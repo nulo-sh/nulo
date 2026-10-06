@@ -1,0 +1,218 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true
+	}
+}
+</route>
+
+<script setup>
+/** Components */
+import { Dropdown } from "@/components/ui/Dropdown"
+import AuthwitCard from "@/popup/components/modules/settings/authwits/AuthwitCard.vue"
+
+/** Services */
+import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
+
+/** Composables */
+import { useToast } from "@/composables/toast.js"
+import { useEntityCrud } from "@/composables/useEntityCrud"
+
+/** Helpers */
+import { authwitMatchesSearch, decorateAuthwit, sortAuthwits } from "@/popup/components/modules/settings/authwits/authwit-helpers"
+
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+const appStore = useAppStore()
+const popupStore = usePopupStore()
+const cacheStore = useCacheStore()
+
+const isRegistryEnabled = ref(true)
+const isFetchingRegistryStatus = ref(false)
+const searchTerm = ref("")
+
+const authwitsService = new AuthRegistryServiceClient()
+
+const {
+	entities: authwits,
+	isLoading: isFetchingAuthwits,
+	error,
+	refresh: refreshAuthwits,
+} = useEntityCrud({
+	fetch: async () => {
+		const list = await authwitsService.getAuthwits(appStore.network.chainId, appStore.account.address)
+		return list?.map(decorateAuthwit) ?? []
+	},
+	added: authwitsService.onAuthwitAdded,
+	deleted: authwitsService.onAuthwitDeleted,
+	identity: (aw) => aw.id,
+	// The list is (profile, chain, account)-scoped: the same address on another chain or profile
+	// must not splice in mid-switch.
+	accept: (aw) =>
+		aw.profileId === appStore.profile?.id && aw.chainId === appStore.network?.chainId && aw.account === appStore.account?.address,
+})
+
+const filteredAuthwits = computed(() => {
+	const sorted = sortAuthwits(authwits.value)
+	const term = searchTerm.value.trim()
+	if (!term) return sorted
+	return sorted.filter((aw) => authwitMatchesSearch(aw, term))
+})
+
+const isErrorOccurred = computed(() => !!error.value)
+
+const isShownScope = (scope) =>
+	scope.profileId === appStore.profile?.id && scope.chainId === appStore.network?.chainId && scope.account === appStore.account?.address
+function onRegistryEnabled(scope) {
+	if (isShownScope(scope)) isRegistryEnabled.value = true
+}
+function onRegistryDisabled(scope) {
+	if (isShownScope(scope)) isRegistryEnabled.value = false
+}
+authwitsService.onRegistryEnabled.add(onRegistryEnabled)
+authwitsService.onRegistryDisabled.add(onRegistryDisabled)
+
+async function fetchRegistryStatus() {
+	isFetchingRegistryStatus.value = true
+	try {
+		isRegistryEnabled.value = await authwitsService.getRegistryEnabled(appStore.network.chainId, appStore.account.address)
+	} catch {
+		// surfaced via the entity-crud error ref already
+	} finally {
+		isFetchingRegistryStatus.value = false
+	}
+}
+
+function handleRefetch() {
+	openToast({ kind: "success", label: "Fetching authwits again" })
+	refreshAuthwits()
+}
+
+function changeAuthwitsRegistry() {
+	popupStore.open("change_authwits_registry")
+}
+
+function revokeAuthwits(aw) {
+	cacheStore.preselectedAuthwits = aw ? [aw] : authwits.value
+	popupStore.open("revoke_authwits")
+}
+
+const handleOpenAuthwit = (aw) => {
+	cacheStore.viewerData = aw.content
+	popupStore.open("data_viewer")
+}
+
+// A profile/account switch emits no authwit events and this route is not
+// remounted — refetch explicitly. `clear` empties the foreign scope's rows
+// synchronously so a failed refetch cannot leave them rendered; the
+// composable's fetch sequence retires any in-flight stale fetch.
+watch(
+	() => [appStore.profile?.id, appStore.network?.chainId, appStore.account?.address],
+	() => {
+		void refreshAuthwits({ clear: true })
+		void fetchRegistryStatus()
+	},
+)
+
+onMounted(async () => {
+	if (appStore.account && appStore.isLogined) {
+		await fetchRegistryStatus()
+	}
+})
+
+onBeforeUnmount(() => {
+	authwitsService.onRegistryEnabled.remove(onRegistryEnabled)
+	authwitsService.onRegistryDisabled.remove(onRegistryDisabled)
+	authwitsService.disconnect()
+})
+</script>
+
+<template>
+	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
+		<SubPageHeader title="Authwits" :backTo="'/popup/settings/advanced/account-state'">
+			<template #trailing>
+				<Dropdown>
+					<button type="button" data-testid="authwits-actions-btn" :class="$style.icon_btn" aria-label="Authwit actions">
+						<MaterialIcon name="settings" :size="18" color="secondary" />
+					</button>
+
+					<template #popup>
+						<DropdownItem data-testid="authwits-toggle-registry" @click="changeAuthwitsRegistry">
+							<Flex align="center" gap="8">
+								<Icon name="lock" size="14" color="secondary" />
+								{{ `${isRegistryEnabled ? "Disable" : "Enable"} authwits registry` }}
+							</Flex>
+						</DropdownItem>
+						<DropdownItem data-testid="authwits-revoke-all" @click="revokeAuthwits()" :disabled="!authwits.length">
+							<Flex align="center" gap="8">
+								<Icon name="close-circle" size="14" color="secondary" />
+								Revoke all authwits
+							</Flex>
+						</DropdownItem>
+					</template>
+				</Dropdown>
+			</template>
+		</SubPageHeader>
+
+		<Flex direction="column" gap="16" wide :class="$style.content">
+			<Flex v-if="!isRegistryEnabled" align="center" justify="center" gap="6" wide :class="$style.warning">
+				<Icon name="warning" color="orange" size="14" />
+				<Text size="13" color="secondary">
+					Account authwits registry
+					<Text size="13" color="orange"> disabled</Text>
+				</Text>
+			</Flex>
+			<Input
+				v-if="authwits.length"
+				v-model="searchTerm"
+				icon="search"
+				placeholder="Search by kind, address or function"
+				clearable
+				@clear="searchTerm = ''"
+			/>
+
+			<AsyncListStatus v-if="isFetchingAuthwits || isErrorOccurred" :loading="isFetchingAuthwits" :error="error" label="FETCHING AUTHWITS" @retry="handleRefetch" />
+
+			<Flex v-else-if="filteredAuthwits.length" direction="column" gap="8">
+				<AuthwitCard
+					v-for="aw in filteredAuthwits"
+					:key="aw.id"
+					:authwit="aw"
+					@open="handleOpenAuthwit"
+					@revoke="revokeAuthwits"
+				/>
+			</Flex>
+
+			<ListStatusMessage v-else-if="filteredAuthwits.length === 0 && searchTerm" variant="no-results" />
+
+			<ListStatusMessage v-else headline="NO AUTHWITS YET" sub="Approved authorizations you grant will appear here." />
+		</Flex>
+	</Flex>
+</template>
+
+<style module>
+.wrapper {
+	composes: wrapper from "../../../../../../components/composite/settings-page.module.css";
+}
+
+.content {
+	composes: content from "../../../../../../components/composite/settings-page.module.css";
+}
+
+.icon_btn {
+	composes: icon_btn from "../../../../toolbar-button.module.css";
+}
+
+.warning {
+	padding: 4px;
+}
+
+
+
+
+</style>

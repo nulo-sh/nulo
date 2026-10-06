@@ -1,0 +1,217 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+/**
+ * Settled phase of an activity card. Wraps `TransactionCardLayout` so its
+ * field positions match the in-flight phase (`TransactionAwaitingCard`) —
+ * title row stays put across the lifecycle; only badge + secondary-row
+ * content swap from spinner+status-text to status-icon+hash-and-chips.
+ */
+/** Vendor */
+
+/** Components */
+import TransactionCardLayout from "@/components/composite/activity/TransactionCardLayout.vue"
+
+/** Services */
+import { TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
+
+/** Utils */
+import { balanceFormatted } from "@/utils/amount.js"
+import { txAmount } from "@/utils/tx-amount"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { usePrices } from "@/composables/usePrices"
+import { getTransactionExplorerUrl } from "@/wallet/constants/explorers"
+import { getTxCategory, getTxTitle, getOriginLabel, getPrimaryCall, formatTransferType } from "@/utils/tx-enrichment"
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
+
+const props = defineProps({
+	tx: {
+		type: Object,
+	},
+	/** The profile and chain's tokens: a mint shows an amount only for a token in this list. */
+	tokens: { type: Array, default: () => [] },
+	/** The route the row opens. */
+	to: { type: String, default: undefined },
+})
+
+const call = computed(() => getPrimaryCall(props.tx.calls))
+const type = computed(() => getTxCategory(props.tx.calls))
+const transfer = computed(() => (call.value?.transfers ? call.value.transfers[0] : null))
+const amount = computed(() => txAmount(props.tx.calls, props.tokens))
+
+const icon = computed(() => {
+	if (type.value === "transfer") return "arrow-narrow-up-right"
+	if (type.value === "mint") return "faucet"
+	return "zap"
+})
+
+const isMined = computed(() => {
+	const s = props.tx.status
+	return s === TxStatus.Proposed || s === TxStatus.Checkpointed || s === TxStatus.Proven || s === TxStatus.Finalized
+})
+const isPending = computed(() => props.tx.status === TxStatus.Pending)
+const isDropped = computed(() => props.tx.status === TxStatus.Dropped)
+const isReverted = computed(() => isMined.value && !!props.tx.executionResult && props.tx.executionResult !== TxExecutionResult.Success)
+const isSuccess = computed(() => isMined.value && !isReverted.value)
+
+const statusIcon = computed(() => {
+	if (isReverted.value || isDropped.value) return "close-circle"
+	if (isSuccess.value) return "check-circle"
+	return "clock-circle"
+})
+
+const statusColor = computed(() => {
+	if (isReverted.value || isDropped.value) return "red"
+	if (isSuccess.value) return "green"
+	return "gray"
+})
+
+/**
+ * User-visible status string mirroring the status-icon state machine.
+ * Bound as `data-tx-status` on the card root so e2e tests synchronize on
+ * the same fact the user sees (the green/red/clock icon). "confirmed"
+ * here means first-mined (Proposed | Checkpointed | Proven | Finalized),
+ * which matches when the green check appears — NOT on-chain finality.
+ * Explicit "unknown" fallthrough because Vue omits attribute bindings
+ * whose value is undefined, which would make a missing attribute
+ * indistinguishable from a real state in test selectors.
+ */
+const txStatusAttr = computed(() => {
+	if (isPending.value) return "pending"
+	if (isSuccess.value) return "confirmed"
+	if (isReverted.value || isDropped.value) return "failed"
+	return "unknown"
+})
+
+const title = computed(() => {
+	if (type.value === "transfer" && amount.value?.symbol) return amount.value.symbol
+	return getTxTitle(props.tx.calls)
+})
+
+const transferTypeLabel = computed(() => {
+	if (type.value === "transfer" && transfer.value) return formatTransferType(transfer.value.type)
+	return null
+})
+
+const originLabel = computed(() => getOriginLabel(props.tx.origin))
+const hashSlice = computed(() => {
+	if (!props.tx.hash) return null
+	return `${props.tx.hash.slice(0, 4)}...${props.tx.hash.slice(-4)}`
+})
+
+const explorerUrl = computed(() => {
+	if (!appStore.network?.chainId) return null
+
+	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, props.tx.hash)
+})
+
+const amountStr = computed(() =>
+	amount.value ? balanceFormatted(amount.value.units, amount.value.decimals, 8, { compact: true }).value : null,
+)
+const displayAmountSymbol = computed(() => amount.value?.symbol || null)
+
+/** Fiat under the amount for priced transfer rows, at today's rate. */
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+const amountFiat = computed(() => {
+	if (type.value !== "transfer" || !amount.value || !call.value?.contract) return null
+	const label = prices.tokenFiatLabel(
+		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals },
+		amount.value.units,
+	)
+	return label ?? null
+})
+onBeforeUnmount(() => {
+	prices.dispose()
+	priceService.disconnect()
+})
+</script>
+
+<template>
+	<TransactionCardLayout
+		:title="title"
+		:icon="icon"
+		:amount="amountStr"
+		:amountSymbol="displayAmountSymbol"
+		:amountFiat="amountFiat"
+		:to="to"
+		testId="tx-card"
+		:txAmountDisplay="amountStr"
+		:txTransferTypeLabel="transferTypeLabel"
+		:txStatus="txStatusAttr"
+		:txHash="props.tx.hash"
+	>
+		<template #badge>
+			<Icon :name="statusIcon" size="12" :color="statusColor" :class="$style.status_icon" />
+		</template>
+
+		<template v-if="transferTypeLabel || originLabel" #title-trailing>
+			<!-- Chip stays in the title row across the lifecycle so it
+			     doesn't visually jump when the tx confirms. The dot is a
+			     subtle visual separator so "USDC" and "Private → Public"
+			     don't read as one continuous string.
+			     For the settled card the two labels are INDEPENDENT (not
+			     mutually exclusive like on the journal-driven awaiting /
+			     terminal cards): `transferTypeLabel` is derived from the
+			     call shape and `originLabel` from `tx.origin`. A
+			     dApp-initiated transfer sets both — render both so the
+			     dApp identity isn't silently dropped. -->
+			<span :class="$style.title_sep">·</span>
+			<span v-if="transferTypeLabel" :class="$style.chip">{{ transferTypeLabel }}</span>
+			<span v-if="originLabel" :class="$style.chip">{{ originLabel }}</span>
+		</template>
+
+		<template #secondary>
+			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
+				<span :class="$style.hash">{{ hashSlice }}</span>
+				<RowAction :href="explorerUrl" label="Open in block explorer" :class="$style.explorer">
+					<Icon name="external-link" size="10" color="tertiary" />
+				</RowAction>
+			</span>
+			<span v-else-if="hashSlice" :class="$style.hash">{{ hashSlice }}</span>
+		</template>
+	</TransactionCardLayout>
+</template>
+
+<style module>
+.status_icon {
+	/* Inherits the absolute-positioned badge wrapper from TransactionCardLayout */
+}
+
+/* Inline group so the explorer link rides immediately after the hash slice,
+ * not as a separate flex item. Gap is tighter than the secondary row's so
+ * the icon visually attaches to the hash. */
+.hash_group {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.hash {
+	font-family: var(--font-mono);
+	font-size: 9px;
+	text-transform: uppercase;
+	color: var(--nulo-outline);
+}
+
+.title_sep {
+	composes: title_sep from "../../../../components/composite/activity/activity-card.module.css";
+}
+
+.chip {
+	font-family: var(--font-mono);
+	font-size: 8px;
+	text-transform: uppercase;
+	color: var(--nulo-secondary);
+	background: var(--nulo-surface-low);
+	border: 1px solid var(--hairline-soft);
+	padding: 1px 4px;
+}
+
+/* The 24px box overhangs the 14px secondary row and the 10px glyph, so the row keeps its rhythm. */
+.explorer {
+	margin: -5px -7px;
+}
+</style>

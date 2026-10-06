@@ -1,0 +1,528 @@
+import { afterEach, describe, expect, test, vi } from "vitest"
+import {
+	balanceFormatted,
+	clampDecimals,
+	formatBaseUnits,
+	normalizeAmount,
+	parseAmountToBaseUnits,
+	purgeNumber,
+	readAmountText,
+} from "./amount"
+
+/** Locale-pinned defaults so the tests don't depend on ambient locale.
+ *  Production helpers default to `getDecimalSeparator()` / `getThousandSeparator()`,
+ *  which read from `Number.toLocaleString` at runtime — fine in app context but
+ *  flaky in CI. Pass these in to assert byte-exact strings. */
+const PIN = { decimalSep: ".", thousandsSep: "," } as const
+
+describe("amount/clampDecimals", () => {
+	test("returns input unchanged when there's no dot", () => {
+		expect(clampDecimals("12345", 4)).toBe("12345")
+	})
+
+	test("returns input unchanged when fractional length is below max", () => {
+		expect(clampDecimals("1.5", 4)).toBe("1.5")
+	})
+
+	test("returns input unchanged when fractional length equals max", () => {
+		expect(clampDecimals("1.5000", 4)).toBe("1.5000")
+	})
+
+	test("truncates fractional part to maxDecimals", () => {
+		expect(clampDecimals("1.234567", 4)).toBe("1.2345")
+	})
+
+	test("truncates the example from the bug repro (14.0234375 on a 6-dec token)", () => {
+		expect(clampDecimals("14.0234375", 6)).toBe("14.023437")
+	})
+
+	test("preserves a trailing dot (mid-typing)", () => {
+		expect(clampDecimals("1.", 4)).toBe("1.")
+	})
+
+	test("preserves a leading dot", () => {
+		expect(clampDecimals(".5", 4)).toBe(".5")
+	})
+
+	test("strips the dot when maxDecimals=0", () => {
+		expect(clampDecimals("1.234", 0)).toBe("1")
+	})
+
+	test("strips a lone trailing dot when maxDecimals=0", () => {
+		expect(clampDecimals("1.", 0)).toBe("1")
+	})
+
+	test("returns input unchanged for negative maxDecimals (defensive)", () => {
+		expect(clampDecimals("1.234", -1)).toBe("1.234")
+	})
+
+	test("handles empty string", () => {
+		expect(clampDecimals("", 4)).toBe("")
+	})
+
+	test("handles a lone dot (preserved as-is)", () => {
+		expect(clampDecimals(".", 4)).toBe(".")
+	})
+})
+
+describe("amount/parseAmountToBaseUnits", () => {
+	test("integer input scales correctly", () => {
+		expect(parseAmountToBaseUnits("1", 6)).toBe(1000000n)
+	})
+
+	test("fractional input within decimals scales correctly", () => {
+		expect(parseAmountToBaseUnits("1.5", 6)).toBe(1500000n)
+	})
+
+	test("zero scales to zero", () => {
+		expect(parseAmountToBaseUnits("0", 6)).toBe(0n)
+		expect(parseAmountToBaseUnits("0.0", 6)).toBe(0n)
+	})
+
+	test("18-decimal token (Fee Juice) handles small fractions exactly", () => {
+		expect(parseAmountToBaseUnits("0.0001", 18)).toBe(100000000000000n)
+	})
+
+	test("0-decimal token rejects fractional input", () => {
+		expect(() => parseAmountToBaseUnits("1.5", 0)).toThrow(/too many decimals/)
+	})
+
+	test("0-decimal token accepts integer input", () => {
+		expect(parseAmountToBaseUnits("1", 0)).toBe(1n)
+	})
+
+	test("missing fractional digits pad with zeros", () => {
+		expect(parseAmountToBaseUnits("1", 18)).toBe(1000000000000000000n)
+	})
+
+	test("leading dot treated as 0.x", () => {
+		expect(parseAmountToBaseUnits(".5", 6)).toBe(500000n)
+	})
+
+	test("trailing dot treated as x.0", () => {
+		expect(parseAmountToBaseUnits("1.", 6)).toBe(1000000n)
+	})
+
+	test("rejects more fractional digits than the token supports (the bug)", () => {
+		expect(() => parseAmountToBaseUnits("14.0234375", 6)).toThrow(/too many decimals/)
+	})
+
+	test("rejects empty string", () => {
+		expect(() => parseAmountToBaseUnits("", 6)).toThrow(/empty/)
+	})
+
+	test("rejects a lone dot", () => {
+		expect(() => parseAmountToBaseUnits(".", 6)).toThrow(/empty/)
+	})
+
+	test("rejects scientific notation", () => {
+		expect(() => parseAmountToBaseUnits("1e5", 6)).toThrow(/non-numeric/)
+	})
+
+	test("rejects negative numbers", () => {
+		expect(() => parseAmountToBaseUnits("-1", 6)).toThrow(/non-numeric/)
+	})
+
+	test("rejects multiple dots", () => {
+		expect(() => parseAmountToBaseUnits("1.2.3", 6)).toThrow(/non-numeric/)
+	})
+
+	test("rejects letters", () => {
+		expect(() => parseAmountToBaseUnits("1abc", 6)).toThrow(/non-numeric/)
+	})
+
+	test("rejects negative decimals (caller bug)", () => {
+		expect(() => parseAmountToBaseUnits("1", -1)).toThrow(/Invalid decimals/)
+	})
+
+	test("rejects non-integer decimals (caller bug)", () => {
+		expect(() => parseAmountToBaseUnits("1", 6.5)).toThrow(/Invalid decimals/)
+	})
+
+	test("rejects non-string input (defensive)", () => {
+		// @ts-expect-error testing runtime guard
+		expect(() => parseAmountToBaseUnits(123, 6)).toThrow(/empty/)
+		// @ts-expect-error testing runtime guard
+		expect(() => parseAmountToBaseUnits(null, 6)).toThrow(/empty/)
+	})
+})
+
+describe("amount/purgeNumber", () => {
+	test("returns valid numeric strings unchanged", () => {
+		expect(purgeNumber("1.5")).toBe("1.5")
+		expect(purgeNumber("0")).toBe("0")
+		expect(purgeNumber("100")).toBe("100")
+	})
+
+	test("strips non-numeric characters", () => {
+		expect(purgeNumber("1abc")).toBe("1")
+		expect(purgeNumber("1,000")).toBe("1000")
+		expect(purgeNumber("$5.00")).toBe("5.00")
+	})
+
+	test("preserves the dot", () => {
+		expect(purgeNumber("a.b")).toBe(".")
+	})
+})
+
+describe("amount/normalizeAmount", () => {
+	test("expands a lone dot to '0.'", () => {
+		expect(normalizeAmount(".")).toBe("0.")
+	})
+
+	test("trims a duplicate dot from the end", () => {
+		expect(normalizeAmount("1.5.")).toBe("1.5")
+	})
+
+	test("preserves a single trailing dot (in-progress typing)", () => {
+		expect(normalizeAmount("1.")).toBe("1.")
+	})
+
+	test("returns empty string for empty input", () => {
+		expect(normalizeAmount("")).toBe("")
+	})
+
+	test("clamps astronomically large numbers", () => {
+		expect(normalizeAmount("99999999999999")).toBe("9999999999999")
+	})
+
+	test("returns undefined for valid passthrough inputs", () => {
+		expect(normalizeAmount("1.5")).toBeUndefined()
+		expect(normalizeAmount("100")).toBeUndefined()
+	})
+})
+
+describe("amount/readAmountText", () => {
+	const NBSP = String.fromCodePoint(0xa0)
+	const NNBSP = String.fromCodePoint(0x202f)
+	const THIN = String.fromCodePoint(0x2009)
+
+	test.each([
+		["1234.56", {}, "1234.56"],
+		["1.", {}, "1."],
+		[".5", {}, ".5"],
+		[" 12.5 ", {}, "12.5"],
+		["1.234", {}, "1.234"],
+		["12.345", {}, "12.345"],
+		["0,001", {}, "0.001"],
+		["1,5", {}, "1.5"],
+		[",5", {}, ".5"],
+		["12,50", {}, "12.50"],
+		["1,2345", {}, "1.2345"],
+		["0,123", {}, "0.123"],
+		["1,234.56", {}, "1234.56"],
+		["1,234,567", {}, "1234567"],
+		["1.234,56", {}, "1234.56"],
+		["1.234.567", {}, "1234567"],
+		["1 234,56", {}, "1234.56"],
+		[`1${NNBSP}234,56`, {}, "1234.56"],
+		[`1${NBSP}234.5`, {}, "1234.5"],
+		["1 234", {}, "1234"],
+		[`12${THIN}345${THIN}678`, {}, "12345678"],
+		["$12.50", { currency: "$" as const }, "12.50"],
+		["1,234", { rested: "1,234" }, "1234"],
+		["1,000", { rested: "1,000" }, "1000"],
+		["1,234", {}, "ambiguous"],
+		["12,345", {}, "ambiguous"],
+		["123,456", {}, "ambiguous"],
+		["1,000", {}, "ambiguous"],
+		["1e5", {}, "unreadable"],
+		["1E5", {}, "unreadable"],
+		["1e-7", {}, "unreadable"],
+		["1.5e3", {}, "unreadable"],
+		["12,34.5", {}, "unreadable"],
+		["1,5,", {}, "unreadable"],
+		["1.234,5,", {}, "unreadable"],
+		["1,234,5", {}, "unreadable"],
+		["1.234,5,678901", {}, "unreadable"],
+		["12.5 USDC", {}, "unreadable"],
+		["$5", {}, "unreadable"],
+		["-1", {}, "unreadable"],
+	])("%j %j reads as %s", (text, opts, expected) => {
+		const read = readAmountText(text, opts)
+		expect(read.ok ? read.plain : read.reason).toBe(expected)
+	})
+})
+
+describe("amount/formatBaseUnits", () => {
+	test("zero formats as '0' (no decimal)", () => {
+		expect(formatBaseUnits(0n, 6, PIN)).toBe("0")
+	})
+
+	test("null/undefined/empty string formats as '0'", () => {
+		expect(formatBaseUnits(null, 6, PIN)).toBe("0")
+		expect(formatBaseUnits(undefined, 6, PIN)).toBe("0")
+		expect(formatBaseUnits("", 6, PIN)).toBe("0")
+	})
+
+	test("integer base units (no fractional)", () => {
+		expect(formatBaseUnits(15000000n, 6, PIN)).toBe("15")
+	})
+
+	test("fractional base units, default trim", () => {
+		expect(formatBaseUnits(15500000n, 6, PIN)).toBe("15.5")
+	})
+
+	test("preserves all fractional digits when no maxDecimals set", () => {
+		expect(formatBaseUnits(123456789n, 6, PIN)).toBe("123.456789")
+	})
+
+	test("maxDecimals TRUNCATES (round-down) — never rounds up", () => {
+		// 14999999n on a 6-dec token = 14.999999 — must show 14.9999, NOT 15.0000.
+		expect(formatBaseUnits(14999999n, 6, { maxDecimals: 4, ...PIN })).toBe("14.9999")
+	})
+
+	test("maxDecimals truncates the bug-repro value safely", () => {
+		// The exact value the QA bug surfaced: `14.0234375 × 10^6 = 14023437` (after
+		// integer scaling). Display truncated to 4 places must NOT round up.
+		expect(formatBaseUnits(14023437n, 6, { maxDecimals: 4, ...PIN })).toBe("14.0234")
+	})
+
+	test("maxDecimals=0 strips the fractional part entirely", () => {
+		expect(formatBaseUnits(15999999n, 6, { maxDecimals: 0, ...PIN })).toBe("15")
+	})
+
+	test("minDecimals: solo behaves as 'at least N digits' (no truncation, no trim by default)", () => {
+		// 15500000n / 1e6 = 15.500000. minDecimals=4 means 'show at least 4 digits';
+		// the actual precision is 6, so all 6 are kept.
+		expect(formatBaseUnits(15500000n, 6, { minDecimals: 4, ...PIN })).toBe("15.500000")
+	})
+
+	test("minDecimals pads when fracStr is shorter (combined with maxDecimals)", () => {
+		// 1n / 1e18 = 0.000000000000000001. maxDecimals=8 truncates to "00000000".
+		// minDecimals=4 enforces 4 digits — but trim default for minDecimals>0 is false,
+		// so all 8 zeros stay. Caller wanting fixed N passes both maxDecimals AND minDecimals.
+		expect(formatBaseUnits(1n, 18, { maxDecimals: 8, minDecimals: 4, ...PIN })).toBe("0.00000000")
+	})
+
+	test("minDecimals + maxDecimals together gives fixed N digits", () => {
+		expect(formatBaseUnits(14999999n, 6, { minDecimals: 4, maxDecimals: 4, ...PIN })).toBe("14.9999")
+		expect(formatBaseUnits(15000000n, 6, { minDecimals: 4, maxDecimals: 4, ...PIN })).toBe("15.0000")
+	})
+
+	test("trimTrailingZeros default is true when minDecimals is 0/undefined", () => {
+		expect(formatBaseUnits(15500000n, 6, PIN)).toBe("15.5")
+	})
+
+	test("trimTrailingZeros false keeps trailing zeros after maxDecimals truncation", () => {
+		// 15500000n / 1e6 = 15.500000. maxDecimals=4 truncates to "5000". With
+		// trimTrailingZeros=false, the trailing "000" stays.
+		expect(formatBaseUnits(15500000n, 6, { maxDecimals: 4, trimTrailingZeros: false, ...PIN })).toBe("15.5000")
+	})
+
+	test("thousandsSep default is locale-derived; explicit ',' inserts on integer part only", () => {
+		expect(formatBaseUnits(1500000000n, 6, { thousandsSep: "," })).toBe("1,500")
+	})
+
+	test("explicit thousandsSep='' produces no separator", () => {
+		expect(formatBaseUnits(1500000000n, 6, { thousandsSep: "", decimalSep: "." })).toBe("1500")
+	})
+
+	test("decimalSep override (locale-flexible)", () => {
+		expect(formatBaseUnits(15500000n, 6, { decimalSep: ",", thousandsSep: "." })).toBe("15,5")
+	})
+
+	test("18-decimal Fee Juice format with thousandsSep", () => {
+		expect(formatBaseUnits(1500000000000000000n, 18, PIN)).toBe("1.5")
+	})
+
+	test("0-decimal token (integer-only)", () => {
+		expect(formatBaseUnits(42n, 0, PIN)).toBe("42")
+	})
+
+	test("very small bigint (single base unit at 18 decimals)", () => {
+		expect(formatBaseUnits(1n, 18, PIN)).toBe("0.000000000000000001")
+	})
+
+	test("very small bigint truncated to 4 places strips to '0' by default", () => {
+		// 1n / 1e18 truncated to 4 = "0000". Default trim strips to "" → output "0".
+		// Caller wanting "0.0000" fixed-width passes minDecimals OR trim=false.
+		// Caller wanting "<0.0001" hint detects this case at its layer.
+		expect(formatBaseUnits(1n, 18, { maxDecimals: 4, ...PIN })).toBe("0")
+	})
+
+	test("very small bigint with minDecimals=maxDecimals=4 shows fixed '0.0000'", () => {
+		expect(formatBaseUnits(1n, 18, { maxDecimals: 4, minDecimals: 4, ...PIN })).toBe("0.0000")
+	})
+
+	test("string input parses to bigint", () => {
+		expect(formatBaseUnits("15500000", 6, PIN)).toBe("15.5")
+	})
+
+	test("negative value formats with leading '-'", () => {
+		expect(formatBaseUnits(-1500000n, 6, PIN)).toBe("-1.5")
+	})
+
+	test("rejects negative decimals", () => {
+		expect(() => formatBaseUnits(1n, -1, PIN)).toThrow(/Invalid decimals/)
+	})
+
+	test("rejects non-integer decimals", () => {
+		expect(() => formatBaseUnits(1n, 6.5, PIN)).toThrow(/Invalid decimals/)
+	})
+
+	test("exact-precision parity for typical balance-render inputs", () => {
+		// These were validated against BN.toFormat() during the BN→bigint
+		// migration. They anchor the no-display-drift contract for the most
+		// common balance rendering paths.
+		expect(formatBaseUnits(15000000n, 6, PIN)).toBe("15")
+		expect(formatBaseUnits(1n, 18, PIN)).toBe("0.000000000000000001")
+		expect(formatBaseUnits(1234567890n, 6, PIN)).toBe("1,234.56789")
+		expect(formatBaseUnits(1500000000000000000n, 18, PIN)).toBe("1.5")
+		expect(formatBaseUnits(0n, 6, PIN)).toBe("0")
+	})
+})
+
+describe("amount/balanceFormatted", () => {
+	test("returns '0' when input is null/undefined/zero/empty-string", () => {
+		expect(balanceFormatted(null, 6)).toEqual({ value: "0", slashed: false })
+		expect(balanceFormatted(undefined, 6)).toEqual({ value: "0", slashed: false })
+		expect(balanceFormatted(0n, 6)).toEqual({ value: "0", slashed: false })
+		expect(balanceFormatted("", 6)).toEqual({ value: "0", slashed: false })
+	})
+
+	test("formats a non-zero bigint without truncation when no length is given", () => {
+		// 1500000n / 1e6 = 1.5
+		const result = balanceFormatted(1500000n, 6)
+		expect(result.slashed).toBe(false)
+		expect(result.value).toMatch(/^1[.,]5$/)
+	})
+
+	test("slices to length and sets slashed when output exceeds length", () => {
+		// 1234567890n / 1e9 = 1.23456789 → 10 chars. With length=5: slice to 5 chars,
+		// no "..." suffix — callers gate their own affordance off `slashed`.
+		const result = balanceFormatted(1234567890n, 9, 5)
+		expect(result.slashed).toBe(true)
+		expect(result.value.length).toBe(5)
+		expect(result.value).toBe("1.234")
+	})
+
+	test("renders <0.0001-style fallback for very small balances at narrow widths", () => {
+		// 1n / 1e9 = 0.000000001. length=5 → hintDigits=3. Threshold=10^(9-3)=1e6.
+		// u=1 < 1e6 → small-value hint fires.
+		const result = balanceFormatted(1n, 9, 5)
+		expect(result.slashed).toBe(true)
+		expect(result.value.startsWith("<0")).toBe(true)
+	})
+
+	test("accepts string inputs", () => {
+		expect(balanceFormatted("1500000", 6).value).toMatch(/^1[.,]5$/)
+	})
+})
+
+describe("amount/balanceFormatted — compact", () => {
+	const SEPARATORS = { "en-US": [".", ","], "de-DE": [",", "."], "fr-FR": [",", "\u202f"] } as const
+	type Locale = keyof typeof SEPARATORS
+
+	/** The formatter reads the separators off `(1.1)` and `(1111)`; every other number formats as usual. */
+	const useSeparators = (locale: Locale) => {
+		const [decimal, thousands] = SEPARATORS[locale]
+		const original = Number.prototype.toLocaleString
+		vi.spyOn(Number.prototype, "toLocaleString").mockImplementation(function (this: number, ...args: []) {
+			const n = Number(this)
+			if (n === 1.1) return `1${decimal}1`
+			if (n === 1111) return `1${thousands}111`
+			return original.apply(this, args)
+		})
+	}
+
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	const E18 = 10n ** 18n
+	const U128_MAX = 2n ** 128n - 1n
+	const NNBSP = "\u202f"
+
+	type Row = { name: string; locale?: Locale; units: bigint; decimals: number; compact: string; today: string }
+
+	/** `today` is the plain cut every caller without the option keeps. */
+	const AT_8: Row[] = [
+		{
+			name: "whole part fits, cut on the separator",
+			units: 9_999_999n * 10n ** 17n,
+			decimals: 18,
+			compact: "999,999",
+			today: "999,999.",
+		},
+		{ name: "whole part fits exactly", units: 999_995n * E18, decimals: 18, compact: "999,995", today: "999,995" },
+		{ name: "first M", units: 1_000_000n * E18, decimals: 18, compact: "1M", today: "1,000,00" },
+		{ name: "M with a fraction", units: 1_234_567n * E18, decimals: 18, compact: "1.23M", today: "1,234,56" },
+		{ name: "the brief's amount, truncated", units: 123_456_789n * E18, decimals: 18, compact: "123.45M", today: "123,456," },
+		{ name: "at the M/B boundary, never rounded up", units: 999_995_000n * E18, decimals: 18, compact: "999.99M", today: "999,995," },
+		{ name: "top of M", units: 99_999_999_999n * 10n ** 16n, decimals: 18, compact: "999.99M", today: "999,999," },
+		{ name: "first B, decimals 0", units: 10n ** 9n, decimals: 0, compact: "1B", today: "1,000,00" },
+		{ name: "top of T", units: 10n ** 15n - 1n, decimals: 0, compact: "999.99T", today: "999,999," },
+		{ name: "past T", units: 10n ** 15n, decimals: 0, compact: ">999T", today: "1,000,00" },
+		{ name: "u128 maximum, decimals 0", units: U128_MAX, decimals: 0, compact: ">999T", today: "340,282," },
+		{ name: "u128 maximum, decimals 18", units: U128_MAX, decimals: 18, compact: ">999T", today: "340,282," },
+		{ name: "zero", units: 0n, decimals: 18, compact: "0", today: "0" },
+		{ name: "one base unit, the hint wins", units: 1n, decimals: 18, compact: "<0.000001", today: "<0.000001" },
+		{ name: "one base unit, decimals 0", units: 1n, decimals: 0, compact: "1", today: "1" },
+		{
+			name: "comma decimal, dot grouping",
+			locale: "de-DE",
+			units: 123_456_789n * E18,
+			decimals: 18,
+			compact: "123,45M",
+			today: "123.456.",
+		},
+		{
+			name: "comma decimal, narrow-space grouping",
+			locale: "fr-FR",
+			units: 123_456_789n * E18,
+			decimals: 18,
+			compact: "123,45M",
+			today: `123${NNBSP}456${NNBSP}`,
+		},
+		{
+			name: "narrow-space grouping, whole part fits",
+			locale: "fr-FR",
+			units: 9_999_999n * 10n ** 17n,
+			decimals: 18,
+			compact: `999${NNBSP}999`,
+			today: `999${NNBSP}999,`,
+		},
+	]
+
+	test.each(AT_8)("length 8, $name: $compact", ({ locale = "en-US", units, decimals, compact, today }) => {
+		useSeparators(locale)
+		const out = balanceFormatted(units, decimals, 8, { compact: true })
+		expect(out.value).toBe(compact)
+		expect(out.slashed).toBe(out.value !== balanceFormatted(units, decimals).value)
+		expect(balanceFormatted(units, decimals, 8).value).toBe(today)
+	})
+
+	/** The other caps, all at 18 decimals: Home's token-row sides (6), its total and the token page's
+	 *  split (10), the token page's hero (20). */
+	const OTHER_WIDTHS: Array<Omit<Row, "locale" | "decimals"> & { length: number }> = [
+		{ length: 6, name: "whole part fits, the trim", units: 12_345_678n * 10n ** 14n, compact: "1,234", today: "1,234." },
+		{ length: 6, name: "whole part fits exactly", units: 99_999n * E18, compact: "99,999", today: "99,999" },
+		{ length: 6, name: "first K", units: 100_000n * E18, compact: "100K", today: "100,00" },
+		{ length: 6, name: "K with a fraction", units: 123_456n * E18, compact: "123.4K", today: "123,45" },
+		{ length: 6, name: "at the K/M boundary, never rounded up", units: 999_995n * E18, compact: "999.9K", today: "999,99" },
+		{ length: 6, name: "first M", units: 1_000_000n * E18, compact: "1M", today: "1,000," },
+		{ length: 6, name: "the brief's amount with cents", units: 12_345_678_912n * 10n ** 16n, compact: "123.4M", today: "123,45" },
+		{ length: 6, name: "one base unit, the hint wins", units: 1n, compact: "<0.0001", today: "<0.0001" },
+		{ length: 10, name: "whole part fits, the trim", units: 123_456_789n * 10n ** 16n, compact: "1,234,567", today: "1,234,567." },
+		{ length: 10, name: "top of M", units: 999_999_999n * E18, compact: "999.99M", today: "999,999,99" },
+		{ length: 10, name: "B with a fraction", units: 1_234_567_890n * E18, compact: "1.23B", today: "1,234,567," },
+		{ length: 10, name: "the brief's amount with cents", units: 12_345_678_912n * 10n ** 16n, compact: "123.45M", today: "123,456,78" },
+		{
+			length: 20,
+			name: "whole part fits, the trim",
+			units: 9_999_999_999_999_995n * 10n ** 17n,
+			compact: "999,999,999,999,999",
+			today: "999,999,999,999,999.",
+		},
+		{ length: 20, name: "past T", units: 10n ** 15n * E18, compact: ">999T", today: "1,000,000,000,000,00" },
+	]
+
+	test.each(OTHER_WIDTHS)("length $length, $name: $compact", ({ length, units, compact, today }) => {
+		useSeparators("en-US")
+		const out = balanceFormatted(units, 18, length, { compact: true })
+		expect(out.value).toBe(compact)
+		expect(out.slashed).toBe(out.value !== balanceFormatted(units, 18).value)
+		expect(balanceFormatted(units, 18, length).value).toBe(today)
+	})
+})

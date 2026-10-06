@@ -1,0 +1,286 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { z } from "zod"
+import type { FnImpl } from "@/wallet/utils/fn"
+import type { OperationContext } from "@/wallet/services/operation-journal/spec"
+
+export const TOKEN_SERVICE_NAME = "token"
+
+/** EntityStorage root for token rows (keyed by `String(token.id)`). Frozen:
+ *  renaming detaches every existing row; the backup-migration registry pins it. */
+export const TOKEN_STORAGE_ROOT = "nulo:core:tokens"
+
+export type Token = {
+	id: number
+	profileId: string
+
+	chainId: number
+	contract: string
+
+	name: string
+	symbol: string
+	decimals: number
+
+	getNameFn?: FnImpl
+	getSymbolFn?: FnImpl
+	getDecimalsFn?: FnImpl
+	balanceOfPublicFn?: FnImpl
+	balanceOfPrivateFn?: FnImpl
+	transferPublicFn?: FnImpl
+	transferPrivateFn?: FnImpl
+	transferPublicToPrivateFn?: FnImpl
+	transferPrivateToPublicFn?: FnImpl
+}
+
+/** `FnImpl` on disk is its two data fields; parse yields a structurally
+ *  equivalent plain object (same as the JSON.parse cast always did). */
+const FnImplSchema = z.object({ name: z.string(), impl: z.number() })
+
+/** Storage codec row schema — mirrors `Token` exactly. */
+export const TokenSchema: z.ZodType<Token> = z.object({
+	id: z.number(),
+	profileId: z.string(),
+	chainId: z.number(),
+	contract: z.string(),
+	name: z.string(),
+	symbol: z.string(),
+	decimals: z.number(),
+	getNameFn: FnImplSchema.optional(),
+	getSymbolFn: FnImplSchema.optional(),
+	getDecimalsFn: FnImplSchema.optional(),
+	balanceOfPublicFn: FnImplSchema.optional(),
+	balanceOfPrivateFn: FnImplSchema.optional(),
+	transferPublicFn: FnImplSchema.optional(),
+	transferPrivateFn: FnImplSchema.optional(),
+	transferPublicToPrivateFn: FnImplSchema.optional(),
+	transferPrivateToPublicFn: FnImplSchema.optional(),
+})
+
+export type TokenInfo = {
+	/** Internal id. */
+	id: number
+	/** Chain id. */
+	chainId: number
+	/** Token contract address. */
+	contract: string
+	/** Token name. */
+	name: string
+	/** Token symbol. */
+	symbol: string
+	/** Token decimals. */
+	decimals: number
+	/** Whether the token has a decimals getter; without one, `decimals` is stored as 0. */
+	hasDecimals: boolean
+	/** Whether or not the token has this functionality. */
+	hasPublicBalances: boolean
+	/** Whether or not the token has this functionality. */
+	hasPublicTransfers: boolean
+	/** Whether or not the token has this functionality. */
+	hasPublicToPrivateTransfers: boolean
+	/** Whether or not the token has this functionality. */
+	hasPrivateBalances: boolean
+	/** Whether or not the token has this functionality. */
+	hasPrivateTransfers: boolean
+	/** Whether or not the token has this functionality. */
+	hasPrivateToPublicTransfers: boolean
+}
+
+export type TokenInterface = {
+	/** Chain id. */
+	chainId: number
+	/** Contract address. */
+	contract: string
+
+	/** Function to get token name. */
+	getNameFn?: FnImpl
+	/** Functions with `getNameFn`-like signature. */
+	getNameFnCandidates: FnImpl[]
+
+	/** Function to get token symbol. */
+	getSymbolFn?: FnImpl
+	/** Functions with `getSymbolFn`-like signature. */
+	getSymbolFnCandidates: FnImpl[]
+
+	/** Function to get token decimals. */
+	getDecimalsFn?: FnImpl
+	/** Functions with `getDecimalsFn`-like signature. */
+	getDecimalsFnCandidates: FnImpl[]
+
+	/** Function to get public balance. */
+	balanceOfPublicFn?: FnImpl
+	/** Functions with `balanceOfPublicFn`-like signature. */
+	balanceOfPublicFnCandidates: FnImpl[]
+
+	/** Function to get private balance. */
+	balanceOfPrivateFn?: FnImpl
+	/** Functions with `balanceOfPrivateFn`-like signature. */
+	balanceOfPrivateFnCandidates: FnImpl[]
+
+	/** Function to make public transfer. */
+	transferPublicFn?: FnImpl
+	/** Functions with `transferPublicFn`-like signature. */
+	transferPublicFnCandidates: FnImpl[]
+
+	/** Function to make private transfer. */
+	transferPrivateFn?: FnImpl
+	/** Functions with `transferPrivateFn`-like signature. */
+	transferPrivateFnCandidates: FnImpl[]
+
+	/** Function to make public to private transfer. */
+	transferPublicToPrivateFn?: FnImpl
+	/** Functions with `transferPublicToPrivateFn`-like signature. */
+	transferPublicToPrivateFnCandidates: FnImpl[]
+
+	/** Function to make private to public transfer. */
+	transferPrivateToPublicFn?: FnImpl
+	/** Functions with `transferPrivateToPublicFn`-like signature. */
+	transferPrivateToPublicFnCandidates: FnImpl[]
+
+	/** Whether or not the token has complete functionality */
+	isComplete: boolean
+}
+
+/**
+ * Where a default token stands. `failed` spent its attempts for this extension
+ * version and can be retried by the user; `rejected` failed a pin or a metadata
+ * bound and cannot. `seeded` has its token row — but balance rows are created
+ * after it, by the balance service, so a consumer keeps waiting until it sees one.
+ */
+export type SeedStatus = "pending" | "seeding" | "failed" | "rejected" | "seeded"
+
+/** One default the user has not deleted. `symbol` and `displayName` are compiled-in literals, never chain data. */
+export type SeedStatusEntry = {
+	chainId: number
+	contract: string
+	symbol: string
+	displayName: string
+	status: SeedStatus
+}
+
+export type SeedScope = { profileId: string; chainId: number }
+
+/** `scope` is what the service worker read the entries for — `undefined` with no active profile or
+ *  network. An empty list proves nothing about any other scope. */
+export type SeedStatusSnapshot = { scope: SeedScope | undefined; entries: SeedStatusEntry[] }
+
+export type Methods = {
+	/**
+	 * Returns a list of tokens.
+	 * @param profileId Profile id.
+	 * @param chainId Chain id.
+	 */
+	getTokens(profileId?: string, chainId?: number): TokenInfo[]
+
+	/**
+	 * Returns a token with the specified id, or undefined if it doesn't exist.
+	 * @param id Token id.
+	 */
+	getToken(id: number): TokenInfo
+
+	/**
+	 * Creates and returns a new token.
+	 * @param profileId Profile id.
+	 * @param networkId Network id.
+	 * @param accountAddress Account address.
+	 * @param tokenInterface Token interface, determining token's functionality.
+	 */
+	addToken(
+		profileId: string,
+		networkId: string,
+		accountAddress: string,
+		tokenInterface: TokenInterface,
+		opContext: OperationContext,
+	): TokenInfo
+
+	/**
+	 * Updates token and returns it.
+	 * @param profileId Profile id.
+	 * @param networkId Network id.
+	 * @param accountAddress Account address.
+	 * @param tokenId Token id.
+	 * @param tokenInterface Token interface, determining token's functionality.
+	 */
+	updateToken(profileId: string, networkId: string, accountAddress: string, tokenId: number, tokenInterface: TokenInterface): TokenInfo
+
+	/**
+	 * Deletes token with the specified id and returns it.
+	 * @param id Token id.
+	 */
+	deleteToken(id: number): TokenInfo
+
+	/**
+	 * Parses contract and returns token interface.
+	 * @param networkId Network id.
+	 * @param contract Token contract address.
+	 */
+	parseTokenInterface(networkId: string, contract: string): TokenInterface
+
+	/**
+	 * Resolve a token's user-facing metadata (name, symbol, decimals) WITHOUT
+	 * adding the token to storage. Used by the dApp `register_token` popup so
+	 * the user can see what they're about to add before clicking Allow.
+	 *
+	 * Also returns the parsed `TokenInterface` for display. It is never handed
+	 * back to the executor: what `executeRegisterToken` persists is always its
+	 * own `parseTokenInterface` result.
+	 *
+	 * Returns `{ name: "<name>", symbol: "<symbol>", decimals: 0 }` placeholder
+	 * strings when the contract's interface is incomplete. Callers must NOT
+	 * trust the strings as authentic — they come straight from the on-chain
+	 * contract and a phishing contract can return any string. Always render
+	 * the contract address alongside.
+	 * @param networkId Network id.
+	 * @param accountAddress Address of an account used to drive the simulation.
+	 * @param contract Token contract address.
+	 */
+	previewTokenMetadata(
+		networkId: string,
+		accountAddress: string,
+		contract: string,
+	): { name: string; symbol: string; decimals: number; interface: TokenInterface }
+
+	/**
+	 * Default tokens of the active profile on `chainId`.
+	 * The caller names the chain (its view switches before the active network
+	 * follows); the profile is always the active one, reported back in `scope`.
+	 * A pure read: it never starts or retries seeding. User-deleted defaults are
+	 * omitted.
+	 */
+	getSeedStatus(chainId: number): SeedStatusSnapshot
+
+	/**
+	 * Starts a seed pass when a default is still `pending` and nothing is working
+	 * on it — the recovery for a service worker that died mid-seeding. Acts at most
+	 * once per service-worker lifetime per (profile, chain); returns without
+	 * waiting for the pass.
+	 */
+	ensureSeeding(): void
+
+	/**
+	 * Gives a `failed` default a fresh round of attempts. Resolves `false` — and
+	 * changes nothing — for any other status, a contract outside the active
+	 * network's seed list, or a retry already accepted for the same default.
+	 */
+	retrySeed(chainId: number, contract: string): boolean
+}
+
+/**
+ * `onTokenDeleted` payload. `TokenInfo` is deliberately profile-stripped (it's
+ * the RPC-facing shape), but deletion consumers MUST scope to the DELETED token's
+ * profile — using the active profile instead wipes the wrong profile's data.
+ * So the deletion event carries the authoritative `profileId`.
+ */
+export type TokenDeleted = TokenInfo & { profileId: string }
+
+/** `onTokenAdded` payload, carrying `profileId` too: an add can finish after a profile switch. */
+export type TokenAdded = TokenInfo & { profileId: string }
+
+export type Events = {
+	/** Emitted when a new token is created */
+	onTokenAdded: TokenAdded
+	/** Emitted when an existing token is updated */
+	onTokenUpdated: TokenInfo
+	/** Emitted when an existing token is deleted */
+	onTokenDeleted: TokenDeleted
+	/** A default's status changed in this scope. An invalidation: consumers refetch `getSeedStatus`. */
+	onSeedStatusChanged: SeedScope
+}

@@ -1,0 +1,387 @@
+/**
+ * Durable journal for in-flight wallet operations.
+ *
+ * The substrate for durable jobs: every transaction submission becomes
+ * an `OperationRecord` with a stage (the job FSM) plus carry fields used
+ * for fairness, retries, tombstones, and idempotency.
+ *
+ * Records live in `chrome.storage.local` — survive SW suspension AND full
+ * browser exit (a session-storage home would wipe the failed/cancelled tx
+ * history users expect to keep).
+ *
+ * Record invariants:
+ *   - `origin`, `profileId` tagged at create-time
+ *   - terminal records kept with `terminalAt` set (never deleted)
+ *   - client-side multi-observer via subscribe-with-snapshot pattern
+ *   - `progress` is the extensible tagged-union from `@nulo/wallet-core/jobs`
+ *   - `error.normalizedRaw` preserves the raw boundary error
+ *   - `attempts` is the retry counter (defaults to 0)
+ */
+
+import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
+import { z } from "zod"
+import { TransferType } from "@/wallet/services/transaction/spec"
+
+export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
+
+/** Coarse operation category.
+ *
+ * - `transfer` / `dapp_execute`: on-chain ops (full FSM with prove + submit).
+ * - `token_import`: single-shot no-tx op — `pending → simulating
+ *   → succeeded`. The kind ↔ `succeeded.txHash` invariant is enforced in
+ *   `OperationJournalService.transitionOperation` so non-tx kinds cannot
+ *   carry a fake txHash and on-chain kinds cannot succeed without one. */
+export type OperationKind = "transfer" | "dapp_execute" | "token_import"
+
+/**
+ * Where the operation originated. Used by fairness (per-origin
+ * rate limits) and observability.
+ *
+ * The wallet emits `"popup"` (UI-initiated transfers) and `"dapp"` (wallet-sdk
+ * + dApp interactions, which share `DappInteractionService`). `"sdk"` as a
+ * separate origin would require a path that bypasses dapp-interaction; it
+ * doesn't exist today. Add the enum variant back when one does.
+ *
+ * `"seed"` marks zero-interaction default-token imports (the built-in seed
+ * list) so the activity feed can label them "Default token" instead of
+ * implying the user or a dApp requested them.
+ */
+export type OperationOrigin = "popup" | "dapp" | "seed"
+
+/**
+ * Caller-provided context for services that internally journal an operation
+ * (`TokenService.addToken`, future graduations). The discriminated
+ * shape forces the dapp branch to carry the originating dapp's URL — a
+ * defaulted optional `origin` would let future callers forget context
+ * silently.
+ */
+export type OperationContext = { origin: "popup" } | { origin: "dapp"; dappOrigin: string } | { origin: "seed" }
+
+export interface OperationRecord {
+	/** Random 16-hex id assigned at `createOperation`. */
+	id: string
+	kind: OperationKind
+	/** Where the operation came from — tagged at create-time. */
+	origin: OperationOrigin
+	/** Profile id — tagged at create-time for per-profile fairness. */
+	profileId: string
+	/**
+	 * Session id for `dapp_execute` records originating from a wallet-sdk
+	 * message. Populated by `tryCreateQueuedJournal` from
+	 * `ActiveSession.sessionId`. Used by the per-session queued-record
+	 * cap. Undefined for `popup`-origin records (UI-initiated transfers,
+	 * token imports).
+	 */
+	sessionId?: string
+	/** Extensible per-stage progress payload (from `@nulo/wallet-core/jobs`). */
+	progress: JobProgress
+	/** Present iff `progress.stage === "failed"`; raw category preserved. */
+	error: JobError | null
+	/** Set when the record enters a terminal stage; `null` otherwise. */
+	terminalAt: number | null
+	/** Attempt counter for the retry policy; starts at 0. */
+	attempts: number
+	createdAt: number
+	updatedAt: number
+	/** Scope metadata — preserved for activity UI + chain purge consumers. */
+	accountAddress?: string
+	networkId?: string
+	tokenId?: number
+	/** UI metadata. Short strings intended for activity card rendering. */
+	title?: string
+	subtitle?: string
+	/**
+	 * Raw transfer amount in base units, BigInt
+	 * serialized as a string (BigInt doesn't JSON round-trip). Suffix
+	 * `Raw` matches the convention of `balanceFormatted(rawAmount, decimals, length)`.
+	 * Set by `executeTransfer` for UI-initiated transfers; undefined for
+	 * other kinds (dApp ops don't carry a wallet-known amount).
+	 */
+	amountRaw?: string
+	/**
+	 * Transfer recipient address, shown on the journal-detail page; no card
+	 * renders it. Undefined for non-transfer kinds.
+	 */
+	recipientAddress?: string
+	/**
+	 * Token contract address for `kind: "token_import"` records.
+	 * Identifies the in-flight import in the tokens view (where the journal
+	 * record drives the `TokenImportRow` until the token is added to the
+	 * watchlist and the normal `TokenCard` takes over). Undefined for
+	 * non-import kinds.
+	 */
+	contractAddress?: string
+	/**
+	 * `TransferType` enum value for `kind: "transfer"` records. Lets the
+	 * in-flight `TransactionAwaitingCard` render the same Private/Public
+	 * direction chip the settled card shows via `formatTransferType()`.
+	 * Undefined for non-transfer kinds AND for legacy records persisted
+	 * before this field existed — gate consumers on `=== undefined` because
+	 * `TransferType.Private === 0` (a truthy check would silently drop the
+	 * Private → Private chip).
+	 */
+	transferType?: TransferType
+}
+
+/**
+ * Fields a caller supplies at create-time. The journal fills in
+ * `id`, `progress` (defaults to `{ stage: "pending" }`), `error: null`,
+ * `terminalAt: null`, `attempts: 0`, `createdAt`, `updatedAt`.
+ */
+export type NewOperationInput = {
+	kind: OperationKind
+	origin: OperationOrigin
+	profileId: string
+	/**
+	 * Optional session id for dapp_execute records originating from a
+	 * wallet-sdk message. Populated by `tryCreateQueuedJournal` from
+	 * `ActiveSession.sessionId`. Used by the per-session queued-record
+	 * cap and future per-session GC. Undefined for UI-initiated records
+	 * (transfers, token imports).
+	 */
+	sessionId?: string
+	/**
+	 * The profile deletion epoch the creator captured WHEN it captured
+	 * `profileId` (via `ProfileDeletionState.capture`). The journal refuses
+	 * creation if the epoch has advanced since — a deletion began or completed
+	 * in between. Membership alone cannot catch this: backup re-import
+	 * deliberately reuses a freed profile id, so a stale creator would pass a
+	 * bare existence check and write into the successor incarnation.
+	 */
+	profileEpoch?: number
+	accountAddress?: string
+	networkId?: string
+	tokenId?: number
+	title?: string
+	subtitle?: string
+	amountRaw?: string
+	recipientAddress?: string
+	contractAddress?: string
+	transferType?: TransferType
+	/**
+	 * Optional initial-stage override. Defaults to `{ stage: "pending" }`.
+	 * Restricted to non-terminal pre-execution stages so callers can't
+	 * mint impossible terminal-stage records by accident. Used by
+	 * `background.ts:onWalletMessage` (via `tryCreateQueuedJournal`) to
+	 * surface incoming dApp sendTx requests in the activity feed before
+	 * the handler claims them, and by a popup transfer that must wait for
+	 * an earlier send.
+	 */
+	initialStage?: { stage: "queued" } | { stage: "pending" }
+}
+
+// ── Zod schemas ──────────────────────────────────────────────────────
+
+export const OperationKindSchema = z.enum(["transfer", "dapp_execute", "token_import"])
+export const OperationOriginSchema = z.enum(["popup", "dapp", "seed"])
+
+export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("stage", [
+	z.object({ stage: z.literal("queued") }),
+	z.object({ stage: z.literal("pending") }),
+	z.object({ stage: z.literal("simulating") }),
+	z.object({ stage: z.literal("proving"), enteredProveAt: z.number(), backend: z.enum(["presto", "browser"]).optional() }),
+	z.object({ stage: z.literal("submitting"), txHash: z.string().optional(), submittedEndpointUrl: z.string().optional() }),
+	z.object({ stage: z.literal("succeeded"), txHash: z.string().optional() }),
+	z.object({
+		stage: z.literal("failed"),
+		from: z.enum(["queued", "pending", "simulating", "proving", "submitting"]).optional(),
+		txHash: z.string().optional(),
+		submittedEndpointUrl: z.string().optional(),
+		check: z.enum(["sent", "reverted", "unconfirmed"]).optional(),
+	}),
+	z.object({ stage: z.literal("cancelled") }),
+])
+
+/** May have reached the node: it failed at `submitting` with a hash, and not at the send line's
+ *  own liveness check, which throws before `node.sendTx`. */
+export function isSendCheckable(op: OperationRecord): boolean {
+	const { progress } = op
+	return progress.stage === "failed" && progress.from === "submitting" && !!progress.txHash && op.error?.kind !== "session_ended"
+}
+
+/** Proven not sent: it failed before `submitting`, or at that liveness check. A row with no
+ *  recorded stage proves nothing. */
+export function wasNeverSent(op: OperationRecord): boolean {
+	const { progress } = op
+	if (progress.stage !== "failed" || progress.from === undefined) return false
+	return progress.from !== "submitting" || op.error?.kind === "session_ended"
+}
+
+/**
+ * Narrowed initial-stage schema for `createOperation` callers. Only the
+ * pre-execution stages — `queued` and `pending` — are admissible as
+ * initial state. Anything past `pending` (e.g. `simulating`, terminal
+ * stages) would skip the FSM and is rejected here at the parse boundary.
+ */
+const InitialStageSchema = z.discriminatedUnion("stage", [
+	z.object({ stage: z.literal("queued") }),
+	z.object({ stage: z.literal("pending") }),
+])
+
+export const JobErrorSchema: z.ZodType<JobError> = z.object({
+	kind: z.string().min(1),
+	message: z.string(),
+	normalizedRaw: z.string().max(NORMALIZED_RAW_MAX_CHARS).nullable(),
+})
+
+export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
+	id: z.string(),
+	kind: OperationKindSchema,
+	origin: OperationOriginSchema,
+	profileId: z.string().min(1),
+	sessionId: z.string().optional(),
+	progress: JobProgressSchema,
+	error: JobErrorSchema.nullable(),
+	terminalAt: z.number().nullable(),
+	attempts: z.number().int().nonnegative(),
+	createdAt: z.number(),
+	updatedAt: z.number(),
+	accountAddress: z.string().optional(),
+	networkId: z.string().optional(),
+	tokenId: z.number().optional(),
+	title: z.string().optional(),
+	subtitle: z.string().optional(),
+	amountRaw: z.string().optional(),
+	recipientAddress: z.string().optional(),
+	contractAddress: z.string().optional(),
+	transferType: z.nativeEnum(TransferType).optional(),
+})
+
+/**
+ * `NewOperationInput` schema with a discriminated-union refinement:
+ * `initialStage: "queued"` is ONLY legal for `dapp_execute` + `dapp` origin
+ * + `sessionId` present (the per-session cap counts against the session), or
+ * for a `transfer` from the `popup`, which the SW's own executor creates.
+ */
+export const NewOperationInputSchema: z.ZodType<NewOperationInput> = z
+	.object({
+		kind: OperationKindSchema,
+		origin: OperationOriginSchema,
+		profileId: z.string().min(1),
+		sessionId: z.string().optional(),
+		profileEpoch: z.number().int().nonnegative().optional(),
+		accountAddress: z.string().optional(),
+		networkId: z.string().optional(),
+		tokenId: z.number().optional(),
+		title: z.string().optional(),
+		subtitle: z.string().optional(),
+		amountRaw: z.string().optional(),
+		recipientAddress: z.string().optional(),
+		contractAddress: z.string().optional(),
+		transferType: z.nativeEnum(TransferType).optional(),
+		initialStage: InitialStageSchema.optional(),
+	})
+	.refine(
+		(v) => {
+			if (v.initialStage?.stage !== "queued") return true
+			if (v.kind === "transfer") return v.origin === "popup"
+			return v.kind === "dapp_execute" && v.origin === "dapp" && typeof v.sessionId === "string" && v.sessionId.length > 0
+		},
+		{
+			message:
+				"initialStage='queued' requires kind='dapp_execute' + origin='dapp' + non-empty sessionId, or kind='transfer' + origin='popup'",
+		},
+	)
+
+export const JobStageSchema: z.ZodType<JobStage> = z.enum([
+	"queued",
+	"pending",
+	"simulating",
+	"proving",
+	"submitting",
+	"succeeded",
+	"failed",
+	"cancelled",
+])
+
+export const OperationFilterSchema = z.object({
+	accountAddress: z.string().optional(),
+	profileId: z.string().optional(),
+	stage: JobStageSchema.optional(),
+	isTerminal: z.boolean().optional(),
+	kind: OperationKindSchema.optional(),
+})
+
+export type OperationFilter = z.infer<typeof OperationFilterSchema>
+
+/**
+ * Lightweight count-query filter. Used by `tryCreateQueuedJournal`'s
+ * per-session and global queued-record caps so the journal doesn't have
+ * to materialize full records just to know the count.
+ */
+export const OperationCountFilterSchema = z.object({
+	sessionId: z.string().optional(),
+	stage: JobStageSchema.optional(),
+})
+
+export type OperationCountFilter = z.infer<typeof OperationCountFilterSchema>
+
+// ── RPC surface ──────────────────────────────────────────────────────
+
+export const OperationJournalMethodSchemas = {
+	createOperation: {
+		params: z.tuple([NewOperationInputSchema]),
+		result: OperationRecordSchema,
+	},
+	/**
+	 * Transition-aware update. The service validates `progress.stage` against the current stage
+	 * via `assertCanTransition` and refuses illegal transitions.
+	 *
+	 * `error` MUST be provided when `progress.stage === "failed"`; for all
+	 * other stages it MUST be `null` (or omitted). The service throws on mismatch.
+	 */
+	transitionOperation: {
+		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional()]),
+		result: OperationRecordSchema,
+	},
+	/**
+	 * Update non-FSM metadata on an existing record (title / subtitle). Unlike
+	 * `transitionOperation`, this never moves the stage and is safe to call on
+	 * terminal records. Used by `tokenService.addToken` to backfill the
+	 * resolved symbol as the title once metadata fetch returns — the journal
+	 * entry is created up-front (so the tokens-view in-flight row pops in
+	 * immediately) and gets its title rewritten when the symbol resolves.
+	 */
+	setOperationMeta: {
+		params: z.tuple([
+			z.string().min(1),
+			z.object({
+				title: z.string().optional(),
+				subtitle: z.string().optional(),
+			}),
+		]),
+		result: OperationRecordSchema,
+	},
+	getOperation: {
+		params: z.tuple([z.string().min(1)]),
+		result: OperationRecordSchema.optional(),
+	},
+	getOperations: {
+		params: z.tuple([OperationFilterSchema.optional()]),
+		result: z.array(OperationRecordSchema),
+	},
+	countOperations: {
+		params: z.tuple([OperationCountFilterSchema]),
+		result: z.number().int().nonnegative(),
+	},
+	deleteOperation: {
+		params: z.tuple([z.string().min(1)]),
+		result: z.void(),
+	},
+} as const
+
+/** The popup-reachable surface: two READS, both answered for the ACTIVE profile only at the
+ *  RPC boundary (`invoke`) — a record owned by another profile reads as absent, and `[]` is the
+ *  answer while locked. Every write (`createOperation`, `transitionOperation`, `setOperationMeta`,
+ *  `deleteOperation`) and `countOperations` are in-process only: a popup that could create or
+ *  transition journal rows could forge its own history. */
+export type Methods = {
+	getOperation(id: string): OperationRecord | undefined
+	getOperations(filter?: OperationFilter): OperationRecord[]
+}
+
+export type Events = {
+	onOperationAdded: OperationRecord
+	onOperationUpdated: OperationRecord
+	onOperationDeleted: OperationRecord
+}

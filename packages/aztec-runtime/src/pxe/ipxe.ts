@@ -1,0 +1,53 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+/**
+ * `IPXE` — the in-process facade a profile gets for a single network.
+ *
+ * `PxeServiceClient` in extension is the SW-side RPC transport;
+ * `PXEProxy` (also in extension) wraps one PxeServiceClient + a Network
+ * pair into an IPXE impl. Moving the interface to aztec-runtime lets
+ * aztec-runtime-owned consumers (`IAccountContract`, NuloAccount) type
+ * against it without circular-depending on extension.
+ */
+
+import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { NotesFilter, PackedPrivateEvent, SimulateTxOpts, ExecuteUtilityOpts, ProfileTxOpts } from "@aztec-labs/pxe/client/bundle"
+import type { ContractArtifact, EventSelector, FunctionCall } from "@aztec-labs/stdlib/abi"
+import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import type { CompleteAddress, ContractInstanceWithAddress, PartialAddress } from "@aztec-labs/stdlib/contract"
+import type { NoteDao } from "@aztec-labs/stdlib/note"
+import type {
+	BlockHeader,
+	TxExecutionRequest,
+	TxProfileResult,
+	TxProvingResult,
+	TxSimulationResult,
+	UtilityExecutionResult,
+} from "@aztec-labs/stdlib/tx"
+import type { PrivateEventFilter } from "@aztec-labs/aztec.js/wallet"
+
+export interface IPXE {
+	getContractInstance(
+		address: AztecAddress,
+		opts?: { pxeOnly?: boolean; nodeBestEffort?: boolean },
+	): Promise<ContractInstanceWithAddress | undefined>
+	getContractArtifact(id: Fr): Promise<ContractArtifact | undefined>
+	registerAccount(secretKey: Fr, partialAddress: PartialAddress): Promise<CompleteAddress>
+	registerSender(address: AztecAddress): Promise<AztecAddress>
+	getSenders(): Promise<AztecAddress[]>
+	removeSender(address: AztecAddress): Promise<void>
+	getRegisteredAccounts(): Promise<CompleteAddress[]>
+	registerContractClass(artifact: ContractArtifact): Promise<void>
+	registerContract(contract: { instance: ContractInstanceWithAddress; artifact?: ContractArtifact }): Promise<void>
+	getContracts(): Promise<AztecAddress[]>
+	getNotes(filter: NotesFilter): Promise<NoteDao[]>
+	proveTx(txRequest: TxExecutionRequest, scopes: AztecAddress[], proveId?: string): Promise<TxProvingResult>
+	profileTx(txRequest: TxExecutionRequest, opts: ProfileTxOpts): Promise<TxProfileResult>
+	simulateTx(txRequest: TxExecutionRequest, opts: SimulateTxOpts, stubAccountAddresses?: string[]): Promise<TxSimulationResult>
+	executeUtility(call: FunctionCall, opts: ExecuteUtilityOpts): Promise<UtilityExecutionResult>
+	getPrivateEvents<_T>(eventSelector: EventSelector, filter: PrivateEventFilter): Promise<PackedPrivateEvent[]>
+	/** Returns the PXE's latest synchronized block header. Used by the
+	 *  fast path as the anchor for `simulateViaNode` so both arms of a
+	 *  mixed simulation observe the same chain state. Mirrors upstream
+	 *  `BaseWallet.simulateTx`'s try-PXE-first-then-node-fallback pattern. */
+	getSyncedBlockHeader(): Promise<BlockHeader>
+}

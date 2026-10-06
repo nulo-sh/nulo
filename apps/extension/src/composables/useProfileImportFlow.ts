@@ -1,0 +1,453 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { computed, type Ref, ref, watch } from "vue"
+import { DuplicateWalletError } from "@nulo/extension-messaging/errors"
+import type { ToastOptions } from "@/composables/toast"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+import { useFullBackupImport } from "@/composables/useFullBackupImport"
+import { usePasskeyCeremony } from "@/composables/usePasskeyCeremony"
+import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
+import { useProfileNameField } from "@/composables/useProfileNameField"
+import { FileTooLargeError, pickFile } from "@/utils"
+import { copyWithToast } from "@/utils/clipboard"
+import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
+import { managers } from "@/utils/core"
+import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
+import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+import { isNewPasswordValid } from "@/utils/password"
+
+/**
+ * Shared orchestration for the profile-IMPORT flow, consumed by both the
+ * popup (`popup/pages/import.vue`) and onboarding (`onboarding/pages/import.vue`)
+ * shells. Owns the validation + secret-entry + passkey-ceremony + full-backup
+ * wiring + error routing; the two shells inject the parts that genuinely
+ * differ.
+ *
+ * The activation tail is INJECTED, not owned: `completeImport` runs the
+ * shell's own "profile is now active" sequence. The popup relies on
+ * `popup/app.vue`'s `onActiveProfileChanged` listener (it does NOT bootstrap);
+ * onboarding has no such listener and bootstraps explicitly. The same
+ * `completeImport` reference is threaded into `useFullBackupImport`, so every
+ * import path (seed/key/passkey + full-backup) activates through exactly one
+ * callback — which is also why the onboarding shell no longer double-bootstraps.
+ *
+ * C1 lifecycle: exposes `dispose()` (the parent calls it in its existing
+ * `onBeforeUnmount`); never registers its own `onUnmounted`. Secret refs are
+ * exposed but NOT zeroed here — zeroing is a per-shell page concern.
+ */
+export interface UseProfileImportFlowOptions {
+	/**
+	 * Per-shell activation + routing + success toast. Popup: listener-based, no
+	 * bootstrap. Onboarding: `bootstrapActiveProfile` then route. Threaded into
+	 * `useFullBackupImport` too.
+	 */
+	completeImport: (profile: unknown) => Promise<void> | void
+	/** Per-shell restore-error surface (popup = data-viewer overlay; onboarding = notification). */
+	showErrorLog: (errors: Record<string, unknown[]>) => void
+	/** Per-shell passkey-import failure notification (page owns `notificationStore.create`). */
+	notifyImportFailed: () => void
+	/** The page's toast: the copy-error affordance, and a passkey prompt that was not confirmed. */
+	openToast: (toast: ToastOptions) => void
+}
+
+/** The flow's error banner + copy-to-clipboard affordance. */
+function useImportErrorState(openToast: UseProfileImportFlowOptions["openToast"]) {
+	const error = ref({ type: "", title: "", tooltip: "" })
+	function fillError(type?: string, title?: string, tooltip?: string) {
+		if (!title) {
+			error.value = { type: "", title: "", tooltip: "" }
+			return
+		}
+		error.value = { type: type ?? "unknown", title, tooltip: tooltip ?? "" }
+	}
+	function clearError() {
+		fillError()
+	}
+
+	// Unified catch-all (A1): both shells render title "Import failed" + the
+	// message as tooltip. Replaces popup's prior `fillError("unknown", err)`,
+	// which put the Error object in the title slot and rendered "[object Object]".
+	function fillUnknownImportError(err: unknown) {
+		fillError("unknown", "Import failed", errorMessageFromUnknown(err))
+	}
+
+	const isCopied = ref(false)
+	function handleCopyError() {
+		isCopied.value = true
+		void copyWithToast(`${error.value.title}${error.value.tooltip ? `: ${error.value.tooltip}` : ""}`, openToast, "Error is copied")
+		setTimeout(() => {
+			isCopied.value = false
+		}, 1_500)
+	}
+
+	function handlePasswordInput() {
+		if (error.value.type === "password") fillError()
+	}
+	function handleSecretInput() {
+		if (error.value.type === "secret") fillError()
+	}
+
+	return { error, isCopied, fillError, clearError, fillUnknownImportError, handleCopyError, handlePasswordInput, handleSecretInput }
+}
+
+/** The duplicate-recovery-phrase warn-and-confirm, shared by every import path. */
+function useDuplicateConfirm() {
+	const cacheStore = useCacheStore()
+	const popupStore = usePopupStore()
+	/** `cacheStore.confirm` is an untyped shared `reactive({})` (every other consumer is an
+	 *  unchecked SFC). Narrow it here to the fields ConfirmPopup actually reads. */
+	const confirmSlot = cacheStore.confirm as {
+		title?: string
+		description?: string
+		confirm_text?: string
+		callback?: () => void
+	}
+	/** Set once the user confirms the duplicate-recovery-phrase warning; the retry passes it to
+	 *  the service. Reset per attempt so a confirm never leaks into a later, unrelated import. */
+	const allowDuplicate = ref(false)
+
+	/**
+	 * Warn-and-confirm for a duplicate recovery phrase (owner policy: a warned choice, never a
+	 * hard block). `run` is re-invoked with `allowDuplicate` set if the user confirms; any other
+	 * error propagates untouched. Shared by the seed + passkey + full-backup import paths, so the
+	 * copy and the retry semantics can't drift between them.
+	 */
+	async function withDuplicateConfirm<T>(run: () => Promise<T>): Promise<T | undefined> {
+		try {
+			return await run()
+		} catch (err) {
+			if (!(err instanceof DuplicateWalletError)) throw err
+			const existing = (err.details as { existingProfileName?: string } | undefined)?.existingProfileName
+			const confirmed = await new Promise<boolean>((resolve) => {
+				let settled = false
+				const settle = (value: boolean) => {
+					if (settled) return
+					settled = true
+					stop()
+					resolve(value)
+				}
+				confirmSlot.title = "You already have this wallet"
+				confirmSlot.description = existing
+					? `“${existing}” already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?`
+					: "Another profile already uses this recovery phrase. Both profiles will hold the same accounts and funds. Add it anyway?"
+				confirmSlot.confirm_text = "Add anyway"
+				// ConfirmPopup invokes `callback` on confirm and just closes on cancel/dismiss —
+				// there is no cancel hook — so the close transition IS the cancel signal. Watch it
+				// (the watcher starts before `open`, and `settle` is idempotent, so a confirm that
+				// also closes can't resolve twice).
+				confirmSlot.callback = () => settle(true)
+				const stop = watch(
+					() => popupStore.isOpened("confirm"),
+					(isOpen, wasOpen) => {
+						if (wasOpen && !isOpen) settle(false)
+					},
+				)
+				popupStore.open("confirm")
+			})
+			if (!confirmed) return undefined
+			allowDuplicate.value = true
+			try {
+				return await run()
+			} finally {
+				allowDuplicate.value = false
+			}
+		}
+	}
+
+	return { allowDuplicate, withDuplicateConfirm }
+}
+
+interface ImportHandlerDeps {
+	isImporting: Ref<boolean>
+	isAllowedToImportBySeedPhrase: Ref<boolean>
+	resolveName: () => Promise<string | null>
+	seedPhrase: Ref<string | undefined>
+	password: Ref<string>
+	allowDuplicate: Ref<boolean>
+	withDuplicateConfirm: <T>(run: () => Promise<T>) => Promise<T | undefined>
+	runCeremony: ReturnType<typeof usePasskeyCeremony>["runCeremony"]
+	fillUnknownImportError: (err: unknown) => void
+	completeImport: UseProfileImportFlowOptions["completeImport"]
+	notifyImportFailed: UseProfileImportFlowOptions["notifyImportFailed"]
+	openToast: UseProfileImportFlowOptions["openToast"]
+}
+
+/** The seed + passkey import handlers (the full-backup path lives in
+ *  `useFullBackupImport`). Bodies own the in-flight latch + error routing. */
+function createImportHandlers(deps: ImportHandlerDeps) {
+	// In-flight latch is set BEFORE the async `getProfiles()` fetch so two rapid
+	// clicks can't both pass the pre-check before the lock is set.
+	const handleImportSeed = async () => {
+		if (!deps.isAllowedToImportBySeedPhrase.value || deps.isImporting.value) return
+		deps.isImporting.value = true
+		try {
+			const name = await deps.resolveName()
+			if (name === null) return
+			const profile = await deps.withDuplicateConfirm(() =>
+				managers.profile.importMnemonic(
+					name,
+					(deps.seedPhrase.value ?? "").split(" "),
+					deps.password.value,
+					deps.allowDuplicate.value,
+				),
+			)
+			// `undefined` = the user declined the duplicate warning; stay on the form.
+			if (!profile) return
+			await deps.completeImport(profile)
+		} catch (err) {
+			deps.fillUnknownImportError(err)
+		} finally {
+			deps.isImporting.value = false
+		}
+	}
+
+	const handleImportPasskey = async () => {
+		if (deps.isImporting.value) return
+		deps.isImporting.value = true
+		try {
+			const name = await deps.resolveName()
+			if (name === null) return
+			// Discovery `get` — no allowedCredentials; the user picks from their
+			// available passkeys. In Firefox's toolbar panel the background runs it in its own window.
+			const credData = passkeyNeedsOwnWindow()
+				? undefined
+				: await deps.runCeremony({ mode: "get", step: "import", profileName: name })
+			// PATH A reuses this credential on the confirm-retry, so no second ceremony runs.
+			const profile = await deps.withDuplicateConfirm(() => managers.profile.importPasskey(name, credData, deps.allowDuplicate.value))
+			if (!profile) return
+			await deps.completeImport(profile)
+		} catch (err) {
+			if (handleCancelOrUnconfirmed(err, deps.openToast)) return
+			deps.notifyImportFailed()
+			console.error("Failed to import profile:", err)
+		} finally {
+			deps.isImporting.value = false
+		}
+	}
+
+	return { handleImportSeed, handleImportPasskey }
+}
+
+/** Capped pick: the byte gate must run inside pickFile (compressed files
+ *  inflate in there, before any caller-side .size check could). The cap
+ *  error maps to the flow's error banner and the flow exits through its
+ *  existing no-file path. */
+function cappedBackupPick(fillError: (type?: string, title?: string, tooltip?: string) => void) {
+	return async () => {
+		try {
+			return await pickFile(undefined, false, true, MAX_BACKUP_FILE_BYTES)
+		} catch (err) {
+			if (err instanceof FileTooLargeError) {
+				fillError(
+					"full_backup",
+					"Backup File Too Large",
+					"The backup file is too large to import. Please select a correct backup file.",
+				)
+				return undefined
+			}
+			throw err
+		}
+	}
+}
+
+async function listProfileNames(): Promise<string[]> {
+	return (await managers.profile.getProfiles()).map((p) => p.name)
+}
+
+/** The name field's surface, key names verbatim: both shells destructure them. */
+function nameFieldSurface(nameField: ReturnType<typeof useProfileNameField>, nameDefault: ReturnType<typeof useProfileNameDefault>) {
+	return {
+		nameFieldState: nameDefault.nameFieldState,
+		profileName: nameField.profileName,
+		trimmedName: nameField.trimmedName,
+		holdsOwnName: nameDefault.holdsOwnName,
+		nameError: nameField.nameError,
+		shakeName: nameField.shakeName,
+		nameInputRef: nameField.nameInputRef,
+		handleNameInput: nameField.handleInput,
+	}
+}
+
+export function useProfileImportFlow(opts: UseProfileImportFlowOptions) {
+	const nameField = useProfileNameField()
+	const nameDefault = useProfileNameDefault(nameField, listProfileNames)
+
+	const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onReject: onCeremonyReject } = usePasskeyCeremony()
+
+	const { allowDuplicate, withDuplicateConfirm } = useDuplicateConfirm()
+	const { error, isCopied, fillError, clearError, fillUnknownImportError, handleCopyError, handlePasswordInput, handleSecretInput } =
+		useImportErrorState(opts.openToast)
+
+	const selectedImportOption = ref<string | null>(null)
+	const seedPhrase = ref<string | undefined>(undefined)
+	const password = ref("")
+	const repeatedPassword = ref("")
+	const maxPasswordLength = 128
+	const isImporting = ref(false)
+
+	// Name check is excluded on purpose — name is validated at submit time so
+	// an empty name shakes the input instead of silently disabling the buttons.
+	const isAllowedToContinue = computed(() => isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""))
+	const isAllowedToImportBySeedPhrase = computed(() => {
+		if (!isAllowedToContinue.value) return false
+		return seedPhrase.value?.split(" ").length === 24 && password.value.length >= 8
+	})
+
+	const { handleImportSeed, handleImportPasskey } = createImportHandlers({
+		isImporting,
+		isAllowedToImportBySeedPhrase,
+		resolveName: () => nameDefault.resolveName(),
+		seedPhrase,
+		password,
+		allowDuplicate,
+		withDuplicateConfirm,
+		runCeremony,
+		fillUnknownImportError,
+		completeImport: opts.completeImport,
+		notifyImportFailed: opts.notifyImportFailed,
+		openToast: opts.openToast,
+	})
+
+	const backup = wireBackupImport({
+		password,
+		repeatedPassword,
+		fillError,
+		clearError,
+		completeImport: opts.completeImport,
+		runCeremony,
+		nameDefault,
+		showErrorLog: opts.showErrorLog,
+		openToast: opts.openToast,
+		allowDuplicate,
+		withDuplicateConfirm,
+	})
+
+	// Keep `profileName` across import-method switches so the user doesn't have
+	// to retype it after hitting Back.
+	function clearFormState() {
+		selectedImportOption.value = null
+		seedPhrase.value = undefined
+		password.value = ""
+		repeatedPassword.value = ""
+		backup.resetBackupState()
+		clearError()
+	}
+	function dispose() {
+		nameField.dispose()
+		backup.dispose()
+	}
+
+	return {
+		...nameFieldSurface(nameField, nameDefault),
+		// passkey ceremony
+		ceremonyRequest,
+		onCeremonyResolve,
+		onCeremonyReject,
+		// import state
+		selectedImportOption,
+		seedPhrase,
+		password,
+		repeatedPassword,
+		maxPasswordLength,
+		isImporting,
+		error,
+		isCopied,
+		// per-method gates
+		isAllowedToImportBySeedPhrase,
+		// full backup (surface from the wiring sub-composable, verbatim keys)
+		...backup.surface,
+		// handlers
+		handleImportSeed,
+		handleImportPasskey,
+		handlePasswordInput,
+		handleSecretInput,
+		handleCopyError,
+		clearError,
+		handleBack: clearFormState,
+		// lifecycle
+		dispose,
+	}
+}
+
+interface WireBackupImportDeps {
+	password: Ref<string>
+	repeatedPassword: Ref<string>
+	fillError: (type?: string, title?: string, tooltip?: string) => void
+	clearError: () => void
+	completeImport: UseProfileImportFlowOptions["completeImport"]
+	runCeremony: ReturnType<typeof usePasskeyCeremony>["runCeremony"]
+	nameDefault: ReturnType<typeof useProfileNameDefault>
+	showErrorLog: UseProfileImportFlowOptions["showErrorLog"]
+	openToast: UseProfileImportFlowOptions["openToast"]
+	allowDuplicate: Ref<boolean>
+	withDuplicateConfirm: <T>(run: () => Promise<T>) => Promise<T | undefined>
+}
+
+/** Wires the full-backup sub-flow (capped pick, name prefill) and shapes its
+ *  exported surface — key names verbatim, both shells destructure them. */
+function wireBackupImport(deps: WireBackupImportDeps) {
+	const {
+		selectedBackup,
+		decryptionPassword,
+		restoreStatus,
+		restoreStage,
+		importedProfile,
+		isAllowedToImportBackup,
+		isRestoreHasErrors,
+		parsedBackupName,
+		canRetryAccountState,
+		unrestoredNetworkNames,
+		hasOtherRestoreErrors,
+		isRetryingAccountState,
+		retryAccountState,
+		continueImport,
+		pickBackupFile,
+		decryptBackup,
+		restoreBackup,
+		showRestoreErrorLog,
+		resetBackupState,
+		dispose,
+	} = useFullBackupImport({
+		password: deps.password,
+		repeatedPassword: deps.repeatedPassword,
+		fillError: deps.fillError,
+		clearError: deps.clearError,
+		pickFile: cappedBackupPick(deps.fillError),
+		completeImport: deps.completeImport,
+		runCeremony: deps.runCeremony,
+		resolveProfileName: (backupName) => deps.nameDefault.resolveName(backupName),
+		showErrorLog: deps.showErrorLog,
+		openToast: deps.openToast,
+		allowDuplicate: deps.allowDuplicate,
+		confirmDuplicate: deps.withDuplicateConfirm,
+	})
+
+	// The selected backup's own name prefills an untouched field; a nameless one restores the
+	// default. A name the user typed is never replaced.
+	watch(parsedBackupName, (name) => deps.nameDefault.offer(name))
+
+	return {
+		resetBackupState,
+		dispose,
+		surface: {
+			selectedBackup,
+			decryptionPassword,
+			restoreStatus,
+			restoreStage,
+			importedProfile,
+			isAllowedToImportBackup,
+			isRestoreHasErrors,
+			canRetryAccountState,
+			unrestoredNetworkNames,
+			hasOtherRestoreErrors,
+			isRetryingAccountState,
+			retryAccountState,
+			continueImport,
+			pickBackupFile,
+			decryptBackup,
+			restoreBackup,
+			showRestoreErrorLog,
+		},
+	}
+}

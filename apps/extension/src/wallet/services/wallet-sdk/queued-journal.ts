@@ -1,0 +1,246 @@
+/**
+ * Best-effort "queued" journal-record creation at wallet-sdk message arrival.
+ *
+ * Extracted from `background.ts` so the cap + pre-auth + parsing logic is
+ * unit-testable without spinning up the full BackgroundConnectionHandler.
+ *
+ * Behaviour:
+ *   - Skip queued visibility when:
+ *       - no active profile
+ *       - no matching dapp session
+ *       - no `transaction` capability grant
+ *       - per-session cap reached (MAX_QUEUED_PER_SESSION)
+ *       - global cap reached (MAX_QUEUED_GLOBAL)
+ *   - Skip ONLY for `sendTx` messages — caller is responsible for routing.
+ *   - Cap enforcement is atomic via `queuedCreationLock` — without this,
+ *     concurrent arrivals all see a stale count and the cap is advisory
+ *     rather than protective.
+ */
+import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
+import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
+import type { ILogger } from "@/wallet/logger"
+import { LogLevel } from "@/wallet/logger"
+import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
+import { getErrorMessage, Lock } from "@nulo/wallet-core/utils"
+import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import type { DappSessionService } from "@/wallet/services/dapp-session/service"
+import type { NetworkService } from "@/wallet/services/network/service"
+import type { AccountService } from "@/wallet/services/account/service"
+import { requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
+import { parseCaipAccount } from "@/wallet/utils/caip"
+import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
+import { pickPrimaryMethod } from "@/utils/primary-method"
+import { chainInfoToChainId } from "./session-established"
+
+/** Per-session queued-record cap. Bounds the activity feed under burst flood. */
+export const MAX_QUEUED_PER_SESSION = 8
+/** Global queued-record cap across all sessions. Coarser DoS backstop. */
+export const MAX_QUEUED_GLOBAL = 32
+
+/** Held around count + create, so concurrent arrivals cannot all read a count below the cap. */
+export const queuedCreationLock = new Lock("wallet-sdk-bg:queued-creation")
+
+export interface TryCreateQueuedJournalDeps {
+	journal: OperationJournalService
+	profile: ProfileService
+	dappSession: DappSessionService
+	networkSvc: NetworkService
+	/** Supplies wallet-ordered accounts, so the record is filed under the same
+	 *  account the dispatcher will send from. */
+	account: AccountService
+	/** The session's establishment-stamped profile. Every profile-scoped read
+	 *  below anchors on it (session row, network) and the active profile must
+	 *  still MATCH it — this path runs before the dispatch guard and would
+	 *  otherwise let an A-era message racing a profile switch persist a
+	 *  B-profile record. */
+	stampedProfileId: string
+	logger: ILogger
+}
+
+/**
+ * Create a journal record at `queued` stage so the activity feed surfaces
+ * an incoming sendTx the moment it arrives — BEFORE the per-session FIFO
+ * lets the handler open the approval popup.
+ *
+ * Returns the new record's id, or `undefined` on any failure. Best-effort
+ * visibility: a failure here NEVER blocks the actual handler from running
+ * (the handler falls back to creating its own in-flight record via
+ * `beginDappExecuteJournal`).
+ *
+ * Cheap pre-auth gates: skip queued visibility when there's no active
+ * profile, no dapp session, or no sendTx capability grant. Avoids
+ * surfacing requests that the handler will reject anyway.
+ *
+ * Cap enforcement is atomic: the count-then-create section runs under
+ * `queuedCreationLock` so concurrent arrivals can't all see a stale
+ * "below cap" count and over-create.
+ */
+export async function tryCreateQueuedJournal(
+	message: WalletMessage,
+	session: ActiveSession,
+	deps: TryCreateQueuedJournalDeps,
+): Promise<string | undefined> {
+	const { journal, profile, dappSession, networkSvc, account: accountSvc, stampedProfileId, logger } = deps
+	try {
+		const activeProfile = await profile.getActiveProfile()
+		if (!activeProfile) return undefined
+		// Stamp-vs-active check: a switch racing this message must not produce a
+		// record under the NEW profile (the dispatch guard will reject the
+		// message itself; the record must not exist either).
+		if (activeProfile.id !== stampedProfileId) return undefined
+		// Captured WITH the profile, asserted by the journal at persist time: if
+		// this profile is deleted (even deleted-and-reimported under the same id)
+		// while we resolve session/account/network below, the create is refused
+		// instead of writing stale dApp metadata into the successor incarnation.
+		const profileEpoch = profile.getDeletionState().capture(activeProfile.id)
+
+		const chainId = chainInfoToChainId(session)
+		// Anchored to the STAMPED profile — not a live re-read.
+		const dapp = await dappSession.tryGetDappSessionByOriginAndChain(session.origin, String(chainId), stampedProfileId)
+		if (!dapp?.accounts?.length) return undefined
+
+		// sendTx requires the `transaction` capability (the capability type
+		// scoped to send-like operations). Pre-auth-gate skip when missing.
+		const hasSendTxGrant = (dapp.capabilityGrants ?? []).some((g) => g.capability.type === "transaction")
+		if (!hasSendTxGrant) return undefined
+
+		// The record must name the account this send will actually go out as, so it
+		// resolves through the SAME rule the dispatcher uses — session-authorized
+		// explicit sender, else the first wallet-ordered session account. Taking
+		// `accounts[0]` instead would file a multi-account session's operation
+		// under whichever address the session happened to list first.
+		const sessionAddresses = new Set(dapp.accounts.map((caip: string) => parseCaipAccount(caip as CaipAccount).address))
+		// Visible accounts only — the SAME set the dispatcher resolves against
+		// (`resolveNetworkAndAccount`). Including hidden accounts here would let a
+		// hidden lower-index account win the default on this side but not on the
+		// dispatcher's, which is precisely the divergence this shared rule exists
+		// to prevent.
+		const walletAccounts = await accountSvc.getAccounts(activeProfile.id, chainId)
+		const resolved = resolveAuthorizedSessionAccount({
+			walletAccounts,
+			sessionAddresses,
+			requestedFrom: requestedSenderOf((message as { args?: unknown[] }).args?.[1]),
+		})
+		// An unauthorized or unresolvable sender is left un-journaled: the dispatch
+		// itself will refuse it, and a record naming the wrong account is worse
+		// than no record.
+		if (!resolved.ok) return undefined
+		const accountAddress = resolved.account.address
+
+		// `networkId` for activity-feed scoping must be the INTERNAL network row id
+		// (RecentActivityView.journalRecordInScope filters on `network.id`), NOT
+		// `String(chainId)`. Without this resolution the queued card never renders.
+		// Anchored network read (getNetworksRaw takes the profile explicitly —
+		// resolveNetworkByChainId would live-read the active profile).
+		const networks = await networkSvc.getNetworksRaw(stampedProfileId, chainId)
+		const network = networks[0]
+		if (!network) return undefined
+
+		// Critical section: cap check + record create must be atomic.
+		return await queuedCreationLock.withLock(async () => {
+			// Pre-persist stamp revalidation (belt over the anchored reads above):
+			// the awaits since the first check are exactly where a switch lands.
+			const nowActive = await profile.getActiveProfile()
+			if (nowActive?.id !== stampedProfileId) return undefined
+			const sessionQueuedCount = await journal.countOperations({
+				sessionId: session.sessionId,
+				stage: "queued",
+			})
+			if (sessionQueuedCount >= MAX_QUEUED_PER_SESSION) {
+				logger.log(
+					"wallet-sdk-bg",
+					LogLevel.Debug,
+					`Per-session queued cap reached for ${session.sessionId}; skipping queued visibility`,
+				)
+				return undefined
+			}
+			const globalQueuedCount = await journal.countOperations({ stage: "queued" })
+			if (globalQueuedCount >= MAX_QUEUED_GLOBAL) {
+				logger.log("wallet-sdk-bg", LogLevel.Warn, `Global queued cap reached (${MAX_QUEUED_GLOBAL}); skipping queued visibility`)
+				return undefined
+			}
+
+			const primaryMethod = extractPrimaryMethodFromSendTx(message)
+			// Chip label: prefer the dApp's display name from its stored
+			// session metadata (DappSession.dappMetadata.name, set at
+			// discover/verify time). Falls back to "Unknown dapp" to match
+			// the pre-existing execution path (`dapp-interaction/service.ts:309`)
+			// so the queued record's subtitle equals what the live-claim record
+			// would have gotten — keeps the chip text identical across queued
+			// vs first-tx paths. NOTE: dappMetadata lives on DappSession (our
+			// stored session), NOT on ActiveSession (the wallet-sdk transport
+			// session) — those are two different types that both happen to be
+			// in scope here. Previously this used `session.origin` (the full
+			// URL on the transport session), which surfaced raw URLs in the
+			// activity-card chip.
+			const dappName = dapp.dappMetadata?.name ?? "Unknown dapp"
+			const record = await journal.createOperation({
+				kind: "dapp_execute",
+				origin: "dapp",
+				profileId: activeProfile.id,
+				profileEpoch,
+				sessionId: session.sessionId,
+				accountAddress,
+				networkId: network.id,
+				title: primaryMethod ?? "Transaction",
+				subtitle: dappName,
+				initialStage: { stage: "queued" },
+			})
+			return record.id
+		})
+	} catch (error) {
+		logger.log("wallet-sdk-bg", LogLevel.Warn, "tryCreateQueuedJournal failed", error)
+		return undefined
+	}
+}
+
+/**
+ * Best-effort primary-method extraction from a sendTx wallet message.
+ * Mirrors what `executeAztecSendTx` does to compute the title at journal
+ * creation time, so the title is consistent between the queued surface
+ * and the post-claim in-flight surface.
+ */
+export function extractPrimaryMethodFromSendTx(message: WalletMessage): string | undefined {
+	if (message.type !== "sendTx") return undefined
+	const args = message.args as unknown[] | undefined
+	if (!Array.isArray(args)) return undefined
+	const exec = args[0] as { calls?: Array<{ name?: string }> } | undefined
+	return pickPrimaryMethod(exec?.calls)
+}
+
+/**
+ * Transition a still-`queued` journal record to `failed`. The record is the
+ * source of truth (not a mutable flag): "handler claimed then failed" already
+ * carries its terminal state; "failed before claim" is ours to close so the
+ * UI doesn't show a permanently-stuck "Queued..." card. The stage check MUST
+ * ride `transitionIfStage`'s lock-held re-read — a separate read-then-
+ * transition legally turned a mid-flight `queued → pending` claim into
+ * `pending → failed`, failing an op the user had just approved.
+ */
+export async function failQueuedIfUnclaimed(
+	operationJournal: OperationJournalService,
+	journalId: string,
+	message: string,
+	logger: ILogger,
+	kind: Extract<KnownJobErrorKind, "popup_bound" | "scope_refused"> = "popup_bound",
+): Promise<void> {
+	try {
+		await operationJournal.transitionIfStage(journalId, ["queued"], { stage: "failed" }, { kind, message, normalizedRaw: null })
+	} catch (transitionError) {
+		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)
+	}
+}
+
+/** Fails a still-queued row with the error that ended its message before any claim: `scope_refused`
+ *  for a grant-check refusal, whose message is fixed text, and `popup_bound` for anything else. */
+export async function failQueuedForError(
+	operationJournal: OperationJournalService,
+	journalId: string,
+	error: unknown,
+	logger: ILogger,
+): Promise<void> {
+	const kind = error instanceof ScopeViolationError ? "scope_refused" : "popup_bound"
+	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, kind)
+}

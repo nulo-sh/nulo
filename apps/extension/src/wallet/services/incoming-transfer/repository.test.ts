@@ -1,0 +1,203 @@
+import { describe, expect, test, vi } from "vitest"
+import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import type { IncomingPublicEventRecord } from "./spec"
+import { publicRecordId } from "./spec"
+import { IncomingTransferRepository, trustKey } from "./repository"
+
+describe("IncomingTransferRepository — trustKey", () => {
+	test("composes profile|network|contract", () => {
+		expect(trustKey("p1", "net-1", "0xabc")).toBe("p1|net-1|0xabc")
+	})
+	test("different contracts on the same (profile, network) get distinct keys", () => {
+		expect(trustKey("p1", "net-1", "0xa")).not.toBe(trustKey("p1", "net-1", "0xb"))
+	})
+	test("same contract on different networks gets distinct keys", () => {
+		expect(trustKey("p1", "net-1", "0xa")).not.toBe(trustKey("p1", "net-2", "0xa"))
+	})
+	test("same contract on different profiles gets distinct keys", () => {
+		expect(trustKey("p1", "net-1", "0xa")).not.toBe(trustKey("p2", "net-1", "0xa"))
+	})
+})
+
+const RECORDS_ROOT = "nulo:core:incoming-transfers"
+
+function pubRec(profileId: string, networkId: string, txHash: string): IncomingPublicEventRecord {
+	return {
+		kind: "public-event",
+		id: publicRecordId(profileId, networkId, txHash, 0),
+		profileId,
+		networkId,
+		accountAddress: "0xacct",
+		contract: "0xtok",
+		tokenId: 1,
+		from: "0xfrom",
+		amountRaw: "100",
+		txHash,
+		l2BlockNumber: 5,
+		blockHash: "0xbh",
+		txIndexInBlock: 0,
+		indexInTx: 0,
+		hidden: false,
+		discoveredAt: 0,
+	}
+}
+
+describe("IncomingTransferRepository — clearProfile / clearChain fan-out", () => {
+	test("clearProfile deletes ONLY the target profile (p1 ≠ p11 prefix), incl. a codec-INVALID row", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const repo = new IncomingTransferRepository(api)
+		await repo.upsertRecord(pubRec("p1", "n1", "0xa"))
+		await repo.upsertRecord(pubRec("p11", "n1", "0xb")) // different profile whose id shares the "p1" prefix
+		await repo.setTrust("p1", "n1", "0xtok", "trusted")
+		await repo.setTrust("p11", "n1", "0xtok", "trusted")
+		// A corrupt record row under p1 that FAILS codec validation — `get()` reads it as `undefined`,
+		// so a value-predicate sweep would silently skip it; the key-prefix delete must still remove it.
+		await api.storage.local.set({ [`${RECORDS_ROOT}@${publicRecordId("p1", "n1", "0xcorrupt", 0)}`]: "{}" })
+
+		await repo.clearProfile("p1")
+
+		const remaining = await repo.listRecords()
+		expect(remaining.map((r) => r.profileId)).toEqual(["p11"]) // p1's valid record gone; p11 untouched
+		expect((await repo.listTrust()).map((t) => t.profileId)).toEqual(["p11"])
+		// The corrupt row is gone from the underlying store (its key no longer present).
+		const rawKeys = Object.keys(await api.storage.local.get())
+		expect(rawKeys.some((k) => k.includes("0xcorrupt"))).toBe(false)
+	})
+
+	test("clearChain deletes only (p1,n1), leaving (p1,n2) intact", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const repo = new IncomingTransferRepository(api)
+		await repo.upsertRecord(pubRec("p1", "n1", "0xa"))
+		await repo.upsertRecord(pubRec("p1", "n2", "0xb"))
+		await repo.setTrust("p1", "n1", "0xtok", "trusted")
+		await repo.setTrust("p1", "n2", "0xtok", "trusted")
+
+		await repo.clearChain("p1", "n1")
+
+		expect((await repo.listRecords()).map((r) => r.networkId)).toEqual(["n2"])
+		expect((await repo.listTrust()).map((t) => t.networkId)).toEqual(["n2"])
+	})
+})
+
+describe("IncomingTransferRepository — arrival floors and rows", () => {
+	const freshRepo = () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		return { api, repo: new IncomingTransferRepository(api) }
+	}
+
+	test("a fence that turns false while setTrust reads the stored row writes nothing", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const repo = new IncomingTransferRepository(api)
+		const read = repo.getTrust.bind(repo)
+		let owned = true
+		vi.spyOn(repo, "getTrust").mockImplementationOnce(async (...args) => {
+			const out = await read(...args)
+			owned = false
+			return out
+		})
+
+		expect(await repo.setTrust("p1", "n1", "0xtok", "trusted", () => owned)).toBeUndefined()
+		expect(await read("p1", "n1", "0xtok")).toBeUndefined()
+	})
+
+	test("a trust state change keeps the stored arrival floor and its pending mark", async () => {
+		const { repo } = freshRepo()
+		await repo.setArrivalFloor(await repo.setTrust("p1", "n1", "0xtok", "trusted"), { arrivalFloor: 200, pending: true })
+
+		await repo.setTrust("p1", "n1", "0xtok", "unknown")
+		expect(await repo.getTrust("p1", "n1", "0xtok")).toMatchObject({ state: "unknown", arrivalFloor: 200, arrivalFloorPending: true })
+		await repo.setTrust("p1", "n1", "0xtok", "pending")
+		expect(await repo.getTrust("p1", "n1", "0xtok")).toMatchObject({ state: "pending", arrivalFloor: 200, arrivalFloorPending: true })
+
+		const stored = await repo.getTrust("p1", "n1", "0xtok")
+		if (!stored) throw new Error("trust row missing")
+		await repo.setArrivalFloor(stored, { arrivalFloor: 250, pending: false })
+		const cleared = await repo.getTrust("p1", "n1", "0xtok")
+		expect(cleared).toMatchObject({ state: "pending", arrivalFloor: 250 })
+		expect(cleared?.arrivalFloorPending).toBeUndefined()
+	})
+
+	test("an arrival row that fails to parse reads as missing", async () => {
+		const { api, repo } = freshRepo()
+		await api.storage.local.set({ "nulo:core:incoming-arrivals@p1|n1|0xacct": JSON.stringify({ sinceBlock: -1, played: [] }) })
+		expect(await repo.getArrivalRow("p1", "n1", "0xacct")).toBeUndefined()
+	})
+
+	test("clearChain and clearProfile delete only their scope's arrival rows", async () => {
+		const { repo } = freshRepo()
+		const row = { sinceBlock: 1, played: [] }
+		await repo.setArrivalRow("p1", "n1", "0xa", row)
+		await repo.setArrivalRow("p1", "n2", "0xa", row)
+		await repo.setArrivalRow("p11", "n1", "0xa", row)
+
+		await repo.clearChain("p1", "n1")
+		expect(await repo.getArrivalRow("p1", "n1", "0xa")).toBeUndefined()
+		expect(await repo.getArrivalRow("p1", "n2", "0xa")).toEqual(row)
+
+		await repo.clearProfile("p1")
+		expect(await repo.getArrivalRow("p1", "n2", "0xa")).toBeUndefined()
+		expect(await repo.getArrivalRow("p11", "n1", "0xa")).toEqual(row)
+	})
+})
+
+describe("IncomingTransferRepository — the five-table scope inventory", () => {
+	const ROOTS = [
+		"nulo:core:incoming-transfers",
+		"nulo:core:incoming-trust",
+		"nulo:core:incoming-public-cursors",
+		"nulo:core:incoming-balance-outbox",
+		"nulo:core:incoming-arrivals",
+	]
+	const RECORD_IDS = ["note:p1|n1|0x1", "pub:p1|n1|0x2|0", "note:p1|n11|0x3", "pub:p11|n1|0x4|0", "other:p1|n1|0x5", "note:p1|n2|0x6"]
+	const SCOPED_IDS = ["p1|n1|x", "p1|n11|x", "p11|n1|x", "p1|n2|x"]
+
+	/** Every row is codec-invalid (`"{}"`), so only key-prefix deletion can remove it. */
+	async function seededRepo() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const rows: Record<string, string> = {}
+		for (const id of RECORD_IDS) rows[`${ROOTS[0]}@${id}`] = "{}"
+		for (const root of ROOTS.slice(1)) for (const id of SCOPED_IDS) rows[`${root}@${id}`] = "{}"
+		await api.storage.local.set(rows)
+		const area = api.storage.local
+		const realRemove = area.remove.bind(area)
+		const removed: string[] = []
+		area.remove = (keys: string | string[]) => {
+			removed.push(...(Array.isArray(keys) ? keys : [keys]))
+			return realRemove(keys)
+		}
+		return { api, repo: new IncomingTransferRepository(api), removed }
+	}
+
+	const rowsOf = (scoped: string[], records: string[]) => [
+		...records.map((id) => `${ROOTS[0]}@${id}`),
+		...ROOTS.slice(1).flatMap((root) => scoped.map((id) => `${root}@${id}`)),
+	]
+
+	test("clearChain removes (p1, n1) from every table in table order and keeps every neighbour", async () => {
+		const { api, repo, removed } = await seededRepo()
+		await repo.clearChain("p1", "n1")
+		expect(removed).toEqual(rowsOf(["p1|n1|x"], ["note:p1|n1|0x1", "pub:p1|n1|0x2|0"]))
+		expect(Object.keys(await api.storage.local.get()).sort()).toEqual(
+			rowsOf(
+				["p1|n11|x", "p11|n1|x", "p1|n2|x"],
+				["note:p1|n11|0x3", "pub:p11|n1|0x4|0", "other:p1|n1|0x5", "note:p1|n2|0x6"],
+			).sort(),
+		)
+	})
+
+	test("clearProfile removes p1 from every table in table order and keeps p11 and unknown kinds", async () => {
+		const { api, repo, removed } = await seededRepo()
+		await repo.clearProfile("p1")
+		expect(removed).toEqual(
+			rowsOf(["p1|n1|x", "p1|n11|x", "p1|n2|x"], ["note:p1|n1|0x1", "pub:p1|n1|0x2|0", "note:p1|n11|0x3", "note:p1|n2|0x6"]),
+		)
+		expect(Object.keys(await api.storage.local.get()).sort()).toEqual(
+			rowsOf(["p11|n1|x"], ["pub:p11|n1|0x4|0", "other:p1|n1|0x5"]).sort(),
+		)
+	})
+})

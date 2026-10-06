@@ -1,0 +1,314 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { readFileSync } from "node:fs"
+import { dirname, relative } from "node:path"
+import { fileURLToPath, URL } from "node:url"
+import { resolveExportedAsset } from "@nulo/resolve-asset"
+import vue from "@vitejs/plugin-vue"
+import usePages from "vite-plugin-pages"
+import useAutoImport from "unplugin-auto-import/vite"
+import useComponents from "unplugin-vue-components/vite"
+import { nuloDesignResolver } from "./scripts/design-resolver"
+import { defineConfig } from "vite"
+import { nodePolyfills } from "vite-plugin-node-polyfills"
+import packageJson from "./package.json"
+import { extractBbWasm } from "./scripts/extract-bb-wasm"
+import { bbFetchCodeShim } from "./scripts/bb-fetch-code-shim"
+import { chunkCycleGuard } from "./scripts/chunk-cycle-guard"
+import { PAGES_OPTIONS } from "./scripts/pages-options"
+import { parseLimitGuard } from "./scripts/parse-limit-guard"
+import { stripArtifactDebugInfo } from "./scripts/strip-artifact-debug-info"
+import { vendorChunkGroups } from "./scripts/vendor-chunks"
+import { artifactAliases, debugStrippedArtifacts, resolvePackageFile, sharedDefine, srcDir } from "./vite.shared"
+
+export default defineConfig({
+	server: {
+		port: 8088,
+		strictPort: true,
+		hmr: {
+			port: 8088,
+		},
+		// Headers needed for bb WASM to work in multithreaded mode
+		headers: {
+			"Cross-Origin-Embedder-Policy": "require-corp",
+			"Cross-Origin-Opener-Policy": "same-origin",
+		},
+	},
+	resolve: {
+		// Array form (not object) is required because the function-bind aliases
+		// at the bottom need anchored regex `find` patterns. Vite forwards this
+		// to @rollup/plugin-alias which only matches RegExp via array entries.
+		alias: [
+			{ find: "@", replacement: srcDir },
+			{ find: "~", replacement: srcDir },
+			{ find: "src", replacement: srcDir },
+			{ find: "@assets", replacement: fileURLToPath(new URL("src/assets", import.meta.url)) },
+			...Object.entries(artifactAliases).map(([find, replacement]) => ({ find, replacement })),
+			// Resolve the polyfill's Buffer shim to an absolute path. Rollup's
+			// inject (used by `nodePolyfills({ globals: { Buffer: true } })`)
+			// rewrites naked Buffer references into an import from this path;
+			// without an alias, resolution fails when the source file lives
+			// in a workspace package that doesn't directly depend on the
+			// polyfill plugin (e.g. wallet-core).
+			{
+				find: "vite-plugin-node-polyfills/shims/buffer",
+				replacement: resolvePackageFile("vite-plugin-node-polyfills", "shims/buffer/dist/index.js"),
+			},
+			// Force detect-node to return false so @aztec-labs/foundation's pino logger
+			// uses the browser transport instead of Node.js worker-thread transport.
+			// Without this, the node-polyfills process shim makes detect-node think
+			// we're in Node.js, causing pino.transport() to fail with "window is not defined".
+			{ find: "detect-node", replacement: fileURLToPath(new URL("./src/shims/detect-node.ts", import.meta.url)) },
+			{ find: "comlink", replacement: "comlink" },
+			{ find: "debug", replacement: "debug" },
+			// CSP-safe replacement for the upstream `function-bind` package and
+			// its `/implementation` entry point. The upstream constructs a bound
+			// function from a dynamic string to preserve `f.length`, which MV3
+			// rejects under our `script-src 'self' 'wasm-unsafe-eval'` policy.
+			// Native `Function.prototype.bind` does the same thing without
+			// dynamic code construction; the stub is a small CJS module that
+			// just delegates. Aliased BOTH `function-bind` (the package entry)
+			// and `function-bind/implementation` (some upstream consumers
+			// import the implementation entry directly). Anchored regex so
+			// neighboring packages like `function-bind-other-thing` are not
+			// accidentally rewritten.
+			{ find: /^function-bind$/, replacement: fileURLToPath(new URL("./src/shims/function-bind-stub.cjs", import.meta.url)) },
+			{
+				find: /^function-bind\/implementation$/,
+				replacement: fileURLToPath(new URL("./src/shims/function-bind-stub.cjs", import.meta.url)),
+			},
+		],
+		// Force Vite to resolve these WASM-binding packages to a single copy.
+		// Nested copies of these packages have been installed side by side before.
+		// Without dedup, initAbi() and abiEncode() can end up in
+		// different module scopes, so the WASM instance variable is never shared.
+		dedupe: ["@aztec-foundation/noir-noirc_abi", "@aztec-foundation/noir-acvm_js"],
+	},
+	css: {
+		preprocessorOptions: {
+			scss: {
+				quietDeps: true,
+			},
+		},
+	},
+	plugins: [
+		stripArtifactDebugInfo(debugStrippedArtifacts),
+		parseLimitGuard(),
+		chunkCycleGuard(),
+		bbFetchCodeShim(),
+		// `<presto-banner>` is a custom element from @alejoamiras/presto-banners, not a Vue component.
+		vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith("presto-") } } }),
+
+		usePages(PAGES_OPTIONS),
+
+		useAutoImport({
+			imports: [
+				"vue",
+				"vue-router",
+				{
+					"webextension-polyfill": [["*", "browser"]],
+				},
+			],
+			dts: "src/types/auto-imports.d.ts",
+			dirs: ["src/composables/", "src/stores/", "src/utils/", "src/onboarding/composables/"],
+			// Rewrites compiled _ctx.<name> template references to resolve against the
+			// auto-import registry so {{ trimAddress(...) }} works without explicit
+			// imports in every SFC. Plugin runs enforce:"post" internally — must stay
+			// after vue() in the plugin chain.
+			vueTemplate: true,
+			eslintrc: {
+				enabled: true,
+				filepath: "src/types/.eslintrc-auto-import.json",
+			},
+		}),
+
+		useComponents({
+			dirs: ["src/components", "src/onboarding/components"],
+			resolvers: [nuloDesignResolver()],
+			dts: "src/types/components.d.ts",
+		}),
+
+		{
+			name: "assets-rewrite",
+			enforce: "post",
+			apply: "build",
+			transformIndexHtml(html, { path }) {
+				const assetsPath = relative(dirname(path), "/assets").replace(/\\/g, "/")
+				return html.replace(/"\/assets\//g, `"${assetsPath}/`)
+			},
+		},
+
+		{
+			name: "wasm-content-type",
+			configureServer(server) {
+				server.middlewares.use((req, res, next) => {
+					if (req.url?.endsWith(".wasm")) {
+						res.setHeader("Content-Type", "application/wasm")
+					}
+					next()
+				})
+			},
+		},
+
+		// Source the bb.js WASM directly from `node_modules/@aztec-foundation/bb.js` so a
+		// dependency bump auto-updates both variants. See
+		// `scripts/extract-bb-wasm.ts` for the why + the threads/single
+		// extraction strategy + the hash-divergence assertion.
+		{
+			name: "bb-wasm-emit",
+			apply: "build",
+			generateBundle() {
+				const { single, threads } = extractBbWasm()
+				this.emitFile({
+					type: "asset",
+					fileName: "assets/barretenberg.wasm.gz",
+					source: single,
+				})
+				this.emitFile({
+					type: "asset",
+					fileName: "assets/barretenberg-threads.wasm.gz",
+					source: threads,
+				})
+			},
+			// Dev server: serve the same files via a middleware so `vite dev`
+			// matches the built behavior. Without this, dev would 404.
+			configureServer(server) {
+				const cache = (() => {
+					try {
+						return extractBbWasm()
+					} catch (e) {
+						server.config.logger.error(`bb-wasm-emit: failed to extract bb.js WASM at dev startup: ${(e as Error).message}`)
+						return null
+					}
+				})()
+				server.middlewares.use((req, res, next) => {
+					if (!cache) return next()
+					if (req.url === "/assets/barretenberg.wasm.gz") {
+						res.setHeader("Content-Type", "application/gzip")
+						res.end(Buffer.from(cache.single))
+						return
+					}
+					if (req.url === "/assets/barretenberg-threads.wasm.gz") {
+						res.setHeader("Content-Type", "application/gzip")
+						res.end(Buffer.from(cache.threads))
+						return
+					}
+					next()
+				})
+			},
+		},
+
+		// The offscreen PXE's encrypted SQLite-OPFS store spawns a worker whose emscripten glue
+		// resolves `sqlite3.wasm` at runtime via a `locateFile` fallback that bundlers cannot
+		// rewrite — it requests the BARE `assets/sqlite3.wasm` next to the worker chunk, not the
+		// hash-renamed asset vite emits for the static `new URL(...)` path. In the packed
+		// extension that bare request 404s and the worker hangs SILENTLY on init (no onerror),
+		// which wedges every store open — and, transitively, profile deletion. Emit unhashed
+		// copies alongside the hashed ones (same fix the sibling repo shipped for its SPA; the
+		// async proxy rides along for the non-SAH OPFS VFS the glue can also probe for).
+		{
+			name: "sqlite3mc-wasm-emit",
+			apply: "build",
+			generateBundle() {
+				// Both files are condition-less exported subpaths, so they resolve directly —
+				// layout-agnostically — through this workspace's DECLARED @aztec-labs/sqlite3mc-wasm
+				// dependency (the identity test pins that declaration in lockstep with the copy
+				// @aztec-labs/kv-store consumes).
+				this.emitFile({
+					type: "asset",
+					fileName: "assets/sqlite3.wasm",
+					source: readFileSync(
+						resolveExportedAsset("@aztec-labs/sqlite3mc-wasm", "./vendor/jswasm/sqlite3.wasm", {
+							from: import.meta.url,
+						}),
+					),
+				})
+				this.emitFile({
+					type: "asset",
+					fileName: "assets/sqlite3-opfs-async-proxy.js",
+					source: readFileSync(
+						resolveExportedAsset("@aztec-labs/sqlite3mc-wasm", "./vendor/jswasm/sqlite3-opfs-async-proxy.js", {
+							from: import.meta.url,
+						}),
+					),
+				})
+			},
+		},
+
+		// ── Process handling: three deliberate layers ─────────────────────
+		//
+		// `process` references in source / dependencies are handled by THREE
+		// coordinated mechanisms. Don't add a fourth without understanding
+		// how they interact, or you'll re-introduce bugs that cost weeks of
+		// debugging.
+		//
+		// 1. `define: { "process.browser": true, "process.env": <JSON> }`
+		//    (further down). Esbuild substitutes the literal source tokens
+		//    `process.browser` and `process.env` at parse time. Compile-time.
+		// 2. `alias: { "detect-node": "./src/shims/detect-node.ts" }` (above).
+		//    Forces `detect-node` to return false at module level so pino's
+		//    Node.js transport branch is dead before runtime. Without this,
+		//    the polyfill's `process` would convince detect-node we're in
+		//    Node, and pino would try to load worker-threads.
+		// 3. `nodePolyfills({ globals: { Buffer: true } })` below. Runtime
+		//    polyfill via Rollup's inject — rewrites naked `Buffer`
+		//    identifiers to import the polyfill. Buffer is genuinely needed
+		//    at runtime because Aztec deps reach for it at module-init time.
+		//
+		// We DELIBERATELY do NOT add `process: true` to the polyfill globals.
+		// It would create a runtime `process` global object whose shape
+		// disagrees with the compile-time `define` substitution: `process.X`
+		// reads via bracket notation or via `globalThis.process` would
+		// escape `define` and fall through to the polyfill's empty
+		// `process.env`. The two would diverge silently. The current
+		// three-layer split is what produces a working browser bundle.
+		nodePolyfills({
+			include: ["buffer", /*"crypto",*/ "net", "path", "stream", "tty", "vm", "util"],
+			// Make a naked `Buffer` identifier auto-import the polyfill at
+			// build time. Required because wallet-core's serialization.ts
+			// uses naked `Buffer` (no import) — see its docstring for why.
+			globals: { Buffer: true },
+		}),
+	],
+	build: {
+		// Disable module preload polyfill — it references `window.dispatchEvent`
+		// which doesn't exist in Chrome MV3 service workers.
+		modulePreload: false,
+		target: "esnext",
+		// Skip gzip-size reporting in CI only. With ~78 MB of output and big
+		// wasm assets, the gzip pass adds 5–15 s per build for log lines no
+		// CI consumer reads. Local builds keep the report for manual bundle
+		// inspection during release prep.
+		reportCompressedSize: !process.env.CI,
+		rollupOptions: {
+			input: {
+				offscreen: "src/offscreen/index.html",
+				popup: "src/popup/index.html",
+				setup: "src/setup/index.html",
+				onboarding: "src/onboarding/index.html",
+			},
+			output: {
+				// Firefox's add-on linter refuses to parse a file of 5 MiB or more, and without a rule
+				// everything the offscreen page imports lands in one ~20 MB chunk. `vendorChunkGroups`
+				// says where the cuts go and why they are never by size; `parseLimitGuard` is what
+				// fails the build.
+				codeSplitting: { groups: vendorChunkGroups },
+			},
+		},
+	},
+	optimizeDeps: {
+		include: ["pino", "vue", "webextension-polyfill"],
+		exclude: ["@aztec-foundation/bb.js", "@aztec-foundation/noir-acvm_js", "@aztec-foundation/noir-noirc_abi", "vue-demi"],
+		esbuildOptions: {
+			target: "esnext",
+		},
+	},
+	define: {
+		...sharedDefine,
+		"import.meta.env.HTML_TITLE": JSON.stringify(packageJson.displayName),
+		"process.browser": true,
+		"process.env": JSON.stringify({
+			LOG_LEVEL: "verbose",
+			BB_WASM_PATH: "/assets/barretenberg.wasm.gz",
+		}),
+	},
+})

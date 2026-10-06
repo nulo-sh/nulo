@@ -1,0 +1,35 @@
+{
+	"name": "@nulo/design",
+	"private": true,
+	"version": "0.1.0",
+	"license": "Apache-2.0",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./tokens": "./src/tokens.ts",
+		"./base.css": "./src/base.css",
+		"./core/*": "./src/core/*",
+		"./ui/*": "./src/ui/*",
+		"./composables/*": "./src/composables/*",
+		"./testing": "./src/testing.ts"
+	},
+	"scripts": {
+		"gen:tokens": "bun scripts/gen-tokens.ts",
+		"typecheck": "vue-tsc --noEmit",
+		"test": "bun --bun vitest run",
+		"test:watch": "vitest"
+	},
+	"peerDependencies": {
+		"vue": "^3.5.38"
+	},
+	"devDependencies": {
+		"@types/node": "^24.13.2",
+		"@vitejs/plugin-vue": "^6.0.7",
+		"@vue/compiler-sfc": "^3.5.38",
+		"@vue/test-utils": "^2.4.11",
+		"jsdom": "^29.1.1",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.9",
+		"vue-tsc": "^3.3.5"
+	}
+}

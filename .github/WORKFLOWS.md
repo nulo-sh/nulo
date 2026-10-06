@@ -1,0 +1,67 @@
+# `.github/` — CI configuration
+
+This directory holds the GitHub Actions wiring. The contributor-facing guide lives at [`../CI.md`](../CI.md); the original design is recorded in [`../implementations-plan/archive/ci-cd/`](../implementations-plan/archive/ci-cd/).
+
+## Status check matrix
+
+These `status` aggregators are what branch protection on `main` / `dev` requires. Branch protection matches the **produced check-run name**, which for a normal GitHub Actions job is its bare `name:` — there is no `Workflow / Status` form (that only exists for reusable `uses:` jobs). A hand-typed context such as `Quality / Status` never matches a produced check: it hangs the required gate at `Expected` and forces `--admin` on every merge. So every aggregator has a unique bare name, and the required contexts name exactly that (see [`CI.md`](../CI.md#check-names-and-the-protection-runbook) + [`../implementations-plan/archive/required-check-mismatch/`](../implementations-plan/archive/required-check-mismatch/)).
+
+| Workflow | Required check-run | Required on | Runs when | What it checks |
+|---|---|---|---|---|
+| `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build |
+| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-smoke` label, OR `smoke-surface` paths-filter | chrome build + puppeteer smoke |
+| `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-network` label, OR `extension-network` paths-filter | full network e2e (anvil + Aztec sandbox + playground) |
+| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` (required on `dev` and `main`) | — | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter); skips drafts | firefox build + the smoke suite over geckodriver + Puppeteer BiDi |
+| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` (required on `dev`) | — | same gate as the Chrome twin; skips drafts | the network suite on Firefox: 5 proverless shards + 2 heavy jobs + the real-proving canary, the same four files as on Chrome |
+| `actionlint.yml` | `Status` (not required) | — | when `.github/workflows/**` or shell scripts change | actionlint + shellcheck |
+| `release.yml` | `status` (not required) | — | push to `main` + manual `workflow_dispatch` | release-please + gates + build + smoke against artifact + assets; `publish_chrome` / `publish_firefox` inputs run the store uploads in their protected environments |
+| `store-check.yml` | — | — | manual `workflow_dispatch` (`store`: chrome / firefox / both) | proves a store credential read-only (Chrome: one `fetchStatus`; Firefox: the author-scoped add-on list; no upload) |
+| `source-rebuild.yml` | — | — | weekly (Mondays) + manual `workflow_dispatch` (`tag`) | rebuilds `git archive` of a release (or of the commit) on x86_64 + Ubuntu ARM64 with the reviewer script and fails on any byte differing from the shipped Firefox zip |
+| `publish-packages.yml` | — | — | manual `workflow_dispatch` (`version`, `dry_run`) | tests, stages, packs and digest-checks the three `@nulo-sh/*` npm packages; with `dry_run` false and the `npm-publish` environment approved, publishes them with provenance (no npm token) and verifies the provenance the registry serves |
+| `nightly.yml` | `status` (not required) | — | schedule (daily) + manual dispatch | full quality bar incl. network suite → prerelease GitHub Release from dev (`v<ver>-nightly.<YYDDD>`) |
+
+Each required check-run is `app_id`-pinned to GitHub Actions in `required_status_checks.checks`, so only a check produced by Actions (not a same-named check from another app) can satisfy the gate.
+
+## Reusable workflows + composite actions
+
+Reusables live as `.github/workflows/_*.yml` and are called from top-level workflows. Each is parameterized (`ref`, etc.) and has at least two callers.
+
+| Reusable | Callers |
+|---|---|
+| `_lint-and-typecheck.yml` | `pr-quick`, `release`, `nightly` |
+| `_unit-tests.yml` | `pr-quick`, `release`, `nightly` |
+| `_build-extension.yml` | `pr-quick`, `release`, `nightly` |
+| `_extension-smoke-e2e.yml` | `pr-extension-smoke-e2e`, `pr-extension-smoke-e2e-firefox`, `release`, `nightly` |
+| `_extension-network-e2e.yml` | `pr-extension-network-e2e`, `pr-extension-network-e2e-firefox`, `extension-network-e2e-soak`, `release` (opt-in: `workflow_dispatch` with `run_network_e2e=true`), `nightly` |
+
+Both take a `browser` input (`chrome` default, `firefox`); log-artifact and browser-cache names carry the browser so a Firefox lane can neither overwrite nor restore a Chrome lane's.
+
+Composite actions live in `.github/actions/` and are shared step fragments used inside jobs.
+
+| Composite | Purpose |
+|---|---|
+| `setup-bun` | checkout + bun + install cache + `bun install --frozen-lockfile` |
+| `setup-aztec` | Foundry + Aztec CLI matching the `@aztec-labs/aztec.js` version; the installer, its `versions` manifest and the noir tarball are SHA-256-pinned in the action (`installer-pins.sha256`), and its npm resolve is held to a 7-day release age outside the Aztec scopes |
+| `setup-puppeteer` | warm `~/.cache/puppeteer` (Chrome); with `browser: firefox`, install + cache the Firefox revision the locked Puppeteer pins, under a key that shares no prefix with Chrome's |
+| `setup-geckodriver` | download + verify (tarball and extracted-binary SHA-256 pins, single-member archive) + install `geckodriver` for the Firefox lanes; the pins live in the action. See [SECURITY.md](../SECURITY.md#binary-dependencies). |
+| `setup-presto-server` | download + verify (tarball and extracted-binary SHA-256 pins, single-member archive) + install the headless `presto-server` binary (Linux x86_64) for CI proving. Used by `_extension-network-e2e.yml`. See [CI.md](../CI.md#presto-in-ci). |
+
+## Triggers cheat-sheet
+
+- Push a commit on a feature branch → no CI runs; local pre-commit hook handles biome + commitlint.
+- Open a PR to `dev` → `pr-quick` runs. `pr-extension-smoke-e2e` and `pr-extension-network-e2e` run only if their paths-filter trips OR their respective label is on the PR.
+- Open a PR to `main` → `pr-quick`, `pr-extension-smoke-e2e`, `pr-extension-network-e2e` all run unconditionally.
+- Add `e2e:extension-smoke` or `e2e:extension-network` to an open PR → that workflow fires a fresh run immediately (`labeled` is a subscribed event type; no push needed). Removing the label re-evaluates the gate (`unlabeled`).
+- Click "Run workflow" on `release.yml` → republish an existing tag (`tag`; `publish_chrome` / `publish_firefox` opt into the store uploads). `store-check.yml` → check a store credential without uploading.
+- Every night → `nightly.yml` builds current dev and publishes a prerelease GitHub Release (skips itself when dev HEAD already has tonight's nightly; manual dispatch offers `force` + `dry_run`).
+
+## Labels
+
+| Label | Effect |
+|---|---|
+| `e2e:extension-smoke` | Force the smoke e2e suite to run on this PR (auto-runs when `smoke-surface` filter trips). |
+| `e2e:extension-network` | Force the network e2e suite to run on this PR (auto-runs when `extension-network` filter trips). |
+
+## Branches
+
+Only `main` (stable) and `dev` (integration) are long-lived. Feature branches are auto-deleted on merge (`gh repo edit --delete-branch-on-merge`). See [`CI.md`](../CI.md) for the branch model + release flow.

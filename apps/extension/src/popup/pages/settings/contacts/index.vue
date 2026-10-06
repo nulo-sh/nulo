@@ -1,0 +1,209 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true
+	}
+}
+</route>
+
+<script setup>
+/** Components */
+import { Dropdown } from "@/components/ui/Dropdown"
+import ContactRow from "@/popup/components/modules/settings/contacts/ContactRow.vue"
+
+/** Services */
+import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
+import { ContactServiceClient } from "@/wallet/services/contact/client"
+
+/** Utils */
+import { stringCompare } from "@/utils"
+import { copyWithToast } from "@/utils/clipboard"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { useEntityCrud } from "@/composables/useEntityCrud"
+import { useContactImportExport } from "@/popup/components/modules/settings/contacts/useContactImportExport"
+
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+const appStore = useAppStore()
+const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
+
+const contactService = new ContactServiceClient()
+const accountStateService = new AccountStateServiceClient()
+
+// Resync mode: any contact event triggers a full re-fetch with a seq guard.
+// Guarantees the UI stays consistent with storage (e.g. when imports mutate
+// many rows at once).
+const { entities: contacts } = useEntityCrud({
+	fetch: () => contactService.getContacts(),
+	added: contactService.onContactAdded,
+	updated: contactService.onContactUpdated,
+	deleted: contactService.onContactDeleted,
+	mode: "resync",
+})
+
+const sortedContacts = computed(() =>
+	[...contacts.value].sort((a, b) => {
+		const abbrPos = stringCompare(a.abbr, b.abbr)
+		return abbrPos ? abbrPos : stringCompare(a.name, b.name)
+	}),
+)
+
+/** Senders for the active network. The contacts list shows a small chip
+ *  on each row that's been registered as a private-transfer sender so the
+ *  user can scan registration status at a glance without opening Edit.
+ *  Network-scoped: switching networks reloads the set. */
+const senderAddresses = ref(new Set())
+function isContactSender(address) {
+	// Canonical compare: PXE senders are lowercase hex; a stored contact
+	// address may predate canonical-on-save.
+	return senderAddresses.value.has(address.toLowerCase())
+}
+// Sequence guard: rapid network switches issue overlapping getSenders
+// calls with no ordering guarantee — only the LATEST request may write
+// the set, or a slow network-A response overwrites network-B's chips.
+let senderSyncSeq = 0
+async function syncSenders() {
+	const seq = ++senderSyncSeq
+	if (!appStore.network) {
+		senderAddresses.value = new Set()
+		return
+	}
+	try {
+		const list = await accountStateService.getSenders(appStore.network.id)
+		if (seq !== senderSyncSeq) return
+		senderAddresses.value = new Set(list.map((a) => a.toLowerCase()))
+	} catch (err) {
+		if (seq !== senderSyncSeq) return
+		console.warn("Failed to load senders for contacts list:", err)
+		senderAddresses.value = new Set()
+	}
+}
+// Events also INVALIDATE any in-flight syncSenders snapshot (seq bump):
+// without it, a snapshot taken before the event resolves later and
+// overwrites the event's write with stale data. Residual accepted: the
+// event carries no networkId, so a registration pinned to a previous
+// network (e.g. an import racing a network switch) briefly shows a chip
+// here until the next sync corrects it — cosmetic and self-healing.
+function onSenderAdded(address) {
+	senderSyncSeq++
+	const next = new Set(senderAddresses.value)
+	next.add(address.toLowerCase())
+	senderAddresses.value = next
+}
+function onSenderDeleted(address) {
+	senderSyncSeq++
+	const next = new Set(senderAddresses.value)
+	next.delete(address.toLowerCase())
+	senderAddresses.value = next
+}
+accountStateService.onSenderAdded.add(onSenderAdded)
+accountStateService.onSenderDeleted.add(onSenderDeleted)
+watch(() => appStore.network?.id, syncSenders)
+
+const { exportContacts, importContacts } = useContactImportExport({
+	contacts,
+	contactService,
+	accountStateService,
+})
+
+const handleCopyContactAddress = (contact) => {
+	void copyWithToast(contact.address, openToast, "Address is copied")
+}
+function handleEditContact(contact) {
+	cacheStore.contactToEditIdx = contact.id
+	popupStore.open("edit_contact")
+}
+function handleDeleteContact(contact) {
+	// Deleting a contact never touches sender registration — sender rows are
+	// independent PXE state, managed only in Settings → Advanced → Senders.
+	cacheStore.confirm.confirm_color = "red"
+	cacheStore.confirm.confirm_text = "Yes, delete contact"
+	cacheStore.confirm.description = `Delete contact "${contact.name}"?`
+	cacheStore.confirm.callback = async () => {
+		await contactService.deleteContact(contact.id)
+		openToast({ kind: "success", label: "Contact deleted" })
+	}
+	popupStore.open("confirm")
+}
+
+onMounted(async () => {
+	await syncSenders()
+})
+
+onBeforeUnmount(() => {
+	contactService.disconnect()
+	accountStateService.disconnect()
+})
+</script>
+
+<template>
+	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12">
+		<template #trailing>
+			<Dropdown>
+				<button type="button" :class="$style.icon_btn" aria-label="Contact actions">
+					<MaterialIcon name="more_vert" :size="18" color="secondary" />
+				</button>
+
+				<template #popup>
+					<DropdownItem @click="importContacts">
+						<Flex align="center" gap="8">
+							<Icon name="upload-outline" size="14" color="secondary" />
+							Import contacts
+						</Flex>
+					</DropdownItem>
+					<DropdownItem @click="exportContacts" :disabled="!contacts.length">
+						<Flex align="center" gap="8">
+							<Icon name="download-outline" size="14" color="secondary" />
+							Export contacts
+						</Flex>
+					</DropdownItem>
+				</template>
+			</Dropdown>
+		</template>
+
+		<SectionLabel label="Contacts" :count="sortedContacts.length" />
+
+		<ItemsContainer v-if="sortedContacts.length">
+			<ContactRow
+				v-for="c in sortedContacts"
+				:key="c.id"
+				:contact="c"
+				:isSender="isContactSender(c.address)"
+				@copy="handleCopyContactAddress"
+				@edit="handleEditContact"
+				@delete="handleDeleteContact"
+			/>
+		</ItemsContainer>
+
+		<ListStatusMessage
+			v-else
+			headline="NO CONTACTS YET"
+			sub="Save the people you send to or receive from often."
+			testid="contacts-empty"
+		/>
+
+		<Button
+			@click="popupStore.open('new_contact')"
+			wide
+			variant="primary"
+			size="large"
+			data-testid="contacts-new-btn"
+		>
+			Add contact
+		</Button>
+	</SettingsPageShell>
+</template>
+
+<style module>
+.icon_btn {
+	composes: icon_btn from "../../toolbar-button.module.css";
+}
+</style>

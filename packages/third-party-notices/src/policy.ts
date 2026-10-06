@@ -1,0 +1,355 @@
+/** A hand-verified licence record for packages whose own metadata or files cannot carry the notice. */
+export interface Override {
+	names: readonly string[]
+	/** The installed version the record was verified against; any other version fails the build. */
+	reviewedVersion: string
+	/** SPDX expression the notice is issued under. */
+	license: string
+	/** The package's own `license` field, acknowledged, when it differs from `license`. */
+	declared?: string
+	/** Where the licence text was taken from. */
+	source: string
+	/** Files under `texts/`, required when the package ships no licence file of its own. */
+	texts?: readonly string[]
+	note: string
+}
+
+/** Third-party code the module walk cannot attribute: embedded in another package, or a binary asset. */
+export interface VendoredComponent {
+	name: string
+	version?: string
+	license: string
+	source: string
+	texts: readonly string[]
+	note: string
+}
+
+export interface Vendored {
+	/**
+	 * Fires when the named package rendered code, or when an emitted asset matches the pattern. A
+	 * package trigger is bound to the version whose contents were inspected.
+	 */
+	trigger: { package: string; reviewedVersion: string } | { asset: RegExp }
+	components: readonly VendoredComponent[]
+	/** Packages whose own entry already carries this asset's notice; each must be present. */
+	coveredBy?: readonly string[]
+	/**
+	 * For an asset a build tool writes itself: what writes it, and the shape its WHOLE text must
+	 * have. A file name proves nothing about where a file came from; its content can.
+	 */
+	generated?: { by: string; content: RegExp }
+	/**
+	 * Font binaries. The claim holds only for these exact files, so a replaced or re-subset font
+	 * fails until it is reviewed, and its components are judged by `fontAllowed`.
+	 */
+	font?: { sha256: readonly string[] }
+}
+
+export interface Policy {
+	allowed: ReadonlySet<string>
+	overrides: readonly Override[]
+	vendored: readonly Vendored[]
+	/**
+	 * Third-party source adapted into first-party files, which no module walk can attribute. Every
+	 * build ships first-party code, so each record always renders.
+	 */
+	derived: readonly VendoredComponent[]
+	/** Licences a font may ship under. Font licences are not code licences and never join `allowed`. */
+	fontAllowed: ReadonlySet<string>
+	/** Emitted assets that carry code or a font; each must be claimed by a `vendored` asset trigger. */
+	codeAsset: RegExp
+}
+
+export const ALLOWED: ReadonlySet<string> = new Set([
+	"MIT",
+	"Apache-2.0",
+	"BSD-2-Clause",
+	"BSD-3-Clause",
+	"ISC",
+	"0BSD",
+	"CC0-1.0",
+	"Unlicense",
+	"BlueOak-1.0.0",
+	"Zlib",
+])
+
+/** Every common font container, in any case: an unclaimed `.TTF` must refuse like an unclaimed `.woff2`. */
+export const FONT_ASSET = /\.(woff2?|ttf|otf|eot)$/i
+
+export const FONT_ALLOWED: ReadonlySet<string> = new Set(["OFL-1.1", "Apache-2.0"])
+
+const AZTEC_NODE_TAG = "https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1"
+const AZTEC_PACKAGES_TAG = "https://github.com/AztecProtocol/aztec-packages/blob/v6.0.0-rc.1"
+const NOIR_COMMIT = "https://github.com/noir-lang/noir/blob/5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
+const SQLITE3MC_TAG = "https://github.com/utelle/SQLite3MultipleCiphers/blob/v2.3.5"
+
+const SQLITE3MC_NOTE =
+	"SQLite3 Multiple Ciphers 2.3.5 over SQLite 3.53.2, compiled with Emscripten 6.0.0. The shipped sqlite3.wasm and sqlite3-opfs-async-proxy.js are byte-identical to the upstream release archive sqlite3mc-2.3.5-sqlite-3.53.2-wasm.zip (sha256 3d0d5ebe4c54a9a22012410726ecef711e4e3e15ec11dffddf09488c72a10670), which @aztec-labs/sqlite3mc-wasm repackages unmodified. SQLite itself is in the public domain; the bundle header reproduced below is upstream's own statement of that and of the Emscripten runtime's terms. Upstream builds it from the sqlite3mc amalgamation with the default cipher set and none of the optional extensions (no miniz). Of the code that amalgamation compiles in, what is neither sqlite3mc's own MIT code nor public domain or CC0 has its own entry: sha2, libaegis and Argon2. The Emscripten runtime links musl libc, whose notice follows Emscripten's."
+
+const SQLITE3MC_TEXTS = ["sqlite3mc.MIT.txt", "sqlite-wasm-bundle-header.txt", "emscripten.MIT.txt", "musl.MIT.txt"] as const
+
+export const OVERRIDES: readonly Override[] = [
+	{
+		names: [
+			"@aztec-labs/accounts",
+			"@aztec-labs/aztec.js",
+			"@aztec-labs/bb-prover",
+			"@aztec-labs/blob-lib",
+			"@aztec-labs/constants",
+			"@aztec-labs/entrypoints",
+			"@aztec-labs/ethereum",
+			"@aztec-labs/foundation",
+			"@aztec-labs/key-store",
+			"@aztec-labs/kv-store",
+			"@aztec-labs/noir-contracts.js",
+			"@aztec-labs/noir-protocol-circuits-types",
+			"@aztec-labs/protocol-contracts",
+			"@aztec-labs/pxe",
+			"@aztec-labs/simulator",
+			"@aztec-labs/standard-contracts",
+			"@aztec-labs/stdlib",
+			"@aztec-labs/wallet-sdk",
+		],
+		reviewedVersion: "6.0.0-rc.1",
+		license: "Apache-2.0",
+		source: `${AZTEC_NODE_TAG}/LICENSE`,
+		texts: ["aztec-node.Apache-2.0.txt"],
+		note: "Published from the aztec-node repository with no licence field and no licence file; the repository root LICENSE at the release tag governs the tree these packages are built from.",
+	},
+	{
+		names: ["@aztec-foundation/bb.js"],
+		reviewedVersion: "6.0.0-rc.1",
+		license: "Apache-2.0",
+		declared: "MIT",
+		source: `${AZTEC_PACKAGES_TAG}/barretenberg/LICENSE`,
+		texts: ["barretenberg.Apache-2.0.txt"],
+		note: "The package manifest declares MIT but ships no licence file; the barretenberg tree it and its wasm are built from carries the Apache-2.0 text reproduced here. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+	},
+	{
+		names: ["@aztec-foundation/l1-artifacts"],
+		reviewedVersion: "6.0.0-rc.1",
+		license: "Apache-2.0",
+		source: `${AZTEC_PACKAGES_TAG}/LICENSE`,
+		texts: ["aztec-packages.Apache-2.0.txt"],
+		note: "Published from the aztec-packages monorepo with no licence field and no licence file; the repository root LICENSE at the release tag governs the tree it is built from.",
+	},
+	{
+		names: ["@aztec-foundation/noir-acvm_js"],
+		reviewedVersion: "6.0.0-rc.1",
+		license: "MIT",
+		source: `${NOIR_COMMIT}/LICENSE-MIT`,
+		texts: ["noir.MIT.txt"],
+		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.1 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+	},
+	{
+		names: ["@aztec-foundation/noir-noirc_abi"],
+		reviewedVersion: "6.0.0-rc.1",
+		license: "(MIT OR Apache-2.0)",
+		source: `${NOIR_COMMIT}/LICENSE-MIT`,
+		texts: ["noir.MIT.txt", "noir.Apache-2.0.txt"],
+		note: "Built from the noir submodule commit aztec-packages v6.0.0-rc.1 pins; the package ships no licence file. The wasm binary is attributed to this project as a whole: the third-party components compiled into it are not itemised here, because upstream publishes no inventory of them.",
+	},
+	{
+		names: ["@aztec-labs/sqlite3mc-wasm"],
+		reviewedVersion: "6.0.0-rc.1",
+		license: "MIT",
+		source: `${SQLITE3MC_TAG}/LICENSE`,
+		texts: SQLITE3MC_TEXTS,
+		note: SQLITE3MC_NOTE,
+	},
+	{
+		names: ["hash.js"],
+		reviewedVersion: "1.1.7",
+		license: "MIT",
+		source: "https://github.com/indutny/hash.js/blob/v1.1.7/README.md#license",
+		texts: ["hash.js.MIT.txt"],
+		note: "Ships no licence file; the text is the LICENSE section of the README the package does ship.",
+	},
+]
+
+export const VENDORED: readonly Vendored[] = [
+	{
+		trigger: { package: "vite-plugin-node-polyfills", reviewedVersion: "0.28.0" },
+		components: [
+			{
+				name: "buffer",
+				version: "6.0.3",
+				license: "MIT",
+				source: "https://github.com/feross/buffer/blob/v6.0.3/LICENSE",
+				texts: ["buffer.MIT.txt"],
+				note: "Compiled into vite-plugin-node-polyfills' Buffer shim, which is injected into every module that names Buffer.",
+			},
+			{
+				name: "base64-js",
+				license: "MIT",
+				source: "https://github.com/beatgammit/base64-js/blob/v1.5.1/LICENSE",
+				texts: ["base64-js.MIT.txt"],
+				note: "A dependency of buffer, compiled into the same shim.",
+			},
+			{
+				name: "ieee754",
+				license: "BSD-3-Clause",
+				source: "https://github.com/feross/ieee754/blob/v1.2.1/LICENSE",
+				texts: ["ieee754.BSD-3-Clause.txt"],
+				note: "A dependency of buffer, compiled into the same shim.",
+			},
+		],
+	},
+	{
+		trigger: { package: "@aztec-foundation/l1-artifacts", reviewedVersion: "6.0.0-rc.1" },
+		components: [
+			{
+				name: "@aztec/l1-contracts",
+				version: "0.1.0",
+				license: "Apache-2.0",
+				source: `${AZTEC_PACKAGES_TAG}/LICENSE`,
+				texts: ["aztec-packages.Apache-2.0.txt"],
+				note: "The aztec-packages l1-contracts tree, carried inside @aztec-foundation/l1-artifacts under its own manifest, which declares Apache-2.0. @aztec-labs/ethereum reads its L1 network defaults from it (scripts/network-defaults.json, byte-identical to the file at the release tag). The tree has no licence file of its own; the repository root LICENSE carries the text.",
+			},
+		],
+	},
+	{
+		trigger: { asset: /^assets\/sqlite3(-[\w-]+)?\.wasm$/ },
+		coveredBy: ["@aztec-labs/sqlite3mc-wasm"],
+		components: [
+			{
+				name: "sha2 by Olivier Gay",
+				license: "BSD-3-Clause",
+				source: `${SQLITE3MC_TAG}/src/sha2.c`,
+				texts: ["sqlite3mc-sha2.BSD-3-Clause.txt"],
+				note: "Compiled into sqlite3.wasm by SQLite3 Multiple Ciphers, which uses it for key derivation. The text is the file's own header.",
+			},
+			{
+				name: "libaegis",
+				license: "MIT",
+				source: "https://github.com/jedisct1/libaegis/blob/b4e81fbf6bcb87308cc164bfce7f382882c41aec/LICENSE",
+				texts: ["libaegis.MIT.txt"],
+				note: "SQLite3 Multiple Ciphers vendors Frank Denis's AEGIS implementation under src/aegis, each file marked MIT; its tree carries no separate licence file, so the text is libaegis's own.",
+			},
+			{
+				name: "Argon2 reference implementation",
+				license: "(CC0-1.0 OR Apache-2.0)",
+				source: `${SQLITE3MC_TAG}/src/argon2/src/argon2.c`,
+				texts: ["sqlite3mc-argon2.CC0-1.0-OR-Apache-2.0.txt"],
+				note: "Compiled in with the AEGIS cipher, which derives its keys with it. Used under CC0-1.0. The text is the header the vendored sources carry.",
+			},
+		],
+	},
+	{
+		trigger: { asset: /^assets\/sqlite3-opfs-async-proxy\.js$/ },
+		components: [],
+		coveredBy: ["@aztec-labs/sqlite3mc-wasm"],
+	},
+	{
+		trigger: { asset: /^service-worker-loader\.js$/ },
+		components: [],
+		generated: {
+			by: "@crxjs/vite-plugin's service-worker loader",
+			content: /^import '\.\/assets\/[\w.-]+\.js';\s*$/,
+		},
+	},
+	{
+		trigger: { asset: /^assets\/[\w.-]+-loader-[\w-]+\.js$/ },
+		components: [],
+		generated: {
+			by: "@crxjs/vite-plugin's content-script loader",
+			content:
+				/^\(function \(\) \{\s*'use strict';\s*const injectTime = performance\.now\(\);\s*\(async \(\) => \{\s*const \{ onExecute \} = await import\(\s*\/\* @vite-ignore \*\/\s*chrome\.runtime\.getURL\("assets\/[\w.-]+\.js"\)\s*\);\s*onExecute\?\.\(\{ perf: \{ injectTime, loadTime: performance\.now\(\) - injectTime \} \}\);\s*\}\)\(\)\.catch\(console\.error\);\s*\}\)\(\);\s*$/,
+		},
+	},
+	{
+		trigger: { asset: /^assets\/barretenberg(-threads)?\.wasm\.gz$/ },
+		components: [],
+		coveredBy: ["@aztec-foundation/bb.js"],
+	},
+	{
+		trigger: { asset: /^assets\/acvm_js_bg-[\w-]+\.wasm$/ },
+		components: [],
+		coveredBy: ["@aztec-foundation/noir-acvm_js"],
+	},
+	{
+		trigger: { asset: /^assets\/noirc_abi_wasm_bg-[\w-]+\.wasm$/ },
+		components: [],
+		coveredBy: ["@aztec-foundation/noir-noirc_abi"],
+	},
+	{
+		trigger: { asset: /^assets\/InterVariable-[\w-]+\.woff2$/ },
+		font: { sha256: ["693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3"] },
+		components: [
+			{
+				name: "Inter",
+				version: "4.001",
+				license: "OFL-1.1",
+				source: "https://github.com/rsms/inter/blob/v4.1/LICENSE.txt",
+				texts: ["inter.OFL-1.1.txt"],
+				note: "Font, bundled by @nulo/design. Copyright 2016 The Inter Project Authors. No Reserved Font Name is declared.",
+			},
+		],
+	},
+	{
+		trigger: { asset: /^assets\/SpaceGrotesk-latin(-ext)?-[\w-]+\.woff2$/ },
+		font: {
+			sha256: [
+				"a0d054c4af557de20afd6ca59f47ab353bcaec49c63ff04b6c9d39d0f8910557",
+				"054c266fbb441ee059365dba0885d206f67ca05b375de869b88e02ebfccc9b9d",
+			],
+		},
+		components: [
+			{
+				name: "Space Grotesk",
+				version: "2.000",
+				license: "OFL-1.1",
+				source: "https://github.com/floriankarsten/space-grotesk/blob/4a44bc96691ab8f0fd06e3da65224a2ab30afe23/OFL.txt",
+				texts: ["space-grotesk.OFL-1.1.txt"],
+				note: "Font, latin and latin-ext subsets, bundled by @nulo/design. Copyright 2020 The Space Grotesk Project Authors. No Reserved Font Name is declared, so a subset may keep the name.",
+			},
+		],
+	},
+	{
+		trigger: { asset: /^assets\/JetBrainsMono-latin-[\w-]+\.woff2$/ },
+		font: { sha256: ["2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4"] },
+		components: [
+			{
+				name: "JetBrains Mono",
+				version: "2.211",
+				license: "OFL-1.1",
+				source: "https://github.com/JetBrains/JetBrainsMono/blob/v2.304/OFL.txt",
+				texts: ["jetbrains-mono.OFL-1.1.txt"],
+				note: "Font, latin subset, bundled by @nulo/design. Copyright 2020 The JetBrains Mono Project Authors. No Reserved Font Name is declared, so a subset may keep the name.",
+			},
+		],
+	},
+	{
+		trigger: { asset: /^assets\/MaterialSymbolsOutlined-[\w-]+\.woff2$/ },
+		font: { sha256: ["d7706dbc272274f7a6a4278df7a10a838f2a7c1eb14a3e39106dec04192b91a8"] },
+		components: [
+			{
+				name: "Material Symbols Outlined",
+				version: "2.930",
+				license: "Apache-2.0",
+				source: "https://github.com/google/material-design-icons/blob/68e015dbbb6b730b5fe4934e8507cd5a465c8a3d/LICENSE",
+				texts: ["material-symbols.Apache-2.0.txt"],
+				note: "Icon font, bundled by @nulo/design. Copyright Google LLC. The upstream repository ships no NOTICE file.",
+			},
+		],
+	},
+]
+
+export const DERIVED: readonly VendoredComponent[] = [
+	{
+		name: "Azguard Wallet",
+		license: "Apache-2.0",
+		source: "https://github.com/AzguardWallet/azguard-wallet/blob/845abb7ec1dff689b9330f6648c28105fa8a1ee3/LICENSE.md",
+		texts: ["azguard-wallet.Apache-2.0.txt"],
+		note: 'Nulo is derived from Azguard Wallet; each source file derived from it carries a "Modified from Azguard Wallet" notice, or is listed in ACKNOWLEDGEMENTS.md if its format cannot carry one. The upstream repository ships no NOTICE file.',
+	},
+]
+
+export const POLICY: Policy = {
+	allowed: ALLOWED,
+	overrides: OVERRIDES,
+	vendored: VENDORED,
+	derived: DERIVED,
+	fontAllowed: FONT_ALLOWED,
+	codeAsset: new RegExp(`\\.(wasm(\\.gz)?|[cm]?js)$|${FONT_ASSET.source}`, "i"),
+}

@@ -1,0 +1,185 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+import { FieldWarning } from "@nulo/design"
+/** Services */
+import { ProfileServiceClient } from "@/wallet/services/profile/client"
+
+/** Utils */
+import { normalizeProfileName } from "@/utils/profile-name"
+
+/** Composables */
+import { vSnackFooter } from "@/composables/snackInset"
+import { useToast } from "@/composables/toast"
+import { usePopupEntity } from "@/composables/usePopupEntity"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
+const { order, depth } = usePopupStack("edit_profile")
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+let profileService = null
+const nameTerm = ref("")
+const isStartedEditing = ref(false)
+// Names of OTHER profiles (excluding the one being edited), NFKC + lowercase
+// normalized, populated when the popup opens. Used to block updates that
+// would shadow another profile's name — same case-folded NFKC compare as
+// the F4 duplicate hard-block on Create/Import.
+const otherProfileNames = ref([])
+
+const handleFillFieldsWithDefaultValues = () => {
+	nameTerm.value = appStore.profile?.name
+
+	isStartedEditing.value = false
+}
+
+const isUnchanged = computed(() => appStore.profile.name.toLowerCase() === nameTerm.value.toLowerCase() && isStartedEditing.value)
+const isCollision = computed(() => {
+	if (!nameTerm.value || !isStartedEditing.value) return false
+	const normalized = normalizeProfileName(nameTerm.value)
+	return otherProfileNames.value.includes(normalized)
+})
+const isAvailableToUpdateProfile = computed(() => {
+	// The single submit-validity source for BOTH the button and the Enter path.
+	// Full-lifetime submit latch first: a running rename closes the form on
+	// EVERY route. isStartedEditing must gate here too (not only on the
+	// button): isUnchanged and isCollision both require it, so without this
+	// gate a pre-edit Enter would submit the unchanged name.
+	if (isProfileUpdateInProgress.value) return
+	if (!isStartedEditing.value) return
+	if (!nameTerm.value?.length) return
+	if (isUnchanged.value) return
+	if (isCollision.value) return
+
+	return true
+})
+
+const isProfileUpdateInProgress = ref(false)
+const handleUpdateProfile = async () => {
+	if (!isAvailableToUpdateProfile.value) return
+
+	isProfileUpdateInProgress.value = true
+	try {
+		// Re-validate collision against a fresh getProfiles() inside the
+		// in-progress latch. Closes the race where `otherProfileNames` was
+		// still loading when the user clicked Update (initial population is
+		// async; without this re-check a fast click could submit before the
+		// list arrived). Service has no server-side uniqueness check, so
+		// this is the only defense-in-depth path.
+		const currentId = appStore.profile?.id
+		const freshList = await profileService.getProfiles()
+		const normalized = normalizeProfileName(nameTerm.value)
+		const collidesNow = freshList.some((p) => p.id !== currentId && normalizeProfileName(p.name) === normalized)
+		if (collidesNow) {
+			otherProfileNames.value = freshList.filter((p) => p.id !== currentId).map((p) => normalizeProfileName(p.name))
+			isProfileUpdateInProgress.value = false
+			return
+		}
+		appStore.profile = await profileService.changeProfileName(appStore.profile.id, nameTerm.value)
+		emit("onClose")
+
+		openToast({ kind: "success", label: "Profile is updated" })
+	} catch {
+		// The rejection previously vanished with zero user feedback — the sole
+		// silent outlier in the popup family; the family's standard error toast
+		// handles it, and the finally still releases the latch.
+		openToast({ kind: "error", label: "Something went wrong" })
+	} finally {
+		isProfileUpdateInProgress.value = false
+	}
+}
+
+usePopupEntity(() => props.show, {
+	submit: handleUpdateProfile,
+	onShow: async () => {
+		profileService = new ProfileServiceClient()
+		nameTerm.value = appStore.profile?.name
+		// Populate the cross-profile collision list. Excludes the
+		// current profile by id so renaming to the same name doesn't
+		// trigger a false-positive collision. An Enter during this await is
+		// safe: handleUpdateProfile re-validates against a fresh getProfiles()
+		// inside its in-progress latch.
+		const currentId = appStore.profile?.id
+		const profiles = await profileService.getProfiles()
+		otherProfileNames.value = profiles.filter((p) => p.id !== currentId).map((p) => normalizeProfileName(p.name))
+	},
+	onHide: () => {
+		profileService.disconnect()
+		profileService = null
+		nameTerm.value = ""
+		isStartedEditing.value = false
+		otherProfileNames.value = []
+	},
+})
+</script>
+
+<template>
+	<Popup :show @onClose="emit('onClose')" :displaceIdx="order">
+		<PopupCard :displaceIdx="depth">
+			<PopupHeader @onClose="emit('onClose')" closable>
+				<template #title>
+					<Text size="14" weight="600" color="primary">Edit profile</Text>
+				</template>
+			</PopupHeader>
+
+			<Flex wide direction="column" gap="24" :class="$style.wrapper">
+				<ItemsContainer>
+					<SettingItem
+						size="large"
+						:title="appStore.profile?.name"
+						description="Profile for editing"
+						icon="user"
+						raw
+					/>
+				</ItemsContainer>
+
+				<Input
+					label="New name"
+					placeholder="My Profile"
+					v-model="nameTerm"
+					autofocus
+					sanitize
+					:maxLength="32"
+					@input="isStartedEditing = true"
+					data-testid="profile-name-input"
+				>
+					<template #right>
+						<Transition name="fade">
+							<FieldWarning v-if="isCollision"> Name in use </FieldWarning>
+							<FieldWarning v-else-if="isUnchanged"> Already exist </FieldWarning>
+						</Transition>
+					</template>
+				</Input>
+
+				<Flex v-snack-footer direction="column" gap="12">
+					<Button
+						@click="handleUpdateProfile"
+						wide
+						variant="primary"
+						size="medium"
+						:disabled="!isAvailableToUpdateProfile"
+						:loading="isProfileUpdateInProgress"
+						data-testid="edit-profile-submit"
+					>
+						Update
+					</Button>
+					<Button @click="handleFillFieldsWithDefaultValues" wide variant="primary_outline" size="medium" data-testid="edit-profile-cancel">
+						Reset changes
+					</Button>
+				</Flex>
+			</Flex>
+		</PopupCard>
+	</Popup>
+</template>
+
+<style module>
+.wrapper {
+	composes: body from "./popup-shared.module.css";
+}
+</style>

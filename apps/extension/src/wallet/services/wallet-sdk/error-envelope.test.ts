@@ -1,0 +1,334 @@
+import { describe, expect, test } from "vitest"
+import {
+	AccountAddressInconsistencyError,
+	CapabilityNotGrantedError,
+	ChainNotSupportedError,
+	TermsAcceptanceRequiredError,
+	JobCancelledError,
+	RpcDisconnectedError,
+	RpcTimeoutError,
+	ScopeViolationError,
+	SessionEndedError,
+	TooManyPendingError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
+import {
+	ContractNotRegisteredError,
+	DuplicateInitializationError,
+	PxeScopeUnregisteredError,
+	PxeStaleAnchorError,
+	UnsupportedMethodError,
+} from "@nulo/extension-messaging/errors"
+import { unwrapOperationResult } from "@nulo/wallet-bridge"
+import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
+import { SCOPE_VIOLATION_ENVELOPE, toWalletResponseError, UNCLASSIFIED_ERROR_MESSAGE } from "./error-envelope"
+
+describe("toWalletResponseError", () => {
+	test("JobCancelledError → {code:4001, walletErrorCode, jobId} (regression for existing behavior)", () => {
+		const env = toWalletResponseError(new JobCancelledError("Cancelled", { jobId: "j-1" }))
+		expect(env).toEqual({
+			code: 4001,
+			message: "Cancelled",
+			data: { walletErrorCode: JobCancelledError.CODE, jobId: "j-1" },
+		})
+	})
+
+	test("UserRejectedError → {code:4001, walletErrorCode USER_REJECTED} (popup Reject, distinct from JOB_CANCELLED)", () => {
+		const env = toWalletResponseError(new UserRejectedError("User rejected"))
+		expect(env).toEqual({
+			code: 4001,
+			message: "User rejected",
+			data: { walletErrorCode: UserRejectedError.CODE },
+		})
+	})
+
+	test("TermsAcceptanceRequiredError → {code:4100} with the message a dApp can show as is", () => {
+		expect(toWalletResponseError(new TermsAcceptanceRequiredError())).toEqual({
+			code: 4100,
+			message: TermsAcceptanceRequiredError.MESSAGE,
+			data: { walletErrorCode: TermsAcceptanceRequiredError.CODE },
+		})
+	})
+
+	test("CapabilityNotGrantedError('accounts') → {code:4100, walletErrorCode, capabilityType}", () => {
+		const env = toWalletResponseError(new CapabilityNotGrantedError("accounts"))
+		expect(env).toEqual({
+			code: 4100,
+			message: "accounts capability not granted. Call requestCapabilities() first.",
+			data: { walletErrorCode: CapabilityNotGrantedError.CODE, capabilityType: "accounts" },
+		})
+	})
+
+	test("ScopeViolationError → {code:4100, walletErrorCode SCOPE_VIOLATION} with a constant message, never its own", () => {
+		const refusal = new ScopeViolationError("Scope violation: sendTx call not permitted by granted transaction scope")
+		const env = toWalletResponseError(refusal)
+		expect(env).toEqual({
+			code: 4100,
+			message: "This request is outside the permissions you gave this app.",
+			data: { walletErrorCode: "SCOPE_VIOLATION" },
+		})
+		expect(JSON.stringify(env)).not.toContain("Scope violation")
+		expect(JSON.parse(new Error(JSON.stringify(env)).message)).toEqual(env)
+		// One frozen object answers every refusal, so no sink can edit what the next dApp receives.
+		expect(env === SCOPE_VIOLATION_ENVELOPE && Object.isFrozen(env) && Object.isFrozen(SCOPE_VIOLATION_ENVELOPE.data)).toBe(true)
+		// The same words on a plain Error are not a refusal: the fall-through stays constant.
+		expect(toWalletResponseError(new Error(refusal.message))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("SessionEndedError → {code:4900, walletErrorCode SESSION_ENDED} with the constant message; only the class maps", () => {
+		expect(toWalletResponseError(new SessionEndedError())).toEqual({
+			code: 4900,
+			message: SessionEndedError.MESSAGE,
+			data: { walletErrorCode: SessionEndedError.CODE },
+		})
+		// The same words on a plain Error are not a session end: the fall-through stays constant.
+		expect(toWalletResponseError(new Error(SessionEndedError.MESSAGE))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("ChainNotSupportedError → {code:4901, walletErrorCode CHAIN_NOT_SUPPORTED} with the constant message; only the class maps", () => {
+		expect(toWalletResponseError(new ChainNotSupportedError())).toEqual({
+			code: 4901,
+			message: ChainNotSupportedError.MESSAGE,
+			data: { walletErrorCode: ChainNotSupportedError.CODE },
+		})
+		// The untyped throw it replaced still flattens: a served chain list can never ride a message.
+		expect(toWalletResponseError(new Error("No network configured for chainId 1816023401"))).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("envelope round-trips through new Error(JSON.stringify(env)) — dApp parse recipe works", () => {
+		// Load-bearing contract test for the wallet-bridge README recipe. The
+		// `@aztec-labs/wallet-sdk` wrapper wraps `response.error` in
+		// `new Error(JSON.stringify(error))`, so dApps that want to discriminate
+		// need to `JSON.parse(err.message).code`. If this test fails, the
+		// documented recipe stops working and downstream dApps break silently.
+		const env = toWalletResponseError(new CapabilityNotGrantedError("accounts"))
+		const wrapped = new Error(JSON.stringify(env))
+		const parsed = JSON.parse(wrapped.message)
+		expect(parsed.code).toBe(4100)
+		expect(parsed.data.walletErrorCode).toBe("CAPABILITY_NOT_GRANTED")
+		expect(parsed.data.capabilityType).toBe("accounts")
+	})
+
+	test("TooManyPendingError → {code:-32005, walletErrorCode} with no origin/profile detail", () => {
+		const env = toWalletResponseError(new TooManyPendingError())
+		expect(env).toEqual({
+			code: -32005,
+			message: "Too many pending transactions; retry after the in-flight ones settle.",
+			data: { walletErrorCode: TooManyPendingError.CODE },
+		})
+		// No oracle: the envelope must not carry a lane/origin/profile field.
+		const data = (env as { data: Record<string, unknown> }).data
+		expect(Object.keys(data)).toEqual(["walletErrorCode"])
+	})
+
+	// D11 dApp-contract: the phase-4 offscreen typed-error flip means a prove/
+	// simulate timeout or transport disconnect now reaches the dApp as a typed
+	// Rpc* error. These pin the intended, stable response.error — a generic
+	// message (NO internal "Offscreen request timed out: <method>" leak) + a
+	// discriminable walletErrorCode.
+	test("RpcTimeoutError → {code:-32603, walletErrorCode} with a generic, leak-free message", () => {
+		const env = toWalletResponseError(
+			new RpcTimeoutError("Offscreen request timed out: proveTx", { requestId: 7, methodName: "proveTx" }),
+		)
+		expect(env).toEqual({
+			code: -32603,
+			message: "The wallet timed out while processing the request.",
+			data: { walletErrorCode: "RPC_TIMEOUT" },
+		})
+		// No oracle: the internal method name must NOT cross to the dApp.
+		expect(JSON.stringify(env)).not.toContain("proveTx")
+		expect(JSON.stringify(env)).not.toContain("Offscreen")
+	})
+
+	test("RpcDisconnectedError → {code:-32603, walletErrorCode} (transient; NOT 4900) with a leak-free message", () => {
+		const env = toWalletResponseError(
+			new RpcDisconnectedError("Offscreen send failed: simulateTx", { requestId: 8, methodName: "simulateTx" }),
+		)
+		expect(env).toEqual({
+			code: -32603,
+			message: "The wallet was disconnected while processing the request.",
+			data: { walletErrorCode: "RPC_DISCONNECTED" },
+		})
+		expect(JSON.stringify(env)).not.toContain("simulateTx")
+	})
+
+	test("AccountAddressInconsistencyError → fully generic failure: no detail, no discriminator", () => {
+		const env = toWalletResponseError(new AccountAddressInconsistencyError(undefined, { profileId: "p1", chainId: 0 }))
+		expect(env).toEqual({ code: -32603, message: "The wallet could not process the request." })
+		const wire = JSON.stringify(env)
+		expect(wire).not.toContain("inconsistency")
+		expect(wire).not.toContain("ACCOUNT_ADDRESS")
+		expect(wire).not.toContain("p1")
+	})
+
+	test("plain Error → constant string (preserves the string wire contract, not the content)", () => {
+		// The SHAPE contract — a plain string for unrecognised throws — is what dApps depend on;
+		// the CONTENT was internal text crossing into an untrusted caller.
+		const env = toWalletResponseError(new Error("boom"))
+		expect(typeof env).toBe("string")
+		expect(env).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("non-Error throw → the same constant", () => {
+		expect(toWalletResponseError("nope")).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+		expect(toWalletResponseError(42)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	test("UnsupportedMethodError → {code:-32601, walletErrorCode} keeping the method name", () => {
+		// A dApp's whole response is to fall back to another route, so it must be able to tell this
+		// from a wallet fault. Flattening it into the constant is what broke `batch-partial-failure`.
+		const env = toWalletResponseError(UnsupportedMethodError.forMethod("thisMethodDoesNotExist"))
+		expect(env).toMatchObject({
+			code: -32601,
+			data: { walletErrorCode: UnsupportedMethodError.CODE },
+		})
+		expect((env as { message: string }).message).toMatch(/Unsupported wallet method.*thisMethodDoesNotExist/i)
+	})
+
+	test("the echoed method name is bounded — it arrives off the wire", () => {
+		const env = toWalletResponseError(UnsupportedMethodError.forMethod("X".repeat(5000)))
+		const message = (env as { message: string }).message
+		expect(message.length).toBeLessThan(120)
+		expect(message).toContain("…")
+	})
+})
+
+describe("stale-anchor and unregistered-contract arms", () => {
+	test("PxeStaleAnchorError → {code:-32603, walletErrorCode} with a constant message; the node's text stays behind", () => {
+		const nodeText =
+			"Block hash 0x12dc not found when resolving query. If the node API has been queried with anchor block hash possibly a reorg has occurred."
+		const env = toWalletResponseError(
+			new PxeStaleAnchorError("proveTx: stale chain anchor persisted after a resync", {
+				op: "proveTx",
+				phase: "op",
+				cause: nodeText,
+			}),
+		)
+		expect(env).toEqual({
+			code: -32603,
+			message: "The wallet's view of the chain was behind the node. Retry the request.",
+			data: { walletErrorCode: "PXE_STALE_ANCHOR" },
+		})
+		expect(JSON.stringify(env)).not.toContain("0x12dc")
+	})
+
+	test("ContractNotRegisteredError → {code:-32602, walletErrorCode} with a constant message and no class id", () => {
+		const env = toWalletResponseError(new ContractNotRegisteredError("Contract artifact not found for class 0x2015e1c6"))
+		expect(env).toEqual({
+			code: -32602,
+			message: "Contract not registered with the wallet. Register it and retry.",
+			data: { walletErrorCode: "CONTRACT_NOT_REGISTERED" },
+		})
+		expect(JSON.stringify(env)).not.toContain("0x2015")
+		// The phrase dApp-side substring classifiers key on.
+		expect((env as { message: string }).message.toLowerCase()).toContain("not registered")
+	})
+
+	test("each survives the REAL production chain: classify → unwrap → envelope", () => {
+		const task = { cancel: () => {}, fail: () => {} }
+		const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
+		const rethrown = (thrown: unknown) => {
+			const result = classifyOperationCatch(thrown, task, errorMessage)
+			try {
+				unwrapOperationResult(result as never)
+				return undefined
+			} catch (e) {
+				return e
+			}
+		}
+		const stale = rethrown(
+			new PxeStaleAnchorError("executeUtility: stale chain anchor persisted after a resync", { cause: "secret node text" }),
+		)
+		expect(stale).toBeInstanceOf(PxeStaleAnchorError)
+		expect(toWalletResponseError(stale)).toMatchObject({ code: -32603, data: { walletErrorCode: "PXE_STALE_ANCHOR" } })
+		expect(JSON.stringify(toWalletResponseError(stale))).not.toContain("secret node text")
+
+		const unregistered = rethrown(new ContractNotRegisteredError("Contract instance not found"))
+		expect(unregistered).toBeInstanceOf(ContractNotRegisteredError)
+		expect(toWalletResponseError(unregistered)).toMatchObject({ code: -32602, data: { walletErrorCode: "CONTRACT_NOT_REGISTERED" } })
+
+		expect(toWalletResponseError(rethrown(new PxeScopeUnregisteredError()))).toEqual({
+			code: -32603,
+			message: PxeScopeUnregisteredError.MESSAGE,
+			data: { walletErrorCode: "PXE_SCOPE_UNREGISTERED" },
+		})
+	})
+})
+
+describe("duplicate-initialization envelope reachability", () => {
+	test("the typed error survives the REAL production chain: classify → unwrap → envelope", async () => {
+		// The executor's catch flattens results to data; without the `code`
+		// ride-along + unwrap re-materialization, the envelope's typed branch
+		// is dead code (the max review proved the pre-fix chain delivers a
+		// bare string). This composes the three real functions end-to-end.
+		const task = { cancel: () => {}, fail: () => {} }
+		const result = classifyOperationCatch(new DuplicateInitializationError(), task, (e) => (e instanceof Error ? e.message : String(e)))
+		expect(result.status).toBe("failed")
+		const thrown = (() => {
+			try {
+				unwrapOperationResult(result as never)
+				return undefined
+			} catch (e) {
+				return e
+			}
+		})()
+		expect(thrown).toBeInstanceOf(DuplicateInitializationError)
+		const envelope = toWalletResponseError(thrown)
+		expect(envelope).toMatchObject({
+			code: -32603,
+			data: { walletErrorCode: "DUPLICATE_INITIALIZATION" },
+		})
+		expect((envelope as { message: string }).message).toMatch(/wait for network sync, then retry/)
+	})
+
+	test("an untyped failure still flattens to the string fall-through (no code, no envelope object)", () => {
+		const task = { cancel: () => {}, fail: () => {} }
+		const result = classifyOperationCatch(new Error("plain boom"), task, (e) => (e instanceof Error ? e.message : String(e)))
+		const thrown = (() => {
+			try {
+				unwrapOperationResult(result as never)
+				return undefined
+			} catch (e) {
+				return e
+			}
+		})()
+		expect(thrown).not.toBeInstanceOf(DuplicateInitializationError)
+		expect(toWalletResponseError(thrown)).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+	})
+
+	/**
+	 * This value is handed to an ARBITRARY dApp — the only path here that leaves the machine.
+	 *
+	 * Scrubbing and capping were tried first and rejected: a cap bounds exposure without
+	 * sanitizing it, so `new Error("private note: <secret>")` still crossed verbatim. Anything a
+	 * dApp is meant to act on is classified above with a `walletErrorCode`, so an unclassified
+	 * error's text has no defined meaning to the caller.
+	 */
+	describe("fall-through carries no internal state", () => {
+		test("an endpoint URL with an API key never reaches the dApp", () => {
+			const out = toWalletResponseError(new Error("fetch failed: https://eth.example.com/v2/SECRET-KEY-123?apiKey=abc"))
+
+			expect(out).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+			expect(out).not.toContain("SECRET-KEY-123")
+			expect(out).not.toContain("eth.example.com")
+		})
+
+		test("a secret in the message body never reaches the dApp — a cap would not have stopped this", () => {
+			const out = toWalletResponseError(new Error("private note: correct-horse-battery-staple"))
+
+			expect(out).toBe(UNCLASSIFIED_ERROR_MESSAGE)
+			expect(out).not.toContain("correct-horse")
+		})
+
+		test("stays a plain string, which is the actual wire contract", () => {
+			expect(typeof toWalletResponseError(new Error("x".repeat(10_000)))).toBe("string")
+			expect(typeof toWalletResponseError("not an error")).toBe("string")
+		})
+
+		test("classified errors are unaffected — they keep their code and message", () => {
+			const env = toWalletResponseError(new RpcTimeoutError("Offscreen request timed out: prove"))
+
+			expect(env).toMatchObject({ code: -32603, data: { walletErrorCode: RpcTimeoutError.CODE } })
+		})
+	})
+})

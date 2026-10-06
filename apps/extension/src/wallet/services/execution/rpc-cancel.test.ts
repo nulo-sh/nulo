@@ -1,0 +1,119 @@
+import { describe, expect, test, vi } from "vitest"
+import {
+	ContractNotRegisteredError,
+	DuplicateInitializationError,
+	JobCancelledError,
+	PxeStaleAnchorError,
+	SessionEndedError,
+	TermsAcceptanceRequiredError,
+	TooManyPendingError,
+	walletErrorFromPayload,
+} from "@nulo/extension-messaging/errors"
+import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { classifyOperationCatch, maybeRethrowAsRpcCancel } from "./rpc-cancel"
+
+describe("maybeRethrowAsRpcCancel", () => {
+	test("sentinel → task.cancel() + throws JobCancelledError carrying jobId", () => {
+		// Pin: the SW catch must (a) mark the task cancelled, not failed,
+		// and (b) emit a structurally typed error so the popup's
+		// `instanceof JobCancelledError` works after RPC round-trip.
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		try {
+			maybeRethrowAsRpcCancel(new JobCancelledSentinel("job-abc"), task)
+			expect.unreachable("should have thrown")
+		} catch (err) {
+			expect(err).toBeInstanceOf(JobCancelledError)
+			expect((err as JobCancelledError).details).toMatchObject({ jobId: "job-abc" })
+		}
+		expect(task.cancel).toHaveBeenCalledOnce()
+		expect(task.fail).not.toHaveBeenCalled()
+	})
+
+	test("non-sentinel error → returns without touching the task", () => {
+		// Regression pin: a real failure must NOT be misclassified as a cancel.
+		// Without this branch, every error would mark the task cancelled and
+		// the journal terminal card would say "Cancelled" for genuine failures.
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		expect(() => maybeRethrowAsRpcCancel(new Error("simulation failed"), task)).not.toThrow()
+		expect(task.cancel).not.toHaveBeenCalled()
+		expect(task.fail).not.toHaveBeenCalled()
+	})
+})
+
+describe("classifyOperationCatch", () => {
+	const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+	test("sentinel → task.cancel() + cancelled result with jobId + reason=user", () => {
+		// The task lifecycle must match the result variant. Pin
+		// that cancelled never silently calls task.fail().
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new JobCancelledSentinel("job-1"), task, errorMessage)
+		expect(result).toEqual({ status: "cancelled", jobId: "job-1", reason: "user" })
+		expect(task.cancel).toHaveBeenCalledOnce()
+		expect(task.fail).not.toHaveBeenCalled()
+	})
+
+	test("non-sentinel error → task.fail() + failed result with stringified error", () => {
+		// Regression pin: real failures keep going through task.fail.
+		// If this regresses, every failure would silently become cancelled.
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const err = new Error("network unreachable")
+		const result = classifyOperationCatch(err, task, errorMessage)
+		expect(result).toEqual({ status: "failed", error: "network unreachable", code: undefined })
+		expect(task.fail).toHaveBeenCalledWith(err)
+		expect(task.cancel).not.toHaveBeenCalled()
+	})
+
+	test("DuplicateInitializationError rides the code channel", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new DuplicateInitializationError(), task, errorMessage)
+		expect(result.status).toBe("failed")
+		expect((result as { code?: string }).code).toBe("DUPLICATE_INITIALIZATION")
+	})
+
+	test("PxeStaleAnchorError and ContractNotRegisteredError ride the code channel (message-only reconstructible)", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const stale = classifyOperationCatch(
+			new PxeStaleAnchorError("proveTx: stale chain anchor persisted after a resync"),
+			task,
+			errorMessage,
+		)
+		expect(stale).toMatchObject({ status: "failed", code: "PXE_STALE_ANCHOR" })
+		const unregistered = classifyOperationCatch(new ContractNotRegisteredError("Contract not found"), task, errorMessage)
+		expect(unregistered).toMatchObject({ status: "failed", code: "CONTRACT_NOT_REGISTERED", error: "Contract not found" })
+		expect(task.fail).toHaveBeenCalledTimes(2)
+	})
+
+	test("SessionEndedError rides the code channel and rebuilds losslessly from its code and message", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new SessionEndedError(), task, errorMessage)
+		expect(result).toMatchObject({ status: "failed", code: "SESSION_ENDED", error: SessionEndedError.MESSAGE })
+		const failed = result as { code: string; error: string }
+		expect(walletErrorFromPayload({ code: failed.code, message: failed.error })).toBeInstanceOf(SessionEndedError)
+	})
+
+	test("a Terms refusal at the broadcast line keeps its code all the way to the dApp envelope", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new TermsAcceptanceRequiredError(), task, errorMessage) as { code: string; error: string }
+		expect(result).toMatchObject({ status: "failed", code: TermsAcceptanceRequiredError.CODE })
+		// What the wallet-sdk dispatcher does with a coded failure, then what the ingress sends back.
+		const rebuilt = walletErrorFromPayload({ code: result.code, message: result.error })
+		expect(rebuilt).toBeInstanceOf(TermsAcceptanceRequiredError)
+		expect(toWalletResponseError(rebuilt)).toEqual({
+			code: 4100,
+			message: TermsAcceptanceRequiredError.MESSAGE,
+			data: { walletErrorCode: TermsAcceptanceRequiredError.CODE },
+		})
+	})
+
+	test("OTHER WalletError subclasses do NOT ride the code channel (unsound reconstruction guard)", () => {
+		// TooManyPendingError deliberately reconstructs as base WalletError and
+		// detail-dependent classes lose details through the message-only
+		// channel — a blanket pass-through would silently corrupt them.
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new TooManyPendingError(), task, errorMessage)
+		expect(result.status).toBe("failed")
+		expect((result as { code?: string }).code).toBeUndefined()
+	})
+})

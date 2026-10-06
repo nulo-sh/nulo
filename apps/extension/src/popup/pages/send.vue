@@ -1,0 +1,898 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true
+	}
+}
+</route>
+
+<script setup>
+/** Components */
+import AmountCard from "@/components/composite/send/AmountCard.vue"
+import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue"
+import PublishStrip from "@/components/composite/send/PublishStrip.vue"
+import RecipientField from "@/popup/components/modules/send/RecipientField.vue"
+import SelectTokenCard from "@/popup/components/modules/send/SelectTokenCard.vue"
+import SendReviewSheet from "@/popup/components/modules/send/SendReviewSheet.vue"
+import SendTypesCard from "@/components/composite/send/SendTypesCard.vue"
+
+/** Services */
+import { ContactServiceClient } from "@/wallet/services/contact/client"
+import { ExecutionServiceClient } from "@/wallet/services/execution/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
+import { TokenServiceClient } from "@/wallet/services/token/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { proxyTickerFor } from "@/wallet/services/price/price-map"
+import { TransferType } from "@/wallet/services/transaction/client"
+
+/** Utils */
+import { managers } from "@/utils/core"
+import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
+import { isValidAztecAddress } from "@/utils/aztec-address"
+import { withoutId } from "@/utils/entity-list"
+import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
+import { FEE_JUICE_BRIDGE_URL, feeLine } from "@/popup/components/modules/send/fee-helpers"
+import { validateSendAmount } from "@/popup/pages/send-amount"
+import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
+import { evaluateFiatGate } from "@/popup/pages/send-fiat-gate"
+import { submitTransfer } from "@/popup/pages/send-submit"
+import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
+
+/** Composables */
+import { useToast } from "@/composables/toast.js"
+import { useFeeEstimation } from "@/composables/useFeeEstimation"
+import { useLegalAcceptance } from "@/composables/useLegalAcceptance"
+import { usePrices } from "@/composables/usePrices"
+import { vSnackFooter } from "@/composables/snackInset"
+import { useSendReview } from "@/composables/useSendReview"
+import { useTicker } from "@/composables/ticker"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+const appStore = useAppStore()
+const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
+
+const route = useRoute()
+const router = useRouter()
+
+/** Post-send / forced-close navigation. Prefers browser history so the user
+ *  returns to whichever surface launched Send (token detail, contacts, home);
+ *  falls back to /popup/general for cold-open / deep-link. */
+function leaveSend() {
+	if (window.history.length > 1) {
+		router.back()
+	} else {
+		router.replace("/popup/general")
+	}
+}
+
+const feeSettings = ref()
+/** The fee card's reading of the method in effect — `{ type, fpcId, isProtocol }` or null. */
+const payer = ref(null)
+/** Set by FeeSettingsCard when the selected fee-juice method has zero balance.
+ *  When true, the primary CTA becomes "Get fee juice" (C) and the fee card
+ *  shows the explainer banner (A). */
+const needsFeeJuice = ref(false)
+const feeDisplay = ref(null)
+
+/** Open the fee-juice bridge in a new tab. */
+const openFeeJuiceBridge = () => {
+	window.open(FEE_JUICE_BRIDGE_URL, "_blank", "noopener,noreferrer")
+}
+
+const awaitingNewToken = ref(false)
+
+const tokenService = new TokenServiceClient()
+tokenService.onTokenAdded.add(onTokenAdded)
+tokenService.onTokenDeleted.add(onTokenDeleted)
+let tokenAddedDuringLoad = false
+/** Fires for any profile's or chain's add, so it re-reads the current identity's tokens rather
+ *  than appending one; an add during an identity fetch makes that fetch read them again, and one
+ *  after a refused fetch retries it, since its balances and contacts are missing too. */
+function onTokenAdded() {
+	if (tokensLoading.value) {
+		tokenAddedDuringLoad = true
+		return
+	}
+	if (tokensFailed.value) return retryTokens()
+	reloadTokens().catch(onReadFailed)
+}
+/** Bumped by each token re-read and identity fetch; a re-read lands only if none began after it. */
+let tokenReadSeq = 0
+async function reloadTokens() {
+	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) return
+	const myRead = ++tokenReadSeq
+	const list = await tokenService.getTokens(appStore.profile.id, appStore.network.chainId)
+	if (myRead !== tokenReadSeq) return
+	tokens.value = list
+}
+const onReadFailed = (error) => console.debug("send page read failed", { error })
+function onTokenDeleted(token) {
+	const idx = tokens.value.findIndex((t) => t.id === token.id)
+	if (idx === -1) return
+
+	tokens.value.splice(idx, 1)
+
+	if (activeToken.value?.id !== token.id) return
+
+	if (tokens.value?.length) {
+		cacheStore.activeTokenIdx = tokens.value[0].id
+		return
+	}
+
+	openToast({ kind: "success", label: "The last token has just been deleted" })
+
+	leaveSend()
+}
+
+const tokens = ref([])
+/** True while the current identity's tokens are being read; the token card waits on it. */
+const tokensLoading = ref(true)
+/** The current identity's fetch was refused; the token card offers a Retry. */
+const tokensFailed = ref(false)
+const activeToken = computed(() => tokens.value?.find((t) => t.id === cacheStore.activeTokenIdx))
+const isBlockedTransfer = computed(() => !activeToken.value?.hasPrivateTransfers && !activeToken.value?.hasPublicTransfers)
+
+const tokenBalanceService = new TokenBalanceServiceClient()
+tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
+function onBalanceAdded(balance) {
+	applyBalanceAdd(tokenBalances.value, appStore.account.address, balance)
+}
+function onBalanceUpdated(balance) {
+	applyBalanceUpdate(tokenBalances.value, balance)
+}
+
+const tokenBalances = ref([])
+const tokenBalance = computed(() => {
+	return tokenBalances.value?.find((b) => b?.token.id === cacheStore.activeTokenIdx)
+})
+const tokenBalanceByType = computed(() => {
+	// A balance can land before its token (an event during an identity fetch).
+	if (!tokenBalance.value || !activeToken.value) return 0
+	return selectedSendType.value === "private"
+		? tokenBalance.value.privateBalance / 10 ** activeToken.value.decimals
+		: tokenBalance.value.publicBalance / 10 ** activeToken.value.decimals
+})
+
+const selectedSendType = ref("private")
+const selectedReceiverType = ref("private")
+const initSendType = () => {
+	if (!activeToken.value) return
+	if (cacheStore.preselectedBalanceType && activeToken.value.hasPrivateTransfers && activeToken.value.hasPublicTransfers) {
+		selectedSendType.value = cacheStore.preselectedBalanceType
+	}
+
+	if (!activeToken.value.hasPrivateTransfers) {
+		selectedSendType.value = "public"
+	}
+
+	if (!activeToken.value.hasPublicTransfers) {
+		selectedSendType.value = "private"
+	}
+}
+const initReceiverType = () => {
+	if (!activeToken.value) return
+	if (cacheStore.preselectedBalanceType && activeToken.value.hasPrivateBalances && activeToken.value.hasPublicBalances) {
+		selectedReceiverType.value = cacheStore.preselectedBalanceType
+	}
+
+	if (!activeToken.value.hasPrivateTransfers) {
+		selectedReceiverType.value = "public"
+	}
+
+	if (!activeToken.value.hasPublicTransfers) {
+		selectedReceiverType.value = "private"
+	}
+}
+
+const contactService = new ContactServiceClient()
+contactService.onContactAdded.add(onContactAdded)
+contactService.onContactUpdated.add(onContactUpdated)
+contactService.onContactDeleted.add(onContactDeleted)
+function onContactAdded(contact) {
+	contacts.value.push(contact)
+}
+function onContactUpdated(contact) {
+	const idx = contacts.value.findIndex((c) => c.id === contact.id)
+	if (idx !== -1) {
+		contacts.value[idx] = contact
+	} else {
+		contacts.value.push(contact)
+	}
+}
+function onContactDeleted(contact) {
+	contacts.value = withoutId(contacts.value, contact)
+}
+
+const contacts = ref([])
+const selectedContact = ref()
+const searchTerm = ref("")
+const recipientCandidates = computed(() => [...contacts.value, ...appStore.accounts])
+
+const amountTerm = ref()
+/** The card's own resting text, whose commas the validator reads as its grouping. */
+const amountRested = ref(null)
+
+const isValidAddress = computed(() => isValidAztecAddress(searchTerm.value))
+
+/** Raw balance (base units) for the currently-selected send type.
+ *  Returned as a string straight from `tokenBalance.{public,private}Balance`
+ *  so we never round-trip through JS-number math. */
+const balanceRaw = computed(() => {
+	if (!tokenBalance.value) return undefined
+	return selectedSendType.value === "private" ? tokenBalance.value.privateBalance : tokenBalance.value.publicBalance
+})
+
+/** Single source of truth for "is the typed amount valid?". Drives
+ *  both the Submit gate AND the estimate-watcher (which consumes the
+ *  resulting `integerized: bigint` directly). */
+const amountValidation = computed(() =>
+	validateSendAmount({
+		input: typeof amountTerm.value === "string" ? amountTerm.value : amountTerm.value?.toString(),
+		rested: amountRested.value,
+		tokenDecimals: activeToken.value?.decimals,
+		balanceRaw: balanceRaw.value,
+	}),
+)
+
+/** C3 live pricing. The card freezes a session quote when fiat mode starts;
+ *  the SUBMIT GATE lives here (this page owns handleSend) and fails closed. */
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+
+/** Nothing is sent without a current Terms acceptance; the background refuses it too. `loading`
+ *  shows no banner, so an accepted user never sees one flash. */
+const legal = useLegalAcceptance(managers.legal)
+const legalBlocked = computed(() => legal.status.value === "missing" || legal.status.value === "stale")
+/** Clearing the dismissal is what lets the shell's sheet cover this page again. */
+const legalBannerAction = {
+	name: "Review",
+	testId: "send-legal-review",
+	callback: () => chrome.storage.session.remove(LEGAL_DISMISSED_KEY),
+}
+const liveQuote = computed(() => prices.quoteFor(activeToken.value?.chainId, activeToken.value?.contract) ?? null)
+const proxyTicker = computed(() => (liveQuote.value ? (proxyTickerFor(liveQuote.value.coingeckoId) ?? null) : null))
+
+const fiatMode = ref(false)
+const fiatGuard = ref(null)
+const amountCardRef = useTemplateRef("amountCardRef")
+
+/** Pure, unit-tested gate (send-fiat-gate.ts) — fail-closed by construction. */
+const gateNow = useTicker(30_000)
+const fiatGate = computed(() =>
+	evaluateFiatGate({
+		fiatMode: fiatMode.value,
+		guard: fiatGuard.value,
+		liveUsd: liveQuote.value?.usd ?? null,
+		now: gateNow.value ?? Date.now(),
+	}),
+)
+const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
+/** Distinguishes "needs explicit re-confirmation" from "just converting". */
+const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
+const handleRequote = () => {
+	// Re-freezes at the current quote and re-derives the token amount — the
+	// user sees the NEW derived amount on the card before confirming.
+	amountCardRef.value?.refreezeQuote()
+}
+
+/** The wallet answered that an earlier send holds this transfer's chain state; set until a real
+ *  estimate lands, fails or stops, so nothing goes out on a fee the user has not seen. */
+const feeQueued = ref(false)
+
+const isAllowedToSend = computed(() => {
+	if (!legal.isCurrent.value) return false
+	if (feeQueued.value) return false
+	if (!amountTerm.value) return false
+	if (isBlockedTransfer.value) return false
+	if (!isValidAddress.value) return false
+	if (!feeSettings.value) return false
+	if (fiatQuoteBlocked.value) return false
+	return amountValidation.value.valid
+})
+
+const payerKind = computed(() => payerKindOf(feeSettings.value, payer.value))
+// No sendable token → no facts: no strip, no tag, no review, whatever the fee card resolved.
+const facts = computed(() =>
+	isBlockedTransfer.value ? NO_FACTS : publishFacts(selectedSendType.value, selectedReceiverType.value, payerKind.value),
+)
+
+/** The review sheet lives on the popup stack under this key, so it stacks and closes like any other popup. */
+const REVIEW_KEY = "send_review"
+const reviewOpen = computed(() => popupStore.isOpened(REVIEW_KEY))
+const reviewOrder = computed(() => popupStore.popups[REVIEW_KEY]?.order ?? 0)
+const reviewDepth = computed(() => popupStore.len - reviewOrder.value)
+const { ready: reviewReady, authorises } = useSendReview({
+	isGated: () => facts.value.requiresReview,
+	isOpen: () => reviewOpen.value,
+	isTop: () => reviewOrder.value === popupStore.len - 1,
+})
+const openReview = () => {
+	if (!reviewOpen.value) popupStore.open(REVIEW_KEY)
+}
+const closeReview = () => popupStore.close(REVIEW_KEY)
+
+const amountText = computed(() => (amountTerm.value ? String(amountTerm.value) : undefined))
+const feeText = computed(() => feeLine(feeDisplay.value))
+
+const transferType = computed(() => {
+	if (selectedSendType.value === "private" && selectedReceiverType.value === "private") return TransferType.Private
+	if (selectedSendType.value === "private" && selectedReceiverType.value === "public") return TransferType.PrivateToPublic
+	if (selectedSendType.value === "public" && selectedReceiverType.value === "private") return TransferType.PublicToPrivate
+	if (selectedSendType.value === "public" && selectedReceiverType.value === "public") return TransferType.Public
+	return undefined
+})
+
+/** The transfer the fee is for, less its fee settings: the transaction a sponsor verdict describes. */
+const feeTxShape = computed(() =>
+	JSON.stringify([activeToken.value?.id, transferType.value, searchTerm.value, amountValidation.value.integerized?.toString()]),
+)
+
+const executionService = new ExecutionServiceClient()
+// ExecutionService opens a live SW port as soon as fee estimation runs
+// (before any submit). Its ONLY disconnect used to live in executeTransfer's
+// `.finally`, which never runs unless Send was actually clicked — so the common
+// "open Send, pick amount, navigate away" flow leaked the port. Disconnect it in
+// onBeforeUnmount too, idempotently (submit + unmount must not double-disconnect).
+let executionDisconnected = false
+function disconnectExecution() {
+	if (executionDisconnected) return
+	executionDisconnected = true
+	executionService.disconnect()
+}
+// While a submit is in flight, teardown is OWNED by executeTransfer's `.finally`
+// — the page navigates away immediately after submitting, so disconnecting in
+// onBeforeUnmount would reject the still-pending executeTransfer RPC and surface
+// a false "transaction not sent" for a tx the SW is actually executing.
+let submitInFlight = false
+
+// Per-mount instance id so the in-app log viewer can pin which Send
+// page mount initiated each estimate / submit. Helps diagnose
+// "extension wedge" reports — if a simulate fires while no instance
+// is active, the call originated outside the popup (SW-side retry,
+// dApp re-request, etc).
+const sendInstanceId = Math.random().toString(36).slice(2, 8)
+
+/** What the running estimate was asked: a requeue repeats it with a fresh token. */
+let lastEstimateParams
+
+const {
+	result: feeEstimate,
+	isEstimating,
+	estimate: scheduleFeeEstimate,
+	cancel: cancelFeeEstimate,
+	handoff: handoffFeeEstimate,
+} = useFeeEstimation({
+	debounceMs: 800,
+	estimate: (params, estimateToken, signal) => {
+		const { networkId, accountAddress, tokenId, transferType: tt, destination, amount, settings } = params
+		lastEstimateParams = params
+		console.debug(`[send:${sendInstanceId}] estimateTransferFee firing`)
+		return estimateWhenClear(
+			() =>
+				executionService.estimateTransferFee(networkId, accountAddress, tokenId, tt, destination, amount, settings, estimateToken),
+			signal,
+			{
+				onQueued: () => {
+					if (!signal.aborted) feeQueued.value = true
+				},
+			},
+		)
+	},
+	cancelRemote: (estimateToken) => {
+		executionService.cancelEstimate(estimateToken).catch(() => {})
+	},
+	onError: (err) => {
+		// Rescheduled before the engine's settle clears `isEstimating`, so the queued row never drops.
+		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(lastEstimateParams)
+		feeQueued.value = false
+		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
+		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+	},
+})
+const isSending = ref(false)
+
+/** Set true if the user navigates away manually during the short
+ *  "Confirming..." window — prevents a second router.back() from firing. */
+let cancelled = false
+
+const canSubmitNow = () => {
+	if (!isAllowedToSend.value || isSending.value) return false
+	if (!amountValidation.value.valid) return false
+	// The reactive gate runs on a 30s ticker — re-evaluate at TRUE wall-clock
+	// on the actual click so a snapshot cannot slip through expiry/drift by up
+	// to one tick.
+	const submitGate = evaluateFiatGate({
+		fiatMode: fiatMode.value,
+		guard: fiatGuard.value,
+		liveUsd: liveQuote.value?.usd ?? null,
+		now: Date.now(),
+	})
+	return submitGate.ok
+}
+
+/**
+ * The one path to a transfer. `source` says which control was activated; the sheet's counts only
+ * while the sheet is open, the footer's only while it is not. A send that names the account as fee
+ * payer goes out only from the sheet, and only once it is ready — the footer opens the sheet instead.
+ */
+const submit = (source) => {
+	if (!canSubmitNow()) return
+	if ((source === "review") !== reviewOpen.value) return
+	if (facts.value.requiresReview && !authorises(source)) return openReview()
+
+	isSending.value = true
+	closeReview()
+	submitInFlight = true
+	submitTransfer(submitDeps, snapshotTransfer())
+
+	// Leave at once: the durable operation journal shows progress on the general page and survives
+	// popup close and SW restart; a fast rejection reaches the user as a toast.
+	if (cancelled) return
+	leaveSend()
+}
+
+/** Reactive values read once: the page unmounts before the transfer settles. */
+function snapshotTransfer() {
+	// Pass the cached estimate id when available so the SW can skip the
+	// redundant `buildAndEstimateTxRequest` round-trip and reuse the
+	// pre-built TxRequest. The SW validates a snapshot (base fee, primary
+	// endpoint, inputs) at consume time and rebuilds on any drift.
+	// Ownership handoff: submitting transfers the estimate to the execution
+	// path — unmount cleanup must NOT remote-cancel it, or the eviction
+	// would race the fire-and-forget executeTransfer out of its reuse hit.
+	// Only when a consumable id exists: handing off a still-in-flight
+	// estimate would orphan its eventual stash (nobody consumes, nobody can
+	// cancel) for the full TTL.
+	const precomputedEstimateId = feeEstimate.value?.estimateId
+	if (precomputedEstimateId) handoffFeeEstimate()
+	return {
+		networkId: appStore.network.id,
+		accountAddress: appStore.account.address,
+		tokenId: activeToken.value.id,
+		transferType: transferType.value,
+		destination: searchTerm.value,
+		amount: amountValidation.value.integerized,
+		feeSettings: feeSettings.value,
+		precomputedEstimateId,
+		contract: activeToken.value.contract,
+		symbol: activeToken.value.symbol,
+		decimals: activeToken.value.decimals,
+		epoch: appStore.scopeEpoch,
+	}
+}
+
+const submitDeps = {
+	executeTransfer: (...args) => executionService.executeTransfer(...args),
+	awaiting: { add: appStore.addAwaitingTransaction, remove: appStore.removeAwaitingTransaction },
+	openToast,
+	isCurrent: (epoch) => appStore.isLogined && appStore.scopeEpoch === epoch,
+	viewTransaction: (hash) => router.push(`/popup/tx/${hash}`),
+	// A failure lands after the page has left, so the read opens and closes its own port.
+	readJournal: async (id) => {
+		const journal = new OperationJournalServiceClient()
+		try {
+			return await journal.getOperation(id)
+		} finally {
+			journal.disconnect()
+		}
+	},
+	viewJournal: (id) => router.push(`/popup/journal/${id}`),
+	onSettled: () => {
+		submitInFlight = false
+		disconnectExecution()
+	},
+}
+
+// The queued flag outlives requeues (the engine stays estimating) but never the estimate itself.
+watch(isEstimating, (estimating) => {
+	if (!estimating) feeQueued.value = false
+})
+
+watch(
+	() => cacheStore.activeTokenIdx,
+	() => {
+		closeReview()
+		initSendType()
+		initReceiverType()
+
+		amountTerm.value = null
+	},
+)
+
+watch(
+	() => tokens.value,
+	() => {
+		if (tokens.value?.length && awaitingNewToken.value) {
+			awaitingNewToken.value = false
+			cacheStore.activeTokenIdx = tokens.value[0].id
+		}
+	},
+	{ deep: true },
+)
+
+watch(
+	[amountTerm, searchTerm, selectedSendType, selectedReceiverType, () => feeSettings.value, () => legal.isCurrent.value],
+	() => {
+		// An estimate simulates against the node: no work for a send the wall would refuse.
+		if (!legal.isCurrent.value) {
+			cancelFeeEstimate()
+			return
+		}
+		// NB: transferType can be 0 (TransferType.Private enum) which is falsy — check against undefined explicitly
+		// or Private → Private is silently dropped here before estimation.
+		if (!isValidAddress.value || transferType.value === undefined || !feeSettings.value) {
+			cancelFeeEstimate()
+			return
+		}
+		if (!amountValidation.value.valid) {
+			cancelFeeEstimate()
+			return
+		}
+
+		// New input asks a new question: it is queued only once the wallet says so again.
+		feeQueued.value = false
+		scheduleFeeEstimate({
+			networkId: appStore.network.id,
+			accountAddress: appStore.account.address,
+			tokenId: activeToken.value.id,
+			transferType: transferType.value,
+			destination: searchTerm.value,
+			amount: amountValidation.value.integerized,
+			settings: feeSettings.value,
+		})
+	},
+	{ deep: true },
+)
+
+// The contact travels in the URL so a row opened in a new tab preselects it too. Applied after each
+// contacts load rather than at mount: a cold tab's identity settles after the page is up, and the
+// first load finds no contacts. Consumed once it matches; an id that is not one of this profile's
+// contacts selects nothing.
+let queryContactApplied = false
+function applyQueryContact() {
+	if (queryContactApplied || selectedContact.value || searchTerm.value) return
+	const id = typeof route.query.contact === "string" ? route.query.contact : null
+	const preselected = id === null ? undefined : contacts.value.find((c) => String(c.id) === id)
+	if (!preselected) return
+	queryContactApplied = true
+	selectedContact.value = preselected
+	searchTerm.value = preselected.address
+}
+
+// A newer identity fetch supersedes an older one, and only the current fetch ends `tokensLoading`
+// or marks the fetch failed.
+// `activeTokenIdx` is global (cache store): a new token set without it moves it to the first token,
+// or `activeToken` resolves to nothing. The send and receiver types are then re-validated for it.
+let identityFetchSeq = 0
+async function refetchIdentityScopedState() {
+	const mySeq = ++identityFetchSeq
+	const isCurrent = () => mySeq === identityFetchSeq
+	tokenReadSeq++
+	tokensFailed.value = false
+	if (!appStore.profile?.id || !appStore.network?.id || !appStore.account?.address) {
+		if (isCurrent()) {
+			tokens.value = []
+			tokenBalances.value = []
+			contacts.value = []
+			tokensLoading.value = false
+		}
+		return
+	}
+	const profileId = appStore.profile.id
+	const chainId = appStore.network.chainId
+	// Cleared before the read, so a switch never shows the previous identity's token or balance.
+	tokens.value = []
+	tokenBalances.value = []
+	tokensLoading.value = true
+	tokenAddedDuringLoad = false
+	try {
+		const [first, tb, c] = await Promise.all([
+			tokenService.getTokens(profileId, chainId),
+			tokenBalanceService.getTokenBalances(undefined, appStore.account.address),
+			contactService.getContacts(),
+		])
+		let t = first
+		while (tokenAddedDuringLoad && isCurrent()) {
+			tokenAddedDuringLoad = false
+			t = await tokenService.getTokens(profileId, chainId)
+		}
+		if (!isCurrent()) return
+		tokens.value = t
+		tokenBalances.value = tb
+		contacts.value = c
+		// The tokens watch makes the first token added to an empty list the active one. A refused
+		// load must not arm it, or the Retry's list would lose the active or requested token.
+		awaitingNewToken.value = t.length === 0
+		applyQueryContact()
+		if (!t.some((tok) => tok.id === cacheStore.activeTokenIdx)) {
+			cacheStore.activeTokenIdx = t[0]?.id ?? undefined
+		}
+		applyQueryToken()
+		initSendType()
+		initReceiverType()
+	} catch (error) {
+		if (isCurrent()) tokensFailed.value = true
+		throw error
+	} finally {
+		if (isCurrent()) tokensLoading.value = false
+	}
+}
+
+/** The token card's Retry: all three reads again, since the page cannot send without any of them. */
+function retryTokens() {
+	refetchIdentityScopedState().catch(onReadFailed)
+}
+
+// `?tokenId=` survives the unmount of tokens/[id], which clears `activeTokenIdx`. It is consumed by
+// the first load that succeeds, matching or not: a cold tab's identity settles after mount, and a
+// refused first load leaves it to the Retry.
+let queryTokenApplied = false
+function applyQueryToken() {
+	if (queryTokenApplied) return
+	queryTokenApplied = true
+	const id = route.query.tokenId ? Number(route.query.tokenId) : null
+	if (id && tokens.value.some((tok) => tok.id === id)) cacheStore.activeTokenIdx = id
+}
+
+watch(
+	() => [appStore.profile?.id, appStore.network?.id, appStore.account?.address],
+	() => {
+		closeReview()
+		refetchIdentityScopedState().catch(onReadFailed)
+	},
+	{ immediate: false },
+)
+
+onMounted(async () => {
+	console.debug(`[send:${sendInstanceId}] mounted`)
+	void legal.refresh()
+	// Route mount fetch through the shared refetch so it inherits the
+	// sequence guard AND the null-triple defense AND the
+	// activeTokenIdx-rebind logic.
+	await refetchIdentityScopedState().catch(onReadFailed)
+})
+
+onBeforeUnmount(() => {
+	console.debug(`[send:${sendInstanceId}] unmounting`)
+	cancelled = true
+	closeReview()
+
+	contactService.disconnect()
+	tokenBalanceService.disconnect()
+	tokenService.disconnect()
+	prices.dispose()
+	priceService.disconnect()
+	legal.dispose()
+	// Only when NO submit is in flight — otherwise executeTransfer's `.finally`
+	// owns the disconnect, and tearing down here would abort the pending RPC.
+	if (!submitInFlight) disconnectExecution()
+
+	cancelFeeEstimate()
+
+	amountTerm.value = null
+
+	searchTerm.value = ""
+
+	contacts.value = []
+	selectedContact.value = null
+
+	awaitingNewToken.value = false
+
+	cacheStore.preselectedBalanceType = "private"
+})
+</script>
+
+<template>
+	<Flex direction="column" :class="$style.wrapper">
+		<SubPageHeader title="Send" :backTo="'/popup/general'" />
+
+		<Banner v-if="legalBlocked" variant="warning" wide :action="legalBannerAction" data-testid="send-legal-banner">
+			Accept the Terms to send
+		</Banner>
+
+		<Flex wide direction="column" justify="between" :class="$style.body">
+			<Flex direction="column" :class="$style.top">
+				<!-- Section: Transfer Path + Recipient — flush variant: the input's own bottom border
+				     is the visual terminator, so we suppress the section divider to avoid a double line. -->
+				<div :class="[$style.section, $style.section_flush]">
+					<SendTypesCard
+						v-if="!isBlockedTransfer"
+						v-model:sendType="selectedSendType"
+						v-model:receiverType="selectedReceiverType"
+						:token="activeToken"
+					/>
+
+					<RecipientField
+						v-model:searchTerm="searchTerm"
+						v-model:selectedContact="selectedContact"
+						:candidates="recipientCandidates"
+					/>
+				</div>
+
+				<!-- Section: Select Asset -->
+				<div :class="$style.section">
+					<Flex align="center" justify="between">
+						<span :class="$style.section_label">Select Asset</span>
+						<span :class="$style.section_meta">Network: {{ getChainName(appStore.network?.chainId) }}</span>
+					</Flex>
+					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
+				</div>
+
+				<!-- Section: Transaction Amount -->
+				<div :class="$style.section">
+					<span :class="$style.section_label">Transaction Amount</span>
+					<AmountCard
+						ref="amountCardRef"
+						v-model="amountTerm"
+						v-model:rested="amountRested"
+						v-model:fiatMode="fiatMode"
+						v-model:fiatGuard="fiatGuard"
+						:token="activeToken"
+						:tokenBalanceByType
+						:balanceRawByType="balanceRaw ?? null"
+						:liveQuote
+						:proxyTicker
+					/>
+					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
+						<Icon name="warning" size="12" color="tertiary" />
+						<Text size="11" weight="500" color="tertiary">
+							{{ liveQuote ? "The price moved since you started typing." : "The price quote went stale." }}
+						</Text>
+						<span @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">Refresh quote</span>
+					</Flex>
+				</div>
+
+				<!-- Section: Fee Summary -->
+				<div :class="$style.section_last">
+					<FeeSettingsCard
+						:profile="appStore.profile"
+						:network="appStore.network"
+						:account="appStore.account"
+						:feeEstimate="feeEstimate"
+						:isEstimating="isEstimating"
+						:isQueued="feeQueued"
+						:originPrivacy="selectedSendType"
+						:destinationPrivacy="selectedReceiverType"
+						:payerNoticeShape="facts.noticeShape"
+						:txShape="feeTxShape"
+						v-model="feeSettings"
+						v-model:needsFeeJuice="needsFeeJuice"
+						v-model:payer="payer"
+						v-model:feeDisplay="feeDisplay"
+					/>
+				</div>
+			</Flex>
+
+			<Flex v-snack-footer direction="column" gap="10" :class="$style.bottom" data-testid="send-footer">
+				<PublishStrip v-if="!isBlockedTransfer" :facts="facts" @open="openReview" />
+				<Button
+					v-if="needsFeeJuice"
+					@click="openFeeJuiceBridge"
+					data-testid="send-get-fee-juice"
+					variant="cta"
+					wide
+				>
+					{{ selectedSendType === "private" ? "Get private gas" : "Get Fee Juice" }}
+				</Button>
+				<Button
+					v-else
+					@click="submit('primary')"
+					data-testid="send-submit"
+					:data-action="facts.requiresReview ? 'review' : 'send'"
+					variant="cta"
+					wide
+					:disabled="!isAllowedToSend || isSending"
+					:loading="isSending"
+				>
+					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : "Confirm Transaction" }}
+				</Button>
+			</Flex>
+		</Flex>
+
+		<SendReviewSheet
+			:show="reviewOpen"
+			:order="reviewOrder"
+			:depth="reviewDepth"
+			:facts="facts"
+			:amount="amountText"
+			:symbol="activeToken?.symbol"
+			:recipientName="selectedContact?.name"
+			:recipientAddress="searchTerm"
+			:feeText="feeText"
+			:payerKind="payerKind"
+			:payerType="payer?.type"
+			:canSend="isAllowedToSend"
+			:sending="isSending"
+			:ready="reviewReady"
+			@close="closeReview"
+			@send="submit('review')"
+		/>
+	</Flex>
+</template>
+
+<style module>
+.wrapper {
+	flex: 1;
+	overflow: auto;
+	scrollbar-gutter: stable;
+	background: var(--app-bg);
+}
+
+.body {
+	flex: 1;
+}
+
+.top {
+	padding: 0 24px;
+}
+
+.section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+
+	padding: 14px 0;
+	border-bottom: 1px solid rgba(35, 31, 28, 1);
+}
+
+.section_flush {
+	border-bottom: none;
+	padding-bottom: 0;
+}
+
+.section_last {
+	padding: 14px 0;
+}
+
+.section_label {
+	font-family: var(--font-headline);
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--nulo-secondary);
+}
+
+.section_meta {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	color: var(--nulo-secondary);
+}
+
+.bottom {
+	position: sticky;
+	bottom: 0;
+	z-index: 5;
+
+	padding: 20px 24px;
+	background: var(--app-bg);
+	border-top: 1px solid var(--nulo-border);
+}
+
+
+.requote_notice {
+	padding: 6px 0;
+}
+
+.requote_action {
+	font-family: var(--font-headline);
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--nulo-accent);
+	cursor: pointer;
+
+	&:hover {
+		text-decoration: underline;
+	}
+}
+</style>

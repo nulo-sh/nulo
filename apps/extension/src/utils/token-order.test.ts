@@ -1,0 +1,192 @@
+import { describe, expect, test } from "vitest"
+import { effect, reactive, stop } from "vue"
+import { HOME_TOKEN_ROWS, type OrderableRow, capTokenRows, classifyRow, forChain, isActiveScopeRow, orderTokenRows } from "./token-order"
+
+const row = (symbol: string, over: Partial<OrderableRow> & { contract?: string; name?: string; chainId?: number } = {}): OrderableRow => ({
+	token: {
+		chainId: over.chainId ?? 1,
+		contract: over.contract ?? `0x${symbol.toLowerCase()}`,
+		name: over.name ?? `${symbol} Token`,
+		symbol,
+		decimals: 6,
+	},
+	publicBalance: over.publicBalance ?? "0",
+	privateBalance: over.privateBalance ?? "0",
+	updatedAt: over.updatedAt ?? 1,
+})
+
+/** Price table keyed by symbol; absent = unpriced. */
+const fiatBy = (prices: Record<string, bigint>) => (tb: OrderableRow) => prices[tb.token.symbol]
+const noPins = new Set<string>()
+const ctx = (prices: Record<string, bigint>, pins: ReadonlySet<string> = noPins) => ({ pinnedContracts: pins, fiatOf: fiatBy(prices) })
+
+describe("classifyRow", () => {
+	test("empty before price: a priced zero row is empty, a funded unpriced row is held", () => {
+		expect(classifyRow(row("USDC"), ctx({ USDC: 0n }))).toBe("empty")
+		expect(classifyRow(row("AZTK", { privateBalance: "5" }), ctx({}))).toBe("held-unpriced")
+		expect(classifyRow(row("ETH", { privateBalance: "5" }), ctx({ ETH: 100n }))).toBe("held-priced")
+	})
+
+	test("never-synced and malformed rows are their own classes; absurd decimals are malformed too", () => {
+		expect(classifyRow(row("NEW", { updatedAt: 0 }), ctx({}))).toBe("unsynced")
+		expect(classifyRow(row("BAD", { publicBalance: "1.5" }), ctx({}))).toBe("unknown")
+		const huge = row("HUGE", { privateBalance: "1" })
+		huge.token.decimals = 500
+		expect(classifyRow(huge, ctx({}))).toBe("unknown")
+	})
+
+	test("pin membership wins before any number is read", () => {
+		const pins = new Set(["0xbad"])
+		expect(classifyRow(row("BAD", { publicBalance: "junk" }), ctx({}, pins))).toBe("pinned")
+	})
+})
+
+describe("orderTokenRows", () => {
+	test("priced by fiat desc, then unpriced-held by name, then malformed, then nothing held by name", () => {
+		const rows = [
+			row("EMPTY"),
+			row("ZED", { privateBalance: "1", name: "Zed" }),
+			row("NEW", { updatedAt: 0 }),
+			row("ETH", { privateBalance: "1" }),
+			row("BAD", { publicBalance: "-1" }),
+			row("ALPHA", { privateBalance: "1", name: "Alpha" }),
+			row("USDC", { publicBalance: "1" }),
+		]
+		const out = orderTokenRows(rows, ctx({ ETH: 3_000n, USDC: 10n }))
+		expect(out.map((r) => r.token.symbol)).toEqual(["ETH", "USDC", "ALPHA", "ZED", "BAD", "EMPTY", "NEW"])
+	})
+
+	test("a first sync that finds nothing never reorders the list", () => {
+		const names = ["Test USDC", "Test USDT", "Test EURC", "Test GBPC"]
+		const before = names.map((name) => row(name.slice(5), { name, updatedAt: 0 }))
+		// Each row's sync lands at its own moment; halfway, two rows are empty and two unchecked.
+		const halfway = before.map((r, i) => (i % 2 === 0 ? { ...r, updatedAt: 1 } : r))
+		const after = before.map((r) => ({ ...r, updatedAt: 1 }))
+		const order = (rows: OrderableRow[]) => orderTokenRows(rows, ctx({ USDC: 1n, USDT: 1n, EURC: 1n })).map((r) => r.token.symbol)
+		expect(order(before)).toEqual(["EURC", "GBPC", "USDC", "USDT"])
+		expect(order(halfway)).toEqual(order(before))
+		expect(order(after)).toEqual(order(before))
+	})
+
+	test("pinned first, priced pins before unpriced pins, a malformed pin stays in the top three", () => {
+		const pins = new Set(["0xa", "0xb", "0xbad"])
+		const rows = [
+			row("RICH", { privateBalance: "1" }),
+			row("A", { contract: "0xa", privateBalance: "1" }),
+			row("BAD", { contract: "0xbad", publicBalance: "x" }),
+			row("B", { contract: "0xb", privateBalance: "1" }),
+			row("MORE", { privateBalance: "1" }),
+		]
+		const out = orderTokenRows(rows, ctx({ RICH: 9_999n, A: 1n, B: 5n, MORE: 50n }, pins))
+		expect(out.slice(0, 3).map((r) => r.token.symbol)).toEqual(["B", "A", "BAD"])
+		expect(out.map((r) => r.token.symbol)).toEqual(["B", "A", "BAD", "RICH", "MORE"])
+	})
+
+	test("a malformed pin sorts behind a valid unpriced pin, whatever their names", () => {
+		const pins = new Set(["0xa_bad", "0xz_good"])
+		const rows = [
+			row("A_BAD", { contract: "0xa_bad", publicBalance: "x", name: "A" }),
+			row("Z_GOOD", { contract: "0xz_good", privateBalance: "1", name: "Z" }),
+		]
+		expect(orderTokenRows(rows, ctx({}, pins)).map((r) => r.token.symbol)).toEqual(["Z_GOOD", "A_BAD"])
+	})
+
+	test("fiat kill-switch (everything unpriced) falls back to name order among held rows", () => {
+		const rows = [row("B", { privateBalance: "1", name: "Bravo" }), row("A", { privateBalance: "9", name: "Alpha" })]
+		expect(orderTokenRows(rows, ctx({})).map((r) => r.token.symbol)).toEqual(["A", "B"])
+	})
+
+	test("never mutates the input", () => {
+		const rows = [row("B", { privateBalance: "1" }), row("A", { privateBalance: "1" })]
+		const snapshot = [...rows]
+		orderTokenRows(rows, ctx({}))
+		expect(rows).toEqual(snapshot)
+	})
+})
+
+describe("capTokenRows", () => {
+	test("budget is HOME_TOKEN_ROWS; overflow counts the rest", () => {
+		expect(HOME_TOKEN_ROWS).toBe(3)
+		expect(capTokenRows([1, 2, 3, 4, 5])).toEqual({ shown: [1, 2, 3], overflow: 2 })
+		expect(capTokenRows([1, 2])).toEqual({ shown: [1, 2], overflow: 0 })
+		expect(capTokenRows([])).toEqual({ shown: [], overflow: 0 })
+	})
+})
+
+describe("forChain", () => {
+	test("keeps the active chain's rows and drops a same-address row from another chain", () => {
+		const rows = [row("A", { chainId: 1 }), row("B", { chainId: 2 })]
+		expect(forChain(rows, 1).map((r) => r.token.symbol)).toEqual(["A"])
+		expect(forChain(rows, undefined)).toEqual([])
+	})
+})
+
+describe("classifyRow — row reads", () => {
+	test("a row without a token throws before its numbers are judged", () => {
+		expect(() => classifyRow({ publicBalance: "1" } as unknown as OrderableRow, ctx({}))).toThrow(TypeError)
+	})
+
+	test("a held row's balance properties are read twice", () => {
+		const reads = { pub: 0, priv: 0 }
+		const counted = {
+			get publicBalance() {
+				reads.pub++
+				return "5"
+			},
+			get privateBalance() {
+				reads.priv++
+				return "0"
+			},
+			token: row("C").token,
+		} as OrderableRow
+		expect(classifyRow(counted, ctx({}))).toBe("held-unpriced")
+		expect(reads).toEqual({ pub: 2, priv: 2 })
+	})
+})
+
+describe("isActiveScopeRow", () => {
+	type Live = { account?: { address: string } | null; network?: { chainId: number } | null }
+	type Row = { account?: unknown; token?: { chainId?: unknown } | null }
+	/** The inline predicate every consumer carried before it had a name. */
+	const reference = (live: Live, tb: Row) => tb.account === live.account?.address && tb.token?.chainId === live.network?.chainId
+	const live = (): Live => ({ account: { address: "0xa" }, network: { chainId: 1 } })
+
+	test.each([
+		["match", live(), { account: "0xa", token: { chainId: 1 } }, true],
+		["account mismatch", live(), { account: "0xb", token: { chainId: 1 } }, false],
+		["chain mismatch", live(), { account: "0xa", token: { chainId: 2 } }, false],
+		["no token", live(), { account: "0xa" }, false],
+		["no network and no token", { account: { address: "0xa" }, network: null }, { account: "0xa" }, true],
+		["chain coerced, account matching", live(), { account: "0xa", token: { chainId: "1" } }, false],
+		["account coerced, chain matching", live(), { account: { toString: (): string => "0xa" }, token: { chainId: 1 } }, false],
+	] as const)("%s", (_name, l, tb, expected) => {
+		expect(isActiveScopeRow(l, tb)).toBe(expected)
+		expect(reference(l, tb)).toBe(expected)
+	})
+
+	test("it tracks the network only once the account matches, like the inline predicate", () => {
+		const state = reactive(live())
+		const foreign = { account: "0xb", token: { chainId: 1 } }
+		const own = { account: "0xa", token: { chainId: 1 } }
+		for (const check of [isActiveScopeRow, reference]) {
+			let runs = 0
+			const onForeign = effect(() => {
+				runs++
+				check(state, foreign)
+			})
+			;(state.network as { chainId: number }).chainId++
+			state.network = { chainId: 7 }
+			expect(runs).toBe(1)
+			stop(onForeign)
+
+			let ownRuns = 0
+			const onOwn = effect(() => {
+				ownRuns++
+				check(state, own)
+			})
+			;(state.network as { chainId: number }).chainId++
+			expect(ownRuns).toBe(2)
+			stop(onOwn)
+		}
+	})
+})

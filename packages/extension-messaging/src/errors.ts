@@ -1,0 +1,581 @@
+/**
+ * Structured errors for the RPC boundary.
+ *
+ * Historically services caught any thrown value and serialized it via
+ * `getErrorMessage(e)` — a flat string on the wire. The client rejected
+ * with that string, so consumers lost the error class, the error code, and
+ * any contextual details.
+ *
+ * `WalletError` replaces that. Thrown on the service side, serialized via
+ * `toPayload()`, reconstructed on the client via `walletErrorFromPayload()`
+ * so `instanceof` checks survive the JSON boundary. Non-WalletError throws
+ * still flatten to a message string (backward-compatible fall-through); the
+ * client then rejects with `new Error(message)` instead of a raw string.
+ */
+
+export interface WalletErrorPayload {
+	/** Stable machine-readable code. Subclasses declare their own. */
+	code: string
+	message: string
+	details?: unknown
+}
+
+/** Base class for structured errors that cross the RPC boundary. */
+export class WalletError extends Error {
+	public readonly code: string
+	public readonly details?: unknown
+
+	public constructor(code: string, message: string, details?: unknown, name = "WalletError") {
+		super(message)
+		this.name = name
+		this.code = code
+		this.details = details
+		// Prototype identity is owned HERE, once: `new.target.prototype` resolves to
+		// the most-derived class, so `instanceof` survives reconstruction across
+		// workers/JSON boundaries without any per-subclass fixup. Subclasses pass
+		// their frozen literal name through `super` — never derive it from
+		// `new.target.name`; the production minifier mangles class names.
+		Object.setPrototypeOf(this, new.target.prototype)
+	}
+
+	public toPayload(): WalletErrorPayload {
+		return { code: this.code, message: this.message, details: this.details }
+	}
+}
+
+/**
+ * Raised client-side when an RPC request exceeds its timeout. The service
+ * side never throws this — it originates in `BackgroundServiceClient`.
+ */
+export class RpcTimeoutError extends WalletError {
+	public static readonly CODE = "RPC_TIMEOUT"
+
+	public constructor(message: string, details?: unknown) {
+		super(RpcTimeoutError.CODE, message, details, "RpcTimeoutError")
+	}
+}
+
+/**
+ * Raised client-side when an RPC request cannot be sent because the
+ * underlying chrome.runtime.Port is unavailable — either it disconnected
+ * between the open and the postMessage, or postMessage itself
+ * threw because the port was already torn down. Distinct from
+ * `RpcTimeoutError`: the request never made it onto the wire.
+ *
+ * Replaces a `port!.postMessage` non-null assertion that could race a disconnect. Callers
+ * can `instanceof` this to retry without confusing it with a service-side
+ * failure.
+ */
+export class RpcDisconnectedError extends WalletError {
+	public static readonly CODE = "RPC_DISCONNECTED"
+
+	public constructor(message: string, details?: unknown) {
+		super(RpcDisconnectedError.CODE, message, details, "RpcDisconnectedError")
+	}
+}
+
+/**
+ * Raised client-side when `chrome.runtime.connect` throws synchronously — the extension context is
+ * gone (an update or reload orphaned the page) or the id is wrong. Treated as permanent: nothing
+ * retries, unlike `RpcDisconnectedError`, which callers read as "the worker went away, wait for it".
+ * Client-local; never crosses the wire.
+ *
+ * Chrome's reason is folded into the message because the log projection keeps only an error's
+ * `name` and `message`.
+ */
+export class RpcConnectError extends WalletError {
+	public static readonly CODE = "RPC_CONNECT_FAILED"
+
+	public constructor(service: string, cause: unknown) {
+		const reason = cause instanceof Error ? cause.message : String(cause)
+		super(RpcConnectError.CODE, `Cannot open a port to '${service}': ${reason}`, { service }, "RpcConnectError")
+	}
+}
+
+/**
+ * The exact message both transports use when rejecting every in-flight
+ * request on channel teardown (`makeDisconnectError` in the Port and
+ * offscreen clients). Deliberately a plain `Error`, not a `WalletError` —
+ * part of the string-shaped disconnect contract; the constant keeps the
+ * constructors and `isClientDisconnectRejection` from drifting apart.
+ */
+export const CLIENT_DISCONNECTED_MESSAGE = "Client disconnected"
+
+/**
+ * True for the expected teardown rejection a client emits for each in-flight
+ * request when its channel drops (SW restart, page close). The Port transport
+ * reconnects immediately after, so for a global rejection handler these are
+ * transient churn to log quietly, not actionable errors — a SW restart under
+ * an open page used to spam one error-level line per pending request.
+ */
+export function isClientDisconnectRejection(reason: unknown): boolean {
+	return reason instanceof Error && reason.message === CLIENT_DISCONNECTED_MESSAGE
+}
+
+/**
+ * Chrome's exact rejection text when a `chrome.tabs.sendMessage` / `chrome.runtime.sendMessage`
+ * finds no listener: the tab navigated away, its content script is gone, the offscreen document
+ * closed. Matched exactly, not by prefix — Chrome reports other conditions under the same
+ * "Could not establish connection" opener, and those are actionable.
+ */
+export const RECEIVER_GONE_MESSAGE = "Could not establish connection. Receiving end does not exist."
+
+/** True for the expected rejection of a message whose receiver is already gone. */
+export function isReceiverGoneRejection(reason: unknown): boolean {
+	return reason instanceof Error && reason.message === RECEIVER_GONE_MESSAGE
+}
+
+/** User explicitly rejected a prompt (approval, passkey, etc). */
+export class UserRejectedError extends WalletError {
+	public static readonly CODE = "USER_REJECTED"
+
+	public constructor(message = "User rejected the request", details?: unknown) {
+		super(UserRejectedError.CODE, message, details, "UserRejectedError")
+	}
+}
+
+/**
+ * User cancelled an in-flight job (transfer / dApp send / authwit revoke /
+ * registry toggle) AFTER approval, mid-prove. Sibling to `UserRejectedError`
+ * which covers the pre-approval reject path.
+ *
+ * Internal control-flow uses `JobCancelledSentinel` from `@nulo/wallet-core/jobs`.
+ * The execution-service catch at the RPC boundary converts the sentinel into
+ * THIS class, which round-trips via `toPayload()` / `walletErrorFromPayload()`
+ * so the popup's catch block sees `err instanceof JobCancelledError` cleanly.
+ *
+ * Maps to EIP-1193 code 4001 ("User rejected the request") when surfaced to
+ * dApps. The wallet-sdk handler writes a structured `response.error` with
+ * `data.walletErrorCode = "JOB_CANCELLED"` so dApps can distinguish from
+ * `USER_REJECTED` for telemetry; both should be treated as "user said no"
+ * from a UX perspective.
+ */
+export class JobCancelledError extends WalletError {
+	public static readonly CODE = "JOB_CANCELLED"
+
+	public constructor(message = "Transaction cancelled by user", details?: { jobId?: string }) {
+		super(JobCancelledError.CODE, message, details, "JobCancelledError")
+	}
+}
+
+/**
+ * Raised when a dApp invokes a wallet method that requires a capability it has
+ * not yet been granted. Today the dispatcher throws this from
+ * `handleGetAccounts` when no `accounts` grant exists, so that dApps which call
+ * `getAccounts()` before `requestCapabilities()` fall into their existing
+ * fallback path instead of silently receiving `[]`.
+ *
+ * Maps to EIP-1193 code 4100 ("Unauthorized — the requested method and/or
+ * account has not been authorized by the user") when surfaced to dApps. The
+ * wallet-sdk background handler writes a structured `response.error` with
+ * `data.walletErrorCode = "CAPABILITY_NOT_GRANTED"` and `data.capabilityType`
+ * so dApps that JSON.parse the wrapped error message can discriminate.
+ *
+ * Message text is a public contract — substring-matching dApps lock it in.
+ * Keep the literal stable across versions, and never interpolate user input
+ * (origin, session, address): the message reaches the calling dApp.
+ */
+export class CapabilityNotGrantedError extends WalletError {
+	public static readonly CODE = "CAPABILITY_NOT_GRANTED"
+
+	public constructor(capabilityType: string, message = `${capabilityType} capability not granted. Call requestCapabilities() first.`) {
+		super(CapabilityNotGrantedError.CODE, message, { capabilityType }, "CapabilityNotGrantedError")
+	}
+
+	/** Keeps the payload's message and only its `capabilityType`, so both the `instanceof` and the
+	 *  substring-match contracts survive the JSON boundary. */
+	public static fromPayload(payload: WalletErrorPayload): CapabilityNotGrantedError {
+		// The wire `details` is unvalidated.
+		const details = payload.details as { capabilityType?: string } | undefined
+		return new CapabilityNotGrantedError(details?.capabilityType ?? "unknown", payload.message)
+	}
+}
+
+/**
+ * A dApp request asked for a contract, call, class, account or flag its stored grant does not
+ * cover. Raised by the grant check before any window opens or anything runs. The message names the
+ * method and the scope field, never a request value, and never reaches a dApp: its envelope is a
+ * constant.
+ */
+export class ScopeViolationError extends WalletError {
+	public static readonly CODE = "SCOPE_VIOLATION"
+
+	public constructor(message: string) {
+		super(ScopeViolationError.CODE, message, undefined, "ScopeViolationError")
+	}
+}
+
+/**
+ * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
+ * execution lane is at capacity — either the dApp's own per-origin pending cap
+ * or the coarse total-lane cap (see `ExecutionMutex`). Backpressure, NOT a
+ * permanent failure: the dApp should retry once its in-flight sendTx settle.
+ *
+ * Maps to JSON-RPC code -32005 ("Limit exceeded") when surfaced to dApps, with
+ * `data.walletErrorCode = "TOO_MANY_PENDING"`. The message is a stable public
+ * contract — never interpolate origin/profile/account: naming the full lane
+ * would leak it to the calling dApp.
+ */
+export class TooManyPendingError extends WalletError {
+	public static readonly CODE = "TOO_MANY_PENDING"
+
+	public constructor(message = "Too many pending transactions; retry after the in-flight ones settle.") {
+		super(TooManyPendingError.CODE, message, undefined, "TooManyPendingError")
+	}
+}
+
+/**
+ * A first (account-initializing) transaction lost the initialization race:
+ * the node rejected it with an existing-nullifier error while the wallet
+ * KNOWS it wrapped the account constructor (another device, or a re-send
+ * against a node that lagged behind the earlier init). Classification is
+ * provenance-gated — a bare existing-nullifier rejection on a
+ * NON-initializing tx is an ordinary double-spend and must stay generic.
+ */
+export class DuplicateInitializationError extends WalletError {
+	public static readonly CODE = "DUPLICATE_INITIALIZATION"
+
+	public constructor(
+		message = "Another first transaction initialized this account — wait for network sync, then retry.",
+		details?: unknown,
+	) {
+		super(DuplicateInitializationError.CODE, message, details, "DuplicateInitializationError")
+	}
+}
+
+/**
+ * A dApp asked for an RPC method this wallet does not implement.
+ *
+ * Typed rather than a bare `Error` because it is dApp-ACTIONABLE — the caller's whole response is
+ * to fall back to another route, which needs it told apart from a network failure —
+ * so it must survive the dApp-facing envelope's unclassified fall-through, which by design
+ * replaces an unrecognised error's text with a constant.
+ *
+ * The method name is echoed back because the dApp supplied it, but bounded: it arrives off the
+ * wire, and nothing upstream constrains its length.
+ */
+export class UnsupportedMethodError extends WalletError {
+	public static readonly CODE = "UNSUPPORTED_METHOD"
+
+	/** Longest echoed method name. Real ones are short; anything longer is not a method name. */
+	public static readonly MAX_NAME_CHARS = 64
+
+	/** Takes the composed message, like every sibling here, so a payload round-trips unchanged. */
+	public constructor(message: string, details?: unknown) {
+		super(UnsupportedMethodError.CODE, message, details, "UnsupportedMethodError")
+	}
+
+	/** Compose the frozen string for a wire-supplied name. */
+	public static forMethod(methodName: string): UnsupportedMethodError {
+		const shown =
+			methodName.length <= UnsupportedMethodError.MAX_NAME_CHARS
+				? methodName
+				: `${methodName.slice(0, UnsupportedMethodError.MAX_NAME_CHARS)}…`
+		return new UnsupportedMethodError(`Unsupported wallet method: ${shown}`)
+	}
+}
+
+/**
+ * A PXE operation kept failing on a chain anchor the node no longer agrees with — a reorg, or
+ * nodes behind one endpoint disagreeing on the tip — after one resync and retry. The message is
+ * wallet-authored and constant per operation so upstream node text never rides it; that text lives
+ * in `details.cause`, which stops at the operation-result boundary.
+ */
+export class PxeStaleAnchorError extends WalletError {
+	public static readonly CODE = "PXE_STALE_ANCHOR"
+
+	public constructor(message: string, details?: unknown) {
+		super(PxeStaleAnchorError.CODE, message, details, "PxeStaleAnchorError")
+	}
+}
+
+/**
+ * A request named a contract instance or class the wallet's PXE does not hold. Raised while
+ * resolving contracts — before proving, before any broadcast — so a dApp may register the contract
+ * and retry the same call without risking a double submission. The message names the missing
+ * instance or class for the wallet's own logs; the dApp envelope replaces it with a constant.
+ */
+export class ContractNotRegisteredError extends WalletError {
+	public static readonly CODE = "CONTRACT_NOT_REGISTERED"
+
+	public constructor(message: string, details?: unknown) {
+		super(ContractNotRegisteredError.CODE, message, details, "ContractNotRegisteredError")
+	}
+}
+
+/**
+ * A session's chain has no network in its profile, as when the user removes that network while the
+ * dApp stays connected. Constant message and no details: the requested chain is the dApp's own
+ * input, and nothing here may name a chain the wallet does serve.
+ */
+export class ChainNotSupportedError extends WalletError {
+	public static readonly CODE = "CHAIN_NOT_SUPPORTED"
+	public static readonly MESSAGE = "The wallet has no network for the requested chain. Switch the app to a network the wallet uses."
+
+	public constructor() {
+		super(ChainNotSupportedError.CODE, ChainNotSupportedError.MESSAGE, undefined, "ChainNotSupportedError")
+	}
+}
+
+/**
+ * The offscreen document holds no store key for the profile — a designed cold-start step, not an
+ * incident: the client derives the key, provisions it, and retries once. Only the chain-runtime
+ * bind throws this, BEFORE any PXE operation runs, so the client trusts the class rather than the
+ * message text: an error raised inside a PXE op that merely contains the marker can never trigger
+ * a re-provision.
+ */
+export class PxeStoreKeyMissingError extends WalletError {
+	public static readonly CODE = "PXE_STORE_KEY_MISSING"
+
+	public constructor(message: string, details?: unknown) {
+		super(PxeStoreKeyMissingError.CODE, message, details, "PxeStoreKeyMissingError")
+	}
+}
+
+/**
+ * A PXE operation named a scope whose keys the PXE does not hold. Refused before the PXE runs:
+ * a sync of such a scope advances its handshake cursor past notes it cannot decrypt, losing them.
+ * The client registers the op's own scopes and retries once; no address crosses the wire.
+ */
+export class PxeScopeUnregisteredError extends WalletError {
+	public static readonly CODE = "PXE_SCOPE_UNREGISTERED"
+	public static readonly MESSAGE = "The wallet has not finished loading this account. Try again."
+
+	public constructor() {
+		super(PxeScopeUnregisteredError.CODE, PxeScopeUnregisteredError.MESSAGE, undefined, "PxeScopeUnregisteredError")
+	}
+}
+
+/**
+ * The Terms of Use have not been accepted on this install, or a material revision has not been.
+ * Raised before any transaction is broadcast and before any dApp request is served. Constant message
+ * and no details: it tells a dApp what to ask the user to do and names nothing else.
+ */
+export class TermsAcceptanceRequiredError extends WalletError {
+	public static readonly CODE = "TERMS_ACCEPTANCE_REQUIRED"
+	public static readonly MESSAGE = "Open Nulo and accept the Terms to continue."
+
+	public constructor() {
+		super(TermsAcceptanceRequiredError.CODE, TermsAcceptanceRequiredError.MESSAGE, undefined, "TermsAcceptanceRequiredError")
+	}
+}
+
+/**
+ * The session that authorized an operation ended — a lock, an auto-lock, or another unlock, the same
+ * profile's included — before the operation reached the network. Constant message and no details:
+ * it rides the message-only operation-result channel, and names nothing a dApp could probe.
+ */
+export class SessionEndedError extends WalletError {
+	public static readonly CODE = "SESSION_ENDED"
+	public static readonly MESSAGE = "The wallet session that approved this request has ended."
+
+	public constructor() {
+		super(SessionEndedError.CODE, SessionEndedError.MESSAGE, undefined, "SessionEndedError")
+	}
+}
+
+/**
+ * A send was refused because its journal record could not be created, before any build, proof or
+ * broadcast: nothing was sent. Constant message and no details, so the popup keys its copy on the
+ * class and the storage fault behind it never reaches a caller.
+ */
+export class OperationNotRecordedError extends WalletError {
+	public static readonly CODE = "OPERATION_NOT_RECORDED"
+	public static readonly MESSAGE = "The operation could not be recorded, so it was not started."
+
+	public constructor() {
+		super(OperationNotRecordedError.CODE, OperationNotRecordedError.MESSAGE, undefined, "OperationNotRecordedError")
+	}
+}
+
+/** Request payload failed validation at the RPC boundary. */
+export class ValidationError extends WalletError {
+	public static readonly CODE = "VALIDATION"
+
+	public constructor(message: string, details?: unknown) {
+		super(ValidationError.CODE, message, details, "ValidationError")
+	}
+}
+
+/**
+ * Wrong password supplied to an unlock / reauth flow. Clients can `instanceof`
+ * this to render a "wrong password" state without string-matching on the
+ * message. Matched alongside a legacy-message fallback for older wire formats.
+ */
+export class InvalidPasswordError extends WalletError {
+	public static readonly CODE = "INVALID_PASSWORD"
+	public static readonly LEGACY_MESSAGE = "Invalid profile password"
+
+	public constructor(message: string = InvalidPasswordError.LEGACY_MESSAGE, details?: unknown) {
+		super(InvalidPasswordError.CODE, message, details, "InvalidPasswordError")
+	}
+}
+
+/**
+ * A stored account address no longer matches what this wallet build re-derives from the profile
+ * secret — the address-freeze invariant is broken (wrong build for this profile's regime, or
+ * tampered storage). The background integrity coordinator persists a blocking record and withholds
+ * the session; consumers `instanceof` this to route to the blocking state instead of a generic
+ * failure. NEVER surfaced verbatim to dApps — the dApp-facing projection stays generic.
+ */
+export class AccountAddressInconsistencyError extends WalletError {
+	public static readonly CODE = "ACCOUNT_ADDRESS_INCONSISTENCY"
+
+	public constructor(message = "Account address inconsistency", details?: unknown) {
+		super(AccountAddressInconsistencyError.CODE, message, details, "AccountAddressInconsistencyError")
+	}
+}
+
+/**
+ * A profile's backup restore never finished its storage-slice phase: the
+ * durable restore-pending marker (written before the profile row, cleared at
+ * `finalizeRestore` entry) is still present — the popup/SW died mid-restore
+ * and the profile's slices may be incomplete. Opening a session would let the
+ * bootstrap silently re-seed missing data (e.g. mint a fresh default account),
+ * so unlock is refused; consumers `instanceof` this to explain and point at
+ * delete + re-import. NEVER surfaced verbatim to dApps.
+ */
+export class RestoreTornError extends WalletError {
+	public static readonly CODE = "RESTORE_TORN"
+
+	public constructor(message = "This profile's import didn't finish", details?: unknown) {
+		super(RestoreTornError.CODE, message, details, "RestoreTornError")
+	}
+}
+
+/**
+ * Raised by `createPasskeyProfile` / `importPasskey` when the profile id
+ * the caller pre-reserved was claimed by another writer between the
+ * unlocked WebAuthn ceremony and the locked persistence step. Callers
+ * should retry the entire flow with a freshly-generated id: the credential's
+ * WebAuthn `userHandle` IS the profile id, so the id can never change after the ceremony.
+ */
+export class ProfileIdConflictError extends WalletError {
+	public static readonly CODE = "PROFILE_ID_CONFLICT"
+
+	public constructor(message = "Profile id was claimed during WebAuthn prompt; retry with a new id.", details?: unknown) {
+		super(ProfileIdConflictError.CODE, message, details, "ProfileIdConflictError")
+	}
+}
+
+/**
+ * A profile with the same wallet fingerprint (same recovery phrase → same master) already exists
+ * on this device. Thrown by `importMnemonic` / `importPasskey` / `restore` unless the caller
+ * passes `allowDuplicate: true` — the UI catches this, shows the warn-and-confirm dialog, and
+ * retries with the override (duplicates are a warned choice, never a hard block — owner policy).
+ * `details.existingProfileName` names the colliding profile for the dialog copy; the error NEVER
+ * carries key material.
+ */
+export class DuplicateWalletError extends WalletError {
+	public static readonly CODE = "DUPLICATE_WALLET"
+
+	public constructor(message = "A profile with this recovery phrase already exists", details?: { existingProfileName?: string }) {
+		super(DuplicateWalletError.CODE, message, details, "DuplicateWalletError")
+	}
+}
+
+/**
+ * The active session opened WITHOUT its imported-keys DEK (the sealed slot or the envelope MAC
+ * failed at unlock): the profile is in recovery mode — its PXE store key and dApp-session MAC key
+ * take `HKDF(master ‖ dek)` and cannot be derived, so chain data and dApp sessions are unavailable
+ * until the profile is exported and restored. Consumers `instanceof` this to keep the recovery
+ * sentence intact instead of folding it into a generic lock / PXE failure. NEVER surfaced
+ * verbatim to dApps.
+ */
+export class RecoveryModeError extends WalletError {
+	public static readonly CODE = "RECOVERY_MODE"
+	public static readonly MESSAGE = "Wallet keys need recovery. Export a backup and restore it"
+
+	public constructor(message: string = RecoveryModeError.MESSAGE, details?: unknown) {
+		super(RecoveryModeError.CODE, message, details, "RecoveryModeError")
+	}
+}
+
+/**
+ * Every class a wire `code` rebuilds as. Two subclasses are absent on purpose: `TooManyPendingError`
+ * rebuilds as the base `WalletError`, and `RpcConnectError` never crosses the wire.
+ */
+const REBUILT_AS = [
+	RpcTimeoutError,
+	RpcDisconnectedError,
+	UserRejectedError,
+	JobCancelledError,
+	CapabilityNotGrantedError,
+	ScopeViolationError,
+	ValidationError,
+	InvalidPasswordError,
+	AccountAddressInconsistencyError,
+	RestoreTornError,
+	RecoveryModeError,
+	ProfileIdConflictError,
+	DuplicateWalletError,
+	DuplicateInitializationError,
+	UnsupportedMethodError,
+	PxeStaleAnchorError,
+	ContractNotRegisteredError,
+	ChainNotSupportedError,
+	PxeStoreKeyMissingError,
+	PxeScopeUnregisteredError,
+	SessionEndedError,
+	TermsAcceptanceRequiredError,
+	OperationNotRecordedError,
+] as const
+
+/** A `Map`, not an object, so a code such as `"constructor"` resolves to nothing. */
+const BY_CODE: ReadonlyMap<string, typeof CapabilityNotGrantedError | (new (message: string, details?: never) => WalletError)> = new Map(
+	REBUILT_AS.map((ctor) => [ctor.CODE, ctor]),
+)
+
+/**
+ * Reconstruct a WalletError (concrete subclass if the code is recognised)
+ * from a wire payload. Unknown codes produce a plain `WalletError` with
+ * the code preserved so telemetry / log analysis can still group them.
+ */
+export function walletErrorFromPayload(payload: WalletErrorPayload): WalletError {
+	const ctor = BY_CODE.get(payload.code)
+	if (ctor === undefined) return new WalletError(payload.code, payload.message, payload.details)
+	if (ctor === CapabilityNotGrantedError) return CapabilityNotGrantedError.fromPayload(payload)
+	// The wire `details` is unvalidated. Constant-message constructors ignore both arguments, and
+	// `ScopeViolationError` ignores the details.
+	return new ctor(payload.message, payload.details as never)
+}
+
+/**
+ * A rejection that names the journal record its operation settled as failed. The thrower vouches
+ * for the pairing, so only the code that created the record builds one, with the id it was given.
+ * The response carries `error` exactly as it would alone, with `journalId` beside it.
+ */
+export class JournaledRejection {
+	public readonly error: unknown
+	public readonly journalId: string
+
+	public constructor(error: unknown, journalId: string) {
+		this.error = error
+		this.journalId = journalId
+	}
+}
+
+const journalIds = new WeakMap<Error, string>()
+
+/**
+ * Reconstruct the client-side error from a response envelope's content.
+ *
+ * A structured `errorPayload` is rebuilt into its typed `WalletError` subclass
+ * (so `instanceof` survives the JSON boundary); otherwise the flat `error`
+ * string becomes a plain `Error`. Shared verbatim by the background (Port) and
+ * offscreen (sendMessage) transport clients — the structural param keeps this
+ * decoupled from each client's `ResponseContentLike`.
+ */
+export function remoteErrorFromResponseContent(content: { errorPayload?: unknown; error?: string; journalId?: unknown }): Error {
+	const error = content.errorPayload
+		? walletErrorFromPayload(content.errorPayload as WalletErrorPayload)
+		: new Error(content.error ?? "Unknown error")
+	if (typeof content.journalId === "string") journalIds.set(error, content.journalId)
+	return error
+}
+
+/** The journal record a response named beside this rejection, or null. Only the response's own
+ *  `journalId` sets it; nothing on the error, its details included, can. */
+export function journalIdOf(error: unknown): string | null {
+	return error instanceof Error ? (journalIds.get(error) ?? null) : null
+}

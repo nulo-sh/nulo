@@ -1,0 +1,143 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+import { FieldWarning } from "@nulo/design"
+/** Utils */
+import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+const appStore = useAppStore()
+const { order } = usePopupStack("edit_network")
+const cacheStore = useCacheStore()
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+const networkToEdit = computed(() => appStore.networks.find((n) => n.id === cacheStore.networkToEditIdx))
+
+const form = useFormState({
+	name: {
+		initial: "",
+		validate: (v) => {
+			if (!v.length) return null
+			const conflicting = appStore.networks.find((n) => n.name === v && n.id !== networkToEdit.value?.id)
+			if (conflicting) return "Already exists"
+			return null
+		},
+	},
+	/** Vestigial — kept for the URL input that's now read-only. Endpoint URL
+	 *  editing lives in the per-`Network` detail page. */
+	url: { initial: "" },
+})
+
+const nameTerm = form.fields.name.value
+const urlTerm = form.fields.url.value
+
+const isStartedEditingName = form.fields.name.isDirty
+const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists" && isStartedEditingName.value)
+
+const isAvailableToUpdateNetwork = computed(() => {
+	// Full-lifetime submit latch: a running save closes the form on EVERY
+	// route (button, Enter, future callers) — not just the pointer path.
+	if (isNetworkUpdateInProgress.value) return false
+	if (!nameTerm.value.length) return false
+	if (nameTerm.value === networkToEdit.value?.name) return false
+	if (form.fields.name.error.value) return false
+	return true
+})
+
+const handleFillFieldsWithDefaultValues = () => {
+	const primary = networkToEdit.value && findPrimaryEndpoint(networkToEdit.value)
+	// rebase() loads values + sets the dirty-baseline so `field.isDirty` drives
+	// the "Already exists" warning gating (isStartedEditingName) above.
+	form.rebase({ name: networkToEdit.value?.name ?? "", url: primary?.rpcUrl ?? "" })
+}
+
+const isNetworkUpdateInProgress = ref(false)
+const handleUpdateNetwork = async () => {
+	if (!isAvailableToUpdateNetwork.value) return
+
+	// finally, not sequential clear: a rejected rename must release the latch
+	// or the folded validity source would lock the form disabled for good. The
+	// catch is part of the same repair — the rejection previously escaped as an
+	// unhandled promise (both submit routes fire-and-forget) with zero user
+	// feedback; the family's standard error toast handles it.
+	isNetworkUpdateInProgress.value = true
+	try {
+		await appStore.renameNetwork(cacheStore.networkToEditIdx, nameTerm.value)
+	} catch {
+		openToast({ kind: "error", label: "Something went wrong" })
+		return
+	} finally {
+		isNetworkUpdateInProgress.value = false
+	}
+
+	emit("onClose")
+
+	openToast({ kind: "success", label: "Network is updated" })
+}
+
+usePopupEntity(() => props.show, {
+	submit: handleUpdateNetwork,
+	onShow: handleFillFieldsWithDefaultValues,
+	onHide: handleFillFieldsWithDefaultValues,
+})
+</script>
+
+<template>
+	<FormPopup
+		:show="show"
+		@onClose="emit('onClose')"
+		:displaceIdx="order"
+		title="Edit network"
+		submitLabel="Update"
+		:submitDisabled="!isAvailableToUpdateNetwork || !isStartedEditingName"
+		:submitLoading="isNetworkUpdateInProgress"
+		submitTestId="edit-network-submit"
+		@submit="handleUpdateNetwork"
+	>
+		<ItemsContainer>
+			<SettingItem
+				size="large"
+				:title="networkToEdit.name"
+				description="Selected network for editing"
+				icon="globe-edit"
+				raw
+			/>
+		</ItemsContainer>
+
+		<Input
+			label="New name"
+			placeholder="My network"
+			v-model="nameTerm"
+			autofocus
+			sanitize
+			:maxLength="25"
+			data-testid="network-name-input"
+		>
+			<template #right>
+				<Transition name="fade">
+					<FieldWarning v-if="isNameAlreadyExist"> Already exists </FieldWarning>
+				</Transition>
+			</template>
+		</Input>
+
+		<template #belowSubmit>
+			<Button @click="handleFillFieldsWithDefaultValues" wide variant="primary_outline" size="medium">
+				Reset changes
+			</Button>
+			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 8px 20px 0">
+				Endpoint URLs are managed in the per-network detail page.
+			</Text>
+		</template>
+	</FormPopup>
+</template>
+

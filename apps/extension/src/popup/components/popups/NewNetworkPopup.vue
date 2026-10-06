@@ -1,0 +1,194 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+import { FieldWarning } from "@nulo/design"
+/** Utils */
+import { managers } from "@/utils/core"
+import { activateNetworkGuarded } from "@/utils/guarded-network-activation"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { useFormState } from "@/composables/useFormState"
+import { usePopupEntity } from "@/composables/usePopupEntity"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
+const appStore = useAppStore()
+const { order } = usePopupStack("new_network")
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+/** All endpoint URLs across all networks in this profile — used for UI hint
+ *  "already exists." The service still rejects same-Network URL collisions
+ *  (and DUPLICATE_CHAIN at the chain level); the UI hint is just early
+ *  feedback. */
+const notAllowedNetworkUrls = computed(() => appStore.networks.flatMap((n) => n.endpoints.map((e) => e.rpcUrl)))
+
+const form = useFormState({
+	name: {
+		initial: "",
+		validate: (v) => {
+			if (!v.length) return null
+			if (appStore.networks.some((n) => n.name === v)) return "Already exists"
+			return null
+		},
+	},
+	url: {
+		initial: "https://rpc.sandbox.nulo.sh/",
+		validate: (v) => {
+			if (!v.length) return null
+			const stripped = v.endsWith("/") ? v.slice(0, -1) : v
+			if (notAllowedNetworkUrls.value.includes(stripped)) return "Already exists"
+			return null
+		},
+	},
+})
+
+const nameTerm = form.fields.name.value
+const urlTerm = form.fields.url.value
+
+const isUrlHasError = ref(false)
+const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists")
+const isUrlAlreadyExist = computed(() => form.fields.url.error.value === "Already exists")
+
+const isAvailableToCreateNetwork = computed(() => {
+	// Full-lifetime submit latch: a running save closes the form on EVERY
+	// route (button, Enter, future callers) — not just the pointer path.
+	if (isCreating.value) return false
+	if (!nameTerm.value.length) return false
+	if (!urlTerm.value.length) return false
+	if (urlTerm.value.length < 5) return false
+	if (form.fields.name.error.value || form.fields.url.error.value) return false
+	return true
+})
+
+const isCreating = ref(false)
+const handleCreateNetwork = async () => {
+	if (!isAvailableToCreateNetwork.value) return
+	// Creating a network ACTIVATES it, so it moves the scope a send is building
+	// against. Checked up front to avoid creating one we then refuse to switch
+	// to, and again at the switch itself — a send can start during the create.
+	if (appStore.hasInFlightSend) {
+		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		return
+	}
+
+	try {
+		// The latch spans the WHOLE handler (cleared in finally, not after
+		// addNetwork): the activation + refresh awaits below are still part of
+		// this submit, and a re-entry during them would double-create.
+		isCreating.value = true
+		const network = await managers.network.addNetwork(nameTerm.value, urlTerm.value)
+
+		// Guard first, persist second: the guard admits (and moves the in-memory
+		// scope) before the service write, so a refusal leaves the durable active
+		// network untouched — the network is created but NOT activated.
+		const result = await activateNetworkGuarded(
+			appStore,
+			(id) => managers.network.setActiveNetwork(id),
+			() => managers.network.getActiveNetwork(),
+			network,
+		)
+		if (result !== "activated") {
+			toastNonActivatedOutcome(result)
+			appStore.networks = await managers.network.getNetworks()
+			emit("onClose")
+			return
+		}
+		appStore.networks = await managers.network.getNetworks()
+
+		emit("onClose")
+
+		openToast({ kind: "success", label: "Network is created" })
+	} catch (error) {
+		reportCreateFailure(error)
+	} finally {
+		isCreating.value = false
+	}
+}
+
+/** The network exists but is not active: say why, unless the guard was merely superseded (`stale`). */
+function toastNonActivatedOutcome(result) {
+	if (result === "stale") return
+	const label =
+		result === "blocked"
+			? "Network added. Finish or cancel your pending transaction to switch to it"
+			: "Network added, but the switch didn't confirm. Reopen the popup to verify"
+	openToast({ kind: "error", label })
+}
+
+function reportCreateFailure(error) {
+	const msg = errorMessageFromUnknown(error)
+	if (msg.startsWith("DUPLICATE_CHAIN")) {
+		// Smart-add: chain already exists in profile. Surface this clearly
+		// so the user knows to use Settings → Networks → [chain] → Add endpoint.
+		openToast({ kind: "error", label: "A network for this chain already exists. Add it as an endpoint instead." })
+	} else if (msg === "Failed to fetch node info" || msg === "Failed to fetch network info") {
+		isUrlHasError.value = true
+	} else {
+		openToast({ kind: "error", label: "Something went wrong" })
+	}
+}
+
+usePopupEntity(() => props.show, {
+	submit: handleCreateNetwork,
+	onHide: () => form.reset(),
+})
+</script>
+
+<template>
+	<FormPopup
+		:show="show"
+		@onClose="emit('onClose')"
+		:displaceIdx="order"
+		title="New network"
+		submitLabel="Create"
+		:submitDisabled="!isAvailableToCreateNetwork"
+		:submitLoading="isCreating"
+		submitTestId="new-network-submit"
+		@submit="handleCreateNetwork"
+	>
+		<Input
+			label="Name"
+			placeholder="My network"
+			autofocus
+			sanitize
+			:maxLength="25"
+			v-model="nameTerm"
+			data-testid="network-name-input"
+		>
+			<template #right>
+				<Transition name="fade">
+					<FieldWarning v-if="isNameAlreadyExist"> Already exists </FieldWarning>
+				</Transition>
+			</template>
+		</Input>
+
+		<Input
+			label="RPC Link"
+			placeholder="http://localhost:8080"
+			v-model="urlTerm"
+			@click="isUrlHasError = false"
+			data-testid="network-rpc-input"
+		>
+			<template #right>
+				<Transition name="fade">
+					<FieldWarning v-if="isUrlHasError"> Failed to fetch network info </FieldWarning>
+					<FieldWarning v-else-if="isUrlAlreadyExist"> Already exists </FieldWarning>
+				</Transition>
+			</template>
+		</Input>
+
+		<template #belowSubmit>
+			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 0 20px">
+				We will check the availability of the specified RPC before adding it
+			</Text>
+		</template>
+	</FormPopup>
+</template>
+

@@ -1,0 +1,37 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { ServiceSpec } from "@/wallet/base"
+import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { DummyLogger, type ILoggerStore, type Log } from "@/wallet/logger"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { type Events, LOG_VIEWER_SERVICE_NAME, type Methods } from "./spec"
+
+export * from "./spec"
+
+export class LogViewerService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
+	protected readonly rpcMethods = defineRpcMethods<Methods>()("getLogs", "clearLogs")
+	public static name = LOG_VIEWER_SERVICE_NAME
+
+	public readonly onLog = new EventHandler<Log>()
+
+	private readonly loggerStore: ILoggerStore
+
+	public constructor(logger: ILoggerStore) {
+		super(LOG_VIEWER_SERVICE_NAME, new DummyLogger())
+		this.loggerStore = logger
+		this.loggerStore.onLog.add(this.onLogAdded)
+	}
+
+	public async getLogs(count: number, fromId?: number): Promise<Log[]> {
+		return this.loggerStore.get(count, fromId)
+	}
+
+	public async clearLogs() {
+		// Awaited: the RPC must not resolve until the persisted copy is gone, or a worker restart
+		// in the gap brings back logs the user was told were cleared.
+		await this.loggerStore.clear()
+	}
+
+	private readonly onLogAdded = (log: Log) => {
+		this.emit("onLog", log)
+	}
+}

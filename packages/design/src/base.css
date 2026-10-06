@@ -1,0 +1,407 @@
+/* Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. */
+/*
+ * @nulo/design — the wallet's base stylesheet, relocated verbatim from the extension's former SCSS
+ * partials. Import once at app entry: `import "@nulo/design/base.css"`. Fonts are package-owned
+ * (./fonts); the utility layer is generated (./utilities.css). Token VALUES are kept byte-faithful
+ * to the extension's prior CSS so both apps render identically (see
+ * implementations-plan/archive/design-system-externalization/plan.md).
+ */
+
+@import "./utilities.css";
+
+@font-face {
+	font-family: InterVariable;
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("./fonts/InterVariable.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Space Grotesk";
+	font-style: normal;
+	font-weight: 300 700;
+	font-display: swap;
+	src:
+		url("./fonts/SpaceGrotesk-latin.woff2") format("woff2"),
+		url("./fonts/SpaceGrotesk-latin-ext.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url("./fonts/JetBrainsMono-latin.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Material Symbols Outlined";
+	font-style: normal;
+	font-weight: 100 700;
+	font-display: block;
+	src: url("./fonts/MaterialSymbolsOutlined.woff2") format("woff2");
+}
+
+.material-symbols-outlined {
+	/* biome-ignore lint/a11y/useGenericFontNames: icon font — a generic fallback would render ligature text, not icons (verbatim from the prior _base.scss) */
+	font-family: "Material Symbols Outlined";
+	font-weight: normal;
+	font-style: normal;
+	font-size: 24px;
+	line-height: 1;
+	letter-spacing: normal;
+	text-transform: none;
+	display: inline-block;
+	white-space: nowrap;
+	word-wrap: normal;
+	direction: ltr;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	font-variation-settings:
+		"FILL" 0,
+		"wght" 300,
+		"GRAD" 0,
+		"opsz" 24;
+}
+
+:root[data-has-nav="true"] {
+	--nav-clearance: 96px;
+}
+
+:root {
+	/* nav clearance: 24px default (no nav), 96px when bottom nav is present */
+	--nav-clearance: 24px;
+
+	--font-headline: "Space Grotesk", system-ui, sans-serif;
+	--font-body: "InterVariable", system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", monospace;
+
+	--nulo-surface: #141312;
+	--nulo-surface-low: #1d1b1a;
+	--nulo-surface-high: #2b2a28;
+	--nulo-surface-highest: #363433;
+	--nulo-accent: #f8f1e7;
+	--nulo-outline: #4a463f;
+	--nulo-border: #231f1c;
+	--nulo-secondary: #999187;
+}
+
+/* The dark palette, declared once: an unthemed root (the landing) and an explicit dark theme share
+ * it. It precedes [theme="light"], which overrides it on a light root by source order. */
+:root,
+[theme="dark"] {
+	color-scheme: dark;
+
+	--base-width: 360px;
+	--base-height: 600px;
+
+	--app-bg: #0a0908;
+	--card-bg: #141312;
+	--tooltip-bg: #0f0e0d;
+	--dropdown-bg: #1d1b1a;
+	--border: rgba(74, 70, 63, 0.5);
+	--border-hovered: rgba(74, 70, 63, 0.8);
+
+	/* The light theme inherits both hairlines and every scrim unchanged. */
+	--hairline-soft: rgba(74, 70, 63, 0.2);
+	--hairline-strong: rgba(74, 70, 63, 0.3);
+
+	--scrim-popup: rgba(10, 9, 8, 0.8);
+	--scrim-sheet: rgba(10, 9, 8, 0.82);
+	--scrim-loader: rgba(10, 9, 8, 0.85);
+	--scrim-barrier: rgba(10, 9, 8, 0.92);
+
+	--txt-primary: #f5f0e6;
+	--txt-secondary: #999187;
+	--txt-body: rgba(245, 240, 230, 60%);
+	--txt-tertiary: rgba(245, 240, 230, 56%);
+	--txt-support: rgba(245, 240, 230, 54%);
+	--txt-white: rgba(255, 255, 255, 95%);
+	--txt-inverse: rgba(0, 0, 0, 90%);
+
+	--white: #fff;
+	--black: #000;
+	--blue: #027cfc;
+	--green: #14ae5c;
+	--mint: #18d2a5;
+	--neutral-mint: #109373;
+	--orange: #ff5500;
+	--yellow: #e6c525;
+	--red: #f03c3c;
+	--purple: #5856de;
+	--gray: #8e8e93;
+	--sand: #b88555;
+
+	--bezier: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+[theme="light"] {
+	--base-width: 360px;
+	--base-height: 600px;
+
+	--app-bg: #f5f5f7;
+	--card-bg: #fff;
+	--tooltip-bg: #f3f3f3;
+	--dropdown-bg: #fff;
+
+	/* Direction A — warm chromatic. These 8 brand tokens were MISSING from the light block (they fell
+	 * through to the dark :root values, which is what broke the light theme). The accent stays a
+	 * saturated colour (NOT near-black ink) so it still reads as a link / active-tab / toggle-ON across
+	 * its 43 text sites + 27 fills. */
+	--nulo-surface: #ffffff;
+	--nulo-surface-low: #f0efec;
+	--nulo-surface-high: #e7e5e1;
+	--nulo-surface-highest: #dcd9d3;
+	--nulo-accent: #a8480c;
+	--nulo-outline: #c9c5bd;
+	--nulo-border: #d8d4cc;
+	--nulo-secondary: #6b655c;
+
+	/* Explicit values — replaces the bug-on-bug `var(--nulo-surface-highest)` alias (a DARK token). */
+	--border: rgba(124, 116, 104, 0.3);
+	--border-hovered: rgba(124, 116, 104, 0.55);
+
+	color-scheme: light;
+
+	--txt-primary: rgba(0, 0, 0, 88%);
+	--txt-secondary: rgba(0, 0, 0, 60%);
+	/* Muted scale raised to clear WCAG-AA on white-ish surfaces (down to surface-high). Black-on-white
+	 * at low alpha is far weaker than dark-mode's light-on-dark, so a naive inversion left body/tertiary
+	 * below AA — and these tokens carry security copy (scam-token trust prompt, "irreversible" confirm,
+	 * reset guidance). The light muted scale necessarily compresses (the AA floor on white sits near
+	 * secondary). The contrast gate enforces these in light. */
+	--txt-body: rgba(0, 0, 0, 58%);
+	--txt-tertiary: rgba(0, 0, 0, 56%);
+	--txt-support: rgba(0, 0, 0, 56%);
+	--txt-white: rgba(255, 255, 255, 95%);
+	--txt-inverse: rgba(255, 255, 255, 90%);
+
+	--white: #fff;
+	--black: #000;
+	--blue: #027cfc;
+	--green: #14ae5c;
+	--mint: #18d2a5;
+	--neutral-mint: #109373;
+	--orange: #ff5500;
+	--yellow: #e6c525;
+	--red: #f03c3c;
+	--purple: #5856de;
+	--gray: #8e8e93;
+	--sand: #b88555;
+
+	--json-property-name: #998418;
+	--json-string: #b56959;
+	--json-number: #2f798a;
+	--json-bool: #1e754f;
+
+	--log-background: #f5f5f7;
+	--log-warn-color: #c38700;
+	--log-warn-background: #fff8e1;
+	--log-error-color: #e53935;
+	--log-error-background: #ffebee;
+	--log-inactive-filter: 1.03;
+
+	--bezier: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+[theme="dark"] {
+	--json-property-name: #a99d5e;
+	--json-string: #bd8276;
+	--json-number: #4c9a91;
+	--json-bool: #4d9375;
+
+	--log-background: #1e1e1e;
+	--log-warn-color: #a99d5e;
+	--log-warn-background: #3a2a0f;
+	--log-error-color: #c34f38;
+	--log-error-background: #3a1f1e;
+	--log-inactive-filter: 0.8;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+}
+
+/* The popup scrolls without scrollbars. `::-webkit-scrollbar` is Chromium's and WebKit's only —
+ * Firefox ignores it and showed every one. `scrollbar-width` is the standard property; a scroller
+ * that wants a thin bar back sets it on itself. */
+* {
+	scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+	display: none;
+}
+
+a {
+	text-decoration: none;
+	color: var(--blue);
+}
+
+a:focus {
+	outline: none;
+}
+
+button {
+	font-family: inherit;
+	padding: 0;
+	border: none;
+	outline: none;
+}
+
+input {
+	font: inherit;
+	border: none;
+	outline: none;
+	background: transparent;
+}
+
+body {
+	font-family:
+		"InterVariable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
+		"Helvetica Neue", sans-serif;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	user-select: none;
+}
+
+.slide-enter-active {
+	transition: all 0.3s var(--bezier);
+}
+
+.slide-leave-active {
+	transition: all 0.15s var(--bezier);
+}
+
+.slide-enter-from,
+.slide-leave-to {
+	transform: translateY(40px);
+	opacity: 0;
+}
+
+.slideopacity-enter-active {
+	transition: all 0.3s ease;
+}
+
+.slideopacity-leave-active {
+	transition: all 0.15s ease;
+}
+
+.slideopacity-enter-from,
+.slideopacity-leave-to {
+	opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+	transition: all 0.15s var(--bezier);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+	opacity: 0;
+	transform: translateY(5px);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+	transition: all 0.15s var(--bezier);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+	opacity: 0;
+	transform: translateX(-50%) translateY(-20px);
+}
+
+.opacity-enter-active,
+.opacity-leave-active {
+	transition: all 0.2s ease;
+}
+
+.opacity-enter-from,
+.opacity-leave-to {
+	opacity: 0;
+}
+
+.navigation-enter-active,
+.navigation-leave-active {
+	transition: all 0.2s var(--bezier);
+}
+
+.navigation-enter-from,
+.navigation-leave-to {
+	opacity: 0.3;
+	transform: translateY(2px);
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+	transition: opacity 80ms linear;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+	opacity: 0;
+}
+
+.clickable {
+	cursor: pointer;
+}
+
+.copyable {
+	/* Pointer, NOT `cursor: copy` — the copy cursor is the drag-and-drop "a copy will be made here"
+	 * state (the OS draws a "+" badge), which misreads on click-to-copy targets. The affordance comes
+	 * from the copy icon + toast, per GitHub/Etherscan/MetaMask convention. */
+	cursor: pointer;
+}
+
+.capitalize {
+	text-transform: capitalize;
+}
+
+.noanimations * {
+	/* biome-ignore lint/complexity/noImportantStyles: deliberate animation kill-switch toggled at runtime (verbatim from _base.scss) */
+	transition: none !important;
+}
+
+.no-wrap {
+	white-space: nowrap;
+}
+
+.mono {
+	font-family: var(--font-mono);
+}
+
+.font-headline {
+	font-family: var(--font-headline);
+}
+
+.font-mono {
+	font-family: var(--font-mono);
+}
+
+.uppercase {
+	text-transform: uppercase;
+}
+
+.tracking-wide {
+	letter-spacing: 0.05em;
+}
+
+.tracking-widest {
+	letter-spacing: 0.1em;
+}
+
+.tabular {
+	font-variant: tabular-nums;
+}
+
+.selectable {
+	user-select: text;
+}

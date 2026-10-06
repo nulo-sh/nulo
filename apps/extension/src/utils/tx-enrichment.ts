@@ -1,0 +1,147 @@
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { OriginType } from "@/wallet/services/transaction/spec"
+import type { TxOrigin } from "@/wallet/services/transaction/spec"
+import { FEE_METHODS, pickPrimaryIndex, pickPrimaryMethod } from "./primary-method"
+import { transferLabel } from "./token-transfer-vocabulary"
+
+export { FEE_METHODS, pickPrimaryMethod }
+
+type TxCall = {
+	contract: string
+	method: string
+	args?: unknown[]
+}
+
+/** Labels for the non-transfer names; transfer labels come from the descriptor-derived vocabulary. */
+const METHOD_LABELS: Record<string, string> = {
+	mint_to_public: "Mint (public)",
+	mint_to_private: "Mint (private)",
+	shield: "Shield",
+	unshield: "Unshield",
+	redeem_shield: "Redeem shield",
+	claim_and_end_setup: "Claim Fee Juice",
+	claim: "Claim Fee Juice",
+}
+
+/** The L2 Fee Juice contract (a protocol constant). Labels below are meaningful ONLY on it. */
+const FEE_JUICE_L2_ADDRESS = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString().toLowerCase()
+
+/** Methods whose "Claim Fee Juice" label is protocol-specific — a third-party contract's
+ *  identically-named `claim`/`claim_and_end_setup` must NOT inherit fee-juice semantics on a
+ *  trust surface (it would misdescribe what the user is authorizing). */
+const FEE_JUICE_ONLY_LABELS = new Set(["claim", "claim_and_end_setup"])
+
+const curatedLabel = (method: string): string | null => transferLabel(method) ?? METHOD_LABELS[method] ?? null
+
+/**
+ * Look up the wallet-curated friendly label for `method`. Returns `null` for anything not in the allowlist —
+ * call sites that need a fallback (e.g. the journal title) use
+ * `humanizeMethodName` instead, which title-cases unknowns. The
+ * capability popup uses `getMethodLabel` because tautological
+ * title-casing of a dApp-controlled function name on a trust-sensitive
+ * surface would only add noise.
+ */
+export function getMethodLabel(method: string, contract?: string): string | null {
+	// Fee-juice-only labels apply solely on the FeeJuice protocol contract. When a contract is given
+	// and it isn't that one, suppress the label so a third-party `claim` isn't mislabeled as fee juice.
+	if (FEE_JUICE_ONLY_LABELS.has(method) && contract !== undefined && contract.toLowerCase() !== FEE_JUICE_L2_ADDRESS) {
+		return null
+	}
+	return curatedLabel(method)
+}
+
+/**
+ * Maps a method name/selector to a human-readable label.
+ * - Known Aztec methods get friendly labels; given `contract`, a label that belongs to one protocol
+ *   contract (the fee-juice `claim`) applies only there
+ * - Hex selectors get truncated
+ * - Generic snake_case gets title-cased
+ */
+export function humanizeMethodName(method: string, contract?: string): string {
+	if (!method) return "Unknown"
+
+	const label = getMethodLabel(method, contract)
+	if (label) return label
+
+	// Hex selector — truncate
+	if (/^0x[0-9a-fA-F]+$/.test(method)) {
+		return method.length > 10 ? `${method.slice(0, 10)}...` : method
+	}
+
+	// Generic snake_case → title case
+	return method.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Find the user's primary call, skipping fee/entrypoint infrastructure calls.
+ * Thin wrapper around the shared `pickPrimaryMethod` helper — the method
+ * name comes from there; this returns the matching call object so
+ * downstream consumers can read `contract` / `transfers` / `args`.
+ *
+ * Generic over the call shape so consumers (e.g. `app.store.ts` operating
+ * on `Tx['calls']`, which has `transfers`) keep their full type rather than
+ * being narrowed to the bare `{contract, method, args}` carrier.
+ *
+ * Behavior preserved exactly: empty input → undefined; an all-fee-only call
+ * list returns the first call verbatim (pinned as a BUG PIN in the helper's
+ * test file).
+ */
+export function getPrimaryCall<T extends { method: string }>(calls: T[]): T | undefined {
+	if (!calls?.length) return undefined
+	// Index-based, not find-by-name: when the primary's NAME also appears in the fee payload (the
+	// paired FeeJuice claim), a name find would return the fee call's object - wrong contract/transfers.
+	const idx = pickPrimaryIndex(calls)
+	return idx === undefined ? calls[0] : calls[idx]
+}
+
+/**
+ * Categorizes a transaction by its calls.
+ */
+export function getTxCategory(calls: TxCall[]): "transfer" | "mint" | "tx" {
+	const call = getPrimaryCall(calls)
+	if (call?.method?.startsWith("transfer")) return "transfer"
+	if (call?.method?.startsWith("mint_to_")) return "mint"
+	return "tx"
+}
+
+/**
+ * Returns a display title for a transaction.
+ * - Transfer/mint get existing labels
+ * - Generic txs get humanized primary method name
+ */
+export function getTxTitle(calls: TxCall[]): string {
+	const category = getTxCategory(calls)
+	if (category === "transfer") return "Transfer"
+	if (category === "mint") return "Mint"
+
+	const primary = getPrimaryCall(calls)
+	return primary ? humanizeMethodName(primary.method) : "Transaction"
+}
+
+/**
+ * Returns dApp name for DAPP origin, null for UI/other.
+ */
+export function getOriginLabel(origin?: TxOrigin): string | null {
+	if (!origin || origin.type !== OriginType.DAPP) return null
+	return origin.name || "dApp"
+}
+
+// TransferType enum values: Private=0, PrivateToPublic=1, Public=2, PublicToPrivate=3
+const TRANSFER_TYPE_LABELS: Record<number | string, string> = {
+	0: "Private → Private",
+	1: "Private → Public",
+	2: "Public → Public",
+	3: "Public → Private",
+	Private: "Private → Private",
+	PrivateToPublic: "Private → Public",
+	Public: "Public → Public",
+	PublicToPrivate: "Public → Private",
+}
+
+/**
+ * Returns a human-readable transfer type label.
+ */
+export function formatTransferType(type: number | string): string {
+	return TRANSFER_TYPE_LABELS[type] ?? String(type)
+}

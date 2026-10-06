@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in Nulo does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a recovery phrase, password, private key or unencrypted backup into an issue. Everything here is public.
+        A security problem goes to [private vulnerability reporting](https://github.com/nulo-sh/nulo/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: versions
+    attributes:
+      label: Nulo and Aztec versions
+      description: Both are shown in Settings → About.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Its name and version.
+      placeholder: Firefox 153
+    validations:
+      required: true
+  - type: input
+    id: network
+    attributes:
+      label: Network
+      description: The network the wallet was on, from Settings → Networks.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: A log export can contain addresses and transaction details. Review it and remove anything sensitive before you attach it.

@@ -1,0 +1,252 @@
+/**
+ * Convert an internal exception into the `WalletResponse.error` shape expected
+ * by `@aztec-labs/wallet-sdk`. Structured errors get EIP-1193 codes plus a
+ * `walletErrorCode` discriminator; everything else collapses to a plain string
+ * so the existing wire contract (string error for unrecognised throws) is
+ * preserved.
+ *
+ * Pure — no I/O, no logger, no service dependencies. Lives next to
+ * `background.ts` because the EIP-1193 mapping is a wallet-sdk transport
+ * concern, not a wallet-bridge domain concern. Unit-testable via the
+ * sibling `error-envelope.test.ts`.
+ *
+ * Wire reality: the dApp-side `@aztec-labs/wallet-sdk` wrapper at
+ * `extension_wallet.ts:181` wraps `response.error` in
+ * `new Error(JSON.stringify(error))`. dApps that want to discriminate must
+ * `JSON.parse(err.message).code` (see wallet-bridge README for the recipe).
+ */
+
+import {
+	AccountAddressInconsistencyError,
+	CapabilityNotGrantedError,
+	ChainNotSupportedError,
+	ContractNotRegisteredError,
+	JobCancelledError,
+	PxeScopeUnregisteredError,
+	PxeStaleAnchorError,
+	RpcDisconnectedError,
+	RpcTimeoutError,
+	ScopeViolationError,
+	SessionEndedError,
+	TermsAcceptanceRequiredError,
+	TooManyPendingError,
+	DuplicateInitializationError,
+	UnsupportedMethodError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
+import type { WalletResponse } from "@aztec-labs/wallet-sdk/types"
+
+/**
+ * PXE failures one in-wallet retry did not clear, transient from the dApp's side: the same -32603 +
+ * discriminator shape as DuplicateInitializationError, with a constant message so neither the
+ * node's text nor an account address crosses. A stale anchor fell out of the node's view (a reorg,
+ * or nodes behind one endpoint disagreeing); an unregistered scope could not be loaded into the PXE.
+ */
+const PXE_RETRY_ENVELOPES = [
+	[PxeStaleAnchorError, "The wallet's view of the chain was behind the node. Retry the request."],
+	[PxeScopeUnregisteredError, PxeScopeUnregisteredError.MESSAGE],
+] as const
+
+export function toWalletResponseError(error: unknown): WalletResponse["error"] {
+	if (error instanceof JobCancelledError) {
+		return {
+			code: 4001,
+			message: error.message,
+			data: {
+				walletErrorCode: JobCancelledError.CODE,
+				jobId: (error.details as { jobId?: string } | undefined)?.jobId,
+			},
+		}
+	}
+	if (error instanceof UserRejectedError) {
+		// USER_REJECTED distinguishes the popup's Reject from a journal
+		// cancellation (JOB_CANCELLED); same 4001. The message passes through:
+		// it is wallet-authored.
+		return {
+			code: 4001,
+			message: error.message,
+			data: { walletErrorCode: UserRejectedError.CODE },
+		}
+	}
+	if (error instanceof SessionEndedError) {
+		// The wallet session that approved the request ended (lock, auto-lock, another unlock) before
+		// the request reached the network, so nothing was sent. 4900: this provider session cannot
+		// finish it; unlike SESSION_INVALID no teardown follows, so the dApp may re-request after the
+		// user unlocks. A sweep that cancels the same request first answers JOB_CANCELLED instead.
+		return {
+			code: 4900,
+			message: error.message,
+			data: { walletErrorCode: SessionEndedError.CODE },
+		}
+	}
+	if (error instanceof ChainNotSupportedError) {
+		// EIP-1193 4901: the provider is not connected to the requested chain. The session's chain
+		// lost its network in the wallet, which only the dApp's own chain choice can work around.
+		// Constant message: it names neither the session's chain nor any chain the wallet serves.
+		return {
+			code: 4901,
+			message: ChainNotSupportedError.MESSAGE,
+			data: { walletErrorCode: ChainNotSupportedError.CODE },
+		}
+	}
+	if (error instanceof TermsAcceptanceRequiredError) {
+		// 4100 (unauthorized): the wallet will serve this origin again once the user accepts the
+		// Terms in the wallet itself — nothing the dApp can do but say so. One bit about the install,
+		// disclosed before any method or capability is examined.
+		return {
+			code: 4100,
+			message: error.message,
+			data: { walletErrorCode: TermsAcceptanceRequiredError.CODE },
+		}
+	}
+	if (error instanceof CapabilityNotGrantedError) {
+		return {
+			code: 4100,
+			message: error.message,
+			data: {
+				walletErrorCode: CapabilityNotGrantedError.CODE,
+				capabilityType: (error.details as { capabilityType?: string } | undefined)?.capabilityType,
+			},
+		}
+	}
+	if (error instanceof ScopeViolationError) {
+		// The classification tells a dApp that its grant refused the call before execution, not that
+		// something downstream failed.
+		return SCOPE_VIOLATION_ENVELOPE
+	}
+	if (error instanceof RpcTimeoutError) {
+		// An internal RPC (e.g. offscreen prove/simulate) exceeded its timeout.
+		// -32603 = JSON-RPC "Internal error". Generic message — never the raw
+		// internal "Offscreen request timed out: <method>" detail (no oracle on
+		// internal method names). dApps discriminate via data.walletErrorCode.
+		return {
+			code: -32603,
+			message: "The wallet timed out while processing the request.",
+			data: { walletErrorCode: RpcTimeoutError.CODE },
+		}
+	}
+	if (error instanceof RpcDisconnectedError) {
+		// The wallet's internal transport (popup↔SW / SW↔offscreen) dropped
+		// before the request was answered. This is TRANSIENT (the worker
+		// reconnects) — deliberately NOT EIP-1193 4900 "Disconnected", which dApp
+		// libraries treat as a hard provider disconnect and may use to tear down
+		// session state. -32603 (JSON-RPC Internal error) + the walletErrorCode
+		// discriminator lets a dApp recognise + retry without nuking the session.
+		return {
+			code: -32603,
+			message: "The wallet was disconnected while processing the request.",
+			data: { walletErrorCode: RpcDisconnectedError.CODE },
+		}
+	}
+	if (error instanceof AccountAddressInconsistencyError) {
+		// The integrity blocking state is a wallet-UI concern. A dApp gets a fully generic
+		// internal failure — no mismatch detail, no discriminator code — so the condition can't
+		// be probed or used to fingerprint a wallet install.
+		return {
+			code: -32603,
+			message: "The wallet could not process the request.",
+		}
+	}
+	if (error instanceof TooManyPendingError) {
+		// -32005 = JSON-RPC "Limit exceeded" (closest standard; EIP-1193 has no
+		// rate-limit code). Backpressure — the dApp retries after its in-flight
+		// sendTx settle. No origin/profile detail (no oracle).
+		return {
+			code: -32005,
+			message: error.message,
+			data: { walletErrorCode: TooManyPendingError.CODE },
+		}
+	}
+	if (error instanceof UnsupportedMethodError) {
+		// -32601 = JSON-RPC "Method not found". Purely a statement about THIS wallet's surface, and
+		// the only variable part is the method name the dApp itself sent (bounded at the throw
+		// site), so the echo tells the caller nothing it did not already know. Classified because
+		// falling through would leave a dApp unable to tell "I asked for the wrong thing" from
+		// "the wallet broke", the distinction a dApp's fallback to another route depends on.
+		return {
+			code: -32601,
+			message: error.message,
+			data: { walletErrorCode: UnsupportedMethodError.CODE },
+		}
+	}
+	if (error instanceof DuplicateInitializationError) {
+		// The account's first transaction lost the initialization race (another
+		// device or a lagging node). Transient from the dApp's perspective —
+		// retry succeeds once the network syncs. -32603 + discriminator so a
+		// dApp can retry without treating it as a permanent send failure.
+		return {
+			code: -32603,
+			message: error.message,
+			data: { walletErrorCode: DuplicateInitializationError.CODE },
+		}
+	}
+	const pxeRetry = PXE_RETRY_ENVELOPES.find(([ctor]) => error instanceof ctor)
+	if (pxeRetry) return { code: -32603, message: pxeRetry[1], data: { walletErrorCode: pxeRetry[0].CODE } }
+	if (error instanceof ContractNotRegisteredError) {
+		// -32602 = JSON-RPC "Invalid params": the request named a contract the wallet was never
+		// given. Raised only while resolving contracts — before proving, before any broadcast — so
+		// a dApp may register it and retry the same call safely. Constant message ("not registered"
+		// is the phrase dApp-side classifiers key on); no class id, since instance lookup can be
+		// served from wallet-local data and is therefore not established as public.
+		return {
+			code: -32602,
+			message: "Contract not registered with the wallet. Register it and retry.",
+			data: { walletErrorCode: ContractNotRegisteredError.CODE },
+		}
+	}
+	// This value crosses the trust boundary INTO an arbitrary dApp — the one path here that leaves
+	// the machine — and by definition we did not recognise the error, so nothing about its text is
+	// known to be safe. Scrubbing and capping were tried and are not enough: a cap BOUNDS exposure
+	// without sanitizing it, and `new Error("private note: <secret>")` passes through verbatim.
+	//
+	// An error a dApp is meant to act on has to be classified above and carry a `walletErrorCode`;
+	// an unclassified one has no defined meaning to the caller, so a constant loses nothing it
+	// could legitimately use. The wire contract (a plain string for unrecognised throws) is
+	// preserved — only the content is not.
+	//
+	// The obligation runs the other way too, and twice already it was not met: a `SESSION_INVALID`
+	// and an unsupported-method rejection both reached here as bare `Error`s and were flattened
+	// into this constant, leaving the dApp unable to tell an actionable refusal from a wallet
+	// fault. Adding an actionable throw means adding its class above, not relying on its text.
+	return UNCLASSIFIED_ERROR_MESSAGE
+}
+
+/**
+ * The single string handed to a dApp for any error we did not classify.
+ *
+ * Deliberately constant: it is the only shape that cannot carry internal state outward.
+ */
+export const UNCLASSIFIED_ERROR_MESSAGE = "The wallet could not process the request."
+
+/** Every scope refusal's dApp text, never the refusal's own: dApps may show or match it, so it is a
+ *  public contract. */
+export const SCOPE_VIOLATION_MESSAGE = "This request is outside the permissions you gave this app."
+
+/** One object answers every scope refusal, so it is frozen: no sink can edit what the next dApp gets. */
+export const SCOPE_VIOLATION_ENVELOPE = Object.freeze({
+	code: 4100,
+	message: SCOPE_VIOLATION_MESSAGE,
+	data: Object.freeze({ walletErrorCode: ScopeViolationError.CODE }),
+})
+
+/**
+ * The session was invalidated mid-flight (profile switch, revocation) and the dApp must reconnect.
+ *
+ * Classified rather than thrown as a plain `Error`: this is wallet-authored, ACTIONABLE guidance,
+ * and routing it through the unclassified fall-through would replace it with the constant above —
+ * privacy preserved, but the dApp left unable to tell "reconnect" from any other failure.
+ *
+ * EIP-1193 4900 ("Disconnected") is the semantically correct code — the provider genuinely cannot
+ * service further requests on this session — and it is the opposite of `RpcDisconnectedError`
+ * above, which is transient and deliberately avoids it.
+ *
+ * What 4900 does NOT do here is drive the dApp's `onDisconnect`: the installed SDK wraps the whole
+ * envelope in `new Error(JSON.stringify(error))`, so a generic library never sees `err.code`. The
+ * `terminateSession()` call that follows this response is what actually triggers reconnection. The
+ * code carries the meaning; the teardown carries the behavior.
+ */
+export const SESSION_INVALID_ERROR: WalletResponse["error"] = {
+	code: 4900,
+	message: "Session no longer valid — reconnect",
+	data: { walletErrorCode: "SESSION_INVALID" },
+}

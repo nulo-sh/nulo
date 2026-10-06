@@ -1,0 +1,282 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+export const getDecimalSeparator = (): string => {
+	const s = (1.1).toLocaleString()
+	return s.substring(1, s.length - 1)
+}
+
+export const getThousandSeparator = (): string => {
+	const s = (1111).toLocaleString()
+	return s.substring(1, s.length - 3)
+}
+
+export const purgeNumber = (target: string): string => {
+	if (/^(0|[1-9]\d*)(\.\d+)?$/.test(target)) return target
+	return target.replace(/[^0-9.]/g, "")
+}
+
+export const normalizeAmount = (target: string): string | undefined => {
+	if (target === ".") return "0."
+
+	let dotCounter = 0
+	for (const char of target) {
+		if (char === ".") dotCounter++
+	}
+
+	if (dotCounter > 1) return target.slice(0, target.length - 1)
+
+	if (target[target.length - 1] === ".") return target
+	if (!target.length) return ""
+	if (target.length === 1 && !/^(0|[1-9]\d*)(\.\d+)?$/.test(target)) return ""
+	if (Number.parseFloat(purgeNumber(target)) >= 9_999_999_999_999) return "9999999999999"
+}
+
+/** What an amount text reads as: its plain form (digits and at most one "."), or why it has none. */
+export type AmountRead = { ok: true; plain: string } | { ok: false; reason: "ambiguous" | "unreadable" }
+
+/** The grouped whole part the Send field writes at rest (`restingAmount`); keep the two in step. */
+const GROUPED = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/
+const SPACE = /[\u0020\u00a0\u202f\u2009]/g
+const SPACE_GROUPED = /^[1-9]\d{0,2}(?:[\u0020\u00a0\u202f\u2009]\d{3})+(?:[.,]\d*)?$/
+const UNREADABLE: AmountRead = { ok: false, reason: "unreadable" }
+
+/**
+ * The one amount a text reads as, or none: a "." is the decimal point, and a comma or space is read
+ * as grouping or as the decimal only where the form allows one reading ("1,234" allows two).
+ * `rested` is the field's own resting text, whose commas are the wallet's grouping; `currency: "$"`
+ * drops one leading "$".
+ */
+export function readAmountText(text: string, { rested = null, currency }: { rested?: string | null; currency?: "$" } = {}): AmountRead {
+	let t = text.trim()
+	if (currency === "$" && t.startsWith("$")) t = t.slice(1)
+	if (!/\d/.test(t)) return UNREADABLE
+	if (text === rested && GROUPED.test(t)) return { ok: true, plain: t.replaceAll(",", "") }
+	if (/^\d*\.?\d*$/.test(t)) return { ok: true, plain: t }
+	if (/^[1-9]\d{0,2},\d{3}$/.test(t)) return { ok: false, reason: "ambiguous" }
+	if (/^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d*)?$/.test(t)) return { ok: true, plain: t.replaceAll(",", "") }
+	if (/^[1-9]\d{0,2}(?:\.\d{3})+(?:,\d*)?$/.test(t)) return { ok: true, plain: t.replaceAll(".", "").replace(",", ".") }
+	if (SPACE_GROUPED.test(t)) return { ok: true, plain: t.replace(SPACE, "").replace(",", ".") }
+	if (/^\d*,\d*$/.test(t)) return { ok: true, plain: t.replace(",", ".") }
+	return UNREADABLE
+}
+
+const COMPACT_SUFFIXES = ["K", "M", "B", "T"] as const
+
+/**
+ * `fullValue` in `length` characters without losing a whole digit: the cut minus a trailing
+ * decimal separator while the whole part fits, else the whole part in its largest K/M/B/T tier with
+ * at most two truncated digits of the next group, or `>999T` past a thousand trillion.
+ */
+const compactCut = (fullValue: string, units: bigint, decimals: number, length: number, decimalSep: string): string => {
+	if ((fullValue.split(decimalSep)[0] ?? fullValue).length <= length) {
+		const cut = fullValue.slice(0, length)
+		return cut.endsWith(decimalSep) ? cut.slice(0, -decimalSep.length) : cut
+	}
+	const whole = units / 10n ** BigInt(decimals)
+	if (whole >= 1000n ** 5n) return ">999T"
+	let tier = COMPACT_SUFFIXES.length
+	while (tier > 1 && whole < 1000n ** BigInt(tier)) tier--
+	const scale = 1000n ** BigInt(tier)
+	const head = (whole / scale).toString()
+	const places = Math.max(0, Math.min(2, length - head.length - 2))
+	const frac = (whole % scale)
+		.toString()
+		.padStart(3 * tier, "0")
+		.slice(0, places)
+		.replace(/0+$/, "")
+	return `${head}${frac ? decimalSep + frac : ""}${COMPACT_SUFFIXES[tier - 1]}`
+}
+
+/**
+ * Format base units for display, truncated (never rounded up), in at most `length` characters
+ * when given; `slashed` is set when the value shown is not the full one.
+ *
+ * - Non-zero but below what `length` can show → `<0.0001`, its zeros filling the width.
+ * - Longer than `length` → cut to it, with no ellipsis; callers draw their own "Show full".
+ * - `compact`: whole digits are never cut. The cut drops a trailing decimal separator, and a whole
+ *   part longer than `length` reads K/M/B/T (`123.45M`), or `>999T` past a thousand trillion.
+ */
+export const balanceFormatted = (
+	units: bigint | string | null | undefined,
+	decimals: number,
+	length?: number,
+	opts: { compact?: boolean } = {},
+): { value: string; slashed: boolean } => {
+	if (units == null || units === "") return { value: "0", slashed: false }
+	const u = typeof units === "bigint" ? units : BigInt(units)
+	if (u === 0n) return { value: "0", slashed: false }
+
+	const decimalSep = getDecimalSeparator()
+	const fullValue = formatBaseUnits(u, decimals)
+
+	if (!length) {
+		return { value: fullValue, slashed: false }
+	}
+
+	// Small-value hint: value > 0 but smaller than the smallest representable
+	// at this output width. Threshold: 10^(decimals - (length - 2)) base units.
+	// If `length-2 >= decimals`, the threshold collapses to 0 and the hint
+	// branch is unreachable (which is correct — at that width the full value
+	// fits trivially).
+	const hintDigits = length - 2
+	if (hintDigits > 0 && hintDigits < decimals) {
+		const threshold = 10n ** BigInt(decimals - hintDigits)
+		if (u < threshold) {
+			return {
+				value: `<0${decimalSep}${"0".repeat(length - 3)}1`,
+				slashed: true,
+			}
+		}
+	}
+
+	if (fullValue.length > length) {
+		const value = opts.compact ? compactCut(fullValue, u, decimals, length, decimalSep) : fullValue.slice(0, length)
+		return { value, slashed: true }
+	}
+
+	return { value: fullValue, slashed: false }
+}
+
+/**
+ * Truncate a typed-input string to at most `maxDecimals` digits after the
+ * decimal point. Pure string operation — no BN, no float, no rounding.
+ *
+ * - `clampDecimals("1.234567", 4)` → `"1.2345"`
+ * - `clampDecimals("1.5", 4)` → `"1.5"` (under the limit, untouched)
+ * - `clampDecimals("1.", 4)` → `"1."` (trailing dot preserved while typing)
+ * - `clampDecimals("123", 4)` → `"123"` (no dot, untouched)
+ * - `clampDecimals("1.234", 0)` → `"1"` (zero-decimal token strips the dot)
+ *
+ * Returns the input unchanged when `maxDecimals < 0` (defensive).
+ */
+export const clampDecimals = (value: string, maxDecimals: number): string => {
+	if (maxDecimals < 0) return value
+	const dotIdx = value.indexOf(".")
+	if (dotIdx === -1) return value
+	if (maxDecimals === 0) return value.slice(0, dotIdx)
+	const allowed = dotIdx + 1 + maxDecimals
+	return value.length <= allowed ? value : value.slice(0, allowed)
+}
+
+/**
+ * Parse a decimal-string user input to base-units `bigint` for a token of
+ * `decimals`. Pure native bigint via string padding — no BigNumber, no
+ * float math, no precision-loss footgun (`10 ** decimals` is JS-number
+ * math and starts losing precision around `decimals > 15`).
+ *
+ * Throws on:
+ *   - Empty string or lone "."
+ *   - Non-numeric characters
+ *   - More fractional digits than the token supports (caller should
+ *     `clampDecimals` first if it wants silent truncation)
+ *
+ * Examples:
+ *   parseAmountToBaseUnits("1.5", 6)    → 1500000n
+ *   parseAmountToBaseUnits("0.0001", 18) → 100000000000000n
+ *   parseAmountToBaseUnits("1.5", 0)    → throws  (token has 0 decimals; `1.5` invalid)
+ *   parseAmountToBaseUnits("1", 0)      → 1n
+ *   parseAmountToBaseUnits("1.234", 2)  → throws  (3 frac digits > 2)
+ */
+export const parseAmountToBaseUnits = (value: string, decimals: number): bigint => {
+	if (decimals < 0 || !Number.isInteger(decimals)) {
+		throw new Error("Invalid decimals: must be a non-negative integer")
+	}
+	if (typeof value !== "string" || value === "" || value === ".") {
+		throw new Error("Invalid amount: empty")
+	}
+	// Match digits + at most one dot. Tolerates "1.", ".5", "1", "1.5".
+	// Rejects garbage like "1.2.3", "abc", "-1", "1e5".
+	if (!/^\d*\.?\d*$/.test(value)) {
+		throw new Error("Invalid amount: non-numeric characters")
+	}
+	const [intPart = "", fracPart = ""] = value.split(".")
+	if (fracPart.length > decimals) {
+		throw new Error("Invalid amount: too many decimals for token")
+	}
+	const padded = fracPart.padEnd(decimals, "0")
+	const composed = (intPart || "0") + padded
+	// Strip leading zeros (BigInt accepts them; keeps the contract clean).
+	const stripped = composed.replace(/^0+(?=\d)/, "")
+	return BigInt(stripped)
+}
+
+export interface FormatBaseUnitsOpts {
+	/** Truncate (round down) to N digits after the decimal point. Default:
+	 *  full precision. **TRUNCATES** — never rounds up — so a balance display
+	 *  always shows ≤ the actual amount. Important: rounding-up would invite
+	 *  a UX where the user sees "1.50" while only holding 1.4999, then types
+	 *  "1.5" expecting it to send and gets a misleading "exceeds balance"
+	 *  error. */
+	maxDecimals?: number
+	/** Pad to at least N digits after the decimal (with trailing zeros).
+	 *  Default: 0. Use for fixed-width displays (e.g. always 4 decimals). */
+	minDecimals?: number
+	/** Strip trailing zeros past `minDecimals`. Default: true when
+	 *  `minDecimals` is 0/undefined; false otherwise. */
+	trimTrailingZeros?: boolean
+	/** Decimal separator. Default: locale (`getDecimalSeparator()`). */
+	decimalSep?: string
+	/** Thousands separator on the integer part. Default: locale
+	 *  (`getThousandSeparator()`). */
+	thousandsSep?: string
+}
+
+/**
+ * Format a base-units integer value as a decimal-string for display.
+ * Pure native bigint; no `bignumber.js` dependency.
+ *
+ * **Rounding contract**: `maxDecimals` always TRUNCATES (round-down). Never
+ * rounds up. For amounts this matters: showing a rounded-up value can
+ * mislead the user into thinking they hold more than they actually do.
+ * Cost-only displays (e.g. fee-to-USD) that prefer half-up should compute
+ * their own rounding before calling here.
+ *
+ * Example:
+ *   formatBaseUnits(15000000n, 6)                       → "15"
+ *   formatBaseUnits(15500000n, 6)                       → "15.5"
+ *   formatBaseUnits(14999999n, 6, { maxDecimals: 4 })   → "14.9999"  (truncated, NOT 15.0000)
+ *   formatBaseUnits(1500n, 6, { maxDecimals: 4 })       → "0.0015"
+ *   formatBaseUnits(1500000000n, 6, { thousandsSep: "," }) → "1,500"
+ *   formatBaseUnits(150n, 6, { minDecimals: 4 })        → "0.0001"  (truncated; trailing zero kept by minDecimals)
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 22 — sign, truncation, padding, zero trimming and separators ARE the integer-formatting algorithm
+export const formatBaseUnits = (units: bigint | string | null | undefined, decimals: number, opts: FormatBaseUnitsOpts = {}): string => {
+	if (decimals < 0 || !Number.isInteger(decimals)) {
+		throw new Error("Invalid decimals: must be a non-negative integer")
+	}
+	if (units == null || units === "") return "0"
+	const u = typeof units === "bigint" ? units : BigInt(units)
+
+	const sign = u < 0n ? "-" : ""
+	const abs = sign === "-" ? -u : u
+
+	const factor = decimals === 0 ? 1n : 10n ** BigInt(decimals)
+	const wholePart = abs / factor
+	let fracStr = decimals === 0 ? "" : (abs % factor).toString().padStart(decimals, "0")
+
+	// `maxDecimals`: truncate (round down) the fractional part.
+	if (opts.maxDecimals !== undefined && opts.maxDecimals < fracStr.length) {
+		fracStr = fracStr.slice(0, opts.maxDecimals)
+	}
+
+	const minDecimals = opts.minDecimals ?? 0
+	if (fracStr.length < minDecimals) {
+		fracStr = fracStr.padEnd(minDecimals, "0")
+	}
+
+	const trimDefault = minDecimals === 0
+	const trim = opts.trimTrailingZeros ?? trimDefault
+	if (trim) {
+		while (fracStr.length > minDecimals && fracStr.endsWith("0")) {
+			fracStr = fracStr.slice(0, -1)
+		}
+	}
+
+	const thousandsSep = opts.thousandsSep ?? getThousandSeparator()
+	let wholeStr = wholePart.toString()
+	if (thousandsSep) {
+		wholeStr = wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSep)
+	}
+
+	const decimalSep = opts.decimalSep ?? getDecimalSeparator()
+	return sign + wholeStr + (fracStr ? decimalSep + fracStr : "")
+}

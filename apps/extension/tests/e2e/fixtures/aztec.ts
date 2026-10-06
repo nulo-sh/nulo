@@ -1,0 +1,886 @@
+/**
+ * Aztec SDK helpers for E2E tests.
+ *
+ * Uses EmbeddedWallet to deploy contracts and mint tokens on the local Aztec network.
+ * Designed to run as a singleton per test file (file-scoped fixture).
+ */
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { randomBytes } from "node:crypto"
+import { rmSync } from "node:fs"
+
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node"
+import { TxHash } from "@aztec-labs/stdlib/tx"
+import { GasFees } from "@aztec-labs/stdlib/gas"
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
+import { Fr } from "@aztec-labs/aztec.js/fields"
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded"
+import { registerInitialLocalNetworkAccountsInWallet } from "@aztec-labs/wallets/testing"
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
+import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum"
+import { isL1ToL2MessageReady } from "@aztec-labs/aztec.js/messaging"
+import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol"
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
+import { SponsoredFPCContractArtifact } from "@aztec-labs/noir-contracts.js/SponsoredFPC"
+import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
+
+/**
+ * Aztec L2 node URL. Defaults to http://localhost:8080 (the standard sandbox port).
+ *
+ * Override via `AZTEC_NODE_URL` env var for parallel runs on the same machine
+ * — e.g. when another impl is already using 8080, set `AZTEC_NODE_URL=http://localhost:19080`
+ * and ensure the spawned `aztec start` listens on that port (see global-setup.ts).
+ */
+export const LOCAL_NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080"
+const SPONSORED_FPC_SALT = 0n
+
+export interface AztecTestConfig {
+	nodeUrl: string
+	tokenAddress: string
+	/** Contract-class id of the deployed test token. The default-token seeder
+	 *  pins this per seed, and the sandbox address is minted per run, so the
+	 *  e2e seed entry can only be assembled from live deploy output. */
+	tokenClassId: string
+	sponsoredFpcAddress: string
+	/** Hex-encoded minter account address */
+	minterAddress: string
+}
+
+/** A valid address no one has sent to: a recipient whose sequences all start at their first send. */
+export async function randomAztecAddress(): Promise<string> {
+	return (await AztecAddress.random()).toString()
+}
+
+/** Check if the local Aztec node is reachable and responding. */
+export async function checkNodeHealth(url = LOCAL_NODE_URL): Promise<boolean> {
+	try {
+		const node = createAztecNodeClient(url)
+		await node.getNodeInfo()
+		return true
+	} catch {
+		return false
+	}
+}
+
+/** Wait for the local node to become healthy (with timeout). */
+export async function waitForLocalNode(url = LOCAL_NODE_URL, timeoutMs = 60_000): Promise<void> {
+	const node = createAztecNodeClient(url)
+	const start = Date.now()
+	while (Date.now() - start < timeoutMs) {
+		try {
+			await node.getNodeInfo()
+			return
+		} catch {
+			await new Promise((r) => setTimeout(r, 2_000))
+		}
+	}
+	throw new Error(`Local Aztec node at ${url} did not become healthy within ${timeoutMs}ms`)
+}
+
+/**
+ * Serves Nulo's FROZEN Schnorr artifact wherever upstream would serve its own.
+ *
+ * Upstream rebuilds `@aztec-labs/accounts` artifacts on toolchain changes (5.2.0 moved the
+ * SchnorrAccount class id, and with it every address derived from it), while Nulo's address
+ * regime is pinned to a vendored copy. A script-side account built from the upstream artifact
+ * would land on a different address than the one the extension derives and this fixture funds.
+ * Only the artifact hook differs: upstream's constructor name (`constructor`), args ([x, y])
+ * and salt (ZERO) already match the frozen descriptor.
+ */
+class FrozenArtifactWallet extends EmbeddedWallet {
+	constructor(...[pxe, node, walletDB, accountContracts, log]: ConstructorParameters<typeof EmbeddedWallet>) {
+		const frozen: typeof accountContracts = {
+			...accountContracts,
+			getSchnorrAccountContract: async (signingKey) => {
+				const [{ SchnorrAccountContract }, { FrozenSchnorrAccountArtifact }] = await Promise.all([
+					import("@aztec-labs/accounts/schnorr"),
+					import("@nulo/aztec-runtime/account"),
+				])
+				return new (class extends SchnorrAccountContract {
+					override getContractArtifact() {
+						return Promise.resolve(FrozenSchnorrAccountArtifact)
+					}
+				})(signingKey)
+			},
+			getSchnorrInitializerlessAccountContract: (k) => accountContracts.getSchnorrInitializerlessAccountContract(k),
+			getEcdsaRAccountContract: (k) => accountContracts.getEcdsaRAccountContract(k),
+			getEcdsaKAccountContract: (k) => accountContracts.getEcdsaKAccountContract(k),
+			getStubAccountContractArtifact: (t) => accountContracts.getStubAccountContractArtifact(t),
+			createStubAccount: (a, t) => accountContracts.createStubAccount(a, t),
+		}
+		super(pxe, node, walletDB, frozen, log)
+	}
+}
+
+/** Create an EmbeddedWallet connected to the local node. Returns wallet + cleanup function. */
+export async function createTestWallet(url = LOCAL_NODE_URL) {
+	const node = createAztecNodeClient(url)
+	await waitForNode(node)
+
+	const dataDirectory = join(tmpdir(), `nulo-e2e-${randomBytes(8).toString("hex")}`)
+	const wallet = await FrozenArtifactWallet.create(node, {
+		pxe: { dataDirectory, proverEnabled: false },
+	})
+
+	const accounts = await registerInitialLocalNetworkAccountsInWallet(wallet)
+
+	const cleanup = async () => {
+		await wallet.stop()
+		try {
+			rmSync(dataDirectory, { recursive: true, force: true })
+		} catch {
+			// ignore cleanup errors
+		}
+	}
+
+	return { wallet, accounts, node, cleanup }
+}
+
+/**
+ * Generous `maxFeesPerGas` ceiling for SponsoredFPC-paid setup txs. The SDK otherwise pins
+ * maxFeesPerGas to the ESTIMATION-time gas fee with no headroom, so an L2-fee spike between
+ * estimate and inclusion rejects the tx. maxFeesPerGas is only a ceiling and the FPC pays the
+ * ACTUAL network fee, so a high cap can't overpay — it just stops spike-rejection flakes.
+ * 5.0 raised the sandbox L2 base fee ~4 orders of magnitude (observed inclusion feePerL2Gas
+ * ≈9.24e11 vs 4.2.0's ~1.1e8), so the old 1e11 cap fell BELOW the live fee and rejected every
+ * setup tx with "maxFeesPerGas.feePerL2Gas must be >= gasFees.feePerL2Gas". 1e13 restores ~10x
+ * headroom while staying under the SponsoredFPC fee-juice balance (cap × gasLimit). See implementations-plan/archive/aztec-5.0-upgrade/plan.md (Sponsor ceiling).
+ */
+const E2E_FEE_GAS = { maxFeesPerGas: new GasFees(10n ** 13n, 10n ** 13n) }
+
+/** Deploy a Token contract with a minter address. Returns the token contract address.
+ *  `symbol` lets a test deploy several distinguishable tokens (Home and Holdings select by it). */
+export async function deployTestToken(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	minterAddress: AztecAddress,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+	symbol = "TST",
+	name = symbol === "TST" ? "TestToken" : `${symbol} Token`,
+	decimals = 18,
+): Promise<string> {
+	const { contract } = await TokenContract.deployWithOpts(
+		{ method: "constructor_with_minter", wallet },
+		name,
+		symbol,
+		decimals,
+		minterAddress,
+		// 5.0.1 standards added a 5th `auth_contract` param to constructor_with_minter — pass ZERO
+		// (no transfer-authorization gating) for the plain test token.
+		AztecAddress.ZERO,
+	).send({ fee: { ...feeOptions, gasSettings: E2E_FEE_GAS }, from: minterAddress })
+
+	return contract.address.toString()
+}
+
+export async function getContractClassId(node: ReturnType<typeof createAztecNodeClient>, address: string): Promise<string> {
+	const instance = await node.getContract(AztecAddress.fromStringUnsafe(address))
+	if (!instance) throw new Error(`contract instance not found at node for ${address}`)
+	return instance.currentContractClassId.toString()
+}
+
+/** Get the Sponsored FPC address (deterministic from salt=0). */
+export async function getSponsoredFpcAddress(): Promise<string> {
+	const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContractArtifact, {
+		salt: new Fr(SPONSORED_FPC_SALT),
+	})
+	return instance.address.toString()
+}
+
+/** Create Sponsored fee payment options. Registers the SponsoredFPC with the wallet's PXE first. */
+export async function createSponsoredFeeOptions(wallet: InstanceType<typeof EmbeddedWallet>) {
+	const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContractArtifact, {
+		salt: new Fr(SPONSORED_FPC_SALT),
+	})
+
+	// Register the SponsoredFPC contract so the wallet can use it for fee payment
+	try {
+		await wallet.registerContract(instance, SponsoredFPCContractArtifact)
+	} catch {
+		// Already registered — ignore
+	}
+
+	const paymentMethod = new SponsoredFeePaymentMethod(instance.address)
+	return { paymentMethod, address: instance.address.toString() }
+}
+
+/** Mint public tokens to an address. Waits for the balance to be readable via the test wallet's PXE.
+ *  Returns the mined tx hash, which keys the recipient's public receipt. */
+export async function mintPublicTokens(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	tokenAddress: string,
+	toAddress: string,
+	amount: bigint,
+	minterAddress: string,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<string> {
+	const token = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet)
+	const sent = await token.methods.mint_to_public(AztecAddress.fromStringUnsafe(toAddress), amount).send({
+		fee: { ...feeOptions, gasSettings: E2E_FEE_GAS },
+		from: AztecAddress.fromStringUnsafe(minterAddress),
+		wait: { timeout: 120 },
+	})
+
+	// Verify the mint is visible by reading the balance from the test wallet's PXE.
+	// This ensures the state has settled before the extension tries to read it.
+	const to = AztecAddress.fromStringUnsafe(toAddress)
+	const balance = unwrapSimulated(
+		await token.methods
+			.balance_of_public(to)
+			.simulate({ from: AztecAddress.fromStringUnsafe(minterAddress), fee: { gasSettings: E2E_FEE_GAS } }),
+	)
+	console.log(`[mintPublicTokens] Verified on-chain public balance: ${balance}`)
+	if (balance === 0n) {
+		throw new Error(`Mint appeared to succeed but balance_of_public returned 0 for ${toAddress}`)
+	}
+	return sent.receipt.txHash.toString()
+}
+
+/** Mint private tokens to an address. Returns the mined L2 tx hash as a
+ *  `0x`-prefixed string — the SAME value the extension's note scanner reports
+ *  as `note.txHash` (both are `TxHash.toString()`), so callers can arm the
+ *  incoming-poll gate or correlate a discovered incoming record by hash.
+ *
+ *  `mint_to_private` is a private execution path, so the test wallet's
+ *  PXE must know the token contract (instance + artifact) before it can
+ *  simulate the call. createTestWallet returns a fresh wallet whose PXE
+ *  hasn't been told about the deployed token — `TokenContract.at(...)`
+ *  alone doesn't register. Fetch the deployed instance from the node
+ *  + register with the wallet's PXE before simulating the mint.
+ *  `mintPublicTokens` doesn't need this because `mint_to_public` is a
+ *  public call that goes straight to the node.
+ */
+export async function mintPrivateTokens(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	tokenAddress: string,
+	toAddress: string,
+	amount: bigint,
+	minterAddress: string,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<string> {
+	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
+	const instance = await node.getContract(addr)
+	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
+	try {
+		await wallet.registerContract(instance, TokenContract.artifact)
+	} catch {
+		// Already registered — ignore.
+	}
+
+	const token = await TokenContract.at(addr, wallet)
+	// `send()` waits for the checkpointed receipt by default (300 s); this bounds it at 120 s, and the
+	// receipt's `txHash` is what callers correlate.
+	const sent = await token.methods.mint_to_private(AztecAddress.fromStringUnsafe(toAddress), amount).send({
+		fee: { ...feeOptions, gasSettings: E2E_FEE_GAS },
+		from: AztecAddress.fromStringUnsafe(minterAddress),
+		wait: { timeout: 120 },
+	})
+	return sent.receipt.txHash.toString()
+}
+
+/** Private → private transfer between two addresses the test wallet can
+ *  act for (sender must hold private balance — see `mintPrivateTokens`).
+ *  Same registration + `wait` traps as the private mint above. Returns the
+ *  mined L2 tx hash (`0x`-prefixed `TxHash.toString()`) — the delivered note
+ *  the recipient discovers carries this exact `txHash`, so callers can arm the
+ *  incoming-poll gate or correlate the incoming record by hash. */
+export async function transferPrivateTokens(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	tokenAddress: string,
+	fromAddress: string,
+	toAddress: string,
+	amount: bigint,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<string> {
+	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
+	const instance = await node.getContract(addr)
+	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
+	try {
+		await wallet.registerContract(instance, TokenContract.artifact)
+	} catch {
+		// Already registered — ignore.
+	}
+
+	const token = await TokenContract.at(addr, wallet)
+	const sent = await token.methods
+		.transfer_private_to_private(AztecAddress.fromStringUnsafe(fromAddress), AztecAddress.fromStringUnsafe(toAddress), amount, 0)
+		.send({
+			fee: { ...feeOptions, gasSettings: E2E_FEE_GAS },
+			from: AztecAddress.fromStringUnsafe(fromAddress),
+			wait: { timeout: 120 },
+		})
+	return sent.receipt.txHash.toString()
+}
+
+/** Public → public transfer (`transfer_public_to_public`) — the sender must hold a PUBLIC balance
+ *  (mint one first). Emits `Transfer{from: sender, to, amount}`: the recipient's PUBLIC arm sees a
+ *  "Public → Public" receipt. Public call, so no PXE registration needed (mirrors `mintPublicTokens`). */
+export async function transferPublicTokens(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	tokenAddress: string,
+	fromAddress: string,
+	toAddress: string,
+	amount: bigint,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<void> {
+	const from = AztecAddress.fromStringUnsafe(fromAddress)
+	const token = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet)
+	await token.methods
+		.transfer_public_to_public(from, AztecAddress.fromStringUnsafe(toAddress), amount, 0)
+		.send({ fee: { ...feeOptions, gasSettings: E2E_FEE_GAS }, from, wait: { timeout: 120 } })
+	const balance = unwrapSimulated(
+		await token.methods
+			.balance_of_public(AztecAddress.fromStringUnsafe(toAddress))
+			.simulate({ from, fee: { gasSettings: E2E_FEE_GAS } }),
+	)
+	console.log(`[transferPublicTokens] recipient on-chain public balance: ${balance}`)
+}
+
+/** `caller` spends a public authwit `owner` granted it: `transfer_public_to_public(owner, caller, amount,
+ *  nonce)` sent as `caller`. The wallet that holds `owner` sends nothing, so it learns of the debit
+ *  only on its next balance refresh. */
+export async function spendPublicAuthwit(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	tokenAddress: string,
+	ownerAddress: string,
+	callerAddress: string,
+	amount: bigint,
+	nonce: bigint,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<void> {
+	const caller = AztecAddress.fromStringUnsafe(callerAddress)
+	const token = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet)
+	await token.methods
+		.transfer_public_to_public(AztecAddress.fromStringUnsafe(ownerAddress), caller, amount, nonce)
+		.send({ fee: { ...feeOptions, gasSettings: E2E_FEE_GAS }, from: caller, wait: { timeout: 120 } })
+}
+
+/** Private → public transfer (`transfer_private_to_public`) — the sender must hold a PRIVATE balance.
+ *  The public-credit leg emits `Transfer{from: PRIVATE_ADDRESS_MAGIC_VALUE, to, amount}`, so the
+ *  recipient's PUBLIC arm sees a "Private → Public" receipt (`from == MAGIC`). Needs PXE registration
+ *  (private execution) + `wait` (same traps as `transferPrivateTokens`). */
+export async function transferPrivateToPublicTokens(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	tokenAddress: string,
+	fromAddress: string,
+	toAddress: string,
+	amount: bigint,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<void> {
+	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
+	const instance = await node.getContract(addr)
+	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
+	try {
+		await wallet.registerContract(instance, TokenContract.artifact)
+	} catch {
+		// Already registered — ignore.
+	}
+	const from = AztecAddress.fromStringUnsafe(fromAddress)
+	const token = await TokenContract.at(addr, wallet)
+	await token.methods
+		.transfer_private_to_public(from, AztecAddress.fromStringUnsafe(toAddress), amount, 0)
+		.send({ fee: { ...feeOptions, gasSettings: E2E_FEE_GAS }, from, wait: { timeout: 120 } })
+}
+
+/** Public → private transfer (`transfer_public_to_private`) — the sender must hold a PUBLIC balance.
+ *  Delivers a private NOTE to the recipient (discovered by the NOTE arm as "Received privately") and
+ *  emits `Transfer{from: sender, to: PRIVATE_ADDRESS_MAGIC_VALUE}` on the debit leg (to == MAGIC, so
+ *  NOT a public receipt for the recipient — D7 dropped: pub→priv is not distinguished). Needs PXE
+ *  registration (note creation) + `wait`. */
+export async function transferPublicToPrivateTokens(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	tokenAddress: string,
+	fromAddress: string,
+	toAddress: string,
+	amount: bigint,
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<void> {
+	const addr = AztecAddress.fromStringUnsafe(tokenAddress)
+	const instance = await node.getContract(addr)
+	if (!instance) throw new Error(`Token instance not found at node for ${tokenAddress}`)
+	try {
+		await wallet.registerContract(instance, TokenContract.artifact)
+	} catch {
+		// Already registered — ignore.
+	}
+	const from = AztecAddress.fromStringUnsafe(fromAddress)
+	const token = await TokenContract.at(addr, wallet)
+	await token.methods
+		.transfer_public_to_private(from, AztecAddress.fromStringUnsafe(toAddress), amount, 0)
+		.send({ fee: { ...feeOptions, gasSettings: E2E_FEE_GAS }, from, wait: { timeout: 120 } })
+}
+
+// ── Fee Juice L1→L2 Bridge ────────────────────────────────────────────
+
+/**
+ * L1 Anvil URL. Defaults to http://localhost:8545. Override via `ANVIL_URL` env var
+ * for parallel runs (e.g. `ANVIL_URL=http://localhost:18545`).
+ */
+const ANVIL_URL = process.env.ANVIL_URL ?? "http://localhost:8545"
+const ANVIL_MNEMONIC = "test test test test test test test test test test test junk"
+
+/** Bridge FeeJuice from L1 (Anvil) to an L2 address. Mints test FJ on L1, deposits to portal.
+ *  Note: the L1 FeeAssetHandler has a fixed mint amount of 1000 FJ per call. */
+export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClient>, toAddress: string, amount = 1000n * 10n ** 18n) {
+	const nodeInfo = await node.getNodeInfo()
+	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" })
+	const logger = {
+		info: console.log,
+		debug: console.log,
+		warn: console.warn,
+		error: console.error,
+		verbose: console.log,
+		trace: () => {},
+	}
+	const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, logger)
+	const claim = await portalManager.bridgeTokensPublic(AztecAddress.fromStringUnsafe(toAddress), amount, true)
+	console.log(`[bridgeFeeJuice] Bridged ${amount} FJ to ${toAddress}, messageHash: ${claim.messageHash}`)
+	return claim
+}
+
+/** Wait until a bridged L1→L2 message is CLAIMABLE.
+ *
+ *  Claimable is not "the node knows the message" but "a block at the anchor tip has inserted it"
+ *  (`isL1ToL2MessageReady`): the claim builds a membership witness against the anchor, and without
+ *  one it throws "No L1 to L2 message found". The sequencer mints an L2 block only when txs are
+ *  pending (`SEQ_MIN_TX_PER_BLOCK=0` does not change that), so after the bridge the anchor can stall
+ *  below the message forever. `forceBlock` submits one cheap tx to advance the chain past it;
+ *  callers without a handy tx fall back to best-effort. */
+export async function waitForL1ToL2Message(
+	node: ReturnType<typeof createAztecNodeClient>,
+	messageHash: string,
+	forceBlock?: () => Promise<unknown>,
+	timeoutMs = 90_000,
+): Promise<void> {
+	const hash = Fr.fromString(messageHash)
+	const start = Date.now()
+	let messageIndex: bigint | undefined
+	while (Date.now() - start < timeoutMs) {
+		messageIndex = await node.getL1ToL2MessageIndex(hash)
+		if (messageIndex !== undefined) {
+			console.log(`[waitForL1ToL2Message] message at leaf ${messageIndex} after ${Date.now() - start}ms`)
+			break
+		}
+		await new Promise((r) => setTimeout(r, 2_000))
+	}
+	if (messageIndex === undefined) throw new Error(`[waitForL1ToL2Message] ${messageHash} not seen by the node within ${timeoutMs}ms`)
+
+	// The node-admin `mineBlock` is not RPC-exposed, so callers pass `forceBlock` (a cheap sponsored
+	// tx), which runs until the latest block's message tree covers the message.
+	while (Date.now() - start < timeoutMs) {
+		if (await isL1ToL2MessageReady(node, hash)) {
+			console.log(`[waitForL1ToL2Message] claimable after ${Date.now() - start}ms`)
+			return
+		}
+		if (forceBlock) await forceBlock().catch((err) => console.warn(`[waitForL1ToL2Message] forceBlock failed: ${err}`))
+		await new Promise((r) => setTimeout(r, 1_500))
+	}
+	console.warn(`[waitForL1ToL2Message] no block inserted leaf ${messageIndex} within ${timeoutMs}ms — proceeding best-effort`)
+}
+
+/** Claim bridged FeeJuice on L2. Uses SponsoredFPC to pay for the claim tx itself.
+ *  Uses ContractFunctionInteraction directly since FeeJuiceContract.at() may not bind to EmbeddedWallet correctly. */
+export async function claimFeeJuice(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	toAddress: string,
+	fromAddress: AztecAddress,
+	claim: { claimAmount: bigint; claimSecret: Fr; messageLeafIndex: bigint },
+	feeOptions: { paymentMethod: SponsoredFeePaymentMethod },
+): Promise<void> {
+	const { Contract } = await import("@aztec-labs/aztec.js/contracts")
+	const { FeeJuiceArtifact } = await import("@aztec-labs/protocol-contracts/fee-juice")
+	const feeJuice = await Contract.at(ProtocolContractAddress.FeeJuice, FeeJuiceArtifact, wallet)
+	await feeJuice.methods
+		.claim(AztecAddress.fromStringUnsafe(toAddress), claim.claimAmount, claim.claimSecret, claim.messageLeafIndex)
+		.send({ fee: { ...feeOptions, gasSettings: E2E_FEE_GAS }, from: fromAddress })
+	console.log(`[claimFeeJuice] Claimed ${claim.claimAmount} FJ for ${toAddress}`)
+}
+
+// ── Pre-Funded Account (WS3 — fee-methods test re-enable) ─────────────
+
+/**
+ * Result of `setupPreFundedAccount`. The fixture extension imports `masterBase64`
+ * via `importPlain` and switches to Local Network — that auto-derives the same
+ * `accountAddress` (deterministic via `salt = Fr.ZERO` + matching account-secret
+ * derivation). Both public + private FeeJuice balances are pre-funded on-chain.
+ */
+export interface PreFundedAccount {
+	/** The 24-word recovery phrase the fixture extension imports (KDF v2 — plain-key import is gone). */
+	words: string[]
+	masterBase64: string
+	accountAddress: AztecAddress
+	/** The account's Schnorr signing key (0x hex) — for building an account-export file to
+	 *  exercise the IMPORT-account flow against a pre-funded on-chain account. */
+	signingKeyHex: string
+}
+
+/**
+ * Build a script-side wallet whose on-chain address matches what Nulo will derive
+ * post-import. Pre-funds both public + private FeeJuice for that address.
+ *
+ * Why same-secret matters: `PrivateFPC.mint` requires `msg_sender == claimer`
+ * (private_contract/main.nr:135-148; canonical `private.test.ts:213-242` proves
+ * "wrong claimer reverts"). The mint MUST come from a wallet whose address
+ * equals the eventual imported account's address. We achieve that by deriving
+ * the script wallet via the SAME formula as Nulo's account/service.ts:117 →
+ * NuloAccount.new() → SchnorrAccountContractArtifact + salt=Fr.ZERO.
+ *
+ * ChainId for Local Network = literal `0` (network/service.ts:85);
+ * AccountType.Nulo_v1 = `0` (account/spec.ts:5; the spec.ts comment
+ * "SECURITY: NEVER change it" makes it authoritative).
+ *
+ * Returns `{ masterBase64, accountAddress }`. The fixture imports `masterBase64`
+ * into a fresh extension via `importPlain` and switches to Local Network.
+ */
+export async function setupPreFundedAccount(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	feePayerAddress: AztecAddress,
+	opts: {
+		publicAmount?: bigint
+		privateAmount?: bigint
+		/** A cheap sponsored state-changing tx that mints one L2 block. 5.0 mints no empty blocks,
+		 *  so FJ-claim readiness (anchor checkpoint >= message checkpoint) only advances when a real
+		 *  tx is sent. Provided by callers that have a token to transfer/mint. */
+		forceBlock?: () => Promise<unknown>
+	} = {},
+): Promise<PreFundedAccount> {
+	// Mirrors Nulo's KDF v2 derivation exactly. Constants verified against source-of-truth:
+	const ACCOUNT_TYPE_NULO_V1 = 0 // account/spec.ts — SECURITY: NEVER change
+	const LOCAL_L1_CHAIN_ID = 31337 // anvil — the EXACT L1 id KDF v2 derives under (NOT the composite 0)
+	const ACCOUNT_INDEX = 0 // first account
+	const publicAmount = opts.publicAmount ?? 1000n * 10n ** 18n
+	const privateAmount = opts.privateAmount ?? 1000n * 10n ** 18n
+
+	// Lazy imports: heavy aztec deps + workspace pkg, only needed when fixture runs.
+	const { getMnemonic } = await import("@nulo/wallet-core/utils")
+	const { deriveAccountSeed, deriveMasterFromMnemonic, deriveNuloAccountKeys } = await import("@nulo/wallet-crypto")
+	const { NuloAccount } = await import("@nulo/aztec-runtime/account")
+	const { createLogger } = await import("@aztec-labs/foundation/log")
+	const logger = createLogger("setup-pre-funded-account")
+
+	// Step 1 — Derive identity via the SAME recovery-phrase path the extension imports through:
+	// random entropy → 24 words → PBKDF2 master → deriveAccountSeed(master, l1ChainId, type, index).
+	const entropy = crypto.getRandomValues(new Uint8Array(32))
+	const words = await getMnemonic(entropy)
+	const masterBytes = await deriveMasterFromMnemonic(words)
+	const master = Fr.fromBuffer(Buffer.from(masterBytes))
+	const accountSeed = await deriveAccountSeed(master, LOCAL_L1_CHAIN_ID, ACCOUNT_TYPE_NULO_V1, ACCOUNT_INDEX)
+	// Signing-key-root model (NULO-ACCOUNT-KDF v2): seed → signing key (root) → privacy secret.
+	const { signingKey, secretKey } = await deriveNuloAccountKeys(accountSeed)
+
+	// Sanity check the derived address against NuloAccount's path so the fixture
+	// fails fast if the frozen-artifact account below and NuloAccount ever disagree.
+	const nuloAccountContract = await NuloAccount.new(accountSeed, logger)
+	const expectedAddress = nuloAccountContract.address
+	logger.info(`Expected derived address: ${expectedAddress.toString()}`)
+
+	// Step 2 — Create the script-side schnorr account in the wallet's PXE.
+	// EmbeddedWallet.createSchnorrAccount(secretKey, salt, signingKey) returns an AccountManager —
+	// called WITHOUT a cast so the compiler checks the argument order against upstream. The
+	// wallet was built with the frozen-artifact provider (see createTestWallet), so this derives
+	// Nulo's pinned address rather than whatever `@aztec-labs/accounts` currently ships.
+	const accountManager = await wallet.createSchnorrAccount(secretKey, Fr.ZERO, signingKey)
+	if (accountManager.address.toString() !== expectedAddress.toString()) {
+		throw new Error(
+			`Address derivation parity broken: NuloAccount=${expectedAddress.toString()} vs createSchnorrAccount=${accountManager.address.toString()}`,
+		)
+	}
+	logger.info(`Script-side account created: ${accountManager.address.toString()}`)
+
+	// Step 3 — Deploy the derived account via SponsoredFPC (so it can sign/send mint later).
+	// Use `NO_FROM` sentinel per canonical pattern at @aztec-labs/wallets/testing
+	// (deployFundedSchnorrAccounts) — bypasses entrypoint auth for the bootstrap tx
+	// since the account doesn't exist on-chain yet. Passing `from: account.address`
+	// fails with "Failed to get a note" because the schnorr entrypoint reads a
+	// signing-key note that the constructor hasn't created yet.
+	const { NO_FROM } = await import("@aztec-labs/aztec.js/account")
+	const sponsoredFee = await createSponsoredFeeOptions(wallet)
+	const deployMethod = await accountManager.getDeployMethod()
+	await deployMethod.send({
+		from: NO_FROM,
+		fee: { paymentMethod: sponsoredFee.paymentMethod, gasSettings: E2E_FEE_GAS },
+		wait: { timeout: 120 },
+	})
+	logger.info(`Script-side account deployed: ${accountManager.address.toString()}`)
+	// getAccount() registers the derived account in the wallet (side effect); the value itself
+	// is unused — the subsequent mint targets `expectedAddress` (== the derived account address).
+	const _derivedWallet = await accountManager.getAccount()
+
+	// Step 4 — Public FJ: bridge + claim. Recipient-bound (sender-agnostic), so we
+	// reuse the existing helpers with the test sandbox wallet for fee payment.
+	const publicClaim = await bridgeFeeJuice(node, expectedAddress.toString(), publicAmount)
+	await waitForL1ToL2Message(node, publicClaim.messageHash.toString(), opts.forceBlock)
+	await claimFeeJuice(wallet, expectedAddress.toString(), feePayerAddress, publicClaim, sponsoredFee)
+	logger.info(`Public FJ claimed: amount=${publicAmount}`)
+
+	// Step 5 — Private FJ via PrivateFPC.
+	// Top-level import of @alejoamiras/private-fee-juice fails on
+	// `Export named 'DEFAULT_TEARDOWN_DA_GAS_LIMIT'` (Aztec version drift between
+	// @wonderland's pinned deps and Nulo's). Sub-path imports work.
+	const { PrivateFPCContract } = await import("@alejoamiras/private-fee-juice/artifacts/private")
+	const { bridgeForMint } = await import("./aztec-private-fpc-bridge")
+
+	// PrivateFPC instance salt MUST match Nulo's auto-discovery (fpc/protocol-fpcs.ts: the CANONICAL
+	// salt 0x…01 from 5.0.0 onward + deployer=AztecAddress.ZERO; protocol-fpcs.test.ts pins the
+	// canonical address). 5.0 rejects the old `deploy().register()` path here
+	// ("deployer is not yet locked" — a ZERO deployer isn't locked, and 5.0 moved salt/deployer
+	// to construction-time options). Compute + register the instance the SAME way the wallet
+	// does, which both sidesteps that and guarantees the address matches the auto-discovery.
+	// biome-ignore lint/suspicious/noExplicitAny: aztec-stdlib instance mismatch between @wonderland's pinned version and Nulo's
+	const fpcArtifact = (PrivateFPCContract as any).artifact
+	const fpcInstance = await getContractInstanceFromInstantiationParams(fpcArtifact, {
+		salt: new Fr(1n),
+		deployer: AztecAddress.ZERO,
+	})
+	// biome-ignore lint/suspicious/noExplicitAny: see above
+	await (wallet as any).registerContract(fpcInstance, fpcArtifact)
+	// biome-ignore lint/suspicious/noExplicitAny: see above
+	const fpc = await PrivateFPCContract.at(fpcInstance.address, wallet as any)
+	logger.info(`PrivateFPC registered: ${fpc.address.toString()}`)
+
+	// Bridge salt must be RANDOM per invocation (avoids nullifier collision on reruns).
+	const bridgeSalt = Fr.random()
+	const { secret: bridgeSecret, leafIndex } = await bridgeForMint(
+		node,
+		fpc.address,
+		expectedAddress,
+		bridgeSalt,
+		privateAmount,
+		// produceL2Block: a REAL state-changing tx to advance the chain. The predecessor used
+		// `.simulate()` (read-only — mines nothing), which never advanced the anchor on 5.0.
+		opts.forceBlock ?? (async () => {}),
+	)
+	logger.info(`PrivateFPC bridge ready: leafIndex=${leafIndex.toString()}`)
+
+	// L2 claim: emits the FeeJuice nullifier. Sender doesn't matter for FJ.claim
+	// (claim is recipient-bound via the embedded leaf hash). Use the script's main
+	// EmbeddedWallet (sandbox-funded sender) for fees.
+	{
+		const { Contract } = await import("@aztec-labs/aztec.js/contracts")
+		const { FeeJuiceArtifact } = await import("@aztec-labs/protocol-contracts/fee-juice")
+		const feeJuice = await Contract.at(ProtocolContractAddress.FeeJuice, FeeJuiceArtifact, wallet)
+		await feeJuice.methods.claim(fpc.address, privateAmount, bridgeSecret, leafIndex).send({
+			fee: { paymentMethod: sponsoredFee.paymentMethod, gasSettings: E2E_FEE_GAS },
+			from: feePayerAddress,
+			wait: { timeout: 120 },
+		})
+		logger.info("FJ.claim emitted FeeJuice nullifier")
+	}
+
+	// L2 mint — MUST be from derivedWallet (msg_sender == claimer == accountAddress).
+	// `additionalScopes: [fpc.address]` per canonical private.test.ts:103-105.
+	await fpc.methods.mint(privateAmount, bridgeSalt, leafIndex).send({
+		from: expectedAddress,
+		additionalScopes: [fpc.address],
+		fee: { paymentMethod: sponsoredFee.paymentMethod, gasSettings: E2E_FEE_GAS },
+		wait: { timeout: 120 },
+	})
+	logger.info("PrivateFPC.mint succeeded")
+
+	// Sanity assertion: balance landed before fixture returns.
+	// `balance_of(...).simulate(...)` returns `{ result: bigint }` per @wonderland's
+	// canonical pattern (private.test.ts:101-103).
+	const { result: privateBal } = await fpc.methods
+		.balance_of(expectedAddress)
+		.simulate({ from: expectedAddress, fee: { gasSettings: E2E_FEE_GAS } })
+	if (typeof privateBal !== "bigint" || privateBal === 0n) {
+		throw new Error(`PrivateFPC.balance_of returned ${privateBal} after mint — claim/mint flow broken`)
+	}
+	logger.info(`PrivateFPC.balance_of(account) = ${privateBal}`)
+
+	const masterBase64 = Buffer.from(master.toBuffer()).toString("base64")
+	return { words, masterBase64, accountAddress: expectedAddress, signingKeyHex: signingKey.toString() }
+}
+
+/**
+ * Convenience wrapper for pre-minting public tokens to a dApp-granted account
+ * before exercising the wallet's sendTx flow in popup-shape tests. Without this,
+ * the wallet's simulate step fails ("not enough balance"), the journal advances
+ * straight to `failed`, and the `tx-awaiting-card` never reaches an active
+ * stage — which breaks waitForDappExecuteWorked(). cancel-mid-prove.test.ts
+ * uses an identical inline block; this helper consolidates it for the 6 tests
+ * restructured in implementations-plan/journal-stage-restructure/.
+ */
+export async function mintPublicTokensForAccount(
+	aztecConfig: AztecTestConfig,
+	accountAddress: string,
+	amount = 100n * 10n ** 18n,
+): Promise<void> {
+	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const feeOptions = await createSponsoredFeeOptions(wallet)
+		await mintPublicTokens(wallet, aztecConfig.tokenAddress, accountAddress, amount, aztecConfig.minterAddress, feeOptions)
+	} finally {
+		await cleanup()
+	}
+}
+
+/**
+ * Deploy extra tokens (distinct symbols) with the sandbox minter and mint a public balance of each
+ * to `accountAddress`. Home's three-row cap and the Holdings list need more than the one fixture
+ * token to prove ordering; `amount` per symbol lets a test rank them by value with a seeded quote.
+ * Returns the contract address per symbol.
+ */
+export async function deployExtraTokensForAccount(
+	aztecConfig: AztecTestConfig,
+	accountAddress: string,
+	tokens: ReadonlyArray<{ symbol: string; amount: bigint }>,
+): Promise<Record<string, string>> {
+	const { wallet, accounts, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const minter = accounts[0]
+		if (minter.toString() !== aztecConfig.minterAddress) {
+			throw new Error(`deployExtraTokensForAccount: minter mismatch ${minter} vs ${aztecConfig.minterAddress}`)
+		}
+		const feeOptions = await createSponsoredFeeOptions(wallet)
+		const out: Record<string, string> = {}
+		for (const t of tokens) {
+			const address = await deployTestToken(wallet, minter, feeOptions, t.symbol)
+			if (t.amount > 0n) {
+				await mintPublicTokens(wallet, address, accountAddress, t.amount, aztecConfig.minterAddress, feeOptions)
+			}
+			out[t.symbol] = address
+		}
+		return out
+	} finally {
+		await cleanup()
+	}
+}
+
+/**
+ * Delegated-pull rig for authwit-DISCOVERY coverage: an upstream Token plus a
+ * Crowdfunding consumer whose `donate` pulls the donor's tokens via
+ * `transfer_in_private` (msg.sender = crowdfunding ≠ from = donor), so the
+ * token asserts a call authwit against the DONOR's account — the shape the
+ * wallet's estimate-time discovery must detect and sign. The donor gets a
+ * private balance minted so the pull can execute. Returns the two addresses
+ * (instances are fetched from the node by the test driver for dApp-side
+ * `registerContract`).
+ */
+export async function deployDelegatedPullRig(
+	aztecConfig: AztecTestConfig,
+	donorAddress: string,
+	donorMint = 1_000_000n,
+): Promise<{ pullTokenAddress: string; consumerAddress: string }> {
+	const { TokenContract: PullTokenContract } = await import("@aztec-labs/noir-contracts.js/Token")
+	const { CrowdfundingContract } = await import("@aztec-labs/noir-contracts.js/Crowdfunding")
+	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const feeOptions = await createSponsoredFeeOptions(wallet)
+		const minter = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
+		const fee = { ...feeOptions, gasSettings: E2E_FEE_GAS }
+
+		const tokenDeploy = await PullTokenContract.deploy(wallet as never, minter, "PullToken", "PULL", 18).send({
+			from: minter,
+			fee,
+			wait: { timeout: 120 },
+		} as never)
+		const pullToken = (tokenDeploy as unknown as { contract: { address: AztecAddress } }).contract
+
+		const crowdDeploy = await CrowdfundingContract.deploy(
+			wallet as never,
+			pullToken.address,
+			minter,
+			// Deadline far in the future — u64 seconds.
+			2n ** 40n,
+		).send({ from: minter, fee, wait: { timeout: 120 } } as never)
+		const crowdfunding = (crowdDeploy as unknown as { contract: { address: AztecAddress } }).contract
+
+		const token = await PullTokenContract.at(pullToken.address, wallet as never)
+		await token.methods.mint_to_private(AztecAddress.fromStringUnsafe(donorAddress), donorMint).send({
+			from: minter,
+			fee,
+			wait: { timeout: 120 },
+		} as never)
+
+		return { pullTokenAddress: pullToken.address.toString(), consumerAddress: crowdfunding.address.toString() }
+	} finally {
+		await cleanup()
+	}
+}
+
+/** Poll the node until a tx (by hash string, as returned to the dApp) is
+ *  MINED successfully. Needed when a flow's NEXT step reads on-chain state
+ *  the tx wrote (e.g. a public-authwit grant's `set_authorized` must be
+ *  mined before a consume's public simulation can see it) — the wallet's
+ *  `send_transaction` path resolves the dApp promise at SUBMIT, not at
+ *  mine. Throws on revert/drop so failures attribute to the right tx. */
+export async function waitForTxMined(aztecConfig: AztecTestConfig, txHash: string, timeoutMs = 120_000): Promise<void> {
+	const node = createAztecNodeClient(aztecConfig.nodeUrl)
+	const deadline = Date.now() + timeoutMs
+	for (;;) {
+		const receipt = await node.getTxReceipt(TxHash.fromString(txHash)).catch(() => undefined)
+		const status = receipt ? String(receipt.status) : undefined
+		// Aztec terminal-success statuses: "success" (mined) and "finalized"
+		// / "proven" (block settled). Any of them means the tx's public
+		// effects (e.g. a set_authorized write) are live and readable.
+		if (status === "success" || status === "finalized" || status === "proven") return
+		if (status === "app_logic_reverted" || status === "teardown_reverted" || status === "dropped" || status === "reverted") {
+			throw new Error(`waitForTxMined: tx ${txHash} terminal as "${status}"`)
+		}
+		if (Date.now() > deadline) {
+			throw new Error(`waitForTxMined: timeout waiting for ${txHash} (last status: ${status ?? "pending"})`)
+		}
+		await new Promise((r) => setTimeout(r, 1_000))
+	}
+}
+
+/**
+ * Give an EXTENSION-owned account public Fee Juice it can pay its own fees from: bridge from L1,
+ * wait until the message is claimable (5.0 mints no empty blocks, so a cheap sponsored mint from
+ * the script wallet advances the anchor), then claim to the account. The claim is permissionless
+ * given the secret, so the script wallet's sponsored account can send it for the extension's.
+ */
+export async function fundPublicFeeJuice(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	node: ReturnType<typeof createAztecNodeClient>,
+	scriptAccount: AztecAddress,
+	aztecConfig: AztecTestConfig,
+	toAddress: string,
+	amount = 1000n * 10n ** 18n,
+): Promise<void> {
+	const feeOptions = await createSponsoredFeeOptions(wallet)
+	const claim = await bridgeFeeJuice(node, toAddress, amount)
+	await waitForL1ToL2Message(node, claim.messageHash.toString(), () =>
+		mintPublicTokens(wallet, aztecConfig.tokenAddress, scriptAccount.toString(), 1n, aztecConfig.minterAddress, feeOptions),
+	)
+	await claimFeeJuice(wallet, toAddress, scriptAccount, claim, feeOptions)
+}
+
+/** The public Fee Juice an address holds, read through the script wallet (`balance_of_public`). */
+export async function readPublicFeeJuice(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	from: AztecAddress,
+	address: string,
+): Promise<bigint> {
+	const { Contract } = await import("@aztec-labs/aztec.js/contracts")
+	const { FeeJuiceArtifact } = await import("@aztec-labs/protocol-contracts/fee-juice")
+	const feeJuice = await Contract.at(ProtocolContractAddress.FeeJuice, FeeJuiceArtifact, wallet)
+	const answer: unknown = await feeJuice.methods.balance_of_public(AztecAddress.fromStringUnsafe(address)).simulate({ from })
+	return unwrapSimulated(answer)
+}
+
+/** The public balance of the fixture token an address holds, read through the script wallet. */
+export async function readPublicTokenBalance(
+	wallet: InstanceType<typeof EmbeddedWallet>,
+	from: AztecAddress,
+	tokenAddress: string,
+	address: string,
+): Promise<bigint> {
+	const token = await TokenContract.at(AztecAddress.fromStringUnsafe(tokenAddress), wallet)
+	const answer: unknown = await token.methods
+		.balance_of_public(AztecAddress.fromStringUnsafe(address))
+		.simulate({ from, fee: { gasSettings: E2E_FEE_GAS } })
+	return unwrapSimulated(answer)
+}
+
+/** A utility simulation answers the bare value or `{ result }` depending on the SDK path. */
+function unwrapSimulated(answer: unknown): bigint {
+	const value = typeof answer === "object" && answer !== null && "result" in answer ? (answer as { result: unknown }).result : answer
+	return BigInt(value as bigint | number | string)
+}

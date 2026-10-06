@@ -1,0 +1,184 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+/** Utils */
+import { isValidAztecAddress } from "@/utils/aztec-address"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "@/utils/contact-rules"
+import { withoutId } from "@/utils/entity-list"
+
+/** Components */
+import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
+import ProcessingErrorNote from "@/components/composite/ProcessingErrorNote.vue"
+
+/** Services */
+import { ContactServiceClient } from "@/wallet/services/contact/client"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { useFormState } from "@/composables/useFormState"
+import { usePopupEntity } from "@/composables/usePopupEntity"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+const { order } = usePopupStack("new_contact")
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+const contactService = new ContactServiceClient()
+contactService.onContactAdded.add(onContactAdded)
+contactService.onContactUpdated.add(onContactUpdated)
+contactService.onContactDeleted.add(onContactDeleted)
+
+function onContactAdded(contact) {
+	contacts.value.push(contact)
+}
+function onContactUpdated(contact) {
+	const idx = contacts.value.findIndex((c) => c.id === contact.id)
+	if (idx !== -1) {
+		contacts.value[idx] = contact
+	} else {
+		contacts.value.push(contact)
+	}
+}
+function onContactDeleted(contact) {
+	contacts.value = withoutId(contacts.value, contact)
+}
+
+const contacts = ref([])
+
+const form = useFormState({
+	name: {
+		initial: "",
+		validate: (v) => {
+			if (!v.replace(/\s/g, "").length) return null // empty is "not yet valid", not an error to display
+			if (contacts.value.some((c) => sameContactName(c, v))) return CONTACT_EXISTS
+			return null
+		},
+	},
+	address: {
+		initial: "",
+		validate: (v) => {
+			if (!v) return null // empty: pre-input, not an error to display
+			if (!isValidAztecAddress(v)) return "Invalid address"
+			// Hex is case-insensitive — a mixed-case rendering of a saved
+			// address is the same contact, not a new one.
+			if (contacts.value.some((c) => sameContactAddress(c, v))) return CONTACT_EXISTS
+			return null
+		},
+	},
+})
+
+// Aliases preserve the existing template bindings (v-model="nameTerm" etc.).
+const nameTerm = form.fields.name.value
+const contactAddressTerm = form.fields.address.value
+
+// Existing template uses these inline-warning predicates. Map to the form's
+// error messages so the visual contract is unchanged.
+const isAlreadyExistName = computed(() => form.fields.name.error.value === CONTACT_EXISTS)
+const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
+const isAlreadyExistAddress = computed(() => form.fields.address.error.value === CONTACT_EXISTS)
+
+const isAvailableToAddContact = computed(() => {
+	// Full-lifetime submit latch: a running save closes the form on EVERY
+	// route (button, Enter, future callers) — not just the pointer path.
+	if (isLoading.value) return false
+	if (!nameTerm.value.replace(/\s/g, "").length) return false
+	if (!isValidAddress.value) return false
+	if (form.fields.name.error.value) return false
+	if (form.fields.address.error.value) return false
+	return true
+})
+
+const isLoading = ref(false)
+const processingError = ref({
+	show: false,
+	title: "",
+	tooltip: "",
+})
+
+const handleAddContact = async () => {
+	if (!isAvailableToAddContact.value) return
+
+	isLoading.value = true
+	try {
+		// Canonicalize to lowercase on save — the wallet emits lowercase hex
+		// everywhere else (PXE senders, derived addresses), and case-mixed
+		// stored rows break exact-match lookups downstream.
+		await contactService.addContact(nameTerm.value.trim(), canonicalContactAddress(contactAddressTerm.value))
+
+		emit("onClose")
+		openToast({ kind: "success", label: "Contact is added" })
+	} catch (err) {
+		processingError.value = {
+			show: true,
+			title: "Failed to add contact.",
+			tooltip: err,
+		}
+
+		openToast({ kind: "error", label: "Something went wrong" })
+	} finally {
+		isLoading.value = false
+	}
+}
+
+// No submitWaitsForShow here: this popup already installed its listener
+// BEFORE the getContacts await (Enter-live-during-population is its pinned
+// timing), and its duplicate checks tolerate the empty initial list.
+usePopupEntity(() => props.show, {
+	submit: handleAddContact,
+	onShow: async () => {
+		// Reset BEFORE awaiting getContacts. The await is non-trivial under
+		// load (full chrome.storage scan + cross-context RPC); resetting
+		// after it raced with user typing — the input fires v-model writes
+		// before the await resolves, and the post-await `form.reset()`
+		// then wiped them. The form is freshly visible (popup just opened),
+		// so an immediate reset is correct UX as well.
+		form.reset()
+		contacts.value = await contactService.getContacts()
+	},
+	onHide: () => {
+		contactService.disconnect()
+
+		contacts.value = []
+		form.reset()
+	},
+})
+
+watch(
+	() => [nameTerm.value, contactAddressTerm.value],
+	() => {
+		processingError.value.show = false
+	},
+)
+</script>
+
+<template>
+	<FormPopup
+		:show="show"
+		@onClose="emit('onClose')"
+		:displaceIdx="order"
+		title="New contact"
+		submitLabel="Add contact"
+		:submitDisabled="!isAvailableToAddContact || processingError.show"
+		:submitLoading="isLoading"
+		submitTestId="new-contact-submit"
+		@submit="handleAddContact"
+	>
+		<ContactFormFields
+			v-model:name="nameTerm"
+			v-model:address="contactAddressTerm"
+			:nameExists="isAlreadyExistName"
+			:addressValid="isValidAddress"
+			:addressExists="isAlreadyExistAddress"
+		/>
+
+		<template #aboveSubmit>
+			<ProcessingErrorNote
+				:show="processingError.show"
+				:title="processingError.title"
+				:tooltip="processingError.tooltip"
+			/>
+		</template>
+	</FormPopup>
+</template>

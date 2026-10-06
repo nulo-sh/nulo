@@ -1,0 +1,71 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true
+	}
+}
+</route>
+
+<script setup>
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
+const appStore = useAppStore()
+const popupStore = usePopupStore()
+</script>
+
+<template>
+	<SettingsPageShell title="Profile" :backTo="'/popup/settings'" gap="24">
+		<ItemsContainer v-if="appStore.profile" title="Identity">
+			<SettingField
+				@click="popupStore.open('edit_profile')"
+				label="Name"
+				:value="appStore.profile?.name"
+				icon="edit"
+				data-testid="identity-name-row"
+			/>
+			<Flex direction="column" gap="6" :class="$style.id_row" data-testid="identity-id-row">
+				<Text size="12" weight="600" color="secondary">ID</Text>
+				<Text size="12" weight="500" color="tertiary" :class="$style.id_value">
+					{{ appStore.profile?.id }}
+				</Text>
+			</Flex>
+		</ItemsContainer>
+
+		<ItemsContainer title="Security">
+			<SettingItem to="/popup/settings/security/export" title="Backup profile" icon="key-square" chevron data-testid="backup-link-btn" />
+			<SettingItem
+				to="/popup/settings/security/change-password"
+				title="Change password"
+				icon="profile-password"
+				:disabled="appStore.profile?.type === 'passkey'"
+				chevron
+				data-testid="change-password-link-btn"
+			/>
+		</ItemsContainer>
+
+		<ItemsContainer>
+			<SettingItem
+				to="/popup/settings/security/reset"
+				title="Delete profile"
+				icon="trash"
+				iconBgColor="red"
+				chevron
+				data-testid="delete-profile-link-btn"
+			/>
+		</ItemsContainer>
+	</SettingsPageShell>
+</template>
+
+<style module>
+.id_row {
+	position: relative;
+	padding: 14px 16px;
+}
+
+.id_value {
+	font-family: var(--font-mono);
+	word-break: break-all;
+}
+</style>

@@ -1,0 +1,901 @@
+/**
+ * DappInteractionService — execution-hook forwarding (v3 parallel popups).
+ *
+ * Contract: DappInteractionService FORWARDS the execution hooks bag to
+ * `executeOperations` — it must NOT fire `onExecutionEnqueued` itself. The
+ * baton release fires downstream in `ExecutionService.acquireExecutionSlot`,
+ * once the request has enqueued on the execution mutex (which is what preserves
+ * execution order across concurrent popups). These tests pin "hooks reach
+ * executeOperations intact, and are not fired prematurely at the popup/silent
+ * seam" — the field-name + threading half of the wiring whose drift left the
+ * release dead pre-v3.
+ *
+ * Construction injects partial service mocks directly — standing up the full
+ * six-service graph `init()` pulls would be far heavier than the seam under
+ * test warrants. `chrome.*` is stubbed by tests/vitest.setup.ts.
+ */
+
+import { LoggerStore, type ILogger } from "@/wallet/logger"
+import { ServiceCollection } from "@/wallet/base"
+import { ConfigStore } from "@/wallet/config"
+import { AccountService } from "@/wallet/services/account/service"
+import { ContactService } from "@/wallet/services/contact/service"
+import { AccessLevel, DappSessionService } from "@/wallet/services/dapp-session/service"
+import { ExecutionService } from "@/wallet/services/execution/service"
+import { FpcService, FpcType } from "@/wallet/services/fpc/service"
+import { NetworkService } from "@/wallet/services/network/service"
+import { OperationJournalService } from "@/wallet/services/operation-journal/service"
+import { ProfileService } from "@/wallet/services/profile/service"
+import { TokenService } from "@/wallet/services/token/service"
+import { WindowManager } from "@/wallet/services/window-manager/window-manager"
+import { describe, expect, test, vi } from "vitest"
+import { JobCancelledError, TermsAcceptanceRequiredError, UserRejectedError } from "@nulo/extension-messaging/errors"
+import { FakeBrowserApi, MockClock } from "@nulo/wallet-core/testing"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { CHAIN_IDS } from "@/utils/chain-ids"
+import { DappInteractionService } from "./service"
+import type { CapabilityPayload, DappInteraction, DiscoveryResult, ExecutionHooks, OperationRequest } from "./spec"
+import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+
+const noopLogger: ILogger = { log: () => {} }
+
+/** Resolve after the current microtask + macrotask turn so background async
+ *  (executeAndResolve's await chain) runs before assertions. */
+const flush = () => new Promise((r) => setTimeout(r, 0))
+
+/** Structural view of the privates the tests inject/drive. */
+type Internals = {
+	storage: Map<string, DappInteraction>
+	profileService: {
+		refreshSession: () => Promise<void>
+		getActiveProfile: () => Promise<{ id: string } | undefined>
+		captureExecutionFence: () => Promise<{ profileId: string; epoch: number; session: number }>
+	}
+	executionService: { executeOperations: (...args: unknown[]) => Promise<unknown> }
+	dappSessionService: { tryGetDappSession: (id: string) => Promise<{ profileId: string } | undefined> }
+	silentInteraction: (payload: unknown, hooks?: ExecutionHooks) => Promise<unknown>
+	operationJournal: { getOperation: (id: string) => Promise<unknown> }
+	windowManager: { cancel: ReturnType<typeof vi.fn>; settle: ReturnType<typeof vi.fn>; focus: ReturnType<typeof vi.fn> }
+	cancelInteractionForJournal: (journalId: string) => void
+	reconcileCancelledJournal: (journalId: string) => Promise<void>
+}
+
+function makeService(overrides: {
+	executeOperations?: (...args: unknown[]) => Promise<unknown>
+	getActiveProfile?: () => Promise<{ id: string } | undefined>
+	tryGetDappSession?: (id: string) => Promise<{ profileId: string } | undefined>
+}) {
+	const windowManager = { detach: vi.fn(), settle: vi.fn(), cancel: vi.fn(), focus: vi.fn(async () => true) } as unknown as WindowManager
+	const svc = new DappInteractionService(noopLogger, windowManager)
+	const internals = svc as unknown as Internals
+	internals.profileService = {
+		refreshSession: vi.fn(async () => {}),
+		getActiveProfile: overrides.getActiveProfile ?? (async () => ({ id: "p1" })),
+		// Derived from the same override so a test's active-profile choice drives
+		// both the silent path's id read and executeAndResolve's atomic capture.
+		captureExecutionFence: async () => {
+			const p = await internals.profileService.getActiveProfile()
+			if (!p) throw new Error("Wallet locked")
+			return { profileId: p.id, epoch: 0, session: 1 }
+		},
+	}
+	internals.executionService = { executeOperations: overrides.executeOperations ?? (async () => []) }
+	// Live-by-default: executeAndResolve re-validates the session ROW at
+	// approval; the default keeps the happy-path tests unchanged.
+	internals.dappSessionService = {
+		tryGetDappSession: overrides.tryGetDappSession ?? (async () => ({ profileId: "p1" })),
+	}
+	return { svc, internals }
+}
+
+// session.profileId matches makeService's default getActiveProfile ({ id: "p1" })
+// so the executeAndResolve active-profile guard passes.
+const emptyPayload = {
+	params: { operations: [] },
+	session: { profileId: "p1", dappMetadata: { name: "test-dapp" } },
+} as unknown as DappInteraction["payload"]
+
+/** A live popup interaction for a queued dApp request whose journal record is `journalId`. */
+const seedQueued = (internals: Internals, id: string, journalId: string) => {
+	internals.storage.set(id, {
+		id,
+		payload: emptyPayload,
+		handleId: `handle-${id}`,
+		cancellationToken: id,
+		hooks: { queuedJournalId: journalId },
+	})
+}
+
+describe("DappInteractionService forwards execution hooks (does not fire the baton release)", () => {
+	test("approveInteraction (popup path) forwards the stored hooks to executeOperations", async () => {
+		const releaseSpy = vi.fn()
+		let observedHooks: ExecutionHooks | undefined
+		const executeOperations = vi.fn(async (...args: unknown[]) => {
+			observedHooks = args[3] as ExecutionHooks | undefined
+			return []
+		})
+		const { svc, internals } = makeService({ executeOperations })
+
+		const id = "interaction-1"
+		internals.storage.set(id, {
+			id,
+			payload: emptyPayload,
+			handleId: "handle-1",
+			cancellationToken: id,
+			hooks: { onExecutionEnqueued: releaseSpy, queuedJournalId: "q-1", originKey: "https://dapp.example" },
+		})
+
+		await svc.approveInteraction(id, [])
+		await flush()
+
+		expect(executeOperations).toHaveBeenCalledTimes(1)
+		expect(observedHooks?.onExecutionEnqueued).toBe(releaseSpy)
+		expect(observedHooks?.queuedJournalId).toBe("q-1")
+		// originKey rides the same bag through to executeOperations (→ the cap).
+		expect(observedHooks?.originKey).toBe("https://dapp.example")
+		// The release is NOT fired by DappInteractionService — ExecutionService
+		// fires it once the request enqueues on the mutex.
+		expect(releaseSpy).not.toHaveBeenCalled()
+	})
+
+	test("executeAndResolve threads the AUTHORIZATION capture into executeOperations (F11)", async () => {
+		// The fence must be the capture made at the session re-validation —
+		// upstream of the refreshSession park — so entry-asserting ops commit
+		// against the authorization-time incarnation.
+		let observedFence: unknown
+		const executeOperations = vi.fn(async (...args: unknown[]) => {
+			observedFence = args[5]
+			return []
+		})
+		const { svc, internals } = makeService({ executeOperations })
+		const id = "interaction-fence"
+		internals.storage.set(id, {
+			id,
+			payload: emptyPayload,
+			handleId: "handle-f",
+			cancellationToken: id,
+		} as unknown as DappInteraction)
+
+		await svc.approveInteraction(id, [])
+		await flush()
+
+		expect(executeOperations).toHaveBeenCalledTimes(1)
+		expect(observedFence).toEqual({ profileId: "p1", epoch: 0, session: 1 })
+	})
+
+	test("executeAndResolve aborts when the session ROW is gone — delete+re-import cannot ride an old approval", async () => {
+		// The payload's session is a snapshot from interaction CREATION; a delete
+		// + same-id re-import settling while the popup sat open makes the fence
+		// capture observe the successor's epoch (it passes). The purged session
+		// row is the discriminator: a re-import never resurrects it.
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations, tryGetDappSession: async () => undefined })
+		const id = "interaction-dead-session"
+		internals.storage.set(id, {
+			id,
+			payload: emptyPayload,
+			handleId: "handle-d",
+			cancellationToken: id,
+		} as unknown as DappInteraction)
+
+		await svc.approveInteraction(id, [])
+		await flush()
+
+		expect(executeOperations).not.toHaveBeenCalled()
+	})
+
+	test("executeAndResolve aborts (no dispatch) when the capture's profile differs from the session's", async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations, getActiveProfile: async () => ({ id: "p2" }) })
+		const id = "interaction-mismatch"
+		internals.storage.set(id, {
+			id,
+			payload: emptyPayload,
+			handleId: "handle-m",
+			cancellationToken: id,
+		} as unknown as DappInteraction)
+
+		await svc.approveInteraction(id, [])
+		await flush()
+
+		expect(executeOperations).not.toHaveBeenCalled()
+	})
+
+	test("silentInteraction forwards the hooks to executeOperations", async () => {
+		const releaseSpy = vi.fn()
+		let observedHooks: ExecutionHooks | undefined
+		const executeOperations = vi.fn(async (...args: unknown[]) => {
+			observedHooks = args[3] as ExecutionHooks | undefined
+			return []
+		})
+		const { internals } = makeService({ executeOperations, getActiveProfile: async () => ({ id: "p1" }) })
+
+		// No queuedJournalId → skip the queued→pending fast-forward (which would
+		// touch operationJournal); the hook-forwarding contract is what we pin.
+		const payload = { params: { operations: [] }, session: { profileId: "p1", dappMetadata: { name: "test-dapp" } } }
+		const hooks: ExecutionHooks = { onExecutionEnqueued: releaseSpy, originKey: "https://dapp.example" }
+
+		await internals.silentInteraction(payload, hooks)
+
+		expect(executeOperations).toHaveBeenCalledTimes(1)
+		expect(observedHooks?.onExecutionEnqueued).toBe(releaseSpy)
+		expect(observedHooks?.originKey).toBe("https://dapp.example")
+		expect(releaseSpy).not.toHaveBeenCalled()
+	})
+
+	// AUTHZ guard pin (Q19): silentInteraction's check is an IDENTITY guard
+	// (`profile?.id !== session.profileId`), NOT a mere absence guard. The
+	// requireActiveProfile sweep must NEVER collapse it to "profile exists" —
+	// doing so would let a DIFFERENT still-unlocked profile execute a dApp
+	// request approved under another profile. These two cases pin both arms.
+	test('silentInteraction throws "Wallet locked" when the active profile DIFFERS from the session profile', async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { internals } = makeService({ executeOperations, getActiveProfile: async () => ({ id: "p2" }) })
+		const payload = { params: { operations: [] }, session: { profileId: "p1", dappMetadata: { name: "test-dapp" } } }
+
+		await expect(internals.silentInteraction(payload)).rejects.toThrow("Wallet locked")
+		expect(executeOperations).not.toHaveBeenCalled()
+	})
+
+	test('silentInteraction throws "Wallet locked" when the wallet is locked (no active profile)', async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { internals } = makeService({ executeOperations, getActiveProfile: async () => undefined })
+		const payload = { params: { operations: [] }, session: { profileId: "p1", dappMetadata: { name: "test-dapp" } } }
+
+		await expect(internals.silentInteraction(payload)).rejects.toThrow("Wallet locked")
+		expect(executeOperations).not.toHaveBeenCalled()
+	})
+
+	test("silentInteraction dispatches under the fence it compared, even when the session re-unlocks before the dispatch", async () => {
+		let live = 1
+		// The execution side of the contract: a fence from an ended session fails its send.
+		const executeOperations = vi.fn(async (...args: unknown[]) =>
+			(args[5] as { session: number }).session === live ? [{ status: "ok" }] : [{ status: "failed", code: "SESSION_ENDED" }],
+		)
+		const { internals } = makeService({ executeOperations })
+		const capture = vi.fn(async () => ({ profileId: "p1", epoch: 0, session: live }))
+		internals.profileService.captureExecutionFence = capture
+		const payload = { params: { operations: [] }, session: { profileId: "p1", dappMetadata: { name: "test-dapp" } } }
+
+		expect(await internals.silentInteraction(payload)).toEqual([{ status: "ok" }])
+
+		capture.mockClear()
+		// A lock and a same-profile unlock land after the compare, before the dispatch.
+		internals.profileService.refreshSession = vi.fn(async () => {
+			live = 2
+		})
+		expect(await internals.silentInteraction(payload)).toEqual([{ status: "failed", code: "SESSION_ENDED" }])
+		expect(capture).toHaveBeenCalledTimes(1)
+		expect((executeOperations.mock.calls[1] as unknown[])[5]).toEqual({ profileId: "p1", epoch: 0, session: 1 })
+	})
+
+	test("approveInteraction without hooks does not throw", async () => {
+		const { svc, internals } = makeService({ executeOperations: async () => [] })
+		const id = "interaction-3"
+		internals.storage.set(id, { id, payload: emptyPayload, handleId: "handle-3", cancellationToken: id })
+		await expect(svc.approveInteraction(id, [])).resolves.toBeUndefined()
+	})
+})
+
+describe("DappInteractionService cancellation linearization (first service claim wins)", () => {
+	const seed = (internals: Internals, id: string) => {
+		internals.storage.set(id, {
+			id,
+			payload: emptyPayload,
+			handleId: `handle-${id}`,
+			cancellationToken: id,
+		})
+	}
+
+	test("cancel processed first → later approve throws JobCancelledError, execution never starts, record retained", async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations })
+		seed(internals, "i-1")
+
+		svc.cancelInteraction("i-1")
+		await expect(svc.approveInteraction("i-1", [])).rejects.toBeInstanceOf(JobCancelledError)
+		await flush()
+		expect(executeOperations).not.toHaveBeenCalled()
+		// The record survives until window dismissal — overlay + cleanup rely on it.
+		expect(internals.storage.has("i-1")).toBe(true)
+		await expect(svc.isInteractionCancelled("i-1")).resolves.toBe(true)
+	})
+
+	test("rejectInteraction hands the window manager a UserRejectedError carrying the reason", async () => {
+		const { svc, internals } = makeService({})
+		seed(internals, "i-r")
+		const cancel = (internals as unknown as { windowManager: { cancel: ReturnType<typeof vi.fn> } }).windowManager.cancel
+
+		await svc.rejectInteraction("i-r", "User rejected")
+
+		expect(cancel).toHaveBeenCalledTimes(1)
+		const [handleId, reason] = cancel.mock.calls[0] as [string, unknown]
+		expect(handleId).toBe("handle-i-r")
+		expect(reason).toBeInstanceOf(UserRejectedError)
+		expect((reason as UserRejectedError).message).toBe("User rejected")
+		expect(internals.storage.has("i-r")).toBe(false)
+	})
+
+	test("approve claimed first → later cancel finds nothing, approval proceeds exactly once", async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations })
+		seed(internals, "i-2")
+		const cancelled: string[] = []
+		svc.onInteractionCancelled.add((id) => cancelled.push(id))
+
+		await svc.approveInteraction("i-2", [])
+		svc.cancelInteraction("i-2")
+		await flush()
+		expect(executeOperations).toHaveBeenCalledTimes(1)
+		expect(cancelled).toEqual([])
+	})
+
+	test("resolveInteraction refuses a cancelled record too (capability/discovery parity)", async () => {
+		const { svc, internals } = makeService({})
+		seed(internals, "i-4")
+		svc.cancelInteraction("i-4")
+		await expect(svc.resolveInteraction("i-4", { approved: true })).rejects.toBeInstanceOf(JobCancelledError)
+		expect(internals.storage.has("i-4")).toBe(true)
+	})
+
+	test("the cancelled flag is DURABLE before the broadcast — a late subscriber replays it", async () => {
+		const { svc, internals } = makeService({})
+		seed(internals, "i-3")
+		// No subscriber attached when the cancel fires (the lost-event case).
+		svc.cancelInteraction("i-3")
+		await expect(svc.isInteractionCancelled("i-3")).resolves.toBe(true)
+		// An unknown id reads false, never throws (replay must be safe pre-load).
+		await expect(svc.isInteractionCancelled("missing")).resolves.toBe(false)
+	})
+})
+
+describe("DappInteractionService journal-driven cancel (a feed cancel closes the popup)", () => {
+	const cancelCalls = (internals: Internals) => internals.windowManager.cancel.mock.calls as Array<[string, unknown]>
+
+	test("cancelled journal record → manager.cancel once with the handle id and a JobCancelledError carrying the jobId; broadcast + flag", () => {
+		const { svc, internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+		const broadcast: string[] = []
+		svc.onInteractionCancelled.add((id) => broadcast.push(id))
+
+		internals.cancelInteractionForJournal("j-1")
+
+		expect(cancelCalls(internals)).toHaveLength(1)
+		const [handleId, reason] = cancelCalls(internals)[0]
+		expect(handleId).toBe("handle-i-1")
+		expect(reason).toBeInstanceOf(JobCancelledError)
+		expect((reason as JobCancelledError).details).toEqual({ jobId: "j-1" })
+		expect(broadcast).toEqual(["i-1"])
+		expect(internals.storage.get("i-1")?.cancelledAt).toBeTypeOf("number")
+	})
+
+	test("unknown journal id → nothing happens", () => {
+		const { internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+
+		internals.cancelInteractionForJournal("j-other")
+
+		expect(cancelCalls(internals)).toHaveLength(0)
+		expect(internals.storage.get("i-1")?.cancelledAt).toBeUndefined()
+	})
+
+	test("already-approved interaction (record gone) → nothing; the claim helper owns that cancel", async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations })
+		seedQueued(internals, "i-1", "j-1")
+
+		await svc.approveInteraction("i-1", [])
+		internals.cancelInteractionForJournal("j-1")
+		await flush()
+
+		expect(cancelCalls(internals)).toHaveLength(0)
+		expect(executeOperations).toHaveBeenCalledTimes(1)
+	})
+
+	test("a second cancelled event is a no-op", () => {
+		const { internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+
+		internals.cancelInteractionForJournal("j-1")
+		internals.cancelInteractionForJournal("j-1")
+
+		expect(cancelCalls(internals)).toHaveLength(1)
+	})
+
+	test("approve after the cancelled event and before cleanup is refused with JobCancelledError", async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations })
+		seedQueued(internals, "i-1", "j-1")
+
+		internals.cancelInteractionForJournal("j-1")
+		await expect(svc.approveInteraction("i-1", [])).rejects.toBeInstanceOf(JobCancelledError)
+		await flush()
+		expect(executeOperations).not.toHaveBeenCalled()
+	})
+
+	// Any stage past `queued` means the record moved on without this popup —
+	// the same predicate as the pre-popup short-circuit, not only `cancelled`.
+	test.each(["cancelled", "failed"])("reconcile: the post-registration read reports %s → cancel once, no event needed", async (stage) => {
+		const { internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+		internals.operationJournal = { getOperation: async () => ({ progress: { stage } }) }
+
+		await internals.reconcileCancelledJournal("j-1")
+
+		expect(cancelCalls(internals)).toHaveLength(1)
+		expect(cancelCalls(internals)[0][1]).toBeInstanceOf(JobCancelledError)
+	})
+
+	test("reconcile: the read reports queued → nothing", async () => {
+		const { internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+		internals.operationJournal = { getOperation: async () => ({ progress: { stage: "queued" } }) }
+
+		await internals.reconcileCancelledJournal("j-1")
+
+		expect(cancelCalls(internals)).toHaveLength(0)
+	})
+
+	test("reconcile: a read still pending when Approve lands → no cancel, no throw; execution proceeds", async () => {
+		const executeOperations = vi.fn(async () => [])
+		const { svc, internals } = makeService({ executeOperations })
+		seedQueued(internals, "i-1", "j-1")
+		let release!: (record: unknown) => void
+		internals.operationJournal = {
+			getOperation: () =>
+				new Promise((resolve) => {
+					release = resolve
+				}),
+		}
+
+		const reconcile = internals.reconcileCancelledJournal("j-1")
+		await svc.approveInteraction("i-1", [])
+		release({ progress: { stage: "cancelled" } })
+		await reconcile
+		await flush()
+
+		expect(cancelCalls(internals)).toHaveLength(0)
+		expect(executeOperations).toHaveBeenCalledTimes(1)
+	})
+
+	test("reconcile: a rejecting read → no cancel, no throw; the window stays owned", async () => {
+		const { internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+		internals.operationJournal = { getOperation: async () => Promise.reject(new Error("storage down")) }
+
+		await expect(internals.reconcileCancelledJournal("j-1")).resolves.toBeUndefined()
+
+		expect(cancelCalls(internals)).toHaveLength(0)
+		expect(internals.storage.has("i-1")).toBe(true)
+	})
+})
+
+describe("DappInteractionService.focusInteractionWindow (Queued card → bring the popup forward)", () => {
+	test("finds the interaction by journal id and returns the manager's answer", async () => {
+		const { svc, internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+
+		await expect(svc.focusInteractionWindow("j-1")).resolves.toBe(true)
+		expect(internals.windowManager.focus).toHaveBeenCalledWith("handle-i-1")
+	})
+
+	test("unknown journal id, or an empty one → false, manager untouched", async () => {
+		const { svc, internals } = makeService({})
+		seedQueued(internals, "i-1", "j-1")
+
+		await expect(svc.focusInteractionWindow("j-other")).resolves.toBe(false)
+		await expect(svc.focusInteractionWindow("")).resolves.toBe(false)
+		expect(internals.windowManager.focus).not.toHaveBeenCalled()
+	})
+
+	const denied: Array<[string, () => Promise<{ id: string } | undefined>]> = [
+		["another profile is active", async () => ({ id: "p2" })],
+		["the wallet is locked", async () => undefined],
+	]
+	test.each(denied)("when %s → false, manager untouched", async (_label, getActiveProfile) => {
+		const { svc, internals } = makeService({ getActiveProfile })
+		seedQueued(internals, "i-1", "j-1")
+
+		await expect(svc.focusInteractionWindow("j-1")).resolves.toBe(false)
+		expect(internals.windowManager.focus).not.toHaveBeenCalled()
+	})
+})
+
+describe("DappInteractionService window placement", () => {
+	test.each(["execute", "capabilities", "discover"])("the %s window opens at the browser window's top-right", async (kind) => {
+		const openAndAwait = vi.fn((_opts: unknown) => ({ handleId: "h1", promise: Promise.resolve({}) }))
+		const svc = new DappInteractionService(noopLogger, { openAndAwait } as unknown as WindowManager)
+		const interaction = (svc as unknown as { interaction: (type: string, payload: unknown) => Promise<unknown> }).interaction
+
+		await interaction.call(svc, kind, emptyPayload)
+
+		expect(openAndAwait).toHaveBeenCalledWith(expect.objectContaining({ kind, width: 400, height: 800, placement: "top-right" }))
+	})
+})
+
+describe("DappInteractionService when the Terms acceptance lapses after the request was admitted", () => {
+	const refuse = async () => {
+		throw new TermsAcceptanceRequiredError()
+	}
+
+	test("an approved request is cancelled with the typed error, so the dApp still gets the 4100 envelope", async () => {
+		const { svc, internals } = makeService({ executeOperations: refuse })
+		const id = "interaction-terms"
+		internals.storage.set(id, { id, payload: emptyPayload, handleId: "handle-t", cancellationToken: id } as unknown as DappInteraction)
+
+		await svc.approveInteraction(id, [])
+		await flush()
+
+		expect(internals.windowManager.cancel).toHaveBeenCalledTimes(1)
+		expect(internals.windowManager.cancel.mock.calls[0]?.[1]).toBeInstanceOf(TermsAcceptanceRequiredError)
+		expect(internals.windowManager.settle).not.toHaveBeenCalled()
+	})
+
+	test("a silent send settles the record it advanced to pending, which the ingress safety net would not close", async () => {
+		const { internals } = makeService({ executeOperations: refuse })
+		const transitionOperation = vi.fn(async () => {})
+		const transitionIfStage = vi.fn(async () => ({ outcome: "transitioned" }))
+		Object.assign(internals, { operationJournal: { transitionOperation, transitionIfStage } })
+		const payload = { params: { operations: [] }, session: { profileId: "p1", dappMetadata: { name: "test-dapp" } } }
+
+		await expect(internals.silentInteraction(payload, { queuedJournalId: "journal-1" })).rejects.toBeInstanceOf(
+			TermsAcceptanceRequiredError,
+		)
+
+		expect(transitionOperation).toHaveBeenCalledWith("journal-1", { stage: "pending" })
+		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle.
+		expect(transitionIfStage).toHaveBeenCalledWith(
+			"journal-1",
+			["pending"],
+			{ stage: "failed" },
+			expect.objectContaining({ message: TermsAcceptanceRequiredError.MESSAGE }),
+		)
+	})
+
+	test("any other failure on the silent path leaves the record alone", async () => {
+		const { internals } = makeService({
+			executeOperations: async () => {
+				throw new Error("node unreachable")
+			},
+		})
+		const transitionIfStage = vi.fn()
+		Object.assign(internals, { operationJournal: { transitionOperation: vi.fn(async () => {}), transitionIfStage } })
+		const payload = { params: { operations: [] }, session: { profileId: "p1", dappMetadata: { name: "test-dapp" } } }
+
+		await expect(internals.silentInteraction(payload, { queuedJournalId: "journal-2" })).rejects.toThrow("node unreachable")
+		expect(transitionIfStage).not.toHaveBeenCalled()
+	})
+})
+
+describe("DappInteractionService — a confirmation window never falls back to signing", () => {
+	const ADDRESS = `0x${"0a".repeat(32)}`
+	const ACCOUNT = `aztec:1:${ADDRESS}`
+	const SESSION = {
+		id: "s1",
+		profileId: "p1",
+		chainId: "1",
+		dappMetadata: { name: "dapp.example", url: "https://dapp.example" },
+		permissions: [{ methods: [] }],
+		accounts: [ACCOUNT],
+		confirmationLevel: AccessLevel.Transactions,
+		expiry: Number.MAX_SAFE_INTEGER,
+	}
+	const authwit = {
+		kind: "aztec_createAuthWit",
+		account: ACCOUNT,
+		messageHashOrIntent: { consumer: `0x${"07".repeat(32)}`, innerHash: `0x${"01".repeat(32)}` },
+	} as unknown as OperationRequest
+	const stub = (name: string, methods: Record<string, unknown>) => ({ name, dependencies: [], async start() {}, ...methods }) as never
+	type Outcome = { settled: boolean; ok?: unknown; err?: unknown }
+
+	/** The real interaction path: `execute` opens a window through a real WindowManager on a fake
+	 *  browser, and the only way to a signature is an approval the service accepts. */
+	async function windowHarness() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const clock = new MockClock()
+		const logger = new LoggerStore(new ConfigStore())
+		const dapp = new DappInteractionService(logger, new WindowManager(api.windows, clock, logger))
+		const executeOperations = vi.fn(async () => [{ status: "ok", result: "0xsigned" }])
+		const collection = new ServiceCollection()
+		collection.add(
+			stub(ProfileService.name, {
+				getActiveProfile: async () => ({ id: "p1" }),
+				refreshSession: async () => {},
+				captureExecutionFence: async () => ({ profileId: "p1", epoch: 0, session: 1 }),
+			}),
+		)
+		collection.add(stub(NetworkService.name, { getNetworks: async () => [{ id: "net-1", chainId: 1 }] }))
+		collection.add(stub(AccountService.name, { getAccount: async () => ({ address: ADDRESS }) }))
+		collection.add(stub(DappSessionService.name, { tryGetDappSession: async () => SESSION }))
+		collection.add(stub(ExecutionService.name, { executeOperations }))
+		collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
+		collection.add(stub(FpcService.name, {}))
+		collection.add(dapp)
+		await collection.start()
+		const creates = vi.spyOn(api.windows, "create")
+		const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+
+		const open = async () => {
+			const outcome: Outcome = { settled: false }
+			dapp.execute({ sessionId: SESSION.id, operations: [authwit] }).then(
+				(ok) => Object.assign(outcome, { settled: true, ok }),
+				(err) => Object.assign(outcome, { settled: true, err }),
+			)
+			await expect.poll(() => creates.mock.results.length).toBeGreaterThan(0)
+			const created = (await creates.mock.results.at(-1)?.value) as { id: number }
+			const windowId = created.id
+			const id = [...storage.keys()].at(-1) as string
+			creates.mockClear()
+			return { outcome, windowId, id }
+		}
+		const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
+		return { dapp, clock, executeOperations, storage, open, closeByUser }
+	}
+
+	test("a window closed before approval rejects the call and nothing signs", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		h.closeByUser(window.windowId)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBeDefined()
+		expect(h.executeOperations).not.toHaveBeenCalled()
+		expect(h.storage.size).toBe(0)
+	})
+
+	test("a window left unanswered times out, rejects the call and nothing signs", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		h.clock.advance(10 * 60 * 1000)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(window.outcome.err).toBeDefined()
+		expect(h.executeOperations).not.toHaveBeenCalled()
+		expect(h.storage.size).toBe(0)
+	})
+
+	test("an approval arriving after the window closed is refused and nothing signs", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		h.closeByUser(window.windowId)
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		await expect(h.dapp.approveInteraction(window.id, [{}])).rejects.toThrow("Invalid id")
+		await flush()
+		expect(h.executeOperations).not.toHaveBeenCalled()
+	})
+
+	test("two windows for one row: approving one signs only it, the other stays pending until its own close", async () => {
+		const h = await windowHarness()
+		const first = await h.open()
+		const second = await h.open()
+		await h.dapp.approveInteraction(first.id, [{}])
+		await expect.poll(() => first.outcome.settled).toBe(true)
+		expect(first.outcome.ok).toEqual([{ status: "ok", result: "0xsigned" }])
+		expect(h.executeOperations).toHaveBeenCalledTimes(1)
+		await flush()
+		expect(second.outcome.settled).toBe(false)
+		expect(h.storage.has(second.id)).toBe(true)
+
+		h.closeByUser(second.windowId)
+		await expect.poll(() => second.outcome.settled).toBe(true)
+		expect(second.outcome.err).toBeDefined()
+		expect(h.executeOperations).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("DappInteractionService — the capability window's known contracts", () => {
+	const SPONSORED = `0x${"0b".repeat(32)}`
+	const PRIVATE = `0x${"0c".repeat(32)}`
+	const TOKEN = `0x${"0d".repeat(32)}`
+	const SESSION = {
+		id: "s1",
+		profileId: "p1",
+		chainId: String(CHAIN_IDS.TESTNET),
+		dappMetadata: { name: "dapp.example", url: "https://dapp.example" },
+		permissions: [],
+		accounts: [],
+		confirmationLevel: AccessLevel.Transactions,
+		expiry: Number.MAX_SAFE_INTEGER,
+	}
+	const stub = (name: string, methods: Record<string, unknown>) => ({ name, dependencies: [], async start() {}, ...methods }) as never
+
+	test("names only what the wallet vouches for, whatever the stores and the request carry", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const logger = new LoggerStore(new ConfigStore())
+		const dapp = new DappInteractionService(logger, new WindowManager(api.windows, new MockClock(), logger))
+		const collection = new ServiceCollection()
+		collection.add(stub(ProfileService.name, { getActiveProfile: async () => ({ id: "p1" }) }))
+		collection.add(stub(NetworkService.name, {}))
+		collection.add(stub(AccountService.name, {}))
+		collection.add(stub(DappSessionService.name, { getDappSession: async () => SESSION, tryGetDappSession: async () => SESSION }))
+		collection.add(stub(ExecutionService.name, {}))
+		collection.add(stub(OperationJournalService.name, { onOperationUpdated: new EventHandler() }))
+		collection.add(
+			stub(FpcService.name, {
+				getOrComputeProtocolAddresses: async () => ({ sponsored: SPONSORED, private: PRIVATE }),
+				getFpcs: async () => [
+					{
+						id: "f1",
+						profileId: "p1",
+						chainId: CHAIN_IDS.TESTNET,
+						type: FpcType.DefaultSponsoredFpc,
+						address: SPONSORED,
+						name: "Auth registry",
+					},
+				],
+			}),
+		)
+		collection.add(
+			stub(TokenService.name, { getTokens: async () => [{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Fee Juice" }] }),
+		)
+		collection.add(
+			stub(ContactService.name, {
+				getContacts: async () => [{ id: "c1", profileId: "p1", name: "Private fee payer", address: TOKEN }],
+			}),
+		)
+		collection.add(dapp)
+		await collection.start()
+		const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+
+		void dapp
+			.requestCapabilities({
+				sessionId: SESSION.id,
+				manifest: {},
+				delta: [{ type: "transaction", scope: [{ contract: TOKEN, function: "transfer" }] }],
+				existingGrants: [],
+				knownContracts: [{ address: TOKEN, name: "Fee Juice" }],
+			})
+			.catch(() => {})
+		await expect.poll(() => storage.size).toBe(1)
+
+		const { params } = [...storage.values()][0].payload as CapabilityPayload
+		expect(params.knownContracts).toEqual([
+			{ address: `0x${"0".repeat(63)}3`, name: "Fee Juice" },
+			{ address: SPONSORED, name: "Sponsored fee payer" },
+			{ address: PRIVATE, name: "Private fee payer" },
+			{ address: "0x1ec33912c9f14470513e0eb23db81ddb2aa1ae3395e6ab4d3cba383f68dec3c5", name: "Auth registry" },
+			{ address: TESTNET_TOKENS.USDC, name: "Test USDC" },
+			{ address: TESTNET_TOKENS.USDT, name: "Test USDT" },
+			{ address: TESTNET_TOKENS.EURC, name: "Test EURC" },
+			{ address: TESTNET_TOKENS.GBPC, name: "Test GBPC" },
+		])
+	})
+})
+
+describe("DappInteractionService — an approved connect window is handed to the connection", () => {
+	const METADATA = { name: "dapp.example", url: "https://dapp.example" }
+
+	/** A real WindowManager on a fake browser: `open` starts an interaction and waits for its window. */
+	function handOverHarness() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const clock = new MockClock()
+		const dapp = new DappInteractionService(noopLogger, new WindowManager(api.windows, clock, noopLogger))
+		const creates = vi.spyOn(api.windows, "create")
+		const removes = vi.spyOn(api.windows, "remove")
+		const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+		const interaction = (dapp as unknown as { interaction: (type: string, payload: unknown) => Promise<unknown> }).interaction
+		const open = async (start: () => Promise<unknown>) => {
+			const pending = start()
+			await expect.poll(() => creates.mock.results.length).toBe(1)
+			const created = (await creates.mock.results[0]?.value) as { id: number }
+			await flush()
+			return { pending, windowId: created.id, id: [...storage.keys()][0] as string }
+		}
+		const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
+		return { dapp, clock, removes, open, interaction, closeByUser }
+	}
+
+	test("an approved discovery resolves with the handle's window id, never the page's, and the window stays open", async () => {
+		const h = handOverHarness()
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+
+		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999 } as DiscoveryResult)
+
+		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId })
+		expect(w.windowId).not.toBe(999)
+		// Nothing watches the window now: its later close and the old timeout settle nothing.
+		h.closeByUser(w.windowId)
+		h.clock.advance(10 * 60 * 1000)
+		expect(h.removes).not.toHaveBeenCalled()
+	})
+
+	test("a discovery answer other than approved: true is a denial and closes the window", async () => {
+		const h = handOverHarness()
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+
+		await h.dapp.resolveInteraction(w.id, { approved: "yes", windowId: 999 } as unknown as DiscoveryResult)
+
+		await expect(w.pending).resolves.toEqual({ approved: false })
+		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+	})
+
+	test("a denied discovery settles and closes the window", async () => {
+		const h = handOverHarness()
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+
+		await h.dapp.resolveInteraction(w.id, { approved: false })
+
+		await expect(w.pending).resolves.toEqual({ approved: false })
+		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+	})
+
+	const capabilityPayload = { params: { sessionId: "s1" }, session: { profileId: "p1", dappMetadata: METADATA } }
+	test.each([
+		["capabilities", capabilityPayload, { approved: true }],
+		["execute", emptyPayload, [{ status: "ok", result: "0x01" }]],
+	])("a %s window answered through resolveInteraction settles with that answer and closes", async (kind, payload, answer) => {
+		const h = handOverHarness()
+		const w = await h.open(() => h.interaction.call(h.dapp, kind, payload))
+
+		await h.dapp.resolveInteraction(w.id, answer as never)
+
+		await expect(w.pending).resolves.toEqual(answer)
+		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+	})
+})
+
+describe("DappInteractionService — the network-unavailable notice only informs", () => {
+	const PARAMS = { dappMetadata: { name: "dapp.example", url: "https://dapp.example" } }
+
+	function noticeHarness() {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const windowManager = new WindowManager(api.windows, new MockClock(), noopLogger)
+		const opens = vi.spyOn(windowManager, "openAndAwait")
+		const dapp = new DappInteractionService(noopLogger, windowManager)
+		const creates = vi.spyOn(api.windows, "create")
+		const removes = vi.spyOn(api.windows, "remove")
+		const storage = (dapp as unknown as { storage: Map<string, DappInteraction> }).storage
+		const open = async () => {
+			const settled = vi.fn()
+			const pending = dapp.notifyNetworkUnavailable(PARAMS).then(settled)
+			await expect.poll(() => creates.mock.results.length).toBe(1)
+			const created = (await creates.mock.results[0]?.value) as { id: number }
+			await flush()
+			return { pending, settled, windowId: created.id, id: [...storage.keys()][0] as string }
+		}
+		const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
+		return { dapp, opens, removes, open, closeByUser }
+	}
+
+	test("opens its own window type where the connect window opens, with the payload the window reads", async () => {
+		const h = noticeHarness()
+		const w = await h.open()
+
+		expect(h.opens.mock.calls[0]?.[0]).toEqual(
+			expect.objectContaining({ kind: "network-unavailable", width: 400, height: 800, placement: "top-right" }),
+		)
+		await expect(h.dapp.getInteractionPayload(w.id)).resolves.toEqual({ notice: "network-unavailable", params: PARAMS })
+	})
+
+	test("refuses to be resolved, even as an approved discovery, and stays open", async () => {
+		const h = noticeHarness()
+		const w = await h.open()
+
+		await expect(h.dapp.resolveInteraction(w.id, { approved: true } as DiscoveryResult)).rejects.toThrow("Invalid id")
+		await flush()
+
+		expect(w.settled).not.toHaveBeenCalled()
+		expect(h.removes).not.toHaveBeenCalled()
+	})
+
+	test("Close (a reject) closes the window and settles without throwing", async () => {
+		const h = noticeHarness()
+		const w = await h.open()
+
+		await h.dapp.rejectInteraction(w.id, "Closed")
+
+		await expect(w.pending).resolves.toBeUndefined()
+		expect(h.removes).toHaveBeenCalledWith(w.windowId)
+	})
+
+	test("closing the window by hand settles it too", async () => {
+		const h = noticeHarness()
+		const w = await h.open()
+
+		h.closeByUser(w.windowId)
+
+		await expect(w.pending).resolves.toBeUndefined()
+	})
+})

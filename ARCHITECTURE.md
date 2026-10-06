@@ -1,0 +1,263 @@
+# Architecture
+
+How Nulo Wallet is wired. Companion to per-package READMEs (which cover surface area inside one package) and to [`CLAUDE.md`](./CLAUDE.md) (operating rules, not architecture).
+
+## 1. Process boundaries
+
+A running extension lives in four browser contexts:
+
+```
+   ┌─────────────────────────────────────────────────────────────────┐
+   │                   chrome runtime (MV3)                          │
+   │                                                                 │
+   │  ┌──────────────────┐        ┌────────────────────────────────┐ │
+   │  │  Service Worker  │ ◄──────┤  Popup UI (Vue 3)              │ │
+   │  │  (background)    │        │  apps/extension/src/popup/ │ │
+   │  │  src/wallet/     │        └────────────────────────────────┘ │
+   │  └─────────┬────────┘                                           │
+   │            │ chrome.runtime.connect / chrome.runtime.sendMessage│
+   │            │                                                    │
+   │  ┌─────────▼──────────────┐    ┌─────────────────────────────┐  │
+   │  │  PXE host              │    │  Content script             │  │
+   │  │  src/offscreen/        │    │  src/content-script/        │  │
+   │  │  Chrome: offscreen doc │    │  Injects in-page bridge for │  │
+   │  │  Firefox: a frame of   │    │  dApp discovery + RPC.      │  │
+   │  │  the background page   │    └──────────┬──────────────────┘  │
+   │  └────────────────────────┘               │ window.postMessage  │
+   │                                           ▼                     │
+   └─────────────────────────────────────┐  ┌─────────────────────┐  │
+                                         │  │   dApp web page     │  │
+                                         │  │  @aztec-labs/wallet-sdk  │  │
+                                         │  └─────────────────────┘  │
+                                         └───────────────────────────┘
+```
+
+Entry points:
+
+| Context | File | Owns |
+|---|---|---|
+| Service Worker | `apps/extension/src/wallet/index.ts` | Every background service; storage; the wallet-sdk dispatcher. |
+| Popup UI | `apps/extension/src/popup/index.ts` | Vue 3 app; Pinia stores; service-clients. |
+| Content Script | `apps/extension/src/content-script/content.ts` | dApp bridge — postMessage ↔ runtime. |
+| Offscreen | `apps/extension/src/offscreen/index.ts` | PXE; protocol-contract artifacts; key derivation that needs full WebCrypto. |
+
+## 2. Package layer hierarchy
+
+Each package can import only the layers below it. Enforced via biome `noRestrictedImports` overrides (see `biome.json`); violations fail `bun run lint`.
+
+```
+wallet-core         (foundation; pure ports + types; NO chrome.*)
+  ↑
+wallet-crypto       (KDF + encryption; depends on wallet-core)
+  ↑
+extension-messaging (RPC plumbing; depends on wallet-core)
+  ↑
+aztec-runtime       (PXE + account; depends on wallet-core + extension-messaging)
+  ↑
+wallet-bridge       (wallet-sdk dispatcher; depends on wallet-core + extension-messaging — NOT aztec-runtime)
+  ↑
+extension           (sink; can import anything below)
+```
+
+`wallet-bridge` deliberately does NOT depend on `aztec-runtime`: the bridge is transport-shaped (dispatching protocol messages to typed service calls), not chain-shaped. Keeping it Aztec-runtime-free is what allows the dispatcher to live in the service worker and the PXE to live in the offscreen document.
+
+Inside `@nulo/extension`, additional rules enforce the L0–L6 component model (see [`CLAUDE.md`](./CLAUDE.md) for the layer rules).
+
+## 3. Message flow — Service / ServiceClient / OffscreenService
+
+Background services and the popup talk over a typed RPC layer defined in `@nulo/extension-messaging`:
+
+```
+POPUP (Vue UI)                        BACKGROUND (Service Worker)
+ServiceClient<Methods, Events>   ←→   Service<Methods, Events>
+   chrome.runtime.connect()           ports.get(name).onMessage
+   RequestMessage / ResponseMessage   replies via the same port
+   EventMessage (subscriptions)
+```
+
+Base classes:
+
+- `packages/extension-messaging/src/background/service.ts` — server-side base.
+- `packages/extension-messaging/src/background/client.ts` — client-side base.
+- `packages/extension-messaging/src/messages.ts` — wire schema.
+
+Every service client in a document logs through that document's one logger client (`documentLogger(context)` in `apps/extension/src/wallet/services/logger/client.ts`, a context-tagged view over a module-private port client): a client that built its own logger would hold a `logger` port nothing closes, since `disconnect()` closes only the client's own port and then logs through the logger.
+
+For the service worker → offscreen direction, the same pattern repeats with `OffscreenService` / its client (`packages/extension-messaging/src/offscreen/`) on top of `chrome.runtime.sendMessage`. The offscreen-side telemetry sidecar tracks per-request lifecycle so terminal-state events fire even when ports drop.
+
+`Error` instances are reconstructed across the wire — comparing error messages on the client must use `err instanceof Error && err.message === "..."`, not `err === "..."`.
+
+## 4. State surface
+
+- **Background services** hold authoritative state and emit `EventHandler` events. The popup pulls current state on mount via service-client method calls and subscribes to relevant events.
+- **Pinia stores** in the popup (`apps/extension/src/stores/`) cache visible state (`appStore`, `popupStore`, `cacheStore`). They are not the source of truth — services are.
+- **`chrome.storage.local`** holds persistent records (profiles, networks, FPCs, accounts, contacts, tokens, dApp sessions). Entity rows are keyed `${root}@${id}`.
+- **`chrome.storage.session`** holds the active `Session` mirror — survives SW suspensions, cleared when the browser session ends.
+- **The operation journal lives in `chrome.storage.local`** (`nulo:journal@<id>` via `OperationJournalService`, `apps/extension/src/wallet/services/operation-journal/service.ts`). Not session storage: terminal records ARE the user's history, and a browser-exit wipe would erase failed/cancelled history users expect to keep. The reaper still fails surviving non-terminal records on SW restart.
+- **Operation journal model.** Every long-running operation creates a record with a 7-stage FSM (`pending → simulating → proving → submitting → succeeded/failed/cancelled`, plus a `simulating → succeeded` no-prove shortcut for non-tx kinds). Three kinds today: `transfer`, `dapp_execute` (full FSM + on-chain `txHash`), `token_import` (no-prove shortcut, no `txHash`). The kind ↔ `txHash` invariant is enforced at `transitionOperation`. Sibling `JournalReaper` marks stuck non-terminal records as failed; `JournalGC` caps terminal records at 50 per `(profileId, accountAddress)` on a 60-min alarm. Activity feed renders one card per in-flight journal op (newest on top, older below); token-import surface is a sibling `TokenImportRow` in the tokens view. The substrate is intentionally extensible — adding a new kind requires adding the enum variant + the `kind ↔ txHash` branch + a renderer; the FSM table stays unchanged.
+- **Prove-phase event (where a proof runs).** The Presto SDK reports each prove attempt's phases (`detect`, `transmit`, `proving`, `proved`, `fallback`, `denied`, …) to the offscreen `ProductionPxeFactory`, which stamps a per-attempt sequence number and derives the backend at the source (`transmit` → `presto`, `fallback`/`denied` → `browser`) onto the runtime's `activeProve` record. `PxeService.proveTx` sets that record for exactly the duration of the locked `pxe.proveTx` call, keyed by a `proveId` the SW's `ExecutionCoordinator` mints per attempt and maps to the op's journal row; `PxeService` forwards each phase as an `onProvePhase` event, which the SW's `OffscreenClient` accepts only from the offscreen page's own URL (origin + pathname; Firefox's `?instance=` query ignored) and the coordinator validates with a Zod schema, drops when the `proveId` is unmapped or the `seq` is not newer, and otherwise copies verbatim: the journal's `updateProvingBackend` seam writes `progress.backend` only while the row is still `proving`, and two SW-memory hints (`lastProveOutcome`, and `lastDenial`, which only a later native `proved` from an attempt dispatched after the denial clears) back `ExecutionService.getLastProveOutcome()`. The activity card renders `Proving with Presto ✦` / `Proving in browser…` from the journal field ahead of the task label and stamps `data-backend`. A lost or reordered event can leave the evidence stale, never wrong; nothing infers a backend it was not told.
+- **Price feed** (`PriceService`, `apps/extension/src/wallet/services/price/`): USD quotes for a STATIC (chainId, contract) → CoinGecko-id map (`price-map.ts` — Aztec-native assets proxy to Ethereum tickers: cUSD → USDC, Fee Juice → AZTEC). One batched keyless request for the full id set (never holdings-derived), only while a profile session is unlocked (3-min alarm dispatched from a module-scope listener in `wallet/index.ts`; cleared on lock). Quotes validate against per-id sanity bands at write AND read, expire after 15 min vs min(local, provider) timestamps, and are served through the single `getUsableQuote` path — executors read cache-or-nothing (no fetch is ever triggered by transaction activity). `Config.showFiatValues` is the kill-switch (Settings → Appearance): off aborts in-flight fetches (generation counter), clears the alarm + cache, and hides every fiat surface. No price means the fiat element is ABSENT — never a fake $0.00. Not exposed to dApps (pinned by test).
+- **Token-balance rows** (`TokenBalanceService`, `apps/extension/src/wallet/services/token-balance/`): one row per `(token, account)` pair, carrying the paired token's **immutable identity triple** — required `profileId`/`chainId`/`contract` (the triple cannot change on a token, so a stamped copy only goes stale by token deletion or id reuse). Rows are created by the `onAccountAdded` / `onTokenAdded` handlers and read by the assets view filtered to the ACTIVE account. **One shared predicate** (`balance-identity.ts` `rowMatchesToken`: FK + triple) gates every raw-row decision — list/single reads, all refresh enqueues, both event handlers, the projector, the queue's write-time `isRowEmittable`, `backup()`'s export join, reconcile matching, and `ensurePairsHoldingLock`'s occupancy set — so a foreign-profile row or a dead incarnation at a reused token id can never render, export, sync, or block repair; the failure mode is a missing row, repaired by the reconcile. The reconcile (tail of `init()` and `onActiveProfileChanged`; pure diff in `reconcile-pairs.ts`) creates missing pairs, re-queues never-projected rows, and **deletes + fences provably-stale rows** — only where the numeric token id resolves to a live token of the active profile whose identity mismatches (a codec-hidden token's rows and foreign-profile rows are deliberately left). Init also runs an idempotent **legacy sweep**: rows matching the complete pre-identity codec at their canonical numeric key are reaped (they are recomputable projections whose physical keys would otherwise tax every `max+1` allocation forever). Account removal cascades through a **registered awaited purge**: `TokenBalanceService` registers `purgeForAccounts(scopes, profileId)` with `AccountService` (the `registerChainPurgeSubscriber` pattern — no RPC surface), and `reconcileImportedAccounts` lists keyless imported accounts, awaits the purge with full `(profileId, chainId, address)` tuples (bare-address would destroy a sibling profile's rows; address+profile would destroy the same profile's rows on another chain), then deletes Account rows with a per-row key-absence re-check, returning only the scopes actually deleted — dependents die first, and a purge failure aborts the restore into its pre-finalize rollback. **Every path that allocates a row id holds one service-level `Lock` constructed with `maxHoldMs: null`** (both live handlers, both sweeps, `restore()`'s batch, and all three deletion paths — `onTokenDeleted`, `purgeForTokens`, `purgeForAccounts` — which do not allocate but must not interleave with a creation): allocation is `max+1` over the live key space and event subscribers dispatch un-awaited, so unserialized creators compute the same id and the later write silently overwrites. `restore()` shares the lock but NOT the ensure path — full-backup slices land before profile activation, so it derives all three identity fields itself from `tokenService.getTokensRaw(profileId)` (nothing identity-bearing survives from the wire), rejects rows whose token the profile doesn't own, and collapses duplicate `(token, account)` pairs the backup registry's row-id-only dedup would admit. The root enables `requireKeyIdentityMatch` in `"numeric"` mode; the mode is load-bearing, since the default `"string"` mode would reject every numeric-id row.
+- **Default-token seeding** (`TokenSeeder` + `default-tokens.ts`, `apps/extension/src/wallet/services/token/`): on unlock, active-network change, **and account creation**, missing entries from the built-in seed list are added through a single-pass validated snapshot — register-free instance read → pinned `currentContractClassId` + address check → ONE batched metadata read (name, symbol, decimals — `batchedViewSimulation`) → bounds/symbol pins → `addSeededToken` persists THAT exact snapshot (journal `origin: "seed"`, "Default token"). The token row exists only after all of that, which is seconds on a cold PXE. Markers under `nulo:core:token-seeded@<profileId>` carry attempt caps (3, refreshed once per extension version), a per-version `rejectedAtVersion` for a pin or bound failure (not retried until the next release), and user-deletion tombstones that SURVIVE chain purges — deleting a default then re-adding the network does not resurrect it. **Seed status** is the read model over that: `getSeedStatus(chainId)` (a pure read — it can never start seeding; the popup names the chain because its view switches before the worker's active network follows, and the answer carries the `{ profileId, chainId }` it was read for) returns the active profile's defaults the user has not deleted as `pending | seeding | failed | rejected | seeded` — `seeded` stays listed because balance rows are created after the token row, by the balance service, so the popup keeps a placeholder until the row itself shows up — from the seed list ⨝ the marker ⨝ the in-memory set of running attempts, and `onSeedStatusChanged` fires only when a scope's derived statuses change. The popup renders those as named placeholder rows and holds the Home total behind a skeleton while any is `pending | seeding`. Two things write, both popup-only RPCs: `ensureSeeding()` (a recovery kick, latched once per service-worker lifetime per (profile, chain) and only once an account exists) and `retrySeed()` (accepts a `failed` default only; decided inside the marker lock, the pass launched after it). A failed attempt retries by itself — 15 s, then 60 s, then `failed` — from a `nextAttemptAt` persisted WITH the attempt counter, so the retry survives a service-worker death: `armPostStartWork` re-arms it at every boot, and the journal reaper's one-minute alarm is what boots a closed-popup worker. Seed pins are captured by `apps/extension/scripts/seed-preflight.ts`; re-run it on network resets. **All three triggers are load-bearing:** the profile- and network-change ones both fire before a chain's first account row exists (the popup creates networks, then accounts — `useProfileBootstrap`, and `network-switch.ts` on a switch to an account-less chain), so without the account trigger a fresh profile's seeds skip at the zero-accounts guard and nothing re-runs them. The seed list itself is resolved once per pass via `TokenSeederDeps.getSeeds()`; armed e2e builds swap in a `chrome.storage.session`-backed list that REPLACES the shipped one (see the extension's e2e README).
+- **Incoming public-scan health** (`IncomingTransferService` + `scan-health.ts` / `scan-episodes.ts`, `apps/extension/src/wallet/services/incoming-transfer/`): every public-event scan tick for a `(network, contract)` returns one `ScanOutcome` covering the whole tick — `progress` (a validated cursor advance was committed, forward or as a reconciliation step), `idle-at-tip` (a validated empty read up to the pinned checkpoint), `no-progress` (a dropped page anywhere in the pass — the valid prefix is still committed — a commit the epoch fence rejected, or no checkpoint hash this tick), `failed` (inputs or class gate unresolved, or a throw) and `ineligible` (a non-standard token, never counted). It is judged on the cursor, not on block coverage: the scan pages by log count, so a busy block takes many productive ticks without covering a new block. `failed | no-progress` opens or extends a per-contract **episode** `{ failures, failingSince, nextAttemptAt }` and backs the next attempt off (30 s doubling, capped at 5 min); anything else ends it. A network is **stalled** when one of its contracts has failed at least twice for more than ten minutes — time, not an attempt, flips it, so a tick skipped by backoff still re-evaluates. Episodes are keyed `${profileId}|${networkId}|${contract}` and live in `chrome.storage.session` (an alarm-woken worker would otherwise restart the ten-minute clock on every wake); they follow the scheduler set — a same-profile rebuild keeps them, a lock or profile switch ends them, so an unlock always starts fresh — and are also dropped by `clearProfile`, `clearChain` and a token delete. The outcome write is taken under the service lock and fenced by the epoch captured before the scan, so an outcome that lands after a lock or purge cannot recreate an episode; stored values are validated field by field on hydration (an untrustworthy streak is dropped, a bad gate is only reopened or clamped — and the repair is written back, so a worker that restarts faster than the clamp still reaches the gate). Every public poll — interval, install kick or Retry — is refused unless its target carries the current epoch, which closes the window between a rebuild's bump and its commit; a token or account delete, whose bump orphans every surviving target and interval, rebuilds the scheduler set once its wipe is done. The read model is `getIncomingSyncHealth(networkId)` → `{ stalled, since }` for the active profile, `onIncomingSyncHealthChanged` (an invalidation — consumers refetch) and `retryIncomingScan(networkId)`, which reopens the backoff gates and scans now without touching the streak. Home's Recent activity shows one line for it. The reorg path is unchanged: any anchored throw still begins a reconciliation immediately. Transient scan failures log at `debug`; the single `warn` is the transition into stalled, and which networks' stall has been announced is stored with the episodes, so it is once per stall rather than once per worker wake. A health read returns the very snapshot it announced — one clock read — so a recovery that follows a stall only a reader saw still emits.
+- **PXE** writes its own IndexedDB under the offscreen document (`pxe/...` databases). PXE state is OUTSIDE the storage-migration framework's scope — it is Aztec-owned and rebuilt on protocol resets, not field-migrated.
+
+## 5. Storage versioning + data-preserving migration
+
+When a release changes the shape of a persisted `chrome.storage.local` record (add / rename / remove a field, restructure), existing users' data is **transformed in place by a numbered migration — never wiped**. (The pre-launch wipe-on-bump model and its `migrate.ts` are gone; the wallet launched its current shape as **schema v1**.)
+
+**The engine** — `@nulo/wallet-core/migration` (pure, `chrome.*`-free, fully unit-tested) — applies migrations where `version > persisted nulo:schema:version`, each under a crash-safe journal:
+
+1. Set the durable `nulo:schema:running` marker (doubles as the UI barrier, below).
+2. Snapshot the migration's **declared footprint** into a single-key atomic backup.
+3. Run `up(ctx)` — writes accumulate in a staging buffer (read-your-writes), never mid-migration.
+4. Commit the staged diff, stamp `nulo:schema:version = N` (per-migration checkpoint), clear the journal.
+
+A throw never advances the version; the next boot **restores the backup, then retries** (a durable, footprint-excluded attempt counter bounds retries). Interrupted boots converge: `running` + valid backup ⇒ restore-then-rerun; `running` without a backup ⇒ the crash predated any write. The marker decision table fails closed: a corrupt/out-of-range version — or the legacy `nulo:core:storage-version` key without a schema version — refuses to guess (`needs-recovery`), never init-and-skip. Fresh installs stamp the max version and run nothing.
+
+**Pre-production rule**: while the wallet has no production users, shape changes do NOT get migrations — the launch baseline absorbs them and devs reinstall fresh (see CLAUDE.md § Persisted-storage shape changes for the full rule and its flip-at-launch).
+
+**The registry** — `apps/extension/src/wallet/storage/migrations/` (baseline v1; copy `template.ts` to add `NNN-*.ts`, declare the exact read/write footprint, keep `up` idempotent — the harness runs every migration twice — and set `breaking: false` only if the new code genuinely tolerates the old shape). The migrator runs in `runtime.ts` as the FIRST storage action — before `config.load()`, so a config-reshaping migration can't be shadowed by an already-loaded config.
+
+**Failure UX**: a breaking failure (or `needs-recovery`) persists `nulo:schema:blocked` and refuses to start services — `MigrationBarrier.vue` (both shells) renders a funds-are-safe recovery screen. An additive failure persists `nulo:schema:degraded` and boots with a dismissible warning. Healthy boots clear both.
+
+**The UI barrier**: popup/onboarding pages are separate JS contexts that read `chrome.storage.local` outside the SW, so a page opened mid-migration could read a pre-migration row and write the old shape back. ALL UI storage access goes through the migration-aware facade (`apps/extension/src/utils/storage.ts`), which blocks on the `running` marker; `storage-facade-ban.test.ts` statically enforces that no raw `chrome.storage.local` access exists outside the allowlist. The barrier engages only on the rare boot right after an update that ships a migration.
+
+**What migrations do NOT cover**: crypto/KDF/vector rotations — the migrator runs pre-unlock and has no password to re-encrypt with (see `packages/wallet-crypto/README.md`); those are re-encrypt-on-next-unlock or a documented reset. PXE IndexedDB — protocol-reset concern, out of scope. `chrome.storage.session` — ephemeral, can't be tracked by a durable version.
+
+**Backup-import migration** — `apps/extension/src/wallet/services/backup/` (see its README for the full contract). When a full backup exported at an OLDER `backup-schema-version` is imported, its slices are migrated forward BEFORE the service-by-service restore: normalize slices into an in-memory scratch store in the exact live key/value format (the pinned `BACKUP_SLICE_REGISTRY` maps `serviceName → root/value descriptor`), seed `nulo:schema:version` from the blob, run the REAL `Migrator` over the same `realMigrations` the live boot applies, denormalize back into slices. Pure + in-memory: a failure rejects the import with zero live state touched. Only migrations authored in the **backup-safe declarative form** (`defineRowMapMigration` — a finite data-only DSL: `rename`/`drop`/`retype`/`remapValues`/`addDefault`, structurally row-local, WeakSet-branded + frozen) can run over a backup; an imperative `defineMigration` in range BLOCKS import with a re-export message, as do migrations touching the block-listed roots (`nulo:core:profiles`, `nulo:core:auth-registry-enabled`). Trust gates in `useFullBackupImport`: checksum over the ORIGINAL body first, then the non-migratable `compat-epoch`, then the `backup-schema-version` range — never a recomputed post-migration checksum. Guardrails: `footprint-coverage.test.ts` (registry coverage + metamorphic per-row invariance + the `IMPORT_BLOCKING_ACK` explicit-release-decision chokepoint) and the registry/migrator unit suites.
+
+**E2E proof**: a build-stamped fixture migration (`VITE_NULO_E2E_MIGRATION_FIXTURE=1`, tree-shaken from prod builds and grep-guarded in `_build-extension.yml`) drives real cold boots in `tests/e2e/migration.test.ts` — transform+checkpoint, fail-closed→recovery→retry, the mid-flight barrier, and crash-mid-migration convergence. The same stamp arms a DECLARATIVE backup fixture (v9001, contact field-rename) that `tests/e2e/backup-migration.test.ts` drives through the real import UI (smoke) and `tests/e2e/network/backup-migration-roundtrip.test.ts` proves on-chain functional (network) — every future real backup-schema migration inherits this coverage.
+
+**Per-row storage resilience.** `EntityStorage` (`packages/wallet-core/src/storage/entity_storage.ts`) wraps every `JSON.parse` in a per-row try/catch, so a byte-malformed row cannot throw and poison every reader of the namespace: bad rows are logged with a truncated payload preview, deleted, and skipped from iteration. (Migration reads are the deliberate exception: the engine's `ctx` THROWS on a malformed row — fail-closed — rather than dropping it, since mid-migration the backup may be the only copy.) The journal service layers on top with `OperationRecordSchema.safeParse` in a `_loadValidated` helper — schema-invalid records get the same drop-and-skip treatment so downstream FSM code never sees a malformed record.
+
+## 6. Offscreen lifecycle
+
+The Aztec PXE runs in a page of its own: Chrome's offscreen document, or — Firefox MV3 has no `chrome.offscreen` — the same `src/offscreen/index.html` loaded as a frame of the background page. The background creates and supervises it via `apps/extension/src/wallet/utils/offscreen.ts`:
+
+- `ensureOffscreenRunning()` is the entry point. It first checks `isOffscreenAlreadyRunning()` (Chromium: `chrome.runtime.getContexts`; Firefox: the tracked frame is still attached).
+- If a document exists, it pings it via `isOffscreenHealthy()`. A non-responsive ("zombie") offscreen is torn down and recreated. On Firefox a READY or PONG counts only when the sender's URL carries the live frame's `?instance=` generation, so a frame removed on timeout cannot open its successor's gate or pass its health check.
+- A creation in flight is shared — concurrent callers all await the same `offscreenPromise`. A `READY_TIMEOUT_MS` watchdog converts a stuck create into a thrown error.
+
+**Why a frame, and its lifetime.** Firefox clamps a hidden document's timers to one per second, and the PXE's node client waits on a zero-delay timer per RPC batch — hosted in a minimized window, a dApp `sendTx` took 18–28 s against 1.5–5 s framed (`implementations-plan/archive/pxe-timer-throttling/`). A frame inherits the background page's `visible` state. It lives at most as long as the background page: the 10 s `storage.session` heartbeat keeps the event page from Firefox's 30 s idle suspension while the background is up, and when the background ends anyway (a browser or extension restart, a crash) the wallet comes back locked — strict security mode drops the session on any background death, on both browsers — and the PXE cold-starts on the first request after the unlock. Chrome differs only in that its offscreen document survives a worker restart. `tests/e2e/network/pxe-host-state.test.ts` holds both browsers to one `visible` host; `firefox-background-restart.test.ts` pins the locked-then-recovered path after the background alone is ended.
+
+## 7. Profile + session model
+
+Two profile types: **password** and **passkey**. Each uses a different derivation chain (see `@nulo/wallet-crypto`) to produce the same master-secret shape; downstream code is agnostic.
+
+`SessionManager` (`apps/extension/src/wallet/services/profile/session-manager.ts`) owns the in-memory `ActiveSession` and its persisted `Session` mirror in `chrome.storage.session`. Properties:
+
+- **Session storage** survives MV3 service-worker suspensions but is cleared when the browser session ends. The popup can reconnect mid-session without re-prompting.
+- **In-memory only**: the raw master secret (`Fr`). Never persisted.
+- **`restore()` runs once at init** — silently re-hydrates the session, never emits `onActiveProfileChanged`. Subscribers pull via `getActive()` at mount.
+- **TTL-aware**: `since + ttl` past → silent drop, storage cleaned.
+- **Wrong credentials / corrupted ciphertext** → silent close, same as TTL.
+- **Lock-agnostic**: SessionManager performs no locking of its own. Callers (the `ProfileService` facade) serialize via its lock.
+
+Under strict security mode (default ON) a session persists no silent-restore bearer (`SessionSecretBox`: the master secret and the imported-keys key wrapped under a random token) to `chrome.storage.session`, and turning strict mode on mid-session removes an existing one, best effort (see `SECURITY.md`). With strict mode ON, any SW recycle (Chrome's idle-suspend within the same browser session, a full browser close, or an explicit kill) forces a fresh password unlock — the session restore short-circuits because it refuses a bearer when strict mode is already on. See `apps/extension/tests/e2e/sw-resilience.test.ts` for the SW-stop-and-respawn coverage.
+
+**A session end ends the work it authorized.** Every send carries the serial of the session that approved it, and a lock, an expiry or a switch to another profile cancels its sends that have not been broadcast (the fence, in `apps/extension/src/wallet/services/execution/README.md`); the popup's lock button asks first when approved sends are running. The inactivity auto-lock waits for them instead: an expired session with an approved send at `pending`, `simulating` or `proving` is extended a step at a time (`min(60 s, TTL)`), within a budget of `min(TTL, 10 min)` per session that nothing refills, then locks. dApp activity refreshes the TTL as it always has; the budget bounds only the deferral.
+
+**Two secrets per profile, and recovery mode.** Besides the master, every profile owns a random imported-keys DEK, sealed under the credential and never master-derived: two profiles restored from one recovery phrase share the master, and the DEK is the only secret that tells them apart. Three derivations therefore take `HKDF(master ‖ dek)` (`packages/wallet-crypto/src/dual-secret-hkdf.ts`), so a same-phrase sibling holding the master cannot compute them: the envelope MAC (`entropy-mac.ts`), the PXE store key (`pxe-store-key.ts`, profile-bound salt) and the dApp-session MAC key (`dapp-session-mac-key.ts`). A session whose DEK slot or envelope MAC fails at unlock opens in **recovery mode** (`ActiveSession.dek === undefined`, projected as `ProfileInfo.recoveryMode`, never persisted): derived accounts stay reachable and no bearer is persisted, but the store key and the session key cannot exist, so the service-worker PXE client refuses every profile-bound request with `RecoveryModeError` before any offscreen round-trip (the offscreen keeps runtimes warm across lock and profile switch, so the gate cannot live there) and dApp-session rows are hidden, not deleted. The repair path is export + restore: the full-backup exports tolerate an unrecoverable slot by carrying a fresh DEK and naming the loss (imported keys, local chain state), the assembler omits a network's PXE state instead of aborting, and a password change refuses rather than minting a DEK (a mint would silently orphan every store and every session tag).
+
+A **late-activation** pattern is used for full-backup restore: `ProfileService.restore()` writes the profile and stashes the recovered secret in a `pendingRestoreSecrets` map without opening a session. The caller restores backup data, then calls `finalizeRestore()` which opens the session. This avoids racing `app.vue`'s `onActiveProfileChanged → ensureDefaultAccount` against the import's writes.
+
+## 8. dApp session + capability surface
+
+dApps interact via `@aztec-labs/wallet-sdk` over a postMessage-bridged encrypted channel. Wiring lives in:
+
+- `apps/extension/src/wallet/services/wallet-sdk/background.ts` — sets up `BackgroundConnectionHandler` from the SDK. Owns discovery, key exchange, message routing.
+- `packages/wallet-bridge/src/dispatcher.ts` — the typed dispatcher. Receives wallet messages, narrows protocol shapes via Zod, enforces session scope, and delegates to typed service calls; the consent planning behind `requestCapabilities` lives beside it in `capability-negotiation.ts`.
+- `packages/wallet-bridge/src/capability-map.ts` — declarative map of every capability the wallet exposes (~17 RPCs + 4 special). Determines which RPCs need user approval vs auto-approve, which open a popup vs run silently.
+- `packages/wallet-bridge/src/scope-enforcement.ts` — re-checks per-message scope against the granted session (call-intent targets, fee-payer constraints, chainId, accounts).
+
+A `DappSession` is per-`(origin, chainId, profileId)`. When the dApp's profile or chain changes, the session is revoked and re-approval is required. Auto-approve runs when an active session matches the discovery request.
+
+**When the background dies under a connected dApp.** The SDK's live sessions exist only in the background's memory, so a restart — Chrome's idle reaper, a crash, Firefox ending its event page — forgets every one while the page's SDK still holds its channel. The SDK drops a message for a session it does not know in silence, and the dApp's in-flight call would wait out its own 300 s ceiling. So the content wrapper in `apps/extension/src/wallet/services/wallet-sdk/background.ts` (`stale-session.ts`) answers a validated `ping` or `secure-message` that names a session the sender's tab does not hold with the SDK's own `session-disconnected`, sent to the browser-reported sender tab only. An id another tab owns is answered exactly like an absent one, so a page that names ids it never owned learns nothing about which are live, and the owning tab is never written to. The content script closes the matching port if it holds one and ignores the reply otherwise (a port exists only from an approval broadcast on); the page's SDK rejects everything in flight (`Wallet disconnected`) and fires `onDisconnect`, and the dApp reconnects from the same page instead of hanging. The cold-wake relay is untouched: a message that itself wakes a cold background is still dropped before the listener exists, so recovery from a *cold* background rides on the dApp's 5 s heartbeat, which the SDK runs only while a call is pending — "within seconds" is what an attached background answers, and "at once" is the next message after it attaches. Four limits are stated, not fixed: a dApp with no heartbeat (or a long custom interval) has nothing on the wire to answer, so its pending call ends at its own timeout, and only a call that reaches an attached background is rejected at once (one that itself wakes a cold background is still dropped); a hidden tab's throttled timers stretch "seconds" to about a minute; an invalidated extension context (the add-on reloaded or updated under the page) has no receiver and cannot be repaired from the background; and a handshake in progress when the background dies ends at the dApp's discovery / key-exchange timeouts. That last one is deliberate, and differs from the queued-discovery case (`implementations-plan/archive/fix-discovery-restart-durability/`), where clean loss was accepted: a queued discovery has a 60 s dApp-side timeout and a retry papercut, while an established session with a call in flight has only the 300 s ceiling and a user mid-transaction, so it gets the reply. `apps/extension/tests/e2e/network/inflight-call-background-death.test.ts` pins the three shapes (in flight, idle-cold, idle-up) on both browsers.
+
+The session's chain is the dApp's, not the wallet's active network: every op runs against it whatever the home screen shows. When a dApp asks for `accounts` on a chain the profile has never activated, the dispatcher provisions that chain's default account first (`IAccountProvisioner.provisionDefaultAccount` — only for a chain with no rows of any kind whose seeded L1 identity needs no endpoint probe; user-added networks are declined), and the capabilities popup names the dApp's chain and offers, never requires, switching the wallet to it.
+
+Capability *bundles* — the playground's helper concept for grouping capabilities into a single approval gesture — are a test-harness construct and live in `apps/playground/`. The wallet does not model bundles internally; they are sugar over `requestCapabilities`.
+
+## 9. Concurrency model
+
+Two primitives:
+
+- **`Lock`** (`packages/wallet-core/src/utils/lock.ts`) — single-flight queue per service. Methods that mutate service state acquire the lock; readers and writers serialize behind it. Ownership-ticketed: `enter()` returns a per-grant `LockTicket` and `leave(ticket)` no-ops for anyone but the current owner, so the 5-minute force-release watchdog (there to avoid deadlocks; disable with `maxHoldMs: null` for by-design long holds) cannot let a displaced holder release its successor's turn.
+- **`ReadWriteGuard`** (`packages/wallet-core/src/utils/rw-guard.ts`) — multi-reader / single-writer guard. `read(fn)` runs in parallel with other reads; `write(fn)` drains readers, then runs exclusively. Manual `enterWrite()` / `leaveWrite()` for destructive ops that span multiple awaits (profile switch / delete). Writers have FIFO priority — a reader arriving while a writer is queued waits behind that writer. Force-release at `MAX_READER_DRAIN_MS` is a debuggability aid, not a correctness path.
+
+Service startup is **phase-ordered**, not parallel: `ServiceCollection.start()` (`packages/wallet-core/src/base/index.ts`) runs services in topological phases derived from each service's `dependencies` array. Phase 0 runs everything with no declared deps in parallel; each subsequent phase awaits the previous. Cycles and unknown deps throw named errors at boot.
+
+## 10. Auth + crypto model
+
+`@nulo/wallet-crypto` owns every security-critical derivation:
+
+- `EncryptionKey` — PBKDF2 + AES-GCM framed ciphertext.
+- `PasswordSecretBox` — password-based wrap around `EncryptionKey`, with no storage or session state. Its `passhash` is an unsalted SHA-256 of the password: password-equivalent, held in memory only, never persisted.
+- `SessionSecretBox` — the lenient-mode silent-restore bearer: the master secret and the imported-keys key wrapped under a fresh random token, so the session record holds nothing derived from the password (see `SECURITY.md`).
+- `PasskeyCredential` — WebAuthn PRF → HKDF master-secret. Cross-extension / cross-device portability is limited by browser PRF non-portability (see `apps/extension/tests/e2e/PRF-NON-PORTABLE.md`).
+
+All derivation chains are **vector-locked** by `apps/extension/src/wallet/crypto/key-vectors.test.ts`. Any change to wallet-crypto must keep those vectors passing byte-identically. The KDF rev-key (`ENCRYPTION_GUARD`) is a frozen constant: changing it bricks every existing wallet.
+
+Buffer ownership is explicit. Secret material is allocated as `Uint8Array<ArrayBuffer>` (never `Buffer`), zeroed on drop via the `zeroize()` helper.
+
+## 11. Account contract
+
+The wallet uses the upstream `@aztec-labs/accounts/schnorr` account contract — there is no custom Noir source in this repo. A thin adapter (`packages/aztec-runtime/src/account/nulo-account.ts`, class `NuloAccount`) wraps it:
+
+- Derives the Schnorr signing key via upstream `deriveSigningKey(secret)` (currently uses `DomainSeparator.IVSK_M`; upstream has an open TODO to replace this — see `AztecProtocol/aztec-packages#5837`).
+- Uses `DefaultAccountEntrypoint` for app-payload encoding and authwit signing.
+- Uses `DefaultMultiCallEntrypoint` for first-tx initialization wrapping (`ctor + app` payload via the protocol `MULTI_CALL_ENTRYPOINT_ADDRESS`).
+- Recursively chunks payloads with more than 5 calls: each chunk is wrapped through `entrypoint.wrapExecutionPayload()` so every nesting layer gets its own outer-authwit hash.
+- Pins the instantiation salt to `Fr.ZERO` for deterministic address recreation from seed + index.
+
+The on-chain class is whatever `SchnorrAccountContractArtifact` maps to in the pinned `@aztec-labs/accounts` release.
+
+## 12. Fee-payment model
+
+The wallet supports three fee-payment shapes:
+
+- **Native fee** — user pays in the network's native fee asset.
+- **Sponsored** — a configured Sponsored FPC address pays. Address is editable in settings.
+- **FPC** — a fee-paying contract pays in a registered fee asset.
+
+Fee USD figures are priced at the LIVE AZTEC rate (1 FJ = 1 AZTEC) from the price feed — cache-or-nothing at estimate time; with no usable quote the USD figure is omitted (no hardcoded fallback rate). Displays label the rate as "today's" (historical fees are valued at current spot).
+
+Fee-method selection persists per `(profileId, networkId, accountAddress)`. A storage migration drops the saved selection when the FPC schema changes so a dangling FPC id from a pre-v4 record cannot resolve to a stale handler.
+
+**On the Send page the fee source follows the transfer's origin** (`apps/extension/src/popup/components/modules/send/fee-privacy.ts`). Every transaction names its fee payer in public: the account's own Fee Juice names the account, the PrivateFPC and a sponsor name that contract. So the default walk is origin-matching payer first, sponsor last — private origin: Private Fee Juice → Fee Juice → Sponsored; public origin: Fee Juice → Private Fee Juice → Sponsored. Under a private origin the wallet *defaults* to the account's own Fee Juice only when the private balance was positively read as `"0"` (and every Send mount reads balances fresh, since the origin can flip to private without another read); on anything less it takes a sponsor or selects nothing. The selection is a `computed` over the origin, the committed balance snapshot and the account's pick, never an assigned ref. Send keeps its picks under its own key, one per account × origin (`nulo:ui:sendFeePaymentMethods`, single serialized writer in `fee-send-selection.ts`); the dApp execute window and the authwit popups pass no origin and keep the one-pick-per-account behaviour and key.
+
+**What a send publishes is read once and rendered three times** (`apps/extension/src/components/composite/send/publish-facts.ts`). `publishFacts(origin, destination, payer)` turns the two transfer sides and the fee payer the card reports into three visibilities — you, recipient, amount: a public origin names the sender, a public destination names the recipient, either side public shows the amount, and the payer names whoever pays. `payerKindOf` reads the payer as `account` (own Fee Juice), `contract` (a fee contract the wallet vouches for — the protocol's PrivateFPC or sponsor, `isProtocol`), `unvouched` (a hand-added fee contract) or `null` (not read yet, or the read failed); the last two render as "—", never HIDDEN — HIDDEN is claimed for the sender only under a private origin paid by a vouched contract. The same facts object drives the strip above the Send button (`send-publish-strip[data-you|data-to|data-amount]`), the review sheet it opens (`SendReviewSheet`, a slot on the popup stack under `send_review`) and the `NAMES YOUR ADDRESS` tag on the fee card's "Fee Source" label (`send-fee-privacy-notice[data-notice-shape]`, handed down from the page — the card never computes it), so the three cannot disagree. One send is gated: a private origin paid from the account's own Fee Juice sets `requiresReview`, the button reads "Review send" (`send-submit[data-action="review"]`) and only the sheet's CTA — armed `REVIEW_ARM_MS` after the sheet opened, and only while the sheet holds the top slot of the popup stack (`useSendReview`) — authorises the broadcast — the page's single `submit(source)` is the one decision site, and the fire-and-forget transfer itself lives in `send-submit.ts`. Every other send stays one tap and the strip opens the sheet as information. The sheet closes on an account, network or token switch and on lock.
+
+The private-cold-start fee-payment path (private mint + pay-fee combined for an uninitialized account) is not yet wired. The gap is tracked separately; tests that depend on it remain skipped.
+
+## 13. Build artifacts
+
+`bun run build` produces a Chrome MV3 bundle at `apps/extension/dist/chrome/`. `bun run build:firefox` produces a Firefox MV3 bundle at `dist/firefox/`. Manifests are configured per-target in `apps/extension/manifest/`; the Firefox manifest drops the `offscreen` permission (no Chromium offscreen API) and the PXE page is hosted as a frame of the background page instead.
+
+Vite env propagation: e2e network suites pass `VITE_LOCAL_NETWORK_RPC_URL=http://localhost:<aztec-port>` so the wallet's "Local Network" preset points at the per-worktree sandbox. The build wrapper greps the bundle for the URL and fails fast if the env didn't substitute.
+
+`noExplicitAny` is enforced as a biome error. Use `unknown` and cast at usage sites; suppress with `// biome-ignore lint/suspicious/noExplicitAny: <reason>` only for genuinely untyped boundaries (the `MethodsMap` constraint in `wallet-core/base` is the canonical example).
+
+## 14. Test taxonomy
+
+| Suite | Config | Scope | Runtime | Aztec sandbox? |
+|---|---|---|---|---|
+| Unit | Per-package `vitest.config.ts` in every workspace (`wallet-core`, `wallet-crypto`, `extension-messaging`, `design`, `extension`, and minimal explicit-`node` configs for `wallet-bridge`, `aztec-runtime`, `wallet-sdk-schema-patch`, `landing`); all spread `sharedTest` from the root `vitest.base.ts`. | Colocated `*.test.ts`. Pure logic, mocks via `@webext-core/fake-browser`, `FakeBrowserApi` from `wallet-core/testing`. | Bun (`bun --bun vitest run`) | No. |
+| Component | `apps/extension/vitest.config.ts` (filtered via `bun run test:components`) | Vue SFC tests via `@vue/test-utils`. `chrome.*` stubbed by `tests/vitest.setup.ts:57-84`. | Bun | No. |
+| Extension smoke e2e | `apps/extension/vitest.e2e.config.ts` | `tests/e2e/*.test.ts` — popup UI flows. | Node (Puppeteer) | No. |
+| Extension network e2e | `apps/extension/vitest.e2e.network.config.ts` | `tests/e2e/network/**` — drives the playground dApp against a real anvil + aztec sandbox. | Node (Puppeteer) | Yes (per worktree). |
+| Full e2e | `apps/extension/vitest.e2e.all.config.ts` | Smoke + network. | Node (Puppeteer) | Yes. |
+
+Run commands:
+
+```bash
+bun run test                  # Unit + component (vitest)
+bun run test:e2e              # Smoke
+bun run e2e:agent             # Network — parallel-safe per worktree
+bun run audit:vue             # One-shot pre-PR: typecheck → test → lint → build
+```
+
+`bun run audit:vue` deliberately **excludes** e2e tests — that gate is for fast, isolated correctness. Extension smoke e2e is a separate command; network e2e is its own infrastructure (see [`apps/extension/tests/e2e/README.md`](./apps/extension/tests/e2e/README.md) for the parallel-safe agent runner, port allocation, and reuse-vs-cold-start logic).
+
+Coverage minimums for component / composable tests, the `chrome.*` stubbing, and the e2e helper conventions all live in [`CLAUDE.md`](./CLAUDE.md).

@@ -1,0 +1,54 @@
+/**
+ * @nulo/design — the brutalist design system shared across Nulo apps.
+ *
+ * Tokens are a typed reflection of the CSS variables declared in base.css.
+ * Import the global stylesheet once at app entry: `import "@nulo/design/base.css"`.
+ * Components are exported as Vue SFC source; the consumer's Vite pipeline compiles them.
+ *
+ * Fonts are package-owned (`src/fonts`, referenced package-relative from base.css); the consumer's
+ * Vite bundles them. There is NO auto-import in this package — every component, Vue API, and helper
+ * uses explicit imports, so it compiles under any consumer's Vite config, auto-import or not.
+ *
+ * Presentational only: components take their data + any `data-testid` via props.
+ * They never import app-specific utilities, stores, or service clients.
+ */
+
+/** Core (L1) primitives */
+export { default as Flex } from "./core/Flex.vue"
+export { default as Icon } from "./core/Icon.vue"
+export { default as MaterialIcon } from "./core/MaterialIcon.vue"
+export { default as Text } from "./core/Text.vue"
+
+/** UI primitives */
+export { default as Badge } from "./ui/Badge.vue"
+export { default as Banner } from "./ui/Banner.vue"
+export { default as BrutalistTitle } from "./ui/BrutalistTitle.vue"
+/** Router-free base; the extension keeps a local <Button> wrapper that injects RouterLink. */
+export { default as Button } from "./ui/Button.vue"
+export { default as Checkbox } from "./ui/Checkbox.vue"
+export { default as FieldWarning } from "./ui/FieldWarning.vue"
+export { default as Input } from "./ui/Input.vue"
+export { default as LoadingState } from "./ui/LoadingState.vue"
+export { default as Popover } from "./ui/Popover.vue"
+export { default as RowAction } from "./ui/RowAction.vue"
+export { default as SectionLabel } from "./ui/SectionLabel.vue"
+export { default as Skeleton } from "./ui/Skeleton.vue"
+export { default as Spinner } from "./ui/Spinner.vue"
+/** Router-free base; the extension keeps a local <SubPageHeader> wrapper that injects useRouter. */
+export { default as SubPageHeaderBase } from "./ui/SubPageHeaderBase.vue"
+/** Extension's transient single-toast region. */
+export { default as ToastManagerBase } from "./ui/ToastManagerBase.vue"
+export { default as Toggle } from "./ui/Toggle.vue"
+export { default as Tooltip } from "./ui/Tooltip.vue"
+
+/** Tokens */
+export * from "./tokens"
+
+/** Shared severity/status vocabulary (Badge/Banner tone subsets) */
+export type { SeverityTone } from "./severity"
+
+/** Utility color names (keys of textColors) for `color` props */
+export type { TextColorName } from "./color-names"
+
+/** Layout prop unions (Flex/Text align, justify, wrap, direction, gap) */
+export type { FlexAlign, FlexDirection, FlexGap, FlexJustify, FlexWrap, TextAlign } from "./layout-names"

@@ -1,0 +1,85 @@
+import { describe, expect, test } from "vitest"
+import { isAmountAboveDustThreshold, usdThresholdToMicro } from "./incoming-dust"
+
+describe("isAmountAboveDustThreshold hardening", () => {
+	const threshold = usdThresholdToMicro(0.01)
+
+	test("invalid decimals (negative, fractional, above 77) → fail OPEN without computing", () => {
+		for (const decimals of [-1, 1.5, 78, 10_000, Number.NaN]) {
+			expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals, usdRate: 2, thresholdMicro: threshold }), String(decimals)).toBe(
+				true,
+			)
+		}
+	})
+
+	test("decimals 77 (the ceiling) still evaluates", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals: 77, usdRate: 2, thresholdMicro: threshold })).toBe(false)
+	})
+
+	test("a huge threshold from a bounded config still converts without overflow", () => {
+		expect(usdThresholdToMicro(1_000_000)).toBe(1_000_000_000_000n)
+	})
+})
+
+describe("usdThresholdToMicro", () => {
+	test("converts USD to micro-USD; 0 / invalid → 0n (off)", () => {
+		expect(usdThresholdToMicro(0.01)).toBe(10_000n)
+		expect(usdThresholdToMicro(1)).toBe(1_000_000n)
+		expect(usdThresholdToMicro(0)).toBe(0n)
+		expect(usdThresholdToMicro(-5)).toBe(0n)
+		expect(usdThresholdToMicro(Number.NaN)).toBe(0n)
+	})
+})
+
+describe("isAmountAboveDustThreshold on receipts", () => {
+	// A token with 18 decimals priced at $2/token; threshold $0.01 = 10_000 micro-USD.
+	const threshold = usdThresholdToMicro(0.01)
+
+	test("filter OFF (threshold 0) → always shown", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals: 18, usdRate: 2, thresholdMicro: 0n })).toBe(true)
+	})
+
+	test("no fresh rate (undefined) → fail OPEN (shown)", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals: 18, usdRate: undefined, thresholdMicro: threshold })).toBe(true)
+	})
+
+	test("value ABOVE threshold → shown", () => {
+		// 1 whole token @ $2 = $2.00 >> $0.01.
+		expect(
+			isAmountAboveDustThreshold({ amountRaw: (10n ** 18n).toString(), decimals: 18, usdRate: 2, thresholdMicro: threshold }),
+		).toBe(true)
+	})
+
+	test("value BELOW threshold → hidden (dust)", () => {
+		// 0.001 token @ $2 = $0.002 < $0.01.
+		expect(
+			isAmountAboveDustThreshold({ amountRaw: (10n ** 15n).toString(), decimals: 18, usdRate: 2, thresholdMicro: threshold }),
+		).toBe(false)
+	})
+
+	test("value EXACTLY at threshold → shown (>=, no boundary rounding)", () => {
+		// amount × rate = threshold × scale exactly: 0.005 token @ $2 = $0.01.
+		expect(
+			isAmountAboveDustThreshold({ amountRaw: (5n * 10n ** 15n).toString(), decimals: 18, usdRate: 2, thresholdMicro: threshold }),
+		).toBe(true)
+	})
+
+	test("RAISING the threshold hides MORE; LOWERING re-reveals", () => {
+		const args = { amountRaw: (10n ** 16n).toString(), decimals: 18, usdRate: 2 } // 0.01 token @ $2 = $0.02
+		expect(isAmountAboveDustThreshold({ ...args, thresholdMicro: usdThresholdToMicro(0.01) })).toBe(true) // $0.02 >= $0.01
+		expect(isAmountAboveDustThreshold({ ...args, thresholdMicro: usdThresholdToMicro(0.05) })).toBe(false) // $0.02 < $0.05 → hidden
+		expect(isAmountAboveDustThreshold({ ...args, thresholdMicro: usdThresholdToMicro(0.01) })).toBe(true) // lower back → re-revealed
+	})
+
+	test("unparseable amount → fail OPEN", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "not-a-number", decimals: 18, usdRate: 2, thresholdMicro: threshold })).toBe(true)
+	})
+
+	test("zero rate (invalid) → fail OPEN", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "1", decimals: 18, usdRate: 0, thresholdMicro: threshold })).toBe(true)
+	})
+
+	test("a zero-value receipt is dust when the filter is on", () => {
+		expect(isAmountAboveDustThreshold({ amountRaw: "0", decimals: 18, usdRate: 2, thresholdMicro: threshold })).toBe(false)
+	})
+})

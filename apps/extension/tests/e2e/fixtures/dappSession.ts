@@ -1,0 +1,131 @@
+/**
+ * Helpers for reading and mutating the dApp session record directly in chrome.storage.local.
+ *
+ * EntityStorage backs sessions at keys `nulo:core:dappSessions@<id>`, JSON-encoded.
+ * Test driver (Puppeteer) opens the popup page and runs `chrome.storage.local`
+ * calls there — no debug RPC added to the extension. The next dapp-interaction
+ * service call re-reads via `tryGetDappSession` (service.ts:272), so the mutation
+ * is observed without needing a SW restart.
+ *
+ * Used by tests that need an "elevated confirmationLevel" session (so non-sendTx
+ * methods open the execute popup instead of going silent), and by tests that check
+ * the stored grant beside the dApp's answer.
+ */
+import type { ExtensionContext } from "./extension"
+import { openPopup } from "./extension"
+
+export const SESSION_KEY_PREFIX = "nulo:core:dappSessions@"
+
+/** AccessLevel enum values (mirrored from packages/wallet-bridge/src/session-types.ts). */
+export const AccessLevel = {
+	None: 0,
+	AppState: 1,
+	PublicData: 2,
+	PxeState: 3,
+	PrivateData: 4,
+	Transactions: 5,
+} as const
+
+export type AccessLevelValue = (typeof AccessLevel)[keyof typeof AccessLevel]
+
+/** The chain id of every session row stored for exactly `origin`, as persisted: one entry per row. */
+export async function sessionChainsForOrigin(ctx: ExtensionContext, origin: string): Promise<string[]> {
+	const page = await openPopup(ctx)
+	try {
+		return await page.evaluate(
+			async ({ exact, prefix }: { exact: string; prefix: string }) => {
+				const chains: string[] = []
+				for (const [key, value] of Object.entries(await chrome.storage.local.get(null))) {
+					if (!key.startsWith(prefix)) continue
+					try {
+						const session = JSON.parse(value as string)
+						if (session?.dappMetadata?.url === exact) chains.push(String(session.chainId))
+					} catch {
+						// not a JSON session record
+					}
+				}
+				return chains.sort()
+			},
+			{ exact: origin, prefix: SESSION_KEY_PREFIX },
+		)
+	} finally {
+		await page.close()
+	}
+}
+
+/** Scan all session keys, return the id whose dappMetadata.url starts with origin. */
+export async function getSessionIdForOrigin(ctx: ExtensionContext, origin: string): Promise<string> {
+	const page = await openPopup(ctx)
+	try {
+		const id = await page.evaluate(
+			async ({ originPrefix, prefix }: { originPrefix: string; prefix: string }) => {
+				const all = await chrome.storage.local.get(null)
+				for (const [key, value] of Object.entries(all)) {
+					if (!key.startsWith(prefix)) continue
+					try {
+						const session = JSON.parse(value as string)
+						if (typeof session?.dappMetadata?.url === "string" && session.dappMetadata.url.startsWith(originPrefix)) {
+							return key.slice(prefix.length)
+						}
+					} catch {
+						// not a JSON session record
+					}
+				}
+				throw new Error(`No dApp session found for origin ${originPrefix}`)
+			},
+			{ originPrefix: origin, prefix: SESSION_KEY_PREFIX },
+		)
+		return id
+	} finally {
+		await page.close()
+	}
+}
+
+/**
+ * The capability of `type` that the one session stored for `origin` holds, as persisted, or
+ * undefined when it holds none. Throws unless exactly one session matches.
+ */
+export async function readStoredCapability(
+	ctx: ExtensionContext,
+	origin: string,
+	type: string,
+): Promise<Record<string, unknown> | undefined> {
+	const page = await openPopup(ctx)
+	try {
+		return await page.evaluate(
+			async ({ originPrefix, prefix, capType }: { originPrefix: string; prefix: string; capType: string }) => {
+				const all = await chrome.storage.local.get(null)
+				const sessions = Object.entries(all)
+					.filter(([key]) => key.startsWith(prefix))
+					.map(([, value]) => (typeof value === "string" ? JSON.parse(value) : value))
+					.filter((session) => String(session?.dappMetadata?.url ?? "").startsWith(originPrefix))
+				if (sessions.length !== 1) throw new Error(`expected one dApp session for ${originPrefix}, found ${sessions.length}`)
+				const grants: Array<{ capability?: { type?: string } }> = sessions[0].capabilityGrants ?? []
+				return grants.find((grant) => grant.capability?.type === capType)?.capability
+			},
+			{ originPrefix: origin, prefix: SESSION_KEY_PREFIX, capType: type },
+		)
+	} finally {
+		await page.close()
+	}
+}
+
+/** Mutate `confirmationLevel` on a dApp session record. */
+export async function setConfirmationLevel(ctx: ExtensionContext, sessionId: string, level: AccessLevelValue): Promise<void> {
+	const page = await openPopup(ctx)
+	try {
+		await page.evaluate(
+			async ({ key, level }: { key: string; level: number }) => {
+				const result = await chrome.storage.local.get(key)
+				const raw = result[key]
+				if (typeof raw !== "string") throw new Error(`No session record at ${key}`)
+				const session = JSON.parse(raw)
+				session.confirmationLevel = level
+				await chrome.storage.local.set({ [key]: JSON.stringify(session) })
+			},
+			{ key: `${SESSION_KEY_PREFIX}${sessionId}`, level: level as number },
+		)
+	} finally {
+		await page.close()
+	}
+}

@@ -1,0 +1,53 @@
+name: _Unit tests (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to checkout.
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  unit-tests:
+    name: Vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Run unit tests in every package
+        run: bun run test:all
+
+      # The staged-package tests import every published export under Node 24 ESM as well as Bun.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Run release-script unit tests
+        # scripts/release/ and scripts/publish/ aren't @nulo/* workspaces, so `test:all` (which
+        # filters @nulo/*) skips them. Run them here, guarded so this is a no-op on
+        # refs that predate the dir (other branches / older history).
+        run: |
+          if [ -d scripts/release ]; then
+            bun run test:release
+          else
+            echo "scripts/release/ not present on this ref — skipping."
+          fi
+
+      - name: Run CI-gating guard test
+        # scripts/ci-cd/ isn't a @nulo/* workspace, so `test:all` skips it. This is
+        # the anti-drift guard for the paths-filter gates (derived from the dependency
+        # graph) — it MUST run on PRs or a new ungated @nulo/* dep / a re-introduced `!`
+        # negation would merge green. Guarded so it's a no-op on refs predating the dir.
+        run: |
+          if [ -d scripts/ci-cd ]; then
+            bun run test:ci-gating
+          else
+            echo "scripts/ci-cd/ not present on this ref — skipping."
+          fi

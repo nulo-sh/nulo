@@ -1,0 +1,144 @@
+<route lang="json">
+{ "meta": { "title": "Done" } }
+</route>
+
+<script setup lang="ts">
+/** Composables */
+import { vSnackFooter } from "@/composables/snackInset"
+
+/** Utils */
+import { clearOnboardingTabTracking, OPEN_TOOLBAR_POPUP, type OpenToolbarPopupAnswer } from "@/wallet/utils/onboarding-tab"
+
+const appStore = useAppStore()
+
+// Detected on mount so the pin-tip only shows for users who actually need
+// it. chrome.action.getUserSettings exists from Chrome 91+; we fall back
+// to "not pinned" if the API is missing or rejects.
+const isPinned = ref(false)
+onMounted(async () => {
+	try {
+		const settings = await chrome.action.getUserSettings()
+		isPinned.value = settings.isOnToolbar === true
+	} catch {
+		isPinned.value = false
+	}
+})
+
+async function openWallet() {
+	await appStore.setOnboardingCompleted(true)
+	await clearOnboardingTabTracking()
+
+	// The background closes this tab and only then opens the popup, which the close would otherwise
+	// dismiss; Firefox also refuses a page's own close once its history has grown. A window's last
+	// tab stays, with the popup over it.
+	let answer: OpenToolbarPopupAnswer | undefined
+	let messaged = false
+	try {
+		answer = await chrome.runtime.sendMessage({ type: OPEN_TOOLBAR_POPUP })
+		messaged = true
+	} catch (error) {
+		console.error("Failed to message SW for openPopup; falling back to window:", error)
+	}
+
+	if (messaged) {
+		// No answer, or a tab the background could not close: close it from here, as before.
+		if (answer?.ok !== true) setTimeout(() => window.close(), 50)
+		return
+	}
+
+	// Fallback when messaging the SW isn't possible. Left-positioned
+	// popup-shaped window.
+	await chrome.windows.create({
+		url: chrome.runtime.getURL("src/popup/index.html"),
+		type: "popup",
+		width: 380,
+		height: 660,
+		left: 24,
+		top: 80,
+	})
+	window.close()
+}
+</script>
+
+<template>
+	<OnboardingPage align="center" :gap="40">
+		<StepIndicator :current="6" />
+		<Flex direction="column" align="center" gap="16" :class="$style.hero">
+			<BrutalistTitle main="You're" sub="In" align="center" />
+			<div :class="$style.hero_bar" />
+			<Text size="15" color="secondary" height="150" align="center" :class="$style.subhead">
+				Access the private coordination internet layer.
+			</Text>
+			<Text size="13" color="secondary" height="150" align="center" mono :class="$style.tagline">
+				Private by default. Sovereign by design.
+			</Text>
+		</Flex>
+
+		<Flex
+			v-if="!isPinned"
+			direction="column"
+			gap="12"
+			:class="$style.tip"
+			data-testid="onboarding-pin-tip"
+		>
+			<Flex align="center" gap="8">
+				<MaterialIcon name="extension" :size="16" color="secondary" />
+				<Text size="11" weight="700" color="secondary" :class="$style.tip_label">Pro tip</Text>
+			</Flex>
+			<Text size="13" color="secondary" height="150">
+				Click the puzzle icon in your Chrome toolbar, then pin Nulo for
+				quick access. That's how you'll open the wallet from now on.
+			</Text>
+		</Flex>
+
+		<Button
+			v-snack-footer
+			variant="cta"
+			size="large"
+			data-testid="onboarding-done-open"
+			@click="openWallet"
+		>
+			Open wallet
+		</Button>
+	</OnboardingPage>
+</template>
+
+<style module>
+.hero {
+	/* `padding-top: 48px` keeps the final celebration screen's roomier top
+	 * rhythm: the unified OnboardingPage margin-top is 24 px (down from done's
+	 * previous 48 px); compensating with 48 px of hero padding-top restores
+	 * the original 72 px top-of-shell distance. */
+	padding: 48px 0 24px;
+}
+
+.hero_bar {
+	width: 56px;
+	height: 2px;
+	background: var(--nulo-accent);
+}
+
+.subhead {
+	max-width: 380px;
+}
+
+.tagline {
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	opacity: 0.65;
+}
+
+.tip {
+	width: 100%;
+	padding: 16px 20px;
+	background: var(--nulo-surface);
+	border: 1px solid var(--nulo-border);
+	border-left: 2px solid var(--nulo-outline);
+}
+
+.tip_label {
+	font-family: var(--font-headline);
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+}
+</style>

@@ -1,0 +1,60 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { CHAIN_IDS } from "@/utils/chain-ids"
+
+/** Canonical list of explorer ids — single source for both the `BlockExplorerType`
+ *  union and the config zod schema (`defaultExplorer`), so they can't drift. */
+export const BLOCK_EXPLORER_IDS = ["aztecscan"] as const
+
+export type BlockExplorerType = (typeof BLOCK_EXPLORER_IDS)[number]
+
+export type BlockExplorer = {
+	/** Unique identifier */
+	id: BlockExplorerType
+	/** Display name */
+	name: string
+}
+
+/**
+ * Available block explorers for selection in settings.
+ * Use `null` in config to disable explorer links.
+ */
+export const BLOCK_EXPLORERS: BlockExplorer[] = [
+	{
+		id: "aztecscan",
+		name: "Aztecscan",
+	},
+]
+
+/**
+ * Base URLs for each explorer by chain ID.
+ * To add a new explorer: add its ID to BlockExplorerType,
+ * add to BLOCK_EXPLORERS array, and add URLs here.
+ *
+ * testnet.aztecscan.xyz may still index the V5 testnet, in which case its V6 links 404 until it
+ * serves the V6 chain.
+ */
+const EXPLORER_BASE_URLS: Record<BlockExplorerType, Record<number, string>> = {
+	aztecscan: {
+		[CHAIN_IDS.TESTNET]: "https://testnet.aztecscan.xyz",
+	},
+}
+
+/**
+ * Construct a transaction explorer URL for a given transaction hash.
+ * Returns null if explorer is disabled (null) or doesn't support the network.
+ *
+ * @param chainId - The network's chain ID
+ * @param explorerId - User's selected explorer ID, or null if disabled
+ * @param txHash - Transaction hash
+ * @returns Full URL to view the transaction, or null if unavailable
+ */
+export function getTransactionExplorerUrl(
+	chainId: number,
+	explorerId: BlockExplorerType | null | undefined,
+	txHash: string,
+): string | null {
+	if (!explorerId) return null
+
+	const baseUrl = EXPLORER_BASE_URLS[explorerId]?.[chainId]
+	return baseUrl ? `${baseUrl}/tx-effects/${txHash}` : null
+}

@@ -1,0 +1,56 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+bun-debug.log*
+
+node_modules
+dist
+dist-ssr
+# npm packages staged by scripts/publish/stage.ts
+/dist-publish/
+*.local
+
+# Secrets / env (committed templates are .env.example only)
+.env
+.env.*
+!.env.example
+
+# Storybook build output
+storybook-static/
+
+apps/extension/src/external/*
+
+# E2E test generated config
+apps/extension/tests/e2e/.test-config.json
+
+# E2E parallel-agent state (port pack, ownership lockfile, child logs)
+apps/extension/.e2e-state/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.tsbuildinfo
+wallet_data_*/
+
+# Local runtime artifacts (script PXE/wallet data dirs + MCP captures)
+.playwright-mcp/
+**/pxe_data_*/
+**/wallet_data_*/
+
+# The bridge and its tools app live in alejoamiras/unleashed, not here. Keep any local deployer
+# wallet stores and forge caches at these paths unstageable.
+/apps/tools/
+/packages/bridge-core/
+/contracts/bridge/

@@ -1,0 +1,160 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{
+	"meta": {
+		"isAuthRequired": true
+	}
+}
+</route>
+
+<script setup>
+/** Services */
+import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
+
+/** Utils */
+import { stringCompare } from "@/utils/string"
+import { copyWithToast } from "@/utils/clipboard"
+import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { useEntityCrud } from "@/composables/useEntityCrud"
+
+/** Components */
+import FpcRow from "@/popup/components/modules/settings/fpcs/FpcRow.vue"
+
+/** Helpers */
+import { fpcSortOrder, isSyntheticRow, prepareFpc, PUBLIC_FJ_ROW } from "@/popup/components/modules/settings/fpcs/fpc-helpers"
+import { mutateSendSelections, withoutFpc } from "@/popup/components/modules/send/fee-send-selection"
+
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+const appStore = useAppStore()
+const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
+
+const FEE_METHOD_LS_KEY = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
+
+/** Service clients */
+const fpcService = new FpcServiceClient()
+
+const {
+	entities: rawFpcs,
+	isLoading,
+	error,
+	refresh: refreshFpcs,
+} = useEntityCrud({
+	fetch: () => fpcService.getFpcs(appStore.network.chainId),
+	added: fpcService.onFpcAdded,
+	updated: fpcService.onFpcUpdated,
+	deleted: fpcService.onFpcDeleted,
+	// Events are global; the list is chain-scoped within the active profile — a
+	// mid-switch add/update for another chain OR another profile (the payload
+	// carries profileId; same chainId across profiles is common) must not render.
+	accept: (f) => f.chainId === appStore.network?.chainId && f.profileId === appStore.profile?.id,
+})
+
+const fpcs = computed(() =>
+	rawFpcs.value
+		?.map((f) => prepareFpc(f))
+		.sort((a, b) => {
+			const order = fpcSortOrder(a) - fpcSortOrder(b)
+			return order || stringCompare(a.name, b.name)
+		}),
+)
+
+/** Always render the synthetic Public Fee Juice anchor first; storage-backed
+ * rows follow. The synthetic row never reaches handleEdit/handleDelete since
+ * FpcRow gates emits behind the synthetic prop. */
+const displayedRows = computed(() => [PUBLIC_FJ_ROW, ...(fpcs.value ?? [])])
+
+/** Handlers */
+const handleCopyAddress = (address) => {
+	void copyWithToast(address, openToast, "FPC's address is copied")
+}
+
+const handleEdit = (fpc) => {
+	cacheStore.fpcToEditIdx = fpc.id
+	popupStore.open("edit_fpc")
+}
+
+const handleDelete = (fpc) => {
+	cacheStore.confirm.confirm_text = "Yes, delete FPC"
+	cacheStore.confirm.confirm_color = "red"
+	cacheStore.confirm.title = "Delete this FPC?"
+	cacheStore.confirm.description = "By confirming this action, the selected FPC will be permanently deleted from your wallet"
+	cacheStore.confirm.callback = async () => {
+		await fpcService.deleteFpc(fpc.id)
+
+		const fpms = (await storageLocalGet(FEE_METHOD_LS_KEY))[FEE_METHOD_LS_KEY] || {}
+		if (Object.keys(fpms).length) {
+			for (const [account, data] of Object.entries(fpms)) {
+				if (data.fpc?.id === fpc.id) {
+					delete fpms[account]
+				}
+			}
+			await storageLocalSet({ [FEE_METHOD_LS_KEY]: fpms })
+		}
+		await mutateSendSelections((raw) => withoutFpc(raw, fpc.id))
+
+		openToast({ kind: "success", label: "FPC is deleted" })
+	}
+	popupStore.open("confirm")
+}
+
+// A profile/network switch emits no fpc events and this route is not
+// remounted — refetch explicitly. `clear` empties the foreign scope's rows
+// synchronously so a failed refetch cannot leave them rendered; the
+// composable's fetch sequence retires any in-flight stale fetch.
+watch(
+	() => [appStore.profile?.id, appStore.network, appStore.account],
+	() => {
+		if (appStore.network && appStore.account) {
+			void refreshFpcs({ clear: true })
+		}
+	},
+)
+
+onBeforeUnmount(() => {
+	fpcService.disconnect()
+})
+</script>
+
+<template>
+	<SettingsPageShell title="Manage FPCs" :backTo="'/popup/settings'" gap="20">
+		<!-- The synthetic Public Fee Juice anchor is hardcoded + network-
+			independent, so the list (anchor first) always renders. Loading /
+			error apply only to the storage/protocol-backed rows and show
+			below — without this, no PXE (smoke / offline) left the whole list,
+			including the always-present anchor, hidden behind the spinner. -->
+		<Flex direction="column" gap="16">
+			<SectionLabel label="FPCs" :count="displayedRows.length" />
+
+			<ItemsContainer>
+				<FpcRow
+					v-for="row in displayedRows"
+					:key="row.id"
+					:fpc="row"
+					:synthetic="isSyntheticRow(row) ? 'public-fj' : undefined"
+					:protectedRow="!!row.isProtocol"
+					:nonEditable="row.isProtocol && row.type === FpcType.PrivateFpc"
+					@copyAddress="handleCopyAddress"
+					@edit="handleEdit"
+					@delete="handleDelete"
+				/>
+			</ItemsContainer>
+
+			<AsyncListStatus v-if="isLoading || error" :loading="isLoading" :error="error" label="FETCHING FPCS" @retry="refreshFpcs()" />
+		</Flex>
+
+		<Button @click="popupStore.open('new_fpc')" wide variant="primary" size="large" data-testid="fpc-new-btn">
+			Add FPC
+		</Button>
+	</SettingsPageShell>
+</template>
+

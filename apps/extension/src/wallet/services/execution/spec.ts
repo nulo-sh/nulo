@@ -1,0 +1,154 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { TransferType, LocalTxOrigin } from "@/wallet/services/transaction/spec"
+import type {
+	DecodedCall,
+	DisplayCallInput,
+	FeeSettings,
+	GasBalances,
+	LastProveOutcome,
+	OperationAuthwitPreview,
+	TransferFeeEstimate,
+	Operation,
+	OperationResult,
+} from "./models"
+
+export const EXECUTION_SERVICE_NAME = "execution"
+
+/** An estimate that did not run: a send sharing its chain state is in flight. A spent token was admitted and cannot be sent again. */
+export type TransferFeeQueued = { readonly queued: true; readonly tokenSpent: boolean }
+
+export * from "./models"
+
+export type Methods = {
+	/**
+	 * Executes batch request and returns transaction hash.
+	 * @param network Network id.
+	 * @param account Sender account address.
+	 * @param token Token id.
+	 * @param transferType Transfer type.
+	 * @param recipient Recipient address.
+	 * @param amount Amount.
+	 */
+	executeTransfer(
+		networkId: string,
+		accountAddress: string,
+		tokenId: number,
+		transferType: TransferType,
+		recipientAddress: string,
+		amount: bigint,
+		feeSettings: FeeSettings,
+		precomputedEstimateId?: string,
+	): string
+	/**
+	 * Executes batch of operations.
+	 * @param operations Operations to execute.
+	 * @param origin Origin.
+	 */
+	executeOperations(operations: Operation[], origin: LocalTxOrigin): OperationResult[]
+
+	/**
+	 * Returns public FeeJuice balance and private FeeJuice balance (via PrivateFPC).
+	 * Cached for 5 minutes in the service worker; pass forceRefresh to bypass.
+	 * @param networkId Network id.
+	 * @param accountAddress Account address.
+	 * @param forceRefresh Bypass cache and fetch fresh values.
+	 */
+	getGasBalances(networkId: string, accountAddress: string, forceRefresh?: boolean): GasBalances
+
+	/**
+	 * Cache-only peek at the last-known FeeJuice balances — instant, never
+	 * triggers a fetch. `stale: true` marks an entry past the TTL or
+	 * invalidated (settled tx / PrivateFPC change); callers render it dimmed
+	 * while a real `getGasBalances` refresh runs. `null` means this key was
+	 * never fetched in the current service-worker lifetime.
+	 */
+	peekGasBalances(networkId: string, accountAddress: string): { balances: GasBalances; stale: boolean } | null
+
+	/**
+	 * Estimates the fee for a transfer without executing it.
+	 * Runs simulation in the background and returns fee breakdown.
+	 */
+	estimateTransferFee(
+		networkId: string,
+		accountAddress: string,
+		tokenId: number,
+		transferType: TransferType,
+		recipientAddress: string,
+		amount: bigint,
+		feeSettings: FeeSettings,
+		estimateToken?: string,
+	): TransferFeeEstimate | TransferFeeQueued
+
+	/**
+	 * Estimates the fee for one send-like operation of a stored dApp interaction,
+	 * by reference: the SW re-materializes the request at `(interactionId,
+	 * index)` and applies `feeSettings` after validating its fee path. The
+	 * result's `previewId` names the snapshot of discovered authorizations the
+	 * confirm of that operation is held to.
+	 */
+	estimateOperationFee(
+		interactionId: string,
+		index: number,
+		feeSettings: FeeSettings,
+		estimateToken?: string,
+		flowKey?: string,
+	): TransferFeeEstimate
+
+	/**
+	 * Discovers, without signing, the private authorizations a stored
+	 * `default_entrypoint` operation would need at send. Same by-reference,
+	 * token and flow-key contract as {@link estimateOperationFee}; its
+	 * `previewId` participates in {@link cancelEstimate} the same way.
+	 */
+	previewOperationAuthwits(interactionId: string, index: number, estimateToken?: string, flowKey?: string): OperationAuthwitPreview
+
+	/**
+	 * Decodes calls for the approval card against the artifacts the PXE holds on
+	 * `networkId`, index-aligned with `calls`. Display only: the result names
+	 * parameters and values for the user to read and never feeds execution, so
+	 * the popup may hand over its own copy of the calls. A call the wallet cannot
+	 * decode says why instead of guessing.
+	 */
+	decodeCallsForDisplay(networkId: string, calls: DisplayCallInput[]): DecodedCall[]
+
+	/**
+	 * Cancel an in-flight fee estimate by its caller-minted token.
+	 *
+	 * Estimates have no journal record, so this is the estimate-side sibling
+	 * of {@link cancelJob}, backed by the SW's EstimateCancelRegistry:
+	 * abort-if-running (the pipeline stops at its next stage boundary — an
+	 * ACVM simulation already in flight cannot be preempted) AND
+	 * evict-if-stashed (a completed estimate's cached reuse entry is dropped,
+	 * so a cancelled estimate can never be consumed at confirm). Unknown or
+	 * foreign-profile tokens no-op silently.
+	 */
+	cancelEstimate(estimateToken: string): void
+
+	/**
+	 * Cancel an in-flight job by its operation-journal id.
+	 *
+	 * Lossy-cancel semantics: the journal is transitioned to
+	 * `cancelled` synchronously and the SW-side AbortSignal for that job
+	 * is fired. The underlying prove call may still be running in the
+	 * offscreen document (BB.wasm can't be preempted); its result is
+	 * dropped silently when it eventually resolves.
+	 *
+	 * Submission is blocked: the SW pipeline checks `signal.aborted` at
+	 * each stage boundary and short-circuits before `sendTxTask`. If the
+	 * cancel arrives once the journal has already transitioned to
+	 * `submitting` (the broadcast is in flight), the FSM rejects the
+	 * `submitting → cancelled` transition and `cancelJob` drops the
+	 * abort signal silently — the flow proceeds to its natural
+	 * `succeeded` / `failed` terminal. Honouring the cancel there would
+	 * flip the journal to cancelled while the tx still landed on chain,
+	 * producing a contradictory record.
+	 *
+	 * No-op for unknown jobIds or jobs that already terminated.
+	 */
+	cancelJob(jobId: string): void
+
+	/** The SW's memory of the latest prove attempt (`outcome`) and of a Presto
+	 *  approval denial (`denial`, cleared by the next native proof). Hints only:
+	 *  both reset on SW restart; the journal is the record. */
+	getLastProveOutcome(): LastProveOutcome
+}

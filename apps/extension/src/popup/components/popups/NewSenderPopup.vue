@@ -1,0 +1,190 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+import { FieldWarning } from "@nulo/design"
+import { isValidHex } from "@/utils/string"
+
+/** Services */
+import { AccountStateServiceClient } from "@/wallet/services/account-state/client"
+
+/** Composables */
+import { vSnackFooter } from "@/composables/snackInset"
+import { useToast } from "@/composables/toast"
+import { usePopupEntity } from "@/composables/usePopupEntity"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
+const { order, depth } = usePopupStack("new_sender")
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+let accountStateClientService = null
+const senders = ref([])
+const senderAddress = ref("")
+const isLoading = ref(false)
+const error = ref({ type: "", title: "", tooltip: "" })
+const fillError = (type, title, tooltip) => {
+	error.value = { type, title, tooltip }
+}
+
+const isAlreadyExist = computed(() => senders.value?.includes(senderAddress.value))
+const isAvailableToAddSender = computed(() => {
+	// Full-lifetime submit latch: a running save closes the form on EVERY
+	// route (button, Enter, future callers) — not just the pointer path.
+	if (isLoading.value) return false
+	if (!senderAddress.value.length) return false
+	if (!isValidHex(senderAddress.value)) return false
+
+	return true
+})
+const validateSenderAddress = () => {
+	fillError()
+	if (!senderAddress.value) return
+
+	if (isAlreadyExist.value) {
+		fillError("validation", "Already exist")
+		return
+	}
+
+	if (!isValidHex(senderAddress.value)) {
+		fillError("validation", "Invalid sender address")
+		return
+	}
+}
+
+const handleAddSender = async () => {
+	if (!isAvailableToAddSender.value) return
+
+	isLoading.value = true
+
+	try {
+		await accountStateClientService.addSender(appStore.network.id, senderAddress.value)
+		emit("onClose")
+		openToast({ kind: "success", label: "Sender is added" })
+	} catch (err) {
+		fillError("error", "Failed to add sender", err)
+	} finally {
+		isLoading.value = false
+	}
+}
+
+watch(
+	() => senderAddress.value,
+	() => validateSenderAddress(),
+)
+usePopupEntity(() => props.show, {
+	submit: handleAddSender,
+	onShow: async () => {
+		accountStateClientService = new AccountStateServiceClient()
+		senders.value = await accountStateClientService.getSenders(appStore.network.id)
+	},
+	onHide: () => {
+		accountStateClientService.disconnect()
+		accountStateClientService = null
+		senderAddress.value = ""
+	},
+})
+</script>
+
+<template>
+	<Popup :show @onClose="emit('onClose')" :displaceIdx="order">
+		<PopupCard :displaceIdx="depth">
+			<PopupHeader @onClose="emit('onClose')" closable>
+				<template #title>
+					<Text size="14" weight="600" color="primary">New sender</Text>
+				</template>
+			</PopupHeader>
+
+			<Flex wide direction="column" gap="24" :class="$style.wrapper">
+				<Input
+					label="Sender address"
+					placeholder="0x174403baa8cd5ad87b6bc5b6db32eb430c77cae5798092c4e4755835bb4d0cb0"
+					autofocus
+					sanitize
+					v-model="senderAddress"
+					data-testid="new-sender-address-input"
+				>
+					<template #right>
+						<Transition name="fade">
+							<FieldWarning v-if="error.type === 'validation'">{{ error.title }}</FieldWarning>
+						</Transition>
+					</template>
+				</Input>
+
+				<Flex v-snack-footer direction="column" gap="10">
+					<Transition name="fade">
+						<Tooltip
+							v-if="error.type === 'error'"
+							side="top"
+							position="start"
+							wide
+							:style="{ marginTop: '-12px' }"
+						>
+							<Flex align="center" gap="6">
+								<Icon
+									name="info"
+									size="14"
+									color="red"
+								/>
+
+								<Text size="12" weight="600" color="secondary">
+									{{ error.title }}
+								</Text>
+							</Flex>
+
+							<template #content>
+								<Text size="12" color="secondary">
+									{{ error.tooltip }}
+								</Text>
+							</template>
+						</Tooltip>
+					</Transition>
+					
+					<Button
+						@click="handleAddSender"
+						wide
+						variant="primary"
+						size="medium"
+						:loading="isLoading"
+						:class="error.type === 'error' && $style.shake"
+						:disabled="!isAvailableToAddSender || !!error.type"
+						data-testid="new-sender-submit"
+					>
+						Add sender
+					</Button>
+				</Flex>
+			</Flex>
+		</PopupCard>
+	</Popup>
+</template>
+
+<style module>
+.wrapper {
+	composes: body from "./popup-shared.module.css";
+}
+
+.shake {
+	animation: shake 0.5s ease;
+}
+
+@keyframes shake {
+	0%,
+	100% {
+		transform: translateX(0);
+	}
+	25% {
+		transform: translateX(-2px);
+	}
+	50% {
+		transform: translateX(2px);
+	}
+	75% {
+		transform: translateX(-2px);
+	}
+}
+</style>

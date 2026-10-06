@@ -1,0 +1,91 @@
+# What runs in the wallet that did not ship in the package
+
+Both stores ask whether the extension executes remote code. This note describes, with file
+references, what arrives from outside, what executes it, and what it can and cannot reach, so the
+declaration ("No remote code", on both stores) rests on a stated mechanism rather than on a slogan.
+`scripts/store-listing.test.ts` checks that every `path:line` cited here exists.
+
+## What arrives
+
+An application connected over the wallet-sdk channel can register a contract: an **instance**
+(address preimage) and, optionally, an **artifact** (`packages/wallet-bridge/src/dispatcher.ts:1099-1106`).
+The artifact is a JSON document: an ABI plus, per function, one ACIR program with any Brillig code
+inside it (`@aztec-labs/stdlib/src/abi/abi.ts:273-274`). The wallet parses it against a schema before storing it
+(`packages/aztec-runtime/src/pxe/service.ts:440-465`) and derives the contract address from the
+preimage, refusing a mismatch. The artifact is **data**: it is never evaluated as JavaScript, never
+injected into a page, never loaded as a script.
+
+## What executes it
+
+Contract functions run inside the Aztec PXE, hosted in a hidden extension document (Chrome's
+offscreen document, or a frame of the background page on Firefox,
+`apps/extension/src/wallet/utils/offscreen.ts:36-43`). The PXE feeds each function's bytecode to
+the ACVM, a virtual machine compiled to WebAssembly and bundled in the package
+(`@aztec-labs/simulator/src/private/acvm_wasm.ts:89-97`;
+`@aztec-labs/pxe/src/contract_function_simulator/oracle/private_execution.ts:48`). That the WASM is
+the bundled copy is a property of the loaders, not of the policy: the ACVM glue instantiates
+`acvm_js_bg.wasm` from its own module URL (`@aztec-foundation/noir-acvm_js/web/acvm_js.js:924`, an asset
+Vite emits next to it), and the prover's loader is replaced by a shim that fetches
+`/assets/barretenberg.wasm.gz` from the extension's own origin
+(`apps/extension/src/shims/bb-fetch-code.ts:15-18`). The content security policy,
+`script-src 'self' 'wasm-unsafe-eval'` (`apps/extension/manifest/manifest.config.ts:47-49`), forbids
+remote scripts, `eval` and `Function()`. The one upstream package that built a function from a
+string with no fallback, `function-bind`, is replaced by a stub for that reason
+(`apps/extension/src/shims/function-bind-stub.cjs:1-26`); the others that try (zod, msgpackr,
+get-intrinsic) catch the refusal and fall back. But `'wasm-unsafe-eval'` permits compiling WASM
+bytes from any source and the policy sets no `connect-src`, so it does not by itself prove where
+the bytes came from; the loaders above do.
+
+## What the bytecode can reach
+
+**Directly: nothing outside the VM.** The ACVM interprets an arithmetic circuit; a Brillig
+opcode can request a *foreign call*, and the only foreign-call handler is the one built over the
+wallet's own oracle: `buildACIRCallback` maps each registered oracle name to a method of the handler
+it is given and nothing else (`@aztec-labs/pxe/src/contract_function_simulator/oracle/acir_callback.ts:24-96`).
+
+**Through the oracle, the calls it serves.** Utility functions get the methods of
+`@aztec-labs/pxe/src/contract_function_simulator/oracle/utility_execution_oracle.ts` (the public
+methods from `:200` on, among them random fields, key validation, membership witnesses, block headers, contract
+instances, auth witnesses, the caller's own notes and nullifiers, capsules and fact collections,
+logging, nested utility calls). Private functions add the methods of
+`@aztec-labs/pxe/src/contract_function_simulator/oracle/private_execution_oracle.ts` (from `:117`, among
+them context inputs, note creation and nullification notices, tagging secrets, hash preimages, log
+emission). Some of those answers are fetched from the Aztec node the user configured — for example
+a public-storage read (`@aztec-labs/pxe/src/contract_function_simulator/oracle/utility_execution_oracle.ts:547-558`) becomes
+`getPublicStorageAt` requests, and membership witnesses become the corresponding node queries
+(`:264`, `:291`, `:321`, `:343`, `:361`, `:389`, `:518`). So a contract function **can cause
+requests to leave the device, to one fixed endpoint it does not choose**, carrying what it
+queries: addresses, storage slots, hashes and log tags. It cannot name a host, send a body of its choosing, or read the response of
+anything but the typed query the oracle made on its behalf.
+
+**What it cannot reach:** extension APIs (`chrome.*`), the DOM of any page, the popup, storage
+outside the PXE database, the network by any path other than the oracle above, and any host other
+than the configured node. The host document itself talks to the service worker over
+`chrome.runtime` messaging (`apps/extension/src/offscreen/index.ts:109`) and exposes no page-facing
+surface.
+
+## When it runs without a click
+
+A connected application's calls go through the interaction service. `isConfirmationNeeded`
+(`apps/extension/src/wallet/services/dapp-interaction/service.ts:686-715`) shows the confirmation
+popup when the call's access level reaches the session's confirmation level, when a send spends the
+account's own Fee Juice (it names no fee payer, or pays itself), and always for token registration; the wallet-sdk session is created at
+`AccessLevel.Transactions` (`apps/extension/src/wallet/services/wallet-sdk/background.ts:1081`), so
+sends prompt. Auth-witness creation prompts too, unless the user let that application sign, without
+asking, the authorizations its granted scopes cover: a consent stored on the session
+(`packages/wallet-bridge/src/dispatcher.ts:604-628`). Simulations and utility calls at lower
+levels run silently for a session the user already approved
+(`apps/extension/src/wallet/services/dapp-interaction/service.ts:430-431`). A silent utility call can
+therefore execute application-supplied bytecode and, through the oracle, cause node reads, with no
+per-request window. What it cannot do is any of the things listed above.
+
+## What this bears on
+
+`legal/privacy.md` says in § 13 "The extension loads no remote code" (`legal/privacy.md:346-347`).
+That sentence is true under the reading above — code is what the browser executes as script or
+WASM, and the package bundles all of it. § 2 credits the content security policy only with what it
+delivers, "forbids loading remote scripts" (`legal/privacy.md:48-49`): `script-src 'self'` forbids
+remote *scripts*, while `'wasm-unsafe-eval'` permits compiling WASM bytes from any source, and it is
+the bundled loaders above, not the policy, that keep the WASM local. The Firefox reviewer notes and
+the Chrome remote-code justification in `store/listing.md` summarise this note and rest on the § 13
+sentence.

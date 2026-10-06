@@ -1,0 +1,241 @@
+# Archived plans
+
+Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — one-line hook`. Each is a short record of what was decided and why, never a task list.
+
+- [accelerator-server-ci](accelerator-server-ci/plan.md) — completed — native `bb` proving in the network e2e CI through the vendor's headless prover server
+- [account-artifact-freeze](account-artifact-freeze/plan.md) — completed — account addresses frozen per extension major: vendored artifact, frozen descriptor, execution canary
+- [account-balance-orphans](account-balance-orphans/plan.md) — completed — balance rows carry their own profile, chain and contract scope, judged by one identity predicate
+- [account-profile-siloing](account-profile-siloing/plan.md) — completed — one composite scope of profile, network, chain and account governs every activity record and slice
+- [account-switch-isolation](account-switch-isolation/plan.md) — completed — scope-filtered reducers contain cross-account activity leaks on an account switch
+- [adversarial-key-model-review](adversarial-key-model-review/plan.md) — completed — read-only adversarial review of the second-generation key model
+- [amount-honesty](amount-honesty/plan.md) — completed — the wallet never guesses an amount's magnitude, and what it cannot state exactly it does not state
+- [approval-card-decoding](approval-card-decoding/plan.md) — completed — a readable execute-window approval card that decodes call arguments without guessing
+- [approval-scope-follow](approval-scope-follow/plan.md) — completed — a dApp transaction runs in the scope the dApp pinned, with a banner when the wallet's view differs
+- [authwit-lifecycle-and-execution-followups](authwit-lifecycle-and-execution-followups/plan.md) — completed — a testable public-authwit lifecycle, plus the previous arc's execution follow-ups
+- [aztec-4.2.0-bump](aztec-4.2.0-bump/plan.md) — superseded by aztec-5.0-upgrade — move the Aztec packages from the last 4.2.0 nightly to the 4.2.0 stable release
+- [aztec-5.0-rc2](aztec-5.0-rc2/plan.md) — completed — the Aztec set bumped to 5.0 release candidate 2, with the testnet redeploy in the same arc
+- [aztec-5.0-upgrade](aztec-5.0-upgrade/plan.md) — completed — the whole Aztec family moved to 5.0.0-rc.1 together, bottom-up by layer
+- [aztec-5.0.0-stable](aztec-5.0.0-stable/plan.md) — superseded by aztec-5.2.0-js-line — Aztec 5.0.0 stable and the signing-key-root account model under a frozen derivation spec
+- [aztec-5.0.1-line](aztec-5.0.1-line/plan.md) — completed — client bump to Aztec 5.0.1 with the restore-boot fix and a deletion fence for per-profile PXE stores
+- [aztec-5.2.0-js-line](aztec-5.2.0-js-line/plan.md) — completed — a version-only bump of the Aztec JS packages to 5.2.0, with the Noir toolchain held
+- [backup-import](backup-import/plan.md) — completed — a full-backup import that one slow public node cannot stall
+- [backup-import-decomposition](backup-import-decomposition/plan.md) — completed — the full-backup restore stages split into plain functions behind a short orchestrator
+- [backup-import-repair](backup-import-repair/plan.md) — completed — restore writes the profile, and a separate last step opens the session
+- [backup-integrity](backup-integrity/plan.md) — completed — the backup migration core and restore surface split under the complexity budget, behaviour unchanged
+- [backup-log-hygiene](backup-log-hygiene/plan.md) — completed — every extension log line made safe to persist and export, in three redundant layers
+- [backup-restore-corruption-fix](backup-restore-corruption-fix/plan.md) — completed — three high-severity data-corruption bugs in full-backup restore and profile deletion
+- [backup-restore-security-hardening](backup-restore-security-hardening/plan.md) — completed — a backup treated as attacker-controlled, with the restore and delete paths hardened together
+- [balance-durable-jobs](balance-durable-jobs/plan.md) — completed — the balance pipeline and durable jobs refactored out of the complexity baseline
+- [balance-fpc-cache](balance-fpc-cache/plan.md) — completed — one shared popup store for balance and FPC fetches, with a keyed cache
+- [balance-row-reconciliation](balance-row-reconciliation/plan.md) — completed — missing and stuck balance rows repaired through one idempotent ensure path
+- [bb-wasm-hardening](bb-wasm-hardening/plan.md) — completed — the bb.js WASM assets built from the installed package instead of vendored by hand
+- [bootstrap-route-decouple](bootstrap-route-decouple/plan.md) — completed — a bounded chain sync at the end of a backup import, with honest skip states
+- [bug-fixes-batch](bug-fixes-batch/plan.md) — completed — five user-reported issues shipped as one change, smallest risk first
+- [bun-1.4-adoption](bun-1.4-adoption/plan.md) — completed — the Bun 1.4 adoption split into four plans: the bump, the isolated linker, vitest on Bun, native tooling
+- [bun-1.4-bump](bun-1.4-bump/plan.md) — completed — an exact Bun 1.4 pin with only the wins that need no runtime or topology change
+- [bundle-fpc-nft](bundle-fpc-nft/plan.md) — completed in part — the PrivateFPC note schema bundled with the wallet; the Wonderland NFT half did not ship
+- [capabilities-popup-quality](capabilities-popup-quality/plan.md) — completed — the capabilities popup and connected-apps page say only what the protocol does
+- [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
+- [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
+- [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
+- [cognitive-shallow-tail](cognitive-shallow-tail/plan.md) — completed — the 16 to 20 cognitive-complexity band cleared by extracting named helpers
+- [complexity-budgets](complexity-budgets/plan.md) — completed — Biome complexity budgets at error severity in the existing pipeline
+- [complexity-residue](complexity-residue/plan.md) — completed — the complexity residue burned down, with each surviving acceptance justified
+- [composition-root-pilot](composition-root-pilot/plan.md) — completed — two low-risk extractions from the large initializers, and what the pilot does and does not prove
+- [composition-test-rollout](composition-test-rollout/plan.md) — completed — composition tests behind one shared minimal PXE seam, where they pay
+- [connect-chain-mismatch](connect-chain-mismatch/plan.md) — completed — connecting on another chain derives that chain's default account on demand
+- [connect-window](connect-window/plan.md) — completed — after Allow the connect window becomes the emoji check instead of opening a second window
+- [contacts-export-uxr](contacts-export-uxr/plan.md) — abandoned — a proposed rework of the contacts export, never carried out
+- [contacts-rename-export-senders](contacts-rename-export-senders/plan.md) — completed — senders renamed to contacts, with the sender flag kept across export and import
+- [contacts-sender-decouple](contacts-sender-decouple/plan.md) — completed — contacts never register or unregister senders, except the explicit adds an import makes
+- [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
+- [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
+- [dapp-interaction-lock-fix](dapp-interaction-lock-fix/plan.md) — completed — two pending dApp transactions visible at once, the second popup opening on approval
+- [dapp-popup-cancel-focus](dapp-popup-cancel-focus/plan.md) — completed — cancel closes the dApp transaction window, and the Queued card refocuses it
+- [dapp-preexisting-fee](dapp-preexisting-fee/plan.md) — completed — a dApp can name the account's own held Fee Juice as payer, and the wallet routes it
+- [dapp-profile-binding](dapp-profile-binding/plan.md) — completed — a live dApp channel stays bound to the profile that approved it
+- [data-safety](data-safety/plan.md) — completed — three surgical data-safety fixes with no storage shape change
+- [dedup-clipboard](dedup-clipboard/plan.md) — completed — one clipboard helper and one secret-copy composable for every call site
+- [dedup-design](dedup-design/plan.md) — completed — two design-system duplications removed with zero visual change
+- [dedup-fee-estimation](dedup-fee-estimation/plan.md) — completed — one fee-estimation state machine behind the single and keyed estimators
+- [dedup-ledger](dedup-ledger/plan.md) — completed — a duplication review of the whole codebase and the phased plan that removed it
+- [dedup-messaging-primitives](dedup-messaging-primitives/plan.md) — completed — three copy-pasted pieces removed from the messaging package
+- [dedup-pxe-memo](dedup-pxe-memo/plan.md) — completed — two async-memo helpers replace six hand-rolled PXE caches
+- [dedup-ui-structure](dedup-ui-structure/plan.md) — completed — three structural popup UI cleanups with zero visual change
+- [dedup-withlock](dedup-withlock/plan.md) — completed — a callback-scoped `withLock` replaces the try/finally lock pairs
+- [dependency-hardening](dependency-hardening/plan.md) — completed — the install path defended against fresh malicious publishes, then dependencies refreshed by risk
+- [dependency-refresh](dependency-refresh/plan.md) — completed — minor and patch updates inside existing ranges, with the release-age gate holding
+- [deprecate-simulate-views](deprecate-simulate-views/plan.md) — completed — the internal simulate_views operation kind retired from every layer
+- [design-system-externalization](design-system-externalization/plan.md) — completed — `@nulo/design` becomes the single source of tokens, base styles and primitives
+- [docs-improvement](docs-improvement/plan.md) — completed — documentation split by job, and a sweep of the code comments
+- [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
+- [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
+- [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
+- [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
+- [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
+- [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
+- [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
+- [e2e-skill-refresh](e2e-skill-refresh/plan.md) — completed — one service-worker kill helper and a procedure-first e2e-testing skill
+- [e2e-stabilization](e2e-stabilization/plan.md) — completed — the network suite's remaining flakes fixed, iterating locally first
+- [embedded-fpc-firsttx-cosmetic](embedded-fpc-firsttx-cosmetic/plan.md) — completed — embedded FPC cap and first-transaction cleanups after the simulation fast path
+- [enter-gate-and-ping](enter-gate-and-ping/plan.md) — completed — one submit-validity computed for the profile-edit popup, and a ping message type
+- [execution-decomposition](execution-decomposition/plan.md) — completed — the execution service decomposed with zero behaviour change
+- [execution-pipeline](execution-pipeline/plan.md) — completed — a money-path complexity burn-down with no wire or journal change
+- [execution-pxe-injection-spike](execution-pxe-injection-spike/plan.md) — completed — the composition test layer proven on the execution service
+- [export-integrity](export-integrity/plan.md) — completed — a pure backup assembly and a latch on the export path
+- [failed-send-check](failed-send-check/plan.md) — completed — a failed send that may have reached the node is checked in the background
+- [fast-path-internal-views](fast-path-internal-views/plan.md) — completed — node-direct simulation for a leading prefix of the wallet's own batched views
+- [faucet-add-token](faucet-add-token/plan.md) — completed — a dApp can ask the wallet to watch a token, through an approval window
+- [fee-estimation-init-race](fee-estimation-init-race/plan.md) — completed — fee settings derived only after initialisation in the fee card
+- [fee-estimation-speedup](fee-estimation-speedup/plan.md) — completed — fewer full simulations behind every fee estimate
+- [firefox-arc-closeout](firefox-arc-closeout/plan.md) — completed — the Firefox arc closed: fast answers to in-flight dApp calls, canaries on both browsers
+- [firefox-background-kill](firefox-background-kill/plan.md) — completed — the e2e suite ends the Firefox background page through the browser driver
+- [firefox-first-class-spike](firefox-first-class-spike/plan.md) — completed — Firefox gets the same smoke and network suites as Chrome
+- [firefox-passkey-unlock](firefox-passkey-unlock/plan.md) — completed — passkey steps started in Firefox's toolbar panel run in a window, and every passkey failure shows a way out
+- [first-account-token-seeding](first-account-token-seeding/plan.md) — completed — default tokens seeded on the first account through an account-added subscription
+- [fix-account-generation-fence](fix-account-generation-fence/plan.md) — completed — stale account activation fenced by generation
+- [fix-cold-wake-discovery-loss](fix-cold-wake-discovery-loss/plan.md) — completed — a module-scope relay keeps dApp messages that wake a dead service worker
+- [fix-discovery-restart-durability](fix-discovery-restart-durability/plan.md) — completed — queued dApp discoveries lost on a worker restart stay the accepted behaviour, pinned by a spec
+- [fix-execution-journal](fix-execution-journal/plan.md) — completed — three execution and journal correctness fixes, each proved by a failing test
+- [fix-profile-deletion-status](fix-profile-deletion-status/plan.md) — completed — a torn profile import swept and deleted durably on resume
+- [fix-pxe-offscreen](fix-pxe-offscreen/plan.md) — completed — three unfenced-continuation and leak fixes in the PXE runtime and offscreen lifecycle
+- [fix-session-profile](fix-session-profile/plan.md) — completed — four session and profile lifecycle fixes, each proved first
+- [fix-state-fences](fix-state-fences/plan.md) — completed — async commits that captured state before a transition are fenced
+- [fix-storage-row-repair](fix-storage-row-repair/plan.md) — completed — profile purges get a raw second pass for rows the codec cannot read
+- [fix-transport-sessions](fix-transport-sessions/plan.md) — completed — transport and dApp-session fixes, each proved by a failing test
+- [fix-ui-storage](fix-ui-storage/plan.md) — completed — UI, storage and composable fixes, each proved by a failing test
+- [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
+- [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
+- [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions
+- [god-service-splits](god-service-splits/plan.md) — completed — the three largest wallet services split into collaborators behind unchanged surfaces
+- [grant-check-address-case](grant-check-address-case/plan.md) — completed — contract addresses in the grant check compared case-insensitively, after validation
+- [harden-dedupe](harden-dedupe/plan.md) — completed — a quality audit's duplication folded into shared helpers on one integration branch, with today's behaviour pinned first
+- [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
+- [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
+- [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
+- [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
+- [hd-behaviour-alignment](hd-behaviour-alignment/plan.md) — completed in part — four of the dedupe program's owner calls (History by network, trimmed contact names, new-password hints, motion and focus) and a dead protocol deleted
+- [hd-delete-after-prove](hd-delete-after-prove/plan.md) — completed — a profile erase stops deleting bb.js's public CRS cache, which a page that loaded the CRS holds open, guarded by a prover-on e2e in the canary job
+- [hd-import-handshake-loss](hd-import-handshake-loss/plan.md) — completed — the PXE refuses to sync an account it lacks keys for and the wallet registers it first, so a backup import keeps third-party notes
+- [hd-same-token-concurrent-sends](hd-same-token-concurrent-sends/plan.md) — completed — a popup send that shares chain state with an in-flight send waits for its inclusion instead of failing; every send takes the slot
+- [holdings-loading-sync](holdings-loading-sync/plan.md) — completed — honest Home token loading states and an outcome-based incoming-scan health signal
+- [home-holdings-pin](home-holdings-pin/plan.md) — completed — Home shows three pinned tokens, and a Holdings tab owns the full list
+- [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
+- [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
+- [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
+- [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
+- [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill
+- [incoming-trust-state-machine-refactor](incoming-trust-state-machine-refactor/plan.md) — completed — the incoming-transfer trust table serialized behind one lock per service
+- [isolated-linker-store](isolated-linker-store/plan.md) — completed — Bun's isolated linker adopted consumers first, with `@nulo/resolve-asset`
+- [journal-reaper](journal-reaper/plan.md) — completed — three fixes for the operation-journal reaper and its neighbours
+- [journal-stage-restructure](journal-stage-restructure/plan.md) — completed — popup-shape sendTx e2e tests assert journal stages instead of the full promise
+- [justified-baseline](justified-baseline/plan.md) — completed — each surviving over-budget function carries a one-sentence justification
+- [key-model-v2](key-model-v2/plan.md) — completed — the second-generation key model, one coordinated break before the first shipped build
+- [key-model-v2-hardening](key-model-v2-hardening/plan.md) — completed — four hardening deliverables on top of the second-generation key model
+- [keyboard-guards](keyboard-guards/plan.md) — completed — each page's Enter shortcut answers only its own fields and refuses repeats
+- [layout-polish](layout-polish/plan.md) — completed — the popup built to the drawings, with the remaining differences decided from pictures
+- [legal-terms](legal-terms/plan.md) — completed — Terms and Privacy Policy, an on-device acceptance record, and third-party notices
+- [light-theme-fix](light-theme-fix/plan.md) — completed — the light theme repaired at its root, and a theme toggle for the faucet
+- [lock-ownership](lock-ownership/plan.md) — completed — ticketed lock release and two post-await ownership fixes
+- [mac-identity-binding](mac-identity-binding/plan.md) — completed — the envelope MAC binds the row's storage id and the wallet fingerprint
+- [method-metadata-registry](method-metadata-registry/plan.md) — completed — one wallet method descriptor table replaces six hand-synchronized tables
+- [migration-lifecycle](migration-lifecycle/plan.md) — completed — a migration retry budget and kill-loop bound before the first real migration
+- [monorepo-restructure](monorepo-restructure/plan.md) — completed — the workspace reorganized into apps, packages and contracts directories
+- [network-e2e-required](network-e2e-required/plan.md) — completed — the network e2e check made reliably green, then required
+- [network-e2e-unquarantine](network-e2e-unquarantine/plan.md) — completed — the network suite restored to zero skips and no stretched waits
+- [network-playground-testing](network-playground-testing/plan.md) — completed — the wallet's dApp surface covered in the network suite through a local playground dApp
+- [network-test-triage](network-test-triage/plan.md) — completed — the failing network e2e tests diagnosed before any timeout was touched
+- [nightly-release](nightly-release/plan.md) — completed — one tagged nightly prerelease per day from the tip of dev
+- [nulo-v6](nulo-v6/plan.md) — completed — the dependency line and the chain identity moved to Aztec V6 as Nulo V6
+- [on-camera-landing](on-camera-landing/plan.md) — completed — the landing replaced with a character-drawn CCTV-style feed
+- [onboarding-fees-history-arc](onboarding-fees-history-arc/plan.md) — completed — onboarding, fees and history changes in one risk-ordered change
+- [onboarding-tab](onboarding-tab/plan.md) — completed — first-time onboarding moved from the popup into a dedicated extension tab
+- [onboarding-width-unification](onboarding-width-unification/plan.md) — completed — one onboarding page width through a single layout component
+- [origin-guard-truth](origin-guard-truth/plan.md) — completed — whether the cross-origin session guard is live, settled and pinned by a test
+- [owned-client-teardown](owned-client-teardown/plan.md) — completed — documents share one logger client instead of a private logger per service client
+- [package-extraction](package-extraction/plan.md) — completed — the extension monolith cut into workspace packages in dependency order
+- [parallel-e2e-isolation](parallel-e2e-isolation/plan.md) — completed — parallel network e2e runs from sibling worktrees own their ports, processes and state
+- [passkey-display-name](passkey-display-name/plan.md) — completed — new passkeys register with a readable, unique display name
+- [passkey-in-page-modal](passkey-in-page-modal/plan.md) — completed — passkey ceremonies run in an in-page modal instead of a separate window
+- [passkey-modal-export-import](passkey-modal-export-import/plan.md) — completed — backup export and import passkey ceremonies moved to the in-page modal
+- [paths-filter-negation-fix](paths-filter-negation-fix/plan.md) — completed — every CI paths-filter gate derived from what its target is built from
+- [plans-scaffolding](plans-scaffolding/plan.md) — completed — the planning tree moved to one standard, enforced by a gate
+- [playwright-migration](playwright-migration/plan.md) — abandoned — the decision not to migrate the e2e suites from Puppeteer to Playwright
+- [popup-enter-handler-unification](popup-enter-handler-unification/plan.md) — completed — the last hand-rolled popup Enter handlers moved onto the shared submit-key guard
+- [popup-entity-consolidation](popup-entity-consolidation/plan.md) — completed — `usePopupEntity` owns the standard popup Enter-listener lifecycle
+- [popup-escape-closes](popup-escape-closes/plan.md) — completed — Escape closes the top popup and returns focus to the control that opened it
+- [popup-handshake](popup-handshake/plan.md) — completed — a single-navigation popup-open fast path in the e2e fixtures
+- [popup-shell-state](popup-shell-state/plan.md) — completed — popup shell, state and input functions decomposed under the complexity budget
+- [popup-submit-reentrancy](popup-submit-reentrancy/plan.md) — completed — async popup submits hold a latch for their whole life
+- [popup-window-decomposition](popup-window-decomposition/plan.md) — superseded by vue-design-system — a structural cut of the two oversized dApp-window popups
+- [port-client-connect](port-client-connect/plan.md) — completed — a synchronous port-open failure rejects at once with a typed error, and nothing retries
+- [prerelease-rollout](prerelease-rollout/plan.md) — completed — release-candidate tags cut from dev beside the stable release flow
+- [presto-migration](presto-migration/plan.md) — completed — Presto replaces the Aztec Accelerator, and the wallet reports where a proof ran
+- [primitive-adoption-closure](primitive-adoption-closure/plan.md) — completed — the alarm dispatcher and shared row helpers adopted where code was already identical
+- [private-fuel-fee-fix](private-fuel-fee-fix/plan.md) — completed — the private fuel claim's budget-check revert fixed in the wallet and the bridge's numbers
+- [private-transfer-row](private-transfer-row/plan.md) — completed — one list of authwit nonce names for the approval card and the wallet's transfer matching
+- [production-hardening](production-hardening/plan.md) — completed — the production hardening plans, reduced to what a pre-launch wallet needs
+- [production-ready-audit-remediation](production-ready-audit-remediation/plan.md) — completed — a production-readiness bug audit's verified findings fixed in nine batches
+- [profile-fenced-execution](profile-fenced-execution/plan.md) — completed — a transaction runs under the session that approved it, or it stops
+- [profile-flow-dedup](profile-flow-dedup/plan.md) — completed — two parameterised composables for profile import and create
+- [profile-name-parity](profile-name-parity/plan.md) — completed — onboarding and the popup create and name profiles the same way
+- [profile-service-dedup](profile-service-dedup/plan.md) — completed — the profile service's clone families collapsed with behaviour unchanged
+- [proverless-network-stabilization](proverless-network-stabilization/plan.md) — completed — the proverless network e2e suite stabilized toward a required check
+- [pxe-network-boundary](pxe-network-boundary/plan.md) — completed — a PXE, fetch and network-restore complexity burn-down
+- [pxe-timer-throttling](pxe-timer-throttling/plan.md) — completed — Firefox hosts the PXE page as an iframe in the background page
+- [qa-feedback-batch](qa-feedback-batch/plan.md) — completed — ten alpha-tester feedback items across the faucet and the extension
+- [quality-arc-completion](quality-arc-completion/plan.md) — completed — a quality audit's remaining findings finished in two batches
+- [quality-dedup-adoption](quality-dedup-adoption/plan.md) — completed — half-adopted extractions finished, new abstractions only for three or more call sites
+- [quality-dedup-quick-wins](quality-dedup-quick-wins/plan.md) — completed — five one-day dedup fixes from a quality audit, one change each
+- [quality-first-extractions](quality-first-extractions/plan.md) — completed — the smallest safe first step of the two riskiest extraction findings
+- [quality-quick-wins](quality-quick-wins/plan.md) — completed — four low-risk maintainability fixes with no behaviour change
+- [refresh-balances-disconnect](refresh-balances-disconnect/plan.md) — completed — the balance warm-up awaits every refresh before tearing down its client
+- [registry-stealth-notes](registry-stealth-notes/plan.md) — completed — the artifact registry reduced to local and bundled sources, and per-class note decoding
+- [reimport-pxe-fence](reimport-pxe-fence/plan.md) — completed — a PXE incarnation fence for a delete and re-import in one session
+- [release-dev-to-main](release-dev-to-main/plan.md) — completed — dev promoted to main and a stable release published with the pipeline as it stood
+- [release-dx-hardening](release-dx-hardening/plan.md) — completed — the dev-to-main release turned into a near one-click operation
+- [release-pipeline-hardening](release-pipeline-hardening/plan.md) — completed — post-publish deploy jobs run on a manual re-run, with a break-glass landing refresh
+- [release-please-rollout](release-please-rollout/plan.md) — completed — release-please becomes the release driver, authenticated as a GitHub App
+- [release-prerelease-fix](release-prerelease-fix/plan.md) — completed — rc cuts from dev fixed after they produced the previous stable version
+- [remediation-followups](remediation-followups/plan.md) — completed — each documented deferral of the previous remediation run as its own planned arc
+- [required-check-mismatch](required-check-mismatch/plan.md) — completed — the required aggregator jobs renamed and branch protection re-pointed at them
+- [restart-lock-truth](restart-lock-truth/plan.md) — completed — a lock after a worker restart reliably locks the popup
+- [restore-stage-extraction](restore-stage-extraction/plan.md) — completed — the coupling between two full-backup restore stages made an explicit value
+- [row-service-method-families](row-service-method-families/plan.md) — completed — pins first and one extraction across the token and network row services
+- [runtime-edges](runtime-edges/plan.md) — completed — three low-severity runtime edge fixes, each pinned
+- [runtime-start-single-flight](runtime-start-single-flight/plan.md) — completed — a single-flight service-worker start replaces the started latch
+- [security-audit-remediation](security-audit-remediation/plan.md) — completed — a security audit's findings fixed in small, separately reviewed phases
+- [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
+- [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
+- [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
+- [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
+- [send-states](send-states/plan.md) — completed — a sponsor funding check on the fee card and a load error on Send's token card
+- [service-fences](service-fences/plan.md) — completed — capture-then-assert fences for three durable writes made after an await
+- [shell-identity-fences](shell-identity-fences/plan.md) — completed — identity-safe popup shell continuations, and two retired pieces removed
+- [simulate-fast-path](simulate-fast-path/plan.md) — completed — a dApp simulateTx serves a public-static prefix directly on the node
+- [single-sim-estimates](single-sim-estimates/plan.md) — completed — fewer simulations per dApp sendTx estimate, after proving identical gas
+- [stable-release](stable-release/plan.md) — completed — the stable release cut as a short, repeatable procedure
+- [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
+- [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
+- [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
+- [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
+- [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC
+- [token-prices](token-prices/plan.md) — completed — live token prices and default token seeding
+- [tools-readiness](tools-readiness/plan.md) — completed — a dApp session widened to a new account without forgetting the app
+- [transport-unification](transport-unification/plan.md) — completed — one template-method RPC design for the background and offscreen transports
+- [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
+- [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
+- [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
+- [ux-feedback](ux-feedback/plan.md) — completed — a user-testing proposal built as five batches on one stack
+- [ux-owner-picks](ux-owner-picks/plan.md) — completed — five UI decisions from the feedback follow-ups, each signed off once built
+- [vitest-on-bun](vitest-on-bun/plan.md) — completed — the workspace Vitest suites run on Bun (all but resolve-asset), shown to be no flakier than Node
+- [vitest-vite-bumps](vitest-vite-bumps/plan.md) — completed — vitest 4 everywhere, and Vite 8 with its polyfill plugin in lockstep
+- [vitest-vite8-dedupe](vitest-vite8-dedupe/plan.md) — completed — exactly one Vite 8 in the dependency tree
+- [vue-design-system](vue-design-system/plan.md) — completed — the Vue design system and component library built first
+- [vue-router-5](vue-router-5/plan.md) — completed — the archived router plugin dropped and vue-router moved to 5
+- [vue-shell-composites](vue-shell-composites/plan.md) — completed — the duplicated Vue shell pieces that survive review extracted, and the rest recorded
+- [wallet-error-resilience](wallet-error-resilience/plan.md) — completed — resync and retry once on stale anchors, then fail with a named error
+- [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
+- [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
+- [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set
+- [zod-puppeteer](zod-puppeteer/plan.md) — completed — Zod 4 and Puppeteer 25 bumps as separate changes

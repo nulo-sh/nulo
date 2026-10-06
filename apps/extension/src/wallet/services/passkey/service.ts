@@ -1,0 +1,177 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { ServiceSpec } from "@/wallet/base"
+import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import type { ILogger } from "@/wallet/logger"
+import {
+	PASSKEY_SERVICE_NAME,
+	PASSKEY_TIMEOUT,
+	type Methods,
+	type PasskeyCredentialData,
+	type PasskeyDisplay,
+	type PasskeyRequest,
+	type PasskeyStepOutcome,
+} from "./spec"
+import { PasskeyCredential } from "@nulo/wallet-crypto"
+import { UserRejectedError } from "@nulo/extension-messaging/errors"
+import { deferred } from "@nulo/wallet-core/utils"
+import { randomIdNotIn } from "@/wallet/services/id-allocators"
+import { WINDOW_CLOSED_BY_USER, type WindowManager } from "@/wallet/services/window-manager/window-manager"
+
+export * from "./spec"
+
+/**
+ * Hard timeout for a passkey popup. Bounds the worst case when neither the
+ * user interacts nor `chrome.windows.onRemoved` fires (eg. extension reload,
+ * popup crash, MV3 suspension races). Derived from the ceremony budget, NOT
+ * a free-standing figure: authenticators that only return PRF on `get` run a
+ * SECOND full leg (`passkey-ceremony.ts` runCreate → runGet fallback), so a
+ * legitimate ceremony can need 2 × PASSKEY_TIMEOUT; the extra minute covers
+ * window spawn + user hand-off. A window ceiling below the two-leg worst
+ * case force-closes the popup under the user's finger and orphans the
+ * just-minted resident credential.
+ */
+const PASSKEY_TIMEOUT_MS = 2 * PASSKEY_TIMEOUT + 60_000
+
+type PendingPasskey = {
+	request: PasskeyRequest
+	handleId: string
+	/** The window answered and its credential is being built: a second answer is refused, while a
+	 *  close or a newer request can still cancel it. */
+	resolving: boolean
+	/** Reopens the toolbar popup once the step succeeded, since the prompt closed the panel. */
+	popupReturn?: () => Promise<void>
+}
+
+/**
+ * A PATH B step's credential, and `finish`, which tells the passkey window how the step ended:
+ * the window stays open on the finishing screen until then. Only the first call counts.
+ */
+export type PasskeyHandOver = {
+	credential: PasskeyCredential
+	finish: (outcome: PasskeyStepOutcome) => void
+}
+
+/**
+ * Two ceremony hosts share this service:
+ *
+ *   - PATH A — the page runs WebAuthn itself (`runPasskeyCeremony`) and hands the resulting
+ *     `PasskeyCredentialData` to `ProfileService`, which wraps it with `materializeCredential`.
+ *     No window opens.
+ *   - PATH B — Firefox closes its toolbar panel when an OS passkey prompt takes focus, which
+ *     cancels a ceremony run there, so a step started in the panel comes here instead:
+ *     `createKey`/`getKey` open the passkey window (`src/popup/windows/passkey/index.vue`), which
+ *     runs the same `runPasskeyCeremony` and answers through `resolvePasskeyRequest` or
+ *     `rejectPasskeyRequest`. The window outlives the prompt: the step reports how it ended
+ *     through its hand-over's `finish`, and the window shows that end.
+ */
+export class PasskeyService extends Service<Methods> implements ServiceSpec<Methods> {
+	protected readonly rpcMethods = defineRpcMethods<Methods>()("getPendingRequest", "resolvePasskeyRequest", "rejectPasskeyRequest")
+	public static name = PASSKEY_SERVICE_NAME
+
+	private pending: Map<string, PendingPasskey> = new Map()
+
+	public constructor(
+		logger: ILogger,
+		private readonly windowManager: WindowManager,
+		private readonly armPopupReturn?: () => () => Promise<void>,
+	) {
+		super(PASSKEY_SERVICE_NAME, logger)
+	}
+
+	/** PATH B create. `name` is the profile name, slugified into the credential label by
+	 *  `buildCreateOptions`. */
+	public async createKey(userHandle: string, name: string): Promise<PasskeyHandOver> {
+		return await this.openWindowAndWait({ mode: "create", userHandle, name, step: "create", profileName: name })
+	}
+
+	/** PATH B get: bound to `credentialId`, or a discovery `get` without one. */
+	public async getKey(credentialId: string | undefined, display: PasskeyDisplay): Promise<PasskeyHandOver> {
+		return await this.openWindowAndWait({ mode: "get", credentialId, ...display })
+	}
+
+	/**
+	 * PATH A — wrap a `PasskeyCredentialData` (collected by the popup-side
+	 * in-page modal) into a `PasskeyCredential`. SW-internal collaborator
+	 * method; not exposed over RPC because `PasskeyCredential` carries
+	 * `CryptoKey` state that cannot cross the postMessage boundary.
+	 */
+	public async materializeCredential(data: PasskeyCredentialData): Promise<PasskeyCredential> {
+		return await PasskeyCredential.create(data)
+	}
+
+	public async getPendingRequest(requestId: string): Promise<PasskeyRequest> {
+		const entry = this.pending.get(requestId)
+		if (!entry) throw new Error("Invalid request id")
+		return entry.request
+	}
+
+	public async resolvePasskeyRequest(requestId: string, result: PasskeyCredentialData): Promise<PasskeyStepOutcome> {
+		const entry = this.pending.get(requestId)
+		if (!entry || entry.resolving) throw new Error("Invalid request id")
+		entry.resolving = true
+		let credential: PasskeyCredential
+		try {
+			credential = await PasskeyCredential.create(result)
+		} catch (err) {
+			this.logWarn("Passkey request could not be resolved")
+			// The step must not wait out the window's ceiling for an answer that cannot come.
+			this.windowManager.cancel(entry.handleId, err instanceof Error ? err : new Error("Invalid passkey result"))
+			return "failed"
+		}
+		const outcome = deferred<PasskeyStepOutcome>()
+		const handOver: PasskeyHandOver = { credential, finish: (step) => outcome.resolve(step) }
+		// A close or a newer request during the build already told the step and closed the window.
+		// Once handed over, neither reaches the step: it runs to its end whatever the window does.
+		if (this.pending.get(requestId) !== entry || !this.windowManager.handOver(entry.handleId, () => handOver)) {
+			return "failed"
+		}
+		this.logDebug("Passkey request resolved")
+		const step = await outcome.promise
+		// Not awaited: the window closes on this answer, and only then can focus come back.
+		if (step === "done") void entry.popupReturn?.()
+		return step
+	}
+
+	public async rejectPasskeyRequest(requestId: string): Promise<void> {
+		const entry = this.pending.get(requestId)
+		if (!entry) throw new Error("Invalid request id")
+		this.pending.delete(requestId)
+		this.logInfo("Passkey request cancelled")
+		this.windowManager.cancel(entry.handleId, new UserRejectedError("Passkey request cancelled"))
+	}
+
+	private async openWindowAndWait(request: PasskeyRequest): Promise<PasskeyHandOver> {
+		// One passkey window at a time: reopening the panel while a window is up takes that window's
+		// focus, and the next request replaces the window instead of stacking a second one.
+		this.cancelPending()
+		const popupReturn = this.armPopupReturn?.()
+		const id = randomIdNotIn((candidate) => this.pending.has(candidate))
+
+		const handle = this.windowManager.openAndAwait<PasskeyHandOver>({
+			url: chrome.runtime.getURL(`src/popup/index.html#/windows/passkey?requestId=${id}`),
+			width: 500,
+			height: 800,
+			timeoutMs: PASSKEY_TIMEOUT_MS,
+			kind: "passkey",
+			placement: "center",
+		})
+
+		const entry: PendingPasskey = { request, handleId: handle.handleId, resolving: false, popupReturn }
+		this.pending.set(id, entry)
+
+		try {
+			return await handle.promise
+		} catch (err) {
+			throw err === WINDOW_CLOSED_BY_USER ? new UserRejectedError("Passkey window closed") : err
+		} finally {
+			if (this.pending.get(id) === entry) this.pending.delete(id)
+		}
+	}
+
+	private cancelPending(): void {
+		for (const [id, entry] of this.pending) {
+			this.pending.delete(id)
+			this.windowManager.cancel(entry.handleId, new UserRejectedError("Replaced by a newer passkey request"))
+		}
+	}
+}

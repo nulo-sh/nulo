@@ -1,0 +1,29 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { ContractArtifact } from "@aztec-labs/stdlib/abi"
+import type { Gas } from "@aztec-labs/stdlib/gas"
+import type { Action } from "@/wallet/services/execution/spec"
+import { type FpcInfo, FpcType } from "../spec"
+import { DefaultSponsoredFpcHandler } from "./default-sponsored-fpc-handler"
+import { PrivateFpcHandler } from "./private-fpc-handler"
+
+export interface IFpcHandler {
+	validateArtifact(artifact: ContractArtifact): void
+	getFeePayload(fpc: FpcInfo, account: string, maxFee: Fr): Action[]
+	getTeardownGas(): Gas
+	getTotalGas(): Gas
+}
+
+export function getFpcHandler(type: FpcType) {
+	switch (type) {
+		case FpcType.DefaultSponsoredFpc: {
+			return new DefaultSponsoredFpcHandler()
+		}
+		case FpcType.PrivateFpc: {
+			return new PrivateFpcHandler()
+		}
+		default: {
+			throw new Error("Invalid FPC type")
+		}
+	}
+}

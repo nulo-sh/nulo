@@ -1,0 +1,72 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+/** Utils */
+import { closeCurrentWindow } from "@/utils/close-current-window"
+import { ProfileServiceClient } from "@/wallet/services/profile/client"
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
+
+let profileService
+let unsubscribe
+
+function onActiveProfileChanged(profile) {
+	if (!profile) closeCurrentWindow()
+}
+
+function onClose() {
+	unsubscribe?.()
+	unsubscribe = null
+	profileService.disconnect()
+	profileService = null
+	appStore.loggerWindowId = null
+}
+
+onMounted(async () => {
+	profileService = new ProfileServiceClient()
+	profileService.connect()
+	// subscribeActiveProfile delivers the current state once on subscribe,
+	// then on every change, and re-delivers after SW-restart reconnects.
+	// If the wallet is already locked when this window mounts, the first
+	// invocation closes the window immediately instead of leaving it
+	// stranded in a stale state (pre-existing subtle bug).
+	unsubscribe = await profileService.subscribeActiveProfile(onActiveProfileChanged)
+	window.addEventListener("beforeunload", onClose)
+})
+
+onUnmounted(() => {
+	window.removeEventListener("beforeunload", onClose)
+})
+</script>
+
+<template>
+	<Flex
+		align="start"
+		direction="column"
+		justify="start"
+		gap="12"
+		:class="[$style.wrapper, $style.json_viewer]"
+	>
+         <LogsViewer />
+	</Flex>
+</template>
+
+<style module>
+body {
+	width: 100%;
+	height: 100%;
+
+	background: var(--app-bg);
+
+	margin: 0 auto;
+}
+
+.wrapper {
+	composes: viewer_wrapper from "../window-shell.module.css";
+}
+
+.json_viewer {
+	composes: json_viewer from "../window-shell.module.css";
+}
+</style>

@@ -1,0 +1,254 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+/**
+ * `OperationPlanner` — normalizes incoming operation shapes into the
+ * concrete objects downstream collaborators consume. Houses three
+ * functions previously scattered across `ExecutionService`:
+ *
+ *   - `buildTransferOperation` — transfer params → `SendTransactionOperation`.
+ *     Dispatches on the requested `TransferType` to pick the token's
+ *     transfer function, and encodes the call args. Also wallet-lock
+ *     guards; preserves the `"Unauthorized"` / `"Transfer type not
+ *     supported"` / `"Invalid transfer type"` strings verbatim.
+ *   - `processAztecJsPayload` — Aztec.js `ExecutionPayload` (capsules,
+ *     auth-witnesses, extra-hashed args, calls) → normalized `Action[]`
+ *     + inferred `AccountFeePaymentMethodOptions` + `FeeOptions`. Consumed by
+ *     `executeAztecSendTx`, `executeAztecSimulateTx`, `executeAztecProfileTx`.
+ *   - `extractPrimaryMethod` — best-effort display label for the task
+ *     title (popup UX). Reads the first call in an operation.
+ *
+ * Method signatures and bodies are preserved byte-for-byte from the
+ * original `ExecutionService` implementations. `FeeStrategy`,
+ * `TxRequestBuilder`, and `AuthwitDiscoverer` build on top.
+ *
+ * Dependencies: ProfileService (wallet-lock check) + TokenService
+ * (transfer-function lookup). Both injected in the facade's init phase.
+ * The auth check stays inside `buildTransferOperation` to preserve the
+ * exact ordering today's callers depend on (`estimateTransferFee`
+ * currently has NO separate auth check; it relies on this one).
+ */
+
+import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
+import { FunctionCall } from "@aztec-labs/stdlib/abi"
+import { Capsule, type ExecutionPayload, HashedValues } from "@aztec-labs/stdlib/tx"
+import type { InteractionWaitOptions } from "@aztec-labs/aztec.js/contracts"
+import type { ProfileOptions, SendOptions, SimulateOptions } from "@aztec-labs/aztec.js/wallet"
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import type { ProfileService } from "@/wallet/services/profile/service"
+import type { TokenService, Token } from "@/wallet/services/token/service"
+import { createTokenFn, TOKEN_FN_DESCRIPTORS } from "@/wallet/services/token/functions"
+import { TransferType } from "@/wallet/services/transaction/spec"
+
+/** Which token function each transfer type executes; a type outside this table is invalid. */
+const TRANSFER_FN_BY_TYPE = {
+	[TransferType.Private]: { field: "transferPrivateFn", descriptor: TOKEN_FN_DESCRIPTORS.transferPrivate },
+	[TransferType.PrivateToPublic]: { field: "transferPrivateToPublicFn", descriptor: TOKEN_FN_DESCRIPTORS.transferPrivateToPublic },
+	[TransferType.Public]: { field: "transferPublicFn", descriptor: TOKEN_FN_DESCRIPTORS.transferPublic },
+	[TransferType.PublicToPrivate]: { field: "transferPublicToPrivateFn", descriptor: TOKEN_FN_DESCRIPTORS.transferPublicToPrivate },
+} as const satisfies Record<TransferType, { field: string; descriptor: unknown }>
+import type { Fn } from "@/wallet/utils/fn"
+import { pickPrimaryMethod } from "@/utils/primary-method"
+import type {
+	Action,
+	AddCapsuleAction,
+	AddExtraArgsAction,
+	AddPrivateAuthwitAction,
+	AztecSendTxOperation,
+	EncodedCallAction,
+	FeeOptions,
+	FeeSettings,
+	Operation,
+	SendTransactionOperation,
+} from "./spec"
+import { type FeePayerRoute, classifyFeePayer } from "@nulo/wallet-bridge"
+
+/** The transfer-request value object used below the RPC seam. The wire
+ *  (`spec.ts`) stays positional — RPC entry points construct this at the
+ *  boundary. Same shape as the estimate-reuse cache's input snapshot. */
+export interface TransferRequest {
+	networkId: string
+	accountAddress: string
+	tokenId: number
+	transferType: TransferType
+	recipientAddress: string
+	amount: bigint
+	feeSettings: FeeSettings
+}
+
+/** Result of {@link OperationPlanner.processAztecJsPayload}: the normalized
+ *  actions plus the inferred fee shape. Named (not a positional tuple) so the
+ *  three slots can't be transposed at the call sites. */
+export interface ProcessedAztecJsPayload {
+	actions: Action[]
+	feePaymentMethod: AccountFeePaymentMethodOptions
+	feeOptions: FeeOptions
+}
+
+/** The wire fee options of a dApp payload: what its payer route carries (an embedded payment, or a
+ *  requested self-pay), and every cap the dApp set. `maxPriorityFeesPerGas` is plumbed through so
+ *  the standard path's gas settings match what the dApp requested — it used to be dropped here. */
+function feeOptionsOf(
+	route: FeePayerRoute | undefined,
+	opts: SimulateOptions | ProfileOptions | SendOptions<InteractionWaitOptions>,
+): FeeOptions {
+	const maxFeesUpstream = opts.fee?.gasSettings?.maxFeesPerGas
+	const maxPriorityFeesUpstream = opts.fee?.gasSettings?.maxPriorityFeesPerGas
+	return {
+		embeddedFeePayment: route === "fjwc" || route === "fpc" ? route : undefined,
+		requestedPayment: route === "self-pay" ? "fj" : undefined,
+		gasLimits: opts.fee?.gasSettings?.gasLimits,
+		teardownGasLimits: opts.fee?.gasSettings?.teardownGasLimits,
+		maxFeesPerGas: maxFeesUpstream
+			? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
+			: undefined,
+		maxPriorityFeesPerGas: maxPriorityFeesUpstream
+			? { feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString() }
+			: undefined,
+		gasPadding: 1,
+	}
+}
+
+export class OperationPlanner {
+	public constructor(
+		private readonly profileService: ProfileService,
+		private readonly tokenService: TokenService,
+	) {}
+
+	/** Build a `SendTransactionOperation` from a user-supplied transfer
+	 *  request. Wallet-lock guarded at the top. Throws
+	 *  `"Transfer type not supported"` if the token doesn't expose the
+	 *  matching transfer function, or `"Invalid transfer type"` on an
+	 *  unknown enum value. */
+	public async buildTransferOperation(
+		req: TransferRequest,
+	): Promise<{ op: SendTransactionOperation; token: Token; fn: Fn; args: unknown[] }> {
+		const { networkId, accountAddress, tokenId, transferType, recipientAddress, amount, feeSettings } = req
+		const profile = await this.profileService.getActiveProfile()
+		if (!profile) {
+			throw new Error("Unauthorized")
+		}
+		const token = await this.tokenService.getTokenRaw(tokenId)
+
+		// A plain index would coerce "0" / ["0"] and reach inherited names; the enum is numeric and own.
+		const transfer =
+			typeof transferType === "number" && Object.hasOwn(TRANSFER_FN_BY_TYPE, transferType)
+				? TRANSFER_FN_BY_TYPE[transferType]
+				: undefined
+		if (!transfer) throw new Error("Invalid transfer type")
+		const tokenFn = token[transfer.field]
+		if (!tokenFn) throw new Error("Transfer type not supported")
+		const fn: Fn = createTokenFn(transfer.descriptor, tokenFn.name, tokenFn.impl)
+		const args = fn.buildArgs(accountAddress, recipientAddress, amount)
+		const selector = await fn.getSelector()
+		const encodedArgs = fn.encodeArgs(args)
+
+		const op: SendTransactionOperation = {
+			kind: "send_transaction",
+			networkId,
+			accountAddress,
+			feeSettings,
+			actions: [
+				{
+					kind: "encoded_call",
+					to: token.contract,
+					selector: selector.toString(),
+					args: encodedArgs.map((x) => x.toString()),
+					name: fn.name,
+					type: fn.type,
+					isStatic: fn.isStatic,
+				},
+			],
+		}
+
+		return { op, token, fn, args }
+	}
+
+	/** Parse an Aztec.js `ExecutionPayload` + call-options into a normalized
+	 *  `Action[]` array. Collects capsules, private authwits, extra-hashed
+	 *  args, and encoded calls into a flat list. Also infers the fee
+	 *  payment method from the payer and the calls via `classifyFeePayer`. */
+	public async processAztecJsPayload(
+		exec: ExecutionPayload,
+		opts: SimulateOptions | ProfileOptions | SendOptions<InteractionWaitOptions>,
+	): Promise<ProcessedAztecJsPayload> {
+		const actions: Action[] = []
+
+		for (const _capsule of (exec.capsules ?? []).concat(opts.capsules ?? [])) {
+			const capsule = await Capsule.schema.parseAsync(_capsule)
+			actions.push({
+				kind: "add_capsule",
+				contract: capsule.contractAddress.toString(),
+				storageSlot: capsule.storageSlot.toString(),
+				capsule: capsule.data.map((x) => x.toString()),
+				scope: capsule.scope?.toString(),
+			} satisfies AddCapsuleAction)
+		}
+
+		for (const _authwit of (exec.authWitnesses ?? []).concat(opts.authWitnesses ?? [])) {
+			const authwit = await AuthWitness.schema.parseAsync(_authwit)
+			actions.push({
+				kind: "add_private_authwit",
+				content: {
+					kind: "message_hash",
+					messageHash: authwit.requestHash.toString(),
+				},
+				authwit: authwit.witness.map((x) => x.toString()),
+			} satisfies AddPrivateAuthwitAction)
+		}
+
+		for (const _args of exec.extraHashedArgs ?? []) {
+			const args = await HashedValues.schema.parseAsync(_args)
+			actions.push({
+				kind: "add_extra_args",
+				args: args.values.map((x) => x.toString()),
+			} satisfies AddExtraArgsAction)
+		}
+
+		for (const _call of exec.calls ?? []) {
+			const call = await FunctionCall.schema.parseAsync(_call)
+			actions.push({
+				kind: "encoded_call",
+				to: call.to.toString(),
+				selector: call.selector.toString(),
+				args: call.args.map((x) => x.toString()),
+				hideMsgSender: call.hideMsgSender,
+				name: call.name,
+				type: call.type,
+				isStatic: call.isStatic,
+				returnType: call.returnType,
+			} satisfies EncodedCallAction)
+		}
+
+		const route = classifyFeePayer(exec.feePayer, opts.from, exec.calls)
+		const feeOptions = feeOptionsOf(route, opts)
+		const feePaymentMethod =
+			route === "fjwc"
+				? AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM
+				: route === "fpc"
+					? AccountFeePaymentMethodOptions.EXTERNAL
+					: AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE
+
+		return { actions, feePaymentMethod, feeOptions }
+	}
+
+	/** Best-effort display label for the task title. Returns the first
+	 *  call's method name (for Nulo `send_transaction` shapes) or the
+	 *  first call's name/selector (for Aztec.js `aztec_sendTx` shapes).
+	 *  Returns undefined for operation kinds that have no "primary" call. */
+	public extractPrimaryMethod(operation: Operation): string | undefined {
+		if ("actions" in operation && Array.isArray(operation.actions)) {
+			const carriers: Array<{ method?: string; name?: string }> = []
+			for (const action of operation.actions) {
+				if (action.kind === "call") carriers.push({ method: action.method })
+				else if (action.kind === "encoded_call") carriers.push({ name: action.name ?? action.selector })
+			}
+			return pickPrimaryMethod(carriers)
+		}
+		if ("exec" in operation && (operation as AztecSendTxOperation).exec?.calls?.length) {
+			const carriers = (operation as AztecSendTxOperation).exec.calls.map((c) => ({
+				name: c.name?.toString() ?? c.selector?.toString(),
+			}))
+			return pickPrimaryMethod(carriers)
+		}
+		return undefined
+	}
+}

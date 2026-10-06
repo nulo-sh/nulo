@@ -1,0 +1,567 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+/** Components */
+import { Skeleton } from "@nulo/design"
+import ActionButtonsView from "./ActionButtonsView.vue"
+import GasBalanceCard from "./GasBalanceCard.vue"
+
+/** Services */
+import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { getPriceMapEntry } from "@/wallet/services/price/price-map"
+import { ConfigServiceClient } from "@/wallet/services/config/client"
+
+/** Utils */
+import { balanceFormatted } from "@/utils/amount.js"
+import { copyWithToast } from "@/utils/clipboard"
+import { isValidDecimals, parseRawBalance, safeFiatOf } from "@/utils/token-amount"
+import { aggregateFiat } from "@/utils/token-aggregate"
+import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+import { createBalanceCount } from "./balance-count"
+import { FULL_SIZE, fiatHeroCandidates, fitHero, holdHeroFit, tokenHeroCandidates } from "@/utils/hero-fit"
+import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
+
+/** Composables */
+import { usePrices } from "@/composables/usePrices"
+import { useTokenBalanceSnapshot } from "@/composables/useTokenBalanceSnapshot"
+import { useToast } from "@/composables/toast.js"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store"
+const appStore = useAppStore()
+
+/** Home shows the account aggregate; the token page passes its own balance for a per-token hero. */
+const props = defineProps({
+	tokenBalance: {
+		type: Object,
+		required: false,
+		default: null,
+	},
+	/** Home only: defaults that are not token rows yet. A mount without them has none to wait for. */
+	seedEntries: {
+		type: Array,
+		default: () => [],
+	},
+	seedReady: {
+		type: Boolean,
+		default: true,
+	},
+	/** Home's newest arrival, `{ id, label }`; a null label (an unformattable amount) shows no chip. */
+	arrival: {
+		type: Object,
+		default: null,
+	},
+})
+
+const PRIVATE_BALANCE_LABEL = "Private balance: only you can see it"
+const PUBLIC_BALANCE_LABEL = "Public balance: anyone can see it"
+
+const tokenBalances = ref([])
+
+const tokenToDisplay = computed(() => props.tokenBalance?.token)
+const showFullBalance = ref(false)
+/** The token hero reads a stored row: a malformed side or invalid decimals renders a dash, never throws. */
+const heroSides = computed(() => {
+	const tb = props.tokenBalance
+	if (!tb || !isValidDecimals(tb.token?.decimals)) return undefined
+	const publicRaw = parseRawBalance({ publicBalance: tb.publicBalance })
+	const privateRaw = parseRawBalance({ privateBalance: tb.privateBalance })
+	if (publicRaw === undefined || privateRaw === undefined) return undefined
+	return { publicRaw, privateRaw, decimals: tb.token.decimals }
+})
+const totalTokenBalance = computed(() => {
+	if (!props.tokenBalance) return { value: 0 }
+	const sides = heroSides.value
+	if (!sides) return { value: "—" }
+	return balanceFormatted(sides.publicRaw + sides.privateRaw, sides.decimals, showFullBalance.value ? undefined : 20, { compact: true })
+})
+
+const privateBalanceFormatted = computed(() => {
+	const sides = heroSides.value
+	return sides ? balanceFormatted(sides.privateRaw, sides.decimals, 10, { compact: true }).value : "—"
+})
+const publicBalanceFormatted = computed(() => {
+	const sides = heroSides.value
+	return sides ? balanceFormatted(sides.publicRaw, sides.decimals, 10, { compact: true }).value : "—"
+})
+
+/** Live prices. Parent owns the client lifecycle; the composable owns
+ *  freshness. Every fiat element below renders ONLY with a usable quote —
+ *  no price means no dollar figure, never a fake $0.00. */
+const priceService = new PriceServiceClient()
+const prices = usePrices(priceService)
+
+/** Fiat kill-switch state — with it OFF the aggregate slot is HIDDEN entirely
+ *  (the space is reclaimed), not rendered as a dash. */
+const showFiatValues = ref(true)
+const configService = new ConfigServiceClient()
+configService.onUpdate.add(onConfigUpdate)
+function onConfigUpdate(prop) {
+	if (prop.key === "showFiatValues") showFiatValues.value = prop.value !== false
+}
+configService.getValue("showFiatValues").then((v) => {
+	showFiatValues.value = v !== false
+})
+
+/** Secondary line for the token hero: `≈ $x.xx`, or undefined (hidden, also for a malformed row). */
+const displayedTokenFiat = computed(() => {
+	const sides = heroSides.value
+	if (!tokenToDisplay.value || !sides) return undefined
+	return prices.tokenFiatLabel(tokenToDisplay.value, sides.publicRaw + sides.privateRaw)
+})
+
+const fiatOf = safeFiatOf((tb) => prices.tokenFiatMicro(tb.token, parseRawBalance(tb)))
+const aggregate = computed(() => aggregateFiat(tokenBalances.value, fiatOf))
+
+/** Always a dollar figure — holdings that lack a price count as $0.00 and
+ *  the "priced assets only" caption owns the honesty, never an em-dash. */
+const aggregateFiatDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
+const isAggregatePartial = computed(() => aggregate.value.partial)
+
+/** The hero's figure while it counts toward the aggregate; null shows the aggregate's own string. */
+const countMicro = ref(null)
+const balanceCount = createBalanceCount({
+	now: () => Date.now(),
+	frame: (step) => requestAnimationFrame(step),
+	cancelFrame: (id) => cancelAnimationFrame(id),
+	show: (micro) => {
+		countMicro.value = micro
+	},
+})
+const isCalm = () =>
+	window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("noanimations")
+/** Home's arrival chip: none on the token hero, and none while the fiat hero is hidden. */
+const chip = computed(() => (!tokenToDisplay.value && showFiatValues.value && props.arrival?.label ? props.arrival : null))
+const chipCalm = ref(false)
+
+/** Every form the hero's figure may take, longest first; the fit draws the longest that fits. */
+const heroCandidates = computed(() => {
+	if (!tokenToDisplay.value) return fiatHeroCandidates(countMicro.value ?? aggregate.value.micro)
+	const sides = heroSides.value
+	if (!sides) return ["—"]
+	return tokenHeroCandidates(sides.publicRaw + sides.privateRaw, sides.decimals, showFullBalance.value ? undefined : 20)
+})
+const heroFit = ref(FULL_SIZE)
+const heroText = computed(() => heroCandidates.value[Math.min(heroFit.value.index, heroCandidates.value.length - 1)])
+const heroSection = ref(null)
+const heroRuler = ref(null)
+let heroResizes
+// The figure a count runs to: until the hero shows another, its fit only shrinks.
+let heroHeldFor = null
+function fitHeroToLine() {
+	const forms = heroRuler.value?.children
+	if (!heroSection.value || !forms) return
+	const candidates = heroCandidates.value
+	if (countMicro.value !== null) heroHeldFor = aggregateFiatDisplay.value
+	else if (heroHeldFor !== candidates[0]) heroHeldFor = null
+	const widthAt = (index, scale) => rulerWidth(forms[index], scale)
+	const fresh = fitHero(Math.min(candidates.length, forms.length), widthAt, heroRoom(heroSection.value))
+	const next = heroHeldFor === null ? fresh : holdHeroFit(heroFit.value, fresh)
+	if (next.index !== heroFit.value.index || next.scale !== heroFit.value.scale) heroFit.value = next
+}
+
+const handleCopy = (value, label) => {
+	void copyWithToast(value, openToast, `${label} is copied`)
+}
+const handleTokenBalanceClick = async () => {
+	let balance = totalTokenBalance.value?.value
+	if (totalTokenBalance.value?.slashed || showFullBalance.value) {
+		showFullBalance.value = !showFullBalance.value
+		await nextTick()
+		balance = totalTokenBalance.value?.value
+	}
+
+	handleCopy(balance, "Balance")
+}
+
+/** `loaded` = a snapshot for the active scope has SUCCEEDED; it then survives a later rejected refetch.
+ *  `loading` and `unavailable` both mean the total is not known — never a reason to print $0.00. */
+const balancesState = ref("loading")
+
+/** `seeded` counts: its balance row is created after the token row and may not have landed. */
+const WORKING_SEED = new Set(["pending", "seeding", "seeded"])
+/** The total is still moving: a snapshot is missing, a row has never been projected, or a default
+ *  token is on its way in. Showing a figure now would show one that is about to change. */
+const isTotalUnsettled = computed(() => {
+	if (balancesState.value !== "loaded" || !props.seedReady) return true
+	if (tokenBalances.value.some((tb) => tb.updatedAt === 0 && !tb.syncFailure)) return true
+	// A default whose row has landed is that row's business now, whatever the seed list still says.
+	const landed = new Set(tokenBalances.value.map((tb) => tb.token?.contract?.toLowerCase()))
+	return props.seedEntries.some((entry) => WORKING_SEED.has(entry.status) && !landed.has(entry.contract.toLowerCase()))
+})
+/** A skeleton that never resolves is worse than a partial figure: after the cap the hero says what
+ *  it knows. One cap per scope — a row that starts syncing later does not re-hide a shown total. */
+const HERO_PENDING_CAP_MS = 12_000
+const capElapsed = ref(false)
+let capTimer
+function restartCap() {
+	clearTimeout(capTimer)
+	capElapsed.value = false
+	capTimer = setTimeout(() => {
+		capElapsed.value = true
+	}, HERO_PENDING_CAP_MS)
+}
+/** A price-mapped holding counts as $0.00 until its quote lands, so a wallet holding one waits for
+ *  the first price answer; an empty or unpriced wallet has none to wait for. */
+const awaitingQuotes = computed(
+	() =>
+		showFiatValues.value &&
+		!prices.settled.value &&
+		tokenBalances.value.some(
+			(tb) =>
+				typeof tb.token?.contract === "string" &&
+				(parseRawBalance(tb) ?? 0n) > 0n &&
+				getPriceMapEntry(tb.token.chainId, tb.token.contract) !== undefined,
+		),
+)
+const heroPending = computed(() => (isTotalUnsettled.value || awaitingQuotes.value) && !capElapsed.value)
+/** After the cap one question decides the figure: did ANY snapshot succeed for this scope? A loaded
+ *  empty list is a real $0.00; a list that never loaded is unknown. */
+const isTotalKnown = computed(() => balancesState.value === "loaded")
+
+const tokenBalanceService = new TokenBalanceServiceClient()
+const {
+	fetchTokenBalances,
+	markDirty,
+	inActiveScope,
+	onBalanceUpdated,
+	dispose: disposeBalances,
+} = useTokenBalanceSnapshot({ client: tokenBalanceService, live: appStore, rows: tokenBalances, state: balancesState })
+tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
+tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
+tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
+function onBalanceAdded(tb) {
+	if (!inActiveScope(tb)) return
+	tokenBalances.value.push(tb)
+	markDirty()
+}
+function onBalanceDeleted(tb) {
+	tokenBalances.value = tokenBalances.value.filter((_tb) => _tb.id !== tb.id)
+	if (inActiveScope(tb)) markDirty()
+}
+
+/** A new scope owes nothing to the previous one: its rows, its loaded state and its cap all restart. */
+function enterScope() {
+	tokenBalances.value = []
+	balancesState.value = "loading"
+	balanceCount.reset({ scope: true })
+	restartCap()
+	return fetchTokenBalances()
+}
+
+// The profile too: one phrase imported twice gives two profiles the same address on the same chain.
+watch(
+	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],
+	async () => {
+		await enterScope()
+	},
+)
+// Only a figure the hero displays is recorded: loading, unknown and fiat off count nothing.
+watch(
+	() => (!tokenToDisplay.value && showFiatValues.value && !heroPending.value && isTotalKnown.value ? aggregate.value.micro : null),
+	(micro) => (micro === null ? balanceCount.reset() : balanceCount.observe(micro)),
+	{ immediate: true },
+)
+watch(
+	() => props.arrival?.id,
+	(id) => {
+		if (!id) return
+		chipCalm.value = isCalm()
+		balanceCount.arrive(chipCalm.value)
+	},
+)
+// After the render, so the ruler holds the new forms, and before the paint.
+watch([heroCandidates, () => tokenToDisplay.value?.symbol], fitHeroToLine, { flush: "post" })
+onMounted(async () => {
+	fitHeroToLine()
+	// jsdom has neither; there the fit still runs on each render.
+	heroResizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fitHeroToLine)
+	heroResizes?.observe(heroSection.value)
+	document.fonts?.addEventListener("loadingdone", fitHeroToLine)
+	await enterScope()
+})
+onBeforeUnmount(() => {
+	heroResizes?.disconnect()
+	document.fonts?.removeEventListener("loadingdone", fitHeroToLine)
+	balanceCount.stop()
+	clearTimeout(capTimer)
+	disposeBalances()
+	tokenBalanceService.disconnect()
+	prices.dispose()
+	priceService.disconnect()
+	configService.disconnect()
+})
+</script>
+
+<template>
+	<Flex direction="column" :class="$style.wrapper">
+		<!-- Balance section -->
+		<section ref="heroSection" :class="$style.balance_section">
+			<div :class="$style.hero_wrap">
+				<div
+					v-if="tokenToDisplay || showFiatValues"
+					@click="handleTokenBalanceClick"
+					data-testid="balance-amount"
+					:aria-busy="(!tokenToDisplay && heroPending) || undefined"
+					:class="$style.balance_amount"
+				>
+					<span v-if="tokenToDisplay" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">
+						{{ heroText }}
+						<span :class="$style.balance_symbol">{{ tokenToDisplay?.symbol }}</span>
+					</span>
+					<Skeleton v-else-if="heroPending" :width="150" :height="40" data-testid="balance-hero-loading" :class="$style.hero_skeleton" />
+					<span v-else-if="isTotalKnown" :class="$style.hero_fit" :style="{ '--hero-scale': heroFit.scale }">{{ heroText }}</span>
+					<!-- The balance list could not be read at all: unknown, which is not zero. -->
+					<span v-else data-testid="balance-hero-unknown">—</span>
+				</div>
+				<!-- Mounted before any arrival, so a chip's text lands in a live region that already exists. -->
+				<span role="status" data-testid="balance-arrival-status">
+					<span
+						v-if="chip"
+						:key="chip.id"
+						data-testid="balance-arrival-chip"
+						:class="[$style.arrival_chip, chipCalm && $style.arrival_chip_calm]"
+					>
+						{{ chip.label }}
+					</span>
+				</span>
+				<!-- Each form at the full size, for the fit to measure: clipped to nothing, never drawn. -->
+				<div ref="heroRuler" aria-hidden="true" :class="[$style.balance_amount, $style.hero_ruler]">
+					<template v-if="tokenToDisplay">
+						<span v-for="form in heroCandidates" :key="form" :class="$style.hero_fit">
+							{{ form }}
+							<span :class="$style.balance_symbol">{{ tokenToDisplay?.symbol }}</span>
+						</span>
+					</template>
+					<template v-else>
+						<span v-for="form in heroCandidates" :key="form" :class="$style.hero_fit">{{ form }}</span>
+					</template>
+				</div>
+			</div>
+
+			<div v-if="tokenToDisplay && displayedTokenFiat" data-testid="balance-fiat" :class="$style.fiat_line">
+				{{ displayedTokenFiat }}
+			</div>
+			<div
+				v-if="!tokenToDisplay && !heroPending && isTotalKnown && isAggregatePartial"
+				data-testid="balance-fiat-partial"
+				:class="$style.fiat_partial"
+			>
+				priced assets only
+			</div>
+
+			<!-- Glyphs only: the padlock and globe are the token rows' vocabulary, so no word doubles them. -->
+			<Flex v-if="tokenToDisplay" align="center" justify="center" gap="12" :class="$style.breakdown">
+				<Tooltip textAlign="left" delay="300">
+					<span :class="$style.breakdown_item">
+						<span :class="$style.breakdown_private"><Icon name="lock" size="12" :aria-label="PRIVATE_BALANCE_LABEL" /></span>
+						<span data-testid="private-balance-value">{{ privateBalanceFormatted }}</span>
+					</span>
+					<template #content>
+						<span :class="$style.label_text">{{ PRIVATE_BALANCE_LABEL }}</span>
+					</template>
+				</Tooltip>
+				<span :class="$style.breakdown_divider">|</span>
+				<Tooltip textAlign="left" delay="300">
+					<span :class="$style.breakdown_item">
+						<span :class="$style.breakdown_public"><Icon name="globe" size="12" :aria-label="PUBLIC_BALANCE_LABEL" /></span>
+						<span data-testid="public-balance-value">{{ publicBalanceFormatted }}</span>
+					</span>
+					<template #content>
+						<span :class="$style.label_text">{{ PUBLIC_BALANCE_LABEL }}</span>
+					</template>
+				</Tooltip>
+			</Flex>
+		</section>
+
+		<!-- Gas juice (home page only, not token detail) -->
+		<GasBalanceCard v-if="!tokenBalance" />
+
+		<!-- Action buttons -->
+		<Flex :class="$style.actions">
+			<ActionButtonsView :token="tokenBalance?.token" />
+		</Flex>
+	</Flex>
+</template>
+
+<style module>
+.wrapper {
+	padding: 0 24px 24px 24px;
+}
+
+.balance_section {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+
+	margin-top: 22px;
+	margin-bottom: 10px;
+}
+
+.balance_amount {
+	font-family: var(--font-headline);
+	font-size: 48px;
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	color: var(--txt-primary);
+	cursor: pointer;
+
+	white-space: nowrap;
+	overflow: hidden;
+	max-width: 100%;
+	min-width: 0;
+}
+
+/* The figure's type scales down from the hero's size, while its line keeps the full size's height. */
+.hero_fit {
+	font-size: calc(1em * var(--hero-scale, 1));
+	letter-spacing: -0.04em;
+}
+
+.hero_ruler {
+	position: absolute;
+	width: 0;
+	height: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.hero_ruler > span {
+	position: absolute;
+}
+
+/* The arrival chip rises above the hero; the hero keeps its own clipping. */
+.hero_wrap {
+	position: relative;
+	display: inline-flex;
+	max-width: 100%;
+}
+
+.arrival_chip {
+	position: absolute;
+	left: 50%;
+	top: -18px;
+	transform: translateX(-50%);
+	max-width: 312px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	padding: 3px 8px;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--green);
+	background: color-mix(in srgb, var(--green), transparent 88%);
+	border: 1px solid color-mix(in srgb, var(--green), transparent 55%);
+	opacity: 0;
+	pointer-events: none;
+	animation: n-plus 2.6s ease-out forwards;
+}
+
+.arrival_chip_calm {
+	animation: n-plus-calm 2.6s ease-out forwards;
+}
+
+@keyframes n-plus {
+	0% {
+		opacity: 0;
+		transform: translate(-50%, 6px);
+	}
+	12% {
+		opacity: 1;
+		transform: translate(-50%, 0);
+	}
+	78% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate(-50%, -4px);
+	}
+}
+
+@keyframes n-plus-calm {
+	0% {
+		opacity: 0;
+	}
+	10% {
+		opacity: 1;
+	}
+	80% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+.balance_symbol {
+	font-size: 0.5em;
+	color: var(--txt-tertiary);
+}
+
+/* Centred on the figure's own line box, so the section does not move when the number lands. */
+.hero_skeleton {
+	vertical-align: middle;
+}
+
+.fiat_line {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--nulo-secondary);
+	margin-top: 4px;
+}
+
+.fiat_partial {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--nulo-outline);
+	margin-top: 4px;
+}
+
+.breakdown {
+	margin-top: 8px;
+}
+
+.breakdown_item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+
+	font-family: var(--font-mono);
+	font-size: 11px;
+	letter-spacing: 0.02em;
+	color: var(--nulo-secondary);
+}
+
+/* Same private/public vocabulary as TokenCard's split: bone lock = private, grey globe = public. */
+.breakdown_private {
+	display: inline-flex;
+	color: var(--nulo-accent);
+}
+
+.breakdown_public {
+	display: inline-flex;
+	color: var(--nulo-secondary);
+}
+
+.breakdown_divider {
+	color: var(--nulo-outline);
+}
+
+/* Text on the bubble must reach WCAG AA's 4.5:1 in both themes. */
+.label_text {
+	display: block;
+	line-height: 1.2;
+	color: var(--txt-body);
+}
+
+.actions {
+	width: 100%;
+	margin-top: 12px;
+}
+</style>

@@ -1,0 +1,251 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<route lang="json">
+{ "meta": { "title": "Create" } }
+</route>
+
+<script setup lang="ts">
+/** Composables */
+import { vSnackFooter } from "@/composables/snackInset"
+import { useToast } from "@/composables/toast"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { useProfileCreateFlow } from "@/composables/useProfileCreateFlow"
+
+/** Services */
+import type { ProfileInfo } from "@/wallet/services/profile/spec"
+
+/** Utils */
+import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
+
+/** Stores */
+import { useNotificationStore } from "@/stores/notification.store"
+
+/** Components — the passkey ceremony dialog teleports to #popup, which the onboarding
+	shell declares too. */
+import AuthMethodTabs from "@/components/composite/AuthMethodTabs.vue"
+import PasskeyCeremonyDialog from "@/components/passkey/PasskeyCeremonyDialog.vue"
+
+const router = useRouter()
+const notificationStore = useNotificationStore()
+const { openToast } = useToast()
+const { bootstrapActiveProfile } = useProfileBootstrap()
+
+const maxPasswordLength = 128
+
+const {
+	nameFieldState,
+	profileName,
+	nameError,
+	shakeName,
+	nameInputRef,
+	handleNameInput,
+	ceremonyRequest,
+	onCeremonyResolve,
+	onCeremonyReject,
+	authMethod,
+	password,
+	repeatedPassword: confirm,
+	isCreating,
+	strengthHint: passwordStrengthHint,
+	isAllowedToContinue,
+	handleCreate: handleSubmit,
+	dispose,
+} = useProfileCreateFlow({
+	// Onboarding has no popup app.vue listener, so it bootstraps the freshly
+	// created profile itself, then routes.
+	onCreated: async (profile) => {
+		await bootstrapActiveProfile(profile as ProfileInfo)
+		await setLastActiveProfileId((profile as ProfileInfo).id)
+		router.push("/onboarding/learn")
+	},
+	openToast,
+	notifyCreateFailed: (isPasskey) => {
+		notificationStore.create({
+			type: "warning",
+			payload: {
+				title: "Profile creation failed",
+				description: isPasskey
+					? "An error occurred while creating the profile. This authenticator may not be supported or encountered an issue. Try again or use another one."
+					: "An error occurred while creating the profile. Please try again.",
+				note: isPasskey ? "Windows Hello may not work correctly with some versions of Windows." : undefined,
+				confirmText: "OK",
+				onConfirm: () => {},
+			},
+		})
+	},
+})
+
+const submitLabel = computed(() => {
+	if (isCreating.value) return "Creating..."
+	return authMethod.value === "passkey" ? "Create with passkey" : "Create wallet"
+})
+
+onBeforeUnmount(() => {
+	dispose()
+	// Defense-in-depth: zero out secret material on unmount.
+	password.value = ""
+	confirm.value = ""
+})
+</script>
+
+<template>
+	<OnboardingPage data-testid="onboarding-create-page" :data-name-field="nameFieldState">
+		<OnboardingBackLink testid="onboarding-create-back" />
+		<StepIndicator :current="2" />
+		<header :class="$style.hero">
+			<BrutalistTitle main="Create" sub="Wallet" />
+			<div :class="$style.hero_bar" />
+		</header>
+
+		<form :class="$style.form" @submit.prevent="handleSubmit" @keydown.enter="refuseRepeatEnter">
+			<OnboardingProfileNameField
+				v-if="nameFieldState === 'shown'"
+				ref="nameInputRef"
+				v-model="profileName"
+				:error="nameError"
+				:shake="shakeName"
+				@input="handleNameInput"
+			/>
+
+			<Flex direction="column" gap="12">
+				<Text size="11" weight="700" color="secondary" :class="$style.section_label">How you'll unlock Nulo</Text>
+				<AuthMethodTabs
+					v-model="authMethod"
+					:class="$style.tabs"
+					ariaLabel="How you'll unlock Nulo"
+					:tabClass="$style.tab"
+					:activeClass="$style.tabActive"
+					passwordTestid="onboarding-method-password"
+					passkeyTestid="onboarding-method-passkey"
+				/>
+			</Flex>
+
+			<Flex v-if="authMethod === 'password'" direction="column" gap="12">
+				<Flex direction="column" gap="8">
+					<Text size="11" weight="700" color="secondary" :class="$style.section_label">Password</Text>
+					<Input
+						v-model="password"
+						type="password"
+						placeholder="Strong password"
+						autocomplete="new-password"
+						:maxLength="maxPasswordLength"
+						autofocus
+						data-testid="onboarding-password-input"
+					/>
+				</Flex>
+				<Flex direction="column" gap="8">
+					<Text size="11" weight="700" color="secondary" :class="$style.section_label">Confirm password</Text>
+					<Input
+						v-model="confirm"
+						type="password"
+						placeholder="Repeat password"
+						autocomplete="new-password"
+						:maxLength="maxPasswordLength"
+						data-testid="onboarding-password-confirm"
+						inputTestid="onboarding-password-confirm-input"
+					/>
+				</Flex>
+				<Text v-if="passwordStrengthHint" size="12" color="secondary" height="150">
+					{{ passwordStrengthHint }}
+				</Text>
+			</Flex>
+
+			<div v-else :class="$style.passkeyInfo">
+				<Text size="13" color="secondary" height="150">
+					Your passkey replaces a password. Touch ID, Windows Hello, or
+					a hardware key, whichever your device supports.
+				</Text>
+			</div>
+
+			<Button
+				v-snack-footer
+				variant="cta"
+				size="large"
+				:disabled="!isAllowedToContinue || isCreating"
+				:loading="isCreating"
+				data-testid="onboarding-submit-create"
+				@click="handleSubmit"
+			>
+				{{ submitLabel }}
+			</Button>
+		</form>
+
+		<PasskeyCeremonyDialog
+			v-if="ceremonyRequest"
+			:request="ceremonyRequest"
+			@resolve="onCeremonyResolve"
+			@reject="onCeremonyReject"
+		/>
+	</OnboardingPage>
+</template>
+
+<style module>
+.hero {
+	padding: 8px 0 16px;
+}
+
+.hero_bar {
+	width: 40px;
+	height: 2px;
+	background: var(--nulo-accent);
+	margin-top: 12px;
+}
+
+.form {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+.section_label {
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+	font-family: var(--font-headline);
+}
+
+.tabs {
+	display: flex;
+	border: 1px solid var(--nulo-outline);
+	background: var(--nulo-surface);
+	width: fit-content;
+}
+
+.tab {
+	background: transparent;
+	border: none;
+	color: var(--txt-secondary);
+	font-family: var(--font-headline);
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	padding: 10px 20px;
+	cursor: pointer;
+	transition: background 0.15s var(--bezier), color 0.15s var(--bezier);
+}
+
+.tab:hover {
+	color: var(--txt-primary);
+}
+
+.tab:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: -2px;
+}
+
+.tabActive {
+	background: var(--nulo-accent);
+	color: var(--app-bg);
+}
+
+.tabActive:hover {
+	color: var(--app-bg);
+}
+
+.passkeyInfo {
+	padding: 16px;
+	background: var(--nulo-surface);
+	border: 1px solid var(--nulo-border);
+}
+
+</style>

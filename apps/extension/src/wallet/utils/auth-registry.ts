@@ -1,0 +1,64 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { type FunctionAbi, FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { deriveStorageSlotInMap } from "@aztec-labs/stdlib/hash"
+import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+
+// Auth Registry storage slots, in the upstream contract's declaration order: the
+// AuthRegistry `#[storage]` struct declares `reject_all` FIRST (slot 1) then
+// `approved_actions` SECOND (slot 2) — see @aztec-labs/noir-contracts.js
+// auth_registry_contract `main.nr`. These were previously swapped, so
+// `isAuthwitConsumable` + `isAuthRegistryEnabled` read the wrong public storage:
+// a granted/revoked authwit read as the reject_all map and vice-versa, so a revoke
+// could never be confirmed on-chain and a fast follow-up consume raced the
+// not-yet-mined revoke. Pinned by auth-registry.test.ts.
+const REJECT_ALL_SLOT = new Fr(1)
+const APPROVED_ACTIONS_SLOT = new Fr(2)
+
+// 5.0 demoted auth_registry from a protocol contract (hardcoded slot 1) to a standard contract;
+// its address is now derived from the artifact and shipped as a precomputed AztecAddress.
+export const getAuthRegistryAddress = () => STANDARD_AUTH_REGISTRY_ADDRESS
+
+export const getSetAuthorizedFn = () =>
+	({
+		name: "set_authorized",
+		functionType: FunctionType.PUBLIC,
+		isOnlySelf: false,
+		isStatic: false,
+		isInitializer: false,
+		parameters: [
+			{
+				name: "message_hash",
+				type: { kind: "field" },
+				visibility: "private",
+			},
+			{
+				name: "authorize",
+				type: { kind: "boolean" },
+				visibility: "private",
+			},
+		],
+		errorTypes: {},
+	}) as FunctionAbi
+
+export const getSetAuthorizedSelector = async () => {
+	const fn = getSetAuthorizedFn()
+	return await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters)
+}
+
+export const isAuthwitConsumable = async (node: AztecNode, account: string, message_hash: string) => {
+	const slot = await deriveStorageSlotInMap(
+		await deriveStorageSlotInMap(APPROVED_ACTIONS_SLOT, AztecAddress.fromStringUnsafe(account)),
+		Fr.fromString(message_hash),
+	)
+	const approved = await node.getPublicStorageAt("latest", getAuthRegistryAddress(), slot)
+	return !approved.isZero()
+}
+
+export const isAuthRegistryEnabled = async (node: AztecNode, account: string) => {
+	const slot = await deriveStorageSlotInMap(REJECT_ALL_SLOT, AztecAddress.fromStringUnsafe(account))
+	const rejectAll = await node.getPublicStorageAt("latest", getAuthRegistryAddress(), slot)
+	return rejectAll.isZero()
+}

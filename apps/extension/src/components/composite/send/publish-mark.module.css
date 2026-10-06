@@ -1,0 +1,20 @@
+/* One vocabulary for the strip, the review sheet and the fee-source tag. The element carrying a
+   visibility class sets the ink; the glyph inside (`publishGlyph`: padlock hidden, globe public,
+   none unknown) draws in currentColor. Glyph and word carry the meaning; colour only reinforces. */
+
+.hidden {
+	color: var(--txt-tertiary);
+}
+
+.public {
+	color: var(--txt-primary);
+}
+
+.exposed {
+	color: var(--orange);
+}
+
+.unknown {
+	color: var(--txt-tertiary);
+	opacity: 0.55;
+}

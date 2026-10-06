@@ -1,0 +1,233 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { buildCreateOptions, confirmCreatedCredential, runPasskeyCeremony } from "./passkey-ceremony"
+import { PasskeyPrfError, PasskeyUnconfirmedError } from "./passkey-errors"
+
+const ID = "a3f29b14"
+const toHex = (b: BufferSource): string => {
+	const u =
+		b instanceof ArrayBuffer
+			? new Uint8Array(b)
+			: new Uint8Array((b as ArrayBufferView).buffer, (b as ArrayBufferView).byteOffset, (b as ArrayBufferView).byteLength)
+	return Buffer.from(u).toString("hex")
+}
+
+describe("buildCreateOptions", () => {
+	it("sets user.name and user.displayName to the branded nulo-{name}-{id} label", async () => {
+		const opts = await buildCreateOptions(ID, "Alice")
+		expect(opts.user.name).toBe("nulo-alice-a3f29b14")
+		expect(opts.user.displayName).toBe("nulo-alice-a3f29b14")
+	})
+
+	it("uses the name-free fallback when the profile name has no slugifiable characters", async () => {
+		const opts = await buildCreateOptions(ID, "山田")
+		expect(opts.user.name).toBe("nulo-profile-a3f29b14")
+		expect(opts.user.displayName).toBe("nulo-profile-a3f29b14")
+	})
+
+	// Regression guard: changing the label must NOT disturb any crypto-adjacent
+	// field. user.id, the PRF eval input, the challenge size, rp, and the
+	// credential params are what the key-derivation + relying-party binding
+	// depend on — they stay byte-identical to the pre-change shape.
+	it("leaves user.id as the hex-decoded handle (independent of the label)", async () => {
+		const opts = await buildCreateOptions(ID, "Alice")
+		expect(toHex(opts.user.id)).toBe(ID)
+	})
+
+	it("keeps the PRF eval input = SHA-256('nulo:profile:v1')", async () => {
+		const opts = await buildCreateOptions(ID, "Alice")
+		const first = opts.extensions?.prf?.eval?.first
+		expect(first).toBeDefined()
+		const expected = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("nulo:profile:v1")))
+		expect(toHex(first as BufferSource)).toBe(Buffer.from(expected).toString("hex"))
+	})
+
+	it("keeps rp, challenge size, credential params, and authenticator selection unchanged", async () => {
+		const opts = await buildCreateOptions(ID, "Alice")
+		expect(opts.rp).toEqual({ name: "Nulo", id: "passkey.nulo.sh" })
+		expect((opts.challenge as Uint8Array).byteLength).toBe(32)
+		expect(opts.pubKeyCredParams).toEqual([
+			{ type: "public-key", alg: -7 },
+			{ type: "public-key", alg: -257 },
+		])
+		expect(opts.authenticatorSelection).toEqual({
+			residentKey: "required",
+			userVerification: "required",
+			requireResidentKey: true,
+		})
+	})
+})
+
+// jsdom ships no WebAuthn, so the ceremony's `instanceof` checks need real classes to match.
+class StubAssertionResponse {
+	constructor(readonly userHandle: ArrayBuffer | Uint8Array | null) {}
+}
+class StubCredential {
+	constructor(
+		readonly rawId: Uint8Array,
+		private readonly ext: Record<string, unknown>,
+		readonly response?: StubAssertionResponse,
+	) {}
+	getClientExtensionResults() {
+		return this.ext
+	}
+}
+
+type CreateArgs = { publicKey: PublicKeyCredentialCreationOptions; signal?: AbortSignal }
+type GetArgs = { publicKey: PublicKeyCredentialRequestOptions; signal?: AbortSignal }
+
+const RAW_ID = new Uint8Array([1, 2, 3, 4])
+const OTHER_RAW_ID = new Uint8Array([9, 8, 7, 6])
+const PRF_AT_CREATE = new Uint8Array(32).fill(7)
+const PRF_AT_GET = new Uint8Array(32).fill(9)
+const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64")
+const CREATE_REQUEST = { mode: "create", step: "create", userHandle: ID, name: "Alice" } as const
+
+describe("runPasskeyCeremony in create mode", () => {
+	const create = vi.fn<(o: CreateArgs) => Promise<unknown>>()
+	const get = vi.fn<(o: GetArgs) => Promise<unknown>>()
+	const withPrfOnGet = () => new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null))
+
+	beforeEach(() => {
+		create.mockReset()
+		get.mockReset()
+		vi.stubGlobal("PublicKeyCredential", StubCredential)
+		vi.stubGlobal("AuthenticatorAssertionResponse", StubAssertionResponse)
+		vi.stubGlobal("navigator", { credentials: { create, get } })
+	})
+
+	afterEach(() => {
+		vi.unstubAllGlobals()
+	})
+
+	it("returns the create-time PRF without a second ceremony", async () => {
+		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true, results: { first: PRF_AT_CREATE } } }))
+		const data = await runPasskeyCeremony(CREATE_REQUEST)
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_CREATE), userHandle: ID })
+		expect(get).not.toHaveBeenCalled()
+	})
+
+	// Firefox's shape: `enabled` without output. The assertion also omits `userHandle`, which is
+	// legal once `allowCredentials` pins the request — the minted handle has to survive it.
+	it("falls back to a get pinned to the new credential and keeps the minted handle", async () => {
+		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
+		get.mockResolvedValue(withPrfOnGet())
+		const data = await runPasskeyCeremony(CREATE_REQUEST)
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(get).toHaveBeenCalledTimes(1)
+		const opts = get.mock.calls[0][0].publicKey
+		expect(opts.allowCredentials).toHaveLength(1)
+		expect(b64(opts.allowCredentials?.[0].id as Uint8Array)).toBe(b64(RAW_ID))
+		// The mock accepts invalid options, so check the fallback's security and derivation inputs.
+		expect(opts.rpId).toBe("passkey.nulo.sh")
+		expect(opts.userVerification).toBe("required")
+		const prfLabel = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("nulo:profile:v1")))
+		expect(toHex(opts.extensions?.prf?.eval?.first as BufferSource)).toBe(Buffer.from(prfLabel).toString("hex"))
+	})
+
+	/** The created-but-unconfirmed error `runPasskeyCeremony` rejects with. */
+	async function unconfirmed(): Promise<PasskeyUnconfirmedError> {
+		const err = await runPasskeyCeremony(CREATE_REQUEST).catch((e: unknown) => e)
+		expect(err).toBeInstanceOf(PasskeyUnconfirmedError)
+		return err as PasskeyUnconfirmedError
+	}
+
+	it("a failed confirmation keeps the new credential: its id, the registration handle and the cause", async () => {
+		const dismissed = new DOMException("not allowed", "NotAllowedError")
+		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
+		get.mockRejectedValue(dismissed)
+		const err = await unconfirmed()
+		expect(err.credentialId).toBe(b64(RAW_ID))
+		expect(err.userHandle).toBe(ID)
+		expect(err.cause).toBe(dismissed)
+	})
+
+	it("refuses a fallback assertion from a different credential", async () => {
+		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
+		get.mockResolvedValue(
+			new StubCredential(OTHER_RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)),
+		)
+		expect(((await unconfirmed()).cause as Error).message).toBe("Passkey PRF fallback returned a different credential")
+	})
+
+	it("keeps the new credential without re-prompting when the authenticator reports no PRF at all", async () => {
+		create.mockResolvedValue(new StubCredential(RAW_ID, {}))
+		const err = await unconfirmed()
+		expect(err.credentialId).toBe(b64(RAW_ID))
+		expect(err.userHandle).toBe(ID)
+		expect(err.cause).toBeInstanceOf(PasskeyPrfError)
+		expect((err.cause as Error).message).toBe("Passkey PRF not available")
+		expect(get).not.toHaveBeenCalled()
+	})
+
+	it("throws when the fallback assertion carries no PRF output either", async () => {
+		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
+		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: {} }, new StubAssertionResponse(null)))
+		const cause = (await unconfirmed()).cause
+		expect(cause).toBeInstanceOf(PasskeyPrfError)
+		expect((cause as Error).message).toBe("Passkey PRF has no results")
+	})
+
+	it("forwards the abort signal to both ceremonies", async () => {
+		const { signal } = new AbortController()
+		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
+		get.mockResolvedValue(withPrfOnGet())
+		await runPasskeyCeremony(CREATE_REQUEST, signal)
+		expect(create.mock.calls[0][0].signal).toBe(signal)
+		expect(get.mock.calls[0][0].signal).toBe(signal)
+	})
+})
+
+describe("confirmCreatedCredential", () => {
+	const get = vi.fn<(o: GetArgs) => Promise<unknown>>()
+
+	beforeEach(() => {
+		get.mockReset()
+		vi.stubGlobal("PublicKeyCredential", StubCredential)
+		vi.stubGlobal("AuthenticatorAssertionResponse", StubAssertionResponse)
+		vi.stubGlobal("navigator", { credentials: { get } })
+	})
+
+	afterEach(() => {
+		vi.unstubAllGlobals()
+	})
+
+	it("pins the assertion to the credential and restores the handle the assertion omitted", async () => {
+		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)))
+		const data = await confirmCreatedCredential(b64(RAW_ID), ID)
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(b64(get.mock.calls[0][0].publicKey.allowCredentials?.[0].id as Uint8Array)).toBe(b64(RAW_ID))
+	})
+
+	it("refuses an assertion from a different credential", async () => {
+		get.mockResolvedValue(
+			new StubCredential(OTHER_RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(null)),
+		)
+		await expect(confirmCreatedCredential(b64(RAW_ID), ID)).rejects.toThrow("Passkey PRF fallback returned a different credential")
+	})
+})
+
+describe("runPasskeyCeremony in get mode", () => {
+	const get = vi.fn<(o: GetArgs) => Promise<unknown>>()
+	const HANDLE = new Uint8Array([0xa3, 0xf2, 0x9b, 0x14])
+
+	beforeEach(() => {
+		get.mockReset()
+		vi.stubGlobal("PublicKeyCredential", StubCredential)
+		vi.stubGlobal("AuthenticatorAssertionResponse", StubAssertionResponse)
+		vi.stubGlobal("navigator", { credentials: { create: vi.fn(), get } })
+	})
+
+	afterEach(() => {
+		vi.unstubAllGlobals()
+	})
+
+	// The DOM hands `userHandle` over as an ArrayBuffer; the Uint8Array row covers a view.
+	it.each([
+		["ArrayBuffer", () => HANDLE.slice().buffer],
+		["Uint8Array", () => HANDLE.slice()],
+	])("returns the assertion's %s user handle as lowercase hex", async (_label, handle) => {
+		get.mockResolvedValue(new StubCredential(RAW_ID, { prf: { results: { first: PRF_AT_GET } } }, new StubAssertionResponse(handle())))
+		const data = await runPasskeyCeremony({ mode: "get", step: "unlock" })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: "a3f29b14" })
+	})
+})

@@ -1,0 +1,1026 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+import { assertRestoreEpoch, captureRestoreEpochs } from "@/wallet/services/restore-fence"
+import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
+import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
+import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { validateParams } from "@nulo/extension-messaging/zod"
+import { AztecNodeFactoryAdapter } from "@nulo/aztec-runtime/adapters"
+import type { NodeFactory } from "@nulo/aztec-runtime/ports"
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "@nulo/aztec-runtime/utils"
+import type { ILogger } from "@/wallet/logger"
+import { ProfileService } from "@/wallet/services/profile/service"
+import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
+import { requireOwnedRow } from "@/wallet/services/require-owned-row"
+import { nextRandomId, randomIdNotIn } from "@/wallet/services/id-allocators"
+import { purgeMalformedRows } from "@/wallet/services/purge-rows"
+import { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { EntityStorage } from "@/wallet/storage"
+import { Lock } from "@/wallet/utils"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { getErrorMessage } from "@nulo/wallet-core/utils"
+import type { BrowserApi } from "@nulo/wallet-core/ports"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID, walletChainId } from "@/utils/chain-ids"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import {
+	type ChainKind,
+	ERR_ACTIVE_NETWORK,
+	ERR_DUPLICATE_CHAIN,
+	ERR_DUPLICATE_ENDPOINT,
+	ERR_ENDPOINT_CHAIN_MISMATCH,
+	ERR_LAST_ENDPOINT,
+	ERR_PRIMARY_ENDPOINT,
+	ERR_UNATTENDED_LIVE_CHECK,
+	type Events,
+	findPrimaryEndpoint,
+	type Methods,
+	type Network,
+	type NetworkEndpoint,
+	type NetworkInfo,
+	NETWORK_SERVICE_NAME,
+	NETWORK_STORAGE_ROOT,
+	NetworkMethodSchemas,
+	networkInfoFrom,
+	NodeStatus,
+	NetworkRowSchema,
+	primaryEndpointUrl,
+} from "./spec"
+
+export * from "./spec"
+
+/**
+ * Per-profile active-network pointer. The service owns this state (vs. v0
+ * which left it to UI / chrome.storage.local). UI reads via
+ * `getActiveNetwork()`. Stored as a single value per profile.
+ */
+const ACTIVE_KEY_PREFIX = "nulo:core:active-network@"
+const activeKey = (profileId: string) => `${ACTIVE_KEY_PREFIX}${profileId}`
+
+/** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
+ *  seeded rows against (a row is mutable storage; these constants ship in code). Custom/devnet
+ *  kinds have no constant and are probe-verified at account creation instead. */
+const SEED_L1_BY_KIND: Partial<Record<ChainKind, number>> = {
+	mainnet: MAINNET_L1_CHAIN_ID,
+	testnet: TESTNET_L1_CHAIN_ID,
+	local: LOCAL_L1_CHAIN_ID,
+}
+
+interface DefaultSeed {
+	name: string
+	rpcUrl: string
+	chainId: number
+	/** Hardcoded L1 identity — NEVER probed at seed time (seeding is offline-safe and
+	 *  load-bearing for fresh profiles with the node down). Key derivation consumes it. */
+	l1ChainId: number
+	kind: ChainKind
+	isPrimaryActive: boolean
+	/** Provider label stamped on the seeded endpoint (Settings shows it instead of the raw URL). */
+	endpointLabel?: string
+}
+
+/**
+ * RPC URL stamped into the "Local Network" preset at build time. Defaults
+ * to `http://localhost:8080`; e2e runs override via `VITE_LOCAL_NETWORK_RPC_URL`
+ * so each parallel agent's wallet build talks to its own aztec sandbox.
+ *
+ * The chainId-zero check below also normalizes against this value so that
+ * if a user (or test fixture) edits the seed's endpoint URL via the
+ * settings UI, the chainId resolution still recognizes it as Local Network.
+ * For the structural path, callers that already know they're touching a
+ * `kind === "local"` network pass `kindHint` to `_getChainId` and bypass
+ * the URL comparison entirely.
+ */
+export const LOCAL_NETWORK_RPC_URL: string = (import.meta.env.VITE_LOCAL_NETWORK_RPC_URL as string | undefined) ?? "http://localhost:8080"
+
+const DEFAULT_SEEDS: DefaultSeed[] = [
+	{
+		name: "Testnet",
+		rpcUrl: TESTNET_RPC_URL,
+		chainId: CHAIN_IDS.TESTNET, // (TESTNET_L1_CHAIN_ID ^ TESTNET_ROLLUP_VERSION) >>> 0 — single-sourced in @/utils/chain-ids
+		l1ChainId: TESTNET_L1_CHAIN_ID,
+		kind: "testnet",
+		isPrimaryActive: true,
+		endpointLabel: "dRPC",
+	},
+	{
+		name: "Local Network",
+		rpcUrl: LOCAL_NETWORK_RPC_URL,
+		chainId: 0,
+		l1ChainId: LOCAL_L1_CHAIN_ID,
+		kind: "local",
+		isPrimaryActive: false,
+	},
+]
+
+/** The one seed marked `isPrimaryActive` (Testnet). Single source
+ *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
+ *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
+const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
+
+/**
+ * Strict RPC-URL equality that tolerates trailing-slash and casing differences
+ * on the seed-vs-user-input comparison only. Used by the chainId-zero check
+ * for the "Local Network" preset; the shared `normalizeRpcUrl` deliberately
+ * preserves what the user typed (path/query/fragment verbatim), so we need a
+ * more aggressive comparison here.
+ */
+function sameLocalNetworkUrl(a: string, b: string): boolean {
+	try {
+		const ua = new URL(a)
+		const ub = new URL(b)
+		const pa = ua.pathname.replace(/\/+$/, "")
+		const pb = ub.pathname.replace(/\/+$/, "")
+		return ua.protocol === ub.protocol && ua.host === ub.host && pa === pb && ua.search === ub.search && ua.hash === ub.hash
+	} catch {
+		return a === b
+	}
+}
+
+/** A node whose composite chain id the wallet reads as 0: the caller says the network is local, or
+ *  the URL is the Local Network seed's. */
+function isLocalNetworkTarget(rpcUrl: string, kindHint: ChainKind | undefined): boolean {
+	return kindHint === "local" || sameLocalNetworkUrl(rpcUrl, LOCAL_NETWORK_RPC_URL)
+}
+
+/** Refuses a node that is not `network`'s chain. The XOR composite alone is collision-prone: a
+ *  different (l1ChainId, rollupVersion) pair can XOR to the same value, and l1ChainId feeds key
+ *  derivation, so the L1 must match exactly too. */
+function assertSameChainIdentity(probed: { chainId: number; l1ChainId: number }, network: Network): void {
+	if (probed.chainId !== network.chainId) {
+		throw new Error(
+			`${ERR_ENDPOINT_CHAIN_MISMATCH}: This RPC reports chainId ${probed.chainId}, but this network is chain ${network.chainId}.`,
+		)
+	}
+	if (probed.l1ChainId !== network.l1ChainId) {
+		throw new Error(
+			`${ERR_ENDPOINT_CHAIN_MISMATCH}: This RPC reports L1 chain ${probed.l1ChainId}, but this network is L1 chain ${network.l1ChainId}.`,
+		)
+	}
+}
+
+function trimmedLabel(label: string | undefined): string | undefined {
+	return label?.trim() || undefined
+}
+
+/** Lowercase host + protocol; preserve path/query/fragment verbatim. Falls
+ *  back to the raw string if `URL` rejects it (validation runs elsewhere). */
+function normalizeRpcUrl(raw: string): string {
+	try {
+		const u = new URL(raw)
+		u.protocol = u.protocol.toLowerCase()
+		u.hostname = u.hostname.toLowerCase()
+		let s = u.toString()
+		if (!raw.endsWith("/") && s.endsWith("/") && u.pathname === "/") {
+			s = s.slice(0, -1)
+		}
+		return s
+	} catch {
+		return raw
+	}
+}
+
+export class NetworkService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
+	protected readonly rpcMethods = defineRpcMethods<Methods>()(
+		"getOrInitNetworks",
+		"seedDefaultsForProfile",
+		"getNetworks",
+		"getNetwork",
+		"addNetwork",
+		"renameNetwork",
+		"deleteNetwork",
+		"setActiveNetwork",
+		"getActiveNetwork",
+		"getPrimaryNetwork",
+		"setActiveForProfile",
+		"addEndpoint",
+		"updateEndpoint",
+		"deleteEndpoint",
+		"setPrimaryEndpoint",
+		"getNodeStatus",
+		"probeNodeStatus",
+	)
+	public static name = NETWORK_SERVICE_NAME
+
+	public readonly onNetworkAdded = new EventHandler<Network>()
+	public readonly onNetworkUpdated = new EventHandler<Network>()
+	public readonly onNetworkDeleted = new EventHandler<Network>()
+	public readonly onActiveNetworkChanged = new EventHandler<Network>()
+	public readonly onPrimaryEndpointChanged = new EventHandler<{ networkId: string; endpointId: string }>()
+	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
+
+	private readonly storage: EntityStorage<Network>
+	private readonly nodes = new Map<number, AztecNode>()
+	/** URL-keyed transient cache for pending-tx polling pin. */
+	private readonly transientNodes = new Map<string, { node: AztecNode; failures: number }>()
+	/** Never evicted: the keys are only the endpoints failed sends went through. */
+	private readonly singleAttemptNodes = new Map<string, AztecNode>()
+	private readonly lock: Lock
+	private readonly nodeFactory: NodeFactory
+
+	private profileService: ProfileService = null!
+	private pxeServiceClient: PxeServiceClient = null!
+
+	public constructor(
+		logger: ILogger,
+		private readonly browserApi: BrowserApi,
+		nodeFactory?: NodeFactory,
+	) {
+		super(NETWORK_SERVICE_NAME, logger)
+		this.storage = new EntityStorage<Network>(NETWORK_STORAGE_ROOT, browserApi.storage.local, (raw) => NetworkRowSchema.parse(raw))
+		// Watchdog DISABLED: deleteNetwork legitimately holds this lock across
+		// purgeChain → clearChainState, which rides the 30-minute prove-tx
+		// envelope (it drains behind an in-flight proof). A force-release would
+		// admit a concurrent network mutator into the middle of that cascade;
+		// queueing behind it is the correct semantic.
+		this.lock = new Lock("network", logger, null)
+		this.nodeFactory = nodeFactory ?? new AztecNodeFactoryAdapter()
+	}
+
+	protected async init(services: ServiceCollection) {
+		this.profileService = services.get(ProfileService.name)
+		this.profileService.onActiveProfileChanged.add(this.onActiveProfileChanged)
+		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
+		this.pxeServiceClient = new PxeServiceClient(this.logger)
+	}
+
+	// ── Read paths ───────────────────────────────────────────────────────
+
+	public async getOrInitNetworks(): Promise<Network[]> {
+		await this.ensureInitialized()
+		// Atomic read+capture: the lock wait + per-seed id allocation below can
+		// span the profile's deletion; seeding rows (and the active pointer) for
+		// a deleted profile creates orphans the cascade's snapshot predates.
+		const fence = await this.profileService.captureExecutionFence()
+		const deletion = this.profileService.getDeletionState()
+		const profile = { id: fence.profileId }
+		return await this.lock.withLock(async () => {
+			const existing = (await this.storage.getValues()).filter((n) => n.profileId === profile.id)
+			if (existing.length) return existing
+
+			const seeded: Network[] = []
+			let activeId: string | undefined
+			this.seedingProfiles.add(profile.id)
+			try {
+				for (const seed of DEFAULT_SEEDS) {
+					try {
+						const network = await this.seedOneNetworkLocked(profile.id, seed, fence, deletion)
+						seeded.push(network)
+						if (seed.isPrimaryActive) activeId = network.id
+					} catch (error) {
+						this.logError(`Failed to seed default '${seed.name}'`, error)
+					}
+				}
+			} finally {
+				this.seedingProfiles.delete(profile.id)
+			}
+			// The per-seed catch above (soft-fail is right for one bad seed) also
+			// swallows the deletion compensate's throw — without this re-assert the
+			// call would return [] as a SUCCESS for a deleted profile.
+			deletion.assertCurrent(fence.profileId, fence.epoch)
+			await this.activateSeededLocked(profile.id, seeded, activeId, fence, deletion)
+			return seeded
+		})
+	}
+
+	/** Profiles whose first activation is writing their default networks — see `servesChain`. */
+	private readonly seedingProfiles = new Set<string>()
+
+	/**
+	 * Full-backup import restores into a profile before activating it, so the fresh session
+	 * seeding above cannot serve it. Existence is checked through the profile list — a
+	 * deletion epoch alone would also admit an unknown or already-deleted id — and the fence
+	 * is re-asserted under the lock before every write. Only the target's own active pointer
+	 * is written: `this.nodes` is keyed by `chainId` alone and belongs to the active profile.
+	 */
+	public async seedDefaultsForProfile(profileId: string): Promise<Network[]> {
+		validateParams(NetworkMethodSchemas.seedDefaultsForProfile.params, [profileId], "seedDefaultsForProfile")
+		await this.ensureInitialized()
+		const deletion = this.profileService.getDeletionState()
+		const epochs = captureRestoreEpochs(deletion, [profileId])
+		if (!(await this.profileService.getProfiles()).some((p) => p.id === profileId)) {
+			throw new Error(`profile ${profileId} does not exist`)
+		}
+		return await this.lock.withLock(async () => {
+			assertRestoreEpoch(deletion, epochs, profileId)
+			const existing = (await this.storage.getValues()).filter((n) => n.profileId === profileId)
+			if (existing.length) return existing
+			const fence = { profileId, epoch: epochs.get(profileId) as number }
+			const seeded: Network[] = []
+			let activeId: string | undefined
+			for (const seed of DEFAULT_SEEDS) {
+				try {
+					const network = await this.seedOneNetworkLocked(profileId, seed, fence, deletion)
+					seeded.push(network)
+					if (seed.isPrimaryActive) activeId = network.id
+				} catch (error) {
+					this.logError(`Failed to seed default '${seed.name}'`, error)
+				}
+			}
+			assertRestoreEpoch(deletion, epochs, profileId)
+			const primary = activeId ?? seeded[0]?.id
+			if (primary !== undefined) await this._writeActive(profileId, primary)
+			return seeded
+		})
+	}
+
+	/** Build + persist one default seed, deletion-fenced on both sides of the write:
+	 *  a profile deleted mid-seed gets its just-written row compensated away. Caller
+	 *  holds the network lock. */
+	private async seedOneNetworkLocked(
+		profileId: string,
+		seed: (typeof DEFAULT_SEEDS)[number],
+		fence: { profileId: string; epoch: number },
+		deletion: ReturnType<ProfileService["getDeletionState"]>,
+	): Promise<Network> {
+		const network = await this._buildNetwork(
+			profileId,
+			seed.name,
+			seed.rpcUrl,
+			seed.chainId,
+			seed.l1ChainId,
+			seed.kind,
+			seed.endpointLabel,
+		)
+		deletion.assertCurrent(fence.profileId, fence.epoch)
+		await this.storage.set(network.id, network)
+		if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
+			await this.storage.delete(network.id)
+			throw profileDeletedError(fence.profileId)
+		}
+		return network
+	}
+
+	/** Point the active-network pointer at the primary seed (or the first seeded) and
+	 *  warm its node. Caller holds the network lock. */
+	private async activateSeededLocked(
+		profileId: string,
+		seeded: Network[],
+		primaryActiveId: string | undefined,
+		fence: { profileId: string; epoch: number },
+		deletion: ReturnType<ProfileService["getDeletionState"]>,
+	): Promise<void> {
+		const activeId = primaryActiveId ?? (seeded.length ? seeded[0]!.id : undefined)
+		if (!activeId) return
+		deletion.assertCurrent(fence.profileId, fence.epoch)
+		await this._writeActive(profileId, activeId)
+		const active = seeded.find((n) => n.id === activeId)!
+		const primaryEndpoint = findPrimaryEndpoint(active)!
+		this.nodes.set(active.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
+	}
+
+	public async getNetworks(chainId?: number): Promise<Network[]> {
+		validateParams(NetworkMethodSchemas.getNetworks.params, [chainId], "getNetworks")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return (await this.storage.getValues()).filter(
+			(n) => n.profileId === profile.id && (chainId === undefined || n.chainId === chainId),
+		)
+	}
+
+	/**
+	 * Lock-free, profileId-parameterized network read. Does NOT go through
+	 * `requireActiveProfile`, so it's safe to call under the profile facade lock
+	 * (the deletion coordinator's snapshot) AND from profile-scoped cleanup
+	 * consumers (e.g. `IncomingTransfer.onTokenDeleted`) that must scope to the
+	 * DELETED token's profile, never the active one.
+	 */
+	public async getNetworksRaw(profileId: string, chainId?: number): Promise<Network[]> {
+		await this.ensureInitialized()
+		return (await this.storage.getValues()).filter((n) => n.profileId === profileId && (chainId === undefined || n.chainId === chainId))
+	}
+
+	/**
+	 * The stored, seeded-constant-validated `l1ChainId` for `(profileId, chainId)` — the
+	 * key-derivation chain input. NO network probe (safe for restore-time cross-checks and
+	 * offline reads). For seeded kinds the row value must equal the immutable in-code constant:
+	 * `DEFAULT_SEEDS` only INITIALIZES a mutable row, so a tampered seeded row must fail here
+	 * rather than mint a self-consistent poisoned account. Lock-free, no requireActiveProfile.
+	 */
+	public async getL1ChainIdStored(profileId: string, chainId: number): Promise<number> {
+		await this.ensureInitialized()
+		const network = (await this.storage.getValues()).find((n) => n.profileId === profileId && n.chainId === chainId)
+		if (!network) throw new Error(`No network for chain ${chainId} in this profile`)
+		return NetworkService.assertCanonicalStoredL1(network)
+	}
+
+	/** Seeded-constant + canonical-range validation of a row's `l1ChainId` (sync — see
+	 *  `getL1ChainIdStored` for why the seeded row value must equal the in-code constant). */
+	private static assertCanonicalStoredL1(network: Network): number {
+		const seeded = SEED_L1_BY_KIND[network.kind ?? "custom"]
+		if (seeded !== undefined && network.l1ChainId !== seeded) {
+			throw new Error(`Seeded network L1 identity mismatch: stored ${network.l1ChainId}, expected ${seeded}`)
+		}
+		if (!Number.isSafeInteger(network.l1ChainId) || network.l1ChainId < 0 || network.l1ChainId > 0xffffffff) {
+			throw new Error(`Non-canonical stored l1ChainId: ${network.l1ChainId}`)
+		}
+		return network.l1ChainId
+	}
+
+	/**
+	 * `getL1ChainIdStored` plus, for NON-seeded kinds (custom/devnet), a live-probe confirmation
+	 * that the node still reports the stored L1 identity — required at ACCOUNT CREATION so a
+	 * poisoned custom-network row cannot mint a wrong-chain account. Seeded kinds are already
+	 * bound to in-code constants and stay offline-creatable; custom networks are online-configured
+	 * by nature, so an unreachable node fails creation with a clear error.
+	 *
+	 * ONE row read: the probe target and the returned l1ChainId must come from the same
+	 * snapshot — two independent reads could validate one row and return another's value.
+	 *
+	 * `unattended` refuses (`ERR_UNATTENDED_LIVE_CHECK`) instead of probing, so a caller acting on
+	 * a dApp's request — not the user's — can never make the wallet contact an endpoint. The
+	 * refusal is decided on the SAME row read the derivation uses: a preflight on a separate read
+	 * could be invalidated by a delete-and-re-add landing in between.
+	 */
+	public async resolveVerifiedL1ChainId(profileId: string, chainId: number, opts?: { unattended?: boolean }): Promise<number> {
+		await this.ensureInitialized()
+		const network = (await this.storage.getValues()).find((n) => n.profileId === profileId && n.chainId === chainId)
+		if (!network) throw new Error(`No network for chain ${chainId} in this profile`)
+		const stored = NetworkService.assertCanonicalStoredL1(network)
+		const kind = network.kind ?? "custom"
+		if (SEED_L1_BY_KIND[kind] === undefined) {
+			if (opts?.unattended) throw new Error(`${ERR_UNATTENDED_LIVE_CHECK}: network ${chainId} needs a live L1 identity check`)
+			const primary = findPrimaryEndpoint(network) ?? network.endpoints[0]
+			if (!primary) throw new Error("Network has no endpoint to verify its L1 identity against")
+			const probed = await this._probeChainIdentity(primary.rpcUrl, kind)
+			if (probed.l1ChainId !== stored) {
+				throw new Error(`Custom network L1 identity mismatch: stored ${stored}, node reports ${probed.l1ChainId}`)
+			}
+		}
+		return stored
+	}
+
+	public async getNetwork(id: string): Promise<Network> {
+		validateParams(NetworkMethodSchemas.getNetwork.params, [id], "getNetwork")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const network = requireOwnedRow(await this.storage.get(id), profile.id)
+		return network
+	}
+
+	public async getActiveNetwork(): Promise<Network | null> {
+		validateParams(NetworkMethodSchemas.getActiveNetwork.params, [], "getActiveNetwork")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const id = await this._readActive(profile.id)
+		if (!id) return null
+		const network = await this.storage.get(id)
+		if (network?.profileId !== profile.id) return null
+		return network
+	}
+
+	public async getPrimaryNetwork(): Promise<Network | null> {
+		validateParams(NetworkMethodSchemas.getPrimaryNetwork.params, [], "getPrimaryNetwork")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		if (!PRIMARY_SEED) return null
+		const rows = (await this.storage.getValues()).filter((n) => n.profileId === profile.id)
+		return rows.find((n) => n.chainId === PRIMARY_SEED.chainId) ?? null
+	}
+
+	public async setActiveForProfile(profileId: string, networkId: string): Promise<string> {
+		validateParams(NetworkMethodSchemas.setActiveForProfile.params, [profileId, networkId], "setActiveForProfile")
+		await this.ensureInitialized()
+		return await this.lock.withLock(async () => {
+			// `requireOwnedRow` rejects a networkId that isn't a row of THIS profile — the id comes from
+			// an attacker-controlled backup, so it must resolve only within the profile's restored rows.
+			requireOwnedRow(await this.storage.get(networkId), profileId)
+			await this._writeActive(profileId, networkId)
+			return networkId
+		})
+	}
+
+	// ── Network mutations ────────────────────────────────────────────────
+
+	public async addNetwork(name: string, rpcUrl: string): Promise<Network> {
+		validateParams(NetworkMethodSchemas.addNetwork.params, [name, rpcUrl], "addNetwork")
+		await this.ensureInitialized()
+		// Atomic read+capture: the RPC probe below can span the profile's
+		// deletion — the commit asserts flush against the write.
+		const fence = await this.profileService.captureExecutionFence()
+		const deletion = this.profileService.getDeletionState()
+		const { chainId, l1ChainId } = await this._probeChainIdentity(rpcUrl)
+		return await this.lock.withLock(async () => {
+			const existingForProfile = (await this.storage.getValues()).filter((n) => n.profileId === fence.profileId)
+			const sameChain = existingForProfile.find((n) => n.chainId === chainId)
+			if (sameChain) {
+				throw new Error(`${ERR_DUPLICATE_CHAIN}: A network for chain ${chainId} already exists in this profile.`)
+			}
+			if (existingForProfile.some((n) => n.name === name)) {
+				throw new Error(`Name '${name}' already in use.`)
+			}
+			const network = await this._buildNetwork(fence.profileId, name, rpcUrl, chainId, l1ChainId, "custom")
+			deletion.assertCurrent(fence.profileId, fence.epoch)
+			await this.storage.set(network.id, network)
+			// The set awaits — compensate before the row becomes observable.
+			if (!deletion.isCurrent(fence.profileId, fence.epoch)) {
+				await this.storage.delete(network.id)
+				throw profileDeletedError(fence.profileId)
+			}
+			this.emit("onNetworkAdded", network)
+			return network
+		})
+	}
+
+	public async renameNetwork(id: string, name: string): Promise<Network> {
+		validateParams(NetworkMethodSchemas.renameNetwork.params, [id, name], "renameNetwork")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(id), profile.id)
+			if (network.name === name) return network
+			const collision = (await this.storage.getValues()).find((n) => n.profileId === profile.id && n.id !== id && n.name === name)
+			if (collision) throw new Error(`Name '${name}' already in use.`)
+			network.name = name
+			await this.storage.set(id, network)
+			this.emit("onNetworkUpdated", network)
+			return network
+		})
+	}
+
+	public async deleteNetwork(id: string): Promise<Network> {
+		validateParams(NetworkMethodSchemas.deleteNetwork.params, [id], "deleteNetwork")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(id), profile.id)
+			const activeId = await this._readActive(profile.id)
+			if (activeId === id) {
+				throw new Error(`${ERR_ACTIVE_NETWORK}: Cannot delete the active network. Switch to another chain first.`)
+			}
+			// Reserve BEFORE the cascade: the network row deliberately survives
+			// until the cascade finishes, so "row exists" alone would admit a
+			// journal create landing between its sweep and the row delete. The
+			// reservation makes `isNetworkLive` refuse for the whole window.
+			this.deletingNetworks.add(id)
+			try {
+				// Purge chain-scoped state via the awaited coordinator
+				await this.purgeChain(profile.id, network.chainId, network.id)
+				await this.storage.delete(id)
+			} finally {
+				this.deletingNetworks.delete(id)
+			}
+			this.nodes.delete(network.chainId)
+			this.emit("onNetworkDeleted", network)
+			return network
+		})
+	}
+
+	/** Network ids whose delete cascade is in progress — see `isNetworkLive`. */
+	private readonly deletingNetworks = new Set<string>()
+
+	/**
+	 * Whether a network row exists AND is not mid-deletion. In-memory only:
+	 * a SW restart kills both the flag and any stale creator closure that
+	 * captured the network, so cross-restart staleness cannot occur.
+	 */
+	public async isNetworkLive(networkId: string): Promise<boolean> {
+		await this.ensureInitialized()
+		if (this.deletingNetworks.has(networkId)) return false
+		return (await this.storage.get(networkId)) !== undefined
+	}
+
+	/** Chain-keyed variant of {@link isNetworkLive} for writers that carry only
+	 *  (profileId, chainId) — false when no network row exists for the pair OR
+	 *  the row is reserved-deleting. Deliberately lock-free: liveness checks run
+	 *  inside OTHER services' critical sections (see TokenService.clearChainState
+	 *  on why the sweep/create ordering depends on that). */
+	public async isChainLive(profileId: string, chainId: number): Promise<boolean> {
+		await this.ensureInitialized()
+		const network = (await this.storage.getValues()).find((n) => n.profileId === profileId && n.chainId === chainId)
+		return network !== undefined && !this.deletingNetworks.has(network.id)
+	}
+
+	/** {@link isChainLive} for a dApp asking to connect, where a profile with no network rows, or one
+	 *  whose defaults are being written, counts as having the defaults: a new profile's rows are
+	 *  seeded by the shell's first bootstrap, which the activation's drain of queued discoveries can
+	 *  outrun, and the active network can never be deleted, so an empty profile is always one about
+	 *  to be seeded. Lock-free, like `isChainLive`. */
+	public async servesChain(profileId: string, chainId: number): Promise<boolean> {
+		await this.ensureInitialized()
+		const rows = (await this.storage.getValues()).filter((n) => n.profileId === profileId)
+		const seeding = rows.length === 0 || this.seedingProfiles.has(profileId)
+		if (seeding && DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)) return true
+		const network = rows.find((n) => n.chainId === chainId)
+		return network !== undefined && !this.deletingNetworks.has(network.id)
+	}
+
+	public async setActiveNetwork(id: string): Promise<Network> {
+		validateParams(NetworkMethodSchemas.setActiveNetwork.params, [id], "setActiveNetwork")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(id), profile.id)
+			await this._writeActive(profile.id, id)
+			const primaryEndpoint = findPrimaryEndpoint(network)
+			if (primaryEndpoint) {
+				this.nodes.set(network.chainId, this.nodeFactory.createNode(primaryEndpoint.rpcUrl))
+			}
+			this.emit("onActiveNetworkChanged", network)
+			return network
+		})
+	}
+
+	// ── Endpoint mutations ───────────────────────────────────────────────
+
+	public async addEndpoint(networkId: string, label: string | undefined, rpcUrl: string): Promise<NetworkEndpoint> {
+		validateParams(NetworkMethodSchemas.addEndpoint.params, [networkId, label, rpcUrl], "addEndpoint")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		// Peek the network's kind unlocked so the chainId probe can short-circuit
+		// for `kind === "local"` regardless of how the URL was edited. The lock-
+		// guarded re-read below handles the (rare) deletion race.
+		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
+		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			assertSameChainIdentity(probed, network)
+			const normalized = normalizeRpcUrl(rpcUrl)
+			if (network.endpoints.some((e) => e.rpcUrl === normalized)) {
+				throw new Error(`${ERR_DUPLICATE_ENDPOINT}: This URL is already an endpoint of this network.`)
+			}
+			const endpoint: NetworkEndpoint = {
+				id: this._fresh8(network.endpoints.map((e) => e.id)),
+				rpcUrl: normalized,
+				label: trimmedLabel(label),
+			}
+			network.endpoints.push(endpoint)
+			await this.storage.set(network.id, network)
+			this.emit("onNetworkUpdated", network)
+			return endpoint
+		})
+	}
+
+	public async updateEndpoint(
+		networkId: string,
+		endpointId: string,
+		label: string | undefined,
+		rpcUrl: string,
+	): Promise<NetworkEndpoint> {
+		validateParams(NetworkMethodSchemas.updateEndpoint.params, [networkId, endpointId, label, rpcUrl], "updateEndpoint")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const normalized = normalizeRpcUrl(rpcUrl)
+		// Peek the network's kind so the chainId probe can short-circuit for
+		// `kind === "local"` regardless of how the URL was edited.
+		const peek = requireOwnedRow(await this.storage.get(networkId), profile.id)
+		// Probe outside the lock even for an unchanged URL: the node's chain identity may have drifted.
+		const probed = await this._probeChainIdentity(rpcUrl, peek.kind)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			assertSameChainIdentity(probed, network)
+			const idx = network.endpoints.findIndex((e) => e.id === endpointId)
+			if (idx < 0) throw new Error("Invalid endpoint id")
+			const collision = network.endpoints.find((e, i) => i !== idx && e.rpcUrl === normalized)
+			if (collision) throw new Error(`${ERR_DUPLICATE_ENDPOINT}: Another endpoint of this network uses that URL.`)
+			const oldUrl = network.endpoints[idx]!.rpcUrl
+			const updated: NetworkEndpoint = {
+				id: endpointId,
+				rpcUrl: normalized,
+				label: trimmedLabel(label),
+			}
+			network.endpoints[idx] = updated
+			await this.storage.set(network.id, network)
+			// Evict transient cache for the OLD URL, plus the chain's primary node
+			// cache if this endpoint is the primary.
+			this.transientNodes.delete(oldUrl)
+			if (network.primaryEndpointId === endpointId) {
+				this.nodes.delete(network.chainId)
+			}
+			this.emit("onNetworkUpdated", network)
+			return updated
+		})
+	}
+
+	public async deleteEndpoint(networkId: string, endpointId: string): Promise<NetworkEndpoint> {
+		validateParams(NetworkMethodSchemas.deleteEndpoint.params, [networkId, endpointId], "deleteEndpoint")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			const idx = network.endpoints.findIndex((e) => e.id === endpointId)
+			if (idx < 0) throw new Error("Invalid endpoint id")
+			if (network.endpoints.length === 1) {
+				throw new Error(`${ERR_LAST_ENDPOINT}: Cannot delete the last endpoint. Delete the network instead.`)
+			}
+			if (network.primaryEndpointId === endpointId) {
+				throw new Error(`${ERR_PRIMARY_ENDPOINT}: Cannot delete the primary endpoint. Make another endpoint primary first.`)
+			}
+			const removed = network.endpoints.splice(idx, 1)[0]!
+			await this.storage.set(network.id, network)
+			this.transientNodes.delete(removed.rpcUrl)
+			this.emit("onNetworkUpdated", network)
+			return removed
+		})
+	}
+
+	public async setPrimaryEndpoint(networkId: string, endpointId: string): Promise<Network> {
+		validateParams(NetworkMethodSchemas.setPrimaryEndpoint.params, [networkId, endpointId], "setPrimaryEndpoint")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		return await this.lock.withLock(async () => {
+			const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+			if (!network.endpoints.some((e) => e.id === endpointId)) throw new Error("Invalid endpoint id")
+			if (network.primaryEndpointId === endpointId) return network
+			network.primaryEndpointId = endpointId
+			await this.storage.set(network.id, network)
+			this.nodes.delete(network.chainId)
+			this.emit("onPrimaryEndpointChanged", { networkId: network.id, endpointId })
+			this.emit("onNetworkUpdated", network)
+			return network
+		})
+	}
+
+	// ── Status / node accessors ──────────────────────────────────────────
+
+	public async getNodeStatus(networkId: string): Promise<NodeStatus> {
+		validateParams(NetworkMethodSchemas.getNodeStatus.params, [networkId], "getNodeStatus")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+		const primary = findPrimaryEndpoint(network)
+		if (!primary) return NodeStatus.Inactive
+		try {
+			// No kind hint, unlike probeNodeStatus: a local network off the seed URL reads InvalidChain.
+			const probedChainId = await this._getChainId(primary.rpcUrl)
+			if (probedChainId !== network.chainId) return NodeStatus.InvalidChain
+			return NodeStatus.Active
+		} catch {
+			return NodeStatus.Inactive
+		}
+	}
+
+	public async probeNodeStatus(networkId: string, timeoutMs: number): Promise<NodeStatus> {
+		validateParams(NetworkMethodSchemas.probeNodeStatus.params, [networkId, timeoutMs], "probeNodeStatus")
+		await this.ensureInitialized()
+		const profile = await requireActiveProfile(this.profileService)
+		const network = requireOwnedRow(await this.storage.get(networkId), profile.id)
+		const primary = findPrimaryEndpoint(network)
+		if (!primary) return NodeStatus.Inactive
+		try {
+			const probed = await this.nodeFactory.probeChainId(primary.rpcUrl, timeoutMs)
+			const effective = isLocalNetworkTarget(primary.rpcUrl, network.kind) ? 0 : probed
+			if (effective !== network.chainId) return NodeStatus.InvalidChain
+			return NodeStatus.Active
+		} catch {
+			return NodeStatus.Inactive
+		}
+	}
+
+	public async getNode(chainId: number): Promise<AztecNode> {
+		await this.ensureInitialized()
+		return await this.lock.withLock(async () => {
+			let node = this.nodes.get(chainId)
+			if (!node) {
+				const profile = await requireActiveProfile(this.profileService)
+				const network = (await this.storage.getValues()).find((n) => n.profileId === profile.id && n.chainId === chainId)
+				if (!network) throw new Error(`No network configured for chainId ${chainId}`)
+				const primary = findPrimaryEndpoint(network)
+				if (!primary) throw new Error(`Network ${network.id} has no primary endpoint`)
+				node = this.nodeFactory.createNode(primary.rpcUrl)
+				this.nodes.set(chainId, node)
+			}
+			return node
+		})
+	}
+
+	/** One bounded, silent storage read at `network`'s primary endpoint (see
+	 *  `NodeFactory.readPublicStorageOnce`). Background-only: not an RPC method. */
+	public async readPublicStorageOnce(network: Network, contract: AztecAddress, slot: Fr, timeoutMs: number): Promise<Fr> {
+		const rpcUrl = primaryEndpointUrl(network)
+		if (!rpcUrl) throw new Error(`Network ${network.id} has no primary endpoint`)
+		return this.nodeFactory.readPublicStorageOnce(rpcUrl, contract, slot, timeoutMs)
+	}
+
+	/**
+	 * Returns a transient AztecNode bound to `url` — used by pending-tx
+	 * polling so receipt fetches ALWAYS stay on the endpoint the tx was
+	 * submitted to, even after the user swaps the primary OR switches profiles
+	 * while the tx is still pending.
+	 *
+	 * Polling is pinned to the submitted URL and NEVER falls back to the active
+	 * profile's node. The previous fallback routed one profile's tx hash to
+	 * another profile's RPC provider (a cross-profile isolation leak) whenever
+	 * the submitted endpoint wasn't the active profile's — on a profile switch,
+	 * or after the submitting endpoint was edited/deleted. `url` is internal:
+	 * captured at submit time from a configured (allowlist-validated) endpoint
+	 * and reused verbatim, so dialing it without consulting the active profile
+	 * is the correct ownership model for a pending tx. (The only trust this
+	 * places is in the persisted `submittedEndpointUrl`, a wallet-written
+	 * field; the active-profile fallback survives only for the legacy
+	 * no-recorded-endpoint path in `TransactionService.updateTx`, where there
+	 * is no URL to pin to.)
+	 *
+	 * Failures are reported via `reportEndpointFailure(url)`; after 3
+	 * consecutive failures the cache entry is evicted and the next poll
+	 * rebuilds the same URL.
+	 */
+	public async getNodeForUrl(url: string): Promise<AztecNode> {
+		await this.ensureInitialized()
+		const entry = this.transientNodes.get(url)
+		if (entry) return entry.node
+		const created = this.nodeFactory.createNode(url)
+		this.transientNodes.set(url, { node: created, failures: 0 })
+		return created
+	}
+
+	/**
+	 * {@link getNodeForUrl}'s pinning for a caller that retries on its own schedule: every call
+	 * through the returned client is one attempt, so nothing leaves after the caller stops.
+	 */
+	public async getSingleAttemptNodeForUrl(url: string): Promise<AztecNode> {
+		await this.ensureInitialized()
+		const cached = this.singleAttemptNodes.get(url)
+		if (cached) return cached
+		const created = this.nodeFactory.createSingleAttemptNode(url, DEFAULT_REQUEST_TIMEOUT_MS)
+		this.singleAttemptNodes.set(url, created)
+		return created
+	}
+
+	public reportEndpointFailure(url: string): void {
+		const entry = this.transientNodes.get(url)
+		if (!entry) return
+		entry.failures += 1
+		if (entry.failures >= 3) this.transientNodes.delete(url)
+	}
+
+	/**
+	 * Synthesizes the legacy NetworkInfo struct from a Network's primary
+	 * endpoint. PXE-facing callers (account-state, execution, etc.) consume
+	 * this without knowing about endpoints.
+	 */
+	public async getNetworkInfo(networkId: string): Promise<NetworkInfo> {
+		await this.ensureInitialized()
+		return networkInfoFrom(await this.getNetwork(networkId))
+	}
+
+	// ── Cascade coordinator ──────────────────────────────────────────────
+
+	/**
+	 * Awaited purge of all chain-scoped state for `(profileId, chainId)`.
+	 * Called by `deleteNetwork` and `onProfileDeleted`.
+	 *
+	 * Pipeline:
+	 *  1. SW-side subscribers (registered via `registerChainPurgeSubscriber`
+	 *     from each chain-keyed peer service's `init`). Run in registration
+	 *     order. Expected peers + dependency order:
+	 *       - TransactionService (stops polling first; no stale reads)
+	 *       - TokenService (emits onTokenDeleted → TokenBalance reacts)
+	 *       - FpcService
+	 *       - AccountService (emits onAccountDeleted → AuthRegistry reacts)
+	 *       - OperationJournalService (wipes journal by networkId)
+	 *  2. Offscreen PXE clear via PxeServiceClient — ALWAYS last, hardcoded
+	 *     here (not a subscriber) because peer-state must be wiped before
+	 *     PXE resets, otherwise SW services could read against a fresh
+	 *     empty IDB and get inconsistent state.
+	 *
+	 * Subscriber failures are logged but don't abort the cascade — chain
+	 * cleanup is best-effort across boundaries. PXE clear is similarly
+	 * best-effort. The Network row is deleted by the caller (`deleteNetwork`)
+	 * only after this method resolves.
+	 */
+	public async purgeChain(profileId: string, chainId: number, networkId: string): Promise<void> {
+		// FAIL-FAST: run every step best-effort so a
+		// single failure doesn't strand the others, but PROPAGATE if ANY failed —
+		// the deletion coordinator must keep the tombstone + retry (idempotent), not
+		// treat a swallowed subscriber/PXE failure as "chain erased".
+		const errors: unknown[] = []
+		for (const subscriber of this.chainPurgeSubscribers) {
+			try {
+				await subscriber(profileId, chainId, networkId)
+			} catch (error) {
+				this.logError(`purgeChain subscriber failed for (${profileId}, ${chainId})`, error)
+				errors.push(error)
+			}
+		}
+		try {
+			await this.pxeServiceClient.clearChainState(profileId, chainId)
+		} catch (error) {
+			this.logError("PxeServiceClient.clearChainState failed", error)
+			errors.push(error)
+		}
+		this.emit("onChainPurged", { profileId, chainId })
+		if (errors.length) {
+			throw new Error(`purgeChain failed for (${profileId}, ${chainId}): ${errors.map(getErrorMessage).join("; ")}`)
+		}
+	}
+
+	private readonly chainPurgeSubscribers: Array<(profileId: string, chainId: number, networkId: string) => Promise<void>> = []
+
+	/**
+	 * Register an awaited cleanup for chain-purge events. Peer services call
+	 * this from their `init()`. Order matters — register in dependency order.
+	 */
+	public registerChainPurgeSubscriber(fn: (profileId: string, chainId: number, networkId: string) => Promise<void>): void {
+		this.chainPurgeSubscribers.push(fn)
+	}
+
+	// ── Profile lifecycle ────────────────────────────────────────────────
+
+	private readonly onActiveProfileChanged = async () => {
+		await this.lock.withLock(async () => {
+			this.nodes.clear()
+			this.transientNodes.clear()
+		})
+	}
+
+	/** Awaited profile-scoped network purge, called by the deletion coordinator
+	 *  (relocated from the removed fire-and-forget `onProfileDeleted` sub — D).
+	 *  FAIL-FAST: a `purgeChain`/PXE failure now PROPAGATES (was log-and-continue)
+	 *  so the coordinator keeps the tombstone + retries rather than reporting a
+	 *  false "deleted". */
+	public async purgeForProfile(profileId: string): Promise<void> {
+		await this.ensureInitialized()
+		this.logDebug(`purgeForProfile ${profileId}: purge chains + remove networks`)
+		await this.lock.withLock(async () => {
+			this.nodes.clear()
+			this.transientNodes.clear()
+			const networks = (await this.storage.getValues()).filter((n) => n.profileId === profileId)
+			for (const network of networks) {
+				await this.purgeChain(profileId, network.chainId, network.id)
+				await this.storage.delete(network.id)
+				this.emit("onNetworkDeleted", network)
+			}
+			// Raw second pass — a validation-failed row this profile owns is
+			// invisible to getValues() and would otherwise survive the purge forever.
+			await purgeMalformedRows(
+				this.storage,
+				(raw) => raw.profileId === profileId,
+				(id) => this.logDebug(`purged malformed network row ${id}`),
+			)
+			await this.browserApi.storage.local.remove(activeKey(profileId))
+		})
+	}
+
+	// ── Internals ────────────────────────────────────────────────────────
+
+	private async _buildNetwork(
+		profileId: string,
+		name: string,
+		rpcUrl: string,
+		chainId: number,
+		l1ChainId: number,
+		kind: ChainKind,
+		endpointLabel?: string,
+	): Promise<Network> {
+		const networkId = await this._freshStored8()
+		const endpointId = `${networkId}-ep0`
+		const endpoint: NetworkEndpoint = {
+			id: endpointId,
+			rpcUrl: normalizeRpcUrl(rpcUrl),
+			label: trimmedLabel(endpointLabel),
+		}
+		return {
+			id: networkId,
+			profileId,
+			chainId,
+			l1ChainId,
+			name,
+			primaryEndpointId: endpointId,
+			endpoints: [endpoint],
+			kind,
+		}
+	}
+
+	private async _freshStored8(): Promise<string> {
+		return nextRandomId(this.storage)
+	}
+
+	private _fresh8(taken: string[]): string {
+		const seen = new Set(taken)
+		return randomIdNotIn((id) => seen.has(id))
+	}
+
+	/** A caller that knows the network is local passes `kindHint`, so a Local Network endpoint
+	 *  edited away from the seed URL still reads as chain 0. */
+	private async _getChainId(rpcUrl: string, kindHint?: ChainKind): Promise<number> {
+		return (await this._probeChainIdentity(rpcUrl, kindHint)).chainId
+	}
+
+	/** One probe, both identities: the XOR composite (storage scoping) AND the exact `l1ChainId`
+	 *  (key derivation). The local carve-outs zero only the COMPOSITE — the probed l1ChainId is
+	 *  reported as-is, because derivation must never receive a synthetic 0. */
+	private async _probeChainIdentity(rpcUrl: string, kindHint?: ChainKind): Promise<{ chainId: number; l1ChainId: number }> {
+		try {
+			const rpc = this.nodeFactory.createNode(rpcUrl)
+			const info = await rpc.getNodeInfo()
+			const l1ChainId = info.l1ChainId
+			if (isLocalNetworkTarget(rpcUrl, kindHint)) return { chainId: 0, l1ChainId }
+			return { chainId: walletChainId(info.l1ChainId, info.rollupVersion), l1ChainId }
+		} catch (error) {
+			this.logError("Failed to fetch node info", error)
+			throw new Error("Failed to fetch node info")
+		}
+	}
+
+	private async _readActive(profileId: string): Promise<string | undefined> {
+		const r = await this.browserApi.storage.local.get(activeKey(profileId))
+		const raw = r[activeKey(profileId)]
+		return typeof raw === "string" ? raw : undefined
+	}
+
+	private async _writeActive(profileId: string, networkId: string): Promise<void> {
+		await this.browserApi.storage.local.set({ [activeKey(profileId)]: networkId })
+	}
+}

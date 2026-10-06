@@ -1,0 +1,780 @@
+import { describe, test, expect } from "vitest"
+import { enforceScope, enforceScopeWithSession } from "./scope-enforcement"
+import { isCreateAuthWitCoveredByTxOrSimulationScope } from "./method-scope-checkers"
+import type { Capability, GrantedCapabilityRecord } from "./capabilities"
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+const grant = (cap: Capability): GrantedCapabilityRecord => ({
+	capability: cap,
+	grantedAt: Date.now(),
+})
+
+/** Mock AztecAddress-like object with toString(). */
+const addr = (hex: string) => ({ toString: () => hex })
+
+const ADDR_A = "0x1111111111111111111111111111111111111111111111111111111111111111"
+const ADDR_B = "0x2222222222222222222222222222222222222222222222222222222222222222"
+const CLASS_A = `0x${"0c".repeat(32)}`
+const CLASS_B = `0x${"0d".repeat(32)}`
+
+// ── Pass-through (no scope dimension) ─────────────────────────────────
+
+describe("pass-through methods", () => {
+	test("unknown method with empty grants does not throw", () => {
+		expect(() => enforceScope("unknownMethod", [], [])).not.toThrow()
+	})
+
+	// registerSender and getAddressBook are not
+	// pass-through. They require `data.addressBook === true`. With no grants,
+	// the type-level check at enforceCapability would have thrown first, but
+	// if grants exist without the addressBook flag, the scope checker fires.
+	test("registerSender passes with empty grants (caller's enforceCapability gate handles missing grant)", () => {
+		expect(() => enforceScope("registerSender", [addr(ADDR_A)], [])).not.toThrow()
+	})
+
+	test("getAddressBook passes with empty grants (caller's enforceCapability gate handles missing grant)", () => {
+		expect(() => enforceScope("getAddressBook", [], [])).not.toThrow()
+	})
+
+	test("a non-boolean addressBook sub-bit denies both methods (only literal true grants)", () => {
+		const grants = [grant({ type: "data", addressBook: "yes" } as unknown as Capability)]
+		expect(() => enforceScope("getAddressBook", [], grants)).toThrow(/addressBook=true/)
+		expect(() => enforceScope("registerSender", [], grants)).toThrow(/addressBook=true/)
+	})
+})
+
+// ── getAccounts canGet sub-grant ──────────────────────────────
+
+describe("getAccounts requires accounts.canGet=true", () => {
+	test("accounts grant with canGet=true passes", () => {
+		const grants = [grant({ type: "accounts", canGet: true, accounts: [] } as Capability)]
+		expect(() => enforceScope("getAccounts", [], grants)).not.toThrow()
+	})
+
+	test("accounts grant with canGet=false throws", () => {
+		const grants = [grant({ type: "accounts", canGet: false, accounts: [] } as Capability)]
+		expect(() => enforceScope("getAccounts", [], grants)).toThrow(/canGet=true/)
+	})
+
+	test("accounts grant with canGet missing (undefined) throws", () => {
+		const grants = [grant({ type: "accounts", accounts: [] } as Capability)]
+		expect(() => enforceScope("getAccounts", [], grants)).toThrow(/canGet=true/)
+	})
+})
+
+// ── data.addressBook sub-grant ─────────────────────────────────
+
+describe("getAddressBook + registerSender require data.addressBook=true", () => {
+	test("getAddressBook with addressBook=true passes", () => {
+		const grants = [grant({ type: "data", addressBook: true } as Capability)]
+		expect(() => enforceScope("getAddressBook", [], grants)).not.toThrow()
+	})
+
+	test("getAddressBook with addressBook=false throws", () => {
+		const grants = [grant({ type: "data", addressBook: false } as Capability)]
+		expect(() => enforceScope("getAddressBook", [], grants)).toThrow(/addressBook=true/)
+	})
+
+	test("getAddressBook with addressBook missing throws", () => {
+		const grants = [grant({ type: "data" } as Capability)]
+		expect(() => enforceScope("getAddressBook", [], grants)).toThrow(/addressBook=true/)
+	})
+
+	test("registerSender with addressBook=true passes", () => {
+		const grants = [grant({ type: "data", addressBook: true } as Capability)]
+		expect(() => enforceScope("registerSender", [addr(ADDR_A)], grants)).not.toThrow()
+	})
+
+	test("registerSender with addressBook=false throws", () => {
+		const grants = [grant({ type: "data", addressBook: false } as Capability)]
+		expect(() => enforceScope("registerSender", [addr(ADDR_A)], grants)).toThrow(/addressBook=true/)
+	})
+})
+
+// ── account-scope-array allow-list ─────────────────────────────
+
+describe("account-scope arrays validated against session-approved accounts", () => {
+	const sessionAccounts = new Set([`aztec:0:${ADDR_A}`])
+
+	test("simulateTx with no extra scopes passes through to base check", () => {
+		const grants = [
+			grant({
+				type: "simulation",
+				transactions: { scope: [{ contract: "*", function: "*" }] },
+			} as Capability),
+		]
+		const args = [{ calls: [] }, { from: ADDR_A }] // empty-calls fast-path
+		expect(() => enforceScopeWithSession("simulateTx", args, grants, sessionAccounts)).not.toThrow()
+	})
+
+	test("simulateTx with opts.additionalScopes containing un-approved account throws (empty-calls bypass closed)", () => {
+		const grants = [
+			grant({
+				type: "simulation",
+				transactions: { scope: [{ contract: "*", function: "*" }] },
+			} as Capability),
+		]
+		const args = [
+			{ calls: [] }, // empty calls — pre-fix, scope-enforcement returned early
+			{ from: ADDR_A, additionalScopes: [`aztec:0:${ADDR_B}`] },
+		]
+		expect(() => enforceScopeWithSession("simulateTx", args, grants, sessionAccounts)).toThrow(/not in session's approved accounts/)
+	})
+
+	test("simulateTx with opts.scopes matching approved account passes", () => {
+		const grants = [
+			grant({
+				type: "simulation",
+				transactions: { scope: [{ contract: "*", function: "*" }] },
+			} as Capability),
+		]
+		const args = [{ calls: [] }, { from: ADDR_A, scopes: [`aztec:0:${ADDR_A}`] }]
+		expect(() => enforceScopeWithSession("simulateTx", args, grants, sessionAccounts)).not.toThrow()
+	})
+
+	test("getPrivateEvents with eventFilter.scopes containing un-approved account throws", () => {
+		const grants = [
+			grant({
+				type: "data",
+				privateEvents: { contracts: "*" },
+			} as Capability),
+		]
+		const args = [{ eventName: "Transfer" }, { contractAddress: addr(ADDR_A), scopes: [`aztec:0:${ADDR_B}`] }]
+		expect(() => enforceScopeWithSession("getPrivateEvents", args, grants, sessionAccounts)).toThrow(
+			/not in session's approved accounts/,
+		)
+	})
+
+	test("sendTx with opts.additionalScopes containing un-approved account throws (the highest-impact path)", () => {
+		const grants = [
+			grant({
+				type: "transaction",
+				scope: [{ contract: "*", function: "*" }],
+			} as Capability),
+		]
+		const args = [{ calls: [] }, { from: ADDR_A, additionalScopes: [`aztec:0:${ADDR_B}`] }]
+		expect(() => enforceScopeWithSession("sendTx", args, grants, sessionAccounts)).toThrow(/not in session's approved accounts/)
+	})
+
+	test("plain enforceScope (no session) does not check account scopes — back-compat preserved", () => {
+		const grants = [
+			grant({
+				type: "transaction",
+				scope: [{ contract: "*", function: "*" }],
+			} as Capability),
+		]
+		const args = [{ calls: [] }, { from: ADDR_A, additionalScopes: [`aztec:0:${ADDR_B}`] }]
+		// Plain enforceScope WITHOUT session context is unchanged; dispatcher decides
+		// whether to use enforceScopeWithSession or fall back.
+		expect(() => enforceScope("sendTx", args, grants)).not.toThrow()
+	})
+})
+
+// ── registerContract ──────────────────────────────────────────────────
+
+describe("registerContract", () => {
+	test("wildcard contracts + canRegister passes", () => {
+		const grants = [grant({ type: "contracts", contracts: "*", canRegister: true })]
+		expect(() => enforceScope("registerContract", [{ address: addr(ADDR_A) }], grants)).not.toThrow()
+	})
+
+	test("specific address in list + canRegister passes", () => {
+		const grants = [grant({ type: "contracts", contracts: [ADDR_A], canRegister: true })]
+		expect(() => enforceScope("registerContract", [{ address: addr(ADDR_A) }], grants)).not.toThrow()
+	})
+
+	test("address NOT in list throws", () => {
+		const grants = [grant({ type: "contracts", contracts: [ADDR_A], canRegister: true })]
+		expect(() => enforceScope("registerContract", [{ address: addr(ADDR_B) }], grants)).toThrow(/Scope violation/)
+	})
+
+	test("canRegister: false with wildcard throws", () => {
+		const grants = [grant({ type: "contracts", contracts: "*", canRegister: false })]
+		expect(() => enforceScope("registerContract", [{ address: addr(ADDR_A) }], grants)).toThrow(/Scope violation/)
+	})
+})
+
+// ── getContractMetadata ───────────────────────────────────────────────
+
+describe("getContractMetadata", () => {
+	test("wildcard + canGetMetadata passes", () => {
+		const grants = [grant({ type: "contracts", contracts: "*", canGetMetadata: true })]
+		expect(() => enforceScope("getContractMetadata", [addr(ADDR_A)], grants)).not.toThrow()
+	})
+
+	test("address in list passes", () => {
+		const grants = [grant({ type: "contracts", contracts: [ADDR_A], canGetMetadata: true })]
+		expect(() => enforceScope("getContractMetadata", [addr(ADDR_A)], grants)).not.toThrow()
+	})
+
+	test("address not in list throws", () => {
+		const grants = [grant({ type: "contracts", contracts: [ADDR_A], canGetMetadata: true })]
+		expect(() => enforceScope("getContractMetadata", [addr(ADDR_B)], grants)).toThrow(/Scope violation/)
+	})
+})
+
+// ── getContractClassMetadata ──────────────────────────────────────────
+
+describe("getContractClassMetadata", () => {
+	test("wildcard classes passes", () => {
+		const grants = [grant({ type: "contractClasses", classes: "*", canGetMetadata: true })]
+		expect(() => enforceScope("getContractClassMetadata", [addr(CLASS_A)], grants)).not.toThrow()
+	})
+
+	test("class ID in list passes", () => {
+		const grants = [grant({ type: "contractClasses", classes: [CLASS_A], canGetMetadata: true })]
+		expect(() => enforceScope("getContractClassMetadata", [addr(CLASS_A)], grants)).not.toThrow()
+	})
+
+	test("class ID not in list throws", () => {
+		const grants = [grant({ type: "contractClasses", classes: [CLASS_A], canGetMetadata: true })]
+		expect(() => enforceScope("getContractClassMetadata", [addr(CLASS_B)], grants)).toThrow(/Scope violation/)
+	})
+})
+
+// ── sendTx ────────────────────────────────────────────────────────────
+
+describe("sendTx", () => {
+	const exec = (calls: { to: { toString(): string }; name: string }[]) => ({ calls })
+
+	test("wildcard scope passes", () => {
+		const grants = [grant({ type: "transaction", scope: "*" })]
+		expect(() => enforceScope("sendTx", [exec([{ to: addr(ADDR_A), name: "transfer" }])], grants)).not.toThrow()
+	})
+
+	test("specific contract+function match passes", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "transfer" }] })]
+		expect(() => enforceScope("sendTx", [exec([{ to: addr(ADDR_A), name: "transfer" }])], grants)).not.toThrow()
+	})
+
+	test("contract with wildcard function passes", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "*" }] })]
+		expect(() => enforceScope("sendTx", [exec([{ to: addr(ADDR_A), name: "anything" }])], grants)).not.toThrow()
+	})
+
+	test("call to out-of-scope contract throws", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "*" }] })]
+		expect(() => enforceScope("sendTx", [exec([{ to: addr(ADDR_B), name: "transfer" }])], grants)).toThrow(/Scope violation/)
+	})
+
+	test("multi-call: one in scope, one out throws", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "*" }] })]
+		const calls = [
+			{ to: addr(ADDR_A), name: "transfer" },
+			{ to: addr(ADDR_B), name: "mint" },
+		]
+		expect(() => enforceScope("sendTx", [exec(calls)], grants)).toThrow(/Scope violation/)
+	})
+
+	test("multi-call: all in scope passes", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: "*", function: "*" }] })]
+		const calls = [
+			{ to: addr(ADDR_A), name: "transfer" },
+			{ to: addr(ADDR_B), name: "mint" },
+		]
+		expect(() => enforceScope("sendTx", [exec(calls)], grants)).not.toThrow()
+	})
+
+	test("empty calls array passes (vacuously true)", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "transfer" }] })]
+		expect(() => enforceScope("sendTx", [exec([])], grants)).not.toThrow()
+	})
+})
+
+// ── simulateTx ────────────────────────────────────────────────────────
+
+describe("simulateTx", () => {
+	const exec = (calls: { to: { toString(): string }; name: string }[]) => ({ calls })
+
+	test("wildcard transactions scope passes", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: "*" } })]
+		expect(() => enforceScope("simulateTx", [exec([{ to: addr(ADDR_A), name: "fn" }])], grants)).not.toThrow()
+	})
+
+	test("specific match passes", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_A, function: "fn" }] } })]
+		expect(() => enforceScope("simulateTx", [exec([{ to: addr(ADDR_A), name: "fn" }])], grants)).not.toThrow()
+	})
+
+	test("out of scope throws", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_A, function: "fn" }] } })]
+		expect(() => enforceScope("simulateTx", [exec([{ to: addr(ADDR_B), name: "fn" }])], grants)).toThrow(/Scope violation/)
+	})
+
+	test("no transactions sub-cap throws", () => {
+		const grants = [grant({ type: "simulation", utilities: { scope: "*" } })]
+		expect(() => enforceScope("simulateTx", [exec([{ to: addr(ADDR_A), name: "fn" }])], grants)).toThrow(/Scope violation/)
+	})
+
+	test("(SECURITY) an EMPTY function name is rejected even under a matching {function:''} scope", () => {
+		// The empty-name bypass: a dApp scopes `{function:""}` and sends `name:""`.
+		// matchesScope must NOT authorize it — the ABI sinks would otherwise treat
+		// "" as "absent" and sign/run a different selector silently.
+		const grants = [grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_A, function: "" }] } })]
+		expect(() => enforceScope("simulateTx", [exec([{ to: addr(ADDR_A), name: "" }])], grants)).toThrow(/Scope violation/)
+	})
+
+	test("(SECURITY) a null call element is a controlled scope error, not a TypeError", () => {
+		// checkSimulationTransactions must validate each call element before
+		// dereferencing `call.to` (a null entry previously threw a raw TypeError).
+		const grants = [grant({ type: "simulation", transactions: { scope: "*" } })]
+		expect(() => enforceScope("simulateTx", [{ calls: [null] }], grants)).toThrow(/exec\.calls entries must be objects/)
+	})
+})
+
+// ── executeUtility ────────────────────────────────────────────────────
+
+describe("executeUtility", () => {
+	test("wildcard utilities scope passes", () => {
+		const grants = [grant({ type: "simulation", utilities: { scope: "*" } })]
+		expect(() => enforceScope("executeUtility", [{ to: addr(ADDR_A), name: "view_balance" }], grants)).not.toThrow()
+	})
+
+	test("specific match passes", () => {
+		const grants = [grant({ type: "simulation", utilities: { scope: [{ contract: ADDR_A, function: "view_balance" }] } })]
+		expect(() => enforceScope("executeUtility", [{ to: addr(ADDR_A), name: "view_balance" }], grants)).not.toThrow()
+	})
+
+	test("out of scope throws", () => {
+		const grants = [grant({ type: "simulation", utilities: { scope: [{ contract: ADDR_A, function: "view_balance" }] } })]
+		expect(() => enforceScope("executeUtility", [{ to: addr(ADDR_B), name: "view_balance" }], grants)).toThrow(/Scope violation/)
+	})
+
+	test("no utilities sub-cap throws", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: "*" } })]
+		expect(() => enforceScope("executeUtility", [{ to: addr(ADDR_A), name: "fn" }], grants)).toThrow(/Scope violation/)
+	})
+})
+
+// ── profileTx ─────────────────────────────────────────────────────────
+
+describe("profileTx", () => {
+	const exec = (calls: { to: { toString(): string }; name: string }[]) => ({ calls })
+
+	test("wildcard passes", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: "*" } })]
+		expect(() => enforceScope("profileTx", [exec([{ to: addr(ADDR_A), name: "fn" }])], grants)).not.toThrow()
+	})
+
+	test("out of scope throws", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_A, function: "fn" }] } })]
+		expect(() => enforceScope("profileTx", [exec([{ to: addr(ADDR_B), name: "fn" }])], grants)).toThrow(/Scope violation/)
+	})
+})
+
+// ── simulateViews / getCompleteAddress ───────────────────────────────
+//
+// Both wallet-sdk methods were retired. They appear in no METHOD_SCOPE_CHECKER
+// entry, so enforceScope must no-op for them. This guards against accidental
+// re-introduction of either method without a scope checker — which would
+// silently bypass scope enforcement.
+
+describe("retired methods", () => {
+	test("simulateViews is a no-op (no checker registered)", () => {
+		const grants = [grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_A, function: "view" }] } })]
+		expect(() => enforceScope("simulateViews", [[{ to: addr(ADDR_B), name: "view" }]], grants)).not.toThrow()
+	})
+
+	test("getCompleteAddress is a no-op (no checker registered)", () => {
+		const grants = [grant({ type: "accounts", canGet: true, accounts: [] })]
+		expect(() => enforceScope("getCompleteAddress", [ADDR_A], grants)).not.toThrow()
+	})
+})
+
+// ── getPrivateEvents ──────────────────────────────────────────────────
+
+describe("getPrivateEvents", () => {
+	test("wildcard contracts passes", () => {
+		const grants = [grant({ type: "data", privateEvents: { contracts: "*" } })]
+		expect(() => enforceScope("getPrivateEvents", [{}, { contractAddress: addr(ADDR_A) }], grants)).not.toThrow()
+	})
+
+	test("contract in list passes", () => {
+		const grants = [grant({ type: "data", privateEvents: { contracts: [ADDR_A] } })]
+		expect(() => enforceScope("getPrivateEvents", [{}, { contractAddress: addr(ADDR_A) }], grants)).not.toThrow()
+	})
+
+	test("contract not in list throws", () => {
+		const grants = [grant({ type: "data", privateEvents: { contracts: [ADDR_A] } })]
+		expect(() => enforceScope("getPrivateEvents", [{}, { contractAddress: addr(ADDR_B) }], grants)).toThrow(/Scope violation/)
+	})
+
+	// With the scope's account approved the account check passes, so only the grant decides.
+	describe("the scope's account approved", () => {
+		const sessionAccounts = new Set([`aztec:0:${ADDR_A}`, ADDR_A])
+		const args = [{ eventName: "Transfer" }, { contractAddress: addr(ADDR_B), scopes: [addr(ADDR_A)] }]
+
+		test("private events granted pass", () => {
+			const grants = [grant({ type: "data", addressBook: true, privateEvents: { contracts: "*" } })]
+			expect(() => enforceScopeWithSession("getPrivateEvents", args, grants, sessionAccounts)).not.toThrow()
+		})
+
+		test("an address-book-only grant fails the private-events check", () => {
+			const grants = [grant({ type: "data", addressBook: true })]
+			expect(() => enforceScopeWithSession("getPrivateEvents", args, grants, sessionAccounts)).toThrow(
+				/not permitted by granted data\.privateEvents scope/,
+			)
+		})
+	})
+})
+
+// ── createAuthWit ─────────────────────────────────────────────────────
+
+describe("createAuthWit", () => {
+	const accountsCap = (canCreateAuthWit: boolean, accounts: string[]): Capability => ({
+		type: "accounts",
+		canCreateAuthWit,
+		accounts: accounts.map((a) => ({ alias: "test", item: a })),
+	})
+
+	test("canCreateAuthWit + matching account passes", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A]))]
+		// A structured intent is required now (raw/unstructured args[1] is rejected);
+		// accounts-only, so the call-level check is inapplicable.
+		const intent = { caller: addr(ADDR_A), call: { to: addr(ADDR_B), name: "transfer" } }
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), intent], grants)).not.toThrow()
+	})
+
+	test("canCreateAuthWit with NO accounts list (manifest omits it) passes — regression for the createAuthWit crash", () => {
+		// A dApp can't enumerate the wallet's accounts at connect time, so a real manifest grants
+		// canCreateAuthWit WITHOUT an `accounts` list. This must not throw "Cannot read properties of
+		// undefined (reading 'some')" — it's permitted, bounded by the wallet + the call-scope check.
+		const grants = [grant({ type: "accounts", canCreateAuthWit: true } as Capability)]
+		const intent = { caller: addr(ADDR_A), call: { to: addr(ADDR_B), name: "transfer" } }
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), intent], grants)).not.toThrow()
+	})
+
+	test("canCreateAuthWit: false throws", () => {
+		const grants = [grant(accountsCap(false, [ADDR_A]))]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), {}], grants)).toThrow(/Scope violation/)
+	})
+
+	test("account not in list throws", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A]))]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_B), {}], grants)).toThrow(/Scope violation/)
+	})
+
+	test("raw / unstructured messageHashOrIntent is rejected", () => {
+		// A dApp-supplied raw message hash carries no semantic info to scope-check, so it
+		// cannot be proven within scope. The pre-fix code let it fall through and get signed
+		// silently. It must now be rejected; the dApp must pass a structured CallIntent.
+		const grants = [grant(accountsCap(true, [ADDR_A]))]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), "0xdeadbeef"], grants)).toThrow(/structured call intent/)
+	})
+
+	// ── CallIntent target-call scope enforcement ──────────────────────────
+
+	const callIntent = (to: string, name: string) => ({
+		caller: addr(ADDR_A),
+		call: { to: addr(to), name },
+	})
+
+	test("CallIntent within transaction scope passes", () => {
+		const grants = [
+			grant(accountsCap(true, [ADDR_A])),
+			grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "transfer" }] }),
+		]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_B, "transfer")], grants)).not.toThrow()
+	})
+
+	test("CallIntent with function wildcard passes", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A])), grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "*" }] })]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_B, "mint")], grants)).not.toThrow()
+	})
+
+	test("CallIntent outside transaction scope throws", () => {
+		const grants = [
+			grant(accountsCap(true, [ADDR_A])),
+			grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "transfer" }] }),
+		]
+		// Authwit would authorize a call on ADDR_A, but dApp only has scope for ADDR_B
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_A, "transfer")], grants)).toThrow(/Scope violation/)
+	})
+
+	test("CallIntent with wrong function throws", () => {
+		const grants = [
+			grant(accountsCap(true, [ADDR_A])),
+			grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "transfer" }] }),
+		]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_B, "burn")], grants)).toThrow(/Scope violation/)
+	})
+
+	test("CallIntent covered by simulation.transactions.scope passes", () => {
+		const grants = [
+			grant(accountsCap(true, [ADDR_A])),
+			grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_B, function: "transfer" }] } }),
+		]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_B, "transfer")], grants)).not.toThrow()
+	})
+
+	test("CallIntent without any tx/sim capability (accounts-only) passes (backward-compat)", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A]))]
+		// No transaction or simulation grant — call-level check is inapplicable.
+		// accounts-level check (canCreateAuthWit + matching account) still gates.
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_B, "transfer")], grants)).not.toThrow()
+	})
+
+	test("CallIntent with wildcard transaction scope passes", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A])), grant({ type: "transaction", scope: "*" })]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), callIntent(ADDR_B, "transfer")], grants)).not.toThrow()
+	})
+
+	// ── IntentInnerHash consumer scope ────────────────────────────────────
+
+	const innerHash = (consumer: string) => ({
+		consumer: addr(consumer),
+		innerHash: "0xabc",
+	})
+
+	test("IntentInnerHash with consumer in wildcard-fn transaction scope passes", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A])), grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "*" }] })]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), innerHash(ADDR_B)], grants)).not.toThrow()
+	})
+
+	test("IntentInnerHash with consumer NOT in scope throws", () => {
+		const grants = [grant(accountsCap(true, [ADDR_A])), grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "*" }] })]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), innerHash(ADDR_A)], grants)).toThrow(/Scope violation/)
+	})
+
+	test("IntentInnerHash with consumer narrowly scoped (specific function) throws", () => {
+		const grants = [
+			grant(accountsCap(true, [ADDR_A])),
+			grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "transfer" }] }),
+		]
+		// We can't verify function from inner-hash, so require wildcard coverage — narrowly scoped grants must fail.
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), innerHash(ADDR_B)], grants)).toThrow(/Scope violation/)
+	})
+
+	// ── Raw / unstructured message hash — rejected ─────────────────
+
+	test("raw empty object (unstructured) is rejected", () => {
+		// Was pinned as "accounts check still applies" (no-throw); that was the hole —
+		// an unstructured args[1] fell through the scope check and got signed silently. Now rejected.
+		const grants = [grant(accountsCap(true, [ADDR_A]))]
+		expect(() => enforceScope("createAuthWit", [addr(ADDR_A), {}], grants)).toThrow(/structured call intent/)
+	})
+})
+
+// ── createAuthWit silent-vs-popup routing (dispatcher coverage helper) ──
+
+describe("isCreateAuthWitCoveredByTxOrSimulationScope", () => {
+	const txGrant = grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "transfer" }] } as Capability)
+	const callIntent = (to: string, name: string) => ({ caller: addr(ADDR_A), call: { to: addr(to), name } })
+	const innerHash = (consumer: string) => ({ consumer: addr(consumer), innerHash: "0xabc" })
+
+	test("covered CallIntent → true (routes to silent execution)", () => {
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(callIntent(ADDR_B, "transfer"), [txGrant])).toBe(true)
+	})
+	test("uncovered CallIntent (wrong function) → false (routes to popup)", () => {
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(callIntent(ADDR_B, "burn"), [txGrant])).toBe(false)
+	})
+	test("CallIntent with no tx/sim grant → false (routes to popup)", () => {
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(callIntent(ADDR_B, "transfer"), [])).toBe(false)
+	})
+	test("IntentInnerHash → false (always routes to popup)", () => {
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(innerHash(ADDR_B), [txGrant])).toBe(false)
+	})
+	test("simulation.transactions scope also covers → true", () => {
+		const simGrant = grant({ type: "simulation", transactions: { scope: [{ contract: ADDR_B, function: "transfer" }] } } as Capability)
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(callIntent(ADDR_B, "transfer"), [simGrant])).toBe(true)
+	})
+	test("raw / non-structured → false", () => {
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope("0xhash", [txGrant])).toBe(false)
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope({}, [txGrant])).toBe(false)
+	})
+})
+
+// ── Edge cases ────────────────────────────────────────────────────────
+
+describe("edge cases", () => {
+	test("AztecAddress-like objects match string addresses in scope", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "transfer" }] })]
+		// addr() returns { toString: () => ADDR_A } — should match ADDR_A in scope
+		expect(() => enforceScope("sendTx", [{ calls: [{ to: addr(ADDR_A), name: "transfer" }] }], grants)).not.toThrow()
+	})
+
+	test("multiple grants: first denies, second permits", () => {
+		const grants = [
+			grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "*" }] }),
+			grant({ type: "transaction", scope: [{ contract: ADDR_B, function: "*" }] }),
+		]
+		// ADDR_B is only in the second grant — should pass via ANY-grant semantics
+		expect(() => enforceScope("sendTx", [{ calls: [{ to: addr(ADDR_B), name: "mint" }] }], grants)).not.toThrow()
+	})
+
+	test("empty scope pattern array rejects all calls", () => {
+		const grants = [grant({ type: "transaction", scope: [] })]
+		expect(() => enforceScope("sendTx", [{ calls: [{ to: addr(ADDR_A), name: "transfer" }] }], grants)).toThrow(/Scope violation/)
+	})
+
+	test("malformed args produce clear error", () => {
+		const grants = [grant({ type: "transaction", scope: "*" })]
+		expect(() => enforceScope("sendTx", [{ noCallsField: true }], grants)).toThrow(/exec\.calls/)
+	})
+})
+
+// ── grantPublicAuthwit: gated by the transaction scope ────────────────
+//
+// Granting an authwit for method@contract authorizes a FUTURE call with
+// the user's funds — same power as sending the call, same scope gate.
+
+describe("grantPublicAuthwit transaction-scope gate", () => {
+	const content = (contract: string, method: string) => ({ caller: ADDR_B, contract, method, args: [] })
+
+	test("in-scope contract+method passes", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "transfer_public_to_public" }] } as Capability)]
+		expect(() => enforceScope("grantPublicAuthwit", ["0xacc", content(ADDR_A, "transfer_public_to_public")], grants)).not.toThrow()
+	})
+
+	test("wildcard scope passes", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: "*", function: "*" }] } as Capability)]
+		expect(() => enforceScope("grantPublicAuthwit", ["0xacc", content(ADDR_A, "anything")], grants)).not.toThrow()
+	})
+
+	test("out-of-scope contract throws", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "*" }] } as Capability)]
+		expect(() => enforceScope("grantPublicAuthwit", ["0xacc", content(ADDR_B, "transfer_public_to_public")], grants)).toThrow(
+			/Scope violation: grantPublicAuthwit/,
+		)
+	})
+
+	test("out-of-scope method throws", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: ADDR_A, function: "mint" }] } as Capability)]
+		expect(() => enforceScope("grantPublicAuthwit", ["0xacc", content(ADDR_A, "transfer_public_to_public")], grants)).toThrow(
+			/Scope violation: grantPublicAuthwit/,
+		)
+	})
+
+	test("no transaction grants → pass-through (type-level enforcement handles it)", () => {
+		expect(() => enforceScope("grantPublicAuthwit", ["0xacc", content(ADDR_A, "m")], [])).not.toThrow()
+	})
+})
+
+// ── A listed contract, compared by value ──────────────────────────────
+
+describe("a contract in another case", () => {
+	// Hex letters, so a case flip changes the spelling; a leading zero, so dropping it is a
+	// shorter spelling of the same value. Targets are plain strings, as the wire carries them.
+	const A = `0x${"0a1b2c3d".repeat(8)}`
+	const A_UPPER = `0x${A.slice(2).toUpperCase()}`
+	const A_MIXED = `0x${A.slice(2, 34).toUpperCase()}${A.slice(34)}`
+	const B = `0x${"0e1f2a3b".repeat(8)}`
+	const listed = (contract: string, fn: string) => [{ contract, function: fn }]
+	const calls = (to: string) => [{ calls: [{ to, name: "transfer" }] }]
+
+	const methods: Array<[string, string, (contract: string) => Capability, (target: string) => unknown[]]> = [
+		["sendTx", "sendTx", (c) => ({ type: "transaction", scope: listed(c, "transfer") }), calls],
+		["simulateTx", "simulateTx", (c) => ({ type: "simulation", transactions: { scope: listed(c, "transfer") } }), calls],
+		["profileTx", "profileTx", (c) => ({ type: "simulation", transactions: { scope: listed(c, "transfer") } }), calls],
+		[
+			"executeUtility",
+			"executeUtility",
+			(c) => ({ type: "simulation", utilities: { scope: listed(c, "balance_of") } }),
+			(t) => [{ to: t, name: "balance_of" }],
+		],
+		[
+			"grantPublicAuthwit",
+			"grantPublicAuthwit",
+			(c) => ({ type: "transaction", scope: listed(c, "transfer") }),
+			(t) => [ADDR_A, { caller: ADDR_B, contract: t, method: "transfer", args: [] }],
+		],
+		[
+			"createAuthWit, call intent",
+			"createAuthWit",
+			(c) => ({ type: "transaction", scope: listed(c, "transfer") }),
+			(t) => [ADDR_A, { caller: ADDR_B, call: { to: t, name: "transfer" } }],
+		],
+		[
+			"createAuthWit, inner-hash consumer",
+			"createAuthWit",
+			(c) => ({ type: "transaction", scope: listed(c, "*") }),
+			(t) => [ADDR_A, { consumer: t, innerHash: `0x${"01".repeat(32)}` }],
+		],
+		[
+			"registerContract",
+			"registerContract",
+			(c) => ({ type: "contracts", contracts: [c], canRegister: true }),
+			(t) => [{ address: t }],
+		],
+		["getContractMetadata", "getContractMetadata", (c) => ({ type: "contracts", contracts: [c], canGetMetadata: true }), (t) => [t]],
+		["isTokenRegistered", "isTokenRegistered", (c) => ({ type: "contracts", contracts: [c], canGetMetadata: true }), (t) => [t]],
+		[
+			"getContractClassMetadata",
+			"getContractClassMetadata",
+			(c) => ({ type: "contractClasses", classes: [c], canGetMetadata: true }),
+			(t) => [t],
+		],
+		[
+			"getPrivateEvents",
+			"getPrivateEvents",
+			(c) => ({ type: "data", privateEvents: { contracts: [c] } }),
+			(t) => [{ eventName: "Transfer" }, { contractAddress: t }],
+		],
+	]
+
+	test.each(methods)("%s: a listed contract passes a call to it in another case", (_name, method, grantFor, argsFor) => {
+		expect(new Set([A, A_UPPER, A_MIXED]).size).toBe(3)
+		for (const [scoped, target] of [
+			[A_UPPER, A],
+			[A, A_UPPER],
+			[A_MIXED, A_UPPER],
+		]) {
+			expect(() => enforceScope(method, argsFor(target), [grant(grantFor(scoped))]), `${scoped} → ${target}`).not.toThrow()
+		}
+	})
+
+	const otherValues: Array<[string, string]> = [
+		["another contract", B],
+		["no prefix", A.slice(2)],
+		["an upper-case prefix", `0X${A.slice(2)}`],
+		["a Cyrillic а for an a", A.replace("a", "а")],
+		["a fullwidth Ａ for an a", A.replace("a", "Ａ")],
+		["a character before it", `x${A}`],
+		["itself twice", `${A}${A}`],
+		["a trailing newline", `${A}\n`],
+		["its leading zero dropped", `0x${A.slice(3)}`],
+	]
+
+	test.each(methods)("%s: a listed contract refuses any other value or spelling", (_name, method, grantFor, argsFor) => {
+		for (const [what, target] of otherValues) {
+			expect(() => enforceScope(method, argsFor(target), [grant(grantFor(A))]), what).toThrow(/Scope violation/)
+		}
+	})
+
+	test("a listed value that is not an address matches nothing, itself included", () => {
+		const tx = [grant({ type: "transaction", scope: listed("0xtok", "transfer") })]
+		expect(() => enforceScope("sendTx", calls("0xtok"), tx)).toThrow(/Scope violation/)
+		const contracts = [grant({ type: "contracts", contracts: ["0xtok"], canGetMetadata: true })]
+		expect(() => enforceScope("getContractMetadata", ["0xtok"], contracts)).toThrow(/Scope violation/)
+	})
+
+	test("a call intent is covered by a scope listing its contract in another case, never without the prefix", () => {
+		const grants = [grant({ type: "transaction", scope: listed(A_UPPER, "transfer") })]
+		const intent = (to: string) => ({ caller: ADDR_B, call: { to, name: "transfer" } })
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(intent(A), grants)).toBe(true)
+		expect(isCreateAuthWitCoveredByTxOrSimulationScope(intent(A.slice(2)), grants)).toBe(false)
+	})
+})
+
+// ── Wildcard scopes read no address ───────────────────────────────────
+//
+// A wildcard returns before the target is read, so what it admits is decided by each method's
+// own parser downstream; these pin that the checkers add no validation of their own.
+
+describe("wildcard scopes", () => {
+	test("a pattern on any contract passes a sendTx target without its prefix", () => {
+		const grants = [grant({ type: "transaction", scope: [{ contract: "*", function: "transfer" }] })]
+		expect(() => enforceScope("sendTx", [{ calls: [{ to: "0a".repeat(32), name: "transfer" }] }], grants)).not.toThrow()
+	})
+
+	test("contracts on any contract pass an isTokenRegistered target that is not an address", () => {
+		const grants = [grant({ type: "contracts", contracts: "*", canGetMetadata: true })]
+		expect(() => enforceScope("isTokenRegistered", ["not-an-address"], grants)).not.toThrow()
+	})
+
+	test("private events from any contract pass a malformed contractAddress", () => {
+		const grants = [grant({ type: "data", privateEvents: { contracts: "*" } })]
+		expect(() => enforceScope("getPrivateEvents", [{}, { contractAddress: "0xnot-hex" }], grants)).not.toThrow()
+	})
+})

@@ -1,0 +1,113 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+import { Dropdown } from "@/components/ui/Dropdown"
+import { publishGlyph } from "@/components/composite/send/publish-facts"
+import mark from "@/components/composite/send/publish-mark.module.css"
+import { menuOrder } from "./fee-helpers"
+
+const props = defineProps({
+	modelValue: { type: Object, default: null },
+	methods: { type: Array, required: true },
+	/** "private-private" | "private-public" while this send's fee names the account, else null. The
+	 *  page decides; this only draws the tag. */
+	payerNoticeShape: { type: String, default: null },
+})
+
+const emit = defineEmits(["update:modelValue", "open", "close"])
+
+/** The tag only ever says the fee names the account publicly. */
+const TAG_GLYPH = publishGlyph("exposed")
+
+const menu = computed(() => menuOrder(props.methods))
+</script>
+
+<template>
+	<Flex direction="column" gap="4" :class="$style.card">
+		<Flex align="center" justify="between">
+			<span :class="$style.fee_label">Fee</span>
+			<span
+				v-if="payerNoticeShape"
+				:class="[$style.tag, mark.exposed]"
+				data-testid="send-fee-privacy-notice"
+				:data-notice-shape="payerNoticeShape"
+			>
+				<Icon :name="TAG_GLYPH" size="10" aria-hidden="true" />
+				NAMES YOUR ADDRESS
+			</span>
+		</Flex>
+		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
+			<template #trigger>
+				<Flex
+					align="center"
+					justify="between"
+					class="clickable"
+					data-testid="send-fee-method-trigger"
+					:data-fee-method="modelValue?.subtitle"
+				>
+					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
+					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
+					<MaterialIcon name="expand_more" :size="16" color="secondary" />
+				</Flex>
+			</template>
+
+			<template #popup>
+				<DropdownItem
+					v-for="method in menu"
+					:key="method.fpc?.id ?? method.type"
+					:class="$style.method"
+					:disabled="method.disabled"
+					:data-testid="`send-fee-method-${method.subtitle}`"
+					:data-fpc-id="method.fpc?.id"
+					@click="!method.disabled && emit('update:modelValue', method)"
+				>
+					<Flex align="center" justify="between" gap="8" wide>
+						<Text size="13" weight="600" :color="method.disabled ? 'tertiary' : 'primary'">
+							{{ method.title }}
+						</Text>
+						<Text size="11" color="tertiary">
+							{{ method.disabled && method.disabledReason ? method.disabledReason : method.spend }}
+						</Text>
+					</Flex>
+				</DropdownItem>
+			</template>
+		</Dropdown>
+	</Flex>
+</template>
+
+<style module>
+.card {
+	padding: 12px;
+}
+
+.fee_label {
+	composes: fee_label from "./fee-shared.module.css";
+}
+
+.fee_value {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	color: var(--txt-primary);
+}
+
+.fee_placeholder {
+	color: var(--nulo-secondary);
+}
+
+/* A disabled method already reads in tertiary ink, so DropdownItem's own fade would dim it twice.
+   The doubled class outranks `.wrapper.disabled` whichever sheet loads last. */
+.method.method[aria-disabled="true"] {
+	opacity: 1;
+}
+
+.tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+
+	font-family: var(--font-headline);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	white-space: nowrap;
+}
+</style>

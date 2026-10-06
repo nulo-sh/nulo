@@ -1,0 +1,372 @@
+/**
+ * Contract tests for the offscreen (SW ↔ offscreen sendMessage) Service.
+ *
+ * New coverage (no offscreen service-side suite existed before). After the
+ * service-core unification both transports share one error projection, so the
+ * offscreen service now emits the structured `errorPayload` too
+ * (wire-additive).
+ *
+ * The send fallback matches the background's 3-tier (success → jsonStringify → error-response → drop).
+ *
+ * Drives the service by feeding `chrome.runtime.onMessage` via `emitMessage`
+ * and reading responses via `captureMessage`.
+ */
+
+import { describe, expect, test, vi } from "vitest"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import type { ServiceCollection } from "@nulo/wallet-core/base"
+import { defineRpcMethods } from "../core/rpc-methods"
+import { UserRejectedError } from "../errors"
+import { MessageType } from "../messages"
+import { wrapParams } from "../utils"
+import { captureMessage, emitMessage, silentLogger } from "../testing/transport-harness"
+import { Service } from "./service"
+import { ServiceClient } from "./client"
+import { resetBackgroundContextUrls } from "../core/sender-auth"
+
+const SERVICE = "offscreen-svc"
+const CLIENT = "client-uid"
+
+type Methods = {
+	echo: (msg: string) => string
+	walletFail: () => never
+	plainFail: () => never
+}
+type Events = {
+	ping: { n: number }
+}
+
+class TestService extends Service<Methods, Events> {
+	protected readonly rpcMethods = defineRpcMethods<Methods>()("echo", "walletFail", "plainFail")
+
+	public ping = new EventHandler<{ n: number }>()
+
+	public constructor() {
+		super(SERVICE, silentLogger)
+	}
+
+	public echo(msg: string): string {
+		return `echo:${msg}`
+	}
+
+	public walletFail(): never {
+		throw new UserRejectedError("user said no")
+	}
+
+	public plainFail(): never {
+		throw new Error("plain boom")
+	}
+
+	public emitPing(n: number): void {
+		this.emit("ping", { n })
+	}
+
+	public callEnsureInitialized(): Promise<void> {
+		return this.ensureInitialized()
+	}
+}
+
+async function flush() {
+	await new Promise((r) => setTimeout(r, 0))
+	await new Promise((r) => setTimeout(r, 0))
+	await new Promise((r) => setTimeout(r, 0))
+}
+
+function request(requestId: number, method: keyof Methods, params: unknown[]) {
+	return {
+		type: MessageType.Request,
+		from: CLIENT,
+		to: SERVICE,
+		content: { requestId, method, params: wrapParams(params) },
+	}
+}
+
+type WireResponse = {
+	type: number
+	from?: string
+	to?: string
+	content: { requestId: number; result?: unknown; error?: string; errorPayload?: unknown; resultIsJson?: boolean }
+}
+
+/** All Response-typed messages the service sent (ignores keepalive strings + events). */
+function responses(): WireResponse[] {
+	return captureMessage()
+		.mock.calls.map((c) => c[0] as WireResponse)
+		.filter((m) => typeof m === "object" && m !== null && m.type === MessageType.Response)
+}
+
+// ── Envelope validation + routing ─────────────────────────────────────
+
+describe("envelope validation", () => {
+	test("ignores a message not addressed to this service (no response)", async () => {
+		new TestService()
+		emitMessage({ ...request(1, "echo", ["hi"]), to: "another-service" })
+		await flush()
+		expect(responses()).toHaveLength(0)
+	})
+
+	test("ignores a request with no `from` (no response)", async () => {
+		new TestService()
+		emitMessage({ type: MessageType.Request, to: SERVICE, content: { requestId: 1, method: "echo", params: wrapParams(["hi"]) } })
+		await flush()
+		expect(responses()).toHaveLength(0)
+	})
+
+	test("ignores a request for an unknown method name (no response)", async () => {
+		new TestService()
+		emitMessage(request(1, "nonexistent" as keyof Methods, []))
+		await flush()
+		expect(responses()).toHaveLength(0)
+	})
+
+	// Non-registered callables (inherited, framework, public non-RPC) rejected.
+	test.each(["toString", "constructor", "start", "emit", "emitPing"])(
+		"rejects the non-registered callable %s (RPC-surface guard)",
+		async (method) => {
+			const svc = new TestService()
+			const spy = vi.spyOn(svc as unknown as Record<string, () => void>, "emitPing")
+			emitMessage(request(1, method as keyof Methods, []))
+			await flush()
+			expect(responses()).toHaveLength(0)
+			expect(spy).not.toHaveBeenCalled()
+		},
+	)
+})
+
+// ── Success path ──────────────────────────────────────────────────────
+
+describe("success path", () => {
+	test("invokes the method and replies with the result, addressed back to the caller", async () => {
+		new TestService()
+		emitMessage(request(7, "echo", ["hi"]))
+		await flush()
+
+		const all = responses()
+		expect(all).toHaveLength(1)
+		expect(all[0].content.requestId).toBe(7)
+		expect(all[0].content.result).toBe("echo:hi")
+		expect(all[0].from).toBe(SERVICE)
+		expect(all[0].to).toBe(CLIENT)
+	})
+})
+
+// ── Error path (offscreen emits NO errorPayload — divergence) ─────────
+
+describe("error path (now emits structured errorPayload, additive)", () => {
+	test("WalletError throw serializes errorPayload (additive)", async () => {
+		new TestService()
+		emitMessage(request(1, "walletFail", []))
+		await flush()
+
+		const resp = responses().at(-1)!
+		expect(resp.content.error).toBe("user said no")
+		// The offscreen service attaches the structured payload too (wire-ADDITIVE).
+		expect((resp.content.errorPayload as { code: string }).code).toBe("USER_REJECTED")
+	})
+
+	test("plain Error throw replies with the flat error string and no payload", async () => {
+		new TestService()
+		emitMessage(request(1, "plainFail", []))
+		await flush()
+
+		const resp = responses().at(-1)!
+		expect(resp.content.error).toBe("plain boom")
+		expect(resp.content.errorPayload).toBeUndefined()
+	})
+})
+
+// ── send fallback (offscreen — 3-tier) ────────────
+
+describe("send fallback (offscreen — 3-tier, matches background)", () => {
+	test("tier 1: sendMessage succeeds — single response, no resultIsJson", async () => {
+		new TestService()
+		emitMessage(request(1, "echo", ["hi"]))
+		await flush()
+
+		const all = responses()
+		expect(all).toHaveLength(1)
+		expect(all[0].content.resultIsJson).toBeUndefined()
+	})
+
+	test("tier 2: first send rejects → retries with jsonStringify + resultIsJson", async () => {
+		new TestService()
+		captureMessage().mockRejectedValueOnce(new Error("DataCloneError"))
+		emitMessage(request(1, "echo", ["hi"]))
+		await flush()
+
+		const all = responses()
+		expect(all).toHaveLength(2)
+		const fallback = all.at(-1)!
+		expect(fallback.content.resultIsJson).toBe(true)
+		expect(JSON.parse(fallback.content.result as string)).toBe("echo:hi")
+	})
+
+	test("tier 3: response + fallback sends reject → sends a clean error response", async () => {
+		new TestService()
+		captureMessage().mockRejectedValueOnce(new Error("send1")).mockRejectedValueOnce(new Error("send2"))
+		emitMessage(request(1, "echo", ["hi"]))
+		await flush()
+
+		// original + jsonStringify fallback both rejected; the 3rd send is the
+		// structured error response (previously the offscreen side swallowed,
+		// leaving the client to hang until its full timeout).
+		expect(captureMessage()).toHaveBeenCalledTimes(3)
+		const last = responses().at(-1)!
+		expect(last.content.result).toBeUndefined()
+		expect(String(last.content.error)).toMatch(/Response not serializable/)
+	})
+
+	test("tier 4 (swallow): every send rejects → 3 attempts then gives up cleanly", async () => {
+		new TestService()
+		captureMessage().mockRejectedValue(new Error("SW dead"))
+		// Must not throw out of the handler even when all sends fail.
+		expect(() => emitMessage(request(1, "echo", ["hi"]))).not.toThrow()
+		await flush()
+
+		expect(captureMessage()).toHaveBeenCalledTimes(3)
+	})
+})
+
+// ── Fix (c): malformed params reply with a clean error (no hang) ───────
+
+describe("malformed params (fix c — no silent hang)", () => {
+	test("null params for a valid method replies with a structured ValidationError", async () => {
+		new TestService()
+		emitMessage({ type: MessageType.Request, from: CLIENT, to: SERVICE, content: { requestId: 9, method: "echo", params: null } })
+		await flush()
+
+		const resp = responses().at(-1)!
+		expect(resp.content.requestId).toBe(9)
+		expect(resp.content.error).toBe("Invalid request params")
+		// The offscreen service emits errorPayload too (additive).
+		expect((resp.content.errorPayload as { code: string }).code).toBe("VALIDATION")
+	})
+
+	test("non-object params (e.g. a string) replies with a flat error response", async () => {
+		new TestService()
+		emitMessage({
+			type: MessageType.Request,
+			from: CLIENT,
+			to: SERVICE,
+			content: { requestId: 10, method: "echo", params: "oops" as unknown as [] },
+		})
+		await flush()
+
+		expect(responses().at(-1)!.content.error).toBe("Invalid request params")
+	})
+})
+
+// ── Event emit ────────────────────────────────────────────────────────
+
+describe("event emit", () => {
+	test("broadcasts the event over sendMessage and invokes the local handler", async () => {
+		const svc = new TestService()
+		const seen: Array<{ n: number }> = []
+		svc.ping.add((p) => seen.push(p))
+
+		svc.emitPing(42)
+		await flush()
+
+		const event = captureMessage()
+			.mock.calls.map((c) => c[0] as { type: number; from?: string; content: { event: string; payload: { n: number } } })
+			.find((m) => typeof m === "object" && m !== null && m.type === MessageType.Event)
+		expect(event).toBeDefined()
+		expect(event!.from).toBe(SERVICE)
+		expect(event!.content.event).toBe("ping")
+		expect(event!.content.payload).toEqual({ n: 42 })
+		expect(seen).toEqual([{ n: 42 }])
+	})
+})
+
+// ── ensureInitialized ─────────────────────────────────────────────────
+
+describe("ensureInitialized", () => {
+	test("resolves immediately once started", async () => {
+		const svc = new TestService()
+		await svc.start({} as unknown as ServiceCollection)
+		await expect(svc.callEnsureInitialized()).resolves.toBeUndefined()
+	})
+
+	test("throws after the 30s budget when never started", async () => {
+		vi.useFakeTimers()
+		try {
+			const svc = new TestService()
+			const p = svc.callEnsureInitialized().catch((e) => e)
+			await vi.advanceTimersByTimeAsync(30_000)
+			const err = await p
+			expect(err).toBeInstanceOf(Error)
+			expect((err as Error).message).toBe("Service not initialized")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
+describe("request sender authentication — only the background context drives the offscreen", () => {
+	const sender = (v: object) => v as unknown as chrome.runtime.MessageSender
+	const arm = () => {
+		resetBackgroundContextUrls()
+		// biome-ignore lint/suspicious/noExplicitAny: stub
+		const c = (globalThis as any).chrome
+		c.runtime.id = "nulo"
+		c.runtime.getURL = (p: string) => `chrome-extension://nulo/${p}`
+		c.runtime.getManifest = () => ({ background: { service_worker: "sw.js" } })
+	}
+
+	test("a request from a same-extension POPUP url is ignored; from the service-worker url (Chrome) it is handled", async () => {
+		arm()
+		new TestService()
+		emitMessage(request(1, "echo", ["hi"]), sender({ id: "nulo", url: "chrome-extension://nulo/src/popup/index.html" }))
+		await flush()
+		expect(responses()).toHaveLength(0)
+		emitMessage(request(2, "echo", ["hi"]), sender({ id: "nulo", url: "chrome-extension://nulo/sw.js" }))
+		await flush()
+		expect(responses()).toHaveLength(1)
+	})
+
+	test("Firefox: the background page url is handled", async () => {
+		arm()
+		// biome-ignore lint/suspicious/noExplicitAny: stub
+		const c = (globalThis as any).chrome
+		resetBackgroundContextUrls()
+		c.runtime.getURL = (p: string) => `moz-extension://nulo/${p}`
+		c.runtime.getManifest = () => ({ background: { scripts: ["bg.js"] } })
+		new TestService()
+		emitMessage(request(1, "echo", ["hi"]), sender({ id: "nulo", url: "moz-extension://nulo/_generated_background_page.html" }))
+		await flush()
+		expect(responses()).toHaveLength(1)
+	})
+
+	test("REFLECTED RESPONSE: a popup-sent request carrying the victim's {from, requestId} cannot settle the victim's pending call", async () => {
+		arm()
+		class VictimClient extends ServiceClient<Methods> {
+			public constructor() {
+				super(SERVICE, silentLogger, "victim")
+			}
+			public echo(msg: string): Promise<string> {
+				return this.request("echo", msg)
+			}
+		}
+		new TestService()
+		const victim = new VictimClient()
+		const pending = victim.echo("secret")
+		await flush()
+		const sent = captureMessage().mock.calls.map((c) => c[0] as { type?: MessageType; from?: string; content?: { requestId: number } })
+		const envelope = sent.find((m) => m?.type === MessageType.Request)
+		expect(envelope).toBeTruthy()
+		let settled = false
+		pending.then(() => (settled = true))
+		// The attacker replays the observed envelope from a popup context: the genuine offscreen
+		// must not answer it (it would reply `from: SERVICE, to: victim` and settle the call).
+		emitMessage(envelope, sender({ id: "nulo", url: "chrome-extension://nulo/src/popup/index.html" }))
+		await flush()
+		expect(responses()).toHaveLength(0)
+		expect(settled).toBe(false)
+		// The legitimate path still works: the SW's own send is answered and the reply settles it.
+		emitMessage(envelope, sender({ id: "nulo", url: "chrome-extension://nulo/sw.js" }))
+		await flush()
+		const [reply] = responses()
+		emitMessage(reply, sender({ id: "nulo", url: "chrome-extension://nulo/src/offscreen/index.html" }))
+		await expect(pending).resolves.toBe("echo:secret")
+	})
+})

@@ -1,0 +1,709 @@
+# CLAUDE.md
+
+Operating rules for AI assistants (and any contributor) working in this repository. This file is the **ruleset**, not the architecture. For architecture, read [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
+## Pointers — read these once before you start
+
+- [`BEFORE-LAUNCH.md`](./BEFORE-LAUNCH.md) — what is still blank in the legal documents and **when** each blank is due (before v1.0.0, at the store listing, on the v1.0.0 promote, on every later promote). Check it before any `release: promote dev → main`.
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — process boundaries, message flow, storage versioning, offscreen lifecycle, session model, concurrency, account contract, fee model, test taxonomy.
+- `packages/<name>/README.md` — per-package purpose, file map, scripts, testing, key invariants.
+- **The any-ERC-20 bridge and its tools app live in [`alejoamiras/unleashed`](https://github.com/alejoamiras/unleashed)**, not here: its `packages/bridge-core` (the generation model, the conductor + verifier scripts, the salt/leaf/portal invariants), `contracts/bridge` (the factory / clone / router threat model, the hub, the split Noir/JS toolchain) and `apps/tools` (the tools app + Send wizard). **§ The wallet repo** below says what crosses the repo line.
+- [`apps/extension/tests/e2e/README.md`](./apps/extension/tests/e2e/README.md) — e2e suite layout, parallel-safe agent runner, helper conventions.
+- [`apps/extension/tests/e2e/FIREFOX.md`](./apps/extension/tests/e2e/FIREFOX.md) — how the e2e suite drives Firefox, every behaviour that differs from Chrome and where the suite absorbs it, and the rule that a browser difference lives on `BrowserDriver`. Read before touching `tests/e2e/fixtures/browser/` or debugging a Firefox-only failure.
+- [`apps/extension/tests/COMPOSITION-TESTS.md`](./apps/extension/tests/COMPOSITION-TESTS.md) — **normative** rules for the `*.composition.test.ts` layer (drive the real service graph in-process against dumb fakes): when to use it, the hard limits (shallow PXE **and** bb-free **and** no simulate/prove), the failure taxonomy. Read before adding a composition test.
+- [`implementations-plan/README.md`](./implementations-plan/README.md) — the planning standard: what a plan commits and what stays local, how a plan closes, the portable rules. Read [`implementations-plan/lessons.md`](./implementations-plan/lessons.md) before starting a task.
+
+## The wallet repo — the bridge lives in `alejoamiras/unleashed`
+
+This repo ships **one product, the Nulo wallet** (`apps/extension`), plus what serves it: the generic test dApp [`apps/playground`](./apps/playground/README.md), the landing (`apps/landing`) and the `packages/*` layers. The any-ERC-20 bridge, its tools app, their CI and their plans live in [`alejoamiras/unleashed`](https://github.com/alejoamiras/unleashed).
+
+- **`apps/extension` is a wallet.** It must work with **every wallet-sdk dApp** in the Aztec ecosystem, so its e2e drive it against `apps/playground` — a deliberately generic dApp — never against a product dApp. The Nulo-custom RPCs (`registerToken`, `isTokenRegistered`, `grantPublicAuthwit`, via `@nulo/wallet-sdk-schema-patch`) are optional enhancements: a dApp calling them must **fail open** on a wallet that lacks them, and the standard surface (`requestCapabilities`, `registerContract`, `executeUtility`, `simulateTx`, `sendTx`, `createAuthWit`) never depends on them.
+
+Rules that follow:
+
+- **The playground stays generic.** It reaches the wallet only through `@aztec-labs/wallet-sdk` (plus the fail-open custom RPCs) and never imports from `apps/extension/src`; the extension never special-cases it. Otherwise a green e2e proves the pair, not the wallet.
+- **No gate depends on another repo.** No test here boots, builds, installs or selects the bridge dApp; the extension driving it is a manual pre-release smoke, not a CI gate.
+- **Nothing here imports, fetches or reads unleashed; what crosses the line is data.** Chain identity: each repo keeps its own constants (here `apps/extension/src/utils/chain-ids.ts`). The PrivateFPC canonical address: pinned wallet-side by `apps/extension/src/wallet/services/fpc/protocol-fpcs.test.ts`; the contract is initializerless and private-only, so nothing deploys it, and unleashed's manifest must name the same address. The testnet seeds in `default-tokens.ts` (Test USDC, USDT, EURC and GBPC) mirror the L2 tokens unleashed's testnet generation pre-creates (`bridge.tokens[].l2Token` in its `apps/tools/public/testnet-bridge.json`); their addresses live once, in its `TESTNET_TOKENS`, which `price-map.ts` prices from, and the `aztec-update` skill's reset step re-points every one when that generation moves. User-facing links, both the owner's choice: the landing links no tools app, and the fee card's `FEE_JUICE_BRIDGE_URL` default is unleashed's testnet app, `https://testnet.app.unleashed.systems`, one link for every network; `tools.nulo.sh` and `testnet.tools.nulo.sh` do not resolve. Changing a seed or a link is an owner UI decision.
+- **Three packages are also staged for npm** by [`scripts/publish/`](./scripts/publish/README.md) as `@nulo-sh/wallet-crypto` (key derivation + `EncryptionKey` only), `@nulo-sh/resolve-asset` and `@nulo-sh/wallet-sdk-schema-patch`: the surface unleashed consumes. The workspaces stay `private` under their `@nulo/*` names; every published entry (`packages/wallet-crypto/src/public.ts`, `packages/resolve-asset/src/index.ts`, `packages/wallet-sdk-schema-patch/src/{apply,register}.ts`) and `scripts/publish/packages.ts` is an npm API, so widening one is an API change. Publishing is `publish-packages.yml`, owner-approved, provenance-attested and tokenless.
+- **Shared code lives in a package, never in another app.** `@nulo/design` and `@nulo/legal` serve the extension and the landing, `@nulo/wallet-sdk-schema-patch` the extension and the playground; each is a workspace package with its own tests, and an app importing from another app's `src/` is a layering violation.
+
+## Skills own their domains — route new lessons to them
+
+Project skills in [`.claude/skills/`](./.claude/skills/) are the source of truth for their domain's procedure + accumulated know-how. This file is the ruleset + index; the depth lives in the skill. **When you learn a durable lesson, write it into the owning skill — not an inline comment, not a new paragraph here.**
+
+| Learned something about… | Update this skill |
+|---|---|
+| Bumping the Aztec line (`@aztec-labs/*`, `@aztec-foundation/*`) — rc bumps, protocol forks, testnet resets | [`aztec-update`](./.claude/skills/aztec-update/) |
+| Anything bridge-side — a generation (factory + router + hub), its contracts, the tools app | not this repo: [`alejoamiras/unleashed`](https://github.com/alejoamiras/unleashed), which owns the bridge generation runbook, the Noir contract surface and the bridge drift detectors |
+| Writing/running E2E — fixtures, flake root-causes, selector rules, the parallel-safe runner | [`e2e-testing`](./.claude/skills/e2e-testing/) |
+| Debugging the extension — popup/offscreen/SW, DevTools-MCP techniques, network/console gotchas | [`chrome-extension-debug`](./.claude/skills/chrome-extension-debug/) |
+| How CLAUDE.md itself is maintained | [`update-docs`](./.claude/skills/update-docs/) |
+| The **release** process — cut/unstick/publish/deploy/sync, a new failure mode | _no skill yet → the `### Release runbook` below is its home; extract it when it's worth it_ |
+
+**Routing for anything you learn:** a *rule/policy* → here; a *durable domain procedure/technique* → the owning skill above; a *cross-task gotcha* → [`implementations-plan/lessons.md`](./implementations-plan/lessons.md), one line linking its evidence; an *open follow-up* → [`implementations-plan/follow-ups.md`](./implementations-plan/follow-ups.md); a *plan-specific debugging log* → `implementations-plan/<plan>/lessons/`. Re-check this table when you add or rename a skill.
+
+## Working in this repo
+
+- **Bun** is the package manager. No yarn/npm/pnpm. Pinned to `1.4.2` via `package.json#packageManager` + `setup-bun` action. **Local minimum is 1.4** — the parallel scripts (`audit:vue`, `dev:full`) use `bun run --parallel`. `bun.lock` is `lockfileVersion: 2` (regenerated under the isolated linker), which **Bun ≤1.3 cannot read** — every host that installs must run ≥1.4: local, CI (`setup-bun`), and the landing Worker `nulo-landing`'s Workers Builds (`BUN_VERSION` build variable — the build image honors no version file).
+- **The linker is `isolated`** (`bunfig.toml`; `globalStore` deliberately off — opt in per user via `~/.bunfig.toml` on a trusted single-user machine only). Each workspace's `node_modules` holds ONLY what its `package.json` declares. An undeclared import (a *phantom dependency*) can still resolve locally through the `node_modules/.bun/node_modules` hoist-fallback and then fail on CI's fresh runner (`Rolldown failed to resolve import …`) — so declare every package a workspace imports, including type-only imports and build-plugin-injected specifiers (`vite-plugin-node-polyfills/shims/buffer` is injected into every transformed module; alias it to the app's own copy, as `apps/extension` does). Never walk `node_modules` by hand to find another package's files: use [`@nulo/resolve-asset`](./packages/resolve-asset/README.md), which resolves from the CALLER's location on any layout. Source-level sweep: `bun scripts/phantom-sweep.ts` from the repo root; CI's clean-room builds are the authority for injected ones.
+- **Biome** handles lint + format. Layer-import rules are enforced via `noRestrictedImports` overrides in [`biome.json`](./biome.json); violations fail `bun run lint`.
+- **Unit/component tests run on the Bun runtime.** Every workspace `test` script (and the extension's `test:components`) is `bun --bun vitest run …`: vitest's launcher AND its workers execute on Bun 1.4, so CI's test runtime is the pinned Bun, not the runner's ambient Node. The Puppeteer e2e layer (extension `test:e2e`/`test:e2e:all`, `e2e:agent`) and `packages/design`'s `test:watch` stay on Node. Every unit/component vitest config (not the three Node e2e configs) spreads `sharedTest` from the root [`vitest.base.ts`](./vitest.base.ts): its `deps.interopDefault: false` is a **stopgap** for vitest 4 — Bun's ES-module namespaces answer `"__esModule" in ns`, which vitest 4's interop mistakes for CJS and drops named exports (zod's `z`); fixed upstream in vitest ≥ 5.0.0-beta.3 (vitest-dev/vitest#10363) — delete the key and re-run the soak matrix once the installed vitest has it. Never set `experimental.viteModuleRunner: false` (needs `module.registerHooks`, absent on Bun). The bar for any test-runtime change is the fail-closed soak matrix in `scripts/ci-cd/test-soak/` (30 retry-0 runs per suite on both engines at ONE clean commit after `bun install --frozen-lockfile`, inventory-exact compare, `test:all` ×5, a `workflow_dispatch` of `pr-quick.yml` bound to that commit) — see `implementations-plan/archive/vitest-on-bun/`.
+- **Commitlint** enforces Conventional Commits (`feat:`, `fix:`, `chore:`, …). Subject line must be lower-case.
+- **Pre-commit hook** (`.githooks/pre-commit`) runs `biome check --staged` followed by `scripts/check-no-local-paths.sh` (absolute home-directory path guard). **Commit-msg hook** validates the message. Both auto-install on `bun install` via the `prepare` script, which is a no-op outside a git checkout so the source archive Mozilla reviewers rebuild installs cleanly (`apps/extension/store/SOURCE-BUILD.md`).
+- **`bun run audit:vue`** is the one-shot pre-PR gate. It runs `typecheck:all`, `test`, and `lint` CONCURRENTLY (`bun run --parallel`, Foreman-prefixed output), then `build` after all three pass. It does NOT run e2e — those are separate (`test:e2e` for smoke, `e2e:agent` for network).
+- **`noExplicitAny`** is enforced as an error. Use `unknown` and cast at usage sites. Suppress with `// biome-ignore lint/suspicious/noExplicitAny: <reason>` only at genuinely untyped boundaries.
+
+## UI changes need explicit owner sign-off
+
+Any change to what a user sees — a screen's layout, its copy, which rows it shows or hides, how a value is formatted — is a product decision, and only the owner makes it. This holds inside security, refactor and dependency work too: a remediation may *add* information to a screen, but it may not change how the screen reads without the owner seeing it first. (An approval-card regression came from a security batch that replaced the parsed payload with raw 32-byte fields and untruncated addresses; every audit approved it, nobody looked at it.)
+
+- **Plans call it out.** A `/blueprint` plan lists every user-visible surface it touches under a `UI impact` line, with a before/after description or mockup. No line, no UI change.
+- **Sign-off is explicit and recorded** — a message from the owner naming the surface, quoted in the plan or the PR body. A reviewer's or audit's `approve` is not a sign-off; a passing test is not a sign-off.
+- **Wire-shaped fixtures for dApp-facing surfaces.** A component test for anything that renders dApp data (the execute / connect / sign windows) feeds at least one fixture shaped as the wire carries it — `aztec_sendTx` arguments are `0x` + 64 hex fields, never `5n` — so a rendering that only works on friendly test values cannot pass.
+- **Screenshots close the loop.** A PR that changes a popup surface attaches a screenshot or artifact of the result; the smoke e2e counts rows, it does not read them.
+- **No em dash joins two clauses in user-facing copy.** A full stop does; the empty-value "—" stays. `apps/extension/src/utils/copy-dash-ban.test.ts` fails on the forms it can read (string and template literals, template text and attributes, outside log calls), and its header lists the ones it cannot; text no screen shows, or an empty value inside a label, goes on its reviewed list with a reason.
+
+## Tooltips and the glossary
+
+- Two kinds of tooltip only: the label of an icon-only button, or the definition of a dotted
+  term. A warning or a choice is never a tooltip; it is visible text.
+- Every definition lives in one module (`apps/extension/src/utils/glossary.ts`),
+  which Settings → Glossary renders. A dotted term takes a glossary key, never its own text,
+  so the tooltip and the glossary cannot disagree; a test fails on a key with no entry.
+- A new dotted term or a changed definition is a UI change: owner sign-off, and the glossary
+  entry lands in the same PR.
+- At most two dotted terms per screen; one sentence, 100 characters at most.
+
+## Branching + merging
+
+- `dev` is the **default branch** and the integration lane. Feature work happens on short-lived branches off `dev` (named `feat/...`, `fix/...`, `chore/...`, `refactor/...`, `docs/...`, `test/...`, `deps/...`) and lands via **squash-merge** PRs — dev's history stays essentially linear, one commit per merged feature PR. **The one exception is the post-release `chore: sync main → dev` PR, which is MERGE-committed** (not squashed) so `main`'s release commit stays in `dev`'s ancestry — the prerelease version-anchor needs it. So `dev` carries a periodic sync merge commit; everything else is a squash.
+- `main` is the **stable branch**. main advances via two PR types — both use a **merge commit** (not squash):
+  - `release: promote dev → main` PRs land the next release-candidate set of features.
+  - `chore: release @nulo/extension X.Y.Z` PRs are opened by **release-please** after every push to main. Merging one creates the tag + GitHub Release; the release workflow then attaches built artifacts + git-cliff notes. The landing (`nulo.sh`, the `nulo-landing` Worker) is redeployed by Workers Builds from pushes to `main`, not by the release workflow.
+  Read main's own timeline via `git log main --first-parent`.
+- **Merge type is enforced per branch via GitHub rulesets**: dev allows `squash` **and** `merge` (merge is reserved for the post-release sync PR — see above; feature PRs still squash by convention + the merge-button default), main allows only `merge`. The repo-level toggle has both enabled, and the per-branch ruleset narrows what's selectable at PR-merge time. (dev allows `merge` because a squash-only ruleset HARD-blocks the history-preserving sync — not bypassable by `--admin` or a bypass actor; see `implementations-plan/archive/release-prerelease-fix/`.)
+- Both branches require **signed commits** (SSH or GPG — the merge's squash commit is GitHub web-flow-signed, CLI or UI). **`main` requires four status gates — `quality-status`, `extension-network-e2e-status`, `extension-smoke-e2e-status` and `extension-smoke-e2e-firefox-status` — and `dev` requires five: those four plus `extension-network-e2e-firefox-status`** (the *produced* check-run names — a GitHub Actions normal job's check-run is named its bare job `name:`, with no `Workflow /` prefix), each app_id-pinned to GitHub Actions in `required_status_checks.checks`. Smoke is **required** on both, not advisory. The Firefox network aggregator is **advisory on `main`**; promoting it is the owner's call, through the same runbook (`scripts/ci-cd/required-checks.sh --add … --branch main --expect <snapshot>`). **Check names say what they gate** (`extension-*`; `quality-status` is repo-wide) — a renamed aggregator job blocks every merge on that branch until the protection is repointed, so renames ship with the runbook: `scripts/ci-cd/required-checks.sh print --branch dev --json > <file>` (review it), then, right before merging the rename, `scripts/ci-cd/required-checks.sh --apply --branch dev --expect <file>`; `main` gets the same two steps at its next promote. `scripts/ci-cd/behavior-gating.test.ts` pins each PR workflow's aggregator name to the list the runbook renames onto.
+- **Branch-up-to-date is NOT required on `dev`** (legacy branch protection's `strict` flag is off; `main` keeps `strict: true`). A new dev commit does not invalidate your PR's green CI, so you don't need to re-run the 25-min Extension network e2e every time someone else merges. The required checks only have to be green on your PR's own commits.
+- **Force-pushes and branch deletions are blocked.** Use a feature branch + PR for everything.
+- **Merging needs no `--admin`.** Two independent gates protect both branches: the required status checks above, and `required_signatures`. For a **self-authored** squash GitHub signs the squash on your behalf, so a green self-authored PR merges with a plain `gh pr merge --squash`. Keep your branch commits signed anyway (a dropped SSH agent → unsigned → can still block non-author merges). `--admin` (and the raw `PUT .../merge` API) bypass **both** gates — emergency/admin-only, never a routine path. When you genuinely must bypass: `gh pr merge <n> --squash --admin --delete-branch` (the squash still lands `verified=true`). (Why a required context must be the bare check-run name and never `Workflow / Job`: `implementations-plan/archive/required-check-mismatch/`.)
+- **PR title becomes the squash commit subject on dev.** Write PR titles as real Conventional Commits — `feat(send): ...`, `fix(passkey): ...`, `chore(deps): ...`. The PR body becomes the commit body.
+- **PR-title length: keep the title ≤ ~93 chars.** On squash-merge GitHub appends ` (#NN)` to the subject, and `commitlint`'s `header-max-length` (100) is enforced in `quality-status` and is **NOT** skipped on PRs to `dev` (only on PRs to `main` and on the main → dev sync PR). A 94-char title becomes a 101-char commit subject → red commitlint that you can't fix without rewriting history (force-push, blocked on protected branches). So budget for the `(#NN)` suffix: `len(title) + len(" (#NN)") ≤ 100`. The same applies to any direct commit on a long-running branch that a promote PR later re-lints over its whole range — keep every subject ≤ 100. Fixing an already-merged over-length subject means amending + force-pushing the arc branch, which is only an option on non-protected branches.
+- **Promote PR naming**: `release: promote dev → main` followed by a short content summary in parentheses, e.g. `release: promote dev → main (biome schema bump, lockfile refs migration)`. Becomes the merge commit subject on main — write it like a release note.
+
+## Dependency policy
+
+See [`SECURITY.md`](./SECURITY.md) "Dependency policy" for the full version. TL;DR:
+
+- **`minimumReleaseAge = 604800`** (7 days) in `bunfig.toml` — blocks fresh npm publishes. CVE bypass: edit `bunfig.toml` `minimumReleaseAgeExcludes`, install, then delete the exclude again **in the same PR** (a frozen install never re-gates; prove it with `bun install --frozen-lockfile --force`). Until that version is 7 days old, a `package.json` edit in a workspace that reaches it re-gates it and fails the install — wait, or resolve with an uncommitted local exclude (SECURITY.md, runbook step 4).
+- **`bun audit`** runs advisory in CI (`_lint-and-typecheck.yml`). Surfaces npm advisories in the step summary; does NOT block PRs today.
+- **The age gate holds transitives on `bun update --latest` too** (Bun ≥ 1.4; probe evidence in `implementations-plan/archive/bun-1.4-bump/plan.md#age-gate-probe`). `bun update` and frozen installs never re-gate an already-locked version (evicting one = deliberate lockfile regeneration); a manifest edit does, for the edited workspace's tree. Review every bump with `bun pm diff`; triage advisories with `bun audit fix --dry-run` (full workflow in SECURITY.md).
+- **`@aztec-labs/*` and `@aztec-foundation/*` outside the policy** — exact-pinned on one version line, bumped manually. **Any Aztec version bump follows the `aztec-update` skill** ([`.claude/skills/aztec-update/SKILL.md`](./.claude/skills/aztec-update/SKILL.md)): it classifies the bump first (version-only vs a NETWORK RESET, which moves the wallet's chain identity), then walks the full pin surface (`@alejoamiras/presto`, `@aztec-foundation/aztec-standards` and `@alejoamiras/private-fee-juice` + patches + min-age excludes), the drift detectors and the execution canaries, and — on a reset — the wallet side only: the chainId cascade and the client-side reset (storage baseline, per-chain purge). The bridge's generation redeploy belongs to `alejoamiras/unleashed`. The running list of types coupled to the Aztec packages' shape is logged in [`UPDATE.md`](./UPDATE.md).
+- **Every dependency the extension bundles must pass the third-party notices policy.** The build emits `THIRD-PARTY-NOTICES.txt` from what it actually rendered (main + worker builds) and REFUSES a licence outside the allowlist, a package with no licence metadata or no licence file, a stale or unused override, and an unclaimed compiled asset or font (a font claim is bound to the file's SHA-256 and judged by `FONT_ALLOWED`, so replacing a font in `@nulo/design` means re-reviewing its record) — see [`packages/third-party-notices/README.md`](./packages/third-party-notices/README.md). Loosening `ALLOWED` or `FONT_ALLOWED`, or adding an `OVERRIDES` / `VENDORED` record without a tagged upstream source, is weakening a quality gate. The generator never writes a copyright line; neither do you.
+- **A Bun-version bump needs a manual sync**: changing `package.json#packageManager` does NOT change `.github/actions/setup-bun/action.yml` (the version input + its two cache-key occurrences), nor the five `bun-version:` literals outside it (`release.yml`'s `publish-chrome-store` / `publish-firefox-amo`, `store-check.yml`'s two jobs, `publish-packages.yml`'s `pack` job, which skips the composite to stay off the shared cache), nor the out-of-repo site: the `BUN_VERSION` build variable on the `nulo-landing` Worker's Workers Builds — dashboard-only. Existing CI (`_lint-and-typecheck.yml`) won't catch the drift — review the bump's diff for every one of them and keep all the sites on one line. A Bun bump also requires the machine-wide local bun ≥ the pinned line before merge (the `--parallel` scripts need it, and the v2 lockfile needs ≥1.4).
+
+## Account-address freeze (production invariant)
+
+Account addresses are a **frozen, versioned artifact of the extension major**, not a side effect of whatever `@aztec-labs/accounts` ships. The full freeze surface lives in `packages/aztec-runtime/src/account/`: the vendored `artifacts/SchnorrAccount.json` (byte-exact, provenance in `artifacts/PROVENANCE.md`), `frozen-artifact.ts` (sha256 + loaded-class-id pins), `instantiation-descriptor.ts` (frozen ctor name/args/salt/immutablesHash/deployer, consumed by BOTH the address derivation and the first-tx ctor call), and `address-freeze.ts` (the regime record). Rules:
+
+- **One regime per extension major, append-only.** `REGIMES` in `address-freeze.ts` is an append-only historical record; each major binds at compile time to exactly one entry (`V6_REGIME`). Editing or removing an entry, or re-binding a shipped major, is forbidden — the paired test (`address-freeze.test.ts`) independently hardcodes every entry and reds on any of it. Rotation = append a new entry AND ship a new extension major bound to it.
+- **The vendored artifact + descriptor are NEVER bumped with the Aztec line.** A bump must leave the KAT (`derivation-vectors.test.ts`) and every freeze test green with zero vector/pin edits. If a bump reds them, upstream moved a protocol-level input — that is new-major territory, never a re-pin.
+- **Every Aztec bump PR runs both execution canaries prover-ON, on Chrome and on Firefox** (`bun run e2e:agent tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts`, then the same under `NULO_E2E_BROWSER=firefox` — see the `aztec-update` skill; in CI they are the `canary` job of both network lanes). The address KAT cannot see execution breakage (frozen bytecode vs newer simulator/prover/node); the canaries are the only gate that does. **A red canary on either browser BLOCKS the bump** — the Firefox lane is required on `dev` but advisory on `main`, and the rule holds on both: **default response is HOLD the Aztec line**; shipping a new extension major is the deliberate alternative.
+- **Extension-major strategy (protocol break = a NEW extension).** A new major ships as a separate extension ID + store listing, coexisting with the old one, and its recovery is a seed import deriving the new regime's accounts: an old major's backups are never imported as old-regime accounts. Nulo V6 is the one exception to the new-ID half: it reuses V5's store items, renamed, because V5 never had users, and the backup compat epoch refuses V5 backups. Stored accounts are never ambiguous: every account in a given major belongs to that major's one regime.
+- **Runtime mismatch is a handled state, not a bare throw.** A stored account address that no longer matches re-derivation triggers the background integrity coordinator (session withheld, persisted blocking state, dedicated screen that never solicits the seed and offers no delete CTA); the typed `AccountAddressInconsistencyError` replaces the old generic throw. Deletion stays a deliberate settings flow.
+
+## Complexity budgets
+
+Biome enforces per-function complexity budgets at **error** severity, everywhere Biome runs (editor, pre-commit `--staged`, `bun run lint`, `quality-status`). Full rationale: [`implementations-plan/archive/complexity-budgets/plan.md`](./implementations-plan/archive/complexity-budgets/plan.md).
+
+- **Cognitive complexity ≤ 15** (`noExcessiveCognitiveComplexity`) — ALL code: src, tests, e2e, scripts, `.vue` script blocks. Write flat early-return dispatch, not nesting pyramids; a flat `switch` or one `&&`-run costs 1.
+- **≤ 80 non-blank lines per production function** (`noExcessiveLinesPerFunction`) — tests/e2e exempt via override. Blanks are free by design: the only way under the cap is less code, not denser code.
+- **`describe()` nesting ≤ 5** (`noExcessiveNestedTestSuites`) — zero findings at adoption; keep it that way.
+- **The baseline only shrinks — NEVER add a complexity suppression — and every survivor is justified at the line.** The residue is **24 acceptances**: 10 production functions whose branches ARE their specification (the redaction walker, the hostile-JSON migration algebra, the integer formatter, the Kahn layering, the recursive codecs, two length-only aggregates) and 14 test/CI-harness directives (a lexer state machine, in-page selector semantics, polling predicates over stage thresholds, a CLI grammar, scenario enumerators). Each is a whole-line `// biome-ignore lint/complexity/<rule>: accepted at score N — <why>` (or `accepted at N lines — <why>`) directive: the stamp is the function's EXACT observed value and the sentence says why that function's complexity is essential. [`scripts/complexity-baseline/manifest.json`](./scripts/complexity-baseline/manifest.json) pins each one as `{file, rule, anchor, accepted, sentence}` — `anchor` is the declaration line under the directive, which must be unique in its file, so a directive moved onto another function is a new acceptance, not the same count (a signature edit or file move that keeps the declaration's NAME, rule, stamp and sentence regenerates locally as a move, but CI refuses it unless the owner has applied the `baseline:move-approved` label to the PR — name continuity is reviewer evidence, not proof; anonymous callbacks have no move path at all). The adjudication of every acceptance (and the burn-down history behind the count) is [`implementations-plan/archive/complexity-residue/plan.md`](./implementations-plan/archive/complexity-residue/plan.md#adjudication). An acceptance is not a "refactor when touched" IOU: it stays until its function is rewritten on merit, and a NEW acceptance is a blueprint with owner sign-off, never a PR nit.
+- **Enforced four ways.** `scripts/complexity-baseline/check.ts` (inside `bun run lint` and the pre-commit hook — a sub-second git-grep scan of the index, so it cannot be split-staged past) and its CI mirror `scripts/ci-cd/complexity-baseline.test.ts` in `test:ci-gating` refuse every suppression form except the accepted one — bare `biome-ignore lint:`, group `lint/complexity:`, any `-all`/`-start` (file-wide/range) variant, block comments, the legacy `baseline (…)` text and the generator's `JUSTIFICATION REQUIRED` marker (each broad form verified to suppress on Biome 2.5.9 while looking innocent), plus a directive with no declaration under it or an anchor that is not unique in its file — and diff the tree's acceptances against the manifest entry by entry: added, removed, moved, re-stamped and reworded all fail until the manifest is regenerated. On a PR, the CI mirror also ratchets the manifest against the pull_request event's exact base commit: on the same Biome it may not gain an acceptance, raise a stamp, or (without the owner's `baseline:move-approved` label) move one, and its `rules` summary must equal what its entries derive — so a hand-edited row fails CI even though it matches the tree. What no identity scheme can see is a same-named replacement written in place of an accepted function with the identical score and its sentence copied: that is what the label review and the rescore exactness are for. `scripts/ci-cd/complexity-rescore.test.ts` (on demand: `bun run baseline:rescore`) re-lints one directive-stripped sibling copy per accepted file and fails any stamp that is not exactly the observed value — a raised stamp is an unreviewed ceiling, a lowered one a function that grew, a stale one a directive that outlived its function. (The generated `src/types/*.d.ts` headers keep their sanctioned bare suppressions — outside Biome's lint scope and the scan alike.)
+- **When you touch an accepted function**, refactor it under budget, delete its directive and rerun `bun run baseline:complexity` in the same PR (the manifest must match exactly — a shrink is otherwise a check failure). If it legitimately shrinks but stays over budget, re-stamp by hand to the value `baseline:rescore` reports. **The generator never writes an acceptance for you**: a function a change pushes over budget gets a `JUSTIFICATION REQUIRED (observed N)` marker inserted above it and the run exits 1 without writing the manifest — refactor, or replace the marker with an accepted-form sentence, which is the blueprint + sign-off path above.
+- **A `@biomejs/biome` version bump is the only time numbers rise.** In the bump PR: `bun run baseline:rescore`, re-stamp each drifted directive by hand (paste the audit's `accepted N → observed M` line into the decision), delete directives Biome now reports as `suppressions/unused`, then `bun run baseline:complexity -- --adopt`. `--adopt` is accepted only while the manifest's pinned Biome version differs from the installed one and is refused on the same version; conversely a plain regen refuses to re-pin a changed version (the bump is always the deliberate `--adopt` run, even when nothing drifted); and the CI ratchet relaxes only when the base and head manifests pin different Biome versions — so the bump PR is the one diff where added or raised acceptances can appear, and it is reviewed line by line: every addition must carry a human-written sentence, and unrelated debt does not ride along with a bump.
+- Raising the ceilings in `biome.json`, loosening the override globs, or hand-editing `manifest.json` (it is only ever written by `bun run baseline:complexity`) all count as weakening a quality gate — see the gates warning below.
+- **Duplication is watched, not gated.** `bun run audit:dup` (jscpd, exact-pinned in `scripts/dup-trend/report.ts`) prints the duplication trend; nightly's advisory `dup-trend` job pipes it into the step summary. Duplication is the most consistent LLM-slop signal, but clone identity is too unstable to ratchet (boundaries shift whenever either side is edited) — the escalation, a diff-scoped new-clone check, gets built only if the trend worsens (baseline after the burn-down: 4.84% lines). **Read the report's html-format numbers as noise**: jscpd's html tokenizer matches whole Vue templates that share only component vocabulary (unequal-span "clones"), so html clones count in the totals but are excluded from the actionable top-pairs table; the per-format split line shows where real duplication lives (css + typescript). The vue-shell adjudication — what was extracted vs deliberately left, with measurements — is recorded in `implementations-plan/archive/vue-shell-composites/plan.md`.
+
+## Package boundaries
+
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §2 for the layer hierarchy. Short version:
+
+```
+wallet-core  →  wallet-crypto  →  extension-messaging  →  aztec-runtime  →  wallet-bridge  →  extension
+```
+
+Each package can import only the layers below it. `wallet-bridge` deliberately does NOT depend on `aztec-runtime`. `wallet-core` has `chrome.*` banned via biome `noRestrictedGlobals`.
+
+### Custom RPC schema patch (`registerToken`)
+
+`registerToken` (plus `isTokenRegistered` and `grantPublicAuthwit`) is added to `@aztec-labs/wallet-sdk`'s `WalletSchema` at runtime by the **single private package [`@nulo/wallet-sdk-schema-patch`](./packages/wallet-sdk-schema-patch/README.md)**. Both apps activate it the same way: `import "@nulo/wallet-sdk-schema-patch/register"` as the **first import** in the module that constructs the wallet-sdk client (extension `wallet-sdk/background.ts`, playground `lib/wallet.ts`). The package also exports `./apply` (`applyNuloSchemaPatch(schema)`), the pure patch body, unit-tested in `packages/wallet-sdk-schema-patch/src/apply.test.ts`. (With one source there is no copy to drift, so no copy-identity pin exists.) The reachability guarantee (the patch actually extends `WalletSchema` and the dispatcher routes the methods) is pinned by [`packages/wallet-bridge/src/dispatcher.test.ts`](./packages/wallet-bridge/src/dispatcher.test.ts). When adding a new Nulo-custom RPC, edit the ONE source in `@nulo/wallet-sdk-schema-patch`, add a paired reachability assertion, and list the method in the npm package's README (`scripts/publish/readme/wallet-sdk-schema-patch.md`; `scripts/publish/stage.test.ts` fails until you do). See [`packages/wallet-bridge/README.md`](./packages/wallet-bridge/README.md) "Custom RPC methods" for the full contract.
+
+## Persisted-storage shape changes (migrations)
+
+The extension has a data-preserving storage-migration framework — engine in `@nulo/wallet-core/migration`, registry at `apps/extension/src/wallet/storage/migrations/`, full mechanics in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §5. Whether a `chrome.storage.local` shape change needs a migration depends entirely on one question: **are there production users yet?**
+
+- **Pre-production (the CURRENT state): do NOT write migrations.** There are no users; devs reinstall fresh, and every fresh install stamps the current max schema version and runs nothing. A shape change simply redefines the launch baseline — change the code, reinstall your local extension if it holds old-shaped data, done. Writing a migration now is wasted, untestable-against-real-data work. (Flipping this rule is a deliberate human decision at production launch — update THIS section when that happens.)
+- **Once in production: every change to a persisted shape REQUIRES a numbered migration.** "Persisted shape" = anything in `chrome.storage.local`: EntityStorage rows (`${root}@${id}`) and ValueStorage keys. Procedure: copy `migrations/template.ts` → `NNN-*.ts` (NNN = last real migration + 1; the e2e fixtures' 9001 sentinel doesn't count), **prefer the backup-safe declarative form** (`defineRowMapMigration` — a finite data-only DSL, so the SAME object also migrates imported full-backups; do NOT add callback fields to it — a callback cannot be replayed against an imported backup, which is the whole point of the DSL), fall back to imperative `defineMigration` only when the transform doesn't fit the DSL (that BLOCKS backup import at the covered versions — `footprint-coverage.test.ts` makes you acknowledge it in `IMPORT_BLOCKING_ACK`), declare the EXACT read/write footprint (derived automatically in the declarative form; the engine snapshots only that into the pre-migration backup — an undeclared write is rejected at commit), keep `up()` idempotent + treat its input as HOSTILE (backup blobs are attacker-controlled; presence-guard everything), register it in `migrations/index.ts`'s `realMigrations`, and ship a colocated test with seeded pre-shape fixtures (the registry's empty-store run-twice check is a safety net, not the proof). `breaking: false` only if the new code genuinely tolerates the old shape — and know it only takes effect when the migration is the tail (a mid-chain failure escalates to blocking regardless).
+- **Guardrails that fail CI if you get it wrong**: version contiguity + authored-but-unregistered file scan (`migrations/registry.test.ts`); raw `chrome.storage.local` inside a migration (must use the staged `ctx` — storage-facade-ban DENYLIST); the run-twice idempotency harness; test-fixture leakage into prod builds (negative bundle-grep in `_build-extension.yml`); backup-path coverage + row-locality (`src/wallet/services/backup/footprint-coverage.test.ts` — registry-covered footprints, the metamorphic per-row invariance, the non-forgeable `backupSafe` brand).
+- **Backup-import migration is LIVE** (shipped from [`implementations-plan/archive/storage-migration-backup/`](./implementations-plan/archive/storage-migration-backup/plan.md)): importing a full backup exported at an older `backup-schema-version` migrates its slices in-memory through the real engine before restore — see `apps/extension/src/wallet/services/backup/README.md` for the slice registry, the trust-gate order (checksum → compat-epoch → version range), and the block-listed roots (`nulo:core:profiles`, `nulo:core:auth-registry-enabled`).
+- **Never migratable — don't try**: crypto/KDF/vector rotations (the migrator runs pre-unlock and has no password to re-encrypt with — re-encrypt-on-next-unlock or a documented reset; see [`packages/wallet-crypto/README.md`](./packages/wallet-crypto/README.md)); `chrome.storage.session` (ephemeral); PXE IndexedDB (Aztec-owned, protocol-reset concern; `account-state` backup slices are the non-storage carve-out — their wire shape is versioned by `aztec-version`, not the storage schema).
+- **Related standing rule**: UI code (popup / onboarding / stores / composables) accesses `chrome.storage.local` ONLY through the migration-aware facade (`@/utils/storage`) — never raw. Enforced by `storage-facade-ban.test.ts`; the barrier it provides is what stops a page opened mid-migration from corrupting the transform.
+
+## Terms acceptance (the wall, the record, the documents)
+
+The Terms and Privacy Policy live in [`legal/`](./legal/README.md); their versions, which ones are material, and the consent wording live in [`@nulo/legal`](./packages/legal/README.md), whose tests fail when the package and the documents disagree. Rules:
+
+- **One broadcast line, one guard.** `ExecutionCoordinator.sendTxTask` holds the only `node.sendTx` under `src/wallet`, and `await this.legal.assertCurrent()` sits immediately before `assertLive()` there — nothing may be awaited between `assertLive()` and the send. `wallet/services/legal/call-sites.test.ts` pins both facts and the exact set of files that may call `assertCurrent` (the coordinator, `ExecutionService`'s three broadcasting entry points, the dApp ingress in `wallet-sdk/background.ts`). A new way to broadcast goes through `sendTxTask`; a new caller of the guard edits that pin deliberately.
+- **Declining never locks a person out.** View, every export (recovery phrase, account file, full backup), backup import, profile and account management, lock and reset are never gated, and the acceptance sheet may never cover `/popup/settings/security/export/**`, `/popup/legal/**`, a `windows-*` route, or any route reachable while locked (`utils/legal-sheet.ts`). Terms § 20 promises this; `legal-acceptance.test.ts` S5/S6/S8 prove it with hit-tested pointer input.
+- **`LegalAcceptanceService` is the sole writer** of `nulo:legal:accepted`, keeps no cache, never replaces a newer accepted version with an older one, and fails closed: unreadable, corrupt or missing is "not accepted". The record is device-local, survives a profile reset, and is never part of a backup. **Never log it**, and log a refusal at `debug` only — a connected dApp polls.
+- **Status derives from the Terms alone.** Terms § 23 says accepting them is not privacy consent, so a privacy-only change never blocks; the record keeps `privacyVersionShown` as evidence and Settings → About shows a non-blocking notice.
+- **A material change is a `minor` bump** in `legal/*.md` AND its `@nulo/legal` manifest entry with a human-written `changes` list (that list is what the re-acceptance sheet shows); a patch bump never asks again. `packages/legal/**` is in the smoke and network e2e path filters, so a version bump alone runs the suites that prove re-acceptance.
+- **The consent control starts unchecked, always** — never restored from a prop or storage — and its label and button text come from `CONSENT_LABEL` / `CONTINUE_LABEL`, which a package test pins against Terms § 3. Links open the **versioned permalink** (`openLegalDocument`), never the moving `/terms` page.
+
+## Logging policy (what may reach a log line)
+
+`console.*` is **not** the browser console. It is globally hijacked (`utils/console-sniffer.ts`) in
+all four contexts and funnels into `LoggerStore`, which buffers, persists to
+`chrome.storage.session`, feeds the log viewer, and is CSV-exportable. So an ordinary
+`console.warn` has the same reach as `this.logWarn`, and "it's just a debug line" is never a reason
+to log something sensitive.
+
+- **Pass the value as an object property NAMED for what it is.** The only redaction is `trim()`
+  (`wallet/logger/utils.ts`), an object walker: it blanks secret-named keys, collapses known
+  shapes (`Note`, `ActiveSession`, `Profile`, contract artifacts), summarises typed
+  arrays/`Map`/`Set`, and projects errors. It redacts **by key name**, so `{ password }` is safe
+  and `{ value: password }` is not — the walker reads a benign key and passes the string through.
+  **A finished string is opaque to it** — `` `k=${x}` ``
+  can never be redacted — and neither can `"k=" + x` or a bare `x` string argument. This is
+  enforced by `apps/extension/src/utils/log-payload-ban.test.ts`, which scans the extension app
+  plus every `packages/*/src` (enumerated at runtime, so a new package is covered the day it
+  exists — the transport layer logs the most dangerous payloads there is), and fails CI listing
+  every offending `file:line`. Its known false-negative is textual
+  (aliasing and indirection defeat it), stated in its own header. Its denied names are imported
+  FROM `REDACTED_KEYS`/`URL_KEYS`, so the two lists cannot drift; an arity read
+  (`authWitnesses.length`) is deliberately allowed, being the idiom this policy asks for.
+- **Log the identifier, not the payload — chosen per site.** There is no single right identifier:
+  a `txHash` links private activity, an unsalted origin hash is dictionary-reversible, a bare row
+  id is useless without the database. Prefer note type + content arity, function name + return
+  arity, operation + count + outcome, a row id for entity failures.
+- **Never log**: decrypted note contents, simulation/utility return values, contact name or
+  address, page or navigation URLs, balances, whole RPC envelopes (`params`/`result` carry
+  passwords and export returns), or whole backup rows.
+- **Endpoint URLs** are reduced to their origin (`scrubUrls`, `@/utils/scrub-urls`) — providers
+  embed API keys in the path — on both the log path and the dApp-facing error envelope.
+- **Pick the level by REACH, not by tone.** Services call `this.log{Debug,Info,Warn,Error}`; UI
+  calls `console.{debug,warn,error}`. `LoggerStore.log` drops only `level < logLevel`, and
+  `logLevel` is `Info` unless `debugMode` is on — so **`warn` and `error` are captured for every
+  user with every toggle off**, and land in the buffer the log viewer renders and exports. `debug`
+  is the only level that costs nothing when nobody asked for it. A line you would not want in a
+  stranger's bug report belongs at `debug` or nowhere.
+- **Two flags, not one — don't conflate them.** `debugMode` gates the LEVEL (and grows the ring
+  buffer 1,000 → 10,000); `developerMode` gates PERSISTENCE to `chrome.storage.session`. Debug
+  lines are dropped without `debugMode` even when `developerMode` is on.
+- **`console.log`/`console.info` are banned** in `apps/extension/src/**` (biome `noConsole`,
+  `allow: debug|warn|error`). Exempt by path: the sniffer, the logger internals, e2e, tests. The
+  anti-scam DevTools banner in `popup/app.vue` carries four line-local `biome-ignore`s instead —
+  it must reach the real console, and a whole-file exemption would license every future
+  `console.log` in the app shell.
+- **Retention is opt-in.** Persistence to `chrome.storage.session` only happens with Developer
+  Mode on; turning it off purges the stored copy, and so does "Clear logs". `chrome.storage.session`
+  is memory-backed — a browser restart, extension update or reload clears it, so a log is a
+  short-lived in-session artifact, not a disk record.
+- **Reading them**: with Developer Mode on, Settings → Advanced shows a Logs row that opens the
+  viewer window (`popup/windows/logger/`), which renders the buffer and exports it as CSV. That
+  export is the reason this policy exists — it is the path by which a user's logs become a public
+  bug report.
+
+When adding a sensitive field to a type, add its name to `REDACTED_KEYS` in
+`wallet/logger/utils.ts` — in camelCase *and* the kebab-case spelling used by exported backup JSON
+(the scanner reads `${row["master-key"]}` too). The static guard imports that set, so it extends in
+the same commit. Names ending in `secretKey` are covered by suffix in both.
+
+## Extension component model (L0–L6)
+
+Six layers, low → high. A layer can import only from layers below it. Enforced via `biome.json` `noRestrictedImports` overrides.
+
+**L0–L2 are externalized to `@nulo/design`** (see `implementations-plan/archive/design-system-externalization/`). The framework-/host-agnostic primitives live in the shared package and are consumed by the extension via a custom `unplugin-vue-components` resolver (`apps/extension/scripts/design-resolver.ts`), so templates use `<Flex>`/`<Text>`/`<Badge>` unchanged. `src/design/tokens.ts` re-exports `@nulo/design/tokens`, and the wallet's base stylesheet is `@nulo/design/base.css`. The package has NO auto-import, so its SFCs use explicit imports. **Resolver discipline:** a name enters `NULO_DESIGN_COMPONENTS` only when its extension-local SFC is DELETED; the four host-coupled holdouts (`Button` → RouterLink, `SubPageHeader` → router/history, `ToastManager` → app-shell toast root, `RowTarget` → RouterLink) keep a thin LOCAL extension component; the first three wrap the package base (`Button`/`SubPageHeaderBase`/`ToastManagerBase`), so their bare tags resolve to the wrapper, NOT the resolver. The `toast`/`outside` composables live in `@nulo/design/composables/*`; the extension keeps `composables/{toast,outside}.js` as named re-export shims so its explicit + auto-import call sites are untouched.
+
+```
+[L0] design tokens     @nulo/design (token-contract.ts → generated tokens.ts + base.css + fonts).
+                       Extension src/design/tokens.ts re-exports the package.
+
+[L1] core primitives   @nulo/design/core: Flex, Icon, MaterialIcon, Text. No chrome.*.
+
+[L2] ui primitives     @nulo/design/ui — ALL migrated: Badge, Banner, BrutalistTitle, Button,
+                       Checkbox, Input, LoadingState, Popover, RowAction, SectionLabel, Spinner,
+                       SubPageHeaderBase, Toggle, Tooltip, ToastManagerBase.
+                       The 4 host-coupled ones live LOCALLY in src/components/ui/: Button,
+                       SubPageHeader, ToastManager (thin wrappers rendering the package base) and
+                       RowTarget (a row's link or button, stretched under its nested controls).
+                       Cannot import service clients, stores, or @/utils/core.
+
+[L3] composites        src/components/composite/
+                       FormPopup, EntityForm, SecretRevealCard, AmountCard, ...
+                       Same ban as L2 — no service clients, stores, or @/utils/core.
+
+[L4] feature modules   src/popup/components/modules/
+                       BalanceView, FeeSettingsCard, TokenCard, ContactRow, ...
+                       modules/holdings/TokenList — presentational over rows the page hands in.
+                       Service-bound. Cannot import L5 pages or L6 windows.
+                       Token-row policy lives in pure helpers under src/utils/ (token-amount,
+                       token-order, token-aggregate, token-fold, token-search): Home, Holdings and
+                       the Send picker all order rows through orderTokenRows and never parse a
+                       balance themselves.
+
+[L5] popups + windows  src/popup/components/popups/, src/popup/windows/
+                       Orchestration. May own service-client lifecycle.
+
+[L6] pages             src/popup/pages/
+                       Orchestration. May own service-client lifecycle.
+```
+
+Service-bound visual components (Header, AddressDisplay, GlobalLoader, NotificationManager, Popup, PopupCard, JsonViewer, LogsViewer, PasskeyCeremonyDialog in `components/passkey/`) live flat in `src/components/` or in their own subdir, NOT in `core/`, `ui/`, or `composite/`. Cross-shell ones (e.g. `PasskeyCeremonyDialog`, consumed by both the popup and onboarding shells) MUST live under `src/components/`, never `src/popup/**`, so onboarding can import them without crossing the `@/popup/**` layer ban.
+
+## Composables (C0 / C1)
+
+```
+[C0] pure utilities    src/composables/  (no chrome.*, no service clients)
+                       useTicker, syncedRef, ...
+
+[C1] service hooks     src/composables/
+                       useFormState, useEntityCrud<T>, useFeeEstimation,
+                       useDappInteractionPayload, useSecretCountdown, ...
+                       Receive a connected client (or "do-the-thing" fn) from the parent.
+                       NEVER call .connect() / .disconnect() themselves.
+                       Expose dispose() that the parent calls in onBeforeUnmount.
+```
+
+**When to extract a composable vs a pure helper:**
+
+- Pure function with no Vue reactivity → `*.ts` helper colocated with the parent.
+- Reactive state, computed, watch, or service subscriptions → composable in `src/composables/`.
+- Owns a service-client connection? Composable receives the *connected* client; the parent owns connect/disconnect.
+
+## Vue component test conventions
+
+- Colocate `<Name>.test.ts` next to `<Name>.vue`. No `__tests__/` dirs.
+- Mount via `@vue/test-utils`'s `mount`; stub auto-registered children (`Spinner`, `Icon`, etc.) via `global.stubs`.
+- For store consumers, `createTestingPinia()` from `@pinia/testing`.
+- `tests/vitest.setup.ts` stubs `chrome` before every test with working `runtime` ports and message listeners, but `storage` is an empty object: a test whose code reads or writes storage stubs `chrome` itself (`vi.stubGlobal`).
+
+**Coverage minimums:**
+
+- L1 / L2 primitives: ≥5 cases (props, events, slots, edge cases).
+- L3 composites: ≥10 cases.
+- Composables: ≥10 cases (lifecycle, error paths, dispose).
+- L4 / L5 / L6: not required (covered by e2e + manual smoke). Optional for complex pieces.
+
+**Pre-existing bug pinning:** when extracting a function or component, preserve any pre-existing buggy behavior verbatim. Document via a test pin if the bug is behaviorally surprising:
+
+```ts
+test("(BUG PIN) replaces only the FIRST underscore in operation kind", () => {
+  // humanize.ts has a single .replace("_", " ") which leaves later underscores.
+  // Preserved verbatim during the extraction; tracked separately for fix.
+  expect(humanize("aztec_get_chain_info")).toBe("aztec get_chain_info")
+})
+```
+
+Run component tests via `bun run test:components` (filtered to `src/components/`); they also run via `bun run test`.
+
+## testid preservation rule
+
+Every extraction preserves all `data-testid` attributes verbatim. New components inherit testids from the parent template — they are NOT invented during structural moves. e2e selectors depend on exact testid stability.
+
+When adding new interactive elements, add a `data-testid` rather than relying on placeholder, label, or role queries. Querying by placeholder is a common source of e2e flake.
+
+**E2E selector rule (strict):** e2e tests select **only** by `data-testid`. Never by `aria-label`, text content, role, placeholder, class, or DOM structure. If an element doesn't have a testid, add one BEFORE writing the test. Text-based selectors look fine until copy changes, i18n lands, or a Vue refactor reshuffles the tree — then every test that touched the element breaks at once. The `waitForToast` helper is the one explicit exception (toasts are intentionally text-asserted as a content check, not a click target).
+
+## Keyboard & focus order
+
+The primary Tab sequence must follow the visual/DOM order of the *fields*. A few hard rules (a positive `tabindex` anywhere on a screen silently corrupts the WHOLE document's tab order into two passes — every implicit-0 field becomes reachable only after every positive one):
+
+- **Never use a positive `tabindex`.** Focusable custom widgets (a `<div role="...">` like `Toggle`, `DropdownItem`) get `tabindex="0"` (or `-1` when disabled/locked), never `"1"`. A `<div>` needs an explicit `tabindex` to be focusable at all — so change `"1"`→`"0"`, don't *remove* it.
+- **Custom focusable widgets need keyboard activation.** A `<div @click>` is mouse-only; add `@keydown.enter.prevent` + `@keydown.space.prevent` (and `role`/`aria-*`) so it's operable by keyboard, matching click.
+- **Secondary in-field controls are `tabindex="-1"`.** A show/hide-password button, a clear (`×`) button, an inline copy — anything that sits *between* two logical fields in the DOM — must be out of the Tab path (still mouse/AT-clickable) so Tab flows field → field. (Icon-only `<Icon @click>` SVGs are NOT tabbable, so they need no fix; only real `<button>`s do.) This is a **deliberate, owner-accepted tradeoff**: the show/hide-password toggle is `tabindex="-1"` (mouse + screen-reader reachable, not Tab-reachable) — a known WCAG-2.1.1 gap accepted in favor of the field→field flow. Don't "fix" it by restoring positive/0 tabbing without re-confirming.
+- **Grouped mutually-exclusive choices use a roving tablist**, not N separate tab stops: `role="tablist"` + each option `role="tab"` with `:tabindex="active ? 0 : -1"`, and ←/→ switch + move focus. This collapses a segmented control (e.g. the create-profile Password/Passkey toggle) to ONE Tab stop between the fields around it.
+- **Never key navigation off a `tabindex` literal.** `DropdownRoot` selects items via a stable `[data-dropdown-item]` attribute, NOT `[tabindex="1"]`, so changing an item's tabindex can't silently break arrow-nav.
+- **Escape closes the top popup — the keyboard twin of tapping outside.** Every `Popup` does it by default (`closeOnEscape`), only the topmost one answers, a menu open inside a popup closes first, and focus returns to the element that was focused when the popup opened (recorded before a child's queued focus runs; if that element is gone by the close, nothing receives focus). Nothing is ever approved by Escape. Whatever acts on an Escape marks it handled (`preventDefault()`): Chrome closes the whole toolbar popup on an Escape the page leaves unhandled, and a tab never shows it. A prompt that must be answered by a control passes `:closeOnEscape="false"` — the trap then ignores Escape and keeps the keyboard inside — and must block the outside tap too, or the two exits disagree.
+- **A popup that sends a transaction or signs has no document-level Enter:** its confirm button is the keyboard path and ignores a repeat or composing Enter (`isRepeatOrComposing`).
+- **A page's Enter shortcut answers only a field of that page:** it listens on the page's root, not `document`, returns unless `isPopupSubmitKey` holds and no child handled the key, and each control it names ignores a repeat or composing Enter (`refuseRepeatEnter`). A focused button, link or tab keeps its own activation.
+
+## Cleanup order in `onBeforeUnmount`
+
+Do NOT reorder these:
+
+```ts
+onBeforeUnmount(() => {
+  profileService.disconnect()
+  interactionService.disconnect()
+  executionService.disconnect()        // ← BEFORE timer clear
+  feeEstimation.dispose()              // ← composable's dispose, AFTER service.disconnect()
+  for (const t of Object.values(estimateTimers)) clearTimeout(t)
+  window.removeEventListener("beforeunload", reject)
+})
+```
+
+Composables MUST NOT own their own `onUnmounted`. They expose `dispose()` that the parent calls in the existing slot. **Carve-out:** scope-tied cleanup of NON-SERVICE resources (DOM listeners, timers) via `onScopeDispose` is allowed — such cleanup participates in no order-sensitive teardown sequence, and Vue runs `onBeforeUnmount` hooks BEFORE scope disposal, so parent-owned service teardown always sees the resource still live. Service clients stay parent-disposed, always.
+
+## Vue SFC ordering convention
+
+<!-- This section and "Common patterns" are modified from Azguard Wallet's CLAUDE.md (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+
+Components follow execution-order-based ordering. Code reads in the order it runs.
+
+**Block order:**
+
+```vue
+<route lang="json">        <!-- 1. Route meta (pages only) -->
+</route>
+
+<script setup>             <!-- 2. Script -->
+</script>
+
+<template>                 <!-- 3. Template -->
+</template>
+
+<style module>             <!-- 4. Styles -->
+</style>
+```
+
+**Inside `<script setup>` — ordered by execution flow:**
+
+```javascript
+/** 1. Imports (grouped with comment headers) */
+/** Services */
+import { TokenServiceClient } from "@/wallet/services/token/client"
+
+/** Components */
+import Navigation from "./Navigation.vue"
+
+/** Utils */
+import { formatAddress } from "@/utils/string"
+
+/** 2. Macros (compiler-processed first) */
+const emit = defineEmits(["update:modelValue"])
+const props = defineProps({ ... })
+defineExpose({ inputEl })
+
+/** 3. Store instantiation */
+const appStore = useAppStore()
+const cacheStore = useCacheStore()
+
+/** 4. Composables */
+const { openToast } = useToast()
+const { handleExternalLink } = useExternalLink()
+
+/** 5. Router/Route */
+const route = useRoute()
+const router = useRouter()
+
+/** 6. Reactive state (refs, reactive, computed) */
+const isLoading = ref(true)
+const items = ref([])
+const itemCount = computed(() => items.value.length)
+
+/** 7. Service clients + event subscriptions */
+const tokenService = new TokenServiceClient()
+tokenService.onTokenUpdated.add(onTokenUpdated)
+function onTokenUpdated(token) { ... }
+
+/** 8. Functions/Handlers */
+const handleClick = () => { ... }
+const handleSubmit = async () => { ... }
+
+/** 9. Watchers (watch, watchEffect) */
+watch(() => props.modelValue, (val) => { ... })
+watchEffect(() => { ... })
+
+/** 10. Lifecycle hooks (in execution order) */
+onBeforeMount(async () => { ... })
+onMounted(() => { ... })
+onBeforeUnmount(() => { ... })
+onUnmounted(() => { ... })
+```
+
+This order mirrors Vue's execution flow: imports → macros → setup deps → state → external subs → handlers → watchers → lifecycle.
+
+## Common patterns
+
+**Route meta for auth:**
+
+```vue
+<route lang="json">
+{ "meta": { "isAuthRequired": true } }
+</route>
+```
+
+**Config service for settings:**
+
+```js
+const configService = new ConfigServiceClient()
+const value = await configService.getValue("externalLinks")
+await configService.setValue("stealthMode", true)
+```
+
+**Confirmation dialogs:**
+
+```js
+cacheStore.confirm.title = "Confirm Action?"
+cacheStore.confirm.description = "Description text"
+cacheStore.confirm.confirm_text = "Yes"
+cacheStore.confirm.callback = () => { /* action */ }
+popupStore.open("confirm")
+```
+
+**Toast notifications:**
+
+```js
+const { openToast } = useToast()
+openToast({ label: "Message", icon: "copy" }, 2_000)
+```
+
+**Auto-imports** (vite config) — no explicit imports needed for: Vue APIs (`ref`, `computed`, `watch`, lifecycle hooks), Vue Router (`useRoute`, `useRouter`), composables in `src/composables/`, stores in `src/stores/`, components in `src/components/`.
+
+## Code-comment style
+
+- **Default: no comment.** Identifiers carry intent. If removing a comment wouldn't confuse a future reader, don't write it.
+- **Add a comment when removing it would surprise a reader** — a hidden constraint, a subtle invariant, a workaround for a specific bug, behavior dictated by an external spec.
+- **Comments explain WHY/INVARIANT, not WHAT.** "Re-derive the passhash here because the session was closed during restore" — yes. "This is the password hash." — no.
+- **No milestone, plan, PR, phase, or stage tags.** Not `M4.10`, `A11.1`, `pre-A11`, `phase 4b`, `PR-2`, `Stage D`. Inline code talks about live behavior, not history.
+  - **A security decision is stated as the invariant it protects**, in one sentence at the code it guards, and paired with a test that proves it. It never carries a finding id or points at an audit report.
+  - **Exception** — `phase N` documentation that describes live runtime behavior (`packages/wallet-core/src/base/`, service startup phases) stays. The ban is on milestone vocabulary, not on the word "phase".
+- **Cite a live doc or a permalink, never a plan path.** A plan is archived when it closes, so a comment you write names a live doc (`apps/extension/tests/e2e/PRF-NON-PORTABLE.md`, for one) or a permalink (§ Implementation plans). An existing plan path may stay until its comment is rewritten, as long as it resolves at HEAD or under `archive/`.
+- **TSDoc shape for public APIs** — `/** ... */` block above exports. One-line summary, optional follow-up paragraph. `@param` only when the parameter name doesn't say it. `@returns` only when the return type doesn't say it.
+- **Inline comments are full sentences** with terminal punctuation. Soft cap 100 chars; break at sentence boundaries.
+- **`// biome-ignore`** in handwritten code must carry a reason: `// biome-ignore lint/X: <reason>`. Suppression without a reason is a lint warning; generated files (e.g. `src/types/auto-imports.d.ts`, `src/types/components.d.ts`) carry bare `// biome-ignore lint: disable` headers — leave those alone.
+- **No factual descriptions of what the code does.** Well-named identifiers cover that. Comments describe *why*, *invariants*, or *external constraints*.
+- **No referencing the current task, PR, or caller** ("used by X", "added for the Y flow", "handles issue #NN"). That belongs in the PR description and rots in the codebase.
+
+## Implementation plans
+
+Plans under [`implementations-plan/`](./implementations-plan/README.md) are committed artifacts. They get read by future contributors and future agent sessions that have no idea who you are or where you cloned the repo. That README is the standard (layout, closing a plan, the portable rules); these rules bind every session:
+
+- **Verdicts inline, transcripts local.** `plan.md` records each audit's verdict and every accepted and rejected finding with its reason. Audit transcripts (`audit-*.md`), competing drafts and revisions (`plan-*.md`), scratch briefs (`_*.md`) and `eli5.html` are gitignored by `implementations-plan/.gitignore`; a plan is revised in place, never re-cut as `plan-v2.md`.
+- **Uncommitted means disposable.** A worktree's transcripts are deleted with it, so whatever is worth keeping goes into `plan.md` before the work closes. No committed file links an uncommitted one: a link to a file that left the tree is a permalink, `https://github.com/nulo-sh/nulo/blob/<full sha>/<path>`, at a SHA listed in `scripts/ci-cd/plans/permalink-bases.json` and reachable from `dev`. That list starts empty, so until a base is added the gate refuses every such permalink and the fact is restated in place instead.
+- **Closing a plan ships with the delivery**, never as a follow-up PR: the final commits of a single-arc PR, or a docs-only close-out PR on top of a stack. That is an `## Outcome` block directly after the front matter (Date, Status, Shipped, Open items, and a line retiring its `/goal` and `/loop` seeds); its generalizable gotchas promoted to `implementations-plan/lessons.md`; its open items moved to `implementations-plan/follow-ups.md` or an issue; and the move: `git mv` into `archive/` in its own commit, the relative links the extra directory level breaks repaired, and its index line moved to `archive/index.md`. The merge that lands the work is the merge that closes the plan; until then a running `/loop` only babysits delivery. An archived plan is evidence, never instructions.
+- **The curated layer has a budget.** `lessons.md` stays ≤ 8 KiB, one line per entry, each linking its evidence; a promotion deduplicates, retires what it supersedes, and dates anything tied to a tool version. `follow-ups.md` loses an entry when it resolves.
+- **The gate.** `bun run check:plans` (`scripts/ci-cd/plans/check.ts`), inside `test:ci-gating` and so `quality-status`, fails a PR or a local run on a tracked transcript, a missing or negated `.gitignore` line, a nested ignore file, a link to an untracked or missing plan file, a URL construct it cannot judge, a permalink outside the allowlist or off `dev`, a plan path outside an allowlisted permalink that does not resolve at HEAD (code and config may also name its archived copy), an index line out of format or listing a closed or archived plan, a plan dir with no line in its index, an archived plan without a complete Outcome, an oversize or unlinked `lessons.md` entry, or a home path in the curated files or an active plan. On push, nightly and release it only reports.
+- **No personal absolute paths.** Never write home-directory-rooted paths (macOS `~/...` expansions, Linux `~/Projects/...` expansions, Windows user-profile paths) in any plan file or status doc. Use repo-relative paths (`apps/extension/src/popup/app.vue:165`) — they survive the clone and they don't leak whose machine the plan was written on.
+- **No machine-specific paths in general.** Temp-file paths (system scratch dirs, macOS folder containers, Linux tmpdirs) belong in transient terminal output, never in committed planning docs. When recording an audit's findings in `plan.md`, rewrite its paths repo-relative.
+- **OK to reference outside repos by name when load-bearing.** E.g. "the Rabby reference implementation" or "the Presto native app". Don't include the clone path on your machine.
+
+## Quality gates — local and CI
+
+### Locally (before opening a PR)
+
+| When | Command |
+|---|---|
+| After any code change | `bun run lint` + `bun run typecheck:all` (the pre-commit hook lints staged files; it does not typecheck). |
+| Before opening any UI PR | `bun run audit:vue` (typecheck ∥ unit + component tests ∥ lint, then build). |
+| When editing the popup, contracts, or anything user-visible | `bun run test:e2e` (smoke; no Aztec sandbox). |
+| When touching dApp / network / PXE behavior | `bun run e2e:agent` (network suite; owns anvil + aztec + playground per worktree — parallel-safe). |
+| When touching `tests/e2e/fixtures/**` or anything a browser could disagree on (focus, user activation, WebAuthn, window handling) | The same two suites on Firefox: `NULO_E2E_BROWSER=firefox bun run test:e2e` / `NULO_E2E_BROWSER=firefox bun run e2e:agent` (needs `geckodriver` + `bun x puppeteer browsers install firefox`; see [`FIREFOX.md`](./apps/extension/tests/e2e/FIREFOX.md)). |
+| When editing Storybook stories or component visuals | `bun run --cwd apps/extension build-storybook`. |
+
+`audit:vue` excludes e2e tests (the `tests/e2e/**` entry in `apps/extension/vitest.config.ts`'s `exclude`). Smoke and network e2e are separate gates.
+
+### In CI (server-side enforcement)
+
+Configured in [`.github/`](./.github/). The full contributor guide is at [`CI.md`](./CI.md); the quick reference is at [`.github/WORKFLOWS.md`](./.github/WORKFLOWS.md).
+
+- **Every PR**: `quality-status` aggregates commitlint, lint, typecheck, units, build. **Required check** on `main` + `dev`. Branch-up-to-date is NOT enforced on `dev` (the legacy `strict` flag is off), so a new dev commit doesn't invalidate a green PR — you only re-run CI on your own pushes. (The check-run is the bare job name `quality-status`; the old required context `Quality / Status` was a phantom that never matched — see § Branching.)
+- **`extension-smoke-e2e-status`**: runs on PRs to `main` (always), on PRs to `dev` whose diff touches the `smoke-surface` filter, or on PRs labeled `e2e:extension-smoke`. Status emits pass when skipped. **Required check on both `dev` and `main`** (the produced bare name).
+- **`extension-network-e2e-status`**: same shape as smoke, with the `extension-network` filter and `e2e:extension-network` label. **Required check on both `dev` and `main`**. Every prover-ON shard (not the proverless pool, not a `disable_presto` run) installs the headless `presto-server` (Linux x86_64 tarball from `alejoamiras/presto` releases; tarball AND extracted binary SHA-256-pinned in `_extension-network-e2e.yml`, single-member archive rule in `.github/actions/setup-presto-server`) started with `PRESTO_ALLOW_ALL=1` on plaintext `127.0.0.1:59833`, and enforces native bb proving via `VITE_NULO_PRESTO_REQUIRED=1` baked into the wallet build — any fallback-class phase (`fallback`, `denied`, `secure-connection-unavailable`, `version-mismatch`) throws; the `canary` shard also fails on `PROVE_SUCCESS=0` in the server log and asserts the awaiting card's `Proving with Presto ✦`. Production builds are HTTPS-only with the silent WASM fallback. Rollback: set `vars.NULO_E2E_DISABLE_PRESTO=1` (Settings → Actions → Variables) or use the `workflow_dispatch` input `disable_presto: true`. See [CI.md § Presto in CI](./CI.md#presto-in-ci).
+- **`extension-smoke-e2e-firefox-status`** / **`extension-network-e2e-firefox-status`** (`pr-extension-{smoke,network}-e2e-firefox.yml`): the same two suites on Firefox (geckodriver + Puppeteer over BiDi), behind the same filters and labels as their Chrome twins plus their own files; draft PRs skip them. Three files are Chrome-only and skip whole-file there: one kills the background under an open extension page (Firefox will not end its event page while one is open), one redirects over CDP Fetch, and one stalls a network on a request that hangs, which Firefox's interception cannot make (`CHROME_ONLY` in `fixtures/browser/index.ts` carries each reason). Every other background-kill spec runs on both browsers through the driver's `stopBackground`, the two execution canaries included: every canary lane runs the same five prover-ON files on both browsers, and its `Assert canary results` step reads vitest's json report back against `scripts/ci-cd/canary-expectations.json`, so a canary that skipped, vanished or never ran reds the job whatever the file count said. **Both required on `dev`; on `main` the smoke one is required and the network one advisory.** Each aggregator passes when its lane is skipped (no matching paths, or a draft PR; `ready_for_review` re-runs it). `behavior-gating.test.ts` pins that the only jobs waiting on a Firefox job are `release.yml`'s `attach-assets` and `status`, on its smoke of the shipped zip, and that each lane runs exactly its Chrome twin's files. `nightly.yml` carries advisory Firefox jobs too; `release.yml`'s `smoke-firefox-against-artifact` smokes the shipped Firefox zip and gates the release's assets. See [§ Staged-rollout switches](#staged-rollout-switches).
+- **`nightly.yml`** (the only scheduled workflow besides the weekly `source-rebuild.yml`): daily from dev — full gate battery (lint/typecheck + units + complete network suite + builds + smoke-against-artifact) then a prerelease GitHub Release tagged `v<version>-nightly.<YYDDD>` (YY+day-of-year because Chrome/Firefox cap manifest version components at 65535). Quiet-day skip when dev HEAD already has tonight's tag; manual dispatch has `force` + `dry_run`. Flake policy is retry-lenient (config-default retries), unlike the PR gates' honest retry-0. See [CI.md § nightly.yml](./CI.md#nightlyyml).
+- **Workflow-level**: actionlint + shellcheck run when workflow YAML or shell scripts change.
+
+> **⚠️ The quality gates are non-negotiable.** Unit tests (inside `quality-status`), `Extension network e2e`, and `Extension smoke e2e` are the safety net that lets this repo move fast without shipping breakage, so a red check is never worked around — not by making it advisory (`continue-on-error`, `neutral`, `|| true`, success-on-failure), not by removing it from a branch's required set, not to dodge a `--admin`. A red check means one of two things: a **genuine flake**, which you re-run, or **real breakage**, which you fix. Smoke is required on both branches and its fixtures can flake; it gets the same treatment.
+
+### Branches + releases
+
+- `main` — stable. Required checks enforced via branch protection.
+- `dev` — day-to-day integration. Required checks enforced.
+- Feature branches → PR into `dev`.
+- Promote `dev → main` via PR when ready.
+- **Releases are driven by release-please** (with a workaround). See [§ Release runbook](#release-runbook) below for the full per-release procedure. Two flows: **stable** auto-opens a Release PR on every push to `main`; **prereleases** (rc) are cut manually via `gh workflow run release-prerelease.yml --ref dev`. Both flows hit `release-please-action`'s open abort bug (v4 and v5 alike) ([googleapis/release-please-action#1205](https://github.com/googleapis/release-please-action/issues/1205) + [googleapis/release-please#2712](https://github.com/googleapis/release-please/issues/2712)) — each release needs an unstick + `workflow_dispatch` republish — automated by the `auto-unstick` job while `AUTO_UNSTICK_ENABLED` is on (the 45-second manual version is the documented fallback). Human `chore: bump extension to X.Y.Z` commits remain **deprecated**. Config files: `.github/release-please-config.json` + `.release-please-manifest.json` (stable), `.github/release-please-prerelease-config.json` + `.release-please-prerelease-manifest.json` (prerelease), `CHANGELOG.md`. Workflows: `.github/workflows/release.yml` (stable + publish chain), `.github/workflows/release-prerelease.yml` (rc PR opener).
+
+### Release runbook
+
+Two flows: **stable** (from `main`, tagged `vX.Y.Z`) and **prerelease** (from `dev`, tagged `vX.Y.Z-rc.N`). Both share the same v4 abort bug + manual unstick pattern.
+
+> **This runbook is the source of truth for the release process. Update it when the process changes** — a new failure mode, a changed step, a flipped switch. It's the one runbook still living in CLAUDE.md rather than a skill (see the skill-routing table above — the `release` row points back here); extract it into a `release` skill when it's worth it. Worked examples: `implementations-plan/archive/{release-prerelease-fix,required-check-mismatch,stable-release,release-pipeline-hardening}/`.
+
+#### Start here — what a release is, and what you actually do
+
+A **stable release** turns the current `main` into a published `vX.Y.Z`: a GitHub Release with the built Chrome + Firefox zips + `SHASUMS256.txt`, the landing (`nulo.sh`) redeployed, and a `main → dev` back-sync PR opened. Most of it is automated by [`release.yml`](.github/workflows/release.yml); this table is the **current** division of labor (it shifts as the [staged rollout](#staged-rollout-switches) proceeds):
+
+| What | Who | Current state |
+|---|---|---|
+| Open the Release PR (version bump + `CHANGELOG`) | release-please | ✅ automatic |
+| Write the Release PR's version into `bun.lock`, which release-please cannot edit | `release-pr-lockfile` (advisory; the prerelease PR too) | ✅ automatic |
+| **Tag + GitHub Release after you merge the Release PR** (the "unstick") | `auto-unstick` job **if `AUTO_UNSTICK_ENABLED=on`**, else **you** | ✅ automatic (`AUTO_UNSTICK_ENABLED=on`); with the var OFF (the kill-switch) you do the 45s manual unstick |
+| Gates → build chrome+firefox → smoke → attach zips/SHASUMS | publish chain | ✅ automatic |
+| Redeploy the landing (`nulo.sh`) | Workers Builds, on the next push to `main` | ✅ automatic, but lags a release — see § Stable step 7 |
+| Open the `main → dev` back-sync PR (+ prerelease-manifest re-baseline) | `sync-main-to-dev` | ✅ automatic (it gates on `push` + `attach-assets` success; if you fall back to the manual `workflow_dispatch` unstick, that path is neither → open the sync manually, see § After a stable cut). You review + **merge-commit** it, NOT squash — see step 5. |
+
+**The happy path (stable), end to end:**
+
+1. **Promote `dev → main`** — open a `release: promote dev → main (…)` PR, merge it (merge-commit, per `main`'s ruleset).
+2. **Merge the Release PR** — release-please opens `chore(main): release X.Y.Z` within ~1 min; review the `CHANGELOG.md` diff, merge it via the UI (merge-commit).
+3. **Unstick** — that merge re-triggers `release.yml`, which **aborts** on the [v4 bug](#why-the-manual-unstick-is-required-the-v4-bug):
+   - **`AUTO_UNSTICK_ENABLED=on` (the current state)** → the `auto-unstick` job tags + publishes automatically; nothing to do, skip to 4.
+   - **flag OFF (the kill-switch fallback, not the current state)** → run the **[manual unstick](#stable-release-from-main)** below (§ Stable steps 5–6: a ~45s paste + a `workflow_dispatch` republish).
+4. **Wait for the publish chain** (~15–25 min, plus the Firefox smoke of the zip, which `attach-assets` waits on: allow up to its 45-minute limit): gates → build → smoke → `attach-assets`.
+5. **Merge-commit the back-sync PR (NOT squash)** — `sync-main-to-dev` opens `chore: sync main → dev`. **Merge it with a merge commit** (`gh pr merge <n> --merge`) so `main`'s release commit stays in `dev`'s ancestry — a squash drops it and breaks the next rc cut (the [prerelease-fix record](implementations-plan/archive/release-prerelease-fix/plan.md) has the detail). `dev`'s ruleset allows `merge` alongside `squash`. The merge carries the bot's manifest-rebaseline commit onto `dev`, but that commit is written via the Contents API under the App token → GitHub-**signed** (verified), so classic `required_signatures` is satisfied with **no `--admin`**. Labeled `needs-manual-resolution`? Resolve the conflict on the sync branch first, then merge-commit.
+6. **Verify** — `gh release view v$VERSION --json assets -q '[.assets[].name]'` lists the two zips + `SHASUMS256.txt`.
+
+> **Near-one-click:** with `AUTO_UNSTICK_ENABLED=on`, a stable release is **steps 1, 2, 5 only** (promote → merge Release PR → merge-commit the sync PR); the unstick + publish are hands-off. The detailed sections below are the reference + the fallback for when automation is off or red — see [§ Troubleshooting](#troubleshooting--when-x-fails).
+
+> **Auto-unstick.** `release.yml` has an `auto-unstick` job that does the 45-second manual unstick (§ steps 5–6 below) automatically: on the post-merge `push:main` where release-please aborted, it detects the merged `autorelease: pending` Release PR at `github.sha`, creates the tag + empty release, relabels the PR, and lets `resolve` continue the publish chain in the SAME run. **It is gated by the repo variable `vars.AUTO_UNSTICK_ENABLED`; the in-code default is OFF** (unset, or anything other than `on`/`true`/`1`, = off) as a kill-switch. **The variable is `on`**, so releases self-unstick. (When the var is OFF the job no-ops, `unstuck=false`, and the manual unstick below is required; `gh variable set AUTO_UNSTICK_ENABLED -b off` reverts instantly.) The logic + every guard (idempotent re-tag, fail-closed on a wrong-SHA tag, no-op on a non-Release-PR push) live in unit-tested `scripts/release/auto-unstick*.ts`. **The manual procedure below remains the documented fallback and the source of truth** for what the automation does. To turn it back off: `gh variable set AUTO_UNSTICK_ENABLED -b off` (or delete the variable).
+
+**Prerequisites** (one-time, already done):
+- GitHub App `nulo-sh-release` installed on the repo with `RELEASE_PLEASE_APP_ID` + `RELEASE_PLEASE_APP_PRIVATE_KEY` repo secrets wired.
+- The `nulo-landing` Worker serves `nulo.sh` (custom domain) and has no deploy hook: Workers Builds' Git connection (set up in the Cloudflare dashboard) builds `main` for production and other branches as previews. No Cloudflare credential exists in GitHub Actions.
+
+#### Stable release (from `main`)
+
+Per-release procedure for shipping a stable release. Total time: ~20 min, of which ~45 seconds is manual.
+
+1. **Get the work onto `main`.** Promote `dev → main` via the usual `release: promote dev → main (...)` PR. Merge-commit (per `main`'s ruleset).
+2. **Wait for the Release PR.** The push to `main` triggers `release.yml`. release-please opens a Release PR titled `chore(main): release X.Y.Z` (version chosen automatically from Conventional Commits since the last tag — `feat:` → minor, `fix:` → patch). **While in `0.x`, `bump-minor-pre-major: true` caps a `BREAKING CHANGE:` to a *minor* bump (`0.Y.Z` → `0.(Y+1).0`, never auto-`1.0.0`)** — a `1.0.0` cut is a deliberate manual `Release-As: 1.0.0` footer. Review the auto-generated `CHANGELOG.md` diff in the PR.
+3. **Merge the Release PR via the UI** (merge commit).
+4. **Wait for the post-merge `release.yml` run.** It will run release-please-action again. **Expected: it aborts with `⚠ There are untagged, merged release PRs outstanding - aborting` and the downstream gates + publish jobs all skip.** This is the v4 bug.
+5. **Manual unstick** (~45 seconds — paste into terminal):
+   ```bash
+   PR_NUM=<the Release PR number>
+   VERSION=<the Release PR's X.Y.Z>
+   MERGE_COMMIT=$(gh pr view "$PR_NUM" --json mergeCommit -q '.mergeCommit.oid')
+   git fetch origin main
+   git tag -a "v$VERSION" "$MERGE_COMMIT" -m "Release $VERSION"
+   git push origin "v$VERSION"
+   gh pr edit "$PR_NUM" --add-label "autorelease: tagged" --remove-label "autorelease: pending"
+   gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes "Filled by publish run."
+   ```
+6. **Trigger the publish chain via `workflow_dispatch`:**
+   ```bash
+   gh workflow run release.yml --ref main \
+     -f tag="v$VERSION" -f dry_run=false \
+     -f run_network_e2e=true
+   ```
+   Add `-f publish_chrome=true` and/or `-f publish_firefox=true` only when this dispatch IS the store submission: each publish job runs in its protected environment (`chrome-web-store` keyless via OIDC; `firefox-add-ons` with the `AMO_JWT_ISSUER`/`AMO_JWT_SECRET` secrets), only for a stable tag on `main`, and needs the reviewer's approval; `gh workflow run store-check.yml --ref main -f store=chrome|firefox|both` proves a credential without uploading. The Firefox job packages `git archive` of the release commit as the reviewers' source and attaches it to the version it creates — **if it fails after "version ok" do NOT re-run** (the upload is consumed and AMO never frees a version number): attach the same archive by hand in the Developer Hub, or re-send only the source `PATCH`; the failure message carries the procedure. This runs `lint+typecheck → unit-tests → build chrome+firefox → smoke-against-artifact + smoke-firefox-against-artifact → attach-assets` (zips + SHASUMS + git-cliff body overlay). ~15-25 min. **network-e2e is OPT-IN** (`run_network_e2e=true`) and does not run on the auto push:main publish either — the promote dev→main PR already gates the exact code with the full required network suite before it reaches main, so re-running it on the publish would be pure duplication AND a strand risk (a network-e2e cancel/timeout on push:main takes the whole run down mid-attach, leaving a tag + empty release). The publish still gates on `smoke-against-artifact` and `smoke-firefox-against-artifact` (the real built zips). This does NOT touch the required `extension-network-e2e-status` PR gate — that's produced by the standalone `Extension network e2e` workflow on PRs.
+7. **Refresh the landing once the assets are attached.** The landing's `prebuild` bakes the latest release into the page, and the Release-PR merge push builds it while the release is still being published: that build may keep the previous version, or fail because the new release has no Chrome zip yet (`resolveReleaseInfo` throws; the live deployment stays up). After `attach-assets`, re-run the `nulo-landing` production build (Cloudflare dashboard → Workers & Pages → `nulo-landing` → Deployments), confirm the build succeeded, then check that `curl -s https://nulo.sh` links `releases/tag/vX.Y.Z`.
+8. **Verify**: `gh release view v$VERSION --json assets -q '[.assets[] | .name]'` should list `nulo-chrome-X.Y.Z.zip`, `nulo-firefox-X.Y.Z.zip`, `SHASUMS256.txt`.
+
+#### Prerelease (rc) from `dev`
+
+Per-rc procedure. Same v4 bug as stable; same ~45 second unstick. Network-e2e is OFF by default for prereleases — opt in if you want to gate this rc on it.
+
+1. **Land features on dev as usual** via the standard feat:/fix: PR flow.
+2. **Cut the rc manually:**
+   ```bash
+   gh workflow run release-prerelease.yml --ref dev
+   ```
+   No auto-fire on push:dev — rc cuts are explicit decisions. Within ~30 sec, release-please opens a Prerelease PR titled `chore(dev): release X.Y.Z-rc.N`.
+   - First rc of a new minor: `vX.Y.0-rc.0`.
+   - Second cut, same minor: `vX.Y.0-rc.1`. Third: `vX.Y.0-rc.2`. Counter auto-increments per release-please's prerelease versioning strategy.
+3. **Review + merge the Prerelease PR via the UI** (squash, per `dev`'s ruleset).
+4. **Expected: same v4 abort.** `release-prerelease.yml` doesn't have a downstream publish chain at all — the unstick + publish steps live below.
+5. **Manual unstick** (~45 seconds — paste into terminal, mind the `--prerelease` flag):
+   ```bash
+   PR_NUM=<the Prerelease PR number>
+   VERSION=<the Prerelease PR's version, e.g. X.Y.0-rc.0 or X.Y.0-rc.1>
+   MERGE_COMMIT=$(gh pr view "$PR_NUM" --json mergeCommit -q '.mergeCommit.oid')
+   git fetch origin dev
+   git tag -a "v$VERSION" "$MERGE_COMMIT" -m "Release $VERSION"
+   git push origin "v$VERSION"
+   gh pr edit "$PR_NUM" --add-label "autorelease: tagged" --remove-label "autorelease: pending"
+   gh release create "v$VERSION" --verify-tag --prerelease --title "v$VERSION" --notes "Filled by publish run."
+   ```
+   Notes:
+   - `--prerelease` marks the GitHub Release as prerelease (NOT shown as Latest).
+   - `--verify-tag` confirms the tag exists; we don't pass `--target` because `target_commitish` is ignored when the tag already exists per the GitHub Releases API.
+6. **Trigger the publish chain via the STABLE workflow's escape hatch:**
+   ```bash
+   gh workflow run release.yml --ref dev \
+     -f tag="v$VERSION" -f dry_run=false
+   # Never -f publish_chrome/publish_firefox here: the store jobs refuse prereleases.
+   # Add -f run_network_e2e=true if you want to gate this rc on the
+   # 30-45 min network e2e suite. Off by default for prereleases.
+   ```
+   - **Use `--ref dev` for a prerelease, NOT `--ref main`.** `--ref` picks BOTH the `release.yml` definition AND the reusable workflows it calls (`_build-extension.yml` etc., resolved at the caller's ref). Those must match the **layout of the tag's code**, and `dev` can change that layout before `main` has it: a directory move that has landed on `dev` but not yet on `main` makes a dev-cut tag built via `--ref main` fail with `ENOENT: Could not change directory to …`. So the rule is: **publish a prerelease with the ref of the branch it was cut from.**
+   - Pass the prerelease tag explicitly; the workflow's `resolve` job verifies the tag exists and detects `is_prerelease=true` from the `-` in the version string.
+7. **The landing ignores prereleases** — it links stable releases only. No manual step.
+8. **Verify:**
+   ```bash
+   gh release view "v$VERSION" --json isPrerelease,assets \
+     -q '{prerelease:.isPrerelease, assets:[.assets[].name]}'
+   ```
+   Expected: `prerelease=true`, three assets.
+
+#### After a stable cut promotes to `main`
+
+The prerelease manifest (`.release-please-prerelease-manifest.json`) tracks the rc series independently and must be re-baselined to the new stable version. Otherwise the next rc series starts from a stale base + release-please can reopen old Release PRs on the drift ([release-please#2172](https://github.com/googleapis/release-please/issues/2172)).
+
+> **Automated (`sync-main-to-dev` job).** `release.yml` opens this PR for you. On the `push:main` that published a stable release, the `sync-main-to-dev` job branches from `origin/main`, writes the prerelease-manifest re-baseline, and opens ONE `chore: sync main → dev` PR (App-token-opened so dev's CI fires) that **combines both steps below**. It never local-merges: it lets GitHub compute mergeability — a clean PR is left for you to **merge-commit** (NOT squash — the merge keeps `main`'s release commit in `dev`'s ancestry, which the prerelease anchor needs); a CONFLICTING/UNKNOWN one is labeled `needs-manual-resolution` + commented (surfaced, never silent). It's **push-only** (a `workflow_dispatch` republish of an old tag never re-syncs) and **advisory** (post-publish — a sync hiccup reds only its own job, never the shipped release). The logic lives in unit-tested `scripts/release/open-sync-pr*.ts`. **You still review + merge-commit the PR** (`--merge`, NOT squash — the bot's manifest commit is written via the Contents API under the App token, so it's GitHub-signed and satisfies `required_signatures` with no `--admin`); the steps below are the manual fallback (and what the job automates) if it's ever red or disabled.
+
+**Manual two-step procedure (order matters) — the fallback the job automates:**
+
+1. **First, merge `main` back into `dev`** via the usual flow so `dev`'s `package.json` + `CHANGELOG.md` reflect the new stable version. (Without this, release-please sees a manifest/source drift on dev and can reopen merged PRs.)
+2. **Then, open a small PR to `dev`** updating `.release-please-prerelease-manifest.json` to match (e.g. `{ ".": "X.Y.Z" }`). Merge it.
+3. Next `gh workflow run release-prerelease.yml` will cut the next rc series from the correct base.
+
+#### Why the manual unstick is required (the v4 bug)
+
+`release-please-action@v4` runs both "open Release PR" and "tag + publish merged Release PR" phases. The publish phase looks for a previously-created GitHub Release that matches the merged PR's manifest entry — when no such release exists yet (because the publish phase is supposed to be the one creating it), it logs `⚠ Expected 1 releases, only found 0` and bails with the "outstanding" error instead of creating the release itself. Both the original action issue ([googleapis/release-please-action#1205](https://github.com/googleapis/release-please-action/issues/1205)) and the upstream tool issue ([release-please#2712](https://github.com/googleapis/release-please/issues/2712)) are open with no fix.
+
+**All versions are affected** (verified by source-level inspection):
+- `release-please-action@v3.7.13` (bundles release-please 15.13.0): same abort logic in `base.ts` + `manifest.ts`. Also 18 months unmaintained.
+- `release-please-action@v4` (bundles release-please 17.3.0): hits the bug.
+- `release-please-action@v5.0.0` (bundles release-please 17.6.0): current. Node 24 runtime bump + minor unrelated fixes. Same abort path. Active issues confirm the deadlock on v5.
+
+Downgrading to v3 also requires renaming our `target-branch:` input back to `default-branch:` — not worth the churn for no actual fix.
+
+The manual unstick (tag + `autorelease: tagged` label + empty GitHub Release) places the repo in the state the action's publish phase *expects* to find. The follow-up `workflow_dispatch` then exercises the publish chain end-to-end via our `always() && needs.X.result == 'success'` guards (which require the explicit tag input to bypass `release-please` entirely).
+
+**Things that DO work without manual intervention:**
+- release-please opens correctly-titled Release PRs (the `group-pull-request-title-pattern` in [`release-please-config.json`](.github/release-please-config.json) sets the title).
+- The Release PR's CI runs normally (App-token triggers the PR-quick workflow → `quality-status`).
+- The Release PR's commits are bot-verified (App-authenticated → satisfies `main`'s signed-commits rule).
+- The `workflow_dispatch` publish chain runs all gates + builds + smoke + attach-assets end-to-end.
+
+#### Troubleshooting — when X fails
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Post-merge `release.yml` skipped everything; no tag, no assets | v4 abort while `AUTO_UNSTICK_ENABLED` is OFF — the var is expected `on`, so someone turned it off | Run the [manual unstick](#stable-release-from-main) (§ Stable 5–6), then re-enable: `gh variable set AUTO_UNSTICK_ENABLED -b on`. |
+| `auto-unstick` job **red** with "refusing to re-point" | a `vX.Y.Z` tag already exists at a DIFFERENT commit | Fail-closed by design — it won't move a tag. Investigate the tag/commit mismatch, delete/fix the bad tag, then `workflow_dispatch` republish. |
+| `auto-unstick` ran, `unstuck=false`, chain still skipped | flag off (no-op by design), OR HEAD isn't a merged `autorelease: pending` Release PR | If you expected it ON: confirm `vars.AUTO_UNSTICK_ENABLED=on` AND the Release PR actually merged at `github.sha`. |
+| `publish-firefox-amo` red after `version ok:` | the source `PATCH` failed or timed out after AMO created the version | **Never re-run** (AMO refuses a duplicate version number and deleting a version never frees it). Open the version in the Developer Hub → attach `git archive --format=zip --prefix=nulo-X.Y.Z/ vX.Y.Z` as its source, or re-send only the source `PATCH`. A red `check` in `store-check.yml` (`wallet@nulo.sh` not listed) means the key pair belongs to another Mozilla account: regenerate it in the Developer Hub under the owning account and replace both secrets. |
+| `publish-firefox-amo` red with `create version: HTTP 400` | AMO validated the version request and created nothing, e.g. reviewer notes over its 3,000-character cap, which `reviewerNotes` refuses before the upload | Nothing to recover: no version exists. The job checks out the tag's commit, so a cause in that commit's files, like `listing.md`'s notes, fails the same way on a re-run: submit the release's zip by hand in the Developer Hub with the same `git archive` source and fixed notes, or ship the fix in the next release. Re-run only once a cause outside the tag is fixed. |
+| Every Chrome dashboard field is locked | an approved, staged submission holds the draft | Publishing it unlocks the draft; it goes live, so it is the owner's call. The store run's preflight then reads `published PUBLISHED, submitted none`. |
+| `release-pr-lockfile` red | its `bun.lock` edit failed (the branch kept moving through three attempts, or a lockfile layout `lock-version.ts` refuses) | Nothing is held: the job is advisory and CI's frozen install accepts the stale workspace version. The next release-please update re-runs it; or run `bun install` on the Release PR's branch and push the one-line `bun.lock` change. |
+| Release exists but assets are missing | an upload failed mid-`attach-assets` | Re-run just the publish chain: `gh workflow run release.yml --ref main -f tag=vX.Y.Z -f dry_run=false`. |
+| `attach-assets` skipped, `smoke-firefox-against-artifact` red | the Firefox smoke of the shipped zip failed, and it gates the assets | A genuine flake: re-run the publish chain (the command above). Real breakage: fix forward and release again; never take the smoke out of `needs` to ship this one. |
+| `nulo.sh` still links the previous release, or the `nulo-landing` build failed | the landing builds only on pushes to `main`, and the Release-PR merge built it before the release's zip was attached | Wait for `attach-assets`, re-run the `nulo-landing` production build in the Cloudflare dashboard, confirm it succeeded (§ Stable step 7). |
+| `sync-main-to-dev` PR labeled `needs-manual-resolution` | `dev` diverged from `main` since the release | Resolve the conflict on the sync branch (usually `CHANGELOG.md` / `bun.lock`), then **merge-commit** it (`--merge`, NOT squash — preserves release-commit ancestry on `dev`; the bot's manifest commit is App-signed so no `--admin`). |
+| No `sync-main-to-dev` PR appeared | push-only + stable-only; a `workflow_dispatch` republish never syncs | Expected on a republish. For a genuine cut, check the job ran on the `push:main` and read its log. |
+| release-please reopened an OLD Release PR | prerelease-manifest drift after a stable cut | Re-baseline `.release-please-prerelease-manifest.json` to the new stable version — the `sync-main-to-dev` PR does this; just merge it. |
+
+#### Staged-rollout switches
+
+Several pieces ship **guarded** and get promoted only after they're proven on real runs. Flip them deliberately, one at a time — the rule is *ship inert/advisory, observe one real release, then promote*:
+
+| Switch | What it gates | Default | Flip when | How |
+|---|---|---|---|---|
+| `vars.AUTO_UNSTICK_ENABLED` | the `auto-unstick` job acting vs no-op | code-default **off**; var **on** | next stage: flip the in-code default ON after one clean auto-unstick release | `gh variable set AUTO_UNSTICK_ENABLED -b on` (back: `-b off`, or delete the var) |
+| `smoke-firefox-against-artifact` ∈ `attach-assets.needs` | whether a red Firefox smoke blocks the release's assets | **gating** (in `attach-assets.needs` and `status`) | flipped | back: remove it from both `needs` and `status`'s result loop; update the `behavior-gating.test.ts` pin in the same commit |
+| `extension-smoke-e2e-firefox-status` required | whether a red Firefox smoke blocks a merge | **required on `dev` and `main`** | flipped on both | the protection runbook (`scripts/ci-cd/required-checks.sh`), per branch — owner's call |
+| `extension-network-e2e-firefox-status` required | whether a red Firefox network suite blocks a merge | **required on `dev`**; advisory on `main` | on `main`: after 30 consecutive green nightlies of the four `network-e2e-*-firefox` jobs, or earlier by the owner's call | same runbook — owner's call |
+
+The manual procedures above remain the permanent fallback regardless of switch state.
+
+## What this file is NOT
+
+- Not the architecture overview — see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+- Not the per-package surface — see each `packages/<name>/README.md`.
+- Not the e2e infrastructure doc — see [`apps/extension/tests/e2e/README.md`](./apps/extension/tests/e2e/README.md).
+- Not the planning standard or the plans themselves — see [`implementations-plan/README.md`](./implementations-plan/README.md).

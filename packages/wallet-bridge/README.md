@@ -1,0 +1,328 @@
+# @nulo/wallet-bridge
+
+The dApp-facing dispatcher. Implements the `@aztec-labs/wallet-sdk` capability map,
+narrows protocol messages into typed service calls, and enforces session scope.
+Does not depend on the Aztec runtime — the bridge is transport-shaped, not
+chain-shaped.
+
+## Position in the stack
+
+```
+wallet-core  →  wallet-crypto  →  extension-messaging  →  aztec-runtime  →  wallet-bridge  →  extension
+```
+
+Depends on `wallet-core` and `extension-messaging`. **Does not** depend on
+`aztec-runtime`: keeping the bridge runtime-free is what allows the dispatcher
+to live in the service worker while the PXE lives in the offscreen document.
+
+## File map
+
+| Path | Purpose |
+|---|---|
+| `src/dispatcher.ts` | The dispatcher. Routes every wallet-sdk method to typed service calls; narrows protocol shapes; threads the right session/capabilities through. |
+| `src/capability-negotiation.ts` | Pure consent planning for `requestCapabilities`: projects the requested capabilities, decides which the stored grants already cover, and folds the window's answer into one session decision. The dispatcher owns every service call around it. |
+| `src/method-descriptors.ts` | **Single source of truth** for per-method metadata: capability, routing (network/account/handler), scope-checker reference, exempt flag, batch refusal, F-/AUDIT markers. The six former parallel tables (`METHOD_CAPABILITY_MAP`, `EXEMPT_METHODS`, `METHOD_TO_KIND`, `NETWORK_ONLY_KINDS`, `ACCOUNT_KINDS`, `METHOD_SCOPE_CHECKER`) and `BATCH_REFUSED_METHODS` are DERIVED from `METHOD_REGISTRY` here. Add/reclassify a method = one row (a build-failing exhaustiveness test + the dispatch-entry guard catch a forgotten one). |
+| `src/method-scope-checkers.ts` | Leaf module: per-method scope-check function bodies + their helpers. Referenced by the registry's `scopeCheck` fields and by `scope-enforcement.ts` — kept here (depended-on, never depending back) to break the registry↔scope-enforcement cycle. |
+| `src/field-address.ts` | Leaf module: the listed-contract address form (`isFieldAddress`) and the one comparison every grant-to-call contract check uses (`sameFieldAddress`, over `fieldAddressKey`). It compares the 32-byte value, so the case a dApp wrote never decides a match, and a malformed value matches nothing, itself included. |
+| `src/capability-map.ts` | Thin facade over the registry: `getRequiredCapability` / `isCapabilityExempt` read the derived capability map. |
+| `src/capabilities.ts` | Capability-request types and resolution helpers. |
+| `src/services-contract.ts` | Structural interfaces the dispatcher consumes (NetworkServices, AccountServices, DappSessionServices, …). Keeps the bridge import-free relative to concrete service impls in `@nulo/extension`. |
+| `src/scope-enforcement.ts` | Per-message re-check entry points (`enforceScope` / `enforceScopeWithSession`) over the registry-derived method→checker map; owns the session-account-scope wrapper. Checker bodies live in `method-scope-checkers.ts`. |
+| `src/session-types.ts` | DappSession shape; per-`(origin, chainId, profileId)` keying. |
+| `src/dapp-interaction-protocol.ts` | Wire schemas for popup-driven interactions (discover, capabilities, execute, verify, json). |
+| `src/action.ts`, `operation.ts`, `operation-result.ts`, `transaction-origin.ts` | Operation models that flow through the dispatcher. |
+| `src/fee.ts` | Fee-payment-method protocol types shared with the popup. |
+| `src/caip.ts` | CAIP-2 / CAIP-10 helpers (`aztec:<chainId>` / `aztec:<chainId>:<address>`). The single source of truth for parsing/formatting CAIP identifiers. |
+| `src/authwit-content.ts` | Auth-witness content shapes. |
+| `src/discovery-queue.ts` | Discovery-request queue. |
+| `src/types.ts` | Shared protocol types. |
+
+## OperationResult
+
+Every `executeOperations` call returns one `OperationResult` per requested
+operation, in order. The union has four variants:
+
+| Variant | Meaning |
+|---|---|
+| `{ status: "ok", result }` | Operation completed; `result` is its return value. |
+| `{ status: "cancelled", jobId?, reason? }` | User cancelled mid-flight. Distinct from `failed`. |
+| `{ status: "failed", error }` | Operation failed. `error` is a human-readable message. |
+| `{ status: "skipped" }` | Batch sibling not attempted (a prior operation in the same batch returned non-`ok`). |
+
+`cancelled` distinguishes "the user intentionally cancelled" from "the
+operation failed". dApps should suppress error UI on cancellation — silent UX
+is the expected behavior.
+
+## dApp cancellation contract
+
+When a user cancels an in-flight tx (or other cancellable operation) from the
+wallet UI, the wallet-sdk delivers an error to the dApp's awaiting promise.
+
+**The current upstream `@aztec-labs/wallet-sdk` collapses our structured envelope
+to a plain `Error` whose `.message` is the JSON-serialized payload.** The
+following recipe handles both that shape and a forward-compatible structured
+shape, so dApps stay correct if the SDK ever preserves structure:
+
+```ts
+try {
+  const txHash = await wallet.aztec.sendTx(payload)
+} catch (err) {
+  let info: { code?: number; message?: string; data?: unknown } | undefined
+
+  // Forward-compat: structured payload (if SDK ever stops collapsing).
+  if (typeof err === "object" && err !== null && "code" in err) {
+    info = err as typeof info
+  }
+  // Today: SDK wraps as `new Error(JSON.stringify(response.error))`.
+  else if (err instanceof Error) {
+    try {
+      info = JSON.parse(err.message)
+    } catch {
+      /* not a Nulo cancel — fall through to generic error handling */
+    }
+  }
+
+  if (info?.code === 4001) {
+    // User cancelled or rejected — silent UX, no failure dialog.
+    return
+  }
+
+  // Real failure — surface info?.message ?? err.message to the user.
+  console.error("Transaction failed:", info?.message ?? (err instanceof Error ? err.message : err))
+}
+```
+
+### Cancel payload shape
+
+When the wallet emits a cancel signal, the structured envelope (before SDK
+collapse) is:
+
+```jsonc
+{
+  "code": 4001,                                  // EIP-1193 user-rejected
+  "message": "Transaction cancelled by user",
+  "data": {
+    "walletErrorCode": "JOB_CANCELLED",          // discriminates from USER_REJECTED
+    "jobId": "<journal-uuid>"                    // for dApp-side correlation
+  }
+}
+```
+
+- **Code `4001`** matches [EIP-1193](https://eips.ethereum.org/EIPS/eip-1193#errors).
+  dApps with existing EIP-1193 reject handling get cancel handling for free.
+- **`data.walletErrorCode`** disambiguates "user cancelled mid-flight"
+  (`JOB_CANCELLED`) from "user rejected at approval popup" (`USER_REJECTED`).
+  Both share code 4001; the discriminator is for dApp-side telemetry.
+- **`data.jobId`** correlates with the wallet's internal journal record.
+  Optional for dApp consumers.
+
+### What other error shapes look like
+
+For other failures (network errors, simulation failures, etc.), the dApp
+receives `err.message` as a plain non-JSON string. The recipe's
+`try { info = JSON.parse(...) } catch { ... }` falls through gracefully.
+
+A request its stored grant does not cover (a contract, call, class, account
+or sender outside the grant, or a flag the grant does not set) is refused
+before any window opens or anything runs, with one envelope for every such
+refusal:
+
+```jsonc
+{
+  "code": 4100,                                  // EIP-1193 unauthorized
+  "message": "This request is outside the permissions you gave this app.",
+  "data": { "walletErrorCode": "SCOPE_VIOLATION" }
+}
+```
+
+The message is a constant and the envelope names no field and no value. A
+dApp reads the contracts, calls, classes and flags it holds from its own
+`requestCapabilities` answer, which is the stored grant, and asks again with a
+wider manifest. The answer lists the session's accounts only when the grant
+sets `canGet`. `createAuthWit` for a raw message hash is not a scope refusal
+(no grant can admit one) and answers the plain string.
+
+## getAccounts before requestCapabilities
+
+`wallet.getAccounts()` throws `CapabilityNotGrantedError` (code `4100`,
+EIP-1193 "Unauthorized") when called on a session that has not yet been
+granted the `accounts` capability. dApps should call `requestCapabilities()`
+first; if they don't, the throw triggers their existing fallback path:
+
+```ts
+try {
+  const accounts = await wallet.getAccounts()
+} catch (err) {
+  // Fallback works for ANY throw — bare-catch is fine (e.g. Nethermind faucet).
+  // Code-aware discrimination (optional):
+  const msg = err instanceof Error ? err.message : String(err)
+  try {
+    const parsed = JSON.parse(msg)
+    if (parsed.code === 4100 && parsed.data?.walletErrorCode === "CAPABILITY_NOT_GRANTED") {
+      // The wallet is telling us to request capabilities first.
+    }
+  } catch {
+    /* not a structured error — bare-catch fallback handles it */
+  }
+
+  // Always send the full manifest: one popup grants accounts + simulation
+  // + transaction + etc. The dApp can do everything afterwards.
+  const granted = await wallet.requestCapabilities(myFullManifest)
+}
+```
+
+The structured envelope (pre-SDK-collapse):
+
+```jsonc
+{
+  "code": 4100,
+  "message": "accounts capability not granted. Call requestCapabilities() first.",
+  "data": {
+    "walletErrorCode": "CAPABILITY_NOT_GRANTED",
+    "capabilityType": "accounts"
+  }
+}
+```
+
+The `data.walletErrorCode` discriminator distinguishes this 4100 from any
+other "unauthorized" surface the wallet might add later. The error message is
+a public contract — it must stay byte-for-byte stable across versions because
+some dApps will substring-match on it.
+
+Every capability-gated method answers this when the session holds no grant
+of the method's capability type, with `capabilityType` naming that type. A
+method whose type is granted but whose request the grant does not cover gets
+the `SCOPE_VIOLATION` envelope instead (§ What other error shapes look like).
+
+## Scripts
+
+| Command | Effect |
+|---|---|
+| `bun run typecheck` | `tsc --noEmit`. |
+| `bun run test` | Unit tests via vitest. |
+
+## Testing
+
+Colocated `*.test.ts`. Dispatcher and scope-enforcement coverage live in
+`dispatcher.test.ts` and `scope-enforcement.test.ts`. Both exercise the bridge
+against a fake services-contract; no real chain or runtime needed.
+
+## Key invariants
+
+- **No `aztec-runtime` imports.** Enforced via biome `noRestrictedImports`.
+  The bridge is transport-shaped; chain-shape concerns belong in the runtime
+  or in the extension's service layer.
+- **One CAIP source of truth.** Anything that parses `aztec:<chainId>` or
+  `aztec:<chainId>:<address>` goes through `caip.ts`. Hand-rolled parsing is a
+  bug; that's how the partial-validation drift this package was extracted to
+  fix gets reintroduced.
+- **Scope enforcement is per-message.** A granted session is not a free pass —
+  `scope-enforcement.ts` re-checks each method's targets against the session's
+  allow-list. Don't bypass it on the "trusted dispatcher" assumption.
+- **An accounts grant is widened, never re-granted.** A repeat `accounts` request from a session
+  that already holds one is compared against the profile's visible accounts on the session's
+  chain (CAIP-10 projected, `getSessionAccountAddresses`): an unheld account opens the popup with
+  the held rows locked (`grantedAccounts`); with equal flags (`accountsMembershipOnly`) the
+  decision only adds membership and the stored grant record is never replaced; a decline keeps
+  the grant, its flags and aliases; and the decision carries `requiresGrant: ["accounts"]`, which
+  `applyCapabilityDecision` enforces inside its lock so a grant revoked while the popup was open
+  refuses the addition (`CapabilityNotGrantedError`) instead of landing accounts on a grant-less
+  session. A dApp never learns which accounts it lacks — only that a prompt opened.
+- **Capabilities encode UX, not authority.** The `capability-map.ts` columns
+  determine whether a popup opens; the underlying authority is the session
+  itself. Adding a capability without updating the popup model leaves a silent
+  path; removing one without a migration leaves stale sessions.
+- **The dispatcher is the single chokepoint.** Every dApp-originated request
+  flows through `dispatcher.ts`. New surface (e.g. a new wallet-sdk method)
+  gets added here; bypass routes are not allowed. `dispatch()` resolves the
+  method's `MethodDescriptor` up front — a method with no registry row is
+  rejected (`Unsupported wallet method`) before any routing.
+- **Method metadata lives in ONE place.** Capability, routing, and scope-checker
+  facts for every method are `MethodDescriptor` rows in `method-descriptors.ts`;
+  the old six parallel tables are derived. To add/reclassify a method, edit the
+  row — a forgotten descriptor fails the exhaustiveness test (build) and the
+  dispatch-entry guard (runtime). A method needing a NEW `Operation` kind also
+  touches the kind→Operation build switches in `dispatcher.ts`; a new
+  handler-routed method also needs its `dispatch()` branch.
+
+## Versioning
+
+Pre-1.0 — minor bumps allowed to widen public types non-breakingly (e.g. the
+`cancelled` variant). Major/exhaustive consumers may need a
+new case added to their switches.
+
+## Custom RPC methods (Nulo extensions)
+
+The wallet exposes three Nulo-custom RPCs on top of the canonical `@aztec-labs/wallet-sdk`
+`WalletSchema` (all three are runtime-patched onto `WalletSchema`; see the
+schema-patch contract below):
+
+| Method | Signature | Capability | Popup |
+|---|---|---|---|
+| `registerToken` | `(account: AztecAddress, token: AztecAddress) => Promise<void>` | `accounts` | **Always** (per-call confirmation; AccessLevel.AppState) |
+| `isTokenRegistered` | `(token: AztecAddress) => Promise<boolean>` | `contracts` | None (silent reader; scope-checked via `canGetMetadata`) |
+| `grantPublicAuthwit` | `(account: AztecAddress, content: { caller, contract, method, args }) => Promise<TxHash>` | `transaction` | **Always** (execute confirmation; scope-checked against the granted transaction scope) |
+
+`registerToken` adds the token to the wallet's **profile + chain** watchlist
+(not per-account — every account on this chain tracks the token's balance
+once added). The popup pre-fetches the token's `name` / `symbol` / `decimals`
+via `parseTokenInterface` and renders them BEFORE Allow/Deny so the user can
+recognise phishing tokens. The contract address is always shown alongside the
+metadata — the strings come straight from the on-chain contract and are
+attacker-controllable.
+
+### Schema-patch contract
+
+`WalletSchema` is mutable upstream. We extend it at runtime with Zod entries
+for the three Nulo-custom methods (`registerToken`, `isTokenRegistered`,
+`grantPublicAuthwit`). The patch is a **single private package**,
+[`@nulo/wallet-sdk-schema-patch`](../wallet-sdk-schema-patch/README.md), consumed
+by both apps:
+
+| Side | Import | In |
+|---|---|---|
+| Extension | `import "@nulo/wallet-sdk-schema-patch/register"` | `wallet-sdk/background.ts` (first import) |
+| Playground | `import "@nulo/wallet-sdk-schema-patch/register"` | `lib/wallet.ts` (first import) |
+
+`./register` is **side-effect only** — importing it first mutates `WalletSchema`
+before any wallet-sdk proxy reads it. The package also exports `./apply`
+(`applyNuloSchemaPatch(schema)`), the pure patch body, unit-tested against mock
+schema objects in `packages/wallet-sdk-schema-patch/src/apply.test.ts`. The
+reachability guarantee is pinned by `dispatcher.test.ts` ("schema patch extends
+WalletSchema with a 2-arg `registerToken` entry"), which now imports the shared
+package. (It used to be three byte-identical inline copies with a copy-identity
+drift pin; one source removed both the drift risk and that pin.) When adding a
+new Nulo-custom RPC, edit the ONE source and add a paired reachability assertion.
+
+Keeping the patch in a **dedicated private package** — not an export of
+`wallet-bridge` itself — is deliberate: `wallet-bridge` depends on `wallet-core`
++ `extension-messaging` and must stay extension-internal, so exposing it to the
+playground dApp surface would leak its dispatcher/protocol internals to
+third-party dApps.
+
+### Dropped surface
+
+Previously Nulo-custom but no longer reachable from any dApp (the schema
+patch does NOT restore them):
+
+- `getCompleteAddress` — the `accounts` capability response already carries
+  the account list. Use `wallet.requestCapabilities()` → granted accounts.
+- `simulateViews` — fully retired. dApp-facing method AND internal
+  `simulate_views` op kind both gone. Use `wallet.simulateUtility()` (or batch
+  via `wallet.batch([{name: "executeUtility", ...}, ...])`). The internal
+  batching logic that previously lived behind the op kind now lives in
+  `apps/extension/src/wallet/services/execution/helpers/batched-view-simulation.ts`,
+  called directly by balance-projector + gas-balance.
+
+If a future Aztec.js version ships its own `registerToken`, the patch's
+signature-drift guard throws at SW init (`expected 2 params, found N`). Pin the
+`@aztec-labs/wallet-sdk` version exactly (`6.0.0-rc.1` today) so the patch's
+assumptions are stable across upgrades.
+
+### Not in `batch`
+
+`BatchedMethodSchema` is built from `WalletMethodSchemas` upstream, not from
+`WalletSchema`. Our runtime patch mutates `WalletSchema` but the upstream
+`BatchedMethodSchema` is already frozen. So `wallet.batch([{name:
+"registerToken", ...}])` Zod-rejects on the dApp side. Treat `registerToken`
+as a single-shot call.

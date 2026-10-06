@@ -1,0 +1,33 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+// biome-ignore lint/suspicious/noExplicitAny: console.* genuinely accepts any arguments
+const pendingLogs: any[][] = []
+
+for (const method of ["trace", "debug", "log", "info", "warn", "error"] as const) {
+	const original = console[method].bind(console)
+	console[`_${method}`] = original
+	// biome-ignore lint/suspicious/noExplicitAny: console.* genuinely accepts any arguments
+	console[method] = (...args: any[]) => {
+		const overridden = self[`nuloOn${method}`]
+		if (!overridden) {
+			pendingLogs.push(args)
+			return
+		}
+		if (pendingLogs.length) {
+			for (const data of pendingLogs) {
+				try {
+					overridden(...data)
+				} catch (error) {
+					original(`Error in self.nuloOn${method}`, error)
+					original(...data)
+				}
+			}
+			pendingLogs.splice(0)
+		}
+		try {
+			overridden(...args)
+		} catch (error) {
+			original(`Error in self.nuloOn${method}`, error)
+			original(...args)
+		}
+	}
+}

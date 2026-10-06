@@ -1,0 +1,54 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { type LogEntry, formatLogData, getLogLevelName } from "./logs-format"
+
+const MAX_CELL_LENGTH = 32_760
+
+/**
+ * Build CSV text from a list of log entries. Long data values are split
+ * into MAX_CELL_LENGTH-wide cells with leading / trailing ellipses so
+ * downstream spreadsheets (Excel cell limit is 32_767 chars) don't
+ * truncate silently.
+ */
+export function buildLogsCsv(logs: LogEntry[]): string {
+	const rows: [string, string, string, string][] = []
+
+	for (const log of logs) {
+		const time = new Date(log.timestamp).toISOString()
+		const source = log.source
+		const level = getLogLevelName(log.level)
+		for (const cell of splitIntoCells(formatLogData(log.data))) {
+			rows.push([time, source, level, cell])
+		}
+	}
+
+	return [["time", "source", "level", "data"], ...rows]
+		.map((row) => row.map((value) => `"${neutralizeFormula(String(value)).replace(/"/g, '""')}"`).join(","))
+		.join("\n")
+}
+
+/** A cell starting with a formula trigger opens as code in a spreadsheet; a leading quote keeps it text. */
+function neutralizeFormula(cell: string): string {
+	return /^[=+\-@\t\r]/.test(cell) ? `'${cell}` : cell
+}
+
+/** Split an over-long data value into MAX_CELL_LENGTH-wide cells, ellipsis-marked on the
+ *  cut sides so a continuation cell is visibly a continuation. */
+function splitIntoCells(data: string): string[] {
+	if (data.length <= MAX_CELL_LENGTH) return [data]
+	const cells: string[] = []
+	let i = 0
+	while (i < data.length) {
+		const chunk = data.slice(i, i + MAX_CELL_LENGTH)
+		const isFirst = i === 0
+		const isLast = i + MAX_CELL_LENGTH >= data.length
+
+		let chunkWithDots = chunk
+		if (isFirst && !isLast) chunkWithDots = `${chunk}...`
+		else if (!isFirst && !isLast) chunkWithDots = `...${chunk}...`
+		else if (!isFirst && isLast) chunkWithDots = `...${chunk}`
+
+		cells.push(chunkWithDots)
+		i += MAX_CELL_LENGTH
+	}
+	return cells
+}

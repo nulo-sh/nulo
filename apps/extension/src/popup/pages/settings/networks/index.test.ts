@@ -1,0 +1,157 @@
+import { createTestingPinia } from "@pinia/testing"
+import { flushPromises, mount } from "@vue/test-utils"
+import { nextTick } from "vue"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { useAppStore } from "@/stores/app.store"
+import SettingsPageShell from "@/components/composite/SettingsPageShell.vue"
+import NetworksIndex from "./index.vue"
+
+const configState = vi.hoisted(() => ({ developerMode: false, listeners: [] as Array<(s: { key: string; value: unknown }) => void> }))
+vi.mock("@/wallet/services/config/client", () => ({
+	ConfigServiceClient: function ConfigServiceClient() {
+		return {
+			getValue: vi.fn(async (key: string) => (key === "developerMode" ? configState.developerMode : undefined)),
+			onUpdate: { add: (fn: (s: { key: string; value: unknown }) => void) => configState.listeners.push(fn), remove: vi.fn() },
+			disconnect: vi.fn(),
+		}
+	},
+}))
+
+// The app store's setup runs `useSyncedRef` → `chrome.storage.local` on instantiation; stub it.
+beforeEach(() => {
+	vi.stubGlobal("chrome", {
+		storage: {
+			local: {
+				get: vi.fn((_k: unknown, cb?: (r: Record<string, unknown>) => void) => {
+					cb?.({})
+					return Promise.resolve({})
+				}),
+				set: vi.fn(async () => undefined),
+				remove: vi.fn(async () => undefined),
+			},
+			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+		},
+		runtime: { connect: vi.fn(), onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
+	})
+})
+afterEach(() => vi.unstubAllGlobals())
+
+const NETS = [
+	{ id: "alpha", name: "Alpha V5", chainId: 4248422646, kind: "mainnet", endpoints: [], primaryEndpointId: "" },
+	{ id: "tn", name: "Testnet", chainId: 1816023401, kind: "testnet", endpoints: [], primaryEndpointId: "" },
+]
+
+function mountList(activeId: string) {
+	const wrapper = mount(NetworksIndex, {
+		global: {
+			plugins: [createTestingPinia({ createSpy: vi.fn })],
+			components: { SettingsPageShell },
+			stubs: {
+				// SettingItem stub renders `to` (proving the row is a keyboard-activatable link, not a
+				// click-only div) + the #right slot (where the active badge lives). $attrs forwards the
+				// data-testid/data-network-* fallthrough attributes.
+				SettingItem: {
+					props: ["to", "title"],
+					inheritAttrs: false,
+					template: `<a :data-to="to" v-bind="$attrs"><slot name="dot" /><span class="title">{{ title }}</span><slot name="right" /></a>`,
+				},
+				Flex: { inheritAttrs: false, template: "<div v-bind='$attrs'><slot /></div>" },
+				Text: { template: "<span><slot /></span>" },
+				// Badge is the @nulo/design purple chip; stub keeps the data-testid + text assertions deterministic.
+				Badge: { inheritAttrs: false, template: "<span v-bind='$attrs'><slot /></span>" },
+				MaterialIcon: true,
+				SubPageHeader: true,
+				SectionLabel: true,
+				ItemsContainer: { template: "<div><slot /></div>" },
+				Button: { inheritAttrs: false, template: "<button v-bind='$attrs'><slot /></button>" },
+			},
+		},
+	})
+	const appStore = useAppStore()
+	appStore.networks = NETS as never
+	appStore.network = NETS.find((n) => n.id === activeId) as never
+	return { wrapper, appStore }
+}
+
+describe("Settings › Networks list (item 4 — active badge, keyboard-activatable rows)", () => {
+	test("each row is a keyboard-activatable link (`to`) to its detail page, not a click-only div", async () => {
+		const { wrapper } = mountList("alpha")
+		await nextTick()
+		const rows = wrapper.findAll('[data-testid="network-row"]')
+		expect(rows).toHaveLength(2)
+		const tos = rows.map((r) => r.attributes("data-to"))
+		expect(tos).toContain("/popup/settings/networks/alpha")
+		expect(tos).toContain("/popup/settings/networks/tn")
+	})
+
+	test("the ACTIVE row shows the left dot + Active pill; non-active rows show neither; testids preserved", async () => {
+		const { wrapper } = mountList("alpha")
+		await nextTick()
+		const badges = wrapper.findAll('[data-testid="network-active-badge"]')
+		expect(badges).toHaveLength(1)
+		expect(badges[0]?.text()).toContain("Active")
+
+		// The left status dot (in the #dot slot, where the fake radio used to be) marks the active row.
+		const dots = wrapper.findAll('[data-testid="network-active-dot"]')
+		expect(dots).toHaveLength(1)
+		expect(wrapper.find('[data-network-id="alpha"]').find('[data-testid="network-active-dot"]').exists()).toBe(true)
+		expect(wrapper.find('[data-network-id="tn"]').find('[data-testid="network-active-dot"]').exists()).toBe(false)
+
+		expect(wrapper.find('[data-network-id="alpha"]').find('[data-testid="network-active-badge"]').exists()).toBe(true)
+		expect(wrapper.find('[data-network-id="tn"]').find('[data-testid="network-active-badge"]').exists()).toBe(false)
+
+		// testid stability (e2e selectors depend on these)
+		expect(wrapper.find('[data-testid="network-row"][data-network-name="Alpha V5"]').exists()).toBe(true)
+		expect(wrapper.find('[data-testid="network-row"][data-network-name="Testnet"]').exists()).toBe(true)
+	})
+
+	test("no left radio/circle icon remains (the source of the 'looks selectable' confusion)", async () => {
+		const { wrapper } = mountList("tn")
+		await nextTick()
+		const html = wrapper.html()
+		expect(html).not.toContain("check-circle")
+		expect(html).not.toContain('name="circle"')
+	})
+})
+
+describe("Settings › Networks list — Add network is a Developer-Mode surface", () => {
+	beforeEach(() => {
+		configState.developerMode = false
+		configState.listeners.length = 0
+	})
+
+	test("hidden by default, shown once Developer Mode is on, and follows a live config update", async () => {
+		const { wrapper } = mountList("alpha")
+		await flushPromises()
+		expect(wrapper.find('[data-testid="network-new-btn"]').exists()).toBe(false)
+		// Existing rows stay fully reachable regardless of the gate.
+		expect(wrapper.findAll('[data-testid="network-row"]')).toHaveLength(2)
+
+		for (const fn of configState.listeners) fn({ key: "developerMode", value: true })
+		await nextTick()
+		expect(wrapper.find('[data-testid="network-new-btn"]').exists()).toBe(true)
+
+		for (const fn of configState.listeners) fn({ key: "developerMode", value: false })
+		await nextTick()
+		expect(wrapper.find('[data-testid="network-new-btn"]').exists()).toBe(false)
+	})
+
+	test("an existing custom network stays listed and reachable with Developer Mode off", async () => {
+		const { wrapper, appStore } = mountList("alpha")
+		appStore.networks = [
+			...NETS,
+			{ id: "mine", name: "My Chain", chainId: 4242, kind: "custom", endpoints: [], primaryEndpointId: "" },
+		] as never
+		await flushPromises()
+		const custom = wrapper.findAll('[data-testid="network-row"]').find((r) => r.attributes("data-network-id") === "mine")
+		expect(custom?.attributes("data-to")).toBe("/popup/settings/networks/mine")
+		expect(wrapper.find('[data-testid="network-new-btn"]').exists()).toBe(false)
+	})
+
+	test("mounts visible when Developer Mode is already on", async () => {
+		configState.developerMode = true
+		const { wrapper } = mountList("alpha")
+		await flushPromises()
+		expect(wrapper.find('[data-testid="network-new-btn"]').exists()).toBe(true)
+	})
+})

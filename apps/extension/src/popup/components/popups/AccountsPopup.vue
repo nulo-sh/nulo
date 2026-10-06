@@ -1,0 +1,137 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+/** Services */
+import { AccountType } from "@/wallet/services/account/client"
+
+/** Composables */
+import { useToast } from "@/composables/toast.js"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useAppStore } from "@/stores/app.store.ts"
+import { usePopupStore } from "@/stores/popup.store.ts"
+import { copyWithToast } from "@/utils/clipboard"
+import { trimAddress } from "@/utils/string"
+const appStore = useAppStore()
+const popupStore = usePopupStore()
+const { order, depth } = usePopupStack("accounts")
+
+const router = useRouter()
+
+const emit = defineEmits(["onClose"])
+
+const account = computed(() => appStore.account)
+
+const showAllOtherAccounts = ref(false)
+const accounts = computed(() => {
+	return appStore.accounts.filter((a) => a.visible).sort((a, b) => a.index - b.index)
+})
+
+const handleSelectAccount = async (acc) => {
+	// A send in flight is still reading the active account as it builds and
+	// proves, so switching now would let it finish as the wrong account. Blocked
+	// until it settles; cancelling it also clears this.
+	const switched = await appStore.commitScopeChange(() => appStore.selectAccount(acc))
+	if (!switched) {
+		openToast({ kind: "error", label: "Finish or cancel your pending transaction first" })
+		return
+	}
+
+	emit("onClose")
+}
+
+const isCopied = ref(false)
+const handleCopyAddress = (target) => {
+	isCopied.value = true
+
+	void copyWithToast(target, openToast, "Address is copied")
+
+	setTimeout(() => {
+		isCopied.value = false
+	}, 1_500)
+}
+
+const handleManageAccounts = () => {
+	router.push("/popup/settings/accounts")
+	emit("onClose")
+}
+</script>
+
+<template>
+	<Popup @onClose="emit('onClose')" :displaceIdx="order">
+		<PopupCard :displaceIdx="depth">
+			<PopupHeader @onClose="emit('onClose')" closable>
+				<template #title>
+					<span :class="$style.title">Switch Account</span>
+				</template>
+			</PopupHeader>
+
+			<Flex wide direction="column" gap="24" :class="$style.wrapper" data-testid="accounts-popup">
+				<ItemsContainer>
+					<SettingItem
+						v-for="acc in accounts"
+						@click="handleSelectAccount(acc)"
+						:title="acc.name"
+						:description="trimAddress(acc.address, 6, 4, '...')"
+						:icon="account.address === acc.address ? 'check-circle' : 'circle'"
+						:iconFillColor="account.address === acc.address ? 'primary' : 'tertiary'"
+						data-testid="account-item"
+						:data-account-name="acc.name"
+						:data-account-address="acc.address"
+					>
+						<template #right>
+							<Flex align="center" gap="8">
+								<Tooltip position="end" delay="350">
+									<RowAction label="Copy account address" data-testid="account-item-copy" @click="handleCopyAddress(acc.address)">
+										<Icon name="copy" size="14" color="tertiary" />
+									</RowAction>
+
+									<template #content>Copy account address</template>
+								</Tooltip>
+							</Flex>
+						</template>
+					</SettingItem>
+				</ItemsContainer>
+
+				<ItemsContainer>
+					<SettingItem
+						@click="handleManageAccounts"
+						title="Manage accounts"
+						size="small"
+						icon="settings"
+						iconFillColor="secondary"
+						iconBgColor="transparent"
+						chevron
+					/>
+					<SettingItem
+						@click="popupStore.open('new_account')"
+						data-testid="accounts-popup-new"
+						title="New account"
+						size="small"
+						icon="plus-circle"
+						iconFillColor="secondary"
+						iconBgColor="transparent"
+						chevron
+					/>
+				</ItemsContainer>
+			</Flex>
+		</PopupCard>
+	</Popup>
+</template>
+
+<style module>
+.wrapper {
+	composes: body from "./popup-shared.module.css";
+}
+
+.title {
+	font-family: var(--font-headline);
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+
+	color: var(--txt-primary);
+}
+</style>

@@ -1,0 +1,79 @@
+import { describe, expect, test } from "vitest"
+import { NULO_DESIGN_COMPONENTS, nuloDesignResolver } from "./design-resolver"
+
+/**
+ * Resolver-inventory pin. `NULO_DESIGN_COMPONENTS` must equal EXACTLY
+ * the set of names the extension routes to `@nulo/design` — NOT "every package export" (the package
+ * also exports names the extension never routes, e.g. the wrapper bases `SubPageHeaderBase`/
+ * `ToastManagerBase`, which must never enter the resolver). Wrapper-backed names (`Button`/`SubPageHeader`/`ToastManager`)
+ * stay local and must be ABSENT (else the bare tag resolves to the package base instead of the wrapper).
+ *
+ * Every listed name has had its extension-local SFC deleted: a local shadow wins the bare tag over
+ * the package version, which the "no local shadow" test below refuses. Typecheck catches a missing export; this pins against a
+ * wrong/extra remap AND a re-introduced shadow. Grow `EXPECTED_MIGRATED` in the SAME PR that deletes a
+ * local SFC + adds the name to the resolver.
+ */
+const EXPECTED_MIGRATED = [
+	// L1 core + the pure L2 subset
+	"Flex",
+	"Icon",
+	"Text",
+	"MaterialIcon",
+	"Badge",
+	"BrutalistTitle",
+	"Checkbox",
+	"SectionLabel",
+	"Toggle",
+	// Spinner family (local SFCs deleted)
+	"Spinner",
+	"Banner",
+	"LoadingState",
+	// host-DOM family (local SFCs deleted)
+	"Tooltip",
+	"Popover",
+	// Input (local SFC deleted)
+	"Input",
+	// package-native — never had a local SFC, so there is no shadow to delete
+	"Skeleton",
+	"RowAction",
+]
+
+// Wrapper-backed: the extension keeps a LOCAL SFC of this name, so the bare tag must resolve to that
+// wrapper. These must NEVER be in the resolver set.
+const WRAPPER_BACKED = ["Button", "SubPageHeader", "ToastManager"]
+
+describe("nuloDesignResolver inventory", () => {
+	test("resolver set is exactly the deleted-and-migrated names", () => {
+		expect([...NULO_DESIGN_COMPONENTS].sort()).toEqual([...EXPECTED_MIGRATED].sort())
+	})
+
+	// `ComponentResolver` is a function|object union; our impl returns the function form.
+	type ResolveFn = (name: string) => { name: string; from: string } | undefined
+
+	test("wrapper-backed names are never routed to the package", () => {
+		const resolve = nuloDesignResolver() as ResolveFn
+		for (const name of WRAPPER_BACKED) {
+			expect(NULO_DESIGN_COMPONENTS.has(name)).toBe(false)
+			expect(resolve(name)).toBeUndefined()
+		}
+	})
+
+	test("a migrated name resolves to @nulo/design; an unknown name does not", () => {
+		const resolve = nuloDesignResolver() as ResolveFn
+		expect(resolve("Flex")).toEqual({ name: "Flex", from: "@nulo/design" })
+		expect(resolve("NotAThing")).toBeUndefined()
+	})
+
+	test("no extension-local SFC shadows a resolver name (cleanup invariant)", () => {
+		// A local <Name>.vue matching a NULO_DESIGN_COMPONENTS entry would be dir-scan-registered and WIN
+		// the bare tag over the package version (the shadowing this migration removed). Pin that none re-appears.
+		// Scope MUST mirror unplugin-vue-components' dirs in vite.config.ts (`src/components` AND
+		// `src/onboarding/components`) — else an onboarding shadow would bypass this guard.
+		const basename = (p: string) => p.replace(/^.*\//, "").replace(/\.vue$/, "")
+		const localComponentNames = Object.keys(
+			import.meta.glob(["../src/components/**/*.vue", "../src/onboarding/components/**/*.vue"]),
+		).map(basename)
+		const shadows = localComponentNames.filter((name) => NULO_DESIGN_COMPONENTS.has(name))
+		expect(shadows).toEqual([])
+	})
+})

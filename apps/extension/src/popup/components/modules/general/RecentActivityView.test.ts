@@ -1,0 +1,955 @@
+/**
+ * RecentActivityView component tests.
+ *
+ * Two concerns:
+ *  1. Service-client wiring — the widget calls `IncomingTransferServiceClient`
+ *     + `ConfigServiceClient` `.connect()` on mount (the explicit connect path is the
+ *     exact glue that already broke once).
+ *  2. Account-switch containment (Layer A, drop-only). Asserted at the STATE level via
+ *     `defineExpose`d refs, not just render: a render guard alone can mask a containment gap, so the switch
+ *     reset + the captured-account guards are checked on `journalOps` /
+ *     `executingTask` / `recentActivityRows` directly.
+ *
+ * Drives switches with the reactive `app-store-harness` (the widget captures the
+ * store ref once at setup, so tests MUTATE the same reactive instance rather than
+ * swapping it).
+ */
+
+import { flushPromises, mount } from "@vue/test-utils"
+import { nextTick, ref } from "vue"
+import { createMemoryHistory, createRouter } from "vue-router"
+import { beforeEach, describe, expect, test, vi } from "vitest"
+
+import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
+
+// ── Controllable mock surface (hoisted so vi.mock factories can read it) ──────
+const H = vi.hoisted(() => {
+	const makeEvent = () => {
+		const handlers = new Set<(x?: unknown) => void>()
+		return {
+			add: (fn: (x?: unknown) => void) => handlers.add(fn),
+			remove: (fn: (x?: unknown) => void) => handlers.delete(fn),
+			emit: (x?: unknown) => {
+				for (const fn of [...handlers]) fn(x)
+			},
+			handlers,
+		}
+	}
+	return {
+		makeEvent,
+		// enum shapes shared by the service-spec mocks AND the fixtures below
+		ContentKind: { Step: 0, BalanceUpdate: 1, ExecuteOperation: 2, Transfer: 3, RevokeAuthwits: 4 },
+		TaskStatus: { Pending: 0, Processing: 1, Finished: 2 },
+		OriginType: { UI: 0, DAPP: 1 },
+		TxStatus: { Pending: 0, Dropped: 1, Proposed: 2, Checkpointed: 3, Proven: 4, Finalized: 5 },
+		// per-call-controllable data fns
+		getOperations: vi.fn(),
+		getTasks: vi.fn(),
+		getTokens: vi.fn(),
+		getIncomingTransfers: vi.fn(),
+		getIncomingSyncHealth: vi.fn(),
+		retryIncomingScan: vi.fn(),
+		incomingConnect: vi.fn(),
+		configConnect: vi.fn(),
+		// event emitters (the mocked clients don't fire them; tests emit explicitly)
+		journalAdded: makeEvent(),
+		journalUpdated: makeEvent(),
+		journalDeleted: makeEvent(),
+		journalConnected: makeEvent(),
+		incomingAdded: makeEvent(),
+		incomingUpdated: makeEvent(),
+		incomingDeleted: makeEvent(),
+		incomingConnected: makeEvent(),
+		incomingHealthChanged: makeEvent(),
+		configUpdate: makeEvent(),
+		taskCreated: makeEvent(),
+		taskUpdated: makeEvent(),
+		taskDeleted: makeEvent(),
+		tokenAdded: makeEvent(),
+		// mutable reactive-store holder (set in beforeEach)
+		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
+	}
+})
+
+// ── Service-client mocks ──────────────────────────────────────────────────────
+
+vi.mock("@/wallet/services/incoming-transfer/client", () => ({
+	IncomingTransferServiceClient: vi.fn(function () {
+		return {
+			connect: H.incomingConnect,
+			disconnect: vi.fn(),
+			onIncomingTransferAdded: H.incomingAdded,
+			onIncomingTransferUpdated: H.incomingUpdated,
+			onIncomingTransferDeleted: H.incomingDeleted,
+			onIncomingSyncHealthChanged: H.incomingHealthChanged,
+			onConnected: H.incomingConnected,
+			getIncomingTransfers: H.getIncomingTransfers,
+			getIncomingSyncHealth: H.getIncomingSyncHealth,
+			retryIncomingScan: H.retryIncomingScan,
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/config/client", () => ({
+	ConfigServiceClient: vi.fn(function () {
+		return {
+			connect: H.configConnect,
+			disconnect: vi.fn(),
+			onUpdate: H.configUpdate,
+			getValue: vi.fn().mockResolvedValue(true),
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/task/client", () => ({
+	TaskServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			onTaskCreated: H.taskCreated,
+			onTaskUpdated: H.taskUpdated,
+			onTaskDeleted: H.taskDeleted,
+			getTasks: H.getTasks,
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/operation-journal/client", () => ({
+	OperationJournalServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			onConnected: H.journalConnected,
+			onOperationAdded: H.journalAdded,
+			onOperationUpdated: H.journalUpdated,
+			onOperationDeleted: H.journalDeleted,
+			getOperations: H.getOperations,
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/execution/client", () => ({
+	ExecutionServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			cancelJob: vi.fn().mockResolvedValue(undefined),
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/token/client", () => ({
+	TokenServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			getTokens: H.getTokens,
+			onTokenAdded: H.tokenAdded,
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/task/spec", () => ({
+	ContentKind: H.ContentKind,
+	TaskStatus: H.TaskStatus,
+}))
+
+vi.mock("@/wallet/services/transaction/spec", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/wallet/services/transaction/spec")>()),
+	OriginType: H.OriginType,
+	TxStatus: H.TxStatus,
+}))
+
+// ── Store mock — reactive harness, mutated per test to drive switches ─────────
+
+vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
+
+// ── Fixtures + helpers ────────────────────────────────────────────────────────
+
+import { ARRIVALS_KEY } from "@/composables/useArrivals"
+import RecentActivityView from "./RecentActivityView.vue"
+
+const makeRouter = () =>
+	createRouter({ history: createMemoryHistory(), routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }] })
+
+const ACCT_A = "0xacct" // matches the harness default active account
+const ACCT_B = "0xB"
+const ACCT_FOREIGN = "0xOTHER"
+
+function deferred<T>() {
+	let resolve!: (v: T) => void
+	const promise = new Promise<T>((r) => {
+		resolve = r
+	})
+	return { promise, resolve }
+}
+
+const inFlightTransferOp = (account: string, id = "op-a") => ({
+	id,
+	accountAddress: account,
+	networkId: "net-1",
+	kind: "transfer",
+	terminalAt: null,
+	createdAt: 1,
+	progress: { stage: "proving" },
+})
+
+const uiTransferTask = (sender: string, id = "task-a") => ({
+	id,
+	createdAt: 1,
+	content: { kind: H.ContentKind.Transfer, senderAddress: sender, tokenId: undefined },
+	origin: { type: H.OriginType.UI },
+	subtasks: [],
+})
+
+const dappExecuteTask = (id = "task-dapp") => ({
+	id,
+	createdAt: 1,
+	content: { kind: H.ContentKind.ExecuteOperation, operationKind: "send_transaction" },
+	origin: { type: H.OriginType.DAPP },
+	subtasks: [],
+})
+
+const incomingRecord = (over: Record<string, unknown>) => ({
+	// Discriminated-union NOTE record: `kind` is required (resolveReceivedType, called during the card
+	// render, early-returns on it — without it a note falls into the public branch and dereferences the
+	// absent `from`), and `id` is the row key.
+	kind: "note",
+	id: `note:p1|net-1|${(over.siloedNullifier as string) ?? "sn"}`,
+	profileId: "p1",
+	accountAddress: ACCT_A,
+	networkId: "net-1",
+	tokenId: undefined,
+	amountRaw: "1",
+	txHash: "0xh",
+	discoveredAt: 1000,
+	...over,
+})
+
+const mountView = () => mount(RecentActivityView, { shallow: true, global: { plugins: [makeRouter()] } })
+
+// biome-ignore lint/suspicious/noExplicitAny: JS SFC exposes untyped refs via defineExpose.
+const vmOf = (wrapper: ReturnType<typeof mountView>) => wrapper.vm as any
+
+beforeEach(() => {
+	H.getOperations.mockReset().mockResolvedValue([])
+	H.getTasks.mockReset().mockResolvedValue([])
+	H.getTokens.mockReset().mockResolvedValue([])
+	H.getIncomingTransfers.mockReset().mockResolvedValue([])
+	H.getIncomingSyncHealth.mockReset().mockResolvedValue({ stalled: false, since: null })
+	H.retryIncomingScan.mockReset().mockResolvedValue(undefined)
+	H.incomingConnect.mockReset().mockResolvedValue(undefined)
+	H.configConnect.mockReset().mockResolvedValue(undefined)
+	for (const ev of [
+		H.journalAdded,
+		H.journalUpdated,
+		H.journalDeleted,
+		H.journalConnected,
+		H.incomingAdded,
+		H.incomingUpdated,
+		H.incomingDeleted,
+		H.incomingConnected,
+		H.incomingHealthChanged,
+		H.configUpdate,
+		H.taskCreated,
+		H.taskUpdated,
+		H.taskDeleted,
+		H.tokenAdded,
+	]) {
+		ev.handlers.clear()
+	}
+	H.store.current = createAppStoreHarness()
+})
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe("RecentActivityView — service-client wiring", () => {
+	test("calls IncomingTransferServiceClient.connect() on mount", async () => {
+		mountView()
+		await flushPromises()
+		expect(H.incomingConnect).toHaveBeenCalledTimes(1)
+	})
+	test("calls ConfigServiceClient.connect() on mount (sibling explicit-connect path)", async () => {
+		mountView()
+		await flushPromises()
+		expect(H.configConnect).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("RecentActivityView — account-switch containment (Layer A)", () => {
+	test("switching account synchronously clears journalOps + executingTask + subtasks", async () => {
+		H.getOperations.mockResolvedValueOnce([inFlightTransferOp(ACCT_A)])
+		H.getTasks.mockResolvedValueOnce([uiTransferTask(ACCT_A)])
+		// The post-switch reload never resolves, so ONLY the synchronous
+		// (flush:'sync') reset watcher can empty the refs — proving the clear
+		// rather than the reload.
+		H.getOperations.mockImplementation(() => new Promise(() => {}))
+		H.getTasks.mockImplementation(() => new Promise(() => {}))
+
+		const wrapper = mountView()
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.journalOps).toHaveLength(1)
+		expect(vm.executingTask).not.toBeNull()
+
+		H.store.current.account = { address: ACCT_B }
+		// Assert SYNCHRONOUSLY (no tick) — the flush:'sync' reset watcher must have
+		// cleared before B can paint; a default (post-nextTick) watcher would fail here.
+		expect(vm.journalOps).toEqual([])
+		expect(vm.executingTask).toBeNull()
+		expect(vm.executingSubtasks).toEqual([])
+		await nextTick()
+		expect(vm.journalOps).toEqual([]) // reload is pending → stays cleared
+	})
+
+	test("drops a late getOperations resolving for the previous account after a switch", async () => {
+		const opsA = deferred<unknown[]>()
+		H.getOperations.mockReturnValueOnce(opsA.promise) // mount fetch for A (stays pending)
+		H.getOperations.mockResolvedValue([]) // post-switch reload fetch for B
+
+		const wrapper = mountView()
+		await flushPromises() // onMounted suspends awaiting A's getOperations (captured = A)
+		const vm = vmOf(wrapper)
+
+		H.store.current.account = { address: ACCT_B } // switch → sync clear + B reload ([])
+		await flushPromises()
+		expect(vm.journalOps).toEqual([])
+
+		opsA.resolve([inFlightTransferOp(ACCT_A)]) // A's mount fetch resolves LATE, under B
+		await flushPromises()
+		expect(vm.journalOps).toEqual([]) // captured-account guard dropped the stale A snapshot
+	})
+
+	test("fails closed on a dApp (uncorrelated) executingTask — no orphan card", async () => {
+		H.getTasks.mockResolvedValue([dappExecuteTask()])
+
+		const wrapper = mountView()
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.executingTask).toBeNull()
+		expect(vm.hasOrphanExecutingTask).toBe(false)
+	})
+
+	test("does not surface a foreign-account UI transfer executingTask", async () => {
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_FOREIGN)])
+
+		const wrapper = mountView()
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.executingTask).toBeNull()
+		expect(vm.hasOrphanExecutingTask).toBe(false)
+	})
+
+	test("still surfaces the active account's own UI transfer as an orphan card (positive control)", async () => {
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.getOperations.mockResolvedValue([]) // no matching journal record → orphan
+
+		const wrapper = mountView()
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.executingTask).not.toBeNull()
+		expect(vm.hasOrphanExecutingTask).toBe(true)
+	})
+
+	test("excludes foreign-account + foreign-network incoming rows from recentActivityRows", async () => {
+		H.getIncomingTransfers.mockResolvedValue([
+			incomingRecord({ accountAddress: ACCT_A, networkId: "net-1", siloedNullifier: "sn-active", discoveredAt: 2000 }),
+			incomingRecord({ accountAddress: ACCT_FOREIGN, networkId: "net-1", siloedNullifier: "sn-foreign-acct", discoveredAt: 1000 }),
+			incomingRecord({ accountAddress: ACCT_A, networkId: "net-OTHER", siloedNullifier: "sn-foreign-net", discoveredAt: 1500 }),
+		])
+
+		const wrapper = mountView()
+		await flushPromises()
+		// The mocked connect() doesn't fire onConnected, so emit it to drive the
+		// composable's refresh (which assigns the raw service snapshot verbatim —
+		// the inline recentActivityRows filter is what must drop the foreign rows).
+		H.incomingConnected.emit()
+		await flushPromises()
+
+		const vm = vmOf(wrapper)
+		const incoming = vm.recentActivityRows.filter((r: { type: string }) => r.type === "incoming")
+		expect(incoming.map((r: { inc: { siloedNullifier: string } }) => r.inc.siloedNullifier)).toEqual(["sn-active"])
+	})
+})
+
+describe("RecentActivityView — journal records by network", () => {
+	test("in-flight and terminal records from another network are hidden; records with no networkId show", async () => {
+		const op = (id: string, networkId: string | undefined, terminal: boolean) => ({
+			...inFlightTransferOp(ACCT_A, id),
+			networkId,
+			...(terminal ? { terminalAt: 5, progress: { stage: "cancelled" } } : {}),
+		})
+		H.getOperations.mockResolvedValue([
+			op("live-here", "net-1", false),
+			op("live-there", "net-2", false),
+			op("live-legacy", undefined, false),
+			op("done-here", "net-1", true),
+			op("done-there", "net-2", true),
+			op("done-legacy", undefined, true),
+		])
+		const w = mountView()
+		await flushPromises()
+		const cards = w.findAllComponents({ name: "TransactionAwaitingCard" })
+		expect(cards.map((c) => c.props("jobId")).sort()).toEqual(["live-here", "live-legacy"])
+		const terminal = vmOf(w).recentActivityRows.filter((r: { type: string }) => r.type === "journal")
+		expect(terminal.map((r: { key: string }) => r.key).sort()).toEqual(["journal:done-here", "journal:done-legacy"])
+	})
+})
+
+describe("RecentActivityView — scope-triple containment", () => {
+	test("a SAME-ADDRESS profile switch resets + reloads (the address-only key no-oped here)", async () => {
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		const wrapper = mountView()
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.executingTask).toBeTruthy()
+
+		H.getTasks.mockResolvedValue([]) // the new profile's world is empty
+		H.store.current.profile = { id: "p2" } // same address, new profile
+		await nextTick()
+		expect(vm.executingTask).toBeNull() // sync clear fired despite identical address
+		await flushPromises()
+		expect(vm.executingTask).toBeNull() // reload found nothing to resurrect
+	})
+
+	test("a SAME-ADDRESS network switch does not re-accept the old network's transfer task", async () => {
+		const taskOnNet1 = {
+			...uiTransferTask(ACCT_A),
+			content: { kind: H.ContentKind.Transfer, senderAddress: ACCT_A, tokenId: undefined, networkId: "net-1" },
+		}
+		H.getTasks.mockResolvedValue([taskOnNet1])
+		const wrapper = mountView()
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.executingTask).toBeTruthy()
+
+		// TaskService clears on PROFILE change only — the old-network task is
+		// still returned; the networkId comparison is what must drop it.
+		H.store.current.network = { id: "net-2", chainId: 2 }
+		await nextTick()
+		expect(vm.executingTask).toBeNull()
+		await flushPromises()
+		expect(vm.executingTask).toBeNull() // not re-accepted from the reload
+	})
+
+	test("a deferred OLD-scope token fetch cannot overwrite the new scope's map", async () => {
+		const slow = deferred<Array<{ id: number; symbol: string }>>()
+		H.getTokens.mockReturnValueOnce(slow.promise) // mount's load (old scope) parks
+		const wrapper = mountView()
+		await flushPromises()
+
+		H.getTokens.mockResolvedValue([{ id: 2, symbol: "FRESH" }])
+		H.store.current.profile = { id: "p2" } // switch → sync clear + fenced reload
+		await nextTick()
+		await flushPromises()
+		slow.resolve([{ id: 9, symbol: "STALE" }]) // the OLD run resumes last
+		await flushPromises()
+
+		const vm = vmOf(wrapper)
+		expect(vm.tokens.map((t: { symbol: string }) => t.symbol)).toEqual(["FRESH"])
+	})
+
+	test("collapse: a missing scope part clears state and fires NO reload RPCs", async () => {
+		const wrapper = mountView()
+		await flushPromises()
+		H.getOperations.mockClear()
+		H.getTasks.mockClear()
+
+		H.store.current.network = null // scope collapses to ""
+		await nextTick()
+		await flushPromises()
+		expect(H.getOperations).not.toHaveBeenCalled()
+		expect(H.getTasks).not.toHaveBeenCalled()
+		const vm = vmOf(wrapper)
+		expect(vm.journalOps).toEqual([])
+		expect(vm.executingTask).toBeNull()
+	})
+
+	test("a parked OLD-profile getTasks resolving after a same-address switch cannot land", async () => {
+		const slow = deferred<Array<ReturnType<typeof uiTransferTask>>>()
+		H.getTasks.mockReturnValueOnce(slow.promise) // mount's task load parks
+		const wrapper = mountView()
+		await flushPromises()
+
+		H.getTasks.mockResolvedValue([]) // the new profile's world is empty
+		H.store.current.profile = { id: "p2" } // same address, new profile
+		await nextTick()
+		await flushPromises()
+		slow.resolve([uiTransferTask(ACCT_A)]) // the OLD profile's run resumes last
+		await flushPromises()
+		expect(vmOf(wrapper).executingTask).toBeNull()
+	})
+
+	test("a standalone journal resnapshot does not starve parked task/token loads", async () => {
+		// Per-loader fences: a journal-only begin() (reconnect resnapshot) must not
+		// supersede task/token loads still in flight. The mount path serializes
+		// (it awaits loadTokens first), so the CONCURRENT park is driven through
+		// the scope-switch watcher, which starts all three loads together.
+		const wrapper = mountView()
+		await flushPromises() // mount settles on the fast default mocks
+
+		const slowTasks = deferred<Array<ReturnType<typeof uiTransferTask>>>()
+		const slowTokens = deferred<Array<{ id: number; symbol: string }>>()
+		H.getTasks.mockReturnValueOnce(slowTasks.promise)
+		H.getTokens.mockReturnValueOnce(slowTokens.promise)
+		H.store.current.profile = { id: "p2" } // switch → watcher fires all three loads
+		await nextTick()
+		expect(H.getTasks).toHaveBeenCalled() // both parked RPCs are in flight
+		expect(H.getTokens).toHaveBeenCalled()
+
+		H.journalConnected.emit() // journal-only resnapshot while BOTH are parked
+		await flushPromises()
+		slowTasks.resolve([uiTransferTask(ACCT_A)])
+		slowTokens.resolve([{ id: 3, symbol: "LIVE" }])
+		await flushPromises()
+
+		const vm = vmOf(wrapper)
+		expect(vm.executingTask).toBeTruthy()
+		expect(vm.tokens.map((t: { symbol: string }) => t.symbol)).toEqual(["LIVE"])
+	})
+
+	test("ABA: an A→B→A round-trip does not let A's stale first-run snapshot land", async () => {
+		const slowOps = deferred<Array<ReturnType<typeof inFlightTransferOp>>>()
+		H.getOperations.mockReturnValueOnce(slowOps.promise) // A's mount snapshot parks
+		const wrapper = mountView()
+		await flushPromises()
+
+		H.getOperations.mockResolvedValue([]) // B's and the return-A's snapshots are empty
+		H.store.current.profile = { id: "p2" } // A→B
+		await nextTick()
+		H.store.current.profile = { id: "p1" } // B→A (captured-equality would revalidate!)
+		await nextTick()
+		await flushPromises()
+
+		slowOps.resolve([inFlightTransferOp(ACCT_A, "op-stale")]) // A's ORIGINAL run resumes
+		await flushPromises()
+		const vm = vmOf(wrapper)
+		expect(vm.journalOps.map((o: { id: string }) => o.id)).not.toContain("op-stale")
+	})
+})
+
+describe("RecentActivityView — rows link to their detail routes", () => {
+	test("a tx, a terminal journal record and a receipt each carry their route; the receipt row renders it as its link; the tx card gets the tokens", async () => {
+		H.store.current.transactions = [{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [] } as never]
+		H.getTokens.mockResolvedValue([{ id: 2, symbol: "TST" }])
+		H.getOperations.mockResolvedValue([{ ...inFlightTransferOp(ACCT_A, "op-1"), terminalAt: 5, progress: { stage: "cancelled" } }])
+		H.getIncomingTransfers.mockResolvedValue([incomingRecord({ siloedNullifier: "sn-1", discoveredAt: 2000 })])
+
+		// The receipt card renders for real, down to its link; the other two stay stubs read by prop.
+		const w = mount(RecentActivityView, {
+			shallow: true,
+			global: {
+				plugins: [makeRouter()],
+				stubs: {
+					TransactionIncomingCard: false,
+					TransactionCardLayout: false,
+					RowTarget: false,
+					RouterLink: false,
+					Flex: { template: '<div v-bind="$attrs"><slot /></div>', inheritAttrs: false },
+					Icon: { template: "<i />" },
+				},
+			},
+		})
+		await flushPromises()
+		H.incomingConnected.emit()
+		await flushPromises()
+
+		expect(w.findComponent({ name: "TransactionCard" }).props("to")).toBe("/popup/tx/0xh1")
+		expect(w.findComponent({ name: "TransactionCard" }).props("tokens")).toEqual([{ id: 2, symbol: "TST" }])
+		expect(w.findComponent({ name: "TransactionTerminalCard" }).props("to")).toBe("/popup/journal/op-1")
+		const receipt = w.find('[data-testid="tx-incoming-card"] a[data-row-target]')
+		expect(receipt.attributes("href")).toBe("/popup/received/note:p1|net-1|sn-1")
+	})
+})
+
+describe("RecentActivityView — its header", () => {
+	test("the account feed reads 'Recent activity' with a 'View history' that opens History; the empty token feed keeps the title", async () => {
+		H.store.current.transactions = [{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [] } as never]
+		const router = makeRouter()
+		const feed = mount(RecentActivityView, { shallow: true, global: { plugins: [router], stubs: { SectionLabel: false } } })
+		await flushPromises()
+		expect(feed.text()).toContain("Recent activity")
+		const link = feed.find('[data-testid="activity-view-all"]')
+		expect(link.text()).toBe("View history")
+		await link.trigger("click")
+		await flushPromises()
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity")
+
+		const empty = mount(RecentActivityView, {
+			shallow: true,
+			props: { token: { contract: "0xtok", symbol: "TOK" } },
+			global: { plugins: [makeRouter()], stubs: { SectionLabel: false } },
+		})
+		await flushPromises()
+		expect(empty.text()).toContain("NOTHING HERE YET")
+		expect(empty.text()).toContain("Recent activity")
+	})
+})
+
+describe("RecentActivityView — one feed block for token and account views", () => {
+	const TOKEN = { contract: "0xtok", symbol: "TOK" }
+	const mountFeed = (props: Record<string, unknown> = {}) =>
+		mount(RecentActivityView, { shallow: true, props, global: { plugins: [makeRouter()] } })
+	const awaitingCards = (w: ReturnType<typeof mountFeed>) => w.findAllComponents({ name: "TransactionAwaitingCard" })
+	const root = (w: ReturnType<typeof mountFeed>) => w.find("[data-testid='activity-feed-root']")
+
+	test("a token feed shows the fallback awaiting card only for that token's pending tx", async () => {
+		H.store.current.awaitingTransactions = [{ account: ACCT_A, contract: "0xother" }]
+		const w = mountFeed({ token: TOKEN })
+		await flushPromises()
+		expect(awaitingCards(w)).toHaveLength(0)
+		H.store.current.awaitingTransactions = [{ account: ACCT_A, contract: TOKEN.contract }]
+		await flushPromises()
+		expect(awaitingCards(w)).toHaveLength(1)
+		expect(root(w).exists()).toBe(true)
+	})
+
+	test("an account feed shows the fallback awaiting card for any of the account's pending txs, not a foreign account's", async () => {
+		H.store.current.awaitingTransactions = [{ account: ACCT_FOREIGN, contract: "0xany" }]
+		const w = mountFeed()
+		await flushPromises()
+		expect(root(w).exists()).toBe(false)
+		H.store.current.awaitingTransactions = [{ account: ACCT_A, contract: "0xany" }]
+		await flushPromises()
+		expect(awaitingCards(w)).toHaveLength(1)
+	})
+
+	test("an orphan executing task suppresses the fallback card: one awaiting card, not two", async () => {
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.store.current.awaitingTransactions = [{ account: ACCT_A, contract: "0xany" }]
+		const w = mountFeed()
+		await flushPromises()
+		expect(vmOf(w).hasOrphanExecutingTask).toBe(true)
+		expect(awaitingCards(w)).toHaveLength(1)
+	})
+
+	test("a proving op's backend subtitle outranks the executing task's label and stamps the card", async () => {
+		const proving = (backend?: string) => ({
+			...inFlightTransferOp(ACCT_A),
+			progress: { stage: "proving", enteredProveAt: 1, backend },
+		})
+		const generating = {
+			...uiTransferTask(ACCT_A),
+			subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }],
+		}
+		H.getTasks.mockResolvedValue([generating])
+
+		H.getOperations.mockResolvedValue([proving()])
+		let w = mountFeed()
+		await flushPromises()
+		expect(awaitingCards(w)[0].props("subtitle")).toBe("Generating proof...") // no evidence yet → the task label
+		expect(awaitingCards(w)[0].props("backend")).toBeNull()
+
+		H.getOperations.mockResolvedValue([proving("presto")])
+		w = mountFeed()
+		await flushPromises()
+		expect(awaitingCards(w)[0].props("subtitle")).toBe("Proving with Presto ✦")
+		expect(awaitingCards(w)[0].props("backend")).toBe("presto")
+	})
+
+	test("empty states: a token feed says NOTHING HERE YET with the symbol, an account feed renders nothing", async () => {
+		const withToken = mountFeed({ token: TOKEN })
+		await flushPromises()
+		expect(withToken.text()).toContain("NOTHING HERE YET")
+		expect(withToken.text()).toContain("Send or receive TOK to see activity here.")
+		const withoutToken = mountFeed()
+		await flushPromises()
+		expect(root(withoutToken).exists()).toBe(false)
+		expect(withoutToken.text()).not.toContain("NOTHING HERE YET")
+	})
+
+	test("a token-presence flip remounts the feed root", async () => {
+		H.store.current.awaitingTransactions = [{ account: ACCT_A, contract: TOKEN.contract }]
+		const w = mountFeed()
+		await flushPromises()
+		const before = root(w).element
+		await w.setProps({ token: TOKEN })
+		await flushPromises()
+		expect(root(w).exists()).toBe(true)
+		expect(root(w).element).not.toBe(before)
+	})
+})
+
+describe("RecentActivityView — stalled incoming scan line", () => {
+	const mountFeed = (props: Record<string, unknown> = {}) =>
+		mount(RecentActivityView, { shallow: true, props, global: { plugins: [makeRouter()] } })
+	const line = (w: ReturnType<typeof mountFeed>) => w.find("[data-testid='incoming-sync-stalled']")
+	const retry = (w: ReturnType<typeof mountFeed>) => w.find("[data-testid='incoming-sync-retry']")
+
+	test("a healthy scan shows no line, and an empty account feed still renders nothing", async () => {
+		const w = mountFeed()
+		await flushPromises()
+		expect(H.getIncomingSyncHealth).toHaveBeenCalledWith("net-1")
+		expect(line(w).exists()).toBe(false)
+		expect(w.find("[data-testid='activity-feed-root']").exists()).toBe(false)
+	})
+
+	test("a stalled scan renders the line with its copy — and the section with it, even with no rows", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed()
+		await flushPromises()
+		expect(w.find("[data-testid='activity-feed-root']").exists()).toBe(true)
+		expect(line(w).text()).toContain("Older incoming transfers may be missing")
+		expect(retry(w).text()).toBe("Retry")
+	})
+
+	test("a token lookup that rejects at mount does not abort the rest of mount — the health is still read", async () => {
+		H.getTokens.mockRejectedValue(new Error("port cannot open"))
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+
+		const w = mountFeed()
+		await flushPromises()
+
+		expect(H.getIncomingSyncHealth).toHaveBeenCalledWith("net-1")
+		expect(line(w).exists()).toBe(true)
+	})
+
+	test("Retry asks the worker to scan the active network, then the line follows the fresh health", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed()
+		await flushPromises()
+
+		await retry(w).trigger("click")
+		await flushPromises()
+
+		expect(H.retryIncomingScan).toHaveBeenCalledWith("net-1")
+		expect(H.getIncomingSyncHealth).toHaveBeenCalledTimes(2)
+	})
+
+	test("the health event for this profile + network refetches; the line appears without a remount", async () => {
+		const w = mountFeed()
+		await flushPromises()
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+
+		H.incomingHealthChanged.emit({ profileId: "p1", networkId: "net-1" })
+		await flushPromises()
+
+		expect(line(w).exists()).toBe(true)
+	})
+
+	test("a network switch drops the line at once and reads the new network's health", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed()
+		await flushPromises()
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: false, since: null })
+
+		H.store.current.network = { id: "net-2", chainId: 2 }
+		await flushPromises()
+
+		expect(H.getIncomingSyncHealth).toHaveBeenLastCalledWith("net-2")
+		expect(line(w).exists()).toBe(false)
+	})
+
+	test("a token feed never asks and never shows the line", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed({ token: { contract: "0xtok", symbol: "TOK" } })
+		await flushPromises()
+		expect(H.getIncomingSyncHealth).not.toHaveBeenCalled()
+		expect(line(w).exists()).toBe(false)
+	})
+
+	test("leaving token mode on the same profile + network reads the account feed's health", async () => {
+		H.getIncomingSyncHealth.mockResolvedValue({ stalled: true, since: 1 })
+		const w = mountFeed({ token: { contract: "0xtok", symbol: "TOK" } })
+		await flushPromises()
+
+		await w.setProps({ token: undefined })
+		await flushPromises()
+
+		expect(H.getIncomingSyncHealth).toHaveBeenCalledWith("net-1")
+		expect(line(w).exists()).toBe(true)
+	})
+})
+
+describe("RecentActivityView — arrivals", () => {
+	const fakeArrivals = (arriving: string[]) => ({
+		isArriving: vi.fn((r: { id: string }) => arriving.includes(r.id)),
+		present: vi.fn(),
+		latest: ref(null),
+		load: vi.fn(async () => {}),
+	})
+	const mountWith = (arrivals: ReturnType<typeof fakeArrivals>, props: Record<string, unknown> = {}) =>
+		mount(RecentActivityView, {
+			shallow: true,
+			props,
+			global: { plugins: [makeRouter()], provide: { [ARRIVALS_KEY as symbol]: arrivals } },
+		})
+	const cards = (w: ReturnType<typeof mountWith>) => w.findAllComponents({ name: "TransactionIncomingCard" })
+	const read = async () => {
+		await flushPromises()
+		H.incomingConnected.emit()
+		await flushPromises()
+	}
+
+	test("the account feed paints its rows only under a loaded arrival state, judges each one and presents them", async () => {
+		const first = incomingRecord({ siloedNullifier: "a", discoveredAt: 2000 })
+		const second = incomingRecord({ siloedNullifier: "b", discoveredAt: 1000 })
+		H.getIncomingTransfers.mockResolvedValue([first, second])
+		const arrivals = fakeArrivals([first.id])
+		let finishLoad = () => {}
+		arrivals.load.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishLoad = resolve
+				}),
+		)
+		const w = mountWith(arrivals)
+		await read()
+		expect(arrivals.load).toHaveBeenCalledWith({ profileId: "p1", networkId: "net-1", account: ACCT_A })
+		expect(cards(w)).toHaveLength(0)
+		finishLoad()
+		await flushPromises()
+		expect(cards(w).map((c) => c.props("arriving"))).toEqual([true, false])
+		expect(arrivals.present).toHaveBeenLastCalledWith([first, second])
+	})
+
+	test("a receipt the row budget leaves out is not presented", async () => {
+		const records = [1, 2, 3, 4, 5, 6].map((n) => incomingRecord({ siloedNullifier: `r${n}`, discoveredAt: 1000 * (7 - n) }))
+		H.getIncomingTransfers.mockResolvedValue(records)
+		const arrivals = fakeArrivals(records.map((r) => r.id))
+		mountWith(arrivals)
+		await read()
+		expect(arrivals.present).toHaveBeenLastCalledWith(records.slice(0, 5))
+	})
+
+	test("the token page's feed waits for no arrival state, marks nothing arriving and presents nothing", async () => {
+		const r = incomingRecord({ siloedNullifier: "t", tokenId: 7 })
+		H.getIncomingTransfers.mockResolvedValue([r])
+		const arrivals = fakeArrivals([r.id])
+		const w = mountWith(arrivals, { token: { id: 7, contract: "0xtok", symbol: "TOK" } })
+		await read()
+		expect(cards(w).map((c) => c.props("arriving"))).toEqual([false])
+		expect(arrivals.load).not.toHaveBeenCalled()
+		expect(arrivals.present).not.toHaveBeenCalled()
+	})
+})
+
+describe("RecentActivityView — the awaiting card's fields", () => {
+	const FIELDS = ["title", "icon", "originLabel", "amount", "amountSymbol", "transferTypeLabel"] as const
+	const inFlight = (id: string, createdAt: number, over: Record<string, unknown>) => ({
+		id,
+		accountAddress: ACCT_A,
+		profileId: "p1",
+		networkId: "net-1",
+		terminalAt: null,
+		createdAt,
+		progress: { stage: "proving", enteredProveAt: 1 },
+		...over,
+	})
+
+	test("each in-flight op's card reads its title, icon, chips and amount from the record and its token", async () => {
+		H.getTokens.mockResolvedValue([
+			{ id: 42, symbol: "USDC", decimals: 6 },
+			{ id: 43, symbol: "", decimals: 6 },
+		])
+		// Newest first: the table's order is the cards' order.
+		const table: [Record<string, unknown>, Record<(typeof FIELDS)[number], unknown>][] = [
+			[
+				{ kind: "transfer", tokenId: 42, amountRaw: "1500000", transferType: 0 },
+				{
+					title: "USDC",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: "1.5",
+					amountSymbol: "USDC",
+					transferTypeLabel: "Private → Private",
+				},
+			],
+			[
+				{ kind: "transfer", tokenId: 42, amountRaw: "" },
+				{
+					title: "USDC",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: "0",
+					amountSymbol: "USDC",
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "transfer", tokenId: 42 },
+				{
+					title: "USDC",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: null,
+					amountSymbol: "USDC",
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "transfer", tokenId: 43, amountRaw: "2000000" },
+				{
+					title: "Transfer",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: "2",
+					amountSymbol: null,
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "transfer", amountRaw: "2000000", transferType: 1 },
+				{
+					title: "Transfer",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: null,
+					amountSymbol: null,
+					transferTypeLabel: "Private → Public",
+				},
+			],
+			[
+				{
+					kind: "dapp_execute",
+					title: "swap_tokens_for_exact_tokens",
+					subtitle: "alpha.example",
+					tokenId: 42,
+					amountRaw: "1500000",
+					transferType: 0,
+				},
+				{
+					title: "Swap Tokens For Exact Tokens",
+					icon: "zap",
+					originLabel: "alpha.example",
+					amount: null,
+					amountSymbol: null,
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "dapp_execute", title: "swap", subtitle: "https://evil.example" },
+				{
+					title: "Swap",
+					icon: "zap",
+					originLabel: "[https://evil.example]",
+					amount: null,
+					amountSymbol: null,
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "dapp_execute" },
+				{ title: "Transaction", icon: "zap", originLabel: null, amount: null, amountSymbol: null, transferTypeLabel: null },
+			],
+		]
+		H.getOperations.mockResolvedValue(table.map(([over], i) => inFlight(`op-${i}`, 100 - i, over)))
+		const w = mount(RecentActivityView, { shallow: true, global: { plugins: [makeRouter()] } })
+		await flushPromises()
+		const cards = w.findAllComponents({ name: "TransactionAwaitingCard" })
+		expect(cards.map((c) => c.props("jobId"))).toEqual(table.map((_, i) => `op-${i}`))
+		cards.forEach((card, i) => {
+			expect(Object.fromEntries(FIELDS.map((f) => [f, card.props(f)]))).toEqual(table[i][1])
+		})
+	})
+
+	test("the token feed hides an op of another token, by the journal's own token check", async () => {
+		H.getOperations.mockResolvedValue([
+			inFlight("mine", 2, { kind: "transfer", tokenId: 7 }),
+			inFlight("other", 1, { kind: "transfer", tokenId: 8 }),
+		])
+		const w = mount(RecentActivityView, {
+			shallow: true,
+			props: { token: { id: 7, contract: "0xtok", symbol: "TOK" } },
+			global: { plugins: [makeRouter()] },
+		})
+		await flushPromises()
+		expect(w.findAllComponents({ name: "TransactionAwaitingCard" }).map((c) => c.props("jobId"))).toEqual(["mine"])
+	})
+})

@@ -1,0 +1,251 @@
+<!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
+<script setup>
+/** Utils */
+import { isValidAztecAddress } from "@/utils/aztec-address"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "@/utils/contact-rules"
+import { withoutId } from "@/utils/entity-list"
+
+/** Components */
+import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
+import ProcessingErrorNote from "@/components/composite/ProcessingErrorNote.vue"
+
+/** Services */
+import { ContactServiceClient } from "@/wallet/services/contact/client"
+
+/** Composables */
+import { useToast } from "@/composables/toast"
+import { useFormState } from "@/composables/useFormState"
+import { usePopupEntity } from "@/composables/usePopupEntity"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useCacheStore } from "@/stores/cache.store"
+const cacheStore = useCacheStore()
+const { order } = usePopupStack("edit_contact")
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+const contactService = new ContactServiceClient()
+contactService.onContactAdded.add(onContactAdded)
+contactService.onContactUpdated.add(onContactUpdated)
+contactService.onContactDeleted.add(onContactDeleted)
+
+function onContactAdded(contact) {
+	contacts.value.push(contact)
+}
+function onContactUpdated(contact) {
+	const idx = contacts.value.findIndex((c) => c.id === contact.id)
+	if (idx !== -1) {
+		// External update to the contact being edited (another window, an
+		// import): refresh the draft + the dirty baseline so a later submit
+		// doesn't overwrite the external change with stale fields. (This
+		// branch was dead in the original — it compared against the ref
+		// object instead of its value.)
+		if (cacheStore.contactToEditIdx && contact.id === contactToEdit.value?.id) {
+			contactToEdit.value = contact
+			nameTerm.value = contact.name
+			contactAddressTerm.value = contact.address
+			return
+		}
+		contacts.value[idx] = contact
+	} else {
+		contacts.value.push(contact)
+	}
+}
+function onContactDeleted(contact) {
+	contacts.value = withoutId(contacts.value, contact)
+}
+
+const contactToEdit = ref(null)
+const contacts = ref([])
+
+/** Name + address managed by useFormState. The "already exist" check
+ *  filters out the contact-being-edited so saving with the SAME name/
+ *  address it already has doesn't trip the duplicate guard. */
+const form = useFormState({
+	name: {
+		initial: "",
+		validate: (v) => {
+			if (!v.replace(/\s/g, "").length) return null
+			const conflicting = contacts.value.find((c) => sameContactName(c, v) && c.id !== contactToEdit.value?.id)
+			if (conflicting) return CONTACT_EXISTS
+			return null
+		},
+	},
+	address: {
+		initial: "",
+		validate: (v) => {
+			if (!v) return null
+			if (!isValidAztecAddress(v)) return "Invalid address"
+			// Case-insensitive: hex casing doesn't make a different address.
+			const conflicting = contacts.value.find((c) => sameContactAddress(c, v) && c.id !== contactToEdit.value?.id)
+			if (conflicting) return CONTACT_EXISTS
+			return null
+		},
+	},
+})
+
+const nameTerm = form.fields.name.value
+const contactAddressTerm = form.fields.address.value
+
+// Per-field dirty: name/address are "edited" if value differs from the
+// loaded contact. Used to gate the Update button's "anything changed?"
+// check and the "Already exist" warnings, which stay hidden on the
+// unchanged row.
+const isStartedEditingName = computed(() => Boolean(contactToEdit.value) && nameTerm.value?.trim() !== contactToEdit.value?.name)
+const isStartedEditingAddress = computed(() => Boolean(contactToEdit.value) && contactAddressTerm.value !== contactToEdit.value?.address)
+const isStartedEditing = computed(() => isStartedEditingName.value || isStartedEditingAddress.value)
+
+// Either field's duplicate blocks the save, so once anything is edited both warnings show: an
+// unchanged name can clash with a stored spaced twin, an unchanged address with a mixed-case copy.
+const isAlreadyExistName = computed(() => form.fields.name.error.value === CONTACT_EXISTS && isStartedEditing.value)
+const isAlreadyExistAddress = computed(() => form.fields.address.error.value === CONTACT_EXISTS && isStartedEditing.value)
+const isValidAddress = computed(() => isValidAztecAddress(contactAddressTerm.value))
+const isAvailableToUpdateContact = computed(() => {
+	// Full-lifetime submit latch: a running save closes the form on EVERY
+	// route (button, Enter, future callers) — not just the pointer path.
+	if (isLoading.value) return false
+	if (!nameTerm.value?.replace(/\s/g, "").length) return false
+	if (!isValidAddress.value) return false
+	if (form.fields.name.error.value) return false
+	if (form.fields.address.error.value) return false
+	return true
+})
+
+const isLoading = ref(false)
+const processingError = ref({
+	show: false,
+	title: "",
+	tooltip: "",
+})
+
+function handleFillFieldsWithDefaultValues() {
+	nameTerm.value = contactToEdit.value?.name ?? ""
+	contactAddressTerm.value = contactToEdit.value?.address ?? ""
+}
+
+const handleUpdateContact = async () => {
+	if (!isAvailableToUpdateContact.value) return
+	// Mirror the submit button's dirty gate: the Enter-key path calls this
+	// directly, and a clean submit would otherwise fire a no-op update with
+	// a misleading "updated" toast. (Import staging is exempt — its dirty
+	// state lives in the staging row, not this form.)
+	if (!cacheStore.importContact && !isStartedEditing.value) return
+
+	isLoading.value = true
+	try {
+		if (cacheStore.importContact) {
+			cacheStore.importContact = {
+				...contactToEdit.value,
+				name: nameTerm.value.trim(),
+				// Same canonical-lowercase rule as the direct-save path below —
+				// staged rows feed addContact/addSender downstream.
+				address: canonicalContactAddress(contactAddressTerm.value),
+				updated: true,
+			}
+			emit("onClose")
+		} else {
+			// Canonical lowercase on save (matches NewContactPopup + wallet-wide hex convention).
+			await contactService.updateContact(
+				contactToEdit.value.id,
+				nameTerm.value.trim(),
+				canonicalContactAddress(contactAddressTerm.value),
+			)
+
+			emit("onClose")
+			openToast({ kind: "success", label: "Contact is updated" })
+		}
+	} catch (err) {
+		processingError.value = {
+			show: true,
+			title: "Failed to update contact.",
+			tooltip: err,
+		}
+
+		openToast({ kind: "error", label: "Something went wrong" })
+	} finally {
+		isLoading.value = false
+	}
+}
+
+usePopupEntity(
+	() => props.show,
+	{
+		submit: handleUpdateContact,
+		onShow: async () => {
+			contacts.value = await contactService.getContacts()
+			contactToEdit.value = cacheStore.importContact
+				? cacheStore.importContact
+				: contacts.value.find((c) => c.id === cacheStore.contactToEditIdx)
+			nameTerm.value = contactToEdit.value?.name ?? ""
+			contactAddressTerm.value = contactToEdit.value?.address ?? ""
+		},
+		onHide: () => {
+			cacheStore.contactToEditIdx = ""
+
+			contactService.disconnect()
+
+			contactToEdit.value = null
+			contacts.value = []
+
+			form.reset()
+		},
+	},
+	// The edit target (import mode included) arrives with the await above — a
+	// premature first submit must stay inert, exactly as when the hand-rolled
+	// watcher installed its listener only after it.
+	{ submitWaitsForShow: true },
+)
+
+watch(
+	() => [nameTerm.value, contactAddressTerm.value],
+	() => {
+		processingError.value.show = false
+	},
+)
+</script>
+
+<template>
+	<FormPopup
+		:show="show"
+		@onClose="emit('onClose')"
+		:displaceIdx="order"
+		title="Edit contact"
+		submitLabel="Update contact"
+		:submitDisabled="
+			!isAvailableToUpdateContact ||
+			processingError.show ||
+			!isStartedEditing
+		"
+		:submitLoading="isLoading"
+		submitTestId="edit-contact-submit"
+		@submit="handleUpdateContact"
+	>
+		<ContactFormFields
+			v-model:name="nameTerm"
+			v-model:address="contactAddressTerm"
+			:nameExists="isAlreadyExistName"
+			:addressValid="isValidAddress"
+			:addressExists="isAlreadyExistAddress"
+		/>
+
+		<template #aboveSubmit>
+			<ProcessingErrorNote
+				:show="processingError.show"
+				:title="processingError.title"
+				:tooltip="processingError.tooltip"
+			/>
+		</template>
+
+		<template #belowSubmit>
+			<Button @click="handleFillFieldsWithDefaultValues" wide variant="primary_outline" size="medium">
+				Reset changes
+			</Button>
+		</template>
+	</FormPopup>
+</template>
+

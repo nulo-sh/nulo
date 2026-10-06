@@ -1,0 +1,21 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import type { Action } from "@/wallet/services/execution/spec"
+
+export const feeJuiceAddress = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS).toString()
+
+export const feeJuiceName = "Fee Juice"
+
+export const feeJuiceSymbol = "FJC"
+
+export const getFeeJuiceClaimPayload = (to: string, amount: string, secret: string, messageLeafIndex: string): Action[] => {
+	return [
+		{
+			kind: "call",
+			contract: feeJuiceAddress,
+			method: "claim_and_end_setup",
+			args: [to, amount, secret, messageLeafIndex],
+		},
+	]
+}

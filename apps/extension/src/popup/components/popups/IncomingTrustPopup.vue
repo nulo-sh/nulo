@@ -1,0 +1,297 @@
+<script setup>
+/**
+ * First-receive friction popup. Fires when the IncomingTransferService
+ * encounters a note from a contract whose IncomingTrustState is `unknown`.
+ *
+ * Trust-state machine (per `(profileId, networkId, contract)`):
+ *   unknown → first note → pending (record hidden, this popup opens)
+ *   user Allow → trusted (queued hidden records flip visible atomically)
+ *   user Reject → blocked (queued records stay hidden permanently)
+ *
+ * Adding a token trusts its contract at once, so this opens only for a listed token with no trust
+ * row, after a trust write that failed at add or a backup restore. It states no amount, which the
+ * contract's own decimals would scale.
+ *
+ * Caller (`PopupManager`) sets:
+ *   cacheStore.incomingTrust = {
+ *     tokenSymbol, contract,
+ *     allow: () => service.setTrustAllow(profileId, networkId, contract),
+ *     reject: () => service.setTrustReject(profileId, networkId, contract),
+ *   }
+ */
+
+/** Composables */
+import { vSnackFooter } from "@/composables/snackInset"
+import { useToast } from "@/composables/toast"
+import { usePopupStack } from "@/composables/usePopupStack"
+const { openToast } = useToast()
+
+/** Store */
+import { useCacheStore } from "@/stores/cache.store.ts"
+
+/** Utils */
+import { copyToClipboard } from "@/utils/clipboard"
+import { trimAddress } from "@/utils/string"
+import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+
+const cacheStore = useCacheStore()
+const { order, depth } = usePopupStack("incoming_trust")
+
+const emit = defineEmits(["onClose"])
+const props = defineProps({
+	show: Boolean,
+})
+
+// The contract sets the symbol; sanitizing drops invisible and bidi characters, not look-alikes.
+const tokenSymbol = computed(() => sanitizeWireString(cacheStore.incomingTrust.tokenSymbol ?? "Token", 32))
+const contractFull = computed(() => cacheStore.incomingTrust.contract ?? "")
+const contractSlice = computed(() => (contractFull.value ? trimAddress(contractFull.value, 6, 4) : ""))
+
+// Verification surface: keyboard-reachable expand toggle + copy. Without
+// these as real <button> elements, a keyboard-only user couldn't get to
+// the contract address at all (the previous static <span> was inert).
+const expanded = ref(false)
+const expandToggleRef = ref(null)
+
+function toggleExpanded() {
+	expanded.value = !expanded.value
+}
+
+async function handleCopy() {
+	const value = contractFull.value
+	if (!value) return
+	await copyToClipboard(value, openToast, {
+		success: { label: "Contract address copied" },
+		failure: { label: "Couldn't copy address" },
+	})
+}
+
+// A shared submit latch. Without it, double-clicking Allow/Block fires two
+// decisions: the first closes this prompt (PopupManager then dequeues the NEXT
+// one), and the second's `emit("onClose")` then closes THAT next prompt the user
+// never decided on. The latch drops re-entry while a decision is in flight; the
+// key guard below is the second line of defense. `submitGeneration` is an owner
+// token: a decision only clears the latch it still owns, so a slow prior-prompt
+// handler settling AFTER this component was reused for the next prompt can't
+// unlock the new one (the re-open bumps the generation).
+const isSubmitting = ref(false)
+let submitGeneration = 0
+
+// The identifying triple of the CURRENTLY-displayed prompt. Captured at handler
+// entry and re-checked before `emit("onClose")` so a decision that completes
+// after the active identity switched (PopupManager reassigns
+// `cacheStore.incomingTrust`) can't close whatever prompt is showing now.
+function payloadKey() {
+	const t = cacheStore.incomingTrust
+	return `${t.profileId ?? ""}|${t.networkId ?? ""}|${t.contract ?? ""}`
+}
+
+/** The label and the key are captured before the await: the active prompt can change mid-RPC. */
+async function decide(action, successLabel) {
+	if (isSubmitting.value) return
+	isSubmitting.value = true
+	const myGen = ++submitGeneration
+	const key = payloadKey()
+	try {
+		// true: the trust flip was applied; false: the service refused (stale-popup race — token deleted
+		// between the Pending emit and the click); undefined: the closure wasn't bound. Only explicit true
+		// earns the success toast, so a boundary that drops the return value can't mislead the user.
+		const ok = await action?.()
+		if (ok === true) openToast({ kind: "success", label: successLabel })
+	} catch {
+		openToast({ kind: "error", label: "Couldn't update trust state" })
+	} finally {
+		if (submitGeneration === myGen) isSubmitting.value = false
+	}
+	if (payloadKey() === key) emit("onClose")
+}
+const handleAllow = () => decide(cacheStore.incomingTrust.allow, `Now showing receives for ${tokenSymbol.value}`)
+const handleReject = () => decide(cacheStore.incomingTrust.reject, `Hiding receives from ${tokenSymbol.value}`)
+
+// Initial focus on the expand toggle so a keyboard-only user lands on
+// the verification surface first — they should be reading the contract
+// address before they choose Allow or Block. Reset the expanded state
+// each time the popup re-opens so a previous expansion doesn't bleed
+// across separate contracts.
+watch(
+	() => props.show,
+	async (show) => {
+		if (!show) {
+			expanded.value = false
+			return
+		}
+		// Fresh prompt (the component instance is reused across the queue) — bump
+		// the owner token so a still-pending previous submit's `finally` can't clear
+		// THIS prompt's latch, then clear it for the new prompt.
+		submitGeneration++
+		isSubmitting.value = false
+		await nextTick()
+		expandToggleRef.value?.focus()
+	},
+)
+</script>
+
+<template>
+	<Popup :show :displaceIdx="order" @onClose="emit('onClose')">
+		<PopupCard :displaceIdx="depth">
+			<Flex direction="column" gap="24" :class="$style.wrapper" wide>
+				<Flex direction="column" align="center" gap="12" :class="$style.header">
+					<Icon name="download" size="20" color="primary" />
+					<span :class="$style.pre_title">First receive</span>
+					<h2 :class="$style.title">Allow {{ tokenSymbol }}?</h2>
+					<Text size="13" weight="500" color="body" height="150" align="center">
+						You received <strong>{{ tokenSymbol }}</strong> from a contract you haven't seen before.
+					</Text>
+				</Flex>
+
+				<Flex direction="column" gap="6" :class="$style.contract_row">
+					<span :class="$style.contract_label">CONTRACT</span>
+					<button
+						ref="expandToggleRef"
+						type="button"
+						:class="$style.contract_button"
+						:aria-expanded="expanded"
+						:aria-controls="expanded ? 'incoming-trust-contract-full' : undefined"
+						data-testid="incoming-trust-contract-expand"
+						@click="toggleExpanded"
+					>
+						<span :class="$style.contract_value" data-testid="incoming-trust-contract">{{ contractSlice }}</span>
+						<Icon
+							name="chevron"
+							size="10"
+							color="tertiary"
+							:style="{
+								transform: `rotate(${expanded ? '180' : '0'}deg)`,
+								transition: 'transform 0.2s ease',
+							}"
+						/>
+					</button>
+					<div
+						v-show="expanded"
+						id="incoming-trust-contract-full"
+						:class="$style.contract_full_row"
+					>
+						<span :class="$style.contract_full" data-testid="incoming-trust-contract-full">{{ contractFull }}</span>
+						<button
+							type="button"
+							:class="$style.copy_button"
+							aria-label="Copy contract address"
+							data-testid="incoming-trust-contract-copy"
+							@click="handleCopy"
+						>
+							<Icon name="copy" size="14" color="primary" />
+						</button>
+					</div>
+				</Flex>
+
+				<Text size="11" color="tertiary" height="150" align="center" :class="$style.warning">
+					A contract you don't recognize could be a scam token with a familiar-looking symbol. Verify the contract address before allowing.
+				</Text>
+
+				<Flex v-snack-footer gap="12">
+					<Button
+						@click="handleReject"
+						:disabled="isSubmitting"
+						wide
+						variant="primary_outline"
+						size="medium"
+						data-testid="incoming-trust-reject"
+					>
+						Block
+					</Button>
+					<Button
+						@click="handleAllow"
+						:disabled="isSubmitting"
+						wide
+						size="medium"
+						data-testid="incoming-trust-allow"
+					>
+						Allow
+					</Button>
+				</Flex>
+			</Flex>
+		</PopupCard>
+	</Popup>
+</template>
+
+<style module>
+.wrapper {
+	composes: body from "./popup-shared.module.css";
+}
+.header {
+	composes: header from "./popup-shared.module.css";
+}
+.pre_title {
+	composes: pre_title from "./popup-shared.module.css";
+}
+.title {
+	composes: title from "./popup-shared.module.css";
+	max-width: 280px;
+}
+.contract_row {
+	padding: 12px;
+	border: 1px solid var(--nulo-border);
+	background: var(--nulo-surface-low);
+}
+.contract_label {
+	font-family: var(--font-mono);
+	font-size: 9px;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	color: var(--txt-tertiary);
+}
+.contract_value {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	color: var(--txt-primary);
+	word-break: break-all;
+}
+.contract_button {
+	all: unset;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	cursor: pointer;
+	padding: 2px 0;
+	width: 100%;
+}
+.contract_button:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+.contract_full_row {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--nulo-border);
+}
+.contract_full {
+	flex: 1;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--txt-primary);
+	word-break: break-all;
+	line-height: 1.5;
+}
+.copy_button {
+	all: unset;
+	cursor: pointer;
+	padding: 4px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.copy_button:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
+.warning {
+	padding: 0 8px;
+}
+:global([theme="light"]) .pre_title {
+	color: var(--txt-secondary);
+}
+</style>

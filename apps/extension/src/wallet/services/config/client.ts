@@ -1,0 +1,32 @@
+// Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { ServiceSpec } from "@/wallet/base"
+import { ServiceClient } from "@nulo/extension-messaging/background"
+import { documentLogger } from "@/wallet/services/logger/client"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { CONFIG_SERVICE_NAME, type Config, type ConfigKey, type ConfigProp, type Events, type Methods } from "./spec"
+
+export * from "./spec"
+
+export class ConfigServiceClient extends ServiceClient<Methods, Events> implements ServiceSpec<Methods, Events> {
+	public readonly onUpdate = new EventHandler<ConfigProp>()
+
+	public constructor(name?: string) {
+		super(CONFIG_SERVICE_NAME, documentLogger(), name)
+	}
+
+	public getProps(): Promise<ConfigProp[]> {
+		return this.request("getProps")
+	}
+
+	public async getValue<TKey extends ConfigKey>(key: TKey): Promise<Config[TKey]> {
+		return (await this.request("getValue", key)) as Config[TKey]
+	}
+
+	public setValue<TKey extends ConfigKey>(key: TKey, value: Config[TKey]): Promise<void> {
+		return this.request("setValue", key, value)
+	}
+
+	public reset(): Promise<void> {
+		return this.request("reset")
+	}
+}

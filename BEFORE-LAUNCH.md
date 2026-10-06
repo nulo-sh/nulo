@@ -1,0 +1,101 @@
+# Before launch — what is still blank, and when each blank is due
+
+The Terms and the Privacy Policy ship with `«FILL: …»` placeholders: facts that cannot be read out
+of this repository. While any survives, `nulo.sh/terms` and `/privacy` carry a **DRAFT banner and
+`noindex`**, so nothing here blocks a merge. It blocks **v1.0.0**.
+
+Find every one: `git grep -n "«FILL" -- legal/`. What each one needs is described in
+[`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is the schedule.
+
+## 1. Any time before v1.0.0 — look these up, do not guess
+
+**Done** for the privacy policy, every row below; the Terms carry the same security URL and Presto
+links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md`.
+
+| Fill | Where | How to find it |
+|---|---|---|
+| Email provider's legal name + privacy link | `legal/privacy.md` § 5.5 | The provider behind `hello@nulo.sh` |
+| Cloudflare contracting entity + privacy link | `legal/privacy.md` § 5.5 | Cloudflare's customer agreement names the entity for your country |
+| What the dRPC account exposes to you | `legal/privacy.md` § 5.1 | Open the dashboard and list the categories you can actually see, or confirm you see none |
+| What the Cloudflare dashboard exposes to you | `legal/privacy.md` § 5.5 | Same: open it, list it |
+| Retention ×3 (website/security records, correspondence, provider schedules) | `legal/privacy.md` § 5.5 | State the real period or the real criterion |
+| Transfer safeguards (provider → destination → adequacy decision or SCCs, UK included) | `legal/privacy.md` § 12 | From each provider's DPA |
+| EU/UK Article 27 representative | `legal/privacy.md` § 10 | Only if required. **Delete the line** if not; never leave it blank |
+| Security-reporting URL | `legal/terms.md` § 24, `legal/privacy.md` § 13 | A URL that resolves for a reader outside the repo (`SECURITY.md` is a repo path) |
+| Presto's own licence + privacy links | `legal/terms.md` § 7, `legal/privacy.md` § 5.8 | Published by the Presto native app |
+
+## 2. When the store listings exist
+
+| Fill | Where |
+|---|---|
+| ~~Chrome Web Store listing URL~~ | `legal/terms.md` § 1 — done |
+| ~~Firefox Add-ons listing URL~~ | `legal/terms.md` § 1 — done |
+
+Also at this point, not a placeholder but the same deadline: the **Chrome trader disclosure**
+([`legal/README.md`](./legal/README.md), blocker 5) is declared non-trader; it must be re-declared
+before any funding, revenue or entity. If the trader path applies, Chrome displays a verified address
+and phone number publicly, and no clause can waive that.
+
+The store dashboards are filled from `apps/extension/store/listing.md` (one source for both stores;
+`scripts/store-listing.test.ts` holds it to the manifests and to the privacy policy). Before the
+first submission the privacy page must have lost its DRAFT banner, which takes two things: every
+`«FILL»` in § 1 above is filled (a reviewer who opens `nulo.sh/privacy` reads them), **and the
+privacy policy's effective date is set to the planned submission day** — the banner stays while
+any placeholder survives, and the date is one. Set it in the three places tests hold together:
+
+- [x] `legal/privacy.md` — the version line at the top, and the 1.0 row of the history table
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.0
+
+The Terms' listing URLs were filled once both first submissions existed. Their
+effective date waits for § 3, the 1.0 ship day, so `/terms` stays draft a little longer, which the
+stores do not mind — they require a reachable privacy policy, not terms. Nulo V6 reuses both store
+items, renamed. Both URLs in `legal/terms.md` § 1 name the item by its ID (Chrome's item id, AMO's
+add-on id `3077967`), which each store redirects to the current listing, so no rename touches them.
+
+Also before submission, one wording item in the privacy policy that is not a placeholder: § 2
+attributes "loads no remote code" to the content security policy, which only forbids remote
+*scripts* — WASM bytes are kept local by the bundled loaders, not the policy
+(`apps/extension/store/remote-code.md` § What this bears on). **Done:** § 2 reads "forbids
+loading remote scripts".
+
+## 3. The day v1.0.0 ships — in the `release: promote dev → main` PR that carries it
+
+The Terms' **effective date** is the date the 1.0 listing goes live (privacy 1.0's is already set,
+§ 2). It appears in three places that tests hold in agreement, so change them
+together:
+
+- [ ] `legal/terms.md` — the version line at the top, and the 1.0 row of the history table
+- [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.0 (currently `null`)
+- [ ] `legal/privacy.md` + its manifest entries — 1.0 already dated, confirm unchanged; 1.1 per § 4
+
+Then:
+
+- [ ] `git grep -n "«FILL" -- legal/` prints nothing
+- [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
+      public page only once it has published it)
+- [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green
+- [ ] After the deploy, `nulo.sh/terms/v1.0/` shows **no DRAFT banner** and no `noindex` meta
+- [ ] The README's "DEMO / PREVIEW BUILD — NOT A PRODUCTION WALLET" banner is rewritten
+
+## 4. Every later `release: promote dev → main`
+
+Nothing to fill unless `legal/terms.md` or `legal/privacy.md` changed since the last release. If one
+did, it needs a new version before it reaches users — procedure in
+[`packages/legal/README.md` § Shipping a new version](./packages/legal/README.md#shipping-a-new-version):
+archive the old text, bump the version line, add the history row **with its effective date**, append
+the manifest entry, and mark it `material: true` with hand-written `changes` if people must
+re-accept. `git diff <last release tag> -- legal/` answers whether any of this applies.
+
+**Due at the first release:** privacy 1.1.1 (the address for reporting security vulnerabilities) is
+archived, versioned and effective 6 October 2026:
+
+- [x] `legal/privacy.md` — the version line and the 1.1.1 history row
+- [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.1.1
+- [ ] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
+  carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text)
+
+## Not legal text, same deadline
+
+- Firefox `data_collection_permissions` (`financialAndPaymentInfo`) and the Firefox 153 minimum
+  are settled and pinned by `apps/extension/src/manifest.test.ts`; the reasoning is in
+  `apps/extension/store/listing.md` § Data collection declaration.
