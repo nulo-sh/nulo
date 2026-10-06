@@ -24,11 +24,18 @@
 const URL_LIKE = /\b(?:https?|wss?):\/\/[^\s'"<>]+/gi
 
 /** Sentence punctuation that follows a URL far more often than it belongs to one. */
-const TRAILING_PUNCTUATION = /[).,;:!?}]+$/
+const TRAILING_PUNCTUATION = new Set(").,;:!?}")
+
+/** A scan from the end, not `/[…]+$/`: that regex is quadratic on a long punctuation run that does not reach the end. */
+function trailingPunctuation(candidate: string): string {
+	let end = candidate.length
+	while (end > 0 && TRAILING_PUNCTUATION.has(candidate[end - 1] as string)) end--
+	return candidate.slice(end)
+}
 
 export function scrubUrls(text: string): string {
 	return text.replace(URL_LIKE, (candidate) => {
-		const trailing = candidate.match(TRAILING_PUNCTUATION)?.[0] ?? ""
+		const trailing = trailingPunctuation(candidate)
 		const url = trailing ? candidate.slice(0, -trailing.length) : candidate
 		try {
 			const { protocol, host } = new URL(url)
