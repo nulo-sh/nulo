@@ -105,6 +105,17 @@ describe("CI aggregator check names", () => {
   })
 })
 
+describe("PR concurrency", () => {
+  test("each PR workflow groups by pull request number, so same-named branches of two forks never cancel each other", () => {
+    for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
+      // biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+      const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
+      expect(wf.concurrency?.group, `${file}: concurrency.group`).toContain("${{ github.event.pull_request.number || github.ref }}")
+      expect(wf.concurrency?.group, `${file}: concurrency.group`).not.toContain("head_ref")
+    }
+  })
+})
+
 describe("CI behavior-gating guard", () => {
   const smoke = filtersOf("pr-extension-smoke-e2e.yml")["smoke-surface"]
   const network = filtersOf("pr-extension-network-e2e.yml")["extension-network"]
