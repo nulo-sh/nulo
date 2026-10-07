@@ -41,7 +41,7 @@ export async function startSend(page: Page, send: BurstSend): Promise<void> {
 	)
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', send.amount)
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', send.destination)
-	await selectFeeMethod(page, send.fee, { mountTimeoutMs: 30_000 })
+	await selectFeeMethod(page, send.fee)
 }
 
 /** The estimate's state right now: the fee row (landed or queued), or the page's "Couldn't estimate fee" snack. */

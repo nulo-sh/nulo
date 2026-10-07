@@ -131,14 +131,24 @@ const earlyFpcs = computed(() => {
 })
 
 /**
- * `methods` is the dropdown list. Until a snapshot for the live identity commits, rows are built
- * from that identity's early FPC list alone, never from another identity's, and draw loading where
- * no read has answered them; balances join only with the commit.
+ * `methods` is what selections are resolved against. We pass `gasBalances`
+ * only after init completes, so the loading-state items don't briefly flash
+ * "no balance" before the first fetch returns.
  */
-const methods = computed(() => {
-	const committed = snapshotCommitted.value
-	const early = committed ? null : earlyFpcs.value
-	return buildFeeMethods(committed ? knownFpcs.value : (early ?? []), committed ? gasBalances.value : undefined, {
+const methods = computed(() =>
+	buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
+		shortSponsorIds,
+		setAsideSponsorIds,
+	}),
+)
+
+/** The dropdown's rows: `methods` once the live identity's snapshot is in. Before that, rows come
+ *  from that identity's early FPC list alone, never another identity's, and load wherever no read
+ *  has answered them. Display only: no selection is ever resolved against them. */
+const menuMethods = computed(() => {
+	if (snapshotCommitted.value) return methods.value
+	const early = earlyFpcs.value
+	return buildFeeMethods(early ?? [], undefined, {
 		shortSponsorIds,
 		setAsideSponsorIds,
 		balancesPending: snapshotPending.value,
@@ -198,12 +208,13 @@ const scopeIsLiveIdentity = (scope) => Boolean(scope) && isLiveFeeScope(props, s
 
 const snapshotCommitted = computed(() => isInitComplete.value && scopeIsLiveIdentity(committedScope.value))
 
-/** The identity whose init threw. Nothing commits for it until init runs again, so its rows stop
- *  loading and give today's answers. */
-const failedInitKey = ref(null)
+/** The identity a run is reading for right now, owned by `readingRun`. Rows load only for it: an
+ *  identity no read is coming for, after an init that threw, say, gives today's answers instead. */
+const readingKey = ref(null)
+let readingRun = 0
 
-/** A snapshot for the live identity is still on its way. */
-const snapshotPending = computed(() => !snapshotCommitted.value && failedInitKey.value !== feeScopeKey(liveFeeScope(props)))
+/** A snapshot for the live identity is on its way. */
+const snapshotPending = computed(() => !snapshotCommitted.value && readingKey.value === feeScopeKey(liveFeeScope(props)))
 
 /**
  * Send's selection is DERIVED, never assigned: a pure function of the live origin, the live
@@ -607,9 +618,23 @@ const prefillSelection = (saved) => {
 	chosenUnasked = false
 }
 
+/** Pre-fills from storage BEFORE the slow fetch, so the trigger shows the last-used method while it
+ *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
+ *  map and the reconcile baseline: a pick made after it is a different reference, and the reconcile
+ *  leaves it alone. A pick made during the read (an early sponsor row) is newer than anything saved,
+ *  so nothing is pre-filled over it and the baseline stays the selection from before the read. Null
+ *  when a newer run owns the card: re-applying the pre-fill would clobber that run's reconcile. */
+const readAndPrefill = async (scope, myRun) => {
+	const beforeRead = selectedMethod.value
+	const saved = await readSavedSelections(scope.accountAddress)
+	if (myRun !== runSeq || !isMounted) return null
+	if (selectedMethod.value !== beforeRead) return { saved, baseline: beforeRead }
+	prefillSelection(saved)
+	return { saved, baseline: selectedMethod.value }
+}
+
 const runInit = async () => {
 	const myRun = ++runSeq
-	failedInitKey.value = null
 	try {
 		if (!props.profile || !props.network || !props.account || embeddedHidden()) {
 			// Embedded ops (and identity-less mounts) hold no subscription: the
@@ -636,23 +661,11 @@ const runInit = async () => {
 		// the committed snapshot live (re-arming unconditionally made Confirm
 		// oscillate disabled for the length of every retry's in-flight window).
 		if (committedKey !== reqKey) isInitComplete.value = false
+		readingRun = myRun
+		readingKey.value = reqKey
 
-		// Pre-fill from local storage BEFORE the slow SW fetch so the
-		// dropdown trigger displays the user's last-used method while the
-		// fetch is in flight. The `isInitComplete` gate ensures this
-		// pre-fill doesn't drive settings derivation against stale state.
-		const saved = await readSavedSelections(scope.accountAddress)
-		// A newer run owns the card now: a superseded run resuming from its
-		// storage read must not re-apply the pre-fill (it would clobber the
-		// newer run's reconcile or the user's mid-flight pick).
-		if (myRun !== runSeq || !isMounted) return
-		prefillSelection(saved)
-		// Snapshot the (possibly-prefilled) selection AFTER any pre-fill
-		// assignment. If the user picks something during the ensure await,
-		// `selectedMethod.value` will be a different reactive proxy reference
-		// than `baseline`, and we skip the reconcile path so we don't clobber
-		// their choice.
-		const baseline = selectedMethod.value
+		const read = await readAndPrefill(scope, myRun)
+		if (!read) return
 
 		// Re-validate AFTER the storage await, BEFORE taking the lease: a
 		// mid-await embedded flip (its watcher just released) or identity
@@ -672,7 +685,7 @@ const runInit = async () => {
 		// the commit is atomic against the checked state.
 		if (myRun !== runSeq || identityDrifted(scope)) return
 
-		commitFromEntry(scope, reqKey, saved, baseline)
+		commitFromEntry(scope, reqKey, read.saved, read.baseline)
 	} catch (e) {
 		// Deliberately does NOT open `isInitComplete`: an exception here may
 		// have fired mid-commit, and deriving settings from a half-written
@@ -682,12 +695,12 @@ const runInit = async () => {
 		// run's failure belongs to an identity no longer on screen.
 		console.error("Failed to init", getErrorData(e))
 		if (myRun !== runSeq || !isMounted) return
-		failedInitKey.value = feeScopeKey(liveFeeScope(props))
 		error.value = FEE_INIT_FAILED
 	} finally {
 		// Only the run that owns the loading flag may clear it — a superseded
 		// run's finally must not blank a newer run's in-flight spinner.
 		if (loadingRun === myRun) isLoading.value = false
+		if (readingRun === myRun) readingKey.value = null
 	}
 }
 
@@ -865,7 +878,7 @@ onBeforeUnmount(() => {
 				v-else
 				:modelValue="displayMethod"
 				@update:modelValue="handleMethodPicked"
-				:methods="methods"
+				:methods="menuMethods"
 				:payerNoticeShape="payerNoticeShape"
 				@open="isMethodsDropdownOpen = true"
 				@close="isMethodsDropdownOpen = false"

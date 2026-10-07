@@ -1344,6 +1344,10 @@ export async function hasTxCardByHash(page: Page, hash: string): Promise<boolean
  *  the fourth rendered entry ("coming soon") is disabled by design. */
 export type FeeMethodSubtitle = "sponsored" | "public" | "private"
 
+/** How long a fee row can stay loading on Send: the forced balance read waits out a read already in
+ *  flight, then runs its own, each bounded by the balances store's 20s fetch timeout. */
+export const FEE_ROW_READY_MS = 45_000
+
 /** Select a fee payment method in the shared FeeSettingsCard dropdown (the
  *  send flow AND the dApp execute/authwit popups embed the same card).
  *  `mountTimeoutMs` bounds every wait. The card can mount late, and its rows
@@ -1356,7 +1360,7 @@ export async function selectFeeMethod(
 	methodSubtitle: FeeMethodSubtitle,
 	opts: { mountTimeoutMs?: number } = {},
 ): Promise<void> {
-	const mountTimeoutMs = opts.mountTimeoutMs ?? 30_000
+	const mountTimeoutMs = opts.mountTimeoutMs ?? FEE_ROW_READY_MS
 	await page.waitForSelector('[data-testid="send-fee-method-trigger"]', { visible: true, timeout: mountTimeoutMs })
 	// Open the fee method dropdown (items teleport to #dropdown)
 	await page.evaluate(() => {
