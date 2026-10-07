@@ -18,7 +18,7 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:
-  group: pr-extension-network-e2e-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: pr-extension-network-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:

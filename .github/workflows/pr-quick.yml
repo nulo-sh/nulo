@@ -34,7 +34,7 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
-  group: pr-quick-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: pr-quick-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
