@@ -719,10 +719,7 @@ onBeforeUnmount(() => {
 
 				<!-- Section: Select Asset -->
 				<div :class="$style.section">
-					<Flex align="center" justify="between">
-						<span :class="$style.section_label">Select Asset</span>
-						<span :class="$style.section_meta">Network: {{ getChainName(appStore.network?.chainId) }}</span>
-					</Flex>
+					<span :class="$style.section_label">Select Asset</span>
 					<SelectTokenCard :token="activeToken" :loading="tokensLoading" :failed="tokensFailed" @retry="retryTokens" />
 				</div>
 
@@ -858,12 +855,6 @@ onBeforeUnmount(() => {
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
-	color: var(--nulo-secondary);
-}
-
-.section_meta {
-	font-family: var(--font-mono);
-	font-size: 10px;
 	color: var(--nulo-secondary);
 }
 
