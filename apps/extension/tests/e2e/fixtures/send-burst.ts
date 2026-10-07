@@ -41,20 +41,7 @@ export async function startSend(page: Page, send: BurstSend): Promise<void> {
 	)
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', send.amount)
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', send.destination)
-	await selectFeeWithin(page, send.fee, 30_000)
-}
-
-/** A click on a fee method can miss while the card re-reads its balances after a send lands: try until the selection takes. */
-async function selectFeeWithin(page: Page, fee: FeeMethodSubtitle, timeoutMs: number): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		try {
-			return await selectFeeMethod(page, fee, { mountTimeoutMs: 30_000 })
-		} catch (err) {
-			if (Date.now() > deadline) throw err
-			await new Promise((r) => setTimeout(r, 500))
-		}
-	}
+	await selectFeeMethod(page, send.fee, { mountTimeoutMs: 30_000 })
 }
 
 /** The estimate's state right now: the fee row (landed or queued), or the page's "Couldn't estimate fee" snack. */

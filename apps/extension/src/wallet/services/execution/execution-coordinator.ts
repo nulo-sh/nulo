@@ -1,36 +1,30 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
  * `ExecutionCoordinator` — owns the shared prove → send → record →
- * journal pipeline that would otherwise be duplicated across
- * `executeTransfer`, `executeSendTransaction`, `executeAztecSendTx`,
- * and `executeNoFromSendTx` in `ExecutionService`.
+ * journal pipeline that would otherwise be duplicated across the four
+ * send paths: `executeTransfer`, `executeSendTransaction`,
+ * `executeAztecSendTx` and `executeNoFromSendTx`.
  *
  * ## Scope (deliberately narrow)
  *
- * This PR does NOT move the `executeOperations` dispatcher or the 22
- * per-operation-kind handlers off the facade — each handler is RPC
- * surface + has unique op-specific plumbing that doesn't fit a generic
- * coordinator shape. What DOES move:
+ * The `executeOperations` dispatcher and the per-operation-kind handlers
+ * stay off the coordinator — each handler is RPC surface + has unique
+ * op-specific plumbing that doesn't fit a generic coordinator shape. It
+ * owns:
  *
  *   - `simulateTxTask` / `proveTxTask` / `sendTxTask` — the 3 task-
- *     lifecycle wrappers. Used by every handler + FeeStrategy impls
- *     (via the simulate callback).
- *   - `proveAndSend` — the shared "prove → toTx → send → addTransaction →
- *     mark journal submitted" sequence, called 4 times in the facade
- *     with minor op-specific variation.
- *
- * Future work:
- *   - Move the `executeOperations` dispatcher + per-kind handlers.
- *   - Fold in `GasBalanceCache` (facade-owned today — coordinator only
- *     shares / invalidates, never owns).
- *   - `AuthwitDiscoverer.trackAuthwit` post-send flush (requires the
- *     coordinator to own the send-complete point).
+ *     lifecycle wrappers. Fee strategies reach `simulateTxTask` through
+ *     their simulate callback.
+ *   - `proveAndSend` — the shared prove → toTx → commit `submitting` →
+ *     send → record → journal `succeeded` sequence (full order on the
+ *     method). Per-path variation arrives as data in
+ *     {@link ProveAndSendContext}, never as op-kind branches.
  *
  * ## Coordinator does NOT own the RPC surface
  *
  * Facade still owns `ensureInitialized`, RPC binding, and the RPC
- * methods on `Methods`. Coordinator is a pure collaborator — injected
- * via ctor, called by facade methods, no `Service<Methods>` base.
+ * methods on `Methods`. Coordinator is a pure collaborator — built by the
+ * facade, handed to its executors, no `Service<Methods>` base.
  */
 
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"

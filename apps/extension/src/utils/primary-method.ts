@@ -58,9 +58,8 @@ function userIndexesOf(named: readonly string[]): number[] {
  *
  * Returns `undefined` ONLY when no item carries a method/name string at all.
  * If every named item is a `FEE_METHOD`, returns the first named item
- * verbatim — preserves the pre-existing display behavior. The all-fee-only
- * fallback is documented as a (BUG PIN) in the test file; reshaping it
- * belongs to a separate behavior-change PR, not this extraction.
+ * verbatim. The test file pins that all-fee-only fallback as a (BUG PIN), so
+ * reshaping it is a deliberate display change.
  */
 export function pickPrimaryMethod(items: ReadonlyArray<MethodCarrier> | undefined): string | undefined {
 	const idx = pickPrimaryIndex(items)

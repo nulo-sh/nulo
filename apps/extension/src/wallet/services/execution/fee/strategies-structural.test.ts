@@ -625,13 +625,13 @@ describe("FpcStrategy folded (probed) runs — discovery collapses into the firs
 
 	test("ADVERSARIAL (standalone inner-hash class): folded estimate SUCCEEDS where validated fails — failure moves to prove time", async () => {
 		// Models a contract that asserts an intent-hash authwit via
-		// `assert_inner_hash_valid_authwit`: it emits NO offchain effect (Noir
-		// fact 12), so discovery cannot see the need. A VALIDATED sim dies in
-		// the account's verify (authwit oracle throw); a STUBBED sim completes
-		// with zero effects. The folded pipeline therefore returns an estimate
-		// (and the tx later fails at PROVE time, pre-broadcast) — the
-		// owner-accepted Ask-1 trade. The classic probe-free run of the same op
-		// keeps failing at estimate time.
+		// `assert_inner_hash_valid_authwit`: it emits NO offchain effect, so
+		// discovery cannot see the need. A VALIDATED sim dies in the account's
+		// verify (authwit oracle throw); a STUBBED sim completes with zero
+		// effects. The folded pipeline therefore returns an estimate (and the
+		// tx later fails at PROVE time, pre-broadcast), an accepted trade-off.
+		// The classic probe-free run of the same op keeps failing at estimate
+		// time.
 		const innerHashSim = (opts: { stubAccountAddresses?: string[] }) => {
 			if (opts.stubAccountAddresses?.length) return Promise.resolve(sentinelSim())
 			return Promise.reject(new Error("Unknown auth witness for message hash 0xdeadbeef"))

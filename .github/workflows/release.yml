@@ -19,7 +19,7 @@ on:
         type: string
         default: ""
       dry_run:
-        description: "Skip the actual gh release upload + body update + Cloudflare hook. Build + gates still run."
+        description: "Skip the actual gh release upload + body update + store uploads. Build + gates still run."
         required: false
         type: boolean
         default: false

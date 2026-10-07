@@ -368,6 +368,31 @@ describe("Firefox lanes", () => {
 })
 
 /**
+ * A sharded suite runs only the files its matrix names: an index skipped or repeated, or a count
+ * the list disagrees with, leaves files unrun while the aggregator stays green.
+ */
+describe("shard matrices", () => {
+  test("every shard matrix runs 1/N to N/N once, each runner handed its own shard and label", () => {
+    type MatrixJob = { strategy?: { matrix?: { shard?: unknown[] } }; with?: Record<string, unknown> }
+    let checked = 0
+    for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((name) => name.endsWith(".yml"))) {
+      // biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+      const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
+      for (const [name, job] of Object.entries(wf.jobs ?? {}) as [string, MatrixJob][]) {
+        const shards = job.strategy?.matrix?.shard
+        if (!shards) continue
+        const want = shards.map((_, i) => ({ id: `${i + 1}/${shards.length}`, label: `${i + 1}-of-${shards.length}` }))
+        expect(shards, `${file} → ${name}`).toEqual(want)
+        expect(job.with?.shard, `${file} → ${name} shard`).toBe("${{ matrix.shard.id }}")
+        expect(job.with?.shard_label, `${file} → ${name} shard_label`).toBe("${{ matrix.shard.label }}")
+        checked++
+      }
+    }
+    expect(checked, "the scan found the sharded suites").toBeGreaterThan(0)
+  })
+})
+
+/**
  * The canary lanes — the prover-ON jobs every @aztec bump is gated on — run both execution
  * canaries on both browsers. What could rot silently: a canary dropped from one lane's list, left
  * in a proverless pool, or moved into a proverless job; a lane whose aggregator waits on a job but

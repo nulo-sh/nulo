@@ -9,9 +9,9 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 | Workflow | Required check-run | Required on | Runs when | What it checks |
 |---|---|---|---|---|
 | `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build |
-| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-smoke` label, OR `smoke-surface` paths-filter | chrome build + puppeteer smoke |
+| `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-smoke` label, OR `smoke-surface` paths-filter | chrome build + puppeteer smoke, 3 shards |
 | `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-network` label, OR `extension-network` paths-filter | full network e2e (anvil + Aztec sandbox + playground) |
-| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` (required on `dev` and `main`) | — | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter); skips drafts | firefox build + the smoke suite over geckodriver + Puppeteer BiDi |
+| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` (required on `dev` and `main`) | — | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter); skips drafts | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
 | `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` (required on `dev`) | — | same gate as the Chrome twin; skips drafts | the network suite on Firefox: 5 proverless shards + 2 heavy jobs + the real-proving canary, the same four files as on Chrome |
 | `actionlint.yml` | `Status` (not required) | — | when `.github/workflows/**` or shell scripts change | actionlint + shellcheck |
 | `release.yml` | `status` (not required) | — | push to `main` + manual `workflow_dispatch` | release-please + gates + build + smoke against artifact + assets; `publish_chrome` / `publish_firefox` inputs run the store uploads in their protected environments |
