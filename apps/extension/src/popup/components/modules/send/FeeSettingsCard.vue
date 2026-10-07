@@ -385,6 +385,8 @@ const pickForSend = (m) => {
 
 /** The selection is the card's own default, not a saved or live pick. */
 let chosenUnasked = false
+/** Counts explicit picks: a re-pick of the selected row leaves the reference unchanged. */
+let pickSeq = 0
 
 const handleMethodPicked = (m) => {
 	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
@@ -393,6 +395,7 @@ const handleMethodPicked = (m) => {
 	droppedForVerdictId.value = null
 	if (props.originPrivacy !== null) return pickForSend(m)
 	selectedMethod.value = m
+	pickSeq++
 	chosenUnasked = false
 	useEmbeddedFee.value = false
 	void persistSelection(m)
@@ -529,12 +532,20 @@ const settledSelection = (savedRecord) => {
 	return preferred ? { ...preferred } : undefined
 }
 
+/** A selection taken as `baseline` has since been picked, or replaced by an FPC edit or deletion. */
+const touchedSince = (baseline) => selectedMethod.value !== baseline.method || pickSeq !== baseline.pick
+
+/** A pick made during init stands, read again from the snapshot's rows: their sponsor metadata is
+ *  current, and a sponsor the snapshot no longer lists is dropped rather than paid through. */
+const snapshotRowFor = (m) => (m ? methods.value.find((x) => x.type === m.type && x.fpc?.id === m.fpc?.id) : undefined)
+
 const reconcileSelection = (savedRecord, baseline) => {
-	const userPickedDuringInit = selectedMethod.value !== baseline
 	if (props.lockedMethod) {
 		selectedMethod.value = lockedOption()
 		chosenUnasked = false
-	} else if (!userPickedDuringInit) {
+	} else if (touchedSince(baseline)) {
+		selectedMethod.value = snapshotRowFor(selectedMethod.value)
+	} else {
 		selectedMethod.value = settledSelection(savedRecord)
 		chosenUnasked = !resolveSavedSelection(savedRecord, methods.value)
 	}
@@ -620,17 +631,17 @@ const prefillSelection = (saved) => {
 
 /** Pre-fills from storage BEFORE the slow fetch, so the trigger shows the last-used method while it
  *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
- *  map and the reconcile baseline: a pick made after it is a different reference, and the reconcile
- *  leaves it alone. A pick made during the read (an early sponsor row) is newer than anything saved,
- *  so nothing is pre-filled over it and the baseline stays the selection from before the read. Null
- *  when a newer run owns the card: re-applying the pre-fill would clobber that run's reconcile. */
+ *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
+ *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
+ *  baseline stays the one from before the read. Null when a newer run owns the card: re-applying
+ *  the pre-fill would clobber that run's reconcile. */
 const readAndPrefill = async (scope, myRun) => {
-	const beforeRead = selectedMethod.value
+	const beforeRead = { method: selectedMethod.value, pick: pickSeq }
 	const saved = await readSavedSelections(scope.accountAddress)
 	if (myRun !== runSeq || !isMounted) return null
-	if (selectedMethod.value !== beforeRead) return { saved, baseline: beforeRead }
+	if (touchedSince(beforeRead)) return { saved, baseline: beforeRead }
 	prefillSelection(saved)
-	return { saved, baseline: selectedMethod.value }
+	return { saved, baseline: { method: selectedMethod.value, pick: pickSeq } }
 }
 
 const runInit = async () => {
@@ -730,10 +741,10 @@ const recommit = async () => {
 	// card is embedded-visible), the identity/useOwnMethod watchers own it.
 	if (!recommitStillValid(scope)) return
 	// Baseline BEFORE the await (same rule as runInit): a user pick landing
-	// while the storage read is pending makes the selection differ from this
-	// baseline, so the reconcile is skipped instead of re-applying a stale
-	// storage snapshot over the pick.
-	const baseline = selectedMethod.value
+	// while the storage read is pending moves the selection off this
+	// baseline, so the reconcile keeps the pick instead of re-applying a
+	// stale storage snapshot over it.
+	const baseline = { method: selectedMethod.value, pick: pickSeq }
 	const saved = await readSavedFeeMethods()
 	// Re-validate AFTER the await: an identity switch during the storage read
 	// must not let this late commit re-open the gate with the OLD identity's

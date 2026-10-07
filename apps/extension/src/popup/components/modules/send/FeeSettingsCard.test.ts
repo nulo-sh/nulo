@@ -689,6 +689,25 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 			checking: b.attributes("data-checking") === "true",
 			spend: b.attributes("data-spend") ?? null,
 		}))
+	/** Holds the card's next read of its saved selection until the returned release. The value is
+	 *  read before the hold and handed back as a clone, as chrome does. */
+	const holdSavedSelectionRead = () => {
+		const gate = deferred<void>()
+		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+		const local = (globalThis as any).chrome.storage.local
+		const plainGet = local.get
+		let held = false
+		local.get = async (keys: string | string[] | null | undefined) => {
+			const value = structuredClone(await plainGet(keys))
+			if (keys === FEE_METHOD_LS_KEY && !held) {
+				held = true
+				await gate.promise
+			}
+			return value
+		}
+		return () => gate.resolve()
+	}
+	const SAVED_FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" }
 
 	test("every row loads until the FPC list lands, which answers the sponsors before the balances do", async () => {
 		const fpcs = deferred<unknown>()
@@ -767,22 +786,8 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 		const holder = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
 
-		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: { type: "fj", title: "Public Fee Juice", subtitle: "public" } }
-		// The card's read of its saved selection is answered before the pick, and arrives after it. Reads
-		// hand back clones, as chrome does.
-		const gate = deferred<void>()
-		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-		const local = (globalThis as any).chrome.storage.local
-		const plainGet = local.get
-		let held = false
-		local.get = async (keys: string | string[] | null | undefined) => {
-			const value = structuredClone(await plainGet(keys))
-			if (keys === FEE_METHOD_LS_KEY && !held) {
-				held = true
-				await gate.promise
-			}
-			return value
-		}
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: SAVED_FJ }
+		const release = holdSavedSelectionRead()
 		const gas = deferred<unknown>()
 		mocks.getGasBalances.mockReturnValue(gas.promise)
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
@@ -790,13 +795,55 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s1", checking: false })
 		await w.find('[data-testid="pick-fpc"]').trigger("click")
 
-		gate.resolve()
+		release()
 		await flushPromises()
 		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: null })
 		await flushPromises()
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		w.unmount()
 		holder.unmount()
+	})
+
+	test("an early pick of a sponsor the refreshed list no longer has is dropped, not paid through", async () => {
+		const GONE = { id: "s2", type: 1, name: "Gone", isProtocol: false }
+		mocks.getFpcs.mockResolvedValue([SPONSOR, GONE])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const holder = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		const release = holdSavedSelectionRead()
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await w.find('[data-testid="pick-fpc"][data-fpc-id="s2"]').trigger("click")
+
+		release()
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toBeUndefined()
+		w.unmount()
+		holder.unmount()
+	})
+
+	test("a re-pick of the selected row during a refresh's read is a pick: another card's save does not replace it", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		// A pick from the menu makes the selection the very row the re-pick hands back.
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+
+		storageBacking[FEE_METHOD_LS_KEY] = { [account.address]: SAVED_FJ }
+		const release = holdSavedSelectionRead()
+		await w.setProps({ account: { ...account } })
+		await flushPromises()
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
+
+		release()
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		w.unmount()
 	})
 
 	test("an identity changed in place, which no read is coming for, does not load forever", async () => {
