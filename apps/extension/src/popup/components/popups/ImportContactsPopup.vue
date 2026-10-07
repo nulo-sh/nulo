@@ -188,12 +188,19 @@ watch(
 
 						<!-- Active-network banner. Only shown when at least one
 						     selected import will trigger registerSender on confirm. -->
-						<Text v-if="incomingSenderCount > 0 && appStore.network" size="12" weight="600" color="secondary" align="center">
+						<Text
+							v-if="incomingSenderCount > 0 && appStore.network"
+							size="12"
+							weight="600"
+							color="secondary"
+							align="center"
+							data-testid="import-contacts-senders"
+						>
 							<Text color="primary" weight="700">{{ incomingSenderCount }}</Text>
 							{{ incomingSenderCount === 1 ? "sender" : "senders" }} will be registered on
 							<Text color="primary" weight="700">{{ appStore.network.name }}</Text>.
 						</Text>
-						<Text v-else-if="incomingSenderCount > 0" size="12" weight="600" color="secondary" align="center">
+						<Text v-else-if="incomingSenderCount > 0" size="12" weight="600" color="secondary" align="center" data-testid="import-contacts-senders">
 							No active network. Sender registrations will be skipped.
 						</Text>
 					</Flex>
@@ -221,11 +228,13 @@ watch(
 								gap="10"
 								:class="[$style.contact, !item.row.importable && $style.contact_skipped]"
 								data-testid="import-contact-row"
+								:data-contact-name="item.row.name"
 								:data-row-kind="item.row.kind"
 								:data-selected="item.row.selected || undefined"
 								wide
 							>
 								<RowTarget
+									data-testid="import-contact-target"
 									:labelledby="rowLabelledby(item.row)"
 									:aria-describedby="`${uid}-${item.section.key}`"
 									:aria-pressed="item.row.selected"
