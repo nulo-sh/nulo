@@ -62,6 +62,7 @@ const ADDR_B = "0x047bb28204a2545c566dff691c298d2023fe7cad44bb6468e3f7f1e633f8f7
 
 function makeServices() {
 	const contactService = {
+		getContacts: vi.fn(async () => []),
 		addContact: vi.fn(async (name: string) => {
 			trace.push(`add:${name}`)
 		}),

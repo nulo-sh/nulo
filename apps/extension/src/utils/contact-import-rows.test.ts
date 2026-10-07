@@ -130,8 +130,8 @@ describe("addressChangeText", () => {
 	const at = (i: number, c: string) => `${saved.slice(0, i)}${c}${saved.slice(i + 1)}`
 
 	test("identical short forms show both full addresses", () => {
-		const crafted = at(30, saved[30] === "f" ? "e" : "f")
-		expect(addressChangeText(saved, crafted)).toEqual({ saved, incoming: crafted, full: true })
+		const sameShort = at(30, saved[30] === "f" ? "e" : "f")
+		expect(addressChangeText(saved, sameShort)).toEqual({ saved, incoming: sameShort, full: true })
 	})
 
 	test("a one-character difference inside the short form keeps the short forms", () => {

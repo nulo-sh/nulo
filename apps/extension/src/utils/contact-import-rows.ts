@@ -174,7 +174,7 @@ function admit(row: ReviewedImportRow, index: SavedContactIndex, taken: TakenKey
 }
 
 /** How an address change reads: the usual short forms, or both full addresses when the short forms
- *  agree (a crafted address can share the visible head and tail), so the change is never shown as
+ *  agree (two different addresses can share the visible head and tail), so a change never reads as
  *  two identical strings. */
 export function addressChangeText(saved: string, incoming: string): { saved: string; incoming: string; full: boolean } {
 	const short = { saved: trimAddress(saved), incoming: trimAddress(incoming) }

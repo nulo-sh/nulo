@@ -30,6 +30,7 @@ vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: openToastMock }),
 }))
 vi.mock("@/utils", () => ({
+	FileTooLargeError: class FileTooLargeError extends Error {},
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),
 }))
@@ -55,6 +56,7 @@ function reviewed(rows: unknown[], saved: Array<{ id: string; name: string; addr
 
 function makeServices() {
 	const contactService = {
+		getContacts: vi.fn().mockResolvedValue([]),
 		addContact: vi.fn().mockResolvedValue(undefined),
 		updateContact: vi.fn().mockResolvedValue(undefined),
 	}
@@ -124,6 +126,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		// to delete it here even for isSender:false rows.
 		accountStateService.getSenders.mockResolvedValue([ADDR_A])
 		const existing = ref([{ id: "c1", name: "Alice", address: ADDR_A }])
+		contactService.getContacts.mockResolvedValue(existing.value)
 		const api = useContactImportExport({ contacts: existing, contactService, accountStateService } as never)
 		fileWith({ version: 2, contacts: [{ name: "Alice", address: ADDR_B, isSender: false }] })
 
@@ -212,6 +215,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 	test("a mixed-case existing contact MERGES with its lowercase import (no duplicate)", async () => {
 		const { contactService, accountStateService } = makeServices()
 		const existing = ref([{ id: "c1", name: "Alice", address: ADDR_A.toUpperCase().replace("0X", "0x") }])
+		contactService.getContacts.mockResolvedValue(existing.value)
 		const api = useContactImportExport({ contacts: existing, contactService, accountStateService } as never)
 		fileWith({ version: 2, contacts: [{ name: "Alice2", address: ADDR_A, isSender: false }] })
 
@@ -337,6 +341,7 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 			{ id: "c1", name: "Alice", address: ADDR_A },
 			{ id: "c2", name: "Bob", address: ADDR_B },
 		])
+		contactService.getContacts.mockResolvedValue(contacts.value)
 		const api = useContactImportExport({ contacts, contactService, accountStateService } as never)
 		fileWith({ version: 2, contacts: [{ name: "Alice", address: ADDR_B, isSender: true }] })
 
@@ -351,6 +356,7 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 	test("two rows reaching one saved contact from two sides: only the first is written", async () => {
 		const { contactService, accountStateService } = makeServices()
 		const contacts = ref([{ id: "c1", name: "Alice", address: ADDR_A }])
+		contactService.getContacts.mockResolvedValue(contacts.value)
 		const api = useContactImportExport({ contacts, contactService, accountStateService } as never)
 		fileWith({
 			version: 2,
@@ -369,7 +375,10 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 
 	test("a row whose saved contact changes while earlier rows are written is refused, sender included", async () => {
 		const { contactService, accountStateService } = makeServices()
+		// The page's list stays as it was: the import must read the book from the service.
 		const contacts = ref([{ id: "c2", name: "Bob", address: ADDR_B }])
+		let book = contacts.value
+		contactService.getContacts.mockImplementation(async () => book)
 		let release = () => {}
 		contactService.addContact.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)))
 		const api = useContactImportExport({ contacts, contactService, accountStateService } as never)
@@ -387,13 +396,26 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 		})
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, contacts.value))
 		await vi.waitFor(() => expect(contactService.addContact).toHaveBeenCalled())
-		contacts.value = [{ id: "c2", name: "Bob", address: ADDR_C }]
+		book = [{ id: "c2", name: "Bob", address: ADDR_C }]
 		release()
 		await done
 
 		expect(contactService.updateContact).not.toHaveBeenCalled()
 		expect(accountStateService.addSender).not.toHaveBeenCalled()
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
+	})
+
+	test("a book that cannot be read writes nothing", async () => {
+		const { contactService, accountStateService } = makeServices()
+		contactService.getContacts.mockRejectedValue(new Error("port closed"))
+		const api = useContactImportExport({ contacts: ref([]), contactService, accountStateService } as never)
+		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A, isSender: true }] })
+
+		await runImport(api)
+
+		expect(contactService.addContact).not.toHaveBeenCalled()
+		expect(accountStateService.addSender).not.toHaveBeenCalled()
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Error occurred during import" })
 	})
 
 	test("an edit that makes two new rows share a name or an address adds only the first", async () => {

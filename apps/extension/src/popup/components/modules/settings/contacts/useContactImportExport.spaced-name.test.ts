@@ -56,10 +56,14 @@ describe("importContacts — a file name differing from a saved one by outer spa
 	test("stages trimmed and commits as the saved contact's new address, not a second contact", async () => {
 		const raw = JSON.stringify({ version: 2, contacts: [{ name: "Alice ", address: ADDR_B }] })
 		pickFileMock.mockResolvedValueOnce({ size: raw.length, text: async () => raw })
-		const contactService = { addContact: vi.fn(async () => {}), updateContact: vi.fn(async () => {}) }
 		const accountStateService = { addSender: vi.fn(), getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]) }
 		const contacts = ref([{ id: "c1", name: "Alice", address: ADDR_A }])
 
+		const contactService = {
+			getContacts: vi.fn(async () => contacts.value),
+			addContact: vi.fn(async () => {}),
+			updateContact: vi.fn(async () => {}),
+		}
 		const done = useContactImportExport({ contacts, contactService, accountStateService } as never).importContacts()
 		await vi.waitFor(() => {
 			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
@@ -75,10 +79,14 @@ describe("importContacts — a file name differing from a saved one by outer spa
 	test("a saved name stored with outer spaces still matches its trimmed file name", async () => {
 		const raw = JSON.stringify({ version: 2, contacts: [{ name: "Alice", address: ADDR_B }] })
 		pickFileMock.mockResolvedValueOnce({ size: raw.length, text: async () => raw })
-		const contactService = { addContact: vi.fn(async () => {}), updateContact: vi.fn(async () => {}) }
 		const accountStateService = { addSender: vi.fn(), getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]) }
 		const contacts = ref([{ id: "c1", name: " Alice ", address: ADDR_A }])
 
+		const contactService = {
+			getContacts: vi.fn(async () => contacts.value),
+			addContact: vi.fn(async () => {}),
+			updateContact: vi.fn(async () => {}),
+		}
 		const done = useContactImportExport({ contacts, contactService, accountStateService } as never).importContacts()
 		await vi.waitFor(() => {
 			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
