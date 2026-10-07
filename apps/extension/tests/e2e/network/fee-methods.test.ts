@@ -176,7 +176,7 @@ test.skipIf(!hasConfig)("transfer with private Fee Juice", { timeout: 300_000 },
 	// via PrivateFPC.pay_fee using the FPC's internal balance. The amount input
 	// enables on the token balance alone, so the fee card's first FPC and
 	// balance read, which the row waits on, can still be in flight here.
-	await selectFeeMethod(page, "private", { mountTimeoutMs: 30_000 })
+	await selectFeeMethod(page, "private")
 	console.log("[fee-methods] Switched to Fee Juice (private)")
 
 	// Wait for re-estimation (private path involves more PXE work — note proofs

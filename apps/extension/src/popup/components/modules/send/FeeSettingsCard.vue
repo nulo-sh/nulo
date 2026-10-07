@@ -123,10 +123,17 @@ const lastVerdict = ref(null)
 /** Outside Send: the sponsor a short verdict dropped the selection of, until the person picks. */
 const droppedForVerdictId = ref(null)
 
+/** The FPC list the store has read for the live identity. That read is never forced, so it usually
+ *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
+const earlyFpcs = computed(() => {
+	const fpc = balancesStore.entry(liveFeeScope(props))?.fpc
+	return fpc?.status === "ready" && fpc.data ? applyFpcEdits(fpc.data, fpcEdits) : null
+})
+
 /**
- * `methods` is the dropdown list. We pass `gasBalances` only after init
- * completes, so the loading-state items don't briefly flash "no balance"
- * before the first fetch returns.
+ * `methods` is what selections are resolved against. We pass `gasBalances`
+ * only after init completes, so the loading-state items don't briefly flash
+ * "no balance" before the first fetch returns.
  */
 const methods = computed(() =>
 	buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
@@ -134,6 +141,20 @@ const methods = computed(() =>
 		setAsideSponsorIds,
 	}),
 )
+
+/** The dropdown's rows: `methods` once the live identity's snapshot is in. Before that, rows come
+ *  from that identity's early FPC list alone, never another identity's, and load wherever no read
+ *  has answered them. Display only: no selection is ever resolved against them. */
+const menuMethods = computed(() => {
+	if (snapshotCommitted.value) return methods.value
+	const early = earlyFpcs.value
+	return buildFeeMethods(early ?? [], undefined, {
+		shortSponsorIds,
+		setAsideSponsorIds,
+		balancesPending: snapshotPending.value,
+		fpcsPending: snapshotPending.value && !early,
+	})
+})
 
 const isCustomMethod = computed(() => settings.value?.paymentMethod?.kind === "embedded")
 const useOwnMethod = ref(false)
@@ -184,6 +205,16 @@ const sendPicks = reactive({})
 const committedScope = ref(null)
 
 const scopeIsLiveIdentity = (scope) => Boolean(scope) && isLiveFeeScope(props, scope)
+
+const snapshotCommitted = computed(() => isInitComplete.value && scopeIsLiveIdentity(committedScope.value))
+
+/** The identity a run is reading for right now, owned by `readingRun`. Rows load only for it: an
+ *  identity no read is coming for, after an init that threw, say, gives today's answers instead. */
+const readingKey = ref(null)
+let readingRun = 0
+
+/** A snapshot for the live identity is on its way. */
+const snapshotPending = computed(() => !snapshotCommitted.value && readingKey.value === feeScopeKey(liveFeeScope(props)))
 
 /**
  * Send's selection is DERIVED, never assigned: a pure function of the live origin, the live
@@ -354,12 +385,17 @@ const pickForSend = (m) => {
 
 /** The selection is the card's own default, not a saved or live pick. */
 let chosenUnasked = false
+/** Counts explicit picks: a re-pick of the selected row leaves the reference unchanged. */
+let pickSeq = 0
 
 const handleMethodPicked = (m) => {
+	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
+	if (m.checking) return
 	if (m.type === "fpc" && m.fpc) setAsideSponsorIds.delete(m.fpc.id)
 	droppedForVerdictId.value = null
 	if (props.originPrivacy !== null) return pickForSend(m)
 	selectedMethod.value = m
+	pickSeq++
 	chosenUnasked = false
 	useEmbeddedFee.value = false
 	void persistSelection(m)
@@ -390,15 +426,12 @@ const onFpcUpdated = (fpc) => {
 	}
 }
 const onFpcDeleted = (fpc) => {
-	if (props.originPrivacy !== null) {
-		if (effectiveMethod.value?.fpc?.id === fpc.id) openToast({ kind: "success", label: "Selected FPC was deleted" })
-		fpcEdits.set(fpc.id, null)
-		return
-	}
-	if (selectedMethod.value?.fpc?.id === fpc.id) {
-		selectedMethod.value = undefined
-		openToast({ kind: "success", label: "Selected FPC was deleted" })
-	}
+	const wasSelected = effectiveMethod.value?.fpc?.id === fpc.id
+	// The store's FPC list never hears of a deletion, and the menu offers what that list holds.
+	fpcEdits.set(fpc.id, null)
+	if (!wasSelected) return
+	if (props.originPrivacy === null) selectedMethod.value = undefined
+	openToast({ kind: "success", label: "Selected FPC was deleted" })
 }
 
 const fpcService = new FpcServiceClient()
@@ -415,6 +448,8 @@ let isMounted = true
 // operable meanwhile (sponsored methods stay usable; self-paid methods stay
 // fail-closed until a read succeeds — see settingsForMethod).
 const FEE_DATA_UNAVAILABLE = "Couldn't load fee data. Retrying in the background."
+/** A thrown init never committed, so no store retry can reach it: nothing runs it again on its own. */
+const FEE_INIT_FAILED = "Couldn't load fee data. Close and reopen to try again."
 const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee source to continue."
 
 /** The info row's text. A hold with a healthy store is a read that came back without a balance —
@@ -494,12 +529,20 @@ const settledSelection = (savedRecord) => {
 	return preferred ? { ...preferred } : undefined
 }
 
+/** A selection taken as `baseline` has since been picked, or replaced by an FPC edit or deletion. */
+const touchedSince = (baseline) => selectedMethod.value !== baseline.method || pickSeq !== baseline.pick
+
+/** A pick made during init stands, read again from the snapshot's rows: their sponsor metadata is
+ *  current, and a sponsor the snapshot no longer lists is dropped rather than paid through. */
+const snapshotRowFor = (m) => (m ? methods.value.find((x) => x.type === m.type && x.fpc?.id === m.fpc?.id) : undefined)
+
 const reconcileSelection = (savedRecord, baseline) => {
-	const userPickedDuringInit = selectedMethod.value !== baseline
 	if (props.lockedMethod) {
 		selectedMethod.value = lockedOption()
 		chosenUnasked = false
-	} else if (!userPickedDuringInit) {
+	} else if (touchedSince(baseline)) {
+		selectedMethod.value = snapshotRowFor(selectedMethod.value)
+	} else {
 		selectedMethod.value = settledSelection(savedRecord)
 		chosenUnasked = !resolveSavedSelection(savedRecord, methods.value)
 	}
@@ -583,6 +626,21 @@ const prefillSelection = (saved) => {
 	chosenUnasked = false
 }
 
+/** Pre-fills from storage BEFORE the slow fetch, so the trigger shows the last-used method while it
+ *  runs (the `isInitComplete` gate keeps the pre-fill out of settings derivation). Returns the saved
+ *  map and the reconcile baseline, which a later pick moves off. A pick made during the read (an
+ *  early sponsor row) is newer than anything saved, so nothing is pre-filled over it and the
+ *  baseline stays the one from before the read. Null when a newer run owns the card: re-applying
+ *  the pre-fill would clobber that run's reconcile. */
+const readAndPrefill = async (scope, myRun) => {
+	const beforeRead = { method: selectedMethod.value, pick: pickSeq }
+	const saved = await readSavedSelections(scope.accountAddress)
+	if (myRun !== runSeq || !isMounted) return null
+	if (touchedSince(beforeRead)) return { saved, baseline: beforeRead }
+	prefillSelection(saved)
+	return { saved, baseline: { method: selectedMethod.value, pick: pickSeq } }
+}
+
 const runInit = async () => {
 	const myRun = ++runSeq
 	try {
@@ -611,23 +669,11 @@ const runInit = async () => {
 		// the committed snapshot live (re-arming unconditionally made Confirm
 		// oscillate disabled for the length of every retry's in-flight window).
 		if (committedKey !== reqKey) isInitComplete.value = false
+		readingRun = myRun
+		readingKey.value = reqKey
 
-		// Pre-fill from local storage BEFORE the slow SW fetch so the
-		// dropdown trigger displays the user's last-used method while the
-		// fetch is in flight. The `isInitComplete` gate ensures this
-		// pre-fill doesn't drive settings derivation against stale state.
-		const saved = await readSavedSelections(scope.accountAddress)
-		// A newer run owns the card now: a superseded run resuming from its
-		// storage read must not re-apply the pre-fill (it would clobber the
-		// newer run's reconcile or the user's mid-flight pick).
-		if (myRun !== runSeq || !isMounted) return
-		prefillSelection(saved)
-		// Snapshot the (possibly-prefilled) selection AFTER any pre-fill
-		// assignment. If the user picks something during the ensure await,
-		// `selectedMethod.value` will be a different reactive proxy reference
-		// than `baseline`, and we skip the reconcile path so we don't clobber
-		// their choice.
-		const baseline = selectedMethod.value
+		const read = await readAndPrefill(scope, myRun)
+		if (!read) return
 
 		// Re-validate AFTER the storage await, BEFORE taking the lease: a
 		// mid-await embedded flip (its watcher just released) or identity
@@ -647,19 +693,22 @@ const runInit = async () => {
 		// the commit is atomic against the checked state.
 		if (myRun !== runSeq || identityDrifted(scope)) return
 
-		commitFromEntry(scope, reqKey, saved, baseline)
+		commitFromEntry(scope, reqKey, read.saved, read.baseline)
 	} catch (e) {
 		// Deliberately does NOT open `isInitComplete`: an exception here may
 		// have fired mid-commit, and deriving settings from a half-written
 		// snapshot would break the resolved-state invariant the gate exists
 		// for. The state is degraded-with-notice, never silently frozen — the
-		// identity/useOwnMethod watchers are the re-entry paths.
+		// identity/useOwnMethod watchers are the re-entry paths. A superseded
+		// run's failure belongs to an identity no longer on screen.
 		console.error("Failed to init", getErrorData(e))
-		error.value = FEE_DATA_UNAVAILABLE
+		if (myRun !== runSeq || !isMounted) return
+		error.value = FEE_INIT_FAILED
 	} finally {
 		// Only the run that owns the loading flag may clear it — a superseded
 		// run's finally must not blank a newer run's in-flight spinner.
 		if (loadingRun === myRun) isLoading.value = false
+		if (readingRun === myRun) readingKey.value = null
 	}
 }
 
@@ -689,10 +738,10 @@ const recommit = async () => {
 	// card is embedded-visible), the identity/useOwnMethod watchers own it.
 	if (!recommitStillValid(scope)) return
 	// Baseline BEFORE the await (same rule as runInit): a user pick landing
-	// while the storage read is pending makes the selection differ from this
-	// baseline, so the reconcile is skipped instead of re-applying a stale
-	// storage snapshot over the pick.
-	const baseline = selectedMethod.value
+	// while the storage read is pending moves the selection off this
+	// baseline, so the reconcile keeps the pick instead of re-applying a
+	// stale storage snapshot over it.
+	const baseline = { method: selectedMethod.value, pick: pickSeq }
 	const saved = await readSavedFeeMethods()
 	// Re-validate AFTER the await: an identity switch during the storage read
 	// must not let this late commit re-open the gate with the OLD identity's
@@ -837,7 +886,7 @@ onBeforeUnmount(() => {
 				v-else
 				:modelValue="displayMethod"
 				@update:modelValue="handleMethodPicked"
-				:methods="methods"
+				:methods="menuMethods"
 				:payerNoticeShape="payerNoticeShape"
 				@open="isMethodsDropdownOpen = true"
 				@close="isMethodsDropdownOpen = false"

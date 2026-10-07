@@ -184,7 +184,7 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
 	// The blur is what turns a typed contact address into the contact's card.
 	await setInputAndBlur(page, '[data-testid="send-destination-field"] input', chain.alice)
 	await page.waitForSelector(`[data-testid="recipient-card"][data-address="${chain.alice}"]`, { visible: true, timeout: 10_000 })
-	await selectFeeMethod(page, fee, { mountTimeoutMs: 30_000 })
+	await selectFeeMethod(page, fee)
 	expect(await waitForFee(page, "private", fee)).toMatchObject({
 		action: "send",
 		strip: { you: "hidden", to: "hidden", amount: "hidden" },

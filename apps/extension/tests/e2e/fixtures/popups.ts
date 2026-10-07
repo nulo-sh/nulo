@@ -430,7 +430,7 @@ export async function approveExecute(
 	opts: { feeMethod?: FeeMethodSubtitle; approvableTimeoutMs?: number } = {},
 ): Promise<void> {
 	if (opts.feeMethod) {
-		await selectFeeMethod(page, opts.feeMethod, { mountTimeoutMs: 30_000 })
+		await selectFeeMethod(page, opts.feeMethod)
 	}
 	// Gate on the real approvable signal BEFORE the click — clickByTestId's
 	// generic 10s assumed the button was already (about to be) enabled, which is
@@ -451,7 +451,7 @@ export async function pickFeeAndSubmitAuthwitPopup(
 	submitTestId: string,
 	feeMethod: FeeMethodSubtitle = "sponsored",
 ): Promise<void> {
-	await selectFeeMethod(page, feeMethod, { mountTimeoutMs: 30_000 })
+	await selectFeeMethod(page, feeMethod)
 	await page.waitForFunction(
 		(id: string) => {
 			const b = document.querySelector(`[data-testid="${id}"]`) as HTMLButtonElement | null
