@@ -55,8 +55,6 @@ const appStore = useAppStore()
 
 const router = useRouter()
 
-const backupHelpUrl = "https://nulo.sh/help/wallet-setup/backup-methods"
-
 // Sealed artifact strings, published only by a completed run — never a mutable
 // draft object. `payloadPretty` is the plain download body, `payloadCompact`
 // the encryption input (both derive from the SAME sealed snapshot inside
@@ -462,9 +460,6 @@ onBeforeUnmount(() => {
 						By continuing you agree to all risks and responsibilities.
 					</Text>
 				</Flex>
-				<a :href="backupHelpUrl" target="_blank" rel="noopener noreferrer" class="export_learn_link">
-					Read more about backups
-				</a>
 			</div>
 		</template>
 

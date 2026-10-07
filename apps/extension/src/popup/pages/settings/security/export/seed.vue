@@ -32,7 +32,6 @@ const appStore = useAppStore()
 
 const router = useRouter()
 
-const backupHelpUrl = "https://nulo.sh/help/wallet-setup/backup-methods"
 const AUTO_CLOSE_MS = 60_000 * 5
 
 const isStarted = ref(false)
@@ -106,14 +105,6 @@ onBeforeUnmount(() => {
 						By continuing you agree to all risks and responsibilities.
 					</Text>
 				</Flex>
-				<a
-					:href="backupHelpUrl"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="export_learn_link"
-				>
-					Read more about backups
-				</a>
 			</div>
 		</template>
 
