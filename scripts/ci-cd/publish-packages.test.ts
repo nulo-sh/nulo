@@ -180,7 +180,7 @@ describe("verify's registry wait against a fake registry", () => {
 			const root = join(dir, name)
 			mkdirSync(join(root, "package"), { recursive: true })
 			writeFileSync(join(root, "package/package.json"), JSON.stringify({ name, version: VERSION }))
-			const out = join(dir, "tgz", `${name.slice(1).replace("/", "-")}-${VERSION}.tgz`)
+			const out = join(dir, "tgz", `${name.slice(1).replaceAll("/", "-")}-${VERSION}.tgz`)
 			expect(Bun.spawnSync(["tar", "-czf", out, "-C", root, "package"]).exitCode).toBe(0)
 		}
 	})
@@ -214,7 +214,7 @@ describe("verify's registry wait against a fake registry", () => {
 				const tarball = names.find((n) => url.pathname === tarballPath(n))
 				if (tarball) return new Response("tgz", { status: holds(tarball, "tarball") ? 404 : 200 })
 				// Only npm's own escaping and Accept value: anything else reads another CDN entry than npm does.
-				const name = names.find((n) => url.pathname === `/${n.replace("/", "%2f")}`)
+				const name = names.find((n) => url.pathname === `/${n.replaceAll("/", "%2f")}`)
 				if (!name || req.headers.get("accept") !== "application/json") return new Response("unexpected request", { status: 400 })
 				const origin = name === late && withheld === "transfer" ? `http://127.0.0.1:${cut.port}` : url.origin
 				const listed = holds(name, "document") ? {} : { [VERSION]: { dist: { tarball: origin + tarballPath(name) } } }
