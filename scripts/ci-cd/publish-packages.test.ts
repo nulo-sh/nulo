@@ -2,8 +2,9 @@
  * The npm publish workflow's security shape. Each assertion is a control the trusted-publisher setup
  * relies on: loosening one should fail here, not surface as a compromised package.
  */
-import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { FIRST_VERSION, VERSION_RE } from "../publish/check-digests"
 import { PACKAGES } from "../publish/packages"
@@ -129,6 +130,18 @@ describe(FILE, () => {
 		expect(runs("publish")).toMatch(/npm publish "\$tgz" --provenance --access public --ignore-scripts/)
 	})
 
+	test("verify waits, bounded, until the registry serves every version, before anything reads it", () => {
+		const verify = steps("verify")
+		const wait = verify.findIndex((s) => s.env?.WAIT_SECONDS !== undefined)
+		expect(wait).toBe(verify.findIndex((s) => s.env?.DIGESTS !== undefined) + 1)
+		expect(verify.findIndex((s) => s.run?.includes("verify-provenance.sh"))).toBe(wait + 1)
+		expect(verify.findIndex((s) => /^npm audit signatures$/m.test(s.run ?? ""))).toBeGreaterThan(wait)
+		const { env } = verify[wait]
+		expect(env).toEqual({ REGISTRY: "https://registry.npmjs.org", WAIT_SECONDS: 900, POLL_SECONDS: 20 })
+		// Room for a last poll round and the steps after it, so the wait's own error is what reports a timeout.
+		expect(wf.jobs.verify["timeout-minutes"] * 60).toBeGreaterThanOrEqual(env.WAIT_SECONDS + 600)
+	})
+
 	test("verify checks the signer's certificate identity, not the statement's own claims", () => {
 		expect(runs("verify")).toContain('"$GITHUB_WORKSPACE/scripts/publish/verify-provenance.sh" "$tgz"')
 		expect(runs("verify")).toContain("npm audit signatures")
@@ -147,4 +160,106 @@ describe(FILE, () => {
 			expect(script).toContain(flag)
 		}
 	})
+})
+
+// Runs the wait step's own script, under the `bash -e` GitHub uses for a step with no `shell`.
+describe("verify's registry wait against a fake registry", () => {
+	type Withheld = "document" | "tarball" | "transfer"
+	const VERSION = "0.1.0"
+	const names = PACKAGES.map((p) => p.name).sort()
+	// The glob reads it first, so a loop that keeps only the last tarball's verdict exits early.
+	const late = names[0] ?? ""
+	const tarballPath = (name: string) => `/${name}/-/${name.split("/")[1]}-${VERSION}.tgz`
+	const script: string = steps("verify").find((s) => s.env?.WAIT_SECONDS !== undefined)?.run ?? ""
+	let dir = ""
+	afterAll(() => rmSync(dir, { recursive: true, force: true }))
+	beforeAll(() => {
+		dir = mkdtempSync(join(tmpdir(), "nulo-registry-wait-"))
+		mkdirSync(join(dir, "tgz"))
+		for (const name of names) {
+			const root = join(dir, name)
+			mkdirSync(join(root, "package"), { recursive: true })
+			writeFileSync(join(root, "package/package.json"), JSON.stringify({ name, version: VERSION }))
+			const out = join(dir, "tgz", `${name.slice(1).replace("/", "-")}-${VERSION}.tgz`)
+			expect(Bun.spawnSync(["tar", "-czf", out, "-C", root, "package"]).exitCode).toBe(0)
+		}
+	})
+
+	/**
+	 * Withholds `late`'s `withheld` resource for its first `lag` requests: the document does not list
+	 * the version, the tarball answers 404, or the tarball's transfer breaks after its 200.
+	 */
+	async function waitFor(withheld: Withheld, lag: number, waitSeconds: number) {
+		let hits = 0
+		const holds = (name: string, kind: Withheld) => name === late && kind === withheld && ++hits <= lag
+		// A raw socket, because a Response cannot promise more bytes than it sends.
+		const answered = new WeakSet<object>()
+		const cut = Bun.listen({
+			hostname: "127.0.0.1",
+			port: 0,
+			socket: {
+				data(socket) {
+					if (answered.has(socket)) return
+					answered.add(socket)
+					const length = holds(late, "transfer") ? 64 : 3
+					socket.end(`HTTP/1.1 200 OK\r\nContent-Length: ${length}\r\nConnection: close\r\n\r\ntgz`)
+				},
+			},
+		})
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(req) {
+				const url = new URL(req.url)
+				const tarball = names.find((n) => url.pathname === tarballPath(n))
+				if (tarball) return new Response("tgz", { status: holds(tarball, "tarball") ? 404 : 200 })
+				// Only npm's own escaping and Accept value: anything else reads another CDN entry than npm does.
+				const name = names.find((n) => url.pathname === `/${n.replace("/", "%2f")}`)
+				if (!name || req.headers.get("accept") !== "application/json") return new Response("unexpected request", { status: 400 })
+				const origin = name === late && withheld === "transfer" ? `http://127.0.0.1:${cut.port}` : url.origin
+				const listed = holds(name, "document") ? {} : { [VERSION]: { dist: { tarball: origin + tarballPath(name) } } }
+				return Response.json({ name, versions: { "0.0.0-bootstrap.0": {}, ...listed } })
+			},
+		})
+		try {
+			const proc = Bun.spawn(["bash", "-e", "-c", script], {
+				cwd: join(dir, "tgz"),
+				env: {
+					...process.env,
+					REGISTRY: `http://127.0.0.1:${server.port}`,
+					WAIT_SECONDS: String(waitSeconds),
+					POLL_SECONDS: "0.05",
+				},
+				stdout: "pipe",
+				stderr: "pipe",
+			})
+			const [exit, out, err] = await Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()])
+			return { exit, out, err, hits }
+		} finally {
+			server.stop(true)
+			cut.stop(true)
+		}
+	}
+
+	test.each([
+		{ withheld: "document", when: "the document does not list the version" },
+		{ withheld: "tarball", when: "the tarball answers 404" },
+		{ withheld: "transfer", when: "the tarball's transfer breaks after its 200" },
+	] as const)(
+		"keeps polling while $when, and stops once it is served",
+		async ({ withheld }) => {
+			const run = await waitFor(withheld, 2, 30)
+			expect({ exit: run.exit, hits: run.hits }, run.out + run.err).toEqual({ exit: 0, hits: 3 })
+		},
+		15_000,
+	)
+
+	test("fails closed after the bound, naming what the registry does not serve", async () => {
+		const run = await waitFor("tarball", Number.POSITIVE_INFINITY, 2)
+		expect(run.exit).toBe(1)
+		expect(run.hits).toBeGreaterThan(1)
+		expect(run.out).toContain(`::error::${late}@${VERSION}: http://127.0.0.1:`)
+		expect(run.out).toContain(`${tarballPath(late)} answers 404 after `)
+		expect(run.out).toMatch(/ s; re-run this job once the registry serves it$/m)
+	}, 15_000)
 })
