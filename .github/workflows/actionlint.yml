@@ -7,7 +7,10 @@ on:
 
 concurrency:
   group: actionlint-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # On a PR only a push's first attempt cancels the run in flight. Any other PR event, and any
+  # re-run of one, queues behind it: a run cancelled on its own head leaves a FAILURE aggregator
+  # there (CI.md, "Concurrency").
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}
 
 permissions:
   contents: read
@@ -87,15 +90,31 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Check results
+        env:
+          WORKFLOWS: ${{ needs.changes.outputs.workflows }}
+          SHELL_FILES: ${{ needs.changes.outputs.shell }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          ACTIONLINT_RESULT: ${{ needs.actionlint.result }}
+          SHELLCHECK_RESULT: ${{ needs.shellcheck.result }}
         run: |
-          for r in \
-            "${{ needs.changes.result }}" \
-            "${{ needs.actionlint.result }}" \
-            "${{ needs.shellcheck.result }}" \
-          ; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A required job failed or was cancelled: $r"
+          # An exact state machine, not a denylist: a linter whose filter tripped must succeed and
+          # one whose filter did not must be skipped, so a linter that never ran fails here.
+          expect() {
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 is '$2', expected '$3'"
               exit 1
             fi
-          done
-          echo "All checks passed (or skipped — no relevant changes)."
+          }
+          bool() {
+            case "$2" in
+              true | false) ;;
+              *) echo "::error::$1 is not true/false: '$2'"; exit 1 ;;
+            esac
+          }
+          ran() { if [ "$1" = true ]; then echo success; else echo skipped; fi }
+          expect changes "$CHANGES_RESULT" success
+          bool workflows "$WORKFLOWS"
+          bool shell "$SHELL_FILES"
+          expect actionlint "$ACTIONLINT_RESULT" "$(ran "$WORKFLOWS")"
+          expect shellcheck "$SHELLCHECK_RESULT" "$(ran "$SHELL_FILES")"
+          echo "Every linter ended as its filter asks (skipped when nothing it reads changed)."

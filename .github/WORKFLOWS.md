@@ -51,7 +51,8 @@ Composite actions live in `.github/actions/` and are shared step fragments used 
 - Push a commit on a feature branch → no CI runs; local pre-commit hook handles biome + commitlint.
 - Open a PR to `dev` → `pr-quick` runs. `pr-extension-smoke-e2e` and `pr-extension-network-e2e` run only if their paths-filter trips OR their respective label is on the PR.
 - Open a PR to `main` → `pr-quick`, `pr-extension-smoke-e2e`, `pr-extension-network-e2e` all run unconditionally.
-- Add `e2e:extension-smoke` or `e2e:extension-network` to an open PR → that workflow fires a fresh run immediately (`labeled` is a subscribed event type; no push needed). Removing the label re-evaluates the gate (`unlabeled`).
+- Push to an open PR → each workflow's new run cancels its run in flight for the old head. Any other PR event (a label, `ready_for_review`, `reopened`) and any re-run of one queue behind the run in flight instead: cancelling a run on its own head leaves its aggregator's FAILURE there (see [`CI.md`](../CI.md#concurrency)).
+- Add `e2e:extension-smoke` or `e2e:extension-network` to an open PR → that workflow starts a fresh run (`labeled` is a subscribed event type; no push needed), after its run in flight for the PR, if any, ends. Removing the label re-evaluates the gate (`unlabeled`).
 - Click "Run workflow" on `release.yml` → republish an existing tag (`tag`; `publish_chrome` / `publish_firefox` opt into the store uploads). `store-check.yml` → check a store credential without uploading.
 - Every night → `nightly.yml` builds current dev and publishes a prerelease GitHub Release (skips itself when dev HEAD already has tonight's nightly; manual dispatch offers `force` + `dry_run`).
 

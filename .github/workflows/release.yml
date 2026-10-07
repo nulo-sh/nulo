@@ -295,14 +295,19 @@ jobs:
 
   attach-assets:
     needs: [resolve, lint-and-typecheck, unit-tests, network-e2e, build-chrome, build-firefox, smoke-against-artifact, smoke-firefox-against-artifact]
-    # Skipped needs (e.g. network-e2e on prerelease or manual run_network_e2e=false)
-    # would skip this job by default. The explicit guards let the job proceed when
-    # a need was skipped but fail-fast if any need failed or was cancelled.
+    # Every gate must be exactly 'success', and the opt-in network suite exactly what the dispatch
+    # asked for: rejecting only failure and cancelled would publish past a gate that never ran.
+    # `!cancelled()` keeps a cancelled run from attaching assets.
     if: |
-      always() &&
+      always() && !cancelled() &&
       needs.resolve.result == 'success' &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
+      needs.lint-and-typecheck.result == 'success' &&
+      needs.unit-tests.result == 'success' &&
+      needs.network-e2e.result == (github.event.inputs.run_network_e2e == 'true' && 'success' || 'skipped') &&
+      needs.build-chrome.result == 'success' &&
+      needs.build-firefox.result == 'success' &&
+      needs.smoke-against-artifact.result == 'success' &&
+      needs.smoke-firefox-against-artifact.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -637,25 +642,87 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Aggregate results
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_NETWORK_E2E: ${{ github.event.inputs.run_network_e2e }}
+          PUBLISH_CHROME: ${{ github.event.inputs.publish_chrome }}
+          PUBLISH_FIREFOX: ${{ github.event.inputs.publish_firefox }}
+          RELEASE_CREATED: ${{ needs.release-please.outputs.release_created }}
+          UNSTUCK: ${{ needs.auto-unstick.outputs.unstuck }}
+          IS_PRERELEASE: ${{ needs.resolve.outputs.is_prerelease }}
+          ON_MAIN: ${{ needs.resolve.outputs.on_main }}
+          RELEASE_PLEASE_RESULT: ${{ needs.release-please.result }}
+          AUTO_UNSTICK_RESULT: ${{ needs.auto-unstick.result }}
+          RESOLVE_RESULT: ${{ needs.resolve.result }}
+          LINT_AND_TYPECHECK_RESULT: ${{ needs.lint-and-typecheck.result }}
+          UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+          NETWORK_E2E_RESULT: ${{ needs.network-e2e.result }}
+          BUILD_CHROME_RESULT: ${{ needs.build-chrome.result }}
+          BUILD_FIREFOX_RESULT: ${{ needs.build-firefox.result }}
+          SMOKE_RESULT: ${{ needs.smoke-against-artifact.result }}
+          SMOKE_FIREFOX_RESULT: ${{ needs.smoke-firefox-against-artifact.result }}
+          ATTACH_ASSETS_RESULT: ${{ needs.attach-assets.result }}
+          PUBLISH_CHROME_STORE_RESULT: ${{ needs.publish-chrome-store.result }}
+          PUBLISH_FIREFOX_AMO_RESULT: ${{ needs.publish-firefox-amo.result }}
         run: |
-          for r in \
-            "${{ needs.release-please.result }}" \
-            "${{ needs.auto-unstick.result }}" \
-            "${{ needs.resolve.result }}" \
-            "${{ needs.lint-and-typecheck.result }}" \
-            "${{ needs.unit-tests.result }}" \
-            "${{ needs.network-e2e.result }}" \
-            "${{ needs.build-chrome.result }}" \
-            "${{ needs.build-firefox.result }}" \
-            "${{ needs.smoke-against-artifact.result }}" \
-            "${{ needs.smoke-firefox-against-artifact.result }}" \
-            "${{ needs.attach-assets.result }}" \
-            "${{ needs.publish-chrome-store.result }}" \
-            "${{ needs.publish-firefox-amo.result }}" \
-          ; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A release stage failed or was cancelled: $r"
+          # An exact state machine, not a denylist: each stage must end as its own `if:` says,
+          # `success` where it held and `skipped` where it did not, so a stage that never ran
+          # (skipped for the wrong reason, cancelled before a runner, an empty result) fails here.
+          # A cancel shows the same way: a cancelled stage reads `cancelled`, and one that
+          # `!cancelled()` skipped reads `skipped` where `success` was due.
+          expect() {
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 is '$2', expected '$3'"
               exit 1
             fi
-          done
-          echo "Release pipeline completed."
+          }
+          bool() {
+            case "$2" in
+              true | false) ;;
+              *) echo "::error::$1 is not true/false: '$2'"; exit 1 ;;
+            esac
+          }
+          ran() { if [ "$1" = true ]; then echo success; else echo skipped; fi }
+          push=false
+          if [ "$EVENT" = push ]; then push=true; fi
+          expect release-please "$RELEASE_PLEASE_RESULT" "$(ran "$push")"
+          unstick=false
+          if [ "$push" = true ]; then
+            # release-please leaves release_created empty unless it tagged a release itself.
+            case "$RELEASE_CREATED" in
+              "" | true | false) ;;
+              *) echo "::error::release_created is not empty, true or false: '$RELEASE_CREATED'"; exit 1 ;;
+            esac
+            if [ "$RELEASE_CREATED" != true ]; then unstick=true; fi
+          fi
+          expect auto-unstick "$AUTO_UNSTICK_RESULT" "$(ran "$unstick")"
+          if [ "$unstick" = true ]; then bool unstuck "$UNSTUCK"; fi
+          chain=false
+          if [ "$EVENT" = workflow_dispatch ] || [ "$RELEASE_CREATED" = true ] || [ "$UNSTUCK" = true ]; then
+            chain=true
+          fi
+          expect resolve "$RESOLVE_RESULT" "$(ran "$chain")"
+          network=false
+          chrome_store=false
+          firefox_amo=false
+          if [ "$chain" = true ]; then
+            bool is_prerelease "$IS_PRERELEASE"
+            bool on_main "$ON_MAIN"
+            if [ "$RUN_NETWORK_E2E" = true ]; then network=true; fi
+            # The store jobs take only a stable tag whose commit is on main.
+            if [ "$IS_PRERELEASE" = false ] && [ "$ON_MAIN" = true ]; then
+              if [ "$PUBLISH_CHROME" = true ]; then chrome_store=true; fi
+              if [ "$PUBLISH_FIREFOX" = true ]; then firefox_amo=true; fi
+            fi
+          fi
+          expect lint-and-typecheck "$LINT_AND_TYPECHECK_RESULT" "$(ran "$chain")"
+          expect unit-tests "$UNIT_TESTS_RESULT" "$(ran "$chain")"
+          expect network-e2e "$NETWORK_E2E_RESULT" "$(ran "$network")"
+          expect build-chrome "$BUILD_CHROME_RESULT" "$(ran "$chain")"
+          expect build-firefox "$BUILD_FIREFOX_RESULT" "$(ran "$chain")"
+          expect smoke-against-artifact "$SMOKE_RESULT" "$(ran "$chain")"
+          expect smoke-firefox-against-artifact "$SMOKE_FIREFOX_RESULT" "$(ran "$chain")"
+          expect attach-assets "$ATTACH_ASSETS_RESULT" "$(ran "$chain")"
+          expect publish-chrome-store "$PUBLISH_CHROME_STORE_RESULT" "$(ran "$chrome_store")"
+          expect publish-firefox-amo "$PUBLISH_FIREFOX_AMO_RESULT" "$(ran "$firefox_amo")"
+          echo "Release pipeline completed: every stage ended as its condition asks."

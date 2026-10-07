@@ -14,28 +14,25 @@ on:
     # hang "Expected" forever → mergeStateStatus=BLOCKED.
     #
     # NO `labeled`/`unlabeled`: nothing in this workflow reads labels, so for a
-    # SHA this workflow has already covered a label event only re-does that work
-    # — cancelling the in-flight run (whose `quality-status` then concludes
-    # FAILURE via `always()` + the cancelled-is-failure branch, leaving a
-    # duplicate FAILURE check-run behind) or re-running everything from
-    # scratch. It can
-    # incidentally recover a head with no run of its own, which is why the gap
-    # below matters. The label-gated suites keep both types: their gates read
-    # labels.
+    # SHA this workflow has already covered a label event would only queue a
+    # second identical run. It could incidentally recover a head with no run of
+    # its own, which is why the gap below matters. The label-gated suites keep
+    # both types: their gates read labels.
     #
     # Gap: a PR RETARGETED to dev/main fires `edited`, not listed here, so a head
     # that never got a run can sit at required `quality-status: Expected`
     # forever. `edited` is not the fix — it also fires on every title/body edit,
-    # so unrelated edits would re-run the full suite and cancel in-flight runs,
-    # manufacturing exactly the duplicate churn this line removes. Recover with
-    # `gh workflow run pr-quick.yml --ref <branch>`, where <branch> still
-    # resolves to the PR's current head, then confirm `quality-status` reported
-    # on that exact SHA.
+    # so each unrelated edit would queue a full re-run. Recover by closing and
+    # reopening the PR or by pushing a commit: the checks of a
+    # `workflow_dispatch` run never count toward a pull request's required checks.
     types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
   group: pr-quick-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # On a PR only a push's first attempt cancels the run in flight. Any other PR event, and any
+  # re-run of one, queues behind it: a run cancelled on its own head leaves a FAILURE aggregator
+  # there (CI.md, "Concurrency").
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}
 
 permissions:
   contents: read
@@ -328,19 +325,43 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Aggregate results
+        env:
+          EVENT: ${{ github.event_name }}
+          EXTENSION_BUILD: ${{ needs.changes.outputs.needs-extension-build }}
+          LANDING_BUILD: ${{ needs.changes.outputs.needs-landing-build }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          COMMITLINT_RESULT: ${{ needs.commitlint.result }}
+          LINT_AND_TYPECHECK_RESULT: ${{ needs.lint-and-typecheck.result }}
+          UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+          BUILD_CHROME_RESULT: ${{ needs.build-chrome.result }}
+          BUILD_FIREFOX_RESULT: ${{ needs.build-firefox.result }}
+          BUILD_LANDING_RESULT: ${{ needs.build-landing.result }}
         run: |
-          for r in \
-            "${{ needs.changes.result }}" \
-            "${{ needs.commitlint.result }}" \
-            "${{ needs.lint-and-typecheck.result }}" \
-            "${{ needs.unit-tests.result }}" \
-            "${{ needs.build-chrome.result }}" \
-            "${{ needs.build-firefox.result }}" \
-            "${{ needs.build-landing.result }}" \
-          ; do
-            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
-              echo "::error::A required job failed or was cancelled: $r"
+          # An exact state machine, not a denylist: each gate must end as its own `if:` says,
+          # `success` where it held and `skipped` where it did not, so a gate that never ran
+          # (skipped for the wrong reason, cancelled before a runner, an empty result) fails here.
+          expect() {
+            if [ "$2" != "$3" ]; then
+              echo "::error::$1 is '$2', expected '$3'"
               exit 1
             fi
-          done
-          echo "All required gates passed (or were skipped because their filter did not trip)."
+          }
+          bool() {
+            case "$2" in
+              true | false) ;;
+              *) echo "::error::$1 is not true/false: '$2'"; exit 1 ;;
+            esac
+          }
+          ran() { if [ "$1" = true ]; then echo success; else echo skipped; fi }
+          expect changes "$CHANGES_RESULT" success
+          bool needs-extension-build "$EXTENSION_BUILD"
+          bool needs-landing-build "$LANDING_BUILD"
+          pull_request=false
+          if [ "$EVENT" = pull_request ]; then pull_request=true; fi
+          expect commitlint "$COMMITLINT_RESULT" "$(ran "$pull_request")"
+          expect lint-and-typecheck "$LINT_AND_TYPECHECK_RESULT" success
+          expect unit-tests "$UNIT_TESTS_RESULT" success
+          expect build-chrome "$BUILD_CHROME_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect build-firefox "$BUILD_FIREFOX_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect build-landing "$BUILD_LANDING_RESULT" "$(ran "$LANDING_BUILD")"
+          echo "Every gate ended as its condition asks (a build whose filter did not trip is skipped)."
