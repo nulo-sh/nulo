@@ -185,7 +185,7 @@ runtime env var can never arm a build-time flag.
   grep only when its `probe` input is `"1"`, a caller-set investigation mode, not a dispatch option):
   string constants shipped in `dist/` must not contain `PROBE`.
   `scripts/ci-cd/behavior-gating.test.ts` pins the filters and the exclude list against the lanes.
-- **Nightly** (`nightly.yml`, the only scheduled workflow) mirrors the lanes with config-default
+- **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes with config-default
   retries and publishes a prerelease on full green. **Soak** (`extension-network-e2e-soak.yml`) is manual,
   N iterations at retry 0.
 - A red required gate is a flake → rerun once, or breakage → fix. Never advisory, never

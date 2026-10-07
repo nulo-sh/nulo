@@ -171,10 +171,10 @@ jobs:
         run: |
           if [ "$BASE_REF" = "main" ]; then
             # Skip on promote / Release PRs to main. The two kinds of main PR:
-            #  - the promote PR, whose merge subject is an intentionally
-            #    NON-conventional, >100-char "release: promote dev -> main (...)"
-            #    release-note line (mandated by CLAUDE.md) — it cannot pass
-            #    commitlint by design (no 'release' type; over the header cap);
+            #  - the promote PR, whose merge subject is a
+            #    "release: promote dev -> main (...)" release-note line (mandated
+            #    by CLAUDE.md) — `release` is an allowed type, but the line can
+            #    run past the 100-char header cap;
             #  - the bot Release PR, whose "chore(main): release X.Y.Z" is
             #    reliably conventional anyway.
             # And the dev squash subjects in base..head are already-merged +

@@ -165,12 +165,10 @@ jobs:
       # retry would re-mask app flakes; pure infra-boot flakes are handled by the
       # agent's exit-86 sentinel (one infra-retry in _extension-network-e2e.yml).
       retry: "0"
-      # Proverless shard pool (fast, Presto OFF). Exclude, on top of the
-      # fee-methods + concurrent-confirm heavy jobs (which run proverless too),
-      # the prover-ON canary files transfers + tx-sendTx-default +
-      # frozen-account-canary + passkey-execution-canary — they run with REAL
-      # proving in network-e2e-canary. The partition is pinned by
-      # scripts/ci-cd/behavior-gating.test.ts.
+      # Proverless shard pool (fast, Presto OFF). Exclude every file a dedicated
+      # job below runs: the two heavy jobs' files (proverless too) and the five
+      # prover-ON files, which run with REAL proving in network-e2e-canary. The
+      # partition is pinned by scripts/ci-cd/behavior-gating.test.ts.
       exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
     secrets:
@@ -242,7 +240,9 @@ jobs:
     #   - passkey-execution-canary: the passkey analog (PRF ceremony → frozen
     #     ctor → authwit consume → background-restart ceremony re-unlock), the
     #     KDF-change execution gate; real proving for the same reason.
-    # The same four files run on Firefox (pr-extension-network-e2e-firefox.yml);
+    #   - delete-after-prove: deleting the profile that just proved and sent a
+    #     transaction, while bb.js holds its CRS store open in IndexedDB.
+    # The same five files run on Firefox (pr-extension-network-e2e-firefox.yml);
     # a red canary on either browser holds an @aztec bump.
     # Dedicated runner with presto-server (proverless: false default).
     uses: ./.github/workflows/_extension-network-e2e.yml
