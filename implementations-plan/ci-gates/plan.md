@@ -28,7 +28,7 @@ What the fix rests on, with the evidence and its strength:
 
 - **D1. Exact state machines.** `quality-status`, actionlint's `Status` and release's `status` require each need to end exactly as its own `if:` says: `success` where the condition held, `skipped` where it did not. Each also validates the control outputs its conditions read, since a malformed one would otherwise decide which stages are due. Results and outputs reach the script through `env:`, so the script contains no `${{ }}` and a test can run it as CI does.
 - **D2. `attach-assets` enumerates success.** Its guard becomes `always() && !cancelled()` plus `needs.<job>.result == 'success'` for every need, with `network-e2e` required to be exactly `success` when `run_network_e2e` asked for it and `skipped` otherwise. `!cancelled()` stops a cancelled release from attaching assets; the store-publish jobs already use it.
-- **D3. Only a push's first attempt cancels.** In all six PR workflows, `cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}`. A push supersedes the old head, and a cancelled run's red aggregator lands on that old head, which no required check reads. Every other PR event queues behind the run in flight and runs when it ends. A re-run keeps its original event, `synchronize` included, so without the attempt test a re-run of an old push would cancel the current head's run. `workflow_dispatch` keeps cancelling, as today. The expression lists what may cancel, so a trigger added later queues by default.
+- **D3. On a PR, only a push's first attempt cancels.** In all six PR workflows, `cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}`. A push supersedes the old head, and a cancelled run's red aggregator lands on that old head, which no required check reads. Every other PR event, and every re-run of one, queues behind the run in flight and runs when it ends. A re-run keeps its original event, `synchronize` included, so without the attempt test a re-run of an old push would cancel the current head's run. `workflow_dispatch` keeps cancelling, as today. The expression lists what may cancel, so a trigger added later queues by default.
 - **D4. Every run is a full evaluation.** A run started by an irrelevant label still runs its whole gate, and decides from the labels and draft flag its own event carries.
 - **D5. Pins.** `scripts/ci-cd/aggregators.test.ts` (new) runs each of the three scripts against every legitimate world (each must exit 0); for every need, against every other result including an empty one (each must exit non-zero); and against each malformed control output in the world a run would really produce with it, where the jobs whose `if:` reads that output have skipped (each must exit non-zero). It also requires each aggregator to wait on every job of its workflow but a named advisory list, to bind exactly its needs' results through `env:`, and pins the `attach-assets` guard clause by clause. `behavior-gating.test.ts` pins the cancel expression on all six PR workflows.
 
@@ -65,7 +65,7 @@ A label added, a draft marked ready, a PR reopened or a run re-run while a run i
 None is introduced by this change; D3 makes the first two rarer and moves the rest to `follow-ups.md`.
 
 - **An earlier green copy stands while a later run of the same head works.** A docs-only PR is green with its suites skipped; adding an opt-in label starts a run whose aggregator reports only when its suites end, and until then the earlier copy satisfies the required name. A draft's Firefox lanes skip and pass, so once it is marked ready the PR is mergeable on that pass while the ready run's Firefox suites still run.
-- **A run decides from its own event's snapshot, and runs can enter the group out of event order.** An older event's run that enters after a newer one replaces it if it was queued, and decides on stale labels or a stale draft flag; an older push's first attempt entering after a newer one cancels the current head's run, which then reads red until that run is re-run (a re-run queues, never cancels). Reading the PR's labels, draft flag and head in `changes`, which already holds `pull-requests: read`, would remove both.
+- **A run decides from its own event's snapshot, and runs can enter the group out of event order.** An older event's run that enters after a newer one replaces it if it was queued, and decides on stale labels or a stale draft flag; reading the PR's live labels and draft flag in `changes`, which already holds `pull-requests: read`, would fix that. An older push's first attempt that enters after a newer one cancels the current head's run, which then reads red until it is re-run (a re-run queues, never cancels). No job can prevent that, since workflow-level concurrency acts before any job runs; only a cancel decided against the PR's current head, through the API, could.
 - **A manual or outage cancel** still leaves a red copy on its head, by design: fail closed.
 
 ## Files
@@ -94,7 +94,7 @@ None: CI configuration, a test and docs.
 - `bun run test:ci-gating`: the new executing test and every existing pin pass.
 - `bun run lint:actions`: actionlint, with shellcheck on every `run:` script, is clean.
 - `bun run lint` and `bun run typecheck:all` pass.
-- A mutation probe: dropping any one `expect` or output check, turning a gate back into a denylist, dropping the attempt test's effect on the chain, or dropping `!cancelled()` from `attach-assets` fails `aggregators.test.ts`.
+- A mutation probe: dropping any one result or output check, turning a gate back into a denylist, dropping `unstuck` from the chain's condition, swapping the two store inputs, adding `continue-on-error` to an aggregator, or dropping `!cancelled()` from `attach-assets` fails `aggregators.test.ts`.
 - On the PR: every required check green on the head, with no FAILURE copy of any aggregator.
 - After merge, the next PR that receives a label while a run is in flight (the weekly Dependabot PR does) shows the label run queued, then green, and no cancelled run with a failed aggregator on its head.
 
@@ -104,7 +104,7 @@ In the same PR, after the review loop: an Outcome block after the title; the gen
 
 ## Review
 
-### Plan review (adversarial, second model): reject, then revised
+### Adversarial plan audit: reject, then revised
 
 Each finding and its resolution:
 
@@ -118,6 +118,12 @@ Each finding and its resolution:
 8. **The cost was understated.** Adopted: Cost now counts runner occupancy and states that pending replacement bounds the backlog, not the total.
 9. **Close-out and nightly wording.** Adopted.
 
-### Diff review
+### Adversarial diff audit
 
-Recorded when the review loop ends.
+Round 1, approve with changes; each finding was adopted:
+
+1. The comments said any re-run queues, but a `workflow_dispatch` re-run still cancels: they now say a re-run of a PR event, and `CI.md` names commitlint on a dispatch among the legitimate skips.
+2. Every store world asked for both stores, so swapped `publish_chrome` and `publish_firefox` bindings would pass: a Chrome-only and a Firefox-only world were added, with the network suite toggled independently.
+3. A `continue-on-error` on the aggregator, or an `if:` on its step, would hide a red script from the tests: both are now pinned absent.
+4. The residual's remedy overclaimed: live PR state fixes the stale decision, but no job can stop an out-of-order push's cancel. Residuals now say so.
+5. The review's provenance does not belong in the record: the headings now name the audits only.

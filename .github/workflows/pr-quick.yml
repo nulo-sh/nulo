@@ -29,9 +29,9 @@ on:
 
 concurrency:
   group: pr-quick-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Only a push's first attempt cancels the run in flight. Any other event, and any re-run,
-  # queues behind it: a run cancelled on its own head leaves a FAILURE aggregator there
-  # (CI.md, "Concurrency").
+  # On a PR only a push's first attempt cancels the run in flight. Any other PR event, and any
+  # re-run of one, queues behind it: a run cancelled on its own head leaves a FAILURE aggregator
+  # there (CI.md, "Concurrency").
   cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}
 
 permissions:

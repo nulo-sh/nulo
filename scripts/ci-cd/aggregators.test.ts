@@ -28,6 +28,8 @@ const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, "
 interface Aggregator {
   file: string
   if: unknown
+  /** `continue-on-error` on the job, then on the step, and the step's own `if:`: any of them could hide a red script. */
+  suppressors: unknown[]
   needs: string[]
   /** Every other job in the workflow: each must be a need, or advisory by name. */
   jobs: string[]
@@ -38,11 +40,12 @@ interface Aggregator {
 function aggregator(file: string): Aggregator {
   const { jobs } = workflow(file)
   const job = jobs.status
-  const steps: { run: string; env?: Record<string, string> }[] = job.steps
+  const steps: { run: string; env?: Record<string, string>; if?: unknown; "continue-on-error"?: unknown }[] = job.steps
   expect(steps, `${file}: the aggregator is one step`).toHaveLength(1)
   return {
     file,
     if: job.if,
+    suppressors: [job["continue-on-error"], steps[0]["continue-on-error"], steps[0].if],
     needs: [job.needs].flat(),
     jobs: Object.keys(jobs).filter((name) => name !== "status"),
     run: steps[0].run,
@@ -154,6 +157,22 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
       "a push the auto-unstick rescued": PUSH_RESCUED,
       "a republish": release(asked("false"), ["release-please", "auto-unstick", ...NOT_ASKED]),
       "a store submission with the network suite": STORE_SUBMISSION,
+      "a Chrome store submission alone": release(
+        {
+          "github.event.inputs.run_network_e2e": "false",
+          "github.event.inputs.publish_chrome": "true",
+          "github.event.inputs.publish_firefox": "false",
+        },
+        ["release-please", "auto-unstick", "network-e2e", "publish-firefox-amo"],
+      ),
+      "a Firefox store submission with the network suite": release(
+        {
+          "github.event.inputs.run_network_e2e": "true",
+          "github.event.inputs.publish_chrome": "false",
+          "github.event.inputs.publish_firefox": "true",
+        },
+        ["release-please", "auto-unstick", "publish-chrome-store"],
+      ),
       "a prerelease that asked for both stores": release({ ...asked("true"), "needs.resolve.outputs.is_prerelease": "true" }, [
         "release-please",
         "auto-unstick",
@@ -169,8 +188,9 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 ]
 
 describe.each(CASES)("$file aggregator", ({ agg, advisory, worlds }) => {
-  test("always runs and waits on every job but the advisory ones", () => {
+  test("always runs, nothing can hide a red script, and it waits on every job but the advisory ones", () => {
     expect(agg.if).toBe("always()")
+    expect(agg.suppressors).toEqual([undefined, undefined, undefined])
     expect([...agg.needs].sort()).toEqual(agg.jobs.filter((job) => !advisory.includes(job)).sort())
   })
 
