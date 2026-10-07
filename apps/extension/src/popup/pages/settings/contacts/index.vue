@@ -148,18 +148,18 @@ onBeforeUnmount(() => {
 	<SettingsPageShell title="Contacts" :backTo="'/popup/settings'" gap="12">
 		<template #trailing>
 			<Dropdown>
-				<button type="button" :class="$style.icon_btn" aria-label="Contact actions">
+				<button type="button" :class="$style.icon_btn" aria-label="Contact actions" data-testid="contacts-menu-trigger">
 					<MaterialIcon name="more_vert" :size="18" color="secondary" />
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts">
+					<DropdownItem @click="importContacts" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
 							<Icon name="upload-outline" size="14" color="secondary" />
 							Import contacts
 						</Flex>
 					</DropdownItem>
-					<DropdownItem @click="exportContacts" :disabled="!contacts.length">
+					<DropdownItem @click="exportContacts" :disabled="!contacts.length" data-testid="contacts-menu-export">
 						<Flex align="center" gap="8">
 							<Icon name="download-outline" size="14" color="secondary" />
 							Export contacts

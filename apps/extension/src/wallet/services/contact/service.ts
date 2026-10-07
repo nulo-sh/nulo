@@ -14,7 +14,8 @@ import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock } from "@/wallet/utils"
-import { getInitials, sanitizeString } from "@/utils"
+import { getInitials } from "@/utils"
+import { sanitizeImportName } from "@/utils/contact-import-rows"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT, ContactSchema, type Events, type Methods } from "./spec"
 
@@ -29,7 +30,6 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		"updateContact",
 		"deleteContact",
 		"exportContacts",
-		"importContacts",
 	)
 	public static name = CONTACT_SERVICE_NAME
 
@@ -177,63 +177,6 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		return JSON.stringify(data, null, 2)
 	}
 
-	public async importContacts(data: string): Promise<Contact[]> {
-		await this.ensureInitialized()
-		const profile = await requireActiveProfile(this.profileService)
-
-		const results: Contact[] = []
-
-		type importedContact = { name: string; address: string }
-		const importedContacts = JSON.parse(data)
-			.map((c: importedContact) => ({
-				name: sanitizeString(c.name, 20),
-				address: sanitizeString(c.address, 66),
-			}))
-			.filter((c: importedContact) => !!c.name && !!c.address)
-
-		if (importedContacts.length) {
-			const existingContacts = (await this.storage.getValues()).filter((c) => c.profileId === profile.id)
-			const contactsByAddress = new Map<string, Contact>()
-			const contactsByName = new Map<string, Contact>()
-
-			existingContacts.forEach((contact) => {
-				contactsByAddress.set(contact.address, contact)
-				contactsByName.set(contact.name, contact)
-			})
-
-			for (const _c of importedContacts) {
-				try {
-					let contact: Contact
-
-					const existingByAddress = contactsByAddress.get(_c.address)
-					const existingByName = contactsByName.get(_c.name)
-
-					// A contact's name and address are user PII — the row id identifies which contact
-					// was touched without writing down who it is.
-					if (existingByAddress) {
-						contact = await this.updateContact(existingByAddress.id, _c.name, _c.address)
-
-						this.logDebug(`Updated existing contact #${existingByAddress.id} (matched by address)`)
-					} else if (existingByName) {
-						contact = await this.updateContact(existingByName.id, _c.name, _c.address)
-
-						this.logDebug(`Updated existing contact #${existingByName.id} (matched by name)`)
-					} else {
-						contact = await this.addContact(_c.name, _c.address)
-
-						this.logDebug(`Added new contact #${contact?.id}`)
-					}
-
-					results.push(contact!)
-				} catch (error) {
-					this.logError("Failed to import a contact", error)
-				}
-			}
-		}
-
-		return results
-	}
-
 	/**
 	 * Cascade a profile delete to its contacts.
 	 *
@@ -296,7 +239,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 			return await restoreRows(contacts, async (contact) => {
 				const id = await preferOrReallocId(this.storage, contact.id)
 				// Same sanitizer the plaintext import applies: a backup name is untrusted display text.
-				const written = { ...contact, id, name: sanitizeString(contact.name, 20) }
+				const written = { ...contact, id, name: sanitizeImportName(contact.name) }
 				// Parse the persisted shape so a malformed backup contact is recorded as
 				// restoreError, not silently written + codec-hidden on read.
 				ContactSchema.parse(written)

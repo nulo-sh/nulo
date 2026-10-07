@@ -1,0 +1,37 @@
+{
+	"compat-epoch": 5,
+	"backup-schema-version": 1,
+	"data": {
+		"contact": [
+			{
+				"id": "c1",
+				"profileId": "p1",
+				"name": "Bartholomew Featherstones",
+				"address": "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a",
+				"abbr": "BF"
+			},
+			{
+				"id": "c2",
+				"profileId": "p1",
+				"name": "Zoë Ångström",
+				"address": "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a9459b",
+				"abbr": "ZÅ"
+			},
+			{
+				"id": "c3",
+				"profileId": "p1",
+				"name": " Tom Becker ",
+				"address": "0x048b29517cddb7566a05a2a292624eb2c5350dbe44350763cefe4c9207344c10",
+				"abbr": "TB"
+			},
+			{
+				"id": "c4",
+				"profileId": "p1",
+				"name": "Marco Rossi",
+				"address": "0x0402F387A230066A23ABCED99A2348C1BA902C95518BDC2F9447A0CA51E5CBE2",
+				"abbr": "MR"
+			}
+		]
+	},
+	"checksum": "f82d86429c3c108510eaa2c60a8de00dca9341b370e537a16ddd0820776fdc22"
+}

@@ -67,6 +67,7 @@ declare global {
   const abortableSleep: typeof import('../utils/abortable-sleep').abortableSleep
   const activateNetworkGuarded: typeof import('../utils/guarded-network-activation').activateNetworkGuarded
   const activityRowRoute: typeof import('../utils/activity-rows').activityRowRoute
+  const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
   const approvedSendsInFlight: typeof import('../utils/in-flight-send').approvedSendsInFlight
@@ -89,6 +90,7 @@ declare global {
   const captureOwnWindow: typeof import('../utils/own-window').captureOwnWindow
   const categoricalLabel: typeof import('../utils/journal-state').categoricalLabel
   const clampDecimals: typeof import('../utils/amount').clampDecimals
+  const classifyImportRow: typeof import('../utils/contact-import-rows').classifyImportRow
   const classifyPasskeyFailure: typeof import('../utils/passkey-copy').classifyPasskeyFailure
   const classifyRow: typeof import('../utils/token-order').classifyRow
   const closeCurrentWindow: typeof import('../utils/close-current-window').closeCurrentWindow
@@ -157,6 +159,7 @@ declare global {
   const humanizeMethodName: typeof import('../utils/tx-enrichment').humanizeMethodName
   const incomingInScope: typeof import('../utils/activity-rows').incomingInScope
   const incomingRow: typeof import('../utils/activity-rows').incomingRow
+  const indexSavedContacts: typeof import('../utils/contact-import-rows').indexSavedContacts
   const initAppServiceContext: typeof import('../utils/core').initAppServiceContext
   const initTransactionService: typeof import('../utils/core').initTransactionService
   const inject: typeof import('vue').inject
@@ -194,6 +197,7 @@ declare global {
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
   const managers: typeof import('../utils/core').managers
   const markRaw: typeof import('vue').markRaw
+  const matchSavedContacts: typeof import('../utils/contact-import-rows').matchSavedContacts
   const matchesQuery: typeof import('../utils/token-search').matchesQuery
   const migrationIdle: typeof import('../utils/storage').migrationIdle
   const moveToOwnWindow: typeof import('../utils/own-window').moveToOwnWindow
@@ -202,6 +206,7 @@ declare global {
   const nextTick: typeof import('vue').nextTick
   const normalizeAllIds: typeof import('../utils/full-backup-helpers').normalizeAllIds
   const normalizeAmount: typeof import('../utils/amount').normalizeAmount
+  const normalizeImportRows: typeof import('../utils/contact-import-rows').normalizeImportRows
   const normalizeProfileName: typeof import('../utils/profile-name').normalizeProfileName
   const onActivated: typeof import('vue').onActivated
   const onBeforeMount: typeof import('vue').onBeforeMount
@@ -236,6 +241,7 @@ declare global {
   const pickPrimaryMethod: typeof import('../utils/tx-enrichment').pickPrimaryMethod
   const pinScopeOf: typeof import('../composables/usePinnedTokens').pinScopeOf
   const pinnedTokensKey: typeof import('../utils/profile-ui-keys').pinnedTokensKey
+  const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
@@ -282,6 +288,7 @@ declare global {
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
   const sameContactName: typeof import('../utils/contact-rules').sameContactName
+  const sanitizeImportName: typeof import('../utils/contact-import-rows').sanitizeImportName
   const sanitizeJournalSubtitle: typeof import('../utils/journal-state').sanitizeJournalSubtitle
   const sanitizePinMap: typeof import('../composables/usePinnedTokens').sanitizePinMap
   const sanitizeString: typeof import('../utils/string').sanitizeString
@@ -300,6 +307,7 @@ declare global {
   const snackInset: typeof import('../composables/snackInset').snackInset
   const stageSubtitle: typeof import('../utils/card-subtitle').stageSubtitle
   const stepFailedTitle: typeof import('../utils/passkey-copy').stepFailedTitle
+  const stillAsShown: typeof import('../utils/contact-import-rows').stillAsShown
   const storageLocalGet: typeof import('../utils/storage').storageLocalGet
   const storageLocalRemove: typeof import('../utils/storage').storageLocalRemove
   const storageLocalSet: typeof import('../utils/storage').storageLocalSet
@@ -515,6 +523,9 @@ declare global {
   export type { ConfirmationPolicy } from '../utils/confirmation-policies'
   import('../utils/confirmation-policies')
   // @ts-ignore
+  export type { ImportRow, SavedContactIndex, ContactMatchKind, ContactMatch, ImportRowKind, ClassifiedImportRow, ReviewedImportRow, ImportWrite } from '../utils/contact-import-rows'
+  import('../utils/contact-import-rows')
+  // @ts-ignore
   export type { ImportedContactV1, ImportedContactV2, ParsedExport } from '../utils/contacts-export-format'
   import('../utils/contacts-export-format')
   // @ts-ignore
@@ -652,6 +663,7 @@ declare module 'vue' {
     readonly abortableSleep: UnwrapRef<typeof import('../utils/abortable-sleep')['abortableSleep']>
     readonly activateNetworkGuarded: UnwrapRef<typeof import('../utils/guarded-network-activation')['activateNetworkGuarded']>
     readonly activityRowRoute: UnwrapRef<typeof import('../utils/activity-rows')['activityRowRoute']>
+    readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
     readonly approvedSendsInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['approvedSendsInFlight']>
@@ -674,6 +686,7 @@ declare module 'vue' {
     readonly captureOwnWindow: UnwrapRef<typeof import('../utils/own-window')['captureOwnWindow']>
     readonly categoricalLabel: UnwrapRef<typeof import('../utils/journal-state')['categoricalLabel']>
     readonly clampDecimals: UnwrapRef<typeof import('../utils/amount')['clampDecimals']>
+    readonly classifyImportRow: UnwrapRef<typeof import('../utils/contact-import-rows')['classifyImportRow']>
     readonly classifyPasskeyFailure: UnwrapRef<typeof import('../utils/passkey-copy')['classifyPasskeyFailure']>
     readonly classifyRow: UnwrapRef<typeof import('../utils/token-order')['classifyRow']>
     readonly closeCurrentWindow: UnwrapRef<typeof import('../utils/close-current-window')['closeCurrentWindow']>
@@ -742,6 +755,7 @@ declare module 'vue' {
     readonly humanizeMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['humanizeMethodName']>
     readonly incomingInScope: UnwrapRef<typeof import('../utils/activity-rows')['incomingInScope']>
     readonly incomingRow: UnwrapRef<typeof import('../utils/activity-rows')['incomingRow']>
+    readonly indexSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['indexSavedContacts']>
     readonly initAppServiceContext: UnwrapRef<typeof import('../utils/core')['initAppServiceContext']>
     readonly initTransactionService: UnwrapRef<typeof import('../utils/core')['initTransactionService']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>
@@ -779,6 +793,7 @@ declare module 'vue' {
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>
     readonly managers: UnwrapRef<typeof import('../utils/core')['managers']>
     readonly markRaw: UnwrapRef<typeof import('vue')['markRaw']>
+    readonly matchSavedContacts: UnwrapRef<typeof import('../utils/contact-import-rows')['matchSavedContacts']>
     readonly matchesQuery: UnwrapRef<typeof import('../utils/token-search')['matchesQuery']>
     readonly migrationIdle: UnwrapRef<typeof import('../utils/storage')['migrationIdle']>
     readonly moveToOwnWindow: UnwrapRef<typeof import('../utils/own-window')['moveToOwnWindow']>
@@ -787,6 +802,7 @@ declare module 'vue' {
     readonly nextTick: UnwrapRef<typeof import('vue')['nextTick']>
     readonly normalizeAllIds: UnwrapRef<typeof import('../utils/full-backup-helpers')['normalizeAllIds']>
     readonly normalizeAmount: UnwrapRef<typeof import('../utils/amount')['normalizeAmount']>
+    readonly normalizeImportRows: UnwrapRef<typeof import('../utils/contact-import-rows')['normalizeImportRows']>
     readonly normalizeProfileName: UnwrapRef<typeof import('../utils/profile-name')['normalizeProfileName']>
     readonly onActivated: UnwrapRef<typeof import('vue')['onActivated']>
     readonly onBeforeMount: UnwrapRef<typeof import('vue')['onBeforeMount']>
@@ -821,6 +837,7 @@ declare module 'vue' {
     readonly pickPrimaryMethod: UnwrapRef<typeof import('../utils/tx-enrichment')['pickPrimaryMethod']>
     readonly pinScopeOf: UnwrapRef<typeof import('../composables/usePinnedTokens')['pinScopeOf']>
     readonly pinnedTokensKey: UnwrapRef<typeof import('../utils/profile-ui-keys')['pinnedTokensKey']>
+    readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
@@ -865,6 +882,7 @@ declare module 'vue' {
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>
     readonly sameContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['sameContactAddress']>
     readonly sameContactName: UnwrapRef<typeof import('../utils/contact-rules')['sameContactName']>
+    readonly sanitizeImportName: UnwrapRef<typeof import('../utils/contact-import-rows')['sanitizeImportName']>
     readonly sanitizeJournalSubtitle: UnwrapRef<typeof import('../utils/journal-state')['sanitizeJournalSubtitle']>
     readonly sanitizePinMap: UnwrapRef<typeof import('../composables/usePinnedTokens')['sanitizePinMap']>
     readonly sanitizeString: UnwrapRef<typeof import('../utils/string')['sanitizeString']>
@@ -883,6 +901,7 @@ declare module 'vue' {
     readonly snackInset: UnwrapRef<typeof import('../composables/snackInset')['snackInset']>
     readonly stageSubtitle: UnwrapRef<typeof import('../utils/card-subtitle')['stageSubtitle']>
     readonly stepFailedTitle: UnwrapRef<typeof import('../utils/passkey-copy')['stepFailedTitle']>
+    readonly stillAsShown: UnwrapRef<typeof import('../utils/contact-import-rows')['stillAsShown']>
     readonly storageLocalGet: UnwrapRef<typeof import('../utils/storage')['storageLocalGet']>
     readonly storageLocalRemove: UnwrapRef<typeof import('../utils/storage')['storageLocalRemove']>
     readonly storageLocalSet: UnwrapRef<typeof import('../utils/storage')['storageLocalSet']>

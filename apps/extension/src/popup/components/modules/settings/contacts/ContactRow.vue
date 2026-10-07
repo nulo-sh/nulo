@@ -30,7 +30,7 @@ const target = ref(null)
 			<Flex direction="column" gap="2" wide :class="$style.row_text">
 				<span :id="titleId" :class="$style.row_name">{{ contact.name }}</span>
 				<Flex align="center" gap="6">
-					<span :class="$style.row_address">{{ trimAddress(contact.address) }}</span>
+					<span :class="$style.row_address" data-testid="contact-row-address">{{ trimAddress(contact.address) }}</span>
 					<!-- Raised above the target so its title shows; `.stop` so a press opens the row once. -->
 					<span
 						v-if="isSender"

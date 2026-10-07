@@ -47,13 +47,22 @@ vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: (...args:
 
 import { FileTooLargeError } from "@/utils"
 import { MAX_CONTACT_IMPORT_BYTES } from "@/utils/contacts-export-format"
+import { classifyImportRow, indexSavedContacts } from "@/utils/contact-import-rows"
 import { useContactImportExport } from "./useContactImportExport"
 
-const ADDR_A = `0x${"a".repeat(64)}`
-const ADDR_B = `0x${"b".repeat(64)}`
+/** The rows as the selection popup hands them back: each carries the decision it was shown with. */
+function reviewed(rows: unknown[], saved: Array<{ id: string; name: string; address: string }> = []) {
+	const index = indexSavedContacts(saved)
+	return (rows as Array<{ name: string; address: string }>).map((r) => ({ ...r, ...classifyImportRow(r, index) }))
+}
+
+// Wire-shaped: 0x + 64 hex, valid Aztec addresses.
+const ADDR_A = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
+const ADDR_B = "0x047bb28204a2545c566dff691c298d2023fe7cad44bb6468e3f7f1e633f8f7d2"
 
 function makeServices() {
 	const contactService = {
+		getContacts: vi.fn(async () => []),
 		addContact: vi.fn(async (name: string) => {
 			trace.push(`add:${name}`)
 		}),
@@ -114,7 +123,7 @@ describe("importContacts — selection gate", () => {
 		const done = api().importContacts()
 		await untilSelectionGate()
 		expect(trace).toEqual(["open:import_contacts:controls-ready:2"])
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await done
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "success", label: "Contacts imported · 2 senders registered" })
 	})
@@ -136,7 +145,7 @@ describe("importContacts — per-row order and early exits", () => {
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await vi.waitFor(() => expect(services.contactService.addContact).toHaveBeenCalledTimes(1))
 		expect(trace).toEqual([]) // row A's sender attempt waits for its upsert to settle
 		releaseA()
@@ -158,6 +167,16 @@ describe("importContacts — per-row order and early exits", () => {
 		],
 		["no rows in the file", () => fileWith({ version: 2, contacts: [] }), "No contacts found in file"],
 		[
+			"a format this wallet does not know",
+			() => fileWith({ version: 3, contacts: twoSenders.contacts }),
+			"Error occurred during import",
+		],
+		[
+			"no row with a usable name and address",
+			() => fileWith([1, "x", null, [], { name: ["A"], address: { x: 1 } }, { address: ADDR_A }]),
+			"No contacts found in file",
+		],
+		[
 			"read threw",
 			() =>
 				pickFileMock.mockResolvedValueOnce({
@@ -173,9 +192,23 @@ describe("importContacts — per-row order and early exits", () => {
 		cacheStoreState.importContacts = ["stale-staging"]
 		arrange()
 		await api().importContacts()
+		expect(popupOpenMock).not.toHaveBeenCalled()
 		expect(cacheStoreState.importContacts).toEqual([])
 		expect(cacheStoreState.importPromise).toBeNull()
 		if (toast) expect(openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)).toContain(toast)
+	})
+
+	test("a file that is not JSON logs the failure's kind, never the parser's message quoting the file", async () => {
+		const raw = `Alice,${ADDR_A}\nBob,${ADDR_B}`
+		expect(() => JSON.parse(raw)).toThrow(/Alice/)
+		pickFileMock.mockResolvedValueOnce({ size: raw.length, text: async () => raw })
+		const logged = vi.mocked(console.error)
+
+		await api().importContacts()
+
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Error occurred during import" })
+		expect(logged).toHaveBeenCalledWith("Error occurred during import", "SyntaxError")
+		expect(JSON.stringify(logged.mock.calls)).not.toMatch(/Alice|0x01904d/)
 	})
 
 	test.each<[string, (c: typeof cacheStoreState.importPromise) => void, string]>([
@@ -200,7 +233,7 @@ describe("importContacts — sender-failure toasts", () => {
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await done
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Contacts imported · 1 of 2 senders registered" })
 	})
@@ -211,7 +244,7 @@ describe("importContacts — sender-failure toasts", () => {
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
-		cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
 		await done
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Contacts imported · sender registration failed" })
 	})

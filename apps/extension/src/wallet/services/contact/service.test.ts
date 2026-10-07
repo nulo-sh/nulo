@@ -190,30 +190,20 @@ describe("ContactService (port-migrated)", () => {
 		})
 	})
 
-	describe("import/export", () => {
-		test("exports and reimports round-trip", async () => {
+	describe("export", () => {
+		test("exports every contact's name and address", async () => {
 			await contactService.addContact("Alice", "0xaaaa")
 			await contactService.addContact("Bob", "0xbbbb")
-			const json = await contactService.exportContacts()
 
-			// Wipe and reimport into a fresh profile's context.
-			profile.setActiveProfile(profileB)
-			const restored = await contactService.importContacts(json)
+			const exported = JSON.parse(await contactService.exportContacts())
 
-			expect(restored).toHaveLength(2)
-			const all = await contactService.getContacts()
-			expect(all.map((c) => c.name).sort()).toEqual(["Alice", "Bob"])
-		})
-
-		test("import merges duplicate addresses by updating the existing entry", async () => {
-			const original = await contactService.addContact("Alice", "0xsame")
-			const json = JSON.stringify([{ name: "Alicia", address: "0xsame" }])
-			await contactService.importContacts(json)
-
-			const all = await contactService.getContacts()
-			expect(all).toHaveLength(1)
-			expect(all[0].id).toBe(original.id)
-			expect(all[0].name).toBe("Alicia")
+			expect(exported).toHaveLength(2)
+			expect(exported).toEqual(
+				expect.arrayContaining([
+					{ name: "Alice", address: "0xaaaa" },
+					{ name: "Bob", address: "0xbbbb" },
+				]),
+			)
 		})
 	})
 
@@ -290,6 +280,19 @@ describe("ContactService (port-migrated)", () => {
 			expect(all.map((c) => c.name)).toEqual(["Alice", "Alice"])
 		})
 
+		test("restore keeps a name the form can save (25 characters) and trims its outer spaces, like the import", async () => {
+			await contactService.addContact("Alice", "0xa")
+			const [genuine] = await contactService.backup()
+			const full = "Bartholomew Featherstones"
+			expect(full).toHaveLength(25)
+			const doctored = [
+				{ ...genuine, id: "c-full", name: `  ${full}  ` },
+				{ ...genuine, id: "c-long", name: `${full}yz` },
+			]
+			const restored = await contactService.restore(doctored)
+			expect(restored.map((c) => c.name)).toEqual([full, full])
+		})
+
 		test("a failed item stores the normalized error MESSAGE string, not the raw error", async () => {
 			// Like every other service, contact normalizes the error through
 			// `toRestoreError`, so a failed restore carries the message STRING,
@@ -309,16 +312,18 @@ describe("ContactService (port-migrated)", () => {
 			// written by a `restore` that skipped parse-before-write and then KEPT-but-hidden by
 			// EntityStorage.decodeRow — codec-hidden private data that survives a
 			// later cleanup's getValues(). Parse-before-write records it instead.
-			const bad = [{ id: "bad-1", profileId: "p1", name: 123, address: "0xa", abbr: "AL" }] as unknown as Parameters<
-				typeof contactService.restore
-			>[0]
+			// A string name passes the sanitizer, so only the schema parse can stop this row.
+			const rows = [
+				{ id: "bad-1", profileId: profileA.id, name: "Ali", address: 123, abbr: "AL" },
+				{ id: "good-1", profileId: profileA.id, name: "Bob", address: "0xb", abbr: "BO" },
+			] as unknown as Parameters<typeof contactService.restore>[0]
 
-			const restored = await contactService.restore(bad)
-			expect(restored).toHaveLength(1)
-			expect(restored[0].restoreError).toBeDefined()
+			const restored = await contactService.restore(rows)
+			expect(restored.map((r) => typeof r.restoreError)).toEqual(["string", "undefined"])
 
 			const raw = await api.storage.local.get(null)
 			expect(Object.keys(raw).some((k) => k.includes("bad-1"))).toBe(false)
+			expect((await contactService.getContacts()).map((c) => c.name)).toEqual(["Bob"])
 		})
 	})
 
