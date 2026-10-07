@@ -226,8 +226,8 @@ function expectEveryOtherResultFails(agg: Aggregator, world: World): void {
 }
 
 // Each smoke lane runs its suite as one matrix job of three shards, which GitHub hands the aggregator
-// as the single `needs.smoke.result`: `success` only when every shard succeeded, so a failed or
-// cancelled shard arrives as `failure` or `cancelled`. These scripts read their results inline.
+// as the single `needs.smoke.result`, so a failed or cancelled shard arrives as `failure` or
+// `cancelled`. These scripts read their results inline.
 const SMOKE = aggregator("pr-extension-smoke-e2e.yml")
 const SMOKE_FIREFOX = aggregator("pr-extension-smoke-e2e-firefox.yml")
 const smoke = (run: string, skipped: string[]): World => ({

@@ -383,6 +383,8 @@ describe("shard matrices", () => {
         if (!shards) continue
         const want = shards.map((_, i) => ({ id: `${i + 1}/${shards.length}`, label: `${i + 1}-of-${shards.length}` }))
         expect(shards, `${file} → ${name}`).toEqual(want)
+        // An `exclude` (or any other key) could drop a shard from both twins while the list above holds.
+        expect(Object.keys(job.strategy?.matrix ?? {}), `${file} → ${name} matrix keys`).toEqual(["shard"])
         expect(job.with?.shard, `${file} → ${name} shard`).toBe("${{ matrix.shard.id }}")
         expect(job.with?.shard_label, `${file} → ${name} shard_label`).toBe("${{ matrix.shard.label }}")
         checked++
