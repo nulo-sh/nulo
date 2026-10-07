@@ -8,11 +8,11 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 
 | Workflow | Required check-run | Required on | Runs when | What it checks |
 |---|---|---|---|---|
-| `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build |
+| `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build, landing build |
 | `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-smoke` label, OR `smoke-surface` paths-filter | chrome build + puppeteer smoke, 3 shards |
 | `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-network` label, OR `extension-network` paths-filter | full network e2e (anvil + Aztec sandbox + playground) |
-| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` (required on `dev` and `main`) | — | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter); skips drafts | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
-| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` (required on `dev`) | — | same gate as the Chrome twin; skips drafts | the network suite on Firefox: 5 proverless shards + 2 heavy jobs + the real-proving canary, the same four files as on Chrome |
+| `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` | dev + main | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter); skips drafts | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
+| `pr-extension-network-e2e-firefox.yml` | `extension-network-e2e-firefox-status` | dev | same gate as the Chrome twin; skips drafts | the network suite on Firefox: 5 proverless shards + 2 heavy jobs + the real-proving canary, the same five files as on Chrome |
 | `actionlint.yml` | `Status` (not required) | — | when `.github/workflows/**` or shell scripts change | actionlint + shellcheck |
 | `release.yml` | `status` (not required) | — | push to `main` + manual `workflow_dispatch` | release-please + gates + build + smoke against artifact + assets; `publish_chrome` / `publish_firefox` inputs run the store uploads in their protected environments |
 | `store-check.yml` | — | — | manual `workflow_dispatch` (`store`: chrome / firefox / both) | proves a store credential read-only (Chrome: one `fetchStatus`; Firefox: the author-scoped add-on list; no upload) |
@@ -30,7 +30,8 @@ Reusables live as `.github/workflows/_*.yml` and are called from top-level workf
 |---|---|
 | `_lint-and-typecheck.yml` | `pr-quick`, `release`, `nightly` |
 | `_unit-tests.yml` | `pr-quick`, `release`, `nightly` |
-| `_build-extension.yml` | `pr-quick`, `release`, `nightly` |
+| `_build-extension.yml` | `pr-quick`, `release`, `nightly`, `source-rebuild` |
+| `_release-pr-lockfile.yml` | `release`, `release-prerelease` |
 | `_extension-smoke-e2e.yml` | `pr-extension-smoke-e2e`, `pr-extension-smoke-e2e-firefox`, `release`, `nightly` |
 | `_extension-network-e2e.yml` | `pr-extension-network-e2e`, `pr-extension-network-e2e-firefox`, `extension-network-e2e-soak`, `release` (opt-in: `workflow_dispatch` with `run_network_e2e=true`), `nightly` |
 
@@ -40,7 +41,7 @@ Composite actions live in `.github/actions/` and are shared step fragments used 
 
 | Composite | Purpose |
 |---|---|
-| `setup-bun` | checkout + bun + install cache + `bun install --frozen-lockfile` |
+| `setup-bun` | bun + install cache (`cache: "false"` skips it) + `bun install --frozen-lockfile`; the caller checks out first |
 | `setup-aztec` | Foundry + Aztec CLI matching the `@aztec-labs/aztec.js` version; the installer, its `versions` manifest and the noir tarball are SHA-256-pinned in the action (`installer-pins.sha256`), and its npm resolve is held to a 7-day release age outside the Aztec scopes |
 | `setup-puppeteer` | warm `~/.cache/puppeteer` (Chrome); with `browser: firefox`, install + cache the Firefox revision the locked Puppeteer pins, under a key that shares no prefix with Chrome's |
 | `setup-geckodriver` | download + verify (tarball and extracted-binary SHA-256 pins, single-member archive) + install `geckodriver` for the Firefox lanes; the pins live in the action. See [SECURITY.md](../SECURITY.md#binary-dependencies). |
