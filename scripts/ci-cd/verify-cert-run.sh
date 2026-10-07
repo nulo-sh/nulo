@@ -10,7 +10,7 @@
 #     exit-86 / infra-reboot warning (a pass that consumed a retry is not a
 #     green);
 #   - the runs executed their WORKLOAD jobs by name — the network agent set, smoke's
-#     test job, and quality's unit/lint jobs — so a suite that resolved run=false and
+#     shard jobs, and quality's unit/lint jobs — so a suite that resolved run=false and
 #     produced a green "passed or was skipped" aggregator cannot certify with nothing
 #     having run.
 #
@@ -42,7 +42,7 @@ REQUIRED_WORKFLOWS=("Quality" "Extension smoke e2e" "Extension network e2e")
 # green, so label the PR to force them rather than accepting a skip.
 declare -A REQUIRED_JOBS=(
 	["Quality"]="Unit tests / Vitest|Lint + Typecheck / Biome + vue-tsc"
-	["Extension smoke e2e"]="Run / Vitest + Puppeteer"
+	["Extension smoke e2e"]="Run / shard 1/3 / Vitest + Puppeteer|Run / shard 2/3 / Vitest + Puppeteer|Run / shard 3/3 / Vitest + Puppeteer"
 )
 
 EXPECTED_AGENTS=(

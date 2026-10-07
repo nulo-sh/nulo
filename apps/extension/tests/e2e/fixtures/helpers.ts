@@ -1346,9 +1346,11 @@ export type FeeMethodSubtitle = "sponsored" | "public" | "private"
 
 /** Select a fee payment method in the shared FeeSettingsCard dropdown (the
  *  send flow AND the dApp execute/authwit popups embed the same card).
- *  `mountTimeoutMs` exists because the card mounts only after FPC
- *  auto-discovery — an async service round-trip that can take seconds on a
- *  cold path. */
+ *  `mountTimeoutMs` bounds every wait. The card can mount late, and until its
+ *  first FPC and balance read lands (seconds on a cold path) the Private Fee
+ *  Juice row is drawn disabled, no sponsor row exists, and a pick whose balance
+ *  is unread does not take effect. A click on a disabled row is dropped, so the
+ *  row is clicked only once it is enabled. */
 export async function selectFeeMethod(
 	page: Page,
 	methodSubtitle: FeeMethodSubtitle,
@@ -1361,21 +1363,26 @@ export async function selectFeeMethod(
 		;(document.querySelector('[data-testid="send-fee-method-trigger"]') as HTMLElement)?.click()
 	})
 
-	// Wait for the target item to teleport into the dropdown layer.
-	const testid = `send-fee-method-${methodSubtitle}`
-	await page.waitForSelector(`[data-testid="${testid}"]`, { visible: true, timeout: mountTimeoutMs })
-
-	// Click the method by data-testid on the teleported DropdownItem
-	await page.evaluate((id: string) => {
-		;(document.querySelector(`[data-testid="${id}"]`) as HTMLElement)?.click()
-	}, testid)
+	const row = `send-fee-method-${methodSubtitle}`
+	await withTimeoutMessage(clickByTestId(page, row, mountTimeoutMs), async () => {
+		const state = await page.evaluate((id: string) => {
+			const el = document.querySelector(`[data-testid="${id}"]`)
+			if (!el) return "absent"
+			return el.getAttribute("aria-disabled") === "true" ? "disabled" : "enabled"
+		}, row)
+		return `selectFeeMethod: ${row} was not selectable within ${mountTimeoutMs}ms (now ${state})`
+	})
 
 	// The trigger exposes `data-fee-method` once the selection commits;
 	// wait for it to match instead of guessing at Vue's render timing.
-	await page.waitForFunction(
-		(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
-		{ timeout: 2_000, polling: 50 },
-		methodSubtitle,
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
+			{ timeout: mountTimeoutMs, polling: 50 },
+			methodSubtitle,
+		),
+		async () =>
+			`selectFeeMethod: picked ${methodSubtitle}, but the trigger read ${await getSelectedFeeMethod(page)} after ${mountTimeoutMs}ms`,
 	)
 }
 
