@@ -309,11 +309,20 @@ describe("Firefox lanes", () => {
     }
   })
 
+  /** Every key and string the runner evaluates or executes: names, descriptions and shell comments aside. */
+  const evaluated = (node: unknown, key = ""): string[] => {
+    if (typeof node === "string") return key === "name" || key === "description" ? [] : key === "run" ? commandLines(node) : [node]
+    if (Array.isArray(node)) return node.flatMap((item) => evaluated(item))
+    if (typeof node !== "object" || node === null) return []
+    return Object.entries(node).flatMap(([k, v]) => [k, ...evaluated(v, k)])
+  }
+
   // A draft runs every e2e lane as the same PR ready would: a gate that skipped it would pass the
   // draft, and once marked ready the PR would merge on that pass while its suites still ran.
   test("no PR e2e lane reads the draft flag", () => {
     for (const file of TWINS.flatMap(({ chrome, firefox }) => [chrome, firefox])) {
-      expect(JSON.stringify(workflow(file)), file).not.toMatch(/draft/i)
+      const reads = evaluated(workflow(file)).filter((text) => /draft/i.test(text))
+      expect(reads, file).toEqual([])
     }
   })
 
