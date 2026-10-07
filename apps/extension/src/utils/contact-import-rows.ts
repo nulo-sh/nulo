@@ -119,7 +119,13 @@ export function classifyImportRow(row: StagedRow, index: SavedContactIndex): Cla
 }
 
 /** A row as the selection screen hands it back: the decision the user saw travels with it. */
-export type ReviewedImportRow = StagedRow & { isSender?: boolean; kind?: ImportRowKind; targetId?: string | null }
+export type ReviewedImportRow = StagedRow & {
+	isSender?: boolean
+	kind?: ImportRowKind
+	targetId?: string | null
+	savedName?: string | null
+	savedAddress?: string | null
+}
 
 export interface ImportWrite<T> {
 	row: T
@@ -154,11 +160,13 @@ export function planImportWrites<T extends ReviewedImportRow>(
 	return { admitted, refused }
 }
 
-/** Whether the row still does what the screen showed: same kind, same saved contact. A conflict never
- *  does, whatever it was shown as. */
+/** Whether the row still does what the screen showed: same kind, same saved contact, and that contact
+ *  still holding the name and address the screen showed as its old values. A conflict never does,
+ *  whatever it was shown as. */
 export function stillAsShown(row: ReviewedImportRow, index: SavedContactIndex): boolean {
 	const { kind, target } = matchSavedContacts(row, index)
-	return kind !== "conflict" && kind === row.kind && (target?.id ?? null) === (row.targetId ?? null)
+	if (kind === "conflict" || kind !== row.kind || (target?.id ?? null) !== (row.targetId ?? null)) return false
+	return !target || (target.name === row.savedName && target.address === row.savedAddress)
 }
 
 function admit(row: ReviewedImportRow, index: SavedContactIndex, taken: TakenKeys): { targetId: string | null } | null {

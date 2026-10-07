@@ -168,6 +168,16 @@ describe("planImportWrites", () => {
 		expect(planImportWrites([{ name: "Priya Shah", address: ADDR.priya }], index).refused).toHaveLength(1)
 	})
 
+	test("refuses a row whose saved contact no longer holds the old value it showed, though kind and contact are unchanged", () => {
+		const addressChange = shown("Alice", ADDR.fresh)
+		const movedAgain = indexSavedContacts([{ ...SAVED[0], address: ADDR.priya }, ...SAVED.slice(1)])
+		expect(planImportWrites([addressChange], movedAgain).refused).toEqual([addressChange])
+
+		const nameChange = shown("Marco", ADDR.marco)
+		const renamedAgain = indexSavedContacts([SAVED[0], { ...SAVED[1], name: "Marco R" }, SAVED[2]])
+		expect(planImportWrites([nameChange], renamedAgain).refused).toEqual([nameChange])
+	})
+
 	test("refuses a conflict and an invalid row even when the shown decision says so", () => {
 		expect(planImportWrites([shown("Alice", ADDR.tom), shown("Lena", OFF_CURVE)], index).admitted).toEqual([])
 	})
