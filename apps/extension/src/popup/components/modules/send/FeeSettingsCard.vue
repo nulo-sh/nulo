@@ -426,15 +426,12 @@ const onFpcUpdated = (fpc) => {
 	}
 }
 const onFpcDeleted = (fpc) => {
-	if (props.originPrivacy !== null) {
-		if (effectiveMethod.value?.fpc?.id === fpc.id) openToast({ kind: "success", label: "Selected FPC was deleted" })
-		fpcEdits.set(fpc.id, null)
-		return
-	}
-	if (selectedMethod.value?.fpc?.id === fpc.id) {
-		selectedMethod.value = undefined
-		openToast({ kind: "success", label: "Selected FPC was deleted" })
-	}
+	const wasSelected = effectiveMethod.value?.fpc?.id === fpc.id
+	// The store's FPC list never hears of a deletion, and the menu offers what that list holds.
+	fpcEdits.set(fpc.id, null)
+	if (!wasSelected) return
+	if (props.originPrivacy === null) selectedMethod.value = undefined
+	openToast({ kind: "success", label: "Selected FPC was deleted" })
 }
 
 const fpcService = new FpcServiceClient()

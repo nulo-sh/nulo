@@ -219,6 +219,16 @@ const lastEmittedSettings = (w: ReturnType<typeof mount>) => {
 	return events[events.length - 1][0]
 }
 
+/** Fires an FPC service event at the most recently mounted card. */
+const fpcEvent = async (name: "onFpcDeleted" | "onFpcUpdated", payload: unknown) => {
+	const { FpcServiceClient } = await import("@/wallet/services/fpc/client")
+	const results = vi.mocked(FpcServiceClient).mock.results
+	const instance = results[results.length - 1].value as Record<string, { add: ReturnType<typeof vi.fn> }>
+	const handler = instance[name].add.mock.calls[0]?.[0] as ((f: unknown) => void) | undefined
+	if (!handler) throw new Error(`the card never subscribed to ${name}`)
+	handler(payload)
+}
+
 describe("FeeSettingsCard — bug pins (init race)", () => {
 	test("(BUG PIN) saved fj + delayed gas: settings stays undefined until gas resolves, then emits valid", async () => {
 		// Stored as the wallet currently writes — full FeeMethodOption snapshot.
@@ -843,6 +853,25 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 		release()
 		await flushPromises()
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		w.unmount()
+	})
+
+	test("a sponsor deleted before the balances land leaves the dApp menu and stays gone after the commit", async () => {
+		const CUSTOM = { id: "s2", type: 1, name: "Custom", isProtocol: false }
+		const gas = deferred<unknown>()
+		mocks.getFpcs.mockResolvedValue([SPONSOR, CUSTOM])
+		mocks.getGasBalances.mockReturnValue(gas.promise)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		const listsCustom = () => rowState(w).some((r) => r.fpc === "s2")
+		expect(listsCustom()).toBe(true)
+
+		await fpcEvent("onFpcDeleted", { id: "s2" })
+		await flushPromises()
+		expect(listsCustom()).toBe(false)
+		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: null })
+		await flushPromises()
+		expect(listsCustom()).toBe(false)
 		w.unmount()
 	})
 
@@ -1736,14 +1765,6 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 	const degradedText = (w: ReturnType<typeof mount>) => {
 		const row = w.find('[data-testid="fee-init-degraded"]')
 		return row.exists() ? row.text() : null
-	}
-	const fpcEvent = async (name: "onFpcDeleted" | "onFpcUpdated", payload: unknown) => {
-		const { FpcServiceClient } = await import("@/wallet/services/fpc/client")
-		const results = vi.mocked(FpcServiceClient).mock.results
-		const instance = results[results.length - 1].value as Record<string, { add: ReturnType<typeof vi.fn> }>
-		const handler = instance[name].add.mock.calls[0]?.[0] as ((f: unknown) => void) | undefined
-		if (!handler) throw new Error(`the card never subscribed to ${name}`)
-		handler(payload)
 	}
 
 	describe("the default, by knowledge state", () => {
