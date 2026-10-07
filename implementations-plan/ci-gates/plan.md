@@ -1,5 +1,13 @@
 # Fail-closed CI aggregators
 
+## Outcome
+
+- **Date**: 2026-10-07
+- **Status**: completed.
+- **Shipped**: `quality-status`, actionlint's `Status` and release's `status` check every need against its own condition and the control outputs those conditions read; `attach-assets` publishes only past gates that all succeeded and never from a cancelled run; every PR workflow cancels its run in flight only on a push's first attempt. Pinned by `scripts/ci-cd/aggregators.test.ts` and `scripts/ci-cd/behavior-gating.test.ts`, documented in `CI.md` ("Concurrency").
+- **Open items**: none owned here. The residuals below are in `follow-ups.md`. To watch: the first PR labelled while a run is in flight should show the label's run queued, then green, and no cancelled run with a failed aggregator on its head.
+- **Seeds retired**: none; this record carries no seed prompts.
+
 Two defects let the required checks disagree with the gates behind them: three aggregators pass when their gates never ran, and a PR event on an unchanged head cancels the run in flight, whose aggregator then posts a FAILURE under a required name beside the surviving run's green one.
 
 ## Problem
