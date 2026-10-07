@@ -128,6 +128,21 @@ export async function waitForFocusOn(page: Page, selector: string): Promise<void
 	)
 }
 
+/** Waits until the native input with test id `testid` holds `value`: the edit form fills its
+ *  inputs after it opens, and a value typed before that would be overwritten. */
+export async function waitForInputValue(page: Page, testid: string, value: string): Promise<void> {
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(s: string, v: string) => document.querySelector<HTMLInputElement>(s)?.value === v,
+			{ timeout: 10_000, polling: 100 },
+			sel(testid),
+			value,
+		),
+		async () =>
+			`${testid} holds ${JSON.stringify(await page.evaluate((s: string) => document.querySelector<HTMLInputElement>(s)?.value ?? null, sel(testid)))}, not ${value}`,
+	)
+}
+
 /** Presses a row on its target, the button that covers the row. A row that can't be imported keeps
  *  its target pressable (it explains itself), so this does not wait for an enabled one. */
 export function pressRow(page: Page, name: string): Promise<void> {

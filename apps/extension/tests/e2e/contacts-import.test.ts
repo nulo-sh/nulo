@@ -42,6 +42,7 @@ import {
 	tabWalk,
 	toastAfter,
 	waitForFocusOn,
+	waitForInputValue,
 	waitForListed,
 	waitForSelected,
 } from "./helpers/contacts-import"
@@ -230,11 +231,7 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		await page.focus(hankEdit)
 		await page.keyboard.press("Enter")
 		await page.waitForSelector(sel("edit-contact-submit"), { visible: true, timeout: 5_000 })
-		await page.waitForFunction(
-			(s: string) => document.querySelector<HTMLInputElement>(s)?.value === "Hank",
-			{ timeout: 10_000, polling: 100 },
-			sel("contact-name-input"),
-		)
+		await waitForInputValue(page, "contact-name-input", "Hank")
 		await replaceInputValue(page, sel("contact-address-input"), ADDR.g)
 		await clickByTestId(page, "edit-contact-submit")
 		await settleClosedPopup(page, "edit-contact-submit")
@@ -248,7 +245,9 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		await page.focus(hankEdit)
 		await page.keyboard.press("Enter")
 		await page.waitForSelector(sel("edit-contact-submit"), { visible: true, timeout: 5_000 })
+		await waitForInputValue(page, "contact-address-input", ADDR.g)
 		await replaceInputValue(page, sel("contact-address-input"), ADDR.a)
+		await waitForInputValue(page, "contact-address-input", ADDR.a)
 		expect(await pressEscape(page)).toBe(true)
 		await settleClosedPopup(page, "edit-contact-submit")
 		await waitForFocusOn(page, hankEdit)
