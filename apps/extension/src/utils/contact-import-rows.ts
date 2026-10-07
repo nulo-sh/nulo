@@ -33,9 +33,13 @@ export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, un
 }
 
 /** A contact name read from a file or a backup: untrusted display text, trimmed on both sides of the
- *  cut as the form saves it. */
+ *  cut as the form saves it. The cut counts UTF-16 units, as the form does, but a letter outside the
+ *  BMP that it would split is dropped whole: half of one is not a character, and the next import
+ *  strips it, so the name would never read back as saved. */
 export function sanitizeImportName(name: string): string {
-	return sanitizeString(name.trim(), IMPORT_NAME_MAX).trim()
+	return sanitizeString(name.trim(), IMPORT_NAME_MAX)
+		.replace(/[\uD800-\uDBFF]$/, "")
+		.trim()
 }
 
 function toImportRow(raw: Record<string, unknown> | null): ImportRow {

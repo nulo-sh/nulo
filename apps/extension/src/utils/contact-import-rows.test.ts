@@ -42,6 +42,16 @@ describe("sanitizeImportName", () => {
 	test("strips what is not a letter, digit, space, hyphen, dot or underscore", () => {
 		expect(sanitizeImportName("‮Alice​!")).toBe("Alice")
 	})
+
+	test("keeps letters of any script; a letter outside the BMP that the cut would split is dropped whole, so the name reads back as saved", () => {
+		expect(sanitizeImportName("Zoë 李雷 Ольга")).toBe("Zoë 李雷 Ольга")
+		// MATHEMATICAL SCRIPT CAPITAL A: one letter, two UTF-16 units.
+		const astral = "\u{1D49C}"
+		expect(sanitizeImportName(`${"A".repeat(23)}${astral}`)).toBe(`${"A".repeat(23)}${astral}`)
+		const cut = sanitizeImportName(`${"A".repeat(24)}${astral}`)
+		expect(cut).toBe("A".repeat(24))
+		expect(sanitizeImportName(cut)).toBe(cut)
+	})
 })
 
 describe("normalizeImportRows", () => {
