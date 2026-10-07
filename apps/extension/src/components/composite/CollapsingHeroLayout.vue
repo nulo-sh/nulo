@@ -247,34 +247,4 @@ onBeforeUnmount(() => {
 	letter-spacing: 0.18em;
 	color: var(--nulo-secondary);
 }
-
-:global(.export_learn_link) {
-	display: inline-block;
-	align-self: flex-start;
-
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-
-	color: var(--nulo-secondary);
-	text-decoration: underline;
-	text-decoration-thickness: 1px;
-	text-underline-offset: 4px;
-
-	transition: color 0.2s var(--bezier);
-}
-
-:global(.export_learn_link:hover) {
-	color: var(--txt-primary);
-}
-
-:global([theme="light"] .export_learn_link) {
-	color: var(--txt-secondary);
-}
-
-:global([theme="light"] .export_learn_link:hover) {
-	color: var(--txt-primary);
-}
 </style>
