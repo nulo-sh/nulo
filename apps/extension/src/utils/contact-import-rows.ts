@@ -154,10 +154,16 @@ export function planImportWrites<T extends ReviewedImportRow>(
 	return { admitted, refused }
 }
 
-function admit(row: ReviewedImportRow, index: SavedContactIndex, taken: TakenKeys): { targetId: string | null } | null {
+/** Whether the row still does what the screen showed: same kind, same saved contact. A conflict never
+ *  does, whatever it was shown as. */
+export function stillAsShown(row: ReviewedImportRow, index: SavedContactIndex): boolean {
 	const { kind, target } = matchSavedContacts(row, index)
-	const targetId = target?.id ?? null
-	if (kind === "conflict" || kind !== row.kind || targetId !== (row.targetId ?? null)) return null
+	return kind !== "conflict" && kind === row.kind && (target?.id ?? null) === (row.targetId ?? null)
+}
+
+function admit(row: ReviewedImportRow, index: SavedContactIndex, taken: TakenKeys): { targetId: string | null } | null {
+	if (!stillAsShown(row, index)) return null
+	const targetId = row.targetId ?? null
 	const name = row.name.trim()
 	const address = row.address.toLowerCase()
 	if (taken.names.has(name) || taken.addresses.has(address) || (targetId && taken.targets.has(targetId))) return null

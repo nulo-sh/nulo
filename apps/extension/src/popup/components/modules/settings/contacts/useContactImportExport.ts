@@ -8,6 +8,7 @@ import {
 	indexSavedContacts,
 	normalizeImportRows,
 	planImportWrites,
+	stillAsShown,
 } from "@/utils/contact-import-rows"
 import { MAX_CONTACT_IMPORT_BYTES, parseContactsExport } from "@/utils/contacts-export-format"
 import type { AccountStateServiceClient } from "@/wallet/services/account-state/client"
@@ -202,9 +203,14 @@ async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise
 	const activeNetworkId = deps.appStore.network?.id ?? null
 
 	// A refused row writes nothing and registers no sender.
-	const errors = refused.map((row) => ({ name: row.name, address: row.address, operation: "import", error: new Error("row refused") }))
-	const tally: ImportTally = { errors, senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
+	const tally: ImportTally = { errors: refused.map(refusal), senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
 	for (const { row, targetId } of admitted) {
+		// The book can change while earlier rows are written (another window), so each row is checked
+		// again against the contacts as they are just before its own write.
+		if (!stillAsShown(row, indexSavedContacts(deps.contacts.value))) {
+			tally.errors.push(refusal(row))
+			continue
+		}
 		const error = await upsertOneContact(deps.contactService, row, targetId)
 		if (error) tally.errors.push(error)
 
@@ -215,6 +221,10 @@ async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise
 		if (row.isSender) await registerSender(deps, tally, activeNetworkId, row.address)
 	}
 	return tally
+}
+
+function refusal(row: SelectedRow): UpsertError {
+	return { name: row.name, address: row.address, operation: "import", error: new Error("row refused") }
 }
 
 async function registerSender(deps: ContactIoDeps, tally: ImportTally, activeNetworkId: string | null, address: string): Promise<void> {

@@ -295,6 +295,19 @@ describe("ImportContactsPopup — confirming", () => {
 		expect(edited.element).toBe(element)
 	})
 
+	test("reopening an edited row's form and closing it without saving keeps the user's choice", async () => {
+		const w = await mountWithStaged(FILE, SAVED)
+		cacheStoreState.importContact = { ...FILE[2], idx: "2", name: "Priya S", updated: true }
+		await nextTick()
+		await target(rowNamed(w, "Priya S")).trigger("click")
+		expect(rowNamed(w, "Priya S").attributes("data-selected")).toBeUndefined()
+
+		await rowNamed(w, "Priya S").find('[data-testid="import-contact-edit"]').trigger("click")
+		await nextTick()
+
+		expect(rowNamed(w, "Priya S").attributes("data-selected")).toBeUndefined()
+	})
+
 	test("the first row (index 0) can be edited too", async () => {
 		const w = await mountWithStaged(FILE, SAVED)
 
@@ -338,6 +351,17 @@ describe("ImportContactsPopup — counted sender banner", () => {
 
 		expect(w.text()).toContain("sender will be registered on")
 		expect(w.text()).not.toContain("senders will be registered on")
+	})
+
+	test("drops a sender once the book changes under its row, as the import would refuse it", async () => {
+		const w = await mountWithStaged([{ name: "Priya Shah", address: ADDR.priya, isSender: true }], SAVED)
+		expect(w.text()).toContain("sender will be registered on")
+
+		const added = contactServiceMock.onContactAdded.add.mock.calls[0][0] as (c: unknown) => void
+		added({ id: "c9", name: "Priya Shah", address: ADDR.priya })
+		await nextTick()
+
+		expect(w.text()).not.toContain("will be registered on")
 	})
 
 	test("no banner when nothing selected would register a sender, a sender-flagged change included", async () => {

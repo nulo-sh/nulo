@@ -63,7 +63,9 @@ const REFUSALS = { invalid: "To select, correct the address first", conflict: "T
 const uid = useId()
 const contacts = ref([])
 const importContacts = ref([])
-const savedIndex = ref(null)
+/** The saved contacts as they are now: an edited row is judged against them, and so is the banner,
+ *  so it never counts a sender the apply step would refuse. Rows already shown keep their decision. */
+const savedIndex = computed(() => indexSavedContacts(contacts.value))
 
 /** Section labels and rows in one keyed list: a row an edit moves to another section keeps its
  *  element, so focus can return to its edit button. */
@@ -81,7 +83,6 @@ const listItems = computed(() =>
 /** Selected contacts flagged `isSender: true` that confirming would write: the banner states the
  *  registrations the import will attempt, never one the apply step refuses. */
 const incomingSenderCount = computed(() => {
-	if (!savedIndex.value) return 0
 	const chosen = importContacts.value.filter((c) => c.selected && c.importable)
 	return planImportWrites(chosen, savedIndex.value).admitted.filter((w) => w.row.isSender).length
 })
@@ -100,7 +101,9 @@ function editDescribedby(c, section) {
 	return ids.join(" ")
 }
 
-function stageRow(row, idx) {
+/** `updated` marks an edit that has just come back; the staged row must not keep it, or reopening the
+ *  edit form and closing it would look like another edit and reset the row's selection. */
+function stageRow({ updated: _edit, ...row }, idx) {
 	const classified = classifyImportRow(row, savedIndex.value)
 	const addressText = classified.kind === "address-change" ? addressChangeText(classified.savedAddress, row.address) : null
 	return { ...row, idx, ...classified, addressText }
@@ -144,7 +147,6 @@ watch(
 	async () => {
 		if (props.show) {
 			contacts.value = await contactService.getContacts()
-			savedIndex.value = indexSavedContacts(contacts.value)
 			importContacts.value = cacheStore.importContacts.map((c, idx) => stageRow(c, String(idx)))
 		} else {
 			cacheStore.importPromise?.reject(false)
@@ -152,8 +154,6 @@ watch(
 			cacheStore.importContacts = []
 
 			contactService.disconnect()
-
-			savedIndex.value = null
 		}
 	},
 )
@@ -256,7 +256,7 @@ watch(
 
 										<Flex
 											:id="`${uid}-${item.row.idx}-detail`"
-											align="center"
+											:align="item.row.addressText?.full ? 'start' : 'center'"
 											gap="6"
 											:class="item.row.addressText?.full && $style.detail_full"
 										>
@@ -412,6 +412,10 @@ watch(
    incoming one. */
 .detail_full {
 	flex-wrap: wrap;
+
+	& .arrow {
+		margin-top: 3px;
+	}
 
 	& .address_saved,
 	& .address_incoming {

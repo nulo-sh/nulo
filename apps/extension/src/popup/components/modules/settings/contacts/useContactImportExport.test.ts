@@ -367,6 +367,35 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
 	})
 
+	test("a row whose saved contact changes while earlier rows are written is refused, sender included", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const contacts = ref([{ id: "c2", name: "Bob", address: ADDR_B }])
+		let release = () => {}
+		contactService.addContact.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)))
+		const api = useContactImportExport({ contacts, contactService, accountStateService } as never)
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Carol", address: ADDR_B, isSender: true },
+			],
+		})
+
+		const done = api.importContacts()
+		await vi.waitFor(() => {
+			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
+		})
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, contacts.value))
+		await vi.waitFor(() => expect(contactService.addContact).toHaveBeenCalled())
+		contacts.value = [{ id: "c2", name: "Bob", address: ADDR_C }]
+		release()
+		await done
+
+		expect(contactService.updateContact).not.toHaveBeenCalled()
+		expect(accountStateService.addSender).not.toHaveBeenCalled()
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
+	})
+
 	test("an edit that makes two new rows share a name or an address adds only the first", async () => {
 		const { contactService, accountStateService } = makeServices()
 		const api = useContactImportExport({ contacts: ref([]), contactService, accountStateService } as never)
