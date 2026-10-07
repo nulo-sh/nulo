@@ -22,7 +22,6 @@ import {
 	replaceInputValue,
 	test,
 	waitForHash,
-	withTimeoutMessage,
 } from "./fixtures/extension"
 import { navigateToSettings } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
@@ -31,7 +30,6 @@ import {
 	closeImportWith,
 	contactsFiles,
 	exportContactsFile,
-	focused,
 	importRow,
 	listedAddress,
 	pickContactsFile,
@@ -43,6 +41,7 @@ import {
 	storedContacts,
 	tabWalk,
 	toastAfter,
+	waitForFocusOn,
 	waitForListed,
 	waitForSelected,
 } from "./helpers/contacts-import"
@@ -241,14 +240,22 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		await settleClosedPopup(page, "edit-contact-submit")
 		await waitForSelected(page, "Hank", true)
 		// The row moved to New and kept its element, so focus is back on the button that opened the edit.
-		await withTimeoutMessage(
-			page.waitForFunction(
-				(s: string) => document.activeElement === document.querySelector(s),
-				{ timeout: 5_000, polling: 100 },
-				hankEdit,
-			),
-			async () => `focus is on ${await focused(page)}, not on Hank's edit button`,
-		)
+		await waitForFocusOn(page, hankEdit)
+
+		// An edit left with Escape closes only the edit, and the row keeps its values and its choice.
+		await pressRow(page, "Hank")
+		await waitForSelected(page, "Hank", false)
+		await page.focus(hankEdit)
+		await page.keyboard.press("Enter")
+		await page.waitForSelector(sel("edit-contact-submit"), { visible: true, timeout: 5_000 })
+		await replaceInputValue(page, sel("contact-address-input"), ADDR.a)
+		expect(await pressEscape(page)).toBe(true)
+		await settleClosedPopup(page, "edit-contact-submit")
+		await waitForFocusOn(page, hankEdit)
+		await page.waitForSelector(sel("import-contacts-submit"), { visible: true, timeout: 5_000 })
+		await waitForSelected(page, "Hank", false)
+		await pressRow(page, "Hank")
+		await waitForSelected(page, "Hank", true)
 
 		expect(await shownRows(page)).toEqual([
 			{ name: "Alice", kind: "address-change", selected: true },

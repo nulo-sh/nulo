@@ -116,6 +116,18 @@ export async function waitForSelected(page: Page, name: string, selected: boolea
 	)
 }
 
+/** Waits until keyboard focus is on the element `selector` finds. */
+export async function waitForFocusOn(page: Page, selector: string): Promise<void> {
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(s: string) => document.activeElement === document.querySelector(s),
+			{ timeout: 5_000, polling: 100 },
+			selector,
+		),
+		async () => `focus is on ${await focused(page)}, not on ${selector}`,
+	)
+}
+
 /** Presses a row on its target, the button that covers the row. A row that can't be imported keeps
  *  its target pressable (it explains itself), so this does not wait for an enabled one. */
 export function pressRow(page: Page, name: string): Promise<void> {
