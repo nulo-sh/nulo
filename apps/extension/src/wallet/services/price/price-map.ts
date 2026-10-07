@@ -32,7 +32,7 @@ const USDT: PriceMapEntry = { coingeckoId: "tether", sanity: USDC.sanity }
 
 const EURC: PriceMapEntry = { coingeckoId: "euro-coin", sanity: USDC.sanity }
 
-/** Fee Juice is priced as AZTEC on every chain (1 FJ = 1 AZTEC, per plan Ask 3). */
+/** Fee Juice is priced as AZTEC on every chain (1 FJ = 1 AZTEC). */
 export const FEE_JUICE_ENTRY: PriceMapEntry = {
 	coingeckoId: "aztec",
 	sanity: { min: 0.000_1, max: 100 },

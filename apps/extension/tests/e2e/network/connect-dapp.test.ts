@@ -13,8 +13,8 @@ const hasConfig = aztecConfig !== undefined
  *   /windows/verify (OK) → playground status pill flips to "connected".
  *
  * This test only assumes the playground reaches "connected" and the wallet
- * popup remains usable on `#/popup/general`. Subsequent PRs add capability
- * grants and per-method tests on top of this fixture.
+ * popup remains usable on `#/popup/general`; the capability-grant and
+ * per-method tests build on the same fixture.
  */
 test.skipIf(!hasConfig)(
 	"connect-handshake — playground reaches connected via discover→verify",

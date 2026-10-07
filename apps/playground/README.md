@@ -59,7 +59,7 @@ Bundles are a playground-only convenience: the wallet itself models capabilities
 
 - `@aztec-labs/wallet-sdk` — discovery + secure-channel client.
 - `@aztec-labs/aztec.js` — types (`FunctionCall`, `Fr`, `AztecAddress`, `ExecutionPayload`).
-- `@alejoamiras/aztec-standards` — Token contract artifact for `sendTx` tests.
+- `@aztec-foundation/aztec-standards` — Token contract artifact for `sendTx` tests.
 - Vite — dev server / build.
 - No UI framework — plain DOM updates keyed off `pg-result` seq.
 
