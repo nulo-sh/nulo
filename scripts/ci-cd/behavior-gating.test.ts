@@ -114,6 +114,19 @@ describe("PR concurrency", () => {
       expect(wf.concurrency?.group, `${file}: concurrency.group`).not.toContain("head_ref")
     }
   })
+
+  // A run cancelled on the head it shares with its successor still runs its `always()` aggregator,
+  // which posts FAILURE there under the required name. A push's first attempt is the only event
+  // that moves the head; a re-run keeps its original event, so it must not cancel either.
+  test("only a push's first attempt cancels a run in flight; every other PR event queues", () => {
+    for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
+      // biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+      const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
+      expect(wf.concurrency?.["cancel-in-progress"], `${file}: concurrency.cancel-in-progress`).toBe(
+        "${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}",
+      )
+    }
+  })
 })
 
 describe("CI behavior-gating guard", () => {
@@ -318,9 +331,10 @@ describe("Firefox lanes", () => {
       "attach-assets": ["smoke-firefox-against-artifact"],
       status: ["smoke-firefox-against-artifact"],
     })
-    // A need the result loop skips would let a red smoke through a green status.
-    expect(jobs.status.steps[0].run).toContain('"${{ needs.smoke-firefox-against-artifact.result }}"')
-    expect(jobs["attach-assets"].if).toContain("!contains(needs.*.result, 'failure')")
+    // A need the aggregator never reads would let a red smoke through a green status; aggregators.test.ts
+    // proves each bound result is checked.
+    expect(Object.values(jobs.status.steps[0].env)).toContain("${{ needs.smoke-firefox-against-artifact.result }}")
+    expect(jobs["attach-assets"].if).toContain("needs.smoke-firefox-against-artifact.result == 'success'")
   })
 
   test("nightly's Firefox network jobs mirror its Chrome ones", () => {

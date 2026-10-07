@@ -9,7 +9,10 @@ on:
 
 concurrency:
   group: pr-extension-smoke-e2e-firefox-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only a push's first attempt cancels the run in flight. Any other event, and any re-run,
+  # queues behind it: a run cancelled on its own head leaves a FAILURE aggregator there
+  # (CI.md, "Concurrency").
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}
 
 permissions:
   contents: read
