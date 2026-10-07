@@ -167,6 +167,16 @@ describe("importContacts — per-row order and early exits", () => {
 		],
 		["no rows in the file", () => fileWith({ version: 2, contacts: [] }), "No contacts found in file"],
 		[
+			"a format this wallet does not know",
+			() => fileWith({ version: 3, contacts: twoSenders.contacts }),
+			"Error occurred during import",
+		],
+		[
+			"no row with a usable name and address",
+			() => fileWith([1, "x", null, [], { name: ["A"], address: { x: 1 } }, { address: ADDR_A }]),
+			"No contacts found in file",
+		],
+		[
 			"read threw",
 			() =>
 				pickFileMock.mockResolvedValueOnce({
@@ -182,6 +192,7 @@ describe("importContacts — per-row order and early exits", () => {
 		cacheStoreState.importContacts = ["stale-staging"]
 		arrange()
 		await api().importContacts()
+		expect(popupOpenMock).not.toHaveBeenCalled()
 		expect(cacheStoreState.importContacts).toEqual([])
 		expect(cacheStoreState.importPromise).toBeNull()
 		if (toast) expect(openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)).toContain(toast)

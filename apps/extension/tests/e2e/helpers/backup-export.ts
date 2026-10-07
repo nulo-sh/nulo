@@ -9,7 +9,8 @@
  * Two-phase on purpose: `armBackupDownloadCapture` BEFORE clicking the
  * download CTA, `readCapturedBackupDownload` after. The captured string is
  * the decompressed file content — parsed JSON for a plain backup, the base64
- * ciphertext for an encrypted one.
+ * ciphertext for an encrypted one. `{ gzip: false }` captures a download the
+ * wallet writes uncompressed (the contacts export) as it was written.
  */
 import { createHash } from "node:crypto"
 import type { Page } from "puppeteer"
@@ -20,8 +21,8 @@ import { navigateByHash } from "../fixtures/helpers"
 /** A plain (unencrypted) full backup as the export writes it. */
 export type PlainBackup = { checksum?: string; data: Record<string, unknown> } & Record<string, unknown>
 
-export async function armBackupDownloadCapture(page: Page): Promise<void> {
-	await page.evaluate(() => {
+export async function armBackupDownloadCapture(page: Page, { gzip = true }: { gzip?: boolean } = {}): Promise<void> {
+	await page.evaluate((gunzip: boolean) => {
 		const w = window as unknown as { __backupCapture?: Promise<string> }
 		w.__backupCapture = new Promise<string>((resolve, reject) => {
 			const timer = setTimeout(() => reject(new Error("backup download was not captured within 30s")), 30_000)
@@ -35,8 +36,9 @@ export async function armBackupDownloadCapture(page: Page): Promise<void> {
 					fetch(opts.url)
 						.then((r) => r.blob())
 						.then(async (blob) => {
-							const ds = new DecompressionStream("gzip")
-							const text = await new Response(blob.stream().pipeThrough(ds)).text()
+							const text = gunzip
+								? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text()
+								: await blob.text()
 							clearTimeout(timer)
 							resolve(text)
 							cb(1)
@@ -50,7 +52,7 @@ export async function armBackupDownloadCapture(page: Page): Promise<void> {
 		})
 		// Swallow the (test-only) unhandled rejection if the click never fires.
 		w.__backupCapture.catch(() => {})
-	})
+	}, gzip)
 }
 
 export async function readCapturedBackupDownload(page: Page): Promise<string> {

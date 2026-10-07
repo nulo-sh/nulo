@@ -312,16 +312,18 @@ describe("ContactService (port-migrated)", () => {
 			// written by a `restore` that skipped parse-before-write and then KEPT-but-hidden by
 			// EntityStorage.decodeRow — codec-hidden private data that survives a
 			// later cleanup's getValues(). Parse-before-write records it instead.
-			const bad = [{ id: "bad-1", profileId: "p1", name: 123, address: "0xa", abbr: "AL" }] as unknown as Parameters<
-				typeof contactService.restore
-			>[0]
+			// A string name passes the sanitizer, so only the schema parse can stop this row.
+			const rows = [
+				{ id: "bad-1", profileId: profileA.id, name: "Ali", address: 123, abbr: "AL" },
+				{ id: "good-1", profileId: profileA.id, name: "Bob", address: "0xb", abbr: "BO" },
+			] as unknown as Parameters<typeof contactService.restore>[0]
 
-			const restored = await contactService.restore(bad)
-			expect(restored).toHaveLength(1)
-			expect(restored[0].restoreError).toBeDefined()
+			const restored = await contactService.restore(rows)
+			expect(restored.map((r) => typeof r.restoreError)).toEqual(["string", "undefined"])
 
 			const raw = await api.storage.local.get(null)
 			expect(Object.keys(raw).some((k) => k.includes("bad-1"))).toBe(false)
+			expect((await contactService.getContacts()).map((c) => c.name)).toEqual(["Bob"])
 		})
 	})
 

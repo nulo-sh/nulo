@@ -8,6 +8,7 @@ import {
 	planImportWrites,
 	sanitizeImportName,
 } from "./contact-import-rows"
+import { parseContactsExport } from "./contacts-export-format"
 
 // Wire-shaped: 0x + 64 hex, each the x coordinate of a Grumpkin point.
 const ADDR = {
@@ -19,6 +20,7 @@ const ADDR = {
 }
 // 0x + 64 hex that is not on the curve.
 const OFF_CURVE = "0x0895f3902a26c15e2f159778cd7848cf9048fce777ee8f41dc90a9fe6b50fc09"
+const upper = (address: string) => `0x${address.slice(2).toUpperCase()}`
 
 const SAVED = [
 	{ id: "c1", name: "Alice", address: ADDR.alice },
@@ -80,6 +82,26 @@ describe("normalizeImportRows", () => {
 			{ name: "Other", address: ADDR.alice },
 		])
 		expect(rows.map((r) => r.name)).toEqual(["Alice", "alice"])
+	})
+
+	test("a file of malformed, padded and colliding rows, as the parser reads it, becomes exactly these rows", () => {
+		const raw = `[
+			{ "name": "", "address": "${ADDR.priya}" },
+			{ "name": "   ", "address": "${ADDR.priya}" },
+			{ "name": "  Bartholomew Featherstones  ", "address": "${upper(ADDR.alice)}", "isSender": "true", "extra": { "deep": 1 } },
+			{ "name": "Bartholomew Featherstonesyz", "address": "${ADDR.tom}" },
+			{ "name": "Zoë 李雷 Ольга", "address": "${ADDR.tom}" },
+			{ "name": "\\u202eEve\\u200b", "address": "${ADDR.marco}", "isSender": true },
+			{ "name": "Fay", "address": "${ADDR.alice}" },
+			{ "name": "Gus", "address": "${ADDR.fresh}", "name": "Gil" },
+			{ "name": "Gil", "address": "${ADDR.priya}" }
+		]`
+		expect(normalizeImportRows(parseContactsExport(raw).contacts)).toEqual([
+			{ name: "Bartholomew Featherstones", address: ADDR.alice, isSender: false },
+			{ name: "Zoë 李雷 Ольга", address: ADDR.tom, isSender: false },
+			{ name: "Eve", address: ADDR.marco, isSender: true },
+			{ name: "Gil", address: ADDR.fresh, isSender: false },
+		])
 	})
 
 	test("a row dropped for one key does not reserve its other key", () => {

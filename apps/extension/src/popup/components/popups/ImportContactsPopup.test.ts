@@ -121,6 +121,27 @@ const rowNamed = (w: VueWrapper, text: string) => {
 	return row
 }
 const target = (row: ReturnType<typeof rowNamed>) => row.find("[data-row-target]")
+/** Opens a row in the edit form through its own edit button, then writes back what the form saves in
+ *  import mode: the staged row, changed, marked `updated`. */
+async function saveEdit(w: VueWrapper, rowText: string, change: Record<string, unknown>) {
+	await rowNamed(w, rowText).find('[data-testid="import-contact-edit"]').trigger("click")
+	cacheStoreState.importContact = { ...(cacheStoreState.importContact as Record<string, unknown>), ...change, updated: true }
+	await nextTick()
+}
+/** The words of the elements an ARIA id list points at, in order. Each text node is its own piece:
+ *  the row's parts are flex items, which a browser reads apart. */
+const textOf = (w: VueWrapper, ids: string | undefined) =>
+	(ids ?? "")
+		.split(" ")
+		.flatMap((id) => {
+			const walker = document.createTreeWalker(w.find(`[id="${id}"]`).element, NodeFilter.SHOW_TEXT)
+			const pieces: string[] = []
+			for (let node = walker.nextNode(); node; node = walker.nextNode()) pieces.push(node.textContent ?? "")
+			return pieces
+		})
+		.join(" ")
+		.replace(/\s+/g, " ")
+		.trim()
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -245,6 +266,26 @@ describe("ImportContactsPopup — keyboard and assistive semantics", () => {
 		expect(marco.attributes("data-selected")).toBe("true")
 	})
 
+	test("each row is named by what it shows, in reading order, with the arrow hidden; each edit button is described by its row", async () => {
+		const w = await mountWithStaged(FILE, SAVED)
+		const named = (text: string) => textOf(w, target(rowNamed(w, text)).attributes("aria-labelledby"))
+		expect(named("Marco Rossi")).toBe(`Marco Rossi ${trim(ADDR.marcoSaved)} changes to ${trim(ADDR.marcoFile)}`)
+		expect(named("Jonathan")).toBe(`Jon changes to Jonathan ${trim(ADDR.jon)}`)
+		expect(named("Priya Shah")).toBe(`Priya Shah ${trim(ADDR.priya)}`)
+		expect(named("Sam Ortiz")).toBe(`Sam Ortiz ${trim(ADDR.sam)} sender`)
+		expect(named("Lena Fischer")).toBe(`Lena Fischer ${trim(OFF_CURVE)} Invalid address`)
+		expect(named("Hana")).toBe(`Hana ${trim(ADDR.ivo)} Matches two saved contacts`)
+
+		const arrows = w.findAll('i[name="arrow-right"]')
+		expect(arrows.length).toBeGreaterThan(0)
+		expect(arrows.every((a) => a.attributes("aria-hidden") === "true")).toBe(true)
+
+		const edit = (text: string) => rowNamed(w, text).find('[data-testid="import-contact-edit"]')
+		expect(edit("Jonathan").attributes("aria-label")).toBe("Edit contact")
+		expect(textOf(w, edit("Jonathan").attributes("aria-describedby"))).toBe("Jon changes to Jonathan Name changes 1")
+		expect(textOf(w, edit("Hana").attributes("aria-describedby"))).toBe("Hana Can't be imported 2 Matches two saved contacts")
+	})
+
 	test("edit opens the row in the edit form without toggling it", async () => {
 		const w = await mountWithStaged(FILE, SAVED)
 		const priya = rowNamed(w, "Priya Shah")
@@ -286,8 +327,7 @@ describe("ImportContactsPopup — confirming", () => {
 		expect(before.attributes("data-row-kind")).toBe("address-change")
 		const element = before.element
 
-		cacheStoreState.importContact = { ...FILE[1], idx: "1", kind: "address-change", selected: false, name: "Marco R", updated: true }
-		await nextTick()
+		await saveEdit(w, "Marco Rossi", { name: "Marco R" })
 
 		const edited = rowNamed(w, "Marco R")
 		expect(edited.attributes("data-row-kind")).toBe("new")
@@ -297,8 +337,7 @@ describe("ImportContactsPopup — confirming", () => {
 
 	test("reopening an edited row's form and closing it without saving keeps the user's choice", async () => {
 		const w = await mountWithStaged(FILE, SAVED)
-		cacheStoreState.importContact = { ...FILE[2], idx: "2", name: "Priya S", updated: true }
-		await nextTick()
+		await saveEdit(w, "Priya Shah", { name: "Priya S" })
 		await target(rowNamed(w, "Priya S")).trigger("click")
 		expect(rowNamed(w, "Priya S").attributes("data-selected")).toBeUndefined()
 
@@ -311,10 +350,25 @@ describe("ImportContactsPopup — confirming", () => {
 	test("the first row (index 0) can be edited too", async () => {
 		const w = await mountWithStaged(FILE, SAVED)
 
-		cacheStoreState.importContact = { ...FILE[0], idx: "0", name: "Alicia", updated: true }
-		await nextTick()
+		await saveEdit(w, trim(ADDR.aliceFile), { name: "Alicia" })
 
 		expect(rowNamed(w, "Alicia").attributes("data-row-kind")).toBe("new")
+	})
+})
+
+describe("ImportContactsPopup — leaving without importing", () => {
+	test("Cancel, and closing the popup any other way, reject the selection and never hand back a row", async () => {
+		const w = await mountWithStaged(FILE, SAVED)
+		await w.find('[data-testid="import-contacts-cancel"]').trigger("click")
+		expect(cacheStoreState.importPromise?.reject).toHaveBeenCalled()
+		expect(cacheStoreState.importPromise?.resolve).not.toHaveBeenCalled()
+		expect(w.emitted("onClose")).toHaveLength(1)
+
+		cacheStoreState.importPromise = { resolve: vi.fn(), reject: vi.fn() }
+		await w.setProps({ show: false })
+		await flushPromises()
+		expect(cacheStoreState.importPromise.reject).toHaveBeenCalled()
+		expect(cacheStoreState.importPromise.resolve).not.toHaveBeenCalled()
 	})
 })
 

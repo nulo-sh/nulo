@@ -11,10 +11,20 @@
  * attempts' contacts/senders still present — file-scoped constants turn
  * every retry into a duplicate-validation wall.
  */
-import { expect, inject } from "vitest"
+import { afterAll, expect, inject } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { addContact, closeStuckPopup, navigateByHash, navigateToSettings, waitForToast } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import {
+	closeImportWith,
+	contactsFiles,
+	exportContactsFile,
+	listedAsSender,
+	pickContactsFile,
+	refuseTestnet,
+	senderLine,
+	toastAfter,
+} from "../helpers/contacts-import"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -172,5 +182,52 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 10_000,
 		})
+	},
+)
+
+const files = contactsFiles()
+afterAll(files.cleanup)
+
+test.skipIf(!hasConfig)(
+	"a sender row imported from a contacts file registers on the active network: its chip lights, Senders lists it, and the export marks it",
+	{ timeout: 180_000 },
+	async ({ localNetworkExtension }) => {
+		const sender = await freshIdentity("Imp")
+		const plain = await freshIdentity("Pln")
+		// The export asks every network for its senders; Testnet must not answer from the public endpoint.
+		const refusal = await refuseTestnet(localNetworkExtension)
+		try {
+			const page = await openPopup(localNetworkExtension)
+			await waitForHash(page, "#/popup/general")
+			await gotoContacts(page)
+
+			await pickContactsFile(page, files.write({ version: 2, contacts: [{ ...sender, isSender: true }, plain] }))
+			expect(await senderLine(page)).toBe("1 sender will be registered on Local Network.")
+			await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Contacts imported · 1 sender registered")
+			await page.waitForSelector(
+				`[data-testid="contact-row"][data-contact-name="${sender.name}"] [data-testid="contact-sender-chip"]`,
+				{
+					visible: true,
+					timeout: 10_000,
+				},
+			)
+			expect(await listedAsSender(page, plain.name)).toBe(false)
+
+			await gotoSenders(page)
+			await page.waitForSelector(`[data-testid="sender-row"][data-sender-address="${sender.address}"]`, {
+				visible: true,
+				timeout: 10_000,
+			})
+			expect(await page.$(`[data-testid="sender-row"][data-sender-address="${plain.address}"]`)).toBeNull()
+
+			await gotoContacts(page)
+			const exported = JSON.parse(await exportContactsFile(page)) as { contacts: Array<{ address: string; isSender: boolean }> }
+			const flag = (address: string) => exported.contacts.find((c) => c.address === address)?.isSender
+			expect(flag(sender.address)).toBe(true)
+			expect(flag(plain.address)).toBe(false)
+			expect(await refusal.failures()).toEqual([])
+		} finally {
+			await refusal.stop()
+		}
 	},
 )
