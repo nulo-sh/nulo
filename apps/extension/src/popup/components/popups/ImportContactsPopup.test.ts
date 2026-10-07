@@ -318,6 +318,27 @@ describe("ImportContactsPopup — confirming", () => {
 	})
 })
 
+describe("ImportContactsPopup — reopening", () => {
+	test("a reopened popup shows and confirms only the new file's rows, never the last file's while the book loads", async () => {
+		const w = await mountWithStaged([FILE[2]], SAVED)
+		await w.setProps({ show: false })
+		await flushPromises()
+		let release: (saved: unknown[]) => void = () => {}
+		contactServiceMock.getContacts.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+		cacheStoreState.importContacts = [{ ...FILE[4] }]
+		cacheStoreState.importPromise = { resolve: vi.fn(), reject: vi.fn() }
+
+		await w.setProps({ show: true })
+		expect(rows(w)).toEqual([])
+		await w.find('[data-testid="import-contacts-submit"]').trigger("click")
+		expect(cacheStoreState.importPromise.resolve).toHaveBeenCalledWith([])
+
+		release(SAVED)
+		await flushPromises()
+		expect(rows(w).map((r) => r.attributes("data-contact-name"))).toEqual(["Sam Ortiz"])
+	})
+})
+
 describe("ImportContactsPopup — counted sender banner", () => {
 	test("states the exact number of senders that will be registered", async () => {
 		const w = await mountWithStaged([

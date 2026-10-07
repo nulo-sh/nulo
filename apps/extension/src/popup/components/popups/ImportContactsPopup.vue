@@ -152,6 +152,9 @@ watch(
 			cacheStore.importPromise?.reject(false)
 			cacheStore.importContact = null
 			cacheStore.importContacts = []
+			// The next file's rows arrive only after its book read, so until then the popup must not
+			// show, or confirm, this file's.
+			importContacts.value = []
 
 			contactService.disconnect()
 		}
