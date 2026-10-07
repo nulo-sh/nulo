@@ -405,6 +405,26 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
 	})
 
+	test("senders register on the network active at confirmation, even if it changes while the book is read", async () => {
+		const { contactService, accountStateService } = makeServices()
+		let release = (_: unknown[]) => {}
+		contactService.getContacts.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+		const api = useContactImportExport({ contacts: ref([]), contactService, accountStateService } as never)
+		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A, isSender: true }] })
+
+		const done = api.importContacts()
+		await vi.waitFor(() => {
+			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
+		})
+		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
+		await vi.waitFor(() => expect(contactService.getContacts).toHaveBeenCalled())
+		appStoreState.network = { id: "net-2", name: "Mainnet" }
+		release([])
+		await done
+
+		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A)
+	})
+
 	test("a book that cannot be read writes nothing", async () => {
 		const { contactService, accountStateService } = makeServices()
 		contactService.getContacts.mockRejectedValue(new Error("port closed"))

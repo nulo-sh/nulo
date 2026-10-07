@@ -195,15 +195,15 @@ function openImportSelection(
  *  on the active network. It never deletes or migrates registrations — those live in
  *  Settings → Advanced → Senders. */
 async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise<ImportTally> {
+	// Snapshot active network ONCE, before the first await, so it is the network the confirmed banner
+	// named and a swap mid-loop can't split sender registrations across chains. Null-safe: if no
+	// network is selected, isSender:true rows produce a per-row sender failure.
+	const activeNetworkId = deps.appStore.network?.id ?? null
+
 	// The book is read from the service each time, never from the page's list: that copy refreshes
 	// asynchronously and keeps its last state when a refresh fails. A failed read aborts the import.
 	const book = async () => indexSavedContacts(await deps.contactService.getContacts())
 	const { admitted, refused } = planImportWrites(res, await book())
-
-	// Snapshot active network ONCE so a network swap mid-loop can't split
-	// sender registrations across chains. Null-safe: if no network is
-	// selected, isSender:true rows produce a per-row sender failure.
-	const activeNetworkId = deps.appStore.network?.id ?? null
 
 	// A refused row writes nothing and registers no sender.
 	const tally: ImportTally = { errors: refused.map(refusal), senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
