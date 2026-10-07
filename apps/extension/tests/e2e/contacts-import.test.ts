@@ -15,7 +15,6 @@ import { isValidAztecAddress } from "@/utils/aztec-address"
 import { trimAddress } from "@/utils/string"
 import {
 	clickByTestId,
-	clickSelector,
 	type ExtensionContext,
 	launchExtension,
 	openPopup,
@@ -23,6 +22,7 @@ import {
 	replaceInputValue,
 	test,
 	waitForHash,
+	withTimeoutMessage,
 } from "./fixtures/extension"
 import { navigateToSettings } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
@@ -31,6 +31,7 @@ import {
 	closeImportWith,
 	contactsFiles,
 	exportContactsFile,
+	focused,
 	importRow,
 	listedAddress,
 	pickContactsFile,
@@ -225,10 +226,13 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		await toastAfter(page, () => pressRow(page, "Frank"), "To select, correct the address first")
 		await toastAfter(page, () => pressRow(page, "Dave"), "This contact matches two saved contacts")
 
-		await clickSelector(page, `${importRow("Hank")} ${sel("import-contact-edit")}`)
+		// Opened from the keyboard, so the edit popup has a control to hand focus back to.
+		const hankEdit = `${importRow("Hank")} ${sel("import-contact-edit")}`
+		await page.focus(hankEdit)
+		await page.keyboard.press("Enter")
 		await page.waitForSelector(sel("edit-contact-submit"), { visible: true, timeout: 5_000 })
 		await page.waitForFunction(
-			(s: string) => [...document.querySelectorAll<HTMLInputElement>(`${s} input`)].some((i) => i.value === "Hank"),
+			(s: string) => document.querySelector<HTMLInputElement>(s)?.value === "Hank",
 			{ timeout: 10_000, polling: 100 },
 			sel("contact-name-input"),
 		)
@@ -236,6 +240,15 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		await clickByTestId(page, "edit-contact-submit")
 		await settleClosedPopup(page, "edit-contact-submit")
 		await waitForSelected(page, "Hank", true)
+		// The row moved to New and kept its element, so focus is back on the button that opened the edit.
+		await withTimeoutMessage(
+			page.waitForFunction(
+				(s: string) => document.activeElement === document.querySelector(s),
+				{ timeout: 5_000, polling: 100 },
+				hankEdit,
+			),
+			async () => `focus is on ${await focused(page)}, not on Hank's edit button`,
+		)
 
 		expect(await shownRows(page)).toEqual([
 			{ name: "Alice", kind: "address-change", selected: true },

@@ -298,6 +298,26 @@ describe("useContactImportExport — export", () => {
 		expect(payload.contacts[0]).toEqual({ name: "Legacy", address: mixedCase, isSender: true })
 	})
 
+	test("names the file after the active profile, and a download that fails says so instead of reporting success", async () => {
+		const { contactService, accountStateService } = makeServices()
+		accountStateService.getSendersAcrossActiveNetworks.mockResolvedValue([])
+		const { downloadFile } = await import("@/utils")
+		const api = useContactImportExport({
+			contacts: ref([{ id: "c1", name: "A", address: ADDR_A }]),
+			contactService,
+			accountStateService,
+		} as never)
+
+		await api.exportContacts()
+		expect(vi.mocked(downloadFile).mock.calls.at(-1)?.[0]).toMatchObject({ filename: "p_contacts.json" })
+		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "success", label: "Contacts exported successfully" })
+
+		openToastMock.mockClear()
+		vi.mocked(downloadFile).mockRejectedValueOnce(new Error("Download canceled by the user"))
+		await api.exportContacts()
+		expect(openToastMock.mock.calls).toEqual([[{ kind: "error", label: "Failed to export contacts" }]])
+	})
+
 	test("isSender flags come from the cross-network sender union", async () => {
 		const { contactService, accountStateService } = makeServices()
 		accountStateService.getSendersAcrossActiveNetworks.mockResolvedValue([ADDR_A])

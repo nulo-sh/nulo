@@ -312,7 +312,9 @@ describe("import composition — what the screen showed chosen is what is writte
 		const { contacts } = await startWallet()
 		await contacts.addContact("Alice", ADDR.a)
 		await contacts.addContact("Bob", ADDR.b)
-		const [alice, bob] = await contacts.getContacts()
+		const saved = await contacts.getContacts()
+		const named = (name: string) => saved.find((c) => c.name === name) as Contact
+		const [alice, bob] = [named("Alice"), named("Bob")]
 		const page = openContactsPage(contacts)
 
 		const { done } = await pick(

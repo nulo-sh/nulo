@@ -357,7 +357,7 @@ describe("ImportContactsPopup — confirming", () => {
 })
 
 describe("ImportContactsPopup — leaving without importing", () => {
-	test("Cancel, and closing the popup any other way, reject the selection and never hand back a row", async () => {
+	test("Cancel, and the popup being closed from outside, reject the selection and never hand back a row", async () => {
 		const w = await mountWithStaged(FILE, SAVED)
 		await w.find('[data-testid="import-contacts-cancel"]').trigger("click")
 		expect(cacheStoreState.importPromise?.reject).toHaveBeenCalled()

@@ -128,30 +128,49 @@ export async function closeImportWith(page: Page, testid: "import-contacts-submi
 	await settleClosedPopup(page, "import-contacts-submit")
 }
 
-/** Runs `act` and waits for a toast reading `text` that was not on screen before it. */
-export async function toastAfter(page: Page, act: () => Promise<void>, text: string): Promise<void> {
+type ToastLog = { titles: string[]; observer: MutationObserver }
+
+/** Runs `act` and waits for a toast reading `text` that was not on screen before it. Toasts are
+ *  recorded from before `act` starts, so one that has already left by the time `act` returns (a
+ *  success toast lasts six seconds) still counts. */
+export async function toastAfter(page: Page, act: () => Promise<void>, text: string, timeout = 15_000): Promise<void> {
 	await page.evaluate((s: string) => {
+		const w = window as unknown as { __e2eToastLog?: ToastLog }
+		w.__e2eToastLog?.observer.disconnect()
 		for (const card of document.querySelectorAll(s)) card.setAttribute("data-e2e-seen", "")
+		const titles: string[] = []
+		const record = () => {
+			for (const card of document.querySelectorAll(`${s}:not([data-e2e-seen])`)) {
+				const title = card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? ""
+				if (!titles.includes(title)) titles.push(title)
+			}
+		}
+		const observer = new MutationObserver(record)
+		observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+		w.__e2eToastLog = { titles, observer }
 	}, sel("snackbar"))
-	await act()
-	await withTimeoutMessage(
-		page.waitForFunction(
-			(s: string, t: string) =>
-				[...document.querySelectorAll(`${s}:not([data-e2e-seen])`)].some((card) =>
-					(card.querySelector('[data-testid="snackbar-title"]')?.textContent ?? "").includes(t),
-				),
-			{ timeout: 15_000, polling: 100 },
-			sel("snackbar"),
-			text,
-		),
-		async () => {
-			const shown = await page.evaluate(
-				(s: string) => [...document.querySelectorAll(s)].map((c) => c.textContent?.trim()),
-				sel("snackbar"),
-			)
-			return `no new toast reading "${text}"; on screen: ${JSON.stringify(shown)}`
-		},
-	)
+	try {
+		await act()
+		await withTimeoutMessage(
+			page.waitForFunction(
+				(t: string) => (window as unknown as { __e2eToastLog?: ToastLog }).__e2eToastLog?.titles.some((title) => title.includes(t)),
+				{ timeout, polling: 100 },
+				text,
+			),
+			async () => {
+				const seen = await page.evaluate(() => (window as unknown as { __e2eToastLog?: ToastLog }).__e2eToastLog?.titles)
+				return `no new toast reading "${text}"; new toasts: ${JSON.stringify(seen)}`
+			},
+		)
+	} finally {
+		await page
+			.evaluate(() => {
+				const w = window as unknown as { __e2eToastLog?: ToastLog }
+				w.__e2eToastLog?.observer.disconnect()
+				w.__e2eToastLog = undefined
+			})
+			.catch(() => {})
+	}
 }
 
 export type StoredContact = { id: string; profileId: string; name: string; address: string; abbr: string }

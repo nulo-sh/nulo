@@ -203,7 +203,8 @@ test.skipIf(!hasConfig)(
 
 			await pickContactsFile(page, files.write({ version: 2, contacts: [{ ...sender, isSender: true }, plain] }))
 			expect(await senderLine(page)).toBe("1 sender will be registered on Local Network.")
-			await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Contacts imported · 1 sender registered")
+			// Registration waits on the local node.
+			await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Contacts imported · 1 sender registered", 60_000)
 			await page.waitForSelector(
 				`[data-testid="contact-row"][data-contact-name="${sender.name}"] [data-testid="contact-sender-chip"]`,
 				{

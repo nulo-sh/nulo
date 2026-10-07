@@ -30,7 +30,7 @@ const addressModel = defineModel("address", { type: String, default: "" })
 		sanitize
 		:maxLength="25"
 		v-model="nameModel"
-		data-testid="contact-name-input"
+		inputTestid="contact-name-input"
 	>
 		<template #right>
 			<Transition name="fade">
@@ -47,7 +47,7 @@ const addressModel = defineModel("address", { type: String, default: "" })
 		placeholder="0x15c4ac6afcffdf59aa8a1fb3317ff0c86aee3eb02f9e52c3612e1163d4701446"
 		sanitize
 		v-model="addressModel"
-		data-testid="contact-address-input"
+		inputTestid="contact-address-input"
 	>
 		<template #right>
 			<Transition name="fade">
