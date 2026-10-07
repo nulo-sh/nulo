@@ -31,5 +31,4 @@ definePassthroughsExhaustive<Methods>()(ContactServiceClient.prototype, [
 	"updateContact",
 	"deleteContact",
 	"exportContacts",
-	"importContacts",
 ])

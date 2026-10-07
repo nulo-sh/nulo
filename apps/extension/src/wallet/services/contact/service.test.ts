@@ -190,30 +190,20 @@ describe("ContactService (port-migrated)", () => {
 		})
 	})
 
-	describe("import/export", () => {
-		test("exports and reimports round-trip", async () => {
+	describe("export", () => {
+		test("exports every contact's name and address", async () => {
 			await contactService.addContact("Alice", "0xaaaa")
 			await contactService.addContact("Bob", "0xbbbb")
-			const json = await contactService.exportContacts()
 
-			// Wipe and reimport into a fresh profile's context.
-			profile.setActiveProfile(profileB)
-			const restored = await contactService.importContacts(json)
+			const exported = JSON.parse(await contactService.exportContacts())
 
-			expect(restored).toHaveLength(2)
-			const all = await contactService.getContacts()
-			expect(all.map((c) => c.name).sort()).toEqual(["Alice", "Bob"])
-		})
-
-		test("import merges duplicate addresses by updating the existing entry", async () => {
-			const original = await contactService.addContact("Alice", "0xsame")
-			const json = JSON.stringify([{ name: "Alicia", address: "0xsame" }])
-			await contactService.importContacts(json)
-
-			const all = await contactService.getContacts()
-			expect(all).toHaveLength(1)
-			expect(all[0].id).toBe(original.id)
-			expect(all[0].name).toBe("Alicia")
+			expect(exported).toHaveLength(2)
+			expect(exported).toEqual(
+				expect.arrayContaining([
+					{ name: "Alice", address: "0xaaaa" },
+					{ name: "Bob", address: "0xbbbb" },
+				]),
+			)
 		})
 	})
 

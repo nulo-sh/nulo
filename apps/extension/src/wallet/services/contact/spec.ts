@@ -74,12 +74,6 @@ export type Methods = {
 	 * Export all existing contacts to json.
 	 */
 	exportContacts(): string
-
-	/**
-	 * Import contacts from JSON.
-	 * @param data Contact list in JSON format.
-	 */
-	importContacts(data: string): Contact[]
 }
 
 export type Events = {
