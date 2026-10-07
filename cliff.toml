@@ -1,5 +1,7 @@
 # git-cliff config — release notes for @nulo/extension.
 # Scoped via `--include-path` in the workflow; filters out other packages.
+# A version containing "-" (rc, nightly) is a prerelease, as in release.yml's resolve step. The
+# stores carry only stable releases, so only a stable release's notes link to them.
 
 [changelog]
 header = ""
@@ -9,17 +11,33 @@ body = """
 {% set v = version | trim_start_matches(pat="v") -%}
 ## {{ v }}
 
-### Install (developer preview)
+{% if v is containing("-") -%}
+### Install (prerelease)
+
+This build is a prerelease and is not on the stores. The stores carry the latest stable release.
 
 1. Download `nulo-chrome-{{ v }}.zip` from the assets below.
-2. Unzip locally.
-3. Open `chrome://extensions` and toggle **Developer mode** (top-right).
-4. Click **Load unpacked** and select the unzipped folder.
+2. Unzip it.
+3. Open `chrome://extensions` and turn on Developer mode.
+4. Click Load unpacked and select the unzipped folder.
 
 Verify: `shasum -a 256 -c SHASUMS256.txt`
 
-Firefox build is also attached but unsigned — a signed install path will land in a later release.
+The Firefox zip is unsigned. Load it from `about:debugging` as a temporary add-on.
 
+{% else -%}
+### Install
+
+- Chrome: [Chrome Web Store](https://chromewebstore.google.com/detail/jlmiaokmjoicmclelpiiocdhncddkdmc)
+- Firefox: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/3077967/)
+
+The stores review each version, so they can trail this release by a few days.
+
+### Verify or load by hand
+
+The zips below are the same builds. Verify them with `shasum -a 256 -c SHASUMS256.txt`. To load the Chrome zip by hand, unzip it, open `chrome://extensions`, turn on Developer mode and click Load unpacked. The Firefox zip is unsigned; the signed build comes from Firefox Add-ons.
+
+{% endif -%}
 ---
 {% else -%}
 ## Unreleased

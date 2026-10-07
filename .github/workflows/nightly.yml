@@ -529,8 +529,8 @@ jobs:
       - name: Compose release body
         run: |
           # The cliff output already carries its own `## <version>` heading and
-          # the install block (cliff.toml emits both whenever --tag is passed),
-          # so this header stays minimal to avoid duplicating them.
+          # the prerelease install block (cliff.toml emits both for a tag with a
+          # "-"), so this header stays minimal to avoid duplicating them.
           {
             echo "Automated developer preview built from \`dev\` @ \`${SHA:0:7}\` on $(date -u +%Y-%m-%d)."
             echo ""
