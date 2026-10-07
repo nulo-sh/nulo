@@ -344,6 +344,48 @@ describe("import composition — what the screen showed chosen is what is writte
 	})
 })
 
+describe("import composition — one name, whatever its case, spacing or invisible characters", () => {
+	test("rows matching saved names that way are Already saved or address changes that keep the saved spelling; a repeat in the file is dropped; a look-alike letter is a new name", async () => {
+		const { contacts } = await startWallet()
+		for (const [name, address] of [
+			["Alice", ADDR.a],
+			["Bob Stone", ADDR.b],
+			["Carol", ADDR.c],
+			["Dave", ADDR.d],
+		]) {
+			await contacts.addContact(name, address)
+		}
+		const aliceId = (await contacts.getContacts()).find((c) => c.name === "Alice")?.id
+		const page = openContactsPage(contacts)
+
+		const { done } = await pick(
+			page,
+			fileOf([
+				{ name: "ALICE", address: ADDR.a },
+				{ name: "Bob   Stone ", address: ADDR.e },
+				{ name: "Car\u3164ol\u200B", address: ADDR.c },
+				{ name: "dave\u3164", address: ADDR.f },
+				{ name: "alice", address: ADDR.g },
+				{ name: "\u0410lice", address: ADDR.h },
+			]),
+		)
+		expect(shown(page.popup)).toEqual([
+			{ name: "Bob Stone", kind: "address-change", selected: false },
+			{ name: "dave", kind: "address-change", selected: false },
+			{ name: "\u0410lice", kind: "new", selected: true },
+			{ name: "ALICE", kind: "unchanged", selected: false },
+			{ name: "Carol", kind: "unchanged", selected: false },
+		])
+		await press(page.popup, "Bob Stone")
+		await press(page.popup, "dave")
+		await press(page.popup, "ALICE")
+
+		expect(await confirm(page, done)).toBe("Import completed successfully")
+		expect(await book(contacts)).toEqual({ Alice: ADDR.a, "Bob Stone": ADDR.e, Carol: ADDR.c, Dave: ADDR.f, "\u0410lice": ADDR.h })
+		expect((await contacts.getContacts()).find((c) => c.name === "Alice")?.id).toBe(aliceId)
+	})
+})
+
 // ── Round trips ──────────────────────────────────────────────────────
 
 describe("import composition — the released contacts file", () => {

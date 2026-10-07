@@ -274,6 +274,7 @@
     "computeMaxFee": true,
     "computed": true,
     "confirmationPolicies": true,
+    "contactNameKey": true,
     "copyFor": true,
     "copyToClipboard": true,
     "copyWithToast": true,

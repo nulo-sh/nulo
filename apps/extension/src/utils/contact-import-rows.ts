@@ -15,7 +15,8 @@ type StagedRow = { name: string; address: string }
  * Minimal rows from a parsed file. Never spread the hostile input object: extra properties would
  * ride into staging and storage. A non-string field becomes "" and drops its row alone. Addresses
  * are lowercased, as the wallet emits them. A row survives only if no row kept before it has its
- * name or its address, so the screen never shows two rows that would write the same contact.
+ * name (by `contactNameKey`) or its address, so the screen never shows two rows that would write the
+ * same contact.
  */
 export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, unknown> | null>): ImportRow[] {
 	const names = new Set<string>()
@@ -24,22 +25,50 @@ export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, un
 	for (const raw of rawContacts) {
 		const row = toImportRow(raw)
 		if (!row.name || !row.address.trim()) continue
-		if (names.has(row.name) || addresses.has(row.address)) continue
-		names.add(row.name)
+		const name = contactNameKey(row.name)
+		if (names.has(name) || addresses.has(row.address)) continue
+		names.add(name)
 		addresses.add(row.address)
 		rows.push(row)
 	}
 	return rows
 }
 
+const INVISIBLE = /\p{Default_Ignorable_Code_Point}/gu
+const WHITESPACE_RUN = /\p{White_Space}+/gu
+
 /** A contact name read from a file or a backup: untrusted display text, trimmed on both sides of the
- *  cut as the form saves it. The cut counts UTF-16 units, as the form does, but a letter outside the
- *  BMP that it would split is dropped whole: half of one is not a character, and the next import
- *  strips it, so the name would never read back as saved. */
+ *  cut as the form saves it. Invisible characters are removed and every whitespace run becomes one
+ *  space before the filter and the cut, so none of them is stored or costs a character, and a word
+ *  break the filter would delete stays a space. Visible letters and their case are kept. The cut
+ *  counts UTF-16 units, as the form does, but a letter outside the BMP that it would split is
+ *  dropped whole: half of one is not a character, and the next import strips it, so the name would
+ *  never read back as saved. */
 export function sanitizeImportName(name: string): string {
-	return sanitizeString(name.trim(), IMPORT_NAME_MAX)
+	const visible = name.replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ")
+	return sanitizeString(visible.trim(), IMPORT_NAME_MAX)
 		.replace(/[\uD800-\uDBFF]$/, "")
 		.trim()
+}
+
+/** Case folding for matching: per code point, lower, upper, lower. It puts exactly the code points
+ *  Unicode default case folding treats as one letter in one class (ß, ss and ẞ; σ and ς), though it
+ *  may name the class differently (Cherokee folds to lowercase here). The round trip would also join
+ *  dotless ı to i, which default folding keeps apart, so ı is left as it is. */
+function foldCase(s: string): string {
+	let folded = ""
+	for (const c of s) folded += c === "\u0131" ? c : c.toLowerCase().toUpperCase().toLowerCase()
+	return folded
+}
+
+/**
+ * The key two contact names are the same name by: no invisible characters, compatibility forms
+ * (NFKC), case folded, whitespace runs as one space, trimmed. Letters that only look alike across
+ * scripts (Cyrillic А, Latin A) keep different keys. Invisible characters go first so one between a
+ * letter and its accent cannot stop NFKC composing them; NFKC and folding never produce one.
+ */
+export function contactNameKey(name: string): string {
+	return foldCase(name.replace(INVISIBLE, "").normalize("NFKC")).replace(WHITESPACE_RUN, " ").trim()
 }
 
 function toImportRow(raw: Record<string, unknown> | null): ImportRow {
@@ -57,13 +86,13 @@ export interface SavedContactIndex {
 	byAddress: Map<string, SavedContact[]>
 }
 
-/** Names key trimmed and case-sensitive (`sameContactName`), addresses lowercase. Lists, not single
- *  entries: older data can hold two saved contacts under one trimmed name or one address. */
+/** Names key by `contactNameKey`, addresses lowercase. Lists, not single entries: older data can hold
+ *  two saved contacts under one name key or one address. */
 export function indexSavedContacts(saved: readonly SavedContact[]): SavedContactIndex {
 	const byName = new Map<string, SavedContact[]>()
 	const byAddress = new Map<string, SavedContact[]>()
 	for (const c of saved) {
-		append(byName, c.name.trim(), c)
+		append(byName, contactNameKey(c.name), c)
 		append(byAddress, c.address.toLowerCase(), c)
 	}
 	return { byName, byAddress }
@@ -86,7 +115,7 @@ export interface ContactMatch {
 /** What a row does to the saved contacts, judged over every saved contact it matches by name or by
  *  address: more than one is a conflict, which no write may resolve by picking one. */
 export function matchSavedContacts(row: StagedRow, index: SavedContactIndex): ContactMatch {
-	const byName = index.byName.get(row.name.trim()) ?? []
+	const byName = index.byName.get(contactNameKey(row.name)) ?? []
 	const byAddress = index.byAddress.get(row.address.toLowerCase()) ?? []
 	const matched = new Map([...byName, ...byAddress].map((c) => [c.id, c]))
 	if (matched.size > 1) return { kind: "conflict", target: null }
@@ -176,7 +205,7 @@ export function stillAsShown(row: ReviewedImportRow, index: SavedContactIndex): 
 function admit(row: ReviewedImportRow, index: SavedContactIndex, taken: TakenKeys): { targetId: string | null } | null {
 	if (!stillAsShown(row, index)) return null
 	const targetId = row.targetId ?? null
-	const name = row.name.trim()
+	const name = contactNameKey(row.name)
 	const address = row.address.toLowerCase()
 	if (taken.names.has(name) || taken.addresses.has(address) || (targetId && taken.targets.has(targetId))) return null
 	taken.names.add(name)

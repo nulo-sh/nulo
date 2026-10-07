@@ -293,6 +293,13 @@ describe("ContactService (port-migrated)", () => {
 			expect(restored.map((c) => c.name)).toEqual([full, full])
 		})
 
+		test("restore removes invisible characters from a name and keeps its visible spelling, like the import", async () => {
+			await contactService.addContact("Alice", "0xa")
+			const [genuine] = await contactService.backup()
+			const restored = await contactService.restore([{ ...genuine, id: "c-inv", name: "\u3164ALI\u200Bce\u00A0Smith\uFFA0 " }])
+			expect(restored.map((c) => c.name)).toEqual(["ALIce Smith"])
+		})
+
 		test("a failed item stores the normalized error MESSAGE string, not the raw error", async () => {
 			// Like every other service, contact normalizes the error through
 			// `toRestoreError`, so a failed restore carries the message STRING,
