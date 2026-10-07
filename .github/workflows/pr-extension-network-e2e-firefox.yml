@@ -95,14 +95,10 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
-          DRAFT: ${{ github.event.pull_request.draft }}
           NETWORK: ${{ needs.changes.outputs.extension-network }}
           LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:extension-network') || contains(github.event.pull_request.labels.*.name, 'e2e:network') }}
         run: |
-          # A draft has nothing to say to this lane, and its aggregator passes when skipped; `ready_for_review` re-runs it.
-          if [ "$DRAFT" = "true" ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          elif [ "$EVENT" = "workflow_dispatch" ] \
+          if [ "$EVENT" = "workflow_dispatch" ] \
              || [ "$BASE" = "main" ] \
              || [ "$LABEL_HIT" = "true" ] \
              || [ "$NETWORK" = "true" ]; then

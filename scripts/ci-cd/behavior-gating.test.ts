@@ -65,6 +65,13 @@ function assertGraphCovered(patterns: string[], target: string, label: string) {
   }
 }
 
+/** A script's lines that run — comments cannot test a result or decide a gate. */
+const commandLines = (run: unknown): string[] =>
+  String(run ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+
 const FILTER_WORKFLOWS = [
   "pr-quick.yml",
   "pr-extension-smoke-e2e.yml",
@@ -285,17 +292,37 @@ describe("Firefox lanes", () => {
     }
   })
 
-  test("the Firefox PR lanes hold no write scope and skip drafts", () => {
-    for (const { firefox } of TWINS) {
-      const wf = workflow(firefox)
+  // A lane's aggregator passes when its gate skips the suites, so a twin whose gate skips where its
+  // Chrome lane runs passes a head its Firefox suites never ran on.
+  test("the Firefox PR lanes hold no write scope, and trigger and decide exactly like their Chrome twins", () => {
+    type Decide = { steps: { run?: string }[] }
+    const runnable = (job: Decide) => ({ ...job, steps: job.steps.map((step) => ({ ...step, run: commandLines(step.run) })) })
+    for (const { chrome, firefox } of TWINS) {
+      const [chromeWf, wf] = [workflow(chrome), workflow(firefox)]
       expect(wf.permissions, firefox).toEqual({ contents: "read" })
       for (const [name, job] of Object.entries(wf.jobs) as [string, { permissions?: unknown }][]) {
         const want = name === "changes" ? { contents: "read", "pull-requests": "read" } : undefined
         expect(job.permissions, `${firefox} → ${name}`).toEqual(want)
       }
-      const gate = wf.jobs.decide.steps[0]
-      expect(gate.run, `${firefox}: decide`).toContain('if [ "$DRAFT" = "true" ]')
-      expect(gate.env.DRAFT, `${firefox}: the gate reads the PR's real draft flag`).toBe("${{ github.event.pull_request.draft }}")
+      expect(wf.on, `${firefox} triggers`).toEqual(chromeWf.on)
+      expect(runnable(wf.jobs.decide), `${firefox} → decide`).toEqual(runnable(chromeWf.jobs.decide))
+    }
+  })
+
+  /** Every key and string the runner evaluates or executes: names, descriptions and shell comments aside. */
+  const evaluated = (node: unknown, key = ""): string[] => {
+    if (typeof node === "string") return key === "name" || key === "description" ? [] : key === "run" ? commandLines(node) : [node]
+    if (Array.isArray(node)) return node.flatMap((item) => evaluated(item))
+    if (typeof node !== "object" || node === null) return []
+    return Object.entries(node).flatMap(([k, v]) => [k, ...evaluated(v, k)])
+  }
+
+  // A draft runs every e2e lane as the same PR ready would: a gate that skipped it would pass the
+  // draft, and once marked ready the PR would merge on that pass while its suites still ran.
+  test("no PR e2e lane reads the draft flag", () => {
+    for (const file of TWINS.flatMap(({ chrome, firefox }) => [chrome, firefox])) {
+      const reads = evaluated(workflow(file)).filter((text) => /draft/i.test(text))
+      expect(reads, file).toEqual([])
     }
   })
 
@@ -494,13 +521,6 @@ describe("canary lanes", () => {
       }
     }
   })
-
-  /** A script's lines that run — comments cannot test a result. */
-  const commandLines = (run: unknown): string[] =>
-    String(run ?? "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith("#"))
 
   /** The jobs an aggregator's script actually tests: the operands of its `for r in …; do` lists and of
    *  its direct `[ "${{ needs.x.result }}" …` checks — an echo or a comment naming a result does not count. */

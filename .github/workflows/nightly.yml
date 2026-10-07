@@ -3,11 +3,12 @@ name: nightly
 # Nightly prerelease of the extension from `dev`, published to GitHub Releases
 # so people can install the current state of dev without a maintainer hand-off.
 #
-# This is the repo's ONLY scheduled workflow. GitHub runs schedules from the
-# workflow file on the DEFAULT branch, which is `dev` — the trigger is inert on
-# feature branches (where only the workflow_dispatch input works), and becomes
-# live the moment this file merges to dev. Scheduled starts can be delayed by
-# GitHub during peak load; that is expected and harmless here.
+# One of the repo's two scheduled workflows (source-rebuild.yml runs weekly).
+# GitHub runs schedules from the workflow file on the DEFAULT branch, which is
+# `dev` — the trigger is inert on feature branches (where only the
+# workflow_dispatch input works), and becomes live the moment this file merges
+# to dev. Scheduled starts can be delayed by GitHub during peak load; that is
+# expected and harmless here.
 #
 # Flow:
 #   1. resolve pins origin/dev HEAD and derives tag + version (see below).
@@ -32,9 +33,9 @@ name: nightly
 #   The PR network gate forces retry 0 so app flakes surface honestly. A
 #   nightly wants the opposite trade: absorb flakes, ship when the suite
 #   passes within its normal retry budget. So the network calls below OMIT
-#   the `retry` input (config default = 2 attempts) and keep the reusable
-#   workflow's built-in exit-86 infra-boot retry. Smoke has retry 2 baked
-#   into its vitest config already.
+#   the `retry` input (config default = 2 retries, 3 attempts) and keep
+#   the reusable workflow's built-in exit-86 infra-boot retry. Smoke has
+#   retry 2 baked into its vitest config already.
 
 on:
   schedule:
@@ -190,7 +191,7 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
       shard: ${{ matrix.shard.id }}
       shard_label: ${{ matrix.shard.label }}
-      # No `retry` input → config default (2 attempts). See header, flake policy.
+      # No `retry` input → config default (2 retries, 3 attempts). See header, flake policy.
       exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
       proverless: true
     secrets:

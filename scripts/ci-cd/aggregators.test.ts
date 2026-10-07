@@ -1,7 +1,8 @@
 /**
  * Behavioral pin for the aggregators outside the e2e lanes: `quality-status` (pr-quick.yml),
- * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard; and
- * for the sharded PR smoke lanes' `extension-smoke-e2e-status` and its Firefox twin.
+ * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard; for the
+ * sharded PR smoke lanes' `extension-smoke-e2e-status` and its Firefox twin; and, for every PR e2e
+ * lane, that a draft whose diff touches the lane's surface gets its suites run, not skipped.
  *
  * Each must fail closed: pass only when every need ended exactly as its own `if:` asks, so a gate
  * that never ran (skipped for the wrong reason, cancelled before a runner, an empty result) reds
@@ -12,7 +13,8 @@
  * Wired into CI via the root `test:ci-gating` script in `_unit-tests.yml`.
  */
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..", "..")
@@ -63,14 +65,14 @@ function expressionOf(file: string, key: string, value: string): string {
 
 /**
  * Run the script as the runner does: each inline `${{ }}` replaced by its value first, then `bash -e`
- * with an environment of only `PATH` and the bound `env:`.
+ * with an environment of only `PATH`, `extra` and the bound `env:`.
  */
-function exitCode(agg: Aggregator, world: World): number {
+function exitCode(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}): number {
   const valueOf = (expression: string): string => {
     if (!(expression in world)) throw new Error(`${agg.file}: no world value for ${expression}`)
     return world[expression]
   }
-  const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" }
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", ...extra }
   for (const [key, value] of Object.entries(agg.env)) env[key] = valueOf(expressionOf(agg.file, key, value))
   const script = agg.run.replace(/\$\{\{ (.+?) \}\}/g, (_, expression: string) => valueOf(expression))
   return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { env, stdout: "ignore", stderr: "ignore" }).exitCode
@@ -305,4 +307,47 @@ test("release's attach-assets publishes only past gates that all ended as asked,
     .map((clause) => clause.trim())
   const expected = ["always()", "!cancelled()", ...needs.map((need) => (need === "network-e2e" ? "NETWORK" : `needs.${need}.result == 'success'`))]
   expect(clauses.sort()).toEqual(expected.sort())
+})
+
+// A required aggregator passes when its gate skipped the suites. A gate that skipped a draft would
+// pass it, and once marked ready the PR would merge on that pass while its suites still ran. So each
+// lane's whole `Decide` step runs here bound to a draft whose diff touches its surface: it must ask
+// for the suites, and the aggregator must then fail on them skipped. A draft-flag read spelled any
+// other way than the one this world binds has no value here, and throws.
+const E2E_LANES = [
+  { file: "pr-extension-smoke-e2e.yml", surface: "smoke-surface", label: "smoke" },
+  { file: "pr-extension-smoke-e2e-firefox.yml", surface: "smoke-surface", label: "smoke" },
+  { file: "pr-extension-network-e2e.yml", surface: "extension-network", label: "network" },
+  { file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network", label: "network" },
+]
+const labels = (label: string): string =>
+  `contains(github.event.pull_request.labels.*.name, 'e2e:extension-${label}') || contains(github.event.pull_request.labels.*.name, 'e2e:${label}')`
+
+/** What a lane's `Decide` step writes to `$GITHUB_OUTPUT`. */
+function decided(file: string, world: World): string {
+  const step = workflow(file).jobs.decide.steps[0]
+  const dir = mkdtempSync(join(tmpdir(), "decide-"))
+  try {
+    const output = join(dir, "output")
+    expect(exitCode({ file, run: step.run, env: step.env ?? {} }, world, { GITHUB_OUTPUT: output }), `${file}: decide`).toBe(0)
+    return readFileSync(output, "utf8").trim()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface, label }) => {
+  const draft: World = {
+    "github.event_name": "pull_request",
+    "github.base_ref": "dev",
+    "github.event.pull_request.draft": "true",
+    [`needs.changes.outputs.${surface}`]: "true",
+    [labels(label)]: "false",
+  }
+  expect(decided(file, draft)).toBe("run=true")
+  const agg = aggregator(file)
+  const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
+  const ran = { "needs.decide.outputs.run": "true", ...results(agg.needs, []) }
+  expect(exitCode(agg, ran)).toBe(0)
+  expect(exitCode(agg, { ...ran, ...results(suites, suites) })).not.toBe(0)
 })
