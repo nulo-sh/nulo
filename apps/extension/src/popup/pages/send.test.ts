@@ -217,7 +217,6 @@ async function mountSend(opts: { errorHandler?: (error: unknown) => void; realTo
 		global: {
 			plugins: [pinia],
 			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
-			mocks: { getChainName: () => "Test" },
 			config: opts.errorHandler ? { errorHandler: opts.errorHandler } : {},
 		},
 	})
@@ -430,6 +429,17 @@ describe("send page — the submit tail", () => {
 		await fillForm(w)
 		w.unmount()
 		expect(mocks.executionDisconnect).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("send page — the asset section", () => {
+	test("renders its label without a render error and names no network", async () => {
+		const errors: unknown[] = []
+		const { w } = await mountSend({ errorHandler: (error) => errors.push(error) })
+		expect(errors).toEqual([])
+		expect(w.text()).toContain("Select Asset")
+		expect(w.text()).not.toContain("Network:")
+		w.unmount()
 	})
 })
 

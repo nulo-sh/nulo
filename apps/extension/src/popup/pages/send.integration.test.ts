@@ -239,7 +239,6 @@ async function mountSend(funding: Funding, opts: { storage?: Record<string, unkn
 		global: {
 			plugins: [pinia],
 			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
-			mocks: { getChainName: () => "Test" },
 		},
 	})
 	await flushPromises()
