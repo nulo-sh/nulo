@@ -122,7 +122,7 @@ Each finding and its resolution:
 4. **The earlier-green window exists for opt-in labels too, not only Firefox drafts.** Adopted: both are named under Residuals, and the plan claims fail-closed aggregators, not closed windows.
 5. **The release state machine was promised, not specified, and empty outputs could excuse a skipped store upload.** Adopted: the table above, and validation of `release_created`, `unstuck`, `is_prerelease` and `on_main`.
 6. **Cancellation must fail the release status.** Adopted in substance: a stage cancelled, or skipped by `!cancelled()` where it was due, already fails the exact check, and the test covers both; no separate cancel rule was added.
-7. **The test proves shell comparisons, not orchestration.** Partly adopted: an independent jobs inventory, malformed-output worlds and a clause-by-clause guard pin were added. Rejected: a hosted concurrency rehearsal before merge, since it would queue full e2e lanes on the PR for evidence the first labelled PR after merge gives for free.
+7. **The test proves shell comparisons, not how GitHub schedules the jobs.** Partly adopted: an independent jobs inventory, malformed-output worlds and a clause-by-clause guard pin were added. Rejected: a live concurrency trial on GitHub before merge, since it would queue full e2e lanes on the PR for evidence the first labelled PR after merge gives for free.
 8. **The cost was understated.** Adopted: Cost now counts runner occupancy and states that pending replacement bounds the backlog, not the total.
 9. **Close-out and nightly wording.** Adopted.
 
@@ -135,3 +135,5 @@ Round 1, approve with changes; each finding was adopted:
 3. A `continue-on-error` on the aggregator, or an `if:` on its step, would hide a red script from the tests: both are now pinned absent.
 4. The residual's remedy overclaimed: live PR state fixes the stale decision, but no job can stop an out-of-order push's cancel. Residuals now say so.
 5. The review's provenance does not belong in the record: the headings now name the audits only.
+
+Round 2, approve: no new material findings; the plans gate, the CI-gating tests and actionlint passed.
