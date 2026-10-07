@@ -142,6 +142,8 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **Slow-prove tests**: `tx-sendTx-default`, `multi-account-from` and `tx-sendTx-multicall` run on CI even though the WASM kernel-prove tail can exceed puppeteer's 300s `protocolTimeout` on slow runners: those tests and the `tx-sendTx-{noFrom,feePayer,sponsoredFpc}` siblings assert on the wallet's journal `proving` stage via `waitForSendTxActiveStage()` instead of waiting on the dApp's full sendTx promise. See `implementations-plan/archive/journal-stage-restructure/`.
 
+**Smoke shards**: both PR smoke lanes (`pr-extension-smoke-e2e*.yml`) run the smoke suite as a 3-shard matrix, split by the same SHA-1 rule, because a whole Firefox run neared its 30-minute job limit. `bun run test:e2e --shard=2/3` reproduces one shard; a failing shard's logs upload as `smoke-e2e-logs[-firefox]-<N>-of-3`. The nightly and release smokes of the built zips stay unsharded.
+
 **Known limitation: cold-shard rotation.** Each shard starts with a fresh anvil + aztec + playground + Chrome + extension. The FIRST capability-popup-driven test in shard 1 (whichever file the SHA-1 sharder puts first) pays a cold-SW penalty — `chrome.windows.create` + bb.js init + PXE warmup can push that test past its budget. Quarantining the offender just exposes the next file as the new "first" victim. The structural fix is a fixture-level warm-up tap or pre-grant-capability fixture, which is not built yet. Single-shard re-runs (or local repro via `--shard=N/5`) usually pass green once the SW is warm; `extension-network-e2e-status` is a required check on `dev` and `main`, so a cold-shard red is re-run, never neutralized.
 
 ## Troubleshooting

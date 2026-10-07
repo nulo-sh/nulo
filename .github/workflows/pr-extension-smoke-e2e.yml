@@ -122,12 +122,25 @@ jobs:
   # the quality lane's `Build / vite build (chrome)`; the RELEASE chain still smokes the real
   # artifact (prod-shaped by design - its chain-adjacent legs are the known queued follow-up).
   smoke:
-    name: Run
+    name: Run / shard ${{ matrix.shard.id }}
     needs: [decide]
     if: needs.decide.outputs.run == 'true'
+    strategy:
+      # Every shard reports, so one red shard never hides another's result.
+      fail-fast: false
+      matrix:
+        # Three shards keep the slowest one under half the 30-minute limit on Firefox, whose whole
+        # run reaches ~26m on a slow runner. Vitest assigns files by the SHA-1 of their path, so
+        # the split is fixed, and uneven. `label` is `id` without the `/` upload-artifact rejects.
+        shard:
+          - { id: "1/3", label: "1-of-3" }
+          - { id: "2/3", label: "2-of-3" }
+          - { id: "3/3", label: "3-of-3" }
     uses: ./.github/workflows/_extension-smoke-e2e.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      shard: ${{ matrix.shard.id }}
+      shard_label: ${{ matrix.shard.label }}
 
   status:
     name: extension-smoke-e2e-status
