@@ -53,7 +53,7 @@ Ordinary comment-only edits (`//` and `/** */`) to a published source file leave
 1. **Test.** `test:release`. It runs `@aztec-labs/*` code, so it makes no bytes.
 2. **Pack.** A frozen install with no shared cache and no lifecycle scripts, then stage, pack and check the digests. It runs no test code.
 3. **Publish.** The only job with `id-token: write`. It runs in the `npm-publish` environment, which needs the owner's approval, refuses any version but `0.1.0` until `0.1.0` is on npm, and publishes each tarball with `npm publish --provenance` through npm trusted publishing. No npm token exists anywhere.
-4. **Verify.** Runs `verify-provenance.sh` on each tarball, which requires the registry's provenance to be signed by this workflow on `dev` or `main` and to name these bytes, then runs `npm audit signatures`. A re-run that found a version already published is verified the same way.
+4. **Verify.** First waits, for up to 15 minutes, until the registry's document lists every version and every tarball URL answers 200: a fresh version can take minutes to reach the registry's CDN, which caches the document for up to five minutes. Past that bound it fails; re-run the job once the registry catches up. Then it runs `verify-provenance.sh` on each tarball, which requires the registry's provenance to be signed by this workflow on `dev` or `main` and to name these bytes, then runs `npm audit signatures`. A re-run that found a version already published is verified the same way.
 
 `publish` and `verify` download `pack`'s artifact by its ID and check every tarball against the sha256 list `pack` outputs: `test` runs beside `pack` with the same artifact token, and could otherwise replace a named artifact.
 
