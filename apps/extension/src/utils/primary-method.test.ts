@@ -72,12 +72,12 @@ describe("pickPrimaryMethod — empty / degenerate inputs", () => {
 	})
 })
 
-describe("pickPrimaryMethod — drip regression (the bug this PR fixes)", () => {
+describe("pickPrimaryMethod — drip regression (sponsor call ahead of the user's call)", () => {
 	// Drip shape: wallet-injected sponsor call sits at index 0, the
-	// user's actual call sits at index 1. Pre-fix, the journal title was
-	// derived via .find(c => c.method ?? c.name) which returned the first
-	// item → the user saw "Sponsored unconditionally" while proving, then
-	// the settled card flipped to the real call name.
+	// user's actual call sits at index 1. A journal title taken from the first
+	// named item (.find(c => c.method ?? c.name)) reads "Sponsored
+	// unconditionally" while proving, then the settled card flips to the real
+	// call name.
 	test("name-shape: [sponsor, drip] → drip_to_private", () => {
 		expect(pickPrimaryMethod([{ name: "sponsor_unconditionally" }, { name: "drip_to_private" }])).toBe("drip_to_private")
 	})
@@ -114,10 +114,8 @@ describe("pickPrimaryMethod — mint heuristic (preserved from getPrimaryCall)",
 })
 
 describe("pickPrimaryMethod — fee-only edge case (BUG PIN)", () => {
-	// Pre-existing behavior of getPrimaryCall: when every call is a FEE_METHOD,
-	// it returned the first one. Preserving verbatim during the extraction —
-	// changing this is a separate behavior-change PR, not part of the shared-
-	// helper unification. Pinning so a future "fix" is a deliberate decision.
+	// When every call is a FEE_METHOD, the first one is returned verbatim, as
+	// getPrimaryCall does. Pinned so a future "fix" is a deliberate decision.
 	test("(BUG PIN) [sponsor, pay_fee] → sponsor_unconditionally", () => {
 		expect(pickPrimaryMethod([{ method: "sponsor_unconditionally" }, { method: "pay_fee" }])).toBe("sponsor_unconditionally")
 	})

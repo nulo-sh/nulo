@@ -1,6 +1,6 @@
 /**
  * Delete → import matrix, SAME browser session — the regression surface of the
- * PXE incarnation-fence deadlock (fix: aztec-runtime service.ts, this PR).
+ * PXE incarnation-fence deadlock (the fence: `packages/aztec-runtime/src/pxe/service.ts`).
  *
  * The gap this closes: the backup-restore e2es exercise delete → re-import,
  * but their re-import lands in a FRESH extension context — a fresh offscreen
@@ -16,12 +16,11 @@
  * tombstone-collision leg. Restore is the flow that PRESERVES the profileId
  * (profile/service.ts restore: keeps the backup's id while it's free — and a
  * just-deleted id is free — while minting a fresh pxeGeneration; a plain
- * secret import mints a RANDOM id and can never collide, verified empirically
- * by this test's first draft). (B) a DIFFERENT plain secret — the fresh-id
- * clean-successor leg. Both legs prove post-import PXE health with the two op
- * families the bug killed: a READ (the gas card renders an FJ amount, never
- * the failed-read em-dash) and a WRITE (token import registers the contract
- * and toasts).
+ * secret import mints a RANDOM id and can never collide). (B) a DIFFERENT
+ * plain secret — the fresh-id clean-successor leg. Both legs prove post-import
+ * PXE health with the two op families the bug killed: a READ (the gas card
+ * renders an FJ amount, never the failed-read em-dash) and a WRITE (token
+ * import registers the contract and toasts).
  */
 import { rmSync } from "node:fs"
 import { dirname } from "node:path"

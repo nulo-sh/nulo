@@ -6,7 +6,7 @@ const MERGE = "abc123def456abc123def456abc123def456abcd"
 
 /** A genuine stuck Release PR: merged into main, carries the autorelease:pending label. */
 function releasePr(overrides: Partial<MergedPrRef> = {}): MergedPrRef {
-	return { number: 145, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE, ...overrides }
+	return { number: 7, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE, ...overrides }
 }
 
 interface Calls {
@@ -96,7 +96,7 @@ describe("runUnstick — the unstick itself", () => {
 		expect(r.performed).toBe(true)
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toEqual([{ tag: "v0.24.0", sha: MERGE, message: "Release 0.24.0" }])
-		expect(calls.relabelPr).toEqual([{ prNumber: 145, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
+		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
 		expect(calls.ensureRelease).toEqual([{ tag: "v0.24.0", prerelease: false }])
 	})
 
@@ -109,7 +109,7 @@ describe("runUnstick — the unstick itself", () => {
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toHaveLength(0)
 		expect(calls.ensureRelease).toEqual([{ tag: "v0.24.0", prerelease: false }])
-		expect(calls.relabelPr).toEqual([{ prNumber: 145, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
+		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
 	})
 
 	test("tag exists but points at the WRONG SHA → abort, exit 1, no tag write", async () => {

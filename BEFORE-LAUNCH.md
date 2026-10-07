@@ -37,13 +37,15 @@ before any funding, revenue or entity. If the trader path applies, Chrome displa
 and phone number publicly, and no clause can waive that.
 
 The store dashboards are filled from `apps/extension/store/listing.md` (one source for both stores;
-`scripts/store-listing.test.ts` holds it to the manifests and to the privacy policy). Before the
-first submission the privacy page must have lost its DRAFT banner, which takes two things: every
-`«FILL»` in § 1 above is filled (a reviewer who opens `nulo.sh/privacy` reads them), **and the
-privacy policy's effective date is set to the planned submission day** — the banner stays while
-any placeholder survives, and the date is one. Set it in the three places tests hold together:
+`apps/extension/scripts/store-listing.test.ts` holds it to the manifests and to the privacy
+policy). Before the first submission the privacy page must have lost its DRAFT banner, which takes
+two things: every `«FILL»` in § 1 above is filled (a reviewer who opens `nulo.sh/privacy` reads
+them), **and the privacy policy's effective date is set to the planned submission day** — the
+banner stays while any placeholder survives, and the date is one. Set it in three places, two in
+`legal/privacy.md` (tests hold the version line to the manifest, not the history row's date):
 
-- [x] `legal/privacy.md` — the version line at the top, and the 1.0 row of the history table
+- [x] `legal/privacy.md` — the version line at the top (1.0's now lives in
+      `legal/archive/privacy-1.0.md`), and the 1.0 row of the history table
 - [x] `packages/legal/src/manifest.ts` — `effective` for `privacy` 1.0
 
 The Terms' listing URLs were filled once both first submissions existed. Their
@@ -61,12 +63,13 @@ loading remote scripts".
 ## 3. The day v1.0.0 ships — in the `release: promote dev → main` PR that carries it
 
 The Terms' **effective date** is the date the 1.0 listing goes live (privacy 1.0's is already set,
-§ 2). It appears in three places that tests hold in agreement, so change them
-together:
+§ 2). It appears in three places, two in `legal/terms.md` (tests hold the version line to the
+manifest, not the history row's date), so change them together:
 
 - [ ] `legal/terms.md` — the version line at the top, and the 1.0 row of the history table
 - [ ] `packages/legal/src/manifest.ts` — `effective` for `terms` 1.0 (currently `null`)
-- [ ] `legal/privacy.md` + its manifest entries — 1.0 already dated, confirm unchanged; 1.1 per § 4
+- [ ] `legal/privacy.md` + its manifest entries — 1.0 and 1.1 already dated, confirm unchanged;
+      1.1.1 per § 4
 
 Then:
 

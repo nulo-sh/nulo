@@ -1,12 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 /**
- * Pure helper that simulates a batch of view-shaped calls. Extracted from the
- * former `ExecutionService.executeSimulateViews` so it can be unit-tested in
- * isolation and called directly by internal consumers (balance projector,
- * gas-balance read) without going through the operation-dispatch path.
- *
- * The historical Nulo-custom `simulate_views` op kind was retired;
- * this helper is the structurally-equivalent replacement.
+ * Pure helper that simulates a batch of view-shaped calls. Internal consumers
+ * (balance projector, gas-balance read, token service) call it directly, never
+ * through the operation-dispatch path, and it is unit-tested in isolation.
  *
  * ## Four concurrency arms
  *
@@ -38,7 +34,7 @@
  * route hideMsgSender calls through the slow arm to preserve the
  * caller-supplied flag honor.
  *
- * ## Concurrency invariants (preserved verbatim from pre-extraction)
+ * ## Concurrency invariants
  *
  *   - PUBLIC + PRIVATE tx-typed calls on the slow arm: one
  *     `ExecutionPayload`, one `pxe.simulateTx`, kernel splits internally.
@@ -77,8 +73,8 @@
  * Post-dispatch failures (after both arms have launched in parallel):
  *   - **`SimulationError`** from `simulateViaNode` (real contract revert):
  *     **propagate**. Replaying through PXE produces the same error 3-5s
- *     later. Launched utility promises are left un-awaited — matches
- *     pre-PR behavior for any throw before the utility-await loop.
+ *     later. Launched utility promises are left un-awaited, as for any
+ *     other throw before the utility-await loop.
  *   - **Generic `Error`** from `simulateViaNode` (network blip, RPC
  *     mismatch, etc.): WARN-log + **full rerun** through standard
  *     `pxe.simulateTx` over `allTxCalls` (leadingFast ++ slow). Utility
@@ -390,8 +386,8 @@ function renumberSlotIndices(txCalls: ClassifiedTx[]): TxTuple[] {
 
 /** Fast-arm settle arbitration: fulfilled → results; `SimulationError` → throw
  *  (real revert from a public-static call — same outcome the slow path would
- *  produce; utility queue left un-awaited, matching pre-extraction behavior
- *  for any throw before the utility-await loop); any other rejection → null,
+ *  produce; utility queue left un-awaited, as for any other throw before the
+ *  utility-await loop); any other rejection → null,
  *  meaning infra failure (network blip, RPC mismatch, malformed node response)
  *  and the caller reruns everything through the standard path. Pre-dispatch
  *  failures (anchor missing / completeFeeOptions throw) are handled in
@@ -509,8 +505,8 @@ async function awaitUtilityResults(
 }
 
 /** Standard arm: bundle slow tuples into one ExecutionPayload and dispatch via
- *  `pxe.simulateTx({ simulatePublic: true })`. The opts are byte-equivalent
- *  to pre-PR behavior. */
+ *  `pxe.simulateTx({ simulatePublic: true })`. Its opts are exactly the ones
+ *  listed under the module's concurrency invariants. */
 async function runSlowArm(
 	slowTuples: TxTuple[],
 	account: IAccountContract,

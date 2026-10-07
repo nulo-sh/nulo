@@ -1,10 +1,9 @@
 /**
- * Pre-extraction pins for the passkey-acquisition and wrong-password branches
- * of handleBackup — the stages the PR-b decomposition moves and the main
- * suite's password-path tests don't fix: silent ceremony cancel (agreement
- * gate reset, NO toast/navigation), acquisition failure (toast + back-nav),
- * and the wrong-password flag on the discriminated export. Scaffolding
- * mirrors full.test.ts (client modules mocked at the import level).
+ * Pins for full.vue's passkey path (ceremony cancel, refusal and failure,
+ * own-window handling, the sealed DEK) and its password-export edge cases
+ * (recovery mode, wrong password), which the main suite's password-path tests
+ * don't fix. Scaffolding mirrors full.test.ts (client modules mocked at the
+ * import level).
  */
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
 import { createTestingPinia } from "@pinia/testing"

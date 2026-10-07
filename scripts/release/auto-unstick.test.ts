@@ -10,7 +10,7 @@ function stuck(overrides: Partial<AutoUnstickInput> = {}): AutoUnstickInput {
 		releaseCreated: false,
 		eventName: "push",
 		headSha: MERGE,
-		mergedPr: { number: 145, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE },
+		mergedPr: { number: 7, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE },
 		existingTagSha: null,
 		...overrides,
 	}
@@ -48,7 +48,7 @@ describe("decideUnstick — the unstick itself", () => {
 		const d = decideUnstick(stuck({ existingTagSha: null }))
 		expect(d.action).toBe("create")
 		expect(d.tagSha).toBe(MERGE)
-		expect(d.prNumber).toBe(145)
+		expect(d.prNumber).toBe(7)
 	})
 	test("tag already at the merge SHA → skip (idempotent re-invoke)", () => {
 		expect(decideUnstick(stuck({ existingTagSha: MERGE })).action).toBe("skip")

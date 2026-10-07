@@ -1,8 +1,8 @@
 /**
- * Pre-extraction pins for restore() branches the PR-b decomposition moves and
- * the existing suite does not fix exactly: the protocol-contract silent skip,
- * the empty-item fast path (which must STAY synchronous under the length-
- * guarded loop extraction), and the deadline restoreError's exact string.
+ * Exact pins for restore() branches the main suite leaves loose: the silent
+ * skip of protocol and preloaded standard contracts, the empty-item fast path
+ * (no registration launched, so nothing awaited), and the deadline
+ * restoreError's exact string.
  */
 import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -42,7 +42,7 @@ const NET = {
 	primaryEndpointId: "primary",
 } as Network
 
-describe("restore() pins for the PR-b loop extraction", () => {
+describe("restore() exact-branch pins", () => {
 	let accountStateService: AccountStateService
 	let pxe: FakePxe
 

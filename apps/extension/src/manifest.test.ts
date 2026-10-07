@@ -101,7 +101,7 @@ describe("passkey relying party", () => {
 		expect(injectsInto(cs, `http://${RP_ID}/`)).toBe(false)
 		expect(injectsInto(cs, `https://x.${RP_ID}/`)).toBe(false)
 		expect(injectsInto(cs, "https://nulo.sh/")).toBe(true)
-		expect(injectsInto(cs, "https://tools.nulo.sh/app")).toBe(true)
+		expect(injectsInto(cs, "https://sibling.nulo.sh/app")).toBe(true)
 		expect(injectsInto(cs, "https://example.com/")).toBe(true)
 	})
 })
