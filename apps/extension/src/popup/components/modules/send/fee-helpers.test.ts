@@ -314,6 +314,49 @@ describe("fee-helpers — sponsors a verdict found short", () => {
 	})
 })
 
+describe("fee-helpers/buildFeeMethods — rows whose read has not landed", () => {
+	const PRIVATE = { id: "p1", type: FpcType.PrivateFpc, name: "Private Fee Juice", isProtocol: true }
+	const NULO_SPONSOR = { id: "s1", type: FpcType.DefaultSponsoredFpc, name: "Sponsored", isProtocol: true }
+	const HAND_ADDED = { id: "s2", type: FpcType.DefaultSponsoredFpc, name: "Dev sponsor", isProtocol: false }
+	const NEITHER = { balancesPending: true, fpcsPending: true }
+	const BALANCES = { balancesPending: true, fpcsPending: false }
+
+	test("with neither read in, every row loads with its title alone, and Nulo's sponsor holds its place", () => {
+		expect(buildFeeMethods([], undefined, NEITHER)).toEqual([
+			{ type: "fj", title: "Public Fee Juice", subtitle: "public", checking: true },
+			{ type: "private_fpc", title: "Private Fee Juice", subtitle: "private", fpc: null, checking: true },
+			{ type: "fpc", title: "Sponsored", subtitle: "sponsored", fpc: null, checking: true },
+		])
+	})
+
+	test("a list handed in while the FPC read is pending loads too, and needs no placeholder once it names Nulo's sponsor", () => {
+		const m = buildFeeMethods([PRIVATE, HAND_ADDED, NULO_SPONSOR], undefined, NEITHER)
+		expect(m.every((row) => row.checking && row.spend === undefined && row.disabled === undefined)).toBe(true)
+		expect(m.map((row) => row.fpc?.id ?? null)).toEqual([null, "p1", "s2", "s1"])
+	})
+
+	test("with the FPC list in, sponsors are answered and only the balance rows load", () => {
+		const m = buildFeeMethods([PRIVATE, NULO_SPONSOR, HAND_ADDED], undefined, BALANCES)
+		expect(m.map(({ type, checking, spend }) => ({ type, checking: checking === true, spend }))).toEqual([
+			{ type: "fj", checking: true, spend: undefined },
+			{ type: "private_fpc", checking: true, spend: undefined },
+			{ type: "fpc", checking: false, spend: "free" },
+			{ type: "fpc", checking: false, spend: "—" },
+		])
+	})
+
+	test("a list without the PrivateFPC has answered its row: not available, not loading", () => {
+		const priv = buildFeeMethods([NULO_SPONSOR], undefined, BALANCES).find((m) => m.type === "private_fpc")
+		expect(priv).toMatchObject({ disabled: true, disabledReason: "not available" })
+		expect(priv?.checking).toBeUndefined()
+	})
+
+	test("a loading sponsor is never the default; an answered one is", () => {
+		expect(defaultSponsor(buildFeeMethods([NULO_SPONSOR], undefined, NEITHER))).toBeUndefined()
+		expect(defaultSponsor(buildFeeMethods([NULO_SPONSOR], undefined, BALANCES))?.fpc?.id).toBe("s1")
+	})
+})
+
 describe("fee-helpers/FEE_JUICE_BRIDGE_URL", () => {
 	test("defaults to unleashed's testnet app", () => {
 		expect(FEE_JUICE_BRIDGE_URL).toBe("https://testnet.app.unleashed.systems")

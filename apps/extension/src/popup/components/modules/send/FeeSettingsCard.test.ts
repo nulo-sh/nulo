@@ -101,6 +101,7 @@ const STUBS = {
 					:data-testid="'pick-' + m.type"
 					:data-fpc-id="m.fpc?.id"
 					:data-disabled="m.disabled ? 'true' : 'false'"
+					:data-checking="m.checking ? 'true' : 'false'"
 					:data-reason="m.disabledReason"
 					:data-spend="m.spend"
 					@click="!m.disabled && $emit('update:modelValue', m)"
@@ -613,14 +614,12 @@ describe("FeeSettingsCard — reactivity & lifecycle", () => {
 		expect(JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])).toBe(initialStorageSnapshot)
 	})
 
-	test("user picks during init: their selection is preserved through the late reconciliation", async () => {
-		// Saved is a sponsored fpc; user picks `fj` mid-init. The async resolver
-		// should see selectedMethod has changed since the snapshot taken after
-		// pre-fill, and skip the resolveSavedSelection / auto-select branch.
-		// Note: only `fj` is enabled during the loading window (private_fpc /
-		// fpc / token_fpc need fpcs to be loaded first to be selectable).
+	test("user picks during init: a sponsor the early FPC list answered survives the late reconciliation", async () => {
+		// Saved is Fee Juice. The FPC list lands before the balance read, so the sponsor row is
+		// answered mid-init; the resolver sees selectedMethod moved off the pre-fill snapshot and
+		// skips the saved-selection branch.
 		storageBacking[FEE_METHOD_LS_KEY] = {
-			[account.address]: { type: "fpc", fpc: { id: "s1", type: 1, name: "Sponsor" } },
+			[account.address]: { type: "fj", title: "Public Fee Juice", subtitle: "public" },
 		}
 		const gas = deferred<{ publicFeeJuice: string; privateFeeJuice: string | null }>()
 		mocks.getGasBalances.mockReturnValueOnce(gas.promise)
@@ -628,16 +627,36 @@ describe("FeeSettingsCard — reactivity & lifecycle", () => {
 
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
-		// User picks fj before init completes (only fj is enabled during loading).
-		await w.find('[data-testid="pick-fj"]').trigger("click")
+		expect(w.find('[data-testid="pick-fpc"]').attributes("data-checking")).toBe("false")
+		await w.find('[data-testid="pick-fpc"]').trigger("click")
 		await flushPromises()
 
-		// Now finish init.
 		gas.resolve({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
 		await flushPromises()
 
-		// User's pick survives: settings reflects fj, NOT the saved sponsored.
-		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+	})
+
+	test("a loading row is not a pick: Fee Juice clicked before its balance lands leaves the saved selection", async () => {
+		storageBacking[FEE_METHOD_LS_KEY] = {
+			[account.address]: { type: "fpc", fpc: { id: "s1", type: 1, name: "Sponsor" } },
+		}
+		const saved = JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])
+		const gas = deferred<{ publicFeeJuice: string; privateFeeJuice: string | null }>()
+		mocks.getGasBalances.mockReturnValueOnce(gas.promise)
+		mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor" }])
+
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(w.find('[data-testid="pick-fj"]').attributes("data-checking")).toBe("true")
+		await w.find('[data-testid="pick-fj"]').trigger("click")
+		await flushPromises()
+		expect(JSON.stringify(storageBacking[FEE_METHOD_LS_KEY])).toBe(saved)
+
+		gas.resolve({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+		await flushPromises()
+
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 	})
 
 	test("account prop change re-runs init for the new account's saved record", async () => {
@@ -656,6 +675,101 @@ describe("FeeSettingsCard — reactivity & lifecycle", () => {
 		await flushPromises()
 
 		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+	})
+})
+
+describe("FeeSettingsCard — rows while the read is in flight", () => {
+	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private Fee Juice", isProtocol: true }
+	const SPONSOR = { id: "s1", type: 1, name: "Sponsored", isProtocol: true }
+	const HELD = "1000000000000000000"
+	const rowState = (w: ReturnType<typeof mount>) =>
+		w.findAll('[data-testid="fee-method-selector"] [data-testid^="pick-"]').map((b) => ({
+			type: b.attributes("data-testid")?.slice(5),
+			fpc: b.attributes("data-fpc-id") ?? null,
+			checking: b.attributes("data-checking") === "true",
+			spend: b.attributes("data-spend") ?? null,
+		}))
+
+	test("every row loads until the FPC list lands, which answers the sponsors before the balances do", async () => {
+		const fpcs = deferred<unknown>()
+		const gas = deferred<unknown>()
+		mocks.getFpcs.mockReturnValue(fpcs.promise)
+		mocks.getGasBalances.mockReturnValue(gas.promise)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(rowState(w)).toEqual([
+			{ type: "fj", fpc: null, checking: true, spend: null },
+			{ type: "private_fpc", fpc: null, checking: true, spend: null },
+			{ type: "fpc", fpc: null, checking: true, spend: null },
+		])
+
+		fpcs.resolve([PRIVATE_FPC, SPONSOR])
+		await flushPromises()
+		expect(rowState(w)).toEqual([
+			{ type: "fj", fpc: null, checking: true, spend: null },
+			{ type: "private_fpc", fpc: "p1", checking: true, spend: null },
+			{ type: "fpc", fpc: "s1", checking: false, spend: "free" },
+		])
+		expect(w.emitted("update:modelValue")).toBeUndefined()
+
+		gas.resolve({ publicFeeJuice: HELD, privateFeeJuice: HELD })
+		await flushPromises()
+		expect(rowState(w).map(({ checking, spend }) => ({ checking, spend }))).toEqual([
+			{ checking: false, spend: "1 FJ" },
+			{ checking: false, spend: "1 FJ" },
+			{ checking: false, spend: "free" },
+		])
+		w.unmount()
+	})
+
+	test("an identity switch never draws the previous identity's FPC rows while the new reads are pending", async () => {
+		mocks.getFpcs.mockResolvedValue([SPONSOR])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s1", checking: false })
+
+		const fpcs = deferred<unknown>()
+		mocks.getFpcs.mockReturnValue(fpcs.promise)
+		mocks.getGasBalances.mockReturnValue(new Promise(() => {}))
+		await w.setProps({ account: { id: "a2", address: "0xother" } })
+		await flushPromises()
+		expect(rowState(w)).toEqual([
+			{ type: "fj", fpc: null, checking: true, spend: null },
+			{ type: "private_fpc", fpc: null, checking: true, spend: null },
+			{ type: "fpc", fpc: null, checking: true, spend: null },
+		])
+
+		fpcs.resolve([{ ...SPONSOR, id: "s9" }])
+		await flushPromises()
+		expect(rowState(w).find((r) => r.type === "fpc")).toMatchObject({ fpc: "s9", checking: false })
+		w.unmount()
+	})
+
+	test("an init that throws stops the rows loading, gives today's answers, and never claims a retry", async () => {
+		vi.useFakeTimers()
+		try {
+			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+			const local = (globalThis as any).chrome.storage.local
+			local.get = vi.fn().mockRejectedValue(new Error("storage unavailable"))
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(rowState(w)).toEqual([
+				{ type: "fj", fpc: null, checking: false, spend: "— FJ" },
+				{ type: "private_fpc", fpc: null, checking: false, spend: "— FJ" },
+			])
+			expect(w.find('[data-testid="pick-private_fpc"]').attributes("data-reason")).toBe("not available")
+			expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Close and reopen to try again.")
+
+			// Nothing runs the init again on its own: no read is ever issued.
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS.reduce((a, b) => a + b, 0) + INIT_FETCH_TIMEOUT_MS)
+			expect(mocks.getGasBalances).not.toHaveBeenCalled()
+			expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Close and reopen to try again.")
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
 
@@ -826,9 +940,10 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 		await flushPromises()
 
-		expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+		expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Retrying in the background.")
 		const row = (type: string) => w.find(`[data-testid="pick-${type}"]`)
 		for (const type of ["fj", "private_fpc"]) {
+			expect(row(type).attributes("data-checking")).toBe("false")
 			expect(row(type).attributes("data-disabled")).toBe("false")
 			expect(row(type).attributes("data-spend")).toBe("— FJ")
 		}

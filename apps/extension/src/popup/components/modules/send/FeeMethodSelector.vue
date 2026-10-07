@@ -19,6 +19,12 @@ const emit = defineEmits(["update:modelValue", "open", "close"])
 const TAG_GLYPH = publishGlyph("exposed")
 
 const menu = computed(() => menuOrder(props.methods))
+
+/** A checking row answers nothing yet; the click stops here so the menu stays open. */
+const onRowClick = (method, event) => {
+	if (method.checking) return event?.stopPropagation()
+	if (!method.disabled) emit("update:modelValue", method)
+}
 </script>
 
 <template>
@@ -54,17 +60,23 @@ const menu = computed(() => menuOrder(props.methods))
 				<DropdownItem
 					v-for="method in menu"
 					:key="method.fpc?.id ?? method.type"
-					:class="$style.method"
-					:disabled="method.disabled"
+					:class="[$style.method, method.checking && $style.checking]"
+					:disabled="method.disabled || method.checking"
 					:data-testid="`send-fee-method-${method.subtitle}`"
 					:data-fpc-id="method.fpc?.id"
-					@click="!method.disabled && emit('update:modelValue', method)"
+					:data-checking="method.checking ? 'true' : undefined"
+					:aria-busy="method.checking ? 'true' : undefined"
+					@click="onRowClick(method, $event)"
 				>
 					<Flex align="center" justify="between" gap="8" wide>
-						<Text size="13" weight="600" :color="method.disabled ? 'tertiary' : 'primary'">
+						<Text size="13" weight="600" :color="method.disabled || method.checking ? 'tertiary' : 'primary'">
 							{{ method.title }}
 						</Text>
-						<Text size="11" color="tertiary">
+						<template v-if="method.checking">
+							<span :class="$style.skeleton" aria-hidden="true" />
+							<span :class="$style.visually_hidden">Checking</span>
+						</template>
+						<Text v-else size="11" color="tertiary">
 							{{ method.disabled && method.disabledReason ? method.disabledReason : method.spend }}
 						</Text>
 					</Flex>
@@ -97,6 +109,21 @@ const menu = computed(() => menuOrder(props.methods))
    The doubled class outranks `.wrapper.disabled` whichever sheet loads last. */
 .method.method[aria-disabled="true"] {
 	opacity: 1;
+}
+
+/* A checking row takes its click so the menu does not close on it, and does not light up as a choice. */
+.method.method.checking {
+	pointer-events: auto;
+	cursor: default;
+	background: transparent;
+}
+
+.skeleton {
+	composes: skeleton from "./fee-shared.module.css";
+}
+
+.visually_hidden {
+	composes: visually_hidden from "./fee-shared.module.css";
 }
 
 .tag {

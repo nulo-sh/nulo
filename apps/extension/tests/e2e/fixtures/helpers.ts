@@ -1346,17 +1346,17 @@ export type FeeMethodSubtitle = "sponsored" | "public" | "private"
 
 /** Select a fee payment method in the shared FeeSettingsCard dropdown (the
  *  send flow AND the dApp execute/authwit popups embed the same card).
- *  `mountTimeoutMs` bounds every wait. The card can mount late, and until its
- *  first FPC and balance read lands (seconds on a cold path) the Private Fee
- *  Juice row is drawn disabled, no sponsor row exists, and a pick whose balance
- *  is unread does not take effect. A click on a disabled row is dropped, so the
- *  row is clicked only once it is enabled. */
+ *  `mountTimeoutMs` bounds every wait. The card can mount late, and its rows
+ *  stay loading (aria-disabled, inert) until the read that answers them lands:
+ *  the sponsor rows with the FPC list, the Fee Juice rows with the balance read,
+ *  which is forced on every Send mount and takes seconds on a cold path. So the
+ *  row is clicked only once it is enabled, and the default wait covers that read. */
 export async function selectFeeMethod(
 	page: Page,
 	methodSubtitle: FeeMethodSubtitle,
 	opts: { mountTimeoutMs?: number } = {},
 ): Promise<void> {
-	const mountTimeoutMs = opts.mountTimeoutMs ?? 2_000
+	const mountTimeoutMs = opts.mountTimeoutMs ?? 30_000
 	await page.waitForSelector('[data-testid="send-fee-method-trigger"]', { visible: true, timeout: mountTimeoutMs })
 	// Open the fee method dropdown (items teleport to #dropdown)
 	await page.evaluate(() => {

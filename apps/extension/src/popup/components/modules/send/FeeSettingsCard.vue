@@ -123,17 +123,28 @@ const lastVerdict = ref(null)
 /** Outside Send: the sponsor a short verdict dropped the selection of, until the person picks. */
 const droppedForVerdictId = ref(null)
 
+/** The FPC list the store has read for the live identity. That read is never forced, so it usually
+ *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
+const earlyFpcs = computed(() => {
+	const fpc = balancesStore.entry(liveFeeScope(props))?.fpc
+	return fpc?.status === "ready" && fpc.data ? applyFpcEdits(fpc.data, fpcEdits) : null
+})
+
 /**
- * `methods` is the dropdown list. We pass `gasBalances` only after init
- * completes, so the loading-state items don't briefly flash "no balance"
- * before the first fetch returns.
+ * `methods` is the dropdown list. Until a snapshot for the live identity commits, rows are built
+ * from that identity's early FPC list alone, never from another identity's, and draw loading where
+ * no read has answered them; balances join only with the commit.
  */
-const methods = computed(() =>
-	buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
+const methods = computed(() => {
+	const committed = snapshotCommitted.value
+	const early = committed ? null : earlyFpcs.value
+	return buildFeeMethods(committed ? knownFpcs.value : (early ?? []), committed ? gasBalances.value : undefined, {
 		shortSponsorIds,
 		setAsideSponsorIds,
-	}),
-)
+		balancesPending: snapshotPending.value,
+		fpcsPending: snapshotPending.value && !early,
+	})
+})
 
 const isCustomMethod = computed(() => settings.value?.paymentMethod?.kind === "embedded")
 const useOwnMethod = ref(false)
@@ -184,6 +195,15 @@ const sendPicks = reactive({})
 const committedScope = ref(null)
 
 const scopeIsLiveIdentity = (scope) => Boolean(scope) && isLiveFeeScope(props, scope)
+
+const snapshotCommitted = computed(() => isInitComplete.value && scopeIsLiveIdentity(committedScope.value))
+
+/** The identity whose init threw. Nothing commits for it until init runs again, so its rows stop
+ *  loading and give today's answers. */
+const failedInitKey = ref(null)
+
+/** A snapshot for the live identity is still on its way. */
+const snapshotPending = computed(() => !snapshotCommitted.value && failedInitKey.value !== feeScopeKey(liveFeeScope(props)))
 
 /**
  * Send's selection is DERIVED, never assigned: a pure function of the live origin, the live
@@ -356,6 +376,8 @@ const pickForSend = (m) => {
 let chosenUnasked = false
 
 const handleMethodPicked = (m) => {
+	// A loading row is inert in the menu; this keeps it so for any other path a pick arrives on.
+	if (m.checking) return
 	if (m.type === "fpc" && m.fpc) setAsideSponsorIds.delete(m.fpc.id)
 	droppedForVerdictId.value = null
 	if (props.originPrivacy !== null) return pickForSend(m)
@@ -415,6 +437,8 @@ let isMounted = true
 // operable meanwhile (sponsored methods stay usable; self-paid methods stay
 // fail-closed until a read succeeds — see settingsForMethod).
 const FEE_DATA_UNAVAILABLE = "Couldn't load fee data. Retrying in the background."
+/** A thrown init never committed, so no store retry can reach it: nothing runs it again on its own. */
+const FEE_INIT_FAILED = "Couldn't load fee data. Close and reopen to try again."
 const PRIVATE_GAS_UNCHECKED = "Couldn't check your private gas. Pick a fee source to continue."
 
 /** The info row's text. A hold with a healthy store is a read that came back without a balance —
@@ -585,6 +609,7 @@ const prefillSelection = (saved) => {
 
 const runInit = async () => {
 	const myRun = ++runSeq
+	failedInitKey.value = null
 	try {
 		if (!props.profile || !props.network || !props.account || embeddedHidden()) {
 			// Embedded ops (and identity-less mounts) hold no subscription: the
@@ -653,9 +678,12 @@ const runInit = async () => {
 		// have fired mid-commit, and deriving settings from a half-written
 		// snapshot would break the resolved-state invariant the gate exists
 		// for. The state is degraded-with-notice, never silently frozen — the
-		// identity/useOwnMethod watchers are the re-entry paths.
+		// identity/useOwnMethod watchers are the re-entry paths. A superseded
+		// run's failure belongs to an identity no longer on screen.
 		console.error("Failed to init", getErrorData(e))
-		error.value = FEE_DATA_UNAVAILABLE
+		if (myRun !== runSeq || !isMounted) return
+		failedInitKey.value = feeScopeKey(liveFeeScope(props))
+		error.value = FEE_INIT_FAILED
 	} finally {
 		// Only the run that owns the loading flag may clear it — a superseded
 		// run's finally must not blank a newer run's in-flight spinner.
