@@ -280,6 +280,19 @@ describe("ContactService (port-migrated)", () => {
 			expect(all.map((c) => c.name)).toEqual(["Alice", "Alice"])
 		})
 
+		test("restore keeps a name the form can save (25 characters) and trims its outer spaces, like the import", async () => {
+			await contactService.addContact("Alice", "0xa")
+			const [genuine] = await contactService.backup()
+			const full = "Bartholomew Featherstones"
+			expect(full).toHaveLength(25)
+			const doctored = [
+				{ ...genuine, id: "c-full", name: `  ${full}  ` },
+				{ ...genuine, id: "c-long", name: `${full}yz` },
+			]
+			const restored = await contactService.restore(doctored)
+			expect(restored.map((c) => c.name)).toEqual([full, full])
+		})
+
 		test("a failed item stores the normalized error MESSAGE string, not the raw error", async () => {
 			// Like every other service, contact normalizes the error through
 			// `toRestoreError`, so a failed restore carries the message STRING,

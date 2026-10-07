@@ -32,10 +32,6 @@ vi.mock("@/composables/toast", () => ({
 vi.mock("@/utils", () => ({
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),
-	sanitizeString: (s: unknown, max: number) =>
-		String(s ?? "")
-			.trim()
-			.slice(0, max),
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
@@ -46,7 +42,14 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStoreState }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: popupOpenMock }) }))
 
+import { classifyImportRow, indexSavedContacts } from "@/utils/contact-import-rows"
 import { useContactImportExport } from "./useContactImportExport"
+
+/** The rows as the selection popup hands them back: each carries the decision it was shown with. */
+function reviewed(rows: unknown[], saved: Array<{ id: string; name: string; address: string }> = []) {
+	const index = indexSavedContacts(saved)
+	return (rows as Array<{ name: string; address: string }>).map((r) => ({ ...r, ...classifyImportRow(r, index) }))
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -71,17 +74,18 @@ function fileWith(payload: unknown) {
 
 /** Drives importContacts() to its selection gate, then confirms ALL
  *  staged rows (what the popup's confirm does for a select-all user). */
-async function runImport(api: ReturnType<typeof useContactImportExport>) {
+async function runImport(api: ReturnType<typeof useContactImportExport>, saved: Array<{ id: string; name: string; address: string }> = []) {
 	const done = api.importContacts()
 	await vi.waitFor(() => {
 		if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
 	})
-	cacheStoreState.importPromise?.resolve([...(cacheStoreState.importContacts as never[])])
+	cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, saved))
 	await done
 }
 
-const ADDR_A = `0x${"a".repeat(64)}`
-const ADDR_B = `0x${"b".repeat(64)}`
+// Wire-shaped: 0x + 64 hex, valid Aztec addresses.
+const ADDR_A = "0x01904dba18e847d163097ce15dcd8597e763fb11fe19ef1273d266d6e959ec4a"
+const ADDR_B = "0x047bb28204a2545c566dff691c298d2023fe7cad44bb6468e3f7f1e633f8f7d2"
 
 beforeEach(() => {
 	vi.clearAllMocks()
@@ -123,7 +127,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		const api = useContactImportExport({ contacts: existing, contactService, accountStateService } as never)
 		fileWith({ version: 2, contacts: [{ name: "Alice", address: ADDR_B, isSender: false }] })
 
-		await runImport(api)
+		await runImport(api, existing.value)
 
 		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B)
 		expect(accountStateService.deleteSender).not.toHaveBeenCalled()
@@ -211,7 +215,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		const api = useContactImportExport({ contacts: existing, contactService, accountStateService } as never)
 		fileWith({ version: 2, contacts: [{ name: "Alice2", address: ADDR_A, isSender: false }] })
 
-		await runImport(api)
+		await runImport(api, existing.value)
 
 		expect(contactService.addContact).not.toHaveBeenCalled()
 		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice2", ADDR_A)
@@ -308,5 +312,77 @@ describe("useContactImportExport — export", () => {
 			{ name: "A", address: ADDR_A, isSender: true },
 			{ name: "B", address: ADDR_B, isSender: false },
 		])
+	})
+})
+
+describe("useContactImportExport — apply refuses what no row on screen promised", () => {
+	const ADDR_C = "0x02056523b85ea4e550facca78516f7270f18bddb0f5474177d406f6bf0e58617"
+
+	/** Stages a file, then confirms the given rows, as the popup would after the user's choices. */
+	async function confirmRows(
+		api: ReturnType<typeof useContactImportExport>,
+		pick: (staged: Array<Record<string, unknown>>) => unknown[],
+	) {
+		const done = api.importContacts()
+		await vi.waitFor(() => {
+			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
+		})
+		cacheStoreState.importPromise?.resolve(reviewed(pick(cacheStoreState.importContacts as Array<Record<string, unknown>>)))
+		await done
+	}
+
+	test("a row matching one saved contact's name and another's address writes nothing", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const contacts = ref([
+			{ id: "c1", name: "Alice", address: ADDR_A },
+			{ id: "c2", name: "Bob", address: ADDR_B },
+		])
+		const api = useContactImportExport({ contacts, contactService, accountStateService } as never)
+		fileWith({ version: 2, contacts: [{ name: "Alice", address: ADDR_B, isSender: true }] })
+
+		await runImport(api, contacts.value)
+
+		expect(contactService.updateContact).not.toHaveBeenCalled()
+		expect(contactService.addContact).not.toHaveBeenCalled()
+		expect(accountStateService.addSender).not.toHaveBeenCalled()
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
+	})
+
+	test("two rows reaching one saved contact from two sides: only the first is written", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const contacts = ref([{ id: "c1", name: "Alice", address: ADDR_A }])
+		const api = useContactImportExport({ contacts, contactService, accountStateService } as never)
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Alice", address: ADDR_B },
+				{ name: "Carol", address: ADDR_A },
+			],
+		})
+
+		await runImport(api, contacts.value)
+
+		expect(contactService.updateContact).toHaveBeenCalledTimes(1)
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B)
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
+	})
+
+	test("an edit that makes two new rows share a name or an address adds only the first", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const api = useContactImportExport({ contacts: ref([]), contactService, accountStateService } as never)
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Eli", address: ADDR_B },
+				{ name: "Finn", address: ADDR_C },
+			],
+		})
+
+		await confirmRows(api, ([dana, eli, finn]) => [dana, { ...eli, name: "Dana" }, { ...finn, address: ADDR_A }])
+
+		expect(contactService.addContact).toHaveBeenCalledTimes(1)
+		expect(contactService.addContact).toHaveBeenCalledWith("Dana", ADDR_A)
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
 	})
 })

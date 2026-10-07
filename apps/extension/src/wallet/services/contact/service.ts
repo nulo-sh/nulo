@@ -14,7 +14,8 @@ import { requireOwnedRow } from "@/wallet/services/require-owned-row"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock } from "@/wallet/utils"
-import { getInitials, sanitizeString } from "@/utils"
+import { getInitials } from "@/utils"
+import { sanitizeImportName } from "@/utils/contact-import-rows"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT, ContactSchema, type Events, type Methods } from "./spec"
 
@@ -238,7 +239,7 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 			return await restoreRows(contacts, async (contact) => {
 				const id = await preferOrReallocId(this.storage, contact.id)
 				// Same sanitizer the plaintext import applies: a backup name is untrusted display text.
-				const written = { ...contact, id, name: sanitizeString(contact.name, 20) }
+				const written = { ...contact, id, name: sanitizeImportName(contact.name) }
 				// Parse the persisted shape so a malformed backup contact is recorded as
 				// restoreError, not silently written + codec-hidden on read.
 				ContactSchema.parse(written)

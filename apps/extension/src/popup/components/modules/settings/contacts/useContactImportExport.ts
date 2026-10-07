@@ -1,7 +1,14 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { Ref } from "vue"
 import { useToast } from "@/composables/toast"
-import { FileTooLargeError, downloadFile, pickFile, sanitizeString } from "@/utils"
+import { FileTooLargeError, downloadFile, pickFile } from "@/utils"
+import {
+	type ImportRow,
+	type ReviewedImportRow,
+	indexSavedContacts,
+	normalizeImportRows,
+	planImportWrites,
+} from "@/utils/contact-import-rows"
 import { MAX_CONTACT_IMPORT_BYTES, parseContactsExport } from "@/utils/contacts-export-format"
 import type { AccountStateServiceClient } from "@/wallet/services/account-state/client"
 import type { ContactServiceClient } from "@/wallet/services/contact/client"
@@ -52,8 +59,7 @@ interface ContactIoDeps {
 	popupStore: ReturnType<typeof usePopupStore>
 }
 
-type ImportRow = { name: string; address: string; isSender: boolean }
-type SelectedRow = ContactRecord & { isSender?: boolean }
+type SelectedRow = ReviewedImportRow
 type UpsertError = { name: string; address: string; operation: string; error: unknown }
 interface ImportTally {
 	errors: UpsertError[]
@@ -158,35 +164,13 @@ async function importContacts(deps: ContactIoDeps): Promise<void> {
 			openToast({ kind: "error", label: "Contacts file is too large" })
 			return
 		}
-		console.error("Error occurred during import", (err as Error)?.message || (err as Error)?.stack || err)
+		// The message can quote the file (JSON.parse does), and the file holds names and addresses.
+		console.error("Error occurred during import", err instanceof Error ? err.name : typeof err)
 		openToast({ kind: "error", label: "Error occurred during import" })
 	} finally {
 		cacheStore.importContacts = []
 		cacheStore.importPromise = null
 	}
-}
-
-/** Construct MINIMAL rows — never spread the hostile input object (arbitrary extra properties
- *  would ride along into staging and storage). Non-string name/address fields become "" (a single
- *  malformed row must not abort the whole import); whitespace-only names are dropped
- *  (sanitizeString keeps spaces). Addresses are lowercased: hex is case-insensitive and the wallet
- *  emits lowercase, so canonicalizing here keeps dedup and duplicate-contact matching sound against
- *  mixed-case files. Per-address dedup (first row wins): duplicate addresses in a hostile file would
- *  multiply storage upserts and PXE sender registrations for the same target. */
-function normalizeImportRows(rawContacts: Array<Record<string, unknown>>): ImportRow[] {
-	const seenAddresses = new Set<string>()
-	return rawContacts
-		.map((c) => ({
-			name: typeof c?.name === "string" ? sanitizeString(c.name, 20) : "",
-			address: typeof c?.address === "string" ? sanitizeString(c.address, 66).toLowerCase() : "",
-			isSender: c?.isSender === true,
-		}))
-		.filter((c) => !!c.name.trim() && !!c.address.trim())
-		.filter((c) => {
-			if (seenAddresses.has(c.address)) return false
-			seenAddresses.add(c.address)
-			return true
-		})
 }
 
 /** Stage the rows, create the selection promise, REGISTER its controls on the cache store and open
@@ -210,69 +194,58 @@ function openImportSelection(
  *  on the active network. It never deletes or migrates registrations — those live in
  *  Settings → Advanced → Senders. */
 async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise<ImportTally> {
-	// Address keys are lowercased to match the canonicalized import rows —
-	// an existing contact saved with mixed-case hex must merge, not
-	// duplicate. (Name keys stay case-sensitive: names are labels.)
-	const contactsByAddress = new Map<string, ContactRecord>()
-	const contactsByName = new Map<string, ContactRecord>()
-	for (const c of deps.contacts.value) {
-		contactsByAddress.set(c.address.toLowerCase(), c)
-		contactsByName.set(c.name, c)
-	}
+	const { admitted, refused } = planImportWrites(res, indexSavedContacts(deps.contacts.value))
 
 	// Snapshot active network ONCE so a network swap mid-loop can't split
 	// sender registrations across chains. Null-safe: if no network is
 	// selected, isSender:true rows produce a per-row sender failure.
 	const activeNetworkId = deps.appStore.network?.id ?? null
 
-	const tally: ImportTally = { errors: [], senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
-	for (const _c of res) {
-		const existingByAddress = contactsByAddress.get(_c.address.toLowerCase())
-		const existingByName = contactsByName.get(_c.name)
-		const error = await upsertOneContact(deps.contactService, _c, existingByAddress, existingByName)
+	// A refused row writes nothing and registers no sender.
+	const errors = refused.map((row) => ({ name: row.name, address: row.address, operation: "import", error: new Error("row refused") }))
+	const tally: ImportTally = { errors, senderTotal: 0, senderOk: 0, senderSkippedNoNetwork: 0 }
+	for (const { row, targetId } of admitted) {
+		const error = await upsertOneContact(deps.contactService, row, targetId)
 		if (error) tally.errors.push(error)
 
 		// Sender registration is INDEPENDENT of the contact upsert's
 		// outcome (decoupled state): an explicit isSender intent is
 		// attempted — and counted — even when the address-book row
 		// failed, so the toast accounting never silently drops it.
-		if (_c.isSender) {
-			tally.senderTotal++
-			if (activeNetworkId) {
-				try {
-					await deps.accountStateService.addSender(activeNetworkId, _c.address)
-					tally.senderOk++
-				} catch (err) {
-					// The counterparty address is PII and this fires per failed row; the counts below carry
-					// the diagnosis.
-					console.warn("Failed to register a sender", err)
-				}
-			} else {
-				tally.senderSkippedNoNetwork++
-				console.warn("Skipping sender registration: no active network")
-			}
-		}
+		if (row.isSender) await registerSender(deps, tally, activeNetworkId, row.address)
 	}
 	return tally
+}
+
+async function registerSender(deps: ContactIoDeps, tally: ImportTally, activeNetworkId: string | null, address: string): Promise<void> {
+	tally.senderTotal++
+	if (!activeNetworkId) {
+		tally.senderSkippedNoNetwork++
+		console.warn("Skipping sender registration: no active network")
+		return
+	}
+	try {
+		await deps.accountStateService.addSender(activeNetworkId, address)
+		tally.senderOk++
+	} catch (err) {
+		// The counterparty address is PII and this fires per failed row; the counts below carry
+		// the diagnosis.
+		console.warn("Failed to register a sender", err)
+	}
 }
 
 async function upsertOneContact(
 	contactService: ContactServiceClient,
 	row: SelectedRow,
-	existingByAddress: ContactRecord | undefined,
-	existingByName: ContactRecord | undefined,
+	targetId: string | null,
 ): Promise<UpsertError | null> {
+	const name = row.name.trim()
 	try {
-		if (existingByAddress) {
-			await contactService.updateContact(existingByAddress.id, row.name, row.address)
-		} else if (existingByName) {
-			await contactService.updateContact(existingByName.id, row.name, row.address)
-		} else {
-			await contactService.addContact(row.name, row.address)
-		}
+		if (targetId) await contactService.updateContact(targetId, name, row.address)
+		else await contactService.addContact(name, row.address)
 		return null
 	} catch (err) {
-		return { name: row.name, address: row.address, operation: existingByAddress || existingByName ? "update" : "create", error: err }
+		return { name, address: row.address, operation: targetId ? "update" : "create", error: err }
 	}
 }
 
