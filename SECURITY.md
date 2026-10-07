@@ -363,6 +363,11 @@ lockfile entries inside the window. **On Bun 1.4 that bug is fixed** — a
 Widening to 14 days is viable; it is a deliberate policy change to make
 on its own PR, not a side effect of a toolchain bump.
 
+**Dependabot** updates the GitHub Actions that the workflows and composite
+actions use: one grouped pull request a week, after a 7-day cooldown
+(`.github/dependabot.yml`). It cannot read Bun's lockfile, so npm
+dependencies are updated by hand, under the age gate above.
+
 **`bun audit`** runs as an advisory step in `_lint-and-typecheck.yml`. It
 surfaces npm advisories in the GitHub Action step summary but does not
 block PRs (today). Bun 1.4 exits 1 on findings (1.3.x always exited 0),
