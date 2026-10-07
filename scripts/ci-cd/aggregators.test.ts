@@ -1,11 +1,12 @@
 /**
  * Behavioral pin for the aggregators outside the e2e lanes: `quality-status` (pr-quick.yml),
- * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard.
+ * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard; and
+ * for the sharded PR smoke lanes' `extension-smoke-e2e-status` and its Firefox twin.
  *
  * Each must fail closed: pass only when every need ended exactly as its own `if:` asks, so a gate
  * that never ran (skipped for the wrong reason, cancelled before a runner, an empty result) reds
  * the check. A text pin cannot show that, so this runs each aggregator's own script with its
- * `env:` bound to a world a run can produce: every legitimate world must pass, and any one need
+ * expressions bound to a world a run can produce: every legitimate world must pass, and any one need
  * ending any other way, or any control output it reads being malformed, must fail.
  *
  * Wired into CI via the root `test:ci-gating` script in `_unit-tests.yml`.
@@ -60,15 +61,19 @@ function expressionOf(file: string, key: string, value: string): string {
   return match[1]
 }
 
-/** Run the script as the runner does (`bash -e`), its environment only `PATH` and the bound `env:`. */
+/**
+ * Run the script as the runner does: each inline `${{ }}` replaced by its value first, then `bash -e`
+ * with an environment of only `PATH` and the bound `env:`.
+ */
 function exitCode(agg: Aggregator, world: World): number {
-  const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" }
-  for (const [key, value] of Object.entries(agg.env)) {
-    const expression = expressionOf(agg.file, key, value)
+  const valueOf = (expression: string): string => {
     if (!(expression in world)) throw new Error(`${agg.file}: no world value for ${expression}`)
-    env[key] = world[expression]
+    return world[expression]
   }
-  return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", agg.run], { env, stdout: "ignore", stderr: "ignore" }).exitCode
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" }
+  for (const [key, value] of Object.entries(agg.env)) env[key] = valueOf(expressionOf(agg.file, key, value))
+  const script = agg.run.replace(/\$\{\{ (.+?) \}\}/g, (_, expression: string) => valueOf(expression))
+  return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { env, stdout: "ignore", stderr: "ignore" }).exitCode
 }
 
 /** Every need `success`, except the ones a world's conditions skip. */
@@ -207,12 +212,46 @@ describe.each(CASES)("$file aggregator", ({ agg, advisory, worlds }) => {
   })
 
   test.each(Object.entries(worlds))("fails %s once any one need ends otherwise", (_, world) => {
-    for (const job of agg.needs) {
-      const key = `needs.${job}.result`
-      for (const result of RESULTS.filter((r) => r !== world[key])) {
-        expect(exitCode(agg, { ...world, [key]: result }), `${job} '${result}'`).not.toBe(0)
-      }
+    expectEveryOtherResultFails(agg, world)
+  })
+})
+
+function expectEveryOtherResultFails(agg: Aggregator, world: World): void {
+  for (const job of agg.needs) {
+    const key = `needs.${job}.result`
+    for (const result of RESULTS.filter((r) => r !== world[key])) {
+      expect(exitCode(agg, { ...world, [key]: result }), `${job} '${result}'`).not.toBe(0)
     }
+  }
+}
+
+// Each smoke lane runs its suite as one matrix job of three shards, which GitHub hands the aggregator
+// as the single `needs.smoke.result`: `success` only when every shard succeeded, so a failed or
+// cancelled shard arrives as `failure` or `cancelled`. These scripts read their results inline.
+const SMOKE = aggregator("pr-extension-smoke-e2e.yml")
+const SMOKE_FIREFOX = aggregator("pr-extension-smoke-e2e-firefox.yml")
+const smoke = (run: string, skipped: string[]): World => ({
+  "needs.decide.outputs.run": run,
+  ...results(SMOKE.needs, skipped),
+})
+const SMOKE_WORLDS: Record<string, World> = {
+  "a run of every shard": smoke("true", []),
+  "a gate that skipped the suite": smoke("false", ["smoke"]),
+}
+
+describe.each([SMOKE, SMOKE_FIREFOX])("$file aggregator", (agg) => {
+  test("always runs, nothing can hide a red script, and it waits on every job", () => {
+    expect(agg.if).toBe("always()")
+    expect(agg.suppressors).toEqual([undefined, undefined, undefined])
+    expect([...agg.needs].sort()).toEqual([...agg.jobs].sort())
+  })
+
+  test.each(Object.entries(SMOKE_WORLDS))("passes %s", (_, world) => {
+    expect(exitCode(agg, world)).toBe(0)
+  })
+
+  test.each(Object.entries(SMOKE_WORLDS))("fails %s once any one need ends otherwise", (_, world) => {
+    expectEveryOtherResultFails(agg, world)
   })
 })
 
@@ -229,6 +268,8 @@ test.each([
   ["needs.auto-unstick.outputs.unstuck", RELEASE, PUSH_RESCUED, RESCUE_CHAIN],
   ["needs.resolve.outputs.is_prerelease", RELEASE, STORE_SUBMISSION, STORES],
   ["needs.resolve.outputs.on_main", RELEASE, STORE_SUBMISSION, STORES],
+  ["needs.decide.outputs.run", SMOKE, smoke("true", []), ["smoke"]],
+  ["needs.decide.outputs.run", SMOKE_FIREFOX, smoke("true", []), ["smoke"]],
 ] as const)("%s: a malformed control output fails the check", (output, agg, world, skips) => {
   expect(exitCode(agg, world)).toBe(0)
   const skipped = Object.fromEntries(skips.map((job) => [`needs.${job}.result`, "skipped"]))

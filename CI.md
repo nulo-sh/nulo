@@ -41,7 +41,7 @@ Triggers:
 - **Auto** on PRs to `dev` whose diff touches the `smoke-surface` paths-filter (popup, components, manifest, the wallet services smoke exercises, build inputs, the harness, etc. — see [`pr-extension-smoke-e2e.yml`](./.github/workflows/pr-extension-smoke-e2e.yml) `filters:`)
 - **Manual** by adding the `e2e:extension-smoke` label
 
-`extension-smoke-e2e-status` emits `pass` when the suite is skipped (no relevant changes / no label), so branch protection sees a green check either way. It is a **required** check on both `dev` and `main` (see "Check names and the protection runbook").
+`extension-smoke-e2e-status` emits `pass` when the suite is skipped (no relevant changes / no label), so branch protection sees a green check either way. When the suite runs, GitHub hands the aggregator the three shards as one result, `success` only when every shard succeeded, so a failed or cancelled shard reds it. It is a **required** check on both `dev` and `main` (see "Check names and the protection runbook").
 
 ### `pr-extension-network-e2e.yml`
 
@@ -93,7 +93,7 @@ Every aggregator check is named after the product it gates — `quality-status` 
 
 Each PR workflow groups its runs by pull request number, and only a push's first attempt cancels the run in flight: a push is the one event that moves the head. Every other PR event (a label, `ready_for_review`, `reopened`) and every re-run of a PR event queues behind the run in flight and starts when it ends. A `workflow_dispatch` run still cancels the one before it on its ref. A run cancelled on the head it shares with its successor still runs its `always()` aggregator, which then posts FAILURE under the required check name on that head, beside the surviving run's result; a run replaced while it waits in the queue posts nothing.
 
-Every run evaluates its whole gate, whichever label started it. Do not skip a run whose label is irrelevant: its aggregator would report `skipped`, which branch protection accepts, and could green the required check before any run of that head had run its suites. The price is a second full run when a label lands, or a draft is marked ready, while a run is in flight (on a PR that trips the network filter, eight suite jobs per browser).
+Every run evaluates its whole gate, whichever label started it. Do not skip a run whose label is irrelevant: its aggregator would report `skipped`, which branch protection accepts, and could green the required check before any run of that head had run its suites. The price is a second full run when a label lands, or a draft is marked ready, while a run is in flight (per browser, eight suite jobs on a PR that trips the network filter and three more when it trips the smoke one).
 
 ### `actionlint.yml`
 
