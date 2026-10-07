@@ -65,9 +65,11 @@ describe("sanitizeImportName", () => {
 		expect(sanitizeImportName("Alice\u00A0Smith")).toBe("Alice Smith")
 		expect(sanitizeImportName("山田\u3000太郎\t\tX")).toBe("山田 太郎 X")
 		expect(sanitizeImportName("ＡＬＩＣＥ ﬁ\u0958")).toBe("ＡＬＩＣＥ ﬁ\u0958")
-		// A run of spaces costs one character, so a name the form saved still fits after it.
+		// A run of spaces costs one character, also one the filter leaves, so a saved name still fits.
 		expect(sanitizeImportName(`${"A".repeat(23)}  B`)).toBe(`${"A".repeat(23)} B`)
-		for (const name of ["Alice\u00A0Smith", "\u3164Al\u200Dice ", "\u1100!\u1161", "\u0958"]) {
+		expect(sanitizeImportName(`${"A".repeat(23)} \u0000 B`)).toBe(`${"A".repeat(23)} B`)
+		expect(sanitizeImportName("A ! B")).toBe("A B")
+		for (const name of ["Alice\u00A0Smith", "\u3164Al\u200Dice ", "\u1100!\u1161", "\u0958", "A ! B"]) {
 			expect(sanitizeImportName(sanitizeImportName(name))).toBe(sanitizeImportName(name))
 		}
 	})
@@ -241,6 +243,12 @@ describe("matchSavedContacts / classifyImportRow", () => {
 	test("a look-alike letter from another script is a different name: new elsewhere, a name change at the saved address", () => {
 		expect(classify("\u0410lice", ADDR.fresh)).toMatchObject({ kind: "new", targetId: null })
 		expect(classify("\u0410lice", ADDR.alice)).toMatchObject({ kind: "name-change", targetId: "c1" })
+	})
+
+	test("an accent written as a separate mark is deleted by the character filter before the key sees it, so that spelling is a new name", () => {
+		const [row] = normalizeImportRows([{ name: "JOSE\u0301", address: ADDR.fresh }])
+		expect(row.name).toBe("JOSE")
+		expect(classify(row.name, row.address, [{ id: "c9", name: "José", address: ADDR.priya }])).toMatchObject({ kind: "new" })
 	})
 
 	test("a change carries the saved values it replaces", () => {

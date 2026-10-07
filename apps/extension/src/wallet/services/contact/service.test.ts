@@ -16,6 +16,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { recordWrites } from "../storage-write-log"
+import { getInitials } from "@/utils"
 import { ContactService } from "./service"
 
 /**
@@ -293,11 +294,19 @@ describe("ContactService (port-migrated)", () => {
 			expect(restored.map((c) => c.name)).toEqual([full, full])
 		})
 
-		test("restore removes invisible characters from a name and keeps its visible spelling, like the import", async () => {
+		test("restore removes invisible characters from a name, keeps its visible spelling with a matching abbreviation, and refuses a name with nothing visible", async () => {
 			await contactService.addContact("Alice", "0xa")
 			const [genuine] = await contactService.backup()
-			const restored = await contactService.restore([{ ...genuine, id: "c-inv", name: "\u3164ALI\u200Bce\u00A0Smith\uFFA0 " }])
-			expect(restored.map((c) => c.name)).toEqual(["ALIce Smith"])
+			const restored = await contactService.restore([
+				{ ...genuine, id: "c-inv", name: "\u3164ALI\u200Bce\u00A0Smith\uFFA0 ", abbr: "XX" },
+				{ ...genuine, id: "c-blank", name: "\u3164\u200B " },
+			])
+			expect(restored.map((c) => [c.name, c.abbr, typeof c.restoreError])).toEqual([
+				["ALIce Smith", getInitials("ALIce Smith"), "undefined"],
+				["\u3164\u200B ", genuine.abbr, "string"],
+			])
+			const raw = await api.storage.local.get(null)
+			expect(Object.keys(raw).some((k) => k.includes("c-blank"))).toBe(false)
 		})
 
 		test("a failed item stores the normalized error MESSAGE string, not the raw error", async () => {

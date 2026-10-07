@@ -239,7 +239,10 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 			return await restoreRows(contacts, async (contact) => {
 				const id = await preferOrReallocId(this.storage, contact.id)
 				// Same sanitizer the plaintext import applies: a backup name is untrusted display text.
-				const written = { ...contact, id, name: sanitizeImportName(contact.name) }
+				const name = sanitizeImportName(contact.name)
+				if (!name) throw new Error("contact name has no visible characters")
+				const abbr = name === contact.name ? contact.abbr : this._getAbbreviation(name)
+				const written = { ...contact, id, name, abbr }
 				// Parse the persisted shape so a malformed backup contact is recorded as
 				// restoreError, not silently written + codec-hidden on read.
 				ContactSchema.parse(written)

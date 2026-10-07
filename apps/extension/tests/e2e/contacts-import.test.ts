@@ -44,6 +44,7 @@ import {
 	waitForFocusOn,
 	waitForInputValue,
 	waitForListed,
+	waitForListedAddress,
 	waitForSelected,
 } from "./helpers/contacts-import"
 import { pressEscape } from "./helpers/pointer-probes"
@@ -301,7 +302,7 @@ test("a name that differs from a saved one only by case, spacing or invisible ch
 		await waitForSelected(page, "ALICE", true)
 		await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Import completed successfully")
 		await waitForListed(page, ["Alice"])
-		expect(await listedAddress(page, "Alice")).toBe(trimAddress(ADDR.e))
+		await waitForListedAddress(page, "Alice", trimAddress(ADDR.e))
 		expect(await storedContacts(page)).toEqual([{ ...saved[0], address: ADDR.e }])
 	})
 }, 180_000)

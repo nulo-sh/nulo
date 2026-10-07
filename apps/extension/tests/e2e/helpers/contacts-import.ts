@@ -242,6 +242,20 @@ export function listedAddress(page: Page, name: string): Promise<string | null> 
 	)
 }
 
+/** Waits until a list row shows `shown` as its shortened address: an address change keeps the row's
+ *  name, so waiting for the names alone does not wait for the update. */
+export async function waitForListedAddress(page: Page, name: string, shown: string): Promise<void> {
+	await withTimeoutMessage(
+		page.waitForFunction(
+			(s: string, expected: string) => document.querySelector(s)?.textContent?.trim() === expected,
+			{ timeout: 10_000, polling: 100 },
+			`${listRow(name)} ${sel("contact-row-address")}`,
+			shown,
+		),
+		async () => `${name} shows ${JSON.stringify(await listedAddress(page, name))}, not ${shown}`,
+	)
+}
+
 /** Whether a list row shows the sender chip. */
 export function listedAsSender(page: Page, name: string): Promise<boolean> {
 	return page.evaluate((s: string) => document.querySelector(s) !== null, `${listRow(name)} ${sel("contact-sender-chip")}`)

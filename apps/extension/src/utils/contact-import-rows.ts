@@ -37,16 +37,17 @@ export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, un
 const INVISIBLE = /\p{Default_Ignorable_Code_Point}/gu
 const WHITESPACE_RUN = /\p{White_Space}+/gu
 
-/** A contact name read from a file or a backup: untrusted display text, trimmed on both sides of the
- *  cut as the form saves it. Invisible characters are removed and every whitespace run becomes one
- *  space before the filter and the cut, so none of them is stored or costs a character, and a word
- *  break the filter would delete stays a space. Visible letters and their case are kept. The cut
+/** A contact name read from a file, a backup or an import edit: untrusted display text. Invisible
+ *  characters go, any whitespace becomes a space before the character filter (which would delete it
+ *  and join the words), and the runs the filter leaves become one space, all before the cut, so
+ *  none of them is stored or costs a character. Visible letters and their case are kept. The cut
  *  counts UTF-16 units, as the form does, but a letter outside the BMP that it would split is
  *  dropped whole: half of one is not a character, and the next import strips it, so the name would
  *  never read back as saved. */
 export function sanitizeImportName(name: string): string {
-	const visible = name.replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ")
-	return sanitizeString(visible.trim(), IMPORT_NAME_MAX)
+	const visible = sanitizeString(name.replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ")).replace(/ {2,}/g, " ").trim()
+	return visible
+		.slice(0, IMPORT_NAME_MAX)
 		.replace(/[\uD800-\uDBFF]$/, "")
 		.trim()
 }
