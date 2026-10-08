@@ -1,7 +1,7 @@
 ---
 plan: security-ui-1
 tier: mid
-status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 merged (#51); arc 2 in review
+status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 merged (#51); arc 2 in review (#55); arc 3 in progress
 issues: [17, 34, 14]
 driver: claude-code
 claude_model: opus
@@ -305,7 +305,7 @@ Tests: for every option, the plain path either does not exist (A, D-password) or
 - Pass criteria: every listed spec passes on both browsers; the screenshots exist for the PR body.
 - Layers: smoke e2e (Chrome, Firefox), network e2e.
 
-### Phase 3.1: the emoji check per the owner's #14 pick (Arc 3)
+### Phase 3.1: the emoji check per the owner's #14 pick (Arc 3) ✓
 
 1. Add `revokeLiveSessions` to the wallet-sdk background and move `wireSessionTeardown` onto it.
 2. Add `DappSessionService.refuseVerification`, the `onVerificationRefused` event and the client entry.
@@ -386,6 +386,12 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 - **Deviation (Phase 2.1): the confirm button's red needed a ConfirmPopup field, and a compact size.** `confirm_color: "red"` never coloured ConfirmPopup's confirm button: it reaches the design Button as a `type` attribute and only picks the pre-title. Turning it into the red variant would recolour every destructive confirm in the wallet, a UI change outside this sign-off. So ConfirmPopup takes an opt-in `confirm_variant`, unset everywhere else. At the row's medium size, `cta_destructive`'s CTA type (14 px, 0.2 em tracking, no side padding) clipped "Download anyway" to "OWNLOAD ANYWA"; a CTA variant now takes `compact`, the design package's CTA size for a tight spot, where the label fits edge to edge. The look is flagged to the owner in OWNER-ASKS.md § Render notes.
 - **Deviation (Phase 2.1): one download writer, the plain-file rule held twice.** `canDownload` decides the button; `downloadBackup(isEncrypted)` refuses a plain file on a password profile again, so a confirmation answered after an in-place switch to a password profile writes nothing. The confirm callback also checks the run's `generation` and the `finished` status.
 - **Phase 2.2 helpers:** `exportPlainBackup` became `exportBackupContent` (it now encrypts, downloads and opens the file with `openFullBackupText` in Node); new `downloadEncryptedBackup`, `downloadPlainPasskeyBackup` and `openEncryptedBackup` in `tests/e2e/helpers/backup-export.ts` take the press as a parameter, so `legal-acceptance` keeps its real pointer input.
+
+- **Deviation (Phase 3.1): the replacement lookup reads the owner's raw rows for their storage keys, then verifies each by key.** The plan said "looks up the verified row". A verified read by `getValues()` names a row by its self-reported id; reading `rowsForProfile` first deletes the row at the key it actually lives under, and the MAC read by key still hides a row while locked, so the fence contract is unchanged. The re-check uses `ProfileService.isFenceLive` (synchronous) rather than `assertFence`.
+- **Deviation (Phase 3.1): the window's latch is released when "They match" fails to write the trust flag**, so a failed write leaves both controls usable, as OK was before. It is never released once the window starts closing, so a press during the close runs nothing.
+- **Deviation (Phase 3.1): `refuseVerification` validates its target** and refuses a missing row or profile id and a non-string origin or chain id with `ValidationError` before it ends anything (one test per refused class).
+- **Deviation (Phase 3.1): two planned tests take another shape.** "The same holds after the row is re-created" is not a separate case: the dispatch guard reads the stamp, never a row, and the test proves the unstamped call never reaches the dispatcher. "Both settings pages mounted" is split: the service tests pin the delete event's `id` to the deleted storage key on both paths, the list page's delete test already existed, and `[id].test.ts` adds the detail page leaving on its own row's id only.
+- **Phase 3.2: one testid added, nothing visible:** `connected-app-verification` on the settings row's block, so the e2e reaches the row by testid (CLAUDE.md § testid preservation).
 
 ## Issue claims checked against the tree
 

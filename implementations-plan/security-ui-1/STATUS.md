@@ -24,3 +24,5 @@
 - 2026-10-08: final head Chrome network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): the eight Phase 2.2 network specs (28/28).
 - 2026-10-08: final screenshots taken through the e2e harness (Chrome, both themes, both profile types, ready and confirmation states).
 - 2026-10-08: final head Firefox network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): `import-handshake-note` and `import-handshake-note-matrix` (4/4, the passkey profile included); `account-balance-orphans`, `backup-migration-roundtrip`, `backup-restore-integrity`, `same-token-concurrent-sends` (19/19); `backup-import-stalled-network` and `backup-restore-sw-restart` skip as Chrome-only. Phase 2.2 gate pass.
+- 2026-10-08: arc 3 started on `security-ui-1-emoji-refuse` (gh stack on `security-ui-1-backup-download`); owner calls 2 = A, 3 = Yes, so Phase 3.3 is skipped.
+- 2026-10-08: Phase 3.1 gate pass: `bun run lint`, `bun run typecheck:all`, `bun run audit:vue` (lint, typecheck:all, test, build); new service, revocation, window and settings tests pass and fail under their mutations.
