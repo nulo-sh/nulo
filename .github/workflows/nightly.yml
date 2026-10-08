@@ -67,8 +67,9 @@ concurrency:
   # A newer run supersedes a stale in-flight one (manual dispatch while a
   # scheduled run crawls). Worst case of a cancel DURING publish is the tag
   # and an unpublished draft: re-running the failed job finishes that draft,
-  # and a re-dispatch publishes under a fresh date-code tag, so cancel beats
-  # queueing a duplicate build.
+  # and the next run publishes under a fresh date-code tag (a tag without a
+  # published release is no quiet-day skip), so cancel beats queueing a
+  # duplicate build.
   cancel-in-progress: true
 
 # Least-privilege default; publish-nightly escalates explicitly.
@@ -93,6 +94,7 @@ jobs:
       - id: r
         env:
           FORCE: ${{ github.event.inputs.force }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -141,9 +143,15 @@ jobs:
           SKIP="false"
           if [ "$FORCE" != "true" ]; then
             for t in $(git tag -l 'v*-nightly*'); do
-              if [ "$(git rev-list -n 1 "$t")" = "$DEV_SHA" ]; then
+              [ "$(git rev-list -n 1 "$t")" = "$DEV_SHA" ] || continue
+              # A tag is not a release: publish-nightly creates it before the draft it fills, so a
+              # run that died between the two published nothing. This endpoint never returns a draft.
+              if FOUND="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${t}" --jq .id 2>&1)"; then
                 SKIP="true"
                 echo "::notice::dev HEAD ${DEV_SHA::7} is already released as $t — quiet-day skip (dispatch with force=true to override)"
+              elif ! grep -q 'HTTP 404' <<<"$FOUND"; then
+                echo "::error::reading the release of $t failed: $FOUND"
+                exit 1
               fi
             done
           fi
@@ -515,7 +523,7 @@ jobs:
     # (instead of only rejecting failure/cancelled) makes a future graph edit
     # that introduces a skip path publish-proof by construction.
     if: |
-      always() &&
+      always() && !cancelled() &&
       needs.resolve.result == 'success' &&
       needs.resolve.outputs.skip != 'true' &&
       needs.lint-and-typecheck.result == 'success' &&

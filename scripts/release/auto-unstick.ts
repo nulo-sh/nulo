@@ -1,10 +1,8 @@
 /**
- * The decision core for auto-unsticking the release-please v4 abort (the bug
- * where, after a Release PR merges, the action logs "untagged, merged release
- * PRs outstanding" and never tags). This is the IN-`release.yml` design: on the
- * post-merge `push:main` run, if release-please aborted on a genuine stuck
- * Release PR, we create the tag ourselves, then continue the same publish DAG,
- * whose attach-assets job creates and publishes the GitHub Release.
+ * The decision core for tagging a merged Release PR, which release-please never
+ * tags (it runs with skip-github-release). On the post-merge `push:main` run we
+ * create the tag ourselves, then continue the same publish DAG, whose
+ * attach-assets job creates and publishes the GitHub Release.
  *
  * This module is the PURE decision only — the GitHub API side-effects (create
  * tag, relabel) live in the workflow glue, which calls this to

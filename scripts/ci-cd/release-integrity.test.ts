@@ -14,7 +14,7 @@ import { SOURCE_COMMIT } from "../release/attach-assets-run"
 
 const ROOT = join(import.meta.dir, "..", "..")
 
-type Step = { uses?: string; with?: Record<string, unknown>; run?: string; if?: unknown }
+type Step = { id?: string; uses?: string; with?: Record<string, unknown>; run?: string; if?: unknown }
 type Job = { uses?: string; permissions?: unknown; env?: Record<string, unknown>; steps?: Step[]; needs?: unknown; if?: unknown }
 type Workflow = { permissions?: unknown; env?: Record<string, unknown>; jobs: Record<string, Job> }
 type Action = { runs: { steps?: Step[] } }
@@ -59,7 +59,9 @@ const thirdParty = (steps: Step[]): string[] =>
 	].sort()
 
 function privileged(job: Job, wf: Workflow): boolean {
-	const permissions = (job.permissions ?? wf.permissions ?? {}) as Record<string, unknown>
+	const declared = job.permissions ?? wf.permissions ?? {}
+	if (declared === "write-all") return true
+	const permissions = declared as Record<string, unknown>
 	const signs = permissions["id-token"] === "write" || permissions.attestations === "write"
 	return signs || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
 }
@@ -161,6 +163,8 @@ function cleanFindings(tree: Tree): string[] {
 	const findings = composite
 		.filter((s) => INSTALLS.test(s.run ?? "") && s.if !== "inputs.install == 'true'")
 		.map(() => `${SETUP_BUN}: installs whatever its install input says`)
+	if (composite.some((s) => s.uses?.startsWith("oven-sh/setup-bun@") && s.with?.token !== ""))
+		findings.push(`${SETUP_BUN}: hands Bun's setup the job's token`)
 	const byWhere = new Map([...jobs(tree)].map(({ where, job }) => [where, job]))
 	for (const where of CLEAN) {
 		const job = byWhere.get(where)
@@ -250,6 +254,26 @@ function publisherFindings(tree: Tree, { where, apply }: (typeof PUBLISHERS)[num
 		.trim()
 		.split("\n")
 	if (!Bun.deepEquals(subjects, SUBJECTS)) findings.push(`${where}: attests ${subjects.join(", ")}`)
+	return findings
+}
+
+const VERIFY_GUARD = "steps.plan.outputs.action == 'use-published' && env.DRY_RUN != 'true'"
+const SHIPPED = "${{ steps.published.outputs.dir || 'dist/release' }}/"
+
+/** A store submission on a published release ships the bytes verify-published checked, never this run's rebuild. */
+function storeBytesFindings(tree: Tree): string[] {
+	const steps = tree.workflows["release.yml"].jobs["attach-assets"].steps ?? []
+	const verify = steps.find((s) => s.run === `${RUNNER} verify-published`)
+	const upload = steps.find((s) => s.uses?.startsWith("actions/upload-artifact@") && String(s.with?.name).startsWith("release-"))
+	const paths = String(upload?.with?.path ?? "")
+		.trim()
+		.split("\n")
+		.map((p) => p.trim())
+	const findings: string[] = []
+	if (verify?.id !== "published" || verify.if !== VERIFY_GUARD)
+		findings.push("attach-assets: a published release can skip verify-published")
+	if (paths.length !== 3 || !paths.every((p) => p.startsWith(SHIPPED)))
+		findings.push("attach-assets: the store artifact is not the checked bytes")
 	return findings
 }
 
@@ -350,6 +374,10 @@ describe("credentialed jobs", () => {
 			"a new credentialed job",
 			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { permissions: { "id-token": "write" } }),
 		],
+		[
+			"a job granted write-all",
+			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { permissions: "write-all" }),
+		],
 	])("finds %s", (_, edit) => {
 		expect(credentialedFindings(mutated(edit)).length).toBeGreaterThan(0)
 	})
@@ -369,6 +397,10 @@ describe("jobs that tag or publish", () => {
 		[
 			"an install step",
 			(t: Tree) => t.workflows["nightly.yml"].jobs["publish-nightly"].steps?.push({ run: "bun install --frozen-lockfile" }),
+		],
+		[
+			"Bun's setup with the job's token",
+			(t: Tree) => unset(t.actions[SETUP_BUN].runs.steps?.find((s) => s.uses?.startsWith("oven-sh/setup-bun@"))?.with, "token"),
 		],
 		[
 			"a checkout of the tag",
@@ -419,6 +451,7 @@ describe("attestations", () => {
 	test("each publish job attests the three assets after plan and before the publish, on the publish path only", () => {
 		expect(PUBLISHERS.flatMap((p) => publisherFindings(TREE, p))).toEqual([])
 		expect(releaseWriteFindings(TREE)).toEqual([])
+		expect(storeBytesFindings(TREE)).toEqual([])
 	})
 	const attestStep = (t: Tree, where: string) => step(t, where, ATTEST)
 	test.each([
@@ -446,6 +479,26 @@ describe("attestations", () => {
 	])("finds %s", (_, edit) => {
 		const t = mutated(edit)
 		expect(PUBLISHERS.flatMap((p) => publisherFindings(t, p)).length).toBeGreaterThan(0)
+	})
+	const attachStep = (t: Tree, find: (s: Step) => boolean) => t.workflows["release.yml"].jobs["attach-assets"].steps?.find(find) ?? {}
+	test.each([
+		[
+			"a published release shipped unchecked",
+			(t: Tree) =>
+				Object.assign(
+					attachStep(t, (s) => s.id === "published"),
+					{ if: "env.DRY_RUN != 'true' && false" },
+				),
+		],
+		[
+			"a store artifact made from the rebuild",
+			(t: Tree) =>
+				Object.assign(attachStep(t, (s) => s.uses?.startsWith("actions/upload-artifact@") === true).with ?? {}, {
+					path: "dist/release/nulo-chrome-x.zip\ndist/release/nulo-firefox-x.zip\ndist/release/SHASUMS256.txt",
+				}),
+		],
+	])("finds %s", (_, edit) => {
+		expect(storeBytesFindings(mutated(edit)).length).toBeGreaterThan(0)
 	})
 	test("finds a release written with gh", () => {
 		const edit = (t: Tree) =>

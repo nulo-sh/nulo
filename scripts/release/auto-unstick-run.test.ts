@@ -57,6 +57,7 @@ describe("runUnstick — zero-API short-circuit on the common path", () => {
 		expect(r.action).toBe("disabled")
 		expect(r.exitCode).toBe(0)
 		expect(r.performed).toBe(false)
+		expect(r.continues).toBe(false)
 		expect(calls.resolveMergedPr).toHaveLength(0)
 		expect(calls.resolveTagSha).toHaveLength(0)
 	})
@@ -90,17 +91,19 @@ describe("runUnstick — the unstick itself", () => {
 		const r = await runUnstick(opts({ io }))
 		expect(r.action).toBe("create")
 		expect(r.performed).toBe(true)
+		expect(r.continues).toBe(true)
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toEqual([{ tag: "v0.24.0", sha: MERGE, message: "Release 0.24.0" }])
 		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
 	})
 
-	test("tag already at the merge SHA → skip (no 2nd tag) but HEALS the label", async () => {
+	test("tag already at the merge SHA → skip (no 2nd tag), HEALS the label and continues the publish", async () => {
 		// A prior run may have created the tag then died before the relabel finished.
 		const { io, calls } = fakeIO({ pr: releasePr(), tagSha: MERGE })
 		const r = await runUnstick(opts({ io }))
 		expect(r.action).toBe("skip")
 		expect(r.performed).toBe(false)
+		expect(r.continues).toBe(true)
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toHaveLength(0)
 		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
@@ -111,6 +114,7 @@ describe("runUnstick — the unstick itself", () => {
 		const r = await runUnstick(opts({ io }))
 		expect(r.action).toBe("abort")
 		expect(r.exitCode).toBe(1)
+		expect(r.continues).toBe(false)
 		expect(calls.createTag).toHaveLength(0)
 	})
 

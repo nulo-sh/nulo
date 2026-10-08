@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { assetNames } from "./attach-assets"
-import { type AttachIO, inputFromEnv, main, parseRelease, type ReleaseRecord, type RunInput, SOURCE_COMMIT } from "./attach-assets-run"
+import { type AttachIO, inputFromEnv, main, parseRelease, type ReleaseRecord, realIO, SOURCE_COMMIT } from "./attach-assets-run"
 
 const SHA = "a".repeat(40)
 const OTHER = "b".repeat(40)
@@ -10,8 +13,12 @@ const ENV = { TAG: "v1.2.3", VERSION: "1.2.3", GITHUB_SHA: SHA, SHA, NOTES: "not
 const SHASUMS = `${BUILT[NAMES[0]]}  ${NAMES[0]}\n${BUILT[NAMES[1]]}  ${NAMES[1]}\n`
 
 interface World {
-	releases: (ReleaseRecord & { tag: string })[]
+	releases: ReleaseRecord[]
 	tags: Map<string, string>
+	/** The tag another writer moves the draft to while it is being filled. */
+	retarget?: string
+	/** The first read after an upload or the publish still shows the release as it was. */
+	lag?: boolean
 	/** Digests GitHub reports for an upload, when it differs from the bytes sent. */
 	uploaded?: Record<string, string>
 	/** Hashes of what a download writes, when it differs from GitHub's digest. */
@@ -32,6 +39,7 @@ function fake(world: World) {
 	const outputs: Record<string, string> = {}
 	const logs: string[] = []
 	let nextId = 100
+	let stale = false
 	const find = (id: number) => {
 		const release = world.releases.find((r) => r.id === id)
 		if (!release) throw new Error(`no release ${id}`)
@@ -45,7 +53,12 @@ function fake(world: World) {
 	}
 	const io: AttachIO = {
 		releasesFor: async (tag) => world.releases.filter((r) => r.tag === tag).map((r) => structuredClone(r)),
-		release: async (id) => structuredClone(find(id)),
+		async release(id) {
+			const copy = structuredClone(find(id))
+			if (!stale) return copy
+			stale = false
+			return { ...copy, draft: true, assets: copy.assets.map((a) => ({ ...a, digest: null })) }
+		},
 		tagCommit: async (tag) => world.tags.get(tag) ?? null,
 		async createTagRef(tag, sha) {
 			if (world.tags.has(tag)) return false
@@ -64,12 +77,16 @@ function fake(world: World) {
 		},
 		async uploadAsset(releaseId, name) {
 			calls.push(`upload ${name}`)
-			find(releaseId).assets.push({ id: nextId++, name, digest: `sha256:${world.uploaded?.[name] ?? BUILT[name]}` })
+			const release = find(releaseId)
+			release.assets.push({ id: nextId++, name, digest: `sha256:${world.uploaded?.[name] ?? BUILT[name]}` })
+			if (world.retarget) release.tag = world.retarget
+			stale = world.lag === true
 		},
 		async editRelease(id, patch) {
 			calls.push(patch.draft === false ? "publish" : "notes")
 			if (patch.body !== undefined) world.bodies?.push(patch.body)
 			Object.assign(find(id), patch.draft === undefined ? {} : { draft: patch.draft })
+			stale = world.lag === true && patch.draft === false
 		},
 		attested: async () => world.attested ?? true,
 		verifyAttestation: async () => world.verifies ?? true,
@@ -141,12 +158,26 @@ describe("apply", () => {
 		expect(calls.slice(0, 2)).toEqual(["delete 1", `upload ${NAMES[0]}`])
 	})
 
+	test("reads again while GitHub trails the uploads and the publish", async () => {
+		const world: World = { releases: [], tags: new Map([["v1.2.3", SHA]]), lag: true }
+		expect(await run(world, "apply", "--expect", "publish").exit).toBe(0)
+		expect(world.releases[0].draft).toBe(false)
+	})
+
 	test("never publishes a draft whose read-back differs from the build", async () => {
 		const world: World = { releases: [], tags: new Map([["v1.2.3", SHA]]), uploaded: { [NAMES[1]]: "f".repeat(64) } }
 		const { exit, calls } = run(world, "apply", "--expect", "publish")
 		expect(await exit).toBe(1)
 		expect(calls).not.toContain("publish")
 		expect(calls).not.toContain("notes")
+	})
+
+	test("never publishes a draft moved to another tag while it was filled", async () => {
+		const world: World = { releases: [], tags: new Map([["v1.2.3", SHA]]), retarget: "v9.9.9" }
+		const { exit, calls, logs } = run(world, "apply", "--expect", "publish")
+		expect(await exit).toBe(1)
+		expect(calls).not.toContain("publish")
+		expect(logs.join("\n")).toContain("now belongs to v9.9.9")
 	})
 
 	test("refuses when the release changed since plan", async () => {
@@ -223,15 +254,22 @@ describe("inputs", () => {
 	})
 
 	test("reads a release with every field, and refuses one without", () => {
-		const json = { id: 1, draft: false, immutable: true, assets: [{ id: 2, name: "a.zip", state: "uploaded", digest: "sha256:00" }] }
+		const json = {
+			id: 1,
+			tag_name: "v1.2.3",
+			draft: false,
+			immutable: true,
+			assets: [{ id: 2, name: "a.zip", state: "uploaded", digest: "sha256:00" }],
+		}
 		expect(parseRelease(json)).toEqual({
 			id: 1,
+			tag: "v1.2.3",
 			draft: false,
 			immutable: true,
 			assets: [{ id: 2, name: "a.zip", digest: "sha256:00" }],
 		})
 		expect(parseRelease({ ...json, assets: [{ ...json.assets[0], state: "starter" }] }).assets[0].digest).toBeNull()
-		expect(() => parseRelease({ id: 1, assets: [] })).toThrow()
+		expect(() => parseRelease({ id: 1, draft: false, assets: [] })).toThrow()
 	})
 
 	test("refuses an unknown command", async () => {
@@ -239,4 +277,26 @@ describe("inputs", () => {
 	})
 })
 
-export type { RunInput }
+/** Read-only against a real published release; opt in with `NULO_RELEASE_PROBE=1 GH_TOKEN=… bun test <this file>`. */
+describe.skipIf(!process.env.NULO_RELEASE_PROBE)("the REST boundary against a published release", () => {
+	const PROBE = "v0.30.2"
+	const io = realIO(process.env.GITHUB_REPOSITORY ?? "nulo-sh/nulo", process.env.GH_TOKEN ?? "")
+	const dir = mkdtempSync(join(tmpdir(), "nulo-release-probe-"))
+	afterAll(() => rmSync(dir, { recursive: true, force: true }))
+
+	test("reads the release and its tag, and downloads an asset whose bytes match GitHub's digest", async () => {
+		const [release, ...more] = await io.releasesFor(PROBE)
+		expect({ more: more.length, tag: release?.tag, draft: release?.draft }).toEqual({ more: 0, tag: PROBE, draft: false })
+		expect(release.assets.map((a) => a.name).sort()).toEqual([...assetNames(PROBE.slice(1))].sort())
+		expect(await io.tagCommit(PROBE)).toMatch(/^[0-9a-f]{40}$/)
+
+		const sums = release.assets.find((a) => a.name === "SHASUMS256.txt")
+		expect(sums?.digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+		await io.downloadAsset(sums?.id ?? 0, `${dir}/SHASUMS256.txt`)
+		expect(`sha256:${await io.sha256(`${dir}/SHASUMS256.txt`)}`).toBe(sums?.digest ?? "")
+	}, 60_000)
+
+	test("reads a digest with no attestation as unattested", async () => {
+		expect(await io.attested("0".repeat(64))).toBe(false)
+	}, 30_000)
+})

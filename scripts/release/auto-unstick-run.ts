@@ -5,10 +5,9 @@
  * when (and only when) the decision is `create`. The GitHub Release is the
  * publish chain's: attach-assets creates it as a draft and publishes it whole.
  *
- * Staged-rollout + safety, by construction:
- *  - The expensive resolution (PR-by-commit, tag SHA) runs ONLY when the kill
- *    switch is on AND release-please genuinely aborted AND this is a push — so
- *    the common path (flag off by default, or a normal push) is zero-API.
+ * Safety, by construction:
+ *  - The PR-by-commit and tag lookups run only when the kill switch is on and
+ *    this is a push; otherwise the runner makes no API call.
  *  - `decideUnstick` is the single source of truth for whether to act; this
  *    runner only maps its verdict to side effects.
  *  - `abort` (tag exists at the WRONG sha) exits non-zero — fail-closed, never
@@ -59,6 +58,11 @@ export interface RunUnstickResult {
 	reason: string
 	/** true only when the tag was actually created. */
 	performed: boolean
+	/**
+	 * The tag names this run's Release-PR merge commit, created now or by an earlier attempt of
+	 * this run, so the publish chain continues: a re-run after a failed relabel must not strand the tag.
+	 */
+	continues: boolean
 	exitCode: 0 | 1
 }
 
@@ -66,9 +70,7 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 	const { io } = opts
 	const tag = `v${opts.version}`
 
-	// Cheap guards first: resolve the (API-costing) PR + tag state ONLY when the
-	// flag is on, release-please genuinely aborted, and this is a push. The common
-	// path — flag off by default, or a normal push — stays zero-API.
+	// Cheap guards first: the PR and tag lookups cost API calls.
 	const eligible = opts.autoUnstickEnabled && !opts.releaseCreated && opts.eventName === "push"
 	const mergedPr = eligible ? await io.resolveMergedPr(opts.headSha) : null
 	const existingTagSha = mergedPr ? await io.resolveTagSha(tag) : null
@@ -86,22 +88,22 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 		case "disabled":
 		case "noop":
 			io.log(`auto-unstick: ${decision.action} — ${decision.reason}`)
-			return { action: decision.action, reason: decision.reason, performed: false, exitCode: 0 }
+			return { action: decision.action, reason: decision.reason, performed: false, continues: false, exitCode: 0 }
 		case "abort":
 			io.log(`auto-unstick: ABORT — ${decision.reason}`)
-			return { action: "abort", reason: decision.reason, performed: false, exitCode: 1 }
+			return { action: "abort", reason: decision.reason, performed: false, continues: false, exitCode: 1 }
 		case "skip": {
 			// Tag already at the merge SHA: heal a prior run that tagged but never relabeled. Never a 2nd tag.
 			await io.relabelPr(decision.prNumber as number, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
 			io.log(`auto-unstick: skip (tag exists) — ensured the label for ${tag}`)
-			return { action: "skip", reason: decision.reason, performed: false, exitCode: 0 }
+			return { action: "skip", reason: decision.reason, performed: false, continues: true, exitCode: 0 }
 		}
 		case "create": {
 			io.log(`auto-unstick: creating ${tag} at ${decision.tagSha} (Release PR #${decision.prNumber})`)
 			await io.createTag(tag, decision.tagSha as string, `Release ${opts.version}`)
 			await io.relabelPr(decision.prNumber as number, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
 			io.log(`auto-unstick: created ${tag}, relabeled PR #${decision.prNumber} → tagged`)
-			return { action: "create", reason: decision.reason, performed: true, exitCode: 0 }
+			return { action: "create", reason: decision.reason, performed: true, continues: true, exitCode: 0 }
 		}
 	}
 }
@@ -180,15 +182,10 @@ if (import.meta.main) {
 		io: realIO,
 	})
 
-	// Feed the downstream `resolve` job: `unstuck=true` (+ the tag) only when we
-	// actually created the tag, so the publish chain continues on exactly the
-	// abort path and stays skipped (today's manual-unstick behavior) otherwise.
 	const ghOut = process.env.GITHUB_OUTPUT
 	if (ghOut) {
 		const { appendFileSync } = await import("node:fs")
-		const unstuck = result.action === "create" ? "true" : "false"
-		const tagName = result.action === "create" ? `v${version}` : ""
-		appendFileSync(ghOut, `unstuck=${unstuck}\ntag_name=${tagName}\n`)
+		appendFileSync(ghOut, `unstuck=${result.continues}\ntag_name=${result.continues ? `v${version}` : ""}\n`)
 	}
 	process.exit(result.exitCode)
 }

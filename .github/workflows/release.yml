@@ -46,10 +46,8 @@ concurrency:
   cancel-in-progress: false
 
 # Least-privilege default: read-only for every job (covers checkout; artifact +
-# cache ops don't need a `permissions:` scope). The handful of jobs that write
-# (release-please, auto-unstick, attach-assets, sync) escalate explicitly in
-# their own block — so build/test/resolve/deploy/verify/status no longer inherit
-# a write-capable token.
+# cache ops don't need a `permissions:` scope). A job that writes escalates in its
+# own block or mints a release App token, whose permissions release-integrity.test.ts pins.
 permissions:
   contents: read
 
@@ -115,14 +113,11 @@ jobs:
   # whole publish chain below skips (the documented manual unstick exists for exactly
   # this). This job detects that precise state — a
   # MERGED `autorelease: pending` Release PR whose merge commit IS github.sha (an
-  # explicit PR-to-SHA check, never a title heuristic) — creates the tag itself,
-  # and feeds `resolve` so the chain continues. All logic + guards
-  # live in unit-tested scripts/release/auto-unstick*.ts. Behind
-  # vars.AUTO_UNSTICK_ENABLED (unset/anything-but-on ⇒ OFF — staged rollout; the
-  # manual unstick stays the documented fallback until the flag is flipped). When
-  # OFF the job still runs but the script no-ops (unstuck=false) → resolve stays
-  # skipped → today's behavior exactly, so the first flag-off release validates
-  # this wiring before anyone flips it on.
+  # explicit PR-to-SHA check, never a title heuristic) — creates the tag itself (or
+  # finds the one an earlier attempt created), and feeds `resolve` so the chain
+  # continues. All logic + guards live in unit-tested scripts/release/auto-unstick*.ts.
+  # vars.AUTO_UNSTICK_ENABLED is the kill switch: unset or anything but on/true/1 and
+  # the script no-ops (unstuck=false), resolve stays skipped, and the manual unstick applies.
   auto-unstick:
     needs: release-please
     if: |
@@ -603,9 +598,9 @@ jobs:
       needs.attach-assets.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Every write goes through the App token below; the job token only checks out.
     permissions:
-      contents: write
-      pull-requests: write # covers PR labels + comments (autorelease:* / needs-manual-resolution)
+      contents: read
     steps:
       # App token so the sync PR is bot-opened → dev's required CI fires
       # (a GITHUB_TOKEN-opened PR suppresses the pull_request workflow), and the

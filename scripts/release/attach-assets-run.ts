@@ -9,7 +9,7 @@
  *
  * Environment: TAG, VERSION, SHA (the tag's commit), GITHUB_SHA, GITHUB_REPOSITORY, GH_TOKEN, and
  * NOTES (the release body's file) for apply and verify-published. The built assets are read from
- * dist/release. Every GitHub call is REST, so no field depends on the runner's `gh` version.
+ * dist/release. Every GitHub read and write is REST; only the attestation check runs `gh`.
  */
 
 import { appendFileSync, mkdirSync } from "node:fs"
@@ -17,6 +17,7 @@ import { assetNames, compareAssets, type LocalAsset, parseShasums, planAttach, t
 
 export interface ReleaseRecord {
 	id: number
+	tag: string
 	draft: boolean
 	immutable: boolean
 	assets: RemoteAsset[]
@@ -58,8 +59,8 @@ export interface RunInput {
 /** Where the release notes print the tagged commit for `gh attestation verify --source-digest`. */
 export const SOURCE_COMMIT = "@SOURCE_COMMIT@"
 
-/** Reads of a just-filled draft while GitHub has not yet reported every digest. */
-export const DIGEST_READS = 3
+/** Reads of a release whose state may still trail the write that changed it. */
+const READS = 3
 
 function fail(io: AttachIO, reason: string): 1 {
 	io.log(`::error::${reason}`)
@@ -101,10 +102,10 @@ async function pinTag(io: AttachIO, tag: string, sha: string, create: boolean): 
 	return named === sha ? null : `${tag} names ${named}, not ${sha}`
 }
 
-/** The release read back until GitHub reports a digest for every asset, or the reads run out. */
-async function settled(io: AttachIO, id: number): Promise<ReleaseRecord> {
+/** The release read back until `pending` no longer holds, or the reads run out. */
+async function settled(io: AttachIO, id: number, pending: (release: ReleaseRecord) => boolean): Promise<ReleaseRecord> {
 	let release = await io.release(id)
-	for (let read = 1; read < DIGEST_READS && release.assets.some((a) => a.digest === null); read++) {
+	for (let read = 1; read < READS && pending(release); read++) {
 		await io.wait(2_000)
 		release = await io.release(id)
 	}
@@ -123,7 +124,9 @@ export async function runApply(io: AttachIO, input: RunInput, notes: string, tar
 	const names = new Set(local.map((a) => a.name))
 	for (const asset of (await io.release(id)).assets) if (names.has(asset.name)) await io.deleteAsset(asset.id)
 	for (const asset of local) await io.uploadAsset(id, asset.name, `${input.dir}/${asset.name}`)
-	const filled = compareAssets((await settled(io, id)).assets, local)
+	const draft = await settled(io, id, (r) => r.assets.some((a) => a.digest === null))
+	if (draft.tag !== input.tag) return fail(io, `draft ${id} now belongs to ${draft.tag}, not ${input.tag}`)
+	const filled = compareAssets(draft.assets, local)
 	if (!filled.ok) return fail(io, `draft ${id} does not hold the built assets: ${filled.reason}`)
 
 	await io.editRelease(id, { body: notes })
@@ -133,10 +136,12 @@ export async function runApply(io: AttachIO, input: RunInput, notes: string, tar
 
 /** Another holder of contents: write can act between the check and the publish; this reports it, it cannot prevent it. */
 async function confirmPublished(io: AttachIO, input: RunInput, id: number, local: LocalAsset[]): Promise<0 | 1> {
-	const release = await io.release(id)
+	const release = await settled(io, id, (r) => r.draft)
 	const held = compareAssets(release.assets, local)
-	if (!held.ok || release.draft)
-		return fail(io, `release ${id} changed while it was published: ${held.ok ? "still a draft" : held.reason}`)
+	if (!held.ok || release.draft || release.tag !== input.tag) {
+		const change = !held.ok ? held.reason : release.draft ? "still a draft" : `it belongs to ${release.tag}`
+		return fail(io, `release ${id} changed while it was published: ${change}`)
+	}
 	const named = await io.tagCommit(input.tag)
 	if (named !== input.tagSha) return fail(io, `${input.tag} names ${named}, not ${input.tagSha}, after the publish`)
 	io.log(`${input.tag}: published release ${id} with ${local.map((a) => a.name).join(", ")}`)
@@ -214,9 +219,10 @@ function parseAsset(json: unknown): RemoteAsset {
 
 /** A release from the REST API; a missing field throws rather than reading as a default. */
 export function parseRelease(json: unknown): ReleaseRecord {
-	const r = json as { id?: unknown; draft?: unknown; immutable?: unknown; assets?: unknown }
-	if (typeof r?.id !== "number" || typeof r.draft !== "boolean" || !Array.isArray(r.assets)) throw new Error("unexpected release JSON")
-	return { id: r.id, draft: r.draft, immutable: r.immutable === true, assets: r.assets.map(parseAsset) }
+	const r = json as { id?: unknown; tag_name?: unknown; draft?: unknown; immutable?: unknown; assets?: unknown }
+	if (typeof r?.id !== "number" || typeof r.tag_name !== "string" || typeof r.draft !== "boolean" || !Array.isArray(r.assets))
+		throw new Error("unexpected release JSON")
+	return { id: r.id, tag: r.tag_name, draft: r.draft, immutable: r.immutable === true, assets: r.assets.map(parseAsset) }
 }
 
 export async function main(argv: string[], env: Record<string, string | undefined>, io: AttachIO): Promise<0 | 1> {
@@ -234,7 +240,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
 	return fail(io, `usage: plan | apply --expect publish [--target <sha>] | verify-published (got ${argv.join(" ")})`)
 }
 
-function realIO(repo: string, token: string): AttachIO {
+export function realIO(repo: string, token: string): AttachIO {
 	const call = async (url: string, init: RequestInit = {}, accept = "application/vnd.github+json"): Promise<Response> => {
 		const res = await fetch(url.startsWith("https://") ? url : `https://api.github.com/repos/${repo}/${url}`, {
 			...init,
