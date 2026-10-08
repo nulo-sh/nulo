@@ -14,6 +14,7 @@
  */
 import { trimAddress } from "@/utils/string"
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { matchRecipients } from "./recipient-search"
 
 const props = defineProps({
 	candidates: { type: Array, default: () => [] },
@@ -25,16 +26,7 @@ const selectedContact = defineModel("selectedContact", { default: null })
 const isSearchInputFocused = ref(false)
 const justCleared = ref(false)
 
-const filteredContacts = computed(() => {
-	if (!searchTerm.value) return []
-	const lowTerm = searchTerm.value?.toLowerCase() || ""
-	return [...props.candidates].filter(
-		// Address compare is case-insensitive: contacts are stored lowercase
-		// (canonical-on-save), but a user may re-paste the mixed-case string
-		// they originally typed — same address, same contact.
-		(c) => c.name?.toLowerCase().includes(lowTerm) || c.address?.toLowerCase() === lowTerm || c.abbr?.toLowerCase() === lowTerm,
-	)
-})
+const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
 
 const showSuggestions = computed(() => filteredContacts.value?.length && isSearchInputFocused.value)
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
