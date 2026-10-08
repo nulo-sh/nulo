@@ -22,7 +22,7 @@ Five hardening findings in three arcs:
 
 What a person can notice is listed under UI impact and in `OWNER-ASKS.md`.
 
-Status: planning, awaiting the orchestrator's approval. Nothing below is approved until the orchestrator says so.
+Status: approved by the orchestrator on 2026-10-08, with one reorder (D-ORD): Arc 3, the CSP floor, ships first as layer 1; Arc 1 follows as layer 2 once PR #48 lands, Arc 2 as layer 3.
 
 ## Outcome & Quality Bar
 
@@ -354,7 +354,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 
 `e2e:agent` builds its own `dist/<browser>`. Run the smoke recipe after any `e2e:agent` run, never before it.
 
-### Arc 1 (branch `worktree-hardening-2`, after PR #48 lands)
+### Arc 1 (layer 2, branch `hardening-2-dapp-parse`, after PR #48 lands)
 
 #### Phase 1 — #16: parse every dApp call against the schema
 
@@ -417,7 +417,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - The refused row fails on the base copy of `artifact-registry.ts`; the cached and other-id rows pass on both.
 - Layers: unit, lint, typecheck, network e2e on Chrome (registration, lookups and a prover-on send through the changed path).
 
-### Arc 2 (branch `hardening-2-storage-fences`)
+### Arc 2 (layer 3, branch `hardening-2-storage-fences`)
 
 #### Phase 3 — #19: resume refuses a journal its registry did not write
 
@@ -492,7 +492,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - Each fence test fails with its fence removed.
 - Layers: typecheck/lint, unit, integration, network e2e (restore and purge), smoke e2e.
 
-### Arc 3 (branch `hardening-2-csp-floor`)
+### Arc 3 (layer 1, branch `worktree-hardening-2`)
 
 #### Phase 6 — record before tightening
 
@@ -578,6 +578,7 @@ Per-directive gate:
 | D-23a | Directive order | Explicit directives first, `default-src` last, then drop the redundant ones | `default-src` first (B): the first attempt shows a floor-first change breaks everything at once and hides causes. |
 | D-23b | Inline styles | Narrowest source on evidence: hash, then `'unsafe-inline'` (round 1) | Automatic `'unsafe-inline'` (A, draft): wider than a recorded need. Rewrite markup: changes what a screen renders without sign-off. |
 | D-23c | Capture | An e2e-only `securitypolicyviolation` recorder in every context, with a release guard (round 1) | DevTools capture through `BrowserDriver` (A, draft): Puppeteer's worker hears no CSP log, persistent attachment changes worker lifecycle, and Firefox's reach is unproven. |
+| D-ORD | Arc order (orchestrator, 2026-10-08) | Arc 3 first as layer 1 on `worktree-hardening-2`, then Arc 1 (layer 2, a new branch once PR #48 lands), then Arc 2 (layer 3) | The planned order 1-2-3: Arc 1 must wait for PR #48, and Arc 2 overlaps files PR #52 is changing, while Arc 3 touches neither. |
 | D-23d | IPv6 loopback | Probe; fall back to `http:` and ask (round 1) | Ship `http://[::1]:*` unprobed: the CSP host grammar has no IPv6 literal, so a saved endpoint could silently break. |
 
 **Unresolved disagreements.**
@@ -652,21 +653,21 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 
 ## Delivery
 
-One `gh stack`, base `dev`. PRs open only after every arc's gates and its Codex loop have converged, and after the final cross-arc pass. Arc 1 rebases on `dev` after PR #48 lands; the stack waits for it.
+One `gh stack`, base `dev`, in the D-ORD order. Each layer's PR opens once that arc's gates and its Codex loop have converged; the final cross-arc pass runs before the close-out. Arc 1 rebases on `dev` after PR #48 lands; only layers 2 and up wait for it.
 
 | Layer | Branch | Phases | Stacks on | `/code-review` | PR title (≤ 93 chars) | Closes |
 |---|---|---|---|---|---|---|
-| 1 | `worktree-hardening-2` | 1-2 | `dev` | off | `fix(dapp): parse every dapp call against the wallet schema at dispatch` | #16, #26 |
-| 2 | `hardening-2-storage-fences` | 3-5 | layer 1 | off | `fix(storage): check resume against its migration, keep tombstone reservations` | #18, #19 |
-| 3 | `hardening-2-csp-floor` | 6-7 | layer 2 | off | `fix(extension): add a default-src floor to the extension pages' csp` | #23 |
+| 1 | `worktree-hardening-2` | 6-7 (Arc 3) | `dev` | off | `fix(extension): add a default-src floor to the extension pages' csp` | #23 |
+| 2 | `hardening-2-dapp-parse` | 1-2 (Arc 1) | layer 1 | off | `fix(dapp): parse every dapp call against the wallet schema at dispatch` | #16, #26 |
+| 3 | `hardening-2-storage-fences` | 3-5 (Arc 2) | layer 2 | off | `fix(storage): check resume against its migration, keep tombstone reservations` | #18, #19 |
 | 4 | `hardening-2-close-out` | close-out | layer 3 | off | `docs(plans): close hardening-2` | — |
 
 - Start: `gh stack init --adopt worktree-hardening-2` (base `dev`).
 - At each arc boundary, after that arc's Codex loop converges: `gh stack add <next-branch>`.
 - Delivery: `gh stack sync` if `dev` moved, then `gh stack submit --auto`, then `gh pr edit` each body.
   - Each body states what changed and why, the validation run with outcomes, and the `Closes` lines.
-  - Layer 1's body names OA-1 to OA-3 and OA-5, quotes the owner's OA-3 sign-off once given, and attaches the OA-3 screenshot. Layer 3's names OA-4.
-  - **Layer 1 merges only after the owner's OA-3 sign-off.** If the owner picks another OA-3 option, it lands in layer 1 before that merge.
+  - Arc 1's body (layer 2) names OA-1 to OA-3 and OA-5, quotes the owner's OA-3 sign-off once given, and attaches the OA-3 screenshot. Arc 3's (layer 1) names OA-4.
+  - **Arc 1's layer merges only after the owner's OA-3 sign-off.** If the owner picks another OA-3 option, it lands in Arc 1's layer before that merge.
   - Open each PR without labels. Add `e2e:extension-network` or `e2e:extension-smoke` afterwards only when the path filter would skip a suite the arc needs.
 - Close-out: `gh stack add hardening-2-close-out`, the close-out commits, `gh stack submit --auto`, then `gh pr checks --watch` on each PR.
 - Merging is the orchestrator's call. Never `--admin`. Never force-push outside `gh stack sync`'s `--force-with-lease` on these branches.
