@@ -1019,9 +1019,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			this.sessionManager.patchActiveProfile(id, profile)
 
-			// Identity only: the popup stores this as its profile, so carrying `recoveryMode` would
-			// decide whether the recovery banner survives a rename, which is a product decision.
-			return this.profileIdentity(profile)
+			return this.getProfileInfo(profile)
 		})
 	}
 

@@ -3695,14 +3695,14 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			return { ...ctx, id: created.id, info: { id: created.id, name, type: "password" } }
 		}
 
-		test("(BUG PIN) a rename in recovery mode returns no recoveryMode", async () => {
-			// The popup stores the rename's result as its profile, so the recovery banner hides until the
-			// popup reopens; whether it should stay is a product decision.
+		test("a rename in recovery mode keeps recoveryMode, so the popup's recovery banner stays", async () => {
+			// The popup stores the rename's result as its profile, and the banner reads the flag there.
 			const { api, service, id } = await lockedPasswordProfile()
 			await writeRawRow(api, id, { ...(await readRawRow(api, id)), envelopeMac: Buffer.alloc(32, 0xee).toString("base64") })
 			await service.unlockProfile(id, "pass1234")
-			expect(await service.getActiveProfile()).toStrictEqual({ id, name: "P", type: "password", recoveryMode: true })
-			expect(await service.changeProfileName(id, "Renamed")).toStrictEqual({ id, name: "Renamed", type: "password" })
+			const renamed = { id, name: "Renamed", type: "password", recoveryMode: true }
+			expect(await service.changeProfileName(id, "Renamed")).toStrictEqual(renamed)
+			expect(await service.getActiveProfile()).toStrictEqual(renamed)
 		}, 30_000)
 
 		test("unlockProfile: a healthy open stays silent and holds the real master and DEK", async () => {
