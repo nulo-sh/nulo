@@ -55,3 +55,20 @@ Four calls, in the order the decision page shows them. Each recommendation is th
 - With "no", #17 stays open for this half, with a comment saying why.
 
 **Planner's recommendation: Yes.** The cost is near zero now, because Nulo has no production users and nobody holds an older version that needs the new files. After launch, the same change would strand people on older versions.
+
+## Answers: owner sign-off, 2026-10-08
+
+Recorded by the owner on the decision page (a private Claude Artifact, "Security UI Decisions", with real-wallet screenshots of every option in both themes), then signed off at 16:08 UTC with the four answers as they stood:
+
+| Call | Answer | Note |
+|---|---|---|
+| 1. #34 unencrypted full backup | **D**, split by profile type: A on password profiles, B on passkey profiles | none |
+| 2. #14 emoji check refusal | **A**, two equal controls | none |
+| 3. #14 closing the check window | **Yes**, keep today's behaviour: closing answers nothing | none |
+| 4. #17 encrypted backup format change | **Yes**, go ahead | "I actually thought it already saved the version, to apply migrations if it's an 'older' version of a back-up (into a newer version of Nulo). But I might be wrong." |
+
+Two render caveats were shown with the page and are not sign-offs of their own: the confirmation's "Download anyway" must use the design package's destructive (red) variant, which the prototype could not render; primary buttons uppercase their labels, so the instruction's "Choose They don't match." reads against THEY DON'T MATCH. The owner raised no objection to either, so the ask's wording stands.
+
+On the call-4 note: the plaintext body already carries `backup-schema-version` (the storage schema version, migrated through the registry on import) and `compat-epoch`. What has no version today is the encrypted wrapper around that body; Phase 1.2 gives it one. So the note is right about the body and the change is about the wrapper only.
+
+Consequences: Arc 1 runs Phase 1.1 and Phase 1.2. Arc 2 builds option D. Arc 3 builds option A and skips Phase 3.3.
