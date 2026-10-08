@@ -29,7 +29,7 @@ const tx = (scope: unknown) => grant({ type: "transaction", scope })
 const contracts = (flags: Record<string, boolean>) => grant({ type: "contracts", contracts: [A], ...flags })
 const listedSimulation = (sub: "transactions" | "utilities") => grant({ type: "simulation", [sub]: { scope: listed(A) } })
 const authWit = { type: "accounts", canGet: true, canCreateAuthWit: true }
-const noAddressBook = grant({ type: "data", addressBook: false })
+const noAddressBook = grant({ type: "data", addressBook: false, privateEvents: { contracts: [A] } })
 
 const call = { to: "SENTINEL-TO", name: "SENTINEL-NAME" }
 const exec = { calls: [call], scopes: ["SENTINEL-EXEC-SCOPE"] }

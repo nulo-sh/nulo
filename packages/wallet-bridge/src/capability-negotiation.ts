@@ -241,6 +241,17 @@ export function projectKnownCapability(cap: unknown): unknown {
 	}
 }
 
+/** The stored grants re-projected through `projectKnownCapability`, so coverage and enforcement
+ *  read only the canonical shape. A record that is not an object, has no capability object, or
+ *  fails projection refuses the whole read with a fixed `ValidationError`: a malformed grant must
+ *  never narrow into a smaller one, because consent reads the full set. */
+export function projectStoredGrants(records: readonly unknown[] | undefined): GrantedCapabilityRecord[] {
+	return (records ?? []).map((record) => {
+		if (!isRecord(record) || !isRecord(record.capability)) throw new ValidationError("Malformed capability")
+		return { ...record, capability: projectKnownCapability(record.capability) } as GrantedCapabilityRecord
+	})
+}
+
 /** A known type named twice is refused: the grant would keep only one of them, so what the
  *  window shows and what is granted could differ. */
 export function projectRequestedCapabilities(caps: readonly unknown[]): Record<string, unknown>[] {
@@ -322,7 +333,7 @@ export function reRequestedTypes(plan: CapabilityPlan): string[] {
 }
 
 export function computeCapabilityDelta(requestedCapabilities: Record<string, unknown>[], dappSession: IDappSessionRef): CapabilityPlan {
-	const existingGrants = dappSession.capabilityGrants ?? []
+	const existingGrants = projectStoredGrants(dappSession.capabilityGrants)
 	const existingRejections = dappSession.capabilityRejections ?? []
 	const grantedTypes = new Set<string>(existingGrants.map((g) => g.capability.type))
 	const rejectedTypes = new Set(existingRejections.map((r) => r.capabilityType))

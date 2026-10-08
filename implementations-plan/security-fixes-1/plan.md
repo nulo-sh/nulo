@@ -341,7 +341,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0. The new row fails on the base commit (prove it once: revert the flag, rerun, see the row fail).
 - Layers: lint, typecheck, unit.
 
-#### Phase 2 — #29 stored grants re-projected on read
+#### Phase 2 — #29 stored grants re-projected on read ✓
 
 1. Add `projectStoredGrants` to `capability-negotiation.ts`; call it in `computeCapabilityDelta`.
 2. In `dispatcher.ts`, `enforceCapability` and the post-decision read in `handleRequestCapabilities` read their grants through it.

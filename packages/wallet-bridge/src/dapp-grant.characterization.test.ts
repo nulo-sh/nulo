@@ -99,9 +99,7 @@ async function outcome(pending: Promise<unknown>): Promise<Outcome> {
 	}
 }
 
-/** The engine's own wording for what `run` throws. A malformed stored element throws inside a
- *  coverage or checker expression and some engines name the variable that held it, so a caller
- *  binds the same name the production expression uses. */
+/** The engine's own wording for what `run` throws: engines word a TypeError differently. */
 function thrownBy(run: () => unknown): { threw: unknown; message: string } {
 	try {
 		run()
@@ -129,6 +127,7 @@ async function enforcement(grant: unknown, method: string, args: unknown[]): Pro
 }
 
 const refused = (message: string) => ({ threw: ScopeViolationError, message })
+const malformed = (type: string) => ({ threw: ValidationError, message: `Malformed ${type} capability` })
 const sendTxRefused = refused("Scope violation: sendTx call not permitted by granted transaction scope")
 
 describe("grant coverage agrees with enforcement", () => {
@@ -162,10 +161,12 @@ describe("grant coverage agrees with enforcement", () => {
 		expect(await coverage({ type: "transaction", scope: "*" }, { type: "transaction", scope: "*" })).toBe("covered")
 	})
 
-	test("a stored malformed address matches nothing, itself included", async () => {
+	test("a stored malformed address refuses both reads, a call naming it included", async () => {
 		const grant = { type: "transaction", scope: [{ contract: MALFORMED, function: "transfer" }] }
-		expect(await coverage(grant, { type: "transaction", scope: [{ contract: TOKEN, function: "transfer" }] })).toBe("window")
-		expect(await enforcement(grant, "sendTx", [{ calls: [{ to: MALFORMED, name: "transfer" }] }, {}])).toEqual(sendTxRefused)
+		expect(await coverage(grant, { type: "transaction", scope: [{ contract: TOKEN, function: "transfer" }] })).toEqual(
+			malformed("transaction"),
+		)
+		expect(await enforcement(grant, "sendTx", [{ calls: [{ to: MALFORMED, name: "transfer" }] }, {}])).toEqual(malformed("transaction"))
 	})
 
 	test("an empty function name: enforcement refuses it under *, the request projection refuses to ask for it", async () => {
@@ -205,16 +206,10 @@ describe("grant coverage agrees with enforcement", () => {
 		expect(await enforcement(grant, "registerContract", [{ address: OTHER }])).toBe("allowed")
 	})
 
-	// Engines word a TypeError differently after the expression it names (Bun appends the
-	// transformed source), so the pin is the class and the expression that threw.
-	test("contracts: a held list that is not an array throws today's TypeError on both paths", async () => {
+	test("contracts: a held list that is not an array refuses both reads", async () => {
 		const grant = { type: "contracts", contracts: {}, canRegister: true }
-		const covered = await coverage(grant, { type: "contracts", contracts: [TOKEN], canRegister: true })
-		expect(covered).toMatchObject({ threw: TypeError })
-		expect((covered as { message: string }).message.startsWith("e.contracts.some is not a function")).toBe(true)
-		const enforced = await enforcement(grant, "registerContract", [{ address: TOKEN }])
-		expect(enforced).toMatchObject({ threw: TypeError })
-		expect((enforced as { message: string }).message.startsWith("list.some is not a function")).toBe(true)
+		expect(await coverage(grant, { type: "contracts", contracts: [TOKEN], canRegister: true })).toEqual(malformed("contracts"))
+		expect(await enforcement(grant, "registerContract", [{ address: TOKEN }])).toEqual(malformed("contracts"))
 	})
 
 	test("private events: a listing in another case covers and admits", async () => {
@@ -231,20 +226,18 @@ describe("grant coverage agrees with enforcement", () => {
 		)
 	})
 
-	test("transaction scope: a held null pattern throws the coverage predicate's own TypeError", async () => {
-		const ep = null as unknown as { contract: unknown }
-		const expected = thrownBy(() => ep.contract)
+	test("transaction scope: a held null pattern refuses both reads", async () => {
 		const grant = { type: "transaction", scope: [null] }
-		expect(await coverage(grant, { type: "transaction", scope: [{ contract: TOKEN, function: "transfer" }] })).toEqual(expected)
+		expect(await coverage(grant, { type: "transaction", scope: [{ contract: TOKEN, function: "transfer" }] })).toEqual(
+			malformed("transaction"),
+		)
+		expect(await enforcement(grant, "sendTx", [{ calls: [{ to: TOKEN, name: "transfer" }] }, {}])).toEqual(malformed("transaction"))
 	})
 
-	test("private events: a held element String() cannot convert throws each path's own TypeError", async () => {
-		const element = { toString: 1 }
-		const grant = { type: "data", privateEvents: { contracts: [element] } }
-		const x = element
-		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toEqual(thrownBy(() => String(x)))
-		const item = element
-		expect(await enforcement(grant, "getPrivateEvents", [{}, { contractAddress: TOKEN }])).toEqual(thrownBy(() => String(item)))
+	test("private events: a held element String() cannot convert refuses both reads", async () => {
+		const grant = { type: "data", privateEvents: { contracts: [{ toString: 1 }] } }
+		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toEqual(malformed("data"))
+		expect(await enforcement(grant, "getPrivateEvents", [{}, { contractAddress: TOKEN }])).toEqual(malformed("data"))
 	})
 })
 

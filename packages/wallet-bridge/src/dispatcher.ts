@@ -64,6 +64,7 @@ import {
 	mergeGrantsAndRejections,
 	planAccountsWidening,
 	projectRequestedCapabilities,
+	projectStoredGrants,
 	reRequestedTypes,
 	sessionAccountsOf,
 	storedGrantAnswer,
@@ -801,7 +802,7 @@ export class WalletSdkDispatcher {
 		const updatedSession = await this.dappSessionService.applyCapabilityDecision(dappSession.id, mergeGrantsAndRejections(result, plan))
 
 		const granted = await this.enrichGrantedCapabilities(
-			(updatedSession.capabilityGrants ?? []).map((g) => g.capability),
+			projectStoredGrants(updatedSession.capabilityGrants).map((g) => g.capability),
 			requestedCapabilities,
 			ctx,
 			updatedSession,
@@ -1011,7 +1012,7 @@ export class WalletSdkDispatcher {
 			throw new CapabilityNotGrantedError(requiredType)
 		}
 
-		const grants = dappSession.capabilityGrants ?? []
+		const grants = projectStoredGrants(dappSession.capabilityGrants)
 		const grantedTypes = new Set(grants.map((g) => g.capability.type))
 		if (!grantedTypes.has(requiredType)) {
 			// Debug (not Info): dApps may re-fire methods per render, so the
