@@ -11,3 +11,4 @@
 const shared = globalThis as { __zod_globalConfig?: { jitless?: boolean } }
 shared.__zod_globalConfig ??= {}
 shared.__zod_globalConfig.jitless = true
+export {}
