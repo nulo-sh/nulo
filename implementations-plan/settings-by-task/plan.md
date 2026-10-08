@@ -143,7 +143,7 @@ export const LEGACY_SETTINGS_REDIRECTS: readonly RouteRecordRaw[] // security→
 5. The read timer is cleared by the read's own settle (answer, failure or the 3-second expiry), as in `Header.vue:34-44`; the listeners wait for the decision, not the read. `dispose()` does not clear the timer: a read that never answers would then never settle, and the requested lock would never happen. No timer outlives the 3-second budget.
 6. A `lock()` call after `dispose()` returns without reading.
 
-Label rules: `sessionTtl` 0 → "Never" (owner, Ask 1). A positive finite number whose minutes `m = ms / 60_000` are whole (owner, Ask A): `m < 60` → `${m} min`; `m % 60 === 0` → `${m / 60} h`; otherwise `${Math.floor(m / 60)} h ${m % 60} min`. So "30 min", "1 h", "1 h 30 min", and "24 h" at the field's maximum of 1440. A positive finite number with a fractional minute, which only storage written outside the app can hold (Fact 20), → `${ms / 1_000 / 60} min`, the Lock page's own expression for its minutes field (`security/index.vue:68,133`), with no rounding, so the hub and the field still agree. The Lock page's minutes field does not change. `showFiatValues` true → "Prices on", false → "Prices off"; `theme` `system|dark|light` → "System"/"Dark"/"Light" (the theme dropdown's own labels); `developerMode` true → "On", false → "Off". Anything else, including not yet read, → no value.
+Label rules: `sessionTtl` 0 → "Never" (owner, Ask 1). A positive finite number whose minutes `m = ms / 1_000 / 60` (the Lock field's own expression) are whole (owner, Ask A): `m < 60` → `${m} min`; `m % 60 === 0` → `${m / 60} h`; otherwise `${Math.floor(m / 60)} h ${m % 60} min`. So "30 min", "1 h", "1 h 30 min", and "24 h" at the field's maximum of 1440. A positive finite number with a fractional minute, which only storage written outside the app can hold (Fact 20), → `${ms / 1_000 / 60} min`, the Lock page's own expression for its minutes field (`security/index.vue:68,133`), with no rounding, so the hub and the field still agree. The Lock page's minutes field does not change. `showFiatValues` true → "Prices on", false → "Prices off"; `theme` `system|dark|light` → "System"/"Dark"/"Light" (the theme dropdown's own labels); `developerMode` true → "On", false → "Off". Anything else, including not yet read, → no value.
 
 ### Data & control flow
 
@@ -279,7 +279,7 @@ D. **Test ids on two hub rows.** Do the Change password and Back up rows keep th
 
 ## Phases
 
-### P1 — Shared pieces
+### P1 — Shared pieces ✓
 
 Steps:
 

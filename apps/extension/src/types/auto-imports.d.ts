@@ -158,6 +158,7 @@ declare global {
   const hasReachedPresto: typeof import('../utils/presto-ui-state').hasReachedPresto
   const heroRoom: typeof import('../utils/hero-ruler').heroRoom
   const holdHeroFit: typeof import('../utils/hero-fit').holdHeroFit
+  const hubValues: typeof import('../utils/settings-labels').hubValues
   const humanizeErrorKind: typeof import('../utils/journal-state').humanizeErrorKind
   const humanizeMethodName: typeof import('../utils/tx-enrichment').humanizeMethodName
   const incomingInScope: typeof import('../utils/activity-rows').incomingInScope
@@ -250,6 +251,7 @@ declare global {
   const planImportWrites: typeof import('../utils/contact-import-rows').planImportWrites
   const postAuthRoute: typeof import('../utils/own-window').postAuthRoute
   const preflightNetworkConnectivity: typeof import('../composables/importPreflight').preflightNetworkConnectivity
+  const profileTypeLabel: typeof import('../utils/settings-labels').profileTypeLabel
   const profileUiKeys: typeof import('../utils/profile-ui-keys').profileUiKeys
   const projectArgument: typeof import('../utils/transfer-intent').projectArgument
   const provide: typeof import('vue').provide
@@ -364,6 +366,7 @@ declare global {
   const useIncomingTrustPrompts: typeof import('../composables/useIncomingTrustPrompts').useIncomingTrustPrompts
   const useLegalAcceptance: typeof import('../composables/useLegalAcceptance').useLegalAcceptance
   const useLink: typeof import('vue-router').useLink
+  const useLockWallet: typeof import('../composables/useLockWallet').useLockWallet
   const useModel: typeof import('vue').useModel
   const useNetworkActivation: typeof import('../composables/useNetworkActivation').useNetworkActivation
   const useNotificationStore: typeof import('../stores/notification.store').useNotificationStore
@@ -467,6 +470,9 @@ declare global {
   // @ts-ignore
   export type { LegalViewStatus } from '../composables/useLegalAcceptance'
   import('../composables/useLegalAcceptance')
+  // @ts-ignore
+  export type { LockProfileClient } from '../composables/useLockWallet'
+  import('../composables/useLockWallet')
   // @ts-ignore
   export type { UseNetworkActivationOptions } from '../composables/useNetworkActivation'
   import('../composables/useNetworkActivation')
@@ -587,6 +593,9 @@ declare global {
   // @ts-ignore
   export type { ReceivedType, FromDisplay } from '../utils/received-display'
   import('../utils/received-display')
+  // @ts-ignore
+  export type { HubConfig, HubValues } from '../utils/settings-labels'
+  import('../utils/settings-labels')
   // @ts-ignore
   export type { Aggregate } from '../utils/token-aggregate'
   import('../utils/token-aggregate')
@@ -762,6 +771,7 @@ declare module 'vue' {
     readonly hasReachedPresto: UnwrapRef<typeof import('../utils/presto-ui-state')['hasReachedPresto']>
     readonly heroRoom: UnwrapRef<typeof import('../utils/hero-ruler')['heroRoom']>
     readonly holdHeroFit: UnwrapRef<typeof import('../utils/hero-fit')['holdHeroFit']>
+    readonly hubValues: UnwrapRef<typeof import('../utils/settings-labels')['hubValues']>
     readonly humanizeErrorKind: UnwrapRef<typeof import('../utils/journal-state')['humanizeErrorKind']>
     readonly humanizeMethodName: UnwrapRef<typeof import('../utils/tx-enrichment')['humanizeMethodName']>
     readonly incomingInScope: UnwrapRef<typeof import('../utils/activity-rows')['incomingInScope']>
@@ -854,6 +864,7 @@ declare module 'vue' {
     readonly planImportWrites: UnwrapRef<typeof import('../utils/contact-import-rows')['planImportWrites']>
     readonly postAuthRoute: UnwrapRef<typeof import('../utils/own-window')['postAuthRoute']>
     readonly preflightNetworkConnectivity: UnwrapRef<typeof import('../composables/importPreflight')['preflightNetworkConnectivity']>
+    readonly profileTypeLabel: UnwrapRef<typeof import('../utils/settings-labels')['profileTypeLabel']>
     readonly profileUiKeys: UnwrapRef<typeof import('../utils/profile-ui-keys')['profileUiKeys']>
     readonly projectArgument: UnwrapRef<typeof import('../utils/transfer-intent')['projectArgument']>
     readonly provide: UnwrapRef<typeof import('vue')['provide']>
@@ -966,6 +977,7 @@ declare module 'vue' {
     readonly useIncomingTrustPrompts: UnwrapRef<typeof import('../composables/useIncomingTrustPrompts')['useIncomingTrustPrompts']>
     readonly useLegalAcceptance: UnwrapRef<typeof import('../composables/useLegalAcceptance')['useLegalAcceptance']>
     readonly useLink: UnwrapRef<typeof import('vue-router')['useLink']>
+    readonly useLockWallet: UnwrapRef<typeof import('../composables/useLockWallet')['useLockWallet']>
     readonly useModel: UnwrapRef<typeof import('vue')['useModel']>
     readonly useNetworkActivation: UnwrapRef<typeof import('../composables/useNetworkActivation')['useNetworkActivation']>
     readonly useNotificationStore: UnwrapRef<typeof import('../stores/notification.store')['useNotificationStore']>
