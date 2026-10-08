@@ -1,7 +1,7 @@
 ---
 plan: supply-chain-release
 tier: mid
-status: approved; arc 1 in implementation
+status: approved; arc 1 merged (#50); arc 2 in implementation
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -441,7 +441,7 @@ Pass: each exits 0.
 
 ### Arc 2: pinned toolchain and install privacy
 
-#### Phase 4: pinned Aztec toolchain install
+#### Phase 4: pinned Aztec toolchain install ✓
 
 1. Hash the Foundry tarball yourself and compare it with the GitHub asset digest. Check it once with `gh attestation verify --repo foundry-rs/foundry`. Write the pin line, and record both sources in the pin file's header.
 2. Write `lock.sh`. Generate `cli/package.json` and `cli/package-lock.json` for 6.0.0-rc.1.
@@ -708,6 +708,11 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | Branch base (implementation) | rebased the unpushed plan commit onto `origin/dev` `e49e4ce` | merge | Four commits had landed, two in the workflows this arc edits; the branch was never pushed. |
 | auto-unstick on a re-run (review) | a tag already at HEAD continues the publish, for a `pending` or `tagged` Release PR; only `pending` is ever tagged | continue on `create` only | A re-run after a failed relabel, or after a relabel whose attempt died, stranded a tag with no release. `concurrency: release` serializes runs and the publish is idempotent. |
 | Nightly quiet-day skip (review) | skip only when a nightly tag at the commit has a published release | any nightly tag at the commit | The tag now precedes the draft, so an interrupted publish silenced every later run on that commit. |
+| `install.sh` input (implementation) | `AZTEC_VERSION` from the caller's env, refused unless `cli/package.json` pins the same | read `apps/extension/package.json` itself | Both callers already read the pin; a fifth reader keyed by package name is one more site a rename misses (aztec-update skill). |
+| Rebuild allowlist (implementation) | `bcrypto` | empty | Measured: `@aztec-labs/aztec-node` cannot be imported without its binding (Phase 4 lesson). Its script is a local `node-gyp rebuild`. |
+| Node headers for the rebuild (implementation) | `npm_config_nodedir` in the rebuild's env | `--nodedir` flag | npm 11.19 warns that both forms will stop passing through; node-gyp reads the env var itself. A control run without it downloaded headers. |
+| `docker-ci-like.sh` reinstall rule (implementation) | reinstall when a stamp of the whole action dir differs | reinstall only when `aztec-anvil` is missing | A volume installed by the old unpinned path would otherwise be reused forever; the stamp mirrors CI's cache key. |
+| Caller pin (implementation) | `setup-aztec-pins.test.ts` also pins that both callers run `install.sh` and fetch no installer, with a mutated-copy control | lockfile and pin-file checks only | The regression this phase closes is a caller piping an installer again; one small check with its control. |
 | `oven-sh/setup-bun` token (review) | the composite passes `token: ""` | the action's default (`github.token`) | The default handed the publish jobs' release-writing token to a third-party action; an exact version needs no API call. |
 
 **Unresolved disagreements.** None blocking.

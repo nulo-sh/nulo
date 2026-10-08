@@ -490,6 +490,36 @@ composite action. Trust posture:
   Nulo, so the trust model is what it is. Defense: pinning + per-bump
   PR review.
 
+The Aztec toolchain (the `aztec` CLI and its npm tree, Foundry's `forge`,
+`cast`, `anvil` and `chisel`, noir's `nargo`) is installed on every runner
+that boots a local network by
+[`setup-aztec`](./.github/actions/setup-aztec/action.yml)'s `install.sh`,
+which the local Docker runner (`docker-ci-like.sh`) runs too:
+
+- **Every download is SHA-256-pinned** in `installer-pins.sha256` and checked
+  before use: the per-version installer and its `versions` manifest, and the
+  noir and Foundry release tarballs that manifest names. The Foundry tarball
+  must hold exactly its four tools, as regular files. Its pin equals the
+  release asset's GitHub digest, and the binaries match Foundry's
+  build-provenance attestation, checked once at pin time (the pin file's
+  header names the signer); CI does not re-check the attestation.
+- **The installer runs from the verified file with two steps replaced.** Its
+  Foundry step (`foundryup` from `foundry.paradigm.xyz`) becomes a copy of
+  the verified binaries, and its lockfile-less `npm install` becomes
+  `npm ci --ignore-scripts` against the committed `cli/package-lock.json`,
+  every entry of which is a registry tarball with a sha512
+  (`scripts/ci-cd/setup-aztec-pins.test.ts`). An installer whose shape no
+  longer fits the replacement fails the install.
+- **One install script runs**: `bcrypto`'s, which `@aztec-labs/aztec-node`
+  needs to load. It compiles the package's bundled C sources against the
+  running Node's headers, with no header download.
+- **What stays trusted**: the npm registry when the lockfile is generated
+  (`lock.sh`, under the 7-day gate with the Aztec scopes exempt; each Aztec
+  bump's lockfile diff is reviewed), Aztec's install host and the noir and
+  Foundry release pipelines when they are pinned, Node from
+  `actions/setup-node`, and a restored toolchain cache, which only a run on
+  `dev` or `main` can write and which is checked only by `--version` probes.
+
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is
 installed on every CI runner that executes a Firefox e2e lane, via the

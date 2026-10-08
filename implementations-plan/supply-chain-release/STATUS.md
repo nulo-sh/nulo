@@ -12,3 +12,5 @@
 - 2026-10-08: Arc 1 review rounds 2 and 3: Codex `approve with fixes` (1 accepted, `eb03f15`), then `approve` with no new material findings. Loop closed.
 - 2026-10-08: Arc 1 final gate PASS on `916c347`: lint, typecheck:all, test:all, test:ci-gating (368/0), test:release (215/0), lint:actions, check:plans. PR #50 opened (ready, no labels).
 - 2026-10-08: S1 applied, ruleset id `24737631`; readback matches (plan § S1).
+- 2026-10-08: Arc 2 started on `supply-chain-release-arc2` (new stack off dev; Arc 1 merged as #50).
+- 2026-10-08: Phase 4 gate PASS: lint, typecheck:all, test, test:all, test:ci-gating, test:release (scratch `zip` on PATH), lint:actions, shellcheck on install.sh, lock.sh, docker-ci-like.sh; scratch install exits 0 with four "Verified" lines and no foundryup/paradigm request; `aztec --version` 6.0.0-rc.1, forge and anvil 1.4.1; cold-wake-discovery green twice on `AZTEC_HOME=<scratch>` (`ps` shows the scratch `aztec-anvil`).
