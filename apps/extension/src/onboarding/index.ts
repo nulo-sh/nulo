@@ -5,6 +5,7 @@
  * services as the popup.
  */
 
+import "@/utils/zod-jitless"
 import { installConsoleForwarding } from "@/wallet/logger/console-forwarding"
 
 installConsoleForwarding("onboarding")

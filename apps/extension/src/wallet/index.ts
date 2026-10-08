@@ -13,6 +13,7 @@
  */
 
 import "@/utils/console-sniffer"
+import "@/utils/zod-jitless"
 import { RealChromeBrowserApi, SystemClock } from "@/core/adapters"
 import { ConfigStore } from "./config"
 import { consoleMethods, LoggerStore, LogLevel } from "./logger"
