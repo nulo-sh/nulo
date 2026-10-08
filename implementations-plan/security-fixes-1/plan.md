@@ -388,7 +388,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0; every row of the new table fails on the base commit.
 - Layers: lint, typecheck, unit, integration.
 
-#### Phase 5 — #31 profile RPCs return the projection
+#### Phase 5 — #31 profile RPCs return the projection ✓
 
 1. Add `profileIdentity(profile)` and reuse it in `backup()`.
 2. Return `getProfileInfo(profile)` from the six methods named in the architecture section; return `profileIdentity(profile)` from `changeProfileName`.
@@ -627,6 +627,7 @@ post-build sponsor snapshot for parity, a separate userinfo helper.
 | D12 | #35 extent | also make the invalid-URL reason fixed | reorder `setActiveNetwork` to build the node before writing the active pointer: no stored row can carry userinfo, so the half-applied switch cannot occur |
 | D13 | #29 a stored capability that is not an object (implementation) | passes untouched, like an unknown type; only a null/undefined capability or a non-object record refuses | refuse every non-object capability (the plan's first wording): the capability window's unknown row stores a request entry as sent (`"x"` passes `argsRequestCapabilities` by design), so the session would be refused on every later call after a choice the person made; refuse such entries at `projectRequestedCapabilities`: changes what a person sees (no window) and contradicts the pinned request tolerance. A capability with no type cannot satisfy, widen or narrow any grant consent reads |
 | D14 | #29 tests beyond the plan's list (implementation) | rewrite `dispatcher.test.ts`'s held-non-address test to expect the `ValidationError`; recast its echo test onto a valid held grant with a malformed echo; give `background.refusal-log.test.ts` a data grant a writer can store | keep them: each stored a grant the read now refuses (`contracts: ["0xtok"]`, `{ type: "data" }`, `{ type: "data", addressBook: false }`), the same class as the characterization rows the plan names |
+| D15 | #31 the `(BUG PIN)` rename comment (implementation) | states the pending product decision in words, no ask id | name OA-1 in the comment, as Phase 5 step 6 said: the comment rules ban plan and workflow tags in code |
 
 Unresolved disagreements:
 

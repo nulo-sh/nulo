@@ -610,7 +610,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 				await this.openSessionVerified(profile, secret, passhash, dek)
 
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			// zero secret + entropy + dek + passhash after sessionManager has copied
@@ -750,7 +750,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 					await this.openSessionVerified(profile, recovery.secret, undefined, dek)
 
-					return profile
+					return this.getProfileInfo(profile)
 				})
 			})
 		} finally {
@@ -1019,7 +1019,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			this.sessionManager.patchActiveProfile(id, profile)
 
-			return profile
+			// Identity only: the popup stores this as its profile, so carrying `recoveryMode` would
+			// decide whether the recovery banner survives a rename, which is a product decision.
+			return this.profileIdentity(profile)
 		})
 	}
 
@@ -1185,7 +1187,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				zeroize(resealed.passhash)
 			}
 
-			return profile
+			return this.getProfileInfo(profile)
 		})
 	}
 
@@ -1511,14 +1513,14 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// + release there. Cost: the id stays reserved until that boot — a dead
 		// import's id, unreused for one SW lifetime.
 		if (tornGuard !== undefined) {
-			return profile
+			return this.getProfileInfo(profile)
 		}
 
 		await this.runExclusive(async () => {
 			await this.tombstones.clearIfSame(id, epoch)
 			this.deletionState.release(id)
 		})
-		return profile
+		return this.getProfileInfo(profile)
 	}
 
 	/**
@@ -2093,7 +2095,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		entropy: Uint8Array<ArrayBuffer>,
 		passhash: Passhash,
 		allowDuplicate = false,
-	): Promise<Profile> {
+	): Promise<ProfileInfo> {
 		const dek = generateImportedKeysDek()
 		try {
 			return await this.runExclusive(async () => {
@@ -2106,7 +2108,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const profile = await newPasswordRow({ id, name, slots: encrypted, dekSealed, walletFingerprint }, secret, dek)
 				await this.persistNewProfileHoldingLock(profile)
 				await this.openSessionVerified(profile, secret, passhash, dek)
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			zeroize(secret)
@@ -2127,7 +2129,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		dekWrapKey: CryptoKey,
 		userHandle?: string,
 		allowDuplicate = false,
-	): Promise<Profile> {
+	): Promise<ProfileInfo> {
 		const dek = generateImportedKeysDek()
 		try {
 			const dekSealed = await sealDekUnderWrapKey(dekWrapKey, dek)
@@ -2153,7 +2155,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const profile = newPasskeyRow({ id: userHandle, name, dekSealed, walletFingerprint, credentialId })
 				await this.persistNewProfileHoldingLock(profile)
 				await this.openSessionVerified(profile, secret, undefined, dek)
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			zeroize(secret)
@@ -2161,16 +2163,21 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
+	/** What the profile RPCs return, never the stored row: a row carries sealed key material. */
 	private getProfileInfo(profile: Profile): ProfileInfo {
-		const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
+		const info = this.profileIdentity(profile)
 		if (this.sessionManager.isRecoveryMode(profile.id)) info.recoveryMode = true
 		return info
+	}
+
+	private profileIdentity(profile: Pick<ProfileInfo, "id" | "name" | "type">): ProfileInfo {
+		return { id: profile.id, name: profile.name, type: profile.type }
 	}
 
 	/** The persisted identity only: `recoveryMode` is a live-session projection and never travels. */
 	public async backup(): Promise<ProfileInfo | undefined> {
 		const active = await this.getActiveProfile()
-		return active && { id: active.id, name: active.name, type: active.type }
+		return active && this.profileIdentity(active)
 	}
 
 	public async restore(

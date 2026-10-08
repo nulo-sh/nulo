@@ -13,3 +13,4 @@
 - 2026-10-08 — arc 1 final-head gate pass on f279e54: lint 0, typecheck:all 0, test 10275, test:all 0, network e2e 11 files / 17 tests green; OA-2 after shots taken on f279e54.
 - 2026-10-08 — arc 2 start: OA-3 before shots taken on 3fb939b (proverless network run); OA-1 before shots already present from the interrupted session.
 - 2026-10-08 — phase 4 gate pass: profile vitest 334, lint 0, typecheck:all 0; the five table rows red on the base, the guard test red on an unguarded drop.
+- 2026-10-08 — phase 5 gate pass: profile + EditProfilePopup vitest 364, lint 0, typecheck:all 0; the projection table, the BUG PIN and the replacing-set tests red on the base.

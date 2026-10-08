@@ -3512,35 +3512,32 @@ describe("credential rows, degraded opens and the restore stash", () => {
 	})
 
 	describe("row known-answer vectors (seeded RNG)", () => {
-		test("createProfile persists the pinned row and returns it", async () => {
+		test("createProfile persists the pinned row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const created = await service.createProfile("P", "pass1234")
 			const raw = await rawRow(api, created.id)
 			expectVector("createProfile", raw)
-			expect(created).toStrictEqual(JSON.parse(raw))
 			await expectOracle(created.id, JSON.parse(raw), await unsealPasswordMaster(JSON.parse(raw), "pass1234"), "pass1234")
 		}, 30_000)
 
-		test("importMnemonic persists the pinned row and returns it", async () => {
+		test("importMnemonic persists the pinned row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const words = await wordsForFill(0x21)
 			const imported = await service.importMnemonic("M", words, "pass1234")
 			const raw = await rawRow(api, imported.id)
 			expectVector("importMnemonic", raw)
-			expect(imported).toStrictEqual(JSON.parse(raw))
 			await expectOracle(imported.id, JSON.parse(raw), await deriveMasterFromMnemonic(words), "pass1234")
 		}, 30_000)
 
-		test("changeProfilePassword persists the pinned re-MACed row and returns it", async () => {
+		test("changeProfilePassword persists the pinned re-MACed row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const created = await service.createProfile("P", "pass1234")
-			const changed = await service.changeProfilePassword(created.id, "pass1234", "newpass99")
+			await service.changeProfilePassword(created.id, "pass1234", "newpass99")
 			const raw = await rawRow(api, created.id)
 			expectVector("changeProfilePassword", raw)
-			expect(changed).toStrictEqual(JSON.parse(raw))
 			await expectOracle(created.id, JSON.parse(raw), await unsealPasswordMaster(JSON.parse(raw), "newpass99"), "newpass99")
 		}, 30_000)
 
@@ -3558,23 +3555,21 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			await expectOracle(out.id, JSON.parse(raw), Buffer.from(secret.masterKey, "base64"), "pass1234")
 		}, 30_000)
 
-		test("createPasskeyProfile persists the pinned row and returns it", async () => {
+		test("createPasskeyProfile persists the pinned row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const created = await service.createPasskeyProfile("PK", fakeCredentialData("cred-kat-1", "uh-kat-1"))
 			const raw = await rawRow(api, created.id)
 			expectVector("createPasskeyProfile", raw)
-			expect(created).toStrictEqual(JSON.parse(raw))
 		}, 30_000)
 
-		test("importPasskey with a userHandle persists the pinned row under it and returns it", async () => {
+		test("importPasskey with a userHandle persists the pinned row under it", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const imported = await service.importPasskey("IK", fakeCredentialData("cred-kat-2", "uh-kat-2"))
 			expect(imported.id).toBe("uh-kat-2")
 			const raw = await rawRow(api, imported.id)
 			expectVector("importPasskeyWithHandle", raw)
-			expect(imported).toStrictEqual(JSON.parse(raw))
 		}, 30_000)
 
 		test("importPasskey without a userHandle persists the pinned row under a generated id", async () => {
@@ -3591,7 +3586,6 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			expect(imported.id).toMatch(/^[0-9a-f]{8}$/)
 			const raw = await rawRow(api, imported.id)
 			expectVector("importPasskeyGeneratedId", raw)
-			expect(imported).toStrictEqual(JSON.parse(raw))
 		}, 30_000)
 
 		test("a passkey restore persists the pinned row and returns only the info", async () => {
@@ -3607,6 +3601,48 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			expect(out).toStrictEqual({ id: "uh-kat-4", name: "PR", type: "passkey" })
 			expectVector("restorePasskey", await rawRow(api, out.id))
 		}, 30_000)
+	})
+
+	describe("profile RPC returns", () => {
+		type Ctx = Awaited<ReturnType<typeof makeService>>
+		const fresh = async ({ service }: Ctx) => (await service.createProfile("P", "pass1234")).id
+
+		test.each<[string, (ctx: Ctx) => Promise<unknown>, string, string]>([
+			["createProfile", ({ service }) => service.createProfile("P", "pass1234"), "P", "password"],
+			[
+				"createPasskeyProfile",
+				({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-ret-1", "uh-ret-1")),
+				"PK",
+				"passkey",
+			],
+			["changeProfileName", async (ctx) => ctx.service.changeProfileName(await fresh(ctx), "Q"), "Q", "password"],
+			[
+				"changeProfilePassword",
+				async (ctx) => ctx.service.changeProfilePassword(await fresh(ctx), "pass1234", "newpass99"),
+				"P",
+				"password",
+			],
+			["importMnemonic", async ({ service }) => service.importMnemonic("M", await wordsForFill(0x41), "pass1234"), "M", "password"],
+			["importPasskey", ({ service }) => service.importPasskey("IK", fakeCredentialData("cred-ret-2", "uh-ret-2")), "IK", "passkey"],
+			["deleteProfile", async (ctx) => ctx.service.deleteProfile(await fresh(ctx)), "P", "password"],
+			[
+				"deleteProfile of a torn import",
+				async ({ api, service }) => {
+					const out = await service.restore({ id: "t", name: "T", type: "password" }, await restoreSecretFor(0x42), "pass1234")
+					const marker = await new RestorePendingRepository(api.storage.local).get(out.id)
+					if (marker.kind !== "valid") throw new Error("restore wrote no marker")
+					return service.deleteProfile(out.id, { pxeGeneration: marker.marker.pxeGeneration, markerAt: marker.marker.at })
+				},
+				"T",
+				"password",
+			],
+		])(
+			"%s returns the projection, never the stored row",
+			async (_label, call, name, type) => {
+				expect(await call(await makeService())).toStrictEqual({ id: expect.any(String), name, type })
+			},
+			30_000,
+		)
 	})
 
 	describe("the degraded-open tail", () => {
@@ -3658,6 +3694,16 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			await ctx.service.lockActiveProfile()
 			return { ...ctx, id: created.id, info: { id: created.id, name, type: "password" } }
 		}
+
+		test("(BUG PIN) a rename in recovery mode returns no recoveryMode", async () => {
+			// The popup stores the rename's result as its profile, so the recovery banner hides until the
+			// popup reopens; whether it should stay is a product decision.
+			const { api, service, id } = await lockedPasswordProfile()
+			await writeRawRow(api, id, { ...(await readRawRow(api, id)), envelopeMac: Buffer.alloc(32, 0xee).toString("base64") })
+			await service.unlockProfile(id, "pass1234")
+			expect(await service.getActiveProfile()).toStrictEqual({ id, name: "P", type: "password", recoveryMode: true })
+			expect(await service.changeProfileName(id, "Renamed")).toStrictEqual({ id, name: "Renamed", type: "password" })
+		}, 30_000)
 
 		test("unlockProfile: a healthy open stays silent and holds the real master and DEK", async () => {
 			const { api, service, id, info } = await lockedPasswordProfile()
