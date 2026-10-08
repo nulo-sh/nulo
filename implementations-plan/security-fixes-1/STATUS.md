@@ -28,3 +28,4 @@
 - 2026-10-08 — phase 9 gate pass: incoming-transfer vitest 343, lint 0 (no baseline drift), typecheck:all 0; eleven note-matrix rows red on the base `service.ts`.
 - 2026-10-08 — phase 10 code: wallet-core rpc-url 7, aztec-runtime adapters 45, extension network 146, lint 0, typecheck:all 0; thirteen rows red on the base. Arc gate next.
 - 2026-10-08 — arc 3 gate pass (unit/lint/typecheck on 6563c39; e2e on the pre-loop head): targeted vitest 1631, test 10414, test:all 0, smoke 5 files / 28 tests, network 8 files / 20 tests, incoming-arrival proverless 7 tests. Loop: Codex r1 should-fix + 3 nits, Opus 2 nits, Codex r2 1 test nit, Codex r3 1 non-material test nit; all applied.
+- 2026-10-08 — final-head gates on 7e233ce (code identical to 3b6a99c): lint 0, typecheck:all 0, test 10417, test:all 0, check:plans 0, smoke 5 files / 28 tests, network 8 files / 20 tests, incoming-arrival proverless 7 tests.
