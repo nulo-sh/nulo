@@ -13,7 +13,7 @@
  */
 import { afterAll, expect, inject } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
-import { addContact, closeStuckPopup, navigateByHash, navigateToSettings, waitForToast } from "../fixtures/helpers"
+import { addContact, closeStuckPopup, contactRow, navigateByHash, navigateToSettings, senderChip, waitForToast } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import {
 	closeImportWith,
@@ -24,7 +24,7 @@ import {
 	refuseTestnet,
 	senderLine,
 	toastAfter,
-} from "../helpers/contacts-import"
+} from "../helpers/contacts"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -79,12 +79,7 @@ test.skipIf(!hasConfig)(
 		// A freshly-added contact must NOT be registered as a sender.
 		await navigateToSettings(page, "contacts")
 		await addContact(page, name, address)
-		const chipBefore = await page.evaluate(
-			(n: string) =>
-				!!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"] [data-testid="contact-sender-chip"]`),
-			name,
-		)
-		expect(chipBefore).toBe(false)
+		expect(await listedAsSender(page, name)).toBe(false)
 
 		// Register the SAME address through the Advanced surface. Before
 		// registering, assert the SETTLED sender list has no row for the
@@ -100,10 +95,7 @@ test.skipIf(!hasConfig)(
 
 		// Back on contacts, the chip reflects the PXE registration.
 		await gotoContacts(page)
-		await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"] [data-testid="contact-sender-chip"]`, {
-			visible: true,
-			timeout: 10_000,
-		})
+		await page.waitForSelector(senderChip(name), { visible: true, timeout: 10_000 })
 
 		// Delete the sender from Advanced — the chip clears; the contact stays.
 		await gotoSenders(page)
@@ -123,16 +115,8 @@ test.skipIf(!hasConfig)(
 		await closeStuckPopup(page)
 
 		await gotoContacts(page)
-		await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"]`, {
-			visible: true,
-			timeout: 10_000,
-		})
-		await page.waitForFunction(
-			(n: string) =>
-				!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"] [data-testid="contact-sender-chip"]`),
-			{ timeout: 10_000 },
-			name,
-		)
+		await page.waitForSelector(contactRow(name), { visible: true, timeout: 10_000 })
+		await page.waitForFunction((s: string) => !document.querySelector(s), { timeout: 10_000 }, senderChip(name))
 	},
 )
 
@@ -154,13 +138,10 @@ test.skipIf(!hasConfig)(
 
 		await gotoContacts(page)
 		await addContact(page, name, address)
-		await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"] [data-testid="contact-sender-chip"]`, {
-			visible: true,
-			timeout: 10_000,
-		})
+		await page.waitForSelector(senderChip(name), { visible: true, timeout: 10_000 })
 
 		// Delete the contact. The confirm offers NO sender option.
-		const rowSelector = `[data-testid="contact-row"][data-contact-name="${name}"]`
+		const rowSelector = contactRow(name)
 		await page.evaluate((sel: string) => {
 			const row = document.querySelector<HTMLElement>(sel)
 			row?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
@@ -205,13 +186,7 @@ test.skipIf(!hasConfig)(
 			expect(await senderLine(page)).toBe("1 sender will be registered on Local Network.")
 			// Registration waits on the local node.
 			await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Contacts imported · 1 sender registered", 60_000)
-			await page.waitForSelector(
-				`[data-testid="contact-row"][data-contact-name="${sender.name}"] [data-testid="contact-sender-chip"]`,
-				{
-					visible: true,
-					timeout: 10_000,
-				},
-			)
+			await page.waitForSelector(senderChip(sender.name), { visible: true, timeout: 10_000 })
 			expect(await listedAsSender(page, plain.name)).toBe(false)
 
 			await gotoSenders(page)

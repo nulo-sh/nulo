@@ -96,6 +96,11 @@ const props = defineProps({
 		type: String,
 		required: false,
 	},
+	/** Maps the typed text to the text the field keeps, in place of `sanitize`'s built-in filter. */
+	normalize: {
+		type: Function as PropType<(text: string) => string>,
+		required: false,
+	},
 })
 
 const isFocused = ref(false)
@@ -143,7 +148,8 @@ const getInputType = computed(() => {
 const handleInput = (event?: Event) => {
 	if (props.disabled) return
 
-	text.value = props.sanitize ? sanitizeString(text.value as string, props.maxLength) : text.value
+	if (props.normalize) text.value = props.normalize(text.value as string)
+	else if (props.sanitize) text.value = sanitizeString(text.value as string, props.maxLength)
 
 	if (!!props.maxLength) applyMaxLength(props.maxLength)
 
@@ -228,7 +234,9 @@ const handlePaste = (e: ClipboardEvent) => {
 		const end = el.selectionEnd ?? start
 		const before = (text.value as string).slice(0, start)
 		const after = (text.value as string).slice(end)
-		let newText = before + paste + after
+		// Normalized before the cut, so what `normalize` removes never costs a character.
+		let newText = props.normalize ? props.normalize(before + paste + after) : before + paste + after
+		const caret = props.normalize ? props.normalize(before + paste).length : start + paste.length
 
 		if (newText.length > props.maxLength) {
 			newText = newText.slice(0, props.maxLength)
@@ -238,7 +246,7 @@ const handlePaste = (e: ClipboardEvent) => {
 		handleInput()
 
 		nextTick(() => {
-			const pos = Math.min(start + paste.length, props.maxLength as number)
+			const pos = Math.min(caret, props.maxLength as number)
 			el.setSelectionRange(pos, pos)
 		})
 

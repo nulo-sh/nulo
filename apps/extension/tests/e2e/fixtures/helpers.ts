@@ -832,19 +832,25 @@ export async function createSecondAccount(page: Page, name = "Second"): Promise<
 
 // ── Contact ────────────────────────────────────────────────────────────
 
+/** The contacts list's row for `name`, as the row states its own name. */
+export const contactRow = (name: string) => `[data-testid="contact-row"][data-contact-name="${name}"]`
+/** The sender chip on the contacts list's row for `name`. */
+export const senderChip = (name: string) => `${contactRow(name)} [data-testid="contact-sender-chip"]`
+
+/** Opens the NewContactPopup from the Contacts page and types `name` and `address`, without saving. */
+export async function fillNewContactForm(page: Page, name: string, address: string): Promise<void> {
+	await clickByTestId(page, "contacts-new-btn")
+	await page.waitForSelector('[data-testid="contact-name-input"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="contact-name-input"]', name)
+	await page.waitForSelector('[data-testid="contact-address-input"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="contact-address-input"]', address)
+}
+
 /** Add a contact via the NewContactPopup. Saving a contact touches the
  *  contact service only — sender registration is a separate concern
  *  (Settings → Advanced → Account State → Senders). */
 export async function addContact(page: Page, name: string, address: string): Promise<void> {
-	await clickByTestId(page, "contacts-new-btn")
-
-	// Wait for form inputs to mount
-	await page.waitForSelector('input[placeholder="New contact"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, 'input[placeholder="New contact"]', name)
-
-	await page.waitForSelector('input[placeholder*="0x15c4"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, 'input[placeholder*="0x15c4"]', address)
-
+	await fillNewContactForm(page, name, address)
 	await clickByTestId(page, "new-contact-submit")
 
 	// Deterministic post-mutation signal — wait for the new contact row to
@@ -854,11 +860,7 @@ export async function addContact(page: Page, name: string, address: string): Pro
 	// --disable-renderer-backgrounding flag — the wallet popup ends up
 	// `slide-enter-from slide-enter-active` indefinitely even though
 	// popupStore.popups is empty). Closing via Escape force-unmounts.
-	await page.waitForFunction(
-		(n: string) => !!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"]`),
-		{ timeout: 10_000, polling: 200 },
-		name,
-	)
+	await page.waitForFunction((s: string) => !!document.querySelector(s), { timeout: 10_000, polling: 200 }, contactRow(name))
 
 	await closeStuckPopup(page)
 }
@@ -885,7 +887,7 @@ export async function closeStuckPopup(page: Page): Promise<void> {
  *  contact never touches sender registration — senders are managed only
  *  in Settings → Advanced → Account State → Senders. */
 export async function deleteContact(page: Page, name: string): Promise<void> {
-	const rowSelector = `[data-testid="contact-row"][data-contact-name="${name}"]`
+	const rowSelector = contactRow(name)
 	await page.waitForSelector(rowSelector, { visible: true, timeout: 5_000 })
 
 	// Synthesize a hover so the action icons (revealed via :hover CSS) are
@@ -899,11 +901,11 @@ export async function deleteContact(page: Page, name: string): Promise<void> {
 	}, rowSelector)
 
 	// Click the scoped delete icon within this specific row
-	await page.evaluate((n: string) => {
-		const row = document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"]`)
+	await page.evaluate((s: string) => {
+		const row = document.querySelector(s)
 		const del = row?.querySelector<HTMLElement>('[data-testid="contact-delete"]')
 		del?.click()
-	}, name)
+	}, rowSelector)
 
 	// Confirm deletion via ConfirmPopup
 	await page.waitForSelector('[data-testid="confirm-submit"]', {

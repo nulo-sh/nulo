@@ -2,7 +2,8 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "@/utils/contact-rules"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
+import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
 import { withoutId } from "@/utils/entity-list"
 
 /** Components */
@@ -51,8 +52,9 @@ const form = useFormState({
 	name: {
 		initial: "",
 		validate: (v) => {
-			if (!v.replace(/\s/g, "").length) return null // empty is "not yet valid", not an error to display
-			if (contacts.value.some((c) => sameContactName(c, v))) return CONTACT_EXISTS
+			if (isEmptyContactName(v)) return null // empty is "not yet valid", not an error to display
+			// The name as it would be stored: the cut can make a longer draft another contact's name.
+			if (contacts.value.some((c) => sameContactName(c.name, sanitizeContactName(v)))) return CONTACT_EXISTS
 			return null
 		},
 	},
@@ -83,7 +85,7 @@ const isAvailableToAddContact = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
-	if (!nameTerm.value.replace(/\s/g, "").length) return false
+	if (isEmptyContactName(nameTerm.value)) return false
 	if (!isValidAddress.value) return false
 	if (form.fields.name.error.value) return false
 	if (form.fields.address.error.value) return false

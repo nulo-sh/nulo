@@ -1,8 +1,6 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { contactNameKey, sanitizeContactName } from "@/utils/contact-name"
 import { sanitizeString, trimAddress } from "@/utils/string"
-
-/** The contact form's name limit, so a file round-trips every name the form can save. */
-const IMPORT_NAME_MAX = 25
 
 const IMPORT_ADDRESS_MAX = 66
 
@@ -15,7 +13,8 @@ type StagedRow = { name: string; address: string }
  * Minimal rows from a parsed file. Never spread the hostile input object: extra properties would
  * ride into staging and storage. A non-string field becomes "" and drops its row alone. Addresses
  * are lowercased, as the wallet emits them. A row survives only if no row kept before it has its
- * name or its address, so the screen never shows two rows that would write the same contact.
+ * name (by `contactNameKey`) or its address, so the screen never shows two rows that would write the
+ * same contact.
  */
 export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, unknown> | null>): ImportRow[] {
 	const names = new Set<string>()
@@ -24,29 +23,20 @@ export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, un
 	for (const raw of rawContacts) {
 		const row = toImportRow(raw)
 		if (!row.name || !row.address.trim()) continue
-		if (names.has(row.name) || addresses.has(row.address)) continue
-		names.add(row.name)
+		const name = contactNameKey(row.name)
+		if (names.has(name) || addresses.has(row.address)) continue
+		names.add(name)
 		addresses.add(row.address)
 		rows.push(row)
 	}
 	return rows
 }
 
-/** A contact name read from a file or a backup: untrusted display text, trimmed on both sides of the
- *  cut as the form saves it. The cut counts UTF-16 units, as the form does, but a letter outside the
- *  BMP that it would split is dropped whole: half of one is not a character, and the next import
- *  strips it, so the name would never read back as saved. */
-export function sanitizeImportName(name: string): string {
-	return sanitizeString(name.trim(), IMPORT_NAME_MAX)
-		.replace(/[\uD800-\uDBFF]$/, "")
-		.trim()
-}
-
 function toImportRow(raw: Record<string, unknown> | null): ImportRow {
 	const name = raw?.name
 	const address = raw?.address
 	return {
-		name: typeof name === "string" ? sanitizeImportName(name) : "",
+		name: typeof name === "string" ? sanitizeContactName(name) : "",
 		address: typeof address === "string" ? sanitizeString(address, IMPORT_ADDRESS_MAX).toLowerCase() : "",
 		isSender: raw?.isSender === true,
 	}
@@ -57,13 +47,13 @@ export interface SavedContactIndex {
 	byAddress: Map<string, SavedContact[]>
 }
 
-/** Names key trimmed and case-sensitive (`sameContactName`), addresses lowercase. Lists, not single
- *  entries: older data can hold two saved contacts under one trimmed name or one address. */
+/** Names key by `contactNameKey`, addresses lowercase. Lists, not single entries: older data can hold
+ *  two saved contacts under one name key or one address. */
 export function indexSavedContacts(saved: readonly SavedContact[]): SavedContactIndex {
 	const byName = new Map<string, SavedContact[]>()
 	const byAddress = new Map<string, SavedContact[]>()
 	for (const c of saved) {
-		append(byName, c.name.trim(), c)
+		append(byName, contactNameKey(c.name), c)
 		append(byAddress, c.address.toLowerCase(), c)
 	}
 	return { byName, byAddress }
@@ -86,7 +76,7 @@ export interface ContactMatch {
 /** What a row does to the saved contacts, judged over every saved contact it matches by name or by
  *  address: more than one is a conflict, which no write may resolve by picking one. */
 export function matchSavedContacts(row: StagedRow, index: SavedContactIndex): ContactMatch {
-	const byName = index.byName.get(row.name.trim()) ?? []
+	const byName = index.byName.get(contactNameKey(row.name)) ?? []
 	const byAddress = index.byAddress.get(row.address.toLowerCase()) ?? []
 	const matched = new Map([...byName, ...byAddress].map((c) => [c.id, c]))
 	if (matched.size > 1) return { kind: "conflict", target: null }
@@ -99,6 +89,9 @@ export function matchSavedContacts(row: StagedRow, index: SavedContactIndex): Co
 export type ImportRowKind = ContactMatchKind | "invalid"
 
 export interface ClassifiedImportRow {
+	/** The name the row shows and writes: a row that matched a saved contact by name keeps the saved
+	 *  spelling, so a difference of case, spacing or invisible characters never renames it. */
+	name: string
 	kind: ImportRowKind
 	importable: boolean
 	/** Only a contact the book does not have yet starts selected; every change to a saved one waits
@@ -112,7 +105,9 @@ export interface ClassifiedImportRow {
 
 export function classifyImportRow(row: StagedRow, index: SavedContactIndex): ClassifiedImportRow {
 	const { kind, target } = isValidAztecAddress(row.address) ? matchSavedContacts(row, index) : { kind: "invalid" as const, target: null }
+	const matchedByName = kind === "unchanged" || kind === "address-change"
 	return {
+		name: target && matchedByName ? sanitizeContactName(target.name) : row.name,
 		kind,
 		importable: kind !== "invalid" && kind !== "conflict",
 		selected: kind === "new",
@@ -176,7 +171,7 @@ export function stillAsShown(row: ReviewedImportRow, index: SavedContactIndex): 
 function admit(row: ReviewedImportRow, index: SavedContactIndex, taken: TakenKeys): { targetId: string | null } | null {
 	if (!stillAsShown(row, index)) return null
 	const targetId = row.targetId ?? null
-	const name = row.name.trim()
+	const name = contactNameKey(row.name)
 	const address = row.address.toLowerCase()
 	if (taken.names.has(name) || taken.addresses.has(address) || (targetId && taken.targets.has(targetId))) return null
 	taken.names.add(name)

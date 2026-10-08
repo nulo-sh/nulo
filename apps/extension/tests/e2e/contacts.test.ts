@@ -1,6 +1,6 @@
 import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { addContact, closeStuckPopup, deleteContact, navigateToSettings } from "./fixtures/helpers"
+import { addContact, closeStuckPopup, contactRow, deleteContact, navigateToSettings } from "./fixtures/helpers"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 
 // Per-CALL fresh identities: the extension fixture is file-scoped, so a
@@ -43,19 +43,16 @@ test("add contact via popup", async ({ registeredExtension }) => {
 		await addContact(page, name, randomAddress())
 	} catch (e) {
 		const snap = await page.evaluate(
-			(n: string) => ({
+			(row: string) => ({
 				hash: window.location.hash,
 				body: (document.body?.innerText ?? "").slice(0, 500).replace(/\s+/g, " "),
 				testIds: [...document.querySelectorAll("[data-testid]")].slice(0, 30).map((el) => el.getAttribute("data-testid")),
 				submitDisabled: (document.querySelector('[data-testid="new-contact-submit"]') as HTMLButtonElement | null)?.disabled,
-				nameInputVal: (document.querySelector('input[placeholder="New contact"]') as HTMLInputElement | null)?.value,
-				addrInputVal: (() => {
-					const inputs = [...document.querySelectorAll<HTMLInputElement>('input[placeholder*="0x15c4"]')]
-					return inputs.map((i) => i.value)
-				})(),
-				rowExists: !!document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"]`),
+				nameInputVal: document.querySelector<HTMLInputElement>('[data-testid="contact-name-input"]')?.value,
+				addrInputVal: [...document.querySelectorAll<HTMLInputElement>('[data-testid="contact-address-input"]')].map((i) => i.value),
+				rowExists: !!document.querySelector(row),
 			}),
-			name,
+			contactRow(name),
 		)
 		console.error("[DIAG] addContact failed; snapshot:", JSON.stringify(snap, null, 2))
 		console.error("[DIAG] consoleErrors:", JSON.stringify(registeredExtension.consoleErrors.slice(0, 10)))
@@ -63,7 +60,7 @@ test("add contact via popup", async ({ registeredExtension }) => {
 		throw e
 	}
 
-	await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"]`, { visible: true, timeout: 5_000 })
+	await page.waitForSelector(contactRow(name), { visible: true, timeout: 5_000 })
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -79,14 +76,13 @@ test("edit contact name", async ({ registeredExtension }) => {
 	await addContact(page, name, randomAddress())
 
 	// Wait for the row to settle
-	await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${name}"]`, { visible: true, timeout: 5_000 })
+	await page.waitForSelector(contactRow(name), { visible: true, timeout: 5_000 })
 
 	// Click edit icon scoped to the row
-	await page.evaluate((n: string) => {
-		const row = document.querySelector(`[data-testid="contact-row"][data-contact-name="${n}"]`)
-		const edit = row?.querySelector<HTMLElement>('[data-testid="contact-edit"]')
+	await page.evaluate((s: string) => {
+		const edit = document.querySelector(s)?.querySelector<HTMLElement>('[data-testid="contact-edit"]')
 		edit?.click()
-	}, name)
+	}, contactRow(name))
 
 	// Wait for the popup's PREFILL to settle before typing: the show-watcher
 	// fills the fields only after its async getContacts() resolves, and a
@@ -94,7 +90,7 @@ test("edit contact name", async ({ registeredExtension }) => {
 	// leaving the form clean and the submit disabled (the load-flake).
 	await page.waitForFunction(
 		(n: string) => {
-			const inputs = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="New contact"]')]
+			const inputs = [...document.querySelectorAll<HTMLInputElement>('[data-testid="contact-name-input"]')]
 			return inputs.some((i) => i.offsetParent !== null && i.value === n)
 		},
 		{ timeout: 10_000, polling: 100 },
@@ -103,12 +99,12 @@ test("edit contact name", async ({ registeredExtension }) => {
 
 	// Replace the full name via the v-model-aware helper; triple-click +
 	// type is unreliable on the Input component wrapper.
-	await replaceInputValue(page, 'input[placeholder="New contact"]', renamed)
+	await replaceInputValue(page, '[data-testid="contact-name-input"]', renamed)
 
 	await clickByTestId(page, "edit-contact-submit")
 
 	// Verify new name
-	await page.waitForSelector(`[data-testid="contact-row"][data-contact-name="${renamed}"]`, { visible: true, timeout: 5_000 })
+	await page.waitForSelector(contactRow(renamed), { visible: true, timeout: 5_000 })
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -137,7 +133,7 @@ test("delete-confirm never offers sender options (contacts are decoupled from se
 
 	// Open the confirm popup but DON'T submit yet — assert the toggle is
 	// absent from the DOM before clicking confirm.
-	const rowSelector = `[data-testid="contact-row"][data-contact-name="${name}"]`
+	const rowSelector = contactRow(name)
 	await page.waitForSelector(rowSelector, { visible: true, timeout: 5_000 })
 	await page.evaluate((sel: string) => {
 		const row = document.querySelector<HTMLElement>(sel)
