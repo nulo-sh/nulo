@@ -1,0 +1,7 @@
+# Phase 1: clean signing jobs and narrow tokens
+
+- **Rebase before work.** `origin/dev` gained four commits after the plan (#41, #42, #46, #47), two touching `release.yml`, `nightly.yml`, `behavior-gating.test.ts` and `aggregators.test.ts`. The branch was unpushed, so the plan commit was rebased onto `e49e4ce`; the plan's line references predate it.
+- **`test:release` needs `zip`.** This host has no `zip`, so `zip-reproducible.test.ts` fails three tests on any branch. The gate ran with Ubuntu's `zip` 3.0 deb (`apt-get download zip`, verified by apt against the archive's signed index) extracted under the lane's scratch dir and put on `PATH` for the run only; nothing outside the scratch dir changed.
+- **zsh does not split `$c`.** A gate loop of `for c in "bun run lint" …; do $c; done` exits 127 in zsh; `eval "$c"` runs it.
+- **Proof the finding checks bite.** Each of the five finding functions in `release-integrity.test.ts` had its core check replaced by `if (false)` in a scratch copy: the matching mutated-copy test failed every time (transcript), and passed with the check restored.
+- **Evidence for I3.** `sync-main-to-dev` already creates `refs/heads/<branch>` at `main`'s head with the App token (`open-sync-pr-run.ts`, `POST git/refs`), and that tree holds workflow files; the App has no `workflows` permission. A tag ref at the same kind of commit is the same check, so `auto-unstick`'s REST tag is likely to pass. The first release on the new flow proves it (S2 condition 2).

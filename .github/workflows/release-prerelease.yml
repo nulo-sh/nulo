@@ -42,6 +42,9 @@ jobs:
         with:
           app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
 
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
@@ -52,6 +55,8 @@ jobs:
           # repo's default branch (also `dev` today, but make it explicit so
           # the workflow keeps working if the default changes).
           target-branch: dev
+          # Tags and releases come from the publish chain only (release.yml).
+          skip-github-release: true
           token: ${{ steps.app.outputs.token }}
 
   # ADVISORY: nothing waits on it, so a red run never holds the rc cut.

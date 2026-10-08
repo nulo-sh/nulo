@@ -1,26 +1,26 @@
 /**
- * The decision core for auto-unsticking the release-please v4 abort (the bug
- * where, after a Release PR merges, the action logs "untagged, merged release
- * PRs outstanding" and never tags). This is the IN-`release.yml` design: on the
- * post-merge `push:main` run, if release-please aborted on a genuine stuck
- * Release PR, we create the tag + release ourselves, then continue the same
- * publish DAG.
+ * The decision core for tagging a merged Release PR, which release-please never
+ * tags (it runs with skip-github-release). On the post-merge `push:main` run we
+ * create the tag ourselves, then continue the same publish DAG, whose
+ * attach-assets job creates and publishes the GitHub Release.
  *
  * This module is the PURE decision only — the GitHub API side-effects (create
- * tag, create release, relabel) live in the workflow glue, which calls this to
+ * tag, relabel) live in the workflow glue, which calls this to
  * decide what to do. Keeping it pure makes every branch (incl. the race +
  * wrong-SHA cases) unit-testable with zero secrets.
  *
  * Safety, by construction:
  *  - guarded by `autoUnstickEnabled` (the staged-rollout kill switch);
- *  - only acts on a real `push` whose HEAD is a MERGED `autorelease: pending`
- *    Release PR with base `main` (an explicit PR-to-SHA check — never a title
- *    heuristic);
+ *  - only acts on a real `push` whose HEAD is the merge commit of a MERGED
+ *    `autorelease: pending` Release PR with base `main` (an explicit PR-to-SHA
+ *    check — never a title heuristic);
  *  - idempotent: an existing tag at the right SHA → no-op;
  *  - fail-closed: an existing tag at the WRONG SHA → abort (never re-point).
  */
 
 export const AUTORELEASE_PENDING_LABEL = "autorelease: pending"
+/** What the unstick relabels a Release PR to once its tag exists. */
+export const AUTORELEASE_TAGGED_LABEL = "autorelease: tagged"
 
 export interface AutoUnstickInput {
 	/** `vars.AUTO_UNSTICK_ENABLED` — the staged-rollout kill switch. */
@@ -47,7 +47,7 @@ export interface AutoUnstickDecision {
 	reason: string
 	/** for `create`: the SHA to tag (always the Release-PR merge commit). */
 	tagSha?: string
-	/** for `create`: the PR to relabel `autorelease: tagged`. */
+	/** for `create` and `skip`: the PR to relabel `autorelease: tagged`, while it is still pending. */
 	prNumber?: number
 }
 
@@ -57,17 +57,26 @@ export function decideUnstick(input: AutoUnstickInput): AutoUnstickDecision {
 	if (input.eventName !== "push") return { action: "noop", reason: `event is '${input.eventName}', not a push to main` }
 
 	const pr = input.mergedPr
-	if (!pr || !pr.merged) return { action: "noop", reason: "HEAD is not a merged PR" }
+	if (!pr?.merged) return { action: "noop", reason: "HEAD is not a merged PR" }
+	// The tag names the commit this run builds and attests; another commit's PR is not this run's release.
+	if (pr.mergeSha !== input.headSha)
+		return { action: "noop", reason: `PR #${pr.number} merged as ${pr.mergeSha}, not HEAD ${input.headSha}` }
 	if (pr.baseRef !== "main") return { action: "noop", reason: `merged PR targets '${pr.baseRef}', not main` }
-	if (!pr.labels.includes(AUTORELEASE_PENDING_LABEL)) {
-		return { action: "noop", reason: "merged PR is not an unpublished Release PR (no 'autorelease: pending' label)" }
-	}
-	// HEAD is a genuine stuck Release PR. The tag must point at the merge commit.
-	if (input.existingTagSha === null) {
-		return { action: "create", reason: "stuck Release PR, tag missing — create it", tagSha: pr.mergeSha, prNumber: pr.number }
+	const pending = pr.labels.includes(AUTORELEASE_PENDING_LABEL)
+	// An earlier attempt of this run may have relabeled and died before its outputs; its tag still names HEAD.
+	if (!pending && !pr.labels.includes(AUTORELEASE_TAGGED_LABEL)) {
+		return { action: "noop", reason: "merged PR is not a Release PR (no 'autorelease: pending' or 'autorelease: tagged' label)" }
 	}
 	if (input.existingTagSha === pr.mergeSha) {
-		return { action: "skip", reason: "tag already exists at the merge SHA — idempotent no-op", prNumber: pr.number }
+		return {
+			action: "skip",
+			reason: "tag already exists at the merge SHA — idempotent no-op",
+			prNumber: pending ? pr.number : undefined,
+		}
+	}
+	if (input.existingTagSha === null) {
+		if (!pending) return { action: "noop", reason: "Release PR is labeled tagged but has no tag; only a pending one is tagged here" }
+		return { action: "create", reason: "stuck Release PR, tag missing — create it", tagSha: pr.mergeSha, prNumber: pr.number }
 	}
 	return {
 		action: "abort",

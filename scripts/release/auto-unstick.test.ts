@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AUTORELEASE_PENDING_LABEL, type AutoUnstickInput, decideUnstick } from "./auto-unstick"
+import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL, type AutoUnstickInput, decideUnstick } from "./auto-unstick"
 
 const MERGE = "abc123def456abc123def456abc123def456abcd"
 
@@ -37,6 +37,12 @@ describe("decideUnstick — guards (no action)", () => {
 		const pr = { number: 1, merged: true, baseRef: "main", labels: ["feat"], mergeSha: MERGE }
 		expect(decideUnstick(stuck({ mergedPr: pr })).action).toBe("noop")
 	})
+	test("a Release PR whose merge commit is not HEAD → noop, never a tag at another commit", () => {
+		const pr = { number: 1, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: "0".repeat(40) }
+		const d = decideUnstick(stuck({ mergedPr: pr }))
+		expect(d.action).toBe("noop")
+		expect(d.tagSha).toBeUndefined()
+	})
 	test("an un-merged PR head → noop", () => {
 		const pr = { number: 1, merged: false, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE }
 		expect(decideUnstick(stuck({ mergedPr: pr })).action).toBe("noop")
@@ -52,6 +58,11 @@ describe("decideUnstick — the unstick itself", () => {
 	})
 	test("tag already at the merge SHA → skip (idempotent re-invoke)", () => {
 		expect(decideUnstick(stuck({ existingTagSha: MERGE })).action).toBe("skip")
+	})
+	test("a Release PR already labeled tagged is never tagged here, only continued when its tag names HEAD", () => {
+		const pr = { number: 7, merged: true, baseRef: "main", labels: [AUTORELEASE_TAGGED_LABEL], mergeSha: MERGE }
+		expect(decideUnstick(stuck({ mergedPr: pr, existingTagSha: null })).action).toBe("noop")
+		expect(decideUnstick(stuck({ mergedPr: pr, existingTagSha: MERGE }))).toMatchObject({ action: "skip", prNumber: undefined })
 	})
 	test("tag exists but points at the WRONG SHA → abort (never re-point)", () => {
 		const d = decideUnstick(stuck({ existingTagSha: "0000000000000000000000000000000000000000" }))
