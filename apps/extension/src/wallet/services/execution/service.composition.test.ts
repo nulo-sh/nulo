@@ -1031,7 +1031,7 @@ describe("ExecutionService composition — a confirm reads the sponsor row as th
 		expect(await consume.mock.results[0]?.value).toBeDefined()
 		await waitFor(() => h.ctrl.entered)
 		h.ctrl.release()
-		await p
+		expect(await p).toBe("0xhash")
 		const operationLookup = (internals.operationEstimateReuse as unknown as { deps: { getFpcInfo: (id: string) => Promise<unknown> } })
 			.deps
 		expect(await operationLookup.getFpcInfo(SPONSOR.id)).toEqual(SPONSOR)
