@@ -15,7 +15,7 @@ Marketing landing page for the wallet (nulo.sh). Standalone Vite app; ships inde
 | `src/styles/overrides.css` | The few corrections a web page needs on top of `@nulo/design/base.css` (link colour, focus ring, selectable text, visible scrollbars). |
 | `src/styles/page.css` | Page presentation: plates, bar, hero overlay, sections, breakpoints. |
 | `scripts/headers.ts` | Parses the site-wide block of `public/_headers` so `vite preview` serves the production CSP. |
-| `public/` | `_headers` (CSP and caching, applied by Cloudflare), favicon, robots, sitemap. |
+| `public/` | `_headers` (CSP and caching, applied by Cloudflare), favicon, robots, sitemap, and `og.png`, the 1200×630 link-preview image: the desktop hero captured with reduced motion and the clock hidden. Recapture it when the hero changes. |
 | `vite.config.ts` | Vite config, including `preview.headers` from `_headers`. |
 | `wrangler.jsonc` | The `nulo-landing` Worker: static assets from `dist/`, unknown paths served `index.html` (released wallets deep-link to `/forms/*`), Workers Logs off. `nulo.sh` is a Custom Domain attached outside the file (the build token has no zone permission); no workers.dev host; previews on for non-production branches. |
 

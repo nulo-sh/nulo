@@ -130,7 +130,7 @@ Found during implementation, put to the owner on the PR (not covered by the appr
 - Pass criteria: every command exits 0 (the negated `git grep` exits 0 only when it finds nothing); `grep -c '{{' apps/landing/dist/index.html` prints 0; the build log shows no GitHub request.
 - Layers: typecheck/lint, unit, CI-gating, build.
 
-### Phase 3: Social image and footer store links
+### Phase 3: Social image and footer store links ✓
 
 1. Capture `public/og.png` from the built hero at 1200×630; keep it under 300 KB.
 2. Add the `og:image` set and `twitter:image` to `index.html`.
