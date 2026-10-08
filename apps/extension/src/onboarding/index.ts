@@ -6,7 +6,10 @@
  */
 
 import "@/utils/zod-jitless"
+import { recordCspViolationsInPage } from "@/e2e/csp-report"
 import { installConsoleForwarding } from "@/wallet/logger/console-forwarding"
+
+if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInPage()
 
 installConsoleForwarding("onboarding")
 

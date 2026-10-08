@@ -94,7 +94,11 @@ jobs:
             echo "::error::VITE_NULO_E2E_TOKEN_SEEDS(_CONFIRM) is set in the build environment — an armed token-seed source REPLACES the default seed list, so a release build carrying it would ship a wallet that never seeds defaults" >&2
             exit 1
           fi
-          echo "✓ build env carries no CoinGecko key and no e2e price-map or token-seed flags"
+          if [ -n "${VITE_NULO_E2E_CSP_REPORT:-}" ]; then
+            echo "::error::VITE_NULO_E2E_CSP_REPORT is set in the build environment — the e2e-only CSP violation recorder must never ship" >&2
+            exit 1
+          fi
+          echo "✓ build env carries no CoinGecko key and no e2e price-map, token-seed or CSP-report flags"
 
       - name: Build Chrome
         if: inputs.target == 'chrome' || inputs.target == 'both'
@@ -132,7 +136,7 @@ jobs:
           fail=0
           for d in apps/extension/dist/chrome apps/extension/dist/firefox; do
             [ -d "$d" ] || continue
-            for marker in "NULO_PRESTO_REQUIRED_BUILD_STAMP" "NULO_E2E_PROVERLESS_BUILD_STAMP" "NULO_E2E_PRICE_MAP_BUILD_STAMP" "nulo:e2e:proof-gate" "nulo:e2e:restore-gate" "nulo:e2e:incoming-poll-hold" "nulo:e2e:incoming-poll-status" "nulo:e2e:projection-hold" "SHALLOW_PXE_FAKE_BUNDLE_MARKER" "nulo:e2e:mig-fixture" "nulo:e2e:backup-mig-fixture" "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" "nulo:e2e:token-seeds"; do
+            for marker in "NULO_PRESTO_REQUIRED_BUILD_STAMP" "NULO_E2E_PROVERLESS_BUILD_STAMP" "NULO_E2E_PRICE_MAP_BUILD_STAMP" "nulo:e2e:proof-gate" "nulo:e2e:restore-gate" "nulo:e2e:incoming-poll-hold" "nulo:e2e:incoming-poll-status" "nulo:e2e:projection-hold" "SHALLOW_PXE_FAKE_BUNDLE_MARKER" "nulo:e2e:mig-fixture" "nulo:e2e:backup-mig-fixture" "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" "nulo:e2e:token-seeds" "nulo:e2e:csp-violations"; do
               if grep -rq "$marker" "$d"; then
                 echo "::error::test-only marker '$marker' leaked into $d" >&2
                 fail=1

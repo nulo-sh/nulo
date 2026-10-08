@@ -27,6 +27,7 @@ import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
+import { CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -81,7 +82,7 @@ export async function launchExtension(
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
-	const { browser, close } = await launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize })
+	const { browser, close: closeBrowser } = await launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize })
 
 	try {
 		const extensionId = await settleLaunchedExtension(browser, {
@@ -89,10 +90,14 @@ export async function launchExtension(
 			waitForLiveness,
 			legal: opts.legal ?? (freshProfile ? "current" : "keep"),
 		})
+		// Every launch, a spec's own included, answers for the violations recorded while it ran.
+		const close = CSP_REPORT_ARMED
+			? () => closeAfterCspCheck(closeBrowser, () => readCspViolations(browser, extensionId))
+			: closeBrowser
 		return { browser, extensionId, consoleErrors: [], pageErrors: [], close }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
-		await close().catch(() => {})
+		await closeBrowser().catch(() => {})
 		throw err
 	}
 }

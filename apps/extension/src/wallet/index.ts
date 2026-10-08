@@ -24,6 +24,9 @@ import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/exte
 import { getErrorData } from "@nulo/wallet-core/utils"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
 import { armPopupReturn, registerToolbarPopupMessage } from "./utils/toolbar-popup"
+import { recordCspViolationsInBackground } from "@/e2e/csp-report"
+
+if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInBackground()
 
 // MV3: onInstalled fires once, synchronously, when the SW boots after install.
 // Late addListener calls miss the historic event. Register at top level BEFORE
