@@ -1,12 +1,13 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { CONTACT_NAME_MAX } from "@/utils/contact-name"
 import ContactFormFields from "./ContactFormFields.vue"
 
 const STUBS = {
 	Input: {
 		props: ["modelValue", "placeholder", "maxLength"],
 		emits: ["update:modelValue"],
-		template: `<div><input data-testid="name-input" :placeholder="placeholder" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /></div>`,
+		template: `<div><input data-testid="name-input" :placeholder="placeholder" :data-max-length="maxLength" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" /><slot name="right" /></div>`,
 	},
 	AddressInput: {
 		props: ["modelValue", "placeholder"],
@@ -39,8 +40,9 @@ describe("ContactFormFields", () => {
 		expect(w.emitted("update:address")?.at(-1)).toEqual(["0xabc"])
 	})
 
-	test("e2e-load-bearing placeholders are verbatim", () => {
+	test("placeholders are verbatim, and the name takes no more than a stored name holds", () => {
 		const w = mountFields()
+		expect(w.find('[data-testid="name-input"]').attributes("data-max-length")).toBe(String(CONTACT_NAME_MAX))
 		expect(w.find('[data-testid="name-input"]').attributes("placeholder")).toBe("New contact")
 		expect(w.find('[data-testid="address-input"]').attributes("placeholder")).toBe(
 			"0x15c4ac6afcffdf59aa8a1fb3317ff0c86aee3eb02f9e52c3612e1163d4701446",

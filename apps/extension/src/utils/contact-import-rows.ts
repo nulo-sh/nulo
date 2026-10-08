@@ -1,8 +1,6 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
+import { contactNameKey, sanitizeContactName } from "@/utils/contact-name"
 import { sanitizeString, trimAddress } from "@/utils/string"
-
-/** The contact form's name limit, so a file round-trips every name the form can save. */
-const IMPORT_NAME_MAX = 25
 
 const IMPORT_ADDRESS_MAX = 66
 
@@ -34,49 +32,11 @@ export function normalizeImportRows(rawContacts: ReadonlyArray<Record<string, un
 	return rows
 }
 
-const INVISIBLE = /\p{Default_Ignorable_Code_Point}/gu
-const WHITESPACE_RUN = /\p{White_Space}+/gu
-
-/** A contact name read from a file, a backup or an import edit: untrusted display text. Invisible
- *  characters go, any whitespace becomes a space before the character filter (which would delete it
- *  and join the words), and the runs the filter leaves become one space, all before the cut, so
- *  none of them is stored or costs a character. Visible letters and their case are kept. The cut
- *  counts UTF-16 units, as the form does, but a letter outside the BMP that it would split is
- *  dropped whole: half of one is not a character, and the next import strips it, so the name would
- *  never read back as saved. */
-export function sanitizeImportName(name: string): string {
-	const visible = sanitizeString(name.replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ")).replace(/ {2,}/g, " ").trim()
-	return visible
-		.slice(0, IMPORT_NAME_MAX)
-		.replace(/[\uD800-\uDBFF]$/, "")
-		.trim()
-}
-
-/** Case folding for matching: per code point, lower, upper, lower. It puts exactly the code points
- *  Unicode default case folding treats as one letter in one class (ß, ss and ẞ; σ and ς), though it
- *  may name the class differently (Cherokee folds to lowercase here). The round trip would also join
- *  dotless ı to i, which default folding keeps apart, so ı is left as it is. */
-function foldCase(s: string): string {
-	let folded = ""
-	for (const c of s) folded += c === "\u0131" ? c : c.toLowerCase().toUpperCase().toLowerCase()
-	return folded
-}
-
-/**
- * The key two contact names are the same name by: no invisible characters, compatibility forms
- * (NFKC), case folded, whitespace runs as one space, trimmed. Letters that only look alike across
- * scripts (Cyrillic А, Latin A) keep different keys. Invisible characters go first so one between a
- * letter and its accent cannot stop NFKC composing them; NFKC and folding never produce one.
- */
-export function contactNameKey(name: string): string {
-	return foldCase(name.replace(INVISIBLE, "").normalize("NFKC")).replace(WHITESPACE_RUN, " ").trim()
-}
-
 function toImportRow(raw: Record<string, unknown> | null): ImportRow {
 	const name = raw?.name
 	const address = raw?.address
 	return {
-		name: typeof name === "string" ? sanitizeImportName(name) : "",
+		name: typeof name === "string" ? sanitizeContactName(name) : "",
 		address: typeof address === "string" ? sanitizeString(address, IMPORT_ADDRESS_MAX).toLowerCase() : "",
 		isSender: raw?.isSender === true,
 	}
@@ -129,6 +89,9 @@ export function matchSavedContacts(row: StagedRow, index: SavedContactIndex): Co
 export type ImportRowKind = ContactMatchKind | "invalid"
 
 export interface ClassifiedImportRow {
+	/** The name the row shows and writes: a row that matched a saved contact by name keeps the saved
+	 *  spelling, so a difference of case, spacing or invisible characters never renames it. */
+	name: string
 	kind: ImportRowKind
 	importable: boolean
 	/** Only a contact the book does not have yet starts selected; every change to a saved one waits
@@ -142,7 +105,9 @@ export interface ClassifiedImportRow {
 
 export function classifyImportRow(row: StagedRow, index: SavedContactIndex): ClassifiedImportRow {
 	const { kind, target } = isValidAztecAddress(row.address) ? matchSavedContacts(row, index) : { kind: "invalid" as const, target: null }
+	const matchedByName = kind === "unchanged" || kind === "address-change"
 	return {
+		name: target && matchedByName ? sanitizeContactName(target.name) : row.name,
 		kind,
 		importable: kind !== "invalid" && kind !== "conflict",
 		selected: kind === "new",

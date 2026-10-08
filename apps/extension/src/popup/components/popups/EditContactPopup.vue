@@ -2,7 +2,8 @@
 <script setup>
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress, sameContactName } from "@/utils/contact-rules"
+import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
+import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
 import { withoutId } from "@/utils/entity-list"
 
 /** Components */
@@ -63,6 +64,10 @@ function onContactDeleted(contact) {
 const contactToEdit = ref(null)
 const contacts = ref([])
 
+/** The saved contact this form edits: its own row, or the one an import row would write. Its own
+ *  name and address are never duplicates. */
+const isEditedContact = (c) => c.id === (contactToEdit.value?.id ?? contactToEdit.value?.targetId)
+
 /** Name + address managed by useFormState. The "already exist" check
  *  filters out the contact-being-edited so saving with the SAME name/
  *  address it already has doesn't trip the duplicate guard. */
@@ -70,8 +75,8 @@ const form = useFormState({
 	name: {
 		initial: "",
 		validate: (v) => {
-			if (!v.replace(/\s/g, "").length) return null
-			const conflicting = contacts.value.find((c) => sameContactName(c, v) && c.id !== contactToEdit.value?.id)
+			if (isEmptyContactName(v)) return null
+			const conflicting = contacts.value.find((c) => sameContactName(c.name, v) && !isEditedContact(c))
 			if (conflicting) return CONTACT_EXISTS
 			return null
 		},
@@ -82,7 +87,7 @@ const form = useFormState({
 			if (!v) return null
 			if (!isValidAztecAddress(v)) return "Invalid address"
 			// Case-insensitive: hex casing doesn't make a different address.
-			const conflicting = contacts.value.find((c) => sameContactAddress(c, v) && c.id !== contactToEdit.value?.id)
+			const conflicting = contacts.value.find((c) => sameContactAddress(c, v) && !isEditedContact(c))
 			if (conflicting) return CONTACT_EXISTS
 			return null
 		},
@@ -109,7 +114,7 @@ const isAvailableToUpdateContact = computed(() => {
 	// Full-lifetime submit latch: a running save closes the form on EVERY
 	// route (button, Enter, future callers) — not just the pointer path.
 	if (isLoading.value) return false
-	if (!nameTerm.value?.replace(/\s/g, "").length) return false
+	if (isEmptyContactName(nameTerm.value ?? "")) return false
 	if (!isValidAddress.value) return false
 	if (form.fields.name.error.value) return false
 	if (form.fields.address.error.value) return false
@@ -141,7 +146,8 @@ const handleUpdateContact = async () => {
 		if (cacheStore.importContact) {
 			cacheStore.importContact = {
 				...contactToEdit.value,
-				name: nameTerm.value.trim(),
+				// Staged as the import would store it, so the row shows the name it writes.
+				name: sanitizeContactName(nameTerm.value),
 				// Same canonical-lowercase rule as the direct-save path below —
 				// staged rows feed addContact/addSender downstream.
 				address: canonicalContactAddress(contactAddressTerm.value),

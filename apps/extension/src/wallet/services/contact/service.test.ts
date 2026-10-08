@@ -133,6 +133,13 @@ describe("ContactService (port-migrated)", () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			expect(c.abbr).toBe("AL")
 		})
+
+		test("stores the name as the shared sanitizer returns it, and refuses one with nothing visible without writing", async () => {
+			const c = await contactService.addContact(" \u3164ALI\u200Bce\u00A0 Smith ", "0xa")
+			expect([c.name, c.abbr]).toEqual(["ALIce Smith", getInitials("ALIce Smith")])
+			await expect(contactService.addContact("\u3164\u200B ", "0xb")).rejects.toThrow("contact name has no visible characters")
+			expect((await contactService.getContacts()).map((x) => x.name)).toEqual(["ALIce Smith"])
+		})
 	})
 
 	describe("updateContact", () => {
@@ -148,6 +155,13 @@ describe("ContactService (port-migrated)", () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			profile.setActiveProfile(profileB)
 			await expect(contactService.updateContact(c.id, "X", "0xX")).rejects.toThrow(/invalid id/i)
+		})
+
+		test("stores a new name as the shared sanitizer returns it, refuses one with nothing visible, and keeps the name when none is given", async () => {
+			const c = await contactService.addContact("Alice", "0xa")
+			expect((await contactService.updateContact(c.id, "  BOB\u3164 ")).name).toBe("BOB")
+			await expect(contactService.updateContact(c.id, "\u3164")).rejects.toThrow("contact name has no visible characters")
+			expect((await contactService.updateContact(c.id, undefined, "0xb")).name).toBe("BOB")
 		})
 
 		test("emits onContactUpdated", async () => {

@@ -51,7 +51,8 @@ export type Methods = {
 
 	/**
 	 * Creates and returns a new contact.
-	 * @param name Display name.
+	 * @param name Display name, stored as `sanitizeContactName` returns it; refused when nothing of it
+	 * would be stored.
 	 * @param address contact address.
 	 */
 	addContact(name: string, address: string): Contact
@@ -59,7 +60,7 @@ export type Methods = {
 	/**
 	 * Changes contact name and address and returns the updated contact.
 	 * @param id Contact id.
-	 * @param name New contact name.
+	 * @param name New contact name, stored and refused as in `addContact`; omitted or empty keeps it.
 	 * @param address New contact address.
 	 */
 	updateContact(id: string, name?: string, address?: string): Contact

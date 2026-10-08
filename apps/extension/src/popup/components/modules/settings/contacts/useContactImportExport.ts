@@ -252,9 +252,7 @@ async function upsertOneContact(
 	row: SelectedRow,
 	targetId: string | null,
 ): Promise<UpsertError | null> {
-	// Only a name change renames: a row matching a saved contact by name keeps the saved spelling,
-	// even when the file's differs by case, spacing or invisible characters.
-	const name = (targetId && row.kind !== "name-change" ? (row.savedName ?? row.name) : row.name).trim()
+	const name = row.name.trim()
 	try {
 		if (targetId) await contactService.updateContact(targetId, name, row.address)
 		else await contactService.addContact(name, row.address)

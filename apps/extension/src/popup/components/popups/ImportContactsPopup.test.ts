@@ -335,17 +335,6 @@ describe("ImportContactsPopup — confirming", () => {
 		expect(edited.element).toBe(element)
 	})
 
-	test("an edited name is kept as an imported one: case and invisible variants of a saved name are that contact, and nothing visible leaves the row as it was", async () => {
-		const w = await mountWithStaged(FILE, SAVED)
-		await saveEdit(w, "Priya Shah", { name: "TOM\u3164  becker" })
-		const edited = rows(w).find((r) => r.attributes("data-contact-name") === "TOM becker")
-		expect(edited?.attributes("data-row-kind")).toBe("address-change")
-
-		await saveEdit(w, "TOM becker", { name: "\u3164\u200B " })
-		expect(rows(w).map((r) => r.attributes("data-contact-name"))).toContain("TOM becker")
-		expect(rowNamed(w, "TOM becker").attributes("data-row-kind")).toBe("address-change")
-	})
-
 	test("reopening an edited row's form and closing it without saving keeps the user's choice", async () => {
 		const w = await mountWithStaged(FILE, SAVED)
 		await saveEdit(w, "Priya Shah", { name: "Priya S" })

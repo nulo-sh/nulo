@@ -256,13 +256,16 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(w.text()).not.toContain("Already exist")
 	})
 
-	test("another contact's name, trimmed, and its address in any case, read as duplicates", async () => {
+	test("another contact's name, whatever its case, spacing or invisible characters, and its address in any case, read as duplicates", async () => {
 		const w = await mountAndOpen([CONTACT, BOB])
 		await w.find('[data-testid="name-input"]').setValue("Bob ")
 		await flushPromises()
 		expect(w.text()).toContain("Already exist")
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
 		await w.find('[data-testid="name-input"]').setValue("Bob")
+		await flushPromises()
+		expect(w.text()).toContain("Already exist")
+		await w.find('[data-testid="name-input"]').setValue("BOB\u3164 ")
 		await flushPromises()
 		expect(w.text()).toContain("Already exist")
 		await w.find('[data-testid="name-input"]').setValue("Alicia")
@@ -304,6 +307,50 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(fieldText(w, "address-input")).toBe("Already exist")
 		expect(fieldText(w, "name-input")).toBe("")
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+	})
+
+	test("two saved names that differ only by case: an edit of one is blocked until its name is distinct, then saves", async () => {
+		const w = await mountAndOpen([CONTACT, { id: "c2", name: "alice", address: addr("c") }], "c2")
+		expect(fieldText(w, "name-input")).toBe("")
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("Already exist")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+
+		await w.find('[data-testid="name-input"]').setValue("Alice Brown")
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("")
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(contactServiceMock.updateContact).toHaveBeenCalledWith("c2", "Alice Brown", NEW_ADDRESS)
+	})
+
+	test("a name with nothing visible keeps submit disabled and never warns", async () => {
+		// The third row is older data: a saved name of invisible characters only.
+		const w = await mountAndOpen([CONTACT, BOB, { id: "c3", name: "\u3164", address: addr("d") }])
+		await w.find('[data-testid="name-input"]').setValue("\u3164\u200B ")
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+	})
+
+	test("import mode: the saved contact a row would write is not its duplicate, and the name is staged as the import stores it", async () => {
+		cacheStoreState.importContact = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		const w = await mountAndOpen([CONTACT, BOB], "")
+		await w.find('[data-testid="address-input"]').setValue(OLD_ADDRESS)
+		await w.find('[data-testid="name-input"]').setValue(" ALI\u3164CE  ")
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("")
+		expect(fieldText(w, "address-input")).toBe("")
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(cacheStoreState.importContact).toMatchObject({ name: "ALICE", address: OLD_ADDRESS, targetId: "c1", updated: true })
+
+		cacheStoreState.importContact = { idx: "0", name: "Alice", address: NEW_ADDRESS, kind: "address-change", targetId: "c1" }
+		const again = await mountAndOpen([CONTACT, BOB], "")
+		await again.find('[data-testid="name-input"]').setValue("bob")
+		await flushPromises()
+		expect(fieldText(again, "name-input")).toBe("Already exist")
 	})
 
 	test("import mode stores the address lowercased", async () => {

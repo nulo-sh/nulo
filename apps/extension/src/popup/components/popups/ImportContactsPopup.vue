@@ -3,7 +3,7 @@
 /** Utils */
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { trimAddress } from "@/utils/string"
-import { addressChangeText, classifyImportRow, indexSavedContacts, planImportWrites, sanitizeImportName } from "@/utils/contact-import-rows"
+import { addressChangeText, classifyImportRow, indexSavedContacts, planImportWrites } from "@/utils/contact-import-rows"
 import { withoutId } from "@/utils/entity-list"
 
 /** Components */
@@ -139,11 +139,7 @@ watch(
 	() => {
 		const edited = cacheStore.importContact
 		if (!edited?.idx || !edited.updated) return
-		// An edited name is stored as a file's is. One with nothing visible left is no name, and the
-		// row stays as it was.
-		const name = sanitizeImportName(edited.name)
-		if (!name) return
-		importContacts.value[edited.idx] = stageRow({ ...edited, name }, edited.idx)
+		importContacts.value[edited.idx] = stageRow(edited, edited.idx)
 	},
 )
 watch(

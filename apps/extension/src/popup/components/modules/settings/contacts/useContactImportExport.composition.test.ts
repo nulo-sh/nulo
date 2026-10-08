@@ -345,13 +345,15 @@ describe("import composition — what the screen showed chosen is what is writte
 })
 
 describe("import composition — one name, whatever its case, spacing or invisible characters", () => {
-	test("rows matching saved names that way are Already saved or address changes that keep the saved spelling; a repeat in the file is dropped; a look-alike letter is a new name", async () => {
+	test("every row shows the name it writes: matched rows keep the saved spelling, a rename the file's, rows that can't be imported write nothing", async () => {
 		const { contacts } = await startWallet()
 		for (const [name, address] of [
 			["Alice", ADDR.a],
 			["Bob Stone", ADDR.b],
 			["Carol", ADDR.c],
 			["Dave", ADDR.d],
+			["Erin", ADDR.e],
+			["Gus", ADDR.g],
 		]) {
 			await contacts.addContact(name, address)
 		}
@@ -362,26 +364,54 @@ describe("import composition — one name, whatever its case, spacing or invisib
 			page,
 			fileOf([
 				{ name: "ALICE", address: ADDR.a },
-				{ name: "Bob   Stone ", address: ADDR.e },
+				{ name: "Bob   Stone ", address: ADDR.f },
 				{ name: "Car\u3164ol\u200B", address: ADDR.c },
-				{ name: "dave\u3164", address: ADDR.f },
-				{ name: "alice", address: ADDR.g },
-				{ name: "\u0410lice", address: ADDR.h },
+				{ name: "dave\u3164", address: ADDR.h },
+				{ name: "alice", address: ADDR.i },
+				{ name: "\u0410lice", address: ADDR.j },
+				{ name: "Erin  Ray", address: ADDR.e },
+				{ name: "GUS", address: ADDR.d },
+				{ name: "Hal", address: OFF_CURVE },
 			]),
 		)
-		expect(shown(page.popup)).toEqual([
+		const rows = shown(page.popup)
+		expect(rows).toEqual([
 			{ name: "Bob Stone", kind: "address-change", selected: false },
-			{ name: "dave", kind: "address-change", selected: false },
+			{ name: "Dave", kind: "address-change", selected: false },
+			{ name: "Erin Ray", kind: "name-change", selected: false },
 			{ name: "\u0410lice", kind: "new", selected: true },
-			{ name: "ALICE", kind: "unchanged", selected: false },
+			{ name: "Alice", kind: "unchanged", selected: false },
 			{ name: "Carol", kind: "unchanged", selected: false },
+			{ name: "GUS", kind: "conflict", selected: false },
+			{ name: "Hal", kind: "invalid", selected: false },
 		])
-		await press(page.popup, "Bob Stone")
-		await press(page.popup, "dave")
-		await press(page.popup, "ALICE")
+		for (const name of ["Bob Stone", "Dave", "Erin Ray", "Alice", "GUS", "Hal"]) await press(page.popup, name)
 
 		expect(await confirm(page, done)).toBe("Import completed successfully")
-		expect(await book(contacts)).toEqual({ Alice: ADDR.a, "Bob Stone": ADDR.e, Carol: ADDR.c, Dave: ADDR.f, "\u0410lice": ADDR.h })
+		const saved = await book(contacts)
+		expect(saved).toEqual({
+			Alice: ADDR.a,
+			"Bob Stone": ADDR.f,
+			Carol: ADDR.c,
+			Dave: ADDR.h,
+			"Erin Ray": ADDR.e,
+			Gus: ADDR.g,
+			"\u0410lice": ADDR.j,
+		})
+		const rowAddress: Record<string, string> = {
+			Alice: ADDR.a,
+			"Bob Stone": ADDR.f,
+			Carol: ADDR.c,
+			Dave: ADDR.h,
+			"\u0410lice": ADDR.j,
+			"Erin Ray": ADDR.e,
+			GUS: ADDR.d,
+			Hal: OFF_CURVE,
+		}
+		for (const row of rows) {
+			const written = Object.entries(saved).find(([, address]) => address === rowAddress[row.name ?? ""])?.[0]
+			expect([row.kind, written]).toEqual([row.kind, row.kind === "conflict" || row.kind === "invalid" ? undefined : row.name])
+		}
 		expect((await contacts.getContacts()).find((c) => c.name === "Alice")?.id).toBe(aliceId)
 	})
 })
