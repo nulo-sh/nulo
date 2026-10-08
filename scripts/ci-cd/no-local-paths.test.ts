@@ -26,15 +26,18 @@ describe("check-no-local-paths.sh", () => {
 		const repo = mkdtempSync(join(tmpdir(), "nulo-home-path-"))
 		try {
 			git(repo, "init", "--quiet")
-			// Assembled here so this file never carries the shape it tests for.
-			const leak = ["", "home", "someone", "nulo", "notes.md"].join("/")
-			writeFileSync(join(repo, "notes.md"), `see ${leak}\n`)
-			git(repo, "add", "notes.md")
+			// Assembled here so this file never carries the shapes it tests for.
+			const leaks: Record<string, string[]> = {
+				"linux.md": ["", "home", "someone", "notes.md"],
+				"mounted.md": ["", "mnt", "data", "someone", "notes.md"],
+			}
+			for (const [file, parts] of Object.entries(leaks)) writeFileSync(join(repo, file), `see ${parts.join("/")}\n`)
+			git(repo, "add", ".")
 			const refused = guard(repo)
 			expect(refused.exitCode).toBe(1)
-			expect(refused.stderr.toString()).toContain("notes.md")
+			for (const file of Object.keys(leaks)) expect(refused.stderr.toString()).toContain(file)
 
-			writeFileSync(join(repo, "notes.md"), "see docs/notes.md\n")
+			for (const file of Object.keys(leaks)) writeFileSync(join(repo, file), "see docs/notes.md\n")
 			expect(guard(repo).exitCode).toBe(0)
 		} finally {
 			rmSync(repo, { recursive: true, force: true })

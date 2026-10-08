@@ -5,7 +5,7 @@
 		"moduleResolution": "Bundler",
 		"moduleDetection": "force",
 		"lib": ["ESNext", "DOM"],
-		"types": ["node", "vite/client", "chrome-types"],
+		"types": ["bun", "node", "vite/client", "chrome-types"],
 		"strict": true,
 		"noEmit": true,
 		"resolveJsonModule": true,

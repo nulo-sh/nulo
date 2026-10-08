@@ -101,7 +101,7 @@ export function rescore(directives: AcceptedDirective[], opts: { cwd?: string } 
 	return { checked: directives.length, violations }
 }
 
-/** Writes `file` without its directive lines to a fresh sibling copy (never overwriting one) and returns the copy's path. */
+/** Created exclusively (`wx`), so an existing sibling copy is never overwritten. */
 function writeStrippedCopy(cwd: string, file: string, list: AcceptedDirective[]): string {
 	const remove = new Set(list.map((d) => d.line))
 	const kept = readFileSync(resolve(cwd, file), "utf8")

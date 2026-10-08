@@ -158,7 +158,7 @@ describe("preflight", () => {
 		).toMatchObject({ ok: false, reason: expect.stringContaining("distributionChannels") })
 	})
 
-	test("accepts every documented non-pending state at a lower version", () => {
+	test("accepts every documented state of the published revision at a lower version", () => {
 		for (const state of ["STAGED", "PUBLISHED", "PUBLISHED_TO_TESTERS", "REJECTED", "CANCELLED"]) {
 			const revision = { state, distributionChannels: [{ crxVersion: "0.26.0.0" }] }
 			expect(interpretPreflight(status({ publishedItemRevisionStatus: revision }), ITEM, ours).ok, state).toBe(true)

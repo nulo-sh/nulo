@@ -28,8 +28,7 @@ const CONTRACT_TEST = "agent-runner contract: a live sandbox must be configured 
 
 const report = (name: string): CanaryReport => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"))
 
-/** Each `[job, test file]` a workflow's canary-sharded jobs run. */
-function canaryJobFiles(workflow: string): [string, string][] {
+function canaryJobFiles(workflow: string): [job: string, file: string][] {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 	const { jobs } = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as any
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
@@ -39,7 +38,7 @@ function canaryJobFiles(workflow: string): [string, string][] {
 			String(job.with.test_files)
 				.split(/\s+/)
 				.filter(Boolean)
-				.map((file): [string, string] => [name, file]),
+				.map((file): [job: string, file: string] => [name, file]),
 		)
 }
 const expectations = loadExpectations()

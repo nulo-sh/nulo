@@ -73,7 +73,7 @@ describe("parseAutoUnstickFlag — on by default; the variable only turns it off
 })
 
 describe("runUnstick — zero-API short-circuit on the common path", () => {
-	test("flag off → disabled, NO resolution calls (default path)", async () => {
+	test("flag off → disabled, NO resolution calls", async () => {
 		const { io, calls } = fakeIO({ pr: releasePr() })
 		const r = await runUnstick(opts({ io, autoUnstickEnabled: false }))
 		expect(r.action).toBe("disabled")
