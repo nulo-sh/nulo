@@ -2155,6 +2155,15 @@ describe("dispatcher — the grant boundary", () => {
 		expect(await h.stored()).toEqual([data, transaction])
 	})
 
+	test("an entry of no known type the person grants through the unknown row stores a row that still reads", async () => {
+		const transaction = { type: "transaction", scope: [{ contract: A, function: "transfer" }] }
+		const h = capabilityHarness(makeSession())
+		await h.request(["x", transaction])
+		expect(await h.stored()).toEqual(["x", transaction])
+		await expect(h.request([transaction])).resolves.toMatchObject({ granted: [transaction] })
+		expect(h.seen.windows).toBe(1)
+	})
+
 	test("the answer refuses a decided row that holds a malformed grant written during the window", async () => {
 		const transaction = { type: "transaction", scope: [{ contract: A, function: "transfer" }] }
 		const decideBeside = (written: unknown) => {

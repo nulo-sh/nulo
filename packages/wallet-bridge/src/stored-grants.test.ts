@@ -1,6 +1,6 @@
 /**
  * Stored grants are re-projected on read: every shape the wallet writes reads back unchanged, and
- * every shape no writer produces refuses the whole read with the projector's fixed text.
+ * every malformed grant refuses the whole read with the projector's fixed text.
  */
 import { describe, expect, test } from "vitest"
 import { ValidationError } from "@nulo/extension-messaging/errors"
@@ -36,15 +36,18 @@ describe("projectStoredGrants", () => {
 		expect(projectStoredGrants([record])).toEqual([record])
 	})
 
-	test("an unknown type passes untouched and no grants read as none", () => {
-		const record = { capability: { type: "future", anything: [1] }, grantedAt: 1 }
-		expect(projectStoredGrants([record])).toEqual([record])
+	test("a capability of no known type passes untouched, and no grants read as none", () => {
+		const records = [
+			{ capability: { type: "future", anything: [1] }, grantedAt: 1 },
+			{ capability: "x", grantedAt: 1 },
+		]
+		expect(projectStoredGrants(records)).toEqual(records)
 		expect(projectStoredGrants(undefined)).toEqual([])
 	})
 
 	test.each([
 		["a record that is not an object", "grant", "Malformed capability"],
-		["a record without a capability object", { grantedAt: 1 }, "Malformed capability"],
+		["a record without a capability", { grantedAt: 1 }, "Malformed capability"],
 		[
 			"a contracts list that is not an array",
 			{ capability: { type: "contracts", contracts: {}, canRegister: true } },

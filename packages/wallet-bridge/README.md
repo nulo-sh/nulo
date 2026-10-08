@@ -326,5 +326,5 @@ assumptions are stable across upgrades.
 `BatchedMethodSchema` is already frozen. So `wallet.batch([{name:
 "registerToken", ...}])` Zod-rejects on the dApp side, and so does a
 `grantPublicAuthwit` leg. A raw protocol client skips that Zod, so the
-dispatcher refuses both, like `sendTx`, before any leg of the batch runs
+dispatcher refuses both, like `sendTx`, before any leg of that batch runs
 (`refusedInBatch` in `method-descriptors.ts`). Treat them as single-shot calls.
