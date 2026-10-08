@@ -270,12 +270,14 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 		expect(await nameWarns(w, "Bob")).toBe(true)
 	})
 
-	test("a name that differs from a saved one only by case, spacing or invisible characters is a duplicate; another letter is not", async () => {
+	test("a name stored as a saved one, differing only by case, spacing, invisible characters or what the cut drops, is a duplicate; another letter is not", async () => {
 		const w = await mountAndOpen([
 			{ id: "c1", name: "Alice", address: addr("a") },
 			{ id: "c2", name: "Bob ", address: addr("c") },
+			{ id: "c3", name: "Abcdefghijklmnopqrstuvwxy", address: addr("d") },
 		])
-		for (const name of ["Alice", "Alice ", " alice", "ALI\u3164CE\u200B", "Bob", "bob"]) expect(await nameWarns(w, name)).toBe(true)
+		for (const name of ["Alice", "Alice ", " alice", "ALI\u3164CE\u200B", "Bob", "bob", "abcdefghijklmnopqrstuvwxyz"])
+			expect(await nameWarns(w, name)).toBe(true)
 		for (const name of ["Al ice", "Alicia", "\u0410lice"]) expect(await nameWarns(w, name)).toBe(false)
 	})
 

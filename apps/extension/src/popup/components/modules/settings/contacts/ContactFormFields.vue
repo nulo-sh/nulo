@@ -6,7 +6,7 @@
  * submit; this component just renders the fields and their inline
  * warnings from the flags it is handed.
  */
-import { CONTACT_NAME_MAX } from "@/utils/contact-name"
+import { CONTACT_NAME_MAX, typedContactName } from "@/utils/contact-name"
 
 defineProps({
 	/** Show "Already exist" on the name field. */
@@ -26,7 +26,7 @@ const addressModel = defineModel("address", { type: String, default: "" })
 		label="Name"
 		placeholder="New contact"
 		autofocus
-		sanitize
+		:normalize="typedContactName"
 		:maxLength="CONTACT_NAME_MAX"
 		v-model="nameModel"
 		inputTestid="contact-name-input"

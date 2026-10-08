@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest"
-import { CONTACT_NAME_MAX, contactNameKey, isEmptyContactName, sameContactName, sanitizeContactName } from "./contact-name"
+import {
+	CONTACT_NAME_MAX,
+	contactNameKey,
+	isEmptyContactName,
+	sameContactName,
+	sanitizeContactName,
+	typedContactName,
+} from "./contact-name"
 
 describe("sanitizeContactName", () => {
 	test("keeps 25 characters, the form's limit, and drops the 26th", () => {
@@ -43,6 +50,14 @@ describe("sanitizeContactName", () => {
 		for (const name of ["Alice\u00A0Smith", "\u3164Al\u200Dice ", "\u1100!\u1161", "\u0958", "A ! B"]) {
 			expect(sanitizeContactName(sanitizeContactName(name))).toBe(sanitizeContactName(name))
 		}
+	})
+})
+
+describe("typedContactName", () => {
+	test("is the stored name with its outer spaces kept, so a word break can be typed", () => {
+		expect(typedContactName(" Ali\u00A0ce\u200B ")).toBe(" Ali ce ")
+		for (const name of [" Ali\u00A0ce\u200B ", `\u3164${"a".repeat(30)}`, "Bob!  Stone", `${"a".repeat(24)}\u{20000}`])
+			expect(sanitizeContactName(typedContactName(name))).toBe(sanitizeContactName(name))
 	})
 })
 

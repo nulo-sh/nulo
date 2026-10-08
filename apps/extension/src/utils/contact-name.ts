@@ -11,18 +11,29 @@ export const CONTACT_NAME_MAX = 25
 const INVISIBLE = /\p{Default_Ignorable_Code_Point}/gu
 const WHITESPACE_RUN = /\p{White_Space}+/gu
 
-/** A name as it is stored; untrusted display text from a person, a file or a backup. Invisible
- *  characters go, any whitespace becomes a space before the character filter (which would delete it
- *  and join the words), and the runs the filter leaves become one space, all before the cut, so
- *  none of them is stored or costs a character. Visible letters and their case are kept. A letter
- *  outside the BMP that the cut would split is dropped whole: half of one is not a character, and
- *  the next pass strips it, so the name would never read back as saved. */
+/** Invisible characters go, any whitespace becomes a space before the character filter (which
+ *  would delete it and join the words), and the runs the filter leaves become one space. Visible
+ *  letters and their case are kept. */
+function visibleName(name: string): string {
+	return sanitizeString(name.replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ")).replace(/ {2,}/g, " ")
+}
+
+/** A letter outside the BMP that the cut would split is dropped whole: half of one is not a
+ *  character, and the next pass strips it, so the name would never read back as saved. */
+function cut(name: string): string {
+	return name.slice(0, CONTACT_NAME_MAX).replace(/[\uD800-\uDBFF]$/, "")
+}
+
+/** A name as it is stored; untrusted display text from a person, a file or a backup. Trimmed before
+ *  the cut too, so outer spaces never cost a character. */
 export function sanitizeContactName(name: string): string {
-	const visible = sanitizeString(name.replace(INVISIBLE, "").replace(WHITESPACE_RUN, " ")).replace(/ {2,}/g, " ").trim()
-	return visible
-		.slice(0, CONTACT_NAME_MAX)
-		.replace(/[\uD800-\uDBFF]$/, "")
-		.trim()
+	return cut(visibleName(name).trim()).trim()
+}
+
+/** A name as the contact form keeps it while it is typed: what `sanitizeContactName` stores, with
+ *  its outer spaces still there, so a space between two words can be typed. */
+export function typedContactName(name: string): string {
+	return cut(visibleName(name))
 }
 
 /** Whether nothing of `name` would be stored: it holds only invisible characters, whitespace and

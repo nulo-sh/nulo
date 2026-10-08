@@ -1,7 +1,6 @@
 import { expect } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
-import { addContact, closeStuckPopup, deleteContact, navigateToSettings } from "./fixtures/helpers"
-import { contactRow } from "./helpers/contacts"
+import { addContact, closeStuckPopup, contactRow, deleteContact, navigateToSettings } from "./fixtures/helpers"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 
 // Per-CALL fresh identities: the extension fixture is file-scoped, so a

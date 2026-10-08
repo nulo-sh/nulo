@@ -3,7 +3,7 @@
 /** Utils */
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
-import { isEmptyContactName, sameContactName } from "@/utils/contact-name"
+import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
 import { withoutId } from "@/utils/entity-list"
 
 /** Components */
@@ -53,7 +53,8 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (isEmptyContactName(v)) return null // empty is "not yet valid", not an error to display
-			if (contacts.value.some((c) => sameContactName(c.name, v))) return CONTACT_EXISTS
+			// The name as it would be stored: the cut can make a longer draft another contact's name.
+			if (contacts.value.some((c) => sameContactName(c.name, sanitizeContactName(v)))) return CONTACT_EXISTS
 			return null
 		},
 	},

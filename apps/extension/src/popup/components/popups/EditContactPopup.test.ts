@@ -325,6 +325,21 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(contactServiceMock.updateContact).toHaveBeenCalledWith("c2", "Alice Brown", NEW_ADDRESS)
 	})
 
+	test("a saved name longer than a name is stored: an edit that would store it as another contact's name is blocked", async () => {
+		// The second row is older data: a 26-character name, which saving cuts to the first row's name.
+		const w = await mountAndOpen(
+			[
+				{ id: "c1", name: "Abcdefghijklmnopqrstuvwxy", address: OLD_ADDRESS },
+				{ id: "c2", name: "Abcdefghijklmnopqrstuvwxyz", address: addr("c") },
+			],
+			"c2",
+		)
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(fieldText(w, "name-input")).toBe("Already exist")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+	})
+
 	test("a name with nothing visible keeps submit disabled and never warns", async () => {
 		// The third row is older data: a saved name of invisible characters only.
 		const w = await mountAndOpen([CONTACT, BOB, { id: "c3", name: "\u3164", address: addr("d") }])

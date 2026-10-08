@@ -76,7 +76,8 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (isEmptyContactName(v)) return null
-			const conflicting = contacts.value.find((c) => sameContactName(c.name, v) && !isEditedContact(c))
+			// The name as it would be stored: the cut can make a longer draft another contact's name.
+			const conflicting = contacts.value.find((c) => sameContactName(c.name, sanitizeContactName(v)) && !isEditedContact(c))
 			if (conflicting) return CONTACT_EXISTS
 			return null
 		},

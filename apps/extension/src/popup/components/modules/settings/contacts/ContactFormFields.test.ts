@@ -1,3 +1,4 @@
+import { Input } from "@nulo/design"
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import { CONTACT_NAME_MAX } from "@/utils/contact-name"
@@ -79,5 +80,24 @@ describe("ContactFormFields", () => {
 		const w = mountFields({ address: "0xok", addressValid: true })
 		expect(w.text()).not.toContain("Already exist")
 		expect(w.text()).not.toContain("Invalid address")
+	})
+})
+
+describe("ContactFormFields — the name field keeps what a stored name holds", () => {
+	async function typed(text: string): Promise<unknown> {
+		const { Input: _stub, ...stubs } = STUBS
+		const w = mount(ContactFormFields, {
+			props: { name: "", address: "", addressValid: false },
+			global: { stubs, components: { Input } },
+		})
+		await w.find('[data-testid="contact-name-input"]').setValue(text)
+		return w.emitted("update:name")?.at(-1)?.[0]
+	}
+
+	test("whitespace becomes a space, invisible characters cost nothing, a word break can be typed, and the cut never splits a letter", async () => {
+		expect(await typed("Ali\u00A0ce\u200B")).toBe("Ali ce")
+		expect(await typed("Alice ")).toBe("Alice ")
+		expect(await typed(`\u3164${"a".repeat(30)}`)).toBe("a".repeat(CONTACT_NAME_MAX))
+		expect(await typed(`${"a".repeat(CONTACT_NAME_MAX - 1)}\u{20000}`)).toBe("a".repeat(CONTACT_NAME_MAX - 1))
 	})
 })

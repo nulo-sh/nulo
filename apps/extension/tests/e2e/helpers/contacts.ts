@@ -10,15 +10,12 @@ import type { Page } from "puppeteer"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { type ArmedInterception, interceptRpc, pickFile } from "../fixtures/browser"
 import { clickByTestId, clickSelector, type ExtensionContext, withTimeoutMessage } from "../fixtures/extension"
+import { contactRow, senderChip } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
 import { armBackupDownloadCapture, readCapturedBackupDownload } from "./backup-export"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 export const importRow = (name: string) => `${sel("import-contact-row")}[data-contact-name="${name}"]`
-/** The contacts list's row for `name`. */
-export const contactRow = (name: string) => `${sel("contact-row")}[data-contact-name="${name}"]`
-/** The sender chip on the contacts list's row for `name`. */
-export const senderChip = (name: string) => `${contactRow(name)} ${sel("contact-sender-chip")}`
 
 /** Temp files for one spec; `cleanup` removes them. */
 export function contactsFiles(): { write: (content: unknown) => string; cleanup: () => void } {

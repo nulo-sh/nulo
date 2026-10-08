@@ -13,17 +13,15 @@
  */
 import { afterAll, expect, inject } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
-import { addContact, closeStuckPopup, navigateByHash, navigateToSettings, waitForToast } from "../fixtures/helpers"
+import { addContact, closeStuckPopup, contactRow, navigateByHash, navigateToSettings, senderChip, waitForToast } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import {
 	closeImportWith,
-	contactRow,
 	contactsFiles,
 	exportContactsFile,
 	listedAsSender,
 	pickContactsFile,
 	refuseTestnet,
-	senderChip,
 	senderLine,
 	toastAfter,
 } from "../helpers/contacts"
