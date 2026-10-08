@@ -428,6 +428,24 @@ content-addressed, so an upgrade is a reviewed line in a PR.
   7 days old, not what the major tag currently points at; the two differ
   whenever an action shipped this week.
 
+## Release integrity
+
+One path makes an extension release: `release.yml`'s `attach-assets` job, and `nightly.yml`'s `publish-nightly`, which runs the same `scripts/release/attach-assets-run.ts`. It creates the GitHub Release as a draft, uploads the two zips and `SHASUMS256.txt`, reads every asset's digest back, attests the three files, writes the notes, publishes, and reads the digests and the tag back once more. It publishes only when the run's commit is the commit the tag names, and a published release is never uploaded to again.
+
+- **Build-provenance attestations.** Every asset published by that path carries a SLSA build-provenance attestation from `actions/attest-build-provenance` (SHA-pinned), signed through Sigstore's public-good instance and stored by GitHub. It binds the file's digest to this repository, the workflow file and the commit. The release notes print the check with the commit filled in:
+  ```bash
+  shasum -a 256 -c SHASUMS256.txt
+  gh attestation verify nulo-chrome-X.Y.Z.zip --repo nulo-sh/nulo \
+    --signer-workflow nulo-sh/nulo/.github/workflows/release.yml \
+    --source-digest <the tag's commit> --deny-self-hosted-runners
+  ```
+  A nightly names `nightly.yml`. `--signer-workflow` matches that workflow on any ref; `--source-digest` is what pins the commit. An attestation proves where and from which commit a zip was built, not that the commit is benign: a malicious commit merged to `main` gets a valid one. Releases published before this path existed (`v0.30.2` and its nightlies) carry none, so a store submission through the workflow refuses them.
+- **Digest read-back.** The first read-back keeps a draft that changed after upload from being published. The second reports a change that another holder of `contents: write` made between that check and the publish; GitHub has no compare-and-publish call, so it cannot prevent one.
+- **Store submissions ship the published bytes.** A dispatch on a published release downloads its assets, checks them against `SHASUMS256.txt` and their attestation, and hands those bytes to the store jobs. A rebuild that differs is only a warning: zip bytes depend on the runner's `zip`.
+- **Tags.** `auto-unstick` is the only workflow that creates a stable tag, through the REST API with its own App token, and only at the merge commit of the Release PR the run was triggered by; release-please runs with `skip-github-release: true`. A tag ruleset (`release tags: no deletion or update`, no bypass actor) stops anyone from deleting or moving a `v*` tag; it does not stop an admin, who can disable it, or a stolen owner credential. A second ruleset limiting who may create a stable or rc tag (the release App and the owner) is planned but not yet applied.
+- **Immutable releases** are planned but not yet applied. Once on, a published release's assets and tag can no longer change, and each release gets a GitHub release attestation, checked with `gh release verify vX.Y.Z --repo nulo-sh/nulo`; no release carries one yet. Titles and notes stay editable, which is why the check is the attestation and not the notes.
+- **The jobs that tag or publish** install no dependency, check out the workflow's own revision without persisted credentials, set `GH_TOKEN` per step and run no third-party action but `oven-sh/setup-bun`, which gets no token; git-cliff, whose action downloads its binary at run time, runs in read-only notes jobs. Every App token names its permission set, so a permission later granted to the App reaches no token. `scripts/ci-cd/release-integrity.test.ts` pins all of it. Accepted residuals: a compromised `oven-sh/setup-bun`; `GITHUB_TOKEN` keeps `contents: write` in the two publish jobs; and a release published before this path stays mutable, and a dispatch with such a tag as `--ref` runs that tag's old workflow, which replaces assets. Only accounts with write access can dispatch, and the runbook forbids it.
+
 ## Binary dependencies
 
 `presto-server` (Linux x86_64 binary from

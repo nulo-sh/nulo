@@ -1,10 +1,8 @@
 name: Setup Bun
 description: |
-  Install Bun, restore the install cache, and run `bun install --frozen-lockfile`.
-  Callers must `actions/checkout@v7` before invoking this action — it does NOT
-  check out the repo itself. Removed the inner checkout because every direct
-  caller in this repo already checks out first (verified in build-caching-plan
-  audit), so the duplicate was pure overhead (~5s × N jobs).
+  Install Bun, restore the install cache, and run `bun install --frozen-lockfile` unless `install`
+  is "false".
+  Callers must check out the repository before invoking this action.
 
   Bun version is pinned (matches `packageManager` in root package.json).
   Cache key includes the Bun version so a Bun bump invalidates stale state.
@@ -19,13 +17,22 @@ inputs:
       token.
     required: false
     default: "true"
+  install:
+    description: |
+      "false" installs Bun alone. A job that signs, tags or publishes needs only Bun built-ins, and a
+      dependency install would run lifecycle scripts beside its credentials.
+    required: false
+    default: "true"
 
 runs:
   using: composite
   steps:
+    # An exact version resolves without the GitHub API, so the action gets no token; its
+    # default is the job's, which in a publishing job can write releases.
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
         bun-version: 1.4.2
+        token: ""
 
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       if: inputs.cache == 'true'
@@ -36,5 +43,6 @@ runs:
           ${{ runner.os }}-bun-1.4.2-
           ${{ runner.os }}-bun-
 
-    - shell: bash
+    - if: inputs.install == 'true'
+      shell: bash
       run: bun install --frozen-lockfile
