@@ -28,15 +28,13 @@ import { TOKEN_BALANCE_SERVICE_NAME, TokenBalanceServiceClient } from "@/wallet/
 import { TRANSACTION_SERVICE_NAME, TransactionServiceClient } from "@/wallet/services/transaction/client"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, CURRENT_COMPAT_EPOCH } from "@/wallet/services/backup/backup-migration-registry"
 import { CURRENT_BACKUP_SCHEMA_VERSION } from "@/wallet/services/backup/backup-migrator"
-import { EncryptionKey } from "@nulo/wallet-crypto"
 
 /** Utils */
 import { downloadFile } from "@/utils"
-import { MAX_BACKUP_FILE_BYTES, assembleFullBackup } from "@/utils/full-backup-helpers"
+import { MAX_BACKUP_FILE_BYTES, assembleFullBackup, sealFullBackupText } from "@/utils/full-backup-helpers"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { OWN_WINDOW_ROUTES, moveToOwnWindow, ownWindowRoute } from "@/utils/own-window"
 import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
-import { toBase64 } from "@nulo/wallet-core/utils"
 
 /** Composables */
 import { useToast } from "@/composables/toast.js"
@@ -368,15 +366,11 @@ async function handleEncrypt() {
 	showRecommendation.value = false
 
 	try {
-		const passhash = await EncryptionKey.getPasshash(password.value)
+		const sealed = await sealFullBackupText(plaintext, password.value)
 		if (gen !== generation) return
-		const key = await EncryptionKey.fromPasshash(passhash)
-		if (gen !== generation) return
-		const sealed = toBase64(await key.encrypt(new TextEncoder().encode(plaintext)))
-		if (gen !== generation) return
-		// Encrypted-side half of the shared size invariant (base64 + AES-GCM
+		// Encrypted-side half of the shared size invariant (the tag, base64 and AES-GCM
 		// overhead could in principle cross the line a plain file sits under).
-		// Base64 is pure ASCII, so string length IS the byte count here.
+		// The text is pure ASCII, so string length IS the byte count here.
 		if (sealed.length > MAX_BACKUP_FILE_BYTES) {
 			backupStatus.value = "finished"
 			openToast({ kind: "error", label: "Backup is too large to create" })

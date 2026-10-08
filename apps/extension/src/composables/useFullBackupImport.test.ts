@@ -2290,7 +2290,8 @@ describe("useFullBackupImport — decryptBackup stale-selection fence", () => {
 	it("a decrypt superseded by a re-pick publishes nothing and leaves the new state alone", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "old.txt", backup: "AAAA", type: "encrypted", profileType: null }
+		// A well-formed legacy frame, so the run reaches the KDF instead of failing the parse.
+		c.selectedBackup.value = { name: "old.txt", backup: btoa("\0".repeat(29)), type: "encrypted", profileType: null }
 		c.decryptionPassword.value = "pass1234"
 
 		// Hold the first KDF await open so the selection can change mid-flight
@@ -2311,6 +2312,7 @@ describe("useFullBackupImport — decryptBackup stale-selection fence", () => {
 		expect(c.selectedBackup.value).toBeNull()
 		expect(opts.clearError).not.toHaveBeenCalled()
 		expect(opts.fillError).not.toHaveBeenCalledWith("full_backup", "Decryption Failed", expect.anything())
+		expect(passhashSpy).toHaveBeenCalledTimes(1)
 		passhashSpy.mockRestore()
 	})
 })

@@ -1,6 +1,6 @@
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { MaterialIcon } from "@nulo/design"
-import { MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
+import { FULL_BACKUP_V2_TAG, MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -460,11 +460,12 @@ describe("export/full.vue — the password backup's keys and run fence", () => {
 describe.each(BUFFER_BINDINGS)("export/full.vue — encrypted file encoding (%s Buffer)", (_name, binding) => {
 	afterEach(() => vi.unstubAllGlobals())
 
-	it("downloads the sealed bytes as standard padded base64", async () => {
+	it("downloads the tagged, AAD-bound sealed bytes as standard padded base64", async () => {
 		// 61 bytes of 0xfb: the encoding uses `+`, `/` and `==`.
 		const sealed = new Uint8Array(61).fill(0xfb)
-		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue("hash" as never)
-		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => sealed } as never)
+		const encrypt = vi.fn(async (_payload: Uint8Array, _aad?: Uint8Array) => sealed)
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt } as never)
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
 		withBuffer(binding)
@@ -474,6 +475,7 @@ describe.each(BUFFER_BINDINGS)("export/full.vue — encrypted file encoding (%s 
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		const { data, filename } = downloadFile.mock.calls[0][0]
 		expect(filename).toMatch(/^NuloEncryptedBackup_/)
-		expect(data).toBe(`${"+/v7".repeat(20)}+w==`)
+		expect(data).toBe(`${FULL_BACKUP_V2_TAG}:${"+/v7".repeat(20)}+w==`)
+		expect(new TextDecoder().decode(encrypt.mock.calls[0][1])).toBe(FULL_BACKUP_V2_TAG)
 	})
 })
