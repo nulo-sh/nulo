@@ -1,8 +1,3 @@
-/**
- * The shared wallet lock: the header chip's decision (a fresh read raced against a 3-second budget,
- * abandoned on a session change, asking only while approved sends run) and the dispose contract a
- * page that unmounts mid-decision relies on.
- */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
 
@@ -56,7 +51,6 @@ function deferred() {
 	return { promise, resolve, reject }
 }
 
-/** The journal read answers with `running` approved sends once `gate` resolves. */
 function readAnswers(running: number, gate?: Promise<void>) {
 	return vi.fn(async () => {
 		await gate

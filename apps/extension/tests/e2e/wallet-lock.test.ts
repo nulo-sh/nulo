@@ -28,6 +28,7 @@ test("Lock now on the Lock page locks the wallet, and it stays locked until unlo
 
 	await navigateToSettings(page, "lock")
 	await clickByTestId(page, "lock-now-btn")
+	await waitForHash(page, "#/popup/auth", 15_000)
 	await waitForLockScreen(page)
 
 	await page.close()

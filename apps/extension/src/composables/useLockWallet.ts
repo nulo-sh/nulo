@@ -25,9 +25,9 @@ type LockConfirm = {
 
 /**
  * The wallet lock behind every lock control: it locks at once, or asks first while approved sends
- * run, deciding on a fresh read of the session handle and the in-flight journal.
+ * run.
  *
- * Pass `managers.profile`. A page's own client rejects its pending read on unmount, which would
+ * Pass `managers.profile`: a page's own client rejects its pending read on unmount, which would
  * abandon a lock the person asked for. The caller calls `dispose()` in `onBeforeUnmount`; a decision
  * still pending then finishes: it locks when no confirm is needed, and abandons when one would be.
  */
@@ -65,8 +65,8 @@ export function useLockWallet(profile: LockProfileClient): { lock: () => Promise
 		if (confirmLock && confirmSlot().callback === confirmLock) popupStore.close("confirm")
 	}
 
-	// A lock decided before a session change or a dropped worker connection is abandoned; the worker
-	// also refuses to close any session but the one the decision named.
+	// A session change or a dropped worker connection abandons a pending decision; the worker refuses
+	// a handle that no longer names the live session.
 	const onSessionChanged = () => {
 		sessionChanges++
 		closeOwnConfirm()

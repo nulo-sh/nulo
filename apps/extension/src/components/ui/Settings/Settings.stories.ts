@@ -98,7 +98,6 @@ export const SettingItemValues: Story = {
 	}),
 }
 
-/** A filled `#icon` sizes its own box, so a 40px tile fits; the red icon is boxed at 20x20 by its caller. */
 export const IconSlotAndDanger: Story = {
 	render: () => ({
 		components: { ItemsContainer, SettingItem, MaterialIcon },

@@ -1,7 +1,3 @@
-/**
- * The Settings hub's trailing values and the profile type label. The hub shows a value only once
- * the real one is read, so every input outside a rule maps to no value.
- */
 import { describe, expect, test } from "vitest"
 import { hubValues, profileTypeLabel } from "./settings-labels"
 

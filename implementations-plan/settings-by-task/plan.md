@@ -260,7 +260,7 @@ Label rules: `sessionTtl` 0 → "Never" (owner, Ask 1). A positive finite number
 3. Adding `onUpdate` and `onConnected` listeners to the hub's client does not disturb `usePrestoCheck`, which only calls `getValue` and `setValue` on it.
 4. The fixed 20x20 box stays the default, so every current row in the 26 files that use `SettingItem` renders as before. That includes the first paint while the icon font loads: Material Symbols uses `font-display: block` (`packages/design/src/base.css:42`), so its ligature text is laid out, invisible and wider than 20px, until the font arrives. Only rows that fill `#icon` get minimum sizes: the accounts list's fixed 20px avatar (no change), the card's 40px avatar, and the Delete row's icon, which the hub boxes at 20x20.
 5. Config can change while the hub is open: another popup or the side panel can write any key through the worker. So a `getProps()` answer that arrives after an `onUpdate` would overwrite a newer value. The fence prevents that; the hub test covers both orderings.
-6. After a failed write the hub shows the attempted value, on this mount and every later one, until the worker restarts. The worker's ConfigStore changes memory before it persists and never rolls back (`wallet/config/store.ts:64-66`), and `getProps()` reads that memory (`wallet/services/config/service.ts:42-44`). Accepted with the toggle bug. A worker restart drops the port, and the hub stays mounted (Fact 24). The reread on reconnect then shows the value the worker loaded from storage, so the attempted value does not outlive the restart, and no update the hub missed while disconnected stays missing.
+6. After a failed write the hub shows the attempted value, on this mount and every later one, until the worker restarts. The worker's ConfigStore changes memory before it persists and never rolls back (`wallet/config/store.ts:64-66`), and `getProps()` reads that memory (`wallet/services/config/service.ts:42-44`). Accepted with the toggle bug. A worker restart drops the port, and the hub stays mounted (Fact 24). A reread on reconnect that succeeds then shows the value the worker loaded from storage, so the attempted value outlives the restart only until the first successful reread (a rejected reread leaves it, as any failed read leaves what the hub shows), and no update the hub missed while disconnected stays missing.
 7. No e2e selects `account-avatar`, so overriding it on the card affects no test.
 8. When the worker cannot delete the session record, the person sees one of two things. With an open in-memory session, the lock event fires before the rejection, so the popup shows the lock screen while the stored record survives, and a later worker start may restore the session. On a restarted worker with no in-memory session, no event fires, and the popup stays marked locked on the page it was on. Both are inherited from the header and kept.
 9. After `dispose()`, the session listeners stay until every pending lock decision finishes, so a session change in that window abandons each decision as it does today. That includes the moment between a read's settle and its decision's resume (Fact 25), and a second decision that is still reading when the first finishes. Without that, the worker would refuse the stale handle (`service.ts:903-904`) while the popup showed locked. A decision finishes in the same turn its read settles, and `lock()` after `dispose()` starts no read. So the listeners outlive the component by at most the read budget, and only when a decision was pending.
@@ -403,7 +403,7 @@ Validation gate:
 - Pass criteria: every command exits 0. Both smoke runs include `settings-routes.test.ts` and the new `wallet-lock` test as passed, not skipped. The Tab-lap test passes on both browsers. The two lock files pass at retry 0 on both browsers. `typecheck:all` does not read `tests/e2e/**`, so these runs are the only proof of the e2e edits. A failure that looks like a flake passes on a rerun of that file alone; record the rerun in `lessons/phase-3.md`.
 - Layers: lint and typecheck, unit, e2e (smoke, both browsers), e2e against the local network (touched files and the two lock files, both browsers).
 
-### P4 — Screenshots and full gates
+### P4 — Screenshots and full gates ✓
 
 Warning: do not stage the screenshot spec. Delete it after the capture.
 
@@ -414,6 +414,8 @@ Steps:
 3. Write the images to the session scratchpad. Use `registerPasskeyProfile` from `e2e/fixtures/passkey.ts` for the passkey set.
 4. Give the images to the lead. The lead publishes them as a private Artifact and records its link in this plan.
 5. Delete the spec. Run the final gates alone, with nothing else running.
+
+Captures (private Artifact, 2026-10-08): https://claude.ai/artifact/EFpBZ6KpWL2qYwddzUcTrF. 36 images over 18 surfaces, light and dark, Chrome smoke build at 360x600: the hub in five scroll positions for a password and a passkey profile, Your profile for both, Lock for both, Privacy, Display, Developer off and on. A fresh e2e profile is named "Main", so its avatar reads "MA".
 
 Validation gate:
 
