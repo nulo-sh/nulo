@@ -857,6 +857,10 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 - [Low] The isolation plugin's comment promised every module stays isolated, while virtual ids and earlier resolvers are exempt. Accepted: cut to what the build guarantees (the current graph stays out of shared chunks; the notices policy refuses the loader if an import returns), plus one line on why virtual ids keep theirs.
 - Its "looks fine": the round-1 fixes; both built manifests without `web_accessible_resources` and no loader asset; crxjs checks static and dynamic imports before emitting a loader; the notices collector keeps marked ids and strips the query for attribution; the manifest hook runs after crxjs's on both browsers; the smoke control; SECURITY.md, the README and the vendor-chunks comment describe the current build.
 
+### Arc 2 implementation, Codex round 3 (same session)
+
+**Verdict:** `approve`, no new findings, on diff `5a0e83b..2a6d556`. The loop converged in three rounds.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so there is no `/code-review` pass.

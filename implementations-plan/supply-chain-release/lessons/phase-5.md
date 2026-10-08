@@ -18,3 +18,9 @@
 - **Measured:** both built manifests list no `web_accessible_resources`; the content chunk is 3.6 KB with no `import`/`export`; the smoke check passes on Chrome and Firefox and fails on a build without the hook (`Set{'refused',200}`); with wallet-sdk in a vendor group the build fails on `assets/content.ts-loader-*.js` (no VENDORED entry).
 - **Firefox's `getManifest().web_accessible_resources` is `null` when absent, Chrome's `undefined`;** `extensionUrl` needs a leading `/` on Firefox.
 - **A resolve hook's test under vitest cannot use `import.meta.url` as a file path** ("The URL must be of scheme file"); derive paths from `config.root` in `configResolved`.
+
+## Arc 2 review, rounds 2 and 3
+
+- **Codex round 2: `approve with fixes`, 3 Low, all accepted (`2a6d556`); round 3: `approve`.** The lesson worth keeping: a guard that checks known anchor lines in a downloaded script proves the anchors survive, not that nothing was added around them, so the runbook must still ask for a whole-body read.
+- **zsh does not word-split `set -- $var`**, so a `for run in "a b"; do set -- $run` loop hands the whole string to `$1`. Run such chains under `bash`.
+- **`process.env.X ?? "default"` keeps an empty string**, so `NULO_E2E_BROWSER=` (empty) is refused by the suite's browser resolver; pass `chrome` explicitly.
