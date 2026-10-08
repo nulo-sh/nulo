@@ -469,7 +469,10 @@ Pass: each exits 0.
   - nothing outside `<scratch>` changed (`git status` clean apart from the arc's files)
 - Layers: lint, unit, e2e against the local sandbox. The CI network lanes on the PR are the authoritative proof of the composite action, because `setup-aztec/**` is in their path filter.
 
-#### Phase 5: no fingerprintable content script
+#### Phase 5: no fingerprintable content script — stopped
+
+**Outcome (2026-10-08).** Step 1 does not apply (the content chunk imports two sibling chunks). Step 2 was built and measured: it refuses a page's fetch at the fixed URL, but the chunk's relative imports resolve against the fixed origin, which `use_dynamic_url` refuses, so the content script stops loading (`cold-wake-discovery` red three times on Chrome 152). Reverted. #22 stays open; SECURITY.md and `manifest.test.ts` state the exposure and the reason, and [OWNER-ASKS.md](OWNER-ASKS.md) carries the options (lessons/phase-5.md has the measurement).
+
 
 1. Build both targets. Read the built content-script chunk's imports and the built manifests. Pick step 1 or step 2 of § Arc 2's #22 order.
 2. Write the hook and its unit test. Wire it into `vite.chrome.config.mts`.
@@ -643,8 +646,8 @@ Pass: each exits 0.
 - I3. An App installation token can create a tag ref through the REST API, without the `workflows` permission, when the tag points at a commit already on `main` whose tree contains workflow files. release-please does the same with the same kind of token. If wrong: `auto-unstick` fails red, and the manual unstick is the fallback. S2 condition 2 makes the first release prove it before S2 is on. The nightly's `GITHUB_TOKEN` ref creation is the same server-side check that `auto-unstick`'s `GITHUB_TOKEN` tag push passes today (F5).
 - I4. `gh attestation verify` inside `attach-assets` can read the repository's attestations with the job's `GITHUB_TOKEN` (`attestations: write` covers read).
 - I5. The rulesets API accepts `actor_type: "User"` on a tag ruleset (the live branch rulesets carry it). The fallback is `RepositoryRole` 5.
-- I6. Chrome 130+ serves a `use_dynamic_url` entry to the crxjs loader's `import(chrome.runtime.getURL(...))`, and the chunk's relative imports resolve under the same dynamic origin. Phase 5 measures it. If wrong, #22 stays open.
-- I7. The CLI runs with `--ignore-scripts` plus at most a `bcrypto`/`leveldown` rebuild. Phase 4 measures it.
+- I6. Chrome 130+ serves a `use_dynamic_url` entry to the crxjs loader's `import(chrome.runtime.getURL(...))`, and the chunk's relative imports resolve under the same dynamic origin. Phase 5 measures it. If wrong, #22 stays open. **Did not hold** (Chrome 152): the first import loads from the dynamic URL, but its relative imports resolve against the fixed origin and are refused.
+- I7. The CLI runs with `--ignore-scripts` plus at most a `bcrypto`/`leveldown` rebuild. Phase 4 measures it. **Held:** `bcrypto` only (`@aztec-labs/aztec-node` cannot load without its binding); leveldown loads its bundled prebuild.
 - I8. git-cliff's release-level `{{ commit_id }}` renders the tag's commit. Phase 3 measures it, and the placeholder is the fallback. **Did not hold** (Phase 3, git-cliff 2.14.2, the version `orhun/git-cliff-action` v4.9.1 installs): with `--include-path 'apps/extension/**'` it renders the newest commit the path filter keeps (a scratch rc tag at `50540c8` rendered `3b80761`). The template prints `@SOURCE_COMMIT@`, which `attach-assets-run.ts` replaces with the tag's commit; the renders then name the tag's commit for stable, rc and nightly.
 
 ### Asks (for the orchestrator; working assumption in each)
@@ -713,6 +716,7 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | Node headers for the rebuild (implementation) | `npm_config_nodedir` in the rebuild's env | `--nodedir` flag | npm 11.19 warns that both forms will stop passing through; node-gyp reads the env var itself. A control run without it downloaded headers. |
 | `docker-ci-like.sh` reinstall rule (implementation) | reinstall when a stamp of the whole action dir differs | reinstall only when `aztec-anvil` is missing | A volume installed by the old unpinned path would otherwise be reused forever; the stamp mirrors CI's cache key. |
 | Caller pin (implementation) | `setup-aztec-pins.test.ts` also pins that both callers run `install.sh` and fetch no installer, with a mutated-copy control | lockfile and pin-file checks only | The regression this phase closes is a caller piping an installer again; one small check with its control. |
+| #22 (implementation) | stop at step 3: revert, state the exposure in SECURITY.md and `manifest.test.ts`, owner ask | ship `use_dynamic_url` | Measured: step 1 does not apply, and step 2 breaks discovery (relative chunk imports resolve against the fixed origin). |
 | `oven-sh/setup-bun` token (review) | the composite passes `token: ""` | the action's default (`github.token`) | The default handed the publish jobs' release-writing token to a third-party action; an exact version needs no API call. |
 
 **Unresolved disagreements.** None blocking.
@@ -877,7 +881,7 @@ One `gh stack`, one PR per arc, plus a docs-only close-out layer. `code_review: 
 | Arc | Branch | Phases | Stacks on | PR title (≤ 93 chars) | Closes |
 |---|---|---|---|---|---|
 | 1 release integrity | `worktree-supply-chain-release` (adopted) | 1-3 | `dev` | `ci(release): attest release zips, publish via draft, narrow app tokens` | refs #21 (closes it once S3 is read back) |
-| 2 toolchain + install privacy | `supply-chain-release-toolchain` | 4-5 | arc 1 | `ci(aztec): pin foundry and the cli npm tree; harden content-script resources` | #12, #22 (#22 only if Phase 5 accepted a step) |
+| 2 toolchain + install privacy | `supply-chain-release-arc2` (a new stack off `dev`: arc 1 had merged) | 4-5 | `dev` | `ci(aztec): pin foundry and the cli npm tree` | #12 (#22 stopped in Phase 5, stays open) |
 | 3 release and tooling guards | `supply-chain-release-guards` | 6-7 | arc 2 | `ci: lint and typecheck scripts/, staged-preflight refusal, auto-unstick on by default` | — (follow-ups) |
 | 4 audit gate | `supply-chain-release-audit` | 8 | arc 3 | `ci(deps): clear the audit backlog and block unacknowledged advisories` | #20 |
 | close-out | `supply-chain-release-close-out` | — | arc 4 | `docs(plans): close supply-chain-release` | — |

@@ -191,6 +191,15 @@ SDK. The upstream handler:
   cross-frame spoofing via the synchronous same-origin check).
 - Never reads or writes page DOM state.
 
+The script's loader imports its chunks from the extension, so the build lists
+them as web-accessible to every page the script matches: a page that knows a
+release's chunk names can fetch one and so detect the install on Chrome
+(Firefox serves extension files from a random per-install origin). Chrome's
+`use_dynamic_url` does not close this, because the chunks import each other
+by relative URL and Chrome resolves those against the fixed origin, which it
+then refuses. Closing it needs a content script built as one file that no
+web-accessible entry has to expose.
+
 ### Content-script boundary (defense-in-depth)
 
 Because the protocol mandates broad injection, a zod-validated boundary

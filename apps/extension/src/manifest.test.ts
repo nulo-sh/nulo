@@ -37,8 +37,10 @@ const injectsInto = (cs: ContentScript, href: string) => {
 /**
  * The source manifest declares no web-accessible resources: the logo entry let every page fetch
  * it and so fingerprint the install, and the wallet-sdk discovery icon — the one asset a page
- * legitimately needs — travels inline instead. (The build plugin still emits entries for the
- * content-script chunks; that is a separate, tracked exposure.)
+ * legitimately needs — travels inline instead. The build plugin still lists the content-script
+ * chunks for every page the script matches, so a page can detect the install by fetching one.
+ * Chrome's `use_dynamic_url` cannot close that: the chunks import each other by relative URL,
+ * which Chrome resolves against the fixed origin and refuses (measured on Chrome 152).
  */
 describe("manifest surface", () => {
 	test("declares no web-accessible resources", () => {
