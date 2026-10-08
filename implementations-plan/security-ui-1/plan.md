@@ -332,7 +332,7 @@ Tests:
 - Pass criteria: every command exits 0; the new tests pass.
 - Layers: lint, typecheck, unit, component, build.
 
-### Phase 3.2: the emoji check's e2e (Arc 3)
+### Phase 3.2: the emoji check's e2e (Arc 3) ✓
 
 1. Add `tests/e2e/network/connect-verify-mismatch.test.ts` with two cases.
    - New connection: connect the playground, reach the check with `approveConnect`, and press "They don't match".
@@ -561,6 +561,19 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 | 6 | The per-match log line sat outside its `try`. | Nit | Accepted: moved inside. |
 | 7 | The e2e's "no row" wait also passes if the tab navigated away. | Nit | Accepted: the wait also requires the list's hash. |
 | 8 | Two comments: the target's "as the window read it" names the caller; the latch's "until it settles" is wrong on success. | Nit | Accepted, both reworded. |
+
+### Arc 3 post-implementation: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `approve with fixes`. The raw sweep is "sound: every authorizing row must contain the exact profile, origin, and chain it matches"; the profile filter, latch test and wiring test hold. Two findings, both accepted.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | An establishment that read the row before the refusal took the lock can stamp its channel after the first refusal event; if that channel's termination throws and the delete also throws, no delete event follows, so the stamp and the row survive (Codex reproduced it in memory). | Medium | Accepted. A failed delete emits the refusal event again before answering `unavailable`. Test: the event order is refused, remove, refused; removing the second emit fails it. |
+| 2 | Every fixture's embedded id equals its storage key, so deleting by `row.id` would pass. | Low | Accepted: a signed row copied to another key is deleted at that key and named by it; switching to `row.id` fails it. |
+
+### Arc 3 post-implementation: Codex fix loop, round 3 (resumed session)
+
+**Verdict:** `clean`. "No material findings remain": the round-2 race, re-run against the fixed methods, left no stamp, and the copied row distinguishes the storage key from `row.id`. The loop converged for arc 3.
 
 ## Post-implementation
 
