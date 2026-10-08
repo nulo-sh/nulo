@@ -8,3 +8,4 @@
 - 2026-10-08: Phase 1.2 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build), `bun run test:all`, smoke `backup-roundtrip`, `passkey-backup` with `--retry=0` (4/4).
 - 2026-10-08: arc 1 Codex round 1 (session 01a11c7e) approve with fixes, 4 accepted; Opus review approve with fixes, 5 accepted, 3 observations. Fixes committed.
 - 2026-10-08: arc 1 Codex round 2 (resumed) clean; loop converged. Final gates next.
+- 2026-10-08: final arc 1 gates pass on the head: `bun run audit:vue`, `bun run test:all`, `bun run lint:actions`, `bun run check:plans`, the four smoke specs with `--retry=0` (7/7).
