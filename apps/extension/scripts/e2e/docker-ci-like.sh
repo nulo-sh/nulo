@@ -9,7 +9,6 @@
 #     -v "$PWD":/work -w /work \
 #     -v nulo-bun-cache:/root/.bun/install/cache \
 #     -v nulo-aztec:/root/.aztec \
-#     -v nulo-foundry:/root/.foundry \
 #     ubuntu:24.04 \
 #     bash -lc './apps/extension/scripts/e2e/docker-ci-like.sh 5/5'
 #
@@ -21,7 +20,6 @@
 # Named volumes:
 #   nulo-bun-cache    — preserves bun's npm cache across runs (~few minutes saved)
 #   nulo-aztec        — preserves aztec CLI install (~5 minutes saved)
-#   nulo-foundry      — preserves foundry/anvil install
 #
 # Arg 1: vitest --shard expression (e.g. "5/5"). Default "5/5" (the shard that
 #        hits the connectPlayground:awaitVerifyPopup failure deterministically).
@@ -71,15 +69,6 @@ fi
 node --version
 echo "::endgroup::"
 
-echo "::group::foundry"
-if [ ! -x /root/.foundry/bin/anvil ]; then
-	curl -L https://foundry.paradigm.xyz | bash
-	/root/.foundry/bin/foundryup
-fi
-export PATH="/root/.foundry/bin:$PATH"
-anvil --version || true
-echo "::endgroup::"
-
 echo "::group::bun install"
 bun install --frozen-lockfile
 echo "::endgroup::"
@@ -88,32 +77,18 @@ echo "::group::aztec cli"
 AZTEC_VERSION=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('apps/extension/package.json','utf8')).dependencies['@aztec-labs/aztec.js'])")
 echo "Aztec version: $AZTEC_VERSION"
 echo "node: $(command -v node) ($(node --version))"
-echo "anvil: $(command -v anvil) ($(anvil --version 2>&1 | head -1))"
-# Force re-install if the bin dir is empty (previous failed installs left
-# stub directories that pass `-d` but contain no binaries).
-AZTEC_BIN_DIR="/root/.aztec/versions/$AZTEC_VERSION/bin"
-if [ ! -x "$AZTEC_BIN_DIR/aztec-anvil" ]; then
-	echo "::warning::aztec install absent or stale at $AZTEC_BIN_DIR; reinstalling"
-	rm -rf "/root/.aztec/versions/$AZTEC_VERSION"
-	export CI=1
-	export FOUNDRY_DIR="$HOME/.foundry"
-	curl -fsSL "https://install.aztec.network/${AZTEC_VERSION}/install" | VERSION="$AZTEC_VERSION" bash
+# The CI action's install script, keyed like its cache: a volume installed under other pins, an
+# older lockfile or an older install.sh is reinstalled rather than reused.
+SETUP_AZTEC=.github/actions/setup-aztec
+STAMP=$(find "$SETUP_AZTEC" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+AZTEC_VERSION_DIR="/root/.aztec/versions/$AZTEC_VERSION"
+if [ "$(cat "$AZTEC_VERSION_DIR/.setup-aztec-stamp" 2>/dev/null)" != "$STAMP" ]; then
+	echo "::warning::aztec install absent or from other pins at $AZTEC_VERSION_DIR; reinstalling"
+	rm -rf "$AZTEC_VERSION_DIR"
+	AZTEC_VERSION="$AZTEC_VERSION" bash "$SETUP_AZTEC/install.sh"
+	echo "$STAMP" > "$AZTEC_VERSION_DIR/.setup-aztec-stamp"
 fi
-# global-setup.ts looks at ~/.aztec/current/bin/aztec-anvil exactly (5.0 renamed the bundled
-# bare `anvil` to `aztec-anvil`). The aztec installer SHOULD have put it there; if it didn't
-# (foundry already in PATH, or partial install), symlink foundry's anvil so the test stack finds it.
-if [ ! -x "$AZTEC_BIN_DIR/aztec-anvil" ]; then
-	if [ -x /root/.foundry/bin/anvil ]; then
-		echo "::warning::aztec install didn't place anvil; symlinking foundry's"
-		mkdir -p "$AZTEC_BIN_DIR"
-		ln -sfn /root/.foundry/bin/anvil "$AZTEC_BIN_DIR/aztec-anvil"
-	else
-		echo "::error::no anvil available anywhere"
-		exit 2
-	fi
-fi
-ln -sfn "/root/.aztec/versions/${AZTEC_VERSION}" /root/.aztec/current
-ls -la "$AZTEC_BIN_DIR/" || true
+ln -sfn "$AZTEC_VERSION_DIR" /root/.aztec/current
 export PATH="/root/.aztec/current/bin:/root/.aztec/current/node_modules/.bin:$PATH"
 echo "::endgroup::"
 
