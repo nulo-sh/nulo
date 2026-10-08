@@ -1,0 +1,4 @@
+- 2026-10-08: planning started; recon done (2 explorers); draft plan, options and owner asks written.
+- 2026-10-08: Codex round 1 reject; ten findings accepted and folded into plan, options and asks.
+- 2026-10-08: Opus audit conditional approve; findings folded; Phase 1.1 narrowed to password profiles; refusal redesigned (raw delete).
+- 2026-10-08: Codex final pass round 1 reject (five findings folded); round 2 conditional approve, restart condition folded; plan at the approval gate.
