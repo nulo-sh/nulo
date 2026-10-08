@@ -229,9 +229,8 @@ Then Branch A's delivery gates.
   pieces from GitHub releases, so one HTTP 500 fails a job before any test (6.0.0-rc.1: Foundry's
   attestation file, the noir tarball). Once a run has saved `Linux-aztec-<pin>-<pins hash>-v3`
   (any re-pin changes the key too), `gh run rerun <id> --failed`.
-- **Two steps call the GitHub API with no token**: presto-server's bb fetch, which checks bb's
-  digest through the API, and the landing prebuild's `fetch-latest-release.ts`. On a host whose
-  60-an-hour anonymous budget other agents share, either returns 403 for up to an hour, so read
+- **presto-server's bb fetch calls the GitHub API with no token** to check bb's digest. On a host
+  whose 60-an-hour anonymous budget other agents share, it returns 403 for up to an hour, so read
   `api.github.com/rate_limit` before reading it as code. For local prover-ON canaries, give
   presto-server a private `PRESTO_HOME` and send one warm-up prove once the budget has room, so a
   missing bb fails before the suite instead of as a canary result. CI hands the server the

@@ -535,7 +535,7 @@ Two flows: **stable** (from `main`, tagged `vX.Y.Z`) and **prerelease** (from `d
 
 #### Start here — what a release is, and what you actually do
 
-A **stable release** turns the current `main` into a published `vX.Y.Z`: a GitHub Release with the built Chrome + Firefox zips + `SHASUMS256.txt`, the landing (`nulo.sh`) redeployed, and a `main → dev` back-sync PR opened. Most of it is automated by [`release.yml`](.github/workflows/release.yml); this table is the **current** division of labor (it shifts as the [staged rollout](#staged-rollout-switches) proceeds):
+A **stable release** turns the current `main` into a published `vX.Y.Z`: a GitHub Release with the built Chrome + Firefox zips + `SHASUMS256.txt`, and a `main → dev` back-sync PR opened. Most of it is automated by [`release.yml`](.github/workflows/release.yml); this table is the **current** division of labor (it shifts as the [staged rollout](#staged-rollout-switches) proceeds):
 
 | What | Who | Current state |
 |---|---|---|
@@ -543,7 +543,7 @@ A **stable release** turns the current `main` into a published `vX.Y.Z`: a GitHu
 | Write the Release PR's version into `bun.lock`, which release-please cannot edit | `release-pr-lockfile` (advisory; the prerelease PR too) | ✅ automatic |
 | **Tag the merge commit after you merge the Release PR** (the "unstick") | `auto-unstick` job **if `AUTO_UNSTICK_ENABLED=on`**, else **you** | ✅ automatic (`AUTO_UNSTICK_ENABLED=on`); with the var OFF (the kill-switch) you do the 45s manual unstick |
 | Gates → build chrome+firefox → smoke → publish the GitHub Release (a draft, filled, checked and attested before it is published) | publish chain | ✅ automatic |
-| Redeploy the landing (`nulo.sh`) | Workers Builds, on the next push to `main` | ✅ automatic, but lags a release — see § Stable step 7 |
+| Update the landing (`nulo.sh`) | nobody | ✅ nothing to do: it links the store listings, never a release |
 | Open the `main → dev` back-sync PR (+ prerelease-manifest re-baseline) | `sync-main-to-dev` | ✅ automatic (it gates on `push` + `attach-assets` success; if you fall back to the manual `workflow_dispatch` unstick, that path is neither → open the sync manually, see § After a stable cut). You review + **merge-commit** it, NOT squash — see step 5. |
 
 **The happy path (stable), end to end:**
@@ -595,9 +595,8 @@ Per-release procedure for shipping a stable release. Total time: ~20 min, of whi
    ```
    `--ref "v$VERSION"` makes the run's commit the tagged one, which the attestation records as its source; a dispatch from any other ref refuses to publish an unpublished release. Never dispatch with a tag from before this flow as `--ref`: its old workflow replaces assets. After a tag exists, finish or re-run its publish before merging anything else to `main`, because release-please builds the next Release PR from that tag.
    **The store submission** is its own dispatch from `main` once the release is published: `gh workflow run release.yml --ref main -f tag="v$VERSION" -f dry_run=false -f publish_chrome=true` (and/or `-f publish_firefox=true`). That run re-runs the gates but never uploads to the release: it downloads the published assets, checks them against `SHASUMS256.txt` and their attestation, and ships those bytes (a rebuild that differs is a warning). A release published before this flow carries no attestation, so the run refuses it: submit such a version by hand in the store dashboard, or cut a new release. Each publish job runs in its protected environment (`chrome-web-store` keyless via OIDC; `firefox-add-ons` with the `AMO_JWT_ISSUER`/`AMO_JWT_SECRET` secrets), only for a stable tag on `main`, and needs the reviewer's approval; `gh workflow run store-check.yml --ref main -f store=chrome|firefox|both` proves a credential without uploading. The Firefox job packages `git archive` of the release commit as the reviewers' source and attaches it to the version it creates — **if it fails after "version ok" do NOT re-run** (the upload is consumed and AMO never frees a version number): attach the same archive by hand in the Developer Hub, or re-send only the source `PATCH`; the failure message carries the procedure. This runs `lint+typecheck → unit-tests → build chrome+firefox → smoke-against-artifact + smoke-firefox-against-artifact → release-notes → attach-assets` (zips + SHASUMS, then a draft filled, read back, attested, given the git-cliff notes, published and read back again). ~15-25 min. **network-e2e is OPT-IN** (`run_network_e2e=true`) and does not run on the auto push:main publish either — the promote dev→main PR already gates the exact code with the full required network suite before it reaches main, so re-running it on the publish would be pure duplication AND a strand risk (a network-e2e cancel/timeout on push:main takes the whole run down before the publish, leaving a tag with no release). The publish still gates on `smoke-against-artifact` and `smoke-firefox-against-artifact` (the built trees the zips are made from). This does NOT touch the required `extension-network-e2e-status` PR gate — that's produced by the standalone `Extension network e2e` workflow on PRs.
-7. **Refresh the landing once the assets are attached.** The landing's `prebuild` bakes the latest release into the page, and the Release-PR merge push builds it while the release is still being published: that build may keep the previous version, or fail because the new release has no Chrome zip yet (`resolveReleaseInfo` throws; the live deployment stays up). After `attach-assets`, re-run the `nulo-landing` production build (Cloudflare dashboard → Workers & Pages → `nulo-landing` → Deployments), confirm the build succeeded, then check that `curl -s https://nulo.sh` links `releases/tag/vX.Y.Z`.
-8. **Verify**: `gh release view v$VERSION --json assets -q '[.assets[] | .name]'` should list `nulo-chrome-X.Y.Z.zip`, `nulo-firefox-X.Y.Z.zip`, `SHASUMS256.txt`.
-9. **Publish any fixed advisory**: publish any draft security advisory whose fix shipped in this release, setting its patched version to this release.
+7. **Verify**: `gh release view v$VERSION --json assets -q '[.assets[] | .name]'` should list `nulo-chrome-X.Y.Z.zip`, `nulo-firefox-X.Y.Z.zip`, `SHASUMS256.txt`.
+8. **Publish any fixed advisory**: publish any draft security advisory whose fix shipped in this release, setting its patched version to this release.
 
 #### Prerelease (rc) from `dev`
 
@@ -634,8 +633,7 @@ Per-rc procedure. Same v4 bug as stable; same ~45 second unstick. Network-e2e is
    ```
    - **Use `--ref "v$VERSION"`, the tag itself.** `--ref` picks BOTH the `release.yml` definition AND the reusable workflows it calls (`_build-extension.yml` etc., resolved at the caller's ref). Those must match the **layout of the tag's code** (a directory move on `dev` but not yet on `main` once made a dev-cut tag built via `--ref main` fail with `ENOENT: Could not change directory to …`), and the run's commit must be the tagged one, which the attestation names. The tag's own ref satisfies both.
    - Pass the prerelease tag explicitly; the workflow's `resolve` job verifies the tag exists and detects `is_prerelease=true` from the `-` in the version string.
-7. **The landing ignores prereleases** — it links stable releases only. No manual step.
-8. **Verify:**
+7. **Verify:**
    ```bash
    gh release view "v$VERSION" --json isPrerelease,assets \
      -q '{prerelease:.isPrerelease, assets:[.assets[].name]}'
@@ -696,7 +694,6 @@ Both workflows now run release-please with `skip-github-release: true`, so it ne
 | `attach-assets` red: "published and immutable without …" | an immutable release lacks an asset | The version is burned: cut a new release. |
 | `attach-assets` red: "changed while it was published" | another holder of `contents: write` changed the release or its tag between the check and the publish | Find who wrote it before anything else; the release records what it holds. Treat it as a compromise until explained. |
 | `attach-assets` skipped, `smoke-firefox-against-artifact` red | the Firefox smoke of the release build failed, and it gates the assets | A genuine flake: re-run the failed jobs, or dispatch with `--ref vX.Y.Z`. Real breakage: fix forward and release again; never take the smoke out of `needs` to ship this one. |
-| `nulo.sh` still links the previous release, or the `nulo-landing` build failed | the landing builds only on pushes to `main`, and the Release-PR merge built it before the release's zip was attached | Wait for `attach-assets`, re-run the `nulo-landing` production build in the Cloudflare dashboard, confirm it succeeded (§ Stable step 7). |
 | `sync-main-to-dev` PR labeled `needs-manual-resolution` | `dev` diverged from `main` since the release | Resolve the conflict on the sync branch (usually `CHANGELOG.md` / `bun.lock`), then **merge-commit** it (`--merge`, NOT squash — preserves release-commit ancestry on `dev`; the bot's manifest commit is App-signed so no `--admin`). |
 | No `sync-main-to-dev` PR appeared | push-only + stable-only; a `workflow_dispatch` republish never syncs | Expected on a republish. For a genuine cut, check the job ran on the `push:main` and read its log. |
 | release-please reopened an OLD Release PR | prerelease-manifest drift after a stable cut | Re-baseline `.release-please-prerelease-manifest.json` to the new stable version — the `sync-main-to-dev` PR does this; just merge it. |
