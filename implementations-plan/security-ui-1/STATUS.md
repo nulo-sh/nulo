@@ -32,3 +32,4 @@
 - 2026-10-08: arc 3 Codex round 2 approve with fixes (two accepted: re-emit after a failed delete, a moved-key test); round 3 clean. Loop converged. Chrome network re-run after round 1 passed (4 passed, 1 Firefox-only skip).
 - 2026-10-08: arc 3 final head (53e95c7): `bun run audit:vue`, `bun run test:all`, `bun run test:ci-gating`, `bun run lint:actions` pass; network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless) Chrome `connect-verify-mismatch`, `connect-dapp`, `window-placement` (4 passed, the Firefox-only refocus case skipped), plus `connect-one-window` and `session-reconnect-flood` (2/2); Firefox the first three (5/5).
 - 2026-10-08: arc 3 final screenshots taken through the e2e harness (Chrome, both themes: the check in the connect window, the untrusted reconnect's window, the app's settings row).
+- 2026-10-08: arc 3 PR #58 opened ready (gh stack #59, base `security-ui-1-backup-download`); `Closes #14`. Final screenshots handed to the owner with it.
