@@ -832,19 +832,20 @@ export async function createSecondAccount(page: Page, name = "Second"): Promise<
 
 // ── Contact ────────────────────────────────────────────────────────────
 
+/** Opens the NewContactPopup from the Contacts page and types `name` and `address`, without saving. */
+export async function fillNewContactForm(page: Page, name: string, address: string): Promise<void> {
+	await clickByTestId(page, "contacts-new-btn")
+	await page.waitForSelector('[data-testid="contact-name-input"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="contact-name-input"]', name)
+	await page.waitForSelector('[data-testid="contact-address-input"]', { visible: true, timeout: 5_000 })
+	await replaceInputValue(page, '[data-testid="contact-address-input"]', address)
+}
+
 /** Add a contact via the NewContactPopup. Saving a contact touches the
  *  contact service only — sender registration is a separate concern
  *  (Settings → Advanced → Account State → Senders). */
 export async function addContact(page: Page, name: string, address: string): Promise<void> {
-	await clickByTestId(page, "contacts-new-btn")
-
-	// Wait for form inputs to mount
-	await page.waitForSelector('input[placeholder="New contact"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, 'input[placeholder="New contact"]', name)
-
-	await page.waitForSelector('input[placeholder*="0x15c4"]', { visible: true, timeout: 5_000 })
-	await replaceInputValue(page, 'input[placeholder*="0x15c4"]', address)
-
+	await fillNewContactForm(page, name, address)
 	await clickByTestId(page, "new-contact-submit")
 
 	// Deterministic post-mutation signal — wait for the new contact row to

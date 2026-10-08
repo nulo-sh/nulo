@@ -1,7 +1,7 @@
 /**
- * Drives Settings → Contacts import and export through the real UI and reads back what the person
- * sees and what the wallet stored. Every element is found by its test id; a row is told apart by
- * its own `data-contact-name`, as the contacts list's rows are.
+ * Drives Settings → Contacts (the list, import and export) through the real UI and reads back what
+ * the person sees and what the wallet stored. Every element is found by its test id; a row is told
+ * apart by its own `data-contact-name`.
  */
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -15,7 +15,10 @@ import { armBackupDownloadCapture, readCapturedBackupDownload } from "./backup-e
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 export const importRow = (name: string) => `${sel("import-contact-row")}[data-contact-name="${name}"]`
-const listRow = (name: string) => `${sel("contact-row")}[data-contact-name="${name}"]`
+/** The contacts list's row for `name`. */
+export const contactRow = (name: string) => `${sel("contact-row")}[data-contact-name="${name}"]`
+/** The sender chip on the contacts list's row for `name`. */
+export const senderChip = (name: string) => `${contactRow(name)} ${sel("contact-sender-chip")}`
 
 /** Temp files for one spec; `cleanup` removes them. */
 export function contactsFiles(): { write: (content: unknown) => string; cleanup: () => void } {
@@ -238,7 +241,7 @@ export async function waitForListed(page: Page, names: string[]): Promise<void> 
 export function listedAddress(page: Page, name: string): Promise<string | null> {
 	return page.evaluate(
 		(s: string) => document.querySelector(s)?.textContent?.trim() ?? null,
-		`${listRow(name)} ${sel("contact-row-address")}`,
+		`${contactRow(name)} ${sel("contact-row-address")}`,
 	)
 }
 
@@ -249,7 +252,7 @@ export async function waitForListedAddress(page: Page, name: string, shown: stri
 		page.waitForFunction(
 			(s: string, expected: string) => document.querySelector(s)?.textContent?.trim() === expected,
 			{ timeout: 10_000, polling: 100 },
-			`${listRow(name)} ${sel("contact-row-address")}`,
+			`${contactRow(name)} ${sel("contact-row-address")}`,
 			shown,
 		),
 		async () => `${name} shows ${JSON.stringify(await listedAddress(page, name))}, not ${shown}`,
@@ -258,5 +261,5 @@ export async function waitForListedAddress(page: Page, name: string, shown: stri
 
 /** Whether a list row shows the sender chip. */
 export function listedAsSender(page: Page, name: string): Promise<boolean> {
-	return page.evaluate((s: string) => document.querySelector(s) !== null, `${listRow(name)} ${sel("contact-sender-chip")}`)
+	return page.evaluate((s: string) => document.querySelector(s) !== null, senderChip(name))
 }
