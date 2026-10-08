@@ -1,0 +1,19 @@
+# Phase 6 — #27 class id checked before a restored contract registers, and the arc 2 gate
+
+- `assertWireArtifactClassId` lives next to `assertArtifactClassId` and shares its fixed text through one constant. A probe confirmed each refused row reaches its intended branch: the renamed function a mismatch, the VK-less `transfer_timeout_refused` the upstream "Private function transfer_timeout_refused must have a verification key" (the name the fixed text keeps out), the two schema rows a Zod error.
+- The account-state unit tests mock the helper with a partial `vi.mock` of `@nulo/aztec-runtime/pxe` (their stub instances and artifacts cannot hash); the new restore test asserts the helper's arguments per contract, so the mock cannot hide wrong wiring, and that the refused contract's sibling registers with no "Skipped: couldn't reach the network".
+- The restore's `launch` became `async`, so the "Network not found" narrowing throw now rejects instead of throwing synchronously; the loop awaits it inside its `try` either way.
+- Arc gate, first pass on df4c72b: account-state + profile vitest 391; aztec-runtime `src/pxe/` 236; `bun run lint`, `typecheck:all` 0; `bun run test` 10299 passed; `bun run test:all` 0; smoke (armed build) 9 files / 31 tests green.
+
+## Post-implementation loop
+
+- Codex round 1 (gpt-6.1-sol, high, read-only; session `01a11cef-f35f-7a51-bcf8-af5ea91ce74d`, alejo-gmail): `clean`.
+- Opus review (general-purpose, read-only), beside round 1: one should-fix, two nits.
+  - Should-fix, accepted: the helper checked the artifact against `currentContractClassId`, which the address does not commit to (`computePartialAddress` hashes the original class) and the PXE discards (it stores the preimage; `hydratePreimage` rebuilds current := original). A crafted backup could keep the genuine preimage, name its own artifact's class as current, and pass. Now: current must equal original, and the artifact is checked against the original. Every genuine export has current = original (PXE-hydrated, or node-read through `assertNotUpgraded`). New row: the tampered artifact with the instance's current id set to its class; red on the previous helper.
+  - Nit, accepted: finalize's missing-row and tombstone refusals left the restore's DEK rewrap context (source and destination DEKs) to the TTL. Its drop moved into the same identity-guarded `finally`; the table asserts both stashes are gone and all four buffers zeroed (the two refusal rows red on the previous code).
+  - Nit, rejected: `session-manager.ts` `toInfo` is a third copy of the projection; refactoring code no fix touches is out of the plan's scope.
+  - Out of scope, follow-up: the dApp registration path in `execution/service.ts` checks a supplied artifact against `currentContractClassId` the same way.
+- Codex round 2 (resumed): `findings`, one nit: the guard test replaced only the secret stash, so removing the new `seenRewrap` guard stayed green. Accepted: the hook replaces both stashes; the test now fails without the guard.
+- Codex round 3 (resumed): `clean`.
+- Network gate on 4336347 (the final head differs only in a unit test): `backup-restore-integrity`, `backup-migration-roundtrip`, `profile-reimport-matrix`, 3 files / 7 tests green, prover on, `NULO_E2E_RETRY=0`. `importFullBackup` waits for the success hash, so a genuine export refused by the check would have timed out on the warning screen.
+- OA-3 after shots on 0f396ea, same throwaway spec: the import ends on the existing warning; "View errors" lists the refused contract by its position in the network's list (`"child": 1`) with the fixed text, not by address, which is how the existing viewer records every per-contract restore error. OA-1 after shots on 0f396ea show the banner gone after a rename, as before (the shipped form); a prototype build of option A (the rename returning `getProfileInfo`) was shot as `home-renamed-optiona` and reverted, never committed.

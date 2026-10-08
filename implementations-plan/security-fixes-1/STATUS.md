@@ -14,3 +14,6 @@
 - 2026-10-08 — arc 2 start: OA-3 before shots taken on 3fb939b (proverless network run); OA-1 before shots already present from the interrupted session.
 - 2026-10-08 — phase 4 gate pass: profile vitest 334, lint 0, typecheck:all 0; the five table rows red on the base, the guard test red on an unguarded drop.
 - 2026-10-08 — phase 5 gate pass: profile + EditProfilePopup vitest 364, lint 0, typecheck:all 0; the projection table, the BUG PIN and the replacing-set tests red on the base.
+- 2026-10-08 — phase 6 + arc 2 gate pass on df4c72b: account-state + profile vitest 391, aztec-runtime pxe 236, lint 0, typecheck:all 0, test 10299, test:all 0, smoke 9 files / 31 tests.
+- 2026-10-08 — arc 2 loop: Codex r1 clean; Opus one should-fix (restore check bound to the original class id, D16) + two nits (rewrap context in the finally, D17, accepted; projection helper refactor, rejected); Codex r2 one test nit, applied; Codex r3 clean.
+- 2026-10-08 — arc 2 network e2e on 4336347: 3 files / 7 tests green; OA-3 after shots and OA-1 after + option-A prototype shots taken on 0f396ea; smoke on 0f396ea 9 files / 31 tests green.
