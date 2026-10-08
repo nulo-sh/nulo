@@ -181,7 +181,7 @@ async function acquirePasskeyCredential(gen) {
 /** Stage 2: the authenticated key-material export, discriminated per profile
  *  type. Returns "handled" when the failure UI already resolved (wrong
  *  password / passkey failure / superseded run). */
-async function exportKeyMaterial(gen, credentialData) {
+async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 	try {
 		if (isPasskeyProfile.value) {
 			// Passkey blobs carry the credentialId as `master-key` and NEVER an entropy field —
@@ -192,15 +192,16 @@ async function exportKeyMaterial(gen, credentialData) {
 			if (gen !== generation) return "handled"
 			return { key: passkeyMaterial.credentialId, dekSealedB64: passkeyMaterial.dekSealed, dekReplaced: passkeyMaterial.dekReplaced }
 		}
-		// Atomic discriminated export: master + recovery-phrase entropy + imported-keys DEK
-		// from ONE authenticated pass, so the backup fields can never come from different
-		// row states.
-		const material = await managers.profile.exportBackupMaterial(appStore.profile.id, password.value)
+		// One authenticated pass: master + recovery-phrase entropy, the account slice, then the
+		// imported-key rows re-sealed under a key made for this backup alone, which the file
+		// carries instead of the profile's long-lived imported-keys key.
+		const material = await accountClient.exportFullBackupKeys(fence, password.value)
 		return {
 			key: material.masterKey,
 			entropyB64: material.entropy,
-			dekB64: material.importedKeysDek,
+			dekB64: material.importedKeysKey,
 			dekReplaced: material.dekReplaced,
+			heldSlices: { [ACCOUNT_SERVICE_NAME]: material.accounts, [IMPORTED_KEYS_SERVICE_NAME]: material.importedKeyRows },
 		}
 	} catch (error) {
 		if (gen !== generation) return "handled"
@@ -235,10 +236,11 @@ function buildBackupEnvelope({ key, entropyB64, dekB64, dekSealedB64 }) {
 		// by JSON.stringify). Restore verifies PBKDF2(words(entropy)) == master-key before
 		// sealing either.
 		entropy: entropyB64,
-		// Imported-keys DEK carriers (epoch-4 REQUIRED, per profile type; the other stays
-		// undefined → dropped): plaintext beside the plaintext master for password blobs — the
-		// same trust envelope — and the sealed row blob for passkey blobs. Restore feeds it
-		// ONLY into the rewrap context (the restored row mints a FRESH dek — clone divergence).
+		// Imported-keys key carriers (epoch-4 REQUIRED, per profile type; the other stays
+		// undefined → dropped): for password blobs, plaintext beside the plaintext master, the key
+		// made for this backup alone that its imported-key rows open under; for passkey blobs, the
+		// profile's sealed DEK. Restore feeds it ONLY into the rewrap context (the restored row
+		// mints a FRESH dek — clone divergence).
 		"imported-keys-dek": dekB64,
 		"imported-keys-dek-sealed": dekSealedB64,
 		// The active-network preference names a CHAIN (row ids are per install and the backup
@@ -273,6 +275,28 @@ function reportAssemblyFailure(gen, err) {
 	openToast({ kind: "error", label: "Failed to create the backup" })
 }
 
+/** Every slice comes from its service, except the ones the key export already read. */
+function backupSources(runClients, heldSlices = {}) {
+	return runClients.map(({ name, client }) => ({
+		name,
+		backup: name in heldSlices ? async () => heldSlices[name] : () => client.backup(),
+	}))
+}
+
+/** Stage 1: the run's fence, then a passkey profile's credential. Slices resolve the active
+ *  profile on their own and a profile switch updates this page in place, so the run is bound to
+ *  one session of one profile in one worker: a lock, a switch (even away and back) or a worker
+ *  restart before publication fails it. Returns "handled" when the run already ended. */
+async function openRun(gen) {
+	const fence = await managers.profile.captureRunFence()
+	if (gen !== generation) return "handled"
+	if (fence.profileId !== appStore.profile.id) throw new Error("The active profile is not the one being backed up")
+	if (!isPasskeyProfile.value) return { fence }
+	const acquired = await acquirePasskeyCredential(gen)
+	if (acquired === "handled" || gen !== generation) return "handled"
+	return { fence, credentialData: acquired.credentialData }
+}
+
 async function handleBackup() {
 	// Re-entry latch: closes synchronously, BEFORE the ceremony/KDF awaits —
 	// the empty-status window during PBKDF2 was where double-fires slipped in.
@@ -282,23 +306,21 @@ async function handleBackup() {
 	backupStatus.value = "progress"
 	let runClients = null
 	try {
-		let credentialData
-		if (isPasskeyProfile.value) {
-			const acquired = await acquirePasskeyCredential(gen)
-			if (acquired === "handled" || gen !== generation) return
-			credentialData = acquired.credentialData
-		}
+		const run = await openRun(gen)
+		if (run === "handled") return
 
-		const material = await exportKeyMaterial(gen, credentialData)
+		runClients = buildBackupServices()
+		activeRunClients = runClients
+		const accountClient = runClients.find(({ name }) => name === ACCOUNT_SERVICE_NAME).client
+		const { fence, credentialData } = run
+		const material = await exportKeyMaterial(gen, fence, credentialData, accountClient)
 		if (material === "handled" || gen !== generation) return
 		dekReplaced.value = !!material.dekReplaced
 		chainStateOmitted.value = !!appStore.profile.recoveryMode
 		const envelope = buildBackupEnvelope(material)
 
-		runClients = buildBackupServices()
-		activeRunClients = runClients
-		const sources = runClients.map(({ name, client }) => ({ name, backup: () => client.backup() }))
-		const result = await assembleFullBackup(envelope, sources, () => gen === generation)
+		const result = await assembleFullBackup(envelope, backupSources(runClients, material.heldSlices), () => gen === generation)
+		await managers.profile.assertRunFence(fence)
 		// Fence first: a superseded run must not run the oversize UI writes.
 		if (gen !== generation || rejectOversizedBackup(result.pretty)) return
 

@@ -2244,6 +2244,30 @@ describe("crash-rollback liveness gate", () => {
 	})
 })
 
+describe("useFullBackupImport — a legacy password backup's imported-keys key", () => {
+	it("reaches the profile restore unchanged, so a backup carrying the profile's long-lived DEK still restores its keys", async () => {
+		const backup = await buildBackup()
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		opts.pickFile.mockResolvedValue(new File([JSON.stringify(backup)], "b.json", { type: "application/json" }))
+		await c.pickBackupFile()
+		opts.password.value = "pass1234"
+		opts.repeatedPassword.value = "pass1234"
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Restored", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
+
+		await c.restoreBackup()
+
+		expect(profileClient.restore.mock.calls[0][1]).toEqual({
+			type: "password",
+			masterKey: backup["master-key"],
+			entropy: backup.entropy,
+			importedKeysDek: backup["imported-keys-dek"],
+		})
+	})
+})
+
 describe("useFullBackupImport — decryptBackup accepts the padding the detector accepted", () => {
 	it("decrypts a protected file whose base64 is wrapped in non-breaking spaces", async () => {
 		const key = await EncryptionKey.fromPasshash(await EncryptionKey.getPasshash("pass1234"))

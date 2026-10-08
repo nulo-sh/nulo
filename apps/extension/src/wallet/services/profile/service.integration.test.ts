@@ -928,31 +928,59 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
-	describe("exportBackupMaterial — atomic paired export", () => {
-		test("returns a master+entropy pair from one unseal, and the pair is derivation-consistent", async () => {
+	describe("openBackupTransfer — atomic paired export", () => {
+		test("returns a master+entropy pair from one unseal, the live DEK, and a transfer key that is not the DEK", async () => {
 			const { service } = await makeService()
 			const profile = await service.createProfile("P", "pass1234")
-			const material = await service.exportBackupMaterial(profile.id, "pass1234")
+			const material = await service.openBackupTransfer(profile.id, "pass1234")
 			const entropy = new Uint8Array(Buffer.from(material.entropy, "base64"))
 			expect(entropy.byteLength).toBe(32)
 			const rederived = await deriveMasterFromMnemonic(await getMnemonic(entropy))
 			expect(Buffer.from(rederived).toString("base64")).toBe(material.masterKey)
 			// And `master-key` semantics hold: exportPlain returns the SAME master.
 			expect(await service.exportPlain(profile.id, "pass1234")).toBe(material.masterKey)
+			expect(Array.from(material.sourceDek!)).toEqual(Array.from((await service.getProfileDek(profile.id))!))
+			expect(material.transferKey).toHaveLength(32)
+			expect(Array.from(material.transferKey)).not.toEqual(Array.from(material.sourceDek!))
 		}, 30_000)
 
 		test("rejects a wrong password", async () => {
 			const { service } = await makeService()
 			const profile = await service.createProfile("P", "pass1234")
-			await expect(service.exportBackupMaterial(profile.id, "wrong-pass")).rejects.toThrow()
+			await expect(service.openBackupTransfer(profile.id, "wrong-pass")).rejects.toThrow()
 		}, 30_000)
 
 		test("throws 'Operation not supported for passkey profile' for a passkey profile", async () => {
 			const { service } = await makeService()
 			const profile = await service.createPasskeyProfile("PK")
-			await expect(service.exportBackupMaterial(profile.id, "irrelevant")).rejects.toThrow(
+			await expect(service.openBackupTransfer(profile.id, "irrelevant")).rejects.toThrow(
 				/Operation not supported for passkey profile/,
 			)
+		}, 30_000)
+
+		test("the popup can reach neither the DEK export nor the sealed-DEK read", () => {
+			const service = new ProfileService(fakeConfig(), new LoggerStore(fakeConfig()), new FakeBrowserApi())
+			const rpc = (service as unknown as { rpcMethods: ReadonlySet<string> }).rpcMethods
+			for (const name of ["exportBackupMaterial", "getProfileDekSealed", "openBackupTransfer", "exportImportedKeysDek"]) {
+				expect(rpc.has(name)).toBe(false)
+			}
+			expect(rpc.has("captureRunFence") && rpc.has("assertRunFence")).toBe(true)
+		})
+	})
+
+	describe("run fence — a popup-held fence across RPCs", () => {
+		test("a restarted worker refuses the old worker's fence at the same profile, epoch and serial; a refresh keeps it", async () => {
+			const { api, service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			const fence = await service.captureRunFence()
+			await service.refreshSession()
+			await expect(service.assertRunFence(fence)).resolves.toBeUndefined()
+
+			const { service: restarted } = await makeServiceFromExistingApi(api)
+			const reissued = await restarted.captureRunFence()
+			expect({ ...reissued, incarnation: fence.incarnation }).toEqual(fence)
+			await expect(restarted.assertRunFence(fence)).rejects.toBeInstanceOf(SessionEndedError)
+			await expect(restarted.assertRunFence(reissued)).resolves.toBeUndefined()
 		}, 30_000)
 	})
 
@@ -2755,13 +2783,10 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			expect(typeof pkRow.walletFingerprint).toBe("string")
 		})
 
-		// getProfileDek returns the session dek; getProfileDekSealed returns the row blob.
 		test("getProfileDek returns a live dek; a locked profile has none", async () => {
 			const { service } = await makeService()
 			const p = await service.createProfile("P", "pass1234")
 			expect(await service.getProfileDek(p.id)).toBeDefined()
-			const sealed = await service.getProfileDekSealed(p.id)
-			expect(typeof sealed).toBe("string")
 			await service.lockActiveProfile()
 			await expect(service.getProfileDek(p.id)).rejects.toThrow(/locked/)
 		})
@@ -2867,24 +2892,22 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			expect(service.isRecoveryMode(p.id)).toBe(true)
 		})
 
-		test("password export tolerates an undecryptable slot with a FRESH dek (dekReplaced), and the export → restore round trip lands healthy", async () => {
+		test("password export tolerates an undecryptable slot (no source DEK), and the export → restore round trip lands healthy", async () => {
 			const { api, service } = await makeService()
 			const p = await service.createProfile("P", "pass1234")
 			const liveDek = await service.getProfileDek(p.id)
-			const intact = await service.exportBackupMaterial(p.id, "pass1234")
-			expect(intact.dekReplaced).toBe(false)
-			expect(intact.importedKeysDek).toBe(Buffer.from(liveDek!).toString("base64"))
+			const intact = await service.openBackupTransfer(p.id, "pass1234")
+			expect(Array.from(intact.sourceDek!)).toEqual(Array.from(liveDek!))
 
 			await service.lockActiveProfile()
 			await corruptDekSlot(api, p.id)
 			await service.unlockProfile(p.id, "pass1234")
 			expect(service.isRecoveryMode(p.id)).toBe(true)
-			const material = await service.exportBackupMaterial(p.id, "pass1234")
-			expect(material.dekReplaced).toBe(true)
+			const material = await service.openBackupTransfer(p.id, "pass1234")
+			expect(material.sourceDek).toBeNull()
 			expect(material.masterKey).toBe(intact.masterKey)
 			expect(material.entropy).toBe(intact.entropy)
-			expect(Buffer.from(material.importedKeysDek, "base64")).toHaveLength(32)
-			expect(material.importedKeysDek).not.toBe(intact.importedKeysDek)
+			expect(material.transferKey).toHaveLength(32)
 
 			// The repair: restore the export into a fresh profile and finalize — a healthy session.
 			await service.lockActiveProfile()
@@ -2894,7 +2917,7 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 					type: "password",
 					masterKey: asBase64MasterSecret(material.masterKey),
 					entropy: material.entropy,
-					importedKeysDek: material.importedKeysDek,
+					importedKeysDek: toBase64(material.transferKey),
 				},
 				"pass1234",
 				undefined,
@@ -3076,8 +3099,8 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			// Nothing was committed: the OLD password still works and the dek is untouched.
 			await service.lockActiveProfile()
 			await service.unlockProfile(p.id, "pass1234")
-			const material = await service.exportBackupMaterial(p.id, "pass1234")
-			expect(Array.from(Buffer.from(material.importedKeysDek, "base64"))).toEqual(Array.from(before!))
+			const material = await service.openBackupTransfer(p.id, "pass1234")
+			expect(Array.from(material.sourceDek!)).toEqual(Array.from(before!))
 		})
 
 		// The counterpart of the refusal above: exporting under an unverified dek cannot leak (a
@@ -3093,8 +3116,8 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			row.envelopeMac = Buffer.from(new Uint8Array(32).fill(0xee)).toString("base64")
 			await api.storage.local.set({ [key]: JSON.stringify(row) })
 
-			const material = await service.exportBackupMaterial(p.id, "pass1234")
-			expect(Array.from(Buffer.from(material.importedKeysDek, "base64"))).toEqual(Array.from(dek!))
+			const material = await service.openBackupTransfer(p.id, "pass1234")
+			expect(Array.from(material.sourceDek!)).toEqual(Array.from(dek!))
 			expect(Array.from(await service.exportImportedKeysDek(p.id, "pass1234"))).toEqual(Array.from(dek!))
 		})
 
@@ -3167,8 +3190,8 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 			const { service } = await makeService()
 			const p = await service.createProfile("P", "pass1234")
 
-			// exportBackupMaterial + exportImportedKeysDek expose the TYPED error.
-			await expect(service.exportBackupMaterial(p.id, "wrong-pass")).rejects.toBeInstanceOf(InvalidPasswordError)
+			// openBackupTransfer + exportImportedKeysDek expose the TYPED error.
+			await expect(service.openBackupTransfer(p.id, "wrong-pass")).rejects.toBeInstanceOf(InvalidPasswordError)
 			await expect(service.exportImportedKeysDek(p.id, "wrong-pass")).rejects.toBeInstanceOf(InvalidPasswordError)
 
 			// exportMnemonic + changeProfilePassword throw a PLAIN Error with the same
@@ -3847,8 +3870,9 @@ describe("byte codecs: export encoders and the lenient decodes of stored and res
 		const masterB64 = Buffer.from(master).toString("base64")
 		expect(usesAlphabetEdges(masterB64)).toBe(true)
 
-		const material = await service.exportBackupMaterial(profile.id, "pass1234")
-		expect(material).toEqual({ masterKey: masterB64, entropy: FB32_B64, importedKeysDek: FB32_B64, dekReplaced: false })
+		const material = await service.openBackupTransfer(profile.id, "pass1234")
+		expect(material).toMatchObject({ masterKey: masterB64, entropy: FB32_B64 })
+		expect(toBase64(material.sourceDek!)).toBe(FB32_B64)
 		expect(await service.exportPlain(profile.id, "pass1234")).toBe(masterB64)
 
 		const row = JSON.parse((await api.storage.local.get())[profileRowKey(profile.id)] as string)
@@ -3893,9 +3917,8 @@ describe("byte codecs: export encoders and the lenient decodes of stored and res
 			const row = JSON.parse((await api.storage.local.get())[key] as string)
 			await api.storage.local.set({ [key]: JSON.stringify({ ...row, dekSealed: `${row.dekSealed}!` }) })
 			withBuffer(binding)
-			const material = await service.exportBackupMaterial(profile.id, "pass1234")
-			expect(material.dekReplaced).toBe(false)
-			expect(material.importedKeysDek).toBe(FB32_B64)
+			const material = await service.openBackupTransfer(profile.id, "pass1234")
+			expect(toBase64(material.sourceDek!)).toBe(FB32_B64)
 		}, 30_000)
 	})
 

@@ -31,8 +31,16 @@ function deferred<T>(): Deferred<T> {
 function sliceClient() {
 	return { backup: vi.fn(async (): Promise<unknown> => []), disconnect: vi.fn() }
 }
+const exportFullBackupKeys = vi.fn<(fence: unknown, password: string) => Promise<unknown>>()
+function accountSliceClient() {
+	return {
+		...sliceClient(),
+		backupImportedKeys: vi.fn(async (): Promise<unknown> => []),
+		exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
+	}
+}
 let profileClient = sliceClient()
-let accountClient = { ...sliceClient(), backupImportedKeys: vi.fn(async (): Promise<unknown> => []) }
+let accountClient = accountSliceClient()
 let transactionClient = sliceClient()
 let tokenClient = sliceClient()
 let tokenBalanceClient = sliceClient()
@@ -98,14 +106,16 @@ vi.mock("@/wallet/services/config/client", () => ({
 	}),
 }))
 
-const exportBackupMaterial = vi.fn<(profileId: string, password: string) => Promise<unknown>>()
+const FENCE = { profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }
+const captureRunFence = vi.fn(async (): Promise<unknown> => FENCE)
+const assertRunFence = vi.fn(async (_fence: unknown): Promise<void> => undefined)
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
-			exportBackupMaterial: (profileId: string, password: string) => exportBackupMaterial(profileId, password),
+			captureRunFence: () => captureRunFence(),
+			assertRunFence: (fence: unknown) => assertRunFence(fence),
 			getPasskeyCredentialId: vi.fn(async () => "cred"),
 			exportPlain: vi.fn(async () => "mk"),
-			getProfileDekSealed: vi.fn(async () => "sealed"),
 		},
 	},
 }))
@@ -208,12 +218,12 @@ afterEach(() => {
 	for (const w of wrappers.splice(0)) if (!w.vm.$.isUnmounted) w.unmount()
 })
 
-const material = { masterKey: "mk", entropy: "ent", importedKeysDek: "dek" }
+const material = { masterKey: "mk", entropy: "ent", importedKeysKey: "transfer-key", importedKeyRows: [], accounts: [], dekReplaced: false }
 
 beforeEach(() => {
 	vi.clearAllMocks()
 	profileClient = sliceClient()
-	accountClient = { ...sliceClient(), backupImportedKeys: vi.fn(async (): Promise<unknown> => []) }
+	accountClient = accountSliceClient()
 	transactionClient = sliceClient()
 	tokenClient = sliceClient()
 	tokenBalanceClient = sliceClient()
@@ -221,28 +231,30 @@ beforeEach(() => {
 	authRegistryClient = sliceClient()
 	contactClient = sliceClient()
 	configClient = sliceClient()
-	exportBackupMaterial.mockReset()
-	exportBackupMaterial.mockResolvedValue(material)
+	exportFullBackupKeys.mockReset()
+	exportFullBackupKeys.mockResolvedValue(material)
+	captureRunFence.mockResolvedValue(FENCE)
+	assertRunFence.mockResolvedValue(undefined)
 })
 
 describe("export/full.vue — re-entry latch", () => {
 	it("Create Backup unrenders as it starts, so the KDF window runs one export end to end", async () => {
 		const kdf = deferred<typeof material>()
-		exportBackupMaterial.mockReturnValue(kdf.promise)
+		exportFullBackupKeys.mockReturnValue(kdf.promise)
 		const wrapper = mountPage()
 		await reachUnlockAndSubmit(wrapper)
 
 		// The status flipped synchronously, so the CTA is gone before the KDF settles.
 		expect(wrapper.find("[data-testid='unlock-submit-btn']").exists()).toBe(false)
 		await flushPromises()
-		expect(exportBackupMaterial).toHaveBeenCalledTimes(1)
+		expect(exportFullBackupKeys).toHaveBeenCalledTimes(1)
 
 		kdf.resolve(material)
 		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 		// Single execution end to end: every slice source ran exactly once.
 		expect(profileClient.backup).toHaveBeenCalledTimes(1)
 		expect(configClient.backup).toHaveBeenCalledTimes(1)
-		expect(accountClient.backupImportedKeys).toHaveBeenCalledTimes(1)
+		expect(captureRunFence).toHaveBeenCalledTimes(1)
 	})
 
 	it("two clicks on Protect in one tick start one encryption", async () => {
@@ -268,7 +280,7 @@ describe("export/full.vue — Enter does what the focused control says", () => {
 		pressOn(wrapper.get("[data-testid='subpage-back']").element as HTMLElement, "Enter")
 		await flushPromises()
 		expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
-		expect(exportBackupMaterial).not.toHaveBeenCalled()
+		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 
 	it("at the backup-ready stage, Enter on Download Backup downloads and does not encrypt", async () => {
@@ -396,6 +408,52 @@ describe("export/full.vue — sealed artifact", () => {
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		const parsed = JSON.parse(downloadFile.mock.calls[0][0].data) as Record<string, unknown>
 		expect(parsed["active-chain-id"]).toBe(0)
+	})
+})
+
+describe("export/full.vue — the password backup's keys and run fence", () => {
+	const KEY_ROW = { profileId: "p1", chainId: 7, address: "0xabc", encryptedSigningKey: "sealed-under-transfer-key" }
+	const ACCOUNT = { profileId: "p1", chainId: 7, address: "0xabc", index: 0, type: 1, l1ChainId: 1, name: "Imp", visible: true }
+
+	it("the file carries the key export's transfer key, accounts and rows, read once under the run's fence", async () => {
+		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: [KEY_ROW], accounts: [ACCOUNT] })
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		await wrapper.find("[data-testid='download-backup-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+
+		const parsed = JSON.parse(downloadFile.mock.calls[0][0].data) as Record<string, unknown>
+		const data = parsed.data as Record<string, unknown>
+		expect(exportFullBackupKeys).toHaveBeenCalledWith(FENCE, "pw")
+		expect(parsed["imported-keys-dek"]).toBe("transfer-key")
+		expect(data["imported-account-keys"]).toEqual([KEY_ROW])
+		expect(data.account).toEqual([ACCOUNT])
+		expect(accountClient.backup).not.toHaveBeenCalled()
+		expect(accountClient.backupImportedKeys).not.toHaveBeenCalled()
+		expect(assertRunFence).toHaveBeenCalledWith(FENCE)
+	})
+
+	it("a fence that breaks while the slices are read fails the run after the last slice, and publishes nothing", async () => {
+		const slice = deferred<unknown>()
+		tokenClient.backup.mockReturnValue(slice.promise)
+		assertRunFence.mockRejectedValue(new Error("Session ended"))
+		const wrapper = mountPage()
+		await reachUnlockAndSubmit(wrapper)
+		await vi.waitFor(() => expect(tokenClient.backup).toHaveBeenCalledTimes(1))
+		expect(assertRunFence).not.toHaveBeenCalled()
+
+		slice.resolve([])
+		await vi.waitFor(() => expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to create the backup" }))
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='unlock-submit-btn']").exists()).toBe(true))
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+	})
+
+	it("a run whose active profile is not the page's exports nothing", async () => {
+		captureRunFence.mockResolvedValue({ ...FENCE, profileId: "p2" })
+		const wrapper = mountPage()
+		await reachUnlockAndSubmit(wrapper)
+		await vi.waitFor(() => expect(openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to create the backup" }))
+		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 })
 
