@@ -19,6 +19,8 @@
  */
 
 export const AUTORELEASE_PENDING_LABEL = "autorelease: pending"
+/** What the unstick relabels a Release PR to once its tag exists. */
+export const AUTORELEASE_TAGGED_LABEL = "autorelease: tagged"
 
 export interface AutoUnstickInput {
 	/** `vars.AUTO_UNSTICK_ENABLED` — the staged-rollout kill switch. */
@@ -45,7 +47,7 @@ export interface AutoUnstickDecision {
 	reason: string
 	/** for `create`: the SHA to tag (always the Release-PR merge commit). */
 	tagSha?: string
-	/** for `create`: the PR to relabel `autorelease: tagged`. */
+	/** for `create` and `skip`: the PR to relabel `autorelease: tagged`, while it is still pending. */
 	prNumber?: number
 }
 
@@ -60,15 +62,21 @@ export function decideUnstick(input: AutoUnstickInput): AutoUnstickDecision {
 	if (pr.mergeSha !== input.headSha)
 		return { action: "noop", reason: `PR #${pr.number} merged as ${pr.mergeSha}, not HEAD ${input.headSha}` }
 	if (pr.baseRef !== "main") return { action: "noop", reason: `merged PR targets '${pr.baseRef}', not main` }
-	if (!pr.labels.includes(AUTORELEASE_PENDING_LABEL)) {
-		return { action: "noop", reason: "merged PR is not an unpublished Release PR (no 'autorelease: pending' label)" }
-	}
-	// HEAD is a genuine stuck Release PR. The tag must point at the merge commit.
-	if (input.existingTagSha === null) {
-		return { action: "create", reason: "stuck Release PR, tag missing — create it", tagSha: pr.mergeSha, prNumber: pr.number }
+	const pending = pr.labels.includes(AUTORELEASE_PENDING_LABEL)
+	// An earlier attempt of this run may have relabeled and died before its outputs; its tag still names HEAD.
+	if (!pending && !pr.labels.includes(AUTORELEASE_TAGGED_LABEL)) {
+		return { action: "noop", reason: "merged PR is not a Release PR (no 'autorelease: pending' or 'autorelease: tagged' label)" }
 	}
 	if (input.existingTagSha === pr.mergeSha) {
-		return { action: "skip", reason: "tag already exists at the merge SHA — idempotent no-op", prNumber: pr.number }
+		return {
+			action: "skip",
+			reason: "tag already exists at the merge SHA — idempotent no-op",
+			prNumber: pending ? pr.number : undefined,
+		}
+	}
+	if (input.existingTagSha === null) {
+		if (!pending) return { action: "noop", reason: "Release PR is labeled tagged but has no tag; only a pending one is tagged here" }
+		return { action: "create", reason: "stuck Release PR, tag missing — create it", tagSha: pr.mergeSha, prNumber: pr.number }
 	}
 	return {
 		action: "abort",

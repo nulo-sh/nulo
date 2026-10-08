@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { AUTORELEASE_PENDING_LABEL } from "./auto-unstick"
-import { AUTORELEASE_TAGGED_LABEL, type MergedPrRef, type RunUnstickOpts, runUnstick, type UnstickIO } from "./auto-unstick-run"
+import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL } from "./auto-unstick"
+import { type MergedPrRef, type RunUnstickOpts, runUnstick, type UnstickIO } from "./auto-unstick-run"
 
 const MERGE = "abc123def456abc123def456abc123def456abcd"
 
@@ -107,6 +107,14 @@ describe("runUnstick — the unstick itself", () => {
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toHaveLength(0)
 		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
+	})
+
+	test("the relabel landed but its attempt died: the retry continues the publish without touching the PR", async () => {
+		const { io, calls } = fakeIO({ pr: releasePr({ labels: [AUTORELEASE_TAGGED_LABEL] }), tagSha: MERGE })
+		const r = await runUnstick(opts({ io }))
+		expect({ action: r.action, continues: r.continues }).toEqual({ action: "skip", continues: true })
+		expect(calls.createTag).toHaveLength(0)
+		expect(calls.relabelPr).toHaveLength(0)
 	})
 
 	test("tag exists but points at the WRONG SHA → abort, exit 1, no tag write", async () => {

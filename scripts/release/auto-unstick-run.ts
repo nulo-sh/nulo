@@ -15,10 +15,7 @@
  *  - All I/O is injected, so every branch is unit-testable with zero secrets.
  */
 
-import { AUTORELEASE_PENDING_LABEL, type AutoUnstickAction, decideUnstick } from "./auto-unstick"
-
-/** release-please labels a merged-but-unpublished Release PR `autorelease: pending`; the publish flips it to `tagged`. */
-export const AUTORELEASE_TAGGED_LABEL = "autorelease: tagged"
+import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL, type AutoUnstickAction, decideUnstick } from "./auto-unstick"
 
 export interface MergedPrRef {
 	number: number
@@ -94,8 +91,8 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 			return { action: "abort", reason: decision.reason, performed: false, continues: false, exitCode: 1 }
 		case "skip": {
 			// Tag already at the merge SHA: heal a prior run that tagged but never relabeled. Never a 2nd tag.
-			await io.relabelPr(decision.prNumber as number, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
-			io.log(`auto-unstick: skip (tag exists) — ensured the label for ${tag}`)
+			if (decision.prNumber !== undefined) await io.relabelPr(decision.prNumber, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
+			io.log(`auto-unstick: skip (${tag} exists at HEAD) — continuing the publish`)
 			return { action: "skip", reason: decision.reason, performed: false, continues: true, exitCode: 0 }
 		}
 		case "create": {
