@@ -359,7 +359,7 @@ Validation gate:
 - Pass criteria: every command exits 0. The rename commit lists exactly three page renames and one test rename, each `R100`. The legacy test fails if you restore `security/index.vue` (check once, then revert). It also fails if you remove `isAuthRequired` from `privacy.vue` (check once, then revert).
 - Layers: lint and typecheck, unit, build.
 
-### P3 — E2E and docs
+### P3 — E2E and docs ✓
 
 Warning: never run smoke and network in this worktree at the same time. Both kill Chrome loaded from its dist.
 

@@ -123,7 +123,7 @@ function handleEditContact(contact) {
 }
 function handleDeleteContact(contact) {
 	// Deleting a contact never touches sender registration — sender rows are
-	// independent PXE state, managed only in Settings → Advanced → Senders.
+	// independent PXE state, managed only in Settings → Developer → Account State → Senders.
 	cacheStore.confirm.confirm_color = "red"
 	cacheStore.confirm.confirm_text = "Yes, delete contact"
 	cacheStore.confirm.description = `Delete contact "${contact.name}"?`

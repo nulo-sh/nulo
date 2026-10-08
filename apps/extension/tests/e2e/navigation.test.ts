@@ -1,6 +1,6 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { test, openPopup, waitForHash } from "./fixtures/extension"
+import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
 import { clickNavTab, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
@@ -14,14 +14,12 @@ test("settings page shows all sections", async ({ registeredExtension }) => {
 
 	// Assert core settings destinations exist by testid. Route segments are
 	// the stable contract even when section labels get reorganized.
-	for (const segment of ["profile", "accounts", "security", "networks", "tokens"]) {
+	for (const segment of ["profile", "accounts", "lock", "networks", "tokens", "privacy", "display", "developer", "about"]) {
 		await page.waitForSelector(`[data-testid="setting-nav-${segment}"]`, {
 			visible: true,
 			timeout: 5_000,
 		})
 	}
-	// About is a footer link with a real href (not a SettingItem)
-	await page.waitForSelector('a[href="#/popup/settings/about"]', { visible: true, timeout: 5_000 })
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
@@ -66,11 +64,7 @@ test("about page shows version info", async ({ registeredExtension }) => {
 	await clickNavTab(page, "settings")
 	await waitForHash(page, "#/popup/settings")
 
-	// Jump directly via router rather than clicking the below-the-fold footer link
-	await page.evaluate(() => {
-		const link = document.querySelector<HTMLAnchorElement>('a[href="#/popup/settings/about"]')
-		link?.click()
-	})
+	await clickByTestId(page, "setting-nav-about")
 
 	await waitForHash(page, "#/popup/settings/about")
 
@@ -167,6 +161,11 @@ async function scrollAndSettle(page: Page, wrapperTestid: string, to: "top" | "e
 
 const SETTINGS_ROW = "setting-nav-networks"
 
+/** Hub rows that kept their ids from the pages they left, so they sit outside `setting-nav-`. */
+const HUB_ROWS_OUTSIDE_PREFIX = ["delete-profile-link-btn", "backup-link-btn", "change-password-link-btn"]
+/** Every hub row, matched in one query so the result is in DOM order. */
+const HUB_ROWS = ['[data-testid^="setting-nav-"]', ...HUB_ROWS_OUTSIDE_PREFIX.map((id) => `[data-testid="${id}"]`)].join(", ")
+
 /** Puts a Settings row under the shown bar's bottom edge, clicks 2px below that edge and returns
  *  what the pointer met there and the hash the click led to. */
 async function clickBelowBar(page: Page): Promise<{ hit: string; hash: string }> {
@@ -254,8 +253,8 @@ test("History's and Settings' titles sit 10px below the header with 28px under t
 	const lap = walk.slice(start, end)
 	console.log(`[titles] Settings' Tab lap: ${lap.join(" → ")}`)
 	expect(lap.filter((stop) => stop.startsWith("page-"))).toEqual([])
-	const rows = await page.$$eval('[data-testid^="setting-nav-"]', (els) => els.map((el) => el.getAttribute("data-testid")))
-	expect(lap.filter((stop) => stop.startsWith("setting-nav-"))).toEqual(rows)
+	const rows = await page.$$eval(HUB_ROWS, (els) => els.map((el) => el.getAttribute("data-testid")))
+	expect(lap.filter((stop) => stop.startsWith("setting-nav-") || HUB_ROWS_OUTSIDE_PREFIX.includes(stop))).toEqual(rows)
 
 	const below = await clickBelowBar(page)
 	console.log(`[titles] a click 2px under the shown bar met ${below.hit} and led to ${below.hash}`)
