@@ -48,7 +48,7 @@ function onContactUpdated(contact) {
 		// object instead of its value.)
 		if (cacheStore.contactToEditIdx && contact.id === contactToEdit.value?.id) {
 			contactToEdit.value = contact
-			nameTerm.value = contact.name
+			nameTerm.value = storedNameOf(contact)
 			contactAddressTerm.value = contact.address
 			return
 		}
@@ -67,6 +67,10 @@ const contacts = ref([])
 /** The saved contact this form edits: its own row, or the one an import row would write. Its own
  *  name and address are never duplicates. */
 const isEditedContact = (c) => c.id === (contactToEdit.value?.id ?? contactToEdit.value?.targetId)
+
+/** A name saved by older code can hold what is no longer stored; the field shows it as a save would
+ *  store it, so an edit never saves a name other than the one on screen. */
+const storedNameOf = (contact) => sanitizeContactName(contact?.name ?? "")
 
 /** Name + address managed by useFormState. The "already exist" check
  *  filters out the contact-being-edited so saving with the SAME name/
@@ -102,7 +106,9 @@ const contactAddressTerm = form.fields.address.value
 // loaded contact. Used to gate the Update button's "anything changed?"
 // check and the "Already exist" warnings, which stay hidden on the
 // unchanged row.
-const isStartedEditingName = computed(() => Boolean(contactToEdit.value) && nameTerm.value?.trim() !== contactToEdit.value?.name)
+const isStartedEditingName = computed(
+	() => Boolean(contactToEdit.value) && sanitizeContactName(nameTerm.value ?? "") !== storedNameOf(contactToEdit.value),
+)
 const isStartedEditingAddress = computed(() => Boolean(contactToEdit.value) && contactAddressTerm.value !== contactToEdit.value?.address)
 const isStartedEditing = computed(() => isStartedEditingName.value || isStartedEditingAddress.value)
 
@@ -130,7 +136,7 @@ const processingError = ref({
 })
 
 function handleFillFieldsWithDefaultValues() {
-	nameTerm.value = contactToEdit.value?.name ?? ""
+	nameTerm.value = storedNameOf(contactToEdit.value)
 	contactAddressTerm.value = contactToEdit.value?.address ?? ""
 }
 
@@ -188,7 +194,7 @@ usePopupEntity(
 			contactToEdit.value = cacheStore.importContact
 				? cacheStore.importContact
 				: contacts.value.find((c) => c.id === cacheStore.contactToEditIdx)
-			nameTerm.value = contactToEdit.value?.name ?? ""
+			nameTerm.value = storedNameOf(contactToEdit.value)
 			contactAddressTerm.value = contactToEdit.value?.address ?? ""
 		},
 		onHide: () => {

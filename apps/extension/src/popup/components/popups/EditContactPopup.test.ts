@@ -274,11 +274,14 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(w.text()).toContain("Already exist")
 	})
 
-	test("a stored name with an outer space beside the same name warns on open and blocks an address-only edit", async () => {
+	test("a stored name with an outer space beside the same name opens as it would be stored and blocks an address-only edit", async () => {
 		const spaced = { id: "c2", name: "Alice ", address: addr("c") }
 		const w = await mountAndOpen([CONTACT, spaced], "c2")
-		expect(w.text()).toContain("Already exist")
+		expect((w.find('[data-testid="name-input"]').element as HTMLInputElement).value).toBe("Alice")
+		expect(w.text()).not.toContain("Already exist")
 		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await flushPromises()
+		expect(w.text()).toContain("Already exist")
 		await flushPromises()
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
 		await w.find('[data-testid="form-submit"]').trigger("click")
@@ -325,19 +328,43 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		expect(contactServiceMock.updateContact).toHaveBeenCalledWith("c2", "Alice Brown", NEW_ADDRESS)
 	})
 
-	test("a saved name longer than a name is stored: an edit that would store it as another contact's name is blocked", async () => {
+	test("a name that would be stored as another contact's name is blocked, whether saved by older code or typed", async () => {
 		// The second row is older data: a 26-character name, which saving cuts to the first row's name.
-		const w = await mountAndOpen(
-			[
-				{ id: "c1", name: "Abcdefghijklmnopqrstuvwxy", address: OLD_ADDRESS },
-				{ id: "c2", name: "Abcdefghijklmnopqrstuvwxyz", address: addr("c") },
-			],
-			"c2",
-		)
+		const first = { id: "c1", name: "Abcdefghijklmnopqrstuvwxy", address: OLD_ADDRESS }
+		const w = await mountAndOpen([first, { id: "c2", name: "Abcdefghijklmnopqrstuvwxyz", address: addr("c") }], "c2")
 		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
 		await flushPromises()
 		expect(fieldText(w, "name-input")).toBe("Already exist")
 		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+
+		const typed = await mountAndOpen([first, BOB], "c2")
+		await typed.find('[data-testid="name-input"]').setValue("Abcdefghijklmnopqrstuvwxyz")
+		await flushPromises()
+		expect(fieldText(typed, "name-input")).toBe("Already exist")
+	})
+
+	test("a name saved by older code shows as it would be stored on open, on reset and after an outside update, and an address-only edit saves the name shown", async () => {
+		const w = await mountAndOpen([{ id: "c1", name: " Bob\u3164  Stone ", address: OLD_ADDRESS }])
+		const shownName = () => (w.find('[data-testid="name-input"]').element as HTMLInputElement).value
+		expect(shownName()).toBe("Bob Stone")
+		expect(w.find('[data-testid="form-popup"]').attributes("data-submit-disabled")).toBe("true")
+
+		await w.find('[data-testid="name-input"]').setValue("Robert")
+		await w
+			.findAll("button")
+			.find((b) => b.text() === "Reset changes")
+			?.trigger("click")
+		expect(shownName()).toBe("Bob Stone")
+
+		const onUpdated = contactServiceMock.onContactUpdated.add.mock.calls[0][0] as (c: unknown) => void
+		onUpdated({ id: "c1", name: "Bob\u200B  Stone", address: OLD_ADDRESS })
+		await flushPromises()
+		expect(shownName()).toBe("Bob Stone")
+
+		await w.find('[data-testid="address-input"]').setValue(NEW_ADDRESS)
+		await w.find('[data-testid="form-submit"]').trigger("click")
+		await flushPromises()
+		expect(contactServiceMock.updateContact).toHaveBeenCalledWith("c1", "Bob Stone", NEW_ADDRESS)
 	})
 
 	test("a name with nothing visible keeps submit disabled and never warns", async () => {

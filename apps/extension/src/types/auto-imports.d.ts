@@ -292,7 +292,6 @@ declare global {
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
   const sameContactName: typeof import('../utils/contact-name').sameContactName
   const sanitizeContactName: typeof import('../utils/contact-name').sanitizeContactName
-  const sanitizeImportName: typeof import('../utils/contact-import-rows').sanitizeImportName
   const sanitizeJournalSubtitle: typeof import('../utils/journal-state').sanitizeJournalSubtitle
   const sanitizePinMap: typeof import('../composables/usePinnedTokens').sanitizePinMap
   const sanitizeString: typeof import('../utils/string').sanitizeString
@@ -330,6 +329,7 @@ declare global {
   const txAmount: typeof import('../utils/tx-amount').txAmount
   const txBelongsToScope: typeof import('../stores/activity.store').txBelongsToScope
   const txScope: typeof import('../stores/activity.store').txScope
+  const typedContactName: typeof import('../utils/contact-name').typedContactName
   const uiStateFromStatus: typeof import('../utils/presto-ui-state').uiStateFromStatus
   const unref: typeof import('vue').unref
   const untilSessionChecked: typeof import('../composables/useDappApprovalWindow').untilSessionChecked
@@ -927,6 +927,7 @@ declare module 'vue' {
     readonly txAmount: UnwrapRef<typeof import('../utils/tx-amount')['txAmount']>
     readonly txBelongsToScope: UnwrapRef<typeof import('../stores/activity.store')['txBelongsToScope']>
     readonly txScope: UnwrapRef<typeof import('../stores/activity.store')['txScope']>
+    readonly typedContactName: UnwrapRef<typeof import('../utils/contact-name')['typedContactName']>
     readonly uiStateFromStatus: UnwrapRef<typeof import('../utils/presto-ui-state')['uiStateFromStatus']>
     readonly unref: UnwrapRef<typeof import('vue')['unref']>
     readonly untilSessionChecked: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['untilSessionChecked']>

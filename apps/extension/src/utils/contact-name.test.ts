@@ -54,10 +54,10 @@ describe("sanitizeContactName", () => {
 })
 
 describe("typedContactName", () => {
-	test("is the stored name with its outer spaces kept, so a word break can be typed", () => {
-		expect(typedContactName(" Ali\u00A0ce\u200B ")).toBe(" Ali ce ")
-		for (const name of [" Ali\u00A0ce\u200B ", `\u3164${"a".repeat(30)}`, "Bob!  Stone", `${"a".repeat(24)}\u{20000}`])
-			expect(sanitizeContactName(typedContactName(name))).toBe(sanitizeContactName(name))
+	test("is the stored name with a trailing space kept, so a word break can be typed, and no leading one", () => {
+		expect(typedContactName(" Ali\u00A0ce\u200B ")).toBe("Ali ce ")
+		const names = [" Ali\u00A0ce\u200B ", `\u3164${"a".repeat(30)}`, "Bob!  Stone", `${"a".repeat(24)}\u{20000}`, ` ${"a".repeat(24)}b`]
+		for (const name of names) expect(sanitizeContactName(typedContactName(name))).toBe(sanitizeContactName(name))
 	})
 })
 

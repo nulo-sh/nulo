@@ -31,9 +31,10 @@ export function sanitizeContactName(name: string): string {
 }
 
 /** A name as the contact form keeps it while it is typed: what `sanitizeContactName` stores, with
- *  its outer spaces still there, so a space between two words can be typed. */
+ *  a trailing space still there, so a space between two words can be typed. A leading space is
+ *  dropped: it is never stored, and would cost a character. */
 export function typedContactName(name: string): string {
-	return cut(visibleName(name))
+	return cut(visibleName(name).trimStart())
 }
 
 /** Whether nothing of `name` would be stored: it holds only invisible characters, whitespace and

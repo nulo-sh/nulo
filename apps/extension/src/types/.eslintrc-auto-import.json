@@ -498,6 +498,7 @@
     "txAmount": true,
     "txBelongsToScope": true,
     "txScope": true,
+    "typedContactName": true,
     "uiStateFromStatus": true,
     "unref": true,
     "untilSessionChecked": true,

@@ -94,9 +94,10 @@ describe("ContactFormFields — the name field keeps what a stored name holds", 
 		return w.emitted("update:name")?.at(-1)?.[0]
 	}
 
-	test("whitespace becomes a space, invisible characters cost nothing, a word break can be typed, and the cut never splits a letter", async () => {
+	test("whitespace becomes a space, invisible characters and a leading space cost nothing, a word break can be typed, and the cut never splits a letter", async () => {
 		expect(await typed("Ali\u00A0ce\u200B")).toBe("Ali ce")
 		expect(await typed("Alice ")).toBe("Alice ")
+		expect(await typed(` ${"a".repeat(CONTACT_NAME_MAX)}`)).toBe("a".repeat(CONTACT_NAME_MAX))
 		expect(await typed(`\u3164${"a".repeat(30)}`)).toBe("a".repeat(CONTACT_NAME_MAX))
 		expect(await typed(`${"a".repeat(CONTACT_NAME_MAX - 1)}\u{20000}`)).toBe("a".repeat(CONTACT_NAME_MAX - 1))
 	})
