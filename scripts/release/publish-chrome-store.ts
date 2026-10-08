@@ -247,7 +247,7 @@ export function readWarnings(value: unknown): StoreWarning[] | null {
 
 export interface PublishResponse {
 	state?: string
-	warningInfo?: { warnings?: unknown[] }
+	warningInfo?: unknown
 	error?: { code?: number; message?: string; status?: string; details?: unknown[] }
 	[k: string]: unknown
 }

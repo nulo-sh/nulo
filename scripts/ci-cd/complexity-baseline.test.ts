@@ -316,7 +316,7 @@ describe("complexity baseline (this checkout)", () => {
 		).toEqual([])
 		expect((manifest as BaselineManifest).accepted.length).toBe(scan.accepted.length)
 		expect(
-			manifest.rules,
+			(manifest as BaselineManifest).rules,
 			"manifest.json's `rules` summary was edited by hand — it is derived from the entries; rerun `bun run baseline:complexity`.",
 		).toEqual(ruleCountsOf(scan.accepted))
 	})

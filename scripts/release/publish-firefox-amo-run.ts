@@ -307,7 +307,7 @@ export const diskFiles: Files = {
 
 export async function realFetch(req: ApiRequest, authorization: string, timeoutMs: number): Promise<ApiResponse> {
 	const headers: Record<string, string> = { Authorization: authorization, Accept: "application/json" }
-	let body: BodyInit | undefined
+	let body: string | FormData | undefined
 	if (req.kind === "json") {
 		if (req.body !== undefined) {
 			headers["Content-Type"] = "application/json"
