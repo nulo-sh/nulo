@@ -148,13 +148,16 @@ test("a web page can fetch no extension file, the injected content script includ
 	await popup.close()
 
 	const server = createServer((_, res) => res.end("<!doctype html><title>dapp</title>")).listen(0, "127.0.0.1")
-	await once(server, "listening")
-	const page = await newPage(extension.browser)
 	try {
-		await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`)
-		expect(new Set(await page.evaluate(fetchAll, urls))).toEqual(new Set(["refused"]))
+		await once(server, "listening")
+		const page = await newPage(extension.browser)
+		try {
+			await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`)
+			expect(new Set(await page.evaluate(fetchAll, urls))).toEqual(new Set(["refused"]))
+		} finally {
+			await page.close()
+		}
 	} finally {
-		await page.close()
 		server.close()
 	}
 })

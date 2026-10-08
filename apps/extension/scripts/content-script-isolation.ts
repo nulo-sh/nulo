@@ -24,12 +24,10 @@ export function withoutContentScriptResources(manifest: Manifest): Manifest {
 }
 
 /**
- * Builds the content script as one self-contained file, so no web page can detect the install by
- * fetching a web-accessible chunk at its fixed URL. Every module the script reaches resolves under an
- * id of its own, so the bundler never moves it into a chunk another entry shares; crxjs then injects
- * the import-free chunk directly, with no loader and no `import()` that needs the file exposed. A
- * script that imports a chunk again gets crxjs's loader back, which the third-party-notices policy
- * refuses as an unclaimed asset.
+ * Keeps the content script's module graph out of every shared chunk, so crxjs injects it as one
+ * import-free file and no page can detect the install by fetching a web-accessible chunk. A build
+ * that gives the script an import again gets crxjs's loader back, which the third-party-notices
+ * policy refuses as an unclaimed asset.
  */
 export function contentScriptIsolation(): Plugin[] {
 	let entry = ""
@@ -44,6 +42,7 @@ export function contentScriptIsolation(): Plugin[] {
 			async resolveId(source, importer, options) {
 				if (!importer || (importer !== entry && !MARK.test(importer))) return null
 				const resolved = await this.resolve(source, importer.replace(MARK, ""), { ...options, skipSelf: true })
+				// A virtual module's own plugin loads it by its exact id, so it keeps that id.
 				if (!resolved || resolved.external || resolved.id.startsWith("\0")) return resolved
 				return { ...resolved, id: isolatedId(resolved.id) }
 			},

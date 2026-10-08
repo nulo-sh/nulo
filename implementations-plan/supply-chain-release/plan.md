@@ -849,6 +849,14 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 - [Low] Comments: the stale preflight comment in `action.yml`, the `manifest.test.ts` comment repeating SECURITY.md, the description duplicating SECURITY.md. Accepted (each cut to one sentence or a pointer).
 - Its "looks fine": errexit in the overrides, no network path left for Foundry or npm resolution, the pinned files, the lockfile, the Foundry member check, the cache key and filters, both Docker volume cases.
 
+### Arc 2 implementation, Codex round 2 (same session)
+
+**Verdict:** `approve with fixes`. Diff `66ace77..5a0e83b` (both reviewers' fixes and the #22 change). Fixes in the next commit.
+- [Low] `SKILL.md` claimed `install.sh` refuses an npm step that installs another package; a second `npm install` line passes its anchor checks (Codex confirmed). Accepted: the skill now says the checks catch a lost anchor, not added work, and asks for both bodies to be read whole.
+- [Low] The smoke check could leak its HTTP server if `newPage` or `page.close()` rejected. Accepted: the server closes in its own `finally`.
+- [Low] The isolation plugin's comment promised every module stays isolated, while virtual ids and earlier resolvers are exempt. Accepted: cut to what the build guarantees (the current graph stays out of shared chunks; the notices policy refuses the loader if an import returns), plus one line on why virtual ids keep theirs.
+- Its "looks fine": the round-1 fixes; both built manifests without `web_accessible_resources` and no loader asset; crxjs checks static and dynamic imports before emitting a loader; the notices collector keeps marked ids and strips the query for attribution; the manifest hook runs after crxjs's on both browsers; the smoke control; SECURITY.md, the README and the vendor-chunks comment describe the current build.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so there is no `/code-review` pass.
