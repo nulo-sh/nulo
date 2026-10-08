@@ -226,7 +226,7 @@ describe("the ladder's order and reasons", () => {
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: block not found`]])
 	})
 
-	test("getNode sits outside the fee catch: its rejection propagates", async () => {
+	test("the fee step's getNode sits outside its catch: a rejection there propagates", async () => {
 		const down = new Error("node down")
 		const { reuse } = harness({
 			deps: {

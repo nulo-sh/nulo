@@ -223,6 +223,7 @@ async function makeHarness() {
 			onFpcUpdated: { add: () => {} },
 			onFpcDeleted: { add: () => {} },
 			getFpc: async () => ({ ...SPONSOR }),
+			getFpcImpl: async () => ({ infoData: { ...SPONSOR } }),
 		}),
 	)
 	collection.add(svc(ContactService.name, {}))

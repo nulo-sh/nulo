@@ -23,6 +23,7 @@ import { requireActiveProfile } from "@/wallet/services/profile/require-active-p
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { FpcService, FpcType } from "@/wallet/services/fpc/service"
+import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransactionService, OriginType, type TransferType, type LocalTxOrigin, TxStatus } from "@/wallet/services/transaction/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
@@ -295,7 +296,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
-			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
+			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
@@ -304,7 +305,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
-			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
+			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			logDebug: (msg) => this.logDebug(msg),
 		})
@@ -318,6 +319,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			logDebug: (msg) => this.logDebug(msg),
 		})
+	}
+
+	/** The sponsor row decorated as a build decorates it (`getFpcImpl` derives the protocol
+	 *  addresses; `getFpc` reads a cache a purge of the same chain id in another profile empties). */
+	private async sponsorRow(fpcId: string): Promise<FpcInfo> {
+		return (await this.fpcService.getFpcImpl(fpcId)).infoData
 	}
 
 	/** The live pair, asserted against the network row: what a reused request skipped at build. */
