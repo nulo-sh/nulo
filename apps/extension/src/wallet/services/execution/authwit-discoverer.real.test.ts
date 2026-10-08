@@ -295,9 +295,7 @@ describe("AuthwitDiscoverer — call and encoded-call hashes and the selector bi
 			const content = { kind: "encoded_call", caller, to, selector, args: [], name, type: "lie" }
 			const refused = await rejectionOf(encoded(content))
 			expect(refused.constructor).toBe(Error)
-			expect(refused.message).toBe(
-				`Scope violation: authwit call name "${name}" does not match selector's function "${fn.name}" on ${to}`,
-			)
+			expect(refused.message).toBe("Scope violation: authwit call name does not match selector's function")
 			expect(content.type).toBe("lie")
 		}
 	})

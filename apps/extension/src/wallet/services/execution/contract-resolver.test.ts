@@ -189,8 +189,16 @@ describe("ContractResolver.resolveArtifacts", () => {
 
 // ── Function lookups + ensure-registered ─────────────────────────────────
 
-import { findFunctionByName, findFunctionBySelector } from "./contract-resolver"
-import { FunctionSelector } from "@aztec-labs/stdlib/abi"
+import {
+	AUTHWIT_CALL_BINDING,
+	assertSelectorBinding,
+	CALL_BINDING,
+	findFunctionByName,
+	findFunctionBySelector,
+	NAMED_CALL_BINDING,
+	type SelectorBindingPolicy,
+} from "./contract-resolver"
+import { type FunctionAbi, FunctionSelector } from "@aztec-labs/stdlib/abi"
 
 // Selector derivation hits Barretenberg's poseidon hash, which isn't
 // booted in the unit environment. Stub ONLY fromNameAndParameters with a
@@ -322,5 +330,41 @@ describe("ensureRegistered", () => {
 		} as unknown as IPXE
 		await ensureRegistered(pxe, "0xexisting", instance, artifact)
 		expect(registerContract).not.toHaveBeenCalled()
+	})
+})
+
+describe("assertSelectorBinding: a refusal names the policy, never the call", () => {
+	const fn = fakeFn("transfer_public_to_public") as unknown as FunctionAbi
+	const to = `0x${"2f".repeat(32)}`
+
+	function refusalOf(claim: { name?: string; to: string }, policy: SelectorBindingPolicy): Error {
+		try {
+			assertSelectorBinding(fn, claim, policy)
+		} catch (error) {
+			return error as Error
+		}
+		throw new Error("expected a refusal")
+	}
+
+	test.each([
+		["a call", CALL_BINDING, "balance_of_public", "Scope violation: call name does not match selector's function"],
+		[
+			"an authwit call",
+			AUTHWIT_CALL_BINDING,
+			"balance_of_public",
+			"Scope violation: authwit call name does not match selector's function",
+		],
+		["a fast-path call", NAMED_CALL_BINDING, "balance_of_public", "Scope violation: call name does not match selector's function"],
+		["a fast-path call without a name", NAMED_CALL_BINDING, undefined, "Scope violation: call name does not match selector's function"],
+	])("%s: the refusal is the fixed text", (_label, policy, name, text) => {
+		const refused = refusalOf({ name, to }, policy)
+		expect(refused.constructor).toBe(Error)
+		expect(refused.message).toBe(text)
+		for (const value of [String(name), fn.name, to, to.slice(2)]) expect(refused.message).not.toContain(value)
+	})
+
+	test("a matching name, or an absent one where the policy allows it, returns the selector's function", () => {
+		expect(assertSelectorBinding(fn, { name: fn.name }, NAMED_CALL_BINDING)).toBe(fn)
+		expect(assertSelectorBinding(fn, {}, CALL_BINDING)).toBe(fn)
 	})
 })

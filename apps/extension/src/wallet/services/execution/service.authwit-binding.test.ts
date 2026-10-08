@@ -134,9 +134,7 @@ describe("aztec_createAuthWit: the selector binding of a call intent", () => {
 			const { facade, createAuthWit } = makeFacade()
 			const refused = await rejectionOf(facade.executeAztecCreateAuthWit(op(callIntent({ name, selector })), FENCE))
 			expect(refused.constructor).toBe(Error)
-			expect(refused.message).toBe(
-				`Scope violation: authwit call name "${name}" does not match selector's function "${FN.name}" on ${TO}`,
-			)
+			expect(refused.message).toBe("Scope violation: authwit call name does not match selector's function")
 			expect(createAuthWit).not.toHaveBeenCalled()
 		}
 	})
