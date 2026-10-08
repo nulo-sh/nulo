@@ -23,3 +23,7 @@ Proofs of safety recorded by the review, kept here because they are the argument
 ## Round 2 fixes
 
 Five files under `apps/extension`, +5/−15: the R1 wait in `tests/e2e/wallet-lock.test.ts`, the R3 trims in `useLockWallet.ts`, `useLockWallet.test.ts`, `settings-labels.test.ts` and `Settings.stories.ts`. Proof: `wallet-lock.test.ts` three times on Chrome (Lock now test 3.8 to 4.0s, file 17.6 to 20.5s) and once on Firefox (4.3s, file 21.4s), no retries, against the existing builds (newer than every production source change); `bun run lint` exit 0; the two unit files 38/38. Round 3 (resumed, on this fix diff) decides convergence.
+
+## Round 3: resumed, on the fix diff
+
+Verdict: `approve`. "No new material findings." R1, R2 and R3 confirmed resolved; the only executable change is the added e2e assertion. One caveat recorded, no change: the live redirect awaits `getProfiles()` (`popup/locked-state.ts:49`) and the transport timeout is 60 seconds, so the 15-second budget has no proven upper bound; the four runs at 3.8 to 4.3 seconds and the reopen path's own 10-second budget support keeping it. The loop converged: three rounds, one fix commit (`7d544bd`).
