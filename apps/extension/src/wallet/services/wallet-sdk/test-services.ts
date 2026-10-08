@@ -72,6 +72,7 @@ export function fakeSdkServices(
 				},
 				"dapp-session": {
 					onDappSessionDeleted: new EventHandler<unknown>(),
+					onVerificationRefused: new EventHandler<unknown>(),
 					tryGetDappSessionByOriginAndChain: async (origin: string, chainId: string) => rows.get(`${origin}|${chainId}`),
 					addDappSession: async (metadata: { url: string }, _p: unknown, _a: unknown, _l: unknown, chainId: string) => {
 						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId, trustedVerification: false }

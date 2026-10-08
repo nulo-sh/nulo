@@ -57,6 +57,10 @@ function makeProfileStub() {
 			if (recoveryProfiles.has(profileId)) throw new RecoveryModeError()
 			return realMacKey(profileId)
 		}),
+		isFenceLive: vi.fn(
+			(fence: { profileId: string; epoch: number }) =>
+				activeProfile?.id === fence.profileId && deletionState.isCurrent(fence.profileId, fence.epoch),
+		),
 		async start() {},
 	}
 }
@@ -456,5 +460,82 @@ describe("the authorizations consent", () => {
 		await collection.start()
 		const row = await reader.getDappSession(id)
 		expect(row.capabilityGrants?.slice(1)).toEqual(projected)
+	})
+})
+
+describe("refuseVerification", () => {
+	const ORIGIN = "https://dapp.example"
+	const target = (rowId = "p1-row") => ({ rowId, origin: ORIGIN, chainId: "1", profileId: "p1" })
+
+	/** As the real provider: no key while locked or for a profile that is not the active one. */
+	async function makeLockAwareService() {
+		const made = await makeService()
+		made.profileStub.deriveDappSessionMacKey.mockImplementation(async (profileId: string) => {
+			if (activeProfile?.id !== profileId) throw new Error("Wallet locked")
+			return realMacKey(profileId)
+		})
+		const refused: unknown[] = []
+		const deleted: Array<{ id: string }> = []
+		made.service.onVerificationRefused.add((tuple) => refused.push(tuple))
+		made.service.onDappSessionDeleted.add((row) => deleted.push(row))
+		const stored = async () =>
+			Object.keys((await made.browserApi.storage.local.get(null)) as Record<string, unknown>).filter((k) =>
+				k.startsWith(`${ROW_ROOT}@`),
+			)
+		return { ...made, refused, deleted, stored }
+	}
+
+	test.each([
+		["the row is stored", true, { id: "p1" }, "revoked"],
+		["the row is gone and nothing replaced it", false, { id: "p1" }, "absent"],
+		["the row is gone and the wallet is locked", false, undefined, "unavailable"],
+	] as const)("ends the app's live channels when %s", async (_, stored, active, result) => {
+		const svc = await makeLockAwareService()
+		if (stored) await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		activeProfile = active
+		expect(await svc.service.refuseVerification(target())).toBe(result)
+		expect(svc.refused).toEqual([{ origin: ORIGIN, chainId: "1" }])
+	})
+
+	test("locked, the stored row is still deleted, with one delete event naming its storage key", async () => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		activeProfile = undefined
+		expect(await svc.service.refuseVerification(target())).toBe("revoked")
+		expect(await svc.stored()).toEqual([])
+		expect(svc.deleted.map((row) => row.id)).toEqual(["p1-row"])
+	})
+
+	test("with the row gone, a replacement row for the app is deleted under the owner, and another profile's is kept", async () => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "replacement" }, "p1")
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-chain", chainId: "2" }, "p1")
+		await plantRowSignedBy(svc.browserApi, rowFor("p2"), "p2")
+		expect(await svc.service.refuseVerification(target("gone-row"))).toBe("revoked")
+		expect(await svc.stored()).toEqual([`${ROW_ROOT}@other-chain`, `${ROW_ROOT}@p2-row`])
+		expect(svc.deleted.map((row) => row.id)).toEqual(["replacement"])
+	})
+
+	test.each([
+		["a lock", () => undefined],
+		["a switch", () => ({ id: "p2" })],
+	])("%s landing during the replacement lookup answers unavailable, never absent", async (_, next) => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "replacement" }, "p1")
+		svc.profileStub.deriveDappSessionMacKey.mockImplementationOnce(async () => {
+			activeProfile = next()
+			throw new Error("Wallet locked")
+		})
+		expect(await svc.service.refuseVerification(target("gone-row"))).toBe("unavailable")
+		expect(await svc.stored()).toEqual([`${ROW_ROOT}@replacement`])
+	})
+
+	test.each([
+		["no row id", { ...target(), rowId: "" }],
+		["no origin", { ...target(), origin: undefined }],
+	])("refuses a target with %s before ending anything", async (_, bad) => {
+		const svc = await makeLockAwareService()
+		await expect(svc.service.refuseVerification(bad as never)).rejects.toBeInstanceOf(ValidationError)
+		expect(svc.refused).toEqual([])
 	})
 })
