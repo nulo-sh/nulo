@@ -113,6 +113,12 @@ grep -Fxv -e 'main "$@"' -e 'exit' "$INSTALLER" > "$WORK/installer-functions.sh"
 	[ "$VERSION" = "$AZTEC_VERSION" ] || fail "the installer pinned for $AZTEC_VERSION installs $VERSION."
 	declare -F install_foundry install_aztec_packages main > /dev/null ||
 		fail "the pinned installer no longer defines install_foundry, install_aztec_packages and main."
+	# The overrides stand in for exactly these steps; one that now installs more would be dropped.
+	# shellcheck disable=SC2016 # matched literally against the installer's source.
+	if [[ "$(declare -f install_aztec_packages)" != *'npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix'* ]] ||
+		[[ "$(declare -f install_foundry)" != *'for binary in forge cast anvil chisel;'* ]]; then
+		fail "the pinned installer's npm or Foundry step changed; re-read it before re-pinning."
+	fi
 
 	# The installer runs these in `retry`/`dump_fail` subshells, which inherit the overrides but
 	# turn errexit off: each body sets it again, as upstream's do, or a failed step would pass.
@@ -140,4 +146,7 @@ grep -Fxv -e 'main "$@"' -e 'exit' "$INSTALLER" > "$WORK/installer-functions.sh"
 
 	main
 )
-ls -la "${AZTEC_HOME:-$HOME/.aztec}/versions/$AZTEC_VERSION/bin/"
+# Upstream's retry counts a SIGTERM as success and a skipped install script fails only on load, so
+# the install is judged by whether the node it installed can load.
+(cd "${AZTEC_HOME:-$HOME/.aztec}/versions/$AZTEC_VERSION" && node --input-type=module -e "await import('@aztec-labs/aztec-node')") ||
+	fail "the installed @aztec-labs/aztec-node does not load."

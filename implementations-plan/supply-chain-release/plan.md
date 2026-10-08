@@ -594,7 +594,7 @@ Pass: each exits 0.
 - `actions/attest-build-provenance` v4.2.2 is pinned by SHA (`4d101475…`). It is a composite wrapper over `actions/attest@508db95d… # v4.2.1`. Both are GitHub's first-party actions, older than 7 days (published 2026-08-06 and 2026-07-29).
 - The npm tree for the Aztec CLI moves from "resolved at install time, scripts on" to "a committed lockfile with integrity, scripts off, an explicit rebuild allowlist". The trust root becomes the registry at lock time (trust on first use), plus review of the lockfile diff at each Aztec bump. The two `@aztec-labs` packages stay exempt from the age gate, as today; their bytes are now locked by integrity.
 - Foundry moves from a moving `HEAD` script plus an unverified binary to one SHA-256-pinned tarball, checked once against Foundry's own GitHub attestation.
-- Accepted residual: a restored toolchain cache is trusted after `--version` probes only. Caches are scoped by ref: a poisoned entry that a run on `dev` or `main` restores needs a run on that branch to write it; a pull request's own cache serves only that pull request.
+- Accepted residual: a restored toolchain cache is trusted after `--version` probes only. A run restores caches written on its own ref or on `dev` (the default branch), and a pull request writes only its own, so a poisoned entry that `dev` or `main` restores needs code merged to one of them.
 - Accepted residual: git-cliff-action still downloads an unpinned git-cliff binary, now in a read-only job whose only output is the notes text.
 - Accepted residual: releases published before S3 stay mutable for good. A dispatch with `--ref <pre-Arc-1 tag>` runs that tag's old workflow, which still uploads with `--clobber`, and nothing in new code can stop it. Only write-access accounts can dispatch, and the runbook forbids it (A11).
 - `bun audit` becomes blocking for dependency changes. An acknowledgement is added only through a reviewed PR, and a stale one fails.
@@ -823,6 +823,16 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 ### Arc 1 implementation, Codex round 3 (same session)
 
 **Verdict:** `approve`, no new material findings, on diff `7a271a1..eb03f15`. The loop converged in three rounds.
+
+### Arc 2 implementation, Codex round 1 (GPT-6.1 Sol, high), session `01a11d05-b909-7df3-9059-185cb4fc5280`
+
+**Verdict:** `approve with fixes`. Diff `f5ca160..66ace77`. Fixes in `bfc90d6`.
+- [Medium] `unhashedSources` exempted `link` entries, so a local directory would pass the "registry tarball" pin. Accepted: only bundled entries stay exempt; a `link` control added, shown to fail with the old exemption.
+- [Low] The docker stamp replaced the binary-presence check, so a volume whose stamp matched but lost a tool skipped the install. Accepted: it reinstalls when any of the four tools `global-setup.ts` needs is missing, or the stamp differs.
+- [Low] "Only a run on `dev` or `main` can write the cache" was too broad. Accepted: SECURITY.md and § Security now state GitHub's ref scoping.
+- [Low] § Security still claimed #22 closed. Accepted: rewritten to the measured outcome.
+- [Low] Comment density. Accepted for the test header and `install.sh`'s header (each cut to its contract). Rejected for the preflight comment in `action.yml`: unchanged by this arc, and still accurate.
+- Its "looks fine": the overrides cover every Foundry and npm path of the pinned installer; the lockfile; the cache key and both lanes' filters; the #22 stop (no small supported option found); no release-path regression.
 
 ## Post-implementation
 

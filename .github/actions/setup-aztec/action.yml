@@ -4,12 +4,8 @@ description: |
   cached by version and by the content of this directory. `install.sh` does the install; the
   local Docker runner (apps/extension/scripts/e2e/docker-ci-like.sh) runs the same script.
 
-  Trust posture: every download (the per-version installer, its `versions` manifest, and the noir
-  and Foundry release tarballs that manifest names) is SHA-256-pinned in `installer-pins.sha256`
-  and checked before use. The installer runs from the verified file, never from a pipe, with its
-  Foundry step replaced by a copy of the verified tarball's four binaries and its npm step by
-  `npm ci --ignore-scripts` against the committed `cli/package-lock.json`, plus a rebuild of the
-  packages `install.sh` allowlists. Node itself comes from setup-node.
+  Every download is SHA-256-pinned in `installer-pins.sha256` and the npm tree is locked in
+  `cli/package-lock.json`; SECURITY.md § Binary dependencies has the trust posture.
 
 inputs:
   skip_cli:
@@ -58,12 +54,7 @@ runs:
         AZTEC_VERSION: ${{ steps.detect.outputs.version }}
       run: bash "$GITHUB_ACTION_PATH/install.sh"
 
-    # Fail-loud toolchain preflight, on BOTH the cache-hit and fresh-install
-    # paths: the L1 deploy depends on the pin's bundled forge/anvil
-    # (internal-bin outranks every other resolveFoundryBinary source once
-    # `current` is symlinked). If a future aztec installer stops shipping them,
-    # this step names the cause at setup instead of a confusing
-    # missing-arguments failure mid-sandbox-boot.
+    # On a cache hit nothing else checks the restored forge/anvil, which the L1 deploy resolves first.
     - name: Assert bundled Foundry toolchain
       if: inputs.skip_cli != 'true'
       shell: bash

@@ -96,6 +96,10 @@ describe("the callers", () => {
     expect(ownInstallers(script)).toEqual([])
   })
 
+  test("install.sh installs the npm tree from the lockfile with install scripts off", () => {
+    expect(read(".github/actions/setup-aztec/install.sh")).toMatch(/^\s*npm ci [^\n]*--ignore-scripts/m)
+  })
+
   test("a caller that pipes Foundry's installer again is refused", () => {
     const script = `${read("apps/extension/scripts/e2e/docker-ci-like.sh")}\ncurl -L https://foundry.paradigm.xyz | bash\n`
     expect(ownInstallers(script)).toHaveLength(1)

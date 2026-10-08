@@ -527,9 +527,10 @@ which the local Docker runner (`docker-ci-like.sh`) runs too:
   bump's lockfile diff is reviewed), Aztec's install host and the noir and
   Foundry release pipelines when they are pinned, Node from
   `actions/setup-node`, and a restored toolchain cache, checked only by
-  `--version` probes. GitHub scopes caches by ref: the one a run on `dev` or
-  `main` restores can only have been written by a run on that branch, and a
-  pull request's own cache serves only that pull request's runs.
+  `--version` probes. A run restores caches written on its own ref or on
+  `dev`, the default branch; a pull request also restores its base branch's
+  and writes only its own, so poisoning what `dev` or `main` restores takes
+  code merged to one of them.
 
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is

@@ -6,3 +6,7 @@
 - **Stopped per the plan's step 3.** Hook, wiring and smoke check reverted; SECURITY.md and `manifest.test.ts` now state the exposure and why `use_dynamic_url` cannot close it; OWNER-ASKS.md carries the options, recommending a self-contained content-script build.
 - **`git checkout <file>` to undo a temporary edit also drops uncommitted work in that file.** Back the file up instead.
 - **`pkill -f '<pattern>'` matches the shell running a chain whose command line holds the pattern**, including the agent's own Bash call. It killed the background chain after Firefox discovery had passed; its last child (`pxe-host-state`, against the broken build) was then stopped by its own process group (`kill -TERM -<pgid>`), whose teardown reaped the anvil it had started. Use the pgid from the start.
+
+## Arc 2 review, round 1
+
+- **Codex: `approve with fixes`, 5 findings, 4 accepted in full, 1 in part** (plan § Audit verdicts). The useful one: an exemption written for a shape the lockfile does not have today (`link`) is a hole the next regeneration can walk through; exempt only what another check covers (bundled entries ride their parent's integrity).
