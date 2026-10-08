@@ -10,3 +10,5 @@
 - 2026-10-08: Phase 3 gate PASS: lint, typecheck:all, test, test:all, test:ci-gating, test:release, lint:actions, release-integrity.test.ts, actionlint; the three git-cliff 2.14.2 renders (stable, rc on a scratch clone, nightly) name release.yml / release.yml / nightly.yml and, after the runner's substitution, each tag's own commit. I8 did not hold (see plan).
 - 2026-10-08: Arc 1 review round 1: Codex `approve with fixes` (4/4 accepted), Opus (8 accepted, 1 no-change); fixes `cf8ecb3`; test:ci-gating 368/0, test:release 213/0, lint, lint:actions PASS.
 - 2026-10-08: Arc 1 review rounds 2 and 3: Codex `approve with fixes` (1 accepted, `eb03f15`), then `approve` with no new material findings. Loop closed.
+- 2026-10-08: Arc 1 final gate PASS on `916c347`: lint, typecheck:all, test:all, test:ci-gating (368/0), test:release (215/0), lint:actions, check:plans. PR #50 opened (ready, no labels).
+- 2026-10-08: S1 applied, ruleset id `24737631`; readback matches (plan § S1).

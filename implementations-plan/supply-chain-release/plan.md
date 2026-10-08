@@ -302,6 +302,8 @@ JSON
   4. Read back.
 - **Undo:** `gh api -X DELETE repos/nulo-sh/nulo/rulesets/<id>`. Readback: the first readback command prints nothing.
 
+- **Applied 2026-10-08, id `24737631`**, after Arc 1's PR (#50) opened with every local gate green. Readback 1: `{"enforcement":"active","id":24737631,"name":"release tags: no deletion or update"}` (the only tag ruleset). Readback 2: `{"bypass_actors":[],"conditions":{"ref_name":{"exclude":[],"include":["refs/tags/v*"]}},"enforcement":"active","rules":["deletion","non_fast_forward","update"],"target":"tag"}`, as expected. CLAUDE.md § Tag rulesets carries the id.
+
 ### S2: tag ruleset "release tags: creation by the release app and the owner"
 
 **When:** all four hold:
