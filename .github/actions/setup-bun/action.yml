@@ -1,6 +1,7 @@
 name: Setup Bun
 description: |
-  Install Bun, restore the install cache, and run `bun install --frozen-lockfile`.
+  Install Bun, restore the install cache, and run `bun install --frozen-lockfile` unless `install`
+  is "false".
   Callers must `actions/checkout@v7` before invoking this action — it does NOT
   check out the repo itself. Removed the inner checkout because every direct
   caller in this repo already checks out first (verified in build-caching-plan
@@ -17,6 +18,12 @@ inputs:
       Bun never re-checks cached files against the lockfile, and the install runs trusted
       packages' lifecycle scripts, so a poisoned cache would ship in the zips or run beside the
       token.
+    required: false
+    default: "true"
+  install:
+    description: |
+      "false" installs Bun alone. A job that signs, tags or publishes needs only Bun built-ins, and a
+      dependency install would run lifecycle scripts beside its credentials.
     required: false
     default: "true"
 
@@ -36,5 +43,6 @@ runs:
           ${{ runner.os }}-bun-1.4.2-
           ${{ runner.os }}-bun-
 
-    - shell: bash
+    - if: inputs.install == 'true'
+      shell: bash
       run: bun install --frozen-lockfile

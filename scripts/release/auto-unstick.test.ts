@@ -37,6 +37,12 @@ describe("decideUnstick — guards (no action)", () => {
 		const pr = { number: 1, merged: true, baseRef: "main", labels: ["feat"], mergeSha: MERGE }
 		expect(decideUnstick(stuck({ mergedPr: pr })).action).toBe("noop")
 	})
+	test("a Release PR whose merge commit is not HEAD → noop, never a tag at another commit", () => {
+		const pr = { number: 1, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: "0".repeat(40) }
+		const d = decideUnstick(stuck({ mergedPr: pr }))
+		expect(d.action).toBe("noop")
+		expect(d.tagSha).toBeUndefined()
+	})
 	test("an un-merged PR head → noop", () => {
 		const pr = { number: 1, merged: false, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE }
 		expect(decideUnstick(stuck({ mergedPr: pr })).action).toBe("noop")

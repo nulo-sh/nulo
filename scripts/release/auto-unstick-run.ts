@@ -121,36 +121,35 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 if (import.meta.main) {
 	const { $ } = await import("bun")
 	const repo = process.env.GITHUB_REPOSITORY ?? ""
-	// github-actions[bot] identity for the annotated tag (tags need no signature —
-	// main's signed-commits rule covers commits, and the tag points at the already
-	// bot-signed merge commit).
-	const BOT_NAME = "github-actions[bot]"
-	const BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 
 	const realIO: UnstickIO = {
 		async resolveMergedPr(headSha) {
-			const res = await $`gh api ${`repos/${repo}/commits/${headSha}/pulls`} --jq ${".[0] // empty"}`.nothrow().quiet()
+			const res = await $`gh api ${`repos/${repo}/commits/${headSha}/pulls`} --jq ${".[]"}`.nothrow().quiet()
 			// Fail LOUD on a transport/auth/rate-limit error. Returning null here would be
 			// indistinguishable from "no Release PR" → a silent noop → a stuck-but-green
 			// release. A commit with no PRs is exit 0 + empty output (handled below).
 			if (res.exitCode !== 0) throw new Error(`gh api commits/${headSha}/pulls failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`)
-			const out = res.stdout.toString().trim()
-			if (!out) return null
-			const pr = JSON.parse(out) as {
-				number?: number
-				merged_at?: string | null
-				base?: { ref?: string }
-				labels?: Array<{ name: string }>
-				merge_commit_sha?: string
+			// One JSON object per line. GitHub also associates a commit with PRs that merely contain
+			// it, so only the PR this commit merged counts.
+			for (const line of res.stdout.toString().split("\n")) {
+				if (!line.trim()) continue
+				const pr = JSON.parse(line) as {
+					number?: number
+					merged_at?: string | null
+					base?: { ref?: string }
+					labels?: Array<{ name: string }>
+					merge_commit_sha?: string
+				}
+				if (!pr.number || pr.merge_commit_sha !== headSha) continue
+				return {
+					number: pr.number,
+					merged: pr.merged_at != null,
+					baseRef: pr.base?.ref ?? "",
+					labels: (pr.labels ?? []).map((l) => l.name),
+					mergeSha: headSha,
+				}
 			}
-			if (!pr.number) return null
-			return {
-				number: pr.number,
-				merged: pr.merged_at != null,
-				baseRef: pr.base?.ref ?? "",
-				labels: (pr.labels ?? []).map((l) => l.name),
-				mergeSha: pr.merge_commit_sha ?? "",
-			}
+			return null
 		},
 		async resolveTagSha(tag) {
 			const ref = `${tag}^{commit}`
@@ -159,8 +158,10 @@ if (import.meta.main) {
 			return res.stdout.toString().trim() || null
 		},
 		async createTag(tag, sha, message) {
-			await $`git -c user.name=${BOT_NAME} -c user.email=${BOT_EMAIL} tag -a ${tag} ${sha} -m ${message}`
-			await $`git push origin ${tag}`
+			// Through the API, so the tag's creator is the token's App and no credential enters .git/config.
+			// No tagger is sent: GitHub records the token's identity.
+			const object = (await $`gh api -X POST ${`repos/${repo}/git/tags`} -f tag=${tag} -f message=${message} -f object=${sha} -f type=commit --jq .sha`.text()).trim()
+			await $`gh api -X POST ${`repos/${repo}/git/refs`} -f ref=${`refs/tags/${tag}`} -f sha=${object}`.quiet()
 		},
 		async relabelPr(prNumber, add, remove) {
 			// `gh pr edit --add-label` FAILS if the label isn't defined in the repo. The

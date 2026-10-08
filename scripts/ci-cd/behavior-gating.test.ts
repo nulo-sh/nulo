@@ -707,14 +707,16 @@ describe("Bun's install cache", () => {
   const SETUP_BUN = "./.github/actions/setup-bun"
   type Step = { uses?: string; with?: Record<string, unknown>; if?: unknown }
   type Job = { uses?: string; permissions?: unknown; steps?: Step[] }
-  const holdsWrite = (permissions: unknown): boolean =>
-    permissions === "write-all" ||
-    (typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write"))
   /** A job's own steps, or every step of the local reusable workflow it calls. */
   const stepsOf = (job: Job): Step[] =>
     job.uses?.startsWith("./.github/workflows/")
       ? (Object.values(parse(job.uses.slice(2)).jobs) as Job[]).flatMap((called) => called.steps ?? [])
       : (job.steps ?? [])
+  /** Any write scope (`id-token` and `attestations` included), or an App token minted whatever the block says. */
+  const holdsWrite = (permissions: unknown, job: Job): boolean =>
+    permissions === "write-all" ||
+    (typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write")) ||
+    stepsOf(job).some((step) => step.uses?.startsWith("actions/create-github-app-token@"))
 
   test("the composite restores it only when asked", () => {
     const action = parse(".github/actions/setup-bun/action.yml")
@@ -736,7 +738,7 @@ describe("Bun's install cache", () => {
       const wf = parse(`.github/workflows/${file}`)
       for (const [name, job] of Object.entries(wf.jobs ?? {}) as [string, Job][]) {
         // A job's own block replaces the workflow's rather than adding to it.
-        if (!holdsWrite(job.permissions ?? wf.permissions)) continue
+        if (!holdsWrite(job.permissions ?? wf.permissions, job)) continue
         for (const step of stepsOf(job).filter((step) => step.uses === SETUP_BUN)) {
           expect(step.with?.cache, `${file} → ${name}`).toBe("false")
           checked++

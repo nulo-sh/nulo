@@ -435,82 +435,22 @@ jobs:
       artifact_name: extension-firefox
       browser: firefox
 
-  publish-nightly:
-    needs:
-      [
-        resolve,
-        lint-and-typecheck,
-        unit-tests,
-        network-e2e,
-        network-e2e-heavy,
-        network-e2e-heavy-concurrent,
-        network-e2e-canary,
-        build-chrome,
-        build-firefox,
-        smoke-against-artifact,
-      ]
-    # Fail-closed: EVERY gate must be exactly 'success'. A skipped gate is not
-    # reachable when resolve succeeded with skip=false, but enumerating success
-    # (instead of only rejecting failure/cancelled) makes a future graph edit
-    # that introduces a skip path publish-proof by construction.
-    if: |
-      always() &&
-      needs.resolve.result == 'success' &&
-      needs.resolve.outputs.skip != 'true' &&
-      needs.lint-and-typecheck.result == 'success' &&
-      needs.unit-tests.result == 'success' &&
-      needs.network-e2e.result == 'success' &&
-      needs.network-e2e-heavy.result == 'success' &&
-      needs.network-e2e-heavy-concurrent.result == 'success' &&
-      needs.network-e2e-canary.result == 'success' &&
-      needs.build-chrome.result == 'success' &&
-      needs.build-firefox.result == 'success' &&
-      needs.smoke-against-artifact.result == 'success'
+  # git-cliff runs here, in a job that holds no write token and signs nothing: its action downloads
+  # the git-cliff binary at run time. The composed body reaches publish-nightly as an artifact.
+  nightly-notes:
+    needs: resolve
+    if: always() && !cancelled() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
+    timeout-minutes: 5
     env:
-      VERSION: ${{ needs.resolve.outputs.version }}
       TAG: ${{ needs.resolve.outputs.tag }}
       SHA: ${{ needs.resolve.outputs.sha }}
-      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.resolve.outputs.sha }}
           fetch-depth: 0
-      - uses: ./.github/actions/setup-bun
-        with:
-          cache: "false"
-
-      - name: Download Chrome build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: extension-chrome
-          path: dist/release/chrome
-      - name: Download Firefox build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: extension-firefox
-          path: dist/release/firefox
-
-      # Every entry is stamped with the commit's own time and written in a fixed order, so a
-      # rebuild of the same commit with the same zip gives the same bytes. The script is taken
-      # from the workflow's own revision, not the checkout, as release.yml does.
-      - name: Zip artifacts + SHASUMS
-        run: |
-          mkdir -p dist/release
-          git show "${GITHUB_SHA}:scripts/release/zip-reproducible.ts" > "${RUNNER_TEMP}/zip-reproducible.ts"
-          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
-          export SOURCE_DATE_EPOCH
-          bun "${RUNNER_TEMP}/zip-reproducible.ts" dist/release/chrome "dist/release/nulo-chrome-${VERSION}.zip"
-          bun "${RUNNER_TEMP}/zip-reproducible.ts" dist/release/firefox "dist/release/nulo-firefox-${VERSION}.zip"
-          cd dist/release
-          sha256sum \
-            "nulo-chrome-${VERSION}.zip" \
-            "nulo-firefox-${VERSION}.zip" \
-            > SHASUMS256.txt
+          persist-credentials: false
 
       - name: Generate changelog since previous tag (git-cliff)
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
@@ -542,11 +482,101 @@ jobs:
           echo '--- body preview ---'
           cat /tmp/body.md
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-notes
+          path: /tmp/body.md
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-nightly:
+    needs:
+      [
+        resolve,
+        lint-and-typecheck,
+        unit-tests,
+        network-e2e,
+        network-e2e-heavy,
+        network-e2e-heavy-concurrent,
+        network-e2e-canary,
+        build-chrome,
+        build-firefox,
+        smoke-against-artifact,
+        nightly-notes,
+      ]
+    # Fail-closed: EVERY gate must be exactly 'success'. A skipped gate is not
+    # reachable when resolve succeeded with skip=false, but enumerating success
+    # (instead of only rejecting failure/cancelled) makes a future graph edit
+    # that introduces a skip path publish-proof by construction.
+    if: |
+      always() &&
+      needs.resolve.result == 'success' &&
+      needs.resolve.outputs.skip != 'true' &&
+      needs.lint-and-typecheck.result == 'success' &&
+      needs.unit-tests.result == 'success' &&
+      needs.network-e2e.result == 'success' &&
+      needs.network-e2e-heavy.result == 'success' &&
+      needs.network-e2e-heavy-concurrent.result == 'success' &&
+      needs.network-e2e-canary.result == 'success' &&
+      needs.build-chrome.result == 'success' &&
+      needs.build-firefox.result == 'success' &&
+      needs.smoke-against-artifact.result == 'success' &&
+      needs.nightly-notes.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      SHA: ${{ needs.resolve.outputs.sha }}
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+    steps:
+      # The workflow's own revision: the composite action and the scripts below run with this job's
+      # write token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+
+      - name: Download Chrome build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: extension-chrome
+          path: dist/release/chrome
+      - name: Download Firefox build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: extension-firefox
+          path: dist/release/firefox
+      - name: Download release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-notes
+          path: dist/notes
+
+      # Every entry is stamped with the built commit's own time and written in a fixed order, so a
+      # rebuild of the same commit with the same zip gives the same bytes.
+      - name: Zip artifacts + SHASUMS
+        run: |
+          mkdir -p dist/release
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct "$SHA")
+          export SOURCE_DATE_EPOCH
+          bun scripts/release/zip-reproducible.ts dist/release/chrome "dist/release/nulo-chrome-${VERSION}.zip"
+          bun scripts/release/zip-reproducible.ts dist/release/firefox "dist/release/nulo-firefox-${VERSION}.zip"
+          cd dist/release
+          sha256sum \
+            "nulo-chrome-${VERSION}.zip" \
+            "nulo-firefox-${VERSION}.zip" \
+            > SHASUMS256.txt
+
       - name: Create prerelease + upload assets
         if: env.DRY_RUN != 'true'
         env:
-          # Scoped to this step only — the git-cliff step above must not run
-          # with a write-capable token it never needs.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$TAG" \
@@ -556,7 +586,7 @@ jobs:
             --target "$SHA" \
             --prerelease \
             --title "$TAG" \
-            --notes-file /tmp/body.md
+            --notes-file dist/notes/body.md
 
       - name: Dry-run preview (skip publish)
         if: env.DRY_RUN == 'true'
@@ -579,6 +609,7 @@ jobs:
         build-chrome,
         build-firefox,
         smoke-against-artifact,
+        nightly-notes,
         publish-nightly,
       ]
     runs-on: ubuntu-latest
@@ -597,6 +628,7 @@ jobs:
             "${{ needs.build-chrome.result }}" \
             "${{ needs.build-firefox.result }}" \
             "${{ needs.smoke-against-artifact.result }}" \
+            "${{ needs.nightly-notes.result }}" \
             "${{ needs.publish-nightly.result }}" \
           ; do
             if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then

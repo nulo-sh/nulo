@@ -299,6 +299,7 @@ test("release's attach-assets publishes only past gates that all ended as asked,
       "build-firefox",
       "smoke-against-artifact",
       "smoke-firefox-against-artifact",
+      "release-notes",
     ].sort(),
   )
   const clauses = String(job.if)

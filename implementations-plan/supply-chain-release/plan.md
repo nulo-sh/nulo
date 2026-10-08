@@ -1,7 +1,7 @@
 ---
 plan: supply-chain-release
 tier: mid
-status: draft, awaiting approval
+status: approved; arc 1 in implementation
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -10,7 +10,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 sonnet explorers; dual audit (codex gpt-6.1-sol high + opus Plan); final fresh codex pass
 issues: "#21, #12, #22, #20, plus six release and tooling follow-ups"
-base: origin/dev 90f4fb3
+base: origin/dev 90f4fb3 (arc 1 rebased onto e49e4ce)
 ---
 
 # Supply chain and release integrity
@@ -370,7 +370,7 @@ Pass: each exits 0.
 
 ### Arc 1: release integrity
 
-#### Phase 1: clean signing jobs and narrow tokens
+#### Phase 1: clean signing jobs and narrow tokens ✓
 
 1. Add the `install` input to `setup-bun`. Pass `"false"` in `auto-unstick`, `attach-assets`, `sync-main-to-dev` and `publish-nightly`.
 2. Set `persist-credentials: false` on those jobs' checkouts. Move every `GH_TOKEN` to step level.

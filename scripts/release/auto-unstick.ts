@@ -13,9 +13,9 @@
  *
  * Safety, by construction:
  *  - guarded by `autoUnstickEnabled` (the staged-rollout kill switch);
- *  - only acts on a real `push` whose HEAD is a MERGED `autorelease: pending`
- *    Release PR with base `main` (an explicit PR-to-SHA check — never a title
- *    heuristic);
+ *  - only acts on a real `push` whose HEAD is the merge commit of a MERGED
+ *    `autorelease: pending` Release PR with base `main` (an explicit PR-to-SHA
+ *    check — never a title heuristic);
  *  - idempotent: an existing tag at the right SHA → no-op;
  *  - fail-closed: an existing tag at the WRONG SHA → abort (never re-point).
  */
@@ -58,6 +58,8 @@ export function decideUnstick(input: AutoUnstickInput): AutoUnstickDecision {
 
 	const pr = input.mergedPr
 	if (!pr || !pr.merged) return { action: "noop", reason: "HEAD is not a merged PR" }
+	// The tag names the commit this run builds and attests; another commit's PR is not this run's release.
+	if (pr.mergeSha !== input.headSha) return { action: "noop", reason: `PR #${pr.number} merged as ${pr.mergeSha}, not HEAD ${input.headSha}` }
 	if (pr.baseRef !== "main") return { action: "noop", reason: `merged PR targets '${pr.baseRef}', not main` }
 	if (!pr.labels.includes(AUTORELEASE_PENDING_LABEL)) {
 		return { action: "noop", reason: "merged PR is not an unpublished Release PR (no 'autorelease: pending' label)" }
