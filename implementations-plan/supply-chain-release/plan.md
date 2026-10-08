@@ -727,6 +727,12 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | `bun pm diff` (implementation, arc 3) | the added root devDependencies reviewed through `git diff bun.lock` | `bun pm diff` | On Bun 1.4.2 a bare `bun pm diff` looks the root package up on npm (404); the lock diff is two packages, `@types/bun` and `bun-types` 1.4.2. |
 | Home-path guard shape (review, arc 3) | add a home under a mount (`/mnt/<volume>/<user>`) to the shell guard, as the plans gate's `LOCAL_PATH_RE` already counts; the root user's home stays out, since container scripts use it | narrow CLAUDE.md's claim; name this host's prefix | Codex [Medium]: in CI the guard now stands alone, and it missed such homes. The generic shape matches the plans gate and names no host. |
 | commitlint test runtime (review, arc 3) | the CLI runs on Bun (`process.execPath`) | rely on `_unit-tests.yml`'s Node 24 step | Opus [Low]: `@commitlint/cli` needs Node ≥ 22.12 and the test leaned on a step added for another reason; it behaves the same on Bun. |
+| vue version (implementation, arc 4) | 3.5.42 exactly, floors raised to `^3.5.42` | 3.5.43, what `^3.5.42` resolves to | 3.5.43 adds a dozen runtime, reactivity and suspense changes past the fix; the plan names 3.5.42, the smallest bump that clears the advisory (phase 8 lesson has the resolution steps). |
+| Ack file shape (implementation, arc 4) | groups that share `bundled`, `reason` and `revisit`, each listing its advisories (id, package, range, severity); an id appears once in the file | one flat entry per id | 23 undici entries would repeat one reason; a group keeps one sentence per cause, and every id still carries the fields it is matched on. |
+| Exit code and report (implementation, arc 4) | exit 0 must come with `{}` and exit 1 with findings; anything else is unreadable | trust either alone | With `--audit-level=low` the two always agree; a disagreement means the tool did not do what the gate assumes. |
+| Mode diff (implementation, arc 4) | `mode --base <sha> --head <sha>`: `git diff` from the merge base to the PR head, with `--no-textconv`, `--no-renames` and fixed prefixes; a hunk's lines are content, never headers | diff of the checkout's merge commit | The PR's own change, rendered the same whatever the runner's git config. |
+| Audit step output (implementation, arc 4) | the gate's summary replaces the advisory `--audit-level=moderate` text dump; the JSON stays an artifact | keep both | One audit call, one summary that names what is acknowledged and why. |
+| `changes` job timeout (implementation, arc 4) | 5 minutes | 2 | It now installs Bun and runs `git merge-base` on deps PRs; a timeout there would fail `quality-status`. |
 
 **Unresolved disagreements.** None blocking.
 - Opus preferred `--source-ref`; the plan pins `--source-digest` for the reason in the ledger.
@@ -887,6 +893,25 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 ### Arc 3 implementation, Codex round 2 (same session)
 
 **Verdict:** `approve`, no new findings, on diff `bd6c67d..d8893c7`. The loop converged in two rounds. Its "looks fine": no tracked file matches the mount shape; the extension's `@types/bun` pin reuses the locked 1.4.2, changes no resolution and adds nothing to the notices; the commitlint test needs no ambient Node; the comments.
+
+### Arc 4 implementation, Codex round 1 (GPT-6.1 Sol, high), session `01a11dd8-a43b-7d52-a4bd-d2292d973554`
+
+**Verdict:** `approve with fixes`. Diff `86a89c5..44b0dae`. All three findings checked against the tree and accepted; fixes in the next commit.
+- [Low] The version exception accepted nested keys, so a dependency or override named `version` (an npm package of that name exists) read as a version line. Accepted: only a manifest's own field (one indent) and a lockfile workspace's (six spaces) pass; one regression case, shown to fail with the old pattern. A real such dependency also adds a lockfile package entry, which enforced already; the rule is now exact anyway.
+- [Low] The summary's acknowledged table omitted the reason. Accepted: a Reason column.
+- [Low] Two test helper comments restated their filters. Accepted: deleted.
+- Its "looks fine": the refused classes, the lint gate running on every dependency PR, the merge-commit checkout holding both parents, the acknowledgement chains, no new credential or write permission, no runbook path touched.
+
+### Arc 4 implementation, Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict:** the gate logic and the acknowledgements are sound; two Medium in the wiring. Diff `86a89c5..44b0dae`. Fixes in the same commit as Codex's.
+- [Medium] Nothing pinned that `enforce` reaches the gate: dropping pr-quick's `audit_mode`, or hard-coding the step's mode, kept every test green. Accepted: the wiring test pins both, with one mutation each.
+- [Medium] A git failure in the mode step failed `changes` and so every gate (a base commit a force-push left unreachable, replayed by a re-run). Accepted: the PR loses the exemption (`enforce`) with a warning and the job passes; one test.
+- [Low] The mode line printed a changed line raw, so a `\r` in it could start a workflow command. Accepted: CR and LF replaced.
+- [Low] CLAUDE.md omitted the unreadable-result cause. Accepted.
+- [Low] `mismatch` on `package`, and the `revisit` check, had no test. Accepted: one row and one expectation.
+- [Low] The first group's reason said "transports" and "only in tests and the e2e harness", while `apps/extension/scripts/seed-preflight-node.ts` loads foundation's JSON-RPC client from Node. Accepted and checked: the preflight passes its own fetch, and foundation keeps undici in `client/undici.js`, which that client never imports; the reason now says so.
+- Not changed: commit 1's subject says "patch bumps" though axios, fast-copy and qs move a minor within their ranges; the squash takes the PR's title and body.
 
 ## Post-implementation
 

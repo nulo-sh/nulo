@@ -196,7 +196,9 @@ export const failing = (judgement: Judgement): boolean =>
 /** The files whose diff decides the mode, as git pathspecs; the same set as pr-quick's `deps` filter. */
 export const DEPENDENCY_PATHSPECS = ["bun.lock", "bunfig.toml", "scripts/ci-cd/audit-acks.json", ":(glob)**/package.json"]
 
-const VERSION_LINE = /^[+-][ \t]*"version": "[^"\\]*",?[ \t]*$/
+/** A dependency or an override named `version` sits deeper than a manifest's or a workspace's own field. */
+const MANIFEST_VERSION = /^[+-](?:\t| {2})"version": "[^"\\]*",?$/
+const WORKSPACE_VERSION = /^[+-] {6}"version": "[^"\\]*",?$/
 const isVersioned = (path: string): boolean => path === "bun.lock" || path === "package.json" || path.endsWith("/package.json")
 
 /**
@@ -228,7 +230,8 @@ function enforcingLine(state: DiffState, line: string): string | undefined {
 		state.inHunk = true
 		return undefined
 	}
-	const benign = state.inHunk ? VERSION_LINE.test(line) : /^(index |--- |\+\+\+ )/.test(line)
+	const version = state.file === "bun.lock" ? WORKSPACE_VERSION : MANIFEST_VERSION
+	const benign = state.inHunk ? version.test(line) : /^(index |--- |\+\+\+ )/.test(line)
 	return benign ? undefined : `${state.file ?? "the diff"}: ${line.slice(0, 120)}`
 }
 
@@ -286,9 +289,16 @@ export function renderSummary(judgement: Judgement, mode: AuditMode): string {
 		)
 	}
 	if (judgement.acknowledged.length > 0) {
-		lines.push("<details><summary>Acknowledged</summary>", "", "| Package | Severity | Advisory | Revisit |", "|---|---|---|---|")
+		lines.push(
+			"<details><summary>Acknowledged</summary>",
+			"",
+			"| Package | Severity | Advisory | Reason | Revisit |",
+			"|---|---|---|---|---|",
+		)
 		for (const { advisory, ack } of judgement.acknowledged) {
-			lines.push(`| ${cell(advisory.package)} | ${advisory.severity} | ${advisoryLink(advisory)} | ${cell(ack.revisit)} |`)
+			lines.push(
+				`| ${cell(advisory.package)} | ${advisory.severity} | ${advisoryLink(advisory)} | ${cell(ack.reason)} | ${cell(ack.revisit)} |`,
+			)
 		}
 		lines.push("", "</details>", "")
 	}
@@ -335,14 +345,24 @@ function runJudge(reportPath: string, exitCode: number, mode: AuditMode, acksPat
 	return mode === "enforce" && failing(judgement) ? 1 : 0
 }
 
+/** A diff git cannot produce (a base a force-push left unreachable) costs the exemption, never the PR. */
+function modeFor(base: string, head: string): { mode: AuditMode; why: string } {
+	try {
+		return auditMode(dependencyDiff(base, head))
+	} catch (error) {
+		console.log(command("warning", `the dependency diff failed, so the audit enforces: ${String(error)}`))
+		return { mode: "enforce", why: "the dependency diff failed" }
+	}
+}
+
 function runMode(base: string | undefined, head: string | undefined): number {
 	const sha = /^[0-9a-f]{40}$/
 	if (!base || !head || !sha.test(base) || !sha.test(head)) {
 		console.error("usage: audit-gate.ts mode --base <40-hex sha> --head <40-hex sha>")
 		return 2
 	}
-	const { mode, why } = auditMode(dependencyDiff(base, head))
-	console.log(`audit mode: ${mode} (${why})`)
+	const { mode, why } = modeFor(base, head)
+	console.log(`audit mode: ${mode} (${why.replace(/[\r\n]/g, " ")})`)
 	const outputPath = process.env.GITHUB_OUTPUT
 	if (outputPath) appendFileSync(outputPath, `audit-mode=${mode}\n`)
 	return 0

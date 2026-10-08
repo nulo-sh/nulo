@@ -44,6 +44,7 @@ describe("judgeAudit", () => {
 	})
 
 	test.each([
+		["package", "undici-fork"],
 		["vulnerable_versions", "<6.23.0"],
 		["severity", "moderate"],
 	])("an acknowledgement whose %s no longer matches stops covering the advisory", (field, value) => {
@@ -73,8 +74,9 @@ describe("judgeAudit", () => {
 		expect(judgeAudit({ report: "{}", exitCode: 2, acks: [] }).malformed).toEqual(["bun audit exited 2: a tool failure, not a result"])
 	})
 
-	test("an acknowledgement file with an empty reason, or one id twice, is refused", () => {
+	test("an acknowledgement file with an empty reason or revisit, or one id twice, is refused", () => {
 		expect(parseAcks([{ ...ACKS[0], reason: " " }])).toEqual({ ok: false, problems: ['group 1: "reason" is empty'] })
+		expect(parseAcks([{ ...ACKS[0], revisit: "" }])).toEqual({ ok: false, problems: ['group 1: "revisit" is empty'] })
 		expect(parseAcks([...ACKS, group([ACKS[0].advisories[1]])])).toEqual({ ok: false, problems: ["advisory 12 is acknowledged twice"] })
 	})
 
@@ -107,6 +109,26 @@ describe("the gate's command line", () => {
 			}
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+})
+
+describe("the mode command", () => {
+	test("a diff git cannot produce selects enforce without failing the job", () => {
+		const repo = mkdtempSync(join(tmpdir(), "nulo-audit-mode-cli-"))
+		try {
+			Bun.spawnSync(["git", "init", "--quiet"], { cwd: repo })
+			const output = join(repo, "github-output")
+			const missing = "0".repeat(40)
+			const run = Bun.spawnSync(["bun", GATE, "mode", "--base", missing, "--head", missing], {
+				cwd: repo,
+				env: { ...process.env, GITHUB_OUTPUT: output },
+				stdout: "pipe",
+			})
+			expect(run.exitCode, run.stdout.toString()).toBe(0)
+			expect(readFileSync(output, "utf8")).toBe("audit-mode=enforce\n")
+		} finally {
+			rmSync(repo, { recursive: true, force: true })
 		}
 	})
 })
@@ -166,6 +188,11 @@ describe("auditMode", () => {
 			"apps/extension/package.json",
 			(text: string) => text.replace('"zod": ', '"left-pad": "1.3.0",\n\t\t"zod": '),
 		],
+		[
+			"a dependency named version",
+			"apps/extension/package.json",
+			(text: string) => text.replace('"zod": ', '"version": "0.1.2",\n\t\t"zod": '),
+		],
 		["a changed range", "apps/extension/package.json", (text: string) => text.replace(/"zod": "[^"]+"/, '"zod": "^4.0.0"')],
 		["a bunfig.toml change", "bunfig.toml", (text: string) => text.replace("minimumReleaseAge = 604800", "minimumReleaseAge = 0")],
 		["an acknowledgement change", "scripts/ci-cd/audit-acks.json", (text: string) => text.replace('"the next Aztec bump"', '"never"')],
@@ -188,7 +215,6 @@ describe("the audit mode's wiring", () => {
 	const LINT = "./.github/workflows/_lint-and-typecheck.yml"
 	const PR_MODE = "${{ needs.changes.outputs.audit-mode }}"
 
-	/** Callers of the lint workflow that pass an audit mode other than the `changes` job's output. */
 	function callerSources(workflows: Workflows): string[] {
 		const calls = Object.entries(workflows).flatMap(([file, workflow]) =>
 			Object.entries<Workflows>(workflow.jobs ?? {}).map(([name, job]) => ({ file, name, job })),
@@ -201,7 +227,6 @@ describe("the audit mode's wiring", () => {
 			.map(({ file, name, job }) => `${file} ${name}: ${job.with.audit_mode}`)
 	}
 
-	/** Every way a run could get `enforce` other than the `changes` job's computed output. */
 	function enforceSources(workflows: Workflows): string[] {
 		const found = callerSources(workflows)
 		const input = workflows["_lint-and-typecheck.yml"].on.workflow_call.inputs.audit_mode
@@ -210,16 +235,37 @@ describe("the audit mode's wiring", () => {
 		if (changes.outputs["audit-mode"] !== "${{ steps.audit-mode.outputs.audit-mode }}") found.push("pr-quick.yml: audit-mode output")
 		const run = String(changes.steps.find((step: Workflows) => step.id === "audit-mode")?.run ?? "")
 		if (!run.includes("audit-gate.ts mode --base") || run.includes("audit-mode=enforce")) found.push("pr-quick.yml: audit-mode step")
+		return [...found, ...deliveryGaps(workflows)]
+	}
+
+	function deliveryGaps(workflows: Workflows): string[] {
+		const found: string[] = []
+		if (workflows["pr-quick.yml"].jobs["lint-and-typecheck"].with?.audit_mode !== PR_MODE)
+			found.push("pr-quick.yml: lint job's audit_mode")
+		const steps = workflows["_lint-and-typecheck.yml"].jobs["lint-and-typecheck"].steps
+		const audit = steps.find((step: Workflows) => step.name === "bun audit")
+		if (audit?.env?.AUDIT_MODE !== "${{ inputs.audit_mode }}" || !String(audit?.run).includes('--mode "$AUDIT_MODE"')) {
+			found.push("_lint-and-typecheck.yml: the audit step's mode")
+		}
 		return found
 	}
 
-	test("only pr-quick's changes job selects enforce", () => {
+	test("only pr-quick's changes job selects enforce, and its choice reaches the gate", () => {
 		expect(enforceSources(load())).toEqual([])
-		const mutated = load()
-		const nightly = Object.values<Workflows>(mutated["nightly.yml"].jobs).find((job) => job.uses === LINT)
+		const forced = load()
+		const nightly = Object.values<Workflows>(forced["nightly.yml"].jobs).find((job) => job.uses === LINT)
 		if (!nightly) throw new Error("nightly.yml no longer calls the lint workflow")
 		nightly.with = { ...nightly.with, audit_mode: "enforce" }
-		expect(enforceSources(mutated)).toEqual([expect.stringContaining("nightly.yml")])
+		expect(enforceSources(forced)).toEqual([expect.stringContaining("nightly.yml")])
+		const dropped = load()
+		dropped["pr-quick.yml"].jobs["lint-and-typecheck"].with.audit_mode = undefined
+		expect(enforceSources(dropped)).toEqual(["pr-quick.yml: lint job's audit_mode"])
+		const pinned = load()
+		const audit = pinned["_lint-and-typecheck.yml"].jobs["lint-and-typecheck"].steps.find(
+			(step: Workflows) => step.name === "bun audit",
+		)
+		audit.env.AUDIT_MODE = "report"
+		expect(enforceSources(pinned)).toEqual(["_lint-and-typecheck.yml: the audit step's mode"])
 	})
 
 	test("pr-quick's deps filter watches the files the mode reads", () => {

@@ -1,7 +1,7 @@
 [
 	{
 		"bundled": false,
-		"reason": "Reached only through the exact-pinned Aztec 6.0.0-rc.1 line: undici 5 and its busboy from @aztec-labs/foundation, ws 8.18.3 pinned exactly by @aztec/viem 2.38.3, and uuid 9 from the Google Cloud Storage client @aztec-labs/stdlib depends on. All are Node-side transports: neither extension zip contains them (THIRD-PARTY-NOTICES.txt), and in this repository they run only in tests and e2e harness code that reach a sandbox the run started itself.",
+		"reason": "Reached only through the exact-pinned Aztec 6.0.0-rc.1 line: undici 5 and its busboy from @aztec-labs/foundation, ws 8.18.3 pinned exactly by @aztec/viem 2.38.3, and uuid 9 from the Google Cloud Storage client @aztec-labs/stdlib depends on. All are Node-side code that neither extension zip contains (THIRD-PARTY-NOTICES.txt). Here they load only in tests, the e2e harness against a sandbox the run started, and the seed preflight script, which hands foundation's JSON-RPC client its own fetch, so undici is never imported.",
 		"revisit": "the next Aztec bump",
 		"advisories": [
 			{
