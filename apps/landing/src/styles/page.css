@@ -551,6 +551,8 @@ section.s {
 
 .rec-pan {
 	padding: 0;
+	/* Otherwise the ledger's unwrapped lines set the grid column's minimum and widen the page on a phone. */
+	min-width: 0;
 }
 
 .rec-pan .dot {
