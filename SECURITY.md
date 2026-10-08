@@ -526,8 +526,10 @@ which the local Docker runner (`docker-ci-like.sh`) runs too:
   (`lock.sh`, under the 7-day gate with the Aztec scopes exempt; each Aztec
   bump's lockfile diff is reviewed), Aztec's install host and the noir and
   Foundry release pipelines when they are pinned, Node from
-  `actions/setup-node`, and a restored toolchain cache, which only a run on
-  `dev` or `main` can write and which is checked only by `--version` probes.
+  `actions/setup-node`, and a restored toolchain cache, checked only by
+  `--version` probes. GitHub scopes caches by ref: the one a run on `dev` or
+  `main` restores can only have been written by a run on that branch, and a
+  pull request's own cache serves only that pull request's runs.
 
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is

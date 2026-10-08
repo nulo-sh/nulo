@@ -594,7 +594,7 @@ Pass: each exits 0.
 - `actions/attest-build-provenance` v4.2.2 is pinned by SHA (`4d101475…`). It is a composite wrapper over `actions/attest@508db95d… # v4.2.1`. Both are GitHub's first-party actions, older than 7 days (published 2026-08-06 and 2026-07-29).
 - The npm tree for the Aztec CLI moves from "resolved at install time, scripts on" to "a committed lockfile with integrity, scripts off, an explicit rebuild allowlist". The trust root becomes the registry at lock time (trust on first use), plus review of the lockfile diff at each Aztec bump. The two `@aztec-labs` packages stay exempt from the age gate, as today; their bytes are now locked by integrity.
 - Foundry moves from a moving `HEAD` script plus an unverified binary to one SHA-256-pinned tarball, checked once against Foundry's own GitHub attestation.
-- Accepted residual: a restored toolchain cache is trusted after `--version` probes only. A poisoned entry needs a run on `dev` or `main` to write that key.
+- Accepted residual: a restored toolchain cache is trusted after `--version` probes only. Caches are scoped by ref: a poisoned entry that a run on `dev` or `main` restores needs a run on that branch to write it; a pull request's own cache serves only that pull request.
 - Accepted residual: git-cliff-action still downloads an unpinned git-cliff binary, now in a read-only job whose only output is the notes text.
 - Accepted residual: releases published before S3 stay mutable for good. A dispatch with `--ref <pre-Arc-1 tag>` runs that tag's old workflow, which still uploads with `--clobber`, and nothing in new code can stop it. Only write-access accounts can dispatch, and the runbook forbids it (A11).
 - `bun audit` becomes blocking for dependency changes. An acknowledgement is added only through a reviewed PR, and a stale one fails.
@@ -607,7 +607,7 @@ Pass: each exits 0.
 - `audit-gate.ts` treats the audit JSON as untrusted: a malformed report is a failure in `enforce` mode, never "clean".
 
 **Domain risks.**
-- *Frontend (#22).* After the change, no web page can probe for the extension through a fixed resource URL on Chrome 130 or later. Older Chrome ignores the key, as today. Firefox already randomizes the extension origin per install.
+- *Frontend (#22).* Not closed: on Chrome a page can still fetch the content-script chunks at their fixed URL and detect the install. The `use_dynamic_url` change was measured and reverted, because the chunks' relative imports resolve against the fixed origin and the content script stops loading (Phase 5). Firefox randomizes the extension origin per install.
 - *Workflow injection.* No new `${{ }}` interpolation into `run:` scripts. Values reach scripts through `env:`.
 
 ## Assumptions

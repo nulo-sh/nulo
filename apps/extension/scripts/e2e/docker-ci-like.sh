@@ -78,11 +78,15 @@ AZTEC_VERSION=$(bun -e "console.log(JSON.parse(require('fs').readFileSync('apps/
 echo "Aztec version: $AZTEC_VERSION"
 echo "node: $(command -v node) ($(node --version))"
 # The CI action's install script, keyed like its cache: a volume installed under other pins, an
-# older lockfile or an older install.sh is reinstalled rather than reused.
+# older lockfile or an older install.sh, or missing a tool global-setup.ts needs, is reinstalled.
 SETUP_AZTEC=.github/actions/setup-aztec
 STAMP=$(find "$SETUP_AZTEC" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
 AZTEC_VERSION_DIR="/root/.aztec/versions/$AZTEC_VERSION"
-if [ "$(cat "$AZTEC_VERSION_DIR/.setup-aztec-stamp" 2>/dev/null)" != "$STAMP" ]; then
+TOOLS_PRESENT=1
+for tool in node_modules/.bin/aztec bin/aztec-anvil internal-bin/forge internal-bin/anvil; do
+	[ -x "$AZTEC_VERSION_DIR/$tool" ] || TOOLS_PRESENT=0
+done
+if [ "$TOOLS_PRESENT" = 0 ] || [ "$(cat "$AZTEC_VERSION_DIR/.setup-aztec-stamp" 2>/dev/null)" != "$STAMP" ]; then
 	echo "::warning::aztec install absent or from other pins at $AZTEC_VERSION_DIR; reinstalling"
 	rm -rf "$AZTEC_VERSION_DIR"
 	AZTEC_VERSION="$AZTEC_VERSION" bash "$SETUP_AZTEC/install.sh"

@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Installs the Aztec toolchain for AZTEC_VERSION into ${AZTEC_HOME:-$HOME/.aztec}/versions/<version>,
-# running nothing it fetched without hashing it first. Every download is checked against
-# installer-pins.sha256; the pinned upstream installer keeps its layout logic, with its two
-# unpinnable steps replaced: Foundry comes from a pinned release tarball instead of foundryup,
-# and the npm tree comes from the committed cli/ lockfile with install scripts off.
+# Installs the Aztec toolchain for AZTEC_VERSION into ${AZTEC_HOME:-$HOME/.aztec}/versions/<version>
+# through the pinned upstream installer, with its Foundry and npm steps replaced by pinned inputs.
 set -euo pipefail
 
 : "${AZTEC_VERSION:?set AZTEC_VERSION to the @aztec-labs/aztec.js version in apps/extension/package.json}"

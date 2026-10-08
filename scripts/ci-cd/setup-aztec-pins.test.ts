@@ -1,9 +1,6 @@
 /**
- * The Aztec toolchain install (`.github/actions/setup-aztec/install.sh`) runs only bytes the repo
- * pins: each download by its SHA-256 in `installer-pins.sha256`, the CLI's npm tree by the integrity
- * hashes of the committed `cli/package-lock.json`. These pins keep that lockfile on the extension's
- * Aztec line with every package a registry tarball under a sha512, and keep both callers (the
- * composite action and the local Docker runner) on the script rather than an installer of their own.
+ * `.github/actions/setup-aztec/install.sh` runs only bytes the repo pins: downloads by SHA-256, the
+ * CLI's npm tree by its committed lockfile's integrity hashes.
  */
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
@@ -24,10 +21,13 @@ interface Lockfile {
   packages: Record<string, LockEntry>
 }
 
-/** Packages `npm ci` would take from anywhere but a registry tarball with a sha512 to check it against. */
+/**
+ * Packages `npm ci` would take from anywhere but a registry tarball with a sha512 to check it against.
+ * A bundled package arrives inside its parent's checked tarball; a link is a local directory.
+ */
 function unhashedSources(lock: Lockfile): string[] {
   return Object.entries(lock.packages)
-    .filter(([path, entry]) => path !== "" && !entry.inBundle && !entry.link)
+    .filter(([path, entry]) => path !== "" && !entry.inBundle)
     .filter(([, entry]) => !entry.resolved?.startsWith("https://registry.npmjs.org/") || !entry.integrity?.startsWith("sha512-"))
     .map(([path]) => path)
 }
@@ -56,6 +56,7 @@ describe("the CLI's npm tree", () => {
     ["a git source", { resolved: "git+https://github.com/example/pkg.git#0123456" }],
     ["a file source", { resolved: "file:../vendor/pkg.tgz" }],
     ["no integrity", { integrity: undefined }],
+    ["a linked directory", { link: true, resolved: "../vendor/pkg", integrity: undefined }],
   ])("a lockfile copy with %s is refused", (_, change) => {
     const target = "node_modules/@adraffy/ens-normalize"
     const copy: Lockfile = structuredClone(lock)
