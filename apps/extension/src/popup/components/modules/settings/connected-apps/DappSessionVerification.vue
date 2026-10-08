@@ -17,17 +17,17 @@ const emit = defineEmits(["toggleTrust"])
 
 <template>
 	<Flex direction="column" gap="10" wide>
-		<SectionLabel label="Connection verification" />
+		<SectionLabel label="Connection check" />
 		<Flex direction="column" align="center" wide>
 			<EmojiGrid :emojis="emojis" />
 		</Flex>
 		<Text size="12" color="tertiary" :style="{ lineHeight: '1.4' }">
-			Emojis from the most recent connection. They should have matched what the app showed then
+			Emojis from the most recent connection. They should have matched what the app showed then.
 		</Text>
 		<Flex align="center" justify="between" gap="12" wide>
 			<Flex direction="column" gap="4">
-				<span :class="$style.setting_key">Always trust</span>
-				<span :class="$style.setting_sub">Skip verification on reconnect</span>
+				<span :class="$style.setting_key">Skip this check next time</span>
+				<span :class="$style.setting_sub">Only for this app on this network.</span>
 			</Flex>
 			<Toggle :modelValue="isTrusted" @update:modelValue="(v) => emit('toggleTrust', v)" />
 		</Flex>
