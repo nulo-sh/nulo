@@ -145,12 +145,13 @@ vi.mock("@/utils/own-window", async (importOriginal) => ({
 }))
 
 const runCeremony = vi.fn<() => Promise<unknown>>()
+const rejectCeremony = vi.fn()
 vi.mock("@/composables/usePasskeyCeremony", () => ({
 	usePasskeyCeremony: () => ({
 		request: { value: null },
 		runCeremony: (...args: unknown[]) => runCeremony(...(args as [])),
 		onResolve: vi.fn(),
-		onReject: vi.fn(),
+		onReject: (err: Error) => rejectCeremony(err),
 	}),
 }))
 
@@ -405,6 +406,22 @@ describe("export/full.vue — a passkey profile's plain download asks first", ()
 		await downloadButton(wrapper).trigger("click")
 		;(useCacheStore().confirm as { callback: () => void }).callback()
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+	})
+
+	it("a switch during the passkey prompt ends that prompt, and the new profile's backup runs", async () => {
+		runCeremony.mockReturnValueOnce(new Promise<never>(() => {}))
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(runCeremony).toHaveBeenCalledTimes(1))
+		expect(rejectCeremony).not.toHaveBeenCalled()
+
+		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
+		expect(rejectCeremony).toHaveBeenCalledTimes(1)
+		await flushPromises()
+		captureRunFence.mockResolvedValueOnce({ ...FENCE, profileId: "p2", session: 2 })
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 	})
 
 	it("a confirmation answered after the file was encrypted writes nothing", async () => {

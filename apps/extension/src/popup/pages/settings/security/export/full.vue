@@ -444,7 +444,7 @@ function handleDownloadClick() {
 /** Ends the run and drops what it made. Fence first so no in-flight continuation can publish or
  *  resurrect state; then services (cleanup-order rule), then the secret scrub: the payload strings
  *  hold the plaintext master, entropy and imported-keys key (best-effort: references cleared;
- *  in-flight closures die with the aborted run). */
+ *  pending operations keep what they captured until they settle). */
 function discardRun() {
 	generation++
 	if (activeRunClients) {
@@ -482,6 +482,7 @@ watch(
 	() => appStore.profile?.id,
 	() => {
 		discardRun()
+		onCeremonyReject(new Error("The active profile changed"))
 		isBusy.value = false
 		isDownloading.value = false
 		isAgreed.value = false
@@ -492,6 +493,7 @@ watch(
 		dekReplaced.value = false
 		chainStateOmitted.value = false
 	},
+	{ flush: "sync" },
 )
 
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
