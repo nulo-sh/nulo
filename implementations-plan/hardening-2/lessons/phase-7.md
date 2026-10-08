@@ -1,0 +1,38 @@
+# Phase 7 — one directive at a time
+
+Each directive is gated by the armed smoke suite on Chrome and Firefox (3 local shards each, retry 0) and the eight network files on Chrome and then Firefox (`e2e:agent`, retry 0), with the CSP violation recorder armed throughout.
+
+## The `[::1]` probe (OA-4)
+
+Method (scratch, never committed): a Node HTTP server bound to `::1` that counts hits per path and answers with `access-control-allow-origin: *`; the armed build copied, with only `manifest.json`'s policy rewritten; a probe spec that fetches `http://[::1]:<port>/popup` from the popup and reads the record.
+
+| Policy's `connect-src` | Chrome | Firefox |
+|---|---|---|
+| `'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*` | refused: `Failed to fetch`, a `connect-src` violation for `http://[::1]:<port>`, no server hit | refused: `NetworkError`, the same violation, no server hit |
+| the same without `http://[::1]:*` (control) | refused, identically | refused, identically |
+| `'self' https: http:` | `200`, one server hit, no violation | `200`, one server hit, no violation |
+| none (today's policy) | `200`, one server hit | not run |
+
+Both browsers ignore the `[::1]` source: the precise list behaves exactly like the control. So `http:` ships and OA-4 stays open. The offscreen fetch was not reached (a smoke launch with no profile has no PXE host yet); a host source is parsed the same way in every document under one policy, so the popup result stands for both.
+
+## Directives
+### `connect-src 'self' blob: https: http:`
+
+- First run, `connect-src 'self' https: http:`: Chrome smoke green, zero violations. Firefox smoke red on every test that downloads a file (account export and import, both backup round trips, contacts export, the imported-account lifecycle, legal S5/S6, the toolbar-panel backup): `connect-src` violations from `/src/popup/index.html` blocking `blob`. Firefox checks `downloads.download({ url })` against the calling page's `connect-src`, and `utils/files.ts` downloads a `blob:` URL; Chrome does not check it. The downloads failed, so this was breakage, not noise.
+- Source added: `blob:` in `connect-src`, the source the violation names. A blob URL names data already in the browser's memory, so the source opens no network destination.
+- The same run's Firefox `migration.test.ts` throwing-migration failure was not load (see below).
+- The network leg of that run was stopped to rebuild with `blob:`; the gate was rerun from the start.
+- Rerun with `blob:`: Chrome smoke and Firefox smoke green with zero violations apart from the migration case below; the eight network files green on Chrome and on Firefox (8 of 8 each, 14 tests), CSP equal to the pin.
+
+## The close check raced the migration retry on Firefox
+
+The throwing-migration case failed again in the rerun, once on the 60 s timeout and once with the version converged but `nulo:schema:blocked` still present. Alone on an armed build it failed 2 runs of 3; with `NULO_E2E_CSP_REPORT` unset on the same build it passed 3 of 3 (31-38 s). So phase 6's "load" verdict was wrong: the close check caused it.
+
+- Timing: each check's read took 0.5-1.2 s and its close about 1 s, so the budget was not the cause.
+- Mechanism: the Retry button calls `runtime.reload()`. Firefox reloads the add-on in place, and the new background consumes the gesture token and starts the engine. The test used to close the browser at once, so the relaunch did the run. The check held the browser open about 2 s longer, the in-place boot took the token, and the close killed its run midway. The relaunch then met a persisted non-terminal block with no token, and the gate parked it, sometimes after the version had already been stamped.
+- Fix: `ExtensionContext.checkCspViolations()` checks the record on demand, and `retryAndReopen` calls it before the click. The reload discards the record anyway (Chrome disables the unpacked build; Firefox starts a fresh `storage.session`), so the close after it is the plain, immediate teardown again. This also checks that launch on Chrome, which the disabled-extension pass used to skip, so `EXTENSION_DISABLED` is gone.
+- Result: `migration.test.ts` armed, 3 of 3 on Firefox (39-41 s for the case) and 1 of 1 on Chrome.
+
+## Phase 6's typecheck claim
+
+`vue-tsc` reported `zod-jitless.ts` "is not a module" for its test's dynamic import: a file with no import or export is a script to TypeScript. The phase 6 gate missed it because the exit code read was `tail`'s. `export {}` makes it a module; `typecheck:all` now exits 0, read directly.
