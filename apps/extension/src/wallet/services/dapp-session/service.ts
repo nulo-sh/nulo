@@ -434,6 +434,9 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				)
 				return rows.length > 0 ? "revoked" : "absent"
 			} catch (err) {
+				// No delete event will follow, and an establishment that read the row before the lock
+				// may have stamped its channel since the first event: end the channels again.
+				this.emit("onVerificationRefused", { origin, chainId, profileId })
 				this.logWarn("refuseVerification: the app's channels ended but its rows could not be deleted", err)
 				return "unavailable"
 			}

@@ -484,15 +484,26 @@ describe("refuseVerification", () => {
 	}
 
 	test.each([
-		["the row is stored", "stored", "revoked"],
-		["nothing of the app is stored", "none", "absent"],
-		["the delete fails", "failing", "unavailable"],
-	] as const)("ends the app's live channels when %s", async (_, state, result) => {
+		["the row is stored", false, "revoked"],
+		["nothing of the app is stored", true, "absent"],
+	] as const)("ends the app's live channels when %s", async (_, empty, result) => {
 		const svc = await makeLockAwareService()
-		if (state !== "none") await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
-		if (state === "failing") svc.browserApi.storage.local.remove = async () => Promise.reject(new Error("quota"))
+		if (!empty) await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
 		expect(await svc.service.refuseVerification(TUPLE)).toBe(result)
 		expect(svc.refused).toEqual([TUPLE])
+	})
+
+	test("a delete that fails answers unavailable and ends the channels again after it", async () => {
+		const svc = await makeLockAwareService()
+		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		const order: string[] = []
+		svc.service.onVerificationRefused.add(() => order.push("refused"))
+		svc.browserApi.storage.local.remove = async () => {
+			order.push("remove")
+			throw new Error("quota")
+		}
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("unavailable")
+		expect(order).toEqual(["refused", "remove", "refused"])
 	})
 
 	test.each([
@@ -516,9 +527,12 @@ describe("refuseVerification", () => {
 		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-chain", chainId: "2" }, "p1")
 		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-app", dappMetadata: { url: "https://other.example" } }, "p1")
 		await plantRowSignedBy(svc.browserApi, rowFor("p2"), "p2")
+		// A signed row moved to another key: deleted at the key it lives under, and named by it.
+		const moved = (await svc.browserApi.storage.local.get(`${ROW_ROOT}@replacement`)) as Record<string, unknown>
+		await svc.browserApi.storage.local.set({ [`${ROW_ROOT}@moved`]: moved[`${ROW_ROOT}@replacement`] })
 		expect(await svc.service.refuseVerification(TUPLE)).toBe("revoked")
 		expect(await svc.stored()).toEqual([`${ROW_ROOT}@other-app`, `${ROW_ROOT}@other-chain`, `${ROW_ROOT}@p2-row`])
-		expect(svc.deleted.map((row) => row.id)).toEqual(["replacement"])
+		expect(svc.deleted.map((row) => row.id).sort()).toEqual(["moved", "replacement"])
 	})
 
 	test.each([
