@@ -9,8 +9,10 @@
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import { PRIORITY_MULTIPLIERS, type PriorityLevel } from "@nulo/wallet-bridge"
+import type { FpcIdentitySnapshot, FpcInfo } from "@/wallet/services/fpc/spec"
 import type { NetworkEndpoint } from "@/wallet/services/network/spec"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
+import type { FeeSettings } from "./spec"
 
 // 120 s, owner-set: the retention bound on signed tx requests held in SW memory.
 // Staleness itself is guarded by the consume ladder, not this TTL — past ~2 min
@@ -25,10 +27,19 @@ export function fingerprintBaseFee(min: { feePerDaGas: bigint; feePerL2Gas: bigi
 	return `${min.feePerDaGas.toString()}:${min.feePerL2Gas.toString()}`
 }
 
+/** The raw pair a node reports. The network row's stored chainId is an XOR composite — `(1,4)` and
+ *  `(2,7)` collide — so a snapshot compares this pair, never the composite. */
+export type ChainIdentity = { readonly l1ChainId: number; readonly rollupVersion: number }
+
 /** The snapshot fields both entry types carry: what was true at estimate time, and the build reused on confirm. */
 export type ReuseEntryBase = {
 	/** Profile id at estimate time; consume refuses any other fence. */
 	readonly profileId: string
+	/** The pair the build asserted and signed under. A reused request skips that assert, so consume
+	 *  re-reads the live pair and compares. */
+	readonly chainIdentity: ChainIdentity
+	/** The sponsor row the build paid with; set for every `fpc` payment. */
+	readonly fpcIdentity?: FpcIdentitySnapshot
 	readonly baseFeeFingerprint: string
 	readonly primaryEndpointId: string
 	readonly primaryEndpointUrl: string
@@ -55,6 +66,43 @@ export function primaryEndpointMoved(
 	snap: Pick<ReuseEntryBase, "primaryEndpointId" | "primaryEndpointUrl">,
 ): boolean {
 	return !primary || primary.id !== snap.primaryEndpointId || primary.rpcUrl !== snap.primaryEndpointUrl
+}
+
+/** A fixed category when the live chain is not the pair the request was signed under, or cannot be
+ *  read; the read's own message (a node text) never reaches the reason. */
+export async function chainIdentityDrift(snapshot: ChainIdentity, readLive: () => Promise<ChainIdentity>): Promise<string | undefined> {
+	let live: ChainIdentity
+	try {
+		live = await readLive()
+	} catch {
+		return "chain identity drift"
+	}
+	const same = live.l1ChainId === snapshot.l1ChainId && live.rollupVersion === snapshot.rollupVersion
+	return same ? undefined : "chain identity drift (exact pair mismatch)"
+}
+
+/** A fixed category when an `fpc` payment's sponsor row is not the one the request was built
+ *  against. An `fpc` entry without a snapshot misses: nothing would bind its signed fee payload. */
+export async function fpcIdentityDrift(
+	paymentMethod: FeeSettings["paymentMethod"],
+	snapshot: FpcIdentitySnapshot | undefined,
+	getFpcInfo: (fpcId: string) => Promise<FpcInfo>,
+): Promise<string | undefined> {
+	if (paymentMethod.kind !== "fpc") return undefined
+	if (!snapshot) return "fpc identity missing"
+	let fresh: FpcInfo
+	try {
+		fresh = await getFpcInfo(paymentMethod.fpcId)
+	} catch {
+		return "fpc row unavailable"
+	}
+	const drifted =
+		fresh.id !== snapshot.id ||
+		fresh.type !== snapshot.type ||
+		fresh.address !== snapshot.address ||
+		fresh.chainId !== snapshot.chainId ||
+		(fresh.isProtocol ?? false) !== snapshot.isProtocol
+	return drifted ? "fpc identity drift" : undefined
 }
 
 /** The fee multiplier for a known or absent priority. The lookup stays unvalidated, so an unknown

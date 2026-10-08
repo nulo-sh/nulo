@@ -76,6 +76,7 @@ import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner } from "./operation-planner"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
+import type { ChainIdentity } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor } from "./transfer-executor"
@@ -293,6 +294,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.estimateReuse = new TransferEstimateReuse({
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
+			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
+			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
@@ -300,12 +303,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.operationEstimateReuse = new OperationEstimateReuse({
 			getNetwork: (networkId) => this.networkService.getNetwork(networkId),
 			getNode: (chainId) => this.networkService.getNode(chainId),
-			getLiveChainIdentity: async (network) => {
-				const node = await this.networkService.getNode(network.chainId)
-				const info = await node.getNodeInfo()
-				assertLiveChainIdentity(network, info)
-				return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
-			},
+			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
 			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			logDebug: (msg) => this.logDebug(msg),
@@ -320,6 +318,14 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			logDebug: (msg) => this.logDebug(msg),
 		})
+	}
+
+	/** The live pair, asserted against the network row: what a reused request skipped at build. */
+	private async liveChainIdentity(network: Network): Promise<ChainIdentity> {
+		const node = await this.networkService.getNode(network.chainId)
+		const info = await node.getNodeInfo()
+		assertLiveChainIdentity(network, info)
+		return { l1ChainId: info.l1ChainId, rollupVersion: info.rollupVersion }
 	}
 
 	private wireExecutors(): void {
@@ -424,7 +430,6 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
-			getFpcInfo: (fpcId) => this.fpcService.getFpc(fpcId),
 			lane: {
 				deleteController: (journalId) => this.lane.deleteController(journalId),
 				acquireSlot: (networkId, queuedJournalId, fence, onEnqueued, originKey) =>

@@ -88,10 +88,14 @@ const MIN_FEES = { feePerDaGas: 1n, feePerL2Gas: 1n }
 const ACCOUNT = AztecAddress.fromNumberUnsafe(0x1234)
 const NETWORK = {
 	id: "net1",
+	// The node's pair below: (5 ^ 4) >>> 0 === 1.
 	chainId: 1,
+	l1ChainId: 5,
 	primaryEndpointId: "ep1",
 	endpoints: [{ id: "ep1", rpcUrl: "http://fake" }],
 }
+
+const SPONSOR = { id: "fpc-1", type: 1, isProtocol: true, chainId: NETWORK.chainId, address: "0xsponsor" }
 
 function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
@@ -105,7 +109,11 @@ async function makeHarness() {
 	// proveTx returns a stub TxProvingResult whose `toTx` is spied: the post-prove
 	// cancel checkpoint must drop the proof BEFORE `toTx`, so `toTx` proves submission.
 	const toTx = vi.fn(async () => ({ getTxHash: () => ({ toString: (): string => "0xhash" }) }))
-	const fakeNode = { getCurrentMinFees: async () => MIN_FEES, sendTx } as unknown as never
+	const fakeNode = {
+		getCurrentMinFees: async () => MIN_FEES,
+		getNodeInfo: async () => ({ l1ChainId: 5, rollupVersion: 4 }),
+		sendTx,
+	} as unknown as never
 	const proveTx = vi.fn(async () => ({ toTx }))
 	const fakeIPXE = { proveTx } as unknown as ReturnType<PxeServiceClient["getPXE"]>
 	const fakePxeClient = { getPXE: () => fakeIPXE, onProvePhase: { add: () => {} } } as unknown as PxeServiceClient
@@ -214,7 +222,7 @@ async function makeHarness() {
 		svc(FpcService.name, {
 			onFpcUpdated: { add: () => {} },
 			onFpcDeleted: { add: () => {} },
-			getFpc: async () => ({ type: 1, isProtocol: true, chainId: NETWORK.chainId, address: "0xsponsor" }),
+			getFpc: async () => ({ ...SPONSOR }),
 		}),
 	)
 	collection.add(svc(ContactService.name, {}))
@@ -233,7 +241,7 @@ async function makeHarness() {
 	await collection.start()
 
 	// Seed the reuse cache so executeTransfer takes the fast path (skips build).
-	const feeSettings = { paymentMethod: { kind: "fpc" } } as unknown as FeeSettings
+	const feeSettings: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: SPONSOR.id } }
 	const req = {
 		networkId: NETWORK.id,
 		accountAddress: ACCOUNT.toString(),
@@ -253,6 +261,8 @@ async function makeHarness() {
 		amount: req.amount,
 		feeSettingsHash: fingerprintFeeSettings(feeSettings),
 		profileId: "p1",
+		chainIdentity: { l1ChainId: 5, rollupVersion: 4 },
+		fpcIdentity: SPONSOR,
 		baseFeeFingerprint: fingerprintBaseFee({
 			feePerDaGas: MIN_FEES.feePerDaGas * BigInt(DEFAULT_FEE_MULTIPLIER),
 			feePerL2Gas: MIN_FEES.feePerL2Gas * BigInt(DEFAULT_FEE_MULTIPLIER),

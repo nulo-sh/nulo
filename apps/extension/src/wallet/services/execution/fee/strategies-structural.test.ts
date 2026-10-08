@@ -218,6 +218,7 @@ describe("FpcStrategy structural parity (two-pass choreography — byte-parity c
 	function makeFpc() {
 		const feePayloadAction = { kind: "call", contract: "0xfpc", method: "pay_fee", args: [] } as unknown as Action
 		return {
+			infoData: { id: "fpc-1", profileId: "p1", chainId: 7, type: FpcType.PrivateFpc, address: "0xfpc", isProtocol: true },
 			getTotalGas: () => new Gas(1_000, 2_000),
 			getTeardownGas: () => new Gas(100, 200),
 			getFeePayload: vi.fn(() => [feePayloadAction]),
@@ -253,6 +254,8 @@ describe("FpcStrategy structural parity (two-pass choreography — byte-parity c
 		// Result carries the SECOND pass's identities.
 		expect(result.txRequest).toBe(builtB.txRequest)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
+		// The sponsor snapshot is the row the build paid with.
+		expect(result.fpcIdentity).toEqual({ id: "fpc-1", type: FpcType.PrivateFpc, address: "0xfpc", chainId: 7, isProtocol: true })
 
 		// Final action shape: fee payload first, then originals (splice pin).
 		expect(ctx.op.actions[0]).toBe(fpc.feePayloadAction)
@@ -271,7 +274,14 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 	function makeSponsoredFpc(overrides: Partial<{ type: FpcType; isProtocol: boolean }> = {}) {
 		const feePayloadAction = { kind: "call", contract: "0xsfpc", method: "sponsor_unconditionally", args: [] } as unknown as Action
 		return {
-			infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, ...overrides },
+			infoData: {
+				id: "fpc-1",
+				profileId: "p1",
+				address: "0xsfpc",
+				type: FpcType.DefaultSponsoredFpc,
+				isProtocol: true as boolean | undefined,
+				...overrides,
+			},
 			getTotalGas: () => new Gas(1_000, 2_000),
 			getTeardownGas: () => new Gas(100, 200),
 			getFeePayload: vi.fn(() => [feePayloadAction]),
@@ -310,6 +320,7 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 		expect((buildStandard.mock.calls[0] as unknown[])[2]).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
 		expect(simulateTxTask).toHaveBeenCalledTimes(1)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
+		expect(result.fpcIdentity).toEqual({ id: "fpc-1", type: FpcType.DefaultSponsoredFpc, address: "0xsfpc", isProtocol: true })
 
 		// Final action shape identical to the two-pass output: payload first,
 		// then originals, nothing else.
@@ -386,8 +397,7 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 	})
 
 	test("undecorated FPC shape (cold protocol cache) fails safe to two-pass", async () => {
-		const fpc = makeSponsoredFpc()
-		;(fpc as { infoData?: unknown }).infoData = undefined
+		const fpc = makeSponsoredFpc({ isProtocol: undefined })
 		const { deps, buildStandard } = makeFpcDeps(fpc)
 
 		await new FpcStrategy(deps).buildAndEstimate(makeFpcCtx())

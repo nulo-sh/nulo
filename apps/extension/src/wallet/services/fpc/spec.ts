@@ -31,6 +31,20 @@ export type FpcInfo = {
 	isProtocol?: boolean
 }
 
+/** The sponsor fields a signed request commits to. A row can be edited in place, so a request
+ *  built against one snapshot must never be reused once the live row differs from it. */
+export type FpcIdentitySnapshot = {
+	readonly id: string
+	readonly type: FpcType
+	readonly address: string
+	readonly chainId: number
+	readonly isProtocol: boolean
+}
+
+export function fpcIdentityOf(info: FpcInfo): FpcIdentitySnapshot {
+	return { id: info.id, type: info.type, address: info.address, chainId: info.chainId, isProtocol: info.isProtocol ?? false }
+}
+
 /** Storage codec row schema for the STORED shape (no `isProtocol` — zod strips
  *  unknown keys, so a stray persisted decoration is tolerated on read). */
 export const StoredFpcSchema: z.ZodType<Omit<FpcInfo, "isProtocol">> = z.object({
