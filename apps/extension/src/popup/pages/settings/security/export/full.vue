@@ -418,10 +418,10 @@ async function downloadBackup(isEncrypted) {
 }
 
 /** ConfirmPopup runs its callback without awaiting it, and the page may have moved on by then:
- *  the callback downloads only from the run whose payload the person was warned about. */
+ *  the callback downloads only the plain file of the run the person was warned about. */
 function confirmPlainDownload() {
 	const gen = generation
-	Object.assign(cacheStore.confirm, {
+	cacheStore.confirm = {
 		pre_title: "Not encrypted",
 		title: "Download without a password?",
 		description:
@@ -432,13 +432,30 @@ function confirmPlainDownload() {
 		callback: () => {
 			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)
 		},
-	})
+	}
 	popupStore.open("confirm")
 }
 
 function handleDownloadClick() {
 	if (backupStatus.value === "encrypted") void downloadBackup(true)
 	else if (canDownload.value) confirmPlainDownload()
+}
+
+/** Ends the run and drops what it made. Fence first so no in-flight continuation can publish or
+ *  resurrect state; then services (cleanup-order rule), then the secret scrub: the payload strings
+ *  hold the plaintext master, entropy and imported-keys key (best-effort: references cleared;
+ *  in-flight closures die with the aborted run). */
+function discardRun() {
+	generation++
+	if (activeRunClients) {
+		disconnectAll(activeRunClients)
+		activeRunClients = null
+	}
+	payloadPretty = null
+	payloadCompact = null
+	encryptedB64 = null
+	password.value = null
+	repeatedPassword.value = null
 }
 
 const onKeydown = (e) => {
@@ -459,29 +476,31 @@ const onKeydown = (e) => {
 	}
 }
 
+// A profile switch made elsewhere updates this page in place. A backup it holds is the previous
+// profile's, and the download rule would read the new profile's type, so the page starts over.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		discardRun()
+		isBusy.value = false
+		isDownloading.value = false
+		isAgreed.value = false
+		backupStatus.value = ""
+		showRecommendation.value = false
+		isWrongPassword.value = false
+		isPasswordMismatch.value = false
+		dekReplaced.value = false
+		chainStateOmitted.value = false
+	},
+)
+
 // Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
 // to its own window first. A failed move keeps the page where it is.
 onBeforeMount(() => {
 	if (isPasskeyProfile.value && passkeyNeedsOwnWindow()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
 })
 
-onBeforeUnmount(() => {
-	// Fence first so no in-flight continuation can publish or resurrect state;
-	// then services (cleanup-order rule), then the secret scrub — the payload
-	// strings hold the plaintext master/entropy/DEK and must not outlive the
-	// page (best-effort: references cleared; in-flight closures die with the
-	// aborted run).
-	generation++
-	if (activeRunClients) {
-		disconnectAll(activeRunClients)
-		activeRunClients = null
-	}
-	payloadPretty = null
-	payloadCompact = null
-	encryptedB64 = null
-	password.value = null
-	repeatedPassword.value = null
-})
+onBeforeUnmount(discardRun)
 </script>
 
 <template>

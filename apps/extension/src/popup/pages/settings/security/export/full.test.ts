@@ -211,8 +211,7 @@ async function reachBackupReady(wrapper: ReturnType<typeof mountPage>) {
 
 const downloadButton = (wrapper: ReturnType<typeof mountPage>) => wrapper.get("[data-testid='download-backup-btn']")
 
-/** A password profile's file leaves the page only encrypted: Protect, Download, then the
- *  production opener, as a restore runs it. */
+/** A password profile's file, which leaves the page only encrypted, opened as a restore opens it. */
 async function downloadAndOpen(wrapper: ReturnType<typeof mountPage>): Promise<Record<string, unknown>> {
 	await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
 	await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined(), { timeout: 10_000 })
@@ -326,6 +325,17 @@ describe("export/full.vue — a password profile's file leaves only encrypted", 
 		await downloadButton(wrapper).trigger("click")
 		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
 		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+
+	it("a switch to a passkey profile made elsewhere starts the page over instead of offering the password backup", async () => {
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 
