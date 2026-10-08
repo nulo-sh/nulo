@@ -53,4 +53,5 @@ Gotchas from closed plans, read before every task: one line each with evidence, 
 
 - Agent Bash (zsh 5.9): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
 - `pgrep -f` matches the agent's `zsh -c` wrapper, so a teardown can kill itself: signal your launcher's pgid, never `$$`/`$PPID`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep)
+- Under Puppeteer mobile emulation, `innerWidth` grows to the content, so `scrollWidth > innerWidth` never flags a sideways scroll: compare against the viewport width you set (25.8). [Evidence](landing-store-buttons/plan.md#mobile-emulation-width)
 - Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base)

@@ -9,6 +9,15 @@ trunk: dev
 worktree: landing-store-buttons
 ---
 
+## Outcome
+
+- **Date**: 2026-10-08
+- **Status**: completed.
+- **Shipped**: [#49](https://github.com/nulo-sh/nulo/pull/49). The install buttons go to the visitor's store (`apps/landing/src/install.ts`, `install-dom.ts`, the fallback markup in `index.html`). The build-time GitHub release fetch and its runbook step are deleted. The PR adds the 1200×630 link-preview image `apps/landing/public/og.png` and the footer store links. Two phone layout fixes found on the way: the hero grows with its plate, and the record panel no longer widens the page.
+- **Dropped**: nothing in the approved scope. The "Old Firefox hint" extra was declined before planning.
+- **Open items**: the owner's sign-off on `og.png` and on the two phone layout fixes gates the merge of #49, so it needs no follow-up. The landing's extensionless Vite config import moved to [follow-ups](../follow-ups.md).
+- **Seeds retired**: the `/goal` below and the ELI5's `/loop` are retired. Do not run them.
+
 # Landing store buttons
 
 The landing's install buttons send visitors to the store for their browser, the Chrome Web Store or Firefox Add-ons, instead of a GitHub release. The page no longer reads GitHub at build time, so a release needs no landing rebuild. A social preview image and store links in the footer ride along.
@@ -175,6 +184,14 @@ Run from this plan after Phase 3 is green.
 | 6 | medium: printing labels is not validation; more UA fixtures needed | Adopted: assertions on visible count, destinations, tab order and console/CSP errors; fixtures for desktop-UA iPadOS, Samsung Internet, mobile Edge, Opera GX, Chromium, Yandex, Tor and LibreWolf. |
 | 7 | low: name the remaining trust boundary; use locked tooling; check `og.png` is really served | Adopted: trust boundary and asset-routing bullets; `/og.png` content type checked. Rejected in part: the "Playwright-only" instruction is the owner's global default, while this repo's e2e stack and lockfile carry Puppeteer, so the locked Puppeteer is the right tool. |
 | 8 | low: README test row; Stable step 9 and prerelease step 8 need renumbering | Adopted. |
+
+## Lessons
+
+The per-phase logs are in `lessons/`. One finding generalizes:
+
+### Mobile emulation width
+
+Under Puppeteer's mobile emulation (`isMobile: true`), `innerWidth` grows to the content's width, so `scrollWidth > innerWidth` never flags a page that scrolls sideways. The landing's record panel had widened the page to 494 px at 375 px, and only a check against the width the script set caught it.
 
 ## Seeds
 
