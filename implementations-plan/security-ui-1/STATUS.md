@@ -1,0 +1,12 @@
+- 2026-10-08: planning started; recon done (2 explorers); draft plan, options and owner asks written.
+- 2026-10-08: Codex round 1 reject; ten findings accepted and folded into plan, options and asks.
+- 2026-10-08: Opus audit conditional approve; findings folded; Phase 1.1 narrowed to password profiles; refusal redesigned (raw delete).
+- 2026-10-08: Codex final pass round 1 reject (five findings folded); round 2 conditional approve, restart condition folded; plan at the approval gate.
+- 2026-10-08: arc 1 started; branch rebased on dev e49e4ce (unpushed plan commits only).
+- 2026-10-08: Phase 1.1 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build), `bun run test:all`, smoke `backup-roundtrip`, `backup-imported-account`, `security-backup`, `passkey-backup` with `--retry=0` (7/7).
+- 2026-10-08: Phase 1.1 deviation: account slice read inside the key export; the page's completeness check dropped (a codec-hidden key row would block every backup). Ledger updated.
+- 2026-10-08: Phase 1.2 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build), `bun run test:all`, smoke `backup-roundtrip`, `passkey-backup` with `--retry=0` (4/4).
+- 2026-10-08: arc 1 Codex round 1 (session 01a11c7e) approve with fixes, 4 accepted; Opus review approve with fixes, 5 accepted, 3 observations. Fixes committed.
+- 2026-10-08: arc 1 Codex round 2 (resumed) clean; loop converged. Final gates next.
+- 2026-10-08: final arc 1 gates pass on the head: `bun run audit:vue`, `bun run test:all`, `bun run lint:actions`, `bun run check:plans`, the four smoke specs with `--retry=0` (7/7).
+- 2026-10-08: arc 1 PR #51 opened ready (gh stack, base `dev`); `Closes #17`. Arcs 2 and 3 stack on `worktree-security-ui-1`.

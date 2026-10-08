@@ -4,7 +4,8 @@
  * No vue, no chrome.*, no service clients — safe to import anywhere.
  */
 
-import { EncryptionKey } from "@nulo/wallet-crypto"
+import { EncryptionKey, zeroize } from "@nulo/wallet-crypto"
+import { toBase64 } from "@nulo/wallet-core/utils"
 import { fromBase64 } from "@/wallet/utils"
 import { scrubUrls } from "@/utils/scrub-urls"
 import { CONFIG_SERVICE_NAME, type ConfigKey, RESTORABLE_CONFIG_KEYS } from "@/wallet/services/config/spec"
@@ -43,13 +44,64 @@ export interface BackupSelection {
 export function detectBackupType(text: string): BackupFileType {
 	const trimmed = text.trim()
 	if (trimmed.startsWith("{") || trimmed.startsWith("[")) return "plain"
+	return parseEncryptedBackup(text) ? "encrypted" : "unknown"
+}
+
+/**
+ * The purpose an encrypted full backup is bound to. A v2 file's text is this tag, a colon and the
+ * base64 frame, and the frame's AES-GCM AAD is the tag's bytes, so a frame cannot open as anything
+ * else, nor anything else as a v2 backup, and stripping or adding the tag fails authentication.
+ */
+export const FULL_BACKUP_V2_TAG = "nulo:full-backup:v2"
+const FULL_BACKUP_TAG_FAMILY = "nulo:full-backup:"
+/** Version byte, 12-byte IV and 16-byte GCM tag: the shortest frame `EncryptionKey` writes. */
+const MIN_ENCRYPTED_FRAME_BYTES = 29
+
+const fullBackupAad = () => new TextEncoder().encode(FULL_BACKUP_V2_TAG)
+
+/**
+ * An encrypted full-backup file's frame and the AAD it opens under, decided by the text alone,
+ * before any key derivation: a v2 file opens only under its tag, an untagged legacy frame only
+ * without one, and anything else, another `nulo:full-backup:` tag included, is `null`.
+ */
+export function parseEncryptedBackup(text: string): { frame: Uint8Array<ArrayBuffer>; aad?: Uint8Array<ArrayBuffer> } | null {
+	if (text.length > MAX_BACKUP_FILE_BYTES || new TextEncoder().encode(text).length > MAX_BACKUP_FILE_BYTES) return null
+	const trimmed = text.trim()
+	const tagged = trimmed.startsWith(FULL_BACKUP_TAG_FAMILY)
+	if (tagged && !trimmed.startsWith(`${FULL_BACKUP_V2_TAG}:`)) return null
+	let frame: Uint8Array<ArrayBuffer>
 	try {
-		const bytes = fromBase64(trimmed)
-		if (bytes.length >= 13 && bytes[0] === 0) return "encrypted"
+		frame = fromBase64(tagged ? trimmed.slice(FULL_BACKUP_V2_TAG.length + 1) : trimmed)
 	} catch {
-		return "unknown"
+		return null
 	}
-	return "unknown"
+	if (frame.length < MIN_ENCRYPTED_FRAME_BYTES || frame[0] !== 0) return null
+	return tagged ? { frame, aad: fullBackupAad() } : { frame }
+}
+
+/** Encrypts a full backup's compact JSON under `password` as the text of a v2 file. */
+export async function sealFullBackupText(plaintext: string, password: string): Promise<string> {
+	const key = await EncryptionKey.fromPassword(password)
+	const payload = new TextEncoder().encode(plaintext)
+	try {
+		return `${FULL_BACKUP_V2_TAG}:${toBase64(await key.encrypt(payload, fullBackupAad()))}`
+	} finally {
+		zeroize(payload)
+	}
+}
+
+/** Decrypts an encrypted full-backup file's text to its JSON. Refuses what `parseEncryptedBackup`
+ *  refuses before deriving a key, and a wrong password or a moved tag at authentication. */
+export async function openFullBackupText(text: string, password: string): Promise<string> {
+	const parsed = parseEncryptedBackup(text)
+	if (!parsed) throw new Error("Not an encrypted backup")
+	const key = await EncryptionKey.fromPassword(password)
+	const plaintext = await key.decrypt(parsed.frame, parsed.aad)
+	try {
+		return new TextDecoder().decode(plaintext)
+	} finally {
+		zeroize(plaintext)
+	}
 }
 
 export interface ProcessBackupResult {

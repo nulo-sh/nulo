@@ -1,6 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { z } from "zod"
 import type { Restored } from "@/wallet/base"
+import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const ACCOUNT_SERVICE_NAME = "account"
 
@@ -155,6 +156,24 @@ export type Account = {
 	visible: boolean
 }
 
+/** A password profile's full-backup key material, read in one authenticated pass. */
+export type FullBackupKeys = {
+	/** Base64 master secret, the file's `master-key`. */
+	masterKey: string
+	/** Base64 recovery-phrase entropy. */
+	entropy: string
+	/** Base64 key made for this one backup, the file's `imported-keys-dek`: the key its imported-key
+	 *  rows open under, never the profile's long-lived DEK. */
+	importedKeysKey: string
+	/** The imported-keys slice, re-sealed under `importedKeysKey`. A row that did not open travels
+	 *  as it was stored. */
+	importedKeyRows: ImportedAccountKey[]
+	/** The account slice, read before the key rows. */
+	accounts: Account[]
+	/** The stored DEK no longer opens, so no imported key survives the restore. */
+	dekReplaced: boolean
+}
+
 /** Storage codec row schema — mirrors `Account` exactly. */
 export const AccountSchema: z.ZodType<Account> = z.object({
 	profileId: z.string(),
@@ -248,6 +267,13 @@ export type Methods = {
 	 * confirm before `importAccount`. Throws on any envelope/decrypt/regime failure.
 	 */
 	previewImportAccount(fileBody: string, password: string): string
+
+	/**
+	 * A password profile's full-backup key material from one authenticated pass: master, entropy,
+	 * the account slice, and the imported-key rows re-sealed under a fresh per-backup key. Throws
+	 * unless `fence` names the open session both before the first read and after the last seal.
+	 */
+	exportFullBackupKeys(fence: RunFence, password: string): FullBackupKeys
 
 	/** Backup the active profile's imported-account encrypted key rows (the dedicated slice). */
 	backupImportedKeys(): ImportedAccountKey[]

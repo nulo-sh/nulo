@@ -20,6 +20,7 @@ import { clickByTestId, launchExtension, openPopup, replaceInputValue, test, wai
 import { ensureUnlocked, navigateByHash, reopenAndRecoverAfterImport } from "./fixtures/helpers"
 import { armBackupDownloadCapture, readCapturedBackupDownload } from "./helpers/backup-export"
 import { gotoPopupImport, readActiveAccount, TEST_PASSWORD, waitForActiveAccount } from "./helpers/import-drivers"
+import { FULL_BACKUP_V2_TAG } from "@/utils/full-backup-helpers"
 
 // 900s: export chain (120s) + import navigation incl. the app's bounded recovery leg (300s) +
 // active-account convergence (240s) must ALL fit with headroom on slow runners.
@@ -65,9 +66,9 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 	const ciphertext = await readCapturedBackupDownload(page)
 	await page.close()
 
-	// The capture is the DECOMPRESSED file content: base64 ciphertext whose
-	// first decoded byte is the version 0 the importer's type sniffer keys on.
-	expect(ciphertext.trim().startsWith("{")).toBe(false)
+	// The capture is the DECOMPRESSED file content: the purpose tag, then the
+	// base64 frame whose AAD that tag is.
+	expect(ciphertext.trim().startsWith(`${FULL_BACKUP_V2_TAG}:`)).toBe(true)
 
 	const dir = mkdtempSync(join(tmpdir(), "nulo-e2e-enc-backup-"))
 	const filePath = join(dir, "NuloEncryptedBackup_e2e.txt")
