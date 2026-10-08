@@ -762,8 +762,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * Accounts are read before the key rows: an import that lands between the two reads can add a
-	 * key row with no account, which the orphan sweep removes after a restore, but never an account
-	 * without its key. The fence is asserted again after the last seal, so a lock, switch, deletion or
+	 * key row with no account, which the restored wallet's orphan sweep removes at its next start,
+	 * but never an account without its key. The fence is asserted again after the last seal, so a lock, switch, deletion or
 	 * worker restart during the export throws instead of returning another session's material.
 	 */
 	public async exportFullBackupKeys(fence: RunFence, password: string): Promise<FullBackupKeys> {

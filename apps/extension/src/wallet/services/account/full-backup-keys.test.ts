@@ -8,7 +8,8 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { fromBase64, toBase64 } from "@nulo/wallet-core/utils"
-import { asBase64MasterSecret, asImportedKeysDek, type ImportedKeysDek } from "@nulo/wallet-crypto"
+import { asBase64MasterSecret, asImportedKeysDek, EncryptionKey, type ImportedKeysDek } from "@nulo/wallet-crypto"
+import { validateAndMigrateBackup } from "@/composables/useFullBackupImport"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
@@ -19,7 +20,15 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { svc } from "../composition-harness"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import { AccountService } from "./service"
-import { ACCOUNT_STORAGE_ROOT, type Account, AccountType, type ImportedAccountKey, accountRowId } from "./spec"
+import {
+	ACCOUNT_SERVICE_NAME,
+	ACCOUNT_STORAGE_ROOT,
+	type Account,
+	AccountType,
+	IMPORTED_KEYS_SERVICE_NAME,
+	type ImportedAccountKey,
+	accountRowId,
+} from "./spec"
 
 const box = vi.hoisted(() => ({ beforeSeal: undefined as undefined | (() => Promise<void>) }))
 vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
@@ -93,21 +102,53 @@ const opened = async (key: ImportedKeysDek, row: ImportedAccountKey) =>
 const keyOf = (b64: string) => asImportedKeysDek(fromBase64(b64))
 const allZero = (b: Uint8Array) => b.every((x) => x === 0)
 
-/** Restores a file's key material into a fresh wallet and returns the restored profile's opened keys. */
-async function restoreIntoFreshWallet(file: { masterKey: string; entropy: string; importedKeysDek: string; rows: ImportedAccountKey[] }) {
+/** A password backup as the export page assembles it, checksummed like the real file. */
+async function backupFile(keys: {
+	masterKey: string
+	entropy: string
+	importedKeysDek: string
+	accounts: Account[]
+	rows: ImportedAccountKey[]
+}) {
+	const body = {
+		"compat-epoch": 5,
+		"backup-schema-version": 1,
+		"master-key": keys.masterKey,
+		entropy: keys.entropy,
+		"imported-keys-dek": keys.importedKeysDek,
+		data: {
+			profile: { id: "source-id", name: "P", type: "password" },
+			[ACCOUNT_SERVICE_NAME]: keys.accounts,
+			[IMPORTED_KEYS_SERVICE_NAME]: keys.rows,
+		},
+	}
+	return { ...body, checksum: await EncryptionKey.getHashHex(JSON.stringify(body)) }
+}
+
+/** Runs a file through the import gates, restores it into a fresh wallet, and returns the restored
+ *  profile's opened signing keys. */
+async function restoreIntoFreshWallet(file: Awaited<ReturnType<typeof backupFile>>) {
+	const validated = await validateAndMigrateBackup(file)
+	if (validated.kind !== "ok") throw new Error(validated.message)
+	const envelope = validated.backup as unknown as Record<string, string>
+	const rows = validated.data[IMPORTED_KEYS_SERVICE_NAME] as ImportedAccountKey[]
 	const fresh = await build()
 	const restored = await fresh.profile.restore(
 		{ id: "source-id", name: "Restored", type: "password" },
-		{ type: "password", masterKey: asBase64MasterSecret(file.masterKey), entropy: file.entropy, importedKeysDek: file.importedKeysDek },
+		{
+			type: "password",
+			masterKey: asBase64MasterSecret(envelope["master-key"]!),
+			entropy: envelope.entropy!,
+			importedKeysDek: envelope["imported-keys-dek"]!,
+		},
 		PASSWORD,
 	)
 	if ("restoreError" in restored && restored.restoreError) throw new Error(String(restored.restoreError))
-	const results = await fresh.account.restoreImportedKeys(file.rows.map((r) => ({ ...r, profileId: restored.id })))
+	const results = await fresh.account.restoreImportedKeys(rows.map((r) => ({ ...r, profileId: restored.id })))
 	expect(results.every((r) => !r.restoreError)).toBe(true)
 	await fresh.profile.finalizeRestore(restored.id, PASSWORD)
 	const destinationDek = (await fresh.profile.getProfileDek(restored.id))!
-	const rows = await fresh.keys.backup(restored.id)
-	return Promise.all(rows.map((row) => opened(destinationDek, row)))
+	return Promise.all((await fresh.keys.backup(restored.id)).map((row) => opened(destinationDek, row)))
 }
 
 describe("exportFullBackupKeys — the per-backup key", () => {
@@ -193,7 +234,9 @@ describe("exportFullBackupKeys — restore", () => {
 		await seedImported(api, p.id, ADDR_A, 0x2a, (await profile.getProfileDek(p.id))!)
 		const keys = await account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)
 
-		const restored = await restoreIntoFreshWallet({ ...keys, importedKeysDek: keys.importedKeysKey, rows: keys.importedKeyRows })
+		const restored = await restoreIntoFreshWallet(
+			await backupFile({ ...keys, importedKeysDek: keys.importedKeysKey, rows: keys.importedKeyRows }),
+		)
 
 		expect(restored).toEqual([Array(32).fill(0x2a)])
 	}, 60_000)
@@ -203,9 +246,11 @@ describe("exportFullBackupKeys — restore", () => {
 		const p = await profile.createProfile("P", PASSWORD)
 		const dek = (await profile.getProfileDek(p.id))!
 		await seedImported(api, p.id, ADDR_A, 0x2a, dek)
-		const { masterKey, entropy } = await account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)
+		const { masterKey, entropy, accounts } = await account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)
 
-		const restored = await restoreIntoFreshWallet({ masterKey, entropy, importedKeysDek: toBase64(dek), rows: await repo.backup(p.id) })
+		const restored = await restoreIntoFreshWallet(
+			await backupFile({ masterKey, entropy, accounts, importedKeysDek: toBase64(dek), rows: await repo.backup(p.id) }),
+		)
 
 		expect(restored).toEqual([Array(32).fill(0x2a)])
 	}, 60_000)
@@ -232,14 +277,23 @@ describe("exportFullBackupKeys — the run fence", () => {
 		const run = account.exportFullBackupKeys(fence, PASSWORD)
 		await atSeal
 		box.beforeSeal = undefined
-		return { profile, a, run, release: () => release() }
+		return { profile, account, a, run, release: () => release() }
 	}
 
-	test("a lock between the password check and the last seal refuses the export", async () => {
+	test("a held export released with nothing in between resolves (control)", async () => {
+		const { run, release } = await heldExport()
+		release()
+		await expect(run).resolves.toMatchObject({ dekReplaced: false })
+	}, 30_000)
+
+	test("a lock between the password check and the last seal refuses the export and still zeroizes both keys", async () => {
 		const { profile, run, release } = await heldExport()
 		await profile.lockActiveProfile()
 		release()
 		await expect(run).rejects.toBeInstanceOf(SessionEndedError)
+		const sourceDek = vi.mocked(unsealImportedSigningKeyV2).mock.calls.at(-1)![0]
+		const transferKey = vi.mocked(sealImportedSigningKeyV2).mock.calls.at(-1)![0]
+		expect(allZero(sourceDek) && allZero(transferKey)).toBe(true)
 	}, 30_000)
 
 	test("a switch away and back between the password check and the last seal refuses the export", async () => {
@@ -254,17 +308,36 @@ describe("exportFullBackupKeys — the run fence", () => {
 		const { profile, a, run, release } = await heldExport()
 		await profile.deleteProfile(a.id)
 		release()
-		await expect(run).rejects.toThrow()
+		await expect(run).rejects.toBeInstanceOf(SessionEndedError)
 	}, 30_000)
 
-	test("a fence from another session is refused before anything is read", async () => {
-		const { profile, account } = await build()
-		await profile.createProfile("A", PASSWORD)
+	test("a deletion and a same-id re-creation, unlocked again, between the password check and the last seal refuses the export", async () => {
+		const { profile, a, run, release } = await heldExport()
+		const { masterKey, entropy, transferKey } = await profile.openBackupTransfer(a.id, PASSWORD)
+		await profile.deleteProfile(a.id)
+		const recreated = await profile.restore(
+			{ id: a.id, name: "A", type: "password" },
+			{ type: "password", masterKey: asBase64MasterSecret(masterKey), entropy, importedKeysDek: toBase64(transferKey) },
+			PASSWORD,
+		)
+		await profile.finalizeRestore(recreated.id, PASSWORD)
+		expect(recreated.id).toBe(a.id)
+		expect((await profile.getActiveProfile())?.id).toBe(a.id)
+		release()
+		await expect(run).rejects.toBeInstanceOf(SessionEndedError)
+	}, 60_000)
+
+	test("a fence from another session is refused before the password check or any read", async () => {
+		const { api, profile, account } = await build()
+		const a = await profile.createProfile("A", PASSWORD)
+		await seedImported(api, a.id, ADDR_A, 0x2a, (await profile.getProfileDek(a.id))!)
 		const stale = await profile.captureRunFence()
 		await profile.lockActiveProfile()
-		await profile.unlockProfile(stale.profileId, PASSWORD)
+		await profile.unlockProfile(a.id, PASSWORD)
+		const transfer = vi.spyOn(profile, "openBackupTransfer")
 
 		await expect(account.exportFullBackupKeys(stale, PASSWORD)).rejects.toBeInstanceOf(SessionEndedError)
+		expect(transfer).not.toHaveBeenCalled()
 		expect(unsealImportedSigningKeyV2).not.toHaveBeenCalled()
 	}, 30_000)
 })

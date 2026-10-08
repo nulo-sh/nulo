@@ -185,6 +185,7 @@ vi.mock("@/wallet/storage/migrations", async () => {
 // Imported AFTER mocks are registered.
 import { relinkRestoredTokenBalances, resolvePasskeyCredential, restoreAccountsAndFilterOwnedSlices } from "./full-backup-restore"
 import { useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import { sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { ACCOUNT_STATE_SKIP_DEADLINE } from "@/wallet/services/account-state/normalize"
@@ -2287,32 +2288,39 @@ describe("useFullBackupImport — decryptBackup accepts the padding the detector
 })
 
 describe("useFullBackupImport — decryptBackup stale-selection fence", () => {
-	it("a decrypt superseded by a re-pick publishes nothing and leaves the new state alone", async () => {
+	it("a decrypt that succeeds after a re-pick publishes nothing and leaves the new state alone", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		// A well-formed legacy frame, so the run reaches the KDF instead of failing the parse.
-		c.selectedBackup.value = { name: "old.txt", backup: btoa("\0".repeat(29)), type: "encrypted", profileType: null }
+		const sealed = await sealFullBackupText(JSON.stringify({ data: { profile: { type: "password", name: "Old" } } }), "pass1234")
+		c.selectedBackup.value = { name: "old.txt", backup: sealed, type: "encrypted", profileType: null }
 		c.decryptionPassword.value = "pass1234"
 
-		// Hold the first KDF await open so the selection can change mid-flight
-		// (the too-large re-pick path clears it to null).
-		let releaseKdf!: (v: unknown) => void
-		const kdfGate = new Promise((res) => {
+		// Hold the KDF open so the selection can change mid-flight (the too-large re-pick path
+		// clears it to null), then let it finish with the real passhash so the decrypt succeeds.
+		const realPasshash = EncryptionKey.getPasshash.bind(EncryptionKey)
+		let releaseKdf!: () => void
+		const kdfGate = new Promise<void>((res) => {
 			releaseKdf = res
 		})
-		const passhashSpy = vi.spyOn(EncryptionKey, "getPasshash").mockReturnValue(kdfGate as never)
+		const passhashSpy = vi.spyOn(EncryptionKey, "getPasshash").mockImplementation(async (password) => {
+			await kdfGate
+			return realPasshash(password)
+		})
+		const decrypt = vi.spyOn(EncryptionKey.prototype, "decrypt")
 
 		const run = c.decryptBackup()
 		c.selectedBackup.value = null
-		releaseKdf("stale-passhash")
+		releaseKdf()
 		await run
 
+		await expect(decrypt.mock.results[0]?.value).resolves.toBeInstanceOf(Uint8Array)
 		// The superseded run must neither resurrect a selection husk nor touch
 		// the error channel (the re-pick's own error must survive).
 		expect(c.selectedBackup.value).toBeNull()
+		expect(c.parsedBackupName.value).toBeNull()
 		expect(opts.clearError).not.toHaveBeenCalled()
-		expect(opts.fillError).not.toHaveBeenCalledWith("full_backup", "Decryption Failed", expect.anything())
-		expect(passhashSpy).toHaveBeenCalledTimes(1)
+		expect(opts.fillError).not.toHaveBeenCalled()
 		passhashSpy.mockRestore()
+		decrypt.mockRestore()
 	})
 })

@@ -1070,7 +1070,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  transplanted `dekSealed` (re-MACing would launder it into a freshly-valid envelope)
 	 *  from corruption of the MAC field alone (DEK intact, keys recoverable). The
 	 *  non-destructive repair is export a full backup (deliberately still works in recovery
-	 *  mode — see `exportBackupMaterial`) and restore it. Caller MUST hold the facade lock
+	 *  mode — see `openBackupTransfer`) and restore it. Caller MUST hold the facade lock
 	 *  and OWNS the returned dek + oldPasshash; on a throw after allocation they are zeroized
 	 *  here before the rethrow. */
 	private async rekeyedDekForPasswordChangeHoldingLock(

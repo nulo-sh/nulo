@@ -190,9 +190,7 @@ async function exportKeyMaterial(gen, fence, credentialData, accountClient) {
 			if (gen !== generation) return "handled"
 			return { key: passkeyMaterial.credentialId, dekSealedB64: passkeyMaterial.dekSealed, dekReplaced: passkeyMaterial.dekReplaced }
 		}
-		// One authenticated pass: master + recovery-phrase entropy, the account slice, then the
-		// imported-key rows re-sealed under a key made for this backup alone, which the file
-		// carries instead of the profile's long-lived imported-keys key.
+		// The file carries a key made for this backup alone, never the profile's imported-keys DEK.
 		const material = await accountClient.exportFullBackupKeys(fence, password.value)
 		return {
 			key: material.masterKey,
@@ -273,7 +271,6 @@ function reportAssemblyFailure(gen, err) {
 	openToast({ kind: "error", label: "Failed to create the backup" })
 }
 
-/** Every slice comes from its service, except the ones the key export already read. */
 function backupSources(runClients, heldSlices = {}) {
 	return runClients.map(({ name, client }) => ({
 		name,

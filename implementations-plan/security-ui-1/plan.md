@@ -462,6 +462,30 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 |---|---|---|---|
 | 1 | A popup-held fence outlives the worker that issued it: serials restart at 0 and epochs live in memory, so an old `{ profileId, epoch: 0, session: 1 }` can match a restarted worker's session, and clients reconnect on their own. | High | Accepted, verified (`session-manager.ts:150`, `:337`, `:651`; `profile-deletion-state.ts:27`). The RPC fence becomes `RunFence`, an `ExecutionFence` plus a per-instance random incarnation id; `assertRunFence` checks it first. In-worker fences stay unchanged. Inference 9 narrowed; test (k) added. The condition is met in the plan; it is proven when (k) passes. |
 
+### Arc 1 post-implementation: Codex fix loop, round 1 (gpt-6.1-sol, high), with one Opus review
+
+**Codex verdict:** `approve with fixes`. No correctness or security bug; four findings, all accepted after checking them against the tree.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The stale-selection test released a string passhash into the real `fromPasshash`, so it only proved that a superseded *failure* publishes nothing; the moved fence guards a superseded *success*. | Medium | Accepted, verified. The test now seals a real v2 file, holds the KDF, swaps the selection, lets the real decrypt succeed and asserts nothing is published. Removing the fence after `openFullBackupText` fails it. |
+| 2 | The legacy restore test called the services directly and skipped `validateAndMigrateBackup`. | Medium | Accepted. Both restore tests now build a checksummed file, run it through `validateAndMigrateBackup`, then restore with the real services. |
+| 3 | Same-id re-creation was not exercised. | Low | Accepted. A held-export test deletes A, restores it under the same id, unlocks it, then releases: `SessionEndedError`. |
+| 4 | Two page comments narrated code or repeated the service contract. | Low | Accepted: one deleted, one cut to the invariant. |
+
+**Opus 5.5 review (general-purpose, same round):** `approve with fixes`, no correctness or security bug.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | "A fence from another session is refused" seeded no row, so it passed with the entry assert removed. | Medium | Accepted: a row is seeded and `openBackupTransfer` must not be called. |
+| 2 | The held-export tests had no control, and the deletion test accepted any throw. | Low | Accepted: a hold-and-release control resolves; the deletion test pins `SessionEndedError`. |
+| 3 | Key wiping was tested only on the seal-failure path. | Low | Accepted: the lock test asserts both keys are zero after a fence refusal. |
+| 4 | A doc comment still pointed at `exportBackupMaterial`. | Low | Accepted. |
+| 5 | The orphan sweep runs at service start, not "after a restore". | Low | Accepted: reworded. |
+| 6 | Rows that do not open still report `dekReplaced: false`, so the page names no loss though the restore drops those accounts (unchanged from before). | Observation | Not acted on: surfacing it changes what the page shows, an owner call. Goes to `follow-ups.md` at close-out. |
+| 7 | A fence refusal during the key export shows "wrong password". | Observation | Already accepted (lessons/phase-1.md). |
+| 8 | `atob` accepts whitespace inside the body and unpadded base64. | Observation | Harmless: the tag match is exact and AES-GCM authenticates the frame. |
+
 ## Post-implementation
 
 Run per arc at each arc boundary, before `gh stack add` opens the next arc, scoped to that arc's diff. `/code-review` is not run (`code_review: off`).
