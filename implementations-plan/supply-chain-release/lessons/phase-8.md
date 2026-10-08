@@ -11,3 +11,11 @@
 ## Arc 4 review, round 1
 
 - **Codex `approve with fixes` (3 Low), Opus two Medium and four Low; all accepted** (plan § Audit verdicts). The lessons worth keeping: a textual "only version lines changed" rule must pin the indentation of the field it exempts, or a dependency named `version` passes as one; and a step that computes a gate's mode must degrade to the strict mode when its input is unavailable, never fail the job, since a failed `changes` job skips every gate behind it.
+
+## Arc 4 review, round 2
+
+- **Codex `approve`, no new findings; the loop closed in two rounds.**
+
+## Final cross-arc pass
+
+- **Codex `approve with fixes` (2 Low), both accepted.** Escaping CR and LF is not enough for a log line that carries outside text: the runner's legacy parser reads `##[` anywhere in a line. And a later arc that turns a path off (release-please's tagging) leaves operator-facing strings in older steps pointing at it; read the error text, not just the logic.

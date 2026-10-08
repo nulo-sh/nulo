@@ -7,7 +7,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { lockWithVersion } from "../release/lock-version"
-import { ACKS_FILE, auditMode, DEPENDENCY_PATHSPECS, dependencyDiff, failing, judgeAudit, parseAcks } from "./audit-gate"
+import { ACKS_FILE, auditMode, command, DEPENDENCY_PATHSPECS, dependencyDiff, failing, judgeAudit, parseAcks, plain } from "./audit-gate"
 
 const ROOT = join(import.meta.dir, "..", "..")
 const GATE = join(import.meta.dir, "audit-gate.ts")
@@ -109,6 +109,17 @@ describe("the gate's command line", () => {
 			}
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+})
+
+describe("log output", () => {
+	test("report text cannot start or embed a workflow command", () => {
+		const hostile = "ws\r::error::forged\n##[error]legacy"
+		for (const line of [command("warning", hostile), plain(hostile)]) {
+			const physical = line.split(/\r\n|\r|\n/)
+			expect(physical).toHaveLength(1)
+			expect(line).not.toContain("##[")
 		}
 	})
 })

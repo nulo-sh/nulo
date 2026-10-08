@@ -913,6 +913,17 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 - [Low] The first group's reason said "transports" and "only in tests and the e2e harness", while `apps/extension/scripts/seed-preflight-node.ts` loads foundation's JSON-RPC client from Node. Accepted and checked: the preflight passes its own fetch, and foundation keeps undici in `client/undici.js`, which that client never imports; the reason now says so.
 - Not changed: commit 1's subject says "patch bumps" though axios, fast-copy and qs move a minor within their ranges; the squash takes the PR's title and body.
 
+### Arc 4 implementation, Codex round 2 (same session)
+
+**Verdict:** `approve`, no new findings, on diff `44b0dae..43c766d`. The loop converged in two rounds. Its "looks fine": the fallback always enforces, warns and keeps the gates running, while bad arguments and enforce-mode findings still fail; the indentation rule accepts the real release lines (an in-memory diff from the root and workspace manifests and `lockWithVersion` reported) and refuses nested keys; the new tests and their mutation controls; the Reason column's escaping; the corrected acknowledgement.
+
+### Final cross-arc pass, Codex (GPT-6.1 Sol, high), session `01a11de4-cf0e-77e3-9fc1-ae8d5590edc6`
+
+**Verdict:** `approve with fixes`, on the four arcs together (`ce7b646`, `3345189`, `86a89c5` and arc 4's diff). Both findings checked and accepted; fixes in the next commit.
+- [Low] The gate's log escaped CR and LF but not `##[`, which the runner's legacy parser accepts anywhere in a line, so a manifest line could still forge an annotation; the store runner already escapes it. Accepted: `command` and a `plain` line helper escape it the same way; one test, shown to fail without the escape. Two small copies of the escaper (the gate's and the store runner's) stay separate: two sites, and the reviewer saw no duplication worth a shared module.
+- [Low] `release.yml`'s `resolve` step still said release-please tags on a push and told the operator to check release-please, which arc 1 turned off. Accepted: the comment and both errors name auto-unstick; `resolve-tag.ts`'s copy of the message follows.
+- Its "looks fine": signing-job isolation, the audit mode reaching the gate, `scripts/` lint and typecheck covering arc 4, the stable, rc, nightly and store paths; `.github/actions/setup-aztec/cli/package.json` selecting `enforce` matches the plan's broad filter.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so there is no `/code-review` pass.

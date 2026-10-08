@@ -305,9 +305,12 @@ export function renderSummary(judgement: Judgement, mode: AuditMode): string {
 	return lines.join("\n")
 }
 
-/** A workflow command's message, escaped so report text cannot end the line and start another command. */
-const command = (level: "error" | "warning", message: string): string =>
-	`::${level}::${message.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`
+/** A workflow command whose data is escaped as the runner unescapes it, so report text cannot forge another. */
+export const command = (level: "error" | "warning", message: string): string =>
+	`::${level}::${message.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/##\[/g, "## [")}`
+
+/** An ordinary log line: a `::` command counts only at a line's start, but the runner's legacy `##[` anywhere. */
+export const plain = (text: string): string => text.replace(/[\r\n]+/g, " ").replace(/##\[/g, "## [")
 
 function problems(judgement: Judgement): string[] {
 	return [
@@ -362,7 +365,7 @@ function runMode(base: string | undefined, head: string | undefined): number {
 		return 2
 	}
 	const { mode, why } = modeFor(base, head)
-	console.log(`audit mode: ${mode} (${why.replace(/[\r\n]/g, " ")})`)
+	console.log(plain(`audit mode: ${mode} (${why})`))
 	const outputPath = process.env.GITHUB_OUTPUT
 	if (outputPath) appendFileSync(outputPath, `audit-mode=${mode}\n`)
 	return 0
