@@ -51,12 +51,6 @@ export class DappSessionMacStorage {
 		return (await this.get(id)) !== undefined
 	}
 
-	/** Whether anything is stored under `id`, read past the codec and the MAC: unlike
-	 *  {@link contains}, a locked wallet does not make a stored row read as absent. */
-	public isStored(id: string): Promise<boolean> {
-		return this.inner.contains(id)
-	}
-
 	public delete(id: string): Promise<void> {
 		return this.inner.delete(id)
 	}

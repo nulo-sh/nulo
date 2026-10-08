@@ -44,7 +44,7 @@ const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
 const alwaysTrust = ref(false)
-/** One answer per window: either control locks both until it settles. */
+/** One answer per window: either control locks both, released only when that answer fails. */
 const isBusy = ref(false)
 const refusalError = ref<"unremoved" | "failed">()
 
@@ -78,8 +78,7 @@ const handleConfirm = async () => {
 	closeCurrentWindow()
 }
 
-/** The identity comes from the wallet's own verified row, never the URL beyond its id. The window
- *  closes only once the app's channels have ended and its row is known to be gone. */
+/** The window closes only once the app's channels have ended and its rows are known to be gone. */
 const handleRefuse = async () => {
 	const row = session.value
 	if (isBusy.value || !row) return
@@ -88,7 +87,6 @@ const handleRefuse = async () => {
 	let result: VerificationRefusal
 	try {
 		result = await dappSessionService.refuseVerification({
-			rowId: row.id,
 			origin: row.dappMetadata?.url ?? "",
 			chainId: row.chainId,
 			profileId: row.profileId,

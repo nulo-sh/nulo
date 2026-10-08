@@ -57,10 +57,6 @@ function makeProfileStub() {
 			if (recoveryProfiles.has(profileId)) throw new RecoveryModeError()
 			return realMacKey(profileId)
 		}),
-		isFenceLive: vi.fn(
-			(fence: { profileId: string; epoch: number }) =>
-				activeProfile?.id === fence.profileId && deletionState.isCurrent(fence.profileId, fence.epoch),
-		),
 		async start() {},
 	}
 }
@@ -465,12 +461,14 @@ describe("the authorizations consent", () => {
 
 describe("refuseVerification", () => {
 	const ORIGIN = "https://dapp.example"
-	const target = (rowId = "p1-row") => ({ rowId, origin: ORIGIN, chainId: "1", profileId: "p1" })
+	const TUPLE = { origin: ORIGIN, chainId: "1", profileId: "p1" }
 
-	/** As the real provider: no key while locked or for a profile that is not the active one. */
+	/** As the real provider: no key while locked, for a profile that is not the active one, or in
+	 *  recovery mode. */
 	async function makeLockAwareService() {
 		const made = await makeService()
 		made.profileStub.deriveDappSessionMacKey.mockImplementation(async (profileId: string) => {
+			if (recoveryProfiles.has(profileId)) throw new RecoveryModeError()
 			if (activeProfile?.id !== profileId) throw new Error("Wallet locked")
 			return realMacKey(profileId)
 		})
@@ -479,60 +477,53 @@ describe("refuseVerification", () => {
 		made.service.onVerificationRefused.add((tuple) => refused.push(tuple))
 		made.service.onDappSessionDeleted.add((row) => deleted.push(row))
 		const stored = async () =>
-			Object.keys((await made.browserApi.storage.local.get(null)) as Record<string, unknown>).filter((k) =>
-				k.startsWith(`${ROW_ROOT}@`),
-			)
+			Object.keys((await made.browserApi.storage.local.get(null)) as Record<string, unknown>)
+				.filter((k) => k.startsWith(`${ROW_ROOT}@`))
+				.sort()
 		return { ...made, refused, deleted, stored }
 	}
 
 	test.each([
-		["the row is stored", true, { id: "p1" }, "revoked"],
-		["the row is gone and nothing replaced it", false, { id: "p1" }, "absent"],
-		["the row is gone and the wallet is locked", false, undefined, "unavailable"],
-	] as const)("ends the app's live channels when %s", async (_, stored, active, result) => {
+		["the row is stored", "stored", "revoked"],
+		["nothing of the app is stored", "none", "absent"],
+		["the delete fails", "failing", "unavailable"],
+	] as const)("ends the app's live channels when %s", async (_, state, result) => {
 		const svc = await makeLockAwareService()
-		if (stored) await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
-		activeProfile = active
-		expect(await svc.service.refuseVerification(target())).toBe(result)
-		expect(svc.refused).toEqual([{ origin: ORIGIN, chainId: "1" }])
+		if (state !== "none") await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
+		if (state === "failing") svc.browserApi.storage.local.remove = async () => Promise.reject(new Error("quota"))
+		expect(await svc.service.refuseVerification(TUPLE)).toBe(result)
+		expect(svc.refused).toEqual([TUPLE])
 	})
 
-	test("locked, the stored row is still deleted, with one delete event naming its storage key", async () => {
+	test.each([
+		["locked", () => undefined],
+		["another profile active", () => ({ id: "p2" })],
+		["in recovery mode", () => ({ id: "p1" })],
+	])("%s, every row of the app under the window's profile is deleted, each by its storage key", async (state, active) => {
 		const svc = await makeLockAwareService()
 		await plantRowSignedBy(svc.browserApi, rowFor("p1"), "p1")
-		activeProfile = undefined
-		expect(await svc.service.refuseVerification(target())).toBe("revoked")
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "duplicate" }, "p1")
+		activeProfile = active()
+		if (state === "in recovery mode") recoveryProfiles.add("p1")
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("revoked")
 		expect(await svc.stored()).toEqual([])
-		expect(svc.deleted.map((row) => row.id)).toEqual(["p1-row"])
+		expect(svc.deleted.map((row) => row.id).sort()).toEqual(["duplicate", "p1-row"])
 	})
 
-	test("with the row gone, a replacement row for the app is deleted under the owner, and another profile's is kept", async () => {
+	test("a replacement row of the app is deleted too, and other apps, chains and profiles are kept", async () => {
 		const svc = await makeLockAwareService()
 		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "replacement" }, "p1")
 		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-chain", chainId: "2" }, "p1")
+		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "other-app", dappMetadata: { url: "https://other.example" } }, "p1")
 		await plantRowSignedBy(svc.browserApi, rowFor("p2"), "p2")
-		expect(await svc.service.refuseVerification(target("gone-row"))).toBe("revoked")
-		expect(await svc.stored()).toEqual([`${ROW_ROOT}@other-chain`, `${ROW_ROOT}@p2-row`])
+		expect(await svc.service.refuseVerification(TUPLE)).toBe("revoked")
+		expect(await svc.stored()).toEqual([`${ROW_ROOT}@other-app`, `${ROW_ROOT}@other-chain`, `${ROW_ROOT}@p2-row`])
 		expect(svc.deleted.map((row) => row.id)).toEqual(["replacement"])
 	})
 
 	test.each([
-		["a lock", () => undefined],
-		["a switch", () => ({ id: "p2" })],
-	])("%s landing during the replacement lookup answers unavailable, never absent", async (_, next) => {
-		const svc = await makeLockAwareService()
-		await plantRowSignedBy(svc.browserApi, { ...rowFor("p1"), id: "replacement" }, "p1")
-		svc.profileStub.deriveDappSessionMacKey.mockImplementationOnce(async () => {
-			activeProfile = next()
-			throw new Error("Wallet locked")
-		})
-		expect(await svc.service.refuseVerification(target("gone-row"))).toBe("unavailable")
-		expect(await svc.stored()).toEqual([`${ROW_ROOT}@replacement`])
-	})
-
-	test.each([
-		["no row id", { ...target(), rowId: "" }],
-		["no origin", { ...target(), origin: undefined }],
+		["no profile id", { ...TUPLE, profileId: "" }],
+		["no origin", { ...TUPLE, origin: undefined }],
 	])("refuses a target with %s before ending anything", async (_, bad) => {
 		const svc = await makeLockAwareService()
 		await expect(svc.service.refuseVerification(bad as never)).rejects.toBeInstanceOf(ValidationError)

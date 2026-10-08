@@ -14,13 +14,8 @@ const CONNECTED = '[data-testid="pg-status"][data-status="connected"]'
 const DISCONNECTED = '[data-testid="pg-status"][data-status="disconnected"]'
 const APP_ROW = '[data-testid="connected-app-row"]'
 
-/**
- * "They don't match" on the emoji check ends the app's session and forgets it, both inside the
- * connect window of a new connection and in the standalone window of an untrusted reconnect: the
- * window closes, the playground sees the wallet drop the channel, and Settings, Connected apps no
- * longer lists the app. The list page stays open across the refusal, so the row is seen present
- * first and its removal is the wallet's own delete event.
- */
+/** The wallet tab stays on Connected apps across the refusal, so the row is seen before it and its
+ *  removal is the wallet's own delete event, never the list's first empty render. */
 
 async function walletOnLocalNetwork(ctx: ExtensionContext): Promise<Page> {
 	const wallet = await openPopup(ctx)
@@ -42,7 +37,11 @@ async function refuseAndExpectForgotten(check: Page, dapp: Page, wallet: Page): 
 		new Promise<never>((_, reject) => setTimeout(() => reject(new Error("the check window did not close within 10s")), 10_000)),
 	])
 	await dapp.waitForSelector(DISCONNECTED, { timeout: 20_000 })
-	await wallet.waitForFunction((sel: string) => document.querySelector(sel) === null, { timeout: 10_000, polling: 100 }, APP_ROW)
+	await wallet.waitForFunction(
+		(sel: string) => location.hash === "#/popup/settings/connected-apps" && document.querySelector(sel) === null,
+		{ timeout: 10_000, polling: 100 },
+		APP_ROW,
+	)
 }
 
 test.skipIf(!hasConfig)(

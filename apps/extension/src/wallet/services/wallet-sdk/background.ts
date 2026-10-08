@@ -621,16 +621,16 @@ function serializeDecryption(handler: BackgroundConnectionHandler, decryptLocks:
 		decryptLocks.withLock(sessionId, () => origDecrypt(sessionId, encrypted))
 }
 
-/** A deleted row (a Settings disconnect, an expiry, the emoji check's refusal) and a refusal itself
- *  end every live channel of that app on that network. Tuple-matched, since one row can serve
- *  several tabs' channels; other profiles' channels already ended at the switch. */
+/** A deleted row (a Settings disconnect, an expiry, a profile purge, the emoji check's refusal) and
+ *  a refusal itself end the live channels of that app on that network under the row's profile.
+ *  Tuple-matched, since one row serves every tab's channel to the app. */
 function wireSessionTeardown(
 	handler: BackgroundConnectionHandler,
 	dappSessionService: DappSessionService,
 	sessionProfiles: Map<string, string>,
 	logger: ILogger,
 ): void {
-	const revoke = (origin: string, chainId: string) =>
+	const revoke = (app: { origin: string; chainId: string; profileId: string }) =>
 		revokeLiveSessions(
 			{
 				getActiveSessions: () => handler.getActiveSessions(),
@@ -638,23 +638,22 @@ function wireSessionTeardown(
 				terminateSession: (sessionId) => handler.terminateSession(sessionId),
 				logger,
 			},
-			origin,
-			chainId,
+			app,
 		)
 	dappSessionService.onDappSessionDeleted.add((deleted) => {
 		const origin = deleted.dappMetadata?.url
-		const chainId = deleted.chainId
-		if (!origin || !chainId) {
+		const { chainId, profileId } = deleted
+		if (!origin || !chainId || !profileId) {
 			logger.log(
 				"wallet-sdk-bg",
 				LogLevel.Warn,
-				`DappSession deleted with missing origin/chainId — cannot match active sessions; skipping teardown`,
+				`DappSession deleted with missing origin/chainId/profileId — cannot match active sessions; skipping teardown`,
 			)
 			return
 		}
-		revoke(origin, chainId)
+		revoke({ origin, chainId, profileId })
 	})
-	dappSessionService.onVerificationRefused.add(({ origin, chainId }) => revoke(origin, chainId))
+	dappSessionService.onVerificationRefused.add(revoke)
 }
 
 /** On unlock, drain any queued discovery requests */

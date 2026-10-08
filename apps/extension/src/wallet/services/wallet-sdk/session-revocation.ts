@@ -1,7 +1,7 @@
 /**
- * End every live channel of one app on one network. Each match loses its profile stamp before it
- * is terminated, so a termination that throws leaves a listed channel the dispatch guard refuses;
- * each match runs alone, so one failure never shields the rest.
+ * End every live channel of one app on one network under one profile. Each match loses its profile
+ * stamp before it is terminated, so a termination that throws leaves a listed channel the dispatch
+ * guard refuses; each match runs alone, so one failure never shields the rest.
  */
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@nulo/wallet-core/logger"
@@ -17,16 +17,21 @@ export interface LiveSessionRevocationDeps {
 	logger: ILogger
 }
 
-export function revokeLiveSessions(deps: LiveSessionRevocationDeps, origin: string, chainId: string): void {
+export function revokeLiveSessions(deps: LiveSessionRevocationDeps, app: { origin: string; chainId: string; profileId: string }): void {
+	const { origin, chainId, profileId } = app
 	for (const session of deps.getActiveSessions()) {
 		if (session.origin !== origin || !isOnChain(session, chainId)) continue
+		// Another profile's channel is served by its own row; an unstamped one is debris or still
+		// establishing, and ending it fails closed.
+		const stamp = deps.sessionProfiles.get(session.sessionId)
+		if (stamp !== undefined && stamp !== profileId) continue
 		deps.sessionProfiles.delete(session.sessionId)
-		deps.logger.log(
-			"wallet-sdk-bg",
-			LogLevel.Info,
-			`Terminating live session ${describeExternalId(session.sessionId)} on chain ${chainId}: dApp access revoked`,
-		)
 		try {
+			deps.logger.log(
+				"wallet-sdk-bg",
+				LogLevel.Info,
+				`Terminating live session ${describeExternalId(session.sessionId)} on chain ${chainId}: dApp access revoked`,
+			)
 			deps.terminateSession(session.sessionId)
 		} catch (err) {
 			deps.logger.log("wallet-sdk-bg", LogLevel.Warn, `Failed to terminate session ${describeExternalId(session.sessionId)}`, err)

@@ -100,16 +100,15 @@ export const DappSessionSchema: z.ZodType<DappSession> = z.object({
 	mac: z.string().optional(),
 })
 
-/** The app the emoji check refuses, as the window read it from the wallet's own verified row. */
+/** The app the emoji check refuses, taken from the wallet's own MAC-verified row, never the dApp. */
 export type VerificationRefusalTarget = {
-	rowId: string
 	origin: string
 	chainId: string
 	profileId: string
 }
 
-/** `unavailable`: the live channels ended, but the row is gone and a replacement row for the app
- *  could not be verified, so the app's saved permissions may remain. */
+/** `unavailable`: the live channels ended, but a row of the app could not be deleted, so its saved
+ *  permissions may remain. */
 export type VerificationRefusal = "revoked" | "absent" | "unavailable"
 
 export type Methods = {
@@ -140,5 +139,5 @@ export type Events = {
 	onDappSessionAdded: DappSession
 	onDappSessionUpdated: DappSession
 	onDappSessionDeleted: DappSession
-	onVerificationRefused: { origin: string; chainId: string }
+	onVerificationRefused: { origin: string; chainId: string; profileId: string }
 }

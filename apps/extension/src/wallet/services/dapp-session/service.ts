@@ -59,14 +59,14 @@ function consentAfter(
 }
 
 function readRefusalTarget(target: VerificationRefusalTarget): VerificationRefusalTarget {
-	const { rowId, origin, chainId, profileId } = (target ?? {}) as Partial<Record<keyof VerificationRefusalTarget, unknown>>
-	if (typeof rowId !== "string" || rowId === "" || typeof profileId !== "string" || profileId === "") {
-		throw new ValidationError("refuseVerification needs the row id and its profile id")
+	const { origin, chainId, profileId } = (target ?? {}) as Partial<Record<keyof VerificationRefusalTarget, unknown>>
+	if (typeof profileId !== "string" || profileId === "") {
+		throw new ValidationError("refuseVerification needs the row's profile id")
 	}
 	if (typeof origin !== "string" || typeof chainId !== "string") {
 		throw new ValidationError("refuseVerification needs the app's origin and chain id")
 	}
-	return { rowId, origin, chainId, profileId }
+	return { origin, chainId, profileId }
 }
 
 export class DappSessionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
@@ -92,7 +92,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public readonly onDappSessionAdded = new EventHandler<DappSession>()
 	public readonly onDappSessionUpdated = new EventHandler<DappSession>()
 	public readonly onDappSessionDeleted = new EventHandler<DappSession>()
-	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string }>()
+	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
 
 	private readonly storage: DappSessionMacStorage
 	private readonly lock = new Lock()
@@ -413,47 +413,31 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	}
 
 	/**
-	 * The emoji check's refusal. The app's live channels end first, on every path. The row the window
-	 * verified is then deleted by its storage key without the MAC key, so a lock since the window
-	 * opened cannot hide it. With that row gone, a replacement row for the app is deleted only while
-	 * the owning profile's fence holds: a lock or a switch hides rows, so the answer is `unavailable`,
-	 * never a false `absent`.
+	 * The emoji check's refusal. The app's live channels end first, on every path; then every row of
+	 * the app under the window's profile is deleted, read raw and by storage key as the profile
+	 * purge does, so neither a lock, another active profile nor recovery mode can hide one.
+	 * `unavailable` means the channels ended but a row could not be deleted.
 	 */
 	public async refuseVerification(target: VerificationRefusalTarget): Promise<VerificationRefusal> {
-		const { rowId, origin, chainId, profileId } = readRefusalTarget(target)
+		const { origin, chainId, profileId } = readRefusalTarget(target)
 		await this.ensureInitialized()
 		return await this.lock.withLock(async () => {
-			this.emit("onVerificationRefused", { origin, chainId })
-			if (await this.storage.isStored(rowId)) {
-				await this.storage.delete(rowId)
-				this.emit("onDappSessionDeleted", { id: rowId, profileId, chainId, dappMetadata: { url: origin } } as DappSession)
-				return "revoked"
+			this.emit("onVerificationRefused", { origin, chainId, profileId })
+			try {
+				const rows = (await this.storage.rowsForProfile(profileId)).filter(
+					({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId,
+				)
+				await purgeRows(
+					rows,
+					({ storageId }) => this.storage.delete(storageId),
+					({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
+				)
+				return rows.length > 0 ? "revoked" : "absent"
+			} catch (err) {
+				this.logWarn("refuseVerification: the app's channels ended but its rows could not be deleted", err)
+				return "unavailable"
 			}
-			return await this.deleteReplacementRows(origin, chainId, profileId)
 		})
-	}
-
-	/** Holds the service lock: no `isExpired`, which takes it again. */
-	private async deleteReplacementRows(origin: string, chainId: string, profileId: string): Promise<VerificationRefusal> {
-		let fence: ExecutionFence
-		try {
-			fence = await this.profileService.captureExecutionFence()
-		} catch {
-			return "unavailable"
-		}
-		if (fence.profileId !== profileId) return "unavailable"
-		const replacements: Array<{ storageId: string; row: DappSession }> = []
-		for (const { storageId } of await this.storage.rowsForProfile(profileId)) {
-			const row = await this.storage.get(storageId)
-			if (row?.dappMetadata.url === origin && row.chainId === chainId) replacements.push({ storageId, row })
-		}
-		if (!this.profileService.isFenceLive(fence)) return "unavailable"
-		await purgeRows(
-			replacements,
-			({ storageId }) => this.storage.delete(storageId),
-			({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
-		)
-		return replacements.length > 0 ? "revoked" : "absent"
 	}
 
 	public async isExpired(session: DappSession): Promise<boolean> {

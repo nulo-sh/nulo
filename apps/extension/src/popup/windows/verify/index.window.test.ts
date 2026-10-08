@@ -5,7 +5,7 @@
  * and its warning are read as rendered.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { ref } from "vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -26,8 +26,8 @@ const setTrustedVerification = vi.fn(async (id: string, trusted: boolean) => {
 	callLog.push(`setTrustedVerification:${id}:${trusted}`)
 })
 let refusal: () => Promise<string> = async () => "revoked"
-const refuseVerification = vi.fn(async (target: { rowId: string }) => {
-	callLog.push(`refuseVerification:${target.rowId}`)
+const refuseVerification = vi.fn(async (target: { origin: string }) => {
+	callLog.push(`refuseVerification:${target.origin}`)
 	return refusal()
 })
 
@@ -214,8 +214,8 @@ describe("windows/verify — They don't match", () => {
 		await flushPromises()
 		await w.get('[data-testid="toggle-stub"]').trigger("click")
 		await press(w, "verify-mismatch-btn")
-		expect(refuseVerification.mock.calls).toEqual([[{ rowId: "row-1", origin: "https://dapp.example", chainId: "0", profileId: "p1" }]])
-		expect(callLog).toEqual(["getDappSession:row-1", "refuseVerification:row-1", "getCurrent", "remove:7"])
+		expect(refuseVerification.mock.calls).toEqual([[{ origin: "https://dapp.example", chainId: "0", profileId: "p1" }]])
+		expect(callLog).toEqual(["getDappSession:row-1", "refuseVerification:https://dapp.example", "getCurrent", "remove:7"])
 		expect(setTrustedVerification).not.toHaveBeenCalled()
 	})
 
@@ -230,7 +230,7 @@ describe("windows/verify — They don't match", () => {
 
 	test.each([
 		[
-			"a row it could not verify",
+			"a row it could not delete",
 			async () => "unavailable",
 			"The connection ended, but this app could not be removed. Remove it in Settings, Connected apps.",
 		],
@@ -254,17 +254,23 @@ describe("windows/verify — They don't match", () => {
 		}
 	})
 
-	test("while one answer runs, a second press of either control runs nothing", async () => {
+	test("a press of either control while an answer runs, or once the window is closing, runs nothing", async () => {
 		let settle: (value: string) => void = () => {}
 		refusal = () => new Promise((resolve) => (settle = resolve))
 		const w = mountVerify()
 		await flushPromises()
 		await w.get('[data-testid="toggle-stub"]').trigger("click")
-		await press(w, "verify-mismatch-btn")
-		await press(w, "verify-mismatch-btn")
-		await press(w, "verify-confirm-btn")
+		// Emitted on the component, so what refuses is the handlers' latch, not the disabled attribute.
+		const emitClick = async (testid: string) => {
+			;(w.findComponent(`[data-testid="${testid}"]`) as VueWrapper).vm.$emit("click")
+			await flushPromises()
+		}
+		await emitClick("verify-mismatch-btn")
+		await emitClick("verify-mismatch-btn")
+		await emitClick("verify-confirm-btn")
 		settle("revoked")
 		await flushPromises()
+		await emitClick("verify-confirm-btn")
 		expect(refuseVerification).toHaveBeenCalledTimes(1)
 		expect(setTrustedVerification).not.toHaveBeenCalled()
 		expect(remove.mock.calls).toEqual([[7]])

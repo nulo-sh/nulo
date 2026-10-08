@@ -55,6 +55,12 @@ describe("the dispatch guard refuses an unstamped channel", () => {
 })
 
 describe("revokeLiveSessions", () => {
+	const APP = { origin: ORIGIN, chainId: "0", profileId: "p1" }
+	const revoke = (sessions: ReturnType<typeof live>[], sessionProfiles: Map<string, string>, terminateSession = vi.fn()) => {
+		revokeLiveSessions({ getActiveSessions: () => sessions, sessionProfiles, terminateSession, logger: noopLogger }, APP)
+		return terminateSession
+	}
+
 	test("a throwing termination leaves its channel unstamped and refused, and the next match still ends", async () => {
 		const sessionProfiles = new Map([
 			["s1", "p1"],
@@ -67,7 +73,7 @@ describe("revokeLiveSessions", () => {
 		})
 		const sessions = [live("s1"), live("s2"), live("other-chain", ORIGIN, CHAIN_OTHER), live("other-app", "https://other.example")]
 
-		revokeLiveSessions({ getActiveSessions: () => sessions, sessionProfiles, terminateSession, logger: noopLogger }, ORIGIN, "0")
+		revoke(sessions, sessionProfiles, terminateSession)
 
 		expect(terminateSession.mock.calls).toEqual([["s1"], ["s2"]])
 		expect([...sessionProfiles.keys()]).toEqual(["other-chain", "other-app"])
@@ -75,15 +81,20 @@ describe("revokeLiveSessions", () => {
 		expect((await callFrom("other-chain", sessionProfiles)).dispatch).toHaveBeenCalledTimes(1)
 	})
 
-	test("a session whose chain info does not decode is skipped, and the matches after it still end", () => {
-		const terminateSession = vi.fn()
-		const sessions = [live("garbled", ORIGIN, { chainId: "not hex", version: "0x01" }), live("s1")]
+	test("another profile's channel to the same app is kept; an unstamped one ends", () => {
+		const sessionProfiles = new Map([
+			["mine", "p1"],
+			["theirs", "p2"],
+		])
 
-		revokeLiveSessions(
-			{ getActiveSessions: () => sessions, sessionProfiles: new Map(), terminateSession, logger: noopLogger },
-			ORIGIN,
-			"0",
-		)
+		const terminateSession = revoke([live("mine"), live("theirs"), live("unstamped")], sessionProfiles)
+
+		expect(terminateSession.mock.calls).toEqual([["mine"], ["unstamped"]])
+		expect(sessionProfiles.get("theirs")).toBe("p2")
+	})
+
+	test("a session whose chain info does not decode is skipped, and the matches after it still end", () => {
+		const terminateSession = revoke([live("garbled", ORIGIN, { chainId: "not hex", version: "0x01" }), live("s1")], new Map())
 
 		expect(terminateSession.mock.calls).toEqual([["s1"]])
 	})
