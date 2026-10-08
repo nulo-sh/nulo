@@ -20,7 +20,10 @@ type Resolutions = Map<string, Resolution>
 // not dropped.
 const FOUNDATION = new Set(["bb.js", "l1-artifacts", "noir-acvm_js", "noir-noir_codegen", "noir-noirc_abi", "noir-types"])
 const toCurrentScope = (key: string) =>
-	key.replace(/@aztec\/(?!viem(?:\/|$))([^/]+)/g, (_, pkg: string) => `${FOUNDATION.has(pkg) ? "@aztec-foundation" : "@aztec-labs"}/${pkg}`)
+	key.replace(
+		/@aztec\/(?!viem(?:\/|$))([^/]+)/g,
+		(_, pkg: string) => `${FOUNDATION.has(pkg) ? "@aztec-foundation" : "@aztec-labs"}/${pkg}`,
+	)
 
 const parseLock = async (path: string): Promise<Resolutions> => {
 	const text = await Bun.file(path).text()
@@ -61,5 +64,7 @@ for (const [key, prev] of [...oldRes.entries()].sort()) {
 
 console.log(JSON.stringify({ aztecScope, exceptions, added, removed }, null, "\t"))
 if (exceptions.length + added.length + removed.length > 0) {
-	console.error(`\n${exceptions.length} changed + ${added.length} added + ${removed.length} removed NON-Aztec entries — disposition each in the bump PR.`)
+	console.error(
+		`\n${exceptions.length} changed + ${added.length} added + ${removed.length} removed NON-Aztec entries — disposition each in the bump PR.`,
+	)
 }

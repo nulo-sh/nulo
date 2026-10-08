@@ -57,7 +57,11 @@ function lintPaths(paths: string[], cwd: string): { diagnostics: Diagnostic[]; p
 	const report = JSON.parse(res.stdout)
 	const notPrinted = report.summary?.diagnosticsNotPrinted ?? 0
 	if (notPrinted > 0) throw new Error(`biome truncated ${notPrinted} diagnostic(s) — the audit would be incomplete`)
-	const all = (report.diagnostics ?? []) as Array<{ category?: string; message: string; location: { path: string; start?: { line: number } } }>
+	const all = (report.diagnostics ?? []) as Array<{
+		category?: string
+		message: string
+		location: { path: string; start?: { line: number } }
+	}>
 	const parseErrors = all.filter((d) => (d.category ?? "").startsWith("parse")).map((d) => `${d.location.path}: ${d.message}`)
 	const diagnostics = all
 		.filter((d) => (d.category ?? "").startsWith(CATEGORY_PREFIX))
@@ -97,11 +101,16 @@ export function rescore(directives: AcceptedDirective[], opts: { cwd?: string } 
 		if (parseErrors.length > 0) throw new Error(`the audit cannot score a file Biome failed to parse:\n  ${parseErrors.join("\n  ")}`)
 		for (const [file, list] of byFile) {
 			for (const d of diagnostics) {
-				if (d.path === file && isBaselined(d.category)) violations.push(`${file}:${d.line} ${d.category} — unsuppressed offender (observed ${parseObserved(d.category, d.message)})`)
+				if (d.path === file && isBaselined(d.category))
+					violations.push(
+						`${file}:${d.line} ${d.category} — unsuppressed offender (observed ${parseObserved(d.category, d.message)})`,
+					)
 			}
 			for (const rule of BASELINED_RULES) {
 				const expected = list.filter((d) => d.rule === rule).sort((a, b) => a.line - b.line)
-				const observed = diagnostics.filter((d) => d.path === copyOf.get(file) && d.category === rule).sort((a, b) => a.line - b.line)
+				const observed = diagnostics
+					.filter((d) => d.path === copyOf.get(file) && d.category === rule)
+					.sort((a, b) => a.line - b.line)
 				violations.push(...pairAndCompare(file, rule, expected, observed))
 			}
 		}
@@ -114,7 +123,10 @@ export function rescore(directives: AcceptedDirective[], opts: { cwd?: string } 
 function pairAndCompare(file: string, rule: BaselinedRule, expected: AcceptedDirective[], observed: Diagnostic[]): string[] {
 	if (expected.length === 0 && observed.length === 0) return []
 	if (expected.length !== observed.length) {
-		const stale = expected.length > observed.length ? "a directive no longer has a function over budget under it — remove it and regenerate" : "more offenders than directives"
+		const stale =
+			expected.length > observed.length
+				? "a directive no longer has a function over budget under it — remove it and regenerate"
+				: "more offenders than directives"
 		return [`${file} ${rule} — ${expected.length} accepted directive(s) but ${observed.length} diagnostic(s) once removed: ${stale}`]
 	}
 	const out: string[] = []
@@ -123,7 +135,9 @@ function pairAndCompare(file: string, rule: BaselinedRule, expected: AcceptedDir
 		const actual = parseObserved(rule, observed[i].message)
 		if (actual !== stamp.accepted) {
 			const verb = actual > stamp.accepted ? "grew past" : "fell below"
-			out.push(`${file}:${stamp.line} ${rule} — accepted ${stamp.accepted} → observed ${actual} (the function ${verb} its stamp; edit the stamp to ${actual} or refactor)`)
+			out.push(
+				`${file}:${stamp.line} ${rule} — accepted ${stamp.accepted} → observed ${actual} (the function ${verb} its stamp; edit the stamp to ${actual} or refactor)`,
+			)
 		}
 	}
 	return out
@@ -133,7 +147,9 @@ const isMain = process.argv[1] ? fileURLToPath(import.meta.url) === resolve(proc
 if (isMain) {
 	const result = rescore(scanTree().accepted)
 	if (result.violations.length > 0) {
-		console.error(`complexity rescore FAILED — ${result.violations.length} of ${result.checked} acceptance(s) do not match the function:`)
+		console.error(
+			`complexity rescore FAILED — ${result.violations.length} of ${result.checked} acceptance(s) do not match the function:`,
+		)
 		for (const v of result.violations) console.error(`  • ${v}`)
 		process.exit(1)
 	}

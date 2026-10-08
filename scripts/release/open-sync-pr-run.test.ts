@@ -13,8 +13,22 @@ interface Calls {
 	flagConflict: Array<{ prNumber: number; label: string }>
 }
 
-function fakeIO(script: { releaseSha?: string | null; openPr?: number | null; mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"; prNumber?: number } = {}): { io: SyncIO; calls: Calls } {
-	const calls: Calls = { resolveReleasePrMergeSha: [], findOpenSyncPr: [], prepareSyncBranch: [], openPr: [], mergeability: [], flagConflict: [] }
+function fakeIO(
+	script: {
+		releaseSha?: string | null
+		openPr?: number | null
+		mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
+		prNumber?: number
+	} = {},
+): { io: SyncIO; calls: Calls } {
+	const calls: Calls = {
+		resolveReleasePrMergeSha: [],
+		findOpenSyncPr: [],
+		prepareSyncBranch: [],
+		openPr: [],
+		mergeability: [],
+		flagConflict: [],
+	}
 	const io: SyncIO = {
 		async resolveReleasePrMergeSha(headSha) {
 			calls.resolveReleasePrMergeSha.push(headSha)

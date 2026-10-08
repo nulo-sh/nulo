@@ -123,7 +123,8 @@ async function runCheck(env: Record<string, string | undefined>, io: RunIO): Pro
 			return { exit: 0 }
 		}
 		listed += mine.value.listed
-		if (mine.value.kind === "absent") return fail(io, `${GECKO_ID} is not among the add-ons this key pair authors (${listed} listed over ${page} page(s))`)
+		if (mine.value.kind === "absent")
+			return fail(io, `${GECKO_ID} is not among the add-ons this key pair authors (${listed} listed over ${page} page(s))`)
 		req = ownAddonsRequest(mine.value.url)
 	}
 	return fail(io, `${GECKO_ID} not found in the first ${OWN_ADDONS_MAX_PAGES} pages of the key pair's add-ons (${listed} listed)`)
@@ -139,15 +140,20 @@ interface Inputs {
 
 async function runPublish(env: Record<string, string | undefined>, io: RunIO): Promise<RunResult> {
 	const dryRun = env.DRY_RUN
-	if (dryRun !== "true" && dryRun !== "false") return fail(io, `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})`)
+	if (dryRun !== "true" && dryRun !== "false")
+		return fail(io, `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})`)
 	const inputs = readInputs(env, io)
 	if (!inputs.ok) return fail(io, inputs.reason)
 	const { version, storeVersion, zipPath, sourcePath, notes } = inputs.value
-	io.log(`zip ok: ${zipPath} — manifest version ${storeVersion} (version_name ${version}), gecko id ${GECKO_ID}, settled data declaration`)
+	io.log(
+		`zip ok: ${zipPath} — manifest version ${storeVersion} (version_name ${version}), gecko id ${GECKO_ID}, settled data declaration`,
+	)
 	io.log(`source ok: ${sourcePath}; reviewer notes: ${amoChars(notes)} chars`)
 
 	if (dryRun === "true") {
-		io.log(`dry run: would upload, validate, create version ${storeVersion} on the listed channel and attach the source; no request was made`)
+		io.log(
+			`dry run: would upload, validate, create version ${storeVersion} on the listed channel and attach the source; no request was made`,
+		)
 		return { exit: 0 }
 	}
 
@@ -179,7 +185,9 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 	}
 	if (!attached.ok) return fail(io, `version ${created.value.id} exists but ${attached.reason}; ${RECOVERY}`)
 
-	io.log(`published: version ${created.value.id} (${storeVersion}, ${created.value.channel}, file ${created.value.fileStatus}); source attached; follow it in the Developer Hub`)
+	io.log(
+		`published: version ${created.value.id} (${storeVersion}, ${created.value.channel}, file ${created.value.fileStatus}); source attached; follow it in the Developer Hub`,
+	)
 	return { exit: 0 }
 }
 
@@ -193,7 +201,8 @@ function readInputs(env: Record<string, string | undefined>, io: RunIO): Checked
 	const zipPath = env.ZIP_PATH ?? ""
 	const sourcePath = env.SOURCE_PATH ?? ""
 	const listingPath = env.LISTING_PATH ?? ""
-	if (!version || !zipPath || !sourcePath || !listingPath) return { ok: false, reason: "VERSION, ZIP_PATH, SOURCE_PATH and LISTING_PATH are required" }
+	if (!version || !zipPath || !sourcePath || !listingPath)
+		return { ok: false, reason: "VERSION, ZIP_PATH, SOURCE_PATH and LISTING_PATH are required" }
 
 	let manifest: unknown
 	try {
@@ -269,7 +278,10 @@ async function call(io: RunIO, auth: Auth, req: ApiRequest, what: string, timeou
 		res = await io.fetch(req, `JWT ${token}`, timeoutMs)
 	} catch (e) {
 		const name = e instanceof Error ? e.name : "Error"
-		return { ok: false, reason: `${what}: request failed (${name === "TimeoutError" || name === "AbortError" ? `timed out after ${timeoutMs / 1000}s` : name})` }
+		return {
+			ok: false,
+			reason: `${what}: request failed (${name === "TimeoutError" || name === "AbortError" ? `timed out after ${timeoutMs / 1000}s` : name})`,
+		}
 	}
 	if (res.json === null || typeof res.json !== "object") return { ok: false, reason: `${what}: HTTP ${res.status} with a non-JSON body` }
 	if (res.status >= 400) return { ok: false, status: res.status, reason: `${what}: HTTP ${res.status} — ${apiError(res.json)}` }

@@ -94,9 +94,7 @@ export function formatDupReport(report: JscpdReport): string {
 		`| ${t.sources} | ${t.lines} | ${t.clones} | ${t.duplicatedLines} | ${t.percentage.toFixed(2)}% | ${t.percentageTokens.toFixed(2)}% |`,
 	)
 	out.push("")
-	out.push(
-		`Split: **production ${prod} clones / ${prodLines} lines** · test↔test ${test} / ${testLines} · mixed ${mixed}.`,
-	)
+	out.push(`Split: **production ${prod} clones / ${prodLines} lines** · test↔test ${test} / ${testLines} · mixed ${mixed}.`)
 	out.push("")
 	if (formats.length > 0) {
 		out.push("Production by format: " + formats.map(([f, e]) => `${f} ${e.clones} / ${e.lines}`).join(" · ") + ".")

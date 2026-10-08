@@ -52,7 +52,8 @@ export interface AutoUnstickDecision {
 }
 
 export function decideUnstick(input: AutoUnstickInput): AutoUnstickDecision {
-	if (!input.autoUnstickEnabled) return { action: "disabled", reason: "AUTO_UNSTICK_ENABLED is off (staged rollout) — manual unstick applies" }
+	if (!input.autoUnstickEnabled)
+		return { action: "disabled", reason: "AUTO_UNSTICK_ENABLED is off (staged rollout) — manual unstick applies" }
 	if (input.releaseCreated) return { action: "noop", reason: "release-please created the release; no unstick needed" }
 	if (input.eventName !== "push") return { action: "noop", reason: `event is '${input.eventName}', not a push to main` }
 

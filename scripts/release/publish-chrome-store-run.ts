@@ -64,7 +64,8 @@ export interface RunIO {
 export type RunResult = { exit: 0 | 1 }
 
 /** A workflow command with its data escaped the way the runner unescapes it, so API text cannot forge a second command. */
-const command = (name: string, data: string) => `::${name}::${data.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/##\[/g, "## [")}`
+const command = (name: string, data: string) =>
+	`::${name}::${data.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/##\[/g, "## [")}`
 /**
  * An ordinary line that may carry API text: no line break (a `::` command counts only at the
  * start of a physical line) and no `##[`, which the runner's legacy parser accepts anywhere.
@@ -103,14 +104,19 @@ async function runCheck(env: Record<string, string | undefined>, io: RunIO, publ
 	const res = await call(io, statusRequest(publisherId, itemId, token))
 	if (!res.ok) return fail(io, res.reason)
 	const status = res.json as ItemStatus
-	if (status.itemId !== itemId) return fail(io, `fetchStatus answered for item ${JSON.stringify(status.itemId ?? null)}, expected ${itemId}`)
-	say(io, `check ok: item ${itemId} — published ${describe(status.publishedItemRevisionStatus)}; submitted ${describe(status.submittedItemRevisionStatus)}`)
+	if (status.itemId !== itemId)
+		return fail(io, `fetchStatus answered for item ${JSON.stringify(status.itemId ?? null)}, expected ${itemId}`)
+	say(
+		io,
+		`check ok: item ${itemId} — published ${describe(status.publishedItemRevisionStatus)}; submitted ${describe(status.submittedItemRevisionStatus)}`,
+	)
 	return { exit: 0 }
 }
 
 async function runPublish(env: Record<string, string | undefined>, io: RunIO, publisherId: string, itemId: string): Promise<RunResult> {
 	const dryRun = env.DRY_RUN
-	if (dryRun !== "true" && dryRun !== "false") return fail(io, `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})`)
+	if (dryRun !== "true" && dryRun !== "false")
+		return fail(io, `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})`)
 	const publishType = env.CWS_PUBLISH_TYPE as PublishType
 	if (!PUBLISH_TYPES.includes(publishType)) return fail(io, `CWS_PUBLISH_TYPE must be one of ${PUBLISH_TYPES.join(", ")}`)
 	const version = env.VERSION ?? ""
@@ -166,7 +172,9 @@ async function publish(io: RunIO, publisherId: string, itemId: string, token: st
 	io.log(command("warning", `publish-chrome-store: ${decision}`))
 	io.summary(plain(`Chrome Web Store: ${decision}.`))
 	const retry = await call(io, publishRequest(publisherId, itemId, token, publishType, false), true)
-	const result = retry.ok ? interpretAcceptedPublish(retry.json as PublishResponse, retry.status) : { ok: false as const, reason: retry.reason }
+	const result = retry.ok
+		? interpretAcceptedPublish(retry.json as PublishResponse, retry.status)
+		: { ok: false as const, reason: retry.reason }
 	if (!result.ok) {
 		io.summary(plain(`Chrome Web Store: the publish past accepted warnings failed — ${result.reason}.`))
 		return fail(io, result.reason)
@@ -200,10 +208,14 @@ async function call(io: RunIO, req: ApiRequest, keep4xx = false): Promise<CallRe
 		res = await io.fetch(req, REQUEST_TIMEOUT_MS)
 	} catch (e) {
 		const name = e instanceof Error ? e.name : "Error"
-		return { ok: false, reason: `${what}: request failed (${name === "TimeoutError" || name === "AbortError" ? `timed out after ${REQUEST_TIMEOUT_MS / 1000}s` : name})` }
+		return {
+			ok: false,
+			reason: `${what}: request failed (${name === "TimeoutError" || name === "AbortError" ? `timed out after ${REQUEST_TIMEOUT_MS / 1000}s` : name})`,
+		}
 	}
 	if (res.json === null || typeof res.json !== "object") return { ok: false, reason: `${what}: HTTP ${res.status} with a non-JSON body` }
-	if (res.status >= 400 && !(keep4xx && res.status < 500)) return { ok: false, reason: `${what}: HTTP ${res.status} — ${apiError(res.json)}` }
+	if (res.status >= 400 && !(keep4xx && res.status < 500))
+		return { ok: false, reason: `${what}: HTTP ${res.status} — ${apiError(res.json)}` }
 	return { ok: true, status: res.status, json: res.json }
 }
 
@@ -216,13 +228,17 @@ function readManifest(io: RunIO, zipPath: string, version: string): { ok: true; 
 	} catch {
 		return { ok: false, reason: `cannot read manifest.json from ${zipPath}` }
 	}
-	if ("browser_specific_settings" in manifest) return { ok: false, reason: "the zip carries browser_specific_settings: that is the Firefox build, not the Chrome one" }
-	if (manifest.version_name !== version) return { ok: false, reason: `manifest version_name ${JSON.stringify(manifest.version_name ?? null)} is not VERSION ${version}` }
+	if ("browser_specific_settings" in manifest)
+		return { ok: false, reason: "the zip carries browser_specific_settings: that is the Firefox build, not the Chrome one" }
+	if (manifest.version_name !== version)
+		return { ok: false, reason: `manifest version_name ${JSON.stringify(manifest.version_name ?? null)} is not VERSION ${version}` }
 	const storeVersion = typeof manifest.version === "string" ? manifest.version : ""
 	const tuple = parseStoreVersion(storeVersion)
-	if (!tuple || storeVersion.split(".").length !== 4) return { ok: false, reason: `manifest version ${JSON.stringify(storeVersion)} is not four integers` }
+	if (!tuple || storeVersion.split(".").length !== 4)
+		return { ok: false, reason: `manifest version ${JSON.stringify(storeVersion)} is not four integers` }
 	const fromName = parseStoreVersion(version.split("-")[0])
-	if (!fromName || compareStoreVersions(fromName, tuple) !== 0) return { ok: false, reason: `manifest version ${storeVersion} does not derive from VERSION ${version}` }
+	if (!fromName || compareStoreVersions(fromName, tuple) !== 0)
+		return { ok: false, reason: `manifest version ${storeVersion} does not derive from VERSION ${version}` }
 	return { ok: true, storeVersion }
 }
 

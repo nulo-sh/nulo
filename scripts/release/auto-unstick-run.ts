@@ -119,7 +119,8 @@ if (import.meta.main) {
 			// Fail LOUD on a transport/auth/rate-limit error. Returning null here would be
 			// indistinguishable from "no Release PR" → a silent noop → a stuck-but-green
 			// release. A commit with no PRs is exit 0 + empty output (handled below).
-			if (res.exitCode !== 0) throw new Error(`gh api commits/${headSha}/pulls failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`)
+			if (res.exitCode !== 0)
+				throw new Error(`gh api commits/${headSha}/pulls failed (exit ${res.exitCode}): ${res.stderr.toString().trim()}`)
 			// One JSON object per line. GitHub also associates a commit with PRs that merely contain
 			// it, so only the PR this commit merged counts.
 			for (const line of res.stdout.toString().split("\n")) {

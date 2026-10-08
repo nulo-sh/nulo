@@ -37,7 +37,13 @@ export function statusRequest(publisherId: string, itemId: string, token: string
 }
 
 /** `blockOnWarnings: false` is sent only by the one retry `acceptedWarnings` licenses. */
-export function publishRequest(publisherId: string, itemId: string, token: string, publishType: PublishType, blockOnWarnings = true): ApiRequest {
+export function publishRequest(
+	publisherId: string,
+	itemId: string,
+	token: string,
+	publishType: PublishType,
+	blockOnWarnings = true,
+): ApiRequest {
 	return {
 		url: itemUrl(publisherId, itemId, "publish"),
 		method: "POST",
@@ -83,11 +89,15 @@ export interface RevisionStatus {
 const KNOWN_REVISION_STATES = new Set(["PENDING_REVIEW", "STAGED", "PUBLISHED", "PUBLISHED_TO_TESTERS", "REJECTED", "CANCELLED"])
 
 /** A revision object as the API sent it: absent is valid, anything present must be an object with a known state. */
-function revisionState(revision: unknown): { kind: "absent" } | { kind: "known"; revision: RevisionStatus } | { kind: "unknown"; state: unknown } {
+function revisionState(
+	revision: unknown,
+): { kind: "absent" } | { kind: "known"; revision: RevisionStatus } | { kind: "unknown"; state: unknown } {
 	if (revision === undefined) return { kind: "absent" }
 	if (typeof revision !== "object" || revision === null) return { kind: "unknown", state: revision }
 	const r = revision as RevisionStatus
-	return typeof r.state === "string" && KNOWN_REVISION_STATES.has(r.state) ? { kind: "known", revision: r } : { kind: "unknown", state: r.state }
+	return typeof r.state === "string" && KNOWN_REVISION_STATES.has(r.state)
+		? { kind: "known", revision: r }
+		: { kind: "unknown", state: r.state }
 }
 
 export type Verdict = { ok: true; summary: string } | { ok: false; reason: string }
@@ -241,7 +251,11 @@ export interface PublishResponse {
  */
 export function collectWarnings(res: PublishResponse): string[] {
 	const found = [...asList(record(res.warningInfo)?.warnings), ...asList(res.error?.details)]
-	return found.slice(0, MAX_LISTED).flatMap(describeEntry).slice(0, MAX_LISTED).map((w) => truncate(w, 200))
+	return found
+		.slice(0, MAX_LISTED)
+		.flatMap(describeEntry)
+		.slice(0, MAX_LISTED)
+		.map((w) => truncate(w, 200))
 }
 
 /** A `WarningsInfo` detail or a bare `Warning` (the 200 envelope's shape) reads as its reasons; anything else is opaque. */
@@ -256,7 +270,10 @@ function describeEntry(entry: unknown): string[] {
 export function interpretPublish(res: PublishResponse, httpStatus: number): Verdict {
 	const warnings = collectWarnings(res)
 	if (httpStatus >= 400) {
-		return { ok: false, reason: `publish refused (HTTP ${httpStatus}): ${apiError(res)}${warnings.length ? `; warnings: ${warnings.join(" | ")}` : ""}` }
+		return {
+			ok: false,
+			reason: `publish refused (HTTP ${httpStatus}): ${apiError(res)}${warnings.length ? `; warnings: ${warnings.join(" | ")}` : ""}`,
+		}
 	}
 	// A success that still lists warnings is a success — the store did what it was asked — but the warnings are shown.
 	const noted = warnings.length ? `; warnings: ${warnings.join(" | ")}` : ""
@@ -285,7 +302,8 @@ function classifyDetail(detail: unknown, itemId: string): Detail {
 		return warnings ? { kind: "warnings", warnings } : { kind: "unreadable" }
 	}
 	if (type !== ERROR_INFO) return { kind: "unreadable" }
-	const ours = d.reason === "MANUAL_CONFIRMATION_REQUIRED" && d.domain === "chromewebstore.googleapis.com" && record(d.metadata)?.itemId === itemId
+	const ours =
+		d.reason === "MANUAL_CONFIRMATION_REQUIRED" && d.domain === "chromewebstore.googleapis.com" && record(d.metadata)?.itemId === itemId
 	return ours ? { kind: "confirmation" } : { kind: "unreadable" }
 }
 
@@ -319,7 +337,10 @@ export function interpretAcceptedPublish(res: PublishResponse, httpStatus: numbe
 	const strangers = warnings?.filter((w) => !ACCEPTED_WARNINGS.has(w.reason)).map((w) => truncate(w.reason, 80)) ?? null
 	if (strangers?.length === 0) return verdict
 	const what = strangers ? listed(strangers) : "an unreadable warningInfo"
-	return { ok: false, reason: `the store took the submission but reports ${what} outside the accepted warnings; review it in the dashboard and cancel it there if that is wrong` }
+	return {
+		ok: false,
+		reason: `the store took the submission but reports ${what} outside the accepted warnings; review it in the dashboard and cancel it there if that is wrong`,
+	}
 }
 
 /** The API's `reason`/`description`/`message` strings, truncated; never the raw body. */
@@ -327,13 +348,12 @@ export function apiError(body: unknown): string {
 	if (typeof body !== "object" || body === null) return "no error detail"
 	const error = (body as { error?: unknown }).error
 	const source = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : (body as Record<string, unknown>)
-	const parts = ["reason", "description", "message", "status"]
-		.map((k) => source[k])
-		.filter((v): v is string => typeof v === "string")
+	const parts = ["reason", "description", "message", "status"].map((k) => source[k]).filter((v): v is string => typeof v === "string")
 	return parts.length ? truncate(parts.join(" — "), 200) : "no error detail"
 }
 
 export const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 /** The first MAX_LISTED entries, then a count: output stays bounded whatever the store sends. */
-export const listed = (items: string[]) => (items.length > MAX_LISTED ? `${items.slice(0, MAX_LISTED).join(", ")} (+${items.length - MAX_LISTED} more)` : items.join(", "))
+export const listed = (items: string[]) =>
+	items.length > MAX_LISTED ? `${items.slice(0, MAX_LISTED).join(", ")} (+${items.length - MAX_LISTED} more)` : items.join(", ")
 const str = (v: unknown) => (v === undefined ? "<absent>" : JSON.stringify(v))

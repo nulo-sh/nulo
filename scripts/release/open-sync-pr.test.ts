@@ -31,7 +31,9 @@ describe("syncEligible", () => {
 	})
 
 	test("the eligible reason names the stable Release-PR merge", () => {
-		expect(syncEligible({ eventName: "push", isPrerelease: false, headSha: SHA, releasePrMergeSha: SHA }).reason).toMatch(/stable Release-PR/)
+		expect(syncEligible({ eventName: "push", isPrerelease: false, headSha: SHA, releasePrMergeSha: SHA }).reason).toMatch(
+			/stable Release-PR/,
+		)
 	})
 })
 

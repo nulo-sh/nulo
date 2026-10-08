@@ -49,7 +49,11 @@ describe("suppression classifier", () => {
 			sentence: "the walker IS the redaction policy",
 		})
 		// Biome accepts multiple spaces between token and scope (verified on 2.5.9).
-		expect(classifySuppressionLine(line(["\t", IGNORE, " ", LEN, "accepted at 154 lines — one declarative theme value, split only fragments it"]))).toEqual({
+		expect(
+			classifySuppressionLine(
+				line(["\t", IGNORE, " ", LEN, "accepted at 154 lines — one declarative theme value, split only fragments it"]),
+			),
+		).toEqual({
 			kind: "baselined",
 			rule: "noExcessiveLinesPerFunction",
 			accepted: 154,
@@ -66,7 +70,10 @@ describe("suppression classifier", () => {
 			[line([IGNORE, COG, "accepted at score 22 — TODO"]), /placeholders/],
 			[line([IGNORE, COG, "accepted at score 22 — short"]), /placeholders|essential/],
 			[line([IGNORE, COG, "necessary here"]), /whole `\/\/` comment/],
-			[line(["const x = 1 ", IGNORE, COG, "accepted at score 22 — trailing on a code line is not a whole comment"]), /whole `\/\/` comment/],
+			[
+				line(["const x = 1 ", IGNORE, COG, "accepted at score 22 — trailing on a code line is not a whole comment"]),
+				/whole `\/\/` comment/,
+			],
 		] as const) {
 			const c = classifySuppressionLine(refused)
 			expect(c?.kind, refused).toBe("forbidden")
@@ -121,7 +128,12 @@ describe("identity anchors", () => {
 			"packages/y/gen.ts-6-\t*walk(node: Node): Generator<Node> {",
 		].join("\n")
 		const parsed = parseGrepWithContext(stdout)
-		expect(parsed.matches.map((m) => `${m.file}:${m.line}`)).toEqual(["apps/x/Foo.vue:10", "packages/y/bar.ts:5", "packages/y/baz.ts:5", "packages/y/gen.ts:5"])
+		expect(parsed.matches.map((m) => `${m.file}:${m.line}`)).toEqual([
+			"apps/x/Foo.vue:10",
+			"packages/y/bar.ts:5",
+			"packages/y/baz.ts:5",
+			"packages/y/gen.ts:5",
+		])
 		expect(anchorFor(parsed, "apps/x/Foo.vue", 10)).toBe("async function verify(intentPath: string) {")
 		expect(anchorFor(parsed, "apps/x/Foo.vue", 11)).toBe("async function verify(intentPath: string) {")
 		expect(anchorFor(parsed, "packages/y/bar.ts", 5)).toBe("export function bar() {")
@@ -152,10 +164,25 @@ describe("identity anchors", () => {
 	test("an anchor must be unique in its file — a same-text declaration elsewhere is refused", () => {
 		const dir = mkdtempSync(join(tmpdir(), "anchor-"))
 		const file = join(dir, "twins.ts")
-		writeFileSync(file, ["export const a = () => {", "\treturn new Promise((resolve) => {", "\t})", "}", "export const b = () => {", "\treturn new Promise((resolve) => {", "\t})", "}", ""].join("\n"))
+		writeFileSync(
+			file,
+			[
+				"export const a = () => {",
+				"\treturn new Promise((resolve) => {",
+				"\t})",
+				"}",
+				"export const b = () => {",
+				"\treturn new Promise((resolve) => {",
+				"\t})",
+				"}",
+				"",
+			].join("\n"),
+		)
 		try {
 			const base = { file, rule: "noExcessiveCognitiveComplexity" as const, accepted: 22, sentence: "x".repeat(12) }
-			expect(ambiguousAnchors([{ ...base, line: 1, anchor: "return new Promise((resolve) => {" }]).map((f) => f.why)).toEqual([expect.stringMatching(/occurs 2×/)])
+			expect(ambiguousAnchors([{ ...base, line: 1, anchor: "return new Promise((resolve) => {" }]).map((f) => f.why)).toEqual([
+				expect.stringMatching(/occurs 2×/),
+			])
 			expect(ambiguousAnchors([{ ...base, line: 1, anchor: "export const a = () => {" }])).toEqual([])
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
@@ -174,7 +201,12 @@ describe("entry diff + ratchet", () => {
 	})
 
 	test("lowered stamps and rewording are free; a same-name signature edit or file move pairs as a move; anything else is an add", () => {
-		const base = [entry({}), entry({ anchor: "function g() {", accepted: 30 }), entry({ anchor: "function h() {", accepted: 25 }), entry({ anchor: "function m() {", accepted: 27 })]
+		const base = [
+			entry({}),
+			entry({ anchor: "function g() {", accepted: 30 }),
+			entry({ anchor: "function h() {", accepted: 25 }),
+			entry({ anchor: "function m() {", accepted: 27 }),
+		]
 		const head = [
 			entry({ anchor: "function f(x: number) {" }), // signature edit: same name
 			entry({ anchor: "function g() {", accepted: 28 }), // lowered
@@ -183,19 +215,26 @@ describe("entry diff + ratchet", () => {
 			entry({ anchor: "function k() {", accepted: 25, sentence: "brand new acceptance" }), // added
 		]
 		const diff = diffEntries(base, head)
-		expect(diff.moved.map((m) => `${m.from.anchor} → ${m.to.file} ${m.to.anchor}`)).toEqual(["function f() { → a.ts function f(x: number) {", "function m() { → moved/a.ts function m() {"])
+		expect(diff.moved.map((m) => `${m.from.anchor} → ${m.to.file} ${m.to.anchor}`)).toEqual([
+			"function f() { → a.ts function f(x: number) {",
+			"function m() { → moved/a.ts function m() {",
+		])
 		expect(diff.restamped).toEqual([{ key: "noExcessiveCognitiveComplexity a.ts — function g() {", from: 30, to: 28 }])
 		expect(diff.reworded).toEqual(["noExcessiveCognitiveComplexity a.ts — function h() {"])
 		expect(diff.added.map((e) => e.anchor)).toEqual(["function k() {"])
 		expect(diff.removed).toEqual([])
-		expect(ratchetViolations(diffEntries(base, [entry({ accepted: 23 })]))).toEqual(["↑ noExcessiveCognitiveComplexity a.ts — function f() {: 22 → 23"])
+		expect(ratchetViolations(diffEntries(base, [entry({ accepted: 23 })]))).toEqual([
+			"↑ noExcessiveCognitiveComplexity a.ts — function f() {: 22 → 23",
+		])
 		// Moves are violations by default — name continuity is reviewer evidence, not proof — and pass only under the owner's label.
 		expect(ratchetViolations(diff)).toEqual([
 			"+ noExcessiveCognitiveComplexity a.ts — function k() { (accepted at 25)",
 			`→ noExcessiveCognitiveComplexity a.ts — function f() {  ⇒  noExcessiveCognitiveComplexity a.ts — function f(x: number) { (a move needs the \`${MOVE_APPROVED_LABEL}\` label on the PR)`,
 			`→ noExcessiveCognitiveComplexity a.ts — function m() {  ⇒  noExcessiveCognitiveComplexity moved/a.ts — function m() { (a move needs the \`${MOVE_APPROVED_LABEL}\` label on the PR)`,
 		])
-		expect(ratchetViolations(diff, { movesApproved: true })).toEqual(["+ noExcessiveCognitiveComplexity a.ts — function k() { (accepted at 25)"])
+		expect(ratchetViolations(diff, { movesApproved: true })).toEqual([
+			"+ noExcessiveCognitiveComplexity a.ts — function k() { (accepted at 25)",
+		])
 	})
 
 	test("a delete-and-recreate under the copied sentence is an add even with the label, and anonymous anchors have no move path at all", () => {
@@ -205,15 +244,22 @@ describe("entry diff + ratchet", () => {
 		expect(ratchetViolations(diffEntries([entry({})], [entry({ file: "b.ts", anchor: "function k() {" })]), approved)).toHaveLength(1)
 		// An anonymous callback's identity is its exact line in its file: an edit OR a file move is an add.
 		const anon = entry({ anchor: "(args: { sel: string }) => {" })
-		expect(ratchetViolations(diffEntries([anon], [{ ...anon, anchor: "(args: { sel: string; visible: boolean }) => {" }]), approved)).toHaveLength(1)
+		expect(
+			ratchetViolations(diffEntries([anon], [{ ...anon, anchor: "(args: { sel: string; visible: boolean }) => {" }]), approved),
+		).toHaveLength(1)
 		expect(ratchetViolations(diffEntries([anon], [{ ...anon, file: "b.ts" }]), approved)).toHaveLength(1)
 	})
 
 	test("against a base that predates entries, per-rule totals derived from the head ENTRIES may not grow", () => {
-		const base: LegacyManifest["rules"] = { noExcessiveCognitiveComplexity: { "a.ts": 2, "b.ts": 1 }, noExcessiveLinesPerFunction: { "c.ts": 1 } }
+		const base: LegacyManifest["rules"] = {
+			noExcessiveCognitiveComplexity: { "a.ts": 2, "b.ts": 1 },
+			noExcessiveLinesPerFunction: { "c.ts": 1 },
+		}
 		const three = [entry({ anchor: "function a() {" }), entry({ anchor: "function b() {" }), entry({ anchor: "function c() {" })]
 		expect(legacyRatchetViolations(base, three)).toEqual([])
-		expect(legacyRatchetViolations(base, [...three, entry({ anchor: "function d() {" })])).toEqual(["↑ noExcessiveCognitiveComplexity: 3 → 4 acceptance(s)"])
+		expect(legacyRatchetViolations(base, [...three, entry({ anchor: "function d() {" })])).toEqual([
+			"↑ noExcessiveCognitiveComplexity: 3 → 4 acceptance(s)",
+		])
 	})
 })
 
@@ -261,11 +307,18 @@ describe("complexity baseline (this checkout)", () => {
 				"`bun run baseline:complexity` (a Biome bump needs `-- --adopt`).",
 		).toEqual([])
 		expect(
-			[...diff.removed.map((e) => `removed ${e.file} — ${e.anchor}`), ...diff.moved.map((m) => `moved ${m.from.anchor} → ${m.to.anchor}`), ...diff.reworded.map((k) => `reworded ${k}`)],
+			[
+				...diff.removed.map((e) => `removed ${e.file} — ${e.anchor}`),
+				...diff.moved.map((m) => `moved ${m.from.anchor} → ${m.to.anchor}`),
+				...diff.reworded.map((k) => `reworded ${k}`),
+			],
 			"The manifest is stale — rerun `bun run baseline:complexity` in this PR so it records the change.",
 		).toEqual([])
 		expect((manifest as BaselineManifest).accepted.length).toBe(scan.accepted.length)
-		expect(manifest.rules, "manifest.json's `rules` summary was edited by hand — it is derived from the entries; rerun `bun run baseline:complexity`.").toEqual(ruleCountsOf(scan.accepted))
+		expect(
+			manifest.rules,
+			"manifest.json's `rules` summary was edited by hand — it is derived from the entries; rerun `bun run baseline:complexity`.",
+		).toEqual(ruleCountsOf(scan.accepted))
 	})
 })
 
@@ -349,7 +402,9 @@ describe("shrink-only ratchet against the base branch", () => {
 			}
 			const head = manifest as BaselineManifest
 			if (read.manifest.biomeVersion !== head.biomeVersion) {
-				console.warn(`ratchet relaxed — Biome ${read.manifest.biomeVersion} → ${head.biomeVersion}: review every added or raised acceptance in this PR's diff by hand`)
+				console.warn(
+					`ratchet relaxed — Biome ${read.manifest.biomeVersion} → ${head.biomeVersion}: review every added or raised acceptance in this PR's diff by hand`,
+				)
 				return
 			}
 			const approved = movesApproved(process.env.GITHUB_EVENT_PATH)

@@ -67,7 +67,9 @@ function isBaselined(category: string): category is BaselinedRule {
 const adopt = process.argv.includes("--adopt")
 const rootPkg = JSON.parse(readFileSync("package.json", "utf8"))
 const installed = installedBiomeVersion(rootPkg)
-const committed: BaselineManifest | LegacyManifest | undefined = existsSync(MANIFEST_PATH) ? JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) : undefined
+const committed: BaselineManifest | LegacyManifest | undefined = existsSync(MANIFEST_PATH)
+	? JSON.parse(readFileSync(MANIFEST_PATH, "utf8"))
+	: undefined
 if (committed !== undefined && !hasEntries(committed)) {
 	console.error(`ERROR: ${MANIFEST_PATH} carries no per-acceptance entries — restore it from git before regenerating.`)
 	process.exit(1)
@@ -80,7 +82,9 @@ if (gate === "adopt-on-same-version") {
 }
 if (gate === "version-changed-without-adopt") {
 	console.error(`ERROR: Biome changed ${committed?.biomeVersion} → ${installed}; the manifest is re-pinned only with --adopt.`)
-	console.error("In the bump PR: `bun run baseline:rescore`, re-stamp each drifted directive by hand, then `bun run baseline:complexity -- --adopt`.")
+	console.error(
+		"In the bump PR: `bun run baseline:rescore`, re-stamp each drifted directive by hand, then `bun run baseline:complexity -- --adopt`.",
+	)
 	process.exit(1)
 }
 
@@ -134,7 +138,10 @@ if (committed) {
 		console.error("Refactor the function(s) under the budget instead; `--adopt` exists only for a Biome version bump.")
 		process.exit(1)
 	}
-	for (const m of diff.moved) console.log(`moved (CI needs the owner's ${MOVE_APPROVED_LABEL} label): ${m.from.file} — ${m.from.anchor}  →  ${m.to.file} — ${m.to.anchor}`)
+	for (const m of diff.moved)
+		console.log(
+			`moved (CI needs the owner's ${MOVE_APPROVED_LABEL} label): ${m.from.file} — ${m.from.anchor}  →  ${m.to.file} — ${m.to.anchor}`,
+		)
 	for (const k of diff.reworded) console.log(`reworded: ${k}`)
 }
 

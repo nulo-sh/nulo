@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import type { ApiRequest } from "./publish-chrome-store"
-import { type ApiResponse, POLL_INTERVAL_MS, REQUEST_TIMEOUT_MS, type RunIO, UPLOAD_DEADLINE_MS, runPublishChromeStore } from "./publish-chrome-store-run"
+import {
+	type ApiResponse,
+	POLL_INTERVAL_MS,
+	REQUEST_TIMEOUT_MS,
+	type RunIO,
+	UPLOAD_DEADLINE_MS,
+	runPublishChromeStore,
+} from "./publish-chrome-store-run"
 
 const ITEM = "abcdefghijklmnopabcdefghijklmnop"
 const TOKEN = "TOKEN-A1B2"
@@ -33,7 +40,10 @@ function harness(steps: Step[], manifest: unknown = CHROME_MANIFEST) {
 	return { io, calls, lines, summary, output: () => lines.join("\n") }
 }
 
-const BROAD_HOST = { reason: "BROAD_HOST_USAGE", description: "Your item is requesting broad host permissions which may require an in-depth review." }
+const BROAD_HOST = {
+	reason: "BROAD_HOST_USAGE",
+	description: "Your item is requesting broad host permissions which may require an in-depth review.",
+}
 const refused = (warnings: unknown[]): ApiResponse => ({
 	status: 400,
 	json: {
@@ -42,7 +52,12 @@ const refused = (warnings: unknown[]): ApiResponse => ({
 			message: "Validation warnings were encountered that require confirmation.",
 			status: "FAILED_PRECONDITION",
 			details: [
-				{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "MANUAL_CONFIRMATION_REQUIRED", domain: "chromewebstore.googleapis.com", metadata: { itemId: ITEM, publisherId: "pub" } },
+				{
+					"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+					reason: "MANUAL_CONFIRMATION_REQUIRED",
+					domain: "chromewebstore.googleapis.com",
+					metadata: { itemId: ITEM, publisherId: "pub" },
+				},
 				{ "@type": "type.googleapis.com/google.chrome.webstore.v2.WarningsInfo", warnings },
 			],
 		},
@@ -89,7 +104,11 @@ describe("inputs", () => {
 	})
 
 	test("version_name must equal VERSION and version must be four integers derived from it", async () => {
-		for (const manifest of [{ ...CHROME_MANIFEST, version_name: "0.26.0" }, { ...CHROME_MANIFEST, version: "0.27.0" }, { ...CHROME_MANIFEST, version: "0.28.0.0" }]) {
+		for (const manifest of [
+			{ ...CHROME_MANIFEST, version_name: "0.26.0" },
+			{ ...CHROME_MANIFEST, version: "0.27.0" },
+			{ ...CHROME_MANIFEST, version: "0.28.0.0" },
+		]) {
 			const h = harness([], manifest)
 			expect((await runPublishChromeStore(env(), h.io)).exit).toBe(1)
 		}
@@ -108,7 +127,10 @@ describe("dry run", () => {
 
 describe("check mode", () => {
 	test("needs no zip, makes exactly one GET, applies no eligibility rule", async () => {
-		const h = harness([status({ submittedItemRevisionStatus: { state: "PENDING_REVIEW", distributionChannels: [{ crxVersion: "0.27.0.0" }] } })], undefined)
+		const h = harness(
+			[status({ submittedItemRevisionStatus: { state: "PENDING_REVIEW", distributionChannels: [{ crxVersion: "0.27.0.0" }] } })],
+			undefined,
+		)
 		const r = await runPublishChromeStore(env({ MODE: "check", ZIP_PATH: undefined, VERSION: undefined }), h.io)
 		expect(r.exit).toBe(0)
 		expect(h.calls.map(kind)).toEqual(["fetchStatus"])
@@ -153,7 +175,11 @@ describe("publish flow", () => {
 
 	test("an exhausted deadline never reaches publish", async () => {
 		const polls = Math.ceil(UPLOAD_DEADLINE_MS / POLL_INTERVAL_MS) + 2
-		const h = harness([status(), ok({ itemId: ITEM, uploadState: "IN_PROGRESS" }), ...Array.from({ length: polls }, () => status({ lastAsyncUploadState: "IN_PROGRESS" }))])
+		const h = harness([
+			status(),
+			ok({ itemId: ITEM, uploadState: "IN_PROGRESS" }),
+			...Array.from({ length: polls }, () => status({ lastAsyncUploadState: "IN_PROGRESS" })),
+		])
 		expect((await runPublishChromeStore(env(), h.io)).exit).toBe(1)
 		expect(h.calls.map(kind)).not.toContain("publish")
 		expect(h.output()).toContain("still in progress")
@@ -220,13 +246,22 @@ describe("publish flow", () => {
 		expect((await runPublishChromeStore(env(), rejected.io)).exit).toBe(1)
 		expect(rejected.output()).toContain("bad manifest")
 
-		const blocked = harness([status(), succeeded, ok({ error: { code: 400, message: "warnings block publish", details: [{ reason: "LARGE_ICON" }] } }, 400)])
+		const blocked = harness([
+			status(),
+			succeeded,
+			ok({ error: { code: 400, message: "warnings block publish", details: [{ reason: "LARGE_ICON" }] } }, 400),
+		])
 		expect((await runPublishChromeStore(env(), blocked.io)).exit).toBe(1)
 		expect(blocked.output()).toContain("LARGE_ICON")
 	})
 
 	test("a refusal on accepted warnings alone is retried once with blockOnWarnings: false, and recorded", async () => {
-		const h = harness([status(), succeeded, refused([BROAD_HOST]), ok({ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST] } })])
+		const h = harness([
+			status(),
+			succeeded,
+			refused([BROAD_HOST]),
+			ok({ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST] } }),
+		])
 		expect((await runPublishChromeStore(env(), h.io)).exit).toBe(0)
 		expect(h.calls.map(kind)).toEqual(["fetchStatus", "upload", "publish", "publish"])
 		expect(h.calls.slice(2).map((c) => JSON.parse(c.body as string).blockOnWarnings)).toEqual([true, false])
@@ -257,7 +292,10 @@ describe("publish flow", () => {
 	})
 
 	test("a retry the store took with a warning outside the list exits 1 and points at the dashboard", async () => {
-		const taken = ok({ state: "PENDING_REVIEW", warningInfo: { warnings: [BROAD_HOST, { reason: "LARGE_ICON", description: "icon" }] } })
+		const taken = ok({
+			state: "PENDING_REVIEW",
+			warningInfo: { warnings: [BROAD_HOST, { reason: "LARGE_ICON", description: "icon" }] },
+		})
 		const h = harness([status(), succeeded, refused([BROAD_HOST]), taken])
 		expect((await runPublishChromeStore(env(), h.io)).exit).toBe(1)
 		expect(h.output()).toContain("LARGE_ICON")
@@ -271,7 +309,14 @@ describe("publish flow", () => {
 		for (const steps of [
 			[status(), succeeded, refused([hostile]), taken],
 			[status(), succeeded, taken],
-			[status({ publishedItemRevisionStatus: { state: "PUBLISHED", distributionChannels: [{ crxVersion: "0.26.0.0\n::error::forged" }] } })],
+			[
+				status({
+					publishedItemRevisionStatus: {
+						state: "PUBLISHED",
+						distributionChannels: [{ crxVersion: "0.26.0.0\n::error::forged" }],
+					},
+				}),
+			],
 		]) {
 			const h = harness(steps)
 			await runPublishChromeStore(env(), h.io)

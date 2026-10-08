@@ -354,8 +354,14 @@ describe("staged packages", () => {
 				expect(files).toContain(target.replace(/^\.\//, ""))
 			}
 		}
-		expect(byDir("wallet-crypto").manifest.peerDependencies).toEqual({ "@aztec-labs/accounts": "6.0.0-rc.1", "@aztec-labs/foundation": "6.0.0-rc.1" })
-		expect(byDir("wallet-sdk-schema-patch").manifest.peerDependencies).toEqual({ "@aztec-labs/aztec.js": "6.0.0-rc.1", "@aztec-labs/stdlib": "6.0.0-rc.1" })
+		expect(byDir("wallet-crypto").manifest.peerDependencies).toEqual({
+			"@aztec-labs/accounts": "6.0.0-rc.1",
+			"@aztec-labs/foundation": "6.0.0-rc.1",
+		})
+		expect(byDir("wallet-sdk-schema-patch").manifest.peerDependencies).toEqual({
+			"@aztec-labs/aztec.js": "6.0.0-rc.1",
+			"@aztec-labs/stdlib": "6.0.0-rc.1",
+		})
 		expect(byDir("wallet-sdk-schema-patch").manifest.dependencies).toEqual({
 			zod: workspaceManifest("wallet-sdk-schema-patch").dependencies?.zod,
 		})

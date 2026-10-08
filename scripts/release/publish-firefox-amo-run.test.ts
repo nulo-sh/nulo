@@ -1,6 +1,23 @@
 import { describe, expect, test } from "bun:test"
-import { type ApiRequest, GECKO_ID, NOTES_END, NOTES_START, OWN_ADDONS_MAX_PAGES, RECOVERY, REJECTED, requiredSourcePaths, sourcePackageJsonPath } from "./publish-firefox-amo"
-import { type ApiResponse, type Files, POLL_INTERVAL_MS, type RunIO, runPublishFirefoxAmo, VALIDATION_DEADLINE_MS } from "./publish-firefox-amo-run"
+import {
+	type ApiRequest,
+	GECKO_ID,
+	NOTES_END,
+	NOTES_START,
+	OWN_ADDONS_MAX_PAGES,
+	RECOVERY,
+	REJECTED,
+	requiredSourcePaths,
+	sourcePackageJsonPath,
+} from "./publish-firefox-amo"
+import {
+	type ApiResponse,
+	type Files,
+	POLL_INTERVAL_MS,
+	type RunIO,
+	runPublishFirefoxAmo,
+	VALIDATION_DEADLINE_MS,
+} from "./publish-firefox-amo-run"
 
 const SECRET = "SECRET-A1B2"
 const FIREFOX_MANIFEST = {
@@ -123,7 +140,10 @@ describe("inputs", () => {
 		const manifests = [
 			{ version: "0.27.0.0", version_name: "0.27.0" },
 			{ ...FIREFOX_MANIFEST, browser_specific_settings: { gecko: { ...gecko, id: "other@nulo.sh" } } },
-			{ ...FIREFOX_MANIFEST, browser_specific_settings: { gecko: { ...gecko, data_collection_permissions: { required: ["none"] } } } },
+			{
+				...FIREFOX_MANIFEST,
+				browser_specific_settings: { gecko: { ...gecko, data_collection_permissions: { required: ["none"] } } },
+			},
 		]
 		for (const manifest of manifests) {
 			const h = harness([new Error("must not be called")], { manifest })
@@ -180,8 +200,13 @@ describe("dry run", () => {
 
 describe("check mode", () => {
 	test("needs no zip, source or listing; exactly one GET to the author-scoped list; masks the secret and the JWT", async () => {
-		const h = harness([ok({ results: [{ guid: GECKO_ID, status: "incomplete" }] })], { missing: ["dist/release/nulo-firefox-0.27.0.zip", "dist/source/nulo-0.27.0-source.zip", "apps/extension/store/listing.md"] })
-		const r = await runPublishFirefoxAmo(env({ MODE: "check", ZIP_PATH: undefined, SOURCE_PATH: undefined, LISTING_PATH: undefined, VERSION: undefined }), h.io)
+		const h = harness([ok({ results: [{ guid: GECKO_ID, status: "incomplete" }] })], {
+			missing: ["dist/release/nulo-firefox-0.27.0.zip", "dist/source/nulo-0.27.0-source.zip", "apps/extension/store/listing.md"],
+		})
+		const r = await runPublishFirefoxAmo(
+			env({ MODE: "check", ZIP_PATH: undefined, SOURCE_PATH: undefined, LISTING_PATH: undefined, VERSION: undefined }),
+			h.io,
+		)
 		expect(r.exit).toBe(0)
 		expect(h.kinds()).toEqual(["list"])
 		expect(h.calls[0].req.method).toBe("GET")
@@ -193,14 +218,20 @@ describe("check mode", () => {
 
 	test("follows the list's next links and finds the add-on on a later page", async () => {
 		const next = (n: number) => `https://addons.mozilla.org/api/v5/addons/addon/?page=${n}&page_size=50`
-		const h = harness([ok({ results: [{ guid: "a@x" }], next: next(2) }), ok({ results: [{ guid: "b@x" }], next: next(3) }), ok({ results: [{ guid: GECKO_ID, status: "public" }], next: null })])
+		const h = harness([
+			ok({ results: [{ guid: "a@x" }], next: next(2) }),
+			ok({ results: [{ guid: "b@x" }], next: next(3) }),
+			ok({ results: [{ guid: GECKO_ID, status: "public" }], next: null }),
+		])
 		expect((await runPublishFirefoxAmo(env({ MODE: "check" }), h.io)).exit).toBe(0)
 		expect(h.calls.map((c) => c.req.url)).toEqual([`https://addons.mozilla.org/api/v5/addons/addon/?page_size=50`, next(2), next(3)])
 		expect(h.output()).toContain("status public")
 	})
 
 	test("gives up after the page cap without claiming absence", async () => {
-		const pages = Array.from({ length: OWN_ADDONS_MAX_PAGES + 1 }, (_, i) => ok({ results: [{ guid: `x${i}@x` }], next: `https://addons.mozilla.org/api/v5/addons/addon/?page=${i + 2}` }))
+		const pages = Array.from({ length: OWN_ADDONS_MAX_PAGES + 1 }, (_, i) =>
+			ok({ results: [{ guid: `x${i}@x` }], next: `https://addons.mozilla.org/api/v5/addons/addon/?page=${i + 2}` }),
+		)
 		const h = harness(pages)
 		expect((await runPublishFirefoxAmo(env({ MODE: "check" }), h.io)).exit).toBe(1)
 		expect(h.calls).toHaveLength(OWN_ADDONS_MAX_PAGES)
@@ -343,7 +374,11 @@ describe("publish flow", () => {
 	})
 
 	test("a 400 on the version request created nothing: it says why a re-run of the tag fails, never the recovery", async () => {
-		const h = harness([ok({ uuid: "u-1" }), VALID, ok({ approval_notes: ["Ensure this field has no more than 3000 characters."] }, 400)])
+		const h = harness([
+			ok({ uuid: "u-1" }),
+			VALID,
+			ok({ approval_notes: ["Ensure this field has no more than 3000 characters."] }, 400),
+		])
 		expect((await runPublishFirefoxAmo(env(), h.io)).exit).toBe(1)
 		expect(h.output()).toContain(REJECTED)
 		expect(h.output()).not.toContain(RECOVERY)
