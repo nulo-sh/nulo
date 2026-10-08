@@ -486,6 +486,10 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 | 7 | A fence refusal during the key export shows "wrong password". | Observation | Already accepted (lessons/phase-1.md). |
 | 8 | `atob` accepts whitespace inside the body and unpadded base64. | Observation | Harmless: the tag match is exact and AES-GCM authenticates the frame. |
 
+### Arc 1 post-implementation: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `clean`. "No material findings remain": the revised tests exercise the successful stale decrypt, validated legacy and new envelopes, same-id re-creation, early refusal and key wiping after a fence refusal. The loop converged for arc 1.
+
 ## Post-implementation
 
 Run per arc at each arc boundary, before `gh stack add` opens the next arc, scoped to that arc's diff. `/code-review` is not run (`code_review: off`).
