@@ -15,7 +15,7 @@ worktree: landing-store-buttons
 - **Status**: completed.
 - **Shipped**: [#49](https://github.com/nulo-sh/nulo/pull/49). The install buttons go to the visitor's store (`apps/landing/src/install.ts`, `install-dom.ts`, the fallback markup in `index.html`). The build-time GitHub release fetch and its runbook step are deleted. The PR adds the 1200×630 link-preview image `apps/landing/public/og.png` and the footer store links. Two phone layout fixes found on the way: the hero grows with its plate, and the record panel no longer widens the page.
 - **Dropped**: nothing in the approved scope. The "Old Firefox hint" extra was declined before planning.
-- **Open items**: the owner's sign-off on `og.png` and on the two phone layout fixes gates the merge of #49, so it needs no follow-up. The landing's extensionless Vite config import moved to [follow-ups](../follow-ups.md).
+- **Open items**: the owner's sign-off on `og.png` and on the two phone layout fixes gates the merge of #49, so it needs no follow-up. The landing's extensionless Vite config import moved to [follow-ups](../../follow-ups.md).
 - **Seeds retired**: the `/goal` below and the ELI5's `/loop` are retired. Do not run them.
 
 # Landing store buttons

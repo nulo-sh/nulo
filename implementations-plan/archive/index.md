@@ -134,6 +134,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [key-model-v2](key-model-v2/plan.md) — completed — the second-generation key model, one coordinated break before the first shipped build
 - [key-model-v2-hardening](key-model-v2-hardening/plan.md) — completed — four hardening deliverables on top of the second-generation key model
 - [keyboard-guards](keyboard-guards/plan.md) — completed — each page's Enter shortcut answers only its own fields and refuses repeats
+- [landing-store-buttons](landing-store-buttons/plan.md) — completed — install buttons go to the browser's store; the landing stops reading GitHub releases
 - [layout-polish](layout-polish/plan.md) — completed — the popup built to the drawings, with the remaining differences decided from pictures
 - [legal-terms](legal-terms/plan.md) — completed — Terms and Privacy Policy, an on-device acceptance record, and third-party notices
 - [light-theme-fix](light-theme-fix/plan.md) — completed — the light theme repaired at its root, and a theme toggle for the faucet
