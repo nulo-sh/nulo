@@ -37,7 +37,7 @@ export interface UnstickIO {
 }
 
 export interface RunUnstickOpts {
-	/** `vars.AUTO_UNSTICK_ENABLED` — default OFF (staged rollout); the real-release flip is the human's. */
+	/** `vars.AUTO_UNSTICK_ENABLED` as `parseAutoUnstickFlag` reads it. */
 	autoUnstickEnabled: boolean
 	/** release-please's `release_created` output — true means it worked, no unstick. */
 	releaseCreated: boolean
@@ -61,6 +61,18 @@ export interface RunUnstickResult {
 	 */
 	continues: boolean
 	exitCode: 0 | 1
+}
+
+/**
+ * `vars.AUTO_UNSTICK_ENABLED`, which is empty when the variable is unset: unset or empty is on, so
+ * deleting the variable never strands a release; `off`, `false` and `0` are off; any other value is
+ * off with a warning, so a typo meant to disable never enables.
+ */
+export function parseAutoUnstickFlag(raw: string | undefined): { enabled: boolean; warning?: string } {
+	const flag = (raw ?? "").trim().toLowerCase()
+	if (["", "on", "true", "1"].includes(flag)) return { enabled: true }
+	if (["off", "false", "0"].includes(flag)) return { enabled: false }
+	return { enabled: false, warning: "AUTO_UNSTICK_ENABLED is neither on/true/1 nor off/false/0; auto-unstick stays off" }
 }
 
 export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult> {
@@ -169,10 +181,11 @@ if (import.meta.main) {
 	}
 
 	const version = process.env.VERSION?.trim() || ((await Bun.file("package.json").json()) as { version: string }).version
-	const flag = (process.env.AUTO_UNSTICK_ENABLED ?? "").trim().toLowerCase()
+	const flag = parseAutoUnstickFlag(process.env.AUTO_UNSTICK_ENABLED)
+	if (flag.warning) console.log(`::warning::${flag.warning}`)
 
 	const result = await runUnstick({
-		autoUnstickEnabled: flag === "on" || flag === "true" || flag === "1",
+		autoUnstickEnabled: flag.enabled,
 		releaseCreated: (process.env.RELEASE_CREATED ?? "").trim() === "true",
 		eventName: process.env.EVENT_NAME ?? "",
 		headSha: process.env.HEAD_SHA ?? "",
