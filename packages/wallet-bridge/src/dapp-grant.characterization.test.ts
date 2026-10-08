@@ -250,6 +250,7 @@ describe("grant coverage agrees with enforcement", () => {
 
 const SEND_LEG = { name: "sendTx", args: [{ calls: [] }, {}] }
 const TOKEN_LEG = { name: "registerToken", args: [ACC1, TOKEN] }
+const GRANT_LEG = { name: "grantPublicAuthwit", args: [ACC1, { caller: OTHER, contract: TOKEN, method: "transfer", args: [] }] }
 const CHAIN_LEG = { name: "getChainInfo", args: [] }
 const batchRefusal = (name: string) => ({
 	threw: Error,
@@ -266,6 +267,7 @@ describe("batch refusal", () => {
 	test.each([
 		["sendTx alone", [SEND_LEG], "sendTx"],
 		["registerToken alone", [TOKEN_LEG], "registerToken"],
+		["grantPublicAuthwit alone", [GRANT_LEG], "grantPublicAuthwit"],
 		["a refused leg after a runnable one", [CHAIN_LEG, SEND_LEG], "sendTx"],
 		["the first refused leg in order", [TOKEN_LEG, SEND_LEG], "registerToken"],
 		["a refused leg after an unknown one", [{ name: "nope", args: [] }, SEND_LEG], "sendTx"],
@@ -310,7 +312,7 @@ describe("batch refusal", () => {
 		expect((await runBatch([])).result).toEqual({ ok: [] })
 	})
 
-	test("over every registry method, exactly registerToken and sendTx are refused as batch legs", async () => {
+	test("over every registry method, exactly grantPublicAuthwit, registerToken and sendTx are refused as batch legs", async () => {
 		const names = Object.keys(METHOD_REGISTRY)
 		expect(names.length).toBeGreaterThan(0)
 		const refusedNames: string[] = []
@@ -318,7 +320,7 @@ describe("batch refusal", () => {
 			const { result } = await runBatch([{ name, args: [] }])
 			if ("threw" in result && result.message === batchRefusal(name).message) refusedNames.push(name)
 		}
-		expect(refusedNames.sort()).toEqual(["registerToken", "sendTx"])
+		expect(refusedNames.sort()).toEqual(["grantPublicAuthwit", "registerToken", "sendTx"])
 	})
 
 	test("registerContractClass inside a batch keeps its scope-check refusal", async () => {
@@ -327,15 +329,6 @@ describe("batch refusal", () => {
 			threw: Error,
 			message:
 				"registerContractClass is intentionally disabled in Nulo pending contractClasses.canRegister support and class-id-scoped enforcement.",
-		})
-	})
-
-	test("(DRIFT PIN) grantPublicAuthwit runs inside a batch although it is popup-routed", async () => {
-		const content = { caller: OTHER, contract: TOKEN, method: "transfer", args: [] }
-		expect(await runBatch([{ name: "grantPublicAuthwit", args: [ACC1, content] }], [{ type: "transaction", scope: "*" }])).toEqual({
-			result: { ok: [{ name: "grantPublicAuthwit", result: "0xsent" }] },
-			ran: [],
-			sent: ["send_transaction"],
 		})
 	})
 })

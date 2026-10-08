@@ -327,7 +327,7 @@ that file alone; a second red is breakage, not a flake.
 
 ### Arc 1 — bridge and dispatch
 
-#### Phase 1 — #28 grantPublicAuthwit refused in a batch
+#### Phase 1 — #28 grantPublicAuthwit refused in a batch ✓
 
 1. Set `refusedInBatch: true` on `grantPublicAuthwit` in `method-descriptors.ts`.
 2. In `dapp-grant.characterization.test.ts`, define `GRANT_LEG` next to `SEND_LEG` and `TOKEN_LEG`, with the arguments the drift pin at `:333-336` uses (`[ACC1, content]`), and add the row `["grantPublicAuthwit alone", [GRANT_LEG], "grantPublicAuthwit"]` to the `test.each` of refused legs.

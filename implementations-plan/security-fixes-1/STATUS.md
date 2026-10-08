@@ -5,3 +5,5 @@
 - 2026-10-08 — dual audit back: Codex reject, Opus conditional approve; every blocking finding accepted, #29 switched to refuse-on-read; OA-3 (#27) and OA-4 (#29) filed.
 - 2026-10-08 — final fresh Codex pass started on the consolidated plan.
 - 2026-10-08 — final Codex pass: conditional approve; both conditions applied (post-decision grant read projected, OA-2 labels corrected). Plan at the approval gate.
+- 2026-10-08 — arc 1 start: OA-2 before shots taken on 5eca324 (Chrome, both themes, proverless network run).
+- 2026-10-08 — phase 1 gate pass: wallet-bridge characterization + dispatcher + method-descriptors (355 tests), lint 0, typecheck:all 0; new rows red on the base flag.
