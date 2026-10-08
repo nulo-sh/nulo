@@ -1463,8 +1463,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** The outbox row is written before the record: a discovered note changed the chain balance
-	 *  whatever its trust or display state. As in `commitPublicRecord`, the epoch is re-checked after
-	 *  each await that precedes a write or the emit; only the record write's own await stays open. */
+	 *  whatever its trust or display state. As in `commitPublicRecord`, epoch checks guard the record
+	 *  write and the Added emit; a storage write already in flight is not fenced. */
 	private async commitDiscoveredNote(
 		ctx: NoteScanContext,
 		note: RawNote,

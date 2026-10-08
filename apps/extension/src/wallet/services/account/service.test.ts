@@ -35,6 +35,12 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 	NuloAccount: { new: async () => ({ address: { toString: () => "0xderived-addr" } }) },
 }))
 
+/** A liveness read that rejects after the row write, as a storage read error would. */
+const readFailsOnSecondCall = (call: number): boolean => {
+	if (call === 2) throw new Error("read failed")
+	return true
+}
+
 describe("AccountService.createAccount — deletion fence", () => {
 	function _deferred<T>() {
 		let resolve!: (v: T) => void
@@ -115,6 +121,7 @@ describe("AccountService.createAccount — deletion fence", () => {
 	test.each([
 		["a chain reserved for deletion before the write: refused, nothing written", (call: number) => call !== 1, /^network deleted$/],
 		["a chain reserved during the row write: the row is removed", (call: number) => call !== 2, /^network deleted$/],
+		["a liveness read that fails after the row write: the row is removed", readFailsOnSecondCall, /^read failed$/],
 	])("%s", async (_label, chainLive, refusal) => {
 		const h = await makeHarness({ chainLive })
 		await expect(h.service.createAccount("p1", 1, 0, "A")).rejects.toThrow(refusal)
@@ -722,6 +729,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 
 	test.each([
 		["a chain reserved during the account-row write", /^network deleted$/, () => false],
+		["a liveness read that fails after the account-row write", /^read failed$/, () => readFailsOnSecondCall(2)],
 		["a profile deletion landing during the post-write liveness read", /^profile p1 deleted$/, undefined],
 	])("%s: both rows removed, nothing announced", async (_label, refusal, postWrite) => {
 		const h = await makeHarness({

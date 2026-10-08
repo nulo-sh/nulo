@@ -31,7 +31,7 @@ export type FpcInfo = {
 	isProtocol?: boolean
 }
 
-/** The sponsor fields a signed request commits to. A row can be edited in place, so a request
+/** The sponsor identity a request was built with. A row can be edited in place, so a request
  *  built against one snapshot must never be reused once the live row differs from it. */
 export type FpcIdentitySnapshot = {
 	readonly id: string

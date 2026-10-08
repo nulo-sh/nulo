@@ -254,7 +254,6 @@ describe("FpcStrategy structural parity (two-pass choreography — byte-parity c
 		// Result carries the SECOND pass's identities.
 		expect(result.txRequest).toBe(builtB.txRequest)
 		expect(result.feePaymentMethod).toBe(AccountFeePaymentMethodOptions.EXTERNAL)
-		// The sponsor snapshot is the row the build paid with.
 		expect(result.fpcIdentity).toEqual({ id: "fpc-1", type: FpcType.PrivateFpc, address: "0xfpc", chainId: 7, isProtocol: true })
 
 		// Final action shape: fee payload first, then originals (splice pin).

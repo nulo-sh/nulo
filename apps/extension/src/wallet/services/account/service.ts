@@ -307,15 +307,27 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		await this.storage.set(accountRowIdOf(account), account)
 		// Either purge can snapshot during the set. The epoch check runs after the liveness await,
 		// and nothing awaits between it and the emit.
-		if (!(await this.networkService.isChainLive(profileId, chainId))) await this.unwrite(account, new Error("network deleted"))
+		await this.assertStillLive(account)
 		if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 		this.emit("onAccountAdded", account)
 		return account
 	}
 
+	/** The post-write liveness read. A read that fails removes the row too, so no caller is left
+	 *  holding a row it cannot vouch for (import would otherwise drop the key under it). */
+	private async assertStillLive(account: Account): Promise<void> {
+		let live: boolean
+		try {
+			live = await this.networkService.isChainLive(account.profileId, account.chainId)
+		} catch (error) {
+			return this.unwrite(account, error)
+		}
+		if (!live) await this.unwrite(account, new Error("network deleted"))
+	}
+
 	/** Removes a row no purge will see, then throws `refusal`. Under the row's lock, so a rename
 	 *  that read the row cannot write it back. */
-	private async unwrite(account: Account, refusal: Error): Promise<never> {
+	private async unwrite(account: Account, refusal: unknown): Promise<never> {
 		await this.tupleLocks.withLock(accountRowIdOf(account), () => this.storage.delete(accountRowIdOf(account)))
 		throw refusal
 	}
@@ -522,7 +534,6 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 				const l1ChainId = await this.networkService.getL1ChainIdStored(profileId, chainId)
 
 				const sealed = await sealSigningKey(dek, chainId, recomputed, signingKey)
-				// Refused up front as in createAccountInternal, before the epoch assert.
 				if (!(await this.networkService.isChainLive(profileId, chainId))) throw new Error("network deleted")
 				// KEY ROW FIRST, then the Account row — with compensation. A crash between the two
 				// leaves an orphan key (swept on init) rather than an Account that cannot sign.
@@ -544,8 +555,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 					deletion.assertCurrent(profileId, epoch)
 					await this.storage.set(accountRowIdOf(account), account)
 					// As in createAccountInternal: liveness, then the epoch, then the emit with no await.
-					const chainLive = await this.networkService.isChainLive(profileId, chainId)
-					if (!chainLive) await this.unwrite(account, new Error("network deleted"))
+					await this.assertStillLive(account)
 					if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 				} catch (rowErr) {
 					await this.importedKeys.delete(profileId, chainId, recomputed).catch(() => {})
