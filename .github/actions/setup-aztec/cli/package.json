@@ -1,0 +1,8 @@
+{
+  "name": "aztec-cli",
+  "private": true,
+  "dependencies": {
+    "@aztec-labs/aztec": "6.0.0-rc.1",
+    "@aztec-labs/cli-wallet": "6.0.0-rc.1"
+  }
+}
