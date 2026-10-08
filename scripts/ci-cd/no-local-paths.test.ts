@@ -27,14 +27,14 @@ describe("check-no-local-paths.sh", () => {
 		try {
 			git(repo, "init", "--quiet")
 			// Assembled here so this file never carries the shape it tests for.
-			const leak = ["", "home", "someone", "nulo", "plan.md"].join("/")
+			const leak = ["", "home", "someone", "nulo", "notes.md"].join("/")
 			writeFileSync(join(repo, "notes.md"), `see ${leak}\n`)
 			git(repo, "add", "notes.md")
 			const refused = guard(repo)
 			expect(refused.exitCode).toBe(1)
 			expect(refused.stderr.toString()).toContain("notes.md")
 
-			writeFileSync(join(repo, "notes.md"), "see implementations-plan/nulo/plan.md\n")
+			writeFileSync(join(repo, "notes.md"), "see docs/notes.md\n")
 			expect(guard(repo).exitCode).toBe(0)
 		} finally {
 			rmSync(repo, { recursive: true, force: true })
