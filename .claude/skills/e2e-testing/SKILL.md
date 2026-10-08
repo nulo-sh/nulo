@@ -397,8 +397,10 @@ assertion; drive the rest of the flow with the ordinary helpers.
   instead. Approval sub-windows carry no listeners at all.
 - **`chrome.runtime.reload()` disables an unpacked `--load-extension` build** (every later
   `chrome-extension://` goto is `ERR_BLOCKED_BY_CLIENT`). Never use it for harness state reset; when
-  the product calls it (the migration barrier's Retry), click, wait for the pre-reload write, then
-  `browser.close()` and relaunch over the same `userDataDir` (`migration.test.ts` `retryAndReopen`).
+  the product calls it (the migration barrier's Retry), check the CSP record first
+  (`ctx.checkCspViolations()`), click, wait for the pre-reload write, then close at once and
+  relaunch over the same `userDataDir` (`migration.test.ts` `retryAndReopen`). Firefox reloads the
+  add-on in place instead, and its boot takes the retry token: a slow close kills that run midway.
 - **The first-run onboarding tab.** `onInstalled` (`reason === "install"`) opens it before
   `launchExtension` can seed `nulo:onboarding:completed`; the fixture closes it by the id the worker
   stores in `nulo:onboarding:tab-id` BEFORE flipping the flag (a mounted onboarding page that reads the

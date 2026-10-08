@@ -27,7 +27,7 @@ import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
-import { CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
+import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -37,6 +37,9 @@ export interface ExtensionContext {
 	/** Tear the launch down through this, never through `browser.close()`: a driver may own a
 	 *  WebDriver process and a profile directory that closing the browser does not release. */
 	close(): Promise<void>
+	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
+	 *  before it reloads the extension, which discards the record; `close` then only closes. */
+	checkCspViolations(): Promise<void>
 }
 
 /**
@@ -93,12 +96,18 @@ export async function launchExtension(
 		// Every launch, a spec's own included, answers once for the violations recorded while it ran;
 		// a second close is the plain teardown it always was.
 		let checked = !CSP_REPORT_ARMED
+		const read = () => readCspViolations(browser, extensionId)
+		const checkCspViolations = async () => {
+			if (checked) return
+			checked = true
+			await assertNoCspViolations(read)
+		}
 		const close = () => {
 			if (checked) return closeBrowser()
 			checked = true
-			return closeAfterCspCheck(closeBrowser, () => readCspViolations(browser, extensionId))
+			return closeAfterCspCheck(closeBrowser, read)
 		}
-		return { browser, extensionId, consoleErrors: [], pageErrors: [], close }
+		return { browser, extensionId, consoleErrors: [], pageErrors: [], close, checkCspViolations }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
 		await closeBrowser().catch(() => {})

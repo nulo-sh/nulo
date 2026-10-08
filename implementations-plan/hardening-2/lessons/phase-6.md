@@ -43,7 +43,7 @@ Observation outside the arc: on a smoke build the background and the offscreen d
 
 ## Gate (2026-10-08, today's policy pinned, recorder armed)
 
-- `lint`, `typecheck:all`, `test` (698 files), `test:ci-gating`, `lint:actions`: pass. `test:release`: 212 pass, 3 fail, all `zip-reproducible` with `Executable not found in $PATH: "zip"`; this host has no `zip`, and the arc does not touch `scripts/release`.
+- `lint`, `typecheck:all` (wrong: see `phase-7.md`), `test` (698 files), `test:ci-gating`, `lint:actions`: pass. `test:release`: 212 pass, 3 fail, all `zip-reproducible` with `Executable not found in $PATH: "zip"`; this host has no `zip`, and the arc does not touch `scripts/release`.
 - Chrome smoke, 4 local shards, retry 0: 46 of 47 files pass with zero recorded violations. `passkey-retry.test.ts` failed once on `waitForToastGone(…, 1_000)` (a one-second toast window) and passed 8/8 alone.
-- Firefox smoke, 4 local shards, retry 0: 46 of 47 files pass with zero recorded violations. `migration.test.ts`' throwing-migration case hit its 60 s timeout at 62 s; alone it takes 38 s armed and 38 s unarmed, so the check costs nothing measurable and the timeout was four concurrent Firefox shards on a host at load ~120. Later Firefox runs use 3 shards.
+- Firefox smoke, 4 local shards, retry 0: 46 of 47 files pass with zero recorded violations. `migration.test.ts`' throwing-migration case hit its 60 s timeout at 62 s; alone it takes 38 s armed and 38 s unarmed, so the check costs nothing measurable and the timeout was four concurrent Firefox shards on a host at load ~120. Later Firefox runs use 3 shards. (Wrong: phase 7 traced it to the close check racing the in-place reload; see `phase-7.md`.)
 - Both built manifests' CSP equals the pinned string.

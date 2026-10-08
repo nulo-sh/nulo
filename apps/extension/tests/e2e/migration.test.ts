@@ -145,6 +145,9 @@ describe.skipIf(!HAS_FIXTURE)("storage migration through the real boot path", ()
 	 *  helper is convergence THROUGH the written-and-consumed gesture token. */
 	async function retryAndReopen(page: Page): Promise<Page> {
 		if (!ctx) throw new Error("no extension context")
+		// The reload discards the CSP record, and on Firefox it reloads the add-on in place, whose
+		// boot takes the token: a check at close would hold the browser open while that boot runs.
+		await ctx.checkCspViolations()
 		await page.click("[data-testid='migration-retry-btn']")
 		// Let the token write land before killing the browser (the click
 		// handler persists it before calling runtime.reload()).

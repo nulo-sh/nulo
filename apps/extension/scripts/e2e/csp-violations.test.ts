@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
-import { closeAfterCspCheck, EXTENSION_DISABLED } from "../../tests/e2e/fixtures/csp-violations"
+import { closeAfterCspCheck } from "../../tests/e2e/fixtures/csp-violations"
 
 const ENTRY = { context: "/src/popup/index.html", directive: "style-src-elem", blocked: "inline", source: "" }
 
@@ -8,7 +8,6 @@ describe("closing an armed launch", () => {
 		{ name: "a missing record fails: the recorder never ran", stored: null, failure: /recorder never ran/ },
 		{ name: "a recorded violation fails, naming it", stored: [ENTRY], failure: /1 CSP violation\(s\)[\s\S]*style-src-elem/ },
 		{ name: "an empty record passes", stored: [], failure: undefined },
-		{ name: "an extension the browser disabled has no record to check", stored: EXTENSION_DISABLED, failure: undefined },
 	])("$name, and the browser closes", async ({ stored, failure }) => {
 		const close = vi.fn(async () => {})
 		const closing = closeAfterCspCheck(close, async () => stored)
