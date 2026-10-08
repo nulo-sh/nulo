@@ -84,8 +84,6 @@ test.skipIf(!hasConfig)(
 
 		await clickByTestId(dapp, "pg-btn-disconnect")
 		await dapp.waitForSelector(DISCONNECTED, { timeout: 10_000 })
-		await dapp.reload({ waitUntil: "domcontentloaded" })
-		await dapp.waitForSelector('[data-testid="pg-status"]', { timeout: 10_000 })
 		await listConnectedApps(wallet)
 
 		const checkP = waitForPopup(ctx, "verify", { timeout: 30_000 })
