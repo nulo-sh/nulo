@@ -10,3 +10,7 @@
 - 2026-10-08: arc 1 Codex round 2 (resumed) clean; loop converged. Final gates next.
 - 2026-10-08: final arc 1 gates pass on the head: `bun run audit:vue`, `bun run test:all`, `bun run lint:actions`, `bun run check:plans`, the four smoke specs with `--retry=0` (7/7).
 - 2026-10-08: arc 1 PR #51 opened ready (gh stack, base `dev`); `Closes #17`. Arcs 2 and 3 stack on `worktree-security-ui-1`.
+- 2026-10-08: arc 1 merged to `dev` as #51 (squash f5ca160). Arc 2 branch `security-ui-1-backup-download` stacks on `dev`.
+- 2026-10-08: Phase 2.1 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build); new component tests pass and fail when each guard is removed.
+- 2026-10-08: Phase 2.1 deviation: the destructive confirm renders `cta_destructive` at the compact size; at medium its CTA tracking clipped "Download anyway" in the half-width row. Render note added to OWNER-ASKS.md.
+- 2026-10-08: Phase 2.2 Chrome smoke pass with `--retry=0`: `security-backup`, `passkey-backup`, `backup-imported-account`, `legal-acceptance`, `backup-roundtrip`, `passkey-retry`, `own-window` (32 passed; `passkey-toolbar-panel` skips on Chrome).

@@ -1,7 +1,7 @@
 ---
 plan: security-ui-1
 tier: mid
-status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 in implementation
+status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 merged (#51); arc 2 in implementation
 issues: [17, 34, 14]
 driver: claude-code
 claude_model: opus
@@ -281,7 +281,7 @@ Tests, one per refused class plus the controls:
 - Pass criteria: every command exits 0; tests (a) to (i) pass; the encrypted round trip passes in both smoke specs (the passkey one locally).
 - Layers: lint, typecheck, unit, component, build, smoke e2e.
 
-### Phase 2.1: the export page per the owner's #34 pick (Arc 2)
+### Phase 2.1: the export page per the owner's #34 pick (Arc 2) ✓
 
 1. Build the picked option in `full.vue` exactly as options.md states it, copy included.
 2. Update `full.test.ts` and `full-passkey.pins.test.ts`; add one test per refused path.
@@ -366,7 +366,7 @@ One `gh stack`, one PR per arc, PRs opened only after each arc's Codex loop conv
 | Arc | Phases | Branch | Stacks on | Closes |
 |---|---|---|---|---|
 | 1 | 1.1, 1.2 (1.2 only on a "yes") | `worktree-security-ui-1` (adopted with `gh stack init --adopt`) | `dev` | #17 (or comments on it if 1.2 is declined) |
-| 2 | 2.1, 2.2 | `security-ui-1-backup-download` | Arc 1 | #34 |
+| 2 | 2.1, 2.2 | `security-ui-1-backup-download` | `dev` (Arc 1 merged as #51) | #34 |
 | 3 | 3.1, 3.2, 3.3 (3.3 only on a "no") | `security-ui-1-emoji-refuse` | Arc 2 | #14 |
 | close-out | docs only | `security-ui-1-close-out` | Arc 3 | none |
 
@@ -382,6 +382,10 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 - **Deviation (Phase 1.1, at implementation): the account slice comes from the key export, and the page's completeness check is dropped.** The plan had `full.vue` fail the run when an imported account had no key row. `EntityStorage.getAll` hides a row its codec rejects, so one corrupt key row would fail that check on every retry and the profile could never be backed up again; today the backup ships and the restore drops that one account. `exportFullBackupKeys` now also returns `accounts`, read before the key rows in the same call, and the page serves both slices from it. A concurrent import can then add a key row with no account (the orphan sweep removes it), never an account without its key. Test (i)'s "fails when an imported account has no key row" case is replaced by a test that the file's account and key slices are the export's. The run fence and the profile-id check stay.
 - **Deviation (Phase 1.2): the restore's stale fence moves after the shared opener.** `openEncryptedBackup` now calls `openFullBackupText` and checks staleness once it settles, instead of between the KDF and decrypt awaits. Nothing is published in between, so correctness is unchanged; a superseded run only finishes its decrypt. The parser exposes `parseEncryptedBackup` so the detector and the opener share one decision.
 - **Deviation (Phase 1.1): the incarnation id is the existing `ProfileService.workerId`**, which already keeps session handles from naming a later worker's session. `openBackupTransfer` returns no `dekReplaced` (it is `sourceDek === null`), and `getProfileDekSealed` is deleted, not just unlisted, since it had no caller.
+
+- **Deviation (Phase 2.1): the confirm button's red needed a ConfirmPopup field, and a compact size.** `confirm_color: "red"` never coloured ConfirmPopup's confirm button: it reaches the design Button as a `type` attribute and only picks the pre-title. Turning it into the red variant would recolour every destructive confirm in the wallet, a UI change outside this sign-off. So ConfirmPopup takes an opt-in `confirm_variant`, unset everywhere else. At the row's medium size, `cta_destructive`'s CTA type (14 px, 0.2 em tracking, no side padding) clipped "Download anyway" to "OWNLOAD ANYWA"; a CTA variant now takes `compact`, the design package's CTA size for a tight spot, where the label fits edge to edge. The look is flagged to the owner in OWNER-ASKS.md § Render notes.
+- **Deviation (Phase 2.1): one download writer, the plain-file rule held twice.** `canDownload` decides the button; `downloadBackup(isEncrypted)` refuses a plain file on a password profile again, so a confirmation answered after an in-place switch to a password profile writes nothing. The confirm callback also checks the run's `generation` and the `finished` status.
+- **Phase 2.2 helpers:** `exportPlainBackup` became `exportBackupContent` (it now encrypts, downloads and opens the file with `openFullBackupText` in Node); new `downloadEncryptedBackup`, `downloadPlainPasskeyBackup` and `openEncryptedBackup` in `tests/e2e/helpers/backup-export.ts` take the press as a parameter, so `legal-acceptance` keeps its real pointer input.
 
 ## Issue claims checked against the tree
 
