@@ -17,6 +17,7 @@ import "./index.scss"
 
 import { initAppServiceContext, managers } from "@/utils/core"
 import { captureOwnWindow } from "@/utils/own-window"
+import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
 
 // Eagerly open profile + contact service-worker ports at boot. Matches the
@@ -33,6 +34,7 @@ routes.push({
 	path: "/",
 	redirect: "/popup",
 })
+routes.push(...LEGACY_SETTINGS_REDIRECTS)
 
 // Read before the router rewrites the URL: the guard may redirect the first route.
 captureOwnWindow(window.location.hash)

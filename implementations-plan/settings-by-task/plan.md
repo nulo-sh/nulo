@@ -323,7 +323,7 @@ Validation gate:
 - Pass criteria: every command exits 0. `useLockWallet.test.ts` reports at least 10 cases. `Header.test.ts` keeps only the chip pin and the wiring pin for the lock. The regenerated `auto-imports.d.ts` and `.eslintrc-auto-import.json` are committed, and the second `bun run build:chrome` leaves `git status` with no change to either. If lint prints 20 diagnostics, rerun Biome on the changed files.
 - Layers: lint and typecheck, unit, build (extension and Storybook).
 
-### P2 — Pages, routes, hub
+### P2 — Pages, routes, hub ✓
 
 Steps:
 

@@ -30,7 +30,6 @@ const isShowNodeNameEnabled = ref(defaultConfig.showNode)
 const isShowPopupFullscreen = ref(defaultConfig.showPopupFullscreen)
 const isAnimationsDisabled = ref(defaultConfig.disableAnimations)
 const isIncomingTransfersVisible = ref(defaultConfig.incomingTransfersVisible)
-const isShowFiatValues = ref(defaultConfig.showFiatValues)
 // D8 dust filter — a NUMBER, not a toggle, so it lives outside the `settings` toggle map.
 const dustThreshold = ref(String(defaultConfig.incomingDustUsdThreshold))
 const settings = {
@@ -56,7 +55,7 @@ const settings = {
 	},
 	showPopupFullscreen: {
 		title: "Full-height popups",
-		description: "Open popups to to the full height",
+		description: "Open popups to the full height",
 		model: isShowPopupFullscreen,
 	},
 	disableAnimations: {
@@ -69,11 +68,6 @@ const settings = {
 		description:
 			"Hide if you run the same recovery phrase on multiple devices and don't want one device's outgoing to appear as incoming here",
 		model: isIncomingTransfersVisible,
-	},
-	showFiatValues: {
-		title: "Show fiat values",
-		description: "Fetch USD prices from CoinGecko while unlocked. Off hides all dollar values",
-		model: isShowFiatValues,
 	},
 }
 
@@ -169,12 +163,12 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex direction="column" :class="$style.wrapper">
-		<SubPageHeader title="Appearance" :backTo="'/popup/settings'" />
+		<SubPageHeader title="Display" :backTo="'/popup/settings'" />
 
 		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
 			<Flex justify="between">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary"> Dark Theme </Text>
+					<Text size="13" weight="600" color="primary"> Theme </Text>
 					<Text size="12" weight="500" color="tertiary"> Application theme </Text>
 				</Flex>
 
@@ -219,7 +213,7 @@ onBeforeUnmount(() => {
 				</Dropdown>
 			</Flex>
 
-			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme')" justify="between">
+			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between">
 				<Flex direction="column" gap="6">
 					<Text size="13" weight="600" color="primary"> {{ settings[sk].title }} </Text>
 					<Text size="12" weight="500" color="tertiary"> {{ settings[sk].description }} </Text>
@@ -228,7 +222,21 @@ onBeforeUnmount(() => {
 				<Toggle
 					@update:modelValue="updateSetting(sk, $event)"
 					:modelValue="settings[sk].model.value"
-					:data-testid="(sk === 'disableAnimations' && 'animations-toggle') || (sk === 'showFiatValues' && 'fiat-values-toggle') || null"
+					:data-testid="(sk === 'disableAnimations' && 'animations-toggle') || null"
+				/>
+			</Flex>
+
+			<SectionLabel label="Lists" />
+
+			<Flex justify="between">
+				<Flex direction="column" gap="6">
+					<Text size="13" weight="600" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
+					<Text size="12" weight="500" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
+				</Flex>
+
+				<Toggle
+					@update:modelValue="updateSetting('incomingTransfersVisible', $event)"
+					:modelValue="settings.incomingTransfersVisible.model.value"
 				/>
 			</Flex>
 
