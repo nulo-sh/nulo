@@ -499,7 +499,7 @@ Pass: each exits 0.
 
 ### Arc 3: release and tooling guards
 
-#### Phase 6: lint and typecheck of `scripts/`
+#### Phase 6: lint and typecheck of `scripts/` ✓
 
 1. Widen Biome's scope and add the override.
 2. Run `bunx biome format --write scripts/`, and commit the result alone.
