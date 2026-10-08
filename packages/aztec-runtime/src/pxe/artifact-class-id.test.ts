@@ -2,7 +2,8 @@
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { jsonStringify } from "@aztec-labs/foundation/json-rpc"
-import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
+import { ContractArtifactSchema } from "@aztec-labs/stdlib/abi"
+import { type ContractInstanceWithAddress, getContractClassFromArtifact } from "@aztec-labs/stdlib/contract"
 import { describe, expect, test } from "vitest"
 import { FrozenSchnorrAccountArtifact } from "../account/frozen-artifact"
 import { NuloAccount } from "../account/nulo-account"
@@ -36,6 +37,14 @@ describe("assertWireArtifactClassId", () => {
 	test.each<[string, (pair: Awaited<ReturnType<typeof genuinePair>>) => unknown]>([
 		["an artifact of another class id", ({ artifact }) => (firstPrivate(artifact).name = "entrypoint_altered")],
 		[
+			"an artifact of another class id that the instance's current class id names",
+			async ({ instance, artifact }) => {
+				firstPrivate(artifact).name = "entrypoint_altered"
+				const { id } = await getContractClassFromArtifact(await ContractArtifactSchema.parseAsync(artifact))
+				instance.currentContractClassId = id.toString()
+			},
+		],
+		[
 			"an artifact whose private function lacks its verification key",
 			({ artifact }) => {
 				const fn = firstPrivate(artifact)
@@ -49,7 +58,7 @@ describe("assertWireArtifactClassId", () => {
 		"refuses %s with the fixed text",
 		async (_label, tamper) => {
 			const pair = await genuinePair()
-			tamper(pair)
+			await tamper(pair)
 			const refusal = await assertWireArtifactClassId(pair.instance, pair.artifact).then(
 				() => undefined,
 				(err: Error) => err,

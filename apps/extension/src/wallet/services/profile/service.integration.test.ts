@@ -3851,18 +3851,21 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			["a missing row", ({ api, id }) => api.storage.local.remove(profileRowKey(id)), "Invalid profile id"],
 			["a tombstoned id", ({ service, id }) => service.getDeletionState().beginDeletion(id), "Invalid profile id"],
 		])(
-			"finalize wipes and drops the stashed secret on %s",
+			"finalize wipes and drops both restore stashes on %s",
 			async (_label, arrange, refusal) => {
 				const restored = await restoredPasskey("cred-left", "uh-left")
 				const { service, id, internals } = restored
 				const { secret, dek } = internals.pendingRestoreSecrets.get(id)
-				expect(allZero(secret) || allZero(dek)).toBe(false)
+				const { sourceDek, destinationDek } = internals.pendingDekRewraps.get(id)
+				const buffers = [secret, dek, sourceDek, destinationDek]
+				expect(buffers.some(allZero)).toBe(false)
 				await arrange(restored)
 				const finalized = service.finalizeRestore(id)
 				if (refusal) await expect(finalized).rejects.toThrow(refusal)
 				else await expect(finalized).resolves.toMatchObject({ id })
 				expect(internals.pendingRestoreSecrets.has(id)).toBe(false)
-				expect(allZero(secret) && allZero(dek)).toBe(true)
+				expect(internals.pendingDekRewraps.has(id)).toBe(false)
+				expect(buffers.every(allZero)).toBe(true)
 			},
 			30_000,
 		)

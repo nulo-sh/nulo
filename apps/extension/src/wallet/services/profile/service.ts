@@ -2560,10 +2560,12 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 
 		return this.runExclusive(async () => {
-			// Finalize is the stash entry's only consumer, so every path that does not take it wipes it.
-			// The identity check spares an entry a later restore stashed after the lock's hold watchdog
+			// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
+			// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
+			// identity checks spare entries a later restore stashed after the lock's hold watchdog
 			// released this call.
 			const seen = this.pendingRestoreSecrets.get(id)
+			const seenRewrap = this.pendingDekRewraps.get(id)
 			try {
 				// Sweep stale entries but never the id being finalized here.
 				this.sweepStalePendingRestore(Date.now(), id)
@@ -2586,11 +2588,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				// unlock-later recovery instead of branding them torn.
 				await this.restorePending.delete(id)
 
-				// Zeroize any LEFTOVER rewrap context for this id — the empty-slice case
-				// (`restoreImportedKeys` never ran, so nothing consumed it) and any abandoned
-				// re-restore of the same id. Consumed contexts are already gone.
-				this.pendingDekRewraps.drop(id)
-
 				// If the session is already active for this profile, treat as
 				// no-op. Defensive against double-finalize.
 				if (this.sessionManager.isActive(id)) {
@@ -2605,6 +2602,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				return await this.finalizePasskeyRestoreHoldingLock(id, profile)
 			} finally {
 				if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
+				if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
 			}
 		})
 	}
