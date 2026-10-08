@@ -704,6 +704,9 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | `plan` outputs (implementation) | `action` only; `PlanInput` also carries the tag | `action`, `create_draft`, `release_id` | Nothing read the other two (`apply` re-reads the state); the tag names the refusals. |
 | Digest read-back (implementation) | up to three reads, 2 s apart, while an asset reports no digest | one read | A digest that lags the upload would otherwise refuse every publish; one that never appears still refuses. |
 | Branch base (implementation) | rebased the unpushed plan commit onto `origin/dev` `e49e4ce` | merge | Four commits had landed, two in the workflows this arc edits; the branch was never pushed. |
+| auto-unstick on a re-run (review) | a tag already at HEAD continues the publish, for a `pending` or `tagged` Release PR; only `pending` is ever tagged | continue on `create` only | A re-run after a failed relabel, or after a relabel whose attempt died, stranded a tag with no release. `concurrency: release` serializes runs and the publish is idempotent. |
+| Nightly quiet-day skip (review) | skip only when a nightly tag at the commit has a published release | any nightly tag at the commit | The tag now precedes the draft, so an interrupted publish silenced every later run on that commit. |
+| `oven-sh/setup-bun` token (review) | the composite passes `token: ""` | the action's default (`github.token`) | The default handed the publish jobs' release-writing token to a third-party action; an exact version needs no API call. |
 
 **Unresolved disagreements.** None blocking.
 - Opus preferred `--source-ref`; the plan pins `--source-digest` for the reason in the ledger.
@@ -799,6 +802,16 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 - [Low] Docs state S1 as applied before it is. Not a change: S1 is applied once this PR is open with green local gates, before merge, and its id replaces the placeholders.
 - [Low] Stale comments (the REST claim beside `gh attestation verify`, "zero-API", the v4-abort framing, the staged-rollout tail in `release.yml`, an import kept alive by an export). Accepted, each rewritten or removed.
 - Also folded: `privileged()` in the integrity test now treats `permissions: write-all` as privileged (found in self-review).
+
+### Arc 1 implementation, Codex round 2 (same session)
+
+**Verdict:** `approve with fixes`. Diff `a9f6cbd..cf8ecb3`; one finding, accepted, fixed in `eb03f15`.
+- [Medium] The `skip` fix still stranded a release when the relabel landed but its attempt died before writing outputs: the retry saw `autorelease: tagged` and returned `noop`. Fixed: a Release PR labeled `tagged` whose tag names the merge commit continues the publish without a relabel; only a `pending` one is ever tagged; a `tagged` one with no tag stays a `noop`. Two tests, both shown to fail with the old label check.
+- Its "looks fine": draft retargeting checked before and after the publish, the nightly skip, the live probe, the store-artifact pins, token narrowing, the cancellation guard.
+
+### Arc 1 implementation, Codex round 3 (same session)
+
+**Verdict:** `approve`, no new material findings, on diff `7a271a1..eb03f15`. The loop converged in three rounds.
 
 ## Post-implementation
 

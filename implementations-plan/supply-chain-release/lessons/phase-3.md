@@ -10,3 +10,5 @@
 - **A third-party action's default `token` input is a credential handed over, not one it runs beside.** `oven-sh/setup-bun` defaults `token` to the job's `github.token`; the publish jobs' token can write releases. Read the action's `action.yml` at the pinned SHA before trusting "runs no third-party action but X".
 - **A step that re-runs must see its own earlier work as success.** `auto-unstick` emitted `unstuck=true` only when it created the tag, so the documented "re-run the failed jobs" stranded a tag with no release.
 - **`GET releases/tags/<tag>` never returns a draft**, which is the cheap way to ask "is this published" with a read-only token.
+- **Round 2: `approve with fixes`, 1 accepted (`eb03f15`).** The retry fix had keyed on the label its own attempt changes. An idempotent step must recognise its own finished work by state it cannot half-write (the tag at HEAD), not by a label it flips along the way.
+- **Round 3: `approve`, no new material findings.** Loop closed.
