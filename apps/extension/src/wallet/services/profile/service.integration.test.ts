@@ -3790,19 +3790,56 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			return { ...ctx, id: out.id, internals, ttl: internals.constructor.PENDING_RESTORE_TTL_MS as number }
 		}
 
-		test("(BUG PIN) finalize's type refusal keeps the stashed secret, even at the TTL", async () => {
-			// The type check precedes the take, and the entry sweep spares the id being finalized,
-			// so an edited `type` leaves the master stashed until a later sweep, lock or delete.
-			const { api, service, id, internals, ttl } = await restoredPasskey("cred-type", "uh-type")
-			const entry = internals.pendingRestoreSecrets.get(id)
-			const now = Date.now()
-			vi.spyOn(Date, "now").mockReturnValue(now)
-			entry.capturedAt = now - ttl
-			await writeRawRow(api, id, { ...(await readRawRow(api, id)), type: "bogus" })
+		type RestoredPasskey = Awaited<ReturnType<typeof restoredPasskey>>
+		const editRowType = async ({ api, id }: RestoredPasskey, type: string) =>
+			writeRawRow(api, id, { ...(await readRawRow(api, id)), type })
+
+		test.each<[string, (restored: RestoredPasskey) => unknown, string | undefined]>([
+			["the type refusal", (r) => editRowType(r, "bogus"), "Profile type changed between restore and finalizeRestore"],
+			["a row turned password", (r) => editRowType(r, "password"), "Password is required for password profile"],
+			[
+				"the already-active return",
+				({ internals, id }) => vi.spyOn(internals.sessionManager, "isActive").mockImplementation((p) => p === id),
+				undefined,
+			],
+			["a missing row", ({ api, id }) => api.storage.local.remove(profileRowKey(id)), "Invalid profile id"],
+			["a tombstoned id", ({ service, id }) => service.getDeletionState().beginDeletion(id), "Invalid profile id"],
+		])(
+			"finalize wipes and drops the stashed secret on %s",
+			async (_label, arrange, refusal) => {
+				const restored = await restoredPasskey("cred-left", "uh-left")
+				const { service, id, internals } = restored
+				const { secret, dek } = internals.pendingRestoreSecrets.get(id)
+				expect(allZero(secret) || allZero(dek)).toBe(false)
+				await arrange(restored)
+				const finalized = service.finalizeRestore(id)
+				if (refusal) await expect(finalized).rejects.toThrow(refusal)
+				else await expect(finalized).resolves.toMatchObject({ id })
+				expect(internals.pendingRestoreSecrets.has(id)).toBe(false)
+				expect(allZero(secret) && allZero(dek)).toBe(true)
+			},
+			30_000,
+		)
+
+		test("finalize spares an entry a later restore stashed under the same id", async () => {
+			const restored = await restoredPasskey("cred-later", "uh-later")
+			const { service, id, internals } = restored
+			const later = {
+				...internals.pendingRestoreSecrets.get(id),
+				secret: new Uint8Array(32).fill(7),
+				dek: new Uint8Array(32).fill(8),
+			}
+			await editRowType(restored, "bogus")
+			// A delete and a same-id restore landing while finalize is parked past the lock's watchdog.
+			const clearMarker = internals.restorePending.delete.bind(internals.restorePending)
+			vi.spyOn(internals.restorePending, "delete").mockImplementation(async (profileId) => {
+				await clearMarker(profileId)
+				internals.pendingRestoreSecrets.drop(id)
+				internals.pendingRestoreSecrets.set(id, later)
+			})
 			await expect(service.finalizeRestore(id)).rejects.toThrow("Profile type changed between restore and finalizeRestore")
-			expect(internals.pendingRestoreSecrets.get(id)).toBe(entry)
-			expect(allZero(entry.secret) || allZero(entry.dek)).toBe(false)
-			expect(internals.pendingDekRewraps.has(id)).toBe(false)
+			expect(internals.pendingRestoreSecrets.get(id)).toBe(later)
+			expect(allZero(later.secret) || allZero(later.dek)).toBe(false)
 		}, 30_000)
 
 		test("consumeDekRewrapContext hands over exactly the two buffers once", async () => {

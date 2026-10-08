@@ -11,3 +11,5 @@
 - 2026-10-08 — phase 3 + arc 1 gate pass on 88c33fe: execution vitest 995, lint 0, typecheck:all 0, test 10274, test:all 0, network e2e 11 files / 17 tests green.
 - 2026-10-08 — arc 1 loop: Codex r1 one nit, Opus one should-fix (unknown-row capability, D13) + two nits, all applied in f279e54; Codex r2 clean.
 - 2026-10-08 — arc 1 final-head gate pass on f279e54: lint 0, typecheck:all 0, test 10275, test:all 0, network e2e 11 files / 17 tests green; OA-2 after shots taken on f279e54.
+- 2026-10-08 — arc 2 start: OA-3 before shots taken on 3fb939b (proverless network run); OA-1 before shots already present from the interrupted session.
+- 2026-10-08 — phase 4 gate pass: profile vitest 334, lint 0, typecheck:all 0; the five table rows red on the base, the guard test red on an unguarded drop.

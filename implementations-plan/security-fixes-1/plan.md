@@ -376,7 +376,7 @@ that file alone; a second red is breakage, not a flake.
 
 ### Arc 2 — profile and backup
 
-#### Phase 4 — #30 the restore stash dies with finalize
+#### Phase 4 — #30 the restore stash dies with finalize ✓
 
 1. In `finalizeRestore`, record the stash entry seen at entry; in a `finally`, drop the entry for `id` only if it is still that one.
 2. Replace the `(BUG PIN) finalize's type refusal keeps the stashed secret` test with one `test.each` over the paths that do not consume the stash: type `"bogus"`, type `"password"`, an already-active session, a missing row, a tombstoned id. Each row asserts the outcome (refusal or no-op), that the stash has no entry for `id`, and that the captured `secret` and `dek` buffers are all zero.
