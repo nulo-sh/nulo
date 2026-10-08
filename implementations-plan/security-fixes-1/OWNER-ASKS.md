@@ -108,3 +108,18 @@ record, as today.
 
 **Recommendation.** A. The record cannot come from a wallet version people install, and refusing is
 the fail-closed choice.
+
+## Answers: owner sign-off, 2026-10-08
+
+Recorded from the owner's decision page, 2026-10-08 20:19 UTC, relayed by the orchestrator.
+
+- **OA-1 (#31): A, keep the banner.** Built in arc 2: the rename returns the same projection as every
+  other profile call, `recoveryMode` included, and a test pins the banner's flag surviving a rename.
+  Owner note, verbatim: "I don't understand this? Sounds like the user should never get to this
+  point? How does a user get to this point?" (answered by the orchestrator).
+- **OA-2 (#13): A, classify the refusal as a scope refusal.** Acknowledged; the classification is a
+  follow-up recorded in the plan, not built in this lane.
+- **OA-3 (#27): A, as shipped.** Acknowledged: the per-contract refusal and the existing warning stay.
+  Owner note, verbatim: "Again, sounds like there is something we should prevent here? Like even stop
+  the back-up from working?" (answered by the orchestrator; the per-contract refusal stays).
+- **OA-4 (#29): A, as shipped.** Acknowledged.

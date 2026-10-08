@@ -63,8 +63,9 @@ message.
 **UI impact: none on any input the wallet produces.** Rare-input visible effects, each shipped in its
 today-closest form with existing wording and filed for the owner:
 
-- OA-1 (#31): a rename in recovery mode keeps today's behaviour (the banner hides); the ask is
-  whether to keep the banner.
+- OA-1 (#31): the owner picked A on 2026-10-08 (OWNER-ASKS.md § Answers): a rename in recovery mode
+  now keeps the recovery banner, because the rename returns the same projection as every other
+  profile call. Before the sign-off the plan shipped today's behaviour (the banner hides).
 - OA-2 (#13): the debug/developer journal detail loses the function names and address; the ask is
   that acknowledgement plus whether to classify the refusal as "Not allowed".
 - OA-3 (#27): a backup whose contract artifact does not match its own instance now shows the existing
@@ -171,6 +172,8 @@ stash.
   today's row carries no `recoveryMode`, so the recovery banner hides after a rename in recovery mode.
   Restoring the banner is OA-1. Add a private `profileIdentity(profile)` helper for `{ id, name, type }`
   and reuse it in `backup()` (`:2190`), which builds the same object by hand.
+  *Superseded by the owner's OA-1 pick (D18):* `changeProfileName` returns `getProfileInfo(profile)`,
+  `recoveryMode` included, so the banner stays after a rename.
 - In `apps/extension/src/wallet/services/profile/expiring-stash.ts`, override `set` so that replacing
   an entry with a different object wipes the old one, expired or not, and still returns `this`. Rewrite
   the class comment: a replacing `set` wipes the old entry, so a new entry must never share a buffer
@@ -399,6 +402,7 @@ that file alone; a second red is breakage, not a flake.
 4. Add `profile/expiring-stash.test.ts`: a `set` over a live entry wipes the old buffers; a `set` over an expired, unswept entry wipes it; a `set` of the same object wipes nothing; a `set` on a new key wipes nothing.
 5. In `service.integration.test.ts`, add one table test over the eight RPC returns: each result's keys are a subset of `id`, `name`, `type`, `recoveryMode`.
 6. Add a `(BUG PIN)` test: a rename in recovery mode returns no `recoveryMode`. Name OA-1 in its comment.
+   *Superseded (D18):* the test pins the opposite, a rename in recovery mode returns `recoveryMode: true`.
 7. Run `EditProfilePopup.test.ts` unchanged as the popup's success control.
 
 **Validation gate.**
@@ -598,15 +602,17 @@ request value. The adapter's reasons never echo the URL.
 No Ask blocks this plan. Each owner ask holds back only a choice between the shipped today-closest
 form and an alternative; the working assumption is the shipped form.
 
-- OA-1 (#31): after a rename in recovery mode, should the recovery banner stay? Shipped: no change
-  (the banner hides), pinned as `(BUG PIN)`.
+- OA-1 (#31): after a rename in recovery mode, should the recovery banner stay? Answered A (keep it)
+  on 2026-10-08; built in arc 2 (D18).
 - OA-2 (#13): acknowledge that the debug/developer journal detail loses the function names and
   address; and should the refusal become a typed scope refusal ("Not allowed", dApp code 4100)?
-  Shipped: unclassified, today's words minus the values.
+  Shipped: unclassified, today's words minus the values. Answered A (classify) on 2026-10-08; the
+  classification is a follow-up, not built in this lane.
 - OA-3 (#27): acknowledge that a self-mismatched contract in a backup now shows the existing "completed
-  with some errors" warning. Shipped: the warning shows.
+  with some errors" warning. Shipped: the warning shows. Answered A (as shipped) on 2026-10-08.
 - OA-4 (#29): a stored malformed grant is refused, as most such rows fail today; should it instead be
-  dropped so the app's next request reopens the connect window? Shipped: refused.
+  dropped so the app's next request reopens the connect window? Shipped: refused. Answered A (as
+  shipped) on 2026-10-08.
 
 ## Decision ledger
 
@@ -633,6 +639,7 @@ post-build sponsor snapshot for parity, a separate userinfo helper.
 | D15 | #31 the `(BUG PIN)` rename comment (implementation) | states the pending product decision in words, no ask id | name OA-1 in the comment, as Phase 5 step 6 said: the comment rules ban plan and workflow tags in code |
 | D16 | #27 which class id the restore check binds (implementation, arc 2 loop) | the original class id, with current required to equal it | the current class id (the plan's wording): the address commits to the original (`computePartialAddress`) and the PXE stores only the preimage (`hydratePreimage` rebuilds current := original), so a forged current id let any artifact through; every genuine export has current = original (PXE-hydrated, or node-read through `assertNotUpgraded`) |
 | D17 | #30 the DEK rewrap context on finalize (implementation, arc 2 loop) | its drop moves into the same identity-guarded `finally` | keep the mid-body drop: the missing-row and tombstone refusals threw before it, leaving the source and destination DEKs to the TTL |
+| D18 | #31 rename return, after the owner's OA-1 pick | `getProfileInfo(profile)`, `recoveryMode` included; the `(BUG PIN)` test becomes a pin of the banner staying | keep the bare identity (D8, D15): superseded by the owner's pick A on 2026-10-08 |
 
 Unresolved disagreements:
 
@@ -814,6 +821,7 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
 - `repository.setTrust`'s own await is unfenced on both incoming arms (`(DRIFT PIN) P6`, `N6`).
 - A contract class id does not commit to ABI metadata; a backup can plant a same-class artifact with misleading names (upstream keeps the first artifact stored per class).
 - The dApp registration path (`execution/service.ts`, `executeRegisterContract` and its sibling) checks a supplied artifact against the supplied instance's `currentContractClassId`, which the address does not commit to; bind it to the original class id as the restore check does.
+- OA-2 picked A (2026-10-08): classify the selector-binding refusal as a scope refusal. The dApp then receives code 4100 and the queued send reads "Not allowed"; it needs `failureKind` (`mark-failed-unless-cancelled.ts`) and the execution code-channel allowlist (`rpc-cancel.ts`) to carry `ScopeViolationError`, not only a class change.
 - `session-manager.ts` `toInfo` repeats the profile projection that `ProfileService.getProfileInfo` builds; one shared helper would keep the RPC and event shapes from drifting.
 - `account-state/service.ts` `classifyRestoreFailure` logs the error message as a finished string (`:338`), and its comment says per-item errors are never rendered, which the data viewer contradicts.
 - The transfer ladder's `base fee fetch failed: <message>` reason carries the node's message; the operation ladder already uses a fixed category.

@@ -6,3 +6,4 @@
 - `ExpiringStash.set` wipes the replaced entry after storing the new one, so the map never holds a wiped entry; the constructor passes no iterable, so `Map`'s constructor never calls the override before `wipe` is assigned.
 - Red on the base: the eight table rows, the BUG PIN (the base returns the row) and the two replacing-`set` stash tests; the two no-wipe stash tests are controls and pass on the base.
 - Gate: `vitest run src/wallet/services/profile/ src/popup/components/popups/EditProfilePopup.test.ts` 364 passed; `bun run lint` 0; `typecheck:all` 0.
+- Owner sign-off (2026-10-08) picked OA-1 = A: `changeProfileName` now returns `getProfileInfo`, and the `(BUG PIN)` test became a pin that the rename keeps `recoveryMode: true` (red on the identity return). The projection table's rename row, outside recovery mode, stays the control.
