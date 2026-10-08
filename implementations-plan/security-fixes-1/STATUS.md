@@ -11,3 +11,14 @@
 - 2026-10-08 — phase 3 + arc 1 gate pass on 88c33fe: execution vitest 995, lint 0, typecheck:all 0, test 10274, test:all 0, network e2e 11 files / 17 tests green.
 - 2026-10-08 — arc 1 loop: Codex r1 one nit, Opus one should-fix (unknown-row capability, D13) + two nits, all applied in f279e54; Codex r2 clean.
 - 2026-10-08 — arc 1 final-head gate pass on f279e54: lint 0, typecheck:all 0, test 10275, test:all 0, network e2e 11 files / 17 tests green; OA-2 after shots taken on f279e54.
+- 2026-10-08 — arc 2 start: OA-3 before shots taken on 3fb939b (proverless network run); OA-1 before shots already present from the interrupted session.
+- 2026-10-08 — phase 4 gate pass: profile vitest 334, lint 0, typecheck:all 0; the five table rows red on the base, the guard test red on an unguarded drop.
+- 2026-10-08 — phase 5 gate pass: profile + EditProfilePopup vitest 364, lint 0, typecheck:all 0; the projection table, the BUG PIN and the replacing-set tests red on the base.
+- 2026-10-08 — phase 6 + arc 2 gate pass on df4c72b: account-state + profile vitest 391, aztec-runtime pxe 236, lint 0, typecheck:all 0, test 10299, test:all 0, smoke 9 files / 31 tests.
+- 2026-10-08 — arc 2 loop: Codex r1 clean; Opus one should-fix (restore check bound to the original class id, D16) + two nits (rewrap context in the finally, D17, accepted; projection helper refactor, rejected); Codex r2 one test nit, applied; Codex r3 clean.
+- 2026-10-08 — arc 2 network e2e on 4336347: 3 files / 7 tests green; OA-3 after shots and OA-1 after + option-A prototype shots taken on 0f396ea; smoke on 0f396ea 9 files / 31 tests green.
+- 2026-10-08 — final-head gates on c9233ea: lint 0, typecheck:all 0, test 10300, test:all 0, check:plans 0. PR #52 opened as a draft; no pull_request workflow fired, because the stack's bottom (#48) had gone CONFLICTING with dev (`implementations-plan/index.md` only, after #51 landed).
+- 2026-10-08 — origin/dev merged into the arc 1 branch (index lines kept from both sides; a stale untracked `apps/landing/src/generated/release.json` from the base's landing scripts removed locally), then arc 1 merged into arc 2. Merged arc 2 head: lint 0, typecheck:all 0, test 10386, test:all 0, check:plans 0.
+- 2026-10-08 — merged arc 2 head e2e: smoke 9 files / 31 tests, network 3 files / 7 tests, all green (`--retry=0`, `NULO_E2E_RETRY=0`).
+- 2026-10-08 — owner sign-off relayed: OA-1 A (built: the rename keeps recoveryMode), OA-2 A (classification filed as a follow-up), OA-3 A, OA-4 A; answers recorded in OWNER-ASKS.md.
+- 2026-10-08 — #48 squash-merged into dev (b56d5e3); GitHub's stack rebased arc 2's seven commits onto dev (07d7ceb) and retargeted #52 to dev; the owner-pick commits went on top. Final gates rerun on a local rebase with the identical tree: lint 0, typecheck:all 0, test 10390, test:all 0, check:plans 0, smoke 9 files / 32 tests, network 3 files / 7 tests.

@@ -14,9 +14,16 @@ import { ServiceCollection } from "@/wallet/base"
 import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { RecoveryModeError } from "@nulo/extension-messaging/errors"
+import { assertWireArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import { NETWORK_SERVICE_NAME, type Network, NodeStatus } from "@/wallet/services/network/spec"
 import { ACCOUNT_STATE_CAPS, normalizeAccountStateSlice } from "./normalize"
 import { AccountStateService } from "./service"
+
+// The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
+vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@nulo/aztec-runtime/pxe")>()),
+	assertWireArtifactClassId: vi.fn(async () => undefined),
+}))
 
 /** Minimal NetworkService fake — satisfies the methods
  *  AccountStateService.getSendersAcrossActiveNetworks needs. */
@@ -401,6 +408,23 @@ describe("AccountStateService.restore (bounded)", () => {
 		const result = await accountStateService.restore([null, { networkId: "net-a", senders: null, contracts: [] }] as never, [NET])
 		expect(result.some((r) => String(r.restoreError).includes("malformed"))).toBe(true)
 		expect(pxe.registerSender).not.toHaveBeenCalled()
+	})
+
+	test("a contract whose artifact fails the class-id check is refused alone; its sibling still registers", async () => {
+		const MISMATCH = "Contract artifact doesn't match instance's current class id"
+		const contract = (b: string) => ({ address: `0x${b.repeat(32)}`, instance: { i: b }, artifact: { a: b } })
+		const [crafted, genuine] = [contract("07"), contract("08")]
+		vi.mocked(assertWireArtifactClassId).mockRejectedValueOnce(new Error(MISMATCH))
+		const result = await accountStateService.restore([{ networkId: "net-a", senders: [], contracts: [crafted, genuine] }] as never, [
+			NET,
+		])
+		expect(vi.mocked(assertWireArtifactClassId).mock.calls).toStrictEqual([
+			[crafted.instance, crafted.artifact],
+			[genuine.instance, genuine.artifact],
+		])
+		expect(pxe.registerContract).toHaveBeenCalledTimes(1)
+		expect(pxe.registerContract).toHaveBeenCalledWith(expect.anything(), { instance: genuine.instance, artifact: genuine.artifact })
+		expect(result[0].contracts).toStrictEqual([{ ...crafted, restoreError: MISMATCH }, genuine])
 	})
 
 	test("unknown network: per-child 'Network not found' errors, no dial, no fail-fast misclassification", async () => {

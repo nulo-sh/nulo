@@ -3512,35 +3512,32 @@ describe("credential rows, degraded opens and the restore stash", () => {
 	})
 
 	describe("row known-answer vectors (seeded RNG)", () => {
-		test("createProfile persists the pinned row and returns it", async () => {
+		test("createProfile persists the pinned row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const created = await service.createProfile("P", "pass1234")
 			const raw = await rawRow(api, created.id)
 			expectVector("createProfile", raw)
-			expect(created).toStrictEqual(JSON.parse(raw))
 			await expectOracle(created.id, JSON.parse(raw), await unsealPasswordMaster(JSON.parse(raw), "pass1234"), "pass1234")
 		}, 30_000)
 
-		test("importMnemonic persists the pinned row and returns it", async () => {
+		test("importMnemonic persists the pinned row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const words = await wordsForFill(0x21)
 			const imported = await service.importMnemonic("M", words, "pass1234")
 			const raw = await rawRow(api, imported.id)
 			expectVector("importMnemonic", raw)
-			expect(imported).toStrictEqual(JSON.parse(raw))
 			await expectOracle(imported.id, JSON.parse(raw), await deriveMasterFromMnemonic(words), "pass1234")
 		}, 30_000)
 
-		test("changeProfilePassword persists the pinned re-MACed row and returns it", async () => {
+		test("changeProfilePassword persists the pinned re-MACed row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const created = await service.createProfile("P", "pass1234")
-			const changed = await service.changeProfilePassword(created.id, "pass1234", "newpass99")
+			await service.changeProfilePassword(created.id, "pass1234", "newpass99")
 			const raw = await rawRow(api, created.id)
 			expectVector("changeProfilePassword", raw)
-			expect(changed).toStrictEqual(JSON.parse(raw))
 			await expectOracle(created.id, JSON.parse(raw), await unsealPasswordMaster(JSON.parse(raw), "newpass99"), "newpass99")
 		}, 30_000)
 
@@ -3558,23 +3555,21 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			await expectOracle(out.id, JSON.parse(raw), Buffer.from(secret.masterKey, "base64"), "pass1234")
 		}, 30_000)
 
-		test("createPasskeyProfile persists the pinned row and returns it", async () => {
+		test("createPasskeyProfile persists the pinned row", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const created = await service.createPasskeyProfile("PK", fakeCredentialData("cred-kat-1", "uh-kat-1"))
 			const raw = await rawRow(api, created.id)
 			expectVector("createPasskeyProfile", raw)
-			expect(created).toStrictEqual(JSON.parse(raw))
 		}, 30_000)
 
-		test("importPasskey with a userHandle persists the pinned row under it and returns it", async () => {
+		test("importPasskey with a userHandle persists the pinned row under it", async () => {
 			seedRandom()
 			const { api, service } = await makeService()
 			const imported = await service.importPasskey("IK", fakeCredentialData("cred-kat-2", "uh-kat-2"))
 			expect(imported.id).toBe("uh-kat-2")
 			const raw = await rawRow(api, imported.id)
 			expectVector("importPasskeyWithHandle", raw)
-			expect(imported).toStrictEqual(JSON.parse(raw))
 		}, 30_000)
 
 		test("importPasskey without a userHandle persists the pinned row under a generated id", async () => {
@@ -3591,7 +3586,6 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			expect(imported.id).toMatch(/^[0-9a-f]{8}$/)
 			const raw = await rawRow(api, imported.id)
 			expectVector("importPasskeyGeneratedId", raw)
-			expect(imported).toStrictEqual(JSON.parse(raw))
 		}, 30_000)
 
 		test("a passkey restore persists the pinned row and returns only the info", async () => {
@@ -3607,6 +3601,48 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			expect(out).toStrictEqual({ id: "uh-kat-4", name: "PR", type: "passkey" })
 			expectVector("restorePasskey", await rawRow(api, out.id))
 		}, 30_000)
+	})
+
+	describe("profile RPC returns", () => {
+		type Ctx = Awaited<ReturnType<typeof makeService>>
+		const fresh = async ({ service }: Ctx) => (await service.createProfile("P", "pass1234")).id
+
+		test.each<[string, (ctx: Ctx) => Promise<unknown>, string, string]>([
+			["createProfile", ({ service }) => service.createProfile("P", "pass1234"), "P", "password"],
+			[
+				"createPasskeyProfile",
+				({ service }) => service.createPasskeyProfile("PK", fakeCredentialData("cred-ret-1", "uh-ret-1")),
+				"PK",
+				"passkey",
+			],
+			["changeProfileName", async (ctx) => ctx.service.changeProfileName(await fresh(ctx), "Q"), "Q", "password"],
+			[
+				"changeProfilePassword",
+				async (ctx) => ctx.service.changeProfilePassword(await fresh(ctx), "pass1234", "newpass99"),
+				"P",
+				"password",
+			],
+			["importMnemonic", async ({ service }) => service.importMnemonic("M", await wordsForFill(0x41), "pass1234"), "M", "password"],
+			["importPasskey", ({ service }) => service.importPasskey("IK", fakeCredentialData("cred-ret-2", "uh-ret-2")), "IK", "passkey"],
+			["deleteProfile", async (ctx) => ctx.service.deleteProfile(await fresh(ctx)), "P", "password"],
+			[
+				"deleteProfile of a torn import",
+				async ({ api, service }) => {
+					const out = await service.restore({ id: "t", name: "T", type: "password" }, await restoreSecretFor(0x42), "pass1234")
+					const marker = await new RestorePendingRepository(api.storage.local).get(out.id)
+					if (marker.kind !== "valid") throw new Error("restore wrote no marker")
+					return service.deleteProfile(out.id, { pxeGeneration: marker.marker.pxeGeneration, markerAt: marker.marker.at })
+				},
+				"T",
+				"password",
+			],
+		])(
+			"%s returns the projection, never the stored row",
+			async (_label, call, name, type) => {
+				expect(await call(await makeService())).toStrictEqual({ id: expect.any(String), name, type })
+			},
+			30_000,
+		)
 	})
 
 	describe("the degraded-open tail", () => {
@@ -3658,6 +3694,16 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			await ctx.service.lockActiveProfile()
 			return { ...ctx, id: created.id, info: { id: created.id, name, type: "password" } }
 		}
+
+		test("a rename in recovery mode keeps recoveryMode, so the popup's recovery banner stays", async () => {
+			// The popup stores the rename's result as its profile, and the banner reads the flag there.
+			const { api, service, id } = await lockedPasswordProfile()
+			await writeRawRow(api, id, { ...(await readRawRow(api, id)), envelopeMac: Buffer.alloc(32, 0xee).toString("base64") })
+			await service.unlockProfile(id, "pass1234")
+			const renamed = { id, name: "Renamed", type: "password", recoveryMode: true }
+			expect(await service.changeProfileName(id, "Renamed")).toStrictEqual(renamed)
+			expect(await service.getActiveProfile()).toStrictEqual(renamed)
+		}, 30_000)
 
 		test("unlockProfile: a healthy open stays silent and holds the real master and DEK", async () => {
 			const { api, service, id, info } = await lockedPasswordProfile()
@@ -3790,19 +3836,60 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			return { ...ctx, id: out.id, internals, ttl: internals.constructor.PENDING_RESTORE_TTL_MS as number }
 		}
 
-		test("(BUG PIN) finalize's type refusal keeps the stashed secret, even at the TTL", async () => {
-			// The type check precedes the take, and the entry sweep spares the id being finalized,
-			// so an edited `type` leaves the master stashed until a later sweep, lock or delete.
-			const { api, service, id, internals, ttl } = await restoredPasskey("cred-type", "uh-type")
-			const entry = internals.pendingRestoreSecrets.get(id)
-			const now = Date.now()
-			vi.spyOn(Date, "now").mockReturnValue(now)
-			entry.capturedAt = now - ttl
-			await writeRawRow(api, id, { ...(await readRawRow(api, id)), type: "bogus" })
+		type RestoredPasskey = Awaited<ReturnType<typeof restoredPasskey>>
+		const editRowType = async ({ api, id }: RestoredPasskey, type: string) =>
+			writeRawRow(api, id, { ...(await readRawRow(api, id)), type })
+
+		test.each<[string, (restored: RestoredPasskey) => unknown, string | undefined]>([
+			["the type refusal", (r) => editRowType(r, "bogus"), "Profile type changed between restore and finalizeRestore"],
+			["a row turned password", (r) => editRowType(r, "password"), "Password is required for password profile"],
+			[
+				"the already-active return",
+				({ internals, id }) => vi.spyOn(internals.sessionManager, "isActive").mockImplementation((p) => p === id),
+				undefined,
+			],
+			["a missing row", ({ api, id }) => api.storage.local.remove(profileRowKey(id)), "Invalid profile id"],
+			["a tombstoned id", ({ service, id }) => service.getDeletionState().beginDeletion(id), "Invalid profile id"],
+		])(
+			"finalize wipes and drops both restore stashes on %s",
+			async (_label, arrange, refusal) => {
+				const restored = await restoredPasskey("cred-left", "uh-left")
+				const { service, id, internals } = restored
+				const { secret, dek } = internals.pendingRestoreSecrets.get(id)
+				const { sourceDek, destinationDek } = internals.pendingDekRewraps.get(id)
+				const buffers = [secret, dek, sourceDek, destinationDek]
+				expect(buffers.some(allZero)).toBe(false)
+				await arrange(restored)
+				const finalized = service.finalizeRestore(id)
+				if (refusal) await expect(finalized).rejects.toThrow(refusal)
+				else await expect(finalized).resolves.toMatchObject({ id })
+				expect(internals.pendingRestoreSecrets.has(id)).toBe(false)
+				expect(internals.pendingDekRewraps.has(id)).toBe(false)
+				expect(buffers.every(allZero)).toBe(true)
+			},
+			30_000,
+		)
+
+		test("finalize spares the entries a later restore stashed under the same id", async () => {
+			const restored = await restoredPasskey("cred-later", "uh-later")
+			const { service, id, internals } = restored
+			const fresh = (fill: number) => new Uint8Array(32).fill(fill)
+			const later = { ...internals.pendingRestoreSecrets.get(id), secret: fresh(7), dek: fresh(8) }
+			const laterRewrap = { sourceDek: fresh(9), destinationDek: fresh(10), capturedAt: Date.now() }
+			await editRowType(restored, "bogus")
+			// A delete and a same-id restore landing while finalize is parked past the lock's watchdog.
+			const clearMarker = internals.restorePending.delete.bind(internals.restorePending)
+			vi.spyOn(internals.restorePending, "delete").mockImplementation(async (profileId) => {
+				await clearMarker(profileId)
+				internals.pendingRestoreSecrets.drop(id)
+				internals.pendingDekRewraps.drop(id)
+				internals.pendingRestoreSecrets.set(id, later)
+				internals.pendingDekRewraps.set(id, laterRewrap)
+			})
 			await expect(service.finalizeRestore(id)).rejects.toThrow("Profile type changed between restore and finalizeRestore")
-			expect(internals.pendingRestoreSecrets.get(id)).toBe(entry)
-			expect(allZero(entry.secret) || allZero(entry.dek)).toBe(false)
-			expect(internals.pendingDekRewraps.has(id)).toBe(false)
+			expect(internals.pendingRestoreSecrets.get(id)).toBe(later)
+			expect(internals.pendingDekRewraps.get(id)).toBe(laterRewrap)
+			expect([later.secret, later.dek, laterRewrap.sourceDek, laterRewrap.destinationDek].some(allZero)).toBe(false)
 		}, 30_000)
 
 		test("consumeDekRewrapContext hands over exactly the two buffers once", async () => {

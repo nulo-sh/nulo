@@ -610,7 +610,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 				await this.openSessionVerified(profile, secret, passhash, dek)
 
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			// zero secret + entropy + dek + passhash after sessionManager has copied
@@ -750,7 +750,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 					await this.openSessionVerified(profile, recovery.secret, undefined, dek)
 
-					return profile
+					return this.getProfileInfo(profile)
 				})
 			})
 		} finally {
@@ -1019,7 +1019,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 			this.sessionManager.patchActiveProfile(id, profile)
 
-			return profile
+			return this.getProfileInfo(profile)
 		})
 	}
 
@@ -1185,7 +1185,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				zeroize(resealed.passhash)
 			}
 
-			return profile
+			return this.getProfileInfo(profile)
 		})
 	}
 
@@ -1511,14 +1511,14 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		// + release there. Cost: the id stays reserved until that boot — a dead
 		// import's id, unreused for one SW lifetime.
 		if (tornGuard !== undefined) {
-			return profile
+			return this.getProfileInfo(profile)
 		}
 
 		await this.runExclusive(async () => {
 			await this.tombstones.clearIfSame(id, epoch)
 			this.deletionState.release(id)
 		})
-		return profile
+		return this.getProfileInfo(profile)
 	}
 
 	/**
@@ -2093,7 +2093,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		entropy: Uint8Array<ArrayBuffer>,
 		passhash: Passhash,
 		allowDuplicate = false,
-	): Promise<Profile> {
+	): Promise<ProfileInfo> {
 		const dek = generateImportedKeysDek()
 		try {
 			return await this.runExclusive(async () => {
@@ -2106,7 +2106,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const profile = await newPasswordRow({ id, name, slots: encrypted, dekSealed, walletFingerprint }, secret, dek)
 				await this.persistNewProfileHoldingLock(profile)
 				await this.openSessionVerified(profile, secret, passhash, dek)
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			zeroize(secret)
@@ -2127,7 +2127,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		dekWrapKey: CryptoKey,
 		userHandle?: string,
 		allowDuplicate = false,
-	): Promise<Profile> {
+	): Promise<ProfileInfo> {
 		const dek = generateImportedKeysDek()
 		try {
 			const dekSealed = await sealDekUnderWrapKey(dekWrapKey, dek)
@@ -2153,7 +2153,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 				const profile = newPasskeyRow({ id: userHandle, name, dekSealed, walletFingerprint, credentialId })
 				await this.persistNewProfileHoldingLock(profile)
 				await this.openSessionVerified(profile, secret, undefined, dek)
-				return profile
+				return this.getProfileInfo(profile)
 			})
 		} finally {
 			zeroize(secret)
@@ -2161,16 +2161,21 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
+	/** What the profile RPCs return, never the stored row: a row carries sealed key material. */
 	private getProfileInfo(profile: Profile): ProfileInfo {
-		const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
+		const info = this.profileIdentity(profile)
 		if (this.sessionManager.isRecoveryMode(profile.id)) info.recoveryMode = true
 		return info
+	}
+
+	private profileIdentity(profile: Pick<ProfileInfo, "id" | "name" | "type">): ProfileInfo {
+		return { id: profile.id, name: profile.name, type: profile.type }
 	}
 
 	/** The persisted identity only: `recoveryMode` is a live-session projection and never travels. */
 	public async backup(): Promise<ProfileInfo | undefined> {
 		const active = await this.getActiveProfile()
-		return active && { id: active.id, name: active.name, type: active.type }
+		return active && this.profileIdentity(active)
 	}
 
 	public async restore(
@@ -2553,44 +2558,50 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 
 		return this.runExclusive(async () => {
-			// Sweep stale entries but never the id being finalized here.
-			this.sweepStalePendingRestore(Date.now(), id)
-			const profile = await this.repo.get(id)
-			if (!profile) {
-				throw new Error("Invalid profile id")
-			}
-			// A tombstoned profile (SW died mid-delete: row still present, id
-			// reserved) must not open a session — it is being erased. Gate here as
-			// well as at row-read so a delete that began mid-restore is caught.
-			if (this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
+			// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
+			// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
+			// identity checks spare entries a later restore stashed after the lock's hold watchdog
+			// released this call.
+			const seen = this.pendingRestoreSecrets.get(id)
+			const seenRewrap = this.pendingDekRewraps.get(id)
+			try {
+				// Sweep stale entries but never the id being finalized here.
+				this.sweepStalePendingRestore(Date.now(), id)
+				const profile = await this.repo.get(id)
+				if (!profile) {
+					throw new Error("Invalid profile id")
+				}
+				// A tombstoned profile (SW died mid-delete: row still present, id
+				// reserved) must not open a session — it is being erased. Gate here as
+				// well as at row-read so a delete that began mid-restore is caught.
+				if (this.deletionState.isReserved(id)) {
+					throw new Error("Invalid profile id")
+				}
 
-			// Clear the restore-in-progress marker at ENTRY: being called at all
-			// proves the storage-slice phase completed (the import flow only
-			// finalizes after every slice restore). Clearing on entry — not on
-			// session-open success — keeps finalize-throw survivors (wrong
-			// password, lost passkey pending-secret) on their documented
-			// unlock-later recovery instead of branding them torn.
-			await this.restorePending.delete(id)
+				// Clear the restore-in-progress marker at ENTRY: being called at all
+				// proves the storage-slice phase completed (the import flow only
+				// finalizes after every slice restore). Clearing on entry — not on
+				// session-open success — keeps finalize-throw survivors (wrong
+				// password, lost passkey pending-secret) on their documented
+				// unlock-later recovery instead of branding them torn.
+				await this.restorePending.delete(id)
 
-			// Zeroize any LEFTOVER rewrap context for this id — the empty-slice case
-			// (`restoreImportedKeys` never ran, so nothing consumed it) and any abandoned
-			// re-restore of the same id. Consumed contexts are already gone.
-			this.pendingDekRewraps.drop(id)
+				// If the session is already active for this profile, treat as
+				// no-op. Defensive against double-finalize.
+				if (this.sessionManager.isActive(id)) {
+					return this.getProfileInfo(profile)
+				}
 
-			// If the session is already active for this profile, treat as
-			// no-op. Defensive against double-finalize.
-			if (this.sessionManager.isActive(id)) {
-				return this.getProfileInfo(profile)
+				if (profile.type === "password") {
+					return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
+				}
+				// This dispatch falls through to the passkey branch for ANY non-password
+				// type — an edited `type` field must not select it; the branch re-checks.
+				return await this.finalizePasskeyRestoreHoldingLock(id, profile)
+			} finally {
+				if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
+				if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
 			}
-
-			if (profile.type === "password") {
-				return this.finalizePasswordRestoreHoldingLock(id, profile, password)
-			}
-			// This dispatch falls through to the passkey branch for ANY non-password
-			// type — an edited `type` field must not select it; the branch re-checks.
-			return this.finalizePasskeyRestoreHoldingLock(id, profile)
 		})
 	}
 

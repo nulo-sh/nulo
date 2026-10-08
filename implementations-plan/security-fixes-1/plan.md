@@ -63,8 +63,9 @@ message.
 **UI impact: none on any input the wallet produces.** Rare-input visible effects, each shipped in its
 today-closest form with existing wording and filed for the owner:
 
-- OA-1 (#31): a rename in recovery mode keeps today's behaviour (the banner hides); the ask is
-  whether to keep the banner.
+- OA-1 (#31): the owner picked A on 2026-10-08 (OWNER-ASKS.md § Answers): a rename in recovery mode
+  now keeps the recovery banner, because the rename returns the same projection as every other
+  profile call. Before the sign-off the plan shipped today's behaviour (the banner hides).
 - OA-2 (#13): the debug/developer journal detail loses the function names and address; the ask is
   that acknowledgement plus whether to classify the refusal as "Not allowed".
 - OA-3 (#27): a backup whose contract artifact does not match its own instance now shows the existing
@@ -171,6 +172,8 @@ stash.
   today's row carries no `recoveryMode`, so the recovery banner hides after a rename in recovery mode.
   Restoring the banner is OA-1. Add a private `profileIdentity(profile)` helper for `{ id, name, type }`
   and reuse it in `backup()` (`:2190`), which builds the same object by hand.
+  *Superseded by the owner's OA-1 pick (D18):* `changeProfileName` returns `getProfileInfo(profile)`,
+  `recoveryMode` included, so the banner stays after a rename.
 - In `apps/extension/src/wallet/services/profile/expiring-stash.ts`, override `set` so that replacing
   an entry with a different object wipes the old one, expired or not, and still returns `this`. Rewrite
   the class comment: a replacing `set` wipes the old entry, so a new entry must never share a buffer
@@ -189,6 +192,9 @@ stash.
  *  classifier. For registration inputs that crossed a trust boundary as JSON. */
 export async function assertWireArtifactClassId(instance: unknown, artifact: unknown): Promise<void>
 ```
+
+As implemented (D16): the helper checks the artifact against the instance's **original** class id,
+the one the address commits to, and refuses an instance whose current class id differs from it.
 
 It parses with `ContractInstanceWithAddressSchema` and `ContractArtifactSchema` (as
 `execution/service.ts:839-853` does), calls `assertArtifactClassId`, and rethrows any failure as
@@ -376,7 +382,7 @@ that file alone; a second red is breakage, not a flake.
 
 ### Arc 2 — profile and backup
 
-#### Phase 4 — #30 the restore stash dies with finalize
+#### Phase 4 — #30 the restore stash dies with finalize ✓
 
 1. In `finalizeRestore`, record the stash entry seen at entry; in a `finally`, drop the entry for `id` only if it is still that one.
 2. Replace the `(BUG PIN) finalize's type refusal keeps the stashed secret` test with one `test.each` over the paths that do not consume the stash: type `"bogus"`, type `"password"`, an already-active session, a missing row, a tombstoned id. Each row asserts the outcome (refusal or no-op), that the stash has no entry for `id`, and that the captured `secret` and `dek` buffers are all zero.
@@ -388,7 +394,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0; every row of the new table fails on the base commit.
 - Layers: lint, typecheck, unit, integration.
 
-#### Phase 5 — #31 profile RPCs return the projection
+#### Phase 5 — #31 profile RPCs return the projection ✓
 
 1. Add `profileIdentity(profile)` and reuse it in `backup()`.
 2. Return `getProfileInfo(profile)` from the six methods named in the architecture section; return `profileIdentity(profile)` from `changeProfileName`.
@@ -396,6 +402,7 @@ that file alone; a second red is breakage, not a flake.
 4. Add `profile/expiring-stash.test.ts`: a `set` over a live entry wipes the old buffers; a `set` over an expired, unswept entry wipes it; a `set` of the same object wipes nothing; a `set` on a new key wipes nothing.
 5. In `service.integration.test.ts`, add one table test over the eight RPC returns: each result's keys are a subset of `id`, `name`, `type`, `recoveryMode`.
 6. Add a `(BUG PIN)` test: a rename in recovery mode returns no `recoveryMode`. Name OA-1 in its comment.
+   *Superseded (D18):* the test pins the opposite, a rename in recovery mode returns `recoveryMode: true`.
 7. Run `EditProfilePopup.test.ts` unchanged as the popup's success control.
 
 **Validation gate.**
@@ -403,7 +410,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0; the key-set table and the stash tests fail on the base commit.
 - Layers: lint, typecheck, unit, integration, component.
 
-#### Phase 6 — #27 class id checked before a restored contract registers, then the arc gate
+#### Phase 6 — #27 class id checked before a restored contract registers, then the arc gate ✓
 
 1. Add `assertWireArtifactClassId` to `artifact-class-id.ts` and export it from `pxe/index.ts`.
 2. Add `packages/aztec-runtime/src/pxe/artifact-class-id.test.ts` with `// @vitest-environment node`. Use the genuine instance and `FrozenSchnorrAccountArtifact` in wire form, as `register-contract.test.ts` does.
@@ -595,15 +602,17 @@ request value. The adapter's reasons never echo the URL.
 No Ask blocks this plan. Each owner ask holds back only a choice between the shipped today-closest
 form and an alternative; the working assumption is the shipped form.
 
-- OA-1 (#31): after a rename in recovery mode, should the recovery banner stay? Shipped: no change
-  (the banner hides), pinned as `(BUG PIN)`.
+- OA-1 (#31): after a rename in recovery mode, should the recovery banner stay? Answered A (keep it)
+  on 2026-10-08; built in arc 2 (D18).
 - OA-2 (#13): acknowledge that the debug/developer journal detail loses the function names and
   address; and should the refusal become a typed scope refusal ("Not allowed", dApp code 4100)?
-  Shipped: unclassified, today's words minus the values.
+  Shipped: unclassified, today's words minus the values. Answered A (classify) on 2026-10-08; the
+  classification is a follow-up, not built in this lane.
 - OA-3 (#27): acknowledge that a self-mismatched contract in a backup now shows the existing "completed
-  with some errors" warning. Shipped: the warning shows.
+  with some errors" warning. Shipped: the warning shows. Answered A (as shipped) on 2026-10-08.
 - OA-4 (#29): a stored malformed grant is refused, as most such rows fail today; should it instead be
-  dropped so the app's next request reopens the connect window? Shipped: refused.
+  dropped so the app's next request reopens the connect window? Shipped: refused. Answered A (as
+  shipped) on 2026-10-08.
 
 ## Decision ledger
 
@@ -627,6 +636,10 @@ post-build sponsor snapshot for parity, a separate userinfo helper.
 | D12 | #35 extent | also make the invalid-URL reason fixed | reorder `setActiveNetwork` to build the node before writing the active pointer: no stored row can carry userinfo, so the half-applied switch cannot occur |
 | D13 | #29 a stored capability that is not an object (implementation) | passes untouched, like an unknown type; only a null/undefined capability or a non-object record refuses | refuse every non-object capability (the plan's first wording): the capability window's unknown row stores a request entry as sent (`"x"` passes `argsRequestCapabilities` by design), so the session would be refused on every later call after a choice the person made; refuse such entries at `projectRequestedCapabilities`: changes what a person sees (no window) and contradicts the pinned request tolerance. A capability with no type cannot satisfy, widen or narrow any grant consent reads |
 | D14 | #29 tests beyond the plan's list (implementation) | rewrite `dispatcher.test.ts`'s held-non-address test to expect the `ValidationError`; recast its echo test onto a valid held grant with a malformed echo; give `background.refusal-log.test.ts` a data grant a writer can store | keep them: each stored a grant the read now refuses (`contracts: ["0xtok"]`, `{ type: "data" }`, `{ type: "data", addressBook: false }`), the same class as the characterization rows the plan names |
+| D15 | #31 the `(BUG PIN)` rename comment (implementation) | states the pending product decision in words, no ask id | name OA-1 in the comment, as Phase 5 step 6 said: the comment rules ban plan and workflow tags in code |
+| D16 | #27 which class id the restore check binds (implementation, arc 2 loop) | the original class id, with current required to equal it | the current class id (the plan's wording): the address commits to the original (`computePartialAddress`) and the PXE stores only the preimage (`hydratePreimage` rebuilds current := original), so a forged current id let any artifact through; every genuine export has current = original (PXE-hydrated, or node-read through `assertNotUpgraded`) |
+| D17 | #30 the DEK rewrap context on finalize (implementation, arc 2 loop) | its drop moves into the same identity-guarded `finally` | keep the mid-body drop: the missing-row and tombstone refusals threw before it, leaving the source and destination DEKs to the TTL |
+| D18 | #31 rename return, after the owner's OA-1 pick | `getProfileInfo(profile)`, `recoveryMode` included; the `(BUG PIN)` test becomes a pin of the banner staying | keep the bare identity (D8, D15): superseded by the owner's pick A on 2026-10-08 |
 
 Unresolved disagreements:
 
@@ -705,6 +718,15 @@ orchestrator's routing of OA-1 to OA-4.
 | 1 | Codex (gpt-6.1-sol, high, read-only) | `findings` (one nit) | three "Kept inline … a malformed stored element must throw the same text" comments in `capability-negotiation.ts` state a reason projection removed: accepted, deleted |
 | 1 | Opus (general-purpose, read-only) | close to mergeable, one should-fix | should-fix, accepted (D13): the unknown row can store `{ capability: "x" }`, which the first read refused on every later call; nit, accepted: README "before any leg of the batch runs" was wrong for a nested batch, now "of that batch"; the comment nit duplicated Codex's; process note: Phase 3 tick waits for the final-head gate |
 | 2 | Codex (resumed) | `clean` | a non-null primitive capability has no type, cannot satisfy a known-type check or replace a transaction or simulation grant, so D3 holds; every reader reads `.type` safely or checks the shape first |
+
+### Arc 2 post-implementation loop — `clean` after round 3
+
+| Round | Reviewer | Verdict | Findings and calls |
+|---|---|---|---|
+| 1 | Codex (gpt-6.1-sol, high, read-only) | `clean` | none |
+| 1 | Opus (general-purpose, read-only) | one should-fix, two nits | should-fix, accepted (D16): the class-id check bound the artifact to `currentContractClassId`, which the address does not commit to and the PXE discards, so a crafted backup could name its own artifact's class as current and pass; nit, accepted (D17): finalize's missing-row and tombstone refusals left the DEK rewrap context to the TTL; nit, rejected: `session-manager.ts` `toInfo` is a third copy of the profile projection, a refactor of code no fix touches |
+| 2 | Codex (resumed) | `findings` (one nit) | the guard test replaced only the secret stash, so removing the new rewrap guard stayed green: accepted, the hook now replaces both stashes and the test fails without the guard |
+| 3 | Codex (resumed) | `clean` | none |
 
 ## Post-implementation
 
@@ -798,6 +820,9 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
 - The dApp-session service's writers and `queued-journal.ts:106` dereference `g.capability.type` on raw stored records (`dapp-session/service.ts:35`, `:292`, `:350`, `:367`), and the two grant setters accept unvalidated records from any extension page.
 - `repository.setTrust`'s own await is unfenced on both incoming arms (`(DRIFT PIN) P6`, `N6`).
 - A contract class id does not commit to ABI metadata; a backup can plant a same-class artifact with misleading names (upstream keeps the first artifact stored per class).
+- The dApp registration path (`execution/service.ts`, `executeRegisterContract` and its sibling) checks a supplied artifact against the supplied instance's `currentContractClassId`, which the address does not commit to; bind it to the original class id as the restore check does.
+- OA-2 picked A (2026-10-08): classify the selector-binding refusal as a scope refusal. The dApp then receives code 4100 and the queued send reads "Not allowed"; it needs `failureKind` (`mark-failed-unless-cancelled.ts`) and the execution code-channel allowlist (`rpc-cancel.ts`) to carry `ScopeViolationError`, not only a class change.
+- `session-manager.ts` `toInfo` repeats the profile projection that `ProfileService.getProfileInfo` builds; one shared helper would keep the RPC and event shapes from drifting.
 - `account-state/service.ts` `classifyRestoreFailure` logs the error message as a finished string (`:338`), and its comment says per-item errors are never rendered, which the data viewer contradicts.
 - The transfer ladder's `base fee fetch failed: <message>` reason carries the node's message; the operation ladder already uses a fixed category.
 - A refused dApp call's activity record is titled by the dApp's claimed function name (History card, detail title and Method row read "Balance Of Public" for a call whose selector is `transfer_public_to_public`). Only a refused call can carry a mismatched name, since one that runs passed the selector binding; labelling by the resolved function is a UI change for the owner. Seen in the OA-2 screenshots.
