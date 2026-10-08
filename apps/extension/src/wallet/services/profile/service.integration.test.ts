@@ -3870,25 +3870,26 @@ describe("credential rows, degraded opens and the restore stash", () => {
 			30_000,
 		)
 
-		test("finalize spares an entry a later restore stashed under the same id", async () => {
+		test("finalize spares the entries a later restore stashed under the same id", async () => {
 			const restored = await restoredPasskey("cred-later", "uh-later")
 			const { service, id, internals } = restored
-			const later = {
-				...internals.pendingRestoreSecrets.get(id),
-				secret: new Uint8Array(32).fill(7),
-				dek: new Uint8Array(32).fill(8),
-			}
+			const fresh = (fill: number) => new Uint8Array(32).fill(fill)
+			const later = { ...internals.pendingRestoreSecrets.get(id), secret: fresh(7), dek: fresh(8) }
+			const laterRewrap = { sourceDek: fresh(9), destinationDek: fresh(10), capturedAt: Date.now() }
 			await editRowType(restored, "bogus")
 			// A delete and a same-id restore landing while finalize is parked past the lock's watchdog.
 			const clearMarker = internals.restorePending.delete.bind(internals.restorePending)
 			vi.spyOn(internals.restorePending, "delete").mockImplementation(async (profileId) => {
 				await clearMarker(profileId)
 				internals.pendingRestoreSecrets.drop(id)
+				internals.pendingDekRewraps.drop(id)
 				internals.pendingRestoreSecrets.set(id, later)
+				internals.pendingDekRewraps.set(id, laterRewrap)
 			})
 			await expect(service.finalizeRestore(id)).rejects.toThrow("Profile type changed between restore and finalizeRestore")
 			expect(internals.pendingRestoreSecrets.get(id)).toBe(later)
-			expect(allZero(later.secret) || allZero(later.dek)).toBe(false)
+			expect(internals.pendingDekRewraps.get(id)).toBe(laterRewrap)
+			expect([later.secret, later.dek, laterRewrap.sourceDek, laterRewrap.destinationDek].some(allZero)).toBe(false)
 		}, 30_000)
 
 		test("consumeDekRewrapContext hands over exactly the two buffers once", async () => {
