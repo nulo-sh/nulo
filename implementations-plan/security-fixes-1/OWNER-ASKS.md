@@ -55,6 +55,11 @@ as today.
 **Recommendation.** A. It is a scope refusal: the call claims a permission its selector does not have,
 and a dApp developer can act on the specific code.
 
+**Screenshots.** Before and after, Chrome, both themes, of the developer-mode error block, the
+record's outcome label and the History card, from a real refused send on the local network, go to you
+with this ask. They also show a separate, pre-existing point: the record is titled by the name the
+app claimed ("Balance Of Public" for a transfer), filed as a follow-up.
+
 ## OA-3 — a backup whose contract does not match itself (#27)
 
 **Surface.** Import → full backup, the end of the restore: the warning block

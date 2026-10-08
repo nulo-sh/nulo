@@ -85,10 +85,11 @@ so the dispatcher pre-scan (`dispatcher.ts:522-526`) refuses it before any leg r
 **#29 stored grants.** Add one pure exported helper to `packages/wallet-bridge/src/capability-negotiation.ts`:
 
 ```ts
-/** The stored grants re-projected through `projectKnownCapability`, so coverage and enforcement read
- *  only the canonical shape. A record that is not an object, has no capability object, or fails
- *  projection refuses the whole read with the projector's fixed `ValidationError`: a malformed grant
- *  must never narrow into a smaller one, because consent reads the full set. */
+/** The stored grants re-projected through `projectKnownCapability`, so coverage and enforcement
+ *  read only the canonical shape. A record that is not an object, holds no capability, or holds a
+ *  known type that fails projection refuses the whole read with a fixed `ValidationError`: a
+ *  malformed grant must never narrow into a smaller one, because consent reads the full set. A
+ *  capability of no known type passes untouched, as the window's unknown row stores one as asked. */
 export function projectStoredGrants(records: readonly unknown[] | undefined): GrantedCapabilityRecord[]
 ```
 
@@ -102,8 +103,8 @@ then. `getAccounts`'s desync read (`:457`) runs only after `enforceCapability` p
 each leg goes through the same reads. Unscoped methods read no grant and are unaffected.
 
 The refusal is the projector's existing error: `ValidationError("Malformed <type> capability")` for a
-known type, and `ValidationError("Malformed capability")` for a record or capability that is not an
-object. Neither names a request value. A `ValidationError` is off the dApp code channel, so a dApp
+known type, and `ValidationError("Malformed capability")` for a record that is not an object or
+holds no capability (D13). Neither names a request value. A `ValidationError` is off the dApp code channel, so a dApp
 receives the same constant `UNCLASSIFIED_ERROR_MESSAGE` it receives today for the `TypeError`, and no
 window opens, as today. The stored row and its MAC are untouched.
 
@@ -358,7 +359,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0. The rewritten tests, the consent test and the post-decision test fail on the base commit.
 - Layers: lint, typecheck, unit.
 
-#### Phase 3 — #13 fixed selector-binding text, then the arc gate
+#### Phase 3 — #13 fixed selector-binding text, then the arc gate ✓
 
 1. Add `selectorBindingRefusal(policy)` next to `SelectorBindingPolicy`; `assertSelectorBinding` throws it.
 2. In `contract-resolver.test.ts`, for each policy (`CALL_BINDING`, `AUTHWIT_CALL_BINDING`, `NAMED_CALL_BINDING`, the last with an absent name too), assert the thrown message equals the fixed text and contains neither the claimed name, the resolved function's name, nor the target. Control: a matching name returns the function.
@@ -624,6 +625,8 @@ post-build sponsor snapshot for parity, a separate userinfo helper.
 | D10 | #30 mechanism | identity-guarded `finally { drop }` around finalize | a `drop` before each throw: misses the password branch and the early return; an unguarded `finally` drop: can wipe a later restore's entry after a watchdog hand-off; binding consumption to the captured entry too: guards a path that needs a five-minute park plus a same-id delete-and-restore |
 | D11 | #33 reason format | the shared helpers return fixed categories, so two operation-ladder debug reasons lose the error message | keep the operation ladder's message-bearing reasons: one helper cannot serve both, and the message is a node or storage text the logging policy keeps out of finished strings |
 | D12 | #35 extent | also make the invalid-URL reason fixed | reorder `setActiveNetwork` to build the node before writing the active pointer: no stored row can carry userinfo, so the half-applied switch cannot occur |
+| D13 | #29 a stored capability that is not an object (implementation) | passes untouched, like an unknown type; only a null/undefined capability or a non-object record refuses | refuse every non-object capability (the plan's first wording): the capability window's unknown row stores a request entry as sent (`"x"` passes `argsRequestCapabilities` by design), so the session would be refused on every later call after a choice the person made; refuse such entries at `projectRequestedCapabilities`: changes what a person sees (no window) and contradicts the pinned request tolerance. A capability with no type cannot satisfy, widen or narrow any grant consent reads |
+| D14 | #29 tests beyond the plan's list (implementation) | rewrite `dispatcher.test.ts`'s held-non-address test to expect the `ValidationError`; recast its echo test onto a valid held grant with a malformed echo; give `background.refusal-log.test.ts` a data grant a writer can store | keep them: each stored a grant the read now refuses (`contracts: ["0xtok"]`, `{ type: "data" }`, `{ type: "data", addressBook: false }`), the same class as the characterization rows the plan names |
 
 Unresolved disagreements:
 
@@ -694,6 +697,14 @@ Unresolved disagreements:
 
 Both conditions are applied in this revision. The plan is approved for implementation subject to the
 orchestrator's routing of OA-1 to OA-4.
+
+### Arc 1 post-implementation loop — `clean` after round 2
+
+| Round | Reviewer | Verdict | Findings and calls |
+|---|---|---|---|
+| 1 | Codex (gpt-6.1-sol, high, read-only) | `findings` (one nit) | three "Kept inline … a malformed stored element must throw the same text" comments in `capability-negotiation.ts` state a reason projection removed: accepted, deleted |
+| 1 | Opus (general-purpose, read-only) | close to mergeable, one should-fix | should-fix, accepted (D13): the unknown row can store `{ capability: "x" }`, which the first read refused on every later call; nit, accepted: README "before any leg of the batch runs" was wrong for a nested batch, now "of that batch"; the comment nit duplicated Codex's; process note: Phase 3 tick waits for the final-head gate |
+| 2 | Codex (resumed) | `clean` | a non-null primitive capability has no type, cannot satisfy a known-type check or replace a transaction or simulation grant, so D3 holds; every reader reads `.type` safely or checks the shape first |
 
 ## Post-implementation
 
@@ -789,3 +800,4 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
 - A contract class id does not commit to ABI metadata; a backup can plant a same-class artifact with misleading names (upstream keeps the first artifact stored per class).
 - `account-state/service.ts` `classifyRestoreFailure` logs the error message as a finished string (`:338`), and its comment says per-item errors are never rendered, which the data viewer contradicts.
 - The transfer ladder's `base fee fetch failed: <message>` reason carries the node's message; the operation ladder already uses a fixed category.
+- A refused dApp call's activity record is titled by the dApp's claimed function name (History card, detail title and Method row read "Balance Of Public" for a call whose selector is `transfer_public_to_public`). Only a refused call can carry a mismatched name, since one that runs passed the selector binding; labelling by the resolved function is a UI change for the owner. Seen in the OA-2 screenshots.
