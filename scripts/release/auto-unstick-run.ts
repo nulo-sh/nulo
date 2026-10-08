@@ -1,8 +1,9 @@
 /**
  * The I/O runner around the pure `decideUnstick` (auto-unstick.ts). Resolves the
  * live GitHub state the decision needs — the PR attached to `github.sha` and the
- * tag's current SHA — calls `decideUnstick`, and performs the tag + relabel +
- * release when (and only when) the decision is `create`.
+ * tag's current SHA — calls `decideUnstick`, and performs the tag + relabel
+ * when (and only when) the decision is `create`. The GitHub Release is the
+ * publish chain's: attach-assets creates it as a draft and publishes it whole.
  *
  * Staged-rollout + safety, by construction:
  *  - The expensive resolution (PR-by-commit, tag SHA) runs ONLY when the kill
@@ -36,8 +37,6 @@ export interface UnstickIO {
 	resolveTagSha(tag: string): Promise<string | null>
 	createTag(tag: string, sha: string, message: string): Promise<void>
 	relabelPr(prNumber: number, add: string, remove: string): Promise<void>
-	/** Idempotently ensure an EMPTY GitHub Release exists for the tag (the publish chain fills notes + assets later). */
-	ensureRelease(tag: string, prerelease: boolean): Promise<void>
 	log(msg: string): void
 }
 
@@ -58,7 +57,7 @@ export interface RunUnstickOpts {
 export interface RunUnstickResult {
 	action: AutoUnstickAction
 	reason: string
-	/** true only when a tag + release were actually created. */
+	/** true only when the tag was actually created. */
 	performed: boolean
 	exitCode: 0 | 1
 }
@@ -92,23 +91,16 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 			io.log(`auto-unstick: ABORT — ${decision.reason}`)
 			return { action: "abort", reason: decision.reason, performed: false, exitCode: 1 }
 		case "skip": {
-			// Tag already at the merge SHA. Heal a partial prior run (tag pushed, but the
-			// release or relabel didn't finish) by idempotently ensuring BOTH — otherwise a
-			// rerun would skip forever and `resolve` would never advance. Never a 2nd tag.
-			const prerelease = opts.version.includes("-")
-			await io.ensureRelease(tag, prerelease)
+			// Tag already at the merge SHA: heal a prior run that tagged but never relabeled. Never a 2nd tag.
 			await io.relabelPr(decision.prNumber as number, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
-			io.log(`auto-unstick: skip (tag exists) — ensured release + label for ${tag}`)
+			io.log(`auto-unstick: skip (tag exists) — ensured the label for ${tag}`)
 			return { action: "skip", reason: decision.reason, performed: false, exitCode: 0 }
 		}
 		case "create": {
-			// A hyphen in the version (e.g. 1.2.3-rc.1) means a prerelease GitHub Release.
-			const prerelease = opts.version.includes("-")
 			io.log(`auto-unstick: creating ${tag} at ${decision.tagSha} (Release PR #${decision.prNumber})`)
 			await io.createTag(tag, decision.tagSha as string, `Release ${opts.version}`)
 			await io.relabelPr(decision.prNumber as number, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
-			await io.ensureRelease(tag, prerelease)
-			io.log(`auto-unstick: created ${tag}, relabeled PR #${decision.prNumber} → tagged (prerelease=${prerelease})`)
+			io.log(`auto-unstick: created ${tag}, relabeled PR #${decision.prNumber} → tagged`)
 			return { action: "create", reason: decision.reason, performed: true, exitCode: 0 }
 		}
 	}
@@ -160,7 +152,9 @@ if (import.meta.main) {
 		async createTag(tag, sha, message) {
 			// Through the API, so the tag's creator is the token's App and no credential enters .git/config.
 			// No tagger is sent: GitHub records the token's identity.
-			const object = (await $`gh api -X POST ${`repos/${repo}/git/tags`} -f tag=${tag} -f message=${message} -f object=${sha} -f type=commit --jq .sha`.text()).trim()
+			const object = (
+				await $`gh api -X POST ${`repos/${repo}/git/tags`} -f tag=${tag} -f message=${message} -f object=${sha} -f type=commit --jq .sha`.text()
+			).trim()
 			await $`gh api -X POST ${`repos/${repo}/git/refs`} -f ref=${`refs/tags/${tag}`} -f sha=${object}`.quiet()
 		},
 		async relabelPr(prNumber, add, remove) {
@@ -170,14 +164,6 @@ if (import.meta.main) {
 			// (idempotent via --force). Found by the throwaway-repo rehearsal.
 			await $`gh label create ${add} --color ededed --force`.nothrow().quiet()
 			await $`gh pr edit ${String(prNumber)} --add-label ${add} --remove-label ${remove}`
-		},
-		async ensureRelease(tag, prerelease) {
-			// Idempotent: a prior (possibly partial) run may already have created it.
-			const exists = await $`gh release view ${tag}`.nothrow().quiet()
-			if (exists.exitCode === 0) return
-			const flags = ["release", "create", tag, "--verify-tag", "--title", tag, "--notes", "Filled by publish run."]
-			if (prerelease) flags.push("--prerelease")
-			await $`gh ${flags}`
 		},
 		log: (m) => console.log(m),
 	}
@@ -195,7 +181,7 @@ if (import.meta.main) {
 	})
 
 	// Feed the downstream `resolve` job: `unstuck=true` (+ the tag) only when we
-	// actually created the release, so the publish chain continues on exactly the
+	// actually created the tag, so the publish chain continues on exactly the
 	// abort path and stays skipped (today's manual-unstick behavior) otherwise.
 	const ghOut = process.env.GITHUB_OUTPUT
 	if (ghOut) {

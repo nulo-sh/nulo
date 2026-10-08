@@ -11,14 +11,16 @@ name: nightly
 # expected and harmless here.
 #
 # Flow:
-#   1. resolve pins origin/dev HEAD and derives tag + version (see below).
-#   2. The full gate battery runs at that pinned sha: lint+typecheck, unit,
+#   1. resolve takes the run's own commit, which must be on dev, and derives
+#      tag + version (see below).
+#   2. The full gate battery runs at that sha: lint+typecheck, unit,
 #      the complete network e2e suite, chrome+firefox builds, smoke against
 #      the built chrome artifact.
-#   3. Only if EVERY gate is green, publish-nightly creates the tag + a
-#      PRE-release with the zips + SHASUMS256.txt + git-cliff notes. A red
-#      night publishes nothing and strands nothing (the tag does not exist
-#      until publish time).
+#   3. Only if EVERY gate is green, publish-nightly creates the tag at that
+#      sha, then fills, checks and publishes a draft PRE-release with the
+#      zips + SHASUMS256.txt + git-cliff notes (scripts/release/
+#      attach-assets-run.ts, shared with release.yml). A red night publishes
+#      nothing and strands nothing (the tag does not exist until publish time).
 #
 # Version scheme — why not a calendar date in the last component:
 #   Chrome and Firefox cap every manifest `version` component at 65535, and
@@ -63,9 +65,10 @@ on:
 concurrency:
   group: nightly
   # A newer run supersedes a stale in-flight one (manual dispatch while a
-  # scheduled run crawls). Worst case of a cancel DURING publish is a release
-  # with partial assets; publish is short (~5 min) and a re-dispatch heals it
-  # under a fresh date-code tag, so cancel beats queueing a duplicate build.
+  # scheduled run crawls). Worst case of a cancel DURING publish is the tag
+  # and an unpublished draft: re-running the failed job finishes that draft,
+  # and a re-dispatch publishes under a fresh date-code tag, so cancel beats
+  # queueing a duplicate build.
   cancel-in-progress: true
 
 # Least-privilege default; publish-nightly escalates explicitly.
@@ -93,11 +96,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Always operate on origin/dev regardless of what ref dispatched the
-          # run — nightlies are defined as "current dev", and this makes manual
-          # test-dispatches from feature branches behave exactly like the cron.
-          DEV_SHA="$(git rev-parse origin/dev)"
-          RAW_VERSION="$(git show origin/dev:apps/extension/package.json | jq -r .version)"
+          # The run's own commit: the attestation names the workflow run's commit as its source,
+          # so the built commit must be that one, and on dev.
+          if [ "$GITHUB_REF" != "refs/heads/dev" ]; then
+            echo "::error::a nightly builds dev only; dispatch it with --ref dev (this run is on $GITHUB_REF)"
+            exit 1
+          fi
+          DEV_SHA="$GITHUB_SHA"
+          RAW_VERSION="$(git show "${DEV_SHA}:apps/extension/package.json" | jq -r .version)"
 
           # Normalize the base to plain MAJOR.MINOR.PATCH. During an rc series
           # dev carries e.g. `1.2.3-rc.1`, whose numeric strip is `1.2.3.1` —
@@ -574,19 +580,20 @@ jobs:
             "nulo-firefox-${VERSION}.zip" \
             > SHASUMS256.txt
 
-      - name: Create prerelease + upload assets
-        if: env.DRY_RUN != 'true'
+      # The same publish path as release.yml's attach-assets; `--target` creates the nightly's tag at
+      # the built commit before anything is uploaded, and refuses one already elsewhere.
+      - name: Plan the release
+        id: plan
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$TAG" \
-            "dist/release/nulo-chrome-${VERSION}.zip" \
-            "dist/release/nulo-firefox-${VERSION}.zip" \
-            "dist/release/SHASUMS256.txt" \
-            --target "$SHA" \
-            --prerelease \
-            --title "$TAG" \
-            --notes-file dist/notes/body.md
+        run: bun scripts/release/attach-assets-run.ts plan
+
+      - name: Publish the prerelease
+        if: steps.plan.outputs.action == 'publish' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: dist/notes/body.md
+        run: bun scripts/release/attach-assets-run.ts apply --expect publish --target "$SHA"
 
       - name: Dry-run preview (skip publish)
         if: env.DRY_RUN == 'true'

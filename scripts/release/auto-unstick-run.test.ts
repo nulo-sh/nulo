@@ -14,12 +14,11 @@ interface Calls {
 	resolveTagSha: string[]
 	createTag: Array<{ tag: string; sha: string; message: string }>
 	relabelPr: Array<{ prNumber: number; add: string; remove: string }>
-	ensureRelease: Array<{ tag: string; prerelease: boolean }>
 }
 
 /** A recording fake IO. `pr` / `tagSha` script what resolution returns. */
 function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null } = {}): { io: UnstickIO; calls: Calls } {
-	const calls: Calls = { resolveMergedPr: [], resolveTagSha: [], createTag: [], relabelPr: [], ensureRelease: [] }
+	const calls: Calls = { resolveMergedPr: [], resolveTagSha: [], createTag: [], relabelPr: [] }
 	const io: UnstickIO = {
 		async resolveMergedPr(headSha) {
 			calls.resolveMergedPr.push(headSha)
@@ -34,9 +33,6 @@ function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null } = {}
 		},
 		async relabelPr(prNumber, add, remove) {
 			calls.relabelPr.push({ prNumber, add, remove })
-		},
-		async ensureRelease(tag, prerelease) {
-			calls.ensureRelease.push({ tag, prerelease })
 		},
 		log() {},
 	}
@@ -89,7 +85,7 @@ describe("runUnstick — zero-API short-circuit on the common path", () => {
 })
 
 describe("runUnstick — the unstick itself", () => {
-	test("stuck Release PR, tag missing → create tag + relabel + release", async () => {
+	test("stuck Release PR, tag missing → create tag + relabel, and no release (attach-assets owns it)", async () => {
 		const { io, calls } = fakeIO({ pr: releasePr(), tagSha: null })
 		const r = await runUnstick(opts({ io }))
 		expect(r.action).toBe("create")
@@ -97,18 +93,16 @@ describe("runUnstick — the unstick itself", () => {
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toEqual([{ tag: "v0.24.0", sha: MERGE, message: "Release 0.24.0" }])
 		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
-		expect(calls.ensureRelease).toEqual([{ tag: "v0.24.0", prerelease: false }])
 	})
 
-	test("tag already at the merge SHA → skip (no 2nd tag) but HEALS release + label", async () => {
-		// A prior run may have pushed the tag then died before the release/label finished.
+	test("tag already at the merge SHA → skip (no 2nd tag) but HEALS the label", async () => {
+		// A prior run may have created the tag then died before the relabel finished.
 		const { io, calls } = fakeIO({ pr: releasePr(), tagSha: MERGE })
 		const r = await runUnstick(opts({ io }))
 		expect(r.action).toBe("skip")
 		expect(r.performed).toBe(false)
 		expect(r.exitCode).toBe(0)
 		expect(calls.createTag).toHaveLength(0)
-		expect(calls.ensureRelease).toEqual([{ tag: "v0.24.0", prerelease: false }])
 		expect(calls.relabelPr).toEqual([{ prNumber: 7, add: AUTORELEASE_TAGGED_LABEL, remove: AUTORELEASE_PENDING_LABEL }])
 	})
 
@@ -128,16 +122,14 @@ describe("runUnstick — the unstick itself", () => {
 		const r2 = await runUnstick(opts({ io: second.io }))
 		expect(r2.action).toBe("skip")
 		expect(second.calls.createTag).toHaveLength(0)
-		// the 2nd run still ensures the release exists (idempotent heal), never a 2nd tag
-		expect(second.calls.ensureRelease).toHaveLength(1)
+		expect(second.calls.relabelPr).toHaveLength(1)
 	})
 
-	test("a prerelease version (rc) → ensureRelease marked prerelease", async () => {
+	test("a prerelease version (rc) → its own tag", async () => {
 		const { io, calls } = fakeIO({ pr: releasePr(), tagSha: null })
 		const r = await runUnstick(opts({ io, version: "0.24.0-rc.1" }))
 		expect(r.action).toBe("create")
 		expect(calls.createTag[0].tag).toBe("v0.24.0-rc.1")
-		expect(calls.ensureRelease).toEqual([{ tag: "v0.24.0-rc.1", prerelease: true }])
 	})
 
 	test("a promote PR (base main, NO autorelease:pending label) → noop, no tag", async () => {

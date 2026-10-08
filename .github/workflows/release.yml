@@ -1,13 +1,15 @@
 name: release
 
 # Two trigger paths:
-#  - push to main: release-please-action maintains the Release PR; on merge,
-#    it tags + creates the GitHub Release. The same workflow run then runs
-#    the publish chain (gates → build → smoke → assets → cliff notes). The
-#    landing is a Worker that Workers Builds redeploys from pushes to main; no
-#    job here touches it. The store uploads are opt-in workflow_dispatch inputs.
-#  - workflow_dispatch: re-publish artifacts for an existing tag. Skips the
-#    release-please job. Useful when an asset upload failed mid-publish.
+#  - push to main: release-please-action maintains the Release PR and never tags or releases
+#    (skip-github-release). Once the Release PR merges, auto-unstick tags its merge commit, and
+#    the same run publishes: gates → build → smoke → notes → attach-assets, which creates the
+#    GitHub Release as a draft, uploads and checks the assets, and only then publishes it. The
+#    landing is a Worker that Workers Builds redeploys from pushes to main; no job here touches
+#    it. The store uploads are opt-in workflow_dispatch inputs.
+#  - workflow_dispatch: finish the release of an existing tag, dispatched with `--ref <tag>` so the
+#    run's commit is the tagged one; or, from main, submit a published release to the stores,
+#    which ship its own bytes, never a rebuild. Skips the release-please job.
 on:
   push:
     branches: [main]
@@ -19,7 +21,7 @@ on:
         type: string
         default: ""
       dry_run:
-        description: "Skip the actual gh release upload + body update + store uploads. Build + gates still run."
+        description: "Skip the publish (tag check, draft, uploads, notes) and the store uploads. Build + gates still run."
         required: false
         type: boolean
         default: false
@@ -108,10 +110,10 @@ jobs:
       RELEASE_PLEASE_APP_ID: ${{ secrets.RELEASE_PLEASE_APP_ID }}
       RELEASE_PLEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
 
-  # release-please-action@v4 abort bug: after a Release PR merges, the action logs
-  # "untagged, merged release PRs outstanding" and never tags, so release_created
-  # stays false and the whole publish chain below skips (the documented manual
-  # unstick exists for exactly this). This job detects that precise state — a
+  # release-please never tags (skip-github-release; its own publish path also aborts on
+  # its known bug), so after a Release PR merges release_created stays false and the
+  # whole publish chain below skips (the documented manual unstick exists for exactly
+  # this). This job detects that precise state — a
   # MERGED `autorelease: pending` Release PR whose merge commit IS github.sha (an
   # explicit PR-to-SHA check, never a title heuristic) — creates the tag itself,
   # and feeds `resolve` so the chain continues. All logic + guards
@@ -165,8 +167,9 @@ jobs:
 
   # Translate either trigger path into the same {tag, version, sha, is_prerelease}
   # outputs that downstream jobs consume. Runs on every workflow_dispatch (the
-  # script fails loudly on empty tag) and only when release-please created a
-  # release on the push path.
+  # script fails loudly on empty tag) and, on a push, only once auto-unstick has
+  # tagged. Its release_created branch is unreachable while release-please runs with
+  # skip-github-release, which release-integrity.test.ts pins.
   resolve:
     needs: [release-please, auto-unstick]
     if: |
@@ -257,8 +260,8 @@ jobs:
     # the promote dev→main PR already gates the exact code with the full network
     # suite before it reaches main, so re-running the flaky suite on the
     # publish would only duplicate that gate AND could strand a release: a network-e2e
-    # cancellation/timeout on push:main would take the whole run down mid-attach (leaving
-    # a tag + empty release). The publish still gates on smoke-against-artifact (real
+    # cancellation/timeout on push:main would take the whole run down before the publish
+    # (leaving a tag with no release). The publish still gates on smoke-against-artifact (real
     # built zip). Pass run_network_e2e=true on a manual republish if you want the extra
     # network pass.
     if: |
@@ -460,6 +463,7 @@ jobs:
     # `!cancelled()` keeps a cancelled run from attaching assets.
     if: |
       always() && !cancelled() &&
+      needs.release-notes.result == 'success' &&
       needs.resolve.result == 'success' &&
       needs.lint-and-typecheck.result == 'success' &&
       needs.unit-tests.result == 'success' &&
@@ -467,8 +471,7 @@ jobs:
       needs.build-chrome.result == 'success' &&
       needs.build-firefox.result == 'success' &&
       needs.smoke-against-artifact.result == 'success' &&
-      needs.smoke-firefox-against-artifact.result == 'success' &&
-      needs.release-notes.result == 'success'
+      needs.smoke-firefox-against-artifact.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -523,36 +526,52 @@ jobs:
             "nulo-firefox-${VERSION}.zip" \
             > SHASUMS256.txt
 
-      - name: Upload zipped artifacts (for inspection)
+      # publish: a release this run creates (or a draft a failed run left) is filled, checked and
+      # published. use-published: a published release is never uploaded to; its own bytes ship.
+      - name: Plan the release
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun scripts/release/attach-assets-run.ts plan
+
+      - name: Publish the release
+        if: steps.plan.outputs.action == 'publish' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: dist/notes/release-notes.md
+        run: bun scripts/release/attach-assets-run.ts apply --expect publish
+
+      - name: Verify the published release
+        id: published
+        if: steps.plan.outputs.action == 'use-published' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: dist/notes/release-notes.md
+        run: bun scripts/release/attach-assets-run.ts verify-published
+
+      # The store jobs ship this artifact: the published release's bytes when it already existed,
+      # else the bytes this run just published (or, on a dry run, built).
+      - name: Upload the release assets for the store jobs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-${{ env.VERSION }}
           path: |
-            dist/release/nulo-chrome-${{ env.VERSION }}.zip
-            dist/release/nulo-firefox-${{ env.VERSION }}.zip
-            dist/release/SHASUMS256.txt
+            ${{ steps.published.outputs.dir || 'dist/release' }}/nulo-chrome-${{ env.VERSION }}.zip
+            ${{ steps.published.outputs.dir || 'dist/release' }}/nulo-firefox-${{ env.VERSION }}.zip
+            ${{ steps.published.outputs.dir || 'dist/release' }}/SHASUMS256.txt
+          if-no-files-found: error
           retention-days: 14
-
-      - name: Upload assets + overwrite body with git-cliff notes
-        if: env.DRY_RUN != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "$TAG" \
-            "dist/release/nulo-chrome-${VERSION}.zip" \
-            "dist/release/nulo-firefox-${VERSION}.zip" \
-            "dist/release/SHASUMS256.txt" \
-            --clobber
-          gh release edit "$TAG" --notes-file dist/notes/release-notes.md
 
       - name: Dry-run preview (skip publish)
         if: env.DRY_RUN == 'true'
         run: |
-          echo "DRY RUN — would have uploaded these assets to $TAG:"
+          echo "DRY RUN — the plan was ${ACTION}; nothing was tagged, uploaded or published for $TAG:"
           ls -la dist/release/
           echo ""
-          echo "DRY RUN — would have set release body to:"
+          echo "DRY RUN — the release body would be:"
           cat dist/notes/release-notes.md
+        env:
+          ACTION: ${{ steps.plan.outputs.action }}
 
   sync-main-to-dev:
     name: sync main → dev (post-release)

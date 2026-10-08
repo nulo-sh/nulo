@@ -385,7 +385,7 @@ Pass: each exits 0.
 - Pass: all exit 0. Each finding function's mutated-copy test fails without the function's check (shown once in the transcript by reverting the check).
 - Layers: lint, typecheck, unit.
 
-#### Phase 2: one release owner
+#### Phase 2: one release owner ✓
 
 1. Write `attach-assets.ts` and its tests:
    - one test per refused class: ambiguous; a workflow commit that differs from the tag commit; published and immutable with missing assets; published and mutable with missing assets; a digest-less, extra, missing or different asset in `compareAssets`

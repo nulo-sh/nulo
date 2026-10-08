@@ -3,11 +3,11 @@
  * where, after a Release PR merges, the action logs "untagged, merged release
  * PRs outstanding" and never tags). This is the IN-`release.yml` design: on the
  * post-merge `push:main` run, if release-please aborted on a genuine stuck
- * Release PR, we create the tag + release ourselves, then continue the same
- * publish DAG.
+ * Release PR, we create the tag ourselves, then continue the same publish DAG,
+ * whose attach-assets job creates and publishes the GitHub Release.
  *
  * This module is the PURE decision only — the GitHub API side-effects (create
- * tag, create release, relabel) live in the workflow glue, which calls this to
+ * tag, relabel) live in the workflow glue, which calls this to
  * decide what to do. Keeping it pure makes every branch (incl. the race +
  * wrong-SHA cases) unit-testable with zero secrets.
  *
@@ -57,9 +57,10 @@ export function decideUnstick(input: AutoUnstickInput): AutoUnstickDecision {
 	if (input.eventName !== "push") return { action: "noop", reason: `event is '${input.eventName}', not a push to main` }
 
 	const pr = input.mergedPr
-	if (!pr || !pr.merged) return { action: "noop", reason: "HEAD is not a merged PR" }
+	if (!pr?.merged) return { action: "noop", reason: "HEAD is not a merged PR" }
 	// The tag names the commit this run builds and attests; another commit's PR is not this run's release.
-	if (pr.mergeSha !== input.headSha) return { action: "noop", reason: `PR #${pr.number} merged as ${pr.mergeSha}, not HEAD ${input.headSha}` }
+	if (pr.mergeSha !== input.headSha)
+		return { action: "noop", reason: `PR #${pr.number} merged as ${pr.mergeSha}, not HEAD ${input.headSha}` }
 	if (pr.baseRef !== "main") return { action: "noop", reason: `merged PR targets '${pr.baseRef}', not main` }
 	if (!pr.labels.includes(AUTORELEASE_PENDING_LABEL)) {
 		return { action: "noop", reason: "merged PR is not an unpublished Release PR (no 'autorelease: pending' label)" }

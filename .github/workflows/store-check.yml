@@ -2,8 +2,8 @@ name: store-check
 run-name: "store-check → ${{ inputs.store }}"
 
 # Proves a store credential works, read-only: no upload, no release, no deploy hook. Kept out of
-# release.yml on purpose — a non-dry dispatch there re-uploads release assets, rewrites the notes
-# and fires the deploy hooks, none of which a credential check may touch.
+# release.yml on purpose — a non-dry dispatch there publishes or re-verifies the release and
+# rewrites its notes, none of which a credential check may touch.
 #
 # Each job runs in its store's environment with that store's permissions and auth steps exactly as
 # release.yml's publish job does, and runs the same script with MODE=check. Every step of a job that
