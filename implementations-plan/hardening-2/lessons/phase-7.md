@@ -41,3 +41,12 @@ The throwing-migration case failed again in the rerun, once on the 60 s timeout 
 
 - Every face the build loads is an extension asset (`/assets/*.woff2`, from `@nulo/design`), and the Presto banner is mounted with `fonts="none"`, so it links no Google Fonts stylesheet.
 - Gate: smoke green on Chrome and Firefox (Firefox's migration case included, with the early check), the eight network files green on both, zero violations, CSP equal to the pin. No source added.
+
+### `style-src 'self' 'unsafe-inline'`
+
+- `style-src 'self'` alone, `onboarding-tab.test.ts` on both browsers: one or two inline `style-src-elem` violations per launch that reached the Presto step, from `/src/onboarding/index.html`. Source: the `<presto-banner>` element writes `<style>${STYLES}</style>` into its shadow root (`@alejoamiras/presto-banners` 1.1.0, `element.js:145`). `STYLES` is a constant, so its hash was added, with a unit test deriving the hash from the installed banner (it failed when the hash was altered).
+- Full gate with the hash: Chrome smoke green, Firefox smoke red on `rows.test.ts`, an inline `style-src-elem` from the logger window (`/src/popup/index.html`). A probe that mounted the logger window and waited for `.cm-content` recorded the same violation on both browsers; Chrome's smoke missed it because the test closes the window right after it opens, and a report still in flight from a closing document is lost (a named gap).
+- Source: CodeMirror's `style-mod` uses `adoptedStyleSheets` only inside a shadow root; in a document it writes a `<style>` element and rewrites its `textContent` as each theme mounts. Its text is generated, so no hash names it, and a hash in the directive switches `'unsafe-inline'` off. `'unsafe-inline'` it is, which also covers the banner; the hash and its test went (D-23h).
+- `tab-size` on `.cm-content` is not affected: CodeMirror writes its `style` attribute through `style.cssText`, which CSP does not govern (the probe read `tab-size` 4 on both browsers).
+- What the directive still buys: no stylesheet from another origin (the banner's Google Fonts link, were `fonts="none"` dropped). Narrowing it further means mounting the editors in a shadow root, a UI change; recorded for follow-ups.
+- Gate with `'self' 'unsafe-inline'`: smoke green on Chrome and Firefox, the eight network files green on both, zero violations, CSP equal to the pin.
