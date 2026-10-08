@@ -259,7 +259,7 @@ Tests (compare opened key bytes, never sealed blobs: every seal draws a fresh IV
 - Pass criteria: every command exits 0; tests (a) to (k) pass; the four smoke specs pass locally. `passkey-backup.test.ts` skips on CI, so it is a local regression check only.
 - Layers: lint, typecheck, unit, component, build, smoke e2e.
 
-### Phase 1.2: AAD on the encrypted file (Arc 1; only after a "yes" on call 4)
+### Phase 1.2: AAD on the encrypted file (Arc 1; only after a "yes" on call 4) ✓
 
 1. Add `FULL_BACKUP_V2_TAG`, `sealFullBackupText` and `openFullBackupText` to `utils/full-backup-helpers.ts`.
 2. Use them in `handleEncrypt` and in `openEncryptedBackup`; extend `detectBackupType` and the size gate.
@@ -380,6 +380,7 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 - **Phase 1.1 covers password profiles only:** the panel split on passkey profiles; see Audit verdicts § Where the panel disagreed.
 - **Refusal design:** raw delete by the captured row id, tuple fallback only when verifiable, explicit result; see the same section.
 - **Deviation (Phase 1.1, at implementation): the account slice comes from the key export, and the page's completeness check is dropped.** The plan had `full.vue` fail the run when an imported account had no key row. `EntityStorage.getAll` hides a row its codec rejects, so one corrupt key row would fail that check on every retry and the profile could never be backed up again; today the backup ships and the restore drops that one account. `exportFullBackupKeys` now also returns `accounts`, read before the key rows in the same call, and the page serves both slices from it. A concurrent import can then add a key row with no account (the orphan sweep removes it), never an account without its key. Test (i)'s "fails when an imported account has no key row" case is replaced by a test that the file's account and key slices are the export's. The run fence and the profile-id check stay.
+- **Deviation (Phase 1.2): the restore's stale fence moves after the shared opener.** `openEncryptedBackup` now calls `openFullBackupText` and checks staleness once it settles, instead of between the KDF and decrypt awaits. Nothing is published in between, so correctness is unchanged; a superseded run only finishes its decrypt. The parser exposes `parseEncryptedBackup` so the detector and the opener share one decision.
 - **Deviation (Phase 1.1): the incarnation id is the existing `ProfileService.workerId`**, which already keeps session handles from naming a later worker's session. `openBackupTransfer` returns no `dekReplaced` (it is `sourceDek === null`), and `getProfileDekSealed` is deleted, not just unlisted, since it had no caller.
 
 ## Issue claims checked against the tree

@@ -9,3 +9,10 @@
 - **A key-export failure still shows "wrong password".** The password path's catch flags `isWrongPassword` for any error, including a fence refusal mid-export. Kept: routing it elsewhere would change what a failed export shows, which is an owner call; a lock or switch mid-export unmounts or reroutes the page anyway.
 - **Mutation check.** With the reseal removed and the DEK put back in `imported-keys-dek`, the three per-backup-key tests fail and the three held-export fence tests time out (no seal runs to hold); the two restore tests pass, as they should, since both shapes restore.
 - **Gate.** `audit:vue`, `test:all` and the four smoke specs passed on the first run. `backup-imported-account.test.ts` drives the new export end to end in a real extension: the imported key restores and decrypts.
+
+## Phase 1.2
+
+- **The restore's stale fence moved.** The shared `openFullBackupText` runs the KDF and the decrypt in one call, so `openEncryptedBackup` checks staleness once, after it. Nothing publishes between the awaits, so the only cost is a superseded run finishing its decrypt. The stale-selection test's fixture was `"AAAA"`, which the new parser refuses before the KDF it meant to hold; it now uses a 29-byte legacy frame and asserts the KDF was reached.
+- **The detector tightened.** `detectBackupType` now classifies through the same parser, so a 13 to 28-byte frame reads as `unknown` instead of `encrypted`. Two fixtures moved to 29 bytes.
+- **The export zeroizes its plaintext bytes** after sealing (the compact JSON holds the master), which the old inline code did not.
+- **Gate.** `audit:vue`, `test:all` and both smoke specs passed on the first run. The build regenerated `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` for the four new exports; both are committed.

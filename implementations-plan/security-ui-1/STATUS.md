@@ -5,3 +5,4 @@
 - 2026-10-08: arc 1 started; branch rebased on dev e49e4ce (unpushed plan commits only).
 - 2026-10-08: Phase 1.1 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build), `bun run test:all`, smoke `backup-roundtrip`, `backup-imported-account`, `security-backup`, `passkey-backup` with `--retry=0` (7/7).
 - 2026-10-08: Phase 1.1 deviation: account slice read inside the key export; the page's completeness check dropped (a codec-hidden key row would block every backup). Ledger updated.
+- 2026-10-08: Phase 1.2 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build), `bun run test:all`, smoke `backup-roundtrip`, `passkey-backup` with `--retry=0` (4/4).
