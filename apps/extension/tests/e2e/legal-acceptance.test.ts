@@ -24,7 +24,7 @@ import {
 import { ensureUnlocked, lockWallet, navigateByHash, waitForLockScreen, waitForToast } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth } from "./fixtures/passkey"
 import { exportAccountBody, FIRST_ACCOUNT_NAME } from "./helpers/account-io"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./helpers/backup-export"
+import { downloadEncryptedBackup, downloadPlainPasskeyBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { CANONICAL_SEED_24, importSeed, ONBOARDING_IMPORT_SHELL, readActiveAccount, TEST_PASSWORD } from "./helpers/import-drivers"
 import {
 	acceptOnboardingTerms,
@@ -127,29 +127,20 @@ async function revealSeedPhrase(page: Page): Promise<string> {
 }
 
 /**
- * Assemble a full backup through the page flow and download it. A password profile unlocks first;
- * a passkey profile's agreement starts its WebAuthn ceremony in the page itself, which is exactly
- * what an overlay would break. Returns the parsed file.
+ * Assemble a full backup through the page flow and download it. A password profile unlocks first
+ * and downloads only the encrypted file; a passkey profile's agreement starts its WebAuthn ceremony
+ * in the page itself, which is exactly what an overlay would break, and its plain download passes
+ * a confirmation. Returns the file's content.
  */
 async function downloadFullBackup(page: Page, password?: string): Promise<Record<string, unknown>> {
 	await navigateByHash(page, "#/popup/settings/security/export", 15_000)
 	await navigateByHash(page, "#/popup/settings/security/export/full", 15_000)
 	await pointerClick(page, "agree-continue-btn")
-	if (password) {
-		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
-		await replaceInputValue(page, '[data-testid="unlock-password-input"]', password)
-		await pointerClick(page, "unlock-submit-btn")
-	}
-	await page.waitForFunction(
-		() => {
-			const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-			return !!download && !download.disabled
-		},
-		{ timeout: 180_000, polling: 250 },
-	)
-	await armBackupDownloadCapture(page)
-	await pointerClick(page, "download-backup-btn")
-	return JSON.parse(await readCapturedBackupDownload(page)) as Record<string, unknown>
+	if (!password) return JSON.parse(await downloadPlainPasskeyBackup(page, pointerClick)) as Record<string, unknown>
+	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
+	await replaceInputValue(page, '[data-testid="unlock-password-input"]', password)
+	await pointerClick(page, "unlock-submit-btn")
+	return await openEncryptedBackup(await downloadEncryptedBackup(page, pointerClick, 180_000), password)
 }
 
 describe("popup: declining never locks a person out", () => {
