@@ -114,9 +114,21 @@ describe("preflight", () => {
 			ok: false,
 			reason: expect.stringContaining("not lower"),
 		})
-		const staged = { state: "STAGED", distributionChannels: [{ crxVersion: "0.10.0.0" }] }
-		expect(interpretPreflight(status({ submittedItemRevisionStatus: staged }), ITEM, "0.9.0.0")).toMatchObject({ ok: false })
-		expect(interpretPreflight(status({ submittedItemRevisionStatus: staged }), ITEM, "0.11.0.0")).toMatchObject({ ok: true })
+		const rejected = { state: "REJECTED", distributionChannels: [{ crxVersion: "0.10.0.0" }] }
+		expect(interpretPreflight(status({ submittedItemRevisionStatus: rejected }), ITEM, "0.9.0.0")).toMatchObject({ ok: false })
+		expect(interpretPreflight(status({ submittedItemRevisionStatus: rejected }), ITEM, "0.11.0.0")).toMatchObject({ ok: true })
+	})
+
+	test("refuses a staged submission at any version, which the store would refuse at upload", () => {
+		for (const crxVersion of ["0.26.0.0", "0.28.0.0"]) {
+			const staged = { state: "STAGED", distributionChannels: [{ crxVersion }] }
+			expect(interpretPreflight(status({ submittedItemRevisionStatus: staged }), ITEM, ours)).toMatchObject({
+				ok: false,
+				reason: expect.stringContaining("publish or cancel it in the dashboard first"),
+			})
+		}
+		const published = { state: "PUBLISHED", distributionChannels: [{ crxVersion: "0.26.0.0" }] }
+		expect(interpretPreflight(status({ publishedItemRevisionStatus: published }), ITEM, ours)).toMatchObject({ ok: true })
 	})
 
 	test("refuses a present revision with a missing, undocumented, unspecified or malformed state", () => {
@@ -138,8 +150,12 @@ describe("preflight", () => {
 			reason: expect.stringContaining("distributionChannels"),
 		})
 		expect(
-			interpretPreflight(status({ submittedItemRevisionStatus: { state: "STAGED", distributionChannels: "0.26.0.0" } }), ITEM, ours),
-		).toMatchObject({ ok: false })
+			interpretPreflight(
+				status({ submittedItemRevisionStatus: { state: "REJECTED", distributionChannels: "0.26.0.0" } }),
+				ITEM,
+				ours,
+			),
+		).toMatchObject({ ok: false, reason: expect.stringContaining("distributionChannels") })
 	})
 
 	test("accepts every documented non-pending state at a lower version", () => {

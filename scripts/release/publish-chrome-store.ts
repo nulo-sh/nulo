@@ -103,6 +103,7 @@ function revisionState(
 /** Submitted states that hold the item: the store refuses any upload until the owner acts in the dashboard. */
 const SUBMITTED_HOLDS: ReadonlyMap<string, string> = new Map([
 	["PENDING_REVIEW", "a submitted revision is pending review; cancel it in the dashboard or wait for the verdict"],
+	["STAGED", "a staged revision holds the item; publish or cancel it in the dashboard first"],
 ])
 
 export type Verdict = { ok: true; summary: string } | { ok: false; reason: string }
