@@ -379,14 +379,43 @@ actions use: one grouped pull request a week, after a 7-day cooldown
 (`.github/dependabot.yml`). It cannot read Bun's lockfile, so npm
 dependencies are updated by hand, under the age gate above.
 
-**`bun audit`** runs as an advisory step in `_lint-and-typecheck.yml`. It
-surfaces npm advisories in the GitHub Action step summary but does not
-block PRs (today). Bun 1.4 exits 1 on findings (1.3.x always exited 0),
-so exit-code gating is mechanically possible — the step stays advisory
-deliberately: the existing backlog (every HIGH chain classified as
-dev/build/test tooling or the exact-pinned `@aztec` line, none
-extension-bundle-reachable; the moderate and low ones not individually
-classified) must be triaged to zero first, or a blocking flip is pure noise.
+**`bun audit`** runs at every severity in `_lint-and-typecheck.yml`, through
+`scripts/ci-cd/audit-gate.ts`. Each advisory it reports must have an entry in
+`scripts/ci-cd/audit-acks.json` with the same id, package, affected range and
+severity; the entry says whether the extension zips contain the package
+(decided by the build's `THIRD-PARTY-NOTICES.txt`, not by reading dependency
+trees), why the advisory cannot reach a user, and the event that reopens it.
+An entry no advisory matches any more is stale and must be deleted, and a
+report the gate cannot read, or an exit code other than 0 or 1, is a failure
+rather than a clean result.
+
+- **When it blocks.** On a pull request whose `bun.lock`, `package.json`,
+  `bunfig.toml` or ack-file diff is more than `"version"` lines, an
+  unacknowledged, stale or unreadable result fails `quality-status`. Release
+  PRs and the `main → dev` sync change only version lines, so they, and every
+  push, nightly and release run, report in the step summary without failing.
+  The cost: a new advisory blocks the next dependency change, a promote PR
+  included, until it is fixed or acknowledged on `dev`, and a release can ship
+  while one is open.
+- **Acknowledging.** Fix it first (`bun audit fix --dry-run`, then a bump
+  reviewed as below). Only an advisory that cannot move and cannot reach a
+  user is acknowledged, in a reviewed PR. A bundled one needs a reason that
+  says why the extension cannot reach it; without one it is not acknowledged.
+
+What is acknowledged today (41 advisories; the ack file holds each one):
+
+| Package | Advisories | Comes in through | Reopens at |
+|---|---|---|---|
+| `undici` 5.29.0, `@fastify/busboy` 2.1.1 | 15 (4 high) | `@aztec-labs/foundation` | the next Aztec bump |
+| `ws` 8.18.3 | 2 (1 high) | `@aztec/viem` 2.38.3, an exact pin | the next Aztec bump |
+| `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
+| `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 7 (6 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
+| `undici` 7.29.0, `sharp` 0.35.2 | 12 (4 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`) | the next wrangler bump |
+| `vitest`, `@vitest/mocker` 4.1.10 | 2 | the test runner; 4.1.11 needs the soak matrix | the next vitest bump |
+| `braces` 3.0.3 | 1 (high) | build-time globbing (micromatch, chokidar 3) | a fixed release (none exists) |
+| `elliptic` 6.6.1 | 1 (low) | `vite-plugin-node-polyfills`' crypto-browserify | a fixed release (none exists) |
+
+None of them is in either extension zip.
 
 **Bun pinned** to a specific patch version in `package.json#packageManager`
 and in `setup-bun/action.yml`, plus the five `bun-version:` literals in jobs
