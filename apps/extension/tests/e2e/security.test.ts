@@ -1,4 +1,8 @@
+import { once } from "node:events"
+import { createServer } from "node:http"
+import type { AddressInfo } from "node:net"
 import { expect } from "vitest"
+import { extensionUrl, newPage } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "./fixtures/extension"
 import { changePassword, lockWallet, navigateByHash, waitForToast } from "./fixtures/helpers"
@@ -115,4 +119,42 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	const nonBenignPageErrors = registeredExtensionPerTest.pageErrors.filter((e) => !isBenignPasswordChangeError(e.message))
 	expect(nonBenignConsoleErrors).toEqual([])
 	expect(nonBenignPageErrors).toEqual([])
+})
+
+// A file a page can fetch at the extension's fixed URL tells it the wallet is installed, so no file
+// is web-accessible; the content script is injected as one self-contained file and needs none.
+test("a web page can fetch no extension file, the injected content script included", async ({ extension }) => {
+	const popup = await openPopup(extension)
+	const { exposed, injected } = await popup.evaluate(() => {
+		const manifest = chrome.runtime.getManifest()
+		return { exposed: manifest.web_accessible_resources, injected: (manifest.content_scripts ?? []).flatMap(({ js }) => js ?? []) }
+	})
+	expect(exposed ?? []).toEqual([])
+	const files = [...injected, ...(exposed ?? []).flatMap(({ resources }) => resources)]
+	const urls = files.map((file) => extensionUrl(extension.extensionId, `/${file}`))
+	expect(urls.length).toBeGreaterThan(0)
+
+	const fetchAll = (list: string[]) =>
+		Promise.all(
+			list.map((url) =>
+				fetch(url).then(
+					(res) => res.status,
+					() => "refused" as const,
+				),
+			),
+		)
+	// Control: the URLs are right, so a refusal below is the page being refused, not a typo.
+	expect(new Set(await popup.evaluate(fetchAll, urls))).toEqual(new Set([200]))
+	await popup.close()
+
+	const server = createServer((_, res) => res.end("<!doctype html><title>dapp</title>")).listen(0, "127.0.0.1")
+	await once(server, "listening")
+	const page = await newPage(extension.browser)
+	try {
+		await page.goto(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`)
+		expect(new Set(await page.evaluate(fetchAll, urls))).toEqual(new Set(["refused"]))
+	} finally {
+		await page.close()
+		server.close()
+	}
 })

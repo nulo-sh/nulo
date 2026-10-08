@@ -249,15 +249,6 @@ export const VENDORED: readonly Vendored[] = [
 		},
 	},
 	{
-		trigger: { asset: /^assets\/[\w.-]+-loader-[\w-]+\.js$/ },
-		components: [],
-		generated: {
-			by: "@crxjs/vite-plugin's content-script loader",
-			content:
-				/^\(function \(\) \{\s*'use strict';\s*const injectTime = performance\.now\(\);\s*\(async \(\) => \{\s*const \{ onExecute \} = await import\(\s*\/\* @vite-ignore \*\/\s*chrome\.runtime\.getURL\("assets\/[\w.-]+\.js"\)\s*\);\s*onExecute\?\.\(\{ perf: \{ injectTime, loadTime: performance\.now\(\) - injectTime \} \}\);\s*\}\)\(\)\.catch\(console\.error\);\s*\}\)\(\);\s*$/,
-		},
-	},
-	{
 		trigger: { asset: /^assets\/barretenberg(-threads)?\.wasm\.gz$/ },
 		components: [],
 		coveredBy: ["@aztec-foundation/bb.js"],

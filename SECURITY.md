@@ -191,14 +191,16 @@ SDK. The upstream handler:
   cross-frame spoofing via the synchronous same-origin check).
 - Never reads or writes page DOM state.
 
-The script's loader imports its chunks from the extension, so the build lists
-them as web-accessible to every page the script matches: a page that knows a
-release's chunk names can fetch one and so detect the install on Chrome
-(Firefox serves extension files from a random per-install origin). Chrome's
-`use_dynamic_url` does not close this, because the chunks import each other
-by relative URL and Chrome resolves those against the fixed origin, which it
-then refuses. Closing it needs a content script built as one file that no
-web-accessible entry has to expose.
+The script is built as one self-contained file
+(`apps/extension/scripts/content-script-isolation.ts`), which the browser
+injects directly, so the built manifest lists no web-accessible file. A file
+that is listed can be fetched by any page the entry matches, and on Chrome the
+extension's origin is fixed by its store id, so one fetch tells a page the
+wallet is installed (Firefox's origin is random per install). Chrome's
+`use_dynamic_url` cannot stand in for this: the loader crxjs uses for a
+multi-chunk script imports sibling chunks by relative URL, which Chrome
+resolves against the fixed origin and refuses. The smoke suite fetches every
+injected file from a web page on both browsers (`tests/e2e/security.test.ts`).
 
 ### Content-script boundary (defense-in-depth)
 
