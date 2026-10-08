@@ -135,7 +135,7 @@ jobs:
       # shard failing or is the suite broadly broken?"
       fail-fast: false
       matrix:
-        # N=5 splits the lightweight network test files into ~9-per-shard.
+        # N=5 splits the lightweight network test files into ~21-per-shard.
         # N=5 (not N=4) because vitest's deterministic SHA-1-of-file-path
         # sharder puts the two known slow files (multi-account-from,
         # tx-sendTx-multicall) into the same shard at N=4; N=5 separates
