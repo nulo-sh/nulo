@@ -1,7 +1,7 @@
 ---
 plan: security-ui-1
 tier: mid
-status: planning (awaiting owner calls and approval)
+status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 in implementation
 issues: [17, 34, 14]
 driver: claude-code
 claude_model: opus
@@ -232,7 +232,7 @@ The background must tell a close apart from "They match". Shape: the verify page
 
 Every gate runs inside the worktree. "Green" means every listed command exits 0 and every named test passes.
 
-### Phase 1.1: per-backup key for password profiles (Arc 1)
+### Phase 1.1: per-backup key for password profiles (Arc 1) ✓
 
 1. Add `openBackupTransfer` to `ProfileService` as an internal method; drop `exportBackupMaterial` and `getProfileDekSealed` from its RPC lists; add `captureRunFence` and `assertRunFence` to them, with the per-instance incarnation id.
 2. Add `exportFullBackupKeys` to `AccountService` and its RPC list, with the identity fence.
@@ -379,6 +379,8 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 - **Split of #17 into 1.1 and 1.2:** the per-backup key changes no file format, so it does not wait for the format call.
 - **Phase 1.1 covers password profiles only:** the panel split on passkey profiles; see Audit verdicts § Where the panel disagreed.
 - **Refusal design:** raw delete by the captured row id, tuple fallback only when verifiable, explicit result; see the same section.
+- **Deviation (Phase 1.1, at implementation): the account slice comes from the key export, and the page's completeness check is dropped.** The plan had `full.vue` fail the run when an imported account had no key row. `EntityStorage.getAll` hides a row its codec rejects, so one corrupt key row would fail that check on every retry and the profile could never be backed up again; today the backup ships and the restore drops that one account. `exportFullBackupKeys` now also returns `accounts`, read before the key rows in the same call, and the page serves both slices from it. A concurrent import can then add a key row with no account (the orphan sweep removes it), never an account without its key. Test (i)'s "fails when an imported account has no key row" case is replaced by a test that the file's account and key slices are the export's. The run fence and the profile-id check stay.
+- **Deviation (Phase 1.1): the incarnation id is the existing `ProfileService.workerId`**, which already keeps session handles from naming a later worker's session. `openBackupTransfer` returns no `dekReplaced` (it is `sourceDek === null`), and `getProfileDekSealed` is deleted, not just unlisted, since it had no caller.
 
 ## Issue claims checked against the tree
 

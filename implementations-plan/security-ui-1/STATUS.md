@@ -2,3 +2,6 @@
 - 2026-10-08: Codex round 1 reject; ten findings accepted and folded into plan, options and asks.
 - 2026-10-08: Opus audit conditional approve; findings folded; Phase 1.1 narrowed to password profiles; refusal redesigned (raw delete).
 - 2026-10-08: Codex final pass round 1 reject (five findings folded); round 2 conditional approve, restart condition folded; plan at the approval gate.
+- 2026-10-08: arc 1 started; branch rebased on dev e49e4ce (unpushed plan commits only).
+- 2026-10-08: Phase 1.1 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build), `bun run test:all`, smoke `backup-roundtrip`, `backup-imported-account`, `security-backup`, `passkey-backup` with `--retry=0` (7/7).
+- 2026-10-08: Phase 1.1 deviation: account slice read inside the key export; the page's completeness check dropped (a codec-hidden key row would block every backup). Ledger updated.
