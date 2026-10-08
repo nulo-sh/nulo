@@ -50,7 +50,7 @@ Runs the network e2e suite (anvil + Aztec sandbox + playground + the extension b
 
 #### Presto in CI
 
-Each prover-ON network-e2e lane installs and starts the headless **`presto-server`** binary (from the [`alejoamiras/presto`](https://github.com/alejoamiras/presto) repo) before the test agent fires. The wallet build is stamped with `VITE_NULO_PRESTO_REQUIRED=1` so [`chain-runtime.ts`](./packages/aztec-runtime/src/pxe/chain-runtime.ts) constructs `ProductionPxeFactory` in **required-mode** — proving traffic MUST hit presto-server natively, never silently fall back to in-browser WASM. Required mode is also the only place plaintext HTTP is representable: the headless server is HTTP-only, so the factory derives `httpsOnly: false` from the mode; production always passes `httpsOnly: true`. Layered enforcement:
+Each prover-ON network-e2e lane installs and starts the headless **`presto-server`** binary (from the [`alejoamiras/presto`](https://github.com/alejoamiras/presto) repo) before the suite runs. The wallet build is stamped with `VITE_NULO_PRESTO_REQUIRED=1` so [`chain-runtime.ts`](./packages/aztec-runtime/src/pxe/chain-runtime.ts) constructs `ProductionPxeFactory` in **required-mode** — proving traffic MUST hit presto-server natively, never silently fall back to in-browser WASM. Required mode is also the only place plaintext HTTP is representable: the headless server is HTTP-only, so the factory derives `httpsOnly: false` from the mode; production always passes `httpsOnly: true`. Layered enforcement:
 
 - **Layer 1** (workflow) — `/health` preflight gates the run on `bb_available == true`. Server missing or unhealthy → red.
 - **Layer 2** (wallet) — `chain-runtime.ts` does an eager `checkPrestoStatus()` at PXE creation (the error names the SDK's `reason` and, for `secure-connection-unavailable`, its `diagnosis`) + installs an `onPhase` guard that throws on `fallback` / `denied` / `secure-connection-unavailable` / `version-mismatch`. This is the per-test authority.
@@ -218,7 +218,7 @@ The reusables today are:
 - `_unit-tests.yml` — vitest workspace-wide
 - `_build-extension.yml` — chrome + firefox (with optional version override)
 - `_extension-smoke-e2e.yml` — puppeteer smoke against `EXTENSION_PATH` or downloaded artifact
-- `_extension-network-e2e.yml` — Aztec sandbox + agent runner
+- `_extension-network-e2e.yml` — the `network suite` job: Aztec sandbox + the local `e2e:agent` runner, one job per shard or dedicated file list
 - `_release-pr-lockfile.yml` — writes the Release PR's version into `bun.lock` (advisory)
 
 Composite actions (step-level reuse):

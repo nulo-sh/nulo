@@ -112,6 +112,49 @@ describe("CI aggregator check names", () => {
   })
 })
 
+/**
+ * verify-cert-run.sh certifies a head only when every network suite job ran green, matched by its
+ * full name: the caller's job name, then the reusable workflow's. A rename on either side that the
+ * script does not follow fails every certification, so its list is derived here from the workflows.
+ */
+describe("network suite job names", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+  const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+  const SUITE = "_extension-network-e2e.yml"
+  const PR_LANE = "pr-extension-network-e2e.yml"
+  const LEAF = "network suite"
+  const leaf = (shard: string): string => (shard ? `${LEAF} (shard ${shard})` : LEAF)
+
+  test("the reusable workflow's job is the network suite, named with its shard when it has one", () => {
+    expect(workflow(SUITE).jobs["network-e2e"].name).toBe(
+      `\${{ inputs.shard && format('${LEAF} (shard {0})', inputs.shard) || '${LEAF}' }}`,
+    )
+  })
+
+  test("verify-cert-run.sh expects exactly the jobs the PR lane's network workflow produces", () => {
+    type Caller = { name?: string; uses?: string; with?: { shard?: string }; strategy?: { matrix?: { shard?: { id: string }[] } } }
+    const lane = workflow(PR_LANE)
+    const produced = (Object.values(lane.jobs) as Caller[])
+      .filter((job) => String(job.uses).endsWith(`/${SUITE}`))
+      .flatMap((job) =>
+        (job.strategy?.matrix?.shard?.map((shard) => shard.id) ?? [""]).map((id) => {
+          const bind = (value: unknown) => String(value ?? "").replace("${{ matrix.shard.id }}", id)
+          return `${bind(job.name)} / ${leaf(bind(job.with?.shard))}`
+        }),
+      )
+    const script = readFileSync(join(ROOT, "scripts/ci-cd/verify-cert-run.sh"), "utf8")
+    const block = /^EXPECTED_NETWORK_JOBS=\(\n([\s\S]*?)\n\)$/m.exec(script)?.[1]
+    expect(block, "verify-cert-run.sh declares EXPECTED_NETWORK_JOBS").toBeDefined()
+    const expected = String(block)
+      .split("\n")
+      .map((line) => line.trim().replace(/^"(.*)"$/, "$1"))
+      .filter(Boolean)
+    expect(produced.length, "the PR lane calls the suite").toBeGreaterThan(0)
+    expect([...expected].sort()).toEqual([...produced].sort())
+    expect(script, "the list is checked against the PR lane's runs").toContain(`if [ "$WF" = "${lane.name}" ]; then`)
+  })
+})
+
 describe("PR concurrency", () => {
   test("each PR workflow groups by pull request number, so same-named branches of two forks never cancel each other", () => {
     for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
