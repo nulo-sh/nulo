@@ -116,7 +116,7 @@ Found during implementation, put to the owner on the PR (not covered by the appr
 - Pass criteria: each exits 0; `install.test.ts` is green. Then a scratch Puppeteer script against `bun run --cwd apps/landing preview` loads the page as Chrome, Edge, Brave (navigator flag injected), Firefox UA, iPhone Safari, and with JavaScript off. For each CTA it asserts: the number of visible store links (1 detected, 2 fallback), each visible link's text and `href`, the other-store link's `href`, that no hidden link is focusable by Tab, and no console error or CSP violation. All assertions pass; the output is pasted into `lessons/phase-1.md`.
 - Layers: typecheck/lint, unit, build, browser check.
 
-### Phase 2: Delete the release coupling
+### Phase 2: Delete the release coupling ✓
 
 1. Delete the six release files and the Vite plugin use.
 2. Remove the release scripts from `package.json` hooks; keep `build-legal.ts` in `predev` and `prebuild`.
