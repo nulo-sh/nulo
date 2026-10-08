@@ -725,7 +725,7 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | Extension build scripts (implementation, arc 3) | typechecked by `apps/extension/tsconfig.scripts.json` (its `scripts/` and Vite configs), chained into the extension's `typecheck`, with `@types/bun` 1.4.2 declared there | leave them in no tsconfig; split to a follow-up | The orchestrator asked for a call. These Vite plugins shape the shipped bundle and nothing typechecked them; a probe found three errors. Codex: justified scope. Opus: not worth splitting, and its Medium (the `Bun` global resolved through the root's hoisted copy) made the extension declare its own pin. |
 | Typecheck fixes (implementation, arc 3) | `moduleDetection: "force"`; `PublishResponse.warningInfo: unknown`; `string \| FormData` for the AMO body; a narrowing guard in `check-rp-id.ts` | casts or suppressions | Each type now says what the code already reads defensively; both reviewers checked every reader. |
 | `bun pm diff` (implementation, arc 3) | the added root devDependencies reviewed through `git diff bun.lock` | `bun pm diff` | On Bun 1.4.2 a bare `bun pm diff` looks the root package up on npm (404); the lock diff is two packages, `@types/bun` and `bun-types` 1.4.2. |
-| Home-path guard shape (review, arc 3) | add a home under a mount (`/mnt/<volume>/<user>`) to the shell guard, as the plans gate's `LOCAL_PATH_RE` already counts; `/root` stays out | narrow CLAUDE.md's claim; name this host's prefix | Codex [Medium]: in CI the guard now stands alone, and it missed such homes. The generic shape matches the plans gate and names no host. |
+| Home-path guard shape (review, arc 3) | add a home under a mount (`/mnt/<volume>/<user>`) to the shell guard, as the plans gate's `LOCAL_PATH_RE` already counts; the root user's home stays out, since container scripts use it | narrow CLAUDE.md's claim; name this host's prefix | Codex [Medium]: in CI the guard now stands alone, and it missed such homes. The generic shape matches the plans gate and names no host. |
 | commitlint test runtime (review, arc 3) | the CLI runs on Bun (`process.execPath`) | rely on `_unit-tests.yml`'s Node 24 step | Opus [Low]: `@commitlint/cli` needs Node ≥ 22.12 and the test leaned on a step added for another reason; it behaves the same on Bun. |
 
 **Unresolved disagreements.** None blocking.
@@ -883,6 +883,10 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 - [Low] Open branches with an upper-case word in a subject go red. Accepted as one CLAUDE.md clause: identifiers go in backticks or quotes, which commitlint does not case-check (measured on all three quote forms).
 - Its "looks fine": each refactor compared old against new (`interpretPreflight` order and messages, `readPublishInputs`, `rescore`'s cleanup, `formatDupReport`, the `Map` dedupe), every `warningInfo` reader, the auto-unstick flag (an unset variable renders `""`; the warning is a fixed string), the `STAGED` refusal blocks nothing the store accepts, both new tests fail on their mutations, every bot subject is lower-case.
 - Also folded from self-review: a stale "(default path)" test title and the workflow comment's grammar.
+
+### Arc 3 implementation, Codex round 2 (same session)
+
+**Verdict:** `approve`, no new findings, on diff `bd6c67d..d8893c7`. The loop converged in two rounds. Its "looks fine": no tracked file matches the mount shape; the extension's `@types/bun` pin reuses the locked 1.4.2, changes no resolution and adds nothing to the notices; the commitlint test needs no ambient Node; the comments.
 
 ## Post-implementation
 
