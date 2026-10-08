@@ -17,3 +17,6 @@
 - 2026-10-08 — phase 6 + arc 2 gate pass on df4c72b: account-state + profile vitest 391, aztec-runtime pxe 236, lint 0, typecheck:all 0, test 10299, test:all 0, smoke 9 files / 31 tests.
 - 2026-10-08 — arc 2 loop: Codex r1 clean; Opus one should-fix (restore check bound to the original class id, D16) + two nits (rewrap context in the finally, D17, accepted; projection helper refactor, rejected); Codex r2 one test nit, applied; Codex r3 clean.
 - 2026-10-08 — arc 2 network e2e on 4336347: 3 files / 7 tests green; OA-3 after shots and OA-1 after + option-A prototype shots taken on 0f396ea; smoke on 0f396ea 9 files / 31 tests green.
+- 2026-10-08 — final-head gates on c9233ea: lint 0, typecheck:all 0, test 10300, test:all 0, check:plans 0. PR #52 opened as a draft; no pull_request workflow fired, because the stack's bottom (#48) had gone CONFLICTING with dev (`implementations-plan/index.md` only, after #51 landed).
+- 2026-10-08 — origin/dev merged into the arc 1 branch (index lines kept from both sides; a stale untracked `apps/landing/src/generated/release.json` from the base's landing scripts removed locally), then arc 1 merged into arc 2. Merged arc 2 head: lint 0, typecheck:all 0, test 10386, test:all 0, check:plans 0.
+- 2026-10-08 — merged arc 2 head e2e: smoke 9 files / 31 tests, network 3 files / 7 tests, all green (`--retry=0`, `NULO_E2E_RETRY=0`).
