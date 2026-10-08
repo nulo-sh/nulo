@@ -8,7 +8,6 @@ export type StoreId = keyof typeof STORES
 
 export type Install = { store: StoreId; browser: "Chrome" | "Edge" | "Brave" | "Opera" | "Firefox" }
 
-/** The navigator fields detection reads. */
 export type NavigatorLike = {
 	userAgent: string
 	brave?: unknown
