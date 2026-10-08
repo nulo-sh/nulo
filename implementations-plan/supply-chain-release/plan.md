@@ -778,6 +778,28 @@ Rejected: none. No finding re-raised a ledger decision. The pass's "looks fine" 
 
 The implementing session's per-arc Codex loops review these fixes as built; no further plan round was run, per the mid tier's single final pass.
 
+### Arc 1 implementation, Codex round 1 (GPT-6.1 Sol, high), session `01a11c4d-e378-7a60-9c0c-552bd1340f92`
+
+**Verdict:** `approve with fixes`. Diff `1a2cbaa..a9f6cbd`. All four findings were checked against the tree and accepted; fixes in `cf8ecb3`.
+- [Medium] `parseRelease` dropped `tag_name`, so a draft retargeted to another tag during upload was published (reproduced by the reviewer). Fixed: the record keeps the tag; `apply` refuses a draft that no longer belongs to the run's tag, before and after the publish; one regression test.
+- [Medium] The nightly quiet-day skip counted any nightly tag at the dev commit, and the new flow creates the tag before the draft, so an interrupted publish silenced every later run on that commit. Fixed: only a published release counts (`GET releases/tags/<tag>`, which never returns a draft); an API error other than 404 fails the run. Both outcomes probed live; no unit test, since the logic is a shell step.
+- [Low] The REST boundary had no real-data test. Fixed: an opt-in read-only probe (`NULO_RELEASE_PROBE=1`) reads v0.30.2, downloads `SHASUMS256.txt` and matches GitHub's digest, and reads an unknown digest as unattested. Passed locally.
+- [Low] The `setup-bun` description carried history. Fixed: one line of contract.
+
+### Arc 1 implementation, Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict:** no High; two Medium. Diff `1a2cbaa..a9f6cbd`. Fixes in `cf8ecb3`.
+- [Medium] A re-run of a failed `auto-unstick` found its own tag (`skip`) and emitted `unstuck=false`, so the run went green with a tag and no release. Accepted: `skip` continues the publish too (the release group's queue serializes runs, and the publish path is idempotent); CLAUDE.md gains the troubleshooting row.
+- [Medium] Nothing pinned that a store submission ships the verified bytes. Accepted: `release-integrity.test.ts` pins `verify-published`'s guard and the artifact's source directory, one mutation each.
+- [Low] The post-publish read was a single read while the pre-publish one settles. Accepted: both use the same settle loop; a lag test.
+- [Low] `sync-main-to-dev`'s job token kept `contents`/`pull-requests: write` though every write uses the App token. Accepted: `contents: read`.
+- [Low] `oven-sh/setup-bun` v2.2.0 has a `token` input defaulting to the job token (read at the pinned SHA: it is used only to list tags, which an exact version skips). Accepted: the composite passes `token: ""`, pinned by the test.
+- [Low] `publish-nightly` lacked `!cancelled()`. Accepted.
+- [Low] The quiet-day skip: same as Codex's second finding.
+- [Low] Docs state S1 as applied before it is. Not a change: S1 is applied once this PR is open with green local gates, before merge, and its id replaces the placeholders.
+- [Low] Stale comments (the REST claim beside `gh attestation verify`, "zero-API", the v4-abort framing, the staged-rollout tail in `release.yml`, an import kept alive by an export). Accepted, each rewritten or removed.
+- Also folded: `privileged()` in the integrity test now treats `permissions: write-all` as privileged (found in self-review).
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so there is no `/code-review` pass.
