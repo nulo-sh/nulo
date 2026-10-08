@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { assertWireArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
 import { toRestoreError } from "@/utils/restore-error"
 import type { ILogger } from "@/wallet/logger"
@@ -406,8 +407,11 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 			return undefined
 		}
 		return {
-			launch: () => {
+			launch: async () => {
 				if (!network) throw new Error("Network not found")
+				// Upstream registration never checks the class id, so a backup could otherwise pair a
+				// contract's instance with an artifact of another class.
+				await assertWireArtifactClassId(contract.instance, contract.artifact)
 				return this.pxeService.registerContract(networkInfoFrom(network), {
 					instance: contract.instance,
 					artifact: contract.artifact,
