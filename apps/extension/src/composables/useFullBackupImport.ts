@@ -18,7 +18,13 @@ import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { ToastOptions } from "@/composables/toast"
-import { type BackupSelection, collectRestoreErrors, normalizeAllIds, readBackupFile } from "@/utils/full-backup-helpers"
+import {
+	type BackupSelection,
+	collectRestoreErrors,
+	normalizeAllIds,
+	openFullBackupText,
+	readBackupFile,
+} from "@/utils/full-backup-helpers"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "@/wallet/services/backup/backup-migration-registry"
 import { maxBackupSchemaVersion, migrateBackupData } from "@/wallet/services/backup/backup-migrator"
 import {
@@ -45,7 +51,6 @@ import {
 export type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import type { RestoreStage, RestoreStatus } from "./full-backup-restore"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
-import { fromBase64 } from "@/wallet/utils"
 import { isNewPasswordValid } from "@/utils/password"
 
 /** The full-backup envelope: the checksum + the checksum-covered body. */
@@ -241,23 +246,16 @@ function sanitizedBackupName(raw: unknown): string | null {
 	return cleaned.length > 0 ? cleaned : null
 }
 
-/** The KDF + decrypt + parse chain of decryptBackup, stale-fenced between every await:
- *  a re-pick (or the too-large clear) during the KDF awaits must not have its error wiped
- *  or its selection resurrected by a late publication. */
+/** The decrypt + parse chain of decryptBackup, stale-fenced after the KDF and decrypt: a
+ *  re-pick (or the too-large clear) meanwhile must not have its error wiped or its selection
+ *  resurrected by a late publication. */
 async function openEncryptedBackup(
 	sealed: string,
 	password: string,
 	isStale: () => boolean,
 ): Promise<{ kind: "stale" } | { kind: "ok"; backupObject: { data?: { profile?: { type?: string; name?: string } } } }> {
-	const passhash = await EncryptionKey.getPasshash(password)
+	const decodedJson = await openFullBackupText(sealed, password)
 	if (isStale()) return { kind: "stale" }
-	const key = await EncryptionKey.fromPasshash(passhash)
-	if (isStale()) return { kind: "stale" }
-	// The detector accepted `sealed.trim()`; decode the same bytes (a saved file may carry padding).
-	const encryptedBytes = fromBase64(sealed.trim())
-	const decryptedBytes = await key.decrypt(encryptedBytes)
-	if (isStale()) return { kind: "stale" }
-	const decodedJson = new TextDecoder().decode(decryptedBytes)
 	return { kind: "ok", backupObject: JSON.parse(decodedJson) as { data?: { profile?: { type?: string; name?: string } } } }
 }
 

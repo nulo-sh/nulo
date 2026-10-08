@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
+import { nextTick } from "vue"
 import Input from "./Input.vue"
 
 const STUBS = {
@@ -104,6 +105,34 @@ describe("Input", () => {
 		await w.find("input").setValue("123456789")
 		const emits = w.emitted("update:modelValue")
 		expect(emits?.[emits.length - 1]).toEqual(["12345"])
+	})
+
+	test("normalize decides what the field keeps and emits, in place of sanitize's filter", async () => {
+		const w = mountInput({ sanitize: true, normalize: (text: string) => text.toUpperCase().replace(/\s+/g, "_") })
+		await w.find("input").setValue("a b!")
+		expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["A_B!"])
+		expect((w.find("input").element as HTMLInputElement).value).toBe("A_B!")
+	})
+
+	test("a paste is normalized before maxLength cuts it", () => {
+		const w = mountInput({ maxLength: 3, normalize: (text: string) => text.replace(/_/g, "") })
+		const paste = new Event("paste", { cancelable: true }) as Event & { clipboardData: unknown }
+		paste.clipboardData = { getData: () => "_a_b_c_d" }
+		w.find("input").element.dispatchEvent(paste)
+		expect(w.emitted("update:modelValue")?.at(-1)).toEqual(["abc"])
+	})
+
+	test("a paste over a selection replaces it, normalized, and leaves the caret after the pasted text", async () => {
+		const w = mountInput({ maxLength: 10, normalize: (text: string) => text.replace(/_/g, "") })
+		const el = w.find("input").element as HTMLInputElement
+		await w.find("input").setValue("Alxxce")
+		el.setSelectionRange(2, 4)
+		const paste = new Event("paste", { cancelable: true }) as Event & { clipboardData: unknown }
+		paste.clipboardData = { getData: () => "_i_" }
+		el.dispatchEvent(paste)
+		await nextTick()
+		expect(el.value).toBe("Alice")
+		expect([el.selectionStart, el.selectionEnd]).toEqual([3, 3])
 	})
 
 	test("maxLength reaching the limit emits maxLengthReached(true)", async () => {

@@ -36,7 +36,11 @@ vi.mock("@/wallet/services/account/client", () => ({
 	ACCOUNT_SERVICE_NAME: "account",
 	IMPORTED_KEYS_SERVICE_NAME: "imported-account-keys",
 	AccountServiceClient: vi.fn(function () {
-		return { ...named("account"), backupImportedKeys: vi.fn(async () => []) }
+		return {
+			...named("account"),
+			backupImportedKeys: vi.fn(async () => []),
+			exportFullBackupKeys: (fence: unknown, password: string) => exportFullBackupKeys(fence, password),
+		}
 	}),
 }))
 vi.mock("@/wallet/services/transaction/client", () => ({
@@ -88,7 +92,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 	}),
 }))
 
-const exportBackupMaterial = vi.fn<(profileId: string, password: string) => Promise<unknown>>()
+const exportFullBackupKeys = vi.hoisted(() => vi.fn<(fence: unknown, password: string) => Promise<unknown>>())
 const getPasskeyCredentialId = vi.fn(async (_id: string) => "cred-1")
 const exportPasskeyBackupMaterial = vi.fn(async (_id: string, _credentialData: unknown) => ({
 	credentialId: "cred-1",
@@ -98,7 +102,8 @@ const exportPasskeyBackupMaterial = vi.fn(async (_id: string, _credentialData: u
 vi.mock("@/utils/core", () => ({
 	managers: {
 		profile: {
-			exportBackupMaterial: (profileId: string, password: string) => exportBackupMaterial(profileId, password),
+			captureRunFence: async () => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "worker-1" }),
+			assertRunFence: async () => undefined,
 			getPasskeyCredentialId: (id: string) => getPasskeyCredentialId(id),
 			exportPasskeyBackupMaterial: (id: string, credentialData: unknown) => exportPasskeyBackupMaterial(id, credentialData),
 		},
@@ -257,7 +262,14 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 	})
 
 	it("a password export in recovery mode with an INTACT slot names only the omitted chain state — never a key loss", async () => {
-		exportBackupMaterial.mockResolvedValueOnce({ masterKey: "mk", entropy: "en", importedKeysDek: "dk", dekReplaced: false })
+		exportFullBackupKeys.mockResolvedValueOnce({
+			masterKey: "mk",
+			entropy: "en",
+			importedKeysKey: "dk",
+			importedKeyRows: [],
+			accounts: [],
+			dekReplaced: false,
+		})
 		const wrapper = mountPage("password", true)
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await wrapper.find("[data-testid='unlock-password-input']").setValue("pass1234")
@@ -267,7 +279,7 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 	})
 
 	it("a failed discriminated export on a password profile flags wrong-password, no toast/navigation", async () => {
-		exportBackupMaterial.mockRejectedValueOnce(new Error("Invalid profile old password"))
+		exportFullBackupKeys.mockRejectedValueOnce(new Error("Invalid profile old password"))
 		const wrapper = mountPage("password")
 		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
 		await wrapper.find("[data-testid='unlock-password-input']").setValue("wrong")

@@ -112,6 +112,49 @@ describe("CI aggregator check names", () => {
   })
 })
 
+/**
+ * verify-cert-run.sh certifies a head only when every network suite job ran green, matched by its
+ * full name: the caller's job name, then the reusable workflow's. A rename on either side that the
+ * script does not follow fails every certification, so its list is derived here from the workflows.
+ */
+describe("network suite job names", () => {
+  // biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+  const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+  const SUITE = "_extension-network-e2e.yml"
+  const PR_LANE = "pr-extension-network-e2e.yml"
+  const LEAF = "network suite"
+  const leaf = (shard: string): string => (shard ? `${LEAF} (shard ${shard})` : LEAF)
+
+  test("the reusable workflow's job is the network suite, named with its shard when it has one", () => {
+    expect(workflow(SUITE).jobs["network-e2e"].name).toBe(
+      `\${{ inputs.shard && format('${LEAF} (shard {0})', inputs.shard) || '${LEAF}' }}`,
+    )
+  })
+
+  test("verify-cert-run.sh expects exactly the jobs the PR lane's network workflow produces", () => {
+    type Caller = { name?: string; uses?: string; with?: { shard?: string }; strategy?: { matrix?: { shard?: { id: string }[] } } }
+    const lane = workflow(PR_LANE)
+    const produced = (Object.values(lane.jobs) as Caller[])
+      .filter((job) => String(job.uses).endsWith(`/${SUITE}`))
+      .flatMap((job) =>
+        (job.strategy?.matrix?.shard?.map((shard) => shard.id) ?? [""]).map((id) => {
+          const bind = (value: unknown) => String(value ?? "").replace("${{ matrix.shard.id }}", id)
+          return `${bind(job.name)} / ${leaf(bind(job.with?.shard))}`
+        }),
+      )
+    const script = readFileSync(join(ROOT, "scripts/ci-cd/verify-cert-run.sh"), "utf8")
+    const block = /^EXPECTED_NETWORK_JOBS=\(\n([\s\S]*?)\n\)$/m.exec(script)?.[1]
+    expect(block, "verify-cert-run.sh declares EXPECTED_NETWORK_JOBS").toBeDefined()
+    const expected = String(block)
+      .split("\n")
+      .map((line) => line.trim().replace(/^"(.*)"$/, "$1"))
+      .filter(Boolean)
+    expect(produced.length, "the PR lane calls the suite").toBeGreaterThan(0)
+    expect([...expected].sort()).toEqual([...produced].sort())
+    expect(script, "the list is checked against the PR lane's runs").toContain(`if [ "$WF" = "${lane.name}" ]; then`)
+  })
+})
+
 describe("PR concurrency", () => {
   test("each PR workflow groups by pull request number, so same-named branches of two forks never cancel each other", () => {
     for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
@@ -488,6 +531,81 @@ describe("canary lanes", () => {
     }
   })
 
+  const PR_LANE = "pr-extension-network-e2e.yml"
+  type CopiedJob = SuiteJob & { name?: string; if?: unknown; secrets?: unknown; strategy?: { "fail-fast"?: unknown; matrix?: Record<string, unknown> } }
+
+  // Nightly keeps its own retry policy and adds the chaos job, but splits the suite as the PR lane
+  // does: a file moved between jobs on one side only runs under another job's conditions on the other.
+  test("nightly runs the PR lane's jobs, file for file, on both browsers", () => {
+    const pr = Object.fromEntries(laneJobs(PR_LANE, "chrome")) as Record<string, CopiedJob>
+    for (const browser of ["chrome", "firefox"]) {
+      const nightly = Object.fromEntries(
+        laneJobs("nightly.yml", browser)
+          .filter(([, job]) => job.with?.chaos !== true)
+          .map(([name, job]) => [name.replace(/-firefox$/, ""), job]),
+      ) as Record<string, CopiedJob>
+      expect(Object.keys(nightly).sort(), `nightly.yml ${browser}: jobs`).toEqual(Object.keys(pr).sort())
+      for (const [name, job] of Object.entries(pr)) {
+        const copy = nightly[name]
+        const at = `nightly.yml ${browser} → ${name}`
+        expect(words(copy.with?.test_files), `${at} test_files`).toEqual(words(job.with?.test_files))
+        expect(copy.with?.proverless, `${at} proverless`).toBe(job.with?.proverless)
+        expect(copy.with?.shard_label, `${at} shard_label`).toBe(job.with?.shard_label)
+        expect(copy.strategy, `${at} strategy`).toEqual(job.strategy)
+      }
+    }
+  })
+
+  // One matrix job, so attach-assets and status read the whole opt-in suite as one result; its legs
+  // are the PR lane's calls, so every pin on that lane above holds for the release's run too.
+  test("release's opt-in network run is the PR lane: one leg per PR job and shard, with its inputs", () => {
+    const defaults = workflow(SUITE).on.workflow_call.inputs as Record<string, { default?: unknown }>
+    type Call = { name: string; inputs: Record<string, unknown> }
+    /** Inputs left at the suite's default dropped, file lists split; `ref` and the kill switch are pinned below. */
+    const normalized = ({ name, inputs }: Call) => ({
+      name,
+      inputs: Object.fromEntries(
+        Object.entries(inputs)
+          .filter(([key, value]) => key !== "ref" && key !== "disable_presto" && value !== defaults[key]?.default)
+          .map(([key, value]) => [key, key.endsWith("_files") ? words(value) : value]),
+      ),
+    })
+    const byName = (a: Call, b: Call) => a.name.localeCompare(b.name)
+
+    const pr: Call[] = (laneJobs(PR_LANE, "chrome") as [string, CopiedJob][]).flatMap(([, job]) => {
+      const shards = job.strategy?.matrix?.shard as { id: string; label: string }[] | undefined
+      if (!shards) return [{ name: String(job.name), inputs: job.with ?? {} }]
+      return shards.map((shard) => ({
+        name: String(job.name).replace("${{ matrix.shard.id }}", shard.id),
+        inputs: { ...job.with, shard: shard.id, shard_label: shard.label },
+      }))
+    })
+
+    const job: CopiedJob = workflow("release.yml").jobs["network-e2e"]
+    expect(Object.keys(job.strategy?.matrix ?? {}), "one matrix key").toEqual(["leg"])
+    expect(job.strategy?.["fail-fast"], "a red leg never cancels the others").toBe(false)
+    const legs = job.strategy?.matrix?.leg as Record<string, unknown>[]
+    /** A `${{ matrix.leg.<key> }}` input takes the leg's own value, typed; a key the leg lacks reads undefined and fails. */
+    const bind = (value: unknown, leg: Record<string, unknown>) => {
+      const key = typeof value === "string" ? /^\$\{\{ matrix\.leg\.(\w+) \}\}$/.exec(value)?.[1] : undefined
+      return key === undefined ? value : leg[key]
+    }
+    const release: Call[] = legs.map((leg) => ({
+      name: String(job.name).replace("${{ matrix.leg.name }}", String(leg.name)),
+      inputs: Object.fromEntries(Object.entries(job.with ?? {}).map(([key, value]) => [key, bind(value, leg)])),
+    }))
+    expect(release.map(normalized).sort(byName)).toEqual(pr.map(normalized).sort(byName))
+
+    const [, prPool] = laneJobs(PR_LANE, "chrome")[0]
+    expect(job.uses).toBe(prPool.uses)
+    expect(job.secrets).toEqual((prPool as CopiedJob).secrets)
+    expect(job.with?.ref).toBe("${{ needs.resolve.outputs.sha }}")
+    expect(job.with?.disable_presto).toBe("${{ !matrix.leg.proverless && vars.NULO_E2E_DISABLE_PRESTO == '1' }}")
+    expect(String(job.if).split(/\s+/).join(" ").trim(), "opt-in only").toBe(
+      "always() && needs.resolve.result == 'success' && github.event.inputs.run_network_e2e == 'true'",
+    )
+  })
+
   // The same-token matrix holds the node's block production, which a shard's files share; the chaos
   // run is a nightly lead whose seed fixes its actions, not their timing.
   test("the same-token matrix runs proverless in a dedicated job, and the chaos run only in nightly's advisory jobs", () => {
@@ -589,14 +707,16 @@ describe("Bun's install cache", () => {
   const SETUP_BUN = "./.github/actions/setup-bun"
   type Step = { uses?: string; with?: Record<string, unknown>; if?: unknown }
   type Job = { uses?: string; permissions?: unknown; steps?: Step[] }
-  const holdsWrite = (permissions: unknown): boolean =>
-    permissions === "write-all" ||
-    (typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write"))
   /** A job's own steps, or every step of the local reusable workflow it calls. */
   const stepsOf = (job: Job): Step[] =>
     job.uses?.startsWith("./.github/workflows/")
       ? (Object.values(parse(job.uses.slice(2)).jobs) as Job[]).flatMap((called) => called.steps ?? [])
       : (job.steps ?? [])
+  /** Any write scope (`id-token` and `attestations` included), or an App token minted whatever the block says. */
+  const holdsWrite = (permissions: unknown, job: Job): boolean =>
+    permissions === "write-all" ||
+    (typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write")) ||
+    stepsOf(job).some((step) => step.uses?.startsWith("actions/create-github-app-token@"))
 
   test("the composite restores it only when asked", () => {
     const action = parse(".github/actions/setup-bun/action.yml")
@@ -618,7 +738,7 @@ describe("Bun's install cache", () => {
       const wf = parse(`.github/workflows/${file}`)
       for (const [name, job] of Object.entries(wf.jobs ?? {}) as [string, Job][]) {
         // A job's own block replaces the workflow's rather than adding to it.
-        if (!holdsWrite(job.permissions ?? wf.permissions)) continue
+        if (!holdsWrite(job.permissions ?? wf.permissions, job)) continue
         for (const step of stepsOf(job).filter((step) => step.uses === SETUP_BUN)) {
           expect(step.with?.cache, `${file} → ${name}`).toBe("false")
           checked++

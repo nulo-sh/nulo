@@ -60,6 +60,21 @@ describe("modules/send/RecipientField", () => {
 		expect(avatars[0].attributes("data-name")).toBe("Alice")
 	})
 
+	test("suggests a saved name whatever its case, spacing or invisible characters, and no look-alike", async () => {
+		const saved = { id: "3", name: "Alice", address: `0x${"0a1ce".repeat(12)}0a1c`, abbr: "AL" }
+		const other = { id: "4", name: "Account 1", address: `0x${"b".repeat(64)}` }
+		const suggested = async (searchTerm: string) => {
+			const w = mountField({ candidates: [other, saved], searchTerm })
+			await w.find("input").trigger("focus")
+			return w.findAll('[data-testid="stub-avatar"]').map((a) => a.attributes("data-address"))
+		}
+		for (const term of ["ALICE", "alice  ", "ali\u200Bce", "\uFF41lice"]) {
+			expect(await suggested(term), JSON.stringify(term)).toEqual([saved.address])
+		}
+		expect(await suggested("\u0430lice")).toEqual([])
+		expect(await suggested("\u200B\u200D")).toEqual([])
+	})
+
 	test("a selected recipient renders the RecipientCard (with the full address), not the input", () => {
 		const w = mountField({ candidates: [alice], selectedContact: alice })
 		const card = w.find('[data-testid="stub-card"]')

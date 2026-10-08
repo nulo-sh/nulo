@@ -23,7 +23,7 @@ import {
 	test,
 	waitForHash,
 } from "./fixtures/extension"
-import { navigateToSettings } from "./fixtures/helpers"
+import { fillNewContactForm, navigateToSettings } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import {
 	book,
@@ -44,8 +44,9 @@ import {
 	waitForFocusOn,
 	waitForInputValue,
 	waitForListed,
+	waitForListedAddress,
 	waitForSelected,
-} from "./helpers/contacts-import"
+} from "./helpers/contacts"
 import { pressEscape } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -272,6 +273,46 @@ test("changes to saved contacts apply only when chosen, by pointer or keyboard; 
 		expect(await book(page)).toEqual({ Alice: ADDR.e, Robert: ADDR.b, Carol: ADDR.c, Dave: ADDR.d, Erin: ADDR.f, Hank: ADDR.g })
 	})
 }, 240_000)
+
+test("a name that differs from a saved one only by case, spacing or invisible characters is that contact: the form refuses it as a duplicate, an import shows and keeps the saved spelling", async ({
+	registeredExtensionPerTest: ctx,
+}) => {
+	await onContacts(ctx, async (page) => {
+		await pickContactsFile(page, contactsFile([{ name: "Alice", address: ADDR.a }]))
+		await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Import completed successfully")
+		const saved = await storedContacts(page)
+
+		await fillNewContactForm(page, "alice ", ADDR.f)
+		await page.waitForSelector(sel("contact-name-exists"), { visible: true, timeout: 5_000 })
+		expect(await page.$eval(sel("new-contact-submit"), (button) => (button as HTMLButtonElement).disabled)).toBe(true)
+		expect(await pressEscape(page)).toBe(true)
+		await settleClosedPopup(page, "new-contact-submit")
+		expect(await storedContacts(page)).toEqual(saved)
+
+		// HANGUL FILLER (U+3164) is invisible, so the second row repeats the first row's name and is dropped.
+		await pickContactsFile(
+			page,
+			contactsFile([
+				{ name: "  alice  ", address: ADDR.a },
+				{ name: "AL\u3164ICE", address: ADDR.e },
+			]),
+		)
+		expect(await shownRows(page)).toEqual([{ name: "Alice", kind: "unchanged", selected: false }])
+		expect(await sectionCounts(page)).toEqual({ saved: "1" })
+		await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "No contacts selected for import")
+		expect(await storedContacts(page)).toEqual(saved)
+
+		await pickContactsFile(page, contactsFile([{ name: "ALI\u3164CE\u200B", address: ADDR.e }]))
+		expect(await shownRows(page)).toEqual([{ name: "Alice", kind: "address-change", selected: false }])
+		expect(await sectionCounts(page)).toEqual({ address: "1" })
+		await pressRow(page, "Alice")
+		await waitForSelected(page, "Alice", true)
+		await toastAfter(page, () => closeImportWith(page, "import-contacts-submit"), "Import completed successfully")
+		await waitForListed(page, ["Alice"])
+		await waitForListedAddress(page, "Alice", trimAddress(ADDR.e))
+		expect(await storedContacts(page)).toEqual([{ ...saved[0], address: ADDR.e }])
+	})
+}, 180_000)
 
 test("export, then import: into the same wallet nothing changes, into a fresh wallet the book comes back", async ({
 	registeredExtensionPerTest: ctx,

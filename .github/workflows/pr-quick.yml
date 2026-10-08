@@ -9,9 +9,9 @@ on:
     # the PRs sat with no checks at all rather than with red ones. Gating every PR
     # regardless of base costs CI minutes and makes each arc independently
     # verifiable; a bad middle arc is otherwise invisible until it reaches dev.
-    # `ready_for_review` so a draft marked ready WITHOUT a new push still re-runs
-    # CI — otherwise the required `… / Status` checks never report on the PR and
-    # hang "Expected" forever → mergeStateStatus=BLOCKED.
+    # `ready_for_review` gives a draft marked ready a fresh run on its head. Nothing
+    # here reads the draft flag, so the head normally has a result already; the
+    # fresh run can replace one that failed, was cancelled or never started.
     #
     # NO `labeled`/`unlabeled`: nothing in this workflow reads labels, so for a
     # SHA this workflow has already covered a label event would only queue a
@@ -287,8 +287,8 @@ jobs:
           bun scripts/ci-cd/preview-comment.ts
 
   # The landing deploys from Cloudflare's own Git integration, so without this job the first
-  # build of a change is the production one. No network: the release stub stands in for the
-  # GitHub API call `prebuild` makes, and the legal pages are generated from legal/*.md.
+  # build of a change is the production one. `bun run build` is the production build: `prebuild`
+  # generates the legal pages from legal/*.md, and nothing in it reaches the network.
   build-landing:
     name: Build Landing
     needs: changes
@@ -300,12 +300,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - uses: ./.github/actions/setup-bun
-      - name: Generate the release stub and the legal pages
-        working-directory: apps/landing
-        run: bun run scripts/ensure-release-json.ts && bun run scripts/build-legal.ts
       - name: Build
         working-directory: apps/landing
-        run: bunx vite build
+        run: bun run build
       - name: Verify the legal pages shipped
         working-directory: apps/landing
         run: |

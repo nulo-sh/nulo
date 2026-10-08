@@ -16,6 +16,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
 import { recordWrites } from "../storage-write-log"
+import { getInitials } from "@/utils"
 import { ContactService } from "./service"
 
 /**
@@ -132,6 +133,13 @@ describe("ContactService (port-migrated)", () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			expect(c.abbr).toBe("AL")
 		})
+
+		test("stores the name as the shared sanitizer returns it, and refuses one with nothing visible without writing", async () => {
+			const c = await contactService.addContact(" \u3164ALI\u200Bce\u00A0 Smith ", "0xa")
+			expect([c.name, c.abbr]).toEqual(["ALIce Smith", getInitials("ALIce Smith")])
+			await expect(contactService.addContact("\u3164\u200B ", "0xb")).rejects.toThrow("contact name has no visible characters")
+			expect((await contactService.getContacts()).map((x) => x.name)).toEqual(["ALIce Smith"])
+		})
 	})
 
 	describe("updateContact", () => {
@@ -147,6 +155,13 @@ describe("ContactService (port-migrated)", () => {
 			const c = await contactService.addContact("Alice", "0xa")
 			profile.setActiveProfile(profileB)
 			await expect(contactService.updateContact(c.id, "X", "0xX")).rejects.toThrow(/invalid id/i)
+		})
+
+		test("stores a new name as the shared sanitizer returns it, refuses one with nothing visible, and keeps the name when none is given", async () => {
+			const c = await contactService.addContact("Alice", "0xa")
+			expect((await contactService.updateContact(c.id, "  BOB\u3164 ")).name).toBe("BOB")
+			await expect(contactService.updateContact(c.id, "\u3164")).rejects.toThrow("contact name has no visible characters")
+			expect((await contactService.updateContact(c.id, undefined, "0xb")).name).toBe("BOB")
 		})
 
 		test("emits onContactUpdated", async () => {
@@ -291,6 +306,21 @@ describe("ContactService (port-migrated)", () => {
 			]
 			const restored = await contactService.restore(doctored)
 			expect(restored.map((c) => c.name)).toEqual([full, full])
+		})
+
+		test("restore removes invisible characters from a name, keeps its visible spelling with a matching abbreviation, and refuses a name with nothing visible", async () => {
+			await contactService.addContact("Alice", "0xa")
+			const [genuine] = await contactService.backup()
+			const restored = await contactService.restore([
+				{ ...genuine, id: "c-inv", name: "\u3164ALI\u200Bce\u00A0Smith\uFFA0 ", abbr: "XX" },
+				{ ...genuine, id: "c-blank", name: "\u3164\u200B " },
+			])
+			expect(restored.map((c) => [c.name, c.abbr, typeof c.restoreError])).toEqual([
+				["ALIce Smith", getInitials("ALIce Smith"), "undefined"],
+				["\u3164\u200B ", genuine.abbr, "string"],
+			])
+			const raw = await api.storage.local.get(null)
+			expect(Object.keys(raw).some((k) => k.includes("c-blank"))).toBe(false)
 		})
 
 		test("a failed item stores the normalized error MESSAGE string, not the raw error", async () => {

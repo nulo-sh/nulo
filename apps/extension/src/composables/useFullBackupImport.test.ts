@@ -185,6 +185,7 @@ vi.mock("@/wallet/storage/migrations", async () => {
 // Imported AFTER mocks are registered.
 import { relinkRestoredTokenBalances, resolvePasskeyCredential, restoreAccountsAndFilterOwnedSlices } from "./full-backup-restore"
 import { useFullBackupImport, validateAndMigrateBackup } from "./useFullBackupImport"
+import { sealFullBackupText } from "@/utils/full-backup-helpers"
 import { PasskeyPrfError } from "@/wallet/utils/passkey-errors"
 import { awaitLivenessAdvance, readLiveness } from "@/utils/background-liveness"
 import { ACCOUNT_STATE_SKIP_DEADLINE } from "@/wallet/services/account-state/normalize"
@@ -2244,6 +2245,30 @@ describe("crash-rollback liveness gate", () => {
 	})
 })
 
+describe("useFullBackupImport — a legacy password backup's imported-keys key", () => {
+	it("reaches the profile restore unchanged, so a backup carrying the profile's long-lived DEK still restores its keys", async () => {
+		const backup = await buildBackup()
+		const opts = makeOpts()
+		const c = useFullBackupImport(opts)
+		opts.pickFile.mockResolvedValue(new File([JSON.stringify(backup)], "b.json", { type: "application/json" }))
+		await c.pickBackupFile()
+		opts.password.value = "pass1234"
+		opts.repeatedPassword.value = "pass1234"
+		profileClient.restore.mockResolvedValue({ id: "new-id", name: "Restored", type: "password" })
+		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
+		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
+
+		await c.restoreBackup()
+
+		expect(profileClient.restore.mock.calls[0][1]).toEqual({
+			type: "password",
+			masterKey: backup["master-key"],
+			entropy: backup.entropy,
+			importedKeysDek: backup["imported-keys-dek"],
+		})
+	})
+})
+
 describe("useFullBackupImport — decryptBackup accepts the padding the detector accepted", () => {
 	it("decrypts a protected file whose base64 is wrapped in non-breaking spaces", async () => {
 		const key = await EncryptionKey.fromPasshash(await EncryptionKey.getPasshash("pass1234"))
@@ -2263,30 +2288,39 @@ describe("useFullBackupImport — decryptBackup accepts the padding the detector
 })
 
 describe("useFullBackupImport — decryptBackup stale-selection fence", () => {
-	it("a decrypt superseded by a re-pick publishes nothing and leaves the new state alone", async () => {
+	it("a decrypt that succeeds after a re-pick publishes nothing and leaves the new state alone", async () => {
 		const opts = makeOpts()
 		const c = useFullBackupImport(opts)
-		c.selectedBackup.value = { name: "old.txt", backup: "AAAA", type: "encrypted", profileType: null }
+		const sealed = await sealFullBackupText(JSON.stringify({ data: { profile: { type: "password", name: "Old" } } }), "pass1234")
+		c.selectedBackup.value = { name: "old.txt", backup: sealed, type: "encrypted", profileType: null }
 		c.decryptionPassword.value = "pass1234"
 
-		// Hold the first KDF await open so the selection can change mid-flight
-		// (the too-large re-pick path clears it to null).
-		let releaseKdf!: (v: unknown) => void
-		const kdfGate = new Promise((res) => {
+		// Hold the KDF open so the selection can change mid-flight (the too-large re-pick path
+		// clears it to null), then let it finish with the real passhash so the decrypt succeeds.
+		const realPasshash = EncryptionKey.getPasshash.bind(EncryptionKey)
+		let releaseKdf!: () => void
+		const kdfGate = new Promise<void>((res) => {
 			releaseKdf = res
 		})
-		const passhashSpy = vi.spyOn(EncryptionKey, "getPasshash").mockReturnValue(kdfGate as never)
+		const passhashSpy = vi.spyOn(EncryptionKey, "getPasshash").mockImplementation(async (password) => {
+			await kdfGate
+			return realPasshash(password)
+		})
+		const decrypt = vi.spyOn(EncryptionKey.prototype, "decrypt")
 
 		const run = c.decryptBackup()
 		c.selectedBackup.value = null
-		releaseKdf("stale-passhash")
+		releaseKdf()
 		await run
 
+		await expect(decrypt.mock.results[0]?.value).resolves.toBeInstanceOf(Uint8Array)
 		// The superseded run must neither resurrect a selection husk nor touch
 		// the error channel (the re-pick's own error must survive).
 		expect(c.selectedBackup.value).toBeNull()
+		expect(c.parsedBackupName.value).toBeNull()
 		expect(opts.clearError).not.toHaveBeenCalled()
-		expect(opts.fillError).not.toHaveBeenCalledWith("full_backup", "Decryption Failed", expect.anything())
+		expect(opts.fillError).not.toHaveBeenCalled()
 		passhashSpy.mockRestore()
+		decrypt.mockRestore()
 	})
 })

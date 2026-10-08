@@ -18,12 +18,14 @@ declare global {
   const CHAIN_IDS: typeof import('../utils/chain-ids').CHAIN_IDS
   const CLEANUP_PENDING_MESSAGE: typeof import('../composables/full-backup-restore').CLEANUP_PENDING_MESSAGE
   const CONTACT_EXISTS: typeof import('../utils/contact-rules').CONTACT_EXISTS
+  const CONTACT_NAME_MAX: typeof import('../utils/contact-name').CONTACT_NAME_MAX
   const EffectScope: typeof import('vue').EffectScope
   const EnsureSuperseded: typeof import('../stores/balances.store').EnsureSuperseded
   const EstimateRequeue: typeof import('../utils/estimate-when-clear').EstimateRequeue
   const FEE_JUICE_DECIMALS: typeof import('../utils/fee-estimation').FEE_JUICE_DECIMALS
   const FEE_METHODS: typeof import('../utils/tx-enrichment').FEE_METHODS
   const FIRST_PROFILE_NAME: typeof import('../utils/profile-name').FIRST_PROFILE_NAME
+  const FULL_BACKUP_V2_TAG: typeof import('../utils/full-backup-helpers').FULL_BACKUP_V2_TAG
   const FULL_SIZE: typeof import('../utils/hero-fit').FULL_SIZE
   const FileTooLargeError: typeof import('../utils/files').FileTooLargeError
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
@@ -103,6 +105,7 @@ declare global {
   const computeMaxFee: typeof import('../utils/fee-estimation').computeMaxFee
   const computed: typeof import('vue').computed
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
+  const contactNameKey: typeof import('../utils/contact-name').contactNameKey
   const copyFor: typeof import('../utils/presto-ui-state').copyFor
   const copyToClipboard: typeof import('../utils/clipboard').copyToClipboard
   const copyWithToast: typeof import('../utils/clipboard').copyWithToast
@@ -168,6 +171,7 @@ declare global {
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
   const isBackgroundConnected: typeof import('../utils/core').isBackgroundConnected
+  const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
   const isForeignProfile: typeof import('../utils/activity-rows').isForeignProfile
   const isHiddenHolding: typeof import('../utils/token-fold').isHiddenHolding
@@ -224,12 +228,14 @@ declare global {
   const onUnmounted: typeof import('vue').onUnmounted
   const onUpdated: typeof import('vue').onUpdated
   const onWatcherCleanup: typeof import('vue').onWatcherCleanup
+  const openFullBackupText: typeof import('../utils/full-backup-helpers').openFullBackupText
   const openLegalDocument: typeof import('../utils/legal-links').openLegalDocument
   const openThirdPartyNotices: typeof import('../utils/legal-links').openThirdPartyNotices
   const orderTokenRows: typeof import('../utils/token-order').orderTokenRows
   const ownWindowRoute: typeof import('../utils/own-window').ownWindowRoute
   const parseAmountToBaseUnits: typeof import('../utils/amount').parseAmountToBaseUnits
   const parseContactsExport: typeof import('../utils/contacts-export-format').parseContactsExport
+  const parseEncryptedBackup: typeof import('../utils/full-backup-helpers').parseEncryptedBackup
   const parseRawBalance: typeof import('../utils/token-amount').parseRawBalance
   const parseTransferIntent: typeof import('../utils/transfer-intent').parseTransferIntent
   const passkeyFailureCopy: typeof import('../utils/passkey-copy').passkeyFailureCopy
@@ -287,13 +293,14 @@ declare global {
   const runRestoreFailurePath: typeof import('../composables/full-backup-restore').runRestoreFailurePath
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
-  const sameContactName: typeof import('../utils/contact-rules').sameContactName
-  const sanitizeImportName: typeof import('../utils/contact-import-rows').sanitizeImportName
+  const sameContactName: typeof import('../utils/contact-name').sameContactName
+  const sanitizeContactName: typeof import('../utils/contact-name').sanitizeContactName
   const sanitizeJournalSubtitle: typeof import('../utils/journal-state').sanitizeJournalSubtitle
   const sanitizePinMap: typeof import('../composables/usePinnedTokens').sanitizePinMap
   const sanitizeString: typeof import('../utils/string').sanitizeString
   const scopedTxRows: typeof import('../utils/activity-rows').scopedTxRows
   const scrubUrls: typeof import('../utils/scrub-urls').scrubUrls
+  const sealFullBackupText: typeof import('../utils/full-backup-helpers').sealFullBackupText
   const sendOutcome: typeof import('../utils/journal-state').sendOutcome
   const setLastActiveProfileId: typeof import('../utils/lastActiveProfile').setLastActiveProfileId
   const shallowReactive: typeof import('vue').shallowReactive
@@ -326,6 +333,7 @@ declare global {
   const txAmount: typeof import('../utils/tx-amount').txAmount
   const txBelongsToScope: typeof import('../stores/activity.store').txBelongsToScope
   const txScope: typeof import('../stores/activity.store').txScope
+  const typedContactName: typeof import('../utils/contact-name').typedContactName
   const uiStateFromStatus: typeof import('../utils/presto-ui-state').uiStateFromStatus
   const unref: typeof import('vue').unref
   const untilSessionChecked: typeof import('../composables/useDappApprovalWindow').untilSessionChecked
@@ -614,12 +622,14 @@ declare module 'vue' {
     readonly CHAIN_IDS: UnwrapRef<typeof import('../utils/chain-ids')['CHAIN_IDS']>
     readonly CLEANUP_PENDING_MESSAGE: UnwrapRef<typeof import('../composables/full-backup-restore')['CLEANUP_PENDING_MESSAGE']>
     readonly CONTACT_EXISTS: UnwrapRef<typeof import('../utils/contact-rules')['CONTACT_EXISTS']>
+    readonly CONTACT_NAME_MAX: UnwrapRef<typeof import('../utils/contact-name')['CONTACT_NAME_MAX']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
     readonly EnsureSuperseded: UnwrapRef<typeof import('../stores/balances.store')['EnsureSuperseded']>
     readonly EstimateRequeue: UnwrapRef<typeof import('../utils/estimate-when-clear')['EstimateRequeue']>
     readonly FEE_JUICE_DECIMALS: UnwrapRef<typeof import('../utils/fee-estimation')['FEE_JUICE_DECIMALS']>
     readonly FEE_METHODS: UnwrapRef<typeof import('../utils/tx-enrichment')['FEE_METHODS']>
     readonly FIRST_PROFILE_NAME: UnwrapRef<typeof import('../utils/profile-name')['FIRST_PROFILE_NAME']>
+    readonly FULL_BACKUP_V2_TAG: UnwrapRef<typeof import('../utils/full-backup-helpers')['FULL_BACKUP_V2_TAG']>
     readonly FULL_SIZE: UnwrapRef<typeof import('../utils/hero-fit')['FULL_SIZE']>
     readonly FileTooLargeError: UnwrapRef<typeof import('../utils/files')['FileTooLargeError']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
@@ -699,6 +709,7 @@ declare module 'vue' {
     readonly computeMaxFee: UnwrapRef<typeof import('../utils/fee-estimation')['computeMaxFee']>
     readonly computed: UnwrapRef<typeof import('vue')['computed']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
+    readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
     readonly copyFor: UnwrapRef<typeof import('../utils/presto-ui-state')['copyFor']>
     readonly copyToClipboard: UnwrapRef<typeof import('../utils/clipboard')['copyToClipboard']>
     readonly copyWithToast: UnwrapRef<typeof import('../utils/clipboard')['copyWithToast']>
@@ -764,6 +775,7 @@ declare module 'vue' {
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
     readonly isBackgroundConnected: UnwrapRef<typeof import('../utils/core')['isBackgroundConnected']>
+    readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
     readonly isForeignProfile: UnwrapRef<typeof import('../utils/activity-rows')['isForeignProfile']>
     readonly isHiddenHolding: UnwrapRef<typeof import('../utils/token-fold')['isHiddenHolding']>
@@ -820,12 +832,14 @@ declare module 'vue' {
     readonly onUnmounted: UnwrapRef<typeof import('vue')['onUnmounted']>
     readonly onUpdated: UnwrapRef<typeof import('vue')['onUpdated']>
     readonly onWatcherCleanup: UnwrapRef<typeof import('vue')['onWatcherCleanup']>
+    readonly openFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['openFullBackupText']>
     readonly openLegalDocument: UnwrapRef<typeof import('../utils/legal-links')['openLegalDocument']>
     readonly openThirdPartyNotices: UnwrapRef<typeof import('../utils/legal-links')['openThirdPartyNotices']>
     readonly orderTokenRows: UnwrapRef<typeof import('../utils/token-order')['orderTokenRows']>
     readonly ownWindowRoute: UnwrapRef<typeof import('../utils/own-window')['ownWindowRoute']>
     readonly parseAmountToBaseUnits: UnwrapRef<typeof import('../utils/amount')['parseAmountToBaseUnits']>
     readonly parseContactsExport: UnwrapRef<typeof import('../utils/contacts-export-format')['parseContactsExport']>
+    readonly parseEncryptedBackup: UnwrapRef<typeof import('../utils/full-backup-helpers')['parseEncryptedBackup']>
     readonly parseRawBalance: UnwrapRef<typeof import('../utils/token-amount')['parseRawBalance']>
     readonly parseTransferIntent: UnwrapRef<typeof import('../utils/transfer-intent')['parseTransferIntent']>
     readonly passkeyFailureCopy: UnwrapRef<typeof import('../utils/passkey-copy')['passkeyFailureCopy']>
@@ -881,13 +895,14 @@ declare module 'vue' {
     readonly runRestoreFailurePath: UnwrapRef<typeof import('../composables/full-backup-restore')['runRestoreFailurePath']>
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>
     readonly sameContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['sameContactAddress']>
-    readonly sameContactName: UnwrapRef<typeof import('../utils/contact-rules')['sameContactName']>
-    readonly sanitizeImportName: UnwrapRef<typeof import('../utils/contact-import-rows')['sanitizeImportName']>
+    readonly sameContactName: UnwrapRef<typeof import('../utils/contact-name')['sameContactName']>
+    readonly sanitizeContactName: UnwrapRef<typeof import('../utils/contact-name')['sanitizeContactName']>
     readonly sanitizeJournalSubtitle: UnwrapRef<typeof import('../utils/journal-state')['sanitizeJournalSubtitle']>
     readonly sanitizePinMap: UnwrapRef<typeof import('../composables/usePinnedTokens')['sanitizePinMap']>
     readonly sanitizeString: UnwrapRef<typeof import('../utils/string')['sanitizeString']>
     readonly scopedTxRows: UnwrapRef<typeof import('../utils/activity-rows')['scopedTxRows']>
     readonly scrubUrls: UnwrapRef<typeof import('../utils/scrub-urls')['scrubUrls']>
+    readonly sealFullBackupText: UnwrapRef<typeof import('../utils/full-backup-helpers')['sealFullBackupText']>
     readonly sendOutcome: UnwrapRef<typeof import('../utils/journal-state')['sendOutcome']>
     readonly setLastActiveProfileId: UnwrapRef<typeof import('../utils/lastActiveProfile')['setLastActiveProfileId']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
@@ -920,6 +935,7 @@ declare module 'vue' {
     readonly txAmount: UnwrapRef<typeof import('../utils/tx-amount')['txAmount']>
     readonly txBelongsToScope: UnwrapRef<typeof import('../stores/activity.store')['txBelongsToScope']>
     readonly txScope: UnwrapRef<typeof import('../stores/activity.store')['txScope']>
+    readonly typedContactName: UnwrapRef<typeof import('../utils/contact-name')['typedContactName']>
     readonly uiStateFromStatus: UnwrapRef<typeof import('../utils/presto-ui-state')['uiStateFromStatus']>
     readonly unref: UnwrapRef<typeof import('vue')['unref']>
     readonly untilSessionChecked: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['untilSessionChecked']>

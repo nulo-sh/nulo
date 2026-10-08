@@ -5,10 +5,9 @@
  * Presentation only: the popup owns validation, duplicate policy, and
  * submit; this component just renders the fields and their inline
  * warnings from the flags it is handed.
- *
- * The placeholders are e2e-load-bearing (`contacts.test.ts` locates the
- * inputs by placeholder) — never reword them.
  */
+import { CONTACT_NAME_MAX, typedContactName } from "@/utils/contact-name"
+
 defineProps({
 	/** Show "Already exist" on the name field. */
 	nameExists: Boolean,
@@ -27,14 +26,14 @@ const addressModel = defineModel("address", { type: String, default: "" })
 		label="Name"
 		placeholder="New contact"
 		autofocus
-		sanitize
-		:maxLength="25"
+		:normalize="typedContactName"
+		:maxLength="CONTACT_NAME_MAX"
 		v-model="nameModel"
 		inputTestid="contact-name-input"
 	>
 		<template #right>
 			<Transition name="fade">
-				<Flex v-if="nameExists" align="center" gap="6">
+				<Flex v-if="nameExists" align="center" gap="6" data-testid="contact-name-exists">
 					<Icon name="warning" size="12" color="primary" />
 					<Text size="12" weight="600" color="primary"> Already exist </Text>
 				</Flex>

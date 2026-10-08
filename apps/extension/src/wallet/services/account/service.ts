@@ -13,8 +13,9 @@ import { NetworkService } from "@/wallet/services/network/service"
 import { purgeMalformedRows, purgeRows } from "@/wallet/services/purge-rows"
 import { EntityStorage } from "@/wallet/storage"
 import { array_max, fromBase64Lenient, hasIntersectionByKeys, KeyedLock, Lock } from "@/wallet/utils"
-import { EventHandler } from "@nulo/wallet-core/utils"
+import { EventHandler, toBase64 } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import {
 	buildAccountExport,
 	decryptAccountExport,
@@ -39,6 +40,7 @@ import {
 	DEFAULT_ACCOUNT_NAME,
 	ImportedAccountKeySchema,
 	ImportedAccountUnusableError,
+	type FullBackupKeys,
 	type ImportedAccountKey,
 	accountRowId,
 	accountRowIdOf,
@@ -63,6 +65,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		"exportAccount",
 		"importAccount",
 		"previewImportAccount",
+		"exportFullBackupKeys",
 		"backupImportedKeys",
 		"restoreImportedKeys",
 		"reconcileImportedAccounts",
@@ -676,8 +679,11 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	public async backup(): Promise<Account[]> {
 		const profile = await requireActiveProfile(this.profileService)
+		return this.rowsOfProfile(profile.id)
+	}
 
-		return (await this.liveRows()).filter((x) => x.profileId === profile.id)
+	private async rowsOfProfile(profileId: string): Promise<Account[]> {
+		return (await this.liveRows()).filter((x) => x.profileId === profileId)
 	}
 
 	public async restore(accounts: Account[]): Promise<Restored<Account>[]> {
@@ -752,6 +758,63 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async previewImportAccount(fileBody: string, password: string): Promise<string> {
 		await this.ensureInitialized()
 		return (await this.decodeAccountExport(fileBody, password)).address
+	}
+
+	/**
+	 * Accounts are read before the key rows: an import that lands between the two reads can add a
+	 * key row with no account, which the restored wallet's orphan sweep removes at its next start,
+	 * but never an account without its key. The fence is asserted again after the last seal, so a lock, switch, deletion or
+	 * worker restart during the export throws instead of returning another session's material.
+	 */
+	public async exportFullBackupKeys(fence: RunFence, password: string): Promise<FullBackupKeys> {
+		await this.ensureInitialized()
+		await this.profileService.assertRunFence(fence)
+		const { masterKey, entropy, sourceDek, transferKey } = await this.profileService.openBackupTransfer(fence.profileId, password)
+		try {
+			const accounts = await this.rowsOfProfile(fence.profileId)
+			const stored = await this.importedKeys.backup(fence.profileId)
+			const importedKeyRows = sourceDek ? await this.resealImportedKeys(stored, sourceDek, transferKey) : stored
+			await this.profileService.assertRunFence(fence)
+			return {
+				masterKey,
+				entropy,
+				importedKeysKey: toBase64(transferKey),
+				importedKeyRows,
+				accounts,
+				dekReplaced: sourceDek === null,
+			}
+		} finally {
+			zeroize(sourceDek)
+			zeroize(transferKey)
+		}
+	}
+
+	/** Re-seal each row from `from` to `to`. A row that does not open travels as stored, and the
+	 *  restore files it as an orphan; a seal failure aborts. */
+	private async resealImportedKeys(
+		rows: ImportedAccountKey[],
+		from: ImportedKeysDek,
+		to: ImportedKeysDek,
+	): Promise<ImportedAccountKey[]> {
+		const out: ImportedAccountKey[] = []
+		let unopened = 0
+		for (const row of rows) {
+			let skBytes: Uint8Array<ArrayBuffer>
+			try {
+				skBytes = await unsealImportedSigningKeyV2(from, row.chainId, row.address, row.encryptedSigningKey)
+			} catch {
+				unopened++
+				out.push(row)
+				continue
+			}
+			try {
+				out.push({ ...row, encryptedSigningKey: await sealImportedSigningKeyV2(to, row.chainId, row.address, skBytes) })
+			} finally {
+				zeroize(skBytes)
+			}
+		}
+		if (unopened > 0) this.logWarn("imported-key rows did not open at backup export", { unopened })
+		return out
 	}
 
 	/** Backup this profile's imported-account key rows (the dedicated `imported-account-keys`

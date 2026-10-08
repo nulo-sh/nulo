@@ -9,7 +9,7 @@
 #   - no successful job's runtime log contains a vitest retry marker or an
 #     exit-86 / infra-reboot warning (a pass that consumed a retry is not a
 #     green);
-#   - the runs executed their WORKLOAD jobs by name — the network agent set, smoke's
+#   - the runs executed their WORKLOAD jobs by name — the network suite jobs, smoke's
 #     shard jobs, and quality's unit/lint jobs — so a suite that resolved run=false and
 #     produced a green "passed or was skipped" aggregator cannot certify with nothing
 #     having run.
@@ -32,9 +32,6 @@ set -uo pipefail
 
 REQUIRED_WORKFLOWS=("Quality" "Extension smoke e2e" "Extension network e2e")
 
-# The exact network agent set: 5 sharded jobs + 2 heavies + the prover-ON
-# canary. Checking names rather than a count means a missing shard cannot be
-# offset by an extra job elsewhere.
 # Workload jobs that must have actually EXECUTED. Without these, a head whose
 # `decide` job resolved run=false still produces a green aggregator ("passed or
 # was skipped" is by design for unrelated changes) and would certify with no
@@ -45,15 +42,19 @@ declare -A REQUIRED_JOBS=(
 	["Extension smoke e2e"]="Run / shard 1/3 / Vitest + Puppeteer|Run / shard 2/3 / Vitest + Puppeteer|Run / shard 3/3 / Vitest + Puppeteer"
 )
 
-EXPECTED_AGENTS=(
-	"Run / shard 1/5 / Aztec agent (shard 1/5)"
-	"Run / shard 2/5 / Aztec agent (shard 2/5)"
-	"Run / shard 3/5 / Aztec agent (shard 3/5)"
-	"Run / shard 4/5 / Aztec agent (shard 4/5)"
-	"Run / shard 5/5 / Aztec agent (shard 5/5)"
-	"Run / heavy / fee-methods + selfpay-phase / Aztec agent"
-	"Run / heavy / concurrent-confirm / Aztec agent"
-	"Run / canary / real-proving / Aztec agent"
+# The exact network suite job set: 5 sharded jobs + 2 heavies + the prover-ON
+# canary. Checking names rather than a count means a missing shard cannot be
+# offset by an extra job elsewhere. behavior-gating.test.ts derives this list
+# from the workflows, so a renamed job fails a test instead of this check.
+EXPECTED_NETWORK_JOBS=(
+	"Run / shard 1/5 / network suite (shard 1/5)"
+	"Run / shard 2/5 / network suite (shard 2/5)"
+	"Run / shard 3/5 / network suite (shard 3/5)"
+	"Run / shard 4/5 / network suite (shard 4/5)"
+	"Run / shard 5/5 / network suite (shard 5/5)"
+	"Run / heavy / fee-methods + selfpay-phase / network suite"
+	"Run / heavy / concurrent-confirm / network suite"
+	"Run / canary / real-proving / network suite"
 )
 
 die() {
@@ -174,9 +175,9 @@ for WF in "${REQUIRED_WORKFLOWS[@]}"; do
 		done <<<"$JOB_ROWS"
 
 		if [ "$WF" = "Extension network e2e" ]; then
-			for AGENT in "${EXPECTED_AGENTS[@]}"; do
-				OK=$(jq -r --arg n "$AGENT" '[.[].jobs[]? | select(.name==$n and .conclusion=="success")] | length' "$JOBS")
-				[ "${OK:-0}" -gt 0 ] || violation "network agent job did not run green: $AGENT"
+			for NETWORK_JOB in "${EXPECTED_NETWORK_JOBS[@]}"; do
+				OK=$(jq -r --arg n "$NETWORK_JOB" '[.[].jobs[]? | select(.name==$n and .conclusion=="success")] | length' "$JOBS")
+				[ "${OK:-0}" -gt 0 ] || violation "network suite job did not run green: $NETWORK_JOB"
 			done
 		fi
 

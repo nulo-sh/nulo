@@ -8,6 +8,7 @@ import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/
 import {
 	addContact,
 	clickNavTab,
+	contactRow,
 	navigateByHash,
 	navigateToSettings,
 	openNetworkDetail,
@@ -316,7 +317,7 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 	await navigateToSettings(page, "contacts")
 	await page.waitForSelector(`${sel("contacts-new-btn")}, ${sel("contact-row")}`, { visible: true, timeout: 10_000 })
 	const name = await ensureContact(page)
-	const row = `${sel("contact-row")}[data-contact-name="${name}"]`
+	const row = contactRow(name)
 
 	const href = await page.$eval(`${row} a[data-row-target]`, (a) => a.getAttribute("href") ?? "")
 	expect(href).toContain("#/popup/send?contact=")

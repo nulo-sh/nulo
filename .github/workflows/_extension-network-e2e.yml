@@ -110,7 +110,7 @@ on:
 
 jobs:
   network-e2e:
-    name: ${{ inputs.shard && format('Aztec agent (shard {0})', inputs.shard) || 'Aztec agent' }}
+    name: ${{ inputs.shard && format('network suite (shard {0})', inputs.shard) || 'network suite' }}
     runs-on: ubuntu-latest
     # Per-shard wall-time worst case is ~20m (9 files + cold-start ~5m). 30m
     # budget gives headroom without masking real hangs. Was 60m for the single

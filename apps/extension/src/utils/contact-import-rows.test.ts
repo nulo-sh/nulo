@@ -6,7 +6,6 @@ import {
 	matchSavedContacts,
 	normalizeImportRows,
 	planImportWrites,
-	sanitizeImportName,
 } from "./contact-import-rows"
 import { parseContactsExport } from "./contacts-export-format"
 
@@ -30,32 +29,6 @@ const SAVED = [
 
 const classify = (name: string, address: string, saved = SAVED) => classifyImportRow({ name, address }, indexSavedContacts(saved))
 
-describe("sanitizeImportName", () => {
-	test("keeps 25 characters, the form's limit, and drops the 26th", () => {
-		expect(sanitizeImportName("A".repeat(25))).toBe("A".repeat(25))
-		expect(sanitizeImportName("A".repeat(26))).toBe("A".repeat(25))
-	})
-
-	test("trims before the cut, so outer spaces never cost a character, and after it", () => {
-		expect(sanitizeImportName(`   ${"B".repeat(25)}   `)).toBe("B".repeat(25))
-		expect(sanitizeImportName(`${"C".repeat(24)} D`)).toBe("C".repeat(24))
-	})
-
-	test("strips what is not a letter, digit, space, hyphen, dot or underscore", () => {
-		expect(sanitizeImportName("‮Alice​!")).toBe("Alice")
-	})
-
-	test("keeps letters of any script; a letter outside the BMP that the cut would split is dropped whole, so the name reads back as saved", () => {
-		expect(sanitizeImportName("Zoë 李雷 Ольга")).toBe("Zoë 李雷 Ольга")
-		// MATHEMATICAL SCRIPT CAPITAL A: one letter, two UTF-16 units.
-		const astral = "\u{1D49C}"
-		expect(sanitizeImportName(`${"A".repeat(23)}${astral}`)).toBe(`${"A".repeat(23)}${astral}`)
-		const cut = sanitizeImportName(`${"A".repeat(24)}${astral}`)
-		expect(cut).toBe("A".repeat(24))
-		expect(sanitizeImportName(cut)).toBe(cut)
-	})
-})
-
 describe("normalizeImportRows", () => {
 	test("builds minimal rows: trimmed name, lowercase address, strict isSender", () => {
 		const rows = normalizeImportRows([
@@ -74,14 +47,19 @@ describe("normalizeImportRows", () => {
 		expect(rows).toEqual([])
 	})
 
-	test("the first row wins per trimmed name (case-sensitive) and per address", () => {
+	test("the first row wins per name, whatever its case, spacing or invisible characters, and per address", () => {
 		const rows = normalizeImportRows([
 			{ name: "Alice", address: ADDR.alice },
 			{ name: "Alice ", address: ADDR.fresh },
-			{ name: "alice", address: ADDR.tom },
+			{ name: "ALICE", address: ADDR.tom },
+			{ name: "Al\u3164ice", address: ADDR.priya },
 			{ name: "Other", address: ADDR.alice },
+			{ name: "\u0410lice", address: ADDR.marco },
 		])
-		expect(rows.map((r) => r.name)).toEqual(["Alice", "alice"])
+		expect(rows.map((r) => [r.name, r.address])).toEqual([
+			["Alice", ADDR.alice],
+			["\u0410lice", ADDR.marco],
+		])
 	})
 
 	test("a file of malformed, padded and colliding rows, as the parser reads it, becomes exactly these rows", () => {
@@ -130,6 +108,50 @@ describe("matchSavedContacts / classifyImportRow", () => {
 		expect(row.kind).toBe(kind)
 		expect(row.selected).toBe(selected)
 		expect(row.importable).toBe(kind !== "conflict" && kind !== "invalid")
+	})
+
+	test.each([
+		["case", "ALICE", "aLiCe", "c1", ADDR.alice],
+		["spacing", "Tom   Becker", "  Tom Becker\t", "c3", ADDR.tom],
+		["invisible characters", "Al\u3164ice\u200B", "\uFFA0Alice", "c1", ADDR.alice],
+	])(
+		"a name that differs from a saved one only by %s is that contact: Already saved at its address, an address change at another",
+		(_, atAddress, elsewhere, targetId, address) => {
+			expect(classify(atAddress, address)).toMatchObject({ kind: "unchanged", targetId, selected: false })
+			expect(classify(elsewhere, ADDR.fresh)).toMatchObject({ kind: "address-change", targetId, selected: false })
+		},
+	)
+
+	test("a saved name holding invisible characters is matched by its visible spelling; a new spelling at a saved address is still a name change", () => {
+		const older = [{ id: "c9", name: "Bob\u3164", address: ADDR.priya }]
+		expect(classify("bob", ADDR.priya, older)).toMatchObject({ kind: "unchanged", targetId: "c9" })
+		expect(classify("Bobby", ADDR.priya, older)).toMatchObject({ kind: "name-change", targetId: "c9" })
+	})
+
+	test("two saved contacts whose names differ only by case or spacing are one name: a row matching them is a conflict", () => {
+		const twins = [...SAVED, { id: "c4", name: "ALICE ", address: ADDR.fresh }]
+		expect(classify("alice", ADDR.priya, twins)).toMatchObject({ kind: "conflict", importable: false, targetId: null })
+	})
+
+	test("a look-alike letter from another script is a different name: new elsewhere, a name change at the saved address", () => {
+		expect(classify("\u0410lice", ADDR.fresh)).toMatchObject({ kind: "new", targetId: null })
+		expect(classify("\u0410lice", ADDR.alice)).toMatchObject({ kind: "name-change", targetId: "c1" })
+	})
+
+	test("an accent written as a separate mark is deleted by the character filter before the key sees it, so that spelling is a new name", () => {
+		const [row] = normalizeImportRows([{ name: "JOSE\u0301", address: ADDR.fresh }])
+		expect(row.name).toBe("JOSE")
+		expect(classify(row.name, row.address, [{ id: "c9", name: "José", address: ADDR.priya }])).toMatchObject({ kind: "new" })
+	})
+
+	test("a row carries the name it would write: the saved spelling when it matched a saved contact by name, the file's otherwise", () => {
+		expect(classify("ALICE", ADDR.alice)).toMatchObject({ kind: "unchanged", name: "Alice" })
+		expect(classify("al\u3164ice", ADDR.fresh)).toMatchObject({ kind: "address-change", name: "Alice" })
+		expect(classify("tom  becker", ADDR.fresh)).toMatchObject({ kind: "address-change", name: "Tom Becker" })
+		expect(classify("Marco", ADDR.marco)).toMatchObject({ kind: "name-change", name: "Marco" })
+		expect(classify("priya shah", ADDR.fresh)).toMatchObject({ kind: "new", name: "priya shah" })
+		expect(classify("alice", ADDR.tom)).toMatchObject({ kind: "conflict", name: "alice" })
+		expect(classify("alice", OFF_CURVE)).toMatchObject({ kind: "invalid", name: "alice" })
 	})
 
 	test("a change carries the saved values it replaces", () => {
@@ -181,7 +203,7 @@ describe("addressChangeText", () => {
 
 describe("planImportWrites", () => {
 	const index = indexSavedContacts(SAVED)
-	const shown = (name: string, address: string, isSender = false) => ({ name, address, isSender, ...classify(name, address) })
+	const shown = (name: string, address: string, isSender = false) => ({ address, isSender, ...classify(name, address) })
 
 	test("admits rows that still do what the screen showed, with the saved contact each one writes", () => {
 		const rows = [shown("Alice", ADDR.fresh), shown("Marco", ADDR.marco), shown("Priya Shah", ADDR.priya)]
@@ -208,6 +230,10 @@ describe("planImportWrites", () => {
 		const nameChange = shown("Marco", ADDR.marco)
 		const renamedAgain = indexSavedContacts([SAVED[0], { ...SAVED[1], name: "Marco R" }, SAVED[2]])
 		expect(planImportWrites([nameChange], renamedAgain).refused).toEqual([nameChange])
+
+		// The screen showed the old spelling, so a rename elsewhere that changes only its case still refuses.
+		const recased = indexSavedContacts([{ ...SAVED[0], name: "ALICE" }, ...SAVED.slice(1)])
+		expect(planImportWrites([addressChange], recased).refused).toEqual([addressChange])
 	})
 
 	test("refuses a conflict and an invalid row even when the shown decision says so", () => {
@@ -223,6 +249,9 @@ describe("planImportWrites", () => {
 		const rename = shown("Zed", ADDR.marco)
 		const newSameName = shown("Zed", ADDR.priya)
 		expect(planImportWrites([rename, newSameName], index).admitted.map((w) => w.row.address)).toEqual([ADDR.marco])
+
+		const sameNameOtherSpelling = shown("ZED\u3164 ", ADDR.priya)
+		expect(planImportWrites([rename, sameNameOtherSpelling], index).admitted.map((w) => w.row.address)).toEqual([ADDR.marco])
 	})
 
 	test("two rows reaching one saved contact from its name and from its address: only the first is admitted", () => {

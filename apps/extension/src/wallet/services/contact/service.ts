@@ -15,11 +15,14 @@ import { type RestoreGate, NOOP_RESTORE_GATE } from "@/e2e/restore-gate"
 import { EntityStorage } from "@/wallet/storage"
 import { Lock } from "@/wallet/utils"
 import { getInitials } from "@/utils"
-import { sanitizeImportName } from "@/utils/contact-import-rows"
+import { isEmptyContactName, sanitizeContactName } from "@/utils/contact-name"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT, ContactSchema, type Events, type Methods } from "./spec"
 
 export * from "./spec"
+
+/** Never quotes the name: a contact name is personal data. */
+const NO_VISIBLE_NAME = "contact name has no visible characters"
 
 export class ContactService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -97,6 +100,8 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 
 	public async addContact(name: string, address: string): Promise<Contact> {
 		await this.ensureInitialized()
+		if (isEmptyContactName(name)) throw new Error(NO_VISIBLE_NAME)
+		const stored = sanitizeContactName(name)
 		// Atomic read+capture: the lock wait and id allocation below can span the
 		// profile's deletion — without a fence the row lands stamped with the
 		// deleted profile, surviving the cascade's earlier snapshot as an orphan.
@@ -109,9 +114,9 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 			const contact: Contact = {
 				id,
 				profileId: fence.profileId,
-				name,
+				name: stored,
 				address,
-				abbr: this._getAbbreviation(name),
+				abbr: this._getAbbreviation(stored),
 			}
 
 			deletion.assertCurrent(fence.profileId, fence.epoch)
@@ -131,6 +136,8 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 
 	public async updateContact(contactId: string, name?: string, address?: string): Promise<Contact> {
 		await this.ensureInitialized()
+		if (name && isEmptyContactName(name)) throw new Error(NO_VISIBLE_NAME)
+		const stored = name ? sanitizeContactName(name) : undefined
 		const profile = await requireActiveProfile(this.profileService)
 
 		return await this.lock.withLock(async () => {
@@ -138,8 +145,8 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 
 			const newContact = {
 				...contact,
-				name: name || contact.name,
-				abbr: name ? this._getAbbreviation(name) : contact.abbr,
+				name: stored ?? contact.name,
+				abbr: stored ? this._getAbbreviation(stored) : contact.abbr,
 				address: address || contact.address,
 			}
 
@@ -238,8 +245,11 @@ export class ContactService extends Service<Methods, Events> implements ServiceS
 		return await this.lock.withLock(async () => {
 			return await restoreRows(contacts, async (contact) => {
 				const id = await preferOrReallocId(this.storage, contact.id)
-				// Same sanitizer the plaintext import applies: a backup name is untrusted display text.
-				const written = { ...contact, id, name: sanitizeImportName(contact.name) }
+				// A backup name is untrusted display text, stored as any other name is.
+				if (isEmptyContactName(contact.name)) throw new Error(NO_VISIBLE_NAME)
+				const name = sanitizeContactName(contact.name)
+				const abbr = name === contact.name ? contact.abbr : this._getAbbreviation(name)
+				const written = { ...contact, id, name, abbr }
 				// Parse the persisted shape so a malformed backup contact is recorded as
 				// restoreError, not silently written + codec-hidden on read.
 				ContactSchema.parse(written)

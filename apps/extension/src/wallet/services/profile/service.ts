@@ -54,6 +54,7 @@ import {
 	type Events,
 	type Methods,
 	type RestoreSecret,
+	type RunFence,
 } from "./spec"
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
@@ -85,6 +86,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"unlockPasskeyProfile",
 		"getPasskeyCredentialId",
 		"getSessionHandle",
+		"captureRunFence",
+		"assertRunFence",
 		"lockActiveProfile",
 		"refreshSession",
 		"changeProfileName",
@@ -94,9 +97,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		"importPasskey",
 		"importMnemonic",
 		"exportPlain",
-		"exportBackupMaterial",
 		"exportPasskeyBackupMaterial",
-		"getProfileDekSealed",
 		"exportMnemonic",
 		"restore",
 		"finalizeRestore",
@@ -526,6 +527,20 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			}
 			this.deletionState.assertCurrent(fence.profileId, fence.epoch)
 		})
+	}
+
+	/** {@link captureExecutionFence} for a popup run that spans several RPCs, stamped with this
+	 *  worker's id: a restarted worker can re-issue the same serial and epoch to the same profile. */
+	public async captureRunFence(): Promise<RunFence> {
+		return { ...(await this.captureExecutionFence()), incarnation: this.workerId }
+	}
+
+	/** {@link assertFence} for a {@link RunFence}; a fence another worker issued is refused first. */
+	public async assertRunFence(fence: RunFence): Promise<void> {
+		if (fence?.incarnation !== this.workerId) {
+			throw new SessionEndedError()
+		}
+		await this.assertFence(fence)
 	}
 
 	/** {@link assertFence}'s question answered synchronously from memory — no lock, no lazy expiry
@@ -1055,7 +1070,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  transplanted `dekSealed` (re-MACing would launder it into a freshly-valid envelope)
 	 *  from corruption of the MAC field alone (DEK intact, keys recoverable). The
 	 *  non-destructive repair is export a full backup (deliberately still works in recovery
-	 *  mode — see `exportBackupMaterial`) and restore it. Caller MUST hold the facade lock
+	 *  mode — see `openBackupTransfer`) and restore it. Caller MUST hold the facade lock
 	 *  and OWNS the returned dek + oldPasshash; on a throw after allocation they are zeroized
 	 *  here before the rethrow. */
 	private async rekeyedDekForPasswordChangeHoldingLock(
@@ -1785,23 +1800,26 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	}
 
 	/**
-	 * Atomic paired export for the Full-Backup builder: master + entropy from ONE unseal, so
-	 * the two backup fields can never come from different row states. Password
-	 * profiles only — passkey backups carry the credentialId via `exportPlain` and re-derive
-	 * the master from the passkey PRF at restore.
+	 * A password profile's full-backup secrets from ONE unseal, so master and entropy can never
+	 * come from different row states, plus a fresh per-backup transfer key. The caller re-seals the
+	 * imported-key rows from `sourceDek` to `transferKey` and the file carries only the transfer
+	 * key: the long-lived DEK would open every key imported after the export too, and a password
+	 * change rewraps it rather than rotating it. `sourceDek` is null when the stored slot no longer
+	 * opens. In-process only. From the return on the caller owns and zeroizes both keys.
 	 */
-	public async exportBackupMaterial(
+	public async openBackupTransfer(
 		id: string,
 		password: string,
-	): Promise<{ masterKey: string; entropy: string; importedKeysDek: string; dekReplaced: boolean }> {
+	): Promise<{ masterKey: string; entropy: string; sourceDek: ImportedKeysDek | null; transferKey: ImportedKeysDek }> {
 		await this.ensureInitialized()
 		const { profile, capturedEpoch } = await this.captureRowFence(id)
 		if (profile.type === "passkey") {
 			throw new Error("Operation not supported for passkey profile")
 		}
 		const unsealed = await this.secretBox.unseal(password, this.sealedTriple(profile))
-		let dek: ImportedKeysDek | null = null
+		let sourceDek: ImportedKeysDek | null = null
 		let passhash: Passhash | null = null
+		let handedOver = false
 		try {
 			if (!unsealed) {
 				throw new InvalidPasswordError()
@@ -1812,54 +1830,29 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			// Pairing check before EXPORT: a backup built from a tampered/
 			// transplanted row would otherwise report success with an unrestorable pair.
 			await this.assertEntropyMasterPair(unsealed.secret, unsealed.entropy)
-			// The DEK travels plaintext beside the already-plaintext master (same trust envelope;
-			// any backup already carries jointly-sufficient material). An unrecoverable slot
-			// exports a FRESH DEK (below) — with the DEK keying the PXE store and every session
-			// tag, a password change can no longer mint one, so this export is the repair path.
-			//
-			// KNOWN LIMITATION, accepted: this is the LONG-LIVED profile DEK, not a per-backup
-			// transfer key, and a password change rewraps rather than rotates it. So a backup
-			// grants FORWARD reach — whoever holds it can decrypt imported-key rows created after
-			// the export, given access to those rows' ciphertext later. Scope it honestly:
-			//   - It needs later ciphertext access, but that is NOT a separate compromise for the
-			//     storage-reader this design targets — an ongoing reader already has it.
-			//   - It is narrower than what the same blob already gives up: the plaintext master =
-			//     every derived account plus every imported key existing at export time.
-			//   - It does NOT reach the sibling this DEK exists to stop — a profile created by
-			//     re-importing the recovery PHRASE never sees this key. A clone created by
-			//     RESTORING this backup does, because the blob hands it over by construction.
-			//   - Passkey blobs resist a blob-only thief (the DEK travels sealed under the PRF wrap
-			//     key), but not an authorized clone, which unseals and can retain it.
-			// Closing it means a per-backup transfer key: rewrap every row at export under a fresh
-			// key and carry THAT, which the restore side would consume exactly where it consumes
-			// the source DEK today. That needs export-time ProfileService↔AccountService
-			// coordination and crash consistency — a separate change, not a patch here.
 			passhash = await EncryptionKey.getPasshash(password)
-			dek = await this.unsealDekWithPasshash(passhash, profile.dekSealed)
-			// DELIBERATELY exports even when the envelope MAC no longer covers the row, unlike
-			// every path that puts the DEK to work. Exporting cannot leak: a planted DEK is the
-			// attacker's own key, and a genuine one makes the backup correct — while refusing
-			// would strand a MAC-corrupted profile with no non-destructive repair at all (backup
-			// + restore is precisely the repair `changeProfilePassword` points at). If the DEK
-			// does turn out to be foreign, its rows simply fail into the restore-side orphan
-			// taxonomy, which is a handled, visible outcome rather than a silent one.
-			const dekReplaced = dek === null
-			if (!dek) {
-				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at export — exporting a fresh one", id)
-				dek = generateImportedKeysDek()
+			// DELIBERATELY opens the slot even when the envelope MAC no longer covers the row, unlike
+			// every path that puts the DEK to work: a planted DEK opens none of this profile's rows,
+			// which then travel unopened into the restore's orphan taxonomy, while refusing would
+			// strand a MAC-corrupted profile whose only non-destructive repair is this backup.
+			sourceDek = await this.unsealDekWithPasshash(passhash, profile.dekSealed)
+			if (!sourceDek) {
+				this.logger.log(this.name, LogLevel.Warn, "imported-keys DEK unrecoverable at export — rows travel unopened", id)
 			}
-			return {
+			const material = {
 				masterKey: toBase64(unsealed.secret),
 				entropy: toBase64(unsealed.entropy),
-				importedKeysDek: toBase64(dek),
-				dekReplaced,
+				sourceDek,
+				transferKey: generateImportedKeysDek(),
 			}
+			handedOver = true
+			return material
 		} finally {
 			if (unsealed) {
 				zeroize(unsealed.secret)
 				zeroize(unsealed.entropy)
 			}
-			zeroize(dek)
+			if (!handedOver) zeroize(sourceDek)
 			zeroize(passhash)
 		}
 	}
@@ -1874,19 +1867,6 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			throw new Error("Operation not supported for password profile")
 		}
 		return this.exportPasskeyCredential(id, profile, capturedEpoch, credentialData)
-	}
-
-	/** The SEALED imported-keys DEK blob, verbatim — ciphertext, safe to hand out. Passkey full
-	 *  backups carry this as `imported-keys-dek-sealed`; the restore ceremony's wrap key opens it. */
-	public async getProfileDekSealed(id: string): Promise<string> {
-		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const profile = await this.repo.get(id)
-			if (!profile || this.deletionState.isReserved(id)) {
-				throw new Error("Invalid profile id")
-			}
-			return profile.dekSealed
-		})
 	}
 
 	/** Fresh-auth DEK unseal for the account-export path (mirrors `exportPlain`'s posture:
@@ -1910,7 +1890,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			}
 			passhash = await EncryptionKey.getPasshash(password)
 			const dek = await this.unsealDekWithPasshash(passhash, profile.dekSealed)
-			// No MAC gate here either, for `exportBackupMaterial`'s reason: a foreign DEK cannot
+			// No MAC gate here either, for `openBackupTransfer`'s reason: a foreign DEK cannot
 			// unseal this profile's rows, so the account export fails loudly at the unseal instead
 			// of emitting anything — and gating would deny the single-account escape hatch to a
 			// profile whose DEK is merely MAC-corrupted.

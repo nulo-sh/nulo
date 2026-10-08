@@ -344,6 +344,85 @@ describe("import composition — what the screen showed chosen is what is writte
 	})
 })
 
+describe("import composition — one name, whatever its case, spacing or invisible characters", () => {
+	test("every row shows the name it writes: matched rows keep the saved spelling, a rename the file's, rows that can't be imported write nothing", async () => {
+		const { api, contacts } = await startWallet()
+		for (const [name, address] of [
+			["Alice", ADDR.a],
+			["Dave", ADDR.d],
+			["Erin", ADDR.e],
+			["Gus", ADDR.g],
+		]) {
+			await contacts.addContact(name, address)
+		}
+		// Saved before names were cleaned on save: the rows show, and write, the name as it is stored now.
+		for (const [id, name, address] of [
+			["legacy-bob", " Bob Stone ", ADDR.b],
+			["legacy-carol", "Car\u3164ol", ADDR.c],
+		]) {
+			await api.storage.local.set({
+				[`${CONTACT_STORAGE_ROOT}@${id}`]: JSON.stringify({ id, profileId: "p1", name, address, abbr: "" }),
+			})
+		}
+		const aliceId = (await contacts.getContacts()).find((c) => c.name === "Alice")?.id
+		const page = openContactsPage(contacts)
+
+		const { done } = await pick(
+			page,
+			fileOf([
+				{ name: "ALICE", address: ADDR.a },
+				{ name: "Bob   Stone ", address: ADDR.f },
+				{ name: "Car\u3164ol\u200B", address: ADDR.c },
+				{ name: "dave\u3164", address: ADDR.h },
+				{ name: "alice", address: ADDR.i },
+				{ name: "\u0410lice", address: ADDR.j },
+				{ name: "Erin  Ray", address: ADDR.e },
+				{ name: "GUS", address: ADDR.d },
+				{ name: "Hal", address: OFF_CURVE },
+			]),
+		)
+		const rows = shown(page.popup)
+		expect(rows).toEqual([
+			{ name: "Bob Stone", kind: "address-change", selected: false },
+			{ name: "Dave", kind: "address-change", selected: false },
+			{ name: "Erin Ray", kind: "name-change", selected: false },
+			{ name: "\u0410lice", kind: "new", selected: true },
+			{ name: "Alice", kind: "unchanged", selected: false },
+			{ name: "Carol", kind: "unchanged", selected: false },
+			{ name: "GUS", kind: "conflict", selected: false },
+			{ name: "Hal", kind: "invalid", selected: false },
+		])
+		for (const name of ["Bob Stone", "Dave", "Erin Ray", "Alice", "Carol", "GUS", "Hal"]) await press(page.popup, name)
+
+		expect(await confirm(page, done)).toBe("Import completed successfully")
+		const saved = await book(contacts)
+		expect(saved).toEqual({
+			Alice: ADDR.a,
+			"Bob Stone": ADDR.f,
+			Carol: ADDR.c,
+			Dave: ADDR.h,
+			"Erin Ray": ADDR.e,
+			Gus: ADDR.g,
+			"\u0410lice": ADDR.j,
+		})
+		const rowAddress: Record<string, string> = {
+			Alice: ADDR.a,
+			"Bob Stone": ADDR.f,
+			Carol: ADDR.c,
+			Dave: ADDR.h,
+			"\u0410lice": ADDR.j,
+			"Erin Ray": ADDR.e,
+			GUS: ADDR.d,
+			Hal: OFF_CURVE,
+		}
+		for (const row of rows) {
+			const written = Object.entries(saved).find(([, address]) => address === rowAddress[row.name ?? ""])?.[0]
+			expect(written, row.kind).toBe(row.kind === "conflict" || row.kind === "invalid" ? undefined : row.name)
+		}
+		expect((await contacts.getContacts()).find((c) => c.name === "Alice")?.id).toBe(aliceId)
+	})
+})
+
 // ── Round trips ──────────────────────────────────────────────────────
 
 describe("import composition — the released contacts file", () => {
