@@ -1,7 +1,12 @@
 # SHA-256 of each file setup-aztec downloads before it runs the Aztec installer, keyed by path:
 #   <aztec version>/install and <aztec version>/versions, from https://install.aztec-labs.com/
 #   noir/<noir version>/<asset>, from the noir-lang/noir release that versions file names
+#   foundry/<foundry version>/<asset>, from the foundry-rs/foundry release that versions file names
 # An Aztec bump re-pins them in one commit (the aztec-update skill has the procedure).
+# foundry 1.4.1: the hash equals the release asset's GitHub digest, and the four binaries it holds
+# match Foundry's build-provenance attestation (gh attestation verify <binary> --repo foundry-rs/foundry:
+# release.yml at refs/tags/v1.4.1, commit cf7746048646f2ecff48246dd61e265e49ab16f0), checked 2026-10-08.
 af20f7054b0a43bcf490062953df83dac6e12cddeef8e28136202f194512fca6  6.0.0-rc.1/install
 bd07b479c05d41cc4a18745bad2d057fed7da1c0217997597896ef47a4dad5f9  6.0.0-rc.1/versions
 5792dd962afce1eed834570f95d9f72cc4a09d45cd846d3b80b7a57392732973  noir/1.0.0-rc.3/noir-x86_64-unknown-linux-gnu.tar.gz
+f1b044ee954402807c4dd5a5e7d29b210d24fd3633b7f199d184f034ff94d934  foundry/1.4.1/foundry_v1.4.1_linux_amd64.tar.gz

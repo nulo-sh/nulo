@@ -37,8 +37,9 @@ const injectsInto = (cs: ContentScript, href: string) => {
 /**
  * The source manifest declares no web-accessible resources: the logo entry let every page fetch
  * it and so fingerprint the install, and the wallet-sdk discovery icon — the one asset a page
- * legitimately needs — travels inline instead. (The build plugin still emits entries for the
- * content-script chunks; that is a separate, tracked exposure.)
+ * legitimately needs — travels inline instead. The build adds none either: the content script
+ * ships as one file the browser injects directly (`scripts/content-script-isolation.ts`), and the
+ * smoke suite's security spec reads the built manifest.
  */
 describe("manifest surface", () => {
 	test("declares no web-accessible resources", () => {

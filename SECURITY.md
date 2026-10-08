@@ -191,6 +191,17 @@ SDK. The upstream handler:
   cross-frame spoofing via the synchronous same-origin check).
 - Never reads or writes page DOM state.
 
+The script is built as one self-contained file
+(`apps/extension/scripts/content-script-isolation.ts`), which the browser
+injects directly, so the built manifest lists no web-accessible file. A file
+that is listed can be fetched by any page the entry matches, and on Chrome the
+extension's origin is fixed by its store id, so one fetch tells a page the
+wallet is installed (Firefox's origin is random per install). Chrome's
+`use_dynamic_url` cannot stand in for this: the loader crxjs uses for a
+multi-chunk script imports sibling chunks by relative URL, which Chrome
+resolves against the fixed origin and refuses. The smoke suite fetches every
+injected file from a web page on both browsers (`tests/e2e/security.test.ts`).
+
 ### Content-script boundary (defense-in-depth)
 
 Because the protocol mandates broad injection, a zod-validated boundary
@@ -489,6 +500,39 @@ composite action. Trust posture:
   single-maintainer repo. The maintainer is the same person who owns
   Nulo, so the trust model is what it is. Defense: pinning + per-bump
   PR review.
+
+The Aztec toolchain (the `aztec` CLI and its npm tree, Foundry's `forge`,
+`cast`, `anvil` and `chisel`, noir's `nargo`) is installed on every runner
+that boots a local network by
+[`setup-aztec`](./.github/actions/setup-aztec/action.yml)'s `install.sh`,
+which the local Docker runner (`docker-ci-like.sh`) runs too:
+
+- **Every download is SHA-256-pinned** in `installer-pins.sha256` and checked
+  before use: the per-version installer and its `versions` manifest, and the
+  noir and Foundry release tarballs that manifest names. The Foundry tarball
+  must hold exactly its four tools, as regular files. Its pin equals the
+  release asset's GitHub digest, and the binaries match Foundry's
+  build-provenance attestation, checked once at pin time (the pin file's
+  header names the signer); CI does not re-check the attestation.
+- **The installer runs from the verified file with two steps replaced.** Its
+  Foundry step (`foundryup` from `foundry.paradigm.xyz`) becomes a copy of
+  the verified binaries, and its lockfile-less `npm install` becomes
+  `npm ci --ignore-scripts` against the committed `cli/package-lock.json`,
+  every entry of which is a registry tarball with a sha512
+  (`scripts/ci-cd/setup-aztec-pins.test.ts`). An installer whose shape no
+  longer fits the replacement fails the install.
+- **One install script runs**: `bcrypto`'s, which `@aztec-labs/aztec-node`
+  needs to load. It compiles the package's bundled C sources against the
+  running Node's headers, with no header download.
+- **What stays trusted**: the npm registry when the lockfile is generated
+  (`lock.sh`, under the 7-day gate with the Aztec scopes exempt; each Aztec
+  bump's lockfile diff is reviewed), Aztec's install host and the noir and
+  Foundry release pipelines when they are pinned, Node from
+  `actions/setup-node`, and a restored toolchain cache, checked only by
+  `--version` probes. A run restores caches written on its own ref or on
+  `dev`, the default branch; a pull request also restores its base branch's
+  and writes only its own, so poisoning what `dev` or `main` restores takes
+  code merged to one of them.
 
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is

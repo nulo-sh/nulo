@@ -15,7 +15,7 @@ describe("packageChunkName", () => {
 		expect(packageChunkName("/repo/node_modules/vue/dist/vue.runtime.esm-bundler.js")).toBeNull()
 	})
 
-	// Its chunk is web-accessible to every page through the content script.
+	// The content script reaches it, and a grouped copy would break the script's single file.
 	test("never regroups @aztec-labs/wallet-sdk", () => {
 		const sdk = "/repo/node_modules/.bun/@aztec-labs+wallet-sdk@6.0.0-rc.1/node_modules/@aztec-labs/wallet-sdk/dest/crypto.js"
 		expect(packageChunkName(sdk)).toBeNull()

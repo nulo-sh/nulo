@@ -6,3 +6,4 @@
 implementations-plan/** linguist-generated=true
 implementations-plan/lessons.md -linguist-generated
 implementations-plan/follow-ups.md -linguist-generated
+.github/actions/setup-aztec/cli/package-lock.json linguist-generated=true

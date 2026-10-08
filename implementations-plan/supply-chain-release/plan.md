@@ -1,7 +1,7 @@
 ---
 plan: supply-chain-release
 tier: mid
-status: approved; arc 1 in implementation
+status: approved; arc 1 merged (#50); arc 2 in implementation
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -29,7 +29,7 @@ CI, workflow and release integrity for the Nulo wallet, in four stacked arcs: wh
 | lane brief: apply the ruleset and immutable releases "after the workflow PR is ready" | 1 | **Unsafe for two of the three settings.** A push to `main` runs `main`'s `release.yml`. Until Arc 1 is on `main`, the creation rule refuses the old `GITHUB_TOKEN` tag push, and immutable releases lock the empty release that the old flow publishes before its assets exist, which burns the version for good. Only the no-delete/no-move ruleset is safe once the PR is ready. See § Repository settings. |
 | lane brief: three arcs | 1-4 | Arc 3 as briefed mixes a 38-file reformat, a production `vue` bump and a new blocking gate. Both audits asked for a split, so #20 is its own arc (Ask A8). |
 | #12 Foundry and npm chains unpinned | 2 | Holds. `docker-ci-like.sh` also uses a different, unpinned host (`install.aztec.network`). |
-| #22 web-accessible content-script chunks | 2 | Holds (`@crxjs/vite-plugin@2.7.1` hard-codes `use_dynamic_url: false`). The brief's "prove with the smoke suite" cannot work alone: **no smoke spec loads the content script**, so the proof is one network discovery spec on both browsers plus a new smoke assertion on the built manifest. crxjs's own `standaloneFiles` option fails the third-party-notices policy, so it is not the fix (recon). |
+| #22 web-accessible content-script chunks | 2 | Holds (`@crxjs/vite-plugin@2.7.1` hard-codes `use_dynamic_url: false`). The brief's "prove with the smoke suite" cannot work alone: **no smoke spec loads the content script**, so the proof is one network discovery spec on both browsers plus a new smoke assertion on the built manifest. crxjs's own `standaloneFiles` option fails the third-party-notices policy, so it is not the fix (recon). Closed in Phase 5 by step 1, reached by building the content script as one file. |
 | #20 audit backlog | 4 | Holds: 72 advisories, 35 high, 30 moderate, 7 low, 21 packages on 2026-10-08. `bun audit fix` can clear 31; 41 cannot move (Aztec-pinned chains, miniflare, vue, vitest, and two with no fix). |
 | follow-ups: Chrome `STAGED`, auto-unstick default, home-path guard in CI, lint + typecheck of `scripts/`, commitlint `subject-case` | 3 | All hold as written in `implementations-plan/follow-ups.md`. |
 
@@ -206,15 +206,18 @@ The stable branch's "Verify or load by hand" paragraph becomes: "The zips below 
 2. **Dynamic URL.** Otherwise the same hook sets `use_dynamic_url: true` on every generated entry (Chrome only; crxjs strips the key for Firefox, whose extension origin is already random per install). Chrome honours it from 130, and `chrome.runtime.getURL` returns the dynamic URL that the crxjs loader imports. Accept when every built Chrome entry has `use_dynamic_url: true` and the discovery spec passes on Chrome.
 3. **Neither works.** Stop. #22 stays open with the measurement. The standalone build would need a third-party-notices policy change, which is an owner decision, so write it to `OWNER-ASKS.md`.
 
-**#22 pins.**
-- A unit test of the hook: it adds `use_dynamic_url: true` to Chrome entries (or removes the one entry), and leaves a Firefox manifest untouched.
-- `manifest.test.ts` replaces "a separate, tracked exposure" with a pointer to that pin.
-- A smoke e2e assertion reads the built manifest from an extension page: on Chrome, no entry lacks `use_dynamic_url: true`; on Firefox, the test is skipped with the reason.
+**As built.** Step 1, after making the chunk import-free. As first built, the content chunk imported three enums from a chunk the background shares. An `enforce: "pre"` resolve hook (`apps/extension/scripts/content-script-isolation.ts`) gives every module the content script reaches an id of its own (`?content-script`), so no group or shared chunk takes it, and crxjs then injects the chunk directly as an IIFE with no loader. A post `renderCrxManifest` hook drops the content script's file from `web_accessible_resources`, and the key with it. It stays one build, so the notices plugin sees every module (its collector strips the query). The policy's `VENDORED` claim for crxjs's loader is removed: with no loader it matched nothing, and with it gone a content script that imports a chunk again fails the build.
+
+**#22 pins** (as built).
+- `content-script-isolation.test.ts`: the manifest hook drops crxjs's entry and the key, and keeps any other resource; the resolver marks every module the entry reaches, strips the mark before resolving, and leaves other importers and virtual modules alone.
+- `manifest.test.ts`'s comment points at the hook and the smoke check.
+- A smoke check in `tests/e2e/security.test.ts`, on both browsers: the built manifest lists no `web_accessible_resources`, and a page served from `127.0.0.1` gets a refusal for every injected file that the extension's own page fetches with `200`. Shown to fail on a build without the hook (a page fetch answered `200`).
+- `NEVER_GROUPED` in `vendor-chunks.ts` keeps wallet-sdk out of the package groups; with wallet-sdk grouped, the build fails on the loader asset (measured).
 
 **File-level change map (Arc 2).**
 - add `.github/actions/setup-aztec/install.sh`, `lock.sh`, `cli/package.json`, `cli/package-lock.json`, `scripts/ci-cd/setup-aztec-pins.test.ts`
 - modify `.github/actions/setup-aztec/action.yml` (runs `install.sh`, description, cache key), `installer-pins.sha256` (Foundry line, header), `.gitattributes`, `apps/extension/scripts/e2e/docker-ci-like.sh`, `.claude/skills/aztec-update/SKILL.md`, `SECURITY.md` ("Binary dependencies")
-- add the hook (`apps/extension/scripts/crx-war-hardening.ts`) and its test; modify `apps/extension/vite.chrome.config.mts`, `apps/extension/src/manifest.test.ts`, one smoke spec (chosen at implementation; `tests/e2e/security.test.ts` first)
+- add the hooks (`apps/extension/scripts/content-script-isolation.ts`) and their test; modify both `apps/extension/vite.*.config.mts`, `packages/third-party-notices/src/policy.ts` (the loader claim), `apps/extension/src/manifest.test.ts`, `apps/extension/scripts/vendor-chunks.ts` (comment), `tests/e2e/security.test.ts`, SECURITY.md § Content script injection
 
 **Trade-offs and alternatives not taken.**
 - *Replace the upstream installer with our own steps.* Rejected: it moves the layout logic (symlinks, wrapper, the npm-bin filter) into this repo, where it drifts silently. Overriding two functions keeps the delta at the two download chains, and a changed installer fails loudly at the line match and the `declare -F` check.
@@ -441,7 +444,7 @@ Pass: each exits 0.
 
 ### Arc 2: pinned toolchain and install privacy
 
-#### Phase 4: pinned Aztec toolchain install
+#### Phase 4: pinned Aztec toolchain install ✓
 
 1. Hash the Foundry tarball yourself and compare it with the GitHub asset digest. Check it once with `gh attestation verify --repo foundry-rs/foundry`. Write the pin line, and record both sources in the pin file's header.
 2. Write `lock.sh`. Generate `cli/package.json` and `cli/package-lock.json` for 6.0.0-rc.1.
@@ -469,7 +472,10 @@ Pass: each exits 0.
   - nothing outside `<scratch>` changed (`git status` clean apart from the arc's files)
 - Layers: lint, unit, e2e against the local sandbox. The CI network lanes on the PR are the authoritative proof of the composite action, because `setup-aztec/**` is in their path filter.
 
-#### Phase 5: no fingerprintable content script
+#### Phase 5: no fingerprintable content script ✓
+
+**Outcome (2026-10-08).** Step 1 did not apply as first built (the content chunk imported two sibling chunks). Step 2 was built and measured: it refuses a page's fetch at the fixed URL, but the chunk's relative imports resolve against the fixed origin, which `use_dynamic_url` refuses, so the content script stops loading (`cold-wake-discovery` red three times on Chrome 152). Reverted, and the stop was written up for the owner. The Opus review then found that the content chunk needed only three enums from the shared chunk, so isolating its module graph makes it import-free and step 1 applies: both built manifests list no web-accessible file, and the content script is a 3.6 KB IIFE (§ Arc 2, "As built"). #22 closes with this arc; the owner ask was withdrawn (lessons/phase-5.md has both measurements).
+
 
 1. Build both targets. Read the built content-script chunk's imports and the built manifests. Pick step 1 or step 2 of § Arc 2's #22 order.
 2. Write the hook and its unit test. Wire it into `vite.chrome.config.mts`.
@@ -486,7 +492,7 @@ Pass: each exits 0.
 - Pass:
   - both builds exit 0, and the notices check refuses nothing
   - the Chrome manifest meets the chosen step's acceptance
-  - the smoke spec is green on both browsers, with the Firefox case skipped by reason
+  - the smoke spec is green on both browsers (as built it runs on both; nothing is skipped)
   - the discovery spec is green on both browsers, which proves the content script still injects and answers
   - `pxe-host-state` is green
 - Layers: lint, unit, build, smoke e2e on both browsers, network e2e on both browsers.
@@ -591,7 +597,7 @@ Pass: each exits 0.
 - `actions/attest-build-provenance` v4.2.2 is pinned by SHA (`4d101475…`). It is a composite wrapper over `actions/attest@508db95d… # v4.2.1`. Both are GitHub's first-party actions, older than 7 days (published 2026-08-06 and 2026-07-29).
 - The npm tree for the Aztec CLI moves from "resolved at install time, scripts on" to "a committed lockfile with integrity, scripts off, an explicit rebuild allowlist". The trust root becomes the registry at lock time (trust on first use), plus review of the lockfile diff at each Aztec bump. The two `@aztec-labs` packages stay exempt from the age gate, as today; their bytes are now locked by integrity.
 - Foundry moves from a moving `HEAD` script plus an unverified binary to one SHA-256-pinned tarball, checked once against Foundry's own GitHub attestation.
-- Accepted residual: a restored toolchain cache is trusted after `--version` probes only. A poisoned entry needs a run on `dev` or `main` to write that key.
+- Accepted residual: a restored toolchain cache is trusted after `--version` probes only. A run restores caches written on its own ref or on `dev` (the default branch), and a pull request writes only its own, so a poisoned entry that `dev` or `main` restores needs code merged to one of them.
 - Accepted residual: git-cliff-action still downloads an unpinned git-cliff binary, now in a read-only job whose only output is the notes text.
 - Accepted residual: releases published before S3 stay mutable for good. A dispatch with `--ref <pre-Arc-1 tag>` runs that tag's old workflow, which still uploads with `--clobber`, and nothing in new code can stop it. Only write-access accounts can dispatch, and the runbook forbids it (A11).
 - `bun audit` becomes blocking for dependency changes. An acknowledgement is added only through a reviewed PR, and a stale one fails.
@@ -604,7 +610,7 @@ Pass: each exits 0.
 - `audit-gate.ts` treats the audit JSON as untrusted: a malformed report is a failure in `enforce` mode, never "clean".
 
 **Domain risks.**
-- *Frontend (#22).* After the change, no web page can probe for the extension through a fixed resource URL on Chrome 130 or later. Older Chrome ignores the key, as today. Firefox already randomizes the extension origin per install.
+- *Frontend (#22).* Closed: the content script ships as one file the browser injects directly, so the built manifest lists no web-accessible file and a page cannot fetch one at the extension's fixed URL. A regression fails twice: the build refuses the loader crxjs emits for a script that imports a chunk, and the smoke check fetches every injected file from a page on both browsers. `use_dynamic_url` was measured and reverted (Phase 5). Residual: the content script still runs on every page, as the protocol requires; a page learns of the wallet through discovery only after the user approves it in a popup (SECURITY.md § Content script injection).
 - *Workflow injection.* No new `${{ }}` interpolation into `run:` scripts. Values reach scripts through `env:`.
 
 ## Assumptions
@@ -643,8 +649,8 @@ Pass: each exits 0.
 - I3. An App installation token can create a tag ref through the REST API, without the `workflows` permission, when the tag points at a commit already on `main` whose tree contains workflow files. release-please does the same with the same kind of token. If wrong: `auto-unstick` fails red, and the manual unstick is the fallback. S2 condition 2 makes the first release prove it before S2 is on. The nightly's `GITHUB_TOKEN` ref creation is the same server-side check that `auto-unstick`'s `GITHUB_TOKEN` tag push passes today (F5).
 - I4. `gh attestation verify` inside `attach-assets` can read the repository's attestations with the job's `GITHUB_TOKEN` (`attestations: write` covers read).
 - I5. The rulesets API accepts `actor_type: "User"` on a tag ruleset (the live branch rulesets carry it). The fallback is `RepositoryRole` 5.
-- I6. Chrome 130+ serves a `use_dynamic_url` entry to the crxjs loader's `import(chrome.runtime.getURL(...))`, and the chunk's relative imports resolve under the same dynamic origin. Phase 5 measures it. If wrong, #22 stays open.
-- I7. The CLI runs with `--ignore-scripts` plus at most a `bcrypto`/`leveldown` rebuild. Phase 4 measures it.
+- I6. Chrome 130+ serves a `use_dynamic_url` entry to the crxjs loader's `import(chrome.runtime.getURL(...))`, and the chunk's relative imports resolve under the same dynamic origin. Phase 5 measures it. If wrong, #22 stays open. **Did not hold** (Chrome 152): the first import loads from the dynamic URL, but its relative imports resolve against the fixed origin and are refused. #22 was closed by step 1 instead.
+- I7. The CLI runs with `--ignore-scripts` plus at most a `bcrypto`/`leveldown` rebuild. Phase 4 measures it. **Held:** `bcrypto` only (`@aztec-labs/aztec-node` cannot load without its binding); leveldown loads its bundled prebuild.
 - I8. git-cliff's release-level `{{ commit_id }}` renders the tag's commit. Phase 3 measures it, and the placeholder is the fallback. **Did not hold** (Phase 3, git-cliff 2.14.2, the version `orhun/git-cliff-action` v4.9.1 installs): with `--include-path 'apps/extension/**'` it renders the newest commit the path filter keeps (a scratch rc tag at `50540c8` rendered `3b80761`). The template prints `@SOURCE_COMMIT@`, which `attach-assets-run.ts` replaces with the tag's commit; the renders then name the tag's commit for stable, rc and nightly.
 
 ### Asks (for the orchestrator; working assumption in each)
@@ -708,6 +714,13 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | Branch base (implementation) | rebased the unpushed plan commit onto `origin/dev` `e49e4ce` | merge | Four commits had landed, two in the workflows this arc edits; the branch was never pushed. |
 | auto-unstick on a re-run (review) | a tag already at HEAD continues the publish, for a `pending` or `tagged` Release PR; only `pending` is ever tagged | continue on `create` only | A re-run after a failed relabel, or after a relabel whose attempt died, stranded a tag with no release. `concurrency: release` serializes runs and the publish is idempotent. |
 | Nightly quiet-day skip (review) | skip only when a nightly tag at the commit has a published release | any nightly tag at the commit | The tag now precedes the draft, so an interrupted publish silenced every later run on that commit. |
+| `install.sh` input (implementation) | `AZTEC_VERSION` from the caller's env, refused unless `cli/package.json` pins the same | read `apps/extension/package.json` itself | Both callers already read the pin; a fifth reader keyed by package name is one more site a rename misses (aztec-update skill). |
+| Rebuild allowlist (implementation) | `bcrypto` | empty | Measured: `@aztec-labs/aztec-node` cannot be imported without its binding (Phase 4 lesson). Its script is a local `node-gyp rebuild`. |
+| Node headers for the rebuild (implementation) | `npm_config_nodedir` in the rebuild's env | `--nodedir` flag | npm 11.19 warns that both forms will stop passing through; node-gyp reads the env var itself. A control run without it downloaded headers. |
+| `docker-ci-like.sh` reinstall rule (implementation) | reinstall when a stamp of the whole action dir differs | reinstall only when `aztec-anvil` is missing | A volume installed by the old unpinned path would otherwise be reused forever; the stamp mirrors CI's cache key. |
+| Caller pin (implementation) | `setup-aztec-pins.test.ts` also pins that both callers run `install.sh` and fetch no installer, with a mutated-copy control | lockfile and pin-file checks only | The regression this phase closes is a caller piping an installer again; one small check with its control. |
+| #22 (implementation) | step 1, after isolating the content script's module graph with a resolve hook (one build) | ship `use_dynamic_url`; stop with an owner ask; a separate content-script Vite pass | Step 2 breaks discovery (measured). The isolated chunk is import-free, so crxjs drops the loader and the entry is unneeded; one build keeps every module under the notices plugin, so no gate loosens. |
+| crxjs loader `VENDORED` claim (implementation) | removed | kept | It matched nothing once no loader is emitted, and the policy refuses a stale claim; without it, a content script that imports a chunk again fails the build. |
 | `oven-sh/setup-bun` token (review) | the composite passes `token: ""` | the action's default (`github.token`) | The default handed the publish jobs' release-writing token to a third-party action; an exact version needs no API call. |
 
 **Unresolved disagreements.** None blocking.
@@ -815,6 +828,39 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 
 **Verdict:** `approve`, no new material findings, on diff `7a271a1..eb03f15`. The loop converged in three rounds.
 
+### Arc 2 implementation, Codex round 1 (GPT-6.1 Sol, high), session `01a11d05-b909-7df3-9059-185cb4fc5280`
+
+**Verdict:** `approve with fixes`. Diff `f5ca160..66ace77`. Fixes in `bfc90d6`.
+- [Medium] `unhashedSources` exempted `link` entries, so a local directory would pass the "registry tarball" pin. Accepted: only bundled entries stay exempt; a `link` control added, shown to fail with the old exemption.
+- [Low] The docker stamp replaced the binary-presence check, so a volume whose stamp matched but lost a tool skipped the install. Accepted: it reinstalls when any of the four tools `global-setup.ts` needs is missing, or the stamp differs.
+- [Low] "Only a run on `dev` or `main` can write the cache" was too broad. Accepted: SECURITY.md and § Security now state GitHub's ref scoping.
+- [Low] § Security still claimed #22 closed. Accepted: rewritten to the measured outcome.
+- [Low] Comment density. Accepted for the test header and `install.sh`'s header (each cut to its contract). Rejected for the preflight comment in `action.yml`: unchanged by this arc, and still accurate.
+- Its "looks fine": the overrides cover every Foundry and npm path of the pinned installer; the lockfile; the cache key and both lanes' filters; the #22 stop (no small supported option found); no release-path regression.
+
+### Arc 2 implementation, Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict:** `approve with small fixes`, no High or Medium. Diff `f5ca160..bfc90d6`. Fixes in `7eedad0` and the #22 commit.
+- [Low] The cache-scope sentence (same as Codex's). Accepted, as above.
+- [Low] The install could pass with a broken npm tree: a native package left unbuilt, or an override killed by SIGTERM, which upstream's `retry` counts as success (shown with a harness on the pinned installer). Accepted: each override sets `set -euo pipefail`, and the install ends by importing `@aztec-labs/aztec-node` (a negative control without the bcrypto build exits 1).
+- [Low] `declare -F` proves only that the replaced functions exist. Accepted: `install.sh` checks each upstream body still holds the npm and Foundry lines it replaces.
+- [Low] `--ignore-scripts` was not pinned. Accepted: `setup-aztec-pins.test.ts` pins it on `install.sh`.
+- [Low] #22: a cheaper option than a separate build: the content chunk imports only three enums, so a resolve hook giving the content entry its own copies would make it import-free and let step 1 apply. Accepted and measured; it is how #22 closed.
+- [Low] Comments: the stale preflight comment in `action.yml`, the `manifest.test.ts` comment repeating SECURITY.md, the description duplicating SECURITY.md. Accepted (each cut to one sentence or a pointer).
+- Its "looks fine": errexit in the overrides, no network path left for Foundry or npm resolution, the pinned files, the lockfile, the Foundry member check, the cache key and filters, both Docker volume cases.
+
+### Arc 2 implementation, Codex round 2 (same session)
+
+**Verdict:** `approve with fixes`. Diff `66ace77..5a0e83b` (both reviewers' fixes and the #22 change). Fixes in the next commit.
+- [Low] `SKILL.md` claimed `install.sh` refuses an npm step that installs another package; a second `npm install` line passes its anchor checks (Codex confirmed). Accepted: the skill now says the checks catch a lost anchor, not added work, and asks for both bodies to be read whole.
+- [Low] The smoke check could leak its HTTP server if `newPage` or `page.close()` rejected. Accepted: the server closes in its own `finally`.
+- [Low] The isolation plugin's comment promised every module stays isolated, while virtual ids and earlier resolvers are exempt. Accepted: cut to what the build guarantees (the current graph stays out of shared chunks; the notices policy refuses the loader if an import returns), plus one line on why virtual ids keep theirs.
+- Its "looks fine": the round-1 fixes; both built manifests without `web_accessible_resources` and no loader asset; crxjs checks static and dynamic imports before emitting a loader; the notices collector keeps marked ids and strips the query for attribution; the manifest hook runs after crxjs's on both browsers; the smoke control; SECURITY.md, the README and the vendor-chunks comment describe the current build.
+
+### Arc 2 implementation, Codex round 3 (same session)
+
+**Verdict:** `approve`, no new findings, on diff `5a0e83b..2a6d556`. The loop converged in three rounds.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so there is no `/code-review` pass.
@@ -872,7 +918,7 @@ One `gh stack`, one PR per arc, plus a docs-only close-out layer. `code_review: 
 | Arc | Branch | Phases | Stacks on | PR title (≤ 93 chars) | Closes |
 |---|---|---|---|---|---|
 | 1 release integrity | `worktree-supply-chain-release` (adopted) | 1-3 | `dev` | `ci(release): attest release zips, publish via draft, narrow app tokens` | refs #21 (closes it once S3 is read back) |
-| 2 toolchain + install privacy | `supply-chain-release-toolchain` | 4-5 | arc 1 | `ci(aztec): pin foundry and the cli npm tree; harden content-script resources` | #12, #22 (#22 only if Phase 5 accepted a step) |
+| 2 toolchain + install privacy | `supply-chain-release-arc2` (a new stack off `dev`: arc 1 had merged) | 4-5 | `dev` | `fix: ship the content script as one file and pin the aztec toolchain install` | #12, #22 |
 | 3 release and tooling guards | `supply-chain-release-guards` | 6-7 | arc 2 | `ci: lint and typecheck scripts/, staged-preflight refusal, auto-unstick on by default` | — (follow-ups) |
 | 4 audit gate | `supply-chain-release-audit` | 8 | arc 3 | `ci(deps): clear the audit backlog and block unacknowledged advisories` | #20 |
 | close-out | `supply-chain-release-close-out` | — | arc 4 | `docs(plans): close supply-chain-release` | — |

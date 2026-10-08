@@ -224,7 +224,7 @@ The reusables today are:
 
 Composite actions (step-level reuse):
 - `setup-bun` — bun + install cache (`cache: "false"` skips it) + `bun install --frozen-lockfile`; the caller checks out first
-- `setup-aztec` — Foundry + Aztec CLI matching the declared version, cached; the installer script, its `versions` manifest and the noir tarball are SHA-256-pinned (`installer-pins.sha256`)
+- `setup-aztec` — Foundry + Aztec CLI matching the declared version, cached; the installer script, its `versions` manifest and the noir and Foundry tarballs are SHA-256-pinned (`installer-pins.sha256`), and the CLI's npm tree is installed from a committed lockfile with install scripts off
 - `setup-puppeteer` — `~/.cache/puppeteer` cache
 - `setup-geckodriver` — SHA-256-pinned `geckodriver` for the Firefox lanes
 - `setup-presto-server` — SHA-256-pinned headless `presto-server` for the prover-ON network lanes
