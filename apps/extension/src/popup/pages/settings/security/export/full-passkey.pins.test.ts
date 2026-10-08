@@ -1,14 +1,19 @@
 /**
  * Pins for full.vue's passkey path (ceremony cancel, refusal and failure,
- * own-window handling, the sealed DEK) and its password-export edge cases
- * (recovery mode, wrong password), which the main suite's password-path tests
- * don't fix. Scaffolding mirrors full.test.ts (client modules mocked at the
- * import level).
+ * own-window handling, the sealed DEK, the confirmation before a plain
+ * download) and its password-export edge cases (recovery mode, wrong
+ * password), which the main suite's password-path tests don't fix.
+ * Scaffolding mirrors full.test.ts (client modules mocked at the import level).
  */
 import { UserRejectedError } from "@nulo/extension-messaging/errors"
+import { EncryptionKey } from "@nulo/wallet-crypto"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { pressOn } from "../../../../../../tests/helpers/press-key"
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 import FullExportPage from "./full.vue"
 
 function sliceClient() {
@@ -110,6 +115,13 @@ vi.mock("@/utils/core", () => ({
 	},
 }))
 
+type DownloadArgs = { data: string; filename: string; compressionFormat?: string }
+const downloadFile = vi.hoisted(() => vi.fn<(opts: DownloadArgs) => Promise<void>>(async () => undefined))
+vi.mock("@/utils", async (importOriginal) => ({
+	...(await importOriginal<Record<string, unknown>>()),
+	downloadFile: (opts: DownloadArgs) => downloadFile(opts),
+}))
+
 const openToast = vi.fn()
 vi.mock("@/composables/toast.js", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
@@ -175,7 +187,11 @@ function mountPage(profileType: "passkey" | "password", recoveryMode = false) {
 				Flex: { template: "<div><slot /></div>" },
 				Text: { template: "<span><slot /></span>" },
 				Spinner: true,
-				Input: true,
+				Input: {
+					props: ["modelValue"],
+					emits: ["update:modelValue"],
+					template: "<input :value='modelValue' @input=\"$emit('update:modelValue', $event.target.value)\" />",
+				},
 				Transition: false,
 			},
 		},
@@ -288,5 +304,102 @@ describe("export/full.vue — passkey acquisition + wrong-password pins", () => 
 		expect(wrapper.find("[data-testid='unlock-password-input']").attributes("data-error")).toBe("true")
 		expect(openToast).not.toHaveBeenCalled()
 		expect(routerGo).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — a passkey profile's plain download asks first", () => {
+	type Wrapper = ReturnType<typeof mountPage>
+	const downloadButton = (wrapper: Wrapper) => wrapper.get("[data-testid='download-backup-btn']")
+
+	async function reachBackupReady(): Promise<Wrapper> {
+		runCeremony.mockResolvedValueOnce({ id: "cred-1" })
+		const wrapper = mountPage("passkey")
+		await wrapper.find("[data-testid='agree-continue-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		return wrapper
+	}
+
+	/** What ConfirmPopup does on Cancel: close, without the callback, and clear the request. */
+	function cancelConfirm() {
+		usePopupStore().close("confirm")
+		useCacheStore().confirm = {}
+	}
+
+	afterEach(() => vi.restoreAllMocks())
+
+	it("Download opens the confirmation that names what the file exposes; Cancel writes nothing, Download anyway writes the plain file", async () => {
+		const wrapper = await reachBackupReady()
+		expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined()
+		expect(wrapper.text()).toContain("Without a password, the file is saved in plain text.")
+
+		await downloadButton(wrapper).trigger("click")
+		expect(usePopupStore().isOpened("confirm")).toBe(true)
+		expect(useCacheStore().confirm).toMatchObject({
+			pre_title: "Not encrypted",
+			title: "Download without a password?",
+			description:
+				"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
+			confirm_color: "red",
+			confirm_variant: "cta_destructive",
+			confirm_text: "Download anyway",
+		})
+		cancelConfirm()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+
+		await downloadButton(wrapper).trigger("click")
+		;(useCacheStore().confirm as { callback: () => void }).callback()
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		const { data, filename } = downloadFile.mock.calls[0][0]
+		expect(filename).toMatch(/^NuloBackup_/)
+		expect((JSON.parse(data) as Record<string, unknown>)["master-key"]).toBe("cred-1")
+	})
+
+	it("a confirmation answered after the page left writes nothing", async () => {
+		const wrapper = await reachBackupReady()
+		await downloadButton(wrapper).trigger("click")
+		const { callback } = useCacheStore().confirm as { callback: () => void }
+		wrapper.unmount()
+		callback()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("a confirmation answered after the page switched to a password profile writes nothing", async () => {
+		const wrapper = await reachBackupReady()
+		await downloadButton(wrapper).trigger("click")
+		const { callback } = useCacheStore().confirm as { callback: () => void }
+		useAppStore().profile = { id: "p2", type: "password", name: "Other" } as never
+		callback()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("Enter on Download asks instead of downloading, and a repeat Enter does neither", async () => {
+		const wrapper = await reachBackupReady()
+		pressOn(downloadButton(wrapper).element as HTMLElement, "Enter", { repeat: true })
+		await flushPromises()
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+
+		pressOn(downloadButton(wrapper).element as HTMLElement, "Enter")
+		await flushPromises()
+		expect(usePopupStore().isOpened("confirm")).toBe(true)
+		expect(downloadFile).not.toHaveBeenCalled()
+	})
+
+	it("once the file is encrypted, Download saves it without asking", async () => {
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt: async () => new Uint8Array(29) } as never)
+		const wrapper = await reachBackupReady()
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await wrapper.find("[data-testid='backup-encrypt-password-input']").setValue("pass1234")
+		await wrapper.find("[data-testid='backup-encrypt-password-confirm-input']").setValue("pass1234")
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(wrapper.text()).toContain("Backup is successfully encrypted"))
+
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 })

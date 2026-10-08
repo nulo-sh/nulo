@@ -36,9 +36,9 @@ const STUBS = {
 		template: `<input data-testid="confirm-input" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
 	},
 	Button: {
-		props: ["type", "disabled"],
+		props: ["type", "variant", "size", "disabled"],
 		emits: ["click"],
-		template: `<button :data-type="type" :disabled="disabled" @click="$emit('click')"><slot /></button>`,
+		template: `<button :data-type="type" :data-variant="variant" :data-size="size" :disabled="disabled" @click="$emit('click')"><slot /></button>`,
 	},
 }
 
@@ -127,5 +127,27 @@ describe("ConfirmPopup — pre-title", () => {
 		await nextTick()
 		await open(wrapper, { confirm_color: "red" })
 		expect(wrapper.find('[data-testid="confirm-pre-title"]').text()).toBe("Irreversible")
+	})
+})
+
+describe("ConfirmPopup — the confirm button's variant", () => {
+	beforeEach(() => {
+		vi.stubGlobal("managers", { profile: { confirmProfileOperation: vi.fn() } })
+		H.store.current = reactive({ confirm: {} })
+	})
+
+	test("a caller's CTA variant reaches the confirm button only, at the compact size, and clears on close", async () => {
+		const wrapper = mount(ConfirmPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await open(wrapper, { confirm_color: "red", confirm_variant: "cta_destructive" })
+		const submit = wrapper.find('[data-testid="confirm-submit"]')
+		expect(submit.attributes("data-variant")).toBe("cta_destructive")
+		expect(submit.attributes("data-size")).toBe("compact")
+		expect(wrapper.find('[data-testid="confirm-cancel"]').attributes("data-variant")).toBe("primary_outline")
+
+		await wrapper.setProps({ show: false })
+		await nextTick()
+		await open(wrapper, { confirm_color: "red" })
+		expect(wrapper.find('[data-testid="confirm-submit"]').attributes("data-variant")).toBeUndefined()
+		expect(wrapper.find('[data-testid="confirm-submit"]').attributes("data-size")).toBe("medium")
 	})
 })
