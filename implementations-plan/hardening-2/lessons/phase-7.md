@@ -36,3 +36,8 @@ The throwing-migration case failed again in the rerun, once on the 60 s timeout 
 ## Phase 6's typecheck claim
 
 `vue-tsc` reported `zod-jitless.ts` "is not a module" for its test's dynamic import: a file with no import or export is a script to TypeScript. The phase 6 gate missed it because the exit code read was `tail`'s. `export {}` makes it a module; `typecheck:all` now exits 0, read directly.
+
+### `font-src 'self'`
+
+- Every face the build loads is an extension asset (`/assets/*.woff2`, from `@nulo/design`), and the Presto banner is mounted with `fonts="none"`, so it links no Google Fonts stylesheet.
+- Gate: smoke green on Chrome and Firefox (Firefox's migration case included, with the early check), the eight network files green on both, zero violations, CSP equal to the pin. No source added.

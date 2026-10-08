@@ -45,11 +45,16 @@ export default {
 	],
 	permissions: ["alarms", "offscreen", "storage", "sidePanel", "unlimitedStorage", "downloads"],
 	content_security_policy: {
-		// `connect-src` must reach every node URL the network form accepts: any HTTPS host, and plain
-		// HTTP on localhost, 127.0.0.1 and [::1]. CSP has no IPv6 host source, and both browsers ignore
-		// `http://[::1]:*`, so plain HTTP is allowed by scheme; the form still refuses a remote one.
-		// `blob:` because Firefox checks `downloads.download` of a blob URL against it.
-		extension_pages: "script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:",
+		extension_pages: [
+			"script-src 'self' 'wasm-unsafe-eval'",
+			"img-src 'self' data: blob:",
+			// Every node URL the network form accepts: any HTTPS host, and plain HTTP on localhost,
+			// 127.0.0.1 and [::1]. Both browsers ignore an `http://[::1]:*` source, so plain HTTP is
+			// allowed by scheme; the form still refuses a remote one. Firefox checks
+			// `downloads.download` of a blob URL against this directive.
+			"connect-src 'self' blob: https: http:",
+			"font-src 'self'",
+		].join("; "),
 	},
 	cross_origin_embedder_policy: {
 		value: "require-corp",
