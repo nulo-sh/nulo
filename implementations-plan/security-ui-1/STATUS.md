@@ -9,3 +9,4 @@
 - 2026-10-08: arc 1 Codex round 1 (session 01a11c7e) approve with fixes, 4 accepted; Opus review approve with fixes, 5 accepted, 3 observations. Fixes committed.
 - 2026-10-08: arc 1 Codex round 2 (resumed) clean; loop converged. Final gates next.
 - 2026-10-08: final arc 1 gates pass on the head: `bun run audit:vue`, `bun run test:all`, `bun run lint:actions`, `bun run check:plans`, the four smoke specs with `--retry=0` (7/7).
+- 2026-10-08: arc 1 PR #51 opened ready (gh stack, base `dev`); `Closes #17`. Arcs 2 and 3 stack on `worktree-security-ui-1`.
