@@ -1015,6 +1015,29 @@ describe("ExecutionService composition — fee-strategy map through real init (p
 	})
 })
 
+describe("ExecutionService composition — a confirm reads the sponsor row as the build decorated it", () => {
+	test("getFpc's cold protocol cache (another profile's purge emptied it) does not miss the reuse", async () => {
+		const h = await makeHarness()
+		const internals = h.service as unknown as {
+			fpcService: { getFpc: () => Promise<unknown> }
+			estimateReuse: TransferEstimateReuse
+			operationEstimateReuse: OperationEstimateReuse
+		}
+		internals.fpcService.getFpc = async () => ({ ...SPONSOR, isProtocol: false })
+		const consume = vi.spyOn(internals.estimateReuse, "tryConsume")
+
+		const p = transfer(h)
+		await waitFor(() => consume.mock.results.length > 0)
+		expect(await consume.mock.results[0]?.value).toBeDefined()
+		await waitFor(() => h.ctrl.entered)
+		h.ctrl.release()
+		await p
+		const operationLookup = (internals.operationEstimateReuse as unknown as { deps: { getFpcInfo: (id: string) => Promise<unknown> } })
+			.deps
+		expect(await operationLookup.getFpcInfo(SPONSOR.id)).toEqual(SPONSOR)
+	})
+})
+
 describe("ExecutionService composition — nothing is broadcast without a current Terms acceptance", () => {
 	const transfer = (h: Harness) =>
 		h.service
