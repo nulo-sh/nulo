@@ -7,8 +7,9 @@ on:
     # so a stacked PR targeting its parent feature branch got no CI whatsoever.
     # `labeled` so adding `e2e:extension-smoke` (`e2e:smoke` is honored as an alias) after open triggers a fresh run;
     # `unlabeled` so removing it re-evaluates the gate instead of leaving
-    # a stale failing result; `ready_for_review` so a draft marked ready
-    # (without a new push) re-runs CI instead of hanging the required check.
+    # a stale failing result; `ready_for_review` gives a draft marked ready a fresh
+    # run on its head (no gate reads the draft flag, so the head normally has a run
+    # already; this one can replace a run that failed, was cancelled or never started).
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:

@@ -9,9 +9,9 @@ on:
     # the PRs sat with no checks at all rather than with red ones. Gating every PR
     # regardless of base costs CI minutes and makes each arc independently
     # verifiable; a bad middle arc is otherwise invisible until it reaches dev.
-    # `ready_for_review` so a draft marked ready WITHOUT a new push still re-runs
-    # CI — otherwise the required `… / Status` checks never report on the PR and
-    # hang "Expected" forever → mergeStateStatus=BLOCKED.
+    # `ready_for_review` gives a draft marked ready a fresh run on its head. Nothing
+    # here reads the draft flag, so the head normally has a result already; the
+    # fresh run can replace one that failed, was cancelled or never started.
     #
     # NO `labeled`/`unlabeled`: nothing in this workflow reads labels, so for a
     # SHA this workflow has already covered a label event would only queue a
