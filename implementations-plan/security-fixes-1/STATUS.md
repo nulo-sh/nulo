@@ -25,3 +25,4 @@
 - 2026-10-08 — arc 3 start: branch `security-fixes-1-arc3` off origin/dev 86a89c5 (new one-layer `gh stack`; the merged stack #53 kept); `bun install` picked up dev's `@types/bun`.
 - 2026-10-08 — phase 7 gate pass on e6d524c: execution + fpc vitest 1018, lint 0, typecheck:all 0; the sponsor-edit, row-deleted, missing-snapshot, chain-drift and live-read-throw rows, the operation ladder's id/missing/fixed-category pins and the D6 test red on the base production code.
 - 2026-10-08 — phase 8 gate pass: account + cross-profile-isolation vitest 124, lint 0, typecheck:all 0; the six fence tests and the reconcile lock test red on the base `service.ts`.
+- 2026-10-08 — phase 9 gate pass: incoming-transfer vitest 343, lint 0 (no baseline drift), typecheck:all 0; eleven note-matrix rows red on the base `service.ts`.

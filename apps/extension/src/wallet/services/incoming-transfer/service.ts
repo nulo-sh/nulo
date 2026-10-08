@@ -1425,7 +1425,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const amountRaw = parseNoteAmount(note)
 		if (amountRaw === null) return
 
-		const trustState = await this.resolveReceiptTrust(ctx, token, amountRaw)
+		const trustState = await this.resolveReceiptTrust(ctx, token, amountRaw, () => this.serviceEpoch !== epochAtStart)
+		if (trustState === undefined) return
+		if (this.serviceEpoch !== epochAtStart) return
 		await this.commitDiscoveredNote(ctx, note, token, amountRaw, trustState)
 	}
 
@@ -1443,23 +1445,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** Trust read inside the lock; a first receipt moves `unknown` to `pending` and prompts behind
 	 *  the visibility gate. The trust write succeeds before its emit. `standDown` is read right after
-	 *  the trust read, before the `unknown` test, and only the public arm supplies it. */
-	private resolveReceiptTrust(scope: TrustScope, token: Token, amountRaw: string): Promise<IncomingTrustState>
-	private resolveReceiptTrust(
-		scope: TrustScope,
-		token: Token,
-		amountRaw: string,
-		standDown: () => boolean,
-	): Promise<IncomingTrustState | undefined>
+	 *  the trust read, before the `unknown` test; the trust write's own await is not fenced. */
 	private async resolveReceiptTrust(
 		scope: TrustScope,
 		token: Token,
 		amountRaw: string,
-		standDown?: () => boolean,
+		standDown: () => boolean,
 	): Promise<IncomingTrustState | undefined> {
 		const { profileId, networkId, contract } = scope
 		const trustState = (await this.repo.getTrust(profileId, networkId, contract))?.state ?? "unknown"
-		if (standDown?.()) return undefined
+		if (standDown()) return undefined
 		if (trustState !== "unknown") return trustState
 		const updated = await this.repo.setTrust(profileId, networkId, contract, "pending")
 		this.emit("onIncomingTrustChanged", updated)
@@ -1468,9 +1463,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** The outbox row is written before the record: a discovered note changed the chain balance
-	 *  whatever its trust or display state. This arm re-checks the epoch only at its section's entry
-	 *  and after each timestamp read; its storage and config awaits are revocation windows too, which
-	 *  a wipe reaches only through the lock watchdog. */
+	 *  whatever its trust or display state. As in `commitPublicRecord`, the epoch is re-checked after
+	 *  each await that precedes a write or the emit; only the record write's own await stays open. */
 	private async commitDiscoveredNote(
 		ctx: NoteScanContext,
 		note: RawNote,
@@ -1492,9 +1486,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			blockTimestamp,
 		})
 		await this.markBalanceDirty(profileId, networkId, accountAddress, token.id)
+		if (this.serviceEpoch !== epochAtStart) return
 		await this.repo.upsertRecord(record)
 
-		if (trustState === "trusted" && (await this.isVisibilityEnabled())) {
+		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && this.serviceEpoch === epochAtStart) {
 			this.emit("onIncomingTransferAdded", record)
 		}
 		// pending / blocked: record persisted hidden, no Added emit.
