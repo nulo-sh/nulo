@@ -12,8 +12,16 @@ export const CSP_REPORT_ARMED = process.env.NULO_E2E_CSP_REPORT === "1"
 /** The flush, the read and the scratch page together; a launch past it closes regardless. */
 const READ_BUDGET_MS = 15_000
 
+/**
+ * What `readCspViolations` returns when the extension's pages no longer load. Chrome disables an
+ * unpacked extension that calls `runtime.reload()`, as the migration retry button does, until the
+ * browser restarts; the reload discarded the record with the rest of `storage.session`.
+ */
+export const EXTENSION_DISABLED = "extension-disabled"
+
 /** Why a launch's recorded violations fail it, or undefined when they do not. */
 export function cspViolationFailure(stored: unknown): string | undefined {
+	if (stored === EXTENSION_DISABLED) return undefined
 	if (stored === undefined || stored === null) {
 		return "the CSP violation recorder never ran in this launch: is the build missing VITE_NULO_E2E_CSP_REPORT=1?"
 	}
@@ -42,7 +50,13 @@ export async function closeAfterCspCheck(close: () => Promise<void>, read: () =>
  * what wakes a background that has since been reaped.
  */
 export async function readCspViolations(browser: Browser, extensionId: string): Promise<unknown> {
-	const page = await openScratchPage(browser, extensionId)
+	let page: Awaited<ReturnType<typeof openScratchPage>>
+	try {
+		page = await openScratchPage(browser, extensionId)
+	} catch (err) {
+		if (err instanceof Error && err.message.includes("net::ERR_BLOCKED_BY_CLIENT")) return EXTENSION_DISABLED
+		throw err
+	}
 	try {
 		return await page.evaluate(
 			async ({ flush, key }) => {

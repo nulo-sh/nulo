@@ -87,13 +87,14 @@ falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you alr
    host-wide registry file; safety is probabilistic plus the bind test.
 3. Builds the wallet armed: `VITE_LOCAL_NETWORK_RPC_URL` (this sandbox),
    `VITE_NULO_E2E_PRICE_MAP=1`, `VITE_NULO_E2E_MIGRATION_FIXTURE=1`,
-   `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, plus the proverless pair when asked. Then asserts
-   the bundle before spending a sandbox (exit 2 on a miss): the sandbox URL literal, the
-   migration-fixture stamp, the token-seed stamp and key, the presto stamp when armed, the
+   `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, `VITE_NULO_E2E_CSP_REPORT=1`, plus the proverless
+   pair when asked. Then asserts the bundle before spending a sandbox (exit 2 on a miss): the
+   sandbox URL literal, the migration-fixture stamp, the token-seed stamp and key, the CSP
+   recorder's key, the presto stamp when armed, the
    proverless stamp when armed, the fee multiplier when set. The price map has no stamp check.
 4. Runs vitest with `E2E_REQUIRE_SETUP=1` (a sandbox or deploy failure is `FATAL`, never a silent
    `describe.skipIf` — the suite once showed `61 skipped, exit 0` for weeks) and the runtime
-   declarations the tests read (`NULO_E2E_MIGRATION_FIXTURE=1`, the `*_URL`s).
+   declarations the tests read (`NULO_E2E_MIGRATION_FIXTURE=1`, `NULO_E2E_CSP_REPORT=1`, the `*_URL`s).
 5. `classify-exit.ts` maps the run through `.e2e-state/{boot-started,boot-ready,tests-started}`:
    boot started, never ready, no test ran → exit 86 (CI retries the agent once on 86 only); anything
    else passes through. A test that ran cannot masquerade as infra.
@@ -120,8 +121,9 @@ runtime env var can never arm a build-time flag.
   the end of `bun run audit:vue` — silently disarms the dist.
 - Smoke needs its fixtures armed AND the migration one declared: build with
   `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
-  VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 bun run build:chrome` (the seed pair keeps the fresh wallet off
-  the live seed RPC — `_extension-smoke-e2e.yml` says why), run with `NULO_E2E_MIGRATION_FIXTURE=1`.
+  VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome` (the seed pair
+  keeps the fresh wallet off the live seed RPC — `_extension-smoke-e2e.yml` says why), run with
+  `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
   `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
   remedy.
 - A file that depends on the PROVERLESS build carries the `@requires-proverless` marker (the only
@@ -143,6 +145,7 @@ runtime env var can never arm a build-time flag.
 | `E2E_REQUIRE_SETUP=1` | sandbox/deploy failures are fatal (set by `agent.sh`) |
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
+| `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): blocks the price host, skips the encrypted `backup-roundtrip` spec; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
 | `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |

@@ -4,3 +4,4 @@
 - 2026-10-08: round 1 done (Codex and Opus: both conditional approve); plan, OWNER-ASKS (OA-3 to OA-5 added) and lessons revised.
 - 2026-10-08: final fresh Codex pass converged (round 3: approve); D-26 switched to the object-keyed cache; OA-3 now gates arc 1's merge.
 - 2026-10-08: orchestrator approved the plan; CSP floor reordered first (Arc 3 is layer 1 on worktree-hardening-2; Arc 1 layer 2 after PR #48; Arc 2 layer 3).
+- 2026-10-08: Phase 6 gate pass. lint, typecheck:all, test, test:ci-gating, lint:actions green; test:release 3 fails, host lacks `zip` (unrelated). Smoke at retry 0 with the recorder armed: Chrome 46/47 (passkey-retry toast-window flake, green alone), Firefox 46/47 (migration 60 s timeout under 4-shard load, 38 s alone); zero violations; probes recorded for all six contexts on both browsers.

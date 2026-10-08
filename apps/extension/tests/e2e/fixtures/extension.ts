@@ -90,10 +90,14 @@ export async function launchExtension(
 			waitForLiveness,
 			legal: opts.legal ?? (freshProfile ? "current" : "keep"),
 		})
-		// Every launch, a spec's own included, answers for the violations recorded while it ran.
-		const close = CSP_REPORT_ARMED
-			? () => closeAfterCspCheck(closeBrowser, () => readCspViolations(browser, extensionId))
-			: closeBrowser
+		// Every launch, a spec's own included, answers once for the violations recorded while it ran;
+		// a second close is the plain teardown it always was.
+		let checked = !CSP_REPORT_ARMED
+		const close = () => {
+			if (checked) return closeBrowser()
+			checked = true
+			return closeAfterCspCheck(closeBrowser, () => readCspViolations(browser, extensionId))
+		}
 		return { browser, extensionId, consoleErrors: [], pageErrors: [], close }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
