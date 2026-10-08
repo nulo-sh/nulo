@@ -51,8 +51,7 @@ function assertSingleProducer(checks: Check[]): Check[] {
 	for (const c of checks) producers.set(c.context, (producers.get(c.context) ?? new Set()).add(c.app_id))
 	const conflicts = [...producers].filter(([, apps]) => apps.size > 1).map(([ctx, apps]) => `${ctx} (apps ${[...apps].join(", ")})`)
 	if (conflicts.length > 0) throw new Error(`refusing: a context would have two producers — ${conflicts.join("; ")}`)
-	const seen = new Set<string>()
-	return checks.filter((c) => (seen.has(`${c.context}@${c.app_id}`) ? false : (seen.add(`${c.context}@${c.app_id}`), true)))
+	return [...new Map(checks.map((c) => [`${c.context}@${c.app_id}`, c])).values()]
 }
 
 export function planRename(current: RequiredChecks, renames: Readonly<Record<string, string>> = RENAMES): RequiredChecks {

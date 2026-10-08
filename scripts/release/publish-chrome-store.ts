@@ -100,6 +100,11 @@ function revisionState(
 		: { kind: "unknown", state: r.state }
 }
 
+/** Submitted states that hold the item: the store refuses any upload until the owner acts in the dashboard. */
+const SUBMITTED_HOLDS: ReadonlyMap<string, string> = new Map([
+	["PENDING_REVIEW", "a submitted revision is pending review; cancel it in the dashboard or wait for the verdict"],
+])
+
 export type Verdict = { ok: true; summary: string } | { ok: false; reason: string }
 
 /**
@@ -114,32 +119,35 @@ export function interpretPreflight(status: ItemStatus, itemId: string, version: 
 	if (!ours) return { ok: false, reason: `version ${version} is not a store version (1–4 integers)` }
 	const submitted = revisionState(status.submittedItemRevisionStatus)
 	if (submitted.kind === "unknown") return { ok: false, reason: `submitted revision has an unknown state ${str(submitted.state)}` }
-	if (submitted.kind === "known" && submitted.revision.state === "PENDING_REVIEW") {
-		return { ok: false, reason: "a submitted revision is pending review; cancel it in the dashboard or wait for the verdict" }
-	}
+	const hold = submitted.kind === "known" ? SUBMITTED_HOLDS.get(submitted.revision.state ?? "") : undefined
+	if (hold) return { ok: false, reason: hold }
 	const published = revisionState(status.publishedItemRevisionStatus)
 	if (published.kind === "unknown") return { ok: false, reason: `published revision has an unknown state ${str(published.state)}` }
 	for (const [label, revision] of [
 		["published", published],
 		["submitted", submitted],
 	] as const) {
-		if (revision.kind !== "known") continue
-		const { distributionChannels } = revision.revision
-		// Absent is "no channel"; present-but-not-a-list is a shape this script cannot read, so it fails.
-		if (distributionChannels !== undefined && !Array.isArray(distributionChannels)) {
-			return { ok: false, reason: `${label} revision carries an unreadable distributionChannels ${str(distributionChannels)}` }
-		}
-		for (const channel of distributionChannels ?? []) {
-			const crx = typeof channel === "object" && channel !== null ? channel.crxVersion : undefined
-			const theirs = typeof crx === "string" ? parseStoreVersion(crx) : null
-			if (!theirs) return { ok: false, reason: `${label} revision carries an unreadable crxVersion ${str(crx)}` }
-			if (compareStoreVersions(theirs, ours) >= 0) {
-				return { ok: false, reason: `${label} revision is at ${crx}, not lower than ${version}` }
-			}
-		}
+		const refusal = revision.kind === "known" ? channelRefusal(label, revision.revision, ours, version) : null
+		if (refusal) return { ok: false, reason: refusal }
 	}
 	const describe = (r: ReturnType<typeof revisionState>) => (r.kind === "known" ? r.revision.state : "none")
 	return { ok: true, summary: `preflight ok: published ${describe(published)}, submitted ${describe(submitted)}` }
+}
+
+/** Why a revision's channels forbid uploading `version`: one at or above it, or a shape this script cannot read. */
+function channelRefusal(label: string, revision: RevisionStatus, ours: number[], version: string): string | null {
+	const { distributionChannels } = revision
+	// Absent is "no channel"; present-but-not-a-list is a shape this script cannot read, so it fails.
+	if (distributionChannels !== undefined && !Array.isArray(distributionChannels)) {
+		return `${label} revision carries an unreadable distributionChannels ${str(distributionChannels)}`
+	}
+	for (const channel of distributionChannels ?? []) {
+		const crx = typeof channel === "object" && channel !== null ? channel.crxVersion : undefined
+		const theirs = typeof crx === "string" ? parseStoreVersion(crx) : null
+		if (!theirs) return `${label} revision carries an unreadable crxVersion ${str(crx)}`
+		if (compareStoreVersions(theirs, ours) >= 0) return `${label} revision is at ${crx}, not lower than ${version}`
+	}
+	return null
 }
 
 export interface UploadResponse {

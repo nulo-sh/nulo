@@ -113,22 +113,31 @@ async function runCheck(env: Record<string, string | undefined>, io: RunIO, publ
 	return { exit: 0 }
 }
 
-async function runPublish(env: Record<string, string | undefined>, io: RunIO, publisherId: string, itemId: string): Promise<RunResult> {
+type PublishInputs = { dryRun: boolean; publishType: PublishType; version: string; zipPath: string }
+
+function readPublishInputs(env: Record<string, string | undefined>): { ok: true; inputs: PublishInputs } | { ok: false; reason: string } {
 	const dryRun = env.DRY_RUN
 	if (dryRun !== "true" && dryRun !== "false")
-		return fail(io, `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})`)
+		return { ok: false, reason: `DRY_RUN must be "true" or "false" (got ${JSON.stringify(dryRun ?? null)})` }
 	const publishType = env.CWS_PUBLISH_TYPE as PublishType
-	if (!PUBLISH_TYPES.includes(publishType)) return fail(io, `CWS_PUBLISH_TYPE must be one of ${PUBLISH_TYPES.join(", ")}`)
+	if (!PUBLISH_TYPES.includes(publishType)) return { ok: false, reason: `CWS_PUBLISH_TYPE must be one of ${PUBLISH_TYPES.join(", ")}` }
 	const version = env.VERSION ?? ""
 	const zipPath = env.ZIP_PATH ?? ""
-	if (!version || !zipPath) return fail(io, "VERSION and ZIP_PATH are required")
+	if (!version || !zipPath) return { ok: false, reason: "VERSION and ZIP_PATH are required" }
+	return { ok: true, inputs: { dryRun: dryRun === "true", publishType, version, zipPath } }
+}
+
+async function runPublish(env: Record<string, string | undefined>, io: RunIO, publisherId: string, itemId: string): Promise<RunResult> {
+	const read = readPublishInputs(env)
+	if (!read.ok) return fail(io, read.reason)
+	const { dryRun, publishType, version, zipPath } = read.inputs
 
 	const checked = readManifest(io, zipPath, version)
 	if (!checked.ok) return fail(io, checked.reason)
 	const storeVersion = checked.storeVersion
 	say(io, `zip ok: ${zipPath} — manifest version ${storeVersion} (version_name ${version})`)
 
-	if (dryRun === "true") {
+	if (dryRun) {
 		say(io, `dry run: would preflight, upload and publish (${publishType}) item ${itemId} at ${storeVersion}; no request was made`)
 		return { exit: 0 }
 	}

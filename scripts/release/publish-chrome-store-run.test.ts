@@ -361,7 +361,7 @@ describe("logging contract", () => {
 			const leaked = h.lines.filter((l) => l.includes(TOKEN) && !l.startsWith("::add-mask::"))
 			// The 403 body deliberately echoes the token: the API's message is passed through, so the mask
 			// directive is what keeps it out of the log — it must precede every request-derived line.
-			const maskAt = h.lines.findIndex((l) => l === `::add-mask::${TOKEN}`)
+			const maskAt = h.lines.indexOf(`::add-mask::${TOKEN}`)
 			expect(maskAt).toBeGreaterThanOrEqual(0)
 			for (const line of leaked) expect(h.lines.indexOf(line)).toBeGreaterThan(maskAt)
 			expect(h.lines.filter((l) => l.startsWith("::add-mask::"))).toHaveLength(1)

@@ -204,7 +204,7 @@ describe("CI behavior-gating guard", () => {
 	})
 
 	test("needs-extension-build (pr-quick filter union) covers the extension graph", () => {
-		const union = [...quick["core-foundation"], ...quick["aztec-runtime"], ...quick["wallet-bridge"], ...quick["extension"]]
+		const union = [...quick["core-foundation"], ...quick["aztec-runtime"], ...quick["wallet-bridge"], ...quick.extension]
 		assertGraphCovered(union, "extension", "needs-extension-build")
 	})
 
@@ -214,7 +214,7 @@ describe("CI behavior-gating guard", () => {
 		)
 		// Beyond src + manifest: the licence texts and the expected-minimum list are build inputs too.
 		for (const input of inputs) {
-			expect(quick["extension"], `extension build: ${input}`).toContain(input)
+			expect(quick.extension, `extension build: ${input}`).toContain(input)
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/_build-extension.yml"), "utf8")) as any
@@ -233,8 +233,8 @@ describe("CI behavior-gating guard", () => {
 	})
 
 	test("landing build covers the landing graph and the documents it renders, and is wired into the aggregator", () => {
-		assertGraphCovered(quick["landing"], "landing", "landing")
-		expect(quick["landing"], "a Terms edit must rebuild the pages generated from it").toContain("legal/**")
+		assertGraphCovered(quick.landing, "landing", "landing")
+		expect(quick.landing, "a Terms edit must rebuild the pages generated from it").toContain("legal/**")
 		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
 		expect(wf.jobs["build-landing"].if).toContain("needs-landing-build")
@@ -426,8 +426,8 @@ describe("Firefox lanes", () => {
 		expect(action.inputs.browser.default).toBe("chrome")
 		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 		const caches = action.runs.steps.filter((step: any) => String(step.uses).startsWith("actions/cache@"))
-		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 		const [chrome, firefox] = ["chrome", "firefox"].map((browser) =>
+			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 			caches.find((step: any) => step.if === `inputs.browser == '${browser}'`),
 		)
 		const chromePrefix = String(chrome.with["restore-keys"]).trim()

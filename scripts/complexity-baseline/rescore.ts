@@ -88,36 +88,43 @@ export function rescore(directives: AcceptedDirective[], opts: { cwd?: string } 
 	const violations: string[] = []
 	try {
 		for (const [file, list] of byFile) {
-			const remove = new Set(list.map((d) => d.line))
-			const kept = readFileSync(resolve(cwd, file), "utf8")
-				.split("\n")
-				.filter((_, i) => !remove.has(i + 1))
-			const copy = siblingCopyPath(file)
-			writeFileSync(resolve(cwd, copy), kept.join("\n"), { flag: "wx" })
+			const copy = writeStrippedCopy(cwd, file, list)
 			created.push(resolve(cwd, copy))
 			copyOf.set(file, copy)
 		}
 		const { diagnostics, parseErrors } = lintPaths([...byFile.keys(), ...copyOf.values()], cwd)
 		if (parseErrors.length > 0) throw new Error(`the audit cannot score a file Biome failed to parse:\n  ${parseErrors.join("\n  ")}`)
-		for (const [file, list] of byFile) {
-			for (const d of diagnostics) {
-				if (d.path === file && isBaselined(d.category))
-					violations.push(
-						`${file}:${d.line} ${d.category} — unsuppressed offender (observed ${parseObserved(d.category, d.message)})`,
-					)
-			}
-			for (const rule of BASELINED_RULES) {
-				const expected = list.filter((d) => d.rule === rule).sort((a, b) => a.line - b.line)
-				const observed = diagnostics
-					.filter((d) => d.path === copyOf.get(file) && d.category === rule)
-					.sort((a, b) => a.line - b.line)
-				violations.push(...pairAndCompare(file, rule, expected, observed))
-			}
-		}
+		for (const [file, list] of byFile) violations.push(...judgeFile(file, list, copyOf.get(file), diagnostics))
 	} finally {
 		for (const p of created) rmSync(p, { force: true })
 	}
 	return { checked: directives.length, violations }
+}
+
+/** Writes `file` without its directive lines to a fresh sibling copy (never overwriting one) and returns the copy's path. */
+function writeStrippedCopy(cwd: string, file: string, list: AcceptedDirective[]): string {
+	const remove = new Set(list.map((d) => d.line))
+	const kept = readFileSync(resolve(cwd, file), "utf8")
+		.split("\n")
+		.filter((_, i) => !remove.has(i + 1))
+	const copy = siblingCopyPath(file)
+	writeFileSync(resolve(cwd, copy), kept.join("\n"), { flag: "wx" })
+	return copy
+}
+
+/** An offender the original file leaves unsuppressed, plus every stamp that differs from its function's score in the copy. */
+function judgeFile(file: string, list: AcceptedDirective[], copy: string | undefined, diagnostics: Diagnostic[]): string[] {
+	const out: string[] = []
+	for (const d of diagnostics) {
+		if (d.path === file && isBaselined(d.category))
+			out.push(`${file}:${d.line} ${d.category} — unsuppressed offender (observed ${parseObserved(d.category, d.message)})`)
+	}
+	for (const rule of BASELINED_RULES) {
+		const expected = list.filter((d) => d.rule === rule).sort((a, b) => a.line - b.line)
+		const observed = diagnostics.filter((d) => d.path === copy && d.category === rule).sort((a, b) => a.line - b.line)
+		out.push(...pairAndCompare(file, rule, expected, observed))
+	}
+	return out
 }
 
 function pairAndCompare(file: string, rule: BaselinedRule, expected: AcceptedDirective[], observed: Diagnostic[]): string[] {

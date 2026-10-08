@@ -17,7 +17,7 @@
  *  - all I/O is injected, so every branch is unit-testable with zero secrets.
  */
 
-import { decideSyncPrAction, type Mergeability, NEEDS_RESOLUTION_LABEL, syncEligible } from "./open-sync-pr"
+import { decideSyncPrAction, type Mergeability, syncEligible } from "./open-sync-pr"
 
 export const SYNC_BRANCH_PREFIX = "sync/main-to-dev-v"
 

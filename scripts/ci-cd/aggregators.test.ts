@@ -68,13 +68,13 @@ function expressionOf(file: string, key: string, value: string): string {
  * with an environment of only `PATH`, `extra` and the bound `env:`.
  */
 function exitCode(agg: Pick<Aggregator, "file" | "run" | "env">, world: World, extra: Record<string, string> = {}): number {
-	const valueOf = (expression: string): string => {
+	const worldValue = (expression: string): string => {
 		if (!(expression in world)) throw new Error(`${agg.file}: no world value for ${expression}`)
 		return world[expression]
 	}
 	const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", ...extra }
-	for (const [key, value] of Object.entries(agg.env)) env[key] = valueOf(expressionOf(agg.file, key, value))
-	const script = agg.run.replace(/\$\{\{ (.+?) \}\}/g, (_, expression: string) => valueOf(expression))
+	for (const [key, value] of Object.entries(agg.env)) env[key] = worldValue(expressionOf(agg.file, key, value))
+	const script = agg.run.replace(/\$\{\{ (.+?) \}\}/g, (_, expression: string) => worldValue(expression))
 	return Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-c", script], { env, stdout: "ignore", stderr: "ignore" }).exitCode
 }
 
