@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { formatDupReport, JSCPD_VERSION, type JscpdReport } from "../dup-trend/report"
 
-const clone = (
-	a: string,
-	b: string,
-	lines: number,
-	format = "typescript",
-): JscpdReport["duplicates"][number] => ({
+const clone = (a: string, b: string, lines: number, format = "typescript"): JscpdReport["duplicates"][number] => ({
 	format,
 	lines,
 	firstFile: { name: a },

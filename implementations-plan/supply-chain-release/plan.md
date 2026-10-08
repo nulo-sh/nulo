@@ -499,7 +499,7 @@ Pass: each exits 0.
 
 ### Arc 3: release and tooling guards
 
-#### Phase 6: lint and typecheck of `scripts/`
+#### Phase 6: lint and typecheck of `scripts/` ✓
 
 1. Widen Biome's scope and add the override.
 2. Run `bunx biome format --write scripts/`, and commit the result alone.
@@ -516,7 +516,7 @@ Pass: each exits 0.
   - the complexity manifest is unchanged (no new acceptance)
 - Layers: lint, typecheck, unit.
 
-#### Phase 7: release guards
+#### Phase 7: release guards ✓
 
 1. Make `interpretPreflight` refuse `STAGED`. Test that it refuses, with a success control for `PUBLISHED` at a lower version. Add the troubleshooting row.
 2. Add `parseAutoUnstickFlag`. Write one test per input class. Update every "default off" sentence.
@@ -633,9 +633,9 @@ Pass: each exits 0.
 - F14. The CLI's npm tree has 1,118 packages; 7 of them have install scripts (lock-only resolve, 2026-10-08).
 - F15. crxjs 2.7.1 hard-codes `use_dynamic_url: false` for content-script entries. Its `standaloneFiles` output is an emitted asset that the notices policy refuses.
 - F16. `bun audit` exposes `--ignore=<id>` and no config file. `bun audit fix --dry-run` fixes 31 of 72 advisories.
-- F17. Biome over `scripts/` reports 7 errors, 20 warnings and 6 infos, and reformats 38 files (scratch-copy probe).
+- F17. Biome over `scripts/` reports 7 errors, 20 warnings and 6 infos, and reformats 38 files (scratch-copy probe). At arc 3 the reformat touched 39 files and `interpretPreflight` scored 29; the seven errors held.
 - F18. Root `package.json` declares no `typescript` and no `@types/bun`.
-- F19. All 17 commit subjects on `dev` are lower-case.
+- F19. All 17 commit subjects on `dev` are lower-case. **No longer held at arc 3:** #48's subject names `grantPublicAuthwit`; CLAUDE.md now says identifiers go in backticks or quotes, which commitlint does not case-check (measured).
 - F20. The network e2e lanes' path filters include `.github/actions/setup-aztec/**`.
 - F21. The `production` environment has no protection rule. The two store environments allow `main` only and need the owner's review.
 - F22. `zip-reproducible.ts` shells out to the system `zip`.
@@ -722,6 +722,11 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | #22 (implementation) | step 1, after isolating the content script's module graph with a resolve hook (one build) | ship `use_dynamic_url`; stop with an owner ask; a separate content-script Vite pass | Step 2 breaks discovery (measured). The isolated chunk is import-free, so crxjs drops the loader and the entry is unneeded; one build keeps every module under the notices plugin, so no gate loosens. |
 | crxjs loader `VENDORED` claim (implementation) | removed | kept | It matched nothing once no loader is emitted, and the policy refuses a stale claim; without it, a content script that imports a chunk again fails the build. |
 | `oven-sh/setup-bun` token (review) | the composite passes `token: ""` | the action's default (`github.token`) | The default handed the publish jobs' release-writing token to a third-party action; an exact version needs no API call. |
+| Extension build scripts (implementation, arc 3) | typechecked by `apps/extension/tsconfig.scripts.json` (its `scripts/` and Vite configs), chained into the extension's `typecheck`, with `@types/bun` 1.4.2 declared there | leave them in no tsconfig; split to a follow-up | The orchestrator asked for a call. These Vite plugins shape the shipped bundle and nothing typechecked them; a probe found three errors. Codex: justified scope. Opus: not worth splitting, and its Medium (the `Bun` global resolved through the root's hoisted copy) made the extension declare its own pin. |
+| Typecheck fixes (implementation, arc 3) | `moduleDetection: "force"`; `PublishResponse.warningInfo: unknown`; `string \| FormData` for the AMO body; a narrowing guard in `check-rp-id.ts` | casts or suppressions | Each type now says what the code already reads defensively; both reviewers checked every reader. |
+| `bun pm diff` (implementation, arc 3) | the added root devDependencies reviewed through `git diff bun.lock` | `bun pm diff` | On Bun 1.4.2 a bare `bun pm diff` looks the root package up on npm (404); the lock diff is two packages, `@types/bun` and `bun-types` 1.4.2. |
+| Home-path guard shape (review, arc 3) | add a home under a mount (`/mnt/<volume>/<user>`) to the shell guard, as the plans gate's `LOCAL_PATH_RE` already counts; the root user's home stays out, since container scripts use it | narrow CLAUDE.md's claim; name this host's prefix | Codex [Medium]: in CI the guard now stands alone, and it missed such homes. The generic shape matches the plans gate and names no host. |
+| commitlint test runtime (review, arc 3) | the CLI runs on Bun (`process.execPath`) | rely on `_unit-tests.yml`'s Node 24 step | Opus [Low]: `@commitlint/cli` needs Node ≥ 22.12 and the test leaned on a step added for another reason; it behaves the same on Bun. |
 
 **Unresolved disagreements.** None blocking.
 - Opus preferred `--source-ref`; the plan pins `--source-digest` for the reason in the ledger.
@@ -860,6 +865,28 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 ### Arc 2 implementation, Codex round 3 (same session)
 
 **Verdict:** `approve`, no new findings, on diff `5a0e83b..2a6d556`. The loop converged in three rounds.
+
+### Arc 3 implementation, Codex round 1 (GPT-6.1 Sol, high), session `01a11d62-3c4b-72b0-b3f7-bb081922c8fb`
+
+**Verdict:** `approve with fixes`. Diff `3345189..bd6c67d`. All three findings checked against the tree and accepted; fixes in the next commit.
+- [Medium] The shell guard, now the CI gate, matched only `/Users/` and `/home/`, so a home under a mount passed, and CLAUDE.md's new claim overreached. Accepted with the plans gate's generic shape rather than this host's prefix; the test seeds both shapes and fails without the new alternative.
+- [Low] The `SUBMITTED_HOLDS` comment said the owner must act, which a `PENDING_REVIEW` verdict does not need. Accepted.
+- [Low] Two helper comments restated their code. Accepted: `writeStrippedCopy`'s is cut to its invariant; `canaryJobFiles` loses its comment and labels its tuple instead.
+- Its "looks fine": the reformat is formatting only (syntax-tree compare); the six splits keep behaviour; `warningInfo: unknown`; the extension scripts typecheck is justified scope; the auto-unstick flip leaves every runbook path intact; no automated commit subject breaks the case rule; the path-guard test proves refusal and recovery; the `STAGED` refusal (Chrome's own docs route a staged item back through "Cancel publish").
+
+### Arc 3 implementation, Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict:** approve once the Medium is fixed. Diff `3345189..bd6c67d`. Fixes in the same commit as Codex's.
+- [Medium] `store-icons.ts` uses `Bun.Image`, and the extension scripts typecheck found `Bun` only because unplugin's types import `"bun"`, which resolved to the root's `@types/bun` through the isolated linker's hoist fallback. Accepted: the extension declares `@types/bun` 1.4.2 and lists `bun` in `types`; `--traceResolution` now resolves it from the extension's own `node_modules`. CLAUDE.md's Bun-bump list names both pins.
+- [Low] A preflight test title still said "every documented non-pending state" though it covers the published revision only. Accepted. Its aside that the `STAGED` test's `PUBLISHED` control repeats that loop: kept, since the plan names that control and it sits beside the refusal it pairs with.
+- [Low] The commitlint test claimed to mirror `quality-status`, and it needed Node ≥ 22.12 from an unrelated workflow step. Accepted: the header says what it runs, and the CLI runs on Bun.
+- [Low] Open branches with an upper-case word in a subject go red. Accepted as one CLAUDE.md clause: identifiers go in backticks or quotes, which commitlint does not case-check (measured on all three quote forms).
+- Its "looks fine": each refactor compared old against new (`interpretPreflight` order and messages, `readPublishInputs`, `rescore`'s cleanup, `formatDupReport`, the `Map` dedupe), every `warningInfo` reader, the auto-unstick flag (an unset variable renders `""`; the warning is a fixed string), the `STAGED` refusal blocks nothing the store accepts, both new tests fail on their mutations, every bot subject is lower-case.
+- Also folded from self-review: a stale "(default path)" test title and the workflow comment's grammar.
+
+### Arc 3 implementation, Codex round 2 (same session)
+
+**Verdict:** `approve`, no new findings, on diff `bd6c67d..d8893c7`. The loop converged in two rounds. Its "looks fine": no tracked file matches the mount shape; the extension's `@types/bun` pin reuses the locked 1.4.2, changes no resolution and adds nothing to the notices; the commitlint test needs no ambient Node; the comments.
 
 ## Post-implementation
 

@@ -116,8 +116,8 @@ jobs:
   # explicit PR-to-SHA check, never a title heuristic) — creates the tag itself (or
   # finds the one an earlier attempt created), and feeds `resolve` so the chain
   # continues. All logic + guards live in unit-tested scripts/release/auto-unstick*.ts.
-  # vars.AUTO_UNSTICK_ENABLED is the kill switch: unset or anything but on/true/1 and
-  # the script no-ops (unstuck=false), resolve stays skipped, and the manual unstick applies.
+  # vars.AUTO_UNSTICK_ENABLED is the kill switch: off/false/0 or an unrecognised value makes the
+  # script no-op (unstuck=false), resolve stays skipped, and the manual unstick applies. Unset is on.
   auto-unstick:
     needs: release-please
     if: |
