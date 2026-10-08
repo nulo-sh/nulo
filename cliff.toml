@@ -2,6 +2,8 @@
 # Scoped via `--include-path` in the workflow; filters out other packages.
 # A version containing "-" (rc, nightly) is a prerelease, as in release.yml's resolve step. The
 # stores carry only stable releases, so only a stable release's notes link to them.
+# @SOURCE_COMMIT@ is the tag's commit, written in by scripts/release/attach-assets-run.ts: git-cliff's
+# own commit_id names the newest commit the include-path keeps, not the tagged one.
 
 [changelog]
 header = ""
@@ -21,7 +23,10 @@ This build is a prerelease and is not on the stores. The stores carry the latest
 3. Open `chrome://extensions` and turn on Developer mode.
 4. Click Load unpacked and select the unzipped folder.
 
-Verify: `shasum -a 256 -c SHASUMS256.txt`
+Verify the zips:
+
+- `shasum -a 256 -c SHASUMS256.txt` checks them against the checksums.
+- `gh attestation verify nulo-chrome-{{ v }}.zip --repo nulo-sh/nulo --signer-workflow nulo-sh/nulo/.github/workflows/{% if v is containing("-nightly") %}nightly{% else %}release{% endif %}.yml --source-digest @SOURCE_COMMIT@ --deny-self-hosted-runners` checks that this repository's workflow built the Chrome zip from this commit. Run it for the Firefox zip too.
 
 The Firefox zip is unsigned. Load it from `about:debugging` as a temporary add-on.
 
@@ -35,7 +40,7 @@ The stores review each version, so they can trail this release by a few days.
 
 ### Verify or load by hand
 
-The zips below are the same builds. Verify them with `shasum -a 256 -c SHASUMS256.txt`. To load the Chrome zip by hand, unzip it, open `chrome://extensions`, turn on Developer mode and click Load unpacked. The Firefox zip is unsigned; the signed build comes from Firefox Add-ons.
+The zips below are the same builds. Verify them with `shasum -a 256 -c SHASUMS256.txt`. To check that this repository's release workflow built them from this commit, run `gh attestation verify nulo-chrome-{{ v }}.zip --repo nulo-sh/nulo --signer-workflow nulo-sh/nulo/.github/workflows/release.yml --source-digest @SOURCE_COMMIT@ --deny-self-hosted-runners`, and the same for the Firefox zip. To load the Chrome zip by hand, unzip it, open `chrome://extensions`, turn on Developer mode and click Load unpacked. The Firefox zip is unsigned; the signed build comes from Firefox Add-ons.
 
 {% endif -%}
 ---

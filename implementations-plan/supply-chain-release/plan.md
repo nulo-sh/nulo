@@ -417,7 +417,7 @@ Pass: each exits 0.
   - `git diff origin/dev -- .github/workflows/release.yml` shows every pre-existing line of `attach-assets`' `needs` and `if:` unchanged, with only the `release-notes` additions
 - Layers: lint, typecheck, unit.
 
-#### Phase 3: attestations and the verify text
+#### Phase 3: attestations and the verify text ✓
 
 1. Add the attestation steps (release and nightly) and their two permissions.
 2. Change `cliff.toml` to the text under § Arc 1.
@@ -643,7 +643,7 @@ Pass: each exits 0.
 - I5. The rulesets API accepts `actor_type: "User"` on a tag ruleset (the live branch rulesets carry it). The fallback is `RepositoryRole` 5.
 - I6. Chrome 130+ serves a `use_dynamic_url` entry to the crxjs loader's `import(chrome.runtime.getURL(...))`, and the chunk's relative imports resolve under the same dynamic origin. Phase 5 measures it. If wrong, #22 stays open.
 - I7. The CLI runs with `--ignore-scripts` plus at most a `bcrypto`/`leveldown` rebuild. Phase 4 measures it.
-- I8. git-cliff's release-level `{{ commit_id }}` renders the tag's commit. Phase 3 measures it, and the placeholder is the fallback.
+- I8. git-cliff's release-level `{{ commit_id }}` renders the tag's commit. Phase 3 measures it, and the placeholder is the fallback. **Did not hold** (Phase 3, git-cliff 2.14.2, the version `orhun/git-cliff-action` v4.9.1 installs): with `--include-path 'apps/extension/**'` it renders the newest commit the path filter keeps (a scratch rc tag at `50540c8` rendered `3b80761`). The template prints `@SOURCE_COMMIT@`, which `attach-assets-run.ts` replaces with the tag's commit; the renders then name the tag's commit for stable, rc and nightly.
 
 ### Asks (for the orchestrator; working assumption in each)
 
@@ -699,6 +699,11 @@ Its appeal: a smaller diff in Arc 1, no new TypeScript module, one ruleset.
 | Legacy store submission | refuse unattested releases (A11) | accept legacy releases on checksums alone | Final Codex [High]: the old releases carry no attestation; the plan does not claim what it cannot prove. |
 | Hygiene test scope | strict in the four clean jobs; per-job action list and no persisted credentials in every other App or OIDC job | strict everywhere | Final Codex [Medium]: release-please and Google auth are required third-party actions. |
 | Overclaims | Outcome 3 scoped to the Aztec toolchain; acks "only shrink" removed; OIDC "used only by the attest step" removed | — | Codex [Low], Opus (Facts). |
+| Notes' source digest (implementation) | `@SOURCE_COMMIT@` in `cliff.toml`, replaced by `attach-assets-run.ts` with the tag's commit | `{{ commit_id }}` | Phase 3 render: I8 did not hold. |
+| REST calls in `attach-assets-run.ts` (implementation) | `fetch` with `GH_TOKEN`, as `lock-version-run.ts` does | `gh api` | Uploads and downloads are plain HTTP there, and the plan's reason for REST (no dependence on the runner's `gh`) holds more strongly. `gh attestation verify` is the one `gh` call. |
+| `plan` outputs (implementation) | `action` only; `PlanInput` also carries the tag | `action`, `create_draft`, `release_id` | Nothing read the other two (`apply` re-reads the state); the tag names the refusals. |
+| Digest read-back (implementation) | up to three reads, 2 s apart, while an asset reports no digest | one read | A digest that lags the upload would otherwise refuse every publish; one that never appears still refuses. |
+| Branch base (implementation) | rebased the unpushed plan commit onto `origin/dev` `e49e4ce` | merge | Four commits had landed, two in the workflows this arc edits; the branch was never pushed. |
 
 **Unresolved disagreements.** None blocking.
 - Opus preferred `--source-ref`; the plan pins `--source-digest` for the reason in the ledger.

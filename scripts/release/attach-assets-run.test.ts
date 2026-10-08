@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { assetNames } from "./attach-assets"
-import { type AttachIO, inputFromEnv, main, parseRelease, type ReleaseRecord, type RunInput } from "./attach-assets-run"
+import { type AttachIO, inputFromEnv, main, parseRelease, type ReleaseRecord, type RunInput, SOURCE_COMMIT } from "./attach-assets-run"
 
 const SHA = "a".repeat(40)
 const OTHER = "b".repeat(40)
@@ -21,6 +21,9 @@ interface World {
 	attested?: boolean
 	verifies?: boolean
 	shasums?: string
+	/** The release body as the notes job wrote it; each publish records the body it set. */
+	notes?: string
+	bodies?: string[]
 }
 
 /** A recording fake of GitHub and the runner's disk; `calls` lists every write in order. */
@@ -65,6 +68,7 @@ function fake(world: World) {
 		},
 		async editRelease(id, patch) {
 			calls.push(patch.draft === false ? "publish" : "notes")
+			if (patch.body !== undefined) world.bodies?.push(patch.body)
 			Object.assign(find(id), patch.draft === undefined ? {} : { draft: patch.draft })
 		},
 		attested: async () => world.attested ?? true,
@@ -73,7 +77,7 @@ function fake(world: World) {
 			calls.push(`download ${id}`)
 		},
 		sha256: async (path) => fileHash(path),
-		readText: async (path) => (path.endsWith("SHASUMS256.txt") ? (world.shasums ?? SHASUMS) : "notes"),
+		readText: async (path) => (path.endsWith("SHASUMS256.txt") ? (world.shasums ?? SHASUMS) : (world.notes ?? "notes")),
 		wait: async () => {},
 		output: (key, value) => {
 			outputs[key] = value
@@ -117,6 +121,17 @@ describe("apply", () => {
 		expect(await exit).toBe(0)
 		expect(calls).toEqual(["create", ...NAMES.map((n) => `upload ${n}`), "notes", "publish"])
 		expect(world.releases[0].draft).toBe(false)
+	})
+
+	test("writes the tagged commit into the notes' attestation check", async () => {
+		const world: World = {
+			releases: [],
+			tags: new Map([["v1.2.3", SHA]]),
+			notes: `--source-digest ${SOURCE_COMMIT} --deny`,
+			bodies: [],
+		}
+		expect(await run(world, "apply", "--expect", "publish").exit).toBe(0)
+		expect(world.bodies).toEqual([`--source-digest ${SHA} --deny`])
 	})
 
 	test("replaces what a failed run left on its draft", async () => {
