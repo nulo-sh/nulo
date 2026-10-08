@@ -1,6 +1,6 @@
 # Phase 5: the Codex fix loop on the net diff
 
-`/codex high` on `gpt-6.1-sol`, read-only, against this worktree at `9b04b28` with the net diff from `50540c8` (`_impl.diff`, the plan files and the regenerated `src/types/` excluded), the plan, the three phase logs, and the two rules from § Post-implementation.
+`/codex high` on `gpt-6.1-sol`, read-only, against this worktree at `a2f8bdc` with the net diff from `50540c8` (`_impl.diff`, the plan files and the regenerated `src/types/` excluded), the plan, the three phase logs, and the two rules from § Post-implementation.
 
 ## Round 1: fresh session
 
@@ -26,4 +26,8 @@ Five files under `apps/extension`, +5/−15: the R1 wait in `tests/e2e/wallet-lo
 
 ## Round 3: resumed, on the fix diff
 
-Verdict: `approve`. "No new material findings." R1, R2 and R3 confirmed resolved; the only executable change is the added e2e assertion. One caveat recorded, no change: the live redirect awaits `getProfiles()` (`popup/locked-state.ts:49`) and the transport timeout is 60 seconds, so the 15-second budget has no proven upper bound; the four runs at 3.8 to 4.3 seconds and the reopen path's own 10-second budget support keeping it. The loop converged: three rounds, one fix commit (`7d544bd`).
+Verdict: `approve`. "No new material findings." R1, R2 and R3 confirmed resolved; the only executable change is the added e2e assertion. One caveat recorded, no change: the live redirect awaits `getProfiles()` (`popup/locked-state.ts:49`) and the transport timeout is 60 seconds, so the 15-second budget has no proven upper bound; the four runs at 3.8 to 4.3 seconds and the reopen path's own 10-second budget support keeping it. The loop converged: three rounds, one fix commit (`e4d3e82`).
+
+## Delivery gates after the rebase onto origin/dev (`b56d5e3`)
+
+The rebase replayed eight commits with one conflict, `implementations-plan/index.md` (three plans dev added beside this one). A stale `apps/landing/src/generated/release.json`, written by the landing build before #49 dropped that step and its ignore line, was deleted; it had aborted the first `audit:vue` on a format error. On the clean tree: `bun install --frozen-lockfile` exit 0; `bun run audit:vue` exit 0 (typecheck 59.5s, lint 1.8s, 703 test files / 10,440 tests, build 26.6s); `bun run check:plans` 0 findings; `bun run test:ci-gating` 383 pass; `settings-routes`, `navigation` and `wallet-lock` smoke on Chrome 11/11. The build left `src/types/` unchanged.

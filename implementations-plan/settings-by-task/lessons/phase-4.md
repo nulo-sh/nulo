@@ -10,7 +10,7 @@
 
 ## Gates
 
-Run alone at `9b04b28` plus the plan edits, before the rebase onto `origin/dev` (rerun after it; see `phase-5.md`):
+Run alone at `a2f8bdc` plus the plan edits, before the rebase onto `origin/dev` (rerun after it; see `phase-5.md`):
 
 - `bun run audit:vue`: exit 0 in 2:37 wall (typecheck 33.6s, lint 1.9s, 699 test files / 10,372 tests passed, 3 files and 4 tests skipped, build 12.1s).
 - `bun run check:plans`: 0 findings.
