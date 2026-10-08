@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       run_network_e2e:
-        description: "Run network e2e gate (~30-45 min). Off by default; opt in for paranoid republishes. Only consulted on workflow_dispatch: a push to main never runs it."
+        description: "Run the network e2e gate, sharded as on a PR. Off by default; opt in for paranoid republishes. Only consulted on workflow_dispatch: a push to main never runs it."
         required: false
         type: boolean
         default: false
@@ -233,11 +233,12 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
 
   network-e2e:
+    name: Run / ${{ matrix.leg.name }}
     needs: resolve
     # Network-e2e firing rule: OPT-IN ONLY (workflow_dispatch with
     # `run_network_e2e=true`). It does not run on the auto push:main publish —
     # the promote dev→main PR already gates the exact code with the full network
-    # suite before it reaches main, so re-running the flaky 30-45 min suite on the
+    # suite before it reaches main, so re-running the flaky suite on the
     # publish would only duplicate that gate AND could strand a release: a network-e2e
     # cancellation/timeout on push:main would take the whole run down mid-attach (leaving
     # a tag + empty release). The publish still gates on smoke-against-artifact (real
@@ -247,9 +248,73 @@ jobs:
       always() &&
       needs.resolve.result == 'success' &&
       github.event.inputs.run_network_e2e == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # The PR lane's jobs (pr-extension-network-e2e.yml) as legs of ONE matrix job, its shard
+        # pool spelled out per shard: attach-assets and status read the whole suite as this job's
+        # single result, which is `success` only when every leg succeeded. A leg's inputs are the
+        # PR job's; scripts/ci-cd/behavior-gating.test.ts pins the two, leg for job.
+        leg:
+          - name: shard 1/5
+            shard: "1/5"
+            shard_label: 1-of-5
+            test_files: ""
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            proverless: true
+          - name: shard 2/5
+            shard: "2/5"
+            shard_label: 2-of-5
+            test_files: ""
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            proverless: true
+          - name: shard 3/5
+            shard: "3/5"
+            shard_label: 3-of-5
+            test_files: ""
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            proverless: true
+          - name: shard 4/5
+            shard: "4/5"
+            shard_label: 4-of-5
+            test_files: ""
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            proverless: true
+          - name: shard 5/5
+            shard: "5/5"
+            shard_label: 5-of-5
+            test_files: ""
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            proverless: true
+          - name: heavy / fee-methods + selfpay-phase
+            shard: ""
+            shard_label: heavy
+            test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
+            exclude_files: ""
+            proverless: true
+          - name: heavy / concurrent-confirm
+            shard: ""
+            shard_label: heavy-concurrent
+            test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            exclude_files: ""
+            proverless: true
+          - name: canary / real-proving
+            shard: ""
+            shard_label: canary
+            test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
+            exclude_files: ""
+            proverless: false
     uses: ./.github/workflows/_extension-network-e2e.yml
     with:
       ref: ${{ needs.resolve.outputs.sha }}
+      shard: ${{ matrix.leg.shard }}
+      shard_label: ${{ matrix.leg.shard_label }}
+      retry: "0"
+      test_files: ${{ matrix.leg.test_files }}
+      exclude_files: ${{ matrix.leg.exclude_files }}
+      proverless: ${{ matrix.leg.proverless }}
+      # The PR lane's kill switch, minus its dispatch input; it only reaches the prover-ON leg.
+      disable_presto: ${{ !matrix.leg.proverless && vars.NULO_E2E_DISABLE_PRESTO == '1' }}
     secrets:
       SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 

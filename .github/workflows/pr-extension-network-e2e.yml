@@ -13,8 +13,9 @@ on:
     # so a stacked PR targeting its parent feature branch got no CI whatsoever.
     # `labeled` so adding `e2e:extension-network` (`e2e:network` is honored as an alias) after open triggers a fresh run;
     # `unlabeled` so removing it re-evaluates the gate instead of leaving
-    # a stale failing result; `ready_for_review` so a draft marked ready
-    # (without a new push) re-runs CI instead of hanging the required check.
+    # a stale failing result; `ready_for_review` gives a draft marked ready a fresh
+    # run on its head (no gate reads the draft flag, so the head normally has a run
+    # already; this one can replace a run that failed, was cancelled or never started).
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:
@@ -135,7 +136,7 @@ jobs:
       # shard failing or is the suite broadly broken?"
       fail-fast: false
       matrix:
-        # N=5 splits the lightweight network test files into ~9-per-shard.
+        # N=5 splits the lightweight network test files into ~21-per-shard.
         # N=5 (not N=4) because vitest's deterministic SHA-1-of-file-path
         # sharder puts the two known slow files (multi-account-from,
         # tx-sendTx-multicall) into the same shard at N=4; N=5 separates

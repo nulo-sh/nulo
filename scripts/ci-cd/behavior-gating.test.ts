@@ -488,6 +488,81 @@ describe("canary lanes", () => {
     }
   })
 
+  const PR_LANE = "pr-extension-network-e2e.yml"
+  type CopiedJob = SuiteJob & { name?: string; if?: unknown; secrets?: unknown; strategy?: { "fail-fast"?: unknown; matrix?: Record<string, unknown> } }
+
+  // Nightly keeps its own retry policy and adds the chaos job, but splits the suite as the PR lane
+  // does: a file moved between jobs on one side only runs under another job's conditions on the other.
+  test("nightly runs the PR lane's jobs, file for file, on both browsers", () => {
+    const pr = Object.fromEntries(laneJobs(PR_LANE, "chrome")) as Record<string, CopiedJob>
+    for (const browser of ["chrome", "firefox"]) {
+      const nightly = Object.fromEntries(
+        laneJobs("nightly.yml", browser)
+          .filter(([, job]) => job.with?.chaos !== true)
+          .map(([name, job]) => [name.replace(/-firefox$/, ""), job]),
+      ) as Record<string, CopiedJob>
+      expect(Object.keys(nightly).sort(), `nightly.yml ${browser}: jobs`).toEqual(Object.keys(pr).sort())
+      for (const [name, job] of Object.entries(pr)) {
+        const copy = nightly[name]
+        const at = `nightly.yml ${browser} → ${name}`
+        expect(words(copy.with?.test_files), `${at} test_files`).toEqual(words(job.with?.test_files))
+        expect(copy.with?.proverless, `${at} proverless`).toBe(job.with?.proverless)
+        expect(copy.with?.shard_label, `${at} shard_label`).toBe(job.with?.shard_label)
+        expect(copy.strategy, `${at} strategy`).toEqual(job.strategy)
+      }
+    }
+  })
+
+  // One matrix job, so attach-assets and status read the whole opt-in suite as one result; its legs
+  // are the PR lane's calls, so every pin on that lane above holds for the release's run too.
+  test("release's opt-in network run is the PR lane: one leg per PR job and shard, with its inputs", () => {
+    const defaults = workflow(SUITE).on.workflow_call.inputs as Record<string, { default?: unknown }>
+    type Call = { name: string; inputs: Record<string, unknown> }
+    /** Inputs left at the suite's default dropped, file lists split; `ref` and the kill switch are pinned below. */
+    const normalized = ({ name, inputs }: Call) => ({
+      name,
+      inputs: Object.fromEntries(
+        Object.entries(inputs)
+          .filter(([key, value]) => key !== "ref" && key !== "disable_presto" && value !== defaults[key]?.default)
+          .map(([key, value]) => [key, key.endsWith("_files") ? words(value) : value]),
+      ),
+    })
+    const byName = (a: Call, b: Call) => a.name.localeCompare(b.name)
+
+    const pr: Call[] = (laneJobs(PR_LANE, "chrome") as [string, CopiedJob][]).flatMap(([, job]) => {
+      const shards = job.strategy?.matrix?.shard as { id: string; label: string }[] | undefined
+      if (!shards) return [{ name: String(job.name), inputs: job.with ?? {} }]
+      return shards.map((shard) => ({
+        name: String(job.name).replace("${{ matrix.shard.id }}", shard.id),
+        inputs: { ...job.with, shard: shard.id, shard_label: shard.label },
+      }))
+    })
+
+    const job: CopiedJob = workflow("release.yml").jobs["network-e2e"]
+    expect(Object.keys(job.strategy?.matrix ?? {}), "one matrix key").toEqual(["leg"])
+    expect(job.strategy?.["fail-fast"], "a red leg never cancels the others").toBe(false)
+    const legs = job.strategy?.matrix?.leg as Record<string, unknown>[]
+    /** A `${{ matrix.leg.<key> }}` input takes the leg's own value, typed; a key the leg lacks reads undefined and fails. */
+    const bind = (value: unknown, leg: Record<string, unknown>) => {
+      const key = typeof value === "string" ? /^\$\{\{ matrix\.leg\.(\w+) \}\}$/.exec(value)?.[1] : undefined
+      return key === undefined ? value : leg[key]
+    }
+    const release: Call[] = legs.map((leg) => ({
+      name: String(job.name).replace("${{ matrix.leg.name }}", String(leg.name)),
+      inputs: Object.fromEntries(Object.entries(job.with ?? {}).map(([key, value]) => [key, bind(value, leg)])),
+    }))
+    expect(release.map(normalized).sort(byName)).toEqual(pr.map(normalized).sort(byName))
+
+    const [, prPool] = laneJobs(PR_LANE, "chrome")[0]
+    expect(job.uses).toBe(prPool.uses)
+    expect(job.secrets).toEqual((prPool as CopiedJob).secrets)
+    expect(job.with?.ref).toBe("${{ needs.resolve.outputs.sha }}")
+    expect(job.with?.disable_presto).toBe("${{ !matrix.leg.proverless && vars.NULO_E2E_DISABLE_PRESTO == '1' }}")
+    expect(String(job.if).split(/\s+/).join(" ").trim(), "opt-in only").toBe(
+      "always() && needs.resolve.result == 'success' && github.event.inputs.run_network_e2e == 'true'",
+    )
+  })
+
   // The same-token matrix holds the node's block production, which a shard's files share; the chaos
   // run is a nightly lead whose seed fixes its actions, not their timing.
   test("the same-token matrix runs proverless in a dedicated job, and the chaos run only in nightly's advisory jobs", () => {

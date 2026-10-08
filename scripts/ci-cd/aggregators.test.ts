@@ -309,6 +309,15 @@ test("release's attach-assets publishes only past gates that all ended as asked,
   expect(clauses.sort()).toEqual(expected.sort())
 })
 
+// The opt-in suite is one matrix job whose legs are the PR lane's jobs (behavior-gating.test.ts pins
+// them), so the one clause above reads every leg; a second job calling the suite is one it never reads.
+test("release runs the network suite in the one job attach-assets and status read", () => {
+  const { jobs } = workflow("release.yml")
+  const callers = Object.keys(jobs).filter((name) => /\/_extension-network-e2e\.yml(@.*)?$/.test(String(jobs[name].uses)))
+  expect(callers).toEqual(["network-e2e"])
+  expect(jobs["network-e2e"].strategy?.["fail-fast"]).toBe(false)
+})
+
 // A required aggregator passes when its gate skipped the suites. A gate that skipped a draft would
 // pass it, and once marked ready the PR would merge on that pass while its suites still ran. So each
 // lane's whole `Decide` step runs here bound to a draft whose diff touches its surface: it must ask

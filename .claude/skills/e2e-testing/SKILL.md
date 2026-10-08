@@ -175,8 +175,8 @@ runtime env var can never arm a build-time flag.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e.yml`. Filter `extension-network`, label
   `e2e:extension-network`. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
-  the 8 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
-  `concurrent-sendtx-confirm`, proverless); the **canary** lane prover-ON with the SHA-256-pinned
+  the 9 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
+  `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, proverless); the **canary** lane prover-ON with the SHA-256-pinned
   `presto-server` and `VITE_NULO_PRESTO_REQUIRED=1` (`transfers`, `tx-sendTx-default`,
   `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`) — a canary run with zero `Proving succeeded` lines fails; the
   `disable_presto` dispatch input (or the `NULO_E2E_DISABLE_PRESTO` variable) is the
