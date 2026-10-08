@@ -291,6 +291,7 @@ const METHOD_REGISTRY_SOURCE = {
 		routing: { via: "handler" },
 		scopeCheck: checkGrantPublicAuthwit,
 		argSchema: argsTwoRequired,
+		refusedInBatch: true,
 		// WITHOUT the transaction capability, enforceCapability returns [] and the
 		// scope-enforcement block is skipped — the gate becomes dead code.
 		audit: "requires the transaction capability or the scope gate is dead code (see dispatcher.test.ts)",

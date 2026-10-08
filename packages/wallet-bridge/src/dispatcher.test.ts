@@ -1754,9 +1754,11 @@ describe("dispatcher — isTokenRegistered reachability + gating", () => {
 		await expect(dispatcher.dispatch("isTokenRegistered", [OTHER], ctx)).rejects.toThrow(/Scope violation: isTokenRegistered/)
 	})
 
-	test("a held value that is not an address grants no call, not even one naming it", async () => {
+	test("a held value that is not an address refuses every call, one naming it included", async () => {
 		const dispatcher = makeReaderDispatcher(contractsSession(["0xtok"]), true)
-		await expect(dispatcher.dispatch("isTokenRegistered", ["0xtok"], ctx)).rejects.toThrow(/Scope violation: isTokenRegistered/)
+		const refusal = dispatcher.dispatch("isTokenRegistered", ["0xtok"], ctx)
+		await expect(refusal).rejects.toThrow(ValidationError)
+		await expect(refusal).rejects.toThrow("Malformed contracts capability")
 	})
 
 	test("contracts grant without canGetMetadata ⇒ scope violation", async () => {
@@ -2144,13 +2146,41 @@ describe("dispatcher — the grant boundary", () => {
 		])
 	})
 
-	test("a held grant the popup echoes but the decision does not store is not re-validated", async () => {
-		const legacy = { type: "data" } as Capability
-		const session = makeSession({ capabilityGrants: [{ capability: legacy, grantedAt: 1 }] })
+	test("a held grant's echo the decision does not store is not validated", async () => {
+		const data = { type: "data", addressBook: true } as Capability
+		const session = makeSession({ capabilityGrants: [{ capability: data, grantedAt: 1 }] })
 		const transaction = { type: "transaction", scope: [{ contract: A, function: "transfer" }] }
-		const h = capabilityHarness(session, () => ({ granted: [legacy, transaction] }))
+		const h = capabilityHarness(session, () => ({ granted: [{ type: "data" }, transaction] }))
 		await h.request([transaction])
-		expect(await h.stored()).toEqual([legacy, transaction])
+		expect(await h.stored()).toEqual([data, transaction])
+	})
+
+	test("an entry of no known type the person grants through the unknown row stores a row that still reads", async () => {
+		const transaction = { type: "transaction", scope: [{ contract: A, function: "transfer" }] }
+		const h = capabilityHarness(makeSession())
+		await h.request(["x", transaction])
+		expect(await h.stored()).toEqual(["x", transaction])
+		await expect(h.request([transaction])).resolves.toMatchObject({ granted: [transaction] })
+		expect(h.seen.windows).toBe(1)
+	})
+
+	test("the answer refuses a decided row that holds a malformed grant written during the window", async () => {
+		const transaction = { type: "transaction", scope: [{ contract: A, function: "transfer" }] }
+		const decideBeside = (written: unknown) => {
+			const h = capabilityHarness(makeSession(), (params) => {
+				h.setRow({ capabilityGrants: [{ capability: written, grantedAt: 1 }] })
+				return { granted: params.delta }
+			})
+			return { answer: h.request([transaction]), stored: h.stored }
+		}
+		const refused = decideBeside({ type: "data" })
+		await expect(refused.answer).rejects.toBeInstanceOf(ValidationError)
+		await expect(refused.answer).rejects.toThrow("Malformed data capability")
+
+		const data = { type: "data", addressBook: true }
+		const control = decideBeside(data)
+		await expect(control.answer).resolves.toMatchObject({ granted: [transaction] })
+		expect(await control.stored()).toEqual([data, transaction])
 	})
 
 	test("the accounts grant the safety net adds is the projected request", async () => {
@@ -2504,6 +2534,26 @@ describe("dispatcher — createAuthWit asks unless the authorizations consent is
 		const h = harness({ capabilityGrants: [accounts, anyContract], authorizationsWithoutAsking: { broad: true } })
 		await h.authwit({ consumer: TOKEN, innerHash: `0x${"01".repeat(32)}` })
 		expect(h.counts).toEqual({ signed: 0, windows: 1 })
+	})
+
+	// A malformed scope counts as reaching any contract; were it dropped on read, the narrow
+	// consent would become effective and sign without a window.
+	test("a malformed broad grant beside a narrow one refuses the call: nothing signs, no window opens", async () => {
+		const narrowSim = {
+			capability: { type: "simulation", transactions: { scope: [{ contract: TOKEN, function: "transfer" }] } },
+			grantedAt: 1,
+		}
+		const malformedBroad = { capability: { type: "transaction", scope: [null] }, grantedAt: 1 }
+		const consent = { authorizationsWithoutAsking: { broad: false } }
+		const refused = harness({ capabilityGrants: [accounts, malformedBroad, narrowSim], ...consent })
+		const refusal = refused.authwit(intent(TOKEN))
+		await expect(refusal).rejects.toBeInstanceOf(ValidationError)
+		await expect(refusal).rejects.toThrow("Malformed transaction capability")
+		expect(refused.counts).toEqual({ signed: 0, windows: 0 })
+
+		const control = harness({ capabilityGrants: [accounts, narrowSim], ...consent })
+		await expect(control.authwit(intent(TOKEN))).resolves.toBe("0xsigned")
+		expect(control.counts).toEqual({ signed: 1, windows: 0 })
 	})
 
 	test("a silent signing already past dispatch entry completes after Settings turns Off; the next call asks", async () => {
