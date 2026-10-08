@@ -1,7 +1,7 @@
 ---
 plan: supply-chain-release
 tier: mid
-status: approved; arc 1 merged (#50); arc 2 in implementation
+status: approved; arcs 1-3 merged (#50, #54, #57); arc 4 in review
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -530,7 +530,7 @@ Pass: each exits 0.
 
 ### Arc 4: audit backlog and the gate
 
-#### Phase 8: bumps, classification, gate
+#### Phase 8: bumps, classification, gate ✓
 
 1. Run `bun audit fix`, holding vitest out. Review `bun pm diff` for each bump. Drop any bump the age gate refuses.
 2. Bump `vue` to 3.5.42.
