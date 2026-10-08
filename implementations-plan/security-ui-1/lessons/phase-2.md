@@ -7,3 +7,8 @@
 - **Mutation check.** Removing each guard fails exactly its test: the disabled binding (password ready-state test), the click handler's `canDownload` (the reached-before-encryption test), the writer's plain-file refusal (the in-place switch test), the confirmation itself (four passkey tests).
 - **A stale untracked `apps/landing/src/generated/release.json`** (no current code reads it) failed `biome check` inside `audit:vue`. Moved out of the worktree; never committed.
 - **Gate.** `audit:vue` passed on the second run (the first failed only on that artifact).
+
+## Post-implementation, round 1
+
+- **A page that holds secrets must not outlive the profile that made them.** A switch made elsewhere reaches every open popup page as an in-place `appStore.profile` update, never an unmount, and the shell does not close popups on it. Both reviewers found the export page then judged a password backup by a passkey profile's rule. Fixed by resetting the page on a profile-id change through the same path as unmount.
+- **A once-value queued on a mock leaks into the next test when a test fails early** (`vi.clearAllMocks` keeps `mockResolvedValueOnce` queues): a mutation run cascaded into an unrelated failure until the fence mock was `mockReset` per test.

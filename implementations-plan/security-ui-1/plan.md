@@ -1,7 +1,7 @@
 ---
 plan: security-ui-1
 tier: mid
-status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 merged (#51); arc 2 in implementation
+status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 merged (#51); arc 2 in review
 issues: [17, 34, 14]
 driver: claude-code
 claude_model: opus
@@ -294,7 +294,7 @@ Tests: for every option, the plain path either does not exist (A, D-password) or
 - Pass criteria: every command exits 0; the new tests pass.
 - Layers: lint, typecheck, unit, component, build.
 
-### Phase 2.2: the export page's e2e (Arc 2)
+### Phase 2.2: the export page's e2e (Arc 2) ✓
 
 1. Update every helper and spec that downloads a plain backup (recon.md § E2E hooks) for the pick.
 2. Extend `security-backup.test.ts` with the picked rule and a `shotSend` capture of the new state.
@@ -493,6 +493,42 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 ### Arc 1 post-implementation: Codex fix loop, round 2 (resumed session)
 
 **Verdict:** `clean`. "No material findings remain": the revised tests exercise the successful stale decrypt, validated legacy and new envelopes, same-id re-creation, early refusal and key wiping after a fence refusal. The loop converged for arc 1.
+
+### Arc 2 post-implementation: Codex fix loop, round 1 (gpt-6.1-sol, high), with one Opus review
+
+**Codex verdict:** `reject`. One High, two Low; all accepted after checking them against the tree.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | A profile switch made in another window updates the page in place (`bootstrapActiveProfile` sets `appStore.profile`; the shell neither navigates nor closes popups), so a finished password backup was judged by the new profile's type: switched to a passkey profile, "Download anyway" wrote the password profile's master, entropy and imported-keys key. A passkey-to-passkey switch left a stale confirmation live. | High | Accepted, verified. A watch on the active profile id runs the unmount path (`discardRun`: fence, run clients, scrub) and returns the page to the agreement step. Tests: password to passkey (the page starts over), passkey to passkey (a confirmation from before the switch writes nothing after the new profile's run is ready; a fresh one does). |
+| 2 | The unmount test cannot catch removal of the callback's generation check (unmount also nulls the payload), and nothing tests the `finished` half. | Low | Accepted: the passkey-to-passkey test pins the generation check, and "a confirmation answered after the file was encrypted writes nothing" pins `finished`. Each mutation fails exactly its test. |
+| 3 | The capture helper's header claims an optional `downloads` permission and stubs a check nothing makes; a test doc comment walks through its helper. | Low | Accepted: header corrected, stub removed, doc cut to one line. |
+
+**Opus 5.5 review (general-purpose, same round):** `approve with fixes`.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | Same as Codex 1 (it traced `SessionManager.open` emitting `onActiveProfileChanged` with no lock first). Proposed binding eligibility to the run's `{ id, passkey }`. | Medium | Accepted as Codex 1, with the reset instead: the whole page is profile-type driven (banner copy, whether Protect reuses the profile password or asks for a new one), so a backup held across a switch is wrong beyond the download rule. |
+| 2 | The callback's two guards lack failing tests. | Low | Same as Codex 2. |
+| 3 | The confirm's doc comment overclaimed ("the run whose payload…") while `generation` changed only on unmount. | Low | Accepted: the switch reset bumps `generation`, and the comment says what the code guarantees. |
+| 4 | "An Enter with nothing focused starts nothing" dispatches on `document.body`, which never reaches the page root, so it cannot fail. | Low | Not acted on: pre-existing and unchanged by this arc. |
+| 5 | `Object.assign(cacheStore.confirm, …)` could inherit `single`, `confirmation_text` or `toggle` from an earlier request. | Nit | Accepted: the confirmation is a fresh object. |
+
+**Where the panel disagreed, and the call.** Opus: bind the download rule to the run's profile. Codex: invalidate and reset the page on a profile change. Decided for the reset (reason above). What a person sees: after switching profiles in another window, this page returns to its agreement step, its own first screen, instead of showing the previous profile's backup.
+
+### Arc 2 post-implementation: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `approve with fixes`. The reset to the agreement step is "a reasonable fail-safe"; the round-1 bypass and test gaps are closed. Three findings, all accepted.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The reset left a pending passkey prompt for the previous profile open over the new agreement step. | Medium | Accepted: the reset rejects the page's pending ceremony, which unmounts its dialog and aborts the prompt. Test: a held prompt is ended by the switch, then the new profile's run completes. |
+| 2 | The default watcher flush defers the reset, and a switch away and back within one tick coalesces it away. | Low | Accepted: `flush: "sync"`; the test asserts the prompt's end with no flush. |
+| 3 | "In-flight closures die with the aborted run" overstated the scrub. | Low | Accepted: reworded. |
+
+### Arc 2 post-implementation: Codex fix loop, round 3 (resumed session)
+
+**Verdict:** `approve with fixes`, no production finding: "The production fix looks correct … No new production bug found in this diff." One Low test finding, accepted: the switch test held the prompt forever instead of rejecting it, so the stale run's catch and `finally` never ran. The test now rejects the held prompt through the page's ceremony rejection and asserts the stale run toasts and navigates nothing while the new profile's run completes; removing the catch's generation check fails it. The loop stops here at its three-round limit, with no production finding open.
 
 ## Post-implementation
 
