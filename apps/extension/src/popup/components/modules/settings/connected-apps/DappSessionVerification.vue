@@ -16,7 +16,7 @@ const emit = defineEmits(["toggleTrust"])
 </script>
 
 <template>
-	<Flex direction="column" gap="10" wide>
+	<Flex direction="column" gap="10" wide data-testid="connected-app-verification">
 		<SectionLabel label="Connection check" />
 		<Flex direction="column" align="center" wide>
 			<EmojiGrid :emojis="emojis" />
