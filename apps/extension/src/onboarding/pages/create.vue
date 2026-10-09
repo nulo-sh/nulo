@@ -242,6 +242,12 @@ onBeforeUnmount(() => {
 	color: var(--app-bg);
 }
 
+/* The focused tab is always the filled one, where an accent ring would vanish into the fill. */
+.tabActive:focus-visible {
+	outline: 2px solid var(--app-bg);
+	outline-offset: -5px;
+}
+
 .passkeyInfo {
 	padding: 16px;
 	background: var(--nulo-surface);

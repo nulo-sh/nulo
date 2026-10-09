@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { effect, nextTick, stop } from "vue"
+import { createMemoryHistory, createRouter } from "vue-router"
 import { createAppStoreHarness } from "../../../../../tests/helpers/app-store-harness"
 import { installChromeStorage } from "../../../../../tests/helpers/chrome-storage-mock"
 import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
@@ -266,13 +267,20 @@ describe("TokensView — Home order and cap", () => {
 		expect(wrapper.find('[data-testid="tokens-count"]').text()).toBe("4")
 	})
 
-	test("Home shows at most three rows and a View-all link with the overflow", async () => {
+	test("Home shows at most three rows and a View-all link to Holdings with the overflow", async () => {
 		H.getTokenBalances.mockResolvedValue([1, 2, 3, 4, 5].map((i) => namedRow(i, `T${i}`, { chainId: CHAIN })))
-		const wrapper = mount(TokensView, { shallow: true })
+		const router = createRouter({
+			history: createMemoryHistory(),
+			routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
+		})
+		const wrapper = mount(TokensView, { shallow: true, global: { plugins: [router], stubs: { RouterLink: false } } })
 		await flushPromises()
 
 		expect(cardSymbols(wrapper)).toHaveLength(3)
-		expect(wrapper.find('[data-testid="tokens-view-all"]').exists()).toBe(true)
+		const link = wrapper.find('[data-testid="tokens-view-all"]')
+		expect(link.element.tagName).toBe("A")
+		expect(link.attributes("href")).toBe("/popup/holdings")
+		expect(link.text()).toBe("View all")
 	})
 
 	test("three or fewer tokens: every row shows and there is no View-all link", async () => {

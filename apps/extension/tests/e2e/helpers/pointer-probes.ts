@@ -63,8 +63,7 @@ export async function tabAround(page: Page, times: number): Promise<string[]> {
 	return visited
 }
 
-/** Presses Tab until the named control holds the focus and returns every stop on the way; throws,
- *  naming them, after `limit` presses. */
+/** Presses Tab until focus is in the named control, at most `limit` times, and returns the walk. */
 export async function tabTo(page: Page, testid: string, limit = 40): Promise<string[]> {
 	const visited: string[] = []
 	while (visited.length < limit) {
@@ -72,25 +71,6 @@ export async function tabTo(page: Page, testid: string, limit = 40): Promise<str
 		if (visited.at(-1) === testid) return visited
 	}
 	throw new Error(`Tab never reached ${testid}: ${visited.join(" → ")}`)
-}
-
-/** The focused element's computed outline once its transitions have settled (a control with
- *  `transition: all` brings its ring in over that time), and the theme's accent resolved to the same
- *  colour syntax, so a ring drawn in the accent compares equal whatever notation the token uses. */
-export async function focusRing(page: Page): Promise<{ ring: string; color: string; accent: string }> {
-	return page.evaluate(async () => {
-		const el = document.activeElement as Element
-		// `getAnimations` flushes style first, so a transition the focus just started is in the list.
-		const settled = Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)))
-		await Promise.race([settled, new Promise((r) => setTimeout(r, 1_000))])
-		const style = getComputedStyle(el)
-		const probe = document.createElement("span")
-		probe.style.color = "var(--nulo-accent)"
-		document.body.append(probe)
-		const accent = getComputedStyle(probe).color
-		probe.remove()
-		return { ring: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`, color: style.outlineColor, accent }
-	})
 }
 
 type EscapeRead = { __escapeHandled?: boolean }
@@ -118,4 +98,30 @@ export async function pressEscape(page: Page): Promise<boolean> {
 		polling: 50,
 	})
 	return page.evaluate(() => (window as unknown as EscapeRead).__escapeHandled === true)
+}
+
+/** The colour a design token resolves to on this page's root, as the browser serialises a computed
+ *  colour, so it compares with any computed colour. Throws when the root does not define the token. */
+export async function tokenColor(page: Page, token: string): Promise<string> {
+	return page.evaluate((name: string) => {
+		if (!getComputedStyle(document.documentElement).getPropertyValue(name).trim()) throw new Error(`${name} is not defined`)
+		const probe = document.createElement("i")
+		probe.style.color = `var(${name})`
+		document.body.append(probe)
+		const color = getComputedStyle(probe).color
+		probe.remove()
+		return color
+	}, token)
+}
+
+/** The named control's computed outline: `style width offset`, and its colour, read once its
+ *  transitions have settled, since a control with `transition: all` brings its ring in over time. */
+export async function focusRing(page: Page, testid: string): Promise<{ ring: string; color: string }> {
+	return page.$eval(sel(testid), async (el) => {
+		// `getAnimations` flushes style first, so a transition the focus just started is in the list.
+		const settled = Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)))
+		await Promise.race([settled, new Promise((r) => setTimeout(r, 1_000))])
+		const style = getComputedStyle(el)
+		return { ring: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`, color: style.outlineColor }
+	})
 }

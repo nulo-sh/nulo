@@ -58,8 +58,6 @@ const props = defineProps({
 	},
 })
 
-const router = useRouter()
-
 /** Terminal journal records (cancelled / interrupted / failed) have no age
  *  cutoff: like settled chain txs, they persist across browser restarts.
  *
@@ -762,7 +760,7 @@ onBeforeUnmount(() => {
 	>
 		<Flex align="end" justify="between" :class="$style.section_header">
 			<SectionLabel label="Recent activity" />
-			<span @click="router.push('/popup/activity')" :class="$style.archive_link" data-testid="activity-view-all">View history</span>
+			<RouterLink to="/popup/activity" :class="$style.archive_link" data-testid="activity-view-all">View history</RouterLink>
 		</Flex>
 
 		<div v-if="showStalledLine" :class="$style.stalled_line" data-testid="incoming-sync-stalled">
@@ -858,13 +856,17 @@ onBeforeUnmount(() => {
 	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	color: var(--nulo-outline);
-	cursor: pointer;
+	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
 
 	&:hover {
 		color: var(--nulo-accent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 

@@ -228,7 +228,7 @@ Run every command from the worktree root unless the step says otherwise. Every p
 
 The first Arc 1 phase that runs creates `apps/extension/tests/e2e/send-keyboard.test.ts` (smoke, `registeredExtensionPerTest`) with a helper that opens Send and Tabs until a testid holds the focus (`tabAround`/`activeTestId` from `tests/e2e/helpers/pointer-probes.ts`). Firefox: press `" "`, never `"Space"` (`tests/e2e/FIREFOX.md`).
 
-#### Phase 1.0: an Enter elsewhere never picks a suggestion (call 5)
+#### Phase 1.0: an Enter elsewhere never picks a suggestion (call 5) ✓
 
 Skip this phase if call 5 is "as is".
 
@@ -238,7 +238,7 @@ Skip this phase if call 5 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; the step 1 tests and the step 3 e2e failed on today's code before step 2 (logged). Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 1.1: the unit switch, Max and Refresh quote by keyboard (call 1, with call 2's style)
+#### Phase 1.1: the unit switch, Max and Refresh quote by keyboard (call 1, with call 2's style) ✓
 
 Skip this phase if call 1 is "as is".
 
@@ -261,7 +261,7 @@ Skip this phase if call 1 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox (or, I5, the network run of `fiat-send.test.ts` on both); the network run of `send-amount-exact.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; the step 2 tests failed before step 3; every `cmp` pair is identical or explained in lessons; both browsers' shot pairs are attached to the PR. Layers: lint, typecheck, unit, smoke and network e2e, both browsers.
 
-#### Phase 1.2: the token card's focus ring (call 2)
+#### Phase 1.2: the token card's focus ring (call 2) ✓
 
 Skip this phase if call 2 is B or "as is".
 
@@ -271,7 +271,7 @@ Skip this phase if call 2 is B or "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; every 3:1 row passes; the source test failed before step 2. Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 1.3: a press below the destination survives its swap (call 3)
+#### Phase 1.3: a press below the destination survives its swap (call 3) ✓
 
 Skip this phase if call 3 is "as is".
 
@@ -291,7 +291,7 @@ Skip this phase if call 3 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox; the network run of `send-amount-exact.test.ts` on chrome and on firefox. Pass criteria: step 1's reproduction failed before step 3 (logged) and passes after; step 2's coverage is logged; every command exits 0. Layers: lint, typecheck, unit, smoke and network e2e, both browsers.
 
-#### Phase 1.4: the sponsor notice in a live region (call 4)
+#### Phase 1.4: the sponsor notice in a live region (call 4) ✓
 
 Skip this phase if call 4 is "as is".
 
@@ -301,7 +301,7 @@ Skip this phase if call 4 is "as is".
 
 **Validation gate.** Commands: the fast layers; the network run of `fee-sponsor-funding.test.ts` on chrome. Pass criteria: every command exits 0; the shots are identical or explained in lessons. Layers: lint, typecheck, unit, network e2e.
 
-#### Phase 1.5: the fee method picker by keyboard (call 6)
+#### Phase 1.5: the fee method picker by keyboard (call 6) ✓
 
 Skip this phase if call 6 is B or "as is".
 
@@ -320,11 +320,11 @@ Built on page 1's answers (A, A, C, yes, A, A); every phase gate passed. The per
   - Option C voids a queued release by clearing its timer handle, not with a hold token: the same guarantee with one less piece of state.
   - The hold also ends at the capture of the click its release delivers outside the field: a native click runs the microtasks between its listeners, so the card renders before the click reaches its target and the fee menu measures its trigger where the card moved it. The release timer stays for a press that delivers no click.
   - `data-testid="send-destination-suggestions"` on the suggestion list, so the coverage probe asserts the list is open. No visible change.
-  - `tabTo` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`; `focusRing` waits for the focused element's transitions, since Firefox shot the token card's ring mid-transition.
+  - `tabTo` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`. Arc 2 landed first with the same two helpers (A2-D3), so the merge of `dev` keeps its `focusRing(page, testid)` and `tokenColor`, and adds Arc 1's wait for the control's transitions to it: Firefox shot the token card's ring mid-transition.
   - The unit-switch spec asserts the single stop after the token card, not a whole logged sequence: Chrome starts the first Tab after a click from the clicked spot.
   - The real-card `send.test.ts` case prices a testnet seed through `getPriceMapEntry`.
   - CLAUDE.md § Keyboard & focus order gains call 1's exception in this PR, not at close-out: the rule lands with the code that makes it true.
-  - Delivery: a plain PR on `dev`, with `dev` merged in, never rebased; the arcs run in parallel worktrees, so this layer opens no `gh stack`.
+  - Delivery: a plain PR on `dev`, with `dev` merged in, never rebased; the arcs run in parallel worktrees, so this layer opens no `gh stack`. Arc 2 merged first (#76), so A2-D1's order ran the other way round.
 - **Review.** Codex (gpt-6.1-sol, high): round 1 approve with fixes, five findings, four accepted (a second pointer took over the held press; a queued release ended a newer press; the fee menu measured its trigger before the card moved it, 30 px off on Chrome; the fee spec never picked by keyboard); round 2 clean. Opus: six findings, four accepted (the chevron's `aria-hidden`; Refresh quote moves the focus only when a live quote unmounts it; a vacuous Max test; a dead `color: inherit`), one rejected, one noted.
   - Rejected: deleting the `/** Composables */` import header (CLAUDE.md's SFC order names import groups); an e2e of the Enter guard's 250 ms window (the base-build red proved it; the unit tests pin the window).
   - Noted: a pen press reaches the hold through the same pointer events as a mouse; no pen device here to prove it.
@@ -332,7 +332,7 @@ Built on page 1's answers (A, A, C, yes, A, A); every phase gate passed. The per
 
 ### Arc 2, Home and shared chrome (after page 2's answers)
 
-#### Phase 2.1: Home's view links (call 1)
+#### Phase 2.1: Home's view links (call 1) ✓
 
 Skip this phase if call 1 is "as is".
 
@@ -346,7 +346,7 @@ Skip this phase if call 1 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `home-links.test.ts` on chrome and on firefox; the network run of `home-cap.test.ts` on chrome and on firefox when it carries the "View all" assertions (A, I5) or the nav-tab change (B). Pass criteria: every command exits 0; step 1's tests failed before step 2. Layers: lint, typecheck, unit, smoke e2e on both browsers; network e2e when `home-cap.test.ts` changed.
 
-#### Phase 2.2: the back arrow's and the onboarding tab's rings (call 2)
+#### Phase 2.2: the back arrow's and the onboarding tab's rings (call 2) ✓
 
 Skip this phase if call 2 is "as is".
 
@@ -357,7 +357,7 @@ Skip this phase if call 2 is "as is".
 
 **Validation gate.** Commands: the fast layers (`test:all` runs the design package); the smoke run of `tooltips-glossary.test.ts onboarding-tab.test.ts` on chrome and on firefox; `bun run --cwd apps/extension build-storybook`. Pass criteria: every command exits 0; the outlines read `2px solid` in the accent colour (back) and the page colour (tab). Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 2.3: the step bar's empty half (call 5)
+#### Phase 2.3: the step bar's empty half (call 5) ✓
 
 Skip this phase if call 5 is "as is".
 
@@ -367,7 +367,7 @@ Skip this phase if call 5 is "as is".
 
 **Validation gate.** Commands: the fast layers; the network run of `connect-one-window.test.ts` on chrome. Pass criteria: every command exits 0, including `tokens.drift.test.ts`, `tokens.parity.test.ts`, `base.css.test.ts` and the "dark palette, unthemed vs explicit" tests. Layers: lint, typecheck, unit, network e2e.
 
-#### Phase 2.4: the status colours in the light theme (call 6)
+#### Phase 2.4: the status colours in the light theme (call 6) ✓
 
 Skip this phase if call 6 is "as is".
 
@@ -378,7 +378,41 @@ Skip this phase if call 6 is "as is".
 
 **Validation gate.** Commands: the fast layers; `bun run --cwd apps/extension build-storybook`. Pass criteria: every command exits 0. Layers: lint, typecheck, unit.
 
-**Arc 2 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 2 Codex fix loop has converged.
+**Arc 2 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 2 Codex fix loop has converged. ✓
+
+#### Arc 2 record (Home and shared chrome)
+
+Built on the owner's page 2 picks (OWNER-ASKS.md § Answers: page 2): calls 1 A, 2 A, 5 A and 6 A. Calls 3 and 4 are Arc 3. The phase log is [lessons/phase-2.md](lessons/phase-2.md).
+
+**Arc 2 deviations from the plan as written.**
+
+- **A2-D1, delivery.** The orchestrator ran Arcs 1 and 2 in parallel from the plan commit. Arc 2's branch `accessibility-1-home-chrome` stacks on the plan commit, not on Arc 1, and its PR targets `dev`; Arc 1 merges first, then Arc 2 is rebased onto `dev`. This replaces § Delivery's layer order for these two arcs; Arc 3 and the close-out still stack on top.
+- **A2-D2, Phase 2.1.** The smoke spec seeds one transaction, not three: "View history" needs one row, and fewer rows move under the Tab walk.
+- **A2-D3, test helpers.** `tabTo`, `tokenColor` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`, shared by the three specs that read a ring; `rows.test.ts` keeps its own `tabTo` because PR #56 rewrites that file.
+- **A2-D4, Firefox focus.** Each Tab walk calls `prepareKeys` first: on an unfocused Firefox page `document.hasFocus()` is false and no `:focus-visible` rule matches. Onboarding's create page focuses the password field on arrival, so its walk goes back one stop with Shift+Tab; a forward walk leaves the document on Firefox.
+- **A2-D5, "View all" in the network spec.** Smoke Home draws "View all" only once every default token lands from the live testnet; one failed default leaves three rows and no link (`capHomeSlots`). Its assertions moved to `network/home-cap.test.ts`, the plan's own fallback, on four funded tokens; smoke `home-links.test.ts` keeps "View history", on Home and on a token's page.
+- **A2-D6, `dev` merged in.** The opened PR conflicted with `dev` on `implementations-plan/index.md` (the plan commit's line against security-ui-1's close-out), so GitHub ran no PR workflow. `origin/dev` was merged into the branch (`7032ab3`, no history rewrite), keeping `dev`'s removal and this plan's line, and every Arc 2 gate re-ran green on the merged head. The rebase onto `dev` after Arc 1 lands still follows A2-D1.
+
+**Arc 2 audit verdicts.**
+
+Round 1, Codex (GPT-6.1 Sol, `high`, read-only; session `01a120f5`): **conditional approve (tighten two e2e checks).** Opus 5.5 (general-purpose diff review, alongside): **approve after one Medium fix.**
+
+| # | By | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| 1 | Codex, Opus | Med | `home-links.test.ts` needs all four testnet defaults to land before "View all" shows; `rows.test.ts` only waits for the list to settle, which a failed default also satisfies | Accepted (A2-D5); first rejected on the `rows.test.ts` precedent, which Opus showed does not hold |
+| 2 | Codex | Med | The walk to "View history" could wrap the page and still pass, so it proves no reading order | Accepted: the walk from the list's menu to the link must cross no `BODY` and no nav tab |
+| 3 | Codex | Low | The spec's header comment restated its title | Accepted: removed; a comment now says why "View all" is not in smoke |
+| 4 | Opus | Low | A token's page shows the same "View history", which § UI impact did not name | Accepted: the smoke spec Tabs to it there too; the PR body names and shows it |
+| 5 | Opus | Low | The `--nulo-track` comment in the dark block spoke of the light accent | Accepted: reworded; `base.css` re-pinned |
+| 6 | Opus | Low | `.subtitle_green` asserted twice | Accepted: the duplicate removed |
+
+Round 2, Codex (resumed, same session) on the fix commit: **conditional approve (one new test gap).**
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 7 | Med | After `navigateByHash` to the token page, Home's own "View history" could satisfy the wait, so the walk could test Home's link | Accepted: the spec waits for the token page's `token-menu-trigger` first |
+
+Round 3, Codex (resumed) on that fix: **approve, no new material findings.** The Arc 2 loop converged.
 
 ### Arc 3, after PRs #56, #55 and #58 (page 2, calls 3 and 4)
 

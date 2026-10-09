@@ -13,7 +13,7 @@ import { clickByTestId, openPopup, test, waitForHash, type ExtensionContext } fr
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
-import { activeTestId, coveredAt, focusRing, tabAround, tabTo, waitForFocus } from "./helpers/pointer-probes"
+import { activeTestId, coveredAt, focusRing, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
@@ -34,9 +34,9 @@ async function openSendPage(ctx: ExtensionContext, { priced = false } = {}): Pro
 
 async function expectAccentRing(page: Page, testid: string): Promise<void> {
 	expect(await activeTestId(page)).toBe(testid)
-	const { ring, color, accent } = await focusRing(page)
+	const { ring, color } = await focusRing(page, testid)
 	expect(ring, testid).toMatch(/^solid 2px /)
-	expect(color, testid).toBe(accent)
+	expect(color, testid).toBe(await tokenColor(page, "--nulo-accent"))
 }
 
 async function waitForAmountMode(page: Page, mode: "token" | "usd"): Promise<void> {
