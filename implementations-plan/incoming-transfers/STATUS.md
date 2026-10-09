@@ -1,0 +1,10 @@
+# incoming-transfers — status
+
+- 2026-10-09 — phase 0: adopted worktree `incoming-transfers` (origin/dev `ac259a7`), read briefs, ten issues and the page 4 / C12 records.
+- 2026-10-09 — recon: two Explore agents (sonnet) plus driver read; recon.md written. #140 regrouped out of Arc 1 (deletes visible rows; OA-1).
+- 2026-10-09 — draft: plan.md, OWNER-ASKS.md (OA-1 to OA-4) written; dual audit next.
+- 2026-10-09 — audit round 1: Codex `reject`, Opus `conditional approve`. Accepted the ticket fence, the production-shaped mock, Arc 2 rules, #140 block compare; #92 repair replaced by an all-or-nothing Allow; #138 order routed to OA-5.
+- 2026-10-09 — revision: plan, recon and OWNER-ASKS (five asks) rewritten; final fresh Codex pass running.
+- 2026-10-09 — final fresh Codex pass: `reject`, eight findings; revised (one multi-key Allow write, missing-row refusal, page hold on a stand-down, `settled` marker for #140, newest-first windows for #138, OA-6). Confirmation round running.
+- 2026-10-09 — final pass round 2: `reject`, five findings, all accepted (`deletersRunning`, two-strike #140 delete, revoked/processed commits, window cursors, OA-6 ships nothing). Round 3 running.
+- 2026-10-09 — final pass round 3: `reject`, one finding (deleter count read at lock entry), accepted. Loop stopped at three rounds; awaiting orchestrator approval.
