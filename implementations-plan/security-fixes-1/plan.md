@@ -13,6 +13,19 @@ trunk: dev
 issues: "#28 #29 #13 #30 #31 #27 #33 #32 #25 #35"
 ---
 
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: closed. All three arcs squash-merged into `dev`; the ten issues are closed.
+- **Shipped**:
+  - [#48](https://github.com/nulo-sh/nulo/pull/48), arc 1: #28 (`grantPublicAuthwit` refused as a batch leg), #29 (stored grants re-projected on every read that interprets them; a malformed one refuses the read), #13 (the selector-binding refusal names the policy, never a request value).
+  - [#52](https://github.com/nulo-sh/nulo/pull/52), arc 2: #30 (finalize wipes the passkey stash and the DEK rewrap context on every path that does not consume them), #31 (profile RPCs return the `getProfileInfo` projection; a replacing stash `set` wipes the old entry), #27 (a restored contract's artifact is checked against its instance's original class id before it registers).
+  - [#60](https://github.com/nulo-sh/nulo/pull/60), arc 3: #33 (transfer estimate reuse bound to the sponsor row the build used and to the live chain pair), #32 (account create and import fenced on chain liveness and the deletion epoch; the reconcile delete takes the row lock), #25 (the note arm gets the public arm's epoch re-checks), #35 (userinfo refused in the shared RPC URL verdict, so the node adapter refuses it too, with fixed reasons).
+- **Owner answers** (decision page 2, 2026-10-08; [OWNER-ASKS.md](OWNER-ASKS.md) § Answers): a1 A, the recovery banner stays after a rename, built in #52 (D18); a2 A, classify the selector-binding refusal as a scope refusal, acknowledged and filed as a follow-up, not built here; a3 A, a self-mismatched backup contract is refused with the existing warning, as shipped; a4 A, a malformed stored grant stays refused until the app is disconnected, as shipped.
+- **Dropped**: OA-2's classification, because a class change alone reaches neither the journal's `failureKind` nor the execution code channel, so it is a change of its own. The #30 consumption-binding guard was rejected as unrealistic (D10). No new e2e spec, by design: each fix changes a refusal or an internal order, not a flow.
+- **Open items**: moved to [follow-ups](../follow-ups.md): the planning out-of-scope list and the review findings outside the fixes (§ Follow-ups found during planning). No issue stays open.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
+
 # security-fixes-1 — ten audit fixes in bridge, profile, backup and service code
 
 Ten findings from the security audit, each closable in service-worker or bridge code. No fix changes
@@ -21,7 +34,7 @@ closest to today, built only from wording the wallet already has, and the choice
 owner in [OWNER-ASKS.md](OWNER-ASKS.md). Three arcs ship as three stacked PRs, then a docs-only
 close-out PR.
 
-Recon: [recon.md](recon.md). Live progress: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md).
 
 ## Tier and budget
 

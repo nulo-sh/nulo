@@ -39,7 +39,7 @@ Gotchas from closed plans, read before every task: one line each with evidence, 
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category, never the message. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
 - bb.js never closes its CRS cache (idb-keyval's `keyval-store`) once a page loads the CRS: deleting it blocks. [Evidence](archive/hd-delete-after-prove/plan.md#crs-cache)
-- A MAC binds only what it names, and a row's stored `id` moves with the row: anchor it on the storage key; on a MAC failure refuse, never self-heal. [Evidence](archive/mac-identity-binding/plan.md#mac-scope)
+- A MAC binds only what it names, and a row's stored `id` moves with the row: anchor it on the storage key; on a MAC failure refuse, never self-heal. Likewise an address commits to the original class id, not `currentContractClassId`: check an artifact against the original. [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](security-fixes-1/lessons/phase-6.md)
 
 ## Aztec
 
