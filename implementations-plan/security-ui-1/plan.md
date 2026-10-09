@@ -1,7 +1,7 @@
 ---
 plan: security-ui-1
 tier: mid
-status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 merged (#51); arc 2 in review (#55); arc 3 in progress
+status: completed (arc 1 merged as #51; arcs 2 and 3, #55 and #58, land with this close-out)
 issues: [17, 34, 14]
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,19 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: closed with this delivery. Arc 1 squash-merged into `dev` as #51; arcs 2 and 3 (#55, #58) and this close-out are stacked on it and land together. All three issues close with them.
+- **Shipped**:
+  - [#51](https://github.com/nulo-sh/nulo/pull/51), arc 1: #17. A password profile's full backup carries a key made for that one backup for its imported keys, never the profile's lasting one, so a leaked file opens only the imported keys that existed when it was made. The encrypted file gains a tagged, versioned wrapper bound to its purpose (AAD). Every older backup still restores; a new encrypted file does not open in an older Nulo.
+  - [#55](https://github.com/nulo-sh/nulo/pull/55), arc 2: #34, option D. A password profile's full backup downloads only once encrypted; a passkey profile's plain download asks first, and its "Download anyway" is `@nulo/design`'s new `destructive` Button variant (the regular button's type and padding on red). The export page starts over when a profile switch made in another window reaches it.
+  - [#58](https://github.com/nulo-sh/nulo/pull/58), arc 3: #14, option A. The emoji check has "They don't match" beside "They match": it ends the app's live channels on that network under its profile and deletes every row of the app under that profile, read raw by storage key. The check's copy no longer claims more than it proves, on the window and the app's settings page. Session teardown keeps another profile's stamped channels.
+- **Owner answers.** Decision page, 2026-10-08 ([OWNER-ASKS.md](OWNER-ASKS.md) § Answers): 1. "**D**, split by profile type: A on password profiles, B on passkey profiles"; 2. "**A**, two equal controls"; 3. "**Yes**, keep today's behaviour: closing answers nothing"; 4. "**Yes**, go ahead". Result page, signed off 2026-10-09 12:50 UTC (§ Answers: result page, 2026-10-09): r1 "**C**, a red variant of the regular button"; r2 "**Yes**, ship as built" (a profile switch in another window resets the export page); r3 "**Yes**, ship as built" (ending an app's session is scoped to the profile that owns it).
+- **Dropped**: Phase 3.3 (closing the check window ends the session), on call 3's "yes"; turning the check into a gate is #15. Phase 1.1's per-backup key for passkey profiles, since whoever opens that file's key already holds the passkey. The cross-arc Codex pass over the net diff (Post-implementation step 3) was not run: each arc's loop converged, and the last loop was scoped to the red button's diff.
+- **Open items**: moved to [follow-ups](../follow-ups.md): the single-account export's unencrypted download, a full backup that cannot open some imported-key rows naming no loss, the render caveats (the red button's hover contrast, the instruction against an uppercase label), closing the check window keeping the session (under #15), and the residual of the cross-profile teardown entry (a handshake not yet stamped still ends). No issue stays open.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # Security UI 1: backup encryption, a refusal on the emoji check, a per-backup key
 

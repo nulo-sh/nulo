@@ -12,3 +12,8 @@
 
 - **A page that holds secrets must not outlive the profile that made them.** A switch made elsewhere reaches every open popup page as an in-place `appStore.profile` update, never an unmount, and the shell does not close popups on it. Both reviewers found the export page then judged a password backup by a passkey profile's rule. Fixed by resetting the page on a profile-id change through the same path as unmount.
 - **A once-value queued on a mock leaks into the next test when a test fails early** (`vi.clearAllMocks` keeps `mockResolvedValueOnce` queues): a mutation run cascaded into an unrelated failure until the fence mock was `mockReset` per test.
+
+## Owner call r1: the red button
+
+- **Vitest maps every CSS-module name, defined or not.** `$style.anything` renders as `_anything_<hash>` in a component test (vitest 4.1.10, `@vitejs/plugin-vue`), so asserting a variant's class proves nothing about its look: five of the first seven `Button.test.ts` cases passed with the `.wrapper.destructive` rule deleted. The look is pinned by reading the SFC's style block through `?raw`.
+- **Primary's hover formula is theme-relative.** It mixes 18% of `--txt-primary` into the fill, which lightens in the dark theme and darkens in the light one; on red that drops the white label's contrast in dark only. Raised to the owner as a render note.
