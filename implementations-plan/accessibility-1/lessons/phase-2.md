@@ -13,3 +13,8 @@ Commands as plan.md § Implementation phases defines them (smoke runs build firs
 
 - Smoke Home on testnet draws "View all" once the four default tokens land (I5 holds).
 - Green: unit; smoke `home-links.test.ts` on Chrome (18 s) and Firefox (36 s), retry 0; fast layers.
+
+## Phase 2.2
+
+- Red: the two source-rule tests (`SubPageHeaderBase.test.ts`, `create.test.ts`) before the rules existed; the smoke reds are above.
+- Green: unit and design tests; smoke `tooltips-glossary.test.ts onboarding-tab.test.ts` on Chrome and Firefox, retry 0, 14 of 14 each; the focused back arrow reads `solid 2px -2px` in the accent and the focused method tab `solid 2px -5px` in `--app-bg`, both browsers; fast layers; `build-storybook`.

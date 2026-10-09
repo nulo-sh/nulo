@@ -1,6 +1,6 @@
 import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
-import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, waitForTarget } from "./fixtures/browser"
+import { extensionUrl, gotoExtensionPage, isFirefox, newPage, openScratchPage, prepareKeys, waitForTarget } from "./fixtures/browser"
 import {
 	withTimeoutMessage,
 	clickByTestId,
@@ -12,6 +12,8 @@ import {
 } from "./fixtures/extension"
 import { readProfileNames } from "./fixtures/helpers"
 import { waitForPopupClosed } from "./fixtures/popups"
+import { shotSend } from "./fixtures/send-page"
+import { focusRing, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 import {
 	interceptHealth,
 	PRESTO_DETAILED_HEALTH,
@@ -65,6 +67,32 @@ describe("onboarding tab", () => {
 		// the wrapper to `<main>` / `<section>` would fail this assertion immediately.
 		const mainCount = await page.evaluate(() => document.querySelectorAll("main").length)
 		expect(mainCount).toBe(1)
+
+		await page.close()
+	})
+
+	test("the focused method tab shows a ring in the page colour inside its fill, and ArrowRight carries it to Passkey", async ({
+		freshExtensionPerTest: extension,
+	}) => {
+		const page = await openOnboarding(extension)
+		await clickByTestId(page, "onboarding-welcome-create")
+		await waitForHash(page, "#/onboarding/create", 10_000)
+		await page.waitForSelector('[data-testid="onboarding-method-password"]', { visible: true })
+
+		// The page focuses the password field, and a walk forward from it leaves the document on Firefox.
+		await prepareKeys(page)
+		await page.keyboard.down("Shift")
+		await page.keyboard.press("Tab")
+		await page.keyboard.up("Shift")
+		await waitForFocus(page, "onboarding-method-password")
+		await shotSend(page, "onboarding-method-password-focused", "onboarding-method-password")
+		const ring = { ring: "solid 2px -5px", color: await tokenColor(page, "--app-bg") }
+		expect(await focusRing(page, "onboarding-method-password")).toEqual(ring)
+
+		await page.keyboard.press("ArrowRight")
+		await waitForFocus(page, "onboarding-method-passkey")
+		await shotSend(page, "onboarding-method-passkey-focused", "onboarding-method-passkey")
+		expect(await focusRing(page, "onboarding-method-passkey")).toEqual(ring)
 
 		await page.close()
 	})

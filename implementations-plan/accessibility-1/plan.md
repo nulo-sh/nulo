@@ -328,7 +328,7 @@ Skip this phase if call 1 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `home-links.test.ts` on chrome and on firefox; the network run of `home-cap.test.ts` on chrome and on firefox when it carries the "View all" assertions (A, I5) or the nav-tab change (B). Pass criteria: every command exits 0; step 1's tests failed before step 2. Layers: lint, typecheck, unit, smoke e2e on both browsers; network e2e when `home-cap.test.ts` changed.
 
-#### Phase 2.2: the back arrow's and the onboarding tab's rings (call 2)
+#### Phase 2.2: the back arrow's and the onboarding tab's rings (call 2) ✓
 
 Skip this phase if call 2 is "as is".
 
