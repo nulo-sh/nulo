@@ -23,7 +23,7 @@ import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures
 import { assertPgOk, callExpectingNoPopup, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveCapabilities, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
-import { openSend, waitForFee } from "../fixtures/send-page"
+import { openSend, shotSend, waitForFee } from "../fixtures/send-page"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -171,6 +171,10 @@ test.skipIf(!hasConfig)(
 		expect(await triggerText(page)).toBe(nuloTrigger)
 		const notice = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.textContent?.trim())
 		expect(notice).toBe("The sponsor can't cover this fee right now, so Sponsored pays it.")
+		await shotSend(page, "fee-sponsor-short", "fee-sponsor-short")
+		// The text of a polite region the card mounted before it, so a screen reader is told.
+		const region = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.parentElement?.getAttribute("data-testid"))
+		expect(region).toBe("fee-sponsor-live")
 		const view = await waitForFee(page, "public", "sponsored")
 		expect(view.action).toBe("send")
 		await page.waitForFunction(

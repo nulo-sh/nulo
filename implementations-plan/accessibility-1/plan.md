@@ -228,7 +228,7 @@ Run every command from the worktree root unless the step says otherwise. Every p
 
 The first Arc 1 phase that runs creates `apps/extension/tests/e2e/send-keyboard.test.ts` (smoke, `registeredExtensionPerTest`) with a helper that opens Send and Tabs until a testid holds the focus (`tabAround`/`activeTestId` from `tests/e2e/helpers/pointer-probes.ts`). Firefox: press `" "`, never `"Space"` (`tests/e2e/FIREFOX.md`).
 
-#### Phase 1.0: an Enter elsewhere never picks a suggestion (call 5)
+#### Phase 1.0: an Enter elsewhere never picks a suggestion (call 5) ✓
 
 Skip this phase if call 5 is "as is".
 
@@ -238,7 +238,7 @@ Skip this phase if call 5 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; the step 1 tests and the step 3 e2e failed on today's code before step 2 (logged). Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 1.1: the unit switch, Max and Refresh quote by keyboard (call 1, with call 2's style)
+#### Phase 1.1: the unit switch, Max and Refresh quote by keyboard (call 1, with call 2's style) ✓
 
 Skip this phase if call 1 is "as is".
 
@@ -261,7 +261,7 @@ Skip this phase if call 1 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox (or, I5, the network run of `fiat-send.test.ts` on both); the network run of `send-amount-exact.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; the step 2 tests failed before step 3; every `cmp` pair is identical or explained in lessons; both browsers' shot pairs are attached to the PR. Layers: lint, typecheck, unit, smoke and network e2e, both browsers.
 
-#### Phase 1.2: the token card's focus ring (call 2)
+#### Phase 1.2: the token card's focus ring (call 2) ✓
 
 Skip this phase if call 2 is B or "as is".
 
@@ -271,7 +271,7 @@ Skip this phase if call 2 is B or "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; every 3:1 row passes; the source test failed before step 2. Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 1.3: a press below the destination survives its swap (call 3)
+#### Phase 1.3: a press below the destination survives its swap (call 3) ✓
 
 Skip this phase if call 3 is "as is".
 
@@ -291,7 +291,7 @@ Skip this phase if call 3 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox; the network run of `send-amount-exact.test.ts` on chrome and on firefox. Pass criteria: step 1's reproduction failed before step 3 (logged) and passes after; step 2's coverage is logged; every command exits 0. Layers: lint, typecheck, unit, smoke and network e2e, both browsers.
 
-#### Phase 1.4: the sponsor notice in a live region (call 4)
+#### Phase 1.4: the sponsor notice in a live region (call 4) ✓
 
 Skip this phase if call 4 is "as is".
 
@@ -301,7 +301,7 @@ Skip this phase if call 4 is "as is".
 
 **Validation gate.** Commands: the fast layers; the network run of `fee-sponsor-funding.test.ts` on chrome. Pass criteria: every command exits 0; the shots are identical or explained in lessons. Layers: lint, typecheck, unit, network e2e.
 
-#### Phase 1.5: the fee method picker by keyboard (call 6)
+#### Phase 1.5: the fee method picker by keyboard (call 6) ✓
 
 Skip this phase if call 6 is B or "as is".
 
@@ -310,7 +310,26 @@ Skip this phase if call 6 is B or "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox; the network run of `popup-escape-layered.test.ts` on chrome (it opens the picker by pointer). Pass criteria: every command exits 0; the step 1 tests failed before step 2; the trigger's at-rest shots (`shotSend` with focus `send-fee-method-trigger`, before and after, both browsers) are identical under `cmp` or explained. Layers: lint, typecheck, unit, smoke and network e2e.
 
-**Arc 1 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 1 Codex fix loop has converged.
+**Arc 1 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 1 Codex fix loop has converged. ✓
+
+#### Arc 1 record
+
+Built on page 1's answers (A, A, C, yes, A, A); every phase gate passed. The per-run detail is in [`lessons/phase-1.md`](lessons/phase-1.md).
+
+- **Deviations.**
+  - Option C voids a queued release by clearing its timer handle, not with a hold token: the same guarantee with one less piece of state.
+  - The hold also ends at the capture of the click its release delivers outside the field: a native click runs the microtasks between its listeners, so the card renders before the click reaches its target and the fee menu measures its trigger where the card moved it. The release timer stays for a press that delivers no click.
+  - `data-testid="send-destination-suggestions"` on the suggestion list, so the coverage probe asserts the list is open. No visible change.
+  - `tabTo` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`. Arc 2 landed first with the same two helpers (A2-D3), so the merge of `dev` keeps its `focusRing(page, testid)` and `tokenColor`, and adds Arc 1's wait for the control's transitions to it: Firefox shot the token card's ring mid-transition.
+  - The unit-switch spec asserts the single stop after the token card, not a whole logged sequence: Chrome starts the first Tab after a click from the clicked spot.
+  - The real-card `send.test.ts` case prices a testnet seed through `getPriceMapEntry`.
+  - CLAUDE.md § Keyboard & focus order gains call 1's exception in this PR, not at close-out: the rule lands with the code that makes it true.
+  - Delivery: a plain PR on `dev`, with `dev` merged in, never rebased; the arcs run in parallel worktrees, so this layer opens no `gh stack`. Arc 2 merged first (#76), so A2-D1's order ran the other way round.
+- **Review.** Codex (gpt-6.1-sol, high): round 1 approve with fixes, five findings, four accepted (a second pointer took over the held press; a queued release ended a newer press; the fee menu measured its trigger before the card moved it, 30 px off on Chrome; the fee spec never picked by keyboard); round 2 clean. Opus: six findings, four accepted (the chevron's `aria-hidden`; Refresh quote moves the focus only when a live quote unmounts it; a vacuous Max test; a dead `color: inherit`), one rejected, one noted.
+  - Rejected: deleting the `/** Composables */` import header (CLAUDE.md's SFC order names import groups); an e2e of the Enter guard's 250 ms window (the base-build red proved it; the unit tests pin the window).
+  - Noted: a pen press reaches the hold through the same pointer events as a mouse; no pen device here to prove it.
+- **CI on the PR.** Firefox smoke failed once in CI: the fee picker spec pressed ArrowDown while every fee method was still loading, and a loading method is disabled, so the arrows had no target. The spec now waits for an enabled method first. Codex (resumed review of that hunk): approve, one Low accepted (the comment's wording).
+- **Open.** The cross-arc Codex pass runs after the last arc.
 
 ### Arc 2, Home and shared chrome (after page 2's answers)
 

@@ -151,6 +151,12 @@ onBeforeUnmount(() => {
 	&:hover {
 		background: color-mix(in srgb, var(--nulo-surface-low) 50%, transparent);
 	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: -2px;
+		background: color-mix(in srgb, var(--nulo-surface-low) 50%, transparent);
+	}
 }
 
 .wrapper_loading {

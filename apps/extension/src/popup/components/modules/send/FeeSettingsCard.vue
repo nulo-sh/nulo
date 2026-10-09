@@ -921,14 +921,26 @@ onBeforeUnmount(() => {
 				:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
 				:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
 			/>
+		</template>
 
-			<Flex v-if="sponsorShort" align="start" gap="6" wide :class="$style.detail_row" data-testid="fee-sponsor-short">
-				<Icon name="info" size="14" color="primary" />
+		<!-- Mounted with the card in every state: a region created with its text in place may go unannounced. -->
+		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-sponsor-live">
+			<Flex
+				v-if="showMethodSelector && sponsorShort"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-sponsor-short"
+			>
+				<Icon name="info" size="14" color="primary" aria-hidden="true" />
 				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ sponsorShortText }}
 				</Text>
 			</Flex>
+		</div>
 
+		<template v-if="showMethodSelector">
 			<!-- Get-fee-juice nudge: the selected method has no fee juice to pay with. -->
 			<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
 				<Icon name="warning" size="14" color="secondary" />
