@@ -9,9 +9,9 @@ import { beforeAll, describe, expect, test } from "vitest"
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router"
 import { LEGACY_SETTINGS_REDIRECTS } from "@/popup/legacy-routes"
 import { createPopupGuard } from "@/popup/route-guard"
-import { PAGES_OPTIONS } from "./pages-options"
+import { PAGES_OPTIONS } from "../../scripts/pages-options"
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+const root = join(dirname(fileURLToPath(import.meta.url)), "../..")
 
 interface GeneratedRoute {
 	path: string

@@ -155,7 +155,7 @@ Both audits kept the plan's structure over plan-alt's (unused infrastructure arc
 |---|---|---|---|
 | C1 | High | Lock completion overstated: routing depends on the worker's event, and the header discards the lock request's promise; a persisted session can survive | Adopted. Data & control flow corrected; Security "Lock completion"; Facts 18 and 19; Inference 8; P1 step 7 pins the rejection path. No retry UI (that would be a new Ask). |
 | C2 | Medium | `dispose()` has no ownership contract | Adopted with one change: a pending read finishes instead of being invalidated, because cancelling drops the requested lock (F1). Contract in Key interfaces; tests in P1 step 7; ledger 19. |
-| C3 | Medium | Route tests do not prove the guard or the meta | Adopted. `scripts/legacy-routes.test.ts` asserts `isAuthRequired` and drives the real `createPopupGuard` (Algorithms; P2 step 12). |
+| C3 | Medium | Route tests do not prove the guard or the meta | Adopted. `apps/extension/src/popup/legacy-routes.test.ts` asserts `isAuthRequired` and drives the real `createPopupGuard` (Algorithms; P2 step 12). |
 | C4 | Low | "No query forwarding" is false | Adopted. Security "Redirects" corrected (vue-router 5.2.0 is installed, not 5.1.0; same behavior); the `?redirect=https://example.org` case is in the same test. |
 | C5 | Medium | A stale snapshot can overwrite a newer event | Adopted: snapshot fence and both orderings (ledger 20; P2 steps 14 and 18). Its "refresh after reconnection" was first rejected; the final pass showed the hub stays mounted across a reconnect, so it is adopted as S4 (ledger 22). |
 | C6 | Low | A remount does not repair a failed-write value | Adopted. Inference 6 restated. |

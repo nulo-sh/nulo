@@ -10,7 +10,7 @@ Step 1 (the three `git mv` renames) landed alone in its own commit; this log sta
 
 ## Routes
 
-- A route dump through `PageContext` + the vue resolver's `getComputedRoutes` showed every settings record flat (no nested children), names as `popup-settings-<segments>`, and the `<route>` meta on each record. `scripts/legacy-routes.test.ts` passed on its first run (18 cases).
+- A route dump through `PageContext` + the vue resolver's `getComputedRoutes` showed every settings record flat (no nested children), names as `popup-settings-<segments>`, and the `<route>` meta on each record. `apps/extension/src/popup/legacy-routes.test.ts` passed on its first run (18 cases).
 
 ## Hub
 
@@ -37,5 +37,5 @@ Step 1 (the three `git mv` renames) landed alone in its own commit; this log sta
 
 - `bun run lint` failed once: Biome's `noShadowRestrictedNames` on a test helper named `valueOf`, plus formatting in two new tests. Renamed the helper and ran `biome check --write` on those two files.
 - `bun run build:chrome` left `src/types/auto-imports.d.ts`, `.eslintrc-auto-import.json` and `components.d.ts` unchanged: P2 adds no export under a scanned directory and no component (`legacy-routes.ts` sits in `src/popup/`, outside the auto-import dirs). The built popup carries the three redirect records and the lock and privacy routes.
-- Negative checks: a restored `security/index.vue` reds three cases of `scripts/legacy-routes.test.ts` (no page of its own; the security landing; the query case), because a generated record listed before the redirect wins the match. Removing `isAuthRequired` from `privacy.vue` reds its meta case. Both reverted; the tree matched before each check.
+- Negative checks: a restored `security/index.vue` reds three cases of `apps/extension/src/popup/legacy-routes.test.ts` (no page of its own; the security landing; the query case), because a generated record listed before the redirect wins the match. Removing `isAuthRequired` from `privacy.vue` reds its meta case. Both reverted; the tree matched before each check.
 
