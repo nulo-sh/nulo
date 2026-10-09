@@ -85,3 +85,7 @@ Picks changed by the lead:
 ## Codex implementation round 2
 
 - Verdict reject, three findings (plan § Audit verdicts, R2), all adopted. A "testid no ancestor carries" is not proof that it sits inside the site's component: a slot's content renders inside the component's wrapper, so the check now reads the component's own template (C10). When a selector moves to a child, the role's composition target moves with it, or the sweep's own-class check fails a correct inheritance (C11).
+
+## Codex implementation round 3
+
+- Verdict reject, one finding (C12, plan § Audit verdicts, R3), adopted after the round: proving a testid exists in a component is not proving it renders the site's value, so the check now ties it to the bound prop. Three rounds, so the loop stops here; C12's fix had no codex pass of its own and goes to the final cross-arc pass.
