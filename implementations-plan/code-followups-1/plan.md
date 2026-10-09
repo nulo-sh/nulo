@@ -631,7 +631,7 @@ not a flake. Every run's log goes under `<SCRATCH>/runlogs/`.
 
 ### Arc 1 — CI reliability
 
-#### Phase 1 — the boot line, explained where it prints
+#### Phase 1 — the boot line, explained where it prints ✓
 
 1. In `spawnAztecNode` (`tests/e2e/global-setup.ts`), right after the spawn, log once:
    `[e2e-setup] the aztec CLI wrapper also starts an anvil on :<ANVIL_PORT>; its bind error at boot is expected`.

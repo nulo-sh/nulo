@@ -543,6 +543,9 @@ function spawnAztecNode(): void {
 				PATH: `${AZTEC_INTERNAL_BIN}${path.delimiter}${process.env.PATH ?? ""}`,
 				SEQ_MIN_TX_PER_BLOCK: "0",
 				ETHEREUM_HOSTS: ANVIL_URL,
+				// `node_modules/.bin/aztec` (scripts/aztec.sh) starts its own anvil on $ANVIL_PORT
+				// (8545 when unset); on this setup's port it loses the bind and exits instead of
+				// running a second L1 nobody owns.
 				ANVIL_PORT: String(ANVIL_PORT),
 				AZTEC_PORT: String(AZTEC_PORT),
 				// Highest-priority override for @aztec-labs/ethereum's
@@ -565,6 +568,7 @@ function spawnAztecNode(): void {
 	)
 	weStartedNode = true
 	recordSpawnedPid()
+	console.log(`[e2e-setup] the aztec CLI wrapper also starts an anvil on :${ANVIL_PORT}; its bind error at boot is expected`)
 
 	nodeProcess.stdout?.on("data", (data: Buffer) => {
 		const line = data.toString().trim()
