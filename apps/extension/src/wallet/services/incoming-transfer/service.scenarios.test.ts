@@ -74,8 +74,7 @@ vi.mock("./repository", () => ({
 	// fake is the robust form.
 	IncomingTransferRepository: class {
 		constructor() {
-			// biome-ignore lint/correctness/noConstructorReturn: mock ctor returns the in-memory fake
-			return {
+			const repo = {
 				getRecord: async (k: string) => records.get(k),
 				hasRecord: async (k: string) => records.has(k),
 				upsertRecord: async (r: IncomingTransferRecord) => {
@@ -92,10 +91,13 @@ vi.mock("./repository", () => ({
 				listByContract: async (p: string, n: string, c: string) =>
 					[...records.values()].filter((r) => r.profileId === p && r.networkId === n && r.contract === c),
 				getTrust: async (p: string, n: string, c: string) => trust.get(trustKey(p, n, c)),
-				// Keeps the stored floor fields, as the real repository does.
+				/** The stored read inside `setTrust`, a method of its own so a test can park on it. */
+				readTrustForWrite: async (p: string, n: string, c: string) => trust.get(trustKey(p, n, c)),
+				// As the real repository: the stored read, then the fence, then the write, keeping the floor fields.
 				setTrust: async (p: string, n: string, c: string, state: IncomingTrustState, fence?: () => boolean) => {
+					const stored = await repo.readTrustForWrite(p, n, c)
 					if (fence && !fence()) return undefined
-					const { arrivalFloor, arrivalFloorPending } = trust.get(trustKey(p, n, c)) ?? {}
+					const { arrivalFloor, arrivalFloorPending } = stored ?? {}
 					const rec: IncomingTrustRecord = { profileId: p, networkId: n, contract: c, state, updatedAt: 0 }
 					if (arrivalFloor !== undefined) rec.arrivalFloor = arrivalFloor
 					if (arrivalFloorPending) rec.arrivalFloorPending = true
@@ -149,6 +151,8 @@ vi.mock("./repository", () => ({
 				},
 				listOutbox: async () => [...outbox.entries()],
 			}
+			// biome-ignore lint/correctness/noConstructorReturn: mock ctor returns the in-memory fake
+			return repo
 		}
 	},
 	trustKey,
@@ -5539,6 +5543,7 @@ const RECEIPT_COLLABORATORS: Array<[keyof ReceiptFixture | "repo", string, strin
 	["repo", "getRecord", "getRecord"],
 	["repo", "getTrust", "getTrust"],
 	["repo", "setTrust", "setTrust"],
+	["repo", "readTrustForWrite", "trustRead"],
 	["config", "getValue", "visibility"],
 	["note", "getBlockTimestamp", "timestamp"],
 	["repo", "setOutbox", "setOutbox"],
@@ -5596,6 +5601,32 @@ async function runReceipt(inst: ReturnType<typeof instrumentReceipt>, hold: stri
 	await done
 }
 
+const WATCHDOG_MS = 5 * 60_000 + 1
+
+/** Advance fake time in zero steps until `reached` holds: each step drains the microtasks queued by
+ *  the last. */
+async function untilReached(held: { reached: boolean }) {
+	for (let i = 0; i < 20 && !held.reached; i++) await vi.advanceTimersByTimeAsync(0)
+	expect(held.reached).toBe(true)
+}
+
+/** Run `op` and, while `hold` is parked, let the lock watchdog hand the lock over: the section's
+ *  ticket goes stale and the epoch stays where it was. */
+async function runHandoff<T>(inst: ReturnType<typeof instrumentReceipt>, op: () => Promise<T>): Promise<T> {
+	vi.useFakeTimers()
+	try {
+		const done = op()
+		await untilReached(inst.parked)
+		inst.log.push("HANDOFF")
+		await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+		inst.release()
+		await vi.advanceTimersByTimeAsync(0)
+		return await done
+	} finally {
+		vi.useRealTimers()
+	}
+}
+
 const flagString = (flags: boolean[]) => flags.map((f) => (f ? "1" : "0")).join("")
 
 const NOTE_ID = noteRecordId("p1", "n1", validNullifier(1))
@@ -5648,16 +5679,18 @@ function receiptFlags(log: string[], recordId: string, fixture: string): string 
 /** Both arms' locked head: one order, pinned for both by the matrices below. */
 const RECEIPT_HEAD = ["tokens", "getRecord", "outgoing", "inflight"]
 const NOTE_HEAD = RECEIPT_HEAD
-const NOTE_PROMOTION = ["getTrust", "setTrust", "trustChanged", "visibility", "pending"]
+const NOTE_PROMOTION = ["getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending"]
 const NOTE_UNKNOWN = ["notes", ...NOTE_HEAD, ...NOTE_PROMOTION, "timestamp", "setOutbox", "upsert"]
 const NOTE_TRUSTED = ["notes", ...NOTE_HEAD, "getTrust", "timestamp", "setOutbox", "upsert", "visibility", "added"]
-/** `log` with `BUMP` after the first `label` and everything past `stop` dropped. */
-const bumpedAfter = (log: string[], label: string, stop = log[log.length - 1]) => {
+/** `log` with `marker` after the first `label` and everything past `stop` dropped. */
+const bumpedAfter = (log: string[], label: string, stop = log[log.length - 1], marker = "BUMP") => {
 	const end = log.indexOf(stop) + 1
 	const cut = log.slice(0, end)
 	const at = cut.indexOf(label) + 1
-	return [...cut.slice(0, at), "BUMP", ...cut.slice(at)]
+	return [...cut.slice(0, at), marker, ...cut.slice(at)]
 }
+/** `log` cut after `label`, where the watchdog handed the lock over. */
+const handedOffAfter = (log: string[], label: string) => bumpedAfter(log, label, label, "HANDOFF")
 
 describe("IncomingTransferService — note receipt epoch re-check matrix", () => {
 	test.each<[string, NoteFixture, string, string[], string]>([
@@ -5675,13 +5708,19 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		["N4 in-flight read", "unknown", "inflight", bumpedAfter(NOTE_UNKNOWN, "inflight", "inflight"), "000000"],
 		["N5 trust read", "unknown", "getTrust", bumpedAfter(NOTE_UNKNOWN, "getTrust", "getTrust"), "000000"],
 		[
-			"(DRIFT PIN) N6 trust write: the prompt still emits",
+			"N6 bare bump after the trust write: the prompt still emits",
 			"unknown",
 			"setTrust",
-			bumpedAfter(NOTE_UNKNOWN, "setTrust", "pending"),
+			bumpedAfter(NOTE_UNKNOWN, "trustRead", "pending"),
 			"111000",
 		],
-		["(DRIFT PIN) N7 prompt visibility read", "unknown", "visibility", bumpedAfter(NOTE_UNKNOWN, "visibility", "pending"), "111000"],
+		[
+			"N7 bare bump in the prompt's visibility read: the prompt still emits",
+			"unknown",
+			"visibility",
+			bumpedAfter(NOTE_UNKNOWN, "visibility", "pending"),
+			"111000",
+		],
 		[
 			"N8 timestamp read: the record stands down",
 			"unknown",
@@ -5716,6 +5755,34 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		await runReceipt(inst, hold, () => scan(f.service))
 		expect(inst.log).toEqual(expectedLog)
 		expect(receiptFlags(inst.log, NOTE_ID, fixture)).toBe(expectedFlags)
+	})
+
+	test.each<[string, string, string[], string]>([
+		[
+			"N5b handoff in the trust write's stored read: no row is written",
+			"trustRead",
+			handedOffAfter(NOTE_UNKNOWN, "trustRead"),
+			"000000",
+		],
+		["N6h handoff after the trust write: neither prompt emits", "setTrust", handedOffAfter(NOTE_UNKNOWN, "trustRead"), "100000"],
+		[
+			"N7h handoff in the prompt's visibility read: the trust event emits, the prompt does not",
+			"visibility",
+			handedOffAfter(NOTE_UNKNOWN, "visibility"),
+			"110000",
+		],
+		[
+			"N8h handoff in the timestamp read: no outbox row and no record",
+			"timestamp",
+			handedOffAfter(NOTE_UNKNOWN, "timestamp"),
+			"111000",
+		],
+	])("%s", async (_name, hold, expectedLog, expectedFlags) => {
+		const f = await bootNoteReceipt("unknown")
+		const inst = instrumentReceipt(f, hold)
+		await runHandoff(inst, () => scan(f.service))
+		expect(inst.log).toEqual(expectedLog)
+		expect(receiptFlags(inst.log, NOTE_ID, "unknown")).toBe(expectedFlags)
 	})
 
 	test("an own outgoing hash: the record is read first and the journal is never read", async () => {
@@ -5753,7 +5820,7 @@ type PublicCommit = (
 	ev: PublicTransferEvent,
 	epochAtStart: number,
 	opts?: { reconcile?: boolean },
-) => Promise<void>
+) => Promise<"revoked" | "processed">
 
 function commitPublic(service: unknown, opts?: { reconcile?: boolean }, ev: PublicTransferEvent = pubEvent({ txHash: PUB_TX })) {
 	const svc = service as { serviceEpoch: number; commitPublicEvent: PublicCommit }
@@ -5761,7 +5828,7 @@ function commitPublic(service: unknown, opts?: { reconcile?: boolean }, ev: Publ
 }
 
 const PUB_HEAD = RECEIPT_HEAD
-const PUB_UNKNOWN = [...PUB_HEAD, "getTrust", "setTrust", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
+const PUB_UNKNOWN = [...PUB_HEAD, "getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
 const PUB_TRUSTED = [...PUB_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
 
 describe("IncomingTransferService — public receipt epoch re-check matrix", () => {
@@ -5780,13 +5847,19 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		["P4 in-flight read", "unknown", "inflight", bumpedAfter(PUB_UNKNOWN, "inflight", "inflight"), "000000"],
 		["P5 trust read: the promotion stands down", "unknown", "getTrust", bumpedAfter(PUB_UNKNOWN, "getTrust", "getTrust"), "000000"],
 		[
-			"(DRIFT PIN) P6 trust write: the prompt still emits",
+			"P6 bare bump after the trust write: the prompt still emits",
 			"unknown",
 			"setTrust",
-			bumpedAfter(PUB_UNKNOWN, "setTrust", "pending"),
+			bumpedAfter(PUB_UNKNOWN, "trustRead", "pending"),
 			"111000",
 		],
-		["(DRIFT PIN) P7 prompt visibility read", "unknown", "visibility", bumpedAfter(PUB_UNKNOWN, "visibility", "pending"), "111000"],
+		[
+			"P7 bare bump in the prompt's visibility read: the prompt still emits",
+			"unknown",
+			"visibility",
+			bumpedAfter(PUB_UNKNOWN, "visibility", "pending"),
+			"111000",
+		],
 		["P8 outbox write: the record stands down", "unknown", "setOutbox", bumpedAfter(PUB_UNKNOWN, "setOutbox", "setOutbox"), "111100"],
 		["P9 record write", "unknown", "upsert", bumpedAfter(PUB_UNKNOWN, "upsert"), "111110"],
 		["control, trusted", "trusted", "none", PUB_TRUSTED, "000111"],
@@ -5801,6 +5874,28 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		await runReceipt(inst, hold, () => commitPublic(f.service, fixture === "reconcile" ? { reconcile: true } : undefined))
 		expect(inst.log).toEqual(expectedLog)
 		expect(receiptFlags(inst.log, PUB_ID, fixture)).toBe(expectedFlags)
+	})
+
+	test.each<[string, string, string[], string]>([
+		[
+			"P5b handoff in the trust write's stored read: no row is written",
+			"trustRead",
+			handedOffAfter(PUB_UNKNOWN, "trustRead"),
+			"000000",
+		],
+		["P6h handoff after the trust write: neither prompt emits", "setTrust", handedOffAfter(PUB_UNKNOWN, "trustRead"), "100000"],
+		[
+			"P7h handoff in the prompt's visibility read: the trust event emits, the prompt does not",
+			"visibility",
+			handedOffAfter(PUB_UNKNOWN, "visibility"),
+			"110000",
+		],
+	])("%s; the commit is revoked", async (_name, hold, expectedLog, expectedFlags) => {
+		const f = await bootPublicReceipt("unknown")
+		const inst = instrumentReceipt(f, hold)
+		expect(await runHandoff(inst, () => commitPublic(f.service))).toBe("revoked")
+		expect(inst.log).toEqual(expectedLog)
+		expect(receiptFlags(inst.log, PUB_ID, "unknown")).toBe(expectedFlags)
 	})
 
 	test("an own outgoing hash: the record is read first and the journal is never read", async () => {
@@ -5821,6 +5916,185 @@ test("both arms' unknown-trust receipts read the same head in the same order", a
 
 	expect(noteLog.slice(1, 1 + RECEIPT_HEAD.length)).toEqual(RECEIPT_HEAD)
 	expect(publicLog.slice(0, RECEIPT_HEAD.length)).toEqual(RECEIPT_HEAD)
+})
+
+// ── Receipt sections beside a watchdog handoff or a displaced deleter ─────────
+
+type DeleterInternals = {
+	onTransactionAdded: (tx: { hash: string; account: string; chainId: number; calls: unknown[] }) => Promise<void>
+}
+const ownTxAdded = (service: unknown, hash: string) =>
+	(service as DeleterInternals).onTransactionAdded({ hash, account: "0xa", chainId: 1, calls: [] })
+
+/** Starts a late-delete for `hash`, parks it in its record listing and lets the watchdog hand the lock
+ *  over, so it is still running, displaced, when the caller's next section enters. Fake timers. */
+async function displacedDeleter(f: ReceiptFixture, hash: string) {
+	const listing = holdCall(internals(f.service).repo, "listByTxHash", 1, "after")
+	const done = ownTxAdded(f.service, hash)
+	await untilReached(listing.held)
+	await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+	return {
+		finish: async () => {
+			listing.release()
+			await vi.advanceTimersByTimeAsync(0)
+			await done
+		},
+	}
+}
+
+describe("IncomingTransferService — receipt sections beside a handoff or a displaced deleter", () => {
+	test("a successor Allow admitted by a handoff is not overwritten by the displaced receipt", async () => {
+		const f = await bootService({
+			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),
+			token: makeTokenStub([tokenA]),
+			note: makeNoteStub({ [tokenA.contract]: [note({ siloedNullifier: validNullifier(2), txHash: "0xtx2" })] }, { 100: 1_234 }),
+			publicReader: steeredTip(100).reader,
+		})
+		await flushPromises()
+		trust.set(trustKey("p1", "n1", tokenA.contract), {
+			profileId: "p1",
+			networkId: "n1",
+			contract: tokenA.contract,
+			state: "pending",
+			updatedAt: 0,
+		})
+		const earlier = seedNote({ siloedNullifier: validNullifier(1), contract: tokenA.contract, hidden: true })
+		const fresh = noteRecordId("p1", "n1", validNullifier(2))
+		const timestamp = holdCall(f.note, "getBlockTimestamp", 1, "after")
+		vi.useFakeTimers()
+		try {
+			const displaced = scan(f.service)
+			await untilReached(timestamp.held)
+			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+			expect(await f.service.setTrustAllow("p1", "n1", tokenA.contract)).toBe(true)
+			timestamp.release()
+			await vi.advanceTimersByTimeAsync(0)
+			await displaced
+		} finally {
+			vi.useRealTimers()
+		}
+
+		expect(trust.get(trustKey("p1", "n1", tokenA.contract))?.state).toBe("trusted")
+		expect(records.get(earlier.id)?.hidden).toBe(false)
+		expect(records.has(fresh)).toBe(false)
+		await scan(f.service)
+		expect(records.get(fresh)?.hidden).toBe(false)
+	})
+
+	test("a handoff in a public commit holds its page, and the next tick lands the receipt", async () => {
+		const { reader, state } = makePublicReader()
+		const f = await bootPublic(reader, state)
+		trustedRow()
+		state.responses.push(pubPage([pubEvent({ txHash: PUB_TX })]))
+		const trustRead = holdCall(internals(f.service).repo, "getTrust", 1, "after")
+		let first: ScanOutcome | undefined
+		vi.useFakeTimers()
+		try {
+			const tick = scanPublic(f.service)
+			await untilReached(trustRead.held)
+			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+			trustRead.release()
+			await vi.advanceTimersByTimeAsync(0)
+			first = await tick
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(first).toBe("no-progress")
+		expect(records.has(PUB_ID)).toBe(false)
+		expect(cursorFor()).toMatchObject({ cursor: null, pendingPage: expect.anything() })
+
+		// The resume path's ancestry probe reads one page before the forward scan re-reads this one.
+		state.responses.push(pubPage([]), pubPage([pubEvent({ txHash: PUB_TX })]))
+		expect(await scanPublic(f.service)).toBe("progress")
+		expect(records.get(PUB_ID)?.hidden).toBe(false)
+		expect(cursorFor()?.pendingPage).toBeUndefined()
+		expect(cursorFor()?.cursor).toMatchObject({ blockNumber: 5 })
+	})
+
+	test("a handoff in a reconcile rewrite keeps the marker, so the moved receipt is rewritten, not deleted", async () => {
+		const { reader, state } = makePublicReader()
+		const f = await bootPublic(reader, state)
+		trustedRow()
+		const moved = seedPublic({ txHash: "0xmoved", l2BlockNumber: 7, blockHash: "0xold7" })
+		const marker = { lowerBound: 6, upperBound: 8, upperBoundHash: "0xcheckpoint", progress: null, seen: [] }
+		seedCursor({ cursor: { blockNumber: 8, txIndexWithinBlock: 0, logIndexWithinTx: 0 }, lastScanFinalized: 5, reconciling: marker })
+		const remined = () => pubPage([pubEvent({ txHash: "0xmoved", l2BlockNumber: 7, blockHash: "0xnew7" })])
+		state.responses.push(remined())
+		const recordRead = holdCall(internals(f.service).repo, "getRecord", 1, "after")
+		vi.useFakeTimers()
+		try {
+			const tick = scanPublic(f.service)
+			await untilReached(recordRead.held)
+			await vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+			recordRead.release()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(await tick).toBe("no-progress")
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(cursorFor()?.reconciling).toEqual(marker)
+		expect(records.get(moved.id)).toMatchObject({ blockHash: "0xold7" })
+
+		state.responses.push(remined())
+		expect(await scanPublic(f.service)).toBe("progress")
+		expect(cursorFor()?.reconciling).toBeUndefined()
+		expect(records.get(moved.id)).toMatchObject({ blockHash: "0xnew7", l2BlockNumber: 7 })
+	})
+
+	test("an undisturbed page of an existing record, an own send and a new receipt advances the cursor", async () => {
+		const { reader, state } = makePublicReader()
+		const f = await bootPublic(reader, state, { transaction: ownTx("0xmine") })
+		trustedRow()
+		seedPublic({ txHash: "0xknown", blockHash: "0xbh5" })
+		const events = [
+			pubEvent({ txHash: "0xknown", txIndexWithinBlock: 0 }),
+			pubEvent({ txHash: "0xmine", txIndexWithinBlock: 1 }),
+			pubEvent({ txHash: "0xnew", txIndexWithinBlock: 2 }),
+		]
+		state.responses.push(pubPage(events))
+
+		expect(await scanPublic(f.service)).toBe("progress")
+		expect(records.has("pub:p1|n1|0xnew|0")).toBe(true)
+		expect(records.has("pub:p1|n1|0xmine|0")).toBe(false)
+		expect(cursorFor()?.pendingPage).toBeUndefined()
+		expect(cursorFor()?.cursor).toEqual({ blockNumber: 5, txIndexWithinBlock: 2, logIndexWithinTx: 0 })
+	})
+
+	test.each([
+		["with a displaced deleter still running, a receipt stands down and lands on the next tick", true],
+		["with no deleter running, a receipt lands at once", false],
+	])("%s", async (_name, displaced) => {
+		const f = await bootNoteReceipt("trusted")
+		vi.useFakeTimers()
+		try {
+			const deleter = displaced ? await displacedDeleter(f, "0xunrelated") : undefined
+			await scan(f.service)
+			expect(records.has(NOTE_ID)).toBe(!displaced)
+			await deleter?.finish()
+		} finally {
+			vi.useRealTimers()
+		}
+		await scan(f.service)
+		expect(records.get(NOTE_ID)?.hidden).toBe(false)
+	})
+
+	test("a displaced deleter that finishes during a receipt's reads still makes it stand down", async () => {
+		const f = await bootNoteReceipt("existing")
+		const timestamp = holdCall(f.note, "getBlockTimestamp", 1, "after")
+		vi.useFakeTimers()
+		try {
+			const deleter = await displacedDeleter(f, (records.get(NOTE_ID) as IncomingNoteRecord).txHash)
+			const receipt = scan(f.service)
+			await vi.advanceTimersByTimeAsync(0)
+			await deleter.finish()
+			timestamp.release()
+			await vi.advanceTimersByTimeAsync(0)
+			await receipt
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(records.has(NOTE_ID)).toBe(false)
+	})
 })
 
 // ── Prompt payloads (wire-shaped) ─────────────────────────────────────────────

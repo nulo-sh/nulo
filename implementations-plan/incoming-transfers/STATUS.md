@@ -10,3 +10,4 @@
 - 2026-10-09 — final pass round 3: `reject`, one finding (deleter count read at lock entry), accepted. Loop stopped at three rounds; awaiting orchestrator approval.
 - 2026-10-09 — approved by the orchestrator (D-orch-1 no stack, D-orch-2 Arc 1 only, D-orch-3 unreviewed entry read audited first). Arc 1 implementation started.
 - 2026-10-09 — Phase 1.1 gate passed: incoming-transfer units 346/346, lint 0, typecheck:all 0.
+- 2026-10-09 — Phase 1.2 built; mechanical gate green (units 360/360, lint, typecheck:all; three revert checks fail as required). Entry-read consult (Codex + Opus) running; gate open until recorded (D-orch-3).
