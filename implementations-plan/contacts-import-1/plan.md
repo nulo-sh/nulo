@@ -34,7 +34,7 @@ Three bugs in the contacts import, filed by the owner on 2026-10-08. Recon is in
 - No storage migration: no persisted shape changes.
 
 **UI impact:**
-- The contacts import result toast. New: `Import incomplete · N contacts written` (`kind: "error"`), shown when the import stops early (OWNER-ASKS asks 1 and 2). Before: in that moment the import either wrote the remaining rows to the new profile and showed a success toast, or (after a plain lock) showed "Import ended with errors". Every existing label is unchanged. The PR attaches a screenshot of the new toast (Phase 3).
+- The contacts import result toast. New: `Import incomplete · N contacts written` (`kind: "error"`), shown when the import stops early (OWNER-ASKS asks 1 and 2). Before: in that moment the import either wrote the remaining rows to the new profile and showed a success toast, or (after a plain lock) showed "Error occurred during import", because the next row's read failed and aborted the import ("Import ended with errors" only when the lock landed during the last row's write; checked on Chrome, see D12). Every existing label is unchanged. The PR attaches screenshots of the new toast (Phase 3).
 - No other surface. Closing the file chooser leaves the contacts import, the account import and the full-backup import (onboarding and popup) exactly as they are today: nothing is shown, nothing selected is cleared.
 
 ## Outcome & Quality Bar
@@ -277,6 +277,9 @@ Warning: `audit:vue` builds Chrome without the e2e flags and overwrites `dist/ch
 | D7 | Decide "stopped" by probing the fence after any failed fenced call | classify by error class | The rejection depends on which request a lock's page unmount or a worker restart interrupted, and a deletion fails the fence with a plain error (Opus r1 #1, Codex r1 #2, #3). |
 | D8 | `written` counts writes the wallet confirmed | count persisted rows | A dead fence cannot read the pinned book back; a lost reply can undercount by one, which the toast's ask names. |
 | D9 | Stop toast in its own function | a first branch in `toastImportOutcome` | That function already scores about 15 (Opus r1 #3). |
+| D10 | (implementation) The run reaches `applyImportRows` through `deps`: `ContactIoDeps = ContactIoServices & { run }`, the composable-level interface renamed `ContactIoServices` | a third parameter on `applyImportRows` | Git conflicts on adjacent edits, and open PR #56 edits the line right above the signature. Keeping the signature byte-identical keeps the two line-clean (`lessons/phase-2.md`). |
+| D11 | (implementation) The error-logging loop moves into `logImportErrors`, shared by both toast functions | duplicate the loop in `toastStoppedImport` | One copy of the PII rule. `toastImportOutcome` loses only the loop; its labels are untouched (the Phase 2 label check prints nothing). Deviation from "not edited". |
+| D12 | (implementation) The toast pictures come from the Chrome smoke harness (`shotSend`), a throwaway spec that locks the wallet from a second window during a 500-row import, run on the arc build, on an option-B build and on a base-code build (local branches, never pushed) | a Storybook story (Phase 3 step 5 as written) | The owner decides from real-wallet pictures of the moment the toast appears. The base-code run also corrected the "today" fact: a lock mid-import shows "Error occurred during import", not "Import ended with errors". |
 
 ## Audit verdicts
 

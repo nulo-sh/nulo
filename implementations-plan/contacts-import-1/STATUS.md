@@ -6,3 +6,9 @@
 - 2026-10-09: Codex round 1: reject (2 High, 4 Medium, 2 Low); triage pending the Opus review.
 - 2026-10-09: Opus review: conditional approve (2 High, 3 Medium, 3 Low). Both audits folded: capture at staging, in-lock isFenceLive, fence probe decides the stop, separate stop toast, armed two-browser smoke in Phase 1, second owner ask (stop trigger).
 - 2026-10-09: Codex round 2 (resumed): conditional approve; four conditions folded. Plan at the approval gate.
+- 2026-10-09: implementation started on `worktree-contacts-import-1` (arc 1, phases 1-3).
+- 2026-10-09: Phase 1 step 3 (I4): headless Firefox fires no `cancel` on its own; `contacts-import.test.ts` 5/5 on Firefox with the listener in. No driver contingency.
+- 2026-10-09: Phase 1 gate PASS: lint 0, typecheck:all 0, the five unit files + contacts dir 122/122, armed builds chrome+firefox 0, pick-surface smoke Chrome 4 files 11/11, Firefox 4 files 11/11 (retry 0).
+- 2026-10-09: Phase 2 gate PASS: lint 0, typecheck:all 0, the gate's vitest set 45 files / 806 tests, `git diff 61060c0 -- apps/extension/src | grep -E '^-.*label:'` prints nothing (no label removed or edited).
+- 2026-10-09: Phase 3: `EditContactPopup.test.ts` 20/20 with `EditContactPopup.vue` unchanged since 61060c0 (#44 fixed by #41); `bun run test:all` exit 0 (extension 10534 passed, 4 skipped, 7 todo).
+- 2026-10-09: toast pictures taken on Chrome (A on the arc build, B and today on throwaway local branches `shot/toast-B`, `shot/today`); today's lock mid-import reads "Error occurred during import" (OWNER-ASKS and the UI impact line corrected, D12).

@@ -8,7 +8,9 @@ No other change in this lane alters a screen: the file-chooser fix (#45) leaves 
 
 **Surface:** the toast after a contacts import (Settings → Contacts → Import contacts → Import selected).
 
-**Today, in that moment:** the import either writes the remaining rows to the newly active profile and reports success (the bug), or, after a plain lock, reports "Import ended with errors".
+**Today, in that moment:** the import either writes the remaining rows to the newly active profile and reports success (the bug), or, after a plain lock, reports "Error occurred during import": the next row's read of the book fails and aborts the import. ("Import ended with errors" appears only when the lock lands during the last row's write.) Checked on Chrome: a 500-contact import locked from a second window after 11 rows.
+
+**Pictures:** the PR shows A, B and today's toast after that same lock, in both themes, on the lock screen where it appears.
 
 #43 asks that "the result toast reports the import as incomplete". The lane brief adds the count of contacts written. The count is the number of writes the wallet confirmed; when the stop interrupts a write, that one contact may be saved without being counted.
 
@@ -27,6 +29,6 @@ No other change in this lane alters a screen: the file-chooser fix (#45) leaves 
 
 **Ship now (A):** the import stops when the wallet session its rows were shown in ends before the last row is written. That is: the active profile is switched (in any window), the wallet locks (by hand or by auto-lock), the same profile is unlocked again, the wallet's background restarts, or the profile is being deleted. It also stops when a write fails and the wallet then cannot confirm that the session is still live: the import never continues on a session it cannot prove. This reuses the session check the full-backup export already uses. After a stop, nothing more is written and no sender is registered.
 
-**B. Profile change only:** the import stops only when a different profile becomes active. After a plain lock the remaining writes fail as they do today, and the toast reads "Import ended with errors".
+**B. Profile change only:** the import stops only when a different profile becomes active. After a plain lock the import fails as it does today, and the toast reads "Error occurred during import".
 
 **Planner's recommendation: A.** After a lock nothing more can be written anyway, and "incomplete, N written" tells the person more than "ended with errors". B needs a second, weaker check beside the existing one.
