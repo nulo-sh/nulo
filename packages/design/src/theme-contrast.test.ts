@@ -176,6 +176,8 @@ describe("theme contrast — home links, focus rings and the step bar (required)
 	const pairs: Pair[] = [
 		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link on the page" },
 		{ fg: "--nulo-accent", bg: "--app-bg", min: AA_NON_TEXT, label: "the accent ring on the page" },
+		{ fg: "--nulo-accent", bg: "--nulo-surface-low", min: AA_NON_TEXT, label: "the accent ring on a row's hover tint" },
+		{ fg: "--nulo-accent", bg: "--nulo-surface-high", min: AA_NON_TEXT, label: "the accent ring on a row's pressed tint" },
 		{ fg: "--app-bg", bg: "--nulo-accent", min: AA_NON_TEXT, label: "a page-coloured ring on an accent fill" },
 		{ fg: "--nulo-track", bg: "--app-bg", min: AA_NON_TEXT, label: "a step bar's empty track on the page" },
 	]

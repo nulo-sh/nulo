@@ -2315,6 +2315,17 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(w.find('[data-testid="send-fee-nudge"]').exists()).toBe(type === undefined)
 		})
 
+		test("the notice lands in a polite region that was there, empty, before it", async () => {
+			const w = await pickedWithGas()
+			const live = w.get('[data-testid="fee-sponsor-live"]')
+			expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(live.text()).toBe("")
+			await short(w)
+			expect(w.get('[data-testid="fee-sponsor-live"]').element).toBe(live.element)
+			expect(live.text()).toBe(PAYS_PUBLIC)
+			expect(live.get('[data-testid="fee-sponsor-short"] i').attributes("aria-hidden")).toBe("true")
+		})
+
 		test("funded: marked funded, and nothing else moves", async () => {
 			const w = await pickedWithGas()
 			const emitted = w.emitted("update:modelValue")?.length
@@ -2504,6 +2515,40 @@ describe("FeeSettingsCard — a sponsor that can't cover this fee, outside Send"
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+})
+
+describe("FeeSettingsCard — the sponsor notice's region in a dApp's embedded payment", () => {
+	test("the region mounts with the embedded card, and the notice stays hidden there as before", async () => {
+		const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+		mocks.getFpcs.mockResolvedValue([NULO])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, {
+			props: { ...baseProps(), modelValue: { paymentMethod: { kind: "embedded" } } },
+			global: { stubs: STUBS },
+		})
+		await flushPromises()
+		const live = () => w.get('[data-testid="fee-sponsor-live"]')
+		expect(live().attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+		expect(live().text()).toBe("")
+
+		await w.get('[data-testid="send-fee-override"]').trigger("click")
+		await flushPromises()
+		await w.setProps({
+			feeEstimate: {
+				maxFee: "1000",
+				maxFeeFormatted: "0.000000000000001",
+				sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
+			},
+		})
+		await flushPromises()
+		expect(live().text()).toBe("The sponsor can't cover this fee right now.")
+
+		await w.get('[data-testid="send-fee-back-embedded"]').trigger("click")
+		await flushPromises()
+		expect(w.get('[data-testid="fee-settings-card"]').attributes("data-sponsor-funding")).toBe("short")
+		expect(w.find('[data-testid="fee-sponsor-short"]').exists()).toBe(false)
+		expect(live().text()).toBe("")
 	})
 })
 

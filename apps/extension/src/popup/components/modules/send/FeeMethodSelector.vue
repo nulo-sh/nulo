@@ -44,15 +44,18 @@ const onRowClick = (method, event) => {
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
 				<Flex
+					tag="button"
+					type="button"
 					align="center"
 					justify="between"
 					class="clickable"
+					:class="$style.trigger"
 					data-testid="send-fee-method-trigger"
 					:data-fee-method="modelValue?.subtitle"
 				>
 					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
 					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
-					<MaterialIcon name="expand_more" :size="16" color="secondary" />
+					<MaterialIcon name="expand_more" :size="16" color="secondary" aria-hidden="true" />
 				</Flex>
 			</template>
 
@@ -93,6 +96,18 @@ const onRowClick = (method, event) => {
 
 .fee_label {
 	composes: fee_label from "./fee-shared.module.css";
+}
+
+.trigger {
+	width: 100%;
+	font: inherit;
+	color: inherit;
+	background: none;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 }
 
 .fee_value {

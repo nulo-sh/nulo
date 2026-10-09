@@ -1,5 +1,8 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
+/** Composables */
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
+
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
 import { fitHero } from "@/utils/hero-fit"
@@ -340,7 +343,7 @@ const refreezeQuote = () => {
 	// Handed over, not written first: `fiatGuard.value` reads the page's old quote until it re-renders.
 	scheduleConvert({ frozenUsd: props.liveQuote.usd, frozenAt: Date.now(), converting: false })
 }
-defineExpose({ refreezeQuote })
+defineExpose({ refreezeQuote, focusAmount: () => handleFocus() })
 
 onBeforeUnmount(() => {
 	clearTimeout(convertTimer)
@@ -410,9 +413,11 @@ const handleFiatBalanceAction = (divisor) => {
 					<!-- The fit's ruler: it shares the field's `field_type` class, or the two widths part. -->
 					<span aria-hidden="true" :class="$style.field_ruler"><span ref="fieldRuler" :class="$style.field_type">{{ model }}</span></span>
 				</div>
-				<span
+				<button
 					v-if="canUseFiatInput"
+					type="button"
 					@click.stop="toggleFiatMode"
+					@keydown.enter="refuseRepeatEnter"
 					data-testid="send-amount-fiat-toggle"
 					:title="fiatMode ? `Type in ${token?.symbol || 'token'}` : 'Type in USD'"
 					:class="$style.unit_pair"
@@ -420,7 +425,7 @@ const handleFiatBalanceAction = (divisor) => {
 					<span :class="!fiatMode && $style.unit_on">{{ token?.symbol || "Token" }}</span>
 					<span :class="$style.unit_sep">/</span>
 					<span :class="fiatMode && $style.unit_on">USD</span>
-				</span>
+				</button>
 			</Flex>
 
 			<Flex align="center" justify="between" gap="8">
@@ -440,7 +445,15 @@ const handleFiatBalanceAction = (divisor) => {
 
 				<Flex align="center" gap="8" style="flex: none">
 					<span v-if="balanceSegment" data-testid="send-amount-balance" :class="$style.balance_corner">{{ balanceSegment }}</span>
-					<span @click.stop="handleMax" data-testid="send-amount-max" :class="$style.action_link">Max</span>
+					<button
+						type="button"
+						:disabled="!tokenBalanceByType"
+						@click.stop="handleMax"
+						data-testid="send-amount-max"
+						:class="$style.action_link"
+					>
+						Max
+					</button>
 				</Flex>
 			</Flex>
 
@@ -525,6 +538,8 @@ const handleFiatBalanceAction = (divisor) => {
 
 .unit_pair {
 	flex: none;
+	font: inherit;
+	background: none;
 	font-family: var(--font-headline);
 	font-size: 12px;
 	font-weight: 700;
@@ -588,6 +603,8 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .action_link {
+	font: inherit;
+	background: none;
 	font-family: var(--font-headline);
 	font-size: 10px;
 	font-weight: 700;
@@ -601,6 +618,12 @@ const handleFiatBalanceAction = (divisor) => {
 	&:hover {
 		text-decoration: underline;
 	}
+}
+
+.unit_pair:focus-visible,
+.action_link:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
 }
 
 </style>

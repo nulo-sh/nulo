@@ -114,9 +114,13 @@ export async function tokenColor(page: Page, token: string): Promise<string> {
 	}, token)
 }
 
-/** The named control's computed outline: `style width offset`, and its colour. */
+/** The named control's computed outline: `style width offset`, and its colour, read once its
+ *  transitions have settled, since a control with `transition: all` brings its ring in over time. */
 export async function focusRing(page: Page, testid: string): Promise<{ ring: string; color: string }> {
-	return page.$eval(sel(testid), (el) => {
+	return page.$eval(sel(testid), async (el) => {
+		// `getAnimations` flushes style first, so a transition the focus just started is in the list.
+		const settled = Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)))
+		await Promise.race([settled, new Promise((r) => setTimeout(r, 1_000))])
 		const style = getComputedStyle(el)
 		return { ring: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`, color: style.outlineColor }
 	})

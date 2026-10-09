@@ -277,10 +277,12 @@ const fiatGate = computed(() =>
 const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
 /** Distinguishes "needs explicit re-confirmation" from "just converting". */
 const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
-const handleRequote = () => {
+const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
 	amountCardRef.value?.refreezeQuote()
+	// With a live quote the re-freeze unmounts the button: a keyboard user keeps their place in the amount.
+	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
@@ -743,7 +745,9 @@ onBeforeUnmount(() => {
 						<Text size="11" weight="500" color="tertiary">
 							{{ liveQuote ? "The price moved since you started typing." : "The price quote went stale." }}
 						</Text>
-						<span @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">Refresh quote</span>
+						<button type="button" @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">
+							Refresh quote
+						</button>
 					</Flex>
 				</div>
 
@@ -874,6 +878,8 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
+	font: inherit;
+	background: none;
 	font-family: var(--font-headline);
 	font-size: 10px;
 	font-weight: 700;
@@ -884,6 +890,11 @@ onBeforeUnmount(() => {
 
 	&:hover {
 		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 </style>

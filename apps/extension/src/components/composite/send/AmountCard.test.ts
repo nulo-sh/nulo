@@ -86,12 +86,6 @@ describe("composite/AmountCard", () => {
 		expect(w.emitted("update:modelValue")).toBeUndefined()
 	})
 
-	test("Use Maximum is a no-op when tokenBalanceByType is 0/falsy (disabled balance)", async () => {
-		const w = mountCard({ tokenBalanceByType: 0, modelValue: "" })
-		await w.find("[data-testid='send-amount-max']").trigger("click")
-		expect(w.emitted("update:modelValue")).toBeUndefined()
-	})
-
 	test("input is disabled when tokenBalanceByType is 0/falsy", () => {
 		const w = mountCard({ tokenBalanceByType: 0 })
 		const input = w.find("input[data-testid='send-amount-input']")
@@ -866,5 +860,51 @@ describe("composite/AmountCard — the field reads its text whole", () => {
 			expect(await typeKeys(w, ".", USD)).toEqual(["1.234"])
 			expect(await converted(w)).toBe("1.234")
 		})
+	})
+})
+
+describe("composite/AmountCard — the unit switch and Max by keyboard", () => {
+	const TOKEN = { symbol: "cUSD", decimals: 6 }
+	const QUOTE = { usd: 0.999857, fetchedAt: Date.now() }
+	const mountPriced = (props: Record<string, unknown> = {}) =>
+		mountCard({ token: TOKEN, tokenBalanceByType: 1000, balanceRawByType: "1000000000", liveQuote: QUOTE, modelValue: "", ...props })
+	const enter = (init: KeyboardEventInit = {}) => new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init })
+
+	test("the unit switch and Max are buttons in the Tab path", () => {
+		const w = mountPriced()
+		for (const id of ["send-amount-fiat-toggle", "send-amount-max"]) {
+			const el = w.get(`[data-testid='${id}']`)
+			expect(el.element.tagName, id).toBe("BUTTON")
+			expect(el.attributes("type"), id).toBe("button")
+			expect(el.attributes("tabindex"), id).toBeUndefined()
+		}
+	})
+
+	test("Max is disabled with no balance to fill and enabled with one", () => {
+		expect(mountPriced({ tokenBalanceByType: 0 }).get("[data-testid='send-amount-max']").attributes("disabled")).toBeDefined()
+		expect(mountPriced().get("[data-testid='send-amount-max']").attributes("disabled")).toBeUndefined()
+	})
+
+	test("a repeated Enter on the unit switch is refused and a plain one is not", () => {
+		const toggle = mountPriced().get("[data-testid='send-amount-fiat-toggle']").element
+		const held = enter({ repeat: true })
+		toggle.dispatchEvent(held)
+		expect(held.defaultPrevented).toBe(true)
+		const plain = enter()
+		toggle.dispatchEvent(plain)
+		expect(plain.defaultPrevented).toBe(false)
+	})
+
+	test("focusAmount focuses the visible amount input in both modes", async () => {
+		const focus = vi.mocked(HTMLInputElement.prototype.focus)
+		const w = mountPriced()
+		focus.mockClear()
+		;(w.vm as unknown as { focusAmount: () => void }).focusAmount()
+		expect(focus.mock.contexts).toEqual([w.get("[data-testid='send-amount-input']").element])
+
+		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+		focus.mockClear()
+		;(w.vm as unknown as { focusAmount: () => void }).focusAmount()
+		expect(focus.mock.contexts).toEqual([w.get("[data-testid='send-amount-fiat-input']").element])
 	})
 })
