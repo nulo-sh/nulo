@@ -92,7 +92,7 @@ export type JobProgress =
  * autocomplete + the runtime drift guard, NOT for compiler exhaustiveness.
  *
  * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" |
- * "network" | "unknown")`, `popup_bound` and `scope_refused` (wallet-sdk), the reaper
+ * "network" | "unknown")`, `popup_bound`, `scope_refused` and `malformed_request` (wallet-sdk), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
  * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
@@ -102,6 +102,7 @@ export type KnownJobErrorKind =
 	| "user_rejected"
 	| "popup_bound"
 	| "scope_refused"
+	| "malformed_request"
 	| "sw_restart_post_prove"
 	| "stale_on_resume"
 	| "stuck_proving"
@@ -131,6 +132,7 @@ const KNOWN_JOB_ERROR_KIND_TABLE = {
 	user_rejected: true,
 	popup_bound: true,
 	scope_refused: true,
+	malformed_request: true,
 	sw_restart_post_prove: true,
 	stale_on_resume: true,
 	stuck_proving: true,

@@ -136,6 +136,11 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Transaction failed")
 	})
 
+	test("error.kind === 'malformed_request' → 'Couldn't read request', its outcome label", () => {
+		const op = recordWith({ error: { kind: "malformed_request", message: "...", normalizedRaw: null } })
+		expect(journalTerminalDisplay(op)?.subtitle).toBe("Couldn't read request")
+	})
+
 	test("error.kind === 'scope_refused' → 'Not allowed', on the red failed card", () => {
 		const op = recordWith({ error: { kind: "scope_refused", message: "...", normalizedRaw: null } })
 		expect(journalTerminalDisplay(op)).toEqual({ state: "failed", subtitle: "Not allowed", icon: "close-circle", color: "red" })
@@ -637,6 +642,12 @@ describe("categoricalLabel — B2 failure category + context for journal/[id].vu
 		expect(categoricalLabel(failed("scope_refused"))).toEqual({
 			label: "Not allowed",
 			context: "The app asked for more than you allowed. Nothing was sent.",
+		})
+	})
+	test("malformed_request → 'Couldn't read request', saying nothing was sent", () => {
+		expect(categoricalLabel(failed("malformed_request"))).toEqual({
+			label: "Couldn't read request",
+			context: "The app sent a request the wallet could not read. Nothing was sent.",
 		})
 	})
 	test("simulation / prover / stuck_proving / stuck_queued → 'Stopped before broadcast'", () => {

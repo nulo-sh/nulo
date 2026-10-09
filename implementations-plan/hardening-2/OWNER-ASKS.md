@@ -100,3 +100,15 @@ Five asks. Every arc is built now in the form named under "What ships now". **OA
 **Recommendation: B**, in a release that notes it.
 
 **What ships now: A.** This lane only tightens the patch's drift check, which is not part of the published schema's accepted inputs.
+
+## Answers: owner sign-off, 2026-10-08 (arc 1: OA-1, OA-2, OA-3)
+
+Recorded by the owner on the decision page (a private Claude Artifact, "Security Fixes Decisions"), calls h1 to h3 at 20:17 to 20:19 UTC; the h1 copy was approved verbatim in chat at about 20:30 UTC:
+
+| Call | Answer | Note |
+|---|---|---|
+| h1. OA-3 the activity row of a call refused before any window | **B**, a dedicated label and a new journal outcome | Row label "Couldn't read request", explanation "The app sent a request the wallet could not read. Nothing was sent." Nothing else on the row changes. |
+| h2. OA-1 the permission request's schema check | **C**, the header and each known permission type are parsed; unknown types still reach the window | none |
+| h3. OA-2 the refusal a dApp receives | **B**, code `-32602`, `walletErrorCode: "INVALID_PARAMS"`, one fixed message that names no argument value | The message is the ask's suggestion: "The request's arguments do not match the wallet API." |
+
+Consequences: arc 1 builds the picked options, not the ship-now forms. `requestCapabilities` is parsed (header, known types, then the wallet's own projection of them), so the plan's "the one method the parse skips" no longer holds and is recorded in the decision ledger; `requestCapabilities(null)` still asks for nothing, and a batched `requestCapabilities` still answers as a top-level one. Every schema refusal, the arity guards' included, is `InvalidWalletArgumentsError`, classified beside "Contract not registered". A queued `sendTx` refused by the parse fails its row with the new `malformed_request` outcome, also when the call is outside the granted scope, since the parse runs first. The row is arc 1's only user-visible change; the PR body quotes this sign-off and carries the row in both themes.

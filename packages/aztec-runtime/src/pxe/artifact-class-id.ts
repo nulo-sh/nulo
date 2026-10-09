@@ -43,10 +43,10 @@ export class DefaultArtifactClassIdVerifier implements ArtifactClassIdVerifier {
  * the artifact on match; returns `undefined` (with logging) on
  * mismatch or recompute failure.
  *
- * Computation cost: ~10-50ms per artifact (Poseidon hashing). For hot
- * paths, callers should pair this with a `Set<string>` cache keyed by
- * `expected.toString()` so a once-verified class-id isn't recomputed
- * on every lookup.
+ * Computation cost: ~10-50ms per artifact (Poseidon hashing). A cache
+ * that skips it must key on the verified object and its class id
+ * together, never the class id alone: another store can return a
+ * different object for the same id.
  */
 export async function verifyArtifactClassId(
 	artifact: ContractArtifact,

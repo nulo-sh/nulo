@@ -113,6 +113,7 @@ Out:
 - A-3 → OA-3: what a person sees when the wallet refuses a malformed call before any popup? Built now: the refusal, with today's activity label. Arc 1 merges only after the owner signs off.
 - A-4 → OA-4: an `http://[::1]` node URL, if CSP cannot express it. Ships now: `connect-src` keeps it reachable.
 - A-5 → OA-5: tighten the published patch schema for `grantPublicAuthwit`'s content? Ships now: unchanged.
+- **Arc 1, answered 2026-10-08:** OA-1 C, OA-2 B, OA-3 B (`OWNER-ASKS.md` § Answers). Arc 1 builds those, not the ship-now forms above (D-16j to D-16l).
 
 ## Architecture & Implementation
 
@@ -332,13 +333,11 @@ The implementer rebases each arc on whatever has landed on `dev` and re-runs tha
 
 ## UI impact
 
-- **Popup, connect window, onboarding, settings: none in the form that ships now.** `requestCapabilities` keeps today's guards, also as a batch leg, so the connect window and its "unknown" row are unchanged (OA-1).
-- **Approval window and activity list (OA-3). Arc 1 is built in this form, and its PR does not merge without the owner's explicit sign-off on the before/after below, quoted in the PR body.** The PR attaches a screenshot of the activity row for a refused malformed `sendTx`.
-  - Only a dApp that sends a malformed call, which a stock SDK does not, sees these changes.
-  - A malformed call that used to open the approval window (wrong field types, wrong address form) now opens none. The dApp receives the generic text.
-  - A refused top-level `sendTx` keeps today's activity label for such refusals, "Popup closed early", which today's malformed-`sendTx` refusals already show.
-  - A malformed call that is also out of scope moved from "Not allowed" to that label, because the parse now precedes the scope check.
-- **dApp-facing text: none new.** A schema refusal carries "The wallet could not process the request.", as every malformed call does today. Extra trailing arguments stay ignored, as today.
+- **Arc 1, as signed off by the owner on 2026-10-08 (OA-1 C, OA-2 B, OA-3 B).** Only a dApp that sends a malformed call, which a stock SDK does not, sees any of it.
+  - Connect window: unchanged for every conforming dApp, its "unknown" row included. A request with a malformed header, or a known permission type with a bad field, is refused before any window opens.
+  - Approval window: a call with malformed fields that used to open it now opens none.
+  - Activity: a queued `sendTx` the parse refuses fails its row as **"Couldn't read request"** (the History and Home card, and the record's outcome), with the explanation "The app sent a request the wallet could not read. Nothing was sent." on the record's page, as a scope refusal reads "Not allowed". Nothing else on the row changes. A malformed call outside the grant reads the same, since the parse runs before the scope check. The PR carries the card and the record in both themes.
+  - dApp-facing text: one new classified refusal, `-32602` with `walletErrorCode: "INVALID_PARAMS"` and "The request's arguments do not match the wallet API.". Extra trailing arguments stay ignored, as today.
 - **CSP: none intended.** A directive that breaks a page's styles, fonts or frames is a defect, fixed by widening that directive with the narrowest source the violation names, never by changing markup (D-23b).
 
 ## Implementation phases
@@ -357,6 +356,8 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 ### Arc 1 (layer 2, branch `hardening-2-dapp-parse`, after PR #48 lands)
 
 #### Phase 1 — #16: parse every dApp call against the schema
+
+**Arc 1: done 2026-10-09.** Built with the owner's answers, not the ship-now forms steps 4, 8 and 9 name (D-16j to D-16q). Evidence, the I-2 table and the red-on-base results: `lessons/phase-1.md`.
 
 1. Rebase on `dev` with PR #48 merged. Add the module and the ladder step. Run `bun run --cwd packages/wallet-bridge test` and `bun run test`. Record in `lessons/phase-1.md` which existing tests the parse now refuses.
 2. Verify I-2. For each parsed method, list every `args[N]` read in the dispatcher, the scope checkers and the handlers. Confirm `N` is below the method's tuple length. Record the table in the lessons file.
@@ -397,6 +398,8 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 - Layers: typecheck/lint, unit, network e2e on Chrome. Nothing here touches fixtures, focus, windows or WebAuthn.
 
 #### Phase 2 — #26: key the verified cache by the artifact object
+
+**Arc 1: done 2026-10-09.** As written; evidence in `lessons/phase-2.md`.
 
 1. In `artifact-registry.ts`, replace `verifiedClassIds` with `verified: WeakMap<ContractArtifact, string>` and change `verifyAndCache` as in Architecture. Replace the field's doc-comment with the one-sentence invariant.
 2. In `apps/extension/src/wallet/services/pxe/artifact-registry.test.ts`, with the existing fake verifier:
@@ -592,6 +595,19 @@ Per-directive gate:
 
 - None open. D-26 was split in round 1: Opus judged B marginally stronger, Codex judged A stronger since neither authenticates persisted bytes. The final Codex pass judged B marginally stronger as runtime defence and A defensible only under a trusted store. Checking the tree settled it: one registry serves every runtime's store, and upstream's stable per-runtime objects make B cheap. B adopted.
 
+### Arc 1 implementation decisions (2026-10-09)
+
+| # | Decision | Chosen | Rejected and why |
+|---|---|---|---|
+| D-16j | `requestCapabilities` (owner, OA-1 C) | Parsed: the header, each entry an object with a string `type`, known types through `CapabilitySchema`, then the wallet's own `projectRequestedCapabilities`; unknown types pass to the window; `requestCapabilities(null)` still asks for nothing | Skipped (D-16d, the ship-now form): superseded. Refusing `null` (Codex, design consult): there is no header to parse, it opens and grants nothing, and an existing pin made the tolerance deliberate. |
+| D-16k | Refusal class and text (owner, OA-2 B) | `InvalidWalletArgumentsError` (`INVALID_PARAMS`) in `@nulo/extension-messaging/errors`, rebuilt across the transport; the envelope answers `-32602` with one constant message | The class in `wallet-bridge` (the plan's file map): the envelope classifies it and `REBUILT_AS` rebuilds it, both on the messaging layer. The unmapped class (D-16e): superseded. |
+| D-16l | The refused row (owner, OA-3 B) | A new journal outcome, `malformed_request`, labelled "Couldn't read request" | "Popup closed early" (the ship-now form): superseded. |
+| D-16m | Arity refusals | The parse's class and text, so `INVALID_PARAMS` on the wire | The unclassified constant: two answers for one fault. |
+| D-16n | Envelope mapping | The four constant-message envelopes as one table | A fourth `if`: over the cognitive budget. A suppression: forbidden. |
+| D-16o | `argsRequestCapabilities` | Deleted | Kept: an arity refusal ahead of a method with no capability check, and the parse covers its shape. |
+| D-16p | Test fixtures | Converted to wire shape in place, with helpers exported as `@nulo/wallet-bridge/testing`; no file mocks the parse | `vi.mock` per file (allowed by step 7 for downstream subjects): no file needed it once the helpers existed. |
+| D-16q | Parse tables | 15 refused rows (every method that takes an argument) and 20 allowed rows (every registry method) | 18 rows each (step 8): `requestCapabilities` is now parsed, and a method with an empty tuple has nothing to refuse. |
+
 ## Audit verdicts
 
 ### Round 1 — Codex (gpt-6.1-sol, high; session `01a11cf4-4932-7f03-8f4e-47aed7c75ef7`)
@@ -657,6 +673,39 @@ Per-decision views from round 1: both judged A stronger for D-16a, b, e, f and g
 **Resumed, round 3: approve.** No new or unresolved material finding.
 
 Confirmed sound by this pass: the prescan move; the shallow schema copy (the patch assigns top-level entries only); the deleted shape checks are covered by the schemas; compensation cannot hit a successor (both creation and restore allocate through the fenced allocator); registry matching confines persisted-journal restores, and no legitimate tombstone writer needs a mismatched identity; worker capture is feasible per the CSP3 reporting algorithm, pending the probes; a synchronous first import keeps listener registration; every named test file exists.
+
+### Arc 1 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11eff-cd3c-7fd2-8030-8cff62a36738`)
+
+**Verdict: findings** (five), on `f83703f..f2213dd`. Sound per the pass: the ladder order with batch re-entry and the prescan, fail-closed missing entries, the private patched copy, the capability header and known types, refusals without causes or values, the OA-3 copy, the object-keyed cache.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C1 | Medium | `MessageHashOrIntentSchema` accepts its inner-hash branch first and strips the rest, while the scope check, the window and the signer read the call branch when `caller` is present: a valid inner hash beside a malformed call reached the approval route | **Accepted.** An intent carrying `caller` or `call` must also parse as a call intent (`wallet-schema-args.ts`). Dispatch regression red without the fix. The only object-or-object union in an argument position. |
+| C2 | Low | The queued journal reads `opts.from` before the parse; `String()` on `{ toString: "x" }` throws and logs a warning every user keeps | **Accepted.** `requestedSenderOf` returns `""` (no account) for a non-string `from`, which the parse refuses at dispatch anyway; the sender table now asserts no row warns. Red without the fix. |
+| C3 | Low | The cache keys the input object while returning the verifier's result: a verifier returning B for A leaves A cached | **Accepted, then revised by O6.** |
+| C4 | Low | `artifact-class-id.ts` recommends a class-id-keyed `Set` cache, the #26 mistake | **Accepted.** Comment states the object-and-id rule. |
+| C5 | Low | The `ArgGuard` comment repeats itself; helper comments claim values stay unvalidated | **Accepted.** Condensed to the arity contract; stale helper comments deleted. |
+
+### Arc 1 implementation — Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict: findings** (six), on `f83703f..f2213dd` plus the uncommitted round-1 fixes. Sound per the review: the ladder, no leaks (the message is a registry name, the envelope constant, the journal text fixed), the schema copy, every registry method has an entry, the projection after the parse, the journal wiring (`journal-state.ts` is the only consumer of the kind), the object-keyed cache.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| O1 | High | The activity card's subtitle has no `malformed_request` arm, so the card reads "Transaction failed" and the signed-off label shows only on the record's page; a malformed out-of-scope call's card moved from "Not allowed" to "Transaction failed" | **Accepted.** The card reads "Couldn't read request", as a scope refusal's reads "Not allowed": the owner's row label, unchanged copy. The first build had kept the generic subtitle on a narrow reading of "nothing else on the row changes"; the screenshots show both surfaces. |
+| O2 | Low | A raw client sending `args: null` crashed the arity guards with a bare `TypeError`: the unclassified envelope and an `error` log line per call | **Accepted.** A non-array `args` is the parse's refusal before any guard reads it. Pre-existing. |
+| O3 | Low | Passing the schema does not make a value safe to `String()`: `AztecAddress.schema` accepts a Buffer-shaped object, and one with an own `toString: 0` throws at a dozen coercion sites, failing closed with the unclassified envelope and an `error` log line | **Deferred**, pre-existing and fail-closed with nothing leaked; the fix is either every coercion site or a whole-tree walk at the parse, both outside this arc. Carried to the close-out's follow-ups. |
+| O4 | Low | The I-2 note said no read goes past the tuple; `enforceScopeWithSession` reads `scopes` and `additionalScopes` on every method | **Accepted.** `lessons/phase-1.md` corrected: those reads can only refuse, so the cut stays safe. |
+| O5 | Low | Stale comments: the verifier's cache advice, the guards' "unvalidated", the checker's "unvalidated wire data", a garbled batch sentence, the README's "once per message", `apply.ts` naming only the singleton | **Accepted.** All corrected. |
+| O6 | Low | Caching the verifier's returned object (C3's fix) would vouch for an object the verifier never hashed | **Accepted over C3.** The cache stores an artifact only when the verifier returned the object it hashed; a verifier returning another object leaves nothing cached. |
+
+### Arc 1 implementation — Codex round 2 (same session, on `f2213dd..d2f894b`)
+
+**Verdict: findings** (one, low): converged, no material finding. Confirmed each round-1 fix (C1, C2, C4, C5, O1, O2, the playground query) closes its finding; agreed with the C3/O6 resolution and with deferring O3 as a tracked residual (it narrows the claim that every malformed input gets `INVALID_PARAMS`; the failure still closes access).
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C6 | Low | The rewritten scope-checker comment narrates the check and misstates the boundary: the parse refuses a non-string `name` first | **Accepted.** Deleted; the defensive check stays. |
 
 ### Arc 3 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11e54-381a-7dd2-a1ba-a82a128de7e7`)
 
