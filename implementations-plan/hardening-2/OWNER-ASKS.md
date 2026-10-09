@@ -84,6 +84,8 @@ Five asks. Every arc is built now in the form named under "What ships now". **OA
 
 **What ships now: A**, only if the probe shows the `[::1]` source is ignored. If both browsers honour it, the precise list ships and this ask is withdrawn.
 
+**Probe result (2026-10-08).** Chrome and Firefox both ignore `http://[::1]:*`: with the precise list a fetch to `http://[::1]:<port>` from the popup is refused with a `connect-src` violation and never reaches the server, exactly as without the source. A ships (`connect-src 'self' blob: https: http:`), so this ask stays open.
+
 ## OA-5 — Should the published schema patch check the two addresses in `grantPublicAuthwit`'s content?
 
 **Surface.** `@nulo-sh/wallet-sdk-schema-patch` on npm. No screen.

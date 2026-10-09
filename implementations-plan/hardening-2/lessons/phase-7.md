@@ -71,3 +71,15 @@ The throwing-migration case failed again in the rerun, once on the 60 s timeout 
 - Final policy: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; style-src 'self' 'unsafe-inline'`. `font-src`, `frame-src`, `media-src` and `object-src` now come from `default-src`, as does `manifest-src`; `worker-src` still falls back to `script-src`, unchanged by the arc.
 - `store/remote-code.md` now cites the new block and states what the policy does and does not prove: `connect-src` admits any HTTPS host, so the bundled loaders, not the policy, keep the WASM local; zod no longer tries `Function()` at all.
 - Gate: the Arc 3 gate below runs on this policy; it is a superset of the per-directive gate (the eight files are in the full network suite).
+
+## Reviews
+
+- Codex round 1 (four findings) and an Opus review (five lows) are folded in, with reasons, in `plan.md` § Audit verdicts. The one that needed evidence: the zod seed's ordering on a release-shaped build. A static walk of each entry's ESM imports on unarmed Chrome and Firefox builds puts the seed's own chunk ahead of zod's `$ZodObject` chunk in the background, popup, onboarding and offscreen entries; setup loads no zod statically.
+- Codex round 2 left one low (a lost write's latch dies with its background), recorded as a gap; round 3 clean.
+
+## Arc 3 gate (2026-10-09, `d43a198`, final policy)
+
+- `lint`, `typecheck:all`, `test:all` (covers `test`), `test:ci-gating`, `lint:actions`: pass. `test:release`: 212 pass, 3 fail, the same `zip-reproducible` tests, host without `zip`.
+- Smoke, recorder armed, retry 0, two local shards per browser: Chrome 44 files pass (3 skipped), Firefox 46 pass (1 skipped). Zero violations; CSP equal to the pin.
+- Network split as CI splits it, retry 0, one `e2e:agent` run at a time: proverless without the five canaries, Chrome 106 files pass (5 skipped) and Firefox 105 (6 skipped, the Chrome-only files); the five prover-on canaries with real proofs, 5 of 5 on Chrome and on Firefox. Zero violations; every build's CSP equal to the pin.
+- The head after the gate (`792c3e9`) differs from `d43a198` only in `tests/e2e/README.md`, a unit test's name and plan files.

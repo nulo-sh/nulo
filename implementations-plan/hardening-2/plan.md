@@ -22,7 +22,7 @@ Five hardening findings in three arcs:
 
 What a person can notice is listed under UI impact and in `OWNER-ASKS.md`.
 
-Status: approved by the orchestrator on 2026-10-08, with one reorder (D-ORD): Arc 3, the CSP floor, ships first as layer 1; Arc 1 follows as layer 2 once PR #48 lands, Arc 2 as layer 3.
+Status: approved by the orchestrator on 2026-10-08, with one reorder (D-ORD): Arc 3, the CSP floor, ships first as layer 1; Arc 1 follows as layer 2 once PR #48 lands, Arc 2 as layer 3. Arc 3 (phases 6-7) implemented and gated on 2026-10-09; its Codex loop was clean at round 3.
 
 ## Outcome & Quality Bar
 
@@ -689,6 +689,10 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 | # | Sev | Finding | Resolution |
 |---|---|---|---|
 | C5 | Low | A lost write's latch lives in one background instance: if it is stopped before the check, its successor confirms the flush | **Accepted as a named gap.** Persisting the latch would rely on the storage write that just failed. `tests/e2e/README.md` lists it with the recorder's other gaps, and the unit test's name scopes its claim to that background. |
+
+### Arc 3 implementation — Codex round 3 (same session, on the whole arc)
+
+**Verdict: clean.** No new material finding in `53e77b0...HEAD`; C5 resolved as a named gap; every earlier finding fixed or recorded. The loop converged in three rounds.
 
 ## Delivery
 
