@@ -596,18 +596,17 @@ layer, a dependency, a storage shape or a new message. Paths below are relative 
       the pin's key;
     - the Bun pin's version equals `package.json#packageManager`, so a Bun bump that misses this site
       fails CI.
-- **3.3 One escaper (142).**
+- **3.3 One escaper (142, tracked privately: GHSA-6cj6-wp78-52mc).**
   - `scripts/release/workflow-command.ts` exports the `command(name, data)` / `plain(text)` pair. The
     two copies in `publish-chrome-store-run.ts` and `audit-gate.ts` have the same bodies; audit-gate's
     `command` narrows `name` to `"error" | "warning"`, and the shared one takes `string`.
   - Every TypeScript script that prints a workflow command uses it. The entry names two scripts; the
-    audits found the same unescaped pattern at eight more sites, all moved in this phase:
+    audits found eight more sites, all moved in this phase:
     - `attach-assets-run.ts`: `fail`, the `::warning::` asset line, the top-level catch;
-    - `publish-firefox-amo-run.ts`: `fail`, and both `::add-mask::` lines. A newline in a secret
-      would otherwise leave the rest of it unmasked. Every ordinary line that carries AMO text goes
-      through `plain`, as the Chrome script's `say` does: the validation errors, and the `check ok`,
-      `version ok` and `published` lines, which print AMO's `status`, `channel` and `fileStatus`
-      strings (`publish-firefox-amo.ts` accepts any string there);
+    - `publish-firefox-amo-run.ts`: `fail`, and both `::add-mask::` lines. Every ordinary line that
+      carries AMO text goes through `plain`, as the Chrome script's `say` does: the validation errors,
+      and the `check ok`, `version ok` and `published` lines, which print AMO's `status`, `channel`
+      and `fileStatus` strings (`publish-firefox-amo.ts` accepts any string there);
     - `lock-version-run.ts`: `fail`, and the top-level catch, which prints GitHub GraphQL error text;
     - `auto-unstick-run.ts`: the flag warning;
     - `scripts/publish/check-digests.ts`: the failure lines;
@@ -1022,9 +1021,8 @@ are not dispatched from a feature branch.
    - a newline cannot start a second `::` command;
    - `plain` folds line breaks.
 3. `attach-assets-run.test.ts`, `publish-firefox-amo-run.test.ts` and `lock-version-run.test.ts`: a
-   `fail` reason or a validation error holding `\n::warning::forged` prints as one line with no
-   second command. In the AMO test, so does an add-on `status` holding the same payload on the
-   `check ok` line. The existing failure and normal-status cases are the controls.
+   `fail` reason or a validation error holding a line break and `##[` prints as one escaped line. In
+   the AMO test, so does an add-on `status` holding the same text on the `check ok` line. The existing failure and normal-status cases are the controls.
 
 **Gate:**
 
@@ -1132,10 +1130,7 @@ surface this lane could widen is the CI gate itself, and the shipped bundle or m
 - **134, the bootstrap.** It replaces a pipe-to-shell and an unchecked tarball with hash-pinned
   artifacts. The drift test stops a silent Bun bump from leaving a stale pin. Hashes are
   cross-checked against the publisher's list and the artifact itself.
-- **142, the escaper.** Release scripts print GitHub API and AMO validator text. Unescaped, a
-  newline or `##[` in that text can forge a workflow command: an annotation, `::add-mask::`, or
-  `::stop-commands::`, which silences the rest of the step's commands. The shared escaper closes
-  that at every site, and the tests feed a forged-command payload.
+- **142, the escaper.** Tracked privately: GHSA-6cj6-wp78-52mc.
 - **163, the guard.** It is a new gate. It can only fail a PR, never pass one that would fail today.
   - The risk is false positives. The vocabulary is narrow, and a clean control sample pins what it
     must allow.
@@ -1242,6 +1237,8 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D-arc2-2 | 26: the seed page's unmount case asserts the late mnemonic's `join` is never called, beside the timer count | The countdown's own dispose guard already arms nothing after unmount, so a timer count alone passes without the page's fence; only a page that sets the phrase calls `join` | Reading the phrase from the DOM (the page is gone) |
 | D-arc2-3 | 125: signal only a group whose leader is alive at teardown's entry (a group whose leader already exited gets no signal at all, where base sent SIGTERM); report `stopped`, and keep the lock and the node's data directory when a group may survive (Arc 2 audit rounds 1 and 2: Codex C1, C2, R2-1; Opus 2) | From entry on, some member holds the group id, so it cannot pass to another run's group; once the leader has exited before teardown nothing proves the group never emptied, which § Architecture 2.3's "while any member lives" did not cover, and the lock reaper already refuses such a group (D9). The lock is a survivor's only record | A per-spawn ownership marker read from `/proc` (Linux-only, and more than the entry needs); escalating every group (signals a reused id); refusing escalation once the leader dies during the grace wait (R2-1's second half: it would undo the entry, and reuse in that window needs the cyclic pid cursor to wrap back to the id within one 100 ms poll) |
 | D-orch-2 | No edit to `follow-ups.md`, ever, the close-out included: each PR body lists the entries its arc closes with their governance ledger ids, and a partly built entry's remainder goes into the arc's section of the Outcome draft (orchestrator, at approval) | The file is being retired by the governance-1 lane, which turns every entry into an issue or a recorded disposition | § Close-out edits to follow-ups.md as planned |
+| D-arc3-1 | 142 is tracked privately (GHSA-6cj6-wp78-52mc, filed by the governance lane, #236): the arc's commits, test names, lessons and PR body describe the change only, and this plan's and recon's text that described the weakness is replaced by that pointer | `SECURITY.md` § How findings are tracked: until the advisory is published its finding appears in no committed plan, PR body or test name | Keeping the approved text (it predates the rule, and an archived plan's copy was already rewritten by #236) |
+| D-arc3-2 | 163: the guard reads the tracked files in JavaScript (`git ls-files`, then one regex per family) rather than `git grep -E`; its vocabulary adds `R<n>` and `round <n>` with a review word, which found a seventh comment (`coordinator.default-deriver.test.ts`, "The R1 audits'") | `git grep -E` has no portable `\b` (POSIX ERE leaves it to the platform's regex library), and the milestone shapes need word boundaries and case; a round number beside "audits" is the same provenance as "audit round" | `git grep -P` (needs a PCRE build); the plan's six-hit vocabulary (misses the seventh) |
 
 ## Audit verdicts
 
@@ -1275,7 +1272,7 @@ overlap with #55, #58, #75 or accessibility-1; F5 to F7, F9 to F11; titles and l
 | O3 | Binding the original id accepts an upgraded contract registered without an artifact; the entry's model is the stricter check | **Accepted** as a reason to park (D2). Opus's fix, the strict check, still changes which registrations succeed: an owner call |
 | O4 | Orphan reaping by group is wider than today; the tree's `ownership.ts` already rejects that reasoning | **Accepted** (D9), with the same fix as C3 |
 | O5 | The test's control signals an arbitrary pid on a shared host; a zombie answers `kill(pid, 0)` | **Accepted.** The reaper test is gone; the teardown test signals only its own groups and awaits the leader's exit |
-| O6 | Eight more unescaped workflow-command sites; the gate grep cannot pass; `command`'s type differs | **Accepted** (D16). All twelve sites are in the change map; the gate grep is rewritten; F10 corrected |
+| O6 | Eight more workflow-command sites; the gate grep cannot pass; `command`'s type differs | **Accepted** (D16). All twelve sites are in the change map; the gate grep is rewritten; F10 corrected |
 | O7 | `failureKind` is shared with the first-party Send path | **Accepted** (D21) |
 | O8 | `SendRecordView` has no error kind; the `TextEncoder` patch is unproven on Firefox | **Accepted.** The test reads the kind inline; a Firefox miss is recorded, never weakened |
 | O9 | The dev-watcher test goes vacuous under `extensions: ["vue"]`; the change map misstates two files | **Accepted.** The test plants `.test.vue`; the map is corrected |
@@ -1290,11 +1287,11 @@ Checked and holds (Opus): F1 and the overlap map against each PR's own diff; F2;
 constructor flips; OA-2's relay; 1.1 to 1.4's claims; F6 to F9, F11; deletions 29 and 183; the 107
 evidence; titles; no kept reason names a merged PR; the production CSP is unaffected.
 
-### Final fresh Codex pass (gpt-6.1-sol, high, read-only), `conditional approve (conditions: close the remaining workflow-command injection paths and correct the parking of small, invisible cleanup subitems)`
+### Final fresh Codex pass (gpt-6.1-sol, high, read-only), `conditional approve (conditions: move the remaining workflow-command sites onto the escaper and correct the parking of small, invisible cleanup subitems)`
 
 | # | Finding | Verdict |
 |---|---|---|
-| F1 | AMO's ordinary log lines print API strings (`status`, `channel`, `fileStatus`) raw, so a status holding `\n::warning::…` still forges a command | **Accepted.** Every AMO line carrying API text goes through `plain`; a hostile-status test with a normal-status control |
+| F1 | AMO's ordinary log lines that carry API strings (`status`, `channel`, `fileStatus`) belong on `plain` too | **Accepted.** Every AMO line carrying API text goes through `plain`; tested beside a normal-status control |
 | F2 | 172's first bullet and 186's late-listener bullet are invisible cleanups the record allowed; D19 misread it | **Accepted** (D19 revised, D23). Phase 2.5 builds both; both entries are rewritten to the rest |
 | F3 | Adding the scope refusal to the Terms debug branch would log "terms not accepted" for it | **Accepted** (D22 revised): its own branch and fixed text, asserted |
 | F4 | recon.md's reuse map still says to change `failureKind` and to bind the original class id | **Accepted.** Both rows corrected |
