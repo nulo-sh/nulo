@@ -269,3 +269,19 @@ describe("pages/activity — the received row's token", () => {
 		expect(rowOf(w)).toEqual({ title: "TST", amount: "+1,000", fiat: "≈ $1,000.00" })
 	})
 })
+
+describe("pages/activity — the incoming load signal", () => {
+	test("the feed root carries data-incoming-loaded only once the incoming read has landed", async () => {
+		let release!: (rows: unknown[]) => void
+		H.getIncomingTransfers.mockReturnValue(new Promise((resolve) => (release = resolve)))
+		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		await flushPromises()
+		const root = () => w.find('[data-testid="activity-feed-root"]')
+		expect(root().exists()).toBe(true)
+		expect(root().attributes("data-incoming-loaded")).toBeUndefined()
+
+		release([])
+		await flushPromises()
+		expect(root().attributes("data-incoming-loaded")).toBe("true")
+	})
+})

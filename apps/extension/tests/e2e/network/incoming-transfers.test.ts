@@ -33,11 +33,10 @@ test.skipIf(!hasConfig)(
 		})
 		await waitForHash(page, "#/popup/activity", 10_000)
 
-		// Allow the page to mount + the IncomingTransferServiceClient to
-		// connect + the initial getIncomingTransfers request to return.
-		// A regression in the ServiceClient connect wiring would manifest
-		// as a hung request, surfacing here when nothing renders.
-		await new Promise((r) => setTimeout(r, 3_000))
+		// The attribute appears only once a getIncomingTransfers read for this account has landed, so a
+		// hung or rejected request fails here instead of letting the zero-card check pass on a feed
+		// that never loaded.
+		await page.waitForSelector('[data-testid="activity-feed-root"][data-incoming-loaded="true"]', { timeout: 30_000 })
 
 		// A fresh profile has nothing incoming; any card here is a spurious row.
 		const incomingCards = await page.$$('[data-testid="tx-incoming-card"]')
