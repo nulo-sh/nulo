@@ -1,7 +1,9 @@
-import { existsSync, readdirSync } from "node:fs"
+import { EventEmitter } from "node:events"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { PageContext } from "vite-plugin-pages"
 import { PAGES_OPTIONS } from "./pages-options"
 
@@ -31,5 +33,27 @@ describe("the Pages route scan", () => {
 		const configured = await routedFiles(PAGES_OPTIONS)
 		expect(byDefault.filter((file) => TEST_MODULE.test(file)).length).toBeGreaterThan(0)
 		expect(configured.toSorted()).toEqual(byDefault.filter((file) => !TEST_MODULE.test(file)).toSorted())
+	})
+})
+
+describe("the Pages dev watcher", () => {
+	test("under a dot-directory, an added test module never becomes a route and an added page does", async () => {
+		const base = mkdtempSync(join(tmpdir(), "pages-watch-"))
+		try {
+			const worktree = join(base, ".worktrees", "ext")
+			for (const { dir } of PAGES_OPTIONS.dirs) mkdirSync(join(worktree, dir), { recursive: true })
+			const context = new PageContext(PAGES_OPTIONS, worktree)
+			const watcher = new EventEmitter()
+			context.setupWatcher(watcher as unknown as Parameters<PageContext["setupWatcher"]>[0])
+
+			const testModule = join(worktree, "src/popup/pages/new-page.test.ts")
+			const page = join(worktree, "src/popup/pages/new-page.vue")
+			watcher.emit("add", testModule)
+			watcher.emit("add", page)
+			await vi.waitFor(() => expect(context.pageRouteMap.has(page)).toBe(true))
+			expect(context.pageRouteMap.has(testModule)).toBe(false)
+		} finally {
+			rmSync(base, { recursive: true, force: true })
+		}
 	})
 })
