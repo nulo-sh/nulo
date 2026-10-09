@@ -65,6 +65,26 @@ async function sealSigningKey(dek: ImportedKeysDek, chainId: number, address: st
 	}
 }
 
+/**
+ * Unseals an imported signing key into a scalar and takes ownership of `dek`: the DEK, the
+ * plaintext and its copy are wiped, in that order, before the scalar returns or the error
+ * propagates, so no secret buffer outlives the unseal on any caller's path.
+ */
+async function unsealImportedScalar(dek: ImportedKeysDek, chainId: number, address: string, sealed: string): Promise<GrumpkinScalar> {
+	let skBytes: Uint8Array<ArrayBuffer> | undefined
+	let skCopy: Buffer | undefined
+	try {
+		skBytes = await unsealImportedSigningKeyV2(dek, chainId, address, sealed)
+		// `fromBuffer` copies, so the intermediate is a second plaintext signing key with its own wipe.
+		skCopy = Buffer.from(skBytes)
+		return GrumpkinScalar.fromBuffer(skCopy)
+	} finally {
+		zeroize(dek)
+		if (skBytes) zeroize(skBytes)
+		if (skCopy) zeroize(skCopy)
+	}
+}
+
 export class AccountService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getAccounts",
@@ -418,14 +438,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// A DEGRADED session (dek undefined — the slot failed at unlock) quarantines per-account.
 		const dek = await this.profileService.getProfileDek(profileId)
 		if (!dek) throw new ImportedAccountUnusableError(account.address, "imported keys unavailable — unlock again")
-		let skBytes: Uint8Array<ArrayBuffer> | undefined
-		let skCopy: Buffer | undefined
 		try {
-			skBytes = await unsealImportedSigningKeyV2(dek, account.chainId, account.address, keyRow.encryptedSigningKey)
-			// `fromBuffer` copies, so wipe the intermediate too — an anonymous `Buffer.from(skBytes)`
-			// leaves a second plaintext signing key alive until GC even though `skBytes` is wiped.
-			skCopy = Buffer.from(skBytes)
-			const signingKey = GrumpkinScalar.fromBuffer(skCopy)
+			const signingKey = await unsealImportedScalar(dek, account.chainId, account.address, keyRow.encryptedSigningKey)
 			const contract = await NuloAccount.fromSigningKey(signingKey, this.logger)
 			if (contract.address.toString() !== requestedAddress) {
 				throw new ImportedAccountUnusableError(account.address, "address mismatch")
@@ -434,10 +448,6 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		} catch (err) {
 			if (err instanceof ImportedAccountUnusableError) throw err
 			throw new ImportedAccountUnusableError(account.address, "signing key could not be recovered")
-		} finally {
-			zeroize(dek)
-			if (skBytes) zeroize(skBytes)
-			if (skCopy) zeroize(skCopy)
 		}
 	}
 
@@ -466,19 +476,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			// Fresh auth: the DEK unseals under the SUPPLIED password directly —
 			// session-independent, deletion-guarded — never via SessionManager.
 			const dek = await this.profileService.exportImportedKeysDek(profileId, password)
-			let skBytes: Uint8Array<ArrayBuffer> | undefined
-			let skCopy: Buffer | undefined
-			try {
-				skBytes = await unsealImportedSigningKeyV2(dek, chainId, address, keyRow.encryptedSigningKey)
-				// See loadImportedAccountContract: `fromBuffer` copies, so the intermediate is a
-				// second plaintext signing key and needs its own wipe.
-				skCopy = Buffer.from(skBytes)
-				signingKey = GrumpkinScalar.fromBuffer(skCopy)
-			} finally {
-				if (skBytes) zeroize(skBytes)
-				if (skCopy) zeroize(skCopy)
-				zeroize(dek)
-			}
+			signingKey = await unsealImportedScalar(dek, chainId, address, keyRow.encryptedSigningKey)
 		} else if (account.type === AccountType.Nulo_v1) {
 			const masterCopy = fromBase64Lenient(master)
 			const masterFr = Fr.fromBuffer(masterCopy)
