@@ -37,3 +37,10 @@ Each attempt and measurement of the arc, in order.
 - Option C built with one deviation in mechanism, not behaviour: a queued release is voided by clearing its timer handle (on refocus, on a new hold, on unmount) instead of a hold token. Same guarantee, one less piece of state; the "earlier release cannot end a newer hold" test covers it.
 - Added `data-testid="send-destination-suggestions"` on the suggestion list, so the coverage probe asserts the list is open (its success control) instead of inferring it from what covers the token card. No visible change.
 - Green: unit (ten new cases), smoke on both browsers, network `send-amount-exact.test.ts` on Chrome and Firefox at retry 0, including a 1.5 s press on Max while the destination holds the focus. On Firefox the held press's card appeared at release, so the field did blur there and the hold was exercised.
+
+## Phase 1.4
+
+- Red: the two new `FeeSettingsCard.test.ts` cases (the region on a Send card, the region on an embedded-payment card) failed; network `fee-sponsor-funding.test.ts` on a build with today's card failed at "the notice's parent is `fee-sponsor-live`" (it was the card).
+- The embedded case is reached as a person would: an embedded card, "Override with my method", a short verdict (the notice shows in the region), then "Use app's payment". `handleUseEmbedded` keeps the verdict, so `data-sponsor-funding` still reads `short` while the notice is hidden: the "no notice when embedded" assertion is not vacuous.
+- Shots of the card with the notice, base build vs the change, Chrome, both themes: every differing pixel is in the header's account address; the card draws the same pixels.
+- Chrome's accessibility tree: before, the sentence is a plain `StaticText` with no live ancestor; after, a `status` node with `live=polite` holds it and the info icon is out of the tree.

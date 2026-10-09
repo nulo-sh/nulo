@@ -7,6 +7,7 @@
 - 2026-10-09: Phase 1.1 gate pass: fast layers; smoke `send-keyboard.test.ts` (Enter, unit switch) on chrome and firefox, retry 0, fresh builds; network `send-amount-exact.test.ts` on chrome and firefox at `NULO_E2E_RETRY=0`; at-rest shots differ only in the header's account address.
 - 2026-10-09: Phase 1.2 gate pass: fast layers; smoke `send-keyboard.test.ts` (Enter, unit switch, token card) on chrome and firefox, retry 0, fresh builds.
 - 2026-10-09: Phase 1.3 gate pass (option C): reproduction red on Chrome first; fast layers; smoke `send-keyboard.test.ts` on chrome and firefox; network `send-amount-exact.test.ts` on chrome and firefox at `NULO_E2E_RETRY=0`.
+- 2026-10-09: Phase 1.4 gate pass: fast layers; network `fee-sponsor-funding.test.ts` on chrome at `NULO_E2E_RETRY=0` (red on today's card first); shots identical outside the header address.
 
 ## Planning
 
