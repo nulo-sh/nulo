@@ -310,7 +310,7 @@ Skip this phase if call 6 is B or "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `send-keyboard.test.ts` on chrome and on firefox; the network run of `popup-escape-layered.test.ts` on chrome (it opens the picker by pointer). Pass criteria: every command exits 0; the step 1 tests failed before step 2; the trigger's at-rest shots (`shotSend` with focus `send-fee-method-trigger`, before and after, both browsers) are identical under `cmp` or explained. Layers: lint, typecheck, unit, smoke and network e2e.
 
-**Arc 1 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 1 Codex fix loop has converged.
+**Arc 1 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 1 Codex fix loop has converged. ✓
 
 #### Arc 1 record
 
