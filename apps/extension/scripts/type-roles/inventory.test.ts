@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { beforeAll, describe, expect, test } from "vitest"
 import { type BranchStep, type IdentifierSite, identifierSites, type ProducerHit, producerHits, sitesInSource } from "./identifier-sites"
-import { REPO_ROOT, sourceFiles } from "./source-scan"
+import { parseSource, REPO_ROOT, sourceFiles, type TemplateNode, walkElements } from "./source-scan"
 import { type Surface, surfaces } from "./surfaces"
 
 /**
@@ -84,10 +84,25 @@ function siteProblems(entry: SiteEntry, surfaceIds: ReadonlySet<string>): string
 	return problems
 }
 
-/** Whether the component a site renders through puts `testid` on an element of its own template. */
-function declaresInside(component: string, testid: string): boolean {
-	const files = sourceFiles().filter((file) => file.endsWith(`/${component}.vue`))
-	return files.some((file) => read(file).includes(`data-testid="${testid}"`))
+const contentOf = (node: TemplateNode): string =>
+	(node.children ?? []).map((child) => (typeof child === "object" ? child.loc.source : "")).join(" ")
+
+/**
+ * Whether the component a site renders through puts `testid` on an element of its own template
+ * and, for a site bound to a prop, renders that prop inside it, so the selector reads the value.
+ */
+function declaresInside(component: string, testid: string, prop: string | null): boolean {
+	const named = new RegExp(`\\b${prop}\\b`)
+	let found = false
+	for (const file of sourceFiles().filter((path) => path.endsWith(`/${component}.vue`))) {
+		const { template } = parseSource(file)
+		if (!template) continue
+		walkElements(template, (node) => {
+			const id = node.props?.find((p) => p.name === "data-testid")?.value?.content
+			if (id === testid && (prop === null || named.test(contentOf(node)))) found = true
+		})
+	}
+	return found
 }
 
 /**
@@ -107,7 +122,7 @@ function namesOwnElement(site: IdentifierSite, selector: readonly string[]): boo
 		return new RegExp(`^${pattern.join(".*")}$`).test(testid)
 	}
 	if (own?.text === testid) return true
-	return (own === null || selector.includes(own.text)) && declaresInside(site.component, testid)
+	return (own === null || selector.includes(own.text)) && declaresInside(site.component, testid, site.prop)
 }
 
 /** Why a group of entries that share one surface and one selector cannot be told apart, or nothing. */

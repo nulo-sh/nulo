@@ -70,6 +70,8 @@ export type IdentifierSite = {
 	testids: readonly string[]
 	/** The `data-testid` on the site's own element, the one the sweep reads; a bound one as its expression. */
 	ownTestid: { text: string; bound: boolean } | null
+	/** The component prop the site's value is bound to, when it is one. */
+	prop: string | null
 }
 
 export const IDENTIFIER_MEMBERS = [
@@ -109,6 +111,7 @@ type Candidate = {
 	level: "element" | "match"
 	/** Nodes this candidate stands for besides its own: a split pair's tail. */
 	covers: readonly TemplateNode[]
+	prop?: string
 }
 
 const normalize = (text: string): string => text.replace(/\s+/g, " ").trim()
@@ -289,7 +292,7 @@ function elementCandidates(node: TemplateNode, path: readonly TemplateNode[], ct
 		const text = prop.exp.content
 		const bound = BOUND_TEXT_PROPS.has(prop.arg?.content ?? "") && isIdentifierMember(text, ctx.derived)
 		if (bound || ctx.reach?.test(normalize(text)) || hasSlicePair(text)) {
-			out.push({ owner: node, path: own, expression: text, at: start(prop.exp), level: "match", covers: [] })
+			out.push({ owner: node, path: own, expression: text, at: start(prop.exp), level: "match", covers: [], prop: prop.arg?.content })
 		}
 	}
 	return out
@@ -425,6 +428,7 @@ export function sitesInSource(file: string, source: string, utilities: readonly 
 			steps: branch,
 			testids,
 			ownTestid: ownTestidOf(c.owner),
+			prop: c.prop ?? null,
 		}
 	})
 }
