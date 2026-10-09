@@ -192,6 +192,7 @@ vi.mock("@/wallet/storage/migrations", async () => {
 // Imported AFTER mocks are registered.
 import { useFullBackupImport } from "./useFullBackupImport"
 import { readLiveness } from "@/utils/background-liveness"
+import { FilePickCanceledError } from "@/utils/files"
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -594,6 +595,19 @@ describe("pickBackupFile / decryptBackup behavior pins", () => {
 		c.selectedBackup.value = { name: "old.json", backup: {}, type: "plain", profileType: "password" }
 		await c.pickBackupFile()
 		expect(c.selectedBackup.value).toBeNull()
+	})
+
+	it("a closed chooser keeps the chosen backup and shows no error", async () => {
+		const opts = makeOpts()
+		opts.pickFile.mockRejectedValue(new FilePickCanceledError())
+		const c = useFullBackupImport(opts)
+		const chosen = { name: "old.json", backup: {}, type: "plain" as const, profileType: "password" }
+		c.selectedBackup.value = chosen
+		c.parsedBackupName.value = "Old"
+		await c.pickBackupFile()
+		expect(c.selectedBackup.value).toStrictEqual(chosen)
+		expect(c.parsedBackupName.value).toBe("Old")
+		expect(opts.fillError).not.toHaveBeenCalled()
 	})
 
 	it("a plain pick publishes the SANITIZED embedded name and clears the password fields", async () => {

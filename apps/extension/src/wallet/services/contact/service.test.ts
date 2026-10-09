@@ -14,7 +14,8 @@ import { ServiceCollection, type IService } from "@/wallet/base"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
-import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
+import { PROFILE_SERVICE_NAME, type ProfileInfo, type RunFence } from "@/wallet/services/profile/spec"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { recordWrites } from "../storage-write-log"
 import { getInitials } from "@/utils"
 import { ContactService } from "./service"
@@ -31,6 +32,10 @@ class FakeProfileService implements IService {
 	public readonly onProfileDeleted = new EventHandler<ProfileInfo>()
 	private readonly deletionState = new ProfileDeletionState()
 	private active: ProfileInfo | undefined
+	/** The live session's serial; every `setActiveProfile` ends the session, as a lock and unlock do. */
+	private session = 0
+	/** Runs once a run fence has passed `assertRunFence`, where a test lands a racing switch. */
+	public afterAssert: (() => void) | undefined
 
 	public async start(): Promise<void> {}
 
@@ -47,8 +52,29 @@ class FakeProfileService implements IService {
 		return { profileId: this.active.id, epoch: this.deletionState.capture(this.active.id) }
 	}
 
+	public async captureRunFence(): Promise<RunFence> {
+		return { ...(await this.captureExecutionFence()), session: this.session, incarnation: "w1" }
+	}
+
+	public async assertRunFence(fence: RunFence): Promise<void> {
+		if (fence?.incarnation !== "w1" || fence.session !== this.session || fence.profileId !== this.active?.id) {
+			throw new SessionEndedError()
+		}
+		this.deletionState.assertCurrent(fence.profileId, fence.epoch)
+		this.afterAssert?.()
+	}
+
+	public isFenceLive(fence: RunFence): boolean {
+		return (
+			fence.session === this.session &&
+			fence.profileId === this.active?.id &&
+			this.deletionState.isCurrent(fence.profileId, fence.epoch)
+		)
+	}
+
 	public setActiveProfile(profile: ProfileInfo | undefined): void {
 		this.active = profile
+		this.session++
 	}
 }
 
@@ -509,6 +535,68 @@ describe("ContactService (port-migrated)", () => {
 			expect(writes.log[1]).toBe(writes.log[0]?.replace(/^set:/, "remove:"))
 			expect(await contactRowCount()).toBe(0)
 			expect(emitted).toHaveLength(0)
+		})
+	})
+
+	describe("run fence", () => {
+		const ADDR = "0xaaaa"
+		const contactWrites = () => recordWrites(api.storage.local, "nulo:core:contacts@")
+
+		test.each<[string, (savedId: string, fence: RunFence) => Promise<unknown>]>([
+			["addContact", (_id, fence) => contactService.addContact("Bob", "0xbbbb", fence)],
+			["updateContact", (id, fence) => contactService.updateContact(id, "Alicia", undefined, fence)],
+		])("a switch after the fence check refuses %s's write and stores nothing", async (_method, write) => {
+			const saved = await contactService.addContact("Alice", ADDR)
+			const fence = await profile.captureRunFence()
+			let switched = false
+			profile.afterAssert = () => {
+				profile.afterAssert = undefined
+				profile.setActiveProfile(profileB)
+				switched = true
+			}
+			const writes = contactWrites()
+			await expect(write(saved.id, fence)).rejects.toBeInstanceOf(SessionEndedError)
+			writes.restore()
+			expect(switched).toBe(true)
+			expect(writes.log).toEqual([])
+			profile.setActiveProfile(profileA)
+			expect((await contactService.getContacts()).map((c) => c.name)).toEqual(["Alice"])
+		})
+
+		test.each<[string, (live: RunFence) => unknown]>([
+			[
+				"a fence whose session ended",
+				(live) => {
+					profile.setActiveProfile(profileA)
+					return live
+				},
+			],
+			["a fence another worker issued", (live) => ({ ...live, incarnation: "w0" })],
+			["a string", () => profileA.id],
+		])("%s is refused by every fenced method, and nothing is written", async (_label, forge) => {
+			const saved = await contactService.addContact("Alice", ADDR)
+			const fence = forge(await profile.captureRunFence()) as RunFence
+			const writes = contactWrites()
+			await expect(contactService.getContacts(fence)).rejects.toBeInstanceOf(SessionEndedError)
+			await expect(contactService.addContact("Bob", "0xbbbb", fence)).rejects.toBeInstanceOf(SessionEndedError)
+			await expect(contactService.updateContact(saved.id, "Alicia", undefined, fence)).rejects.toBeInstanceOf(SessionEndedError)
+			writes.restore()
+			expect(writes.log).toEqual([])
+		})
+
+		test("null is no fence: the active profile's book, as when the argument is omitted", async () => {
+			const added = await contactService.addContact("Alice", ADDR, null)
+			expect(added.profileId).toBe(profileA.id)
+			expect(await contactService.updateContact(added.id, "Alicia", undefined, null)).toMatchObject({ name: "Alicia" })
+			expect(await contactService.getContacts(null)).toEqual(await contactService.getContacts())
+		})
+
+		test("a live fence acts for its profile", async () => {
+			const fence = await profile.captureRunFence()
+			const added = await contactService.addContact("Alice", ADDR, fence)
+			expect(added.profileId).toBe(fence.profileId)
+			expect(await contactService.updateContact(added.id, "Alicia", undefined, fence)).toMatchObject({ name: "Alicia" })
+			expect((await contactService.getContacts(fence)).map((c) => c.name)).toEqual(["Alicia"])
 		})
 	})
 })

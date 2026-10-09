@@ -1,0 +1,6 @@
+# Phase 1: a closed chooser settles the pick
+
+- **I4 checked first (step 3).** Armed Firefox build with the `cancel` listener in `pickFile`, then `NULO_E2E_BROWSER=firefox bun run test:e2e -- tests/e2e/contacts-import.test.ts --retry=0`: 5/5 pass. Headless Firefox under Puppeteer BiDi does not fire `cancel` on the wallet's file input by itself (its evaluated `click()` opens no chooser, so nothing closes one). The Firefox driver needs no change.
+- **Red proof.** With the listener removed from `files.ts` and the two caller branches removed, the three new tests fail (the cancel test times out; the contacts row toasts; the backup row fills the read-failure error). The cancel test's stale input also breaks every later `files.test.ts` pick, which only shows that the listener is what removes it.
+- **Auto-imports.** The new `FilePickCanceledError` export adds lines to `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` (the build regenerates both). Open PR #56 edits other lines of both files; the hunks are not adjacent, so the two merge line-clean.
+- **Gate.** lint 0; typecheck:all 0; unit 10 files 122 tests; armed builds of both browsers 0; pick-surface smoke (`contacts-import`, `account-import-export`, `backup-roundtrip`, `backup-imported-account`) Chrome 11/11, Firefox 11/11, retry 0.
