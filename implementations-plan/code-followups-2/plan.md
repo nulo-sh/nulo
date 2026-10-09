@@ -1347,6 +1347,36 @@ window", but a fee-settings change in one window re-runs the estimate, and each 
 **Accepted**, reworded. The loop converged: every round-1 fix held, and no regression was found in
 the arc diff.
 
+### Arc 2 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| C1 / O2 | `killProcessGroup` can signal, and now SIGKILL, a reused group id when the leader and every member exited before teardown; the test's cleanup kills ids it proved gone | **Accepted** (D-arc2-3): only a group whose leader was alive at entry is escalated; the cleanup signals only a group still alive |
+| C2 | The final wait's result is dropped, so teardown deletes the data directory and clears the lock while a member survives | **Accepted** (D-arc2-3): `stopped` is returned; teardown keeps the lock and the node's data directory for the next run's reap |
+| C3 / O1 | The inline-script control does not separate the manifest policy from Chrome's baseline, so "`http:` admits `ws:`" is unproven | **Accepted.** A `fetch("data:")` control showed the dev popup runs under the baseline only; the claim is narrowed, the no-change decision stands (D-arc2-1, I1) |
+| O3 | `pages-options.test.ts` no longer reds when the plain `**/*.test.*` glob is deleted | **Accepted.** The watcher case runs under a dot-directory and a plain one; deleting the glob reds the plain case |
+| O4 | Three comments name their callers; "fails loudly" holds only under `E2E_REQUIRE_SETUP=1` | **Accepted.** Restated as invariants; the post-SIGKILL comment went with the `stopped` result |
+
+### Arc 2 round 2: Codex (resumed), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| R2-1 | A group whose leader exited before teardown still gets SIGTERM, possibly on a reused id; `leaderAliveOnEntry` does not prove ownership across the grace wait; the test cleanup cannot tell a replacement group | **Accepted in part** (D-arc2-3): an exited leader's group gets no signal; the cleanup signals only groups no case proved gone. **Rejected:** refusing escalation once the leader dies during the wait, which would undo entry 125 itself; reuse there needs the pid cursor to wrap back to the id within one 100 ms poll |
+| R2-2 | The stubborn-member cases race the shells' trap installation | **Accepted.** Each case waits for its member's `ready` after the traps are set; the leaderless case uses a member that dies on SIGTERM, so its survival shows nothing was sent |
+| R2-3 | The lock comment overstates what the next run's reap does safely | **Accepted.** Reworded to a best-effort record; the reaper's unconditional data removal is in entry 125's remainder |
+
+### Arc 2 round 3: Codex (resumed), `approve with fixes — no new material finding`
+
+| # | Finding | Verdict |
+|---|---|---|
+| R3-1 | Minor: `killProcessGroup`'s doc comment still claims a member holds the group id from entry on, stronger than the accepted residual risk | **Accepted.** It now says an unreaped leader pins the id for the first signal and escalation assumes no reuse between two polls |
+
+Round 3 verified every round-2 fix and found nothing new; the loop converged.
+
+Arc 2 round 1, checked and holds (both): every real route is still scanned; the overwrite mode keeps every
+declaration a template uses; the seed latch releases in `finally`; the race results and records
+are unchanged; no template, copy or selector changed; the budgets hold.
+
 ### Arc 3 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
 
 | # | Finding | Verdict |
@@ -1513,32 +1543,6 @@ Filled per arc as it lands; the close-out turns it into the `## Outcome` block (
 - Closed whole: 10, 37, 64, 65, 95, 102, 132 (issues #85, #102, #120, #121, #145, #150, #175). Nothing is left in part.
 - Deviations: § UI impact gained Home's Recent activity card, which shares History's card component (Codex A1-C1; the e2e asserts it and the PR shows it). `packages/wallet-bridge/README.md` and `packages/wallet-core/src/jobs/types.ts` were edited beyond the file map, docs only (Opus A1-O1, A1-O2).
 
-## Seeds
-
-Recommended: `/goal`, because its completion is visible in the transcript. Use exactly one per
-session.
-
-```
-/goal All phases in implementations-plan/code-followups-2/plan.md are marked ✓, each backed by its validation gate reported passing in the transcript; for each phase LESSONS_FILE=implementations-plan/code-followups-2/lessons/phase-N.md is printed; /code-review was NOT run (code_review is off); the Codex fix loop converged for each of the three arcs at its boundary and for the final cross-arc pass, each shown by a resumed gpt-6.1-sol pass reporting no new material finding, quoted in the transcript (or stopped at its third round and reported); Phase 1.5's after-shot texts match the plan's UI-impact table, quoted in the transcript; the four-layer gh stack exists on GitHub (gh stack view output in the transcript), opened only after the loops converged, with the close-out layer's archive-move commit shown by git show --stat; bun run test, bun run test:all and bun run lint all exit 0 in the transcript.
-```
-
-```
-/loop 15m Drive implementations-plan/code-followups-2 forward. Never idle. Each firing: (1) read plan.md and lessons/ from the stack's top layer; if the plan path is gone and `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/code-followups-2/plan.md` succeeds, run `agent-worktree done code-followups-2 --merged`, report its output, clear this loop and stop; if it fails, babysit the PRs only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step; run lint and the touched tests after each edit; commit; push only after the loops converge. (4) Stuck: consult Codex (gpt-6.1-sol, high) and log the verdict in lessons/phase-N.md; never cross a hard limit. (5) Same step failed 3 times: stop and reassess with Codex. (6) Phase gate green: paste it, mark ✓, print LESSONS_FILE; at an arc boundary run the Codex loop (hard stop at three rounds), then gh stack add. (7) All ✓: final cross-arc pass, Delivery, close-out, gh pr checks --watch, wrap-up report, stop.
-```
-
-## Follow-ups found during planning
-
-To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
-
-- **CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins** (Phase 3.2). The drift test
-  fails a Bun bump that misses them, but the runbook should list the site beside the others.
-  CLAUDE.md is in accessibility-1's file map.
-- **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1. Deleting it is
-  a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
-  entry.)
-
-
-
 ### Arc 2: extension pages, build and e2e harness
 
 - **Closed whole:** 26 (submit latches and the seed page's unmount fence; the countdown's `start()`
@@ -1599,3 +1603,27 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
   `check:plans` on `dev` (report mode on push); fixed here. Open, needs an issue: CLAUDE.md's
   Bun-bump list does not name `docker-ci-like.sh`'s pins (the drift test fails a bump that misses
   them, but the runbook should list the site).
+
+## Seeds
+
+Recommended: `/goal`, because its completion is visible in the transcript. Use exactly one per
+session.
+
+```
+/goal All phases in implementations-plan/code-followups-2/plan.md are marked ✓, each backed by its validation gate reported passing in the transcript; for each phase LESSONS_FILE=implementations-plan/code-followups-2/lessons/phase-N.md is printed; /code-review was NOT run (code_review is off); the Codex fix loop converged for each of the three arcs at its boundary and for the final cross-arc pass, each shown by a resumed gpt-6.1-sol pass reporting no new material finding, quoted in the transcript (or stopped at its third round and reported); Phase 1.5's after-shot texts match the plan's UI-impact table, quoted in the transcript; the four-layer gh stack exists on GitHub (gh stack view output in the transcript), opened only after the loops converged, with the close-out layer's archive-move commit shown by git show --stat; bun run test, bun run test:all and bun run lint all exit 0 in the transcript.
+```
+
+```
+/loop 15m Drive implementations-plan/code-followups-2 forward. Never idle. Each firing: (1) read plan.md and lessons/ from the stack's top layer; if the plan path is gone and `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/code-followups-2/plan.md` succeeds, run `agent-worktree done code-followups-2 --merged`, report its output, clear this loop and stop; if it fails, babysit the PRs only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step; run lint and the touched tests after each edit; commit; push only after the loops converge. (4) Stuck: consult Codex (gpt-6.1-sol, high) and log the verdict in lessons/phase-N.md; never cross a hard limit. (5) Same step failed 3 times: stop and reassess with Codex. (6) Phase gate green: paste it, mark ✓, print LESSONS_FILE; at an arc boundary run the Codex loop (hard stop at three rounds), then gh stack add. (7) All ✓: final cross-arc pass, Delivery, close-out, gh pr checks --watch, wrap-up report, stop.
+```
+
+## Follow-ups found during planning
+
+To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
+
+- **CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins** (Phase 3.2). The drift test
+  fails a Bun bump that misses them, but the runbook should list the site beside the others.
+  CLAUDE.md is in accessibility-1's file map.
+- **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1. Deleting it is
+  a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
+  entry.)
