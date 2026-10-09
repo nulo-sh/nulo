@@ -191,8 +191,11 @@ describe("popup: declining never locks a person out", () => {
 			expect(await readLegalRecord(page)).toBeUndefined()
 			await waitForSheet(page, "review")
 		} finally {
-			await ctx.close().catch(() => {})
-			rmSync(profileDir, { recursive: true, force: true })
+			try {
+				await ctx.close()
+			} finally {
+				rmSync(profileDir, { recursive: true, force: true })
+			}
 		}
 	}, 240_000)
 
@@ -224,7 +227,7 @@ describe("popup: declining never locks a person out", () => {
 				// The acceptance record is device-local: a backup must not carry it to another device.
 				expect(JSON.stringify(backup)).not.toContain("nulo:legal:accepted")
 			} finally {
-				await ctx.close().catch(() => {})
+				await ctx.close()
 			}
 		},
 		480_000,
