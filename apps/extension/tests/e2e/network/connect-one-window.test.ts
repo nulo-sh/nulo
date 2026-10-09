@@ -12,7 +12,8 @@ import { tokenColor } from "../helpers/pointer-probes"
 /**
  * A new connection's emoji check shows in the connect window itself: Allow keeps that window, the
  * check replaces the connect page, and no other window opens until the dApp asks for permissions.
- * A held Enter at Allow does not carry through the check.
+ * The swap is announced in the wallet's own words, and a held Enter at Allow does not carry through
+ * the check.
  */
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -24,6 +25,9 @@ const GRID = '[data-testid="verify-emoji-grid"]'
 const STEP_BAR = '[data-testid="connect-step-bar"]'
 const TRUST = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
 const REPEATS_KEY = "e2e:enter-repeats"
+const ANNOUNCE = '[data-testid="verify-announce"][role="status"][aria-live="polite"]'
+const ANNOUNCEMENT =
+	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -151,6 +155,12 @@ test.skipIf(!aztecConfig)(
 			error: null,
 		})
 		expect(pageErrors).toEqual([])
+		await page.waitForFunction(
+			(sel: string, want: string) => document.querySelector(sel)?.textContent === want,
+			{ timeout: 5_000, polling: 50 },
+			ANNOUNCE,
+			ANNOUNCEMENT,
+		)
 
 		await prepareKeys(page)
 		await page.keyboard.press("Enter")
