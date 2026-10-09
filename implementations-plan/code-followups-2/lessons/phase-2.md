@@ -109,3 +109,10 @@ same session. Findings and verdicts are in `plan.md` § Audit verdicts.
 - Round 3: no new material finding; one comment tightened to the accepted residual risk.
 - Network `incoming-transfers.test.ts` re-run on the round-2 head: Chrome 2/2, retry 0, nothing
   left on its anvil port.
+
+## Final gates
+
+On the head with `origin/dev` b55d88f (#76) merged: network `incoming-transfers.test.ts` 2/2 on
+Firefox, retry 0, nothing left on its anvil port, no teardown escalated; the six smoke files
+19/19 on Chrome and 19/19 on Firefox, retry 0; `audit:vue` 0 with `src/types/` unchanged by its
+build; `test:all` 0; `test:ci-gating` 413/413.
