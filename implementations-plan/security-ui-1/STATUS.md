@@ -24,3 +24,4 @@
 - 2026-10-08: final head Chrome network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): the eight Phase 2.2 network specs (28/28).
 - 2026-10-08: final screenshots taken through the e2e harness (Chrome, both themes, both profile types, ready and confirmation states).
 - 2026-10-08: final head Firefox network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): `import-handshake-note` and `import-handshake-note-matrix` (4/4, the passkey profile included); `account-balance-orphans`, `backup-migration-roundtrip`, `backup-restore-integrity`, `same-token-concurrent-sends` (19/19); `backup-import-stalled-network` and `backup-restore-sw-restart` skip as Chrome-only. Phase 2.2 gate pass.
+- 2026-10-09: owner answers on the result page recorded (r1 C, r2 yes, r3 yes); arc 2 merged origin/dev (index.md conflict only); r1 built: `destructive` Button variant in `@nulo/design`, used by the passkey confirmation.

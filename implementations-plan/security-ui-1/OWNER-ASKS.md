@@ -78,3 +78,15 @@ Consequences: Arc 1 runs Phase 1.1 and Phase 1.2. Arc 2 builds option D. Arc 3 b
 Not a new call: the build follows call 1 (D) and the caveat that "Download anyway" uses the design package's destructive (red) variant. One thing the prototype could not show:
 
 - **The red button's type.** The design package's only red button is its full-width call-to-action style: 14 px type, wide letter spacing, no side padding. In the confirmation's half-width row that clipped "Download anyway". It now uses the same style's compact size (12 px), the size the design package gives that style in a tight spot, and the label fits, close to the button's edges. Cancel is unchanged. If it reads cramped in the final shots, two alternatives exist, each a UI change for the owner: stack Cancel above a full-width "Download anyway", or add to the design package a red button with the regular button's type, which would match the prototype's look in red.
+
+## Answers: result page, 2026-10-09
+
+Recorded by the owner on the result page (a private Claude Artifact, "Backup Page Result", with the arc 2 and arc 3 screenshots), signed off at 12:50 UTC:
+
+| Call | Answer | Note |
+|---|---|---|
+| r1. The red "Download anyway" button | **C**, a red variant of the regular button | none |
+| r2. A profile switch in another window resets the export page | **Yes**, ship as built | none |
+| r3. Ending an app's session is scoped to the profile that owns it | **Yes**, ship as built | none |
+
+Consequences: `@nulo/design`'s `Button` gains a `destructive` variant, the regular button's type and padding on red, and the passkey confirmation's "Download anyway" uses it at Cancel's size. The compact CTA size the render note above describes is gone from ConfirmPopup. r2 and r3 change nothing.
