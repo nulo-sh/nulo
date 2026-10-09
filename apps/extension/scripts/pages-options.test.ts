@@ -47,10 +47,10 @@ describe("the Pages route scan", () => {
 })
 
 describe("the Pages dev watcher", () => {
-	test("under a dot-directory, an added test page never becomes a route and an added page does", async () => {
+	test.each([".worktrees/ext", "ext"])("under %s, an added test page never becomes a route and an added page does", async (checkout) => {
 		const base = mkdtempSync(join(tmpdir(), "pages-watch-"))
 		try {
-			const worktree = join(base, ".worktrees", "ext")
+			const worktree = join(base, checkout)
 			for (const { dir } of PAGES_OPTIONS.dirs) mkdirSync(join(worktree, dir), { recursive: true })
 			const context = new PageContext(PAGES_OPTIONS, worktree)
 			const watcher = new EventEmitter()

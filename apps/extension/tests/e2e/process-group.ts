@@ -4,6 +4,8 @@ type StopSignal = "SIGTERM" | "SIGKILL"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+const hasExited = (child: ChildProcess) => child.exitCode !== null || child.signalCode !== null
+
 /** A zombie member still counts until it is reaped. */
 function isGroupAlive(pgid: number): boolean {
 	try {
@@ -14,14 +16,9 @@ function isGroupAlive(pgid: number): boolean {
 	}
 }
 
-function isGone(child: ChildProcess, pgid: number): boolean {
-	const leaderExited = child.exitCode !== null || child.signalCode !== null
-	return leaderExited && !isGroupAlive(pgid)
-}
-
 async function waitUntilGone(child: ChildProcess, pgid: number, ms: number): Promise<boolean> {
 	const deadline = Date.now() + ms
-	while (!isGone(child, pgid)) {
+	while (!hasExited(child) || isGroupAlive(pgid)) {
 		if (Date.now() >= deadline) return false
 		await sleep(100)
 	}
@@ -41,25 +38,29 @@ function signal(child: ChildProcess, pgid: number, sig: StopSignal): void {
 }
 
 /**
- * Stops a child this run spawned `detached` (so it leads its own group) and still holds: SIGTERM to
- * the group, then SIGKILL to the group if any member outlives `graceMs`, the leader's exit alone not
- * being enough. While any member lives its group id cannot be reused, so the group signalled is the
- * one the run created; a pid read back from a lock carries no such proof and never comes here.
+ * Stops a child this run spawned `detached`, so it leads its own group: SIGTERM to the group, then
+ * SIGKILL if any member outlives `graceMs`. Only a group whose leader was alive when teardown began
+ * is escalated: its id cannot be reused while any member lives, whereas a group whose leader had
+ * already exited may have emptied and its id passed to another run's group, so it gets SIGTERM
+ * only. `stopped` is false while any member may still run.
  */
 export async function killProcessGroup(
 	child: ChildProcess | null,
 	label: string,
 	weStarted: boolean,
 	graceMs = 5_000,
-): Promise<{ escalated: boolean }> {
-	if (!child?.pid || !weStarted) return { escalated: false }
+): Promise<{ escalated: boolean; stopped: boolean }> {
+	if (!child?.pid || !weStarted) return { escalated: false, stopped: true }
 	const pgid = child.pid
+	const leaderAliveOnEntry = !hasExited(child)
 	console.log(`[e2e-setup] Stopping ${label} (pid=${pgid})...`)
 	signal(child, pgid, "SIGTERM")
-	if (await waitUntilGone(child, pgid, graceMs)) return { escalated: false }
+	if (await waitUntilGone(child, pgid, graceMs)) return { escalated: false, stopped: true }
+	if (!leaderAliveOnEntry) {
+		console.warn(`[e2e-setup] ${label}'s leader exited before teardown, so its group is not escalated`)
+		return { escalated: false, stopped: false }
+	}
 	console.warn(`[e2e-setup] ${label}'s process group outlived SIGTERM; sending SIGKILL`)
 	signal(child, pgid, "SIGKILL")
-	// The caller removes the run's data directory next; a member still dying could write to it.
-	await waitUntilGone(child, pgid, 2_000)
-	return { escalated: true }
+	return { escalated: true, stopped: await waitUntilGone(child, pgid, 2_000) }
 }

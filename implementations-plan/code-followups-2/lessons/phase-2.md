@@ -30,6 +30,12 @@ passed here.
   (Node sets `signalCode`), so even a group that obeyed SIGTERM waited the whole grace period and
   was then sent SIGKILL. The base copy fails the cooperative control case for exactly that reason
   (2 s, escalated). The new wait reads both.
+- First cut escalated every group that outlived SIGTERM, including one whose leader had exited
+  before teardown; both audits showed that group may have emptied and its id been reused, so it
+  now gets SIGTERM only (D-arc2-3). The reworked cases: a leader that exits cleanly on SIGTERM
+  with a member ignoring it is escalated (red at base: the base loop stops at the leader's exit
+  code); a cooperative group is not (red at base: the `exitCode` bug); a group whose leader exited
+  first is never escalated and is reported not stopped (the never-happens pin beside the first).
 - Gate: `process-group.test.ts` and `anvil-probe.test.ts` red at base (4 of 5), green after.
   Network `incoming-transfers.test.ts` on Chrome 2/2, retry 0; after the run nothing listened as
   `anvil --host 127.0.0.1 --port 16368`.
@@ -46,18 +52,26 @@ and released the claim.
 - Run 1 saw no WebSocket: the dep optimizer was still bundling, so crxjs's loading page reloaded
   in a loop for the whole 20 s window. Read as "proves nothing", per the plan, and rerun after the
   dev server's log went quiet for 15 s.
-- Runs 2 to 4 all saw `[vite] connecting...`, `WebSocket ws://localhost:8088/?token=…` created,
+- Every later run saw `[vite] connecting...`, `WebSocket ws://localhost:8088/?token=…` created,
   and a `101 Switching Protocols` handshake followed by the `{"type":"connected"}` frame, with no
   CSP refusal of it.
-- That the page was under the extension policy at the time is proven in the same page: the real
-  popup is served by crxjs's service worker (`fromServiceWorker=true`, no CSP header), yet an
-  inline script appended after the handshake did not run and raised a `script-src-elem`
-  violation naming `script-src 'self' 'wasm-unsafe-eval' …`, the manifest's directive as Chrome
-  enforces it on an unpacked extension. So `connect-src 'self' blob: https: http:` admits
-  `ws://localhost:8088` in this Chrome; the entry's inference that an `http:` source cannot match
-  `ws:` did not hold here.
-- An `<img>` control from run 3 is not evidence either way: COEP (`require-corp`) blocked it
-  before CSP was reported.
+- Why it is not refused: the extension serves only crxjs's loading page itself (with the manifest
+  policy as its CSP header); the real popup comes from crxjs's service worker
+  (`fromServiceWorker=true`) with no CSP header, and Chrome then applies only its baseline
+  extension policy, `script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules'
+  http://localhost:* http://127.0.0.1:*; object-src 'self'`, which has no `connect-src`. The
+  discriminating control: in that page `fetch("data:text/plain,…")` succeeded, and the only
+  violation (an inline script) reported that baseline as its `originalPolicy`. Against a
+  production build the same control was refused under `connect-src 'self' blob: https: http:`
+  with the manifest policy as `originalPolicy`, so the control detects the manifest policy when it
+  applies.
+- So whether an `http:` source admits `ws:` was not tested (the plan's inference I1 is neither
+  proven nor disproven), and a development-only `connect-src` source would change nothing. The
+  first reading of runs 2 to 4, "the policy is enforced and admits `ws:`", rested on an
+  inline-script control that both policies refuse; both audits caught it.
+- Found on the way: on Chrome, `bun run dev` never runs the popup under the manifest's CSP, so a
+  CSP regression shows only in production-mode builds (the e2e builds and their CSP recorder).
+- An `<img>` control from run 3 is not evidence either way: COEP (`require-corp`) blocked it.
 - `dist/chrome` rebuilt with `bun run build:chrome`: its manifest's policy is byte-equal to the
   production string and it carries no development `key`; `manifest.test.ts` 12/12.
 - Firefox's `dev:firefox` is a watch build with no HMR socket, so it was not probed.

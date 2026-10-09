@@ -1189,8 +1189,10 @@ are untouched. 134 adds hash pins.
 ### Inferences
 
 - I1. Under CSP3 an `http:` source does not match a `ws:` URL, so the dev server's HMR socket is
-  likely refused. Phase 2.4 proves or disproves it before any change. **Disproved** by Phase 2.4's
-  probe (D-arc2-1): Chrome 152 admits `ws://localhost:8088` under `connect-src … http:`.
+  likely refused. Phase 2.4 proves or disproves it before any change. **Not tested, and moot**
+  (D-arc2-1): on Chrome the dev popup is served by crxjs's service worker and runs under Chrome's
+  baseline extension policy, which has no `connect-src`, so the manifest's `connect-src` never
+  meets the HMR socket.
 - I2. PR #58 may merge before Arc 1 starts. Phase 1.4 checks and adapts.
 - I3. PR #75 may land before the close-out. The close-out matches entries by text.
 
@@ -1236,8 +1238,9 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D22 | 10: log the refusal at `debug` in `logOperationOutcome` too (Opus round 1) | Without it every refused call still writes an `error` line; a refusal a dApp can repeat belongs at `debug` (logging policy), as the Terms refusal already does | Leaving the `error` line (the plan's first claim was wrong) |
 | D23 | Build 186's late-listener bullet, rewrite the rest (final Codex pass) | A listener added to a disconnected client after dispose is invisible; the same record's cleanup rule covers it, and the pinned-drift test flips with a mounted control | Parking the whole entry as owner UI drift (only its other three bullets are visible) |
 | D-orch-1 | No stack: each arc opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; Arcs 2 and 3 merge `dev` in after the arc before them lands; the close-out is a fourth PR after the last arc merges (orchestrator, at approval) | Arcs 1 and 2 run in parallel worktrees, and the orchestrator merges in order | `gh stack` with one layer per arc (§ Delivery as planned) |
-| D-arc2-1 | 152: no code change; the entry closes on the probe's evidence (`lessons/phase-2.md` § 2.4) | The HMR socket completed its `101` handshake with no refusal while an in-page inline-script control proved the manifest policy was enforced on the same page; § Architecture 2.4 says to change nothing in that case | The development-only override (it would widen the dev policy for nothing) |
+| D-arc2-1 | 152: no code change; the entry closes on the probe's evidence (`lessons/phase-2.md` § 2.4) | The HMR socket completed its `101` handshake with no refusal, and § Architecture 2.4 says to change nothing in that case. A `fetch("data:")` control showed why: the service-worker-served dev popup runs under Chrome's baseline extension policy only, so a development-only `connect-src` source would change nothing (the production control refused the same fetch under the manifest policy) | The development-only override (a no-op on the pages it targets) |
 | D-arc2-2 | 26: the seed page's unmount case asserts the late mnemonic's `join` is never called, beside the timer count | The countdown's own dispose guard already arms nothing after unmount, so a timer count alone passes without the page's fence; only a page that sets the phrase calls `join` | Reading the phrase from the DOM (the page is gone) |
+| D-arc2-3 | 125: escalate only a group whose leader was alive when teardown began; report `stopped`, and keep the lock and the node's data directory when a group outlives SIGKILL (Arc 2 audit round 1: Codex C1, C2; Opus 2) | A live leader keeps its pid, and so the group id, from reuse; once it has exited before teardown the group may have emptied and its id passed to another run's group, which § Architecture 2.3's "while any member lives" did not cover. The lock is a survivor's only record for the next run's reap | A per-spawn ownership marker read from `/proc` (Linux-only, and more than the entry needs); escalating every group (signals a reused id) |
 | D-orch-2 | No edit to `follow-ups.md`, ever, the close-out included: each PR body lists the entries its arc closes with their governance ledger ids, and a partly built entry's remainder goes into the arc's section of the Outcome draft (orchestrator, at approval) | The file is being retired by the governance-1 lane, which turns every entry into an issue or a recorded disposition | § Close-out edits to follow-ups.md as planned |
 
 ## Audit verdicts
@@ -1306,6 +1309,20 @@ written into the wrong table (§ What this lane builds and § File-level change 
 
 **Driver's own fix before the round-1 results:** `probeAnvil` moved out of `global-setup.ts`, whose
 import registers process handlers and creates a data directory.
+
+### Arc 2 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| C1 / O2 | `killProcessGroup` can signal, and now SIGKILL, a reused group id when the leader and every member exited before teardown; the test's cleanup kills ids it proved gone | **Accepted** (D-arc2-3): only a group whose leader was alive at entry is escalated; the cleanup signals only a group still alive |
+| C2 | The final wait's result is dropped, so teardown deletes the data directory and clears the lock while a member survives | **Accepted** (D-arc2-3): `stopped` is returned; teardown keeps the lock and the node's data directory for the next run's reap |
+| C3 / O1 | The inline-script control does not separate the manifest policy from Chrome's baseline, so "`http:` admits `ws:`" is unproven | **Accepted.** A `fetch("data:")` control showed the dev popup runs under the baseline only; the claim is narrowed, the no-change decision stands (D-arc2-1, I1) |
+| O3 | `pages-options.test.ts` no longer reds when the plain `**/*.test.*` glob is deleted | **Accepted.** The watcher case runs under a dot-directory and a plain one; deleting the glob reds the plain case |
+| O4 | Three comments name their callers; "fails loudly" holds only under `E2E_REQUIRE_SETUP=1` | **Accepted.** Restated as invariants; the post-SIGKILL comment went with the `stopped` result |
+
+Checked and holds (both): every real route is still scanned; the overwrite mode keeps every
+declaration a template uses; the seed latch releases in `finally`; the race results and records
+are unchanged; no template, copy or selector changed; the budgets hold.
 
 ## Post-implementation
 
@@ -1456,14 +1473,17 @@ Each arc writes its own section here; the close-out folds them into § Outcome a
 
 - **Closed whole:** 26 (submit latches and the seed page's unmount fence; the countdown's `start()`
   replaces an earlier countdown and arms nothing after dispose), 135 (only `.vue` files are routes),
-  130 (`dtsMode: "overwrite"`; the two stale globals are gone), 152 (no change: the probe showed
-  the HMR socket is not refused, D-arc2-1).
+  130 (`dtsMode: "overwrite"`; the two stale globals are gone), 152 (no change: the HMR socket is
+  not refused, because the Chrome dev popup is served by crxjs's service worker and runs under
+  Chrome's baseline extension policy, not the manifest's, D-arc2-1).
 - **Closed in part; what is left:**
-  - 125: the in-run teardown now waits on and escalates by the whole process group. Left: the
-    persisted-lock reaper (`killOrphanByPid`, `reap.ts`) still skips a group whose leader is dead,
-    because a recorded pid proves no ownership once the original group is gone; reaping it needs
-    ownership evidence, as `tests/e2e/fixtures/browser/ownership.ts` takes from an environment
-    marker.
+  - 125: the in-run teardown now waits on the whole process group and escalates it when its
+    leader was alive as teardown began; a group that outlives SIGKILL keeps the lock and its data
+    directory for the next run's reap (D-arc2-3). Left: a group whose leader exited before
+    teardown gets SIGTERM only, and the persisted-lock reaper (`killOrphanByPid`, `reap.ts`) still
+    skips a group whose leader is dead, because once the leader is gone nothing proves the group
+    never emptied and its id was not reused; escalating either needs ownership evidence, as
+    `tests/e2e/fixtures/browser/ownership.ts` takes from an environment marker.
   - 126: `probeAnvil` refuses an L1 whose chain id is not 31337 or whose block number is not a hex
     quantity. Left: no RPC proves `--slots-in-an-epoch 1` (anvil 1.4.1's `anvil_nodeInfo` does not
     report it), so adopting a running anvil still trusts that flag.
@@ -1473,6 +1493,11 @@ Each arc writes its own section here; the close-out folds them into § Outcome a
   - 186: a disposed `useIncomingTrustPrompts` registers no config listener after its clients
     disconnected. Left: FormPopup's raw order, non-contiguous orders after a re-open, and the
     per-owner reducer policies, each visible.
-- **Found on the way:** the old in-run teardown read only `child.exitCode`, which stays null for a
-  leader killed by a signal, so every spawned group waited the full grace period and was then
-  sent SIGKILL (`lessons/phase-2.md` § 2.3).
+- **Found on the way:**
+  - The old in-run teardown read only `child.exitCode`, which stays null for a leader killed by a
+    signal, so every spawned group waited the full grace period and was then sent SIGKILL
+    (`lessons/phase-2.md` § 2.3).
+  - On Chrome, `bun run dev` never runs the popup under the manifest's CSP (crxjs's
+    service-worker-served pages carry only Chrome's baseline extension policy), so a CSP
+    regression shows only in production-mode builds: the e2e builds and their CSP recorder. A
+    candidate issue for governance; nothing in this lane depends on it.

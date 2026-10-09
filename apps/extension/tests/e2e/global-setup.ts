@@ -776,14 +776,14 @@ export async function teardown() {
 		// ignore
 	}
 
-	await killProcessGroup(playgroundProcess, "playground", weStartedPlayground)
+	const playground = await killProcessGroup(playgroundProcess, "playground", weStartedPlayground)
 	playgroundProcess = null
-	await killProcessGroup(nodeProcess, "aztec", weStartedNode)
+	const node = await killProcessGroup(nodeProcess, "aztec", weStartedNode)
 	nodeProcess = null
-	await killProcessGroup(anvilProcess, "anvil", weStartedAnvil)
+	const anvil = await killProcessGroup(anvilProcess, "anvil", weStartedAnvil)
 	anvilProcess = null
 
-	if (weStartedNode) {
+	if (weStartedNode && node.stopped) {
 		try {
 			fs.rmSync(AZTEC_DATA_DIR, { recursive: true, force: true })
 		} catch {
@@ -791,7 +791,8 @@ export async function teardown() {
 		}
 	}
 
-	if (weOwnLock) clearLock()
+	// The lock is a survivor's only record: the next run's reap finds it there and removes its data.
+	if (weOwnLock && playground.stopped && node.stopped && anvil.stopped) clearLock()
 	killOrphanChromes()
 }
 

@@ -1,6 +1,6 @@
 import http from "node:http"
 
-/** The chain id `ensureAnvil` spawns the L1 with. */
+/** The local L1's chain id: anvil is spawned with it, and a listener on any other chain is not ours. */
 export const ANVIL_CHAIN_ID = 31337
 
 const HEX_QUANTITY = /^0x(0|[1-9a-f][0-9a-f]*)$/
@@ -45,8 +45,8 @@ const isHexQuantity = (value: unknown): value is string => typeof value === "str
 
 /**
  * True only for an L1 this suite could have spawned: a JSON-RPC listener answering a hex block
- * number on chain 31337. Any other listener on the port is not adopted, so the spawn that follows
- * fails loudly on the busy port. `--slots-in-an-epoch 1` is still trusted: no RPC reports it.
+ * number on chain 31337; any other listener is never adopted. `--slots-in-an-epoch 1` is still
+ * trusted: no RPC reports it.
  */
 export async function probeAnvil(url: string, timeoutMs = 1500): Promise<boolean> {
 	if (!isHexQuantity(await rpcResult(url, "eth_blockNumber", timeoutMs))) return false
