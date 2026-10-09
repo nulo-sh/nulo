@@ -74,18 +74,10 @@ export type MethodRouting =
 	| { readonly via: "handler" }
 
 /**
- * Per-method argument guard. A pure, NON-MUTATING predicate over the ORIGINAL
- * args array — deliberately not a parser: it can return only pass/fail, so it
- * cannot coerce, normalize, or substitute values, and everything downstream
- * (scope checkers reading `args` positionally, handler destructuring) keeps
- * seeing the exact wire values. Runs in dispatch() right after
- * `assertKnownMethod`, BEFORE capability/scope enforcement and before any
- * handler destructuring.
- *
- * Arity only: required-LEADING positions, optional trailing args stay optional,
- * extra args stay ignored. Every value shape is the schema parse's
- * (`wallet-schema-args.ts`), which runs after the capability check; a method
- * without this field gets no check before it.
+ * Per-method arity guard, run before the capability check: required leading positions only (and
+ * the batch envelope), never value shapes, which the schema parse checks after the capability
+ * check (`wallet-schema-args.ts`). A pass/fail predicate, so the wire args reach every reader
+ * unchanged.
  */
 export type ArgGuard = (args: readonly unknown[]) => boolean
 
@@ -109,33 +101,22 @@ export interface MethodDescriptor {
 }
 
 // ── Arg guards ─────────────────────────────────────────────────────────
-// Each is a pure pass/fail PREDICATE over the raw positional args; the
-// dispatcher throws the "invalid arguments" rejection when one returns false.
-// Named (not inline) so the registry reads as a table of guarded methods.
 
-/** batch(legs): handleBatch iterates legs and re-dispatches `leg.name(leg.args)`;
- *  each leg is then validated by its OWN method's guard on re-entry. */
+/** Each leg is checked by its own method's guard and parse when it re-enters dispatch. */
 export function argsBatch(args: readonly unknown[]): boolean {
 	const legs = args[0]
 	if (!Array.isArray(legs)) return false
 	return legs.every((leg) => isRecord(leg) && typeof leg.name === "string" && Array.isArray(leg.args))
 }
 
-/** createAuthWit(from, messageHashOrIntent): both positions are read; there is
- *  no working path with the intent absent (the built operation would carry
- *  `messageHashOrIntent: undefined` into execution). Values stay unvalidated —
- *  the scope checker handles the 3 intent shapes tolerantly. */
 export function argsCreateAuthWit(args: readonly unknown[]): boolean {
 	return args.length >= 2
 }
 
-/** Single leading arg that the checker/handler `String()`-coerces — presence
- *  only, no type requirement (coercion tolerance preserved). */
 export function argsOneRequired(args: readonly unknown[]): boolean {
 	return args.length >= 1
 }
 
-/** Two leading args read (getPrivateEvents / registerToken / grantPublicAuthwit). */
 export function argsTwoRequired(args: readonly unknown[]): boolean {
 	return args.length >= 2
 }
