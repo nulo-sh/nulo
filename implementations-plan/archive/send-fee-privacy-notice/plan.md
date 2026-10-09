@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the Send page picks its fee source from the transfer's privacy (`apps/extension/src/popup/components/modules/send/fee-privacy.ts`, `fee-send-selection.ts`) and says so when the account's own Fee Juice would pay for a private send (a tag on the fee card in `FeeMethodSelector.vue`, the sentence and a link to get private gas in `apps/extension/src/popup/components/modules/send/SendReviewSheet.vue`); the gas-balance reader honours a forced refresh under concurrency (`apps/extension/src/wallet/services/execution/gas-balance-reader.ts`).
-- **Open items**: revisit the private-origin fee order when a funded sponsor ships on mainnet, tracked in [follow-ups](../../follow-ups.md). The order puts the account's own Fee Juice ahead of an eligible sponsor, which costs the most privacy, and it decides only on test networks while mainnet offers no sponsored row.
+- **Open items**: revisit the private-origin fee order when a funded sponsor ships on mainnet, tracked in #117. The order puts the account's own Fee Juice ahead of an eligible sponsor, which costs the most privacy, and it decides only on test networks while mainnet offers no sponsored row.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

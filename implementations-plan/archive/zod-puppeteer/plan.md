@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the e2e tooling moved to Puppeteer 25 (`apps/extension/package.json`). The Zod 4 half was deferred by this plan, and the tree now declares `zod` `^4.4.3` in `packages/aztec-runtime/package.json` and the other schema-owning workspaces through later work.
-- **Open items**: nine `z.nativeEnum` calls use an API zod 4.4.3 deprecates, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: nine `z.nativeEnum` calls use an API zod 4.4.3 deprecates, tracked in #175.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

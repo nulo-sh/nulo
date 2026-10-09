@@ -173,8 +173,9 @@ function onConfigUpdate(s: Prompts, prop: ConfigProp) {
  * The incoming-trust prompt queue: one prompt at a time, deduped by (profile, network, contract),
  * only ever for the live identity. Call synchronously in setup; the parent owns both clients'
  * connect and disconnect. `seedVisibility` takes the stored `incomingTransfersVisible` (undefined
- * when the read failed) and only then starts listening for its changes; `dispose` removes every
- * listener this call added, except `onConnected`'s, which lives as long as the client.
+ * when the read failed) and only then starts listening for its changes, unless `dispose` already ran;
+ * `dispose` removes every listener this call added, except `onConnected`'s, which lives as long as
+ * the client.
  */
 export function useIncomingTrustPrompts(incoming: IncomingClient, config: ConfigClient) {
 	const s: Prompts = {
@@ -207,13 +208,17 @@ export function useIncomingTrustPrompts(incoming: IncomingClient, config: Config
 		},
 	)
 
+	let disposed = false
+
 	function seedVisibility(visible: boolean | undefined) {
+		if (disposed) return
 		if (visible !== undefined) s.lastVisibility = visible
 		config.onUpdate.add(onUpdate)
 		s.visibilityInitialized = true
 	}
 
 	function dispose() {
+		disposed = true
 		config.onUpdate.remove(onUpdate)
 		incoming.onIncomingTrustChanged.remove(onTrustChanged)
 		incoming.onIncomingTransferPending.remove(onPending)

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The plan-tree standard and its gate: `implementations-plan/README.md`, `implementations-plan/.gitignore`, `implementations-plan/.ignore`, the curated `implementations-plan/lessons.md` and `implementations-plan/follow-ups.md`, closed plans under `implementations-plan/archive/`, and the CI check `scripts/ci-cd/plans/check.ts` (run as `bun run check:plans`, inside `test:ci-gating`). Assets that code reads moved out of the tree to `reference/`, `scripts/phantom-sweep.ts` and `apps/extension/tests/e2e/PRF-NON-PORTABLE.md`.
-- **Open items**: transcript-shaped files the ignore patterns miss, and linting and type-checking the root `scripts/` tree (Biome's `files.includes` covers only two `scripts/ci-cd/` subtrees and no tsconfig reaches it), tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: transcript-shaped files the ignore patterns miss, and linting and type-checking the root `scripts/` tree (Biome's `files.includes` covers only two `scripts/ci-cd/` subtrees and no tsconfig reaches it), tracked in #182. Linting and type-checking `scripts/` was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

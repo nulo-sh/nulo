@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Every extension build writes a byte-stable `THIRD-PARTY-NOTICES.txt`, refuses an unreviewed licence or asset, and Settings, About opens the file (`packages/third-party-notices`, `apps/extension/src/popup/pages/settings/about.vue`).
-- **Open items**: five declined items wait on their triggers, and `vite dev` in an agent worktree routes a new test file, both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: none. The five declined items wait on external triggers recorded in § Declined items, which reopen them; `vite dev` routing a new test file in an agent worktree was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

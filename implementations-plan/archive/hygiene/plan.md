@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A once-per-file token fixture in `apps/extension/tests/e2e/fixtures/extra-tokens.ts`, a priced-hero wait in `apps/extension/tests/e2e/network/incoming-arrival.test.ts`, a hook-based import in `apps/extension/src/presto/client.test.ts`, the root `typecheck` delegating to the extension's own in `package.json`, and a comment sweep across the extension and its packages that touched no behaviour.
-- **Open items**: the rest of the workflow-reference class in code (names of review tools and `Phase N` tags that remain in comments), `apps/extension/src/e2e/config.test.ts` still importing in its timed body, and the e2e tree having no type gate; all tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the rest of the workflow-reference class in code (names of review tools and `Phase N` tags that remain in comments), `apps/extension/src/e2e/config.test.ts` still importing in its timed body, and the e2e tree having no type gate; all tracked in #193 and #194. The `config.test.ts` import was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

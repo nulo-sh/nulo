@@ -1,7 +1,7 @@
 ---
 plan: code-followups-2
 tier: mid
-status: approved; arc 1 in progress
+status: approved (orchestrator, 2026-10-09); arcs in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -858,7 +858,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 
 ### Arc 2: extension pages, build and e2e harness
 
-#### Phase 2.1: submit latches
+#### Phase 2.1: submit latches ✓
 
 1. `useSecretCountdown.ts`: `start()` clears first, and does nothing after dispose.
 2. `useSecretCountdown.test.ts`, with fake timers:
@@ -884,7 +884,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 - smoke `keyboard-guards.test.ts` and `security.test.ts` pass on Chrome;
 - the diff makes no change to either SFC's `<template>`, so nothing renders differently.
 
-#### Phase 2.2: routes and declarations
+#### Phase 2.2: routes and declarations ✓
 
 1. `pages-options.ts`: `extensions: ["vue"]`.
 2. `pages-options.test.ts`: the case "the configured scan drops exactly the test modules the defaults
@@ -904,7 +904,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 - a second `bun run build` leaves `git diff --exit-code -- apps/extension/src/types/` clean;
 - smoke `navigation.test.ts` and `settings-routes.test.ts` pass on Chrome.
 
-#### Phase 2.3: process groups and the L1 probe
+#### Phase 2.3: process groups and the L1 probe ✓
 
 1. Move `killProcessGroup` to `process-group.ts`; wait on and escalate by group; add the grace
    parameter and the escalation result. `global-setup.ts` imports it. `lockfile.ts` and `reap.ts`
@@ -931,7 +931,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
   nothing;
 - one smoke file passes on both browsers.
 
-#### Phase 2.4: development CSP
+#### Phase 2.4: development CSP ✓
 
 1. Probe, as in § Architecture 2.4: port 8088 claimed, `bun run --cwd apps/extension dev` in its own
    process group, the popup opened in the e2e Chrome profile, and the HMR WebSocket and console CSP
@@ -954,7 +954,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
   string;
 - the arc gate passes.
 
-#### Phase 2.5: two invisible cleanups
+#### Phase 2.5: two invisible cleanups ✓
 
 1. `importPreflight.ts` and `importChainSync.ts`: clear each race's timer when the race settles.
 2. `importPreflight.test.ts` and `importChainSync.test.ts`, with their existing fake timers: after a
@@ -1193,7 +1193,10 @@ are untouched. 134 adds hash pins.
 ### Inferences
 
 - I1. Under CSP3 an `http:` source does not match a `ws:` URL, so the dev server's HMR socket is
-  likely refused. Phase 2.4 proves or disproves it before any change.
+  likely refused. Phase 2.4 proves or disproves it before any change. **Not tested, and moot**
+  (D-arc2-1): on Chrome the dev popup is served by crxjs's service worker and runs under Chrome's
+  baseline extension policy, which has no `connect-src`, so the manifest's `connect-src` never
+  meets the HMR socket.
 - I2. PR #58 may merge before Arc 1 starts. Phase 1.4 checks and adapts.
 - I3. PR #75 may land before the close-out. The close-out matches entries by text.
 
@@ -1238,8 +1241,11 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D21 | 10: map `ScopeViolationError` to `scope_refused` in `markFailedUnlessCancelled`, not in the shared `failureKind` (Opus round 1) | `failureKind` also labels first-party Send records (`transfer-executor.ts`), which must never read "The app asked for more than you allowed" | Changing `failureKind` and accepting the Send label |
 | D22 | 10: log the refusal at `debug` in `logOperationOutcome` too (Opus round 1) | Without it every refused call still writes an `error` line; a refusal a dApp can repeat belongs at `debug` (logging policy), as the Terms refusal already does | Leaving the `error` line (the plan's first claim was wrong) |
 | D23 | Build 186's late-listener bullet, rewrite the rest (final Codex pass) | A listener added to a disconnected client after dispose is invisible; the same record's cleanup rule covers it, and the pinned-drift test flips with a mounted control | Parking the whole entry as owner UI drift (only its other three bullets are visible) |
-| D-orch-1 | No stack: each arc opens its own PR against `dev` (`gh pr create --base dev`), titled per § Delivery; Arcs 2 and 3 rebase onto `dev` after the arc before them lands; the close-out is a fourth PR after the last arc merges (orchestrator, 2026-10-09) | The arcs run in parallel worktrees and merge in order, so a stack would only chain their CI | `gh stack` (§ Delivery as first written) |
-| D-orch-2 | No edits to `follow-ups.md`, ever, the close-out included: each PR body lists the entries it closes by § Close-out number with their governance ledger ids (`Closes #n` where a receipt maps one to an issue), and the part left of a partly built entry goes into its arc's section of the Outcome draft (orchestrator, 2026-10-09) | Lane governance-1 is retiring the file into GitHub issues and recorded dispositions | § Close-out edits to follow-ups.md as first written |
+| D-orch-1 | No stack: each arc opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; Arcs 2 and 3 merge `dev` in after the arc before them lands; the close-out is a fourth PR after the last arc merges (orchestrator, at approval) | Arcs 1 and 2 run in parallel worktrees, and the orchestrator merges in order | `gh stack` with one layer per arc (§ Delivery as planned) |
+| D-arc2-1 | 152: no code change; the entry closes on the probe's evidence (`lessons/phase-2.md` § 2.4) | The HMR socket completed its `101` handshake with no refusal, and § Architecture 2.4 says to change nothing in that case. A `fetch("data:")` control showed why: the service-worker-served dev popup runs under Chrome's baseline extension policy only, so a development-only `connect-src` source would change nothing (the production control refused the same fetch under the manifest policy) | The development-only override (a no-op on the pages it targets) |
+| D-arc2-2 | 26: the seed page's unmount case asserts the late mnemonic's `join` is never called, beside the timer count | The countdown's own dispose guard already arms nothing after unmount, so a timer count alone passes without the page's fence; only a page that sets the phrase calls `join` | Reading the phrase from the DOM (the page is gone) |
+| D-arc2-3 | 125: signal only a group whose leader is alive at teardown's entry (a group whose leader already exited gets no signal at all, where base sent SIGTERM); report `stopped`, and keep the lock and the node's data directory when a group may survive (Arc 2 audit rounds 1 and 2: Codex C1, C2, R2-1; Opus 2) | From entry on, some member holds the group id, so it cannot pass to another run's group; once the leader has exited before teardown nothing proves the group never emptied, which § Architecture 2.3's "while any member lives" did not cover, and the lock reaper already refuses such a group (D9). The lock is a survivor's only record | A per-spawn ownership marker read from `/proc` (Linux-only, and more than the entry needs); escalating every group (signals a reused id); refusing escalation once the leader dies during the grace wait (R2-1's second half: it would undo the entry, and reuse in that window needs the cyclic pid cursor to wrap back to the id within one 100 ms poll) |
+| D-orch-2 | No edit to `follow-ups.md`, ever, the close-out included: each PR body lists the entries its arc closes with their governance ledger ids, and a partly built entry's remainder goes into the arc's section of the Outcome draft (orchestrator, at approval) | The file is being retired by the governance-1 lane, which turns every entry into an issue or a recorded disposition | § Close-out edits to follow-ups.md as planned |
 
 ## Audit verdicts
 
@@ -1500,3 +1506,39 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
 - **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1. Deleting it is
   a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
   entry.)
+
+
+
+### Arc 2: extension pages, build and e2e harness
+
+- **Closed whole:** 26 (submit latches and the seed page's unmount fence; the countdown's `start()`
+  replaces an earlier countdown and arms nothing after dispose), 135 (only `.vue` files are routes),
+  130 (`dtsMode: "overwrite"`; the two stale globals are gone), 152 (no change: the HMR socket is
+  not refused, because the Chrome dev popup is served by crxjs's service worker and runs under
+  Chrome's baseline extension policy, not the manifest's, D-arc2-1).
+- **Closed in part; what is left:**
+  - 125: the in-run teardown now waits on the whole process group and escalates it, for a group
+    whose leader is alive as teardown begins; a group that may survive keeps the lock and its data
+    directory (D-arc2-3). Left: a group whose leader exited before teardown is not signalled at
+    all (base sent it SIGTERM), and the persisted-lock reaper (`killOrphanByPid`, `reap.ts`) still
+    skips a group whose leader is dead and removes the data directory without waiting, because
+    once the leader is gone nothing proves the group never emptied and its id was not reused;
+    stopping such a group needs ownership evidence, as `tests/e2e/fixtures/browser/ownership.ts`
+    takes from an environment marker.
+  - 126: `probeAnvil` refuses an L1 whose chain id is not 31337 or whose block number is not a hex
+    quantity. Left: no RPC proves `--slots-in-an-epoch 1` (anvil 1.4.1's `anvil_nodeInfo` does not
+    report it), so adopting a running anvil still trusts that flag.
+  - 172: the import preflight's and chain registration's races clear their losing timer. Left:
+    `balances.store.ts`'s `withTimeout` settling one hop before a race, and the test-infrastructure
+    `sleep` copies.
+  - 186: a disposed `useIncomingTrustPrompts` registers no config listener after its clients
+    disconnected. Left: FormPopup's raw order, non-contiguous orders after a re-open, and the
+    per-owner reducer policies, each visible.
+- **Found on the way:**
+  - The old in-run teardown read only `child.exitCode`, which stays null for a leader killed by a
+    signal, so every spawned group waited the full grace period and was then sent SIGKILL
+    (`lessons/phase-2.md` § 2.3).
+  - On Chrome, `bun run dev` never runs the popup under the manifest's CSP (crxjs's
+    service-worker-served pages carry only Chrome's baseline extension policy), so a CSP
+    regression shows only in production-mode builds: the e2e builds and their CSP recorder. A
+    candidate issue for governance; nothing in this lane depends on it.

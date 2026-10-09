@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A send sequencer that holds a popup send until the earlier sends it shares chain state with are included (`apps/extension/src/wallet/services/execution/send-sequencer.ts`), the execution slot for every Send-page send, and a queued state on the Send page and activity card instead of a failed estimate.
-- **Open items**: confirming a queued send at once and estimating it when unblocked, dApp-send ordering, three questions with working answers, residual windows that fail as before, the advisory chaos jobs and a fee-method click that may not take right after a dApp send, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: confirming a queued send at once and estimating it when unblocked, dApp-send ordering, three questions with working answers, residual windows that fail as before and the advisory chaos jobs, tracked in #217, #218, #219 and #220. The fee-method click that might not take is done: a row mid-read now shows as loading (#39).
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

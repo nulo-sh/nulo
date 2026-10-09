@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the published documents and versions in `legal/` and `packages/legal/`, the acceptance service in `apps/extension/src/wallet/services/legal/`, the onboarding gate and re-acceptance sheet in `apps/extension/src/onboarding/pages/terms.vue` and `apps/extension/src/components/LegalAcceptanceSheet.vue`, the landing pages built by `apps/landing/scripts/build-legal.ts`, and the notices generator in `packages/third-party-notices/`.
-- **Open items**: a dApp refused for want of a current Terms acceptance opens nothing in the wallet, and no release step refuses a stable publish while a `«FILL»` placeholder survives in `legal/`; both are tracked in [follow-ups](../../follow-ups.md). The refusal is a typed error to the dApp, so the person learns of it only there, and showing the acceptance sheet would be a UI decision. The release gap is a manual checkbox in `BEFORE-LAUNCH.md`, and the landing only marks its page as a draft.
+- **Open items**: a dApp refused for want of a current Terms acceptance opens nothing in the wallet, and no release step refuses a stable publish while a `«FILL»` placeholder survives in `legal/`; both are tracked in #125 and #183. The refusal is a typed error to the dApp, so the person learns of it only there, and showing the acceptance sheet would be a UI decision. The release gap is a manual checkbox in `BEFORE-LAUNCH.md`, and the landing only marks its page as a draft.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

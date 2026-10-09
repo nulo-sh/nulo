@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Three stable cuts run as runbook execution on the existing pipeline (`.github/workflows/release.yml`, `scripts/release/`); the procedure lives in the release runbook in `CLAUDE.md`. No product source changed; the first cut fixed only a release-verification guard that has since been removed.
-- **Open items**: the fee-cap change's post-audit follow-ups, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the fee-cap change's post-audit follow-ups, tracked in #188.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

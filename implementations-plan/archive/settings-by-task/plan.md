@@ -5,7 +5,7 @@
 - **Date**: 2026-10-08
 - **Status**: completed.
 - **Shipped**: in #56. The hub grouped by task with a profile card, row values and a Danger zone (`apps/extension/src/popup/pages/settings/index.vue`); Lock and Privacy pages, Display and Developer for Appearance and Advanced, a slimmer Your profile; one lock for the header chip and Lock now (`apps/extension/src/composables/useLockWallet.ts`); three redirects (`apps/extension/src/popup/legacy-routes.ts`); e2e on the new paths; renamed docs; a `BEFORE-LAUNCH.md` § 4 entry. Review round 2 added a live `#/popup/auth` wait to the Lock now smoke and trimmed five comments; round 3 approved.
-- **Open items**: in [follow-ups](../../follow-ups.md): the store's "security" capture now frames the Lock page; a lock the worker cannot persist is silent; the owner's deferred hub additions; routed `.ts` helpers under `src/popup/pages/`; Account State's `advanced` URL; the config-toggle bug (now naming its pin) and the strict-mode e2e skip. `BEFORE-LAUNCH.md` § 4 owns the privacy policy's "Settings → Advanced" wording.
+- **Open items**: the store's "security" capture now framing the Lock page (#181); routed `.ts` helpers under `src/popup/pages/` (#177); Account State's `advanced` URL (#135); the config-toggle bug (#205) and the strict-mode e2e skip (#162); one more is tracked privately: GHSA-6wh5-mc2x-fc3w. The owner's deferred hub additions are not open work: the owner's answers in this plan decline them for now. `BEFORE-LAUNCH.md` § 4 owns the privacy policy's "Settings → Advanced" wording.
 - **Seeds retired**: the `/goal` seed ("/goal All phases marked ✓ …") and the `/loop` seed ("/loop 15m Drive …") are retired. This record is evidence, never a task list.
 
 ## Decision

@@ -85,8 +85,7 @@ const prices = usePrices(priceService)
  *  than keep showing an orphaned receipt. `deletedIds` tombstones the delete so one that races the initial
  *  load (fired while getIncomingTransferById is still awaiting, when `received` is still null) still wins —
  *  the post-load check in onMounted honors it. (A re-mine that only rewrites a surviving record's block/fee
- *  emits no event yet, so a stale fee on a still-valid record isn't caught here — see the reorg-staleness
- *  entry in implementations-plan/follow-ups.md.) */
+ *  emits no event yet, so a stale fee on a still-valid record isn't caught here.) */
 const deletedIds = new Set()
 const onReceiptDeleted = (rec) => {
 	deletedIds.add(rec.id)
