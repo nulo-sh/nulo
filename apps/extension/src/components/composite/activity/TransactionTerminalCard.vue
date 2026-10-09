@@ -72,13 +72,13 @@ defineProps({
 	color: var(--nulo-secondary);
 }
 .subtitle_amber {
-	color: var(--yellow);
+	color: var(--txt-warning);
 }
 .subtitle_red {
-	color: var(--red);
+	color: var(--txt-danger);
 }
 .subtitle_green {
-	color: var(--green);
+	color: var(--txt-success);
 }
 
 .title_sep {

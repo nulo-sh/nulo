@@ -20,6 +20,7 @@ export const brand = {
 	secondary: "--nulo-secondary",
 	outline: "--nulo-outline",
 	border: "--nulo-border",
+	track: "--nulo-track",
 } as const
 
 export const text = {
@@ -30,6 +31,9 @@ export const text = {
 	support: "--txt-support",
 	white: "--txt-white",
 	inverse: "--txt-inverse",
+	warning: "--txt-warning",
+	danger: "--txt-danger",
+	success: "--txt-success",
 } as const
 
 export const borders = {

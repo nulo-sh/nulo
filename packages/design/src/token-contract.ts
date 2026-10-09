@@ -28,6 +28,7 @@ export const tokenGroups = {
 		secondary: "--nulo-secondary",
 		outline: "--nulo-outline",
 		border: "--nulo-border",
+		track: "--nulo-track",
 	},
 	text: {
 		primary: "--txt-primary",
@@ -37,6 +38,9 @@ export const tokenGroups = {
 		support: "--txt-support",
 		white: "--txt-white",
 		inverse: "--txt-inverse",
+		warning: "--txt-warning",
+		danger: "--txt-danger",
+		success: "--txt-success",
 	},
 	borders: {
 		default: "--border",

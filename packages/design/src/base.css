@@ -85,6 +85,8 @@
 	--nulo-outline: #4a463f;
 	--nulo-border: #231f1c;
 	--nulo-secondary: #999187;
+	/* A graphic's empty track: 3:1 on the page, unlike --nulo-border, and apart from the accent in both themes. */
+	--nulo-track: #68625a;
 }
 
 /* The dark palette, declared once: an unthemed root (the landing) and an explicit dark theme share
@@ -119,6 +121,9 @@
 	--txt-support: rgba(245, 240, 230, 54%);
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(0, 0, 0, 90%);
+	--txt-warning: var(--yellow);
+	--txt-danger: var(--red);
+	--txt-success: var(--green);
 
 	--white: #fff;
 	--black: #000;
@@ -157,6 +162,7 @@
 	--nulo-outline: #c9c5bd;
 	--nulo-border: #d8d4cc;
 	--nulo-secondary: #6b655c;
+	--nulo-track: #8f8a82;
 
 	/* Explicit values — replaces the bug-on-bug `var(--nulo-surface-highest)` alias (a DARK token). */
 	--border: rgba(124, 116, 104, 0.3);
@@ -176,6 +182,10 @@
 	--txt-support: rgba(0, 0, 0, 56%);
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(255, 255, 255, 90%);
+	/* The status colours are too light for text on a light page; these are their AA text shades. */
+	--txt-warning: #7f6200;
+	--txt-danger: #b3261e;
+	--txt-success: #11733d;
 
 	--white: #fff;
 	--black: #000;
