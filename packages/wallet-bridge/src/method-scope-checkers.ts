@@ -145,8 +145,6 @@ function checkSimulationTransactions(methodName: MethodName, args: unknown[], gr
 	if (!caps.length) return
 
 	const typedCalls = calls as WireCall[]
-	// An element that is not an object with a `to` is refused before `call.to` is read, and a
-	// non-string `name` is left to the execution layer's schema.
 	for (const call of typedCalls) {
 		if (typeof call !== "object" || call === null || (call as WireCall).to === undefined) {
 			throw new Error(`Scope enforcement: ${methodName} exec.calls entries must be objects with a \`to\` field`)
