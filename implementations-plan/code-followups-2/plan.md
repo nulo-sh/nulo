@@ -1473,7 +1473,9 @@ Filled per arc as it lands; the close-out turns it into the `## Outcome` block (
 
 ### Arc 1
 
-- Base moved: `origin/dev` at `79bbd7b` merged in (PR #58 has merged, so Phase 1.4 converts all nine calls and entry 132 closes whole).
+- Base moved: `origin/dev` at `79bbd7b` merged in (PR #58 has merged, so Phase 1.4 converts all nine calls and entry 132 closes whole); later `b55d88f` (#76) merged before the PR opened.
+- Closed whole: 10, 37, 64, 65, 95, 102, 132 (issues #85, #102, #120, #121, #145, #150, #175). Nothing is left in part.
+- Deviations: § UI impact gained Home's Recent activity card, which shares History's card component (Codex A1-C1; the e2e asserts it and the PR shows it). `packages/wallet-bridge/README.md` and `packages/wallet-core/src/jobs/types.ts` were edited beyond the file map, docs only (Opus A1-O1, A1-O2).
 
 ## Seeds
 
