@@ -63,6 +63,16 @@ export async function tabAround(page: Page, times: number): Promise<string[]> {
 	return visited
 }
 
+/** Presses Tab until focus is in the named control, at most `limit` times, and returns the walk. */
+export async function tabTo(page: Page, testid: string, limit = 40): Promise<string[]> {
+	const visited: string[] = []
+	while (visited.length < limit) {
+		visited.push(...(await tabAround(page, 1)))
+		if (visited.at(-1) === testid) return visited
+	}
+	throw new Error(`Tab never reached ${testid}: ${visited.join(" → ")}`)
+}
+
 type EscapeRead = { __escapeHandled?: boolean }
 
 /** Presses Escape and returns whether the page marked it handled, which decides whether Chrome's
@@ -88,4 +98,26 @@ export async function pressEscape(page: Page): Promise<boolean> {
 		polling: 50,
 	})
 	return page.evaluate(() => (window as unknown as EscapeRead).__escapeHandled === true)
+}
+
+/** The colour a design token resolves to on this page's root, as the browser serialises a computed
+ *  colour, so it compares with any computed colour. Throws when the root does not define the token. */
+export async function tokenColor(page: Page, token: string): Promise<string> {
+	return page.evaluate((name: string) => {
+		if (!getComputedStyle(document.documentElement).getPropertyValue(name).trim()) throw new Error(`${name} is not defined`)
+		const probe = document.createElement("i")
+		probe.style.color = `var(${name})`
+		document.body.append(probe)
+		const color = getComputedStyle(probe).color
+		probe.remove()
+		return color
+	}, token)
+}
+
+/** The named control's computed outline: `style width offset`, and its colour. */
+export async function focusRing(page: Page, testid: string): Promise<{ ring: string; color: string }> {
+	return page.$eval(sel(testid), (el) => {
+		const style = getComputedStyle(el)
+		return { ring: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`, color: style.outlineColor }
+	})
 }

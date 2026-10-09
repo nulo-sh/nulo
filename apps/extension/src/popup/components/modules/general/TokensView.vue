@@ -373,12 +373,7 @@ onBeforeUnmount(() => {
 			</Flex>
 
 			<Flex align="center" gap="10">
-				<span
-					v-if="overflowCount > 0"
-					@click="router.push('/popup/holdings')"
-					data-testid="tokens-view-all"
-					:class="$style.view_all"
-				>View all</span>
+				<RouterLink v-if="overflowCount > 0" to="/popup/holdings" data-testid="tokens-view-all" :class="$style.view_all">View all</RouterLink>
 				<Dropdown>
 					<Button variant="secondary" size="micro" data-testid="tokens-menu-trigger">
 						<Icon name="dots" size="12" color="secondary" />
@@ -495,13 +490,17 @@ onBeforeUnmount(() => {
 	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	color: var(--nulo-outline);
-	cursor: pointer;
+	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
 
 	&:hover {
 		color: var(--nulo-accent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
 	}
 }
 
