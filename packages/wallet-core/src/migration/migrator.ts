@@ -19,7 +19,10 @@
  *     clear the journal WITHOUT restoring (restoring here would silently revert
  *     committed data underneath the new version marker).
  *   - valid backup + `version < backup.version` ⇒ interrupted mid-migration;
- *     restore the declared footprint from the backup, then clear + re-run.
+ *     restore the declared footprint from the backup, then clear + re-run —
+ *     only when the journal's refs equal its registered migration's declared
+ *     footprint and every entry lies inside it; otherwise fail closed to
+ *     `needs-recovery`, journal kept.
  *   - no backup ⇒ the crash predated any write; clear + proceed.
  *   - PRESENT-but-invalid backup ⇒ tampering/corruption (the backup is written
  *     as one atomic set, so a prep-crash cannot produce a partial one); fail
@@ -92,6 +95,16 @@ function isValidBackup(v: unknown): v is BackupPayload {
 		b.entries !== null &&
 		!Array.isArray(b.entries)
 	)
+}
+
+const refId = (r: StorageRef): string => (r.kind === "root" ? `root:${r.root}` : `value:${r.key}`)
+
+/** The keys `refs` cover. The engine's namespace is excluded unconditionally:
+ *  a migration cannot footprint the journal itself. */
+function footprintCovers(refs: StorageRef[]): (key: string) => boolean {
+	const roots = refs.flatMap((r) => (r.kind === "root" ? [`${r.root}@`] : []))
+	const values = new Set(refs.flatMap((r) => (r.kind === "value" ? [r.key] : [])))
+	return (k) => !k.startsWith(RESERVED_PREFIX) && (values.has(k) || roots.some((p) => k.startsWith(p)))
 }
 
 export interface MigratorOptions {
@@ -346,6 +359,14 @@ export class Migrator {
 			await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 			return undefined
 		}
+		const mismatch = this.journalMismatch(backup)
+		if (mismatch) {
+			return {
+				kind: "needs-recovery",
+				reason: `interrupted migration journal ${mismatch} (version ${backup.version})`,
+				retryable: false,
+			}
+		}
 		try {
 			await this.restore(backup)
 		} catch (err) {
@@ -378,6 +399,25 @@ export class Migrator {
 		// A counted journal's failure is already on the books — resume silently;
 		// the run continuing past this point IS this boot's one authorized up().
 		await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
+		return undefined
+	}
+
+	/** Why a journal is not one the registered migration could have written, or
+	 *  `undefined`. `restore()` writes every entry and removes every key the refs
+	 *  cover, so this confines it to that migration's declared footprint. It does
+	 *  not authenticate the journal: forged refs that match still restore that
+	 *  footprint from forged entries. A shipped migration's footprint is therefore
+	 *  frozen: changing it turns its interrupted journals into recovery states. */
+	private journalMismatch(backup: BackupPayload): string | undefined {
+		const m = this.migrations.find((x) => x.version === backup.version)
+		if (!m) return "names no registered migration"
+		const declared = new Set([...m.reads, ...m.writes].map(refId))
+		const journaled = new Set(backup.refs.map(refId))
+		if (declared.size !== journaled.size || [...journaled].some((r) => !declared.has(r))) {
+			return "does not match the migration's declared footprint"
+		}
+		const covers = footprintCovers(backup.refs)
+		if (Object.keys(backup.entries).some((k) => !covers(k))) return "holds a key outside the migration's declared footprint"
 		return undefined
 	}
 
@@ -429,18 +469,8 @@ export class Migrator {
 		await this.store.set({ [SCHEMA_BACKUP_KEY]: { ...backup, counted: true } satisfies BackupPayload })
 	}
 
-	/** Every live key covered by the refs. The engine's namespace is excluded
-	 *  unconditionally — a migration cannot footprint the journal itself. */
 	private async footprintKeysFor(refs: StorageRef[]): Promise<string[]> {
-		const roots = refs.flatMap((r) => (r.kind === "root" ? [`${r.root}@`] : []))
-		const values = new Set(refs.flatMap((r) => (r.kind === "value" ? [r.key] : [])))
-		const all = await this.store.get()
-		const out: string[] = []
-		for (const k of Object.keys(all)) {
-			if (k.startsWith(RESERVED_PREFIX)) continue
-			if (values.has(k) || roots.some((p) => k.startsWith(p))) out.push(k)
-		}
-		return out
+		return Object.keys(await this.store.get()).filter(footprintCovers(refs))
 	}
 
 	private async snapshot(keys: string[]): Promise<Record<string, unknown>> {

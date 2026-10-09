@@ -16,6 +16,8 @@
  *      snapshots ONLY that footprint into the pre-migration backup, so an
  *      undeclared read/write is a data-loss risk. (The declarative form
  *      derives its footprint from `rowMaps`/`valueMaps` automatically.)
+ *      Once shipped, the footprint is frozen: a crash-resume refuses a
+ *      journal whose refs differ from the registered migration's.
  *   5. Keep `up` IDEMPOTENT (guard with `hasProperty`/presence checks) — the
  *      test harness runs it twice and asserts equality.
  *   6. **HOSTILE-INPUT RULE (standing):** `up()` input is UNTRUSTED. The
