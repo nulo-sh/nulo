@@ -699,7 +699,7 @@ overrun is recorded, not fixed.
 
 ### Arc 2 — tests and tooling
 
-#### Phase 4 — signals instead of sleeps, honest budgets
+#### Phase 4 — signals instead of sleeps, honest budgets ✓
 
 1. *98.* `useIncomingTransfers` returns `loaded`; `useIncomingTransfers.test.ts` adds: `loaded` is
    false while the first read is held and true once it resolves (success control); stays false when
@@ -717,7 +717,7 @@ Chrome with `NULO_E2E_SHOT_DIR=<SCRATCH>/shots` of `incoming-transfers`, `price-
 the sheet and its buttons in the flipped theme's final colours, not a blend. The same invocation under
 `NULO_E2E_BROWSER=firefox` is green (a fixture changed).
 
-#### Phase 5 — tooling and config
+#### Phase 5 — tooling and config ✓
 
 1. *97.* Reword `aztec-update/SKILL.md:206-208`.
 2. *102.* `.storybook/main.ts` `dirs`; `.storybook/preview.ts` fills missing `chrome` members.
