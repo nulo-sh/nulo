@@ -74,7 +74,7 @@ const ROLE_PROPERTIES: ReadonlySet<string> = new Set([
 	"font-variant",
 ])
 /** Style keys judged in any script; template `:style` objects are judged on every role property. */
-const SCRIPT_KEYS: ReadonlySet<string> = new Set(["font-family", "font-size", "font-weight", "letter-spacing", "text-transform"])
+const SCRIPT_KEYS: ReadonlySet<string> = new Set(["font", "font-family", "font-size", "font-weight", "letter-spacing", "text-transform"])
 const MONO_FAMILY = /--font-mono|\bmonospace\b/
 const CSS_WIDE = /^(inherit|initial|unset|revert|revert-layer)$/
 const FONT_SIZE_TOKEN = /^(\d*\.?\d+(px|em|rem|%|pt|ex|ch|vw|vh)|calc\(.*\)|(x{1,3}-)?(small|large)|medium|larger|smaller)(\/|$)/
@@ -84,6 +84,8 @@ const STRING_PICKS: readonly (readonly [RuleId, RegExp])[] = [
 	["tracking", /letter-spacing\s*:\s*[^;"'`]*/i],
 	["case", /text-transform\s*:\s*uppercase/i],
 ]
+/** A `font` shorthand in a style string, judged through its longhands. */
+const STRING_FONT = /(?<![\w-])font\s*:\s*([^;"'`]*)/i
 
 type Finding = { file: string; rule: RuleId; text: string; at: string; line: number; selector?: string; hard?: string }
 type Entry = { rule: RuleId; text: string; role: TypeRole | "carve-out" | "drop"; at: string }
@@ -277,7 +279,9 @@ function scanStyleKeys(scan: Scan, tree: ts.SourceFile, object: ts.ObjectLiteral
 		const key = keyName(property)
 		return key !== undefined && context.keys.has(cssName(key)) ? [{ key, property, ...keyValue(property, tree) }] : []
 	})
-	const mono = carrierMono(context.carrier) || keyed.some(({ key, judged }) => cssName(key) === "font-family" && MONO_FAMILY.test(judged))
+	const mono =
+		carrierMono(context.carrier) ||
+		keyed.some(({ key, judged }) => ["font", "font-family"].includes(cssName(key)) && MONO_FAMILY.test(judged))
 	for (const { key, property, judged, source } of keyed) {
 		const found = judge(cssName(key), judged, { module: context.module, carrier: context.carrier, mono })
 		if (!found) continue
@@ -292,16 +296,23 @@ function scanStyleKeys(scan: Scan, tree: ts.SourceFile, object: ts.ObjectLiteral
 	}
 }
 
-function scanString(scan: Scan, tree: ts.SourceFile, node: ts.Node, context: ScriptContext): void {
-	const text = literalText(node)
-	if (text === undefined) return
+function stringPick(text: string, context: ScriptContext): readonly [RuleId, string] | undefined {
 	for (const [rule, pattern] of STRING_PICKS) {
 		const match = pattern.exec(text)
-		if (!match) continue
-		const line = context.firstLine + tree.getLineAndCharacterOfPosition(node.getStart(tree)).line
-		scan.findings.push({ file: scan.file, rule, text: normalize(match[0]), at: context.at ?? nearestName(node.parent), line })
-		return
+		if (match) return [rule, match[0]]
 	}
+	const font = STRING_FONT.exec(text)
+	const value = font?.[1].trim() ?? ""
+	const rule = font && judge("font", value, { module: context.module, carrier: context.carrier, mono: MONO_FAMILY.test(value) })
+	return rule ? [rule, font[0]] : undefined
+}
+
+function scanString(scan: Scan, tree: ts.SourceFile, node: ts.Node, context: ScriptContext): void {
+	const text = literalText(node)
+	const pick = text === undefined ? undefined : stringPick(text, context)
+	if (!pick) return
+	const line = context.firstLine + tree.getLineAndCharacterOfPosition(node.getStart(tree)).line
+	scan.findings.push({ file: scan.file, rule: pick[0], text: normalize(pick[1]), at: context.at ?? nearestName(node.parent), line })
 }
 
 function scanScript(scan: Scan, source: string, context: ScriptContext): void {
@@ -454,7 +465,7 @@ function passedToData(node: TemplateNode | undefined, attribute: string | undefi
 }
 
 function scanIdentifiers(template: TemplateScan, expression: Expression, chain: readonly TemplateNode[], attribute?: string): void {
-	if (!expression.content.includes("trimAddress(")) return
+	if (!/trimAddress\s*\(/.test(expression.content)) return
 	const element = chain.at(-1)
 	if (chain.some((node) => carriesIdentifierRole(template, node)) || passedToData(element, attribute)) return
 	for (const call of trimCalls(expression.content)) {
@@ -774,6 +785,7 @@ describe("type role ban rules", () => {
 			["tracking", "faceless"],
 		],
 		["identifier: outside a mono role", "<template><span>{{ trimAddress(a) }}</span></template>", ["identifier"]],
+		["identifier: a space before the call's parenthesis", "<template><span>{{ trimAddress (a) }}</span></template>", ["identifier"]],
 		["identifier: inside <Text variant>", '<template><Text variant="data">{{ trimAddress(a) }}</Text></template>', []],
 		[
 			"identifier: inside a class composing a mono role",
@@ -793,6 +805,9 @@ describe("type role ban rules", () => {
 		],
 		["script: a family in a style string", '<script setup>const s = "color: red; font-family: serif"</script>', ["face"]],
 		["script: a module-scoped size key", "<script setup>const s = { fontWeight: 600 }</script>", ["faceless"]],
+		["script: a font shorthand key", '<script setup>const s = { font: "700 12px serif" }</script>', ["face"]],
+		["a bound :style string with a font shorthand", "<template><span :style=\"'font: 700 12px serif'\">x</span></template>", ["face"]],
+		["a font: inherit style string passes", "<template><span :style=\"'font: inherit'\">x</span></template>", []],
 	])("%s", (_case, source, rules) => {
 		expect(rulesOf("x.vue", source)).toEqual(rules)
 	})
