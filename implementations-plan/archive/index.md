@@ -220,6 +220,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [stable-release](stable-release/plan.md) — completed — the stable release cut as a short, repeatable procedure
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
+- [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
 - [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
 - [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC

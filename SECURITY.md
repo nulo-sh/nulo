@@ -432,6 +432,12 @@ development requires bun ≥1.4 (`bun run --parallel` scripts), and
   On a checked-out bump branch the lockfile already holds the NEW
   version, so the unqualified `bun pm diff <pkg>` form (lock → latest)
   reviews the wrong or an empty delta — always name both versions.
+- Raising a range's floor (`^3.5.41` → `^3.5.42`) locks the newest
+  version the age gate allows, which can be releases past the one
+  reviewed. To land exactly one version: `bun add <pkg>@<version>` in
+  the workspace, restore the manifest it rewrote (exact pins, re-sorted
+  keys), raise the floor by hand, `bun install`, then read `bun.lock`
+  for nested copies still on the old version (Bun 1.4.2).
 - `bun audit fix --dry-run` for advisory triage — shows the in-range
   upgrade set without touching anything; `--latest` previews
   cross-major fixes.
