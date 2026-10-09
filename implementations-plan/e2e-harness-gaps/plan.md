@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: planned; audited (dual audit, final Codex pass); awaiting orchestrator approval
+status: approved by the orchestrator 2026-10-09; arc 1a in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -408,6 +408,8 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D16 | A run marker from `agent.sh` for the orphan path, per-service markers for teardown | Forks, Chrome and geckodriver are orphaned by a `kill -9` too, and only an inherited variable reaches them all | Narrowing the quality bar to sandbox services |
 | D17 | Bare-run reuse stays; reuse rewrites the lock's owner, and sweeps refuse while it lives | The reuse drill is the developer loop the skill documents; the owner rewrite closes the window where a reused sandbox looks orphaned | Deleting the reuse path |
 | D18 | Our client never breaks the registry lock; a lock held past 30 s fails the claim closed; release by token | Every path-lock break races, with or without a check afterwards; an abandoned lock is rare (a millisecond critical section) and the other writers break theirs | A token check on break; an inode-and-mtime check on break; copying the other writers' unverified break |
+| D-orch-1 | No stack: arc 1a opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; later arcs branch from 1a's branch and rebase onto `dev` once it lands; the close-out is its own PR after the last arc merges | The orchestrator's call: it merges lanes in order and a stack would tie 1a's merge to later arcs | One `gh stack` per lane (§ Delivery) |
+| D-orch-2 | Arc 1a ships alone and first, as gate G1 for every other lane: no 1b work folds in, and it does not wait on `OWNER-ASKS.md` Ask 1 (which holds arc 3 only) | Every other lane's parallel network e2e waits on it | Folding small 1b fixes into the G1 PR |
 
 ## Audit verdicts
 
@@ -513,7 +515,7 @@ Run per arc, at each arc boundary, before `gh stack add` opens the next arc; the
 
 ## Delivery
 
-One `gh stack` on `dev`. PRs open only after the arc's local gates pass and its Codex loop has converged; open each without labels, then add `e2e:extension-network` or `e2e:extension-smoke` only when the path filter would skip a suite the arc needs.
+Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `dev` on its own, later arcs rebase onto `dev` after the arc below lands. One `gh stack` on `dev`. PRs open only after the arc's local gates pass and its Codex loop has converged; open each without labels, then add `e2e:extension-network` or `e2e:extension-smoke` only when the path filter would skip a suite the arc needs.
 
 | Arc | Branch | Phases | Stacks on | Code review | PR title (≤ 93 chars) | Closes |
 |---|---|---|---|---|---|---|
