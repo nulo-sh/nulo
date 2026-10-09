@@ -818,13 +818,17 @@ the sanctioned response.
   inherits `NULO_E2E_RUN`, `NULO_E2E_RUN_OWNER` (`agent.sh`'s pid) and `NULO_E2E_WORKTREE`.
   Teardown stops the group, then every process carrying the marker; an orphan sweep signals a
   process only when the owner in its own environ is dead, and nothing while the lock's `owner`
-  lives (a reuse rewrites it). `/proc` unreadable, or a claimed process turned unreadable, is
-  `unknown`: the lock and the run dir stay. A lock without markers is never signalled. The node's
-  run dir is stamped with its marker and deleted only directly under `E2E_DATA_ROOT`.
+  lives (a reuse rewrites it). `/proc` unreadable, or a claimed process turned unreadable (a
+  zombie counts as gone), is `unknown`: the lock and the run dir stay, and the lock's pid and start
+  time keep every later sweep `unknown` too while that process lives. A lock naming no owner is
+  never signalled. The node's run dir is stamped with its marker and deleted only directly under
+  `E2E_DATA_ROOT`. Setup and `e2e:reap` read, reap or adopt, and rewrite `owned.json` under
+  `.e2e-state/reconcile.lock`, so two of them never act on one dead owner.
 - **An agent run adopts nothing.** With `NULO_E2E_RUN_ID` set, setup bind-tests the claimed pack
-  right after `markBootStarted()`, skips every adopt probe, and each readiness wait fails once the
-  child it spawned has exited; under `E2E_REQUIRE_SETUP=1` a playground that never comes up fails the
-  boot. All of these are boot failures (exit 86, one CI retry on fresh ports).
+  right after `markBootStarted()` and skips every adopt probe. Every readiness wait fails once the
+  child it spawned exits, a pending probe included, and on Linux accepts only a listener held by a
+  process carrying the service's marker; under `E2E_REQUIRE_SETUP=1` a playground that never comes
+  up fails the boot. All of these are boot failures (exit 86, one CI retry on fresh ports).
 - **Proof for a change here**: the full network suite on CI, the reuse drill (bare vitest on a
   pinned pack, `kill -9` the vitest group after deploy so the pack survives, run again →
   `reusing prior sandbox (identity check passed)`), the reap drill (`e2e:agent` after →

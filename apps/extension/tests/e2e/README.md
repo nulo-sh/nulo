@@ -30,7 +30,7 @@ Internally `scripts/e2e/agent.sh`:
 3. Greps the bundle for the URL — fails fast if the vite env didn't propagate.
 4. Runs the network suite with `ANVIL_URL` / `ANVIL_PORT` / `AZTEC_NODE_URL` / `AZTEC_PORT` / `AZTEC_ADMIN_PORT` / `AZTEC_P2P_PORT` / `PLAYGROUND_URL` / `PLAYGROUND_PORT` in env.
 
-`global-setup.ts` reads those env vars, spawns anvil + aztec + playground (each with the assigned port and its own launch marker) and writes an ownership lockfile at `.e2e-state/owned.json`. Its `setup` is a short coordinator whose ORDER is the contract — build guard → `reconcilePriorLock` (refuse a live owner, reuse a healthy pack on a bare run, or reap a stale one by marker) → the dead-run sweep → provisional lock → `markBootStarted()` (the exit-86 window opens here, AFTER the build/env checks that must never be retried) → on an agent run, a bind test of the claimed pack → `ensureAnvil` → `ensureAztecNode` → `ensureDevServer` (playground) → `finishBoot` (provide URLs, deploy, `markBootReady()`). On a bare run each stage probes first and adopts an already-running service; an agent run adopts nothing. A stage detects a permissive failure and returns `"skip"` (the strict-mode `E2E_REQUIRE_SETUP=1` throws stay inside it), and the coordinator owns the exit (`provideWithoutSandbox` + `return`), so a lost or doubled `provide` is visible in one place. Process handles and the `weStarted*` flags stay module-level, shared with `teardown` and the signal hooks.
+`global-setup.ts` reads those env vars, spawns anvil + aztec + playground (each with the assigned port and its own launch marker) and writes an ownership lockfile at `.e2e-state/owned.json`. Its `setup` is a short coordinator whose ORDER is the contract — build guard → under the worktree's reconcile lock, `reconcilePriorLock` (refuse a live owner, reuse a healthy pack on a bare run, or reap a stale one by marker) and the provisional lock → the dead-run sweep → `markBootStarted()` (the exit-86 window opens here, AFTER the build/env checks that must never be retried) → on an agent run, a bind test of the claimed pack → `ensureAnvil` → `ensureAztecNode` → `ensureDevServer` (playground) → `finishBoot` (provide URLs, deploy, `markBootReady()`). On a bare run each stage probes first and adopts an already-running service; an agent run adopts nothing. A stage detects a permissive failure and returns `"skip"` (the strict-mode `E2E_REQUIRE_SETUP=1` throws stay inside it), and the coordinator owns the exit (`provideWithoutSandbox` + `return`), so a lost or doubled `provide` is visible in one place. Process handles and the `weStarted*` flags stay module-level, shared with `teardown` and the signal hooks.
 
 ### Presto: local vs CI
 
@@ -94,7 +94,7 @@ bun run e2e:agent
 
 What keeps them apart:
 
-- **Ports.** `resolve-ports.ts` skips every port `~/.agents/ports.md` lists and claims its pack there (`nulo-e2e-<service>` rows, owner `agent.sh`'s pid) under the file's lock, which other tools on the host share (`tests/e2e/port-registry.ts` states the contract). `cat ~/.agents/ports.md` shows who holds what. Under a run id, setup bind-tests the pack after `markBootStarted()`, never adopts a listener on it, and fails a readiness wait once the child it spawned has exited, so a stranger on a claimed port is a boot failure (exit 86), not a sandbox.
+- **Ports.** `resolve-ports.ts` skips every port `~/.agents/ports.md` lists and claims its pack there (`nulo-e2e-<service>` rows, owner `agent.sh`'s pid) under the file's lock, which other tools on the host share (`tests/e2e/port-registry.ts` states the contract). `cat ~/.agents/ports.md` shows who holds what. Under a run id, setup bind-tests the pack after `markBootStarted()` and never adopts a listener on it. Every readiness wait fails once the child it spawned exits, even with a probe still pending, and on Linux accepts an answer only from a socket a process carrying the service's marker holds, so a stranger on a claimed port is a boot failure (exit 86), not a sandbox.
 - **Processes.** Each service carries a launch marker and its owner in its environment, and every process of an agent run (forks, Chrome, Firefox, geckodriver) inherits the run's marker, owner and worktree (`tests/e2e/owned-processes.ts`). Teardown stops a service's group, then every process with its marker, a leaderless group's included. An orphan sweep stops a process only when the owner named in its own environment is dead, so a run never signals another's processes, whatever a lock or record on disk says.
 - **Data.** The node's run dir sits on real disk under `~/.cache/nulo-e2e`, stamped with its marker, and is deleted only directly under that root.
 
@@ -162,7 +162,11 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **`another run in this worktree holds the sandbox`** — `owned.json` names a live owner: two runs in one worktree. Wait for it to finish.
 
-**`the prior run's sandbox could not be reaped: …`** — a service of the previous run did not stop (`retained`), could not be read (`unknown`), or its lock predates markers and records live pids. The lock and the run dir stay; stop what the message names, or run `bun run e2e:reap` once its owner is gone.
+**`another run in this worktree is reconciling its sandbox`** — `.e2e-state/reconcile.lock` names a live process. Setup, and `e2e:reap`, hold it while they read `owned.json`, reap or adopt what it names and write their own owner into it, so two of them cannot act on the same dead owner. A dead holder's lock is replaced on its own; delete the file only if no run or reap is in progress.
+
+**`the prior run's sandbox could not be reaped: …`** — a service of the previous run did not stop (`retained`), could not be read (`unknown`), or the lock names no owner (written before markers, or on a host without `/proc`) and records live pids. Those pids may since belong to unrelated processes: stop them only if they are this worktree's sandbox, else delete `.e2e-state/owned.json`. Otherwise run `bun run e2e:reap` once the owner is gone.
+
+**`<what>: answered by a listener this run did not start`** — on Linux, the socket listening on a service's port is not held by a process carrying that service's marker: something bound the port before the service did. A boot failure (exit 86), retried on fresh ports.
 
 **`<service>'s claimed port <n> is already in use`** — something listens on a port this run just claimed. The run fails as a boot failure (exit 86) and CI retries on fresh ports.
 
@@ -236,10 +240,10 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Anvil, aztec, playground | Yes | spawned by setup with a launch marker and owner in their environment, recorded in the lockfile; stopped by group, then by marker |
 | Aztec run dir | Yes | `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`), stamped with the node's marker; the node writes `<dir>/data` |
 | Ports | Yes | claimed in `~/.agents/ports.md` under the run id before the build; bind-tested again at boot |
-| Forks, Chrome, Firefox | Yes | inherit the run marker; a dead run's are stopped by `e2e:reap` and the next run's setup |
+| Forks, Chrome, Firefox | Yes | inherit the run marker (Chrome's launch checks it); a dead run's forks and Chrome are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
-| Chrome orphan cleanup | Yes | an agent run's by run marker; a bare run keeps `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped |
+| Chrome orphan cleanup | Yes | an agent run's by run marker on Linux; a bare run, and any run without `/proc`, keeps `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |
