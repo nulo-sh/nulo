@@ -267,10 +267,8 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-selector\"]",
 			"surface": "popup-settings-advanced-account-state-authwits",
-			"state": "",
-			"liveFrom": 2,
-			"unreachable": "add_public_authwit",
-			"why": "the card lists recorded public authwits, and every record comes from an add_public_authwit action, whose one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
+			"state": "a backup restored with an encoded_call authwit record",
+			"liveFrom": 2
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -280,10 +278,8 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-hash\"]",
 			"surface": "popup-settings-advanced-account-state-authwits",
-			"state": "",
-			"liveFrom": 2,
-			"unreachable": "add_public_authwit",
-			"why": "the card lists recorded public authwits, and every record comes from an add_public_authwit action, whose one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
+			"state": "a backup restored with a message_hash authwit record",
+			"liveFrom": 2
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -315,10 +311,8 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-caller\"]",
 			"surface": "popup-settings-advanced-account-state-authwits",
-			"state": "",
-			"liveFrom": 2,
-			"unreachable": "add_public_authwit",
-			"why": "the card lists recorded public authwits, and every record comes from an add_public_authwit action, whose one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
+			"state": "a backup restored with an encoded_call authwit record",
+			"liveFrom": 2
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -328,10 +322,8 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-to\"]",
 			"surface": "popup-settings-advanced-account-state-authwits",
-			"state": "",
-			"liveFrom": 2,
-			"unreachable": "add_public_authwit",
-			"why": "the card lists recorded public authwits, and every record comes from an add_public_authwit action, whose one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
+			"state": "a backup restored with an encoded_call authwit record",
+			"liveFrom": 2
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -341,10 +333,8 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-consumer\"]",
 			"surface": "popup-settings-advanced-account-state-authwits",
-			"state": "",
-			"liveFrom": 2,
-			"unreachable": "add_public_authwit",
-			"why": "the card lists recorded public authwits, and every record comes from an add_public_authwit action, whose one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
+			"state": "a backup restored with an intent authwit record",
+			"liveFrom": 2
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/contacts/ContactFormFields.vue",
