@@ -177,14 +177,6 @@ export const NetworkSchema: z.ZodType<Network> = z.object({
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.nativeEnum(NodeStatus)
 
-/** `getNetworkInfo` synthesized struct — opaque to the wire validator,
- *  but carrying the same fields the PXE adapter expects. */
-export const NetworkInfoSchema: z.ZodType<NetworkInfo> = z.object({
-	profileId: z.string(),
-	chainId: z.number(),
-	rpcUrl: RpcUrlSchema,
-})
-
 /**
  * Per-method schemas. Tuples preserve positional-param ordering (our wire
  * format sends params as a positional list).

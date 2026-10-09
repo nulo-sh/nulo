@@ -1,8 +1,3 @@
-/**
- * EditNetworkPopup opens on a network whose primaryEndpointId names no endpoint: the rename form
- * still fills, and nothing throws.
- */
-
 import { afterEach, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { useFormState } from "@/composables/useFormState"
@@ -13,15 +8,7 @@ vi.mock("@/composables/toast", () => ({
 }))
 vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({
-		networks: [
-			{
-				id: "net-1",
-				chainId: 1,
-				name: "Local",
-				primaryEndpointId: "gone",
-				endpoints: [{ id: "ep-1", rpcUrl: "https://one.example" }],
-			},
-		],
+		networks: [{ id: "net-1", chainId: 1, name: "Local" }],
 		renameNetwork: vi.fn(),
 	}),
 }))
@@ -54,7 +41,7 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 })
 
-test("a dangling primaryEndpointId still opens the rename form, filled with the network's name", async () => {
+test("opening fills the rename form with the network's name and throws nothing", async () => {
 	vi.stubGlobal("useFormState", useFormState)
 	vi.stubGlobal("usePopupEntity", usePopupEntity)
 	const errors: unknown[] = []

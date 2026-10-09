@@ -1,7 +1,7 @@
 ---
 plan: code-followups-1
 tier: mid
-status: planning, awaiting approval
+status: implementing (arcs 1-2 merged, arc 3 in review)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -756,7 +756,7 @@ suite passes.
 
 ### Arc 3 — wallet code hygiene
 
-#### Phase 7 — dead fields, a dead popup, a duplicated key
+#### Phase 7 — dead fields, a dead popup, a duplicated key ✓
 
 1. *103.* `TokensView.vue` drops `isMinting`; `TokenCard.test.ts` drops it from its fixture.
 2. *163, part.* Delete `SelectNetworksPopup.vue`, its import and its mount in `PopupManager.vue`, and
@@ -778,7 +778,7 @@ Chrome smoke suite passes (every popup mounts through `PopupManager` and `PopupC
 network run of `tests/e2e/network/store-captures.test.ts`, the one e2e that submits Edit network
 (`edit-network-submit`), is green.
 
-#### Phase 8 — keep bb.js's CRS cache
+#### Phase 8 — keep bb.js's CRS cache ✓
 
 1. Remove the `keyval-store` reclaim from `pxe/service.ts` as described in Arc 3.
 2. Tests: in `service-idb-delete.test.ts`, the first case becomes "deletes every legacy DB last-first
@@ -965,6 +965,21 @@ under "Not this lane", not asked ([OWNER-ASKS.md](OWNER-ASKS.md)).
   "the wrapper" (the PATH prepender this spawn bypasses), so the plan's "the aztec CLI wrapper" was
   ambiguous in a CI log. The line reads `the aztec CLI (scripts/aztec.sh) also starts an anvil on
   :<port>; its bind error at boot is expected`; it still does not repeat the vendor's text.
+- **D16, layer 3 is a new stack on `dev` (implementation).** Layers 1 and 2 merged (#65, #66) before
+  arc 3 began, so `code-followups-1-hygiene` was branched from `origin/dev` (`833170d`) and
+  `gh stack init --base dev` started a new stack, as layer 2 did; the close-out layer stacks on it.
+- **D17, the restore tests' account-spec mocks gain `accountScopeKey` (implementation).** Two
+  `useFullBackupImport` test files mock `account/spec` with a hand-listed export set; the swap to the
+  shared helper needed the name there (39 cases failed without it). Added beside the mocks' existing
+  `accountRowId`; the keys only meet each other, so the mock's format proves nothing about the real
+  helper and needs none. The restore's doc comment now names the helper instead of the template.
+- **D18, `deleteDb` returns `Promise<void>` (implementation).** Its boolean result fed only the
+  removed splice bookkeeping; the resolve and reject points and the tick count are unchanged.
+- **D19, `store-captures` is red on `dev`, not on this arc (implementation).** The Phase 7 gate's
+  network file is opt-in (`STORE_CAPTURES=1`). With it, both Edit network submits passed; the file
+  ended red on a soft Send-fit check that #40's restored "Select Asset" label explains, and at the
+  base it went red earlier on a hard strip read. Recorded as a found follow-up, not fixed here (it is
+  a test of Send, which this arc does not touch).
 
 ## Audit verdicts
 
@@ -1060,6 +1075,31 @@ The conditions are met in this text; no further round was run.
   members, assigning over a browser binding may throw in strict-mode modules, and the case exists only
   in a developer's own browser; per-story mocks stay the route. Codex agreed with the rejection.
 - **Round 2** (resumed): `clean`.
+
+### Arc 3 — Codex fix loop (gpt-6.1-sol, high, read-only) and Opus review
+
+- **Round 1** (session `01a11f48-90f6-7523-a4d4-5a70d0857585`): `findings`, one material: the
+  blocked-legacy sweep case fired a late `onsuccess` before awaiting the sweep, so a skip arm that
+  never resolved would still pass (at base the re-list caught it). Accepted: the case awaits the
+  resolution right after `onblocked` and the late success is gone; a mutant with `LEGACY_SWEEP` on
+  `onBlocked: "wait"` now fails it. Codex checked and found sound: every removal unreachable
+  (including the dynamic opener in `Header.vue` and the design stylesheets), the Edit network form's
+  behaviour, byte-identical restore keys for hostile rows, the sweep's microtask shape, no stale
+  doc. Opus review alongside: `findings`, the same material point plus three nits. Accepted: the
+  wallet-bridge doc names the instance's `code`, not the static `CODE`; the sweep test file's header
+  names its keyval case. Rejected: restoring `EditNetworkPopup.test.ts`'s dangling-endpoint fixture
+  (the popup reads no endpoint now, so the fixture would document a dependency it does not have;
+  Codex agreed); dropping the sweep file's keyval case as a duplicate (it runs with the OPFS arm
+  present over a live listing, and the plan keeps it).
+- **Round 2** (resumed): `clean`.
+
+### Final cross-arc pass (fresh session, gpt-6.1-sol, high, read-only)
+
+Session `01a11f5c-9619-7880-82b2-06340487d2b2`, over the three arcs' code diffs (arcs 1 and 2 as
+their squash commits `ab54194` and `833170d`, arc 3 as `833170d..HEAD`, plan files excluded), since
+`a6c2fb5..HEAD` now carries other lanes' merges. Verdict: `clean` on the first round: no seam, no
+duplicated helper, no unrecorded drift from the plan, no combined breakage; 13 unit files (271
+tests) rerun green.
 
 ## Post-implementation
 
@@ -1200,3 +1240,9 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
   `vitest.base.ts` warn on every run that Vite's planned native config loader refuses them ("ESM
   syntax in a file loaded as CommonJS"): the extension's `package.json` declares no `"type"`. The
   landing's twin (entry 133) is fixed; this one needs its own change and soak.
+- (Found in Arc 3.) `apps/extension/tests/e2e/network/store-captures.test.ts` (opt-in,
+  `STORE_CAPTURES=1`, Chrome only) is red on `dev`. Its soft `clearAmountLine` check finds 18 px of
+  scroll room on Send where the amount line needs 35 px, since #40 put the "Select Asset" label back
+  (the page moved down one label row); one run at `833170d` failed earlier, at `fillPrivateSend`'s
+  hard strip read (`you: "unknown"`, expected `"hidden"`). The committed captures predate #40. The
+  next store-art refresh needs the Send frame re-staged; how that frame reads is the owner's call.
