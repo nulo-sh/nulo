@@ -8,6 +8,6 @@ import Text from "../core/Text.vue"
 <template>
 	<Flex align="center" gap="6">
 		<Icon name="warning" size="12" color="red" />
-		<Text size="12" weight="600" color="primary"><slot /></Text>
+		<Text variant="body" color="primary"><slot /></Text>
 	</Flex>
 </template>

@@ -30,17 +30,12 @@ defineProps({
 }
 
 .label {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	composes: type--title-page from global;
 	color: var(--nulo-secondary);
 }
 
 .sub {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--body from global;
 	line-height: 1.4;
 	color: var(--nulo-outline);
 }

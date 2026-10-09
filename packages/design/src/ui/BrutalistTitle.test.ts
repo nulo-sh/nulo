@@ -11,6 +11,7 @@ describe("BrutalistTitle", () => {
 		expect(spans).toHaveLength(2)
 		expect(spans[0].text()).toBe("Create")
 		expect(spans[1].text()).toBe("Wallet")
+		for (const span of spans) expect(span.classes()).toContain("type--title-hero")
 	})
 
 	test("defaults to left align (no center class)", () => {
@@ -33,16 +34,15 @@ describe("BrutalistTitle", () => {
 		const wrapper = mount(BrutalistTitle, {
 			props: { main: "Welcome", sub: "to Nulo", size: "hero" },
 		})
-		const html = wrapper.html()
-		expect(/hero/i.test(html)).toBe(true)
+		expect(wrapper.classes().some((c) => /hero/i.test(c))).toBe(true)
 	})
 
 	test('size="compact" applies the compact modifier class', () => {
 		const wrapper = mount(BrutalistTitle, {
 			props: { main: "Use your", sub: "passkey", size: "compact" },
 		})
-		expect(/compact/i.test(wrapper.html())).toBe(true)
-		expect(/hero/i.test(wrapper.html())).toBe(false)
+		expect(wrapper.classes().some((c) => /compact/i.test(c))).toBe(true)
+		expect(wrapper.classes().some((c) => /hero/i.test(c))).toBe(false)
 	})
 
 	test("renders both spans even when props are short", () => {
