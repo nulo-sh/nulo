@@ -39,10 +39,10 @@ function signal(child: ChildProcess, pgid: number, sig: StopSignal): void {
 
 /**
  * Stops a child this run spawned `detached`, so it leads its own group: SIGTERM to the group, then
- * SIGKILL if any member outlives `graceMs`. Only a group whose leader was alive when teardown began
- * is escalated: its id cannot be reused while any member lives, whereas a group whose leader had
- * already exited may have emptied and its id passed to another run's group, so it gets SIGTERM
- * only. `stopped` is false while any member may still run.
+ * SIGKILL if any member outlives `graceMs`. Only a group whose leader is alive at entry is
+ * signalled: from then on some member holds the group id, so it cannot pass to another run's
+ * group, whereas once the leader has exited nothing proves the group never emptied. `stopped` is
+ * false while any member may still run.
  */
 export async function killProcessGroup(
 	child: ChildProcess | null,
@@ -52,14 +52,14 @@ export async function killProcessGroup(
 ): Promise<{ escalated: boolean; stopped: boolean }> {
 	if (!child?.pid || !weStarted) return { escalated: false, stopped: true }
 	const pgid = child.pid
-	const leaderAliveOnEntry = !hasExited(child)
+	if (hasExited(child)) {
+		const stopped = !isGroupAlive(pgid)
+		if (!stopped) console.warn(`[e2e-setup] ${label}'s leader exited before teardown; its group is left unsignalled`)
+		return { escalated: false, stopped }
+	}
 	console.log(`[e2e-setup] Stopping ${label} (pid=${pgid})...`)
 	signal(child, pgid, "SIGTERM")
 	if (await waitUntilGone(child, pgid, graceMs)) return { escalated: false, stopped: true }
-	if (!leaderAliveOnEntry) {
-		console.warn(`[e2e-setup] ${label}'s leader exited before teardown, so its group is not escalated`)
-		return { escalated: false, stopped: false }
-	}
 	console.warn(`[e2e-setup] ${label}'s process group outlived SIGTERM; sending SIGKILL`)
 	signal(child, pgid, "SIGKILL")
 	return { escalated: true, stopped: await waitUntilGone(child, pgid, 2_000) }

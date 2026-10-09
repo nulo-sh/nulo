@@ -1240,7 +1240,7 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D-orch-1 | No stack: each arc opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; Arcs 2 and 3 merge `dev` in after the arc before them lands; the close-out is a fourth PR after the last arc merges (orchestrator, at approval) | Arcs 1 and 2 run in parallel worktrees, and the orchestrator merges in order | `gh stack` with one layer per arc (§ Delivery as planned) |
 | D-arc2-1 | 152: no code change; the entry closes on the probe's evidence (`lessons/phase-2.md` § 2.4) | The HMR socket completed its `101` handshake with no refusal, and § Architecture 2.4 says to change nothing in that case. A `fetch("data:")` control showed why: the service-worker-served dev popup runs under Chrome's baseline extension policy only, so a development-only `connect-src` source would change nothing (the production control refused the same fetch under the manifest policy) | The development-only override (a no-op on the pages it targets) |
 | D-arc2-2 | 26: the seed page's unmount case asserts the late mnemonic's `join` is never called, beside the timer count | The countdown's own dispose guard already arms nothing after unmount, so a timer count alone passes without the page's fence; only a page that sets the phrase calls `join` | Reading the phrase from the DOM (the page is gone) |
-| D-arc2-3 | 125: escalate only a group whose leader was alive when teardown began; report `stopped`, and keep the lock and the node's data directory when a group outlives SIGKILL (Arc 2 audit round 1: Codex C1, C2; Opus 2) | A live leader keeps its pid, and so the group id, from reuse; once it has exited before teardown the group may have emptied and its id passed to another run's group, which § Architecture 2.3's "while any member lives" did not cover. The lock is a survivor's only record for the next run's reap | A per-spawn ownership marker read from `/proc` (Linux-only, and more than the entry needs); escalating every group (signals a reused id) |
+| D-arc2-3 | 125: signal only a group whose leader is alive at teardown's entry (a group whose leader already exited gets no signal at all, where base sent SIGTERM); report `stopped`, and keep the lock and the node's data directory when a group may survive (Arc 2 audit rounds 1 and 2: Codex C1, C2, R2-1; Opus 2) | From entry on, some member holds the group id, so it cannot pass to another run's group; once the leader has exited before teardown nothing proves the group never emptied, which § Architecture 2.3's "while any member lives" did not cover, and the lock reaper already refuses such a group (D9). The lock is a survivor's only record | A per-spawn ownership marker read from `/proc` (Linux-only, and more than the entry needs); escalating every group (signals a reused id); refusing escalation once the leader dies during the grace wait (R2-1's second half: it would undo the entry, and reuse in that window needs the cyclic pid cursor to wrap back to the id within one 100 ms poll) |
 | D-orch-2 | No edit to `follow-ups.md`, ever, the close-out included: each PR body lists the entries its arc closes with their governance ledger ids, and a partly built entry's remainder goes into the arc's section of the Outcome draft (orchestrator, at approval) | The file is being retired by the governance-1 lane, which turns every entry into an issue or a recorded disposition | § Close-out edits to follow-ups.md as planned |
 
 ## Audit verdicts
@@ -1320,7 +1320,15 @@ import registers process handlers and creates a data directory.
 | O3 | `pages-options.test.ts` no longer reds when the plain `**/*.test.*` glob is deleted | **Accepted.** The watcher case runs under a dot-directory and a plain one; deleting the glob reds the plain case |
 | O4 | Three comments name their callers; "fails loudly" holds only under `E2E_REQUIRE_SETUP=1` | **Accepted.** Restated as invariants; the post-SIGKILL comment went with the `stopped` result |
 
-Checked and holds (both): every real route is still scanned; the overwrite mode keeps every
+### Arc 2 round 2: Codex (resumed), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| R2-1 | A group whose leader exited before teardown still gets SIGTERM, possibly on a reused id; `leaderAliveOnEntry` does not prove ownership across the grace wait; the test cleanup cannot tell a replacement group | **Accepted in part** (D-arc2-3): an exited leader's group gets no signal; the cleanup signals only groups no case proved gone. **Rejected:** refusing escalation once the leader dies during the wait, which would undo entry 125 itself; reuse there needs the pid cursor to wrap back to the id within one 100 ms poll |
+| R2-2 | The stubborn-member cases race the shells' trap installation | **Accepted.** Each case waits for its member's `ready` after the traps are set; the leaderless case uses a member that dies on SIGTERM, so its survival shows nothing was sent |
+| R2-3 | The lock comment overstates what the next run's reap does safely | **Accepted.** Reworded to a best-effort record; the reaper's unconditional data removal is in entry 125's remainder |
+
+Arc 2 round 1, checked and holds (both): every real route is still scanned; the overwrite mode keeps every
 declaration a template uses; the seed latch releases in `finally`; the race results and records
 are unchanged; no template, copy or selector changed; the budgets hold.
 
@@ -1477,13 +1485,14 @@ Each arc writes its own section here; the close-out folds them into § Outcome a
   not refused, because the Chrome dev popup is served by crxjs's service worker and runs under
   Chrome's baseline extension policy, not the manifest's, D-arc2-1).
 - **Closed in part; what is left:**
-  - 125: the in-run teardown now waits on the whole process group and escalates it when its
-    leader was alive as teardown began; a group that outlives SIGKILL keeps the lock and its data
-    directory for the next run's reap (D-arc2-3). Left: a group whose leader exited before
-    teardown gets SIGTERM only, and the persisted-lock reaper (`killOrphanByPid`, `reap.ts`) still
-    skips a group whose leader is dead, because once the leader is gone nothing proves the group
-    never emptied and its id was not reused; escalating either needs ownership evidence, as
-    `tests/e2e/fixtures/browser/ownership.ts` takes from an environment marker.
+  - 125: the in-run teardown now waits on the whole process group and escalates it, for a group
+    whose leader is alive as teardown begins; a group that may survive keeps the lock and its data
+    directory (D-arc2-3). Left: a group whose leader exited before teardown is not signalled at
+    all (base sent it SIGTERM), and the persisted-lock reaper (`killOrphanByPid`, `reap.ts`) still
+    skips a group whose leader is dead and removes the data directory without waiting, because
+    once the leader is gone nothing proves the group never emptied and its id was not reused;
+    stopping such a group needs ownership evidence, as `tests/e2e/fixtures/browser/ownership.ts`
+    takes from an environment marker.
   - 126: `probeAnvil` refuses an L1 whose chain id is not 31337 or whose block number is not a hex
     quantity. Left: no RPC proves `--slots-in-an-epoch 1` (anvil 1.4.1's `anvil_nodeInfo` does not
     report it), so adopting a running anvil still trusts that flag.

@@ -31,11 +31,15 @@ passed here.
   was then sent SIGKILL. The base copy fails the cooperative control case for exactly that reason
   (2 s, escalated). The new wait reads both.
 - First cut escalated every group that outlived SIGTERM, including one whose leader had exited
-  before teardown; both audits showed that group may have emptied and its id been reused, so it
-  now gets SIGTERM only (D-arc2-3). The reworked cases: a leader that exits cleanly on SIGTERM
-  with a member ignoring it is escalated (red at base: the base loop stops at the leader's exit
-  code); a cooperative group is not (red at base: the `exitCode` bug); a group whose leader exited
-  first is never escalated and is reported not stopped (the never-happens pin beside the first).
+  before teardown; the audits showed that group may have emptied and its id been reused, so such a
+  group now gets no signal at all (D-arc2-3). The cases, each red at base: a leader that exits
+  cleanly on SIGTERM with a member ignoring it is escalated (the base loop stops at the leader's
+  exit code); a cooperative group is not (the `exitCode` bug); a group whose leader exited first
+  is never signalled, shown by a member that would die on SIGTERM surviving.
+- A real-process test must wait until its shells have installed their traps: group existence is
+  not readiness. Each case waits for its member's `ready` on stdout, and gates on the pipe's end,
+  not the leader's exit, since a leader may exit first (2 of 4 runs red before, 8 of 8 green
+  after).
 - Gate: `process-group.test.ts` and `anvil-probe.test.ts` red at base (4 of 5), green after.
   Network `incoming-transfers.test.ts` on Chrome 2/2, retry 0; after the run nothing listened as
   `anvil --host 127.0.0.1 --port 16368`.

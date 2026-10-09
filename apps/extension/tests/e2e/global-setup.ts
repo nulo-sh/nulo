@@ -791,7 +791,7 @@ export async function teardown() {
 		}
 	}
 
-	// The lock is a survivor's only record: the next run's reap finds it there and removes its data.
+	// Kept while a group may survive: the lock is the only record a later best-effort reap reads.
 	if (weOwnLock && playground.stopped && node.stopped && anvil.stopped) clearLock()
 	killOrphanChromes()
 }
