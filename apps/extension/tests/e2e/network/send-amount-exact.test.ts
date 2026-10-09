@@ -7,7 +7,7 @@ import { expect, inject } from "vitest"
 import { type AztecTestConfig, mintPublicTokensForAccount } from "../fixtures/aztec"
 import { openPopup, replaceInputValue, test, waitForHash } from "../fixtures/extension"
 import { captureBalanceBaseline, setActiveSendType, waitForFreshBalanceRow } from "../fixtures/helpers"
-import { closeReview, openReviewFromStrip, openSend, readSendInputs } from "../fixtures/send-page"
+import { closeReview, openReviewFromStrip, openSend, readSendInputs, shotSend } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
 import { activeTestId, tabTo } from "../helpers/pointer-probes"
 
@@ -175,6 +175,7 @@ test.skipIf(!hasConfig)(
 		// By keyboard: Tab from the field reaches Max, past the unit switch when the token is priced.
 		const walk = await tabTo(page, "send-amount-max", 2)
 		expect([["send-amount-max"], ["send-amount-fiat-toggle", "send-amount-max"]]).toContainEqual(walk)
+		await shotSend(page, "send-max-focused", "send-amount-row")
 		await page.keyboard.press("Enter")
 		await waitForAmount(page, "1,235,567.123456789012345678")
 		await waitForEstimateAndConfirm(page)
