@@ -173,14 +173,14 @@ Receive and the other popups:
 | Token metadata | keys I 12/600; name, symbol I 12/600; id, contract address and chain ID I 12/600; capability keys M 11/600 | `label` G 10/700 caps 0.1; `value`, unchanged; `data` M 12/500; `data` M 12/500 |
 | Address fields of New token, New FPC, Edit FPC, New sender | typed text I 15/500 | `input-data` M 14/400, in arc 2 with `AddressInput` |
 
-Settings, as `settings-by-task` leaves it (re-audited after the rebase, P1 step 2):
+Settings, as `settings-by-task` leaves it (re-audited at `f557e20`, P1 step 2: every pick below survived the merge with its values; `recon.md` § Settings overlap):
 
 | Element | Before | After |
 |---|---|---|
-| Hub and page row titles | I 14/500 (`SettingItem`); I 13/600 (toggle rows) | `row-title` G 14/700 -0.02 and G 13/700 -0.02 (each keeps its size); a row titled with a person's or account's name takes `name` I 14/600 |
+| Hub and page row titles | I 14/500 (`SettingItem`); I 13/600 (toggle rows) | `row-title` G 14/700 -0.02 and G 13/700 -0.02 (each keeps its size); a row titled with a person's or account's name takes `name` I 14/600, the hub's profile card (`setting-nav-profile`, titled with the profile's name) among them |
 | Row descriptions | I 12/500 | `caption` I 11/400; an address or chain ID description (Network's, `networks/[id].vue:183`) `data` M 12/500 |
 | Group labels | G 10/700 caps 0.2 | `label-section` G 11 caps 0.1, the same as `SectionLabel` (the board's Section label row; ledger 26) |
-| Trailing values (`setting-value`, from `settings-by-task`) | I 12/500 secondary, in that branch on 2026-10-08 | `value` I 12/600; confirmed by the re-audit (P1 step 2) before arc 2 starts |
+| Trailing values (`setting-value`, from `settings-by-task`) | I 12/500 secondary (`SettingItem.vue:144` at `f557e20`) | `value` I 12/600 |
 | Contacts rows | name I 14/600 0.01; address M 11; sender chip M 9/700 caps 0.04; avatar M 10/700 | `name` I 14/600, normal tracking; `data` M 12/500; `tag` G 10/600 caps 0.08; avatar I 10/600 (carve-out: the avatar row's face and weight at the size its 24px box gives, as `AccountAvatar` sizes it) |
 | Accounts list; export account list; connected app accounts | names I 14/500; addresses I 12/500 (one is "CHAIN · 0x…", the chain upper-cased in script) | `name` I 14/600; `data` M 12/500 (the chain name reads in mono with it; the string is unchanged) |
 | FPC rows | title I 14/500 (the FPC's name, or its address when it has none) | `row-title` G 14/700; the address fallback `data` M 12/500 |

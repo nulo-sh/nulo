@@ -148,6 +148,16 @@ Mono 10px rules that stay mono, at 11px (Ask D, answered 2026-10-09), 21 in all:
 
 The spec said `settings-row.module.css` is rewritten; it is not, as of 2026-10-08. P1 step 2 re-audits every row above against the merged code.
 
+Re-audit at `f557e20` (#56 merged, 2026-10-09; P1 step 2). Every type pick above survives with the same values; only lines moved.
+
+- `SettingItem.vue`: title `<Text size="14" weight="500">` `:134` (Inter by inheritance), description `<Text size="12" weight="500">` `:137` with its slot, trailing value `<Text data-testid="setting-value" size="12" weight="500" color="secondary">` `:144`; `.title` keeps `letter-spacing: 0.01em` (`:276`). The new `.icon_slotted` and `.value` rules set no type.
+- `ItemsContainer.vue`: group label `.title` G 10/700 caps 0.2 (`:54-61`), description `.description` I 12 (`:63-68`). The new `danger` prop is the danger fence: `.wrapper_danger` colours the border only (`:50-52`); the "Delete profile" row inside it is an ordinary `SettingItem`, its icon in a type-free `.danger_icon` (`settings/index.vue:337-342`).
+- `settings/index.vue`: the profile card is the hub's first row, a `size="large"` `SettingItem` titled with the profile's name and described by its kind (`:130-140`, testid `setting-nav-profile`); `size` changes padding only (`SettingItem.vue:185-187`). The old `.footer_link` is gone; the hub picks no type of its own beyond the composed `tab-hero.module.css` classes.
+- `Header.vue`: `.account_label` `:324-340`, `.account_address` `:359-369`, `.network_label` `:434-443`, `.lock_label` `:472-477`, values unchanged.
+- `profile/index.vue`: ID `<Text size="12" weight="500">` `:33` with `.id_value` mono (`:61-64`); keys `<Text size="12" weight="600">` `:32,38`; type `<Text size="13" weight="600">` `:39`. Its "Name" row is a `SettingField` (`:23-29`).
+- `lock.vue`, `display.vue`, `developer/index.vue`, `privacy.vue`: toggle-row titles `<Text size="13" weight="600">` and descriptions `<Text size="12" weight="500">`; `display.vue`'s dust input mono 13 (`:325`, `:335`). `privacy.vue` holds five `<Text>` tags: two titles, two descriptions and a 13/600 option label (`:125`).
+- `security/change-password.vue` `:244-248` and `reset.vue` `:196-200` (G 11 caps 0.18), `security/export/index.vue`, `advanced/account-state/index.vue`: only their `backTo` changed. `settings-row.module.css`, `glossary.vue`, `tab-hero.module.css` and `SettingField.vue` are unchanged.
+
 ## Arcs and blast radius
 
 Guard findings per arc (CSS declarations; `<Text>` tags that set `size`, `weight` or `mono`):
