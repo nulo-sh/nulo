@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { LogLevel } from "@/wallet/logger"
 import { MAX_QUEUED_GLOBAL, MAX_QUEUED_PER_SESSION, failQueuedForError, tryCreateQueuedJournal } from "./queued-journal"
 import { makeAccountStub, makeDappSessionStub, makeDeps, makeSession } from "./queued-journal.fixtures"
@@ -328,6 +328,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 
 	test.each([
 		["a scope refusal", "scope_refused", refusal],
+		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx")],
 		["any other failure", "popup_bound", new Error("session gone")],
 	])("a still-queued record failed by %s gets the %s kind and the error's message", async (_name, kind, error) => {
 		const { deps, journal } = makeDeps()

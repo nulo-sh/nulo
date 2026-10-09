@@ -131,8 +131,8 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Couldn't generate proof")
 	})
 
-	test("error.kind === 'popup_bound' → generic 'Transaction failed'", () => {
-		const op = recordWith({ error: { kind: "popup_bound", message: "...", normalizedRaw: null } })
+	test.each(["popup_bound", "malformed_request"])("error.kind === '%s' → generic 'Transaction failed'", (kind) => {
+		const op = recordWith({ error: { kind, message: "...", normalizedRaw: null } })
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Transaction failed")
 	})
 
@@ -637,6 +637,12 @@ describe("categoricalLabel — B2 failure category + context for journal/[id].vu
 		expect(categoricalLabel(failed("scope_refused"))).toEqual({
 			label: "Not allowed",
 			context: "The app asked for more than you allowed. Nothing was sent.",
+		})
+	})
+	test("malformed_request → 'Couldn't read request', saying nothing was sent", () => {
+		expect(categoricalLabel(failed("malformed_request"))).toEqual({
+			label: "Couldn't read request",
+			context: "The app sent a request the wallet could not read. Nothing was sent.",
 		})
 	})
 	test("simulation / prover / stuck_proving / stuck_queued → 'Stopped before broadcast'", () => {

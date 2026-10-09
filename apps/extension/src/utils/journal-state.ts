@@ -251,6 +251,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Popup closed early", context: "The popup closed before this transaction could finish." }
 		case "scope_refused":
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
+		case "malformed_request":
+			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "simulation":
 		case "prover":
 		case "stuck_proving":
