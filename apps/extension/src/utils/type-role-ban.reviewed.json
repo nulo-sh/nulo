@@ -9291,38 +9291,38 @@
 		{
 			"rule": "text-prop",
 			"text": "size=\"12\"",
+			"role": "body",
+			"at": "Text \"Check that the app shows these\""
+		},
+		{
+			"rule": "text-prop",
+			"text": "size=\"12\"",
 			"role": "caption",
-			"at": "Text \"Skip verification on reconnect\""
+			"at": "Text \"Only for this app on this netw\""
 		},
 		{
 			"rule": "text-prop",
 			"text": "size=\"12\"",
 			"role": "body",
-			"at": "Text \"Verify these emojis match what\""
+			"at": "Text[data-testid=verify-mismatch-error]"
 		},
 		{
 			"rule": "text-prop",
 			"text": "size=\"13\"",
 			"role": "row-title",
-			"at": "Text \"Always trust\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "drop",
-			"at": "Text \"OK\""
+			"at": "Text \"Skip this check next time\""
 		},
 		{
 			"rule": "text-prop",
 			"text": "weight=\"500\"",
 			"role": "caption",
-			"at": "Text \"Skip verification on reconnect\""
+			"at": "Text \"Only for this app on this netw\""
 		},
 		{
 			"rule": "text-prop",
 			"text": "weight=\"600\"",
 			"role": "row-title",
-			"at": "Text \"Always trust\""
+			"at": "Text \"Skip this check next time\""
 		}
 	],
 	"packages/design/src/ui/Banner.vue": [
