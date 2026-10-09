@@ -71,9 +71,12 @@ type PublicEventContext = {
 	networkId: string
 	contract: string
 	chainId: number
-	account: string
+	accountAddress: string
 	epochAtStart: number
 }
+
+/** The scope both receipt arms dedupe against. */
+type ReceiptScope = { profileId: string; networkId: string; chainId: number; accountAddress: string }
 
 type TrustScope = { profileId: string; networkId: string; accountAddress: string; contract: string }
 
@@ -1395,33 +1398,25 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (heldTxHash) await this.incomingPollGate?.markCommitted(heldTxHash)
 	}
 
-	/** The per-note locked critical section (hoisted so its branches sit at
-	 *  nesting depth 0; the lock callback invokes it directly). */
+	/** The per-note locked critical section. Its head is the public arm's, read for read: tokens,
+	 *  the record, then the own-send sets, which only ever gate a new record. */
 	private async commitScannedNote(ctx: NoteScanContext, note: RawNote): Promise<void> {
-		const { profileId, networkId, accountAddress, contract, chainId, epochAtStart } = ctx
-		// Lifecycle-cancel guard.
+		const { profileId, networkId, contract, chainId, epochAtStart } = ctx
 		if (this.serviceEpoch !== epochAtStart) return
-
-		// Live re-reads INSIDE the lock.
 		const tokens = await this.tokenService.getTokensRaw(profileId)
+		if (this.serviceEpoch !== epochAtStart) return
 		const token = findToken(tokens, contract, chainId)
 		if (!token) return // Token removed concurrently.
 
-		// Re-read tx-suppression sets live. The outer-scan-loop
-		// approach would stale these between notes if onTransactionAdded
-		// fires mid-scan.
-		const outgoingTxHashes = await this.collectOutgoingTxHashes(profileId, networkId, chainId, accountAddress)
-		const inflightTxHashes = await this.collectInflightTxHashes(profileId, networkId, accountAddress)
-
-		// Existing-record branch: backfill blockTimestamp if missing.
 		const existing = await this.repo.getRecord(noteRecordId(profileId, networkId, note.siloedNullifier))
+		if (this.serviceEpoch !== epochAtStart) return
 		if (existing) {
 			if (existing.blockTimestamp === undefined) await this.backfillNoteTimestamp(ctx, existing, note)
 			return
 		}
 
-		if (outgoingTxHashes.has(note.txHash)) return
-		if (inflightTxHashes.has(note.txHash)) return
+		if (await this.isOwnSend(ctx, note.txHash)) return
+		if (this.serviceEpoch !== epochAtStart) return
 		const amountRaw = parseNoteAmount(note)
 		if (amountRaw === null) return
 
@@ -2066,7 +2061,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		epochAtStart: number,
 		opts?: { reconcile?: boolean },
 	): Promise<void> {
-		const ctx: PublicEventContext = { profileId, networkId, contract, chainId, account, epochAtStart }
+		const ctx: PublicEventContext = { profileId, networkId, contract, chainId, accountAddress: account, epochAtStart }
 		await this.withServiceLock(() => this.commitPublicEventLocked(ctx, ev, opts))
 	}
 
@@ -2099,24 +2094,23 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			return
 		}
 
-		if (await this.isDedupedPublicEvent(ctx, ev.txHash)) return
-		const scope = { profileId, networkId, accountAddress: ctx.account, contract }
+		if (await this.isOwnSend(ctx, ev.txHash)) return
+		if (this.serviceEpoch !== epochAtStart) return
+		const scope = { profileId, networkId, accountAddress: ctx.accountAddress, contract }
 		const trustState = await this.resolveReceiptTrust(scope, token, ev.amountRaw, () => this.serviceEpoch !== epochAtStart)
 		if (trustState === undefined) return
 		if (this.serviceEpoch !== epochAtStart) return
 		await this.commitPublicRecord(ctx, ev, token, trustState)
 	}
 
-	/** 3-source dedupe (the existing-record check ran before this): own outgoing
-	 *  tx hashes, then the in-flight journal txHash, then the post-read epoch
-	 *  re-check. True = stand down. */
-	private async isDedupedPublicEvent(ctx: PublicEventContext, txHash: string): Promise<boolean> {
-		const { profileId, networkId, chainId, account } = ctx
-		const outgoing = await this.collectOutgoingTxHashes(profileId, networkId, chainId, account)
+	/** Whether `txHash` is the scope's own send: its outgoing transactions first, then the journal's
+	 *  sends, each read live so a send journalled mid-scan suppresses the receipt. */
+	private async isOwnSend(scope: ReceiptScope, txHash: string): Promise<boolean> {
+		const { profileId, networkId, chainId, accountAddress } = scope
+		const outgoing = await this.collectOutgoingTxHashes(profileId, networkId, chainId, accountAddress)
 		if (outgoing.has(txHash)) return true
-		const inflight = await this.collectInflightTxHashes(profileId, networkId, account)
-		if (inflight.has(txHash)) return true
-		return this.serviceEpoch !== ctx.epochAtStart
+		const inflight = await this.collectInflightTxHashes(profileId, networkId, accountAddress)
+		return inflight.has(txHash)
 	}
 
 	/** Write-side: the outbox row is written BEFORE the record (ordering +
@@ -2131,10 +2125,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		token: Token,
 		trustState: IncomingTrustState,
 	): Promise<void> {
-		const { profileId, networkId, account, epochAtStart } = ctx
-		await this.markBalanceDirty(profileId, networkId, account, token.id)
+		const { profileId, networkId, accountAddress, epochAtStart } = ctx
+		await this.markBalanceDirty(profileId, networkId, accountAddress, token.id)
 		if (this.serviceEpoch !== epochAtStart) return
-		const record = this.buildPublicRecord({ ev, profileId, networkId, account, token, trustState })
+		const record = this.buildPublicRecord({ ev, profileId, networkId, account: accountAddress, token, trustState })
 		await this.repo.upsertRecord(record)
 		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && this.serviceEpoch === epochAtStart) {
 			this.emit("onIncomingTransferAdded", record)

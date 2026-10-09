@@ -9,3 +9,4 @@
 - 2026-10-09 — final pass round 2: `reject`, five findings, all accepted (`deletersRunning`, two-strike #140 delete, revoked/processed commits, window cursors, OA-6 ships nothing). Round 3 running.
 - 2026-10-09 — final pass round 3: `reject`, one finding (deleter count read at lock entry), accepted. Loop stopped at three rounds; awaiting orchestrator approval.
 - 2026-10-09 — approved by the orchestrator (D-orch-1 no stack, D-orch-2 Arc 1 only, D-orch-3 unreviewed entry read audited first). Arc 1 implementation started.
+- 2026-10-09 — Phase 1.1 gate passed: incoming-transfer units 346/346, lint 0, typecheck:all 0.

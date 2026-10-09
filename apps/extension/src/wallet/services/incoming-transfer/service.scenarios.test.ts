@@ -5645,7 +5645,9 @@ function receiptFlags(log: string[], recordId: string, fixture: string): string 
 	])
 }
 
-const NOTE_HEAD = ["tokens", "outgoing", "inflight", "getRecord"]
+/** Both arms' locked head: one order, pinned for both by the matrices below. */
+const RECEIPT_HEAD = ["tokens", "getRecord", "outgoing", "inflight"]
+const NOTE_HEAD = RECEIPT_HEAD
 const NOTE_PROMOTION = ["getTrust", "setTrust", "trustChanged", "visibility", "pending"]
 const NOTE_UNKNOWN = ["notes", ...NOTE_HEAD, ...NOTE_PROMOTION, "timestamp", "setOutbox", "upsert"]
 const NOTE_TRUSTED = ["notes", ...NOTE_HEAD, "getTrust", "timestamp", "setOutbox", "upsert", "visibility", "added"]
@@ -5661,10 +5663,16 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 	test.each<[string, NoteFixture, string, string[], string]>([
 		["control, unknown trust", "unknown", "none", NOTE_UNKNOWN, "111110"],
 		["N0 stale entry: nothing inside the section runs", "unknown", "notes", ["notes", "BUMP"], "000000"],
-		["N1 token read: the promotion stands down", "unknown", "tokens", bumpedAfter(NOTE_UNKNOWN, "tokens", "getTrust"), "000000"],
-		["N2 outgoing read", "unknown", "outgoing", bumpedAfter(NOTE_UNKNOWN, "outgoing", "getTrust"), "000000"],
-		["N3 in-flight read", "unknown", "inflight", bumpedAfter(NOTE_UNKNOWN, "inflight", "getTrust"), "000000"],
-		["N4 record read", "unknown", "getRecord", bumpedAfter(NOTE_UNKNOWN, "getRecord", "getTrust"), "000000"],
+		["N1 token read", "unknown", "tokens", bumpedAfter(NOTE_UNKNOWN, "tokens", "tokens"), "000000"],
+		["N2 record read", "unknown", "getRecord", bumpedAfter(NOTE_UNKNOWN, "getRecord", "getRecord"), "000000"],
+		[
+			"N3 outgoing read (miss): the journal is still read, then the note stands down",
+			"unknown",
+			"outgoing",
+			bumpedAfter(NOTE_UNKNOWN, "outgoing", "inflight"),
+			"000000",
+		],
+		["N4 in-flight read", "unknown", "inflight", bumpedAfter(NOTE_UNKNOWN, "inflight", "inflight"), "000000"],
 		["N5 trust read", "unknown", "getTrust", bumpedAfter(NOTE_UNKNOWN, "getTrust", "getTrust"), "000000"],
 		[
 			"(DRIFT PIN) N6 trust write: the prompt still emits",
@@ -5687,12 +5695,19 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		["N9 outbox write, trusted", "trusted", "setOutbox", bumpedAfter(NOTE_TRUSTED, "setOutbox", "setOutbox"), "000100"],
 		["N10 record write, trusted: Added stands down", "trusted", "upsert", bumpedAfter(NOTE_TRUSTED, "upsert", "visibility"), "000110"],
 		["N11 Added visibility read", "trusted", "visibility", bumpedAfter(NOTE_TRUSTED, "visibility", "visibility"), "000110"],
-		["control, existing record without a timestamp", "existing", "none", ["notes", ...NOTE_HEAD, "timestamp", "upsert"], "000010"],
+		[
+			"control, existing record without a timestamp",
+			"existing",
+			"none",
+			["notes", "tokens", "getRecord", "timestamp", "upsert"],
+			"000010",
+		],
+		["N2 record read, existing: the backfill stands down", "existing", "getRecord", ["notes", "tokens", "getRecord", "BUMP"], "000000"],
 		[
 			"N4b backfill timestamp read: the backfill stands down",
 			"existing",
 			"timestamp",
-			["notes", ...NOTE_HEAD, "timestamp", "BUMP"],
+			["notes", "tokens", "getRecord", "timestamp", "BUMP"],
 			"000000",
 		],
 	])("%s", async (_name, fixture, hold, expectedLog, expectedFlags) => {
@@ -5703,11 +5718,19 @@ describe("IncomingTransferService — note receipt epoch re-check matrix", () =>
 		expect(receiptFlags(inst.log, NOTE_ID, fixture)).toBe(expectedFlags)
 	})
 
-	test("an own outgoing hash: both sets are read before the record, then the note stands down", async () => {
+	test("an own outgoing hash: the record is read first and the journal is never read", async () => {
 		const f = await bootNoteReceipt("outgoing-hit")
 		const inst = instrumentReceipt(f)
 		await scan(f.service)
-		expect(inst.log).toEqual(["notes", ...NOTE_HEAD])
+		expect(inst.log).toEqual(["notes", "tokens", "getRecord", "outgoing"])
+	})
+
+	test("an already-recorded note costs the token read and the record read only", async () => {
+		const f = await bootNoteReceipt("existing")
+		records.set(NOTE_ID, { ...(records.get(NOTE_ID) as IncomingNoteRecord), blockTimestamp: 1_234 })
+		const inst = instrumentReceipt(f)
+		await scan(f.service)
+		expect(inst.log).toEqual(["notes", "tokens", "getRecord"])
 	})
 })
 
@@ -5737,7 +5760,7 @@ function commitPublic(service: unknown, opts?: { reconcile?: boolean }, ev: Publ
 	return svc.commitPublicEvent("p1", "n1", tokenA.contract, 1, "0xa", ev, svc.serviceEpoch, opts)
 }
 
-const PUB_HEAD = ["tokens", "getRecord", "outgoing", "inflight"]
+const PUB_HEAD = RECEIPT_HEAD
 const PUB_UNKNOWN = [...PUB_HEAD, "getTrust", "setTrust", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
 const PUB_TRUSTED = [...PUB_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
 
@@ -5786,6 +5809,18 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		await commitPublic(f.service)
 		expect(inst.log).toEqual(["tokens", "getRecord", "outgoing"])
 	})
+})
+
+test("both arms' unknown-trust receipts read the same head in the same order", async () => {
+	const noteArm = await bootNoteReceipt("unknown")
+	const noteLog = instrumentReceipt(noteArm).log
+	await scan(noteArm.service)
+	const publicArm = await bootPublicReceipt("unknown")
+	const publicLog = instrumentReceipt(publicArm).log
+	await commitPublic(publicArm.service)
+
+	expect(noteLog.slice(1, 1 + RECEIPT_HEAD.length)).toEqual(RECEIPT_HEAD)
+	expect(publicLog.slice(0, RECEIPT_HEAD.length)).toEqual(RECEIPT_HEAD)
 })
 
 // ── Prompt payloads (wire-shaped) ─────────────────────────────────────────────

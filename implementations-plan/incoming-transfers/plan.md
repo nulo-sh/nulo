@@ -368,7 +368,7 @@ gate passes. Log each attempt in `lessons/phase-N.md` (N = the arc number).
 
 ### Arc 1: fences, an all-or-nothing Allow, one dedupe order (no owner gate)
 
-#### Phase 1.1: one receipt head (#227)
+#### Phase 1.1: one receipt head (#227) ✓
 
 1. In `commitScannedNote`, read the record before the two own-send sets.
 2. Rename `isDedupedPublicEvent` to `isOwnSend` and call it from both arms.
