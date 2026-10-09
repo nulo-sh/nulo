@@ -22,6 +22,7 @@ import { managers } from "@/utils/core"
 /** Composables */
 import { useToast } from "@/composables/toast.js"
 import { isPopupSubmitKey, refuseRepeatEnter } from "@/composables/usePopupEntity"
+import { createRunFence } from "@/composables/runFence"
 import { useSecretClipboardCopy } from "@/composables/useSecretClipboardCopy"
 import { useSecretCountdown } from "@/composables/useSecretCountdown"
 const { openToast } = useToast()
@@ -39,6 +40,9 @@ const isUnlocked = ref(false)
 const password = ref()
 const isWrongPassword = ref(false)
 const phrase = ref("Try harder")
+// Not template state: a pointer double-click must decrypt the phrase once, with nothing re-rendered.
+let isRetrieving = false
+const retrieveFence = createRunFence()
 
 const handleClose = () => {
 	phrase.value = null
@@ -52,16 +56,21 @@ const handleStart = () => {
 }
 
 const handleUnlock = async () => {
-	if (!password.value) return
+	if (!password.value || isRetrieving) return
 
+	isRetrieving = true
+	const isCurrent = retrieveFence.begin()
 	try {
 		const mnemonic = await managers.profile.exportMnemonic(appStore.profile.id, password.value)
+		if (!isCurrent()) return
 		phrase.value = mnemonic.join(" ")
 		password.value = null
 		isUnlocked.value = true
 		countdown.start()
 	} catch (error) {
-		isWrongPassword.value = true
+		if (isCurrent()) isWrongPassword.value = true
+	} finally {
+		isRetrieving = false
 	}
 }
 
@@ -76,6 +85,7 @@ const onKeydown = (e) => {
 }
 
 onBeforeUnmount(() => {
+	retrieveFence.invalidate()
 	// The clipboard scrub timer deliberately outlives the page (useSecretClipboardCopy says why).
 	phrase.value = null
 })
