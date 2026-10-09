@@ -10,3 +10,4 @@
 - 2026-10-09 — approved by the orchestrator (D-orch-1 no stack, D-orch-2 arc 1a ships alone as G1); merged origin/dev ac259a7; arc 1a starts.
 - 2026-10-09 — phase 1.1 gate: pass (lint, typecheck:all, test, port-registry.test.ts 15/15).
 - 2026-10-09 — phase 1.2 gate: pass (fast; unit 25/25; networks.test.ts chrome 4/4 with 5 rows during, 0 after; bogus build exit 1, no row).
+- 2026-10-09 — phase 1.3 gate: pass (fast; unit 33/33; smoke navigation chrome+firefox 5/5; network networks chrome+firefox 4/4, I7 trees = marker scans, no leftovers; reuse, reap, fail-loud drills).
