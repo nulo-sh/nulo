@@ -21,3 +21,54 @@ Arc 1 of the type-roles stack. Every meaningful attempt, failure and decision, i
   - `AddressDisplay` exposes no "showing a name" state, so the fixture treats an `AddressDisplay` site whose text holds no `0x` + two hex digits as showing a name (`name`). Arc 2, which rewrites `AddressDisplay`, can expose the state as a data attribute for the fixture to read instead.
   - Firefox panel geometry, Home and Settings, steady from 0 to 1.2 s: viewport 360×600, `#app` 600, bottom nav ends at 600; no role-bearing text clipped.
 - **Landing at the base and at this head.** Built with `origin/dev`'s `utilities.css` swapped in (the only landing input arc 1 changes), then restored and built again: the normalized declarations differ only by the added role rules, all 28 present (the minifier merges `.type--time` and `.type--meta`, whose six declarations are identical).
+
+## Step 10: the baseline's roles
+
+- **Counts.** Day one's baseline holds 1,578 entries in 170 files: face 244, tracking 146, case 119, size 60, text-prop 622, face-less 362, identifier 25; no tie and no site-size finding. Rule 8 alone finds 362 face-less sizes and weights, not the draft's about 50. The role tally per entry is in `apps/extension/src/utils/type-role-ban.reviewed.json`.
+- **Rows added.** 132 rows marked † in § Surfaces: Shared 3; Home, Holdings, Activity 8 (the Activity empty state among them); Transaction detail 10; Send 11; Receive and the other popups 11; Settings 43; Approval windows 25 (the warned identity strip among them); Onboarding and overlays 21. Two proposed rows merged, both naming `capability-shared.module.css`'s `.mono`; the profile page's type value went into the existing "Account state, notes, profile ID" row. Sixteen existing § Surfaces rows were corrected against the code (Before values, one split into four, line drift), and § Identifiers, § Captures and the change map now agree with the two generators' expected files.
+- **Line drift from the testid commit.** The identifier testids added lines to `received/[id].vue` (+3), `tx/[id].vue` (+3) and one each to `TxDebugPanel.vue`, `CallArguments.vue`, `EditFpcPopup.vue`, `settings/connected-apps/[id].vue`, `settings/networks/[id].vue`, `capabilities/index.vue` and `execute/index.vue`; the added rows cite the lines after it. `handleGrantPublicAuthwit` spans `dispatcher.ts:638-681`; the warned identity strip network is M 10/700 today, not 11.
+
+Picks the boards should look at, most visible first (pick → alternative):
+
+1. `DropdownItem.vue:20-43` `row-title` moves nine menus from I 13/500 to G 13/700 → `value` I 12/600 or `body`.
+2. The legal sheet title `title-page`, 18 → 13px (`LegalAcceptanceSheet.vue:100`) → `title-hero` at 18px, as the declined page's identical title took (`declined.vue:38`).
+3. Onboarding sentences `body`, 14 and 15 → 12px (`OnboardingExplainer.vue:24`, `welcome.vue:17`, `done.vue:69`, `presto.vue:76`) → today's sizes only through `OVERRIDES` and the owner.
+4. The passkey window body `body`, 15 → 12px (`PasskeyScreen.vue:227`) → 15px as an `OVERRIDES` entry, the owner's call.
+5. Execute group labels `label`, a full sentence in caps (`OperationCard.vue:239`) → `label-section` G 11, or `body` for that sentence.
+6. Confirm's toggle label `row-title` G 13/700 (`ConfirmPopup.vue:108`) → `label` G 10 caps, the rulebook's toggle label.
+7. "Always trust": `label` in Settings (`DappSessionVerification.vue:29`), `row-title` in the verify window (`verify/index.vue:170`) → one role for both.
+8. "Override with my method", "Use app's payment" `label`, now caps (`FeeSettingsCard.vue:872,905`) → `value` I 12/600, sentence case.
+9. The notification title `title-page`, 16 → 13px caps (`NotificationManager.vue:56`) → `row-title` G 16/700.
+10. Delete profile's checkbox labels `body`, 14/600 → 12/400 (`settings/security/reset.vue:135,138,141`) → `row-title` G 14/700.
+11. The connected app's URL `data-lead` M 13/600 (`settings/connected-apps/[id].vue:249`) → `data` M 12/500, since the name leads.
+12. The glossary term `row-title` G 14/700 (`settings/glossary.vue:24`) → `name`, today's I 14/600.
+13. "Hidden accounts" and its count in caps and mono (`settings/accounts/index.vue:176,178`) → `row-title` 13 and `value`, sentence case.
+14. The Activity origin chip `tag`, a hostname in caps (`TransactionCard.vue:163`), while the windows set hostnames in `data-lead` mono.
+15. Received "Private" and "Mint" `name` I 13/600 (`received/[id].vue:253-255`) → `data-lead`, the To card's face.
+16. The detail amount's symbol inherits `amount-detail` G 24/700 tabular (`detail-page.module.css:7-9`) → `meta`, as the review sheet's symbols.
+17. The cancelled overlay's message `value` I 12/600 (`DappCancelledOverlay.vue:19`) → `body`, since its messages are sentences.
+18. Raw error dumps stay mono in `meta` (`TxDebugPanel.vue:161-170`, `journal/[id].vue:371-381`) → `body`, which needs a hex-scan exemption.
+19. Row error lines `caption` I 11 (`TokenCard.vue:231-235`, `TokenSeedRow.vue`, `TokenImportRow.vue`) → `body` I 12, the rulebook's errors.
+20. 11px sentences split: `body` 12 (`settings/about.vue:147`, `settings/networks/[id].vue:255`, `IncomingTrustPopup.vue:187`) but `caption` 11 for 11/500 notes (`send.vue:743`, `FeeSettingsCard.vue:937`) → one rule.
+21. The import error title with a detail line `body` (`ImportFullBackupForm.vue:82`) → `value` I 12/600, a banner title.
+22. The sponsored readout's "Nothing" loses its 600 under `data` (`FeeCostReadout.vue:39`) → `value` I 12/600, in Inter beside mono.
+23. The warned identity strip network keeps 700 through a new compound override (`IdentityStrip.vue:98-101`) → drop it, orange at 400.
+24. The logger's menu items `body` (`LogsToolbar.vue:87-121`) while "Clear logs" (`:127`) reads `DropdownItem`'s `row-title` → one role for the menu.
+25. The profile's name value `name` I 13/600 (`SettingField.vue:26-27`) beside its type value `value` I 12/600 (`settings/profile/index.vue:39`) → `value` for both.
+26. Explainer card titles `row-title` G 16/700 (`OnboardingExplainer.vue:32`) → `title-page`.
+27. The scope contact annotation `name` I 600 (`ScopeAddress.vue:68`) → `meta`, quieter beside the address.
+28. The execute amount's symbol `meta` M 11 beside a `data` amount at 12 (`CallArguments.vue:66`) → `data`.
+29. The migration banner's ✕ `body` 12 (`MigrationBarrier.vue:146`) → `caption`, today's 11.
+30. "Invalid address" beside the Recipient label `body` (`RecipientField.vue:88`) → `label`, the label's line.
+
+Picks changed by the lead:
+
+- The explainer and consent ordinals (`OnboardingExplainer.vue:31`, `LegalConsent.vue:46`): `body` → `meta` M 11/400, as the step numbers.
+- The Terms eyebrows (`LegalAcceptanceSheet.vue:99`, `declined.vue:35`): `body` → `label-section` G 11/700 caps 0.1, the popups' pre-titles.
+- `ContactRow`'s initials' face → `drop`: arc 4 drops the mono face; their size and weight stay carve-outs.
+
+## Step 13: the generators' first review
+
+- **Review cleared, 53 items.** Accepted the generator's splits of two selectors § Identifiers shared (`activity-row-hash` / `activity-incoming-hash`; `import-contact-address-saved` / `-incoming`), its `none` calls (Terms versions, the consent hint, a hidden accessible name), Edit FPC's title and the decoded non-address value as new sites, the 29 routed non-page modules and `common-about` as no surface, and the change-map arcs over § Captures' (the tables now follow). `journal-recipient` was never needed: the element carries `journal-detail-recipient`.
+- **A gap the first run hid.** `AuthwitCard` renders `caller`, `contract`, `to` and `consumer` as plain members, outside the pattern list, so the one live branch (a granted call) had no site. Adding the four names finds exactly AuthwitCard's five and nothing else; three are pinned unreachable beside the two the first run found. A note's `entry.value` stays a hand entry.
+- **Two row testids wrapped their label.** `execute-op-transfer-sender` and `execute-op-decoded-param` sit on rows that also hold "From:" or the parameter name, so the sweep would judge the label once labels carry roles; the values take `-address` / `-value` testids of their own. Edit FPC's bare `setting-title` matched the FPC rows under the popup: scoped to `edit-fpc-header-row`.
