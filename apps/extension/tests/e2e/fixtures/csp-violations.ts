@@ -22,7 +22,8 @@ export function cspViolationFailure(stored: unknown): string | undefined {
 	return `${stored.length} CSP violation(s) recorded in this launch:\n${stored.map((entry) => `  ${JSON.stringify(entry)}`).join("\n")}`
 }
 
-/** Fails when the recorder holds a violation, or cannot be read within the budget. */
+/** Fails on a recorded violation, a missing record, a flush the background did not confirm, or a
+ *  read past the budget. */
 export async function assertNoCspViolations(read: () => Promise<unknown>): Promise<void> {
 	const failure = cspViolationFailure(await withBudget(read(), READ_BUDGET_MS))
 	if (failure) throw new Error(failure)

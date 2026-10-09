@@ -148,7 +148,8 @@ export function recordCspViolationsInBackground(): void {
 	})
 }
 
-/** For each document entry, as its first statement, for the same reason as the background's. */
+/** For each document entry, as its first statement: a violation raised while the imports evaluated
+ *  is dispatched as a later task, so it still reaches the listener added here. */
 export function recordCspViolationsInPage(): void {
 	installPageRecorder({ scope: globalThis, context: location.pathname, send: (message) => chrome.runtime.sendMessage(message) })
 }

@@ -33,7 +33,7 @@ Vite emits next to it), and the prover's loader is replaced by a shim that fetch
 `Function()`. The one upstream package that built a function from a string with no fallback,
 `function-bind`, is replaced by a stub for that reason
 (`apps/extension/src/shims/function-bind-stub.cjs:1-26`); zod's compiler is switched off before
-any schema is built (`apps/extension/src/utils/zod-jitless.ts:11-13`), and the others that try
+any schema is built (`apps/extension/src/utils/zod-jitless.ts:12-14`), and the others that try
 (msgpackr, get-intrinsic) catch the refusal and fall back. But `'wasm-unsafe-eval'` permits
 compiling WASM bytes from any source and `connect-src` admits any HTTPS host, so the policy does not
 by itself prove where the bytes came from; the loaders above do.

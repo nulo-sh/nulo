@@ -231,7 +231,7 @@ Sources by directive:
 **Violation recorder** (e2e builds only), following the existing `src/e2e/*-gate.ts` pattern:
 
 - `src/e2e/csp-report.ts`, armed by `VITE_NULO_E2E_CSP_REPORT=1`. It is imported first in every extension entry: the service worker, the offscreen document, and the popup, onboarding and setup pages. Firefox's background page is the worker entry.
-- It listens for `securitypolicyviolation`. For each event it records `{ context, directive, blockedOrigin }`, with the blocked URI reduced to its origin by `scrubUrls`.
+- It listens for `securitypolicyviolation`. For each event it records `{ context, directive, blocked, source }`: the blocked URI reduced to its origin by `scrubUrls` (or the browser's keyword, `inline` or `eval`), and the source file, scrubbed the same way, with its line (D-23j).
 - It writes to `chrome.storage.session` under `nulo:e2e:csp-violations`. The offscreen document has no `chrome.storage`, so it forwards over its existing runtime channel to the worker.
 - Unarmed builds drop it by dead-code elimination.
 - `_build-extension.yml` refuses the flag in a release environment and greps release bundles for the marker, like the other e2e stamps.
@@ -317,7 +317,7 @@ The implementer rebases each arc on whatever has landed on `dev` and re-runs tha
 
 **CSP (#23).**
 
-- The floor refuses remote stylesheets, fonts, frames, objects, media and non-HTTP connection schemes in every extension context.
+- The floor refuses remote stylesheets, fonts, frames, objects and media, and every connection but `'self'`, `blob:`, `http:` and `https:`, in every extension context. Inline styles stay allowed (D-23h); `blob:` reaches no network (D-23k).
 - `connect-src https:` stays broad because a person may save any HTTPS node URL. It is containment, not exfiltration control: after a script injection, `https:` remains a channel. The strict `script-src` is the defence there.
 - A widened `style-src`, if needed, uses hashes before `'unsafe-inline'`.
 - The recorder exists only in e2e builds, and a release-build guard refuses it.
@@ -583,6 +583,8 @@ Per-directive gate:
 | D-23g | Who writes the record (implementation, Phase 6) | The background alone; every document forwards over `runtime.sendMessage` | Pages writing `storage.session` themselves (the plan's text): several writers' read-modify-write appends on one key race and lose entries. |
 | D-23h | `style-src` sources (implementation, Phase 7) | `'self' 'unsafe-inline'`: CodeMirror's `style-mod` writes a generated `<style>` element in the logs and JSON viewers, recorded on both browsers | The Presto banner's hash alone (tried first): CodeMirror's text is generated and rewritten as themes mount, so no hash names it, and any hash switches `'unsafe-inline'` off. A static `EditorView.cspNonce`: a nonce shipped in the bundle admits any injected `<style>` that copies it. Mounting the editors in a shadow root, where `style-mod` uses `adoptedStyleSheets`: changes the viewers' markup and styling, a UI change. |
 | D-23i | Checking a launch that reloads the extension (implementation, Phase 7) | `ExtensionContext.checkCspViolations()` before the reload; the close after it only closes | The check at close (phase 6): on Firefox the in-place reload's boot took the migration retry token while the check held the browser open, and the close killed that run midway. |
+| D-23j | The recorded entry's shape (implementation, Phase 6) | `{ context, directive, blocked, source }` | `{ context, directive, blockedOrigin }` (the plan's text): an inline or `eval` violation has no origin, only the browser's keyword, and the scrubbed source file and line are what names the code to fix or hash. |
+| D-23k | `blob:` in `connect-src` (implementation, Phase 7) | Added on Firefox's recorded violation: it checks `downloads.download` of a blob URL against `connect-src`, and every export downloads one | Leave it out (the plan's source list): every Firefox export and backup download broke. A blob URL names data already in memory, so the source opens no network destination. |
 | D-ORD | Arc order (orchestrator, 2026-10-08) | Arc 3 first as layer 1 on `worktree-hardening-2`, then Arc 1 (layer 2, a new branch once PR #48 lands), then Arc 2 (layer 3) | The planned order 1-2-3: Arc 1 must wait for PR #48, and Arc 2 overlaps files PR #52 is changing, while Arc 3 touches neither. |
 | D-23d | IPv6 loopback | Probe; fall back to `http:` and ask (round 1) | Ship `http://[::1]:*` unprobed: the CSP host grammar has no IPv6 literal, so a saved endpoint could silently break. |
 
@@ -655,6 +657,30 @@ Per-decision views from round 1: both judged A stronger for D-16a, b, e, f and g
 **Resumed, round 3: approve.** No new or unresolved material finding.
 
 Confirmed sound by this pass: the prescan move; the shallow schema copy (the patch assigns top-level entries only); the deleted shape checks are covered by the schemas; compensation cannot hit a successor (both creation and restore allocate through the fenced allocator); registry matching confines persisted-journal restores, and no legitimate tombstone writer needs a mismatched identity; worker capture is feasible per the CSP3 reporting algorithm, pending the probes; a synchronous first import keeps listener registration; every named test file exists.
+
+### Arc 3 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11e54-381a-7dd2-a1ba-a82a128de7e7`)
+
+**Verdict: findings** (four). No release leakage, no externally driven recorder, no directive breakage or unjustified widening, no unrecorded drift found. Fixed in `test(e2e): surface a lost csp record write, …`.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C1 | Medium | `legal-acceptance.test.ts` (two sites) and `network/backup-restore-sw-restart.test.ts` (two) swallow `ctx.close()`, so a recorded violation in those launches passes | **Accepted.** Verified; those four were the only swallowed context closes. Each now propagates, with its profile cleanup in a nested `finally`. |
+| C2 | Medium | A failed append leaves the list unchanged and the flush still answers `true`; a rejected flush is ignored | **Accepted.** The background latches the first lost write and the flush answers it; the reader requires the flush's `true` once the list exists. Every other background `onMessage` listener returns without answering, so the answer is the recorder's. New unit test; it fails when the flush always answers `true`. |
+| C3 | Low | `migration.test.ts`'s `afterEach` and `import-dead-rpc.test.ts` skip profile cleanup when the close throws | **Accepted, wider.** Six sites skipped cleanup on a throwing close, two of them a file holding a test master key (`backup-roundtrip`, `network/account-balance-orphans`); each closes in a `try` whose `finally` cleans up. |
+| C4 | Low | The recorder header's sentence defending the single flag spends context on a past choice | **Accepted.** Deleted. |
+
+### Arc 3 implementation — Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict: approve with low-severity follow-ups.** Reviewed through `ac540a9` (Codex round 1's fixes included). Confirmed clean: no path to the recorder from a page, a content script or another extension (`onMessageExternal` is never used, a content script's `sender.url` is its page, `storage.session` keeps trusted-context access); no directive breaks an uncovered path (workers fall back to `script-src`, the Firefox PXE frame is an extension URL, no WebSocket, no `data:` fetch); the flush's answer can only come from the recorder.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| O1 | Low | A close that throws in a `finally` (a read past the budget, an unconfirmed flush) replaces the test's own error | **Accepted as documented.** A per-site guard at every close is not proportionate; `tests/e2e/README.md` § CSP violations states it and the remedy (rerun with `NULO_E2E_CSP_REPORT` unset). |
+| O2 | Low | The release grep names only the background's key, so a page recorder shipped alone would pass | **Accepted.** `_build-extension.yml` greps `nulo:e2e:csp-`; neither unarmed dist contains it. |
+| O3 | Low | The zod seed's ordering is proven on the armed build only, and its comment says it lands in a chunk of its own | **Accepted, verified.** On unarmed Chrome and Firefox builds the seed is its own chunk and evaluates before zod's `$ZodObject` code in the background, popup, onboarding and offscreen entries (static ESM order; setup loads no zod statically). The comment now states the invariant and why. |
+| O4 | Low | Plan drift: the Security bullet still says "non-HTTP connection schemes" are refused, and the record shape changed | **Accepted.** Bullet and Architecture text corrected; D-23j (record shape) and D-23k (`blob:`) added. |
+| O5 | Low | Comments: the seed's "imports nothing / every copy of zod", the page recorder's borrowed reason, the check's incomplete failure list, agent.sh's "stamp", the `http:` guard unnamed, a restating sentence in `manifest.test.ts` | **Accepted.** Each rewritten; the `http:` comment names `rpcTransportVerdict`. |
+| — | Note | `https:` is redundant next to `http:` (an `http:` source also matches https URLs) | **Kept** for legibility; same reach. |
 
 ## Delivery
 
