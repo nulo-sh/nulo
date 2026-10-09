@@ -121,6 +121,9 @@
 	--txt-support: rgba(245, 240, 230, 54%);
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(0, 0, 0, 90%);
+	--txt-warning: var(--yellow);
+	--txt-danger: var(--red);
+	--txt-success: var(--green);
 
 	--white: #fff;
 	--black: #000;
@@ -179,6 +182,10 @@
 	--txt-support: rgba(0, 0, 0, 56%);
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(255, 255, 255, 90%);
+	/* The status colours are too light for text on a light page; these are their AA text shades. */
+	--txt-warning: #7f6200;
+	--txt-danger: #b3261e;
+	--txt-success: #11733d;
 
 	--white: #fff;
 	--black: #000;

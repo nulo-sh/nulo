@@ -107,7 +107,13 @@ describe("composite/TransactionTerminalCard", () => {
 				.classes()
 				.some((c) => c.includes("subtitle_green")),
 		).toBe(true)
-		expect(SOURCE).toMatch(/\.subtitle_green \{\s*color: var\(--green\);/)
+		expect(SOURCE).toMatch(/\.subtitle_green \{\s*color: var\(--txt-success\);/)
+	})
+
+	test("amber, red and green subtitles read the status text tokens", () => {
+		expect(SOURCE).toMatch(/\.subtitle_amber \{\s*color: var\(--txt-warning\);/)
+		expect(SOURCE).toMatch(/\.subtitle_red \{\s*color: var\(--txt-danger\);/)
+		expect(SOURCE).toMatch(/\.subtitle_green \{\s*color: var\(--txt-success\);/)
 	})
 
 	test("renders originLabel chip when supplied (dApp terminal)", () => {

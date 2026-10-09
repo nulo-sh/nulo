@@ -24,3 +24,10 @@ Commands as plan.md § Implementation phases defines them (smoke runs build firs
 - Red: the two 3:1 rows for `--nulo-track` and the bar's source-rule test, before the token existed; the network red is above.
 - `--nulo-track` sits beside the brand tokens it belongs to, in `:root` (dark, `#68625a`) and `[theme="light"]` (`#8f8a82`); `tokens.ts` regenerated, `utilities.css` unchanged; `base.css.test.ts` re-pinned in the same commit. Ratios on the page from `contrast()`: 3.30 dark, 3.15 light (the plan's figures).
 - Green: design tests (drift, parity, hash, unthemed vs dark parity); network `connect-one-window.test.ts` on Chrome and Firefox at retry 0, 1 of 1 each; fast layers.
+
+## Phase 2.4
+
+- The green "Sent" story was added before any colour change, so its before shot is today's green.
+- Red: twelve rows in the new status block of `theme-contrast.test.ts` (nine light AA pairs, three dark aliases) and two source-rule tests in `TransactionTerminalCard.test.ts`.
+- Light ratios from `contrast()`, matching options.md: amber 5.28 / 5.00 / 4.57, red 6.00 / 5.68 / 5.20, green 5.44 / 5.15 / 4.71 on the page, surface-low and surface-high.
+- Green: design and unit tests; fast layers; `build-storybook`. Storybook shots before and after on Chrome and Firefox: every dark story and the gray story are byte-identical under `cmp`; only the light amber, red and green lines changed.

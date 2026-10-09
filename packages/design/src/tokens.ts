@@ -31,6 +31,9 @@ export const text = {
 	support: "--txt-support",
 	white: "--txt-white",
 	inverse: "--txt-inverse",
+	warning: "--txt-warning",
+	danger: "--txt-danger",
+	success: "--txt-success",
 } as const
 
 export const borders = {

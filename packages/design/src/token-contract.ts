@@ -38,6 +38,9 @@ export const tokenGroups = {
 		support: "--txt-support",
 		white: "--txt-white",
 		inverse: "--txt-inverse",
+		warning: "--txt-warning",
+		danger: "--txt-danger",
+		success: "--txt-success",
 	},
 	borders: {
 		default: "--border",

@@ -349,7 +349,7 @@ Skip this phase if call 5 is "as is".
 
 **Validation gate.** Commands: the fast layers; the network run of `connect-one-window.test.ts` on chrome. Pass criteria: every command exits 0, including `tokens.drift.test.ts`, `tokens.parity.test.ts`, `base.css.test.ts` and the "dark palette, unthemed vs explicit" tests. Layers: lint, typecheck, unit, network e2e.
 
-#### Phase 2.4: the status colours in the light theme (call 6)
+#### Phase 2.4: the status colours in the light theme (call 6) ✓
 
 Skip this phase if call 6 is "as is".
 

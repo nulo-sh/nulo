@@ -187,3 +187,18 @@ describe("theme contrast — home links, focus rings and the step bar (required)
 		}
 	}
 })
+
+// Status text: light needs its own darker values; dark keeps the status colours it always drew.
+describe("theme contrast — status text (required)", () => {
+	const STATUS = { "--txt-warning": "--yellow", "--txt-danger": "--red", "--txt-success": "--green" }
+	for (const [fg, status] of Object.entries(STATUS)) {
+		for (const bg of ["--app-bg", "--nulo-surface-low", "--nulo-surface-high"]) {
+			test(`light: ${fg} on ${bg} >= ${AA_TEXT}:1`, () => {
+				expect(contrast(fg, bg, "light")).toBeGreaterThanOrEqual(AA_TEXT)
+			})
+		}
+		test(`dark: ${fg} is ${status}`, () => {
+			expect(resolveColor(fg, themeMap("dark"))).toEqual(resolveColor(status, themeMap("dark")))
+		})
+	}
+})

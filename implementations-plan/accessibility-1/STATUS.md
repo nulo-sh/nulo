@@ -10,3 +10,4 @@
 - 2026-10-09: phase 2.1 gate pass: lint, typecheck:all, test, test:all; smoke home-links.test.ts on chrome and firefox (retry 0).
 - 2026-10-09: phase 2.2 gate pass: lint, typecheck:all, test, test:all, build-storybook; smoke tooltips-glossary.test.ts onboarding-tab.test.ts on chrome and firefox (retry 0).
 - 2026-10-09: phase 2.3 gate pass: lint, typecheck:all, test, test:all; network connect-one-window.test.ts on chrome and firefox (retry 0).
+- 2026-10-09: phase 2.4 gate pass: lint, typecheck:all, test, test:all, build-storybook; dark story shots cmp-identical before and after on chrome and firefox.
