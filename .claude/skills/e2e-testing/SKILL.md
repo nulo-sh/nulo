@@ -71,6 +71,10 @@ falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you alr
   Rerun before triage. Shard for wall-clock (`--shard=N/M` across agents), never overlap.
 - **Offscreen sender shapes (Chrome, verified by probe)**: SW→offscreen `sender = { id, url: <getURL(manifest.background.service_worker)> }` (no `origin`, no `tab`); offscreen→SW `sender = { id, url: <getURL("src/offscreen/index.html")>, origin }`. A Chrome offscreen document has NO `chrome.runtime.getManifest` (fetch `manifest.json` by URL instead). When a sender predicate changes on either listener, probe the real shapes with a 30-second puppeteer script (pattern: `apps/extension/.playwright-mcp/sender-probe.mjs`) BEFORE the smoke run — the suite only shows the symptom (PXE timeouts, a profile reset stuck on its tombstone) three retries later. `MessageType` on the wire is numeric (`Event=1`, `Request=2`, `Response=3`).
 - **Sharding smoke on one host**: both `global-setup-smoke.ts` hooks `pkill -f "chrome.*--load-extension=<EXTENSION_PATH>"`, a PREFIX match — two `test:e2e --shard` halves need two dist dirs whose paths do not prefix each other (`dist/chrome` + a copy at `dist/smoke2`, NOT `dist/chrome-2`, which the first half's teardown kills mid-run with `ConnectionClosedError` at `openPopup`), each half pointed at its own via `EXTENSION_PATH`, and the armed-build env + `NULO_E2E_MIGRATION_FIXTURE=1` on both.
+- **Smoke builds nothing.** It loads `dist/<browser>`, or `EXTENSION_PATH`, which wins, and an
+  `e2e:agent` run leaves a network build in that directory: before a smoke red or green that must
+  mean the current source, `bun run build:<browser>` and run under `env -u EXTENSION_PATH`
+  (`implementations-plan/archive/accessibility-1/plan.md`, § Implementation phases).
 - **`bun run dev` rewrites `dist/chrome` to load from the dev server** (`localhost:8088`), so a
   later `test:e2e` loads a wallet whose service worker cannot boot and times out in every file.
   Rebuild armed (§ Build-armed tests) before the next run
@@ -375,6 +379,14 @@ assertion; drive the rest of the flow with the ordinary helpers.
 - **A held key is a second `keyboard.down` with `repeat: true`.** Enter in a field clicks the form's
   default button, and no `submit` fires once that button's handler disables it, so count the
   button's activations, never `submit` events (`implementations-plan/archive/keyboard-guards/plan.md#held-keys`).
+
+- **Focus and the accessibility tree.** Chrome starts the first Tab after a click at the clicked
+  spot: reach a control with `tabTo` and assert the next stop, never a walk from the page top. Read
+  a ring with `focusRing`, which waits for the control's transitions (a shot taken sooner shows the
+  ring mid-fade); on Firefox call `prepareKeys` first, since an unfocused page matches no
+  `:focus-visible`. Prove `aria-hidden` or a live region from CDP's `Accessibility.getFullAXTree`
+  with `DOM.resolveNode` (Chrome): `page.accessibility.snapshot()` gives no ignored flag and no
+  element (`implementations-plan/archive/accessibility-1/lessons/`).
 
 ### Product couplings the harness respects
 
