@@ -1,7 +1,7 @@
 ---
 plan: code-followups-2
 tier: mid
-status: planned (awaiting approval)
+status: approved; arc 1 in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -1234,6 +1234,8 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D21 | 10: map `ScopeViolationError` to `scope_refused` in `markFailedUnlessCancelled`, not in the shared `failureKind` (Opus round 1) | `failureKind` also labels first-party Send records (`transfer-executor.ts`), which must never read "The app asked for more than you allowed" | Changing `failureKind` and accepting the Send label |
 | D22 | 10: log the refusal at `debug` in `logOperationOutcome` too (Opus round 1) | Without it every refused call still writes an `error` line; a refusal a dApp can repeat belongs at `debug` (logging policy), as the Terms refusal already does | Leaving the `error` line (the plan's first claim was wrong) |
 | D23 | Build 186's late-listener bullet, rewrite the rest (final Codex pass) | A listener added to a disconnected client after dispose is invisible; the same record's cleanup rule covers it, and the pinned-drift test flips with a mounted control | Parking the whole entry as owner UI drift (only its other three bullets are visible) |
+| D-orch-1 | No stack: each arc opens its own PR against `dev` (`gh pr create --base dev`), titled per § Delivery; Arcs 2 and 3 rebase onto `dev` after the arc before them lands; the close-out is a fourth PR after the last arc merges (orchestrator, 2026-10-09) | The arcs run in parallel worktrees and merge in order, so a stack would only chain their CI | `gh stack` (§ Delivery as first written) |
+| D-orch-2 | No edits to `follow-ups.md`, ever, the close-out included: each PR body lists the entries it closes by § Close-out number with their governance ledger ids (`Closes #n` where a receipt maps one to an issue), and the part left of a partly built entry goes into its arc's section of the Outcome draft (orchestrator, 2026-10-09) | Lane governance-1 is retiring the file into GitHub issues and recorded dispositions | § Close-out edits to follow-ups.md as first written |
 
 ## Audit verdicts
 
@@ -1367,6 +1369,9 @@ exact."*
 
 ### Close-out edits to follow-ups.md
 
+**Superseded by D-orch-2:** nothing below is applied to `follow-ups.md`. It is the record of what
+each entry's disposition is; the PR bodies and § Outcome draft carry it instead.
+
 Numbers are positions at `f557e20`. Match by text, since other lanes edit the file.
 
 - **Delete:**
@@ -1382,6 +1387,9 @@ Numbers are positions at `f557e20`. Match by text, since other lanes edit the fi
   are not rewritten, so the shared file's diff stays small.
 
 ## Delivery
+
+**Superseded in part by D-orch-1 (no stack: one PR per arc against `dev`) and D-orch-2 (no
+`follow-ups.md` edits; entries closed are listed in each PR body).** The titles below still hold.
 
 One `gh stack`, one PR per arc. PRs open only after each arc's loop and the cross-arc pass converge.
 No PR carries `Closes #n`: this lane closes follow-ups entries, not issues.
@@ -1418,6 +1426,14 @@ No PR carries `Closes #n`: this lane closes follow-ups entries, not issues.
 6. Watch with `gh pr checks <n> --watch`.
 
 Never merge; never `--admin`.
+
+## Outcome draft
+
+Filled per arc as it lands; the close-out turns it into the `## Outcome` block (D-orch-2).
+
+### Arc 1
+
+- Base moved: `origin/dev` at `79bbd7b` merged in (PR #58 has merged, so Phase 1.4 converts all nine calls and entry 132 closes whole).
 
 ## Seeds
 
