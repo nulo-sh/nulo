@@ -82,13 +82,10 @@ export type MethodRouting =
  * `assertKnownMethod`, BEFORE capability/scope enforcement and before any
  * handler destructuring.
  *
- * Calibration is tolerance-exact (pinned by tests): required-LEADING arity only
- * where no working absent-arg path exists today; optional trailing args stay
- * optional; extra args stay ignored; no value-type requirements on args the
- * code `String()`-coerces. Methods whose first-arg validation is OWNED by
- * their scope checker (sendTx/simulateTx/profileTx/executeUtility — pinned
- * error strings) or that read no args at all OMIT the field: absence = no arg
- * validation, exactly today's behavior.
+ * Arity only: required-LEADING positions, optional trailing args stay optional,
+ * extra args stay ignored. Every value shape is the schema parse's
+ * (`wallet-schema-args.ts`), which runs after the capability check; a method
+ * without this field gets no check before it.
  */
 export type ArgGuard = (args: readonly unknown[]) => boolean
 
@@ -100,7 +97,7 @@ export interface MethodDescriptor {
 	readonly routing: MethodRouting
 	/** Per-origin scope gate. Omitted = no scope dimension (enforceScope no-ops). */
 	readonly scopeCheck?: ScopeCheck
-	/** Arg-shape guard (see {@link ArgGuard}). Omitted = no arg validation (historical tolerance). */
+	/** Arity guard (see {@link ArgGuard}). Omitted = no check before the capability check. */
 	readonly argSchema?: ArgGuard
 	/** Refused as a batch leg before any leg runs. Named for the refusal, not for popup routing, so
 	 *  routing a new method through a popup never widens the set by itself. */
@@ -115,28 +112,6 @@ export interface MethodDescriptor {
 // Each is a pure pass/fail PREDICATE over the raw positional args; the
 // dispatcher throws the "invalid arguments" rejection when one returns false.
 // Named (not inline) so the registry reads as a table of guarded methods.
-
-/** requestCapabilities(manifest?): the handler optional-chains the manifest
- *  (`manifest?.capabilities ?? []`) then `.filter`s the list, reading `cap.type`
- *  on each entry. The guard mirrors that tolerance for OBJECT manifests and
- *  rejects only inputs the handler cannot process:
- *   - A nullish manifest is the valid "no capabilities requested" call. It is
- *     `== null` (not `=== undefined`) because the dApp channel JSON-serializes,
- *     so a caller's `requestCapabilities(undefined)` arrives as `null`.
- *   - A non-object manifest (array / string / number) is malformed → reject.
- *   - `capabilities` nullish mirrors the handler's `?? []` (empty) → pass.
- *   - `capabilities` non-array (no `.filter`) or with a NULLISH entry
- *     (`null.type` throws) is a dApp-triggerable crash → calibrated reject.
- *     Non-nullish non-object entries flow exactly as the handler tolerates them
- *     (`.type` → undefined → ignored), so this stays a crash guard, not a validator. */
-export function argsRequestCapabilities(args: readonly unknown[]): boolean {
-	const manifest = args[0]
-	if (manifest == null) return true
-	if (!isRecord(manifest)) return false
-	const caps = manifest.capabilities
-	if (caps == null) return true
-	return Array.isArray(caps) && caps.every((cap) => cap != null)
-}
 
 /** batch(legs): handleBatch iterates legs and re-dispatches `leg.name(leg.args)`;
  *  each leg is then validated by its OWN method's guard on re-entry. */
@@ -181,7 +156,6 @@ const METHOD_REGISTRY_SOURCE = {
 		capability: null,
 		exemptReason: "capability-negotiation meta-protocol — the method by which grants are obtained",
 		routing: { via: "handler" },
-		argSchema: argsRequestCapabilities,
 	},
 	batch: {
 		capability: null,

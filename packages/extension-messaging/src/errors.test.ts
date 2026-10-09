@@ -10,6 +10,7 @@ import {
 	ContractNotRegisteredError,
 	DuplicateInitializationError,
 	InvalidPasswordError,
+	InvalidWalletArgumentsError,
 	isClientDisconnectRejection,
 	isReceiverGoneRejection,
 	RECEIVER_GONE_MESSAGE,
@@ -187,6 +188,13 @@ describe("every WalletError subclass: identity and wire shape", () => {
 			make: () => UnsupportedMethodError.forMethod("m"),
 			name: "UnsupportedMethodError",
 			code: "UNSUPPORTED_METHOD",
+			rebuild: pass,
+		},
+		{
+			ctor: InvalidWalletArgumentsError,
+			make: () => InvalidWalletArgumentsError.forMethod("sendTx"),
+			name: "InvalidWalletArgumentsError",
+			code: "INVALID_PARAMS",
 			rebuild: pass,
 		},
 		{
