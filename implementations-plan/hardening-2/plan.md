@@ -443,7 +443,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - Each new refusal test fails on the base copy of `migrator.ts`.
 - Layers: unit, smoke e2e (the 9001 fixture's crash-resume).
 
-#### Phase 4 — #19: tombstones keep their reservation and their identity
+#### Phase 4 — #19: tombstones keep their reservation and their identity ✓
 
 1. Make `TombstoneRepository` decode a row as valid only when its `profileId` equals its key's id: `get`, `validPayloads` and `corruptIds`.
 2. Change `clearIfSame` to return `Promise<boolean>`, as in Architecture.
