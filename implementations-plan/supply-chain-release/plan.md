@@ -924,6 +924,10 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 - [Low] `release.yml`'s `resolve` step still said release-please tags on a push and told the operator to check release-please, which arc 1 turned off. Accepted: the comment and both errors name auto-unstick; `resolve-tag.ts`'s copy of the message follows.
 - Its "looks fine": signing-job isolation, the audit mode reaching the gate, `scripts/` lint and typecheck covering arc 4, the stable, rc, nightly and store paths; `.github/actions/setup-aztec/cli/package.json` selecting `enforce` matches the plan's broad filter.
 
+### Final cross-arc pass, round 2 (same session)
+
+**Verdict:** `approve`, no findings, on `c40b4b2`. The cross-arc loop converged in two rounds.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so there is no `/code-review` pass.
