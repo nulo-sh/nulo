@@ -5,7 +5,7 @@
  * and its warning are read as rendered.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { ref } from "vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -25,6 +25,11 @@ const getDappSession = vi.fn(async (id: string) => {
 const setTrustedVerification = vi.fn(async (id: string, trusted: boolean) => {
 	callLog.push(`setTrustedVerification:${id}:${trusted}`)
 })
+let refusal: () => Promise<string> = async () => "revoked"
+const refuseVerification = vi.fn(async (target: { origin: string }) => {
+	callLog.push(`refuseVerification:${target.origin}`)
+	return refusal()
+})
 
 /** The store's session flag, read through a counting getter so a watcher left running shows up. */
 const sessionChecked = ref(true)
@@ -37,7 +42,7 @@ vi.mock("vue-router", async (importOriginal) => {
 vi.mock("@aztec-labs/wallet-sdk/crypto", () => ({ hashToEmoji: (hash: string) => `grid(${hash})` }))
 vi.mock("@/wallet/services/dapp-session/client", () => ({
 	DappSessionServiceClient: vi.fn(function () {
-		return { connect: () => {}, disconnect: () => {}, getDappSession, setTrustedVerification }
+		return { connect: () => {}, disconnect: () => {}, getDappSession, setTrustedVerification, refuseVerification }
 	}),
 }))
 vi.mock("@/wallet/services/account/client", () => ({
@@ -121,6 +126,7 @@ beforeEach(() => {
 	sessionChecked.value = true
 	sessionCheckedReads = 0
 	currentWindow = { id: 7 }
+	refusal = async () => "revoked"
 	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
 	;(globalThis as any).chrome = { windows: { getCurrent, remove } }
 })
@@ -186,13 +192,88 @@ describe("windows/verify — closing", () => {
 		expect(remove).not.toHaveBeenCalled()
 	})
 
-	test("OK with Always trust records the trust before the window closes", async () => {
+	test("They match with the skip switch on records the trust before the window closes", async () => {
 		const w = mountVerify()
 		await flushPromises()
 		await w.get('[data-testid="toggle-stub"]').trigger("click")
 		await w.get('[data-testid="verify-confirm-btn"]').trigger("click")
 		await flushPromises()
 		expect(callLog).toEqual(["getDappSession:row-1", "setTrustedVerification:row-1:true", "getCurrent", "remove:7"])
+	})
+})
+
+describe("windows/verify — They don't match", () => {
+	const ERROR = '[data-testid="verify-mismatch-error"]'
+	const press = async (w: ReturnType<typeof mountVerify>, testid: string) => {
+		await w.get(`[data-testid="${testid}"]`).trigger("click")
+		await flushPromises()
+	}
+
+	test("refuses the app the wallet's own row names, then closes the window, and never records trust", async () => {
+		const w = mountVerify()
+		await flushPromises()
+		await w.get('[data-testid="toggle-stub"]').trigger("click")
+		await press(w, "verify-mismatch-btn")
+		expect(refuseVerification.mock.calls).toEqual([[{ origin: "https://dapp.example", chainId: "0", profileId: "p1" }]])
+		expect(callLog).toEqual(["getDappSession:row-1", "refuseVerification:https://dapp.example", "getCurrent", "remove:7"])
+		expect(setTrustedVerification).not.toHaveBeenCalled()
+	})
+
+	test("an app already gone closes the window", async () => {
+		refusal = async () => "absent"
+		const w = mountVerify()
+		await flushPromises()
+		await press(w, "verify-mismatch-btn")
+		expect(remove.mock.calls).toEqual([[7]])
+		expect(w.find(ERROR).exists()).toBe(false)
+	})
+
+	test.each([
+		[
+			"a row it could not delete",
+			async () => "unavailable",
+			"The connection ended, but this app could not be removed. Remove it in Settings, Connected apps.",
+		],
+		[
+			"a failed refusal",
+			async () => {
+				throw new Error("port gone")
+			},
+			"Couldn't disconnect this app. Disconnect it in Settings, Connected apps.",
+		],
+	])("%s keeps the window open with its own line, and both controls answer again", async (_, outcome, line) => {
+		refusal = outcome
+		const w = mountVerify()
+		await flushPromises()
+		await press(w, "verify-mismatch-btn")
+		expect(remove).not.toHaveBeenCalled()
+		expect(w.get(ERROR).text()).toBe(line)
+		expect(w.get(ERROR).attributes("role")).toBe("alert")
+		for (const id of ["verify-mismatch-btn", "verify-confirm-btn"]) {
+			expect(w.get(`[data-testid="${id}"]`).attributes("disabled")).toBeUndefined()
+		}
+	})
+
+	test("a press of either control while an answer runs, or once the window is closing, runs nothing", async () => {
+		let settle: (value: string) => void = () => {}
+		refusal = () => new Promise((resolve) => (settle = resolve))
+		const w = mountVerify()
+		await flushPromises()
+		await w.get('[data-testid="toggle-stub"]').trigger("click")
+		// Emitted on the component, so what refuses is the handlers' latch, not the disabled attribute.
+		const emitClick = async (testid: string) => {
+			;(w.findComponent(`[data-testid="${testid}"]`) as VueWrapper).vm.$emit("click")
+			await flushPromises()
+		}
+		await emitClick("verify-mismatch-btn")
+		await emitClick("verify-mismatch-btn")
+		await emitClick("verify-confirm-btn")
+		settle("revoked")
+		await flushPromises()
+		await emitClick("verify-confirm-btn")
+		expect(refuseVerification).toHaveBeenCalledTimes(1)
+		expect(setTrustedVerification).not.toHaveBeenCalled()
+		expect(remove.mock.calls).toEqual([[7]])
 	})
 })
 

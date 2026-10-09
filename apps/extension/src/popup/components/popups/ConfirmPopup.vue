@@ -27,6 +27,7 @@ const props = defineProps({
 	show: Boolean,
 })
 
+/** `confirm_color: "red"` picks the pre-title only; the confirm button's look is `confirm_variant`. */
 const isDestructive = computed(() => cacheStore.confirm.confirm_color === "red")
 /** Informational use: one button, no Cancel, no callback required; cleared with the rest on close. */
 const isSingle = computed(() => cacheStore.confirm.single === true)
@@ -147,6 +148,7 @@ watch(
 						@click="handleConfirm"
 						wide
 						:type="cacheStore.confirm.confirm_color"
+						:variant="cacheStore.confirm.confirm_variant"
 						:disabled="!isConfirmed"
 						size="medium"
 						data-testid="confirm-submit"

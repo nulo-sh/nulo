@@ -28,14 +28,13 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 ## Extension runtime
 
 - A popup-to-background call rejects after 60 s unless its client overrides `getRequestTimeoutMs`: one awaiting a proof fails while the send lands. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
-- `PopupManager` mounts every popup at start, never unmounting: setup waits for `show` or sits behind `v-if`. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts)
+- `PopupManager` mounts every popup at start, never unmounting: setup waits for `show` or sits behind `v-if`; a profile switch elsewhere updates open pages in place too: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, a rejection escapes, event-chained cleanup is fire-and-forget. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
 - EntityStorage's `getAll()` hides undecodable rows, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)
 - The local network's chain id is 0, so a truthiness guard on `chainId` skips every network e2e's chain: test `chainId === undefined`. [Evidence](archive/ux-owner-picks/plan.md#chain-zero)
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category, never the message. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
-- bb.js never closes its CRS cache (idb-keyval's `keyval-store`) once a page loads the CRS: deleting it blocks. [Evidence](archive/hd-delete-after-prove/plan.md#crs-cache)
 - A MAC binds only what it names, and a row's stored `id` moves with the row: anchor it on the storage key; on a MAC failure refuse, never self-heal. Likewise an address commits to the original class id, not `currentContractClassId`: check an artifact against the original. [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md)
 - A dropped port reconnects under a mounted page and replays nothing: reread on each later `onConnected`. [Evidence](archive/settings-by-task/plan.md#hub-reads)
 - Every `.vue`/`.ts`/`.js` under `pages/` is a route, and beats a same-path redirect (vite-plugin-pages 0.33.3). [Evidence](archive/settings-by-task/plan.md#route-moves)

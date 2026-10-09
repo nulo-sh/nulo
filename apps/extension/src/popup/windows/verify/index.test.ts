@@ -89,7 +89,7 @@ async function mountCheck(query: Record<string, string> = {}) {
 	return w
 }
 const header = (w: ReturnType<typeof mount>) => w.findComponent(IdentityStrip).text()
-const okButton = (w: ReturnType<typeof mount>) => w.get('[data-testid="verify-confirm-btn"]').element as HTMLButtonElement
+const button = (w: ReturnType<typeof mount>, testid: string) => w.get(`[data-testid="${testid}"]`).element as HTMLButtonElement
 
 beforeEach(() => {
 	sessionRow = newConnectionRow()
@@ -149,16 +149,24 @@ describe("windows/verify — the grid and the keyboard", () => {
 		expect(keyListeners).toEqual([])
 	})
 
-	test.each([
-		["a repeat", false, { repeat: true }],
-		["a composing", false, { isComposing: true }],
-		["an IME boundary", false, { keyCode: 229 }],
-		["a plain", true, {}],
-	] as const)("%s Enter on OK goes through: %s", async (_, goesThrough, init) => {
+	test.each(
+		["verify-mismatch-btn", "verify-confirm-btn"].flatMap((testid) =>
+			(
+				[
+					["a repeat", false, { repeat: true }],
+					["a composing", false, { isComposing: true }],
+					["an IME boundary", false, { keyCode: 229 }],
+					["a plain", true, {}],
+				] as const
+			).map(([kind, goesThrough, init]) => [kind, testid, goesThrough, init] as const),
+		),
+	)("%s Enter on %s goes through: %s", async (_, testid, goesThrough, init) => {
 		const w = await mountCheck()
-		const ok = okButton(w)
-		ok.focus()
-		expect(ok.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }))).toBe(goesThrough)
+		const control = button(w, testid)
+		control.focus()
+		expect(control.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }))).toBe(
+			goesThrough,
+		)
 	})
 })
 

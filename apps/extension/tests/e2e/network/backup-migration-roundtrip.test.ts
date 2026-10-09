@@ -36,7 +36,7 @@ import {
 	waitForFreshBalanceRow,
 	waitForTokenCardAmount,
 } from "../fixtures/helpers"
-import { accountChainId, exportPlainBackup, keepChainAccountState, sealPlainBackup } from "../helpers/backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "../helpers/backup-export"
 import { gotoPopupImport, importFullBackup, POPUP_IMPORT_SHELL, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -56,7 +56,7 @@ test.skipIf(!hasConfig || !HAS_FIXTURE)(
 	{ timeout: 900_000 },
 	async ({ tokenReadyExtension }) => {
 		// ── 1. Export a REAL backup from the funded wallet ────────────────
-		const exported = await exportPlainBackup(tokenReadyExtension)
+		const exported = await exportBackupContent(tokenReadyExtension)
 
 		// ── 2. Doctor it into a PRE-shape backup ──────────────────────────
 		// Don't pin exact version VALUES: this harness must keep working when a
