@@ -111,6 +111,11 @@ vi.mock("./repository", () => ({
 					if (floor.pending) rec.arrivalFloorPending = true
 					trust.set(trustKey(profileId, networkId, contract), rec)
 				},
+				// One call, as the real one: every row lands, or (on a rejection) none does.
+				commitAcceptance: async (row: IncomingTrustRecord, unhidden: IncomingTransferRecord[]) => {
+					trust.set(trustKey(row.profileId, row.networkId, row.contract), row)
+					for (const r of unhidden) records.set(r.id, r)
+				},
 				listTrust: async () => [...trust.values()],
 				getArrivalRow: async (p: string, n: string, a: string) => arrivals.get(`${p}|${n}|${a}`),
 				setArrivalRow: async (p: string, n: string, a: string, row: ArrivalRow) => {
@@ -757,6 +762,13 @@ describe("IncomingTransferService — trust transitions", () => {
 	test("setTrustAllow flips hidden records visible + emits onIncomingTransferAdded", async () => {
 		const token = makeTokenStub([tokenA])
 		const { service } = await bootService({ token })
+		trust.set(trustKey("p1", "n1", tokenA.contract), {
+			profileId: "p1",
+			networkId: "n1",
+			contract: tokenA.contract,
+			state: "pending",
+			updatedAt: 0,
+		})
 		seedNote({
 			siloedNullifier: "k",
 			profileId: "p1",
@@ -784,6 +796,13 @@ describe("IncomingTransferService — trust transitions", () => {
 	test("setTrustAllow with visibility=false flips records visible but does NOT emit", async () => {
 		const config = makeConfigStub(false)
 		const { service } = await bootService({ config, token: makeTokenStub([tokenA]) })
+		trust.set(trustKey("p1", "n1", tokenA.contract), {
+			profileId: "p1",
+			networkId: "n1",
+			contract: tokenA.contract,
+			state: "pending",
+			updatedAt: 0,
+		})
 		seedNote({
 			siloedNullifier: "k",
 			profileId: "p1",
@@ -2160,63 +2179,6 @@ describe("IncomingTransferService — deletion races and timestamp backfill", ()
 	// implementations-plan/archive/incoming-trust-state-machine-refactor/plan.md)
 	// prevents the race those reverts recovered from. Race-ordering pins for the new lock-based
 	// behavior live in the lock-races describe block below.
-
-	test("setTrustAllow skips per-record upsert when record was deleted mid-loop", async () => {
-		// Race: setTrustAllow snapshotted records via listByContract, but
-		// onTokenDeleted ran its delete-per-record path before our upsert
-		// could resurrect them. The per-iteration getRecord re-check must
-		// skip those rows so the activity feed stays empty.
-		const accountStub = makeAccountStub([{ profileId: "p1", chainId: 1, address: "0xa" }])
-		const tokenStub = makeTokenStub([tokenA])
-		const { service } = await bootService({ network: network(), account: accountStub, token: tokenStub })
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
-			profileId: "p1",
-			networkId: "n1",
-			contract: tokenA.contract,
-			state: "pending",
-			updatedAt: 0,
-		})
-		// Pre-seed a hidden record (the snapshot will see it; we drop it
-		// from the underlying Map BEFORE setTrustAllow's per-record loop
-		// runs, simulating a mid-flight delete).
-		seedNote({
-			siloedNullifier: "k_orphan",
-			profileId: "p1",
-			networkId: "n1",
-			accountAddress: "0xa",
-			contract: tokenA.contract,
-			tokenId: tokenA.id,
-			owner: "0xa",
-			amountRaw: "100",
-			noteHash: "0xnh",
-			txHash: "0xtx",
-			l2BlockNumber: 1,
-			txIndexInBlock: 0,
-			indexInTx: 0,
-			hidden: true,
-			discoveredAt: 0,
-		})
-
-		// Intercept listByContract to return the snapshot, then delete the
-		// underlying record. The per-record getRecord re-check should
-		// observe `undefined` and skip the upsert.
-		const realRepo = (service as never as { repo: { listByContract: (...args: unknown[]) => unknown } }).repo
-		const originalList = realRepo.listByContract.bind(realRepo) as (...args: unknown[]) => Promise<unknown[]>
-		realRepo.listByContract = vi.fn().mockImplementation(async (...args: unknown[]) => {
-			const snap = await originalList(...args)
-			records.delete("note:p1|n1|k_orphan")
-			return snap
-		})
-
-		const added = vi.fn()
-		service.onIncomingTransferAdded.add(added)
-
-		await service.setTrustAllow("p1", "n1", tokenA.contract)
-
-		// No Added emit; record stays deleted.
-		expect(added).not.toHaveBeenCalled()
-		expect(records.has("note:p1|n1|k_orphan")).toBe(false)
-	})
 
 	test("replayPendingPrompts skips a row whose trust was reset to unknown after the snapshot", async () => {
 		// Parallel case: token registration is still live, but the trust
@@ -5313,21 +5275,21 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		},
 	)
 
-	test("an Allow displaced in its un-hide loop leaves a successor Reject's block and the receipts hidden", async () => {
+	test("an Allow displaced in its record read leaves a successor Reject's block and the receipts hidden", async () => {
 		const f = await bootArrivals(100)
 		seedPending()
 		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
-		const unhide = holdCall(internals(f.service).repo, "getRecord", 1, "after")
+		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		vi.useFakeTimers()
 		try {
 			const call = allow(f)
 			await vi.advanceTimersByTimeAsync(0)
-			expect(unhide.held.reached).toBe(true)
+			expect(read.held.reached).toBe(true)
 
 			const successor = reject(f)
 			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
 			expect(await successor).toBe(true)
-			unhide.release()
+			read.release()
 
 			expect(await call).toBe(false)
 		} finally {
@@ -5337,50 +5299,141 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		expect(hiddenOf(receipts)).toEqual([true, true])
 	})
 
-	test("(BUG PIN) an Allow the watchdog displaced mid-un-hide leaves the contract trusted over receipts it never un-hid", async () => {
-		// The trust write lands before the loop and the displaced loop stops at its next un-hide. Only
-		// setTrustAllow writes `hidden: false`, and replay prompts only for `pending` rows, so the
-		// receipts after the stop stay hidden with no path back. Tracked separately for a repair.
+	test("an Allow the watchdog displaced writes nothing, and the next popup open prompts again", async () => {
 		const f = await bootArrivals(100)
 		seedPending()
 		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true }), receipt(3, 42, { hidden: true })]
-		const unhide = holdCall(internals(f.service).repo, "getRecord", 2, "after")
+		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		vi.useFakeTimers()
 		try {
 			const call = allow(f)
 			await vi.advanceTimersByTimeAsync(0)
-			expect(unhide.held.reached).toBe(true)
+			expect(read.held.reached).toBe(true)
 
 			await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
-			unhide.release()
+			read.release()
 
 			expect(await call).toBe(false)
 		} finally {
 			vi.useRealTimers()
 		}
-		expect(trust.get(key())?.state).toBe("trusted")
-		expect(hiddenOf(receipts)).toEqual([false, true, true])
+		expect(trust.get(key())).toMatchObject({ state: "pending" })
+		expect(trust.get(key())?.arrivalFloor).toBeUndefined()
+		expect(hiddenOf(receipts)).toEqual([true, true, true])
 		const prompts = vi.fn()
 		f.service.onIncomingTransferPending.add(prompts)
 		await f.service.replayPendingPrompts("p1", "n1", "0xa")
-		expect(prompts).not.toHaveBeenCalled()
+		expect(prompts).toHaveBeenCalledTimes(1)
 	})
 
-	test("a lock while an Allow un-hides still lands its floor and every un-hide", async () => {
+	test("a lock before an Allow's write refuses it and writes nothing", async () => {
 		const f = await bootArrivals(100)
 		seedPending()
 		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
-		const unhide = holdCall(internals(f.service).repo, "getRecord", 1, "after")
+		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
 		const call = allow(f)
 		await flushPromises()
-		expect(unhide.held.reached).toBe(true)
+		expect(read.held.reached).toBe(true)
 
 		f.profile.lock()
-		unhide.release()
+		read.release()
+
+		expect(await call).toBe(false)
+		expect(trust.get(key())).toMatchObject({ state: "pending" })
+		expect(hiddenOf(receipts)).toEqual([true, true])
+	})
+
+	test("a lock after an Allow's write keeps its floor and every un-hide", async () => {
+		const f = await bootArrivals(100)
+		seedPending()
+		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
+		const write = holdCall(internals(f.service).repo, "commitAcceptance", 1, "after")
+		const call = allow(f)
+		await flushPromises()
+		expect(write.held.reached).toBe(true)
+
+		f.profile.lock()
+		write.release()
 
 		expect(await call).toBe(true)
 		expect(trust.get(key())).toMatchObject({ state: "trusted", arrivalFloor: 100 })
 		expect(hiddenOf(receipts)).toEqual([false, false])
+	})
+
+	test("an accepted Allow commits the trusted row, its floor and every un-hide in one write", async () => {
+		const f = await bootArrivals(100)
+		seedPending()
+		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 141, { hidden: true, accountAddress: "0xb", owner: "0xb" })]
+		const repo = internals(f.service).repo as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
+		const commit = vi.spyOn(repo, "commitAcceptance")
+		const others = ["setTrust", "setArrivalFloor", "upsertRecord"].map((method) => vi.spyOn(repo, method))
+
+		expect(await allow(f)).toBe(true)
+
+		expect(commit).toHaveBeenCalledTimes(1)
+		expect(commit.mock.calls[0][0]).toMatchObject({ state: "trusted", arrivalFloor: 141 })
+		expect((commit.mock.calls[0][1] as IncomingTransferRecord[]).map((r) => [r.id, r.hidden])).toEqual(
+			receipts.map((r) => [r.id, false]),
+		)
+		for (const other of others) expect(other).not.toHaveBeenCalled()
+		expect(hiddenOf(receipts)).toEqual([false, false])
+	})
+
+	test.each([
+		["a missing trust row", () => trust.delete(key())],
+		[
+			"a trust row reset to unknown",
+			() => trust.set(key(), { profileId: "p1", networkId: "n1", contract: tokenA.contract, state: "unknown", updatedAt: 0 }),
+		],
+	])("an Allow over %s writes nothing", async (_name, arrange) => {
+		const f = await bootArrivals(100)
+		seedPending()
+		const receipts = [receipt(1, 40, { hidden: true })]
+		arrange()
+		const before = trust.get(key())
+
+		expect(await allow(f)).toBe(false)
+		expect(trust.get(key())).toEqual(before)
+		expect(hiddenOf(receipts)).toEqual([true])
+	})
+
+	test("an Allow entering while a displaced deleter still runs writes nothing", async () => {
+		const f = await bootArrivals(100)
+		seedPending()
+		const receipts = [receipt(1, 40, { hidden: true })]
+		vi.useFakeTimers()
+		try {
+			const deleter = await displacedDeleter(f, "0xunrelated")
+			expect(await allow(f)).toBe(false)
+			await deleter.finish()
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(trust.get(key())?.state).toBe("pending")
+		expect(hiddenOf(receipts)).toEqual([true])
+	})
+
+	test("a displaced late-delete that finishes during an Allow's reads does not get its record back", async () => {
+		const f = await bootArrivals(100)
+		seedPending()
+		const own = receipt(1, 40, { hidden: true, txHash: "0xown" })
+		const other = receipt(2, 41, { hidden: true })
+		const read = holdCall(f.service, "isVisibilityEnabled", 1, "after")
+		vi.useFakeTimers()
+		try {
+			const deleter = await displacedDeleter(f, "0xown")
+			const call = allow(f)
+			await vi.advanceTimersByTimeAsync(0)
+			await deleter.finish()
+			read.release()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(await call).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(records.has(own.id)).toBe(false)
+		expect(trust.get(key())?.state).toBe("pending")
+		expect(hiddenOf([other])).toEqual([true])
 	})
 
 	test("a token add emitted after a switch away from its profile changes neither profile's trust", async () => {
@@ -5890,6 +5943,7 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 			handedOffAfter(PUB_UNKNOWN, "visibility"),
 			"110000",
 		],
+		["P8h handoff in the outbox write: no record", "setOutbox", handedOffAfter(PUB_UNKNOWN, "setOutbox"), "111100"],
 	])("%s; the commit is revoked", async (_name, hold, expectedLog, expectedFlags) => {
 		const f = await bootPublicReceipt("unknown")
 		const inst = instrumentReceipt(f, hold)
@@ -5943,6 +5997,26 @@ async function displacedDeleter(f: ReceiptFixture, hash: string) {
 }
 
 describe("IncomingTransferService — receipt sections beside a handoff or a displaced deleter", () => {
+	test.each<[string, () => Promise<ReceiptFixture>, (f: ReceiptFixture) => Promise<unknown>, string]>([
+		["note", () => bootNoteReceipt("unknown"), (f) => scan(f.service), NOTE_ID],
+		["public", () => bootPublicReceipt("unknown"), (f) => commitPublic(f.service), PUB_ID],
+	])(
+		"a %s prompt a handoff silenced comes back: the next tick stores the receipt hidden and the next popup open prompts",
+		async (_arm, boot, commit, id) => {
+			const f = await boot()
+			const inst = instrumentReceipt(f, "setTrust")
+			await runHandoff(inst, () => commit(f))
+			expect(inst.log).not.toContain("pending")
+
+			await commit(f)
+			expect(records.get(id)?.hidden).toBe(true)
+			const prompts = vi.fn()
+			f.service.onIncomingTransferPending.add(prompts)
+			await f.service.replayPendingPrompts("p1", "n1", "0xa")
+			expect(prompts).toHaveBeenCalledTimes(1)
+		},
+	)
+
 	test("a successor Allow admitted by a handoff is not overwritten by the displaced receipt", async () => {
 		const f = await bootService({
 			network: makeNetworkStub([{ id: "n1", chainId: 1 }]),

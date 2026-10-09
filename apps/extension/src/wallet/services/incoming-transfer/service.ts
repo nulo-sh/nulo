@@ -81,7 +81,8 @@ type ReceiptScope = { profileId: string; networkId: string; chainId: number; acc
  *  `isCurrent` alone gates the prompt emits. */
 type ReceiptFence = { fenced: () => boolean; isCurrent: () => boolean }
 
-/** A public commit is `revoked` exactly when a `fenced()` read refused it; the caller then holds its page. */
+/** A public commit is `revoked` exactly when a `fenced()` read stopped it before its record write; the
+ *  caller then holds its page. */
 type PublicCommit = "revoked" | "processed"
 
 type TrustScope = { profileId: string; networkId: string; accountAddress: string; contract: string }
@@ -104,6 +105,30 @@ function maxBlock(records: { l2BlockNumber: number }[]): number | undefined {
 function maxDefined(a: number | undefined, b: number | undefined): number | undefined {
 	if (a === undefined) return b
 	return b === undefined ? a : Math.max(a, b)
+}
+
+/**
+ * Floors never move down, so every move takes the max with the stored number: two writers read
+ * their tips before the lock and can enter it in either order. Without a tip, or when the epoch
+ * moved since it was read, the floor goes pending and keeps its number, so nothing of the token
+ * plays until a later read resolves it.
+ */
+function nextArrivalFloor(
+	stored: IncomingTrustRecord,
+	move: { tip: number | undefined; lowerBound?: number; epochMoved: boolean },
+): { arrivalFloor: number | undefined; pending: boolean } {
+	const known = maxDefined(stored.arrivalFloor, move.lowerBound)
+	if (move.tip === undefined || move.epochMoved) return { arrivalFloor: known, pending: true }
+	return { arrivalFloor: maxDefined(known, move.tip), pending: false }
+}
+
+/** `stored` accepted: state `trusted` with the moved floor. */
+function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number | undefined; pending: boolean }): IncomingTrustRecord {
+	const { profileId, networkId, contract } = stored
+	const row: IncomingTrustRecord = { profileId, networkId, contract, state: "trusted", updatedAt: Date.now() }
+	if (floor.arrivalFloor !== undefined) row.arrivalFloor = floor.arrivalFloor
+	if (floor.pending) row.arrivalFloorPending = true
+	return row
 }
 
 /** What an anchored outbox row's task state asks of the drain: terminal-success
@@ -304,11 +329,13 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
-	/** Built at lock entry. The first `fenced()` read happens there, before any read: with no deleter
-	 *  running and the ticket current, none can start or resume until the section ends, whereas a
-	 *  read only before the write misses a displaced deleter that finished during the reads. */
+	/** Built synchronously at lock entry, where it reads the deleter count once, before any read: with
+	 *  none running and the ticket current, none can start or resume while the ticket stays current,
+	 *  whereas a read only before the write misses a displaced deleter that finished during the reads. */
 	private receiptFence(epochAtStart: number, isCurrent: () => boolean): ReceiptFence {
-		return { fenced: () => this.serviceEpoch === epochAtStart && isCurrent() && this.deletersRunning === 0, isCurrent }
+		const clearAtEntry = this.deletersRunning === 0
+		const fenced = () => clearAtEntry && this.serviceEpoch === epochAtStart && isCurrent() && this.deletersRunning === 0
+		return { fenced, isCurrent }
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
@@ -666,6 +693,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
+	/** All or nothing: every read first, then one storage write carrying the trusted row, its arrival
+	 *  floor and every record it un-hides, so no receipt is left hidden under a trusted contract. A
+	 *  refusal writes nothing and leaves the contract pending, and the next popup open prompts again.
+	 *  With `incomingTransfersVisible` off the records still turn visible but emit nothing. */
 	public async setTrustAllow(profileId: string, networkId: string, contract: string): Promise<boolean> {
 		await this.ensureInitialized()
 		const trustFence = await this.captureTrustFence(profileId)
@@ -673,40 +704,38 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const epochAtTip = this.serviceEpoch
 		const tip = await this.readTip(networkId)
 		return this.withServiceLock(async (isCurrent) => {
-			const { live, kept } = trustFence(isCurrent)
-			// Stale-popup guard: refuse the flip if the contract is no longer
-			// registered. Inside the lock, so the check + writes are atomic.
-			if (!(await this.isTokenStillRegistered(profileId, networkId, contract))) return false
-			if (!(await this._setTrustStateLocked(profileId, networkId, contract, "trusted", live))) return false
-
-			// The records it un-hides are history the person just accepted, on every account of the
-			// profile: the floor covers them before any of them turns visible.
-			const records = await this.repo.listByContract(profileId, networkId, contract)
-			const floor = { tip, lowerBound: maxBlock(records.filter((r) => r.hidden)), epochAtTip, isCurrent: kept }
-			if (!(await this.moveArrivalFloorLocked(profileId, networkId, contract, floor))) return false
-			return this.unhideLocked(records, kept)
+			// Read before any read, as in a receipt section: a displaced deleter that finished during the
+			// reads below could have deleted a record this write would put back.
+			if (this.deletersRunning !== 0) return false
+			const acceptance = await this.readAcceptanceLocked(profileId, networkId, contract, tip, epochAtTip)
+			// Nothing awaits between this read and the dispatch, so no handoff can fall between them.
+			if (!acceptance || !trustFence(isCurrent).live() || this.deletersRunning !== 0) return false
+			await this.repo.commitAcceptance(acceptance.trust, acceptance.unhidden)
+			if (!isCurrent()) return true
+			this.emit("onIncomingTrustChanged", acceptance.trust)
+			if (acceptance.visible) for (const record of acceptance.unhidden) this.emit("onIncomingTransferAdded", record)
+			return true
 		})
 	}
 
-	/** Not atomic: stops at the first write `kept` refuses and resolves false, leaving the records
-	 *  before it visible. With `incomingTransfersVisible` off the records still turn visible (a later
-	 *  toggle-on shows them) but emit nothing. */
-	private async unhideLocked(records: IncomingTransferRecord[], kept: () => boolean): Promise<boolean> {
-		const visibilityEnabled = await this.isVisibilityEnabled()
-		for (const record of records) {
-			if (!record.hidden) continue
-			const stillThere = await this.repo.getRecord(record.id)
-			if (!stillThere) continue
-			// A deleted profile's id can come back through a restore, so each write proves that this
-			// section still holds the lock and that its profile is the incarnation that allowed it.
-			if (!kept()) return false
-			const updated = { ...record, hidden: false }
-			await this.repo.upsertRecord(updated)
-			if (visibilityEnabled) {
-				this.emit("onIncomingTransferAdded", updated)
-			}
-		}
-		return true
+	/** The Allow's reads, or undefined to refuse: for a token no longer registered, or a trust row that
+	 *  is missing or `unknown`. A prompt exists only for a `pending` row, and only a wipe deletes the
+	 *  row or a token delete resets it, so writing `trusted` then would put trust back into a cleared
+	 *  scope. The floor covers the accepted history, on every account of the profile. */
+	private async readAcceptanceLocked(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		tip: number | undefined,
+		epochAtTip: number,
+	): Promise<{ trust: IncomingTrustRecord; unhidden: IncomingTransferRecord[]; visible: boolean } | undefined> {
+		if (!(await this.isTokenStillRegistered(profileId, networkId, contract))) return undefined
+		const stored = await this.repo.getTrust(profileId, networkId, contract)
+		if (!stored || stored.state === "unknown") return undefined
+		const hidden = (await this.repo.listByContract(profileId, networkId, contract)).filter((r) => r.hidden)
+		const visible = await this.isVisibilityEnabled()
+		const floor = nextArrivalFloor(stored, { tip, lowerBound: maxBlock(hidden), epochMoved: this.serviceEpoch !== epochAtTip })
+		return { trust: trustedRow(stored, floor), unhidden: hidden.map((r) => ({ ...r, hidden: false })), visible }
 	}
 
 	public async trustRestoredTokens(profileId: string): Promise<void> {
@@ -897,13 +926,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.repo.setArrivalRow(profileId, networkId, accountAddress, { sinceBlock: tip, played: [] })
 	}
 
-	/**
-	 * Floors never move down, so every write takes the max with the stored number: two writers read
-	 * their tips before the lock and can enter it in either order. Without a tip, or when the epoch
-	 * moved since it was read, the floor goes pending and keeps its number, so nothing of the token
-	 * plays until a later read resolves it. A section `isCurrent` refuses writes nothing and resolves
-	 * false.
-	 */
+	/** Moves a stored floor by `nextArrivalFloor`. A section `isCurrent` refuses writes nothing and
+	 *  resolves false. */
 	private async moveArrivalFloorLocked(
 		profileId: string,
 		networkId: string,
@@ -913,12 +937,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const stored = await this.repo.getTrust(profileId, networkId, contract)
 		if (!move.isCurrent()) return false
 		if (!stored) return true
-		const known = maxDefined(stored.arrivalFloor, move.lowerBound)
-		if (move.tip === undefined || this.serviceEpoch !== move.epochAtTip) {
-			await this.repo.setArrivalFloor(stored, { arrivalFloor: known, pending: true })
-			return true
-		}
-		await this.repo.setArrivalFloor(stored, { arrivalFloor: maxDefined(known, move.tip), pending: false })
+		const epochMoved = this.serviceEpoch !== move.epochAtTip
+		await this.repo.setArrivalFloor(stored, nextArrivalFloor(stored, { tip: move.tip, lowerBound: move.lowerBound, epochMoved }))
 		return true
 	}
 
@@ -2078,8 +2098,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** Commits each event addressed to one of `recipients`, in order. False at the first commit a fence
 	 *  refused: the caller then leaves its page marker or reconciliation progress where it was, so the
-	 *  next tick re-reads them. Advancing would skip the receipt for good, since a ticket stand-down,
-	 *  unlike an epoch one, does not stop the cursor write. */
+	 *  next tick re-reads them. Advancing would skip the receipt for good, since a ticket or deleter
+	 *  stand-down, unlike an epoch one, does not stop the cursor write. */
 	private async commitAddressedEvents(
 		target: { profileId: string; networkId: string; contract: string; chainId: number },
 		events: PublicTransferEvent[],

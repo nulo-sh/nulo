@@ -104,6 +104,30 @@ describe("IncomingTransferRepository — arrival floors and rows", () => {
 		expect(await read("p1", "n1", "0xtok")).toBeUndefined()
 	})
 
+	test("commitAcceptance writes the trust row and every record in one storage call", async () => {
+		const { api, repo } = freshRepo()
+		const set = vi.spyOn(api.storage.local, "set")
+		const accepted = [pubRec("p1", "n1", "0xa"), pubRec("p1", "n1", "0xb")]
+		const row = { profileId: "p1", networkId: "n1", contract: "0xtok", state: "trusted" as const, updatedAt: 1, arrivalFloor: 9 }
+
+		await repo.commitAcceptance(row, accepted)
+
+		expect(set).toHaveBeenCalledTimes(1)
+		expect(Object.keys(set.mock.calls[0][0])).toHaveLength(3)
+		expect(await repo.getTrust("p1", "n1", "0xtok")).toEqual(row)
+		expect(await repo.listRecords()).toEqual(expect.arrayContaining(accepted))
+	})
+
+	test("a rejected commitAcceptance propagates and writes no row", async () => {
+		const { api, repo } = freshRepo()
+		vi.spyOn(api.storage.local, "set").mockRejectedValueOnce(new Error("quota"))
+		const row = { profileId: "p1", networkId: "n1", contract: "0xtok", state: "trusted" as const, updatedAt: 1 }
+
+		await expect(repo.commitAcceptance(row, [pubRec("p1", "n1", "0xa")])).rejects.toThrow("quota")
+		expect(await repo.getTrust("p1", "n1", "0xtok")).toBeUndefined()
+		expect(await repo.listRecords()).toEqual([])
+	})
+
 	test("a trust state change keeps the stored arrival floor and its pending mark", async () => {
 		const { repo } = freshRepo()
 		await repo.setArrivalFloor(await repo.setTrust("p1", "n1", "0xtok", "trusted"), { arrivalFloor: 200, pending: true })

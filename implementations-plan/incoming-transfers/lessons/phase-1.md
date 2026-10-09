@@ -51,3 +51,43 @@
 - Gate (mechanical): incoming-transfer units 360/360, `bun run lint` 0, `bun run typecheck:all` 0.
   Per D-orch-3 the gate counts as passed only once the Codex and Opus answers on the entry read are
   recorded under § Audit verdicts.
+
+### Entry-read consult (D-orch-3)
+
+- Codex (gpt-6.1-sol, high, read-only, default login) and an Opus general-purpose agent ran in
+  parallel on the Phase 1.1 and 1.2 commits plus the Phase 1.3 design. Both: the entry read plus the
+  per-write read closes the displaced-deleter race and opens none. Verdicts and dispositions in
+  plan.md § Audit verdicts; decisions D12 (entry read made structural) and D13 (prompt liveness:
+  test, not code).
+- After D12 the "entry read removed" revert check must remove both the captured count and the
+  section's first live read; with only one removed the other still catches the boundary case.
+
+## Phase 1.3: an all-or-nothing Allow (#92)
+
+- Built: `nextArrivalFloor` (pure; `moveArrivalFloorLocked` now uses it), `trustedRow`,
+  `EntityStorage.item(id, entity)` (`set` now writes through it, so the key format lives once),
+  `repo.commitAcceptance(trust, records)` (one `storage.local.set`, dispatched before it returns),
+  `setTrustAllow` rewritten as: count at entry → `readAcceptanceLocked` (registration, stored row,
+  refusal of missing or `unknown`, the contract's hidden records, visibility, then the floor) →
+  `live()` and the count → one commit → ticket-gated emits. `unhideLocked` removed.
+- Tests: the BUG PIN became "an Allow the watchdog displaced writes nothing, and the next popup open
+  prompts again"; the successor-Reject test parks at the visibility read; the lock test became a pair
+  (before the write refuses; after it keeps everything); new: one write carrying the row, its floor
+  and every un-hide (no `setTrust`, `setArrivalFloor` or `upsertRecord`), refusals for a missing row,
+  a row reset to `unknown`, a displaced deleter at entry, and a displaced late-delete finishing during
+  the reads (its record is not resurrected). The raw-map "deleted mid-loop" test was removed: it
+  mutated storage outside the lock, which no production deleter does; the displaced late-delete test
+  replaces it. Two trust-transition tests now seed the `pending` row a prompt implies.
+- Composition (`service.composition.test.ts`): real service, real repository, real lock on
+  `FakeBrowserApi`, `svc()` stubs, real `ProfileDeletionState`. Fake timers drive the watchdog there.
+  Stored-row assertions: the Allow lands trusted with floor 141 and both receipts visible; a lock
+  before the write and a displaced Allow each leave `pending` and hidden. Checked against the old
+  `setTrustAllow` (HEAD's file swapped in): both never-happens cases fail, the success case passes.
+  Reviewer checklist: no PXE fake (D1 n/a), no simulate/prove (D2), no tx-request or derivation
+  (D3, D6), state is seeded rows only (D4), assertions read real storage.
+- Revert checks: Allow entry read removed → the late-delete boundary test fails; the single write
+  replaced by `setTrust` plus per-record upserts → five tests fail (the one-write test and four floor
+  pins).
+- Gate: incoming-transfer units 373/373, `bun run test` 10746 passed (716 files), `bun run
+  test:all` exit 0 (every workspace), `bun run lint` 0, `bun run typecheck:all` 0 (one test-table
+  typing fix after the first run).

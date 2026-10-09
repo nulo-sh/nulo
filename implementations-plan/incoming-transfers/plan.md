@@ -295,9 +295,14 @@ start of history (the `onAccountAdded` reset and a null-cursor restart rely on i
   overwritten by a late write. Each needs a five-minute storage stall first. Recorded, not built.
 - A deleter displaced by the watchdog keeps deleting after the handoff (F11). Receipt and acceptance
   writes stand down until it ends (`deletersRunning`), but other successors (`onTokenAdded`'s trust
-  write, cursor and outbox writes) are not fenced on it, and a deleter that never returns holds receipt
-  writes off until the background restarts. The close-out files an issue. The property to reproduce:
-  with the real `Lock`, a successor's ticket stays current while the displaced holder deletes its row.
+  write, cursor and outbox writes) are not fenced on it, nor are the arrival and floor writers, which
+  read only epoch and ticket (`claimArrivals`, `getArrivalState`'s baseline write and
+  `resolvePendingFloorsLocked`, `baselineAccountLocked`): a displaced `onAccountDeleted` lets a
+  successor `claimArrivals` write back the arrival row it deleted, and a displaced `clearChain` can
+  get a trust row written back through `setArrivalFloor`. A deleter that never returns holds receipt
+  writes off, and every public page held, until the background restarts. The close-out files an
+  issue. The property to reproduce: with the real `Lock`, a successor's ticket stays current while
+  the displaced holder deletes its row.
 - Discovery reads unspent notes only (F6), so a private receipt whose note is spent before a scan sees
   it never gets a row, and a re-included transaction whose note was spent before the wallet saw it
   again does not bring its row back (OA-1 says so). The close-out dedupes and files an issue.
@@ -385,7 +390,7 @@ Validation gate:
 - Pass: exit 0; every matrix row passes with its new log; no complexity directive added.
 - Layers: unit, lint, typecheck.
 
-#### Phase 1.2: the lock ticket in both receipt sections (#144)
+#### Phase 1.2: the lock ticket in both receipt sections (#144) ✓
 
 1. Make the scenarios' mocked `repo.setTrust` read the stored row, pause at a hookable point, then read
    its fence, as `repository.ts:131-136` does.
@@ -417,7 +422,7 @@ Validation gate:
   the entry read removed (record each check in lessons).
 - Layers: unit, lint, typecheck.
 
-#### Phase 1.3: an all-or-nothing Allow (#92)
+#### Phase 1.3: an all-or-nothing Allow (#92) ✓
 
 1. Extract `nextArrivalFloor` from `moveArrivalFloorLocked`; keep the other callers on it.
 2. Add `EntityStorage.item(id, entity)` in `packages/wallet-core` with a test, and
@@ -832,6 +837,19 @@ not verify the witness. Nothing in this plan widens that assumption.
   displaced-deleter race without a new one (a deleter that starts after entry, a count that never
   decrements on a thrown section, an Allow whose reads span a watchdog handoff). Their answers are
   recorded under § Audit verdicts before Phase 1.2's gate counts as passed.
+- **D12, the entry read made structural.** The Opus entry-read review found the entry read was a
+  convention (each section's first `fenced()`), not a property of the fence. `receiptFence` now reads
+  the count once when it is built, synchronously at lock entry, and ANDs it into every `fenced()` read,
+  so a future section cannot skip it. Behaviour is unchanged; the per-write count read stays.
+- **D13, a prompt a handoff silenced recovers through replay, unchanged.** Codex (entry-read consult,
+  question 2e) showed the ticket-only emits trade liveness: after a handoff between the trust write and
+  the emits, no prompt fires; the next tick stores the receipt hidden under `pending`, and the prompt
+  returns only on the next popup open (replay needs a stored record and runs once per popup). Codex
+  proposed a fresh fenced replay after the retry lands; Opus called the trade-off the plan's own
+  (I1). Rejected as a code change: it changes when first-receive prompts appear, an owner-visible
+  behaviour, for a case that needs a five-minute storage stall, and the recovery path exists. Accepted
+  as a test: both arms pin that the next tick stores the receipt hidden and the next popup open
+  prompts.
 - **Unresolved:** I7 (storage dispatch order) is an inference neither reviewer could check from the
   tree; Phase 1.2's handoff rows prove the fence, not the browser's ordering.
 
@@ -945,6 +963,50 @@ back-fill cursors; reconciliation separation; OA-6's owner gate.
 
 **Loop stopped at three rounds.** The round-3 fix is the reviewer's own proposal and was not
 re-reviewed. The implementing session's Arc 1 Codex audit checks it first.
+
+### Arc 1, entry-read consult (D-orch-3), before Phase 1.2's gate
+
+Both legs were asked first, explicitly, whether the lock-entry `deletersRunning` read plus the
+per-write `fenced()` read closes the displaced-deleter race without opening a new one, against the
+Phase 1.1 and 1.2 commits and the Phase 1.3 design.
+
+**Codex (gpt-6.1-sol, high, read-only, default login), `the concurrency fence holds (high
+confidence); ticket-only prompt suppression has a liveness gap`.**
+
+1. Entry read plus per-write read: **holds**. A running displaced deleter makes the section exit
+   before it reads; any later deleter admission invalidates the ticket for good.
+2. (a) a deleter starting after entry: **holds**, impossible while the ticket is current, and a
+   successor's admission leaves `isCurrent()` false even after it finishes. (b) count leak or double
+   count: **holds**, the only mutations are the increment and the `finally` decrement, and no deleter
+   awaits a nested lock. (c) an Allow whose reads span a handoff: **holds as designed**, provided the
+   batch call performs no await after the final checks. (d) a displaced receipt whose successor is a
+   deleter: **holds**. (e) prompts: **safety holds, liveness breaks** on a handoff between the trust
+   write and the emits. Disposition: D13 (test accepted, code change rejected).
+3. Unwrapped deleters: **none needing a change**; the outbox drain deletes outside the count but
+   reads its ticket immediately before dispatch.
+4. Write placement and cursor holds: **hold**. Low: the `PublicCommit` comment said every failed
+   `fenced()` read means `revoked`, but the post-write Added check returns `processed`. **Accepted**:
+   comment narrowed to reads that stop the commit before its record write.
+
+**Opus (general-purpose agent), `the entry read plus the per-write fenced() read close the
+displaced-deleter race for both receipt sections; no new race; four Low findings`.**
+
+- (a) to (d) **hold**, (c) on two conditions met by Phase 1.3: `commitAcceptance` dispatches its one
+  `set` synchronously, and `isFenceLive` is synchronous. (e) a prompt for a wiped row cannot fire; a
+  prompt silenced on a handoff is the plan's accepted trade-off (D13). Unwrapped deleters: none.
+1. Low, the `revoked` return after the outbox write and the bare-bump returns are untested.
+   **Accepted**: a P8h handoff row holds the outbox write and expects `revoked`; the handoff rows
+   assert the result.
+2. Low, `receiptFence`'s comment claimed the entry read happens there, while it was a per-section
+   convention. **Accepted** in its structural form: D12.
+3. Low, the `deletersRunning` comment claims acceptance writes stand down before Phase 1.3 lands.
+   **No change**: Phase 1.3 ships in the same PR.
+4. Low, `commitAddressedEvents`'s comment named only a ticket stand-down. **Accepted**: "a ticket or
+   deleter stand-down".
+- Addition to the close-out issue on displaced deleters: the arrival and floor writers are not fenced
+  on the count either. **Accepted** into § Not this lane.
+
+Phase 1.2's gate counts as passed with these answers recorded.
 
 ## Post-implementation
 
