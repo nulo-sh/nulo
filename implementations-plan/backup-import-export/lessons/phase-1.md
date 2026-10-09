@@ -41,3 +41,5 @@
 
 - Codex round 1: approve with fixes (one Low). Opus review: approve (three Lows). All four verified and accepted; plan.md § Arc 1 implementation review has the table.
 - Codex round 2: clean. Converged in two rounds.
+- Final smoke attempt 1 (after review fixes): 13/14 red on both browsers, every launch refused by the CSP check ("the CSP violation recorder never ran"). Cause: my run script passed the armed flags as one zsh string (`env $A` does not word-split), so the build was unarmed. Rerun with the flags as separate assignments.
+- Final smoke attempt 2 (armed, bundle grepped for the recorder first): Chrome 14/14, Firefox 14/14 at retry 0.

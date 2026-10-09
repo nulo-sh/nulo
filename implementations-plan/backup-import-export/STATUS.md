@@ -13,3 +13,4 @@
 - 2026-10-09: gate 1.4 pass (lint, typecheck:all, composables + profile + serialization 57 files 1191/1191).
 - 2026-10-09: gate 1.5 pass (lint, typecheck:all, wallet-core migration 60/60, extension storage + backup 105/105; the value-key appender control is reported non-idempotent; the parked-read case fails with the post-await re-check removed).
 - 2026-10-09: arc 1 review loop converged (Codex r1 approve with fixes, Opus approve; 4 Lows fixed in 2da0380; Codex r2 clean). Final gates next.
+- 2026-10-09: final gates on the final head pass: lint, typecheck:all, test:all (extension 10738), check:plans (0 findings), smoke 5 files Chrome 14/14 + Firefox 14/14 retry 0 (first attempt unarmed by a shell-quoting slip, rerun armed).
