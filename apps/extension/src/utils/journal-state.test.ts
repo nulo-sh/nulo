@@ -131,9 +131,14 @@ describe("journalTerminalDisplay — Failed state (catch-all + per-kind subtitle
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Couldn't generate proof")
 	})
 
-	test.each(["popup_bound", "malformed_request"])("error.kind === '%s' → generic 'Transaction failed'", (kind) => {
-		const op = recordWith({ error: { kind, message: "...", normalizedRaw: null } })
+	test("error.kind === 'popup_bound' → generic 'Transaction failed'", () => {
+		const op = recordWith({ error: { kind: "popup_bound", message: "...", normalizedRaw: null } })
 		expect(journalTerminalDisplay(op)?.subtitle).toBe("Transaction failed")
+	})
+
+	test("error.kind === 'malformed_request' → 'Couldn't read request', its outcome label", () => {
+		const op = recordWith({ error: { kind: "malformed_request", message: "...", normalizedRaw: null } })
+		expect(journalTerminalDisplay(op)?.subtitle).toBe("Couldn't read request")
 	})
 
 	test("error.kind === 'scope_refused' → 'Not allowed', on the red failed card", () => {

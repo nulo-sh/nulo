@@ -299,6 +299,8 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Stopped when the wallet locked"
 		case "scope_refused":
 			return "Not allowed"
+		case "malformed_request":
+			return "Couldn't read request"
 		// popup_bound, transfer, dapp_execute, unknown, and any other / future
 		// kind all fall through to the generic copy. The kind is still preserved
 		// in the journal record's error.kind field for debugging / future
