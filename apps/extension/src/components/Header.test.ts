@@ -2,7 +2,7 @@
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, and the lock button decides between locking and asking on a fresh count.
+ * the accounts popup, and the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`).
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -136,99 +136,16 @@ describe("Header — lock", () => {
 		expect(lock.attributes("type")).toBe("button")
 	})
 
-	async function clickLock() {
+	test("a click locks through the shared lock, and unmount releases its session listeners", async () => {
 		const w = mountHeader()
+		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(2)
+
 		await w.find('[data-testid="header-lock"]').trigger("click")
 		await flushPromises()
-	}
-
-	test("nothing running after a fresh journal read: it locks at once", async () => {
-		await clickLock()
-		expect(H.app.refreshInFlight).toHaveBeenCalledTimes(1)
 		expect(H.lockActiveProfile).toHaveBeenCalledExactlyOnceWith("session-1")
 		expect(H.app.isLogined).toBe(false)
-		expect(H.openPopup).not.toHaveBeenCalled()
-	})
 
-	test.each([
-		{ running: 1, description: "1 transaction is still running. Locking cancels it." },
-		{ running: 3, description: "3 transactions are still running. Locking cancels them." },
-	])("$running running: it asks, and locks only when the dialog confirms", async ({ running, description }) => {
-		// The count before the read is 0, so asking proves the decision waited for the read.
-		H.app.refreshInFlight = vi.fn(async () => {
-			H.app.approvedSendsInFlight = running
-		})
-		await clickLock()
-
-		expect(H.openPopup).toHaveBeenCalledWith("confirm")
-		expect(H.cache.confirm).toMatchObject({
-			pre_title: "Running transactions",
-			title: "Lock wallet?",
-			description,
-			confirm_text: "Lock anyway",
-			confirm_color: "red",
-		})
-		expect(H.lockActiveProfile).not.toHaveBeenCalled()
-		expect(H.app.isLogined).toBe(true)
-
-		const confirm = H.cache.confirm.callback as () => void
-		confirm()
-		expect(H.lockActiveProfile).toHaveBeenCalledExactlyOnceWith("session-1")
-		expect(H.app.isLogined).toBe(false)
-	})
-
-	test("a journal read that outlasts the budget locks without asking, and its late answer changes nothing", async () => {
-		vi.useFakeTimers()
-		try {
-			// Events had counted a send before the click; an unanswered read must not ask on that count.
-			H.app.approvedSendsInFlight = 1
-			let answer: () => void = () => {}
-			H.app.refreshInFlight = vi.fn(
-				() =>
-					new Promise<void>((resolve) => {
-						answer = () => {
-							H.app.approvedSendsInFlight = 1
-							resolve()
-						}
-					}),
-			)
-			await clickLock()
-			expect(H.lockActiveProfile).not.toHaveBeenCalled()
-
-			await vi.advanceTimersByTimeAsync(3_000)
-			expect(H.lockActiveProfile).toHaveBeenCalledExactlyOnceWith(undefined)
-
-			answer()
-			await flushPromises()
-			expect(H.openPopup).not.toHaveBeenCalled()
-			expect(H.lockActiveProfile).toHaveBeenCalledTimes(1)
-		} finally {
-			vi.useRealTimers()
-		}
-	})
-
-	test.each(["profileListeners", "disconnectListeners"] as const)("an event from %s closes the lock dialog it raised", async (source) => {
-		H.app.refreshInFlight = vi.fn(async () => {
-			H.app.approvedSendsInFlight = 1
-		})
-		await clickLock()
-		expect(H.openPopup).toHaveBeenCalledWith("confirm")
-
-		for (const listener of H[source]) listener()
-		expect(H.closePopup).toHaveBeenCalledWith("confirm")
-		expect(H.lockActiveProfile).not.toHaveBeenCalled()
-	})
-
-	test("a session change during the read abandons the lock: no second read, no dialog, no lock", async () => {
-		let changed = false
-		H.app.refreshInFlight = vi.fn(async () => {
-			if (!changed) for (const listener of H.profileListeners) listener()
-			changed = true
-		})
-		await clickLock()
-
-		expect(H.app.refreshInFlight).toHaveBeenCalledTimes(1)
-		expect(H.openPopup).not.toHaveBeenCalled()
-		expect(H.lockActiveProfile).not.toHaveBeenCalled()
+		w.unmount()
+		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(0)
 	})
 })

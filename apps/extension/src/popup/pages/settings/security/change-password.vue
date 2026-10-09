@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
 		heroMain="Change"
 		heroSub="Password"
 		collapsingLabel="Change Password"
-		backTo="/popup/settings/profile"
+		backTo="/popup/settings"
 		@keydown="onKeydown"
 	>
 		<!-- Profile -->

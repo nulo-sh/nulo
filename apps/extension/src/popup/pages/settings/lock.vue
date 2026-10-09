@@ -12,15 +12,22 @@
 import { defaultConfig as makeDefaultConfig } from "@/wallet/config"
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
+import { managers } from "@/utils/core"
 import { debounce } from "@/utils/general"
 
 /** Stores */
+import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
+const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const popupStore = usePopupStore()
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useLockWallet } from "@/composables/useLockWallet"
 const { openToast } = useToast()
+const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.profile)
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
@@ -33,6 +40,7 @@ const MAX_SESSION_TTL = 1440
 const sessionTtl = ref(defaultConfig.sessionTtl)
 const sessionTtlMinutes = ref(0)
 const strictSecurityMode = ref(defaultConfig.strictSecurityMode)
+const isPasskey = computed(() => appStore.profile?.type === "passkey")
 
 const notification = reactive({
 	show: false,
@@ -141,16 +149,28 @@ onBeforeMount(async () => {
 onBeforeUnmount(() => {
 	configService.disconnect()
 	profileService.disconnect()
+	disposeLockWallet()
 })
 </script>
 
 <template>
-	<SettingsPageShell title="Security" :backTo="'/popup/settings'" gap="32">
+	<SettingsPageShell title="Lock" :backTo="'/popup/settings'" gap="32">
+		<!-- Outside the load gate: the config reads can hang after a worker restart. -->
+		<ItemsContainer>
+			<SettingItem
+				title="Lock now"
+				description="Locks Nulo until you unlock it again"
+				materialIcon="lock"
+				@click="lockNow"
+				data-testid="lock-now-btn"
+			/>
+		</ItemsContainer>
+
 		<LoadingState v-if="isLoading" label="FETCHING SETTINGS" />
 
 		<template v-if="!isLoading">
 			<!-- Strict Security Mode -->
-			<Flex justify="between" align="center" data-testid="setting-strict-security-mode">
+			<Flex v-if="!isPasskey" justify="between" align="center" data-testid="setting-strict-security-mode">
 				<Flex direction="column" gap="6">
 					<Text size="13" weight="600" color="primary">Strict security mode</Text>
 					<Text size="12" weight="500" color="tertiary">
@@ -193,17 +213,6 @@ onBeforeUnmount(() => {
 				/>
 			</Flex>
 
-			<!-- Backup -->
-			<ItemsContainer>
-				<SettingItem
-					size="large"
-					title="Backup profile"
-					description="Get your recovery phrase"
-					icon="download"
-					to="/popup/settings/security/export"
-					data-testid="backup-link-btn"
-				/>
-			</ItemsContainer>
 		</template>
 	</SettingsPageShell>
 </template>

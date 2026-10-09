@@ -125,7 +125,7 @@ before each release:
 2. Lock via header-lock → land on `/popup/auth` → click "Continue" →
    passkey popup → biometric → confirm return to `/popup/general` with
    the SAME account address as step 1.
-3. Export plain key from settings → security → export → key (plain).
+3. Export plain key from settings → back up profile → key (plain).
 4. Reset profile, navigate to import → import-option-passkey → use the
    same passkey → confirm same account address as step 1.
 5. (Cross-device) install on a second Chrome profile, import via
@@ -147,7 +147,7 @@ started by clicking the toolbar icon.
    and the popup comes back by itself on the new profile.
 3. Delete that new profile, then lock screen → profile name → Import profile → Passkey, choosing its
    passkey: the passkey window runs the prompt, and the profile comes back with the same address.
-4. With that profile unlocked, Settings → Security → Export → Full Backup: the export continues in a
+4. With that profile unlocked, Settings → Back up profile → Full Backup: the export continues in a
    window of its own, asks for the passkey and downloads the file.
 5. Delete that profile again, then lock screen → profile name → Import profile → Full Backup: the
    restore opens in a window of its own and brings the file from step 4 back to the same address.

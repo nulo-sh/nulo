@@ -111,7 +111,7 @@ describe("background death and cold respawn", () => {
 	 * persisted bearer comes back. Cold-restore then silently reconstructs the
 	 * in-memory secret → `/popup/general` (no lock screen).
 	 *
-	 * The opt-out is driven through the real Settings → Security toggle. An earlier
+	 * The opt-out is driven through the real Settings → Lock toggle. An earlier
 	 * version posted to ConfigService over `chrome.runtime.sendMessage` to stay
 	 * independent of layout, but wallet services listen on PORTS — the SW's only
 	 * onMessage listener returns false — so the flag never actually changed and this
@@ -125,7 +125,7 @@ describe("background death and cold respawn", () => {
 	//     is never written, so strict mode stayed ON and the silent restore asserted
 	//     here could not occur. The test only ever "passed" because the old kill left
 	//     the worker running, so nothing needed restoring.
-	//  2. Driving the real Settings → Security toggle instead (below, kept for the
+	//  2. Driving the real Settings → Lock toggle instead (below, kept for the
 	//     next attempt) gets further but stalls: the page's `onBeforeMount` awaits two
 	//     `configService.getValue` calls and `isLoading` never clears within 10s in
 	//     this post-unlock, post-restart context, so `strict-security-toggle` never
@@ -145,13 +145,13 @@ describe("background death and cold respawn", () => {
 		await ensureUnlocked(page)
 		await waitForHash(page, "#/popup/general")
 
-		// Turn strict mode off the way a user does: the Settings → Security toggle,
+		// Turn strict mode off the way a user does: the Settings → Lock toggle,
 		// through its confirmation dialog. Then assert the flag actually flipped —
 		// a setup step that silently no-ops is what made this test vacuous before.
 		// Direct hash navigation, not the nav tab: clicking through the shell races
 		// the routing the unlock above is still finishing, and this test's subject is
 		// the strict-mode contract, not settings navigation.
-		await navigateByHash(page, "#/popup/settings/security")
+		await navigateByHash(page, "#/popup/settings/lock")
 		await page.waitForSelector('[data-testid="strict-security-toggle"]', { visible: true, timeout: 10_000 })
 		await clickByTestId(page, "strict-security-toggle")
 		await acceptConfirmPopup(page)

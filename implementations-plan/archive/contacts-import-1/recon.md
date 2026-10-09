@@ -1,0 +1,38 @@
+# Recon: contacts-import-1
+
+Base: `origin/dev` at 61060c0. Two read-only Sonnet explorers (a reuse sweep over eight capabilities, a mapper of the profile-switch path), plus the planner's own reads. Line numbers are at 61060c0.
+
+## Reuse map
+
+| Capability | Found | Verdict |
+|---|---|---|
+| Settle a file pick on `cancel` | Nothing. `pickFile` (`apps/extension/src/utils/files.ts:90-128`) is the only code that creates an `<input type="file">`, and it listens to `change` only. Searched `oncancel`, `addEventListener("cancel"`, `showPicker`, `FileChooser`, `AbortSignal` near pickers, focus-based fallbacks over `apps/` and `packages/`. | build new (a listener and a typed error in `files.ts`) |
+| A typed pick error callers can tell apart | `FileTooLargeError` (`files.ts:83-88`), caught by `instanceof` in all three callers. | adapt: add a sibling `FilePickCanceledError` |
+| Callers' "no file" exits | contacts `if (!file) return` (`useContactImportExport.ts:129`); account import `if (!picked) return` and a catch that swallows everything but `FileTooLargeError` (`popup/pages/settings/accounts/import.vue:58-73`); full backup `runPickBackupFile` treats a falsy file as "drop the previous selection" (`composables/useFullBackupImport.ts:459-473`, pinned by `useFullBackupImport.stages.test.ts` "a null pick DROPS the previous selection") and a rejection as "Failed to read the backup file". | adapt: two callers need a cancel branch, one already has it |
+| Bind a popup run to one session of one profile | `ProfileService.captureRunFence` / `assertRunFence` (`wallet/services/profile/service.ts:534-544`, RPCs on `ProfileServiceClient`), `RunFence` (`profile/spec.ts:20`), used by `popup/pages/settings/security/export/full.vue:284-318` and `AccountService.exportFullBackupKeys` (`account/service.ts:798-806`). Throws `SessionEndedError`, which survives the port as its class (`packages/extension-messaging/src/errors.ts:387`, in `REBUILT_AS`). | reuse as is |
+| A service write that takes a fence | `AccountService.exportFullBackupKeys(fence, …)` asserts it in the background. `ContactService.addContact` already stamps the row with an atomically captured `ExecutionFence` (`contact/service.ts:108-123`). No contact method takes a fence or a profile id. | adapt: an optional trailing `RunFence` on three contact methods |
+| Snapshot a value at confirm | The network pin in `applyImportRows` (`useContactImportExport.ts:198-201`): read `appStore.network?.id` before the first await. `full.vue:287` compares `fence.profileId` with `appStore.profile.id`. | not used: the plan captures the fence when the rows are staged instead (plan D4) |
+| Duplicate check that skips the edited saved contact | `isEditedContact` (`popup/components/popups/EditContactPopup.vue:69`), already `c.id === (contactToEdit.value?.id ?? contactToEdit.value?.targetId)`, from PR #41 (3b80761). Pinned by `EditContactPopup.test.ts` "import mode: the saved contact a row would write is not its duplicate, …" with a control ("bob" → "Already exist"). | nothing to build: #44 is fixed on dev |
+| Import result toast | `toastImportOutcome` (`useContactImportExport.ts:265-289`); labels pinned by about 20 unit assertions and the smoke e2e. No written-count in `ImportTally`. | adapt: one new branch first, one new counter |
+| Composition harness with a profile switch | `useContactImportExport.composition.test.ts`: real `ContactService` over `FakeBrowserApi`, a `svc(PROFILE_SERVICE_NAME, …)` stub driven by `let activeProfile`, already flipped mid-test at two places. | reuse; the stub gains `assertRunFence` |
+| Service test fake | `contact/service.test.ts` `FakeProfileService` (`getActiveProfile`, `getDeletionState`, `captureExecutionFence`, `setActiveProfile`). | adapt: gains `assertRunFence` |
+| e2e driving a pick | Chrome driver `waitForFileChooser` + `accept` (`tests/e2e/fixtures/browser/chrome.ts:234`); Firefox driver plants the file on the pending input and marks abandoned inputs `data-e2e-stale` (`firefox.ts:521-535`, `FIREFOX.md`). Puppeteer 25.8's `FileChooser.cancel()` only dispatches a synthetic `cancel` event (`puppeteer-core/lib/puppeteer/common/FileChooser.js:65-73`). | reuse the smoke files unchanged as regression; no new e2e (see plan) |
+
+## Facts the plan rests on
+
+1. **#45 holds.** `pickFile` settles only in `input.onchange` (`files.ts:99`); a closed chooser fires `cancel`; the input appended at `:97` stays. Firefox's floor is 153 (`manifest/manifest.firefox.config.ts:38`), well past the `cancel` event on file inputs.
+2. **The unit tests drive the picker through the `onchange` property** (`files.test.ts:5-12`, `files.settle.pins.test.ts:12-18`), and the pins fix the settle tick count (3) and "input removed before the pick settles". The cancel path must leave the change path's timing alone.
+3. **A falsy cancel would change a screen.** On the full-backup import page (onboarding and popup), `runPickBackupFile` clears a previously chosen backup when the pick yields no file. Today a cancelled pick changes nothing there (the promise never settles). So cancel must not resolve `null`.
+4. **Three test files mock `@/utils` without `importOriginal`** (`useContactImportExport.test.ts`, `.pins.test.ts`, `.spaced-name.test.ts`); a new export the composable reads from `@/utils` must be added to each mock.
+5. **#44 is fixed on dev.** The issue was filed at 14:13Z on 2026-10-08; PR #41 merged at 14:40Z with `isEditedContact` and its test. At 3b80761^ the check was `c.id !== contactToEdit.value?.id` (the bug as filed).
+6. **#43 holds, with moved lines.** `getContacts` is now `contact/service.ts:72-77`, `addContact` `:101-135` (stamps `fence.profileId` from `captureExecutionFence`), `updateContact` `:137-159` (`requireOwnedRow` against the active profile at `:144`). `applyImportRows` re-reads the book per row (`useContactImportExport.ts:205,213`) and pins only the network (`:201`).
+7. **How the bug lands.** A switch is a lock then an unlock (`popup/locked-state.ts:26`). In the importing popup the lock routes to `/popup/auth` and unmounts the page, but `applyImportRows` keeps running: the client reconnects on the next request (`packages/extension-messaging/src/background/client.ts:116-118`). After the unlock, `getContacts` and `addContact` resolve the new profile, so a `new` row that matches nothing there is added to it; an update row is refused (`requireOwnedRow`) or by `stillAsShown`.
+8. **Sender registration cannot cross profiles.** `AccountStateService.addSender` resolves the network through `NetworkService.getNetwork`, which requires the network row to belong to the active profile, so the pinned network id is refused in another profile. It still must stop with the rows.
+9. **`RunFence` is stricter than a profile id.** It dies on a lock, an unlock (the same profile's re-unlock included), a worker restart, or a begun deletion of its profile (`service.ts:520-544`).
+
+## Collision and dedup risks
+
+- Writing a second `targetId` exclusion in `EditContactPopup.vue` would duplicate #41.
+- A popup-only pin (check, then write, in two RPCs) leaves one row per switch able to land in the new profile; only a fence the write itself checks closes it.
+- Toast labels are pinned widely; the new label is a new branch, never an edit of an existing one.
+- PR #56 (open, settings-by-task) edits the doc comment on `applyImportRows` (`useContactImportExport.ts:193-196`, "Settings → Advanced → Senders" → "Settings → Developer → Account State → Senders") and one comment in `pages/settings/contacts/index.vue`. This lane edits the body of the same function; leave that doc comment alone, so the two merge line-clean.

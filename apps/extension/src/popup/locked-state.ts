@@ -55,10 +55,10 @@ export function createLockedState<P>(shell: LockedStateShell<P>) {
 	return { enter, onLockEvent }
 }
 
-/** The header marks the popup locked before the worker answers its Lock, and the snack and the
- *  epoch go with that mark: `flush: "sync"`, so nothing settling in the next microtask sees either.
- *  Under a lock event's seal it runs a second time, which changes nothing: the epoch only has to
- *  move, and the snack is already closed. */
+/** A lock control (the header chip or Lock now) marks the popup locked before the worker answers its
+ *  Lock, and the snack and the epoch go with that mark: `flush: "sync"`, so nothing settling in the
+ *  next microtask sees either. Under a lock event's seal it runs a second time, which changes
+ *  nothing: the epoch only has to move, and the snack is already closed. */
 export function watchLockStart(isLogined: () => boolean, onLocked: () => void) {
 	return watch(
 		isLogined,

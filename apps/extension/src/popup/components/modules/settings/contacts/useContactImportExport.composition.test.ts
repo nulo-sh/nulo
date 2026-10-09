@@ -33,7 +33,8 @@ import { svc } from "@/wallet/services/composition-harness"
 import { ContactService } from "@/wallet/services/contact/service"
 import { type Contact, CONTACT_SERVICE_NAME, CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
+import { PROFILE_SERVICE_NAME, type RunFence } from "@/wallet/services/profile/spec"
+import { SessionEndedError } from "@nulo/extension-messaging/errors"
 
 const boundary = vi.hoisted(() => ({
 	file: null as { size: number; text: () => Promise<string> } | null,
@@ -41,6 +42,8 @@ const boundary = vi.hoisted(() => ({
 	toasts: [] as Array<{ kind: string; label: string }>,
 	opened: [] as string[],
 	service: null as unknown,
+	/** The background's profile service, which the popup's own profile client reaches too. */
+	profile: null as unknown,
 }))
 
 vi.mock("@/utils", async (importOriginal) => ({
@@ -64,7 +67,14 @@ vi.mock("@/stores/popup.store", () => ({
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
-		return { connect() {}, disconnect() {}, getActiveProfile: async () => ({ name: "Main" }) }
+		const profile = boundary.profile as ProfileStub
+		return {
+			connect() {},
+			disconnect() {},
+			getActiveProfile: async () => ({ name: "Main" }),
+			captureRunFence: () => profile.captureRunFence(),
+			assertRunFence: (fence: RunFence) => profile.assertRunFence(fence),
+		}
 	}),
 }))
 // The popup's port to the contact service, wired straight to the real service in this process.
@@ -121,6 +131,12 @@ const SUBMIT = '[data-testid="import-contacts-submit"]'
 // ── Harness ──────────────────────────────────────────────────────────
 
 let activeProfile = "p1"
+/** The live session's serial. A profile switch is a lock and an unlock, so it ends the session. */
+let session = 1
+function switchProfile(profileId: string): void {
+	activeProfile = profileId
+	session++
+}
 /** Each profile's registered senders, as the account-state port reports them back. */
 const registered = new Map<string, Set<string>>()
 const sendersOf = (profileId: string) => registered.get(profileId) ?? registered.set(profileId, new Set()).get(profileId)!
@@ -136,20 +152,34 @@ async function startWallet() {
 	const api = new FakeBrowserApi()
 	api.reset()
 	const deletion = new ProfileDeletionState()
-	const services = new ServiceCollection()
-	services.add(
-		svc(PROFILE_SERVICE_NAME, {
-			getActiveProfile: async () => ({ id: activeProfile, name: activeProfile, type: "password" }),
-			getDeletionState: () => deletion,
-			captureExecutionFence: async () => ({ profileId: activeProfile, epoch: deletion.capture(activeProfile) }),
+	const isFenceLive = (fence: RunFence) =>
+		fence.session === session && fence.profileId === activeProfile && deletion.isCurrent(fence.profileId, fence.epoch)
+	const profile = {
+		getActiveProfile: async () => ({ id: activeProfile, name: activeProfile, type: "password" }),
+		getDeletionState: () => deletion,
+		captureExecutionFence: async () => ({ profileId: activeProfile, epoch: deletion.capture(activeProfile), session }),
+		captureRunFence: async (): Promise<RunFence> => ({
+			profileId: activeProfile,
+			epoch: deletion.capture(activeProfile),
+			session,
+			incarnation: "w1",
 		}),
-	)
+		assertRunFence: async (fence: RunFence) => {
+			if (fence?.incarnation !== "w1" || !isFenceLive(fence)) throw new SessionEndedError()
+		},
+		isFenceLive,
+	}
+	boundary.profile = profile
+	const services = new ServiceCollection()
+	services.add(svc(PROFILE_SERVICE_NAME, profile))
 	const contacts = new ContactService(new LoggerStore(new ConfigStore()), api)
 	services.add(contacts)
 	await services.start()
 	boundary.service = contacts
-	return { api, contacts }
+	return { api, contacts, profile }
 }
+
+type ProfileStub = Awaited<ReturnType<typeof startWallet>>["profile"]
 
 const mounted: VueWrapper[] = []
 
@@ -242,6 +272,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	Object.assign(useCacheStore(), { importContacts: [], importContact: null, importPromise: null })
 	activeProfile = "p1"
+	session = 1
 	registered.clear()
 	boundary.file = null
 	boundary.downloads.length = 0
@@ -341,6 +372,53 @@ describe("import composition — what the screen showed chosen is what is writte
 		expect(await confirm(page, done)).toBe("Import ended with errors")
 		expect(await book(contacts)).toEqual({ Alicia: ADDR.a, Bob: ADDR.f, Dora: ADDR.i, Erin: ADDR.h })
 		expect(accountState.addSender).not.toHaveBeenCalled()
+	})
+})
+
+describe("import composition — a profile switch mid-import", () => {
+	const fiveNew = fileOf([
+		{ name: "Ana", address: ADDR.a },
+		{ name: "Ben", address: ADDR.b, isSender: true },
+		{ name: "Cleo", address: ADDR.c },
+		{ name: "Dan", address: ADDR.d },
+		{ name: "Eve", address: ADDR.e },
+	])
+	/** Every stored contact's name by profile, read from storage itself rather than through a fence. */
+	async function namesByProfile(api: FakeBrowserApi): Promise<Record<string, string[]>> {
+		const out: Record<string, string[]> = {}
+		for (const [key, raw] of Object.entries(await api.storage.local.get(null))) {
+			if (!key.startsWith(`${CONTACT_STORAGE_ROOT}@`)) continue
+			const row = JSON.parse(raw as string) as Contact
+			out[row.profileId] = [...(out[row.profileId] ?? []), row.name]
+		}
+		return out
+	}
+
+	test("a switch after the second row writes nothing more, to either profile, and the toast reports it", async () => {
+		const { api, contacts } = await startWallet()
+		const page = openContactsPage(contacts)
+		accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
+			sendersOf(activeProfile).add(address.toLowerCase())
+			switchProfile("p2")
+			return address
+		})
+
+		const { done } = await pick(page, fiveNew)
+		expect(await confirm(page, done)).toBe("Import incomplete · 2 of 5 contacts written")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben"] })
+		expect(accountState.addSender).toHaveBeenCalledTimes(1)
+		expect([...sendersOf("p1")]).toEqual([ADDR.b])
+		expect(sendersOf("p2").size).toBe(0)
+	})
+
+	test("control: the same file without a switch writes every row to the profile it was shown in", async () => {
+		const { api, contacts } = await startWallet()
+		const page = openContactsPage(contacts)
+
+		const { done } = await pick(page, fiveNew)
+		expect(await confirm(page, done)).toBe("Contacts imported · 1 sender registered")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
+		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 	})
 })
 
@@ -444,7 +522,7 @@ describe("import composition — the released contacts file", () => {
 		expect(await confirm(page, done)).toBe("No contacts selected for import")
 		expect(await api.storage.local.get(null)).toEqual(before)
 
-		activeProfile = "p2"
+		switchProfile("p2")
 		;({ done } = await pick(page, released))
 		expect(shown(page.popup).every((r) => r.kind === "new" && r.selected)).toBe(true)
 		expect(senderLine(page.popup)).toBe("2 senders will be registered on Testnet.")
@@ -478,7 +556,7 @@ describe("import composition — the released full backup", () => {
 
 		const validated = await validateAndMigrateBackup(JSON.parse(readFileSync(CURRENT_BACKUP_FIXTURE, "utf8")))
 		if (validated.kind !== "ok") throw new Error(`the released backup was rejected: ${validated.message}`)
-		activeProfile = "p2"
+		switchProfile("p2")
 		normalizeAllIds(validated.data, "profileId", "p2")
 		const errors: unknown[] = []
 		await restoreServiceSlices(

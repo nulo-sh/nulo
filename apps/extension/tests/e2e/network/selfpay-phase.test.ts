@@ -256,13 +256,13 @@ async function swTrail(ctx: Ctx, match: string, since = Date.now() - 60_000): Pr
 async function enableDeveloperLogs(ctx: Ctx): Promise<void> {
 	const popup = await openPopup(ctx)
 	await waitForHash(popup, "#/popup/general", 30_000)
-	await navigateByHash(popup, "#/popup/settings/advanced")
+	await navigateByHash(popup, "#/popup/settings/developer")
 	const toggle = (key: string) => `[data-testid="settings-toggle-${key}"]`
 	try {
 		await popup.waitForSelector(toggle("developerMode"), { visible: true, timeout: 30_000 })
 	} catch (e) {
 		const body = await popup.evaluate(() => ({ hash: window.location.hash, text: (document.body.innerText ?? "").slice(0, 400) }))
-		throw new Error(`advanced settings never rendered the developer-mode toggle: ${JSON.stringify(body)} (${(e as Error).message})`)
+		throw new Error(`developer settings never rendered the developer-mode toggle: ${JSON.stringify(body)} (${(e as Error).message})`)
 	}
 	await clickByTestId(popup, "settings-toggle-developerMode")
 	await popup.waitForSelector(toggle("debugMode"), { visible: true, timeout: 30_000 })
