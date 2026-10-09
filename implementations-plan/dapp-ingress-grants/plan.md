@@ -287,7 +287,7 @@ Plain-language steps. "Gate" means the validation block at the end of the phase.
 - Pass: every command exits 0; the new tests are listed and green.
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1.2: attribute an unstamped handshake by its marker (#228)
+#### Phase 1.2: attribute an unstamped handshake by its marker (#228) ✓
 
 1. Move `wireSessionTeardown` into `session-revocation.ts` and export it.
 2. Add `pendingVerification` to `LiveSessionRevocationDeps`.
@@ -544,6 +544,12 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 
 - **D-orch-1, no stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; no `gh stack init` or `adopt`. Arcs 2 and 3 branch from arc 1's branch and rebase onto `dev` after it lands (the accessibility-1 precedent the Delivery section already allows).
 - **D-orch-2, arc 1 only.** Nothing of arcs 2, 3 or 4 is built: they wait on decision pages 2 and 3, charter C11, holds H1 and H5 and the OWNER-ASKS answers (all eight asks are on pages 2 and 3). Arc 1's two behaviour changes for rows no writer can produce (a fixed `ValidationError("Malformed capability")` instead of a `TypeError`; a `debug` line instead of `warn` when a malformed grant skips the queued row) are accepted as stated; nothing a screen shows, a string, or an app-facing error for a producible row changes.
+
+### Implementation deviations (arc 1)
+
+- **D-impl-1.** `projectStoredGrants` is exported through `dispatcher.ts`'s existing `export { … } from "./capability-negotiation"` line, which `index.ts` re-exports; the public surface is the one the plan names.
+- **D-impl-2.** Revocation tombstones the channel's own-tab marker on every channel it ends, not only an unstamped one. A stamped channel with a live marker is still inside `showVerifyWindow`; its success would only spend a marker of an attempt already revoked, and a tombstone makes a retry of that id terminate instead of passing as a reconnect. Strictly fail-closed, and one branch fewer.
+- **D-impl-3.** The establishment recheck lives in two helpers (`lostApproval`, `settleCapturedMarker`) so `handleSessionEstablished` stays under the cognitive-complexity budget (19 inline, under 15 after); the dead-approval log reads "…, so it is terminated" since the copy dash ban reads `terminateWith` arguments.
 
 ### Plan-space search: the competing outline
 

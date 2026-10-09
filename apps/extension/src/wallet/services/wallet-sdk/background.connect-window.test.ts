@@ -17,6 +17,8 @@ let captured: Callbacks | undefined
 const handlerCalls: string[] = []
 const live = new Set<string>()
 const discoveryTabs = new Map<string, number>()
+/** What each discovery named, which the SDK's session for that request id carries. */
+const discovered = new Map<string, { origin: string; chainInfo: unknown }>()
 const droppedTabs = new Set<number>()
 let approveReturns = true
 
@@ -29,7 +31,7 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 			return Promise.resolve()
 		}
 		getActiveSessions() {
-			return [...live].map((sessionId) => ({ sessionId, tabId: discoveryTabs.get(sessionId) }))
+			return [...live].map((sessionId) => ({ sessionId, tabId: discoveryTabs.get(sessionId), ...discovered.get(sessionId) }))
 		}
 		approveDiscovery(id: string) {
 			handlerCalls.push(`approve:${id}`)
@@ -145,7 +147,7 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	const popups = new Map<string, (answer: { approved: boolean; windowId?: number }) => void>()
 	const journal = { countOperations: vi.fn(async () => 0), createOperation: vi.fn(async () => ({ id: "queued-1" })) }
 	let activeProfile: { id: string } | undefined = { id: "p1" }
-	const { services, rows } = fakeSdkServices({
+	const { services, rows, onDappSessionDeleted } = fakeSdkServices({
 		popup: (_params, requestId) => new Promise((resolve) => popups.set(requestId, resolve)),
 		activeProfile: async () => activeProfile,
 		setCapabilityGrants: opts.setCapabilityGrants,
@@ -155,6 +157,7 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	const discover = (requestId: string, over: Record<string, unknown> = {}) => {
 		const discovery = { requestId, origin: ORIGIN, appId: "app", appName: "App", ...chain(1), timestamp: Date.now(), tabId: 7, ...over }
 		discoveryTabs.set(requestId, discovery.tabId)
+		discovered.set(requestId, { origin: discovery.origin, chainInfo: discovery.chainInfo })
 		captured?.onPendingDiscovery(discovery)
 	}
 	/** The person clicks Allow in `requestId`'s connect window, which the browser knows as `windowId`. */
@@ -179,7 +182,9 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	const setProfile = (profile: { id: string } | undefined) => {
 		activeProfile = profile
 	}
-	return { discover, allow, establish, closeTab, setProfile, windows, rows, journal }
+	/** A row of the app on chain 1 under `profileId` went away. */
+	const rowDeleted = (profileId: string) => onDappSessionDeleted.invoke({ dappMetadata: { url: ORIGIN }, chainId: "1", profileId })
+	return { discover, allow, establish, closeTab, setProfile, rowDeleted, windows, rows, journal }
 }
 
 /** Settle the handler's pending microtasks without moving the clock. */
@@ -200,6 +205,7 @@ beforeEach(() => {
 	handlerCalls.length = 0
 	live.clear()
 	discoveryTabs.clear()
+	discovered.clear()
 	droppedTabs.clear()
 	tabRemoved.length = 0
 	approveReturns = true
@@ -379,6 +385,26 @@ describe("an Allow while the origin's two verification slots are held", () => {
 		await flush()
 		expect(rejected()).toEqual(["f3"])
 		expect(approved()).toEqual(["f1", "f2"])
+	})
+})
+
+describe("a deleted row while an approved handshake is not stamped yet", () => {
+	test.each([
+		["another profile's row keeps the handshake", "p2", []],
+		["the approving profile's row ends it and tombstones its marker", "p1", ["f1"]],
+	])("%s", async (_name, profileId, ended) => {
+		const h = boot()
+		h.discover("f1")
+		await flush()
+		h.allow("f1", 41)
+		await flush()
+		// Key exchange is done, so the SDK lists the session; establishment has not stamped it.
+		live.add("f1")
+
+		h.rowDeleted(profileId)
+
+		expect(terminated()).toEqual(ended)
+		expect(markers().get("f1")?.cancelled).toBe(ended.length > 0 ? true : undefined)
 	})
 })
 

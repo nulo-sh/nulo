@@ -139,6 +139,23 @@ export async function handleSessionEstablished(
 			)
 			return false
 		}
+		const lost = lostApproval(deps.pendingVerification, session.sessionId, marker)
+		if (lost === "replaced") {
+			// Termination and liveness work by id, which now names the other attempt: retire untouched.
+			deps.logger.log(
+				"wallet-sdk-bg",
+				LogLevel.Warn,
+				`Session ${describeExternalId(session.sessionId)} lost its approval to another attempt during establishment — not stamping`,
+			)
+			return false
+		}
+		// A revocation tombstones the marker before it terminates, so a termination that threw cannot
+		// be followed by a stamp.
+		if (lost === "dead") {
+			return terminateWith(
+				`Session ${describeExternalId(session.sessionId)} on chain ${chainId} lost its approval during establishment, so it is terminated`,
+			)
+		}
 		// Bind the live channel to its owning profile — consumed by the dispatch
 		// guard and the profile-switch teardown.
 		deps.stampSessionProfile(session.sessionId, dappSession.profileId)
@@ -167,10 +184,32 @@ export async function handleSessionEstablished(
 	} finally {
 		// A failed exit leaves a tombstone: the SDK restores the discovery, and a marker-less retry of
 		// this id would pass as a reconnect, which skips the check on a row since marked trusted.
-		if (isNewConnection) settlePendingVerification(deps.pendingVerification, session.sessionId, established)
+		settleCapturedMarker(deps.pendingVerification, session.sessionId, marker, established)
 		// Every exit that opened no window gives the slot back; an issued creation keeps it.
 		reservation?.releaseIfUnstarted()
 	}
+}
+
+/** Why the approval this attempt captured no longer stands: a revocation tombstoned it, or an id the
+ *  page reused now names another attempt's approval. */
+function lostApproval(
+	markers: Map<string, PendingVerificationEntry>,
+	id: string,
+	marker: PendingVerificationEntry | undefined,
+): "dead" | "replaced" | undefined {
+	if (marker === undefined) return undefined
+	if (markers.get(id) !== marker) return "replaced"
+	return isPendingVerificationDead(marker) ? "dead" : undefined
+}
+
+/** A marker that replaced the captured one belongs to its own attempt, which settles it. */
+function settleCapturedMarker(
+	markers: Map<string, PendingVerificationEntry>,
+	id: string,
+	marker: PendingVerificationEntry | undefined,
+	established: boolean,
+): void {
+	if (marker !== undefined && markers.get(id) === marker) settlePendingVerification(markers, id, established)
 }
 
 function showVerifyWindow(url: string, sessionId: string, reservation: WindowReservation, deps: SessionEstablishedDeps): Promise<void> {

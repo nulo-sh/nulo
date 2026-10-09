@@ -14,6 +14,7 @@ import type { WindowBounds } from "@nulo/wallet-core/ports"
 import { cancelPendingVerification, PENDING_VERIFICATION_STALE_MS, type PendingVerificationEntry } from "./pending-verification"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { chainInfoToChainId, type SessionEstablishedDeps, handleSessionEstablished } from "./session-established"
+import { revokeLiveSessions } from "./session-revocation"
 import { VerifyAdmissionGate, type WindowReservation } from "./verify-admission"
 
 const noopLogger = { log: () => {} } as unknown as ILogger
@@ -391,6 +392,86 @@ describe("handleSessionEstablished — profile binding", () => {
 		expect(stamp).not.toHaveBeenCalled()
 		expect(create).not.toHaveBeenCalled()
 		expect(isSessionLive).toHaveBeenCalledTimes(2)
+	})
+})
+
+describe("handleSessionEstablished — the approval ends while the hash is written", () => {
+	/** A new connection approved under prof-A, paused inside its hash write until `resume`. */
+	function paused() {
+		let resume!: () => void
+		const setVerificationHash = vi.fn(() => new Promise<void>((r) => (resume = r)))
+		const approved = marker("prof-A")
+		const h = makeDeps({
+			pendingVerification: new Map([["sess-1", approved]]),
+			dappSessionService: {
+				tryGetDappSessionByOriginAndChain: vi
+					.fn()
+					.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: false }),
+				setVerificationHash,
+			},
+		})
+		const establishing = handleSessionEstablished(makeSession(), h.deps)
+		const written = vi.waitFor(() => expect(setVerificationHash).toHaveBeenCalledTimes(1))
+		return { ...h, approved, establishing, written, resume: () => resume() }
+	}
+
+	test("a revocation for the approving profile whose termination throws: no stamp, the session ends, the marker stays a tombstone", async () => {
+		const h = paused()
+		await h.written
+		revokeLiveSessions(
+			{
+				getActiveSessions: () => [{ ...makeSession(), tabId: 7 }],
+				sessionProfiles: new Map(),
+				pendingVerification: h.pendingVerification,
+				terminateSession: () => {
+					throw new Error("port gone")
+				},
+				logger: noopLogger,
+			},
+			{ origin: ORIGIN, chainId: "0", profileId: "prof-A" },
+		)
+		h.resume()
+		expect(await h.establishing).toBe(false)
+		expect(h.stamp).not.toHaveBeenCalled()
+		expect(h.terminate).toHaveBeenCalledWith("sess-1")
+		expect(h.pendingVerification.get("sess-1")).toBe(h.approved)
+		expect(h.approved.cancelled).toBe(true)
+	})
+
+	test("control: with no revocation the same establishment stamps and spends the marker", async () => {
+		const h = paused()
+		await h.written
+		h.resume()
+		expect(await h.establishing).toBe(true)
+		expect(h.stamp).toHaveBeenCalledWith("sess-1", "prof-A")
+		expect(h.pendingVerification.has("sess-1")).toBe(false)
+	})
+
+	test("a marker another attempt put under the same id is left to it: no stamp, no termination, its marker and slot untouched", async () => {
+		const h = paused()
+		await h.written
+		// The old slot was given back (its hook tombstoned the old marker), then a discovery reusing
+		// the id was admitted and approved.
+		h.reservation.releaseIfUnstarted()
+		let replacementSlot: WindowReservation | undefined
+		h.gate.admit(
+			{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+			(r) => {
+				replacementSlot = r
+			},
+			() => {},
+		)
+		const replacement = marker("prof-A")
+		h.pendingVerification.set("sess-1", replacement)
+		h.resume()
+		expect(await h.establishing).toBe(false)
+		expect(h.stamp).not.toHaveBeenCalled()
+		expect(h.terminate).not.toHaveBeenCalled()
+		expect(h.pendingVerification.get("sess-1")).toBe(replacement)
+		expect(replacement).toEqual(marker("prof-A", { at: replacement.at }))
+		expect(h.gate.reservation("sess-1")).toBe(replacementSlot)
+		expect(replacementSlot?.status).toBe("unstarted")
+		expect(h.gate.windowsHeld(ORIGIN)).toBe(1)
 	})
 })
 

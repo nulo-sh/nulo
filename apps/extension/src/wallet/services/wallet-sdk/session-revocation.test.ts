@@ -5,6 +5,7 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { SESSION_INVALID_ERROR } from "./error-envelope"
+import { PENDING_VERIFICATION_STALE_MS, type PendingVerificationEntry } from "./pending-verification"
 import { revokeLiveSessions } from "./session-revocation"
 
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({ BackgroundConnectionHandler: class {} }))
@@ -18,7 +19,8 @@ const ORIGIN = "https://dapp.example"
 /** `{ chainId: 1, version: 1 }` is wallet chain 0, as every handshake test discovers with. */
 const CHAIN_0 = { chainId: "0x01", version: "0x01" }
 const CHAIN_OTHER = { chainId: "0x01", version: "0x02" }
-const live = (sessionId: string, origin = ORIGIN, chainInfo = CHAIN_0) => ({ sessionId, origin, chainInfo })
+const TAB = 7
+const live = (sessionId: string, origin = ORIGIN, chainInfo = CHAIN_0) => ({ sessionId, origin, tabId: TAB, chainInfo })
 const noopLogger = { log: () => {} } as never
 
 /** Drives one dApp call through the real ingress with `sessionProfiles` as the stamps. */
@@ -56,8 +58,16 @@ describe("the dispatch guard refuses an unstamped channel", () => {
 
 describe("revokeLiveSessions", () => {
 	const APP = { origin: ORIGIN, chainId: "0", profileId: "p1" }
-	const revoke = (sessions: ReturnType<typeof live>[], sessionProfiles: Map<string, string>, terminateSession = vi.fn()) => {
-		revokeLiveSessions({ getActiveSessions: () => sessions, sessionProfiles, terminateSession, logger: noopLogger }, APP)
+	const revoke = (
+		sessions: ReturnType<typeof live>[],
+		sessionProfiles: Map<string, string>,
+		terminateSession = vi.fn(),
+		pendingVerification = new Map<string, PendingVerificationEntry>(),
+	) => {
+		revokeLiveSessions(
+			{ getActiveSessions: () => sessions, sessionProfiles, pendingVerification, terminateSession, logger: noopLogger },
+			APP,
+		)
 		return terminateSession
 	}
 
@@ -81,16 +91,38 @@ describe("revokeLiveSessions", () => {
 		expect((await callFrom("other-chain", sessionProfiles)).dispatch).toHaveBeenCalledTimes(1)
 	})
 
-	test("another profile's channel to the same app is kept; an unstamped one ends", () => {
-		const sessionProfiles = new Map([
-			["mine", "p1"],
-			["theirs", "p2"],
-		])
+	const approval = (profileId: string, over: Partial<PendingVerificationEntry> = {}): PendingVerificationEntry => ({
+		at: Date.now(),
+		profileId,
+		tabId: TAB,
+		...over,
+	})
+	const stale = { at: Date.now() - PENDING_VERIFICATION_STALE_MS - 1 }
 
-		const terminateSession = revoke([live("mine"), live("theirs"), live("unstamped")], sessionProfiles)
+	test.each<[string, string | undefined, PendingVerificationEntry | undefined, boolean, boolean | undefined]>([
+		["stamped to another profile is kept", "p2", undefined, false, undefined],
+		["unstamped, approved under another profile from its own tab, is kept", undefined, approval("p2"), false, undefined],
+		["stamped to this profile ends", "p1", undefined, true, undefined],
+		["unstamped, approved under this profile, ends and its marker dies", undefined, approval("p1"), true, true],
+		["unstamped with no approval (a reconnect or debris) ends", undefined, undefined, true, undefined],
+		["unstamped on a stale approval of another profile ends", undefined, approval("p2", stale), true, true],
+		[
+			"unstamped on another profile's approval from another tab ends, leaving that marker",
+			undefined,
+			approval("p2", { tabId: TAB + 1 }),
+			true,
+			undefined,
+		],
+	])("a channel %s", (_name, stamp, marker, ended, tombstoned) => {
+		const sessionProfiles = new Map(stamp === undefined ? [] : [["s1", stamp]])
+		const pendingVerification = new Map(marker === undefined ? [] : [["s1", marker]])
 
-		expect(terminateSession.mock.calls).toEqual([["mine"], ["unstamped"]])
-		expect(sessionProfiles.get("theirs")).toBe("p2")
+		const terminateSession = revoke([live("s1")], sessionProfiles, vi.fn(), pendingVerification)
+
+		expect(terminateSession.mock.calls).toEqual(ended ? [["s1"]] : [])
+		expect(sessionProfiles.has("s1")).toBe(stamp !== undefined && !ended)
+		// Another tab's marker holds an id the page chose and is never abandoned on this channel's behalf.
+		expect(pendingVerification.get("s1")?.cancelled).toBe(tombstoned)
 	})
 
 	test("a session whose chain info does not decode is skipped, and the matches after it still end", () => {
