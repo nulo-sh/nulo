@@ -5,7 +5,7 @@
 - **Date**: 2026-10-07
 - **Status**: completed.
 - **Shipped**: `quality-status`, actionlint's `Status` and release's `status` check every need against its own condition and the control outputs those conditions read; `attach-assets` publishes only past gates that all succeeded and never from a cancelled run; every PR workflow cancels its run in flight only on a push's first attempt. Pinned by `scripts/ci-cd/aggregators.test.ts` and `scripts/ci-cd/behavior-gating.test.ts`, documented in `CI.md` ("Concurrency").
-- **Open items**: none owned here. The residuals below are in `follow-ups.md`. To watch: the first PR labelled while a run is in flight should show the label's run queued, then green, and no cancelled run with a failed aggregator on its head.
+- **Open items**: the label-snapshot race (#167); the cancel residual is a `lessons.md` line. To watch: the first PR labelled while a run is in flight should show the label's run queued, then green, and no cancelled run with a failed aggregator on its head.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 Two defects let the required checks disagree with the gates behind them: three aggregators pass when their gates never ran, and a PR event on an unchanged head cancels the run in flight, whose aggregator then posts a FAILURE under a required name beside the surviving run's green one.
@@ -118,7 +118,7 @@ Each finding and its resolution:
 
 1. **A re-run of a `synchronize` run would still cancel a same-head run** (blocker). Adopted: D3 cancels only on the first attempt.
 2. **The merge box's choice among copies is unproven, and `workflow_dispatch` checks never count for a PR.** Adopted: the claim is narrowed to the rollup and the design is shown not to depend on it; `pr-quick.yml`'s recovery advice is corrected. A disposable protected-PR experiment was not run: no outcome of it changes the design.
-3. **Out-of-order entry can replace a newer queued run with a stale one, or let an older push cancel the current head's run.** Adopted as a residual, with its remedy, in `follow-ups.md`: both races predate this change, which makes them rarer, and reading live PR state in four gates is a change of its own.
+3. **Out-of-order entry can replace a newer queued run with a stale one, or let an older push cancel the current head's run.** Adopted as a residual, with its remedy, in `follow-ups.md` (now #167): both races predate this change, which makes them rarer, and reading live PR state in four gates is a change of its own.
 4. **The earlier-green window exists for opt-in labels too, not only Firefox drafts.** Adopted: both are named under Residuals, and the plan claims fail-closed aggregators, not closed windows.
 5. **The release state machine was promised, not specified, and empty outputs could excuse a skipped store upload.** Adopted: the table above, and validation of `release_created`, `unstuck`, `is_prerelease` and `on_main`.
 6. **Cancellation must fail the release status.** Adopted in substance: a stage cancelled, or skipped by `!cancelled()` where it was due, already fails the exact check, and the test covers both; no separate cancel rule was added.

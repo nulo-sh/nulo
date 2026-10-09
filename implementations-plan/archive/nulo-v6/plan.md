@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The wallet runs on the Aztec 6.0.0-rc.1 line as "Nulo V6", derives accounts under the `nulo-v6` regime, seeds the V6 testnet as its one public network, and was submitted to both extension stores (`packages/aztec-runtime/src/account/address-freeze.ts`, `apps/extension/src/utils/chain-ids.ts`, `apps/extension/store/listing.md`).
-- **Open items**: the get-gas link's mainnet follow-through, a fetched default token list, a V6 mainnet seed and its fee policy, an automated live-transaction smoke, a held `presto-banners` bump, the incoming-transfer poll cost on the shared RPC key, and the store launch's owner steps, all tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the get-gas link's mainnet follow-through, a fetched default token list, a V6 mainnet seed and its fee policy, an automated live-transaction smoke, a held `presto-banners` bump, the incoming-transfer poll cost on the shared RPC key, tracked in #77, #79, #80, #81, #82 and #143. The store launch's owner steps are in `BEFORE-LAUNCH.md` § 2.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision
@@ -42,4 +42,4 @@ These break silently or fail open when a package or scope rename misses them, an
 
 ### Store upload
 
-The store launch ran after the V6 release. Chrome took the upload as a staged publish and Firefox took the same zip by hand after the automated job's reviewer notes exceeded the add-on site's 3,000-character cap, which nothing had checked. The publish now refuses over-cap notes before uploading, and an AMO 400 reports that no version was created. Two gotchas went to the release runbook in `CLAUDE.md`. The remaining owner steps are in follow-ups.
+The store launch ran after the V6 release. Chrome took the upload as a staged publish and Firefox took the same zip by hand after the automated job's reviewer notes exceeded the add-on site's 3,000-character cap, which nothing had checked. The publish now refuses over-cap notes before uploading, and an AMO 400 reports that no version was created. Two gotchas went to the release runbook in `CLAUDE.md`. The remaining owner steps are in `BEFORE-LAUNCH.md` § 2.

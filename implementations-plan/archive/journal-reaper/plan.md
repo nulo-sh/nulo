@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A pre-claim wait heartbeat with a bounded lease, a stage-guarded reaper, a bounded `waitForTx`, and controller cleanup under both journal keys. Live in `apps/extension/src/wallet/services/execution/execution-lane.ts`, `apps/extension/src/wallet/services/operation-journal/` (`reaper.ts`, `service.ts`), `apps/extension/src/wallet/services/transaction/service.ts`, `apps/extension/src/wallet/services/execution/dapp-send-executor.ts` and `apps/extension/src/wallet/services/wallet-sdk/background.ts` and `apps/extension/src/wallet/services/wallet-sdk/queued-wait-vouching.ts`.
-- **Open items**: a `sendTx` leg inside a dApp `batch` gets no queued journal record while it waits, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: a `sendTx` leg inside a dApp `batch` gets no queued journal record while it waits, tracked in #126.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

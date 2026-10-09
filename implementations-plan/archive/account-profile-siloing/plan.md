@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Activity state is held in per-scope slices keyed by profile, network, chain and account (`packages/wallet-core/src/activity/scope.ts`, `apps/extension/src/stores/activity.store.ts`); account rows are filed per profile and chain, and a switch guard lives in `apps/extension/src/utils/in-flight-send.ts`. The durable causal protocol it also built was later deleted as unused ([hd-behaviour-alignment](../hd-behaviour-alignment/plan.md)).
-- **Open items**: a resurrected late-mined authwit transaction leaves its registry row pending forever, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: none. A late-mined authwit transaction's registry row left pending is an accepted residual, not open work: the row stays visible and revocable, and a resurrection inside the reconcile window confirms it (`auth-registry/service.ts`).
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

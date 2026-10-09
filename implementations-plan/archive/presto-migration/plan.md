@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The wallet proves through Presto (`packages/aztec-runtime/src/pxe/chain-runtime.ts`), the network e2e runners install a headless Presto server (`.github/actions/setup-presto-server`), the activity card names where each proof ran (`apps/extension/src/utils/card-subtitle.ts`), and onboarding and Settings show Presto's states (`apps/extension/src/onboarding/pages/presto.vue`, `apps/extension/src/popup/pages/settings/proving.vue`).
-- **Open items**: the missing "Grant access" onboarding step for Presto on Firefox, tracked in [follow-ups](../../follow-ups.md). The playground's nested stale `@aztec/protocol-contracts` has since resolved: the playground is on the workspace's Aztec line and no package is held.
+- **Open items**: the missing "Grant access" onboarding step for Presto on Firefox, tracked in #156. The playground's nested stale `@aztec/protocol-contracts` has since resolved: the playground is on the workspace's Aztec line and no package is held.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

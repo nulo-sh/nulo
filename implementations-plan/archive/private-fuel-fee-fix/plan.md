@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The embedded fee strategy reuses the fee cap it already committed instead of refetching it after simulation, in `apps/extension/src/wallet/services/execution/fee/fee-strategy.ts`, while the bridge-side fee cap derivation and fuel floor calibration belong to the bridge code, which lives in the `alejoamiras/unleashed` repository.
-- **Open items**: An embedded fee payment with no `maxFeesPerGas` commits an unpadded cap, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: An embedded fee payment with no `maxFeesPerGas` commits an unpadded cap, tracked in #118.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

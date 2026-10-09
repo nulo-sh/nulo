@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A connect window that turns into the emoji check, in `apps/extension/src/wallet/services/wallet-sdk/session-established.ts`, `verify-admission.ts` and `pending-verification.ts`, with the pages `apps/extension/src/popup/windows/discover/index.vue`, `verify/index.vue` and `ConnectStepBar.vue`.
-- **Open items**: the connect header naming the active rather than the dApp's network, the waiting window's "wants to connect" copy, the step bar's low-contrast empty half, a failed wait closing the window with no message, screen-reader announcement of the swap to the check, and the `network/price-fixture` time budget, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the connect header naming the active rather than the dApp's network, the waiting window's "wants to connect" copy, the step bar's low-contrast empty half, a failed wait closing the window with no message, screen-reader announcement of the swap to the check, and the `network/price-fixture` time budget, tracked in #123, #124 and #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

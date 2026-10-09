@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Spacing, title and copy changes on Home, History and Settings, and a held price skeleton on Home's hero: `apps/extension/src/popup/pages/tab-hero.module.css`, `apps/extension/src/composables/usePrices.ts` and the activity components under `apps/extension/src/popup/components/modules/general/`, with e2e seeders in `apps/extension/tests/e2e/helpers/activity-seeds.ts`.
-- **Open items**: a failed first price fetch ending Home's hero in "$0.00", the two Home view links being mouse-only and low in contrast, History not filtering to a token, a doubled title for screen readers, Home's header spacing against the drawing, and routing retired e2e gotchas into the `e2e-testing` skill, each tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: a failed first price fetch ending Home's hero in "$0.00", the two Home view links being mouse-only and low in contrast, History not filtering to a token, a doubled title for screen readers, Home's header spacing against the drawing, and routing retired e2e gotchas into the `e2e-testing` skill, each tracked in #116, #129, #130, #131, #132 and #185.
 - **Seeds retired**: the plan's goal and loop seeds are spent; nothing to resume.
 
 ## Decision

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A one-simulation estimate for the canonical Sponsored FPC in `apps/extension/src/wallet/services/execution/fee/fpc-strategy.ts`, estimate cancellation in `apps/extension/src/wallet/services/execution/estimate-cancel-registry.ts`, and dApp estimate-to-confirm reuse in `apps/extension/src/wallet/services/execution/operation-estimate-reuse.ts`.
-- **Open items**: the admission cap frees a slot while its simulation still runs, because nothing tells the registry when the offscreen work drains; the fix is a completion or cancellation acknowledgement from the offscreen queue, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the admission cap frees a slot while its simulation still runs, because nothing tells the registry when the offscreen work drains; the fix is a completion or cancellation acknowledgement from the offscreen queue, tracked in #119.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

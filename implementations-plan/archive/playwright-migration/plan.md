@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: abandoned.
 - **Shipped**: Nothing; the e2e suites stay on Puppeteer under `apps/extension/tests/e2e/`.
-- **Open items**: routing the e2e gotchas the lessons rewrite retired into the `e2e-testing` skill, which includes this dead end, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: routing the e2e gotchas the lessons rewrite retired into the `e2e-testing` skill, which includes this dead end, tracked in #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

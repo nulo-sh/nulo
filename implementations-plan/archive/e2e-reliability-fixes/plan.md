@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: seven root-cause fixes to e2e flakes in `apps/extension/tests/e2e/` and `apps/extension/scripts/e2e/resolve-ports.ts`, plus a stable per-row attribute on the fee menu in `apps/extension/src/popup/components/modules/send/`. Nothing a person sees changes.
-- **Open items**: recheck the file-scoped token fixture when vitest ships its fixture-retry fix, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: recheck the file-scoped token fixture when vitest ships its fixture-retry fix, tracked in #190.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision
