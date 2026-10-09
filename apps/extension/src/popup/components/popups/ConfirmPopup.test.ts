@@ -143,6 +143,7 @@ describe("ConfirmPopup — the confirm button's variant", () => {
 		const cancel = wrapper.find('[data-testid="confirm-cancel"]')
 		expect(submit.attributes("data-variant")).toBe("destructive")
 		expect(cancel.attributes("data-variant")).toBe("primary_outline")
+		expect(submit.attributes("data-size")).toBe("medium")
 		expect(submit.attributes("data-size")).toBe(cancel.attributes("data-size"))
 
 		await wrapper.setProps({ show: false })

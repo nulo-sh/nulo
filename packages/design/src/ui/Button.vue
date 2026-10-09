@@ -21,8 +21,7 @@ const props = defineProps({
 	 *   cta                 — full-width brutalist big CTA
 	 *   cta_outline         — outline-style CTA (transparent + outline)
 	 *   cta_destructive     — red-bg CTA (destructive action confirmation)
-	 *   destructive         — primary's type and size on red, for a destructive action beside a
-	 *                         regular button, where a CTA's tracking would clip the label
+	 *   destructive         — primary's type on red, at the regular sizes (a CTA clips in a half-width row)
 	 */
 	variant: {
 		type: String as PropType<
@@ -234,8 +233,7 @@ const rel = computed(() => {
 }
 
 /** VARIANTS */
-/** The regular button's type, one rule for it and its red twin so the two cannot drift. Size and
- *  padding come from the size classes; neither variant may set them. */
+/** One type rule, so the red twin cannot drift from primary; size and padding belong to the size classes. */
 .wrapper.primary,
 .wrapper.destructive {
 	font-family: var(--font-headline);
