@@ -53,6 +53,8 @@ test("the node reference mode only accepts the flipped script shape", () => {
 	expect(parseFlippedScript("vitest run")).toBeNull()
 })
 
+// Each case runs a vitest subprocess, which can outlast bun test's 5 s default on a loaded host; 90 s
+// sits above runFixture's 60 s, so the tool's own timeout, the thing under test, fires first.
 for (const engine of ["node", "bun"] as const) {
 	describe(`fixtures on ${engine}`, () => {
 		test("passing: zero failed runs and the engine is recorded per run", async () => {
@@ -65,13 +67,13 @@ for (const engine of ["node", "bun"] as const) {
 			expect(run.skipped).toBe(1)
 			expect(run.todo).toBe(1)
 			expect(statuses.get("passing.fixture.ts :: passes")).toBe("passed")
-		})
+		}, 90_000)
 
 		test("crash: a killed worker is a failed run", async () => {
 			const { run } = await runFixture(engine, "crash")
 			expect(isFailedRun(run)).toBe(true)
 			expect(run.exitCode === 0).toBe(false)
-		})
+		}, 90_000)
 
 		test("hang: the tool's timeout kills the process group, marks the run timed out, leaves no survivor", async () => {
 			const { run } = await runFixture(engine, "hang", 8_000)
@@ -87,20 +89,20 @@ for (const engine of ["node", "bun"] as const) {
 			expect(run.missingJson).toBe(true)
 			expect(run.timedOut).toBe(false)
 			expect(isFailedRun(run)).toBe(true)
-		})
+		}, 90_000)
 
 		test("unhandled rejection: the exit code carries it (vitest's JSON `success` does not)", async () => {
 			const { run } = await runFixture(engine, "unhandled-rejection")
 			expect(run.exitCode).not.toBe(0)
 			expect(run.success).toBe(true)
 			expect(isFailedRun(run)).toBe(true)
-		})
+		}, 90_000)
 
 		test("sourcemap: the failure names the exact source line", async () => {
 			const { run } = await runFixture(engine, "sourcemap")
 			expect(isFailedRun(run)).toBe(true)
 			expect(run.failing).toEqual(["sourcemap.fixture.ts :: fails on a known line"])
 			expect(run.failureMessages["sourcemap.fixture.ts :: fails on a known line"]).toContain("sourcemap.fixture.ts:5")
-		})
+		}, 90_000)
 	})
 }
