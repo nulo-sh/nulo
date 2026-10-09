@@ -31,3 +31,8 @@ Commands as plan.md § Implementation phases defines them (smoke runs build firs
 - Red: twelve rows in the new status block of `theme-contrast.test.ts` (nine light AA pairs, three dark aliases) and two source-rule tests in `TransactionTerminalCard.test.ts`.
 - Light ratios from `contrast()`, matching options.md: amber 5.28 / 5.00 / 4.57, red 6.00 / 5.68 / 5.20, green 5.44 / 5.15 / 4.71 on the page, surface-low and surface-high.
 - Green: design and unit tests; fast layers; `build-storybook`. Storybook shots before and after on Chrome and Firefox: every dark story and the gray story are byte-identical under `cmp`; only the light amber, red and green lines changed.
+
+## Arc 2 review, round 1
+
+- Codex and Opus both flagged that smoke "View all" waits on every testnet default token landing. I first kept it on the `rows.test.ts` precedent; Opus showed that precedent waits only for the list to settle, which a failed default also satisfies, while "View all" needs a fourth row. The "View all" assertions moved to `network/home-cap.test.ts` (four funded tokens), which passed on Chrome and Firefox at retry 0.
+- A first try at the token page seeded token row 1 before Home settled: the list never settled (150 s timeout, both browsers), because a token row the wallet did not land keeps its default token's seed working until a balance row lands. Seeding it after Home's part, then reloading, as `rows.test.ts` does for that page, avoids it.

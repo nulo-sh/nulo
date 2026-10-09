@@ -85,7 +85,7 @@
 	--nulo-outline: #4a463f;
 	--nulo-border: #231f1c;
 	--nulo-secondary: #999187;
-	/* A graphic's empty track: 3:1 on the page, unlike --nulo-border, and lighter than the light accent. */
+	/* A graphic's empty track: 3:1 on the page, unlike --nulo-border, and apart from the accent in both themes. */
 	--nulo-track: #68625a;
 }
 

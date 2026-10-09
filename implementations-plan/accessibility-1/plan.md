@@ -369,9 +369,23 @@ Built on the owner's page 2 picks (OWNER-ASKS.md § Answers: page 2): calls 1 A,
 **Arc 2 deviations from the plan as written.**
 
 - **A2-D1, delivery.** The orchestrator ran Arcs 1 and 2 in parallel from the plan commit. Arc 2's branch `accessibility-1-home-chrome` stacks on the plan commit, not on Arc 1, and its PR targets `dev`; Arc 1 merges first, then Arc 2 is rebased onto `dev`. This replaces § Delivery's layer order for these two arcs; Arc 3 and the close-out still stack on top.
-- **A2-D2, Phase 2.1.** The smoke spec seeds one transaction, not three: "View history" needs one row, and fewer rows move under the Tab walk. Smoke Home draws "View all" from the four testnet default tokens (I5 holds), so `network/home-cap.test.ts` is untouched.
+- **A2-D2, Phase 2.1.** The smoke spec seeds one transaction, not three: "View history" needs one row, and fewer rows move under the Tab walk.
 - **A2-D3, test helpers.** `tabTo`, `tokenColor` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`, shared by the three specs that read a ring; `rows.test.ts` keeps its own `tabTo` because PR #56 rewrites that file.
 - **A2-D4, Firefox focus.** Each Tab walk calls `prepareKeys` first: on an unfocused Firefox page `document.hasFocus()` is false and no `:focus-visible` rule matches. Onboarding's create page focuses the password field on arrival, so its walk goes back one stop with Shift+Tab; a forward walk leaves the document on Firefox.
+- **A2-D5, "View all" in the network spec.** Smoke Home draws "View all" only once every default token lands from the live testnet; one failed default leaves three rows and no link (`capHomeSlots`). Its assertions moved to `network/home-cap.test.ts`, the plan's own fallback, on four funded tokens; smoke `home-links.test.ts` keeps "View history", on Home and on a token's page.
+
+**Arc 2 audit verdicts.**
+
+Round 1, Codex (GPT-6.1 Sol, `high`, read-only; session `01a120f5`): **conditional approve (tighten two e2e checks).** Opus 5.5 (general-purpose diff review, alongside): **approve after one Medium fix.**
+
+| # | By | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| 1 | Codex, Opus | Med | `home-links.test.ts` needs all four testnet defaults to land before "View all" shows; `rows.test.ts` only waits for the list to settle, which a failed default also satisfies | Accepted (A2-D5); first rejected on the `rows.test.ts` precedent, which Opus showed does not hold |
+| 2 | Codex | Med | The walk to "View history" could wrap the page and still pass, so it proves no reading order | Accepted: the walk from the list's menu to the link must cross no `BODY` and no nav tab |
+| 3 | Codex | Low | The spec's header comment restated its title | Accepted: removed; a comment now says why "View all" is not in smoke |
+| 4 | Opus | Low | A token's page shows the same "View history", which § UI impact did not name | Accepted: the smoke spec Tabs to it there too; the PR body names and shows it |
+| 5 | Opus | Low | The `--nulo-track` comment in the dark block spoke of the light accent | Accepted: reworded; `base.css` re-pinned |
+| 6 | Opus | Low | `.subtitle_green` asserted twice | Accepted: the duplicate removed |
 
 ### Arc 3, after PRs #56, #55 and #58 (page 2, calls 3 and 4)
 

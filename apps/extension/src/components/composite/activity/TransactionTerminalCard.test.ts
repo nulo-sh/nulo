@@ -107,7 +107,6 @@ describe("composite/TransactionTerminalCard", () => {
 				.classes()
 				.some((c) => c.includes("subtitle_green")),
 		).toBe(true)
-		expect(SOURCE).toMatch(/\.subtitle_green \{\s*color: var\(--txt-success\);/)
 	})
 
 	test("amber, red and green subtitles read the status text tokens", () => {
