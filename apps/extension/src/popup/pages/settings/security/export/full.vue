@@ -427,7 +427,7 @@ function confirmPlainDownload() {
 		description:
 			"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
 		confirm_color: "red",
-		confirm_variant: "cta_destructive",
+		confirm_variant: "destructive",
 		confirm_text: "Download anyway",
 		callback: () => {
 			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)

@@ -21,10 +21,12 @@ const props = defineProps({
 	 *   cta                 — full-width brutalist big CTA
 	 *   cta_outline         — outline-style CTA (transparent + outline)
 	 *   cta_destructive     — red-bg CTA (destructive action confirmation)
+	 *   destructive         — primary's type and size on red, for a destructive action beside a
+	 *                         regular button, where a CTA's tracking would clip the label
 	 */
 	variant: {
 		type: String as PropType<
-			"primary" | "primary_outline" | "secondary" | "ghost" | "text" | "cta" | "cta_outline" | "cta_destructive"
+			"primary" | "primary_outline" | "secondary" | "ghost" | "text" | "cta" | "cta_outline" | "cta_destructive" | "destructive"
 		>,
 		default: "primary",
 	},
@@ -232,19 +234,35 @@ const rel = computed(() => {
 }
 
 /** VARIANTS */
-.wrapper.primary {
-	background: var(--nulo-accent);
-	color: var(--txt-inverse);
-	fill: var(--txt-inverse);
+/** The regular button's type, one rule for it and its red twin so the two cannot drift. Size and
+ *  padding come from the size classes; neither variant may set them. */
+.wrapper.primary,
+.wrapper.destructive {
 	font-family: var(--font-headline);
 	font-weight: 700;
 	text-transform: uppercase;
 }
+.wrapper.primary:active:not(.disabled):not(.loading),
+.wrapper.destructive:active:not(.disabled):not(.loading) {
+	transform: scale(0.98);
+}
+
+.wrapper.primary {
+	background: var(--nulo-accent);
+	color: var(--txt-inverse);
+	fill: var(--txt-inverse);
+}
 .wrapper.primary:hover:not(.disabled):not(.loading) {
 	background: color-mix(in srgb, var(--nulo-accent), var(--txt-primary) 18%);
 }
-.wrapper.primary:active:not(.disabled):not(.loading) {
-	transform: scale(0.98);
+
+.wrapper.destructive {
+	background: var(--red);
+	color: var(--txt-white);
+	fill: var(--txt-white);
+}
+.wrapper.destructive:hover:not(.disabled):not(.loading) {
+	background: color-mix(in srgb, var(--red), var(--txt-primary) 18%);
 }
 
 /** Brutalist outlined variant — same typographic weight as primary
