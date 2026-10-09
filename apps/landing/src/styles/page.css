@@ -131,6 +131,11 @@ footer {
 	border: 1px solid var(--txt-primary);
 }
 
+/* `.btn`'s display outranks the browser's own rule for the `hidden` attribute. */
+.btn[hidden] {
+	display: none;
+}
+
 .btn:hover {
 	background: #fff;
 }
@@ -170,6 +175,12 @@ footer {
 	color: var(--nulo-secondary);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
+}
+
+.cta small a {
+	color: var(--txt-primary);
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 
 .bar {
@@ -540,6 +551,8 @@ section.s {
 
 .rec-pan {
 	padding: 0;
+	/* Otherwise the ledger's unwrapped lines set the grid column's minimum and widen the page on a phone. */
+	min-width: 0;
 }
 
 .rec-pan .dot {
@@ -642,17 +655,23 @@ footer .wrap a:hover {
 		grid-template-columns: 1fr;
 	}
 
+	/* The plate fills most of the short hero, so the hero grows with it; the top padding keeps REC visible
+	   above the plate. The bottom labels are dropped. */
 	.hero {
-		height: 640px;
+		height: auto;
+		min-height: 640px;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
+		padding: 64px 24px 24px;
 	}
 
-	/* The plate fills most of the short hero; keep REC visible above it, drop the bottom labels. */
 	.hero__plate {
-		left: 24px;
+		position: relative;
+		left: auto;
 		top: auto;
-		bottom: 24px;
 		transform: none;
-		width: calc(100% - 48px);
+		width: auto;
 		padding: 24px;
 	}
 
@@ -676,6 +695,10 @@ footer .wrap a:hover {
 
 	.slug.ts {
 		display: none;
+	}
+
+	footer .wrap {
+		flex-wrap: wrap;
 	}
 }
 

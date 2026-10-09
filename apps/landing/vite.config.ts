@@ -2,8 +2,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
-import { siteHeaders } from "./scripts/headers"
-import { releaseHtmlPlugin } from "./scripts/release-html-plugin"
+import { siteHeaders } from "./scripts/headers.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -30,5 +29,4 @@ export default defineConfig({
 			input: ["index.html", ...legalPages].map((path) => resolve(here, path)),
 		},
 	},
-	plugins: [releaseHtmlPlugin()],
 })
