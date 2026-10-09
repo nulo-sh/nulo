@@ -1,7 +1,7 @@
 ---
 plan: code-followups-1
 tier: mid
-status: implementing (arcs 1-2 merged, arc 3 in review)
+status: completed (#65, #66, #67)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,6 +14,19 @@ trunk: dev
 issues: none (follow-ups.md entries; no GitHub issue)
 ---
 
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: completed. Arcs 1 and 2 merged; arc 3 is [#67](https://github.com/nulo-sh/nulo/pull/67), with this close-out stacked on it.
+- **Shipped**: three PRs into `dev`.
+  - [#65](https://github.com/nulo-sh/nulo/pull/65), CI reliability. The briefed "port collision" did not hold: `[aztec-node] … os error 98` is the aztec CLI wrapper's second anvil losing its bind, printed on every shard of a green run. The setup now says so in its own log. The one real rerun in 100 network-lane runs was an awaiting-card hydration race in `same-token-concurrent-sends`, closed in the test (`waitForAwaitingCard`), with a component test of the hydration order. Entry 147 was rechecked green on Firefox prover-ON (`sendTransfer` 52-56 s).
+  - [#66](https://github.com/nulo-sh/nulo/pull/66), tests and tooling: History's `data-incoming-loaded` signal replaces a 3 s sleep; price-fixture, test-soak and `e2e/config` get honest budgets; `shotSend` waits for the theme flip; the skills agree on concurrent runs; Storybook resolves its components and fills `chrome`; the pages watcher ignores tests under a dot-directory; the landing's config imports `.ts`; a real selector hash, decoder and `callSurface` test. Entry 174 was measured and not reproduced.
+  - [#67](https://github.com/nulo-sh/nulo/pull/67), wallet code hygiene: an unreachable popup and its store fields, an unread CSS variable, an unread row flag, an unrendered form field and an unused schema removed; the restore's keys built with `accountScopeKey`; one comment corrected; the legacy boot sweep keeps bb.js's CRS cache.
+- **Dropped**: the playground change for entry 101 (D8: the wallet's utility path cannot succeed on the button's call, and existing tests already assert a successful `executeUtility`); the flake-ledger edits to the `e2e-testing` skill, since an open PR (#56) edited that file at close-out: they became one follow-up.
+- **Open items**: none kept here; [follow-ups](../follow-ups.md) took them. Deleted 10, 97, 98, 100, 101, 102, 103, 106, 115, 119, 133, 144, 146, 147, 149 and 177 (120, 122, 123, 125, 127 and 132 were already gone with supply-chain-release's close-out). Rewritten to what is left: 63, 75, 130, 156, 163, 165, 174 and 175. Added: the five in § Follow-ups found during planning, the store-captures one from Arc 3, and the flake-ledger routing.
+- **Lessons**: `lessons.md`'s timed-tests line is retired, since `e2e/config`'s cases now carry their own budget (#66); the base-rerun line gains "grep a green run for a suspect log line". The rest stays in `lessons/phase-*.md`.
+- **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
+
 # code-followups-1 — prune the follow-ups, ship the small code ones, settle the boot-line "flake"
 
 The open entries of [`follow-ups.md`](../follow-ups.md) that are code work with no visible change and
@@ -21,8 +34,7 @@ no design decision, plus one CI reliability item. Three jobs: prune what is alre
 small entries in three stacked arcs, and list the rest under "Not this lane" with one reason each.
 Nothing here changes what a person sees.
 
-Recon: [recon.md](recon.md). Live progress: [STATUS.md](STATUS.md). Owner asks:
-[OWNER-ASKS.md](OWNER-ASKS.md) (none).
+Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
 
 **UI impact: none.** No wallet screen, copy, layout or value format changes. One invisible change,
 named so a reviewer can check it: the History page's root (`activity-feed-root`) gains a
@@ -980,6 +992,15 @@ under "Not this lane", not asked ([OWNER-ASKS.md](OWNER-ASKS.md)).
   ended red on a soft Send-fit check that #40's restored "Select Asset" label explains, and at the
   base it went red earlier on a hard strip read. Recorded as a found follow-up, not fixed here (it is
   a test of Send, which this arc does not touch).
+- **D20, the flake-ledger edits became one follow-up; entry 100 is deleted (close-out).** PR #56,
+  open at close-out, edits `e2e-testing/SKILL.md`, so § Close-out edits to the skills routes the
+  three ledger edits into one new follow-ups entry. That entry carries price-fixture's ledger row, so
+  entry 100's ledger half lives there, and entry 100 is deleted rather than rewritten into a second
+  entry saying the same thing.
+- **D21, one lesson folded, one retired (close-out).** `lessons.md` sat at 8,178 of 8,192 bytes. The
+  vendor-log-line gotcha joins the existing base-rerun line instead of taking a line of its own, and
+  the timed-tests line ("`e2e/config` times out under parallel `test:all` load: rerun the file
+  alone") is retired, since #66 gave those cases their own budget.
 
 ## Audit verdicts
 
