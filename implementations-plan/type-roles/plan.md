@@ -1,0 +1,916 @@
+---
+plan: type-roles
+tier: mid
+driver: claude-code
+eli5_mode: artifact
+code_review: off
+claude_model: opus
+codex_model: sol
+codex_model_slug: gpt-6.1-sol
+codex_effort: high
+explainer: off
+budget: "recon 2 agents; code-review off; codex high"
+status: approved
+trunk: dev
+base: f5ca160
+blocked_on: settings-by-task # it rewrites the Settings pages, SettingItem, ItemsContainer and Header; its PR merges into dev first, then this branch rebases onto that dev
+---
+
+# Type roles
+
+Make one rule decide which face a piece of text gets in the Nulo wallet, as the owner chose on the "Nulo Type Roles" board on 2026-10-08: proposal A's rulebook (Space Grotesk for labels and structure, Inter for words, JetBrains Mono for data), with B's large bold Space Grotesk on three numbers. The rule ships as 28 named type roles generated from `@nulo/design`'s token contract. They reproduce the board's A table row by row (`meta` at 11px, Ask D): two rows share a role only when face, size, weight, case and tracking are all equal. Each role is one CSS class, `type--<role>`, reached through `composes … from global` in a module rule, a class on the element, or a new `Text` prop, `variant`. A source-scanning test and a computed-style sweep in the browser make a role the only way to pick a face, letter spacing or upper case. Copy does not change.
+
+Recon: [recon.md](recon.md). Execution: the lead session orchestrates. Opus 5.5 subagents write every code change; the lead reviews each diff, runs the gates and owns commits. Paths: `apps/extension/src/` is dropped where a path starts with `popup/`, `components/`, `onboarding/`, `utils/` or `wallet/`; a bare file name is unique in the repo.
+
+## Outcome & Quality Bar
+
+**For whom.** A wallet owner reading the 360x600 popup, Chrome's side panel, Firefox's toolbar panel, the approval windows and onboarding, who should be able to tell an address, a label and a sentence apart by their face alone. Second reader: the maintainer who adds a screen next month and must find one obvious way to style its text.
+
+**What excellent looks like.**
+
+1. The board, applied. Every element takes the A row its job names, at that row's face, size, weight, case and tracking. Every address, hash and id renders in a JetBrains Mono role on every screen (§ Identifiers). The Home balance, the Send amount entry and the Send review amount are Space Grotesk 700, -0.04em, at the size their fit picks (tabular figures per Ask E). Each remaining difference from the board is one of Asks A to G, answered by the owner.
+2. A role is the only way to choose a face. `type-role-ban.test.ts` fails on any face, tracking or upper case outside a role, on a face-less size or weight a role should own, on an off-scale or under-floor size, on a `<Text>` that sets `size`, `weight`, `mono` or `tabular`, and on a trimmed identifier outside a mono role. Its baseline is keyed by content, never by line, and is empty when arc 5 lands. Two generators list every identifier site and every rendered surface from the code, and a test fails when either list moves from its reviewed expected output. At each board's head, a computed-style sweep checks every role-bearing element on every generated surface, in both browsers, after the fonts load, and must observe every live identifier site at least once at its expected role; the committed specs repeat it on their listed pages in CI.
+3. Nothing that works breaks. Every testid stays. The hero fit still fits (`send-amount-exact.test.ts` passes on both browsers, with the measured widths reported). The landing's normalized declarations change only by the added role rules and the removed dead utilities. No font file, font basename or `@font-face` rule changes, so the third-party notices font claims hold.
+4. No text is smaller than 10px (`MIN_TEXT_PX`), as the board draws it, and no mono text is smaller than 11px (`MIN_MONO_PX`), the owner's answer to Ask D. Upper-case Space Grotesk never tracks wider than 0.12em, except the call-to-action button at 0.2em. Stated exceptions: avatar initials (sized by their box) and a hero figure the fit shrinks past its floor as a last resort.
+5. The owner has seen every surface before and after, in both themes and both browsers, in its real shell, and signed each board against the head SHA it shows.
+
+**What good enough looks like.** No role sets line height, so line boxes move only where a face or size changes (the boards show it). Colours do not change; a low-contrast pairing found on the way is a follow-up. The landing keeps its own CSS. Review uses screenshot boards and a computed-style sweep, not pixel diffs. Storybook is a review aid, not a gate.
+
+## UI impact
+
+Every screen's type changes. Board: "Nulo Type Roles", 2026-10-08. The owner's decision, verbatim:
+
+```
+So, for the fonts: in general I like "A" better, but I like "B"s hero amount and input number amount (the big roundy one), for example the input amount on send, and the hero $ dollar amount on the home I like better from "B". Same for the amount on the receipts, I like B more.
+```
+
+The board's Decision block, written from that message and published to the owner, verbatim:
+
+```
+Chosen: A, with B's big numbers. Space Grotesk for labels and structure, Inter for words, JetBrains Mono for addresses, hashes and small amounts. Three numbers keep B's large bold Space Grotesk: the Home balance, the amount you type on Send, and the amount on a transaction receipt.
+```
+
+**The signed source.** The board's A rulebook table as drawn, 34 rows, each with a face, size (or "size per slot"), weight, case and tracking. No A cell is blank. B's large bold Space Grotesk ("Hero amount" row, B column: size per slot, 700, -0.04em, tabular) replaces A's value on three numbers: the Home balance, the Send amount entry and the Send review amount. A shorter paraphrase ("Inter for words") is not the source; where it and the table differ, the table wins. Where the plan would merge two A rows with different values, or give a surface a value the table does not give its job, that is an Ask with the board's value as the default (Asks A to G), never a silent catalogue choice. The board's Chosen column differs from A in two rows only, "Hero amount" and "Amount, detail", both B; the second is Ask A, default B as drawn.
+
+**Per-screen sign-off.** The rulebook is signed; the result on each screen is not. The lead publishes a before/after board (private Artifact) at the end of arcs 2, 3 and 4 for the surfaces that arc changed, and a final board at the end of arc 5 for every surface. Each board covers both themes and both browsers, in the real shells of § Captures, and lists every surface the surfaces generator assigns to its arc, each with its images and one sign-off line. The owner signs each board against this rulebook and the tables below. A sign-off binds to the SHA of the head the board was shot from, recorded next to the quote. A later fix that changes visible output recaptures the affected images, and the sign-off is asked again for them against the new SHA. No PR of arcs 2 to 5 opens without its sign-off, and each quotes it; arc 1 has no board (Delivery). Board acceptance criteria: each element matches its row below; no text clips that did not clip before, unless listed; no text moves onto a lower-contrast colour than it has today; no copy changed.
+
+- Arc 2 board: (pending; head SHA: pending)
+- Arc 3 board: (pending; head SHA: pending)
+- Arc 4 board: (pending; head SHA: pending)
+- Final board, both browsers: (pending; head SHA: pending)
+
+### The rulebook as built (28 roles)
+
+G = Space Grotesk (`--font-headline`), I = Inter (`--font-body`), M = JetBrains Mono (`--font-mono`). "Site" means the role leaves the size to the element (the board's "size per slot"); the element keeps its own size, raised to the floors. Tracking is in em. Every role sets its case and tracking, so neither leaks in from a parent. "A rows" names the board rows the role carries; rows share a role only when all five values are equal.
+
+| Role | A rows | Face | Size | Weight | Case | Tracking | Figures | Covers |
+|---|---|---|---|---|---|---|---|---|
+| `title-hero` | Screen hero title | G | site | 700 | upper | -0.04 | | Tab hero titles, `BrutalistTitle`, the collapsing hero title, wordmarks, the unlock and register headings |
+| `amount-hero` | Hero amount, B's value | G | site | 700 | none | -0.04 | tabular (Ask E) | Home balance, Send amount entry and its height strut, Send review amount |
+| `amount-total` | Hero amount, A's value | M | site | 500 | none | -0.02 | | Holdings total (Ask F) |
+| `title-page` | Sub-page / popup title | G | 13 | 700 | upper | 0.12 | | Sub-page and popup titles, sheet titles, loading and empty-state titles |
+| `label-section` | Section label | G | 11 | 700 | upper | 0.1 | | `SectionLabel`, Settings group labels, form section labels, popup pre-titles, date group headers, toast titles, onboarding step labels |
+| `label` | Field / key label; Toggle label; Inline action | G | 10 | 700 | upper | 0.1 | | Field and key labels (`Input` labels too), toggle labels, inline actions and links, table heads, the Send unit pair |
+| `row-title` | Row title | G | site | 700 | none | -0.02 | | Token, activity and Settings row titles, card and status titles, the select-token symbol and initial, the tx call method, operation titles |
+| `caption` | Row secondary line | I | 11 | 400 | none | normal | | Row sub lines, Settings descriptions, the dApp name line |
+| `name` | Person or thing name | I | site | 600 | none | normal | | Account, contact and profile names, fee method names, a name `AddressDisplay` shows in an address's place |
+| `name-tag` | Account name tag | I | 11 | 600 | upper | 0.04 | | The account name in the header and in the windows' identity strip |
+| `body` | Body / help text | I | 12 | 400 | none | normal | | Sentences: help, explanations, warnings and errors, empty-state lines, tooltips |
+| `button` | Primary button | G | 14 | 700 | upper | 0.2 | | The three CTA variants at every size (Ask G), Home's action buttons |
+| `button-md` | Medium button | G | 13 | 700 | upper | 0.03 | | `primary` and `primary_outline` buttons at every size (Ask G), the boot retry |
+| `nav` | Bottom nav label | G | 10 | 500 | upper | 0.05 | | Bottom-nav labels |
+| `segment` | Segmented control | G | 10 | 500, active 700 | upper | 0.06 | | The Send type toggle, onboarding method tabs |
+| `tag` | Chip / tag / network | G | 10 | 600 | upper | 0.08 | | Chips and badges, the network and lock chips, publish strip cells, fee priority |
+| `tag-name` | Chip name | G | 10 | 700 | upper | 0.08 | | The publish strip's name cell |
+| `brand` | Brand mark | G | 10 | 700 | none | 0.2 | | "NULO" in the identity strip |
+| `input-data` | Address input | M | 14 | 400 | none | normal | | Typed text in mono fields: recipient, `AddressInput`, the dust threshold, token search |
+| `data` | Address; Hash / id / function; Amount, inline | M | 12 | 500 | none | normal | | Addresses in rows and tables, hashes, ids, function names, inline amounts and fees |
+| `data-lead` | Address, prominent; dApp hostname | M | 13 | 600 | none | normal | | Header address, Receive address, From and To, the dApp hostname |
+| `amount-row` | Amount in a row | M | 14 | 500 | none | normal | | Token and activity row amounts |
+| `amount-detail` | Amount, detail | G | 24 | 700 | none | -0.02 | tabular | The receipt pages' amount: B's row, as the Chosen column drew it (Ask A; the alternative is A's M 24/500) |
+| `fiat` | Fiat value | M | site | 400 | none | normal | | Every dollar line |
+| `time` | Date and time | M | 11 | 400 | none | normal | | Timestamps |
+| `meta` | Hash, small; Token symbol; Meta / count / hint | M | 11 | 400 | none | normal | | Small hashes and aux ids, symbols beside amounts, counts, hints, conversions |
+| `value` | Value text | I | 12 | 600 | none | normal | | Values in key/value rows, Settings trailing values, banner titles |
+| `input` | none (the board draws no row for typed words) | I | 15 | 500 | none | normal | | Text a person types into `Input`; today's value, unchanged |
+
+The 34th row, "Avatar initial", takes no role: the board marks it "Unchanged in all proposals", and `AccountAvatar` sizes its initials from its box at run time (`AccountAvatar.vue:15,28`). It is a carve-out (§ Algorithms). `meta` is set at 11px where its A rows draw 10px (Ask D, answered 11px), so `meta` and `time` render the same values; they stay two roles, as the board draws them. Under Ask F's alternative, `amount-total` has no site and is not generated.
+
+**Undrawn surfaces.** The board's screens draw Home, Send, Receive, tx detail, one approval window, the Settings hub and Contacts. Any other element takes the A row whose job it does: its role in the typography audit's role table, which the board's rows were built from. An element whose job no A row names takes the nearest row, and its before → after is a row below. Only typed words in `Input` keep today's value through a role of their own (`input`), because no A row comes near (ledger 19).
+
+### Surfaces, before → after
+
+"Before" comes from the source at `f5ca160`; the authority is the rendered element. Arc 1's before set records, by site, the computed values of every visible text element on every surface and of every identifier selector (P1 step 16), and a row its record contradicts is corrected before its arc's board. "Unchanged" means the five values stay.
+
+Shared across every popup page:
+
+| Element | Before | After |
+|---|---|---|
+| Header account name | G 12/700 caps -0.04 | `name-tag` I 11/600 caps 0.04 |
+| Header address | G 14/700 -0.02 | `data-lead` M 13/600 |
+| Header network and lock chips | M 10/500 caps 0.08 | `tag` G 10/600 caps 0.08 |
+| Header avatar | I 600 at 0.4 × its 32px box | unchanged (carve-out) |
+| Bottom-nav labels | G 10/500 caps 0.05 | `nav`, unchanged |
+| `SectionLabel` | G 12/700 caps 0.1; count M 10 in the label's caps and tracking | `label-section` G 11; count `meta` M 11/400, no caps, normal tracking |
+| Sub-page header title | G 13/700 caps 0.12 | `title-page`, unchanged |
+| Buttons (callers in Ask G) | CTA G 14/700 caps 0.2 at every size but compact, 12; `primary` and `primary_outline` G 13/700 caps 0.03, large 14/0.05, the one small 13 from its label with inherited tracking; `secondary` and `ghost` are icon-only, and no caller passes `text` | CTA `button`, unchanged; only its type moves, its box (`width`, `padding`) stays in the compound rules, proved by `Button.test.ts`'s declarations and the sweep's computed padding; compact CTA 14 (Ask G); `primary` and `primary_outline` `button-md`, unchanged at medium; large 13/0.03 and small 13/0.03 (Ask G); `secondary`, `ghost`, `text` take no role, nothing visible changes |
+| `Input` | label I 13/600; typed text I 15/500 (mini 12); length hint I 12; left text I 13/600 | label `label` G 10/700 caps 0.1; typed text `input`, unchanged (mini keeps 12); hint `body` I 12/400; left text `value` I 12/600 (no caller passes `leftText` today, so nothing visible) |
+| `FieldWarning` | I 12/600 | `body` I 12/400 |
+| Tooltips | I 12/600 | `body` I 12/400 |
+| Toasts | title G 12/700 caps 0.06; sub I 11; action G 11/700 caps 0.12 | title `label-section` G 11 caps 0.1; sub `caption` I 11/400; action `label` G 10 caps 0.1 |
+| Banners | title I 12/600; description I 12/500; action G 11/700 caps 0.12 | title `value`, unchanged; description `body` I 12/400; action `label` G 10 caps 0.1 |
+| Loading and empty states | title G 14/700 caps 0.1; line M 11 | `title-page` G 13 caps 0.12; line `body` I 12 |
+| `SearchField` (Holdings, Select token) | M 12/400 | `input-data` M 14/400 |
+
+Home, Holdings, Activity:
+
+| Element | Before | After |
+|---|---|---|
+| Home balance (`.balance_amount`, the fitted `.hero_fit` and its symbol) | G 48/700 -0.04, fitted; symbol 0.5em | `amount-hero`: unchanged, plus tabular figures (Ask E); the em tracking still computes at the fitted size |
+| Home fiat line; partial note; breakdown | M 13; M 10 caps 0.05; M 11 0.02 | `fiat` M 13/400, unchanged; `meta` M 11, no caps; `meta` M 11, size unchanged, normal tracking |
+| Arrival chip | M 11/600 | `tag` G 10/600 caps 0.08 |
+| Incoming-sync stalled line; its Retry | M 11; Retry inherits, 700 caps 0.05 | line `meta` M 11, size unchanged; Retry `label` G 10/700 caps 0.1 |
+| Token row | symbol G 14/700 -0.02; type label M 10 caps; amount M 14/500; fiat and detail M 10; "MINTING..." M 10 caps (literal caps copy) | symbol `row-title`, unchanged; type label `caption` I 11, no caps ("MINTING..." stays caps: the copy is literal); amount `amount-row`, unchanged; fiat `fiat` M 11 and detail `meta` M 11 |
+| Gas card | label M 10 caps 0.05; amount M 12/500; fiat M 10 | `label` G 10/700 caps 0.1; `data`, unchanged; `fiat` M 11 |
+| Holdings total; its meta line; sort and fold links | G 26/700 -0.04; M 10 caps 0.05; M 10 caps 0.08 | `amount-total` M 26/500 -0.02 (Ask F); `meta` M 11, no caps; `label` G 10/700 caps 0.1 |
+| Activity rows | title G 14/700 -0.02; separator G 13/400; chip M 8 caps; hash M 9 caps; amount M 14/500; fiat M 9; symbol M 10; sub line M 10 | title unchanged; separator `row-title` G 13/700 -0.02 (the board's row); chip `tag` G 10/600 caps 0.08; hash `meta` M 11 in the stored case (`0x…`, not `0X…`); amount `amount-row`, unchanged; fiat `fiat` M 11; symbol `meta` M 11; sub line `caption` I 11 |
+| Date group headers | G 10/700 caps 0.15 | `label-section` G 11 caps 0.1 |
+| "NO MATCHES · TRY A DIFFERENT TERM" (`ListStatusMessage.vue:24`, literal caps) | M 11 | `body` I 12; reads in Inter caps, copy unchanged |
+
+Transaction detail, received, journal (one shared stylesheet, `detail-page.module.css`, composed by all three pages):
+
+| Element | Before | After |
+|---|---|---|
+| Hero amount | M 24/500 | `amount-detail` G 24/700, -0.02em, tabular (Ask A default; the alternative keeps M 24/500) |
+| Keys; values; hashes and ids; aux ids; key notes | G 11/700 caps 0.05; I 12/600; M 12/600; M 10; M 9 | `label` G 10/700 caps 0.1; `value`, unchanged; `data` M 12/500; `meta` M 11; `meta` M 11 |
+| From and To | I 13/600 (`AddressDisplay`) | `data-lead` M 13/600 |
+| Type chip; time; fiat | G 10/700 caps 0.15; M 11; M 11 | `tag` G 10/600 caps 0.08; `time`, unchanged; `fiat` M 11/400, unchanged |
+| Call method; call contract | G 13/700 0.01; M 11 | `row-title` G 13/700 -0.02; `data` M 12/500 |
+
+Send:
+
+| Element | Before | After |
+|---|---|---|
+| Section labels | G 10/700 caps 0.1 | `label-section` G 11 caps 0.1 |
+| Recipient field text | M 14/400 | `input-data`, unchanged |
+| Contact suggestions | name I 12/500; address I 12/500 tertiary | name `name` I 12/600; address `data` M 12/500 |
+| Amount entry | G 40/700 -0.04 at the fit's scale | `amount-hero`: unchanged, plus tabular figures (Ask E) |
+| Unit pair (the fiat toggle, `SYMBOL / USD`); balance, conversion and clamp hint; Max | G 12/700 0.06, no caps; M 10; G 10/700 caps 0.1 | `label` G 10/700 caps 0.1 (the board's Inline action row; the symbol reads in caps); `meta` M 11; Max `label`, unchanged |
+| Send type toggle; its sub label | G 10/500 caps, active 700; M 9 caps | `segment` G 10/500 caps 0.06, active 700; `label` G 10/700 caps 0.1 |
+| Fee card | section label G 10/700 caps 0.1; method M 12; row key I 12/600; row value I 12/600; priority M 9/500 caps; readout M 12; USD M 10 | label `label`, unchanged; method `name` I 12/600; key `label` G 10/700 caps 0.1; value `value`, unchanged; priority `tag` G 10/600 caps 0.08; readout `data` M 12/500; USD `fiat` M 11 |
+| Publish strip | cells M 8.5 caps 0.05; name G 8.5/700 caps 0.1 | cells `tag` G 10/600 caps 0.08; name `tag-name` G 10/700 caps 0.08 |
+| Review sheet | title G 12/700 caps 0.2; amount G 30/700 -0.02 at the fit's scale; symbol M 11; recipient M 11; rows head G 9 caps 0.12; row top I 11.5/600; row word M 9.5 caps 0.06; row note I 11/500; fee M 11 | `title-page` G 13 caps 0.12; `amount-hero` -0.04, tabular (Ask E); symbol `meta` M 11, unchanged; recipient `data` M 12/500; head `label` G 10; row top `value` I 12/600; row word `tag` G 10/600 caps 0.08; note `caption` I 11/400; fee `data` M 12/500 |
+
+Receive and the other popups:
+
+| Element | Before | After |
+|---|---|---|
+| Receive title; account name; address | I 16/600; I 14/600; I 13/600 with the `•••` mask | `title-page` G 13 caps 0.12; `name` I 14/600, unchanged; `data-lead` M 13/600, mask markup unchanged |
+| Popup titles; pre-titles | G 16/700 caps 0.08 (`popup-shared.module.css:36`); Accounts G 14/700 caps 0.12 (`AccountsPopup.vue:128`); `FormPopup`'s and two `<Text>` titles I 14/600 (`FormPopup.vue:30`, `NewSenderPopup.vue:99`, `TokenMetadataPopup.vue:81`); G 10/700 caps 0.2 | `title-page` G 13 caps 0.12; `label-section` G 11 caps 0.1 |
+| Accounts popup rows | name I 14/500 (inherited, `SettingItem.vue:132`); address I 12/500 tertiary | `name` I 14/600; `data` M 12/500 (`descriptionVariant`) |
+| Select token card | symbol G 16/700; name M 10 caps; initial G 16/700; empty label G 13 caps 0.08 ("No available tokens"); import link G 12 caps 0.05 | `row-title` G 16/700 -0.02; `caption` I 11, no caps; initial `row-title` G 16/700 -0.02 (the board drew it as a row title); `title-page` G 13 caps 0.12; `label` G 10 caps 0.1 |
+| Import contacts; incoming trust | addresses I 13/600; tag M caps 0.08; contract label M 9/600 0.14; values M 12 and 11 | `data` M 12/500; `tag`; `label` G 10; `data` M 12/500 |
+| Token metadata | keys I 12/600; name, symbol I 12/600; id, contract address and chain ID I 12/600; capability keys M 11/600 | `label` G 10/700 caps 0.1; `value`, unchanged; `data` M 12/500; `data` M 12/500 |
+| Address fields of New token, New FPC, Edit FPC, New sender | typed text I 15/500 | `input-data` M 14/400, in arc 2 with `AddressInput` |
+
+Settings, as `settings-by-task` leaves it (re-audited after the rebase, P1 step 2):
+
+| Element | Before | After |
+|---|---|---|
+| Hub and page row titles | I 14/500 (`SettingItem`); I 13/600 (toggle rows) | `row-title` G 14/700 -0.02 and G 13/700 -0.02 (each keeps its size); a row titled with a person's or account's name takes `name` I 14/600 |
+| Row descriptions | I 12/500 | `caption` I 11/400; an address or chain ID description (Network's, `networks/[id].vue:183`) `data` M 12/500 |
+| Group labels | G 10/700 caps 0.2 | `label-section` G 11 caps 0.1, the same as `SectionLabel` (the board's Section label row; ledger 26) |
+| Trailing values (`setting-value`, from `settings-by-task`) | I 12/500 secondary, in that branch on 2026-10-08 | `value` I 12/600; confirmed by the re-audit (P1 step 2) before arc 2 starts |
+| Contacts rows | name I 14/600 0.01; address M 11; sender chip M 9/700 caps 0.04; avatar M 10/700 | `name` I 14/600, normal tracking; `data` M 12/500; `tag` G 10/600 caps 0.08; avatar I 10/600 (carve-out: the avatar row's face and weight at the size its 24px box gives, as `AccountAvatar` sizes it) |
+| Accounts list; export account list; connected app accounts | names I 14/500; addresses I 12/500 (one is "CHAIN · 0x…", the chain upper-cased in script) | `name` I 14/600; `data` M 12/500 (the chain name reads in mono with it; the string is unchanged) |
+| FPC rows | title I 14/500 (the FPC's name, or its address when it has none) | `row-title` G 14/700; the address fallback `data` M 12/500 |
+| Glossary | group title G 10 caps 0.2; definition I 12.5; "where" M 9.5 caps | `label-section`; `body` I 12; `caption` I 11, no caps |
+| Account state, notes, profile ID | record type G 13 caps 0.04; keys M 11; values M 12; ids M 10 to 12; notes contract M 10/600 0.02 | `label-section`; `label`; `data`; `data` (`meta` for aux ids); `meta` M 11 |
+| Display dust threshold | M 13 | `input-data` M 14/400 |
+| Section labels of change password, reset, new profile | G 11 caps 0.18 | `label-section` G 11 caps 0.1 |
+| Export status | title G 16/700 -0.01; subtitle I 13 | `row-title` G 16/700 -0.02; `body` I 12 |
+
+Approval windows (connect and capabilities, execute, verify, discover, network unavailable):
+
+| Element | Before | After |
+|---|---|---|
+| Identity strip | account G 11/700 caps 0.05; separator M 11; network M 10; "NULO" G 10/700 0.2 | `name-tag` I 11/600 caps 0.04; `meta` M 11, size unchanged; `meta` M 11; `brand`, unchanged |
+| dApp identity | hostname G 14/700 0.01; name M 11; action I 12; homograph warning I 12/500 | `data-lead` M 13/600; `caption` I 11; `body`, unchanged; `body` I 12/400 |
+| Operation keys | I 11 (`CallArguments`); I 12 secondary (`OperationCard`, "From account:", "Class id:") | `label` G 10/700 caps 0.1 (the board drew `CallArguments` keys as Field / key label; Ask C covers the rest) |
+| Operation values; amounts; addresses; account in parentheses; function names; authwit hashes; class id | I 12; I 11; I 11 to 12 (`AddressDisplay`); I 12 inherited; I 12/600; M 11; I 12 | `value`; `data`; `data` (a shown contact or account name `name`); `data`; `data`; `data`; `data` |
+| Operation titles; body | I 14/400; I 11 | `row-title` G 14/700 -0.02; `body` I 12 |
+| Capabilities | chips G 10/700 caps 0.1; row title I 13/600; row sub I 11.5; note I 11.5; table head M 8.5/600 caps; table sub G 10 caps; address M 11; function M 10; tag M 10/600 0.08 | `tag`; `row-title` G 13/700 -0.02; `caption` I 11; `body` I 12; `label` G 10; `label`; `data` M 12/500; `data` M 12/500; `tag` |
+| Account select row | name I 14/600; address M 11; chain M 10/700 0.08 (upper-cased in script); alias field I 13 | `name`, unchanged; `data` M 12/500; `meta` M 11/400; `input` I 15/500 |
+| Footer error (`role="alert"`) | I 12/600 | `body` I 12/400 |
+| Footer buttons | `primary_outline` and `primary` G 13/700 caps 0.03, the confirm label a `<Text size="13">` inside | `button-md`, unchanged; the inner `<Text>` drops `size` and takes no role |
+
+Onboarding, unlock, register, legal, passkey, global overlays:
+
+| Element | Before | After |
+|---|---|---|
+| Wordmarks; `BrutalistTitle` | G 20/700 caps -0.04; G 32/48/56 caps -0.04 | `title-hero`, unchanged |
+| Unlock heading ("Password required"); subheading; error; reset link | G 24/600 -0.02, sentence case; I 13; I 12; G 10 caps 0.2 | `title-hero` G 24/700 caps -0.04 (the audit's role table puts this heading under Screen hero title); `body` I 12; `body`, unchanged; `label` 0.1 |
+| Profile pill | label M 9/500 caps 0.1; name G 14/500 -0.02 | `label` G 10/700 caps 0.1; `name` I 14/600 |
+| Register headline; sub copy; terms | G 28/500 caps -0.04; I 14; M 10 0.08 | `title-hero` G 28/700; `body` I 12; `caption` I 11 |
+| Section labels; tip labels; step labels; step numbers | G caps 0.18; G caps 0.18; G 11 caps 0.16; M 10/600 0.08 | `label-section` G 11 caps 0.1; the same; the same; `meta` M 11/400 |
+| Method tabs | G 12/700 caps 0.12 and 0.2 | `segment` G 10/500 caps 0.06, active 700 |
+| Back and skip links; legal "later" | M 11 caps 0.08 | `label` G 10/700 caps 0.1 |
+| Welcome and done taglines; explainer and legal mono text | `<Text mono>` 13 | `body` I 12 |
+| Passkey tag | M 11 caps 0.08 | `tag` G 10/600 |
+| Global loader; barrier overlay; Presto status; secret cards | G 14 caps 0.1 and M 11; G 14/700; G 15/700, G 11 caps 0.12, M 10/600; G 11 caps 0.12 | `title-page` and `body`; `row-title` G 14/700 -0.02; `row-title` G 15/700 -0.02, `label`, `meta` M 11; `label` |
+| Boot retry (`app.vue:486`, literal "RETRY") | I 12/600 0.04 by `font: inherit` | `button-md` G 13/700 caps 0.03 |
+| Migration retry | G 12/700, no caps | `button-md` G 13/700 caps 0.03 |
+
+### Identifiers
+
+The identifier generator is the contract (§ Algorithms, Inventory generators); this table is its reviewed output at `f5ca160` and seeds its expected file. Each row gives the path that puts a site in a mono role and the selector the sweep reads it by. Separators, truncation markup, the receive mask and `trimAddress` (`utils/string.ts`) stay untouched. A selector marked + is a `data-testid` arc 1 adds before any role edit, which changes nothing visible. A selector names one occurrence (§ Algorithms): `address-display`, a default on `AddressDisplay`'s root, serves one site per surface, and every other `AddressDisplay` takes its caller's own testid (`execute-register-contract-address`+ and `execute-register-sender-address`+ for `OperationCard.vue:340,346`); `setting-title` and `setting-description` sit on `SettingItem`'s title and description, read inside the row's testid.
+
+| Sites | Today | Role path | Selector |
+|---|---|---|---|
+| Header address (`Header.vue:297-300`, the copy button's rule `.account_address` `:407`) | G 14/700 | `data-lead`, composed into `.account_address` | `account-address-copy` |
+| Receive address (`ReceivePopup.vue:65`, mask `:67`) | `<Text>` I 13/600 | `variant="data-lead"`; the mask `<Text>` inherits | inside `receive-address` |
+| From and To (`tx/[id].vue:229,246`; `received/[id].vue:242,265`); account-state contracts (`contracts/index.vue:83`) and senders (`senders/index.vue:107`) | `AddressDisplay` 13/600 and 14/600 | `AddressDisplay` `lead` → `data-lead` | `tx-from-address`+, `tx-to-address`+ (`received-` likewise); `address-display`+ in account state |
+| Every other `AddressDisplay` call (26 in `OperationActionRow.vue`, `OperationCard.vue`, `CallArguments.vue`) | I 11 to 12 | `data`; a shown contact or account name `name` | the caller's own, one per occurrence+ (`execute-authwit-spender` stays) |
+| `SettingItem` descriptions: `AccountsPopup.vue:76`, `settings/accounts/index.vue:188`, `settings/security/export/account.vue:232`, `settings/connected-apps/[id].vue:268` | I 12/500 | `descriptionVariant="data"` | `setting-description`+ inside `account-item`, `manage-accounts-hidden-row`, `export-account-row`, and a new row testid on the connected-app account rows |
+| Network chain ID (`settings/networks/[id].vue:183`, `String(network.chainId)` as a description) | I 12/500 | `descriptionVariant="data"` | `setting-description`+ inside `network-detail-chain-id`+ |
+| FPC row title when the FPC has no name (`FpcRow.vue:33`) | I 14/500 | `:titleVariant="fpc.name ? 'row-title' : 'data'"` | `setting-title`+ inside the FPC row |
+| Account in parentheses (`OperationCard.vue:204,333`, a color-only `<Text>`); class id (`:417`, `<Text size="12">`) | I 12 | `variant="data"` | `execute-op-account`+; `execute-op-class-id`+ |
+| Authwit inner hashes (`OperationCard.vue:275,513`, `<Text mono>`) | M 11 | `variant="data"` | `execute-discovered-inner-hash`+; inside `execute-authwit-inner-hash` (`:511`) |
+| Authwit message hash (`OperationActionRow.vue:51`, a color-only `<Text>`, unreachable); authwit nonce (`CallArguments.vue:76-81`, `:mono` bound to the nonce's kind); raw fields (`:132-133`, bare `mono`, `row.short` trimmed in `call-surface.ts:50`) | I 12; I or M 11; M 11 | `variant="data"` | `execute-authwit-spender`; `<prefix>-transfer-nonce-value`; `<prefix>-arg-field`+ |
+| Contact suggestion address (`RecipientField.vue:123-124`); imported contact addresses (`ImportContactsPopup.vue:276,281,285`); recipient card (`RecipientCard.vue:40,68`); the accounts list's sub line (`settings/accounts/index.vue:99`) | `<Text>` I 12/500, I 13/600, `mono` 12, `mono` 11 | `variant="data"` | `recipient-suggestion-address`+; `import-contact-address`+; `recipient-card-masked`, inside `recipient-card-full`; `setting-description`+ inside `manage-accounts-row` |
+| Rows and tables: contacts (`ContactRow.vue:33`), account select (`AccountSelectRow.vue:78`), incoming trust (`IncomingTrustPopup.vue:158`, rules `:243,271`), review recipient (`SendReviewSheet.vue:119`, rule `:242`), capability table (`DetailsTable.vue:94`, rule `:206`), scope rows (`ScopeAddress.vue:67`, `ScopeClassId.vue:38`), `settings-row.module.css:68`, profile ID (`profile/index.vue:30`, rule `:67`) | M 11 to 12, I | `data`, composed in the element's rule | `contact-row-address`; `account-select-address`+; `incoming-trust-contract`; `send-review-recipient`; `capability-address`+; `scope-address`+, `scope-class-id`+; the composing row's own testid; `identity-id-value`+ |
+| Account-state values (`record-card.module.css:70` `.kv_val`: authwit callers, contracts and hashes in `AuthwitCard.vue:36-58`, note values in `notes/index.vue:324`) | M 12 | `data`, composed into `.kv_val` | `record-value`+ |
+| Detail hashes: tx (`tx/[id].vue:271,276`; `received/[id].vue:289,296`), nonce (`tx/[id].vue:324`), call contract (`:343`), journal recipient (`journal/[id].vue:105-112`), debug hash (`TxDebugPanel.vue:43`) | M 12/600, M 11 | `data` | `tx-hash-link`, `tx-hash`+, `tx-explorer-link`, `tx-hash-copy`; `tx-nonce`+; `tx-call-contract`+; `journal-recipient`+; `tx-debug-hash`+ |
+| Aux ids: block hashes (`tx/[id].vue:316`, `received/[id].vue:326`), chunk nonce (`TxDebugPanel.vue:86`), notes contract (`notes/index.vue:232`, rule `:284`) | M 10 | `meta` M 11 | `tx-block-hash`+; `tx-debug-chunk-nonce`+; `note-contract`+ |
+| Activity row hashes (`TransactionCard.vue:168,173`, `TransactionIncomingCard.vue:71`; rules `:192`, `:94`) | M 9 caps | `meta` M 11, stored case | `activity-row-hash`+ |
+| A token with no name, titled by its trimmed address (`TokenImportRow.vue:26-34`) | the row title's face | `data` on that branch | `token-import-title`+ |
+| Token metadata: id (`TokenMetadataPopup.vue:87`), contract address sliced around a `•••` mask (`:95-99`), chain ID (`:123`) | `<Text>` I 12/600 | `variant="data"`; the mask inherits | `token-metadata-id`+, `token-metadata-address`+, `token-metadata-chain-id`+ |
+| An imported account's full address (`settings/accounts/import.vue:231`, rule `:291`) | M 12/500 (face only; size from the description) | `data`, composed into `.preview_address` | `import-account-preview-address` |
+| Typed addresses: `AddressInput` (the recipient field, the contact form `ContactFormFields.vue:44`); the plain `Input`s of New token (`NewTokenPopup.vue:305`), New FPC (`NewFpcPopup.vue:160`), Edit FPC (`EditFpcPopup.vue:256`) and New sender (`NewSenderPopup.vue:104`), all six in arc 2 | I 15/500; the recipient M 14/400 | `textVariant="input-data"` | the native input at or inside `contact-address-input`, `send-destination-field`, `token-address-input`, `fpc-address-input`, `edit-fpc-address-input`, `new-sender-address-input` |
+| dApp hostname (`DappIdentityBlock.vue:38`, rule `:83`) | G 14/700 | `data-lead` | each window's `hostnameTestId` (+ on capabilities and execute) |
+
+**Conditional sites.** A site behind a branch is observed only in the state that renders it, which the expected file records and the shot specs set (sweep step 4):
+
+- Tx detail: the `seedTransaction` row (`tests/e2e/helpers/activity-seeds.ts:48`) plus a `block` (`tx/[id].vue:311-316`) and a call with a `chunkNonce`; shot with an explorer (`defaultExplorer` set on the testnet chain: `tx-hash-link`, `wallet/constants/explorers.ts:36-59`) and without (`tx-hash`); Developer mode on (`tx/[id].vue:142-144`) and the debug toggle clicked (`TxDebugPanel.vue:19,29,39`) for the debug hash and the chunk nonce (`:58-59,82`).
+- Activity: the same row with and without an explorer (`TransactionCard.vue:167,173`); a `seedReceipt` note (`activity-seeds.ts:93`) for the incoming row (`TransactionIncomingCard.vue:71`) and the received detail.
+- Import contacts: a saved "Alice" and a file naming Alice at another address (`address-change`, `ImportContactsPopup.vue:275-283`) beside a new contact (`:285`; `contacts-import.test.ts:155` builds both).
+- Send: a saved contact and a partial recipient typed (`RecipientField.vue:123`); a chosen recipient with `recipient-card-reveal` clicked (`RecipientCard.vue:67`).
+- Settings: a hidden account (`settings/accounts/index.vue:188`; `accounts.test.ts` hides one), an account file pasted into Import account (`settings/accounts/import.vue:231`; `account-import-export.test.ts`), and a seeded FPC and token with no name (`FpcRow.vue:33`, `TokenImportRow.vue:26-34`).
+- Network only: a connected dApp (`connected-apps/[id].vue:268`); the execute window with an account (`OperationCard.vue:204,333`), `aztec_getContractClassMetadata` (`:414-417`; `contracts-getClassMetadata.test.ts`), an authwit request (`:511-513`) and a discovered authwit with its details open (`:271-275`), a call the wallet cannot decode (`pg-btn-sendTx-delegated` driven as `tx-sendTx-delegated-authwit.test.ts:67-111` does, but its Crowdfunding consumer from `deployDelegatedPullRig` left unregistered, so `donate`'s one field is raw, `call-decoder.ts:38`) with `execute-op-raw-toggle` clicked (`CallArguments.vue:22,121,129`), then cancelled; arc 1's before set proves it renders; required before arc 4's sign-off, and an `AddressDisplay` naming a saved contact; the capabilities window with a contract and a class scope; an incoming transfer from an unknown sender (`IncomingTrustPopup.vue:158`; `incoming-transfers.test.ts`); account-state rows once an authwit and a note exist (`authwit-lifecycle.test.ts`).
+
+**Sizes the floors change** (Asks B and D; declaration lines). 8px: activity chips `TransactionCard.vue:205`, `TransactionIncomingCard.vue:86`, `activity-card.module.css:15` → `tag` 10. 8.5px: `PublishStrip.vue:78` → `tag` 10; `DetailsTable.vue:157,275` → `label` 10. 9px: `SendTypesCard.vue:64` → `label` 10; `FeePriorityRow.vue:58` → `tag` 10; `SendReviewSheet.vue:260` → `label` 10; `ContactRow.vue:111` → `tag` 10; `IncomingTrustPopup.vue:238` → `label` 10; `AuthProfilePill.vue:74` → `label` 10; mono `TransactionCard.vue:194`, `TransactionIncomingCard.vue:96`, `received/[id].vue:409` → `meta`, and `TransactionCardLayout.vue:234` → `fiat`, at 11, the mono floor (the board draws 10; Ask D). 9.5px: `SendReviewSheet.vue:310` → `tag` 10; `glossary.vue:81` → `caption` 11. 10px mono: the 21 rules of `recon.md` § Floors that stay mono → 11. 11.5px: `PermissionRow.vue:116` → `caption` 11; `SendReviewSheet.vue:303` → `value` 12; `capabilities/index.vue:501` → `body` 12. 12.5px: `glossary.vue:74` → `body` 12. 48px and 56px stay only on `title-hero` and `amount-hero` sites and `BrutalistTitle`, and the review amount keeps its 30px start; each is a carve-out keyed to its rule (§ Algorithms). Not raised: the hidden-accounts avatar, whose 20px box gives 9px initials (`settings/accounts/index.vue:193`, `AccountAvatar.vue:15`), a stated exception.
+
+**Line height.** No role sets it (ledger 5): a `normal` line box moves wherever face or size changes, one on `lh--100` or a fixed height does not, and the boards show every move.
+
+**Non-visual items.** Testids added, none renamed: `token-amount` (`TokenCard.vue:97`), `holdings-section-label` (`TokensView.vue:369`), `type-role-probe-<role>` on injected probes, and the selectors marked + in § Identifiers, the capabilities and execute `hostnameTestId` among them (arc 1). Props: `AddressDisplay` swaps `size` and `weight` for `lead`; `Input` gains `textVariant`; `SettingItem` gains `titleVariant` and `descriptionVariant`; `Text` gains `variant` and, in arc 5, loses `size`, `weight`, `mono` and `tabular`. `@nulo/design/tokens` gains the role records and both floors. All are internals.
+
+Items the board's table does not settle are Asks A to G, each with a default.
+
+### Captures
+
+The surfaces generator is the contract (§ Algorithms, Inventory generators); this table is three of its columns as reviewed at `f5ca160`, and its expected file adds each surface's route or trigger, seeded state and dependencies. Every row is in arc 2's board: primitives are everywhere. Arc lists each later arc that changes a file in the surface's closure (§ Algorithms): every popup and every route that shows the Header (`Header.vue:268`, `popup/app.vue:422`) carries 3, the Header's arc; "2" means no later arc. That arc's board reshoots the row; the final board reshoots every row. Each row is shot in light and dark, in Chrome and Firefox, in the 360x600 popup unless it says otherwise: a window at the size the window manager opens it (`wallet/services/window-manager/window-manager.ts:206`), onboarding in its tab. The shot specs reach a row in smoke unless it says network. Each image records its shell's real dimensions; the sweep runs at every shoot. Settings paths are `settings-by-task`'s; P1 step 13 regenerates them after the rebase.
+
+| Surface | Source | Arc |
+|---|---|---|
+| Home (seeded tokens; a balance whose fit scales below 1; also Chrome's side panel and Firefox's toolbar panel) | `popup/pages/general.vue` | 3 |
+| Holdings | `popup/pages/holdings.vue` | 3 |
+| Activity | `popup/pages/activity.vue` | 3 |
+| Token detail | `popup/pages/tokens/[id].vue` | 3 |
+| Send (empty; recipient and amount typed; fee card open) | `popup/pages/send.vue` | 3 |
+| Send review sheet (network) | `SendReviewSheet.vue` | 3 |
+| Tx detail | `popup/pages/tx/[id].vue` | 3 |
+| Received detail | `popup/pages/received/[id].vue` | 3 |
+| Journal detail | `popup/pages/journal/[id].vue` | 3 |
+| Import | `popup/pages/import.vue` | 3 |
+| Unlock (password; passkey) | `popup/pages/auth.vue` | 3 |
+| Register | `popup/pages/register.vue` | 3 |
+| New profile | `popup/pages/profile/new.vue` | 3, 4 |
+| Legal declined | `popup/pages/legal/declined.vue` | 3 |
+| No surface: both redirect to Home | `popup/pages/index.vue`, `popup/pages/[...catch].vue` | none |
+| Settings hub (also Chrome's side panel and Firefox's toolbar panel) | `settings/index.vue` | 3, 4 |
+| About | `settings/about.vue` | 3, 4 |
+| Accounts | `settings/accounts/index.vue` | 3, 4 |
+| Import account | `settings/accounts/import.vue` | 3, 4 |
+| Account state | `settings/advanced/account-state/index.vue` | 3 |
+| Account state: authwits | `settings/advanced/account-state/authwits/index.vue` | 3, 4 |
+| Account state: contracts | `settings/advanced/account-state/contracts/index.vue` | 3, 4 |
+| Account state: notes | `settings/advanced/account-state/notes/index.vue` | 3, 4 |
+| Account state: senders | `settings/advanced/account-state/senders/index.vue` | 3, 4 |
+| Connected apps | `settings/connected-apps/index.vue` | 3, 4 |
+| Connected app | `settings/connected-apps/[id].vue` | 3, 4 |
+| Contacts | `settings/contacts/index.vue` | 3, 4 |
+| Developer | `settings/developer/index.vue` (base `advanced/index.vue`) | 3, 4 |
+| Display | `settings/display.vue` (base `appearance.vue`) | 3, 4 |
+| FPCs | `settings/fpcs/index.vue` | 3 |
+| Glossary | `settings/glossary.vue` | 3, 4 |
+| Lock | `settings/lock.vue` (base `security/index.vue`) | 3, 4 |
+| Networks | `settings/networks/index.vue` | 3 |
+| Network | `settings/networks/[id].vue` | 3, 4 |
+| Privacy | `settings/privacy.vue` (new in `settings-by-task`) | 3, 4 |
+| Profile | `settings/profile/index.vue` | 3, 4 |
+| Proving | `settings/proving.vue` | 3, 4 |
+| Change password | `settings/security/change-password.vue` | 3, 4 |
+| Export | `settings/security/export/index.vue` | 3, 4 |
+| Export account | `settings/security/export/account.vue` | 3, 4 |
+| Full backup | `settings/security/export/full.vue` | 3, 4 |
+| Export recovery phrase | `settings/security/export/seed.vue` | 3, 4 |
+| Reset | `settings/security/reset.vue` | 3, 4 |
+| Tokens | `settings/tokens/index.vue` | 3 |
+| Forgot password | `ForgotPasswordPopup.vue` | 3 |
+| Confirm | `ConfirmPopup.vue` | 3 |
+| Data viewer | `DataViewerPopup.vue` | 3 |
+| Edit profile | `EditProfilePopup.vue` | 3 |
+| Select profile | `SelectProfilePopup.vue` | 3 |
+| New network | `NewNetworkPopup.vue` | 3 |
+| Edit network | `EditNetworkPopup.vue` | 3 |
+| New endpoint | `NewEndpointPopup.vue` | 3 |
+| Edit endpoint | `EditEndpointPopup.vue` | 3 |
+| Select networks | `SelectNetworksPopup.vue` | 3, 4 |
+| Accounts | `AccountsPopup.vue` | 3 |
+| New account | `NewAccountPopup.vue` | 3 |
+| Edit account | `EditAccountPopup.vue` | 3 |
+| Token metadata | `TokenMetadataPopup.vue` | 3 |
+| New token | `NewTokenPopup.vue` | 3 |
+| Select token | `SelectTokenPopup.vue` | 3 |
+| New FPC | `NewFpcPopup.vue` | 3 |
+| Edit FPC | `EditFpcPopup.vue` | 3 |
+| New sender | `NewSenderPopup.vue` | 3 |
+| Authwits registry | `ChangeAuthwitsRegistryPopup.vue` | 3 |
+| Revoke authwits | `RevokeAuthwitsPopup.vue` | 3 |
+| New contact | `NewContactPopup.vue` | 3, 4 |
+| Edit contact | `EditContactPopup.vue` | 3, 4 |
+| Import contacts | `ImportContactsPopup.vue` | 3 |
+| Receive | `ReceivePopup.vue` | 3 |
+| Incoming trust | `IncomingTrustPopup.vue` | 3, 4 |
+| Connect and capabilities (network) | `popup/windows/capabilities/index.vue` | 3, 4 |
+| Execute: send, authwit, contract call (network) | `popup/windows/execute/index.vue` | 3, 4 |
+| Verify (network) | `popup/windows/verify/index.vue` | 4 |
+| Discover (network) | `popup/windows/discover/index.vue` | 4 |
+| Network unavailable (network) | `popup/windows/network-unavailable/index.vue` | 4 |
+| dApp cancelled overlay (network) | `DappCancelledOverlay.vue` | 4 |
+| Passkey window | `popup/windows/passkey/index.vue` | 3 |
+| Logger window | `popup/windows/logger/index.vue` | 4 |
+| JSON window (the Data viewer's full-screen view) | `popup/windows/json/index.vue` | 2 |
+| Onboarding: welcome | `onboarding/pages/welcome.vue` | 3 |
+| Onboarding: terms | `onboarding/pages/terms.vue` | 3 |
+| Onboarding: create | `onboarding/pages/create.vue` | 3 |
+| Onboarding: import | `onboarding/pages/import.vue` | 3 |
+| Onboarding: learn | `onboarding/pages/learn.vue` | 3 |
+| Onboarding: fees | `onboarding/pages/fees.vue` | 3 |
+| Onboarding: Presto | `onboarding/pages/presto.vue` | 3, 4 |
+| Onboarding: done | `onboarding/pages/done.vue` | 3 |
+| Header and bottom nav (read on Home) | `components/Header.vue`, `popup/components/Navigation.vue` | 3 |
+| Toasts | `ToastManagerBase.vue` | 2 |
+| A tooltip | `Tooltip.vue` | 2 |
+| Global loader | `components/GlobalLoader.vue` | 3 |
+| Migration barrier | `components/MigrationBarrier.vue` | 3 |
+| Account verification failure (a blocked record seeded, below) | `components/AccountIntegrityBarrier.vue`, `components/composite/BarrierOverlay.vue` | 3 |
+| Boot retry | `popup/app.vue:486` | 3 |
+| Legal sheet | `components/LegalAcceptanceSheet.vue` | 3 |
+| Passkey ceremony dialog | `components/passkey/PasskeyCeremonyDialog.vue` | 3 |
+| dApp notifications | `components/NotificationManager.vue` | 3 |
+
+Settings paths are under `popup/pages/`; bare popup file names are under `popup/components/popups/`. No e2e drives the account verification failure (Fact 37), so `withBlockedAccount`, a helper in `tests/e2e/fixtures/type-roles.ts` that every board's shot spec calls, seeds it: from the unlocked popup it writes the `nulo:core:account-integrity-blocked@<profile id>` row (`wallet/services/account-integrity/blocked-repository.ts:26`) and asserts `account-integrity-blocked` (`AccountIntegrityBarrier.vue:71`) visible immediately before the shot. Landing on unlock instead means a background restart closed the session (`wallet/services/profile/service.ts:484-487`) and the barrier stays off that route (`AccountIntegrityBarrier.vue:17,22`): the helper retries once, then fails. Its `finally` deletes the row, waits for the overlay to go and runs `ensureUnlocked` (`tests/e2e/fixtures/helpers.ts:142`) back to Home before the next capture.
+
+Chrome's side panel loads the popup document (`manifest/manifest.config.ts:32-34`); it is shot as that document at the side panel's default width, measured once in a headed Chrome and recorded in `lessons/phase-1.md`. Firefox's toolbar panel is the real panel `openActionPopup` opens (`tests/e2e/fixtures/browser/firefox-action-popup.ts:27`), and no WebDriver or BiDi command reaches its document (`tests/e2e/FIREFOX.md:41`), so its image may have to come from elsewhere. Its type is checked inside it: a Firefox-only smoke case runs the sweep in the real panel on Home and the Settings hub through `evaluateInActionPopup` (`:51`); it fails a role-bearing element whose `scrollWidth` exceeds its `clientWidth` unless its rule ends in an ellipsis, and repeats the geometry reading of `tests/e2e/action-popup-layout.test.ts:37`. Without a panel image, the popup document is shot in a window at the panel's measured size, labelled "same-size window, panel measured in-test".
+
+## Scope
+
+**In:** the `typeRoles` contract and its records in `tokens.ts`, its generated CSS and type, the floors and board-pin tests, `Text`'s `variant`, the guard and its content-keyed baseline, the two inventory generators and their expected files, the computed-style sweep and its e2e specs, the role specimen story, every face, tracking and case pick in `apps/extension/src/**` and `packages/design/src/**`, the face-less sizes and weights a role should own, the off-scale and under-floor sizes, the identifier sites, the screenshot boards, docs in `packages/design/README.md` and `CLAUDE.md`, the removal of the dead type utilities and of `Text`'s `size`, `weight`, `mono` and `tabular` once nothing uses them, the `base.css` hash re-pin in arc 5, and the close-out in arc 6.
+
+**Out:** the landing's own CSS (it keeps building and rendering the same); any font file, basename or `@font-face` rule; `trimAddress` and its separators; copy (literal-caps strings keep their caps); `BrutalistTitle`'s sizes; the hero fit's algorithm (`utils/hero-fit.ts`, `utils/hero-ruler.ts`); colours and contrast (follow-ups only); line height; Storybook as a gate; Biome CSS linting; the `<presto-banner>` Shadow DOM; the developer log viewer's CodeMirror theme; the console banner.
+
+**Order.** This plan builds on `settings-by-task`. That plan rewrites `components/ui/Settings/SettingItem.vue`, `ItemsContainer.vue`, the Settings hub and pages and `components/Header.vue`, and lands first. Arc 1's first step rebases onto the `dev` that carries it and re-audits those files (P1 steps 1 and 2; the site list is in `recon.md` § Settings overlap).
+
+## Architecture & Implementation
+
+### Proposed architecture
+
+- **Contract (L0).** `packages/design/src/token-contract.ts` gains `TypeRoleSpec`, `typeRoles` (28 records) and the floors `MIN_TEXT_PX = 10` (the board's) and `MIN_MONO_PX = 11` (Ask D), top-level exports beside `fontSizes`. Each record names its family token, a `fontSizes` step or `null` for a site-sized role, a weight, tracking in em, upper case or not, tabular figures or not, and for `segment` an `activeWeight`. Six roles are site-sized: `title-hero`, `amount-hero`, `amount-total`, `row-title`, `name`, `fiat`.
+- **Generated CSS.** `render-css.ts` gains a multi-declaration rule helper (Fact 2). `renderUtilitiesCss()` emits one `.type--<role>` rule per role after the `.lh--` block. `bun run --cwd packages/design gen:tokens` writes it into `src/utilities.css`, which `base.css:10` imports, so every shell gets the roles and `base.css` itself does not change until arc 5.
+- **Generated TypeScript.** `render-tokens.ts` emits the records as `typeRoles`, plus `typeRoleNames`, `siteSizedTypeRoles`, `MIN_TEXT_PX`, `MIN_MONO_PX` and `export type TypeRole`. The guard, the contract test and the e2e sweep read them from `@nulo/design/tokens` (Fact 3).
+- **`Text` (L1).** A new prop `variant: TypeRole` emits `type--<variant>`, with a runtime `validator` against `typeRoleNames`, because `vue-tsc` skips the 149 SFCs without `lang="ts"` (`implementations-plan/lessons.md:16`). The name avoids `role`, an ARIA attribute two call sites pass (Fact 7). `Text` with no `variant` renders exactly as today, including its default `lh--100` (`Text.vue:18-21`). A `<Text>` with a site-sized role takes its size from a module class on the tag (one `font-size`), since arc 5 removes `size` (ledger 14).
+- **Raw CSS, composes first.** A module rule that picks a face, tracking or case gets `composes: type--<role> from global` as its first line and loses its face, tracking and case, plus its size and weight when the role is fixed-size. A site-sized role's rule keeps its `font-size`. CSS Modules allow `composes` only in a rule whose selector is one class; an element styled by a compound or descendant selector, or with no class, takes `type--<role>` as a static class in the template.
+- **Primitives.** The package's `SectionLabel`, `Button`, `Input`, `LoadingState`, `SubPageHeaderBase`, `ToastManagerBase`, `Banner`, `BrutalistTitle`, `Tooltip` and `FieldWarning` adopt roles inside the package.
+  - `Button`, the cascade today: `size` defaults to `medium` (`Button.vue:12`), so a Button with no `size` carries `.wrapper.medium` (`:193-200`: 13px, 0.03em, `padding: 0 14px` at `:198`), specificity (0,2,0). The CTA rule `.wrapper.cta, .wrapper.cta_outline, .wrapper.cta_destructive` (`:314-324`: 14px, 0.2em, `width: 100%`, `padding: 20px 0`) is also (0,2,0) and later, so it wins at every size (`.large` `:184-191`, `.mini` `:222`, `.micro` `:230`), except `.wrapper.cta.compact` and its siblings at (0,3,0) (`:326-331`: 12px, `padding: 14px 0`). `primary` and `primary_outline` (`:235-242`, `:254-262`) set no size or tracking, so the size rule gives theirs: medium 13/0.03, large 14/0.05; `.small` (`:211-216`) sets neither. A (0,1,0) role carrying the CTA's size would lose to `.wrapper.medium` and drop the 32 default-size CTAs (`SendReviewSheet.vue:158`, `auth.vue:298`, …) to 13px.
+  - `Button`, after: only the type moves. `.cta_type`, a single-class rule, composes `type--button from global` and declares nothing else; `.md_type` composes `type--button-md`; `getStyles()` (`:76-86`) adds the first for the three CTA variants and the second for `primary` and `primary_outline`. The box stays in today's compound rules: the CTA rule keeps `width` and `padding` and loses its type, so it still beats `.medium`'s and `.large`'s padding by order, and the compact CTA rule keeps its padding at (0,3,0) and loses its `font-size`. (A single-class rule holding the padding would lose to `.wrapper.medium`'s `padding: 0 14px`; ledger 32.) The size rules (`:178-232`) keep only box declarations: `.large`'s and `.medium`'s `letter-spacing` goes, and each `font-size` moves into a compound rule on the role-less variants, `.wrapper:is(.secondary, .ghost, .text).<size>` (an `OVERRIDES` entry; their callers are icon-only, `ConfirmPopup.vue:129` and `TokensView.vue:384`). So no size rule reaches a role-bearing variant's type: every CTA reads 14/0.2 and every `primary` 13/0.03 (Ask G's default, the board's two button rows), each in today's box. Ask G's alternative keeps today's sizes as two compound `OVERRIDES` (§ Algorithms). `.wrapper`'s `font-weight: 600` (`:153`), which would tie with the role at (0,1,0), moves to one compound rule for `secondary`, `ghost` and `text`.
+  - `Input` puts `type--input` or `type--input-data` (`textVariant`) on the native `<input>`. `.base input` (`Input.vue:391-405`, specificity (0,1,1)) loses its face, size and weight, so the role is the only source; `.base.mini input` keeps its 12px as a reviewed override.
+  - In the extension, `AddressDisplay` renders `data`, `data-lead` (new `lead` prop) or, when it shows a contact or account name, `name` at its own size. `SettingItem` gains `titleVariant` (`row-title`, `name` or `data`) and `descriptionVariant` (`caption` or `data`).
+- **Heroes.** Each hero's role is composed into the class its drawn number and its hidden ruler share (`recon.md` § Heroes; `hero-ruler.ts:14-20`), so the fit measures the face, tracking and figures it draws: `amount-hero` into `.balance_amount` and `.hero_fit` (`BalanceView.vue:403,418`), `.field_type` (`AmountCard.vue:506`) and the review's `.amount` (`SendReviewSheet.vue:205`); `amount-total` into `.summary_amount` (`holdings.vue:164`); `amount-detail` into `.amount_value` (`detail-page.module.css:11`). `.hero_fit` keeps its fitted size and loses its tracking, so `-0.04em` computes at the fitted size, and the Home symbol (`:500`, 0.5em) inherits that length as today.
+- **Guard.** `apps/extension/src/utils/type-role-ban.test.ts`, modelled on `copy-dash-ban.test.ts`, scans `apps/extension/src` and `packages/design/src` with `postcss` (`apps/extension/package.json:104`) for CSS and `<style>` blocks (nested rules resolved), `sass` (`:106`) for the one `.scss` file that picks a face (`onboarding/onboarding.scss:23`), and `@vue/compiler-sfc` for templates and scripts. It skips tests, stories and `.d.ts` files (`copy-dash-ban.test.ts:25`). Its `REVIEWED` baseline is keyed by content and empty by arc 5. `CARVE_OUTS` and `OVERRIDES` are short reasoned lists, stale-checked like the baseline. It runs in `bun run test`, so in `audit:vue` and `quality-status`.
+- **Inventory generators.** `apps/extension/scripts/type-roles/identifier-sites.ts` and `surfaces.ts` list every identifier site and every rendered surface from the code (§ Algorithms). Each has a reviewed expected file (`*.expected.json`), seeded from § Identifiers and § Captures, holding what code cannot know: a site's role, selector, surface, seeded state and first live arc; a surface's trigger and states. `inventory.test.ts`, in `bun run test`, fails on an item with no entry, a stale entry or a missing field until the lead reviews the difference and updates the expected file and its plan table in one commit. They sit in the extension, whose parsers and route tree they reuse (`apps/extension/package.json:96,104,113`, `scripts/pages-options.test.ts:16-20`).
+- **Runtime sweep.** `tests/e2e/fixtures/type-roles.ts` checks the loaded faces, then every role-bearing element and every identifier occurrence on a page against its record, counting observations (§ Algorithms). The shot specs, the smoke spec `tests/e2e/type-roles.test.ts` and, in the approval windows, `tests/e2e/network/type-roles-windows.test.ts` run it.
+- **Specimen.** `apps/extension/src/design/TypeRoles.stories.ts` sets each role's name in its own role, both themes; a review aid.
+
+### Key interfaces
+
+```ts
+// packages/design/src/token-contract.ts
+export type TypeRoleSpec = {
+	/** A family token from `tokenGroups.fonts`. */
+	readonly family: (typeof tokenGroups.fonts)[keyof typeof tokenGroups.fonts]
+	/** A `fontSizes` step, or `null` when the element keeps its own size (the board's "size per slot"). */
+	readonly size: (typeof fontSizes)[number] | null
+	readonly weight: (typeof fontWeights)[number]
+	/** The weight of the selected item, applied by the component's own compound rule. */
+	readonly activeWeight?: (typeof fontWeights)[number]
+	/** In em; 0 renders `letter-spacing: normal`. */
+	readonly tracking: number
+	readonly uppercase: boolean
+	readonly tabular: boolean
+}
+
+export const MIN_TEXT_PX = 10
+/** A step above `MIN_TEXT_PX`: small mono holds what a person compares glyph by glyph, a hash's head and tail. */
+export const MIN_MONO_PX = 11
+
+/** The only way the wallet picks a face. Each key renders `.type--<key>` in `utilities.css`. */
+export const typeRoles = {
+	"title-hero": { family: "--font-headline", size: null, weight: 700, tracking: -0.04, uppercase: true, tabular: false },
+	"amount-hero": { family: "--font-headline", size: null, weight: 700, tracking: -0.04, uppercase: false, tabular: true },
+	// … the other 26 records, exactly as the rulebook table
+} as const satisfies Record<string, TypeRoleSpec>
+
+// packages/design/src/tokens.ts (generated)
+export const typeRoles = { /* the records */ } as const
+export const typeRoleNames = ["title-hero", "amount-hero", /* … */ "input"] as const
+export const siteSizedTypeRoles = ["title-hero", "amount-hero", "amount-total", "row-title", "name", "fiat"] as const
+export const MIN_TEXT_PX = 10
+export const MIN_MONO_PX = 11
+export type TypeRole = (typeof typeRoleNames)[number]
+```
+
+Generated rule shape (a fixed-size upper-case role, then a site-sized role):
+
+```css
+.type--label {
+	font-family: var(--font-headline);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	font-variant-numeric: normal;
+}
+
+.type--amount-hero {
+	font-family: var(--font-headline);
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	text-transform: none;
+	font-variant-numeric: tabular-nums;
+}
+```
+
+A role with tracking 0 writes `letter-spacing: normal;`. A role without tabular figures writes `font-variant-numeric: normal;`, because the property inherits: the review sheet's `meta` symbols sit inside `amount-hero` (`SendReviewSheet.vue:113,117`) and would otherwise take its tabular figures.
+
+```ts
+// packages/design/src/core/Text.vue (the new prop; the old ones stay until arc 5)
+variant: { type: String as PropType<TypeRole>, validator: (v: string) => (typeRoleNames as readonly string[]).includes(v) }
+
+// packages/design/src/ui/Input.vue, on the native <input>
+textVariant: { type: String as PropType<Extract<TypeRole, "input" | "input-data">>, default: "input" }
+
+// apps/extension/src/components/AddressDisplay.vue: `size` and `weight` removed
+lead: { type: Boolean, default: false }   // `data-lead` instead of `data`; a shown name takes `name` at 12px, 13px with `lead`
+
+// apps/extension/src/components/ui/Settings/SettingItem.vue
+titleVariant: { type: String as PropType<"row-title" | "name" | "data">, default: "row-title" }
+descriptionVariant: { type: String as PropType<"caption" | "data">, default: "caption" }
+```
+
+```ts
+// apps/extension/src/utils/type-role-ban.test.ts
+const SCAN_ROOTS = ["apps/extension/src", "packages/design/src"]
+const EXEMPT = /^packages\/design\/src\/(base\.css|utilities\.css|token-contract\.ts|tokens\.ts|internal\/)/
+const SKIPPED = /\.(test|stories)\.[jt]s$|\.d\.ts$/
+type Key = { file: string; rule: RuleId; text: string }
+/** Today's picks, matched as a multiset by content; `role` is the target the migrating arc applies. Empty by arc 5. */
+const REVIEWED: (Key & { role: TypeRole | "carve-out" | "drop" })[]
+/** Picks that cannot be roles, kept for good; stale-checked. */
+const CARVE_OUTS: (Key & { why: string })[]
+/** Compound rules allowed to override one role property; stale-checked. */
+const OVERRIDES: { file: string; selector: string; property: string; value: string; why: string }[]
+
+// apps/extension/scripts/type-roles/identifier-sites.ts and surfaces.ts
+export type IdentifierSite = { file: string; line: number; expression: string; component: string; branch: string; ordinal: number }
+export type Surface = { id: string; kind: "route" | "popup" | "overlay"; source: string; renders: string[]; arcs: number[] }
+/** Keyed by occurrence: file, expression, branch (the `v-if` chain's condition text) and ordinal among identical expressions in the file; the line is a hint. `selector` names that occurrence alone. `none` marks a reviewed non-identifier and needs `why`; `unreachable` names the producer that never emits the branch, set only in the lead's review. */
+type SiteEntry = { file: string; expression: string; branch: string; ordinal: number; role: "data" | "data-lead" | "input-data" | "meta" | "name" | "none"; selector: string; surface: string; state: string; liveFrom: 2 | 3 | 4; unreachable?: string; why?: string }
+type SurfaceEntry = { id: string; reach: string; states: string[] }
+```
+
+### Data & control flow
+
+- **Build.** `token-contract.ts` → `gen:tokens` → `tokens.ts` (records, names, `TypeRole`) and `utilities.css` (`.type--*`) → `base.css:10` imports `utilities.css` → the popup (`popup/index.ts:11`), onboarding (`onboarding/index.ts:17`), Storybook and the landing (`apps/landing/src/main.ts:1`, `apps/landing/src/legal.ts:1`) load it. The landing uses no utility class, so it renders the same.
+- **Render.** `<Text variant="data">` → `<span class="type--data lh--100 color--…">`; a composing module rule exports its role class too; a static template class puts `type--label` on the element. So every role-bearing element carries a `type--` class, which the sweep collects.
+- **Cascade.** A role is one class: (0,1,0). A plain module class ties with it, and tie order is not stable here: `popup/index.ts:9-11` imports `app.vue` before `base.css`, so an eager component's module CSS sorts before the utilities and a lazy page's after, and Storybook loads `base.css` first. So no single-class rule on a role-bearing element may set a property its role sets (guard rule 7). A compound rule, (0,2,0) or more, may override one role property when `OVERRIDES` lists it (§ Algorithms).
+
+### File-level change map
+
+Arc 1, the role layer (no visible change):
+
+| File | Change |
+|---|---|
+| `packages/design/src/token-contract.ts` | `TypeRoleSpec`, `typeRoles` (28 records), `MIN_TEXT_PX`, `MIN_MONO_PX` |
+| `packages/design/src/internal/render-css.ts` (+ new `render-css.test.ts`) | multi-declaration rule helper; `.type--*` block after `.lh--`; `HEADER` byte-identical (`copy-dash-ban.test.ts:226-230` pins its text) |
+| `packages/design/src/internal/render-tokens.ts` | the records, `typeRoleNames`, `siteSizedTypeRoles`, `MIN_TEXT_PX`, `MIN_MONO_PX`, `TypeRole` |
+| `packages/design/src/utilities.css`, `packages/design/src/tokens.ts` | regenerated |
+| new `packages/design/src/type-roles.contract.test.ts` | floors, read from `./tokens` and pinned (10 and 11); site-sized roles exactly six; each record equals the board's A rows it carries |
+| `packages/design/src/core/Text.vue`, `Text.test.ts` | `variant` prop, validator and cases |
+| `apps/extension/src/utils/type-role-ban.test.ts` | new guard, full baseline with target roles, carve-outs, overrides, self-tests |
+| `apps/extension/src/popup/pages/tab-hero.module.css` | `.hero_title` composes `type--title-hero from global` (identical values; 48px kept): the composes proof |
+| `apps/extension/src/design/TypeRoles.stories.ts` | new specimen story |
+| new `apps/extension/scripts/type-roles/{identifier-sites,surfaces}.ts`, their `*.expected.json` and `inventory.test.ts` | the two generators, their reviewed expected output seeded from § Identifiers and § Captures, the diff test, whose fixture case reads `OperationCard.vue:340,346` as two sites |
+| new `apps/extension/tests/e2e/fixtures/type-roles.ts`, `apps/extension/tests/e2e/type-roles.test.ts` | the sweep function, its `record` mode, its coverage count over `identifier-sites.expected.json` and `withBlockedAccount`; the smoke spec (probes, font loading, the composed hero title, the Firefox panel case) |
+| the identifier sites of § Identifiers marked +, `components/AddressDisplay.vue`, `components/ui/Settings/SettingItem.vue` | the new `data-testid`s, nothing else |
+| `packages/design/README.md`, `CLAUDE.md` | Type roles section; the component model's L0 and L1 lines; correct "generated tokens.ts + base.css" (`README.md:9-10`, `CLAUDE.md:231`): `base.css` is hand-authored |
+
+Arc 2, primitives, shared styles and their callers:
+
+| File | Change |
+|---|---|
+| `packages/design/src/ui/{SectionLabel,Button,Input,LoadingState,SubPageHeaderBase,ToastManagerBase,Banner,BrutalistTitle,Tooltip,FieldWarning}.vue` and their tests; `packages/design/vitest.config.ts` | roles inside the package; `Button`'s `.cta_type` and `.md_type`, size rules limited to box declarations and the role-less variants, `.wrapper` weight moved; `Input` `textVariant` and the `.base input` restructure; `css.include` for `ui/Button.vue` and `utilities.css` only |
+| `apps/extension/src/components/ui/**` (`Settings/SettingItem.vue`, `ItemsContainer.vue`, `settings-row.module.css` and the rest of the folder's picks) | roles; `SettingItem` `titleVariant` and `descriptionVariant` |
+| Callers of those props: `AccountsPopup.vue:72-76`, `settings/accounts/index.vue`, `settings/security/export/account.vue:231-232`, `settings/connected-apps/[id].vue:267-268`, `settings/networks/[id].vue:180-183`, the profile card, `FpcRow.vue:33` | `titleVariant="name"` on rows titled with a name; `descriptionVariant="data"` on address rows and the chain ID; the FPC fallback |
+| Shared modules: `popup/pages/tab-hero.module.css` (the rest), `popup/components/popups/popup-shared.module.css`, `components/composite/list-empty.module.css`, `components/composite/import/import-shared.module.css`, `popup/components/modules/send/fee-shared.module.css`, `popup/components/modules/settings/record-card.module.css`, `components/composite/capabilities/capability-shared.module.css`, `components/composite/activity/activity-card.module.css` | `composes: type--<role> from global`; face, tracking, case, and fixed-size roles' size and weight out. `detail-page.module.css` is arc 3's |
+| `components/AddressDisplay.vue` and its 32 call sites in 7 files | `size`/`weight` out, `lead` in |
+| `components/composite/general/AddressInput.vue`, `popup/components/modules/send/RecipientField.vue`, the four address `Input`s (`NewTokenPopup.vue:305`, `NewFpcPopup.vue:160`, `EditFpcPopup.vue:256`, `NewSenderPopup.vue:104`) | `textVariant="input-data"`; the `:global(input)` override at `RecipientField.vue:158-166` goes |
+| `components/composite/general/AccountAvatar.vue` | `weight="600"` → its own module class; the bound `fontSize` stays (carve-outs) |
+| `TokensView.vue:369`; new `tests/e2e/network/type-roles-windows.test.ts`; `type-role-ban.test.ts`; `tests/e2e/type-roles.test.ts` | `holdings-section-label`; the window sweep; entries out; sweep pages added |
+
+Arc 3, wallet and entry surfaces: `components/Header.vue`, `popup/components/Navigation.vue`, `popup/components/modules/{general,holdings,activity,send,tx,auth}/**`, `components/composite/{activity,send,import}/**`, `popup/pages/{general,holdings,activity,send,import,auth,register}.vue`, `popup/pages/{tx,received,journal,profile,legal}/**`, `popup/pages/detail-page.module.css` (all of it, its amount included: this arc alone touches it), `popup/components/popups/**` except the two in arc 4, `popup/app.vue` (boot retry), `onboarding/**`, `components/{LegalAcceptanceSheet,GlobalLoader,MigrationBarrier,NotificationManager}.vue`, `components/composite/{FormPopup,ProcessingErrorNote}.vue` (the popups' title and error note), `components/composite/{PasskeyScreen,SecretCountdownClose,SecretRevealCard,SecretUnlockSection,BarrierOverlay,LegalConsent,ProfileNameField,ListStatusMessage,CollapsingHeroLayout,SearchField,DottedTerm}.vue`, `TokenCard.vue:97` (`token-amount`), `tests/e2e/network/transfers.test.ts:197-198` (`textContent`). Guard: 331 CSS hits in 70 files and 149 `<Text>` tags in 45 files at the draft's count (`recon.md` § Arcs and blast radius), plus this arc's face-less sizes and weights.
+
+Arc 4, settings and approval windows: `popup/pages/settings/**`, `popup/components/modules/settings/**`, `popup/windows/**`, `components/composite/capabilities/**`, `components/composite/{DappIdentityBlock,IdentityStrip,DappApprovalFooter,DappCancelledOverlay,ScopePatternList,CapabilityDetailPanel}.vue`, `components/{ScopeAddress,ScopeClassId,PrestoStatusCard}.vue`, `components/composite/general/EmojiGrid.vue` (its emoji size into `.cell`, a keyed carve-out), `components/JsonViewer/LogsToolbar.vue`, `popup/components/popups/{IncomingTrustPopup,SelectNetworksPopup}.vue`. Guard: 110 CSS hits in 25 files and 232 `<Text>` tags in 35 files, plus face-less sizes and weights.
+
+Arc 5, zero and cleanup:
+
+| File | Change |
+|---|---|
+| any file the guard still lists | last entries out; `REVIEWED` is `[]` |
+| `packages/design/src/base.css`, `base.css.test.ts:21` | delete `.capitalize`, `.mono`, `.font-headline`, `.font-mono`, `.uppercase`, `.tracking-wide`, `.tracking-widest`, `.tabular` (`base.css:364-366,377-403`); new hash |
+| `packages/design/src/core/Text.vue`, `Text.test.ts` | drop `size`, `weight`, `mono`, `tabular` and their tests, including the `(PIN)` case (`Text.test.ts:31-37`) |
+| `packages/design/src/internal/render-css.ts`, `utilities.css` | drop `.fz--*` and `.fw--*`, which only `Text` emits (no other user: `grep -rn "fz--\|fw--"` outside the generator, `Text` and stories finds none) |
+| `packages/design/src/token-contract.ts:82,85`, `apps/extension/src/design/Typography.stories.ts:53-86` | comments and story labels that name `.fz--N` and `.fw--N` say "scale step"; the scales stay, since roles and the guard read them |
+| `RecipientCard.test.ts:7`, `RecipientField.test.ts:15` | drop the removed prop names from their `Text` stubs |
+
+Arc 6, close-out (docs only): `implementations-plan/type-roles/**` → `implementations-plan/archive/type-roles/**`, `implementations-plan/{index,lessons,follow-ups}.md`, `implementations-plan/archive/index.md`.
+
+### Algorithms / non-obvious mechanics
+
+- **Guard rules.** One finding per declaration, prop, key or string. Each finding prints as `path  rule  text`, with the line as a hint only.
+  1. **Face.** A `font-family` with any value but `inherit`; `var(--font-` in any CSS value; a `fontFamily` key in a static or bound `style` (object or string) or in a script string.
+  2. **Tracking.** Any `letter-spacing` declaration or `letterSpacing` key.
+  3. **Case.** `text-transform: uppercase` or `textTransform: "uppercase"`. `capitalize` and `none` pass.
+  4. **Shorthand.** `font` and `font-variant` are expanded into their longhands, and each is judged by rules 1, 2, 3, 5 and 8. `font: inherit` passes except on a role-bearing element (rule 7): at (0,1,0) it resets the role's longhands.
+  5. **Size.** A `font-size` or `fontSize` whose px terms (plain, or inside `calc()`) are off `fontSizes`; any size under `MIN_TEXT_PX`; a mono size under `MIN_MONO_PX`, mono meaning the rule's own family or its composed role's. The floors are constants from the contract, separate from the scale, which keeps its 8px step (`token-contract.ts:83`).
+  6. **Text props.** `size`, `weight`, `mono` or `tabular` on a `<Text>`, static, bound or bare (`<Text tabular>`), through every local name `Text` is imported or auto-imported as. With `variant`, any of them fails and no baseline entry can cover it. A static `variant` outside `typeRoleNames` fails.
+  7. **Ties.** In a rule that composes a role, a declaration of a property the role sets fails (a site-sized role's `font-size` passes). For an element with a static `type--` class or a `<Text variant>` and a same-file `$style.x`, the single-class rule `.x`, its nested rules resolved, may not set a role property, and `font: inherit` there fails. A compound rule may override a role property only as an `OVERRIDES` entry, whose value must equal the override it names (for `segment`, its `activeWeight`).
+  8. **Face-less size and weight.** In module CSS, a `font-size` or `font-weight` in a rule that composes no role and is not an `OVERRIDES` entry is a finding, and so is a bound `fontSize` or `fontWeight`. This brings the Inter-by-inheritance sizing (about 50 rules, e.g. `DappIdentityBlock.vue:99-103`) into the baseline, so an empty baseline means consolidated.
+  9. **Site sizes on `<Text>`.** A module class on a `<Text variant>` whose role is site-sized may set `font-size` and nothing else; on any other `<Text variant>`, rule 7 applies.
+  10. **Identifiers.** A template expression that calls `trimAddress(` must render inside, or be passed to, an element whose role is mono (`data`, `data-lead`, `meta`, `input-data`, or a `descriptionVariant`/`titleVariant` of `data`), resolved in the same file; otherwise it is a finding. Calls in script blocks are not followed.
+- **Baseline.** Each finding is keyed `(file, rule, text)`, `text` being the offending content normalized (lower case, whitespace collapsed, `prop: value` for a declaration, `size="12"` for a prop). Findings and entries match as a multiset, as `copy-dash-ban.test.ts:357-365` does, so a second identical pick in a file is a new finding and a moved line is not. A finding with no entry fails; an entry with no finding fails as stale; carve-outs and overrides are stale-checked too. A sanity check requires more than 500 scanned files (as `copy-dash-ban.test.ts:369`). On failure the test prints, for each file it names, that file's current findings as paste-ready entries with `role: "TODO"`, and a self-test rejects any committed `TODO`. On day one the list holds about 1,000 entries: 539 CSS findings in 115 files, 393 `<Text>` tags, and the face-less rules (`recon.md` § Counts). Each entry's `role` is the inventory the arc subagents work from; each arc deletes every entry of the files it migrates.
+- **Blind spots, stated in the test's header.** Dynamic class expressions (`Button`'s `getStyles()`, computed class arrays), composition chains that cross files, descendant selectors whose target cannot be resolved, script-block identifier calls, and styles set from script at run time. The runtime sweep covers each on every board's surfaces and on its listed pages in CI. What neither sees is an element that should carry a role and carries none, or a valid role on the wrong job, unless it is a generated identifier site; the boards and the owner's review are the check for those.
+- **Inventory generators.** Both print one line per item and reuse the guard's parsers and skips.
+  - `identifier-sites.ts` reads every template and `<script setup>`. A site is (1) a template call to `trimAddress(`, `shortAddress(` or `formatAddress(`, or to anything that reaches `trimAddress`: a `src/utils/` export named for an address or hash or calling it (`addressChangeText`, `utils/contact-import-rows.ts:186`), or a same-file `computed` or function that does (`TokenImportRow.vue:26-29`); (2) a `.slice(0, N)` with a `.slice(-N)` on one string, in the template or a same-file `computed` (`ReceivePopup.vue:66-68`, `TransactionCard.vue:99-101`); (3) a `mono` on a `<Text>`, bare or bound (`CallArguments.vue:132`, `:76`), or a `textVariant` on an `Input`; (4) a member named `address`, `hash`, `txHash`, `id`, `chainId`, `nonce`, `origin`, `hostname`, `contractAddress` or `selector`, or a `String()` of one, interpolated into template text or bound to `title`, `description`, `label` or `value` (`networks/[id].vue:183`); (5) every `AddressDisplay` and `AddressInput` element. It prints `file:line`, the expression, the enclosing component, the condition text of the `v-if`/`v-else-if` chain above it (the branch the state must reach) and the ordinal among identical expressions in the file. File, expression, branch and ordinal key an occurrence: `OperationCard.vue:340,346`, one expression on two branches, are two sites. A name match that is no identifier is reviewed in as `none`, with its reason. A selector names its occurrence: a testid on the site's element, or on an ancestor inside its branch, in its file. `inventory.test.ts` fails on two entries of one surface with one selector unless they are sibling branches of one chain, each seeded alone (`execute-authwit-spender`, `OperationActionRow.vue:25,39,47,51`). So a bare `address-display` stands for one site per surface, and sweep step 4 credits an element to one occurrence. Discovery runs at arc 1 and at every gate; an entry the patterns stop finding (a `mono` migrated to `variant`) stays, reported, while its testid is in its file, and is stale only once that is gone too. A site whose branch no producer emits is reviewed in as `unreachable`, its reason naming the producer; only the lead's review sets it, never an arc subagent. It is still migrated and guarded, the sweep skips it, and the final board lists it with its reason. The reason pins its evidence by content, like a baseline entry, and names the producer set: every module that constructs the value the branch reads (for the authwit branches, every builder of an `add_public_authwit` operation). Every gate reruns that producer search and diffs the set against the pinned one; a new producer, a changed producer file, or a changed evidence text reports the kind stale, and the site reverts to `recording` until the lead re-attests it or it is observed. Recapturing existing states never exercises an unreachable branch, so the producer search is the only thing that keeps the attestation honest. First entries: `OperationActionRow.vue:39,43,47,51`, a public authwit's encoded-call, intent and message-hash branches, whose one producer, `grantPublicAuthwit` (`packages/wallet-bridge/src/dispatcher.ts:702-728`), builds only `kind: "call"` (`:720-722`); nothing else builds an `add_public_authwit`. It cannot see a key read dynamically (`row[key]`), text a helper builds without `trimAddress`, or a value another file formats (`call-surface.ts:50` trims the raw fields `CallArguments.vue:133` shows as `row.short`): found only by its `mono`, such a site is kept through migration by its arc-1 testid. Sweep step 4's text scan catches any other that renders a hex identifier, and the boards the rest.
+  - `surfaces.ts` lists (1) every route `PageContext` builds from `PAGES_OPTIONS` (`scripts/pages-options.ts:8-17`), with its `<route>` meta; (2) every popup `PopupManager.vue` mounts, with its `isOpened` key and the files that name it; (3) every component `popup/app.vue` mounts outside `RouterView` (`:464-487`, `:493`) and every component that renders a `<Teleport>`. For each it resolves what it renders: components reached through imports, the auto-import map (`src/types/components.d.ts`) and the design resolver (`scripts/design-resolver.ts`), slot content included, with their imported and composed `.module.css`; every script module they import, transitively (`popup/windows/execute/humanize.ts`, whose output `OperationCard.vue:106,326` renders; `src/utils/**`); the entry's shell, `popup/app.vue` or `onboarding/app.vue` (`onboarding/index.ts:15`; its wordmark sits outside `RouterView`, `:94-101`), with its stylesheet (`popup/index.scss`, `onboarding/onboarding.scss`), windows being popup routes; the global styles every shell loads (`base.css`, `utilities.css`, `tokens.ts`, the fonts); the route's shell from its meta (the Header unless `hideHeader`, `auth`, `register` or a window; `Navigation` with `showBottomNav`); for a popup, the shell of the pages that open it. A surface's arcs among 3 and 4 (arc 2's board and the final one take every surface) are those whose change-map globs (`ARC_GLOBS` in the script) match any of those files. It cannot follow a computed `<component :is>` or a popup key built at run time; the review of its output covers those.
+- **Carve-outs.** `onboarding/pages/presto.vue:165-166`: `--pb-font-body`/`--pb-font-display` theme the third-party `<presto-banner>` Shadow DOM through its variables, which a class cannot reach. `popup/app.vue:394,396`: the anti-scam console banner styles DevTools output. `components/JsonViewer/creator.js:244`: CodeMirror's theme takes a style object, in the developer log viewer. `packages/design/src/ui/BrutalistTitle.vue`'s sizes. `AccountAvatar.vue`: the bound `fontSize` (`:28`, from `:15`, which can give 9px) and its weight class; `ContactRow.vue:78`'s initials (Inter 600 at 10px): the avatar row is unchanged by the board, and initials size with their box. `AmountCard.vue:482-492`: the height strut's `font-size: 40px`, because a pseudo-element takes no class and must copy the field's full-size line box; it inherits face and weight from `.field_line` and `.unit_pair`. The hero sizes the scale lacks, each keyed by file, selector and declaration, so a new 30px or 48px elsewhere still fails: `SendReviewSheet.vue` `.amount` `font-size: calc(30px * var(--hero-scale, 1))` (`:207`; rule 5), the review figure's full size, which the fit shrinks; `BalanceView.vue` `.balance_amount` `font-size: 48px` (`:405`; rule 5), the Home figure's full size; `tab-hero.module.css` `.hero_title` `font-size: 48px` (`:47`; rule 5), `title-hero`'s size on Activity and the Settings hub. `BalanceView.vue` `.balance_symbol` `font-size: 0.5em` (`:501`; rule 8): the symbol takes no role and inherits the fitted figure's face, weight and computed tracking at half its size, which a role would reset. Two rule-8 entries keyed by content like a baseline entry, never by file: `packages/design/src/core/MaterialIcon.vue`'s `fontSize` key (`:25`), the file's only rule-8 finding, which sizes an icon glyph, not text (`MaterialIcon.test.ts:19-25` pins it); and `EmojiGrid.vue`'s `.cell` `font-size: 24px`, the verification emoji's size, which arc 4 moves from `<Text size="24">` (`:25`) into `.cell` (`:36`). Any other size or weight in either file is a finding.
+- **Overrides.** `Button.vue`'s size rules on the role-less variants (`.wrapper:is(.secondary, .ghost, .text).<size>`, `font-size`) and those variants' weight 600; under Ask G's alternative only, `.wrapper.cta.compact` and its siblings at 12px and `.wrapper.primary.large, .wrapper.primary_outline.large` at 14px; `Input.vue:384-389`'s mini size; the segment's active weight in `SendTypesCard.vue` and the onboarding method tabs. No size rule of `Button` overrides a role-bearing variant under Ask G's default.
+- **Role from a `<Text>` today.** The subagent picks by job, from the rulebook's Covers column. Starting points for the 393 tags that set `size`, `weight` or `mono` (`recon.md` § Counts): `mono` → `data` (identifier, inline amount), `meta` (hint, small hash, symbol, count), `time`, `fiat`, `amount-row` or `data-lead` (the identifier a screen is about); 14/600 → `name` (a person's, account's, contact's or fee method's name) or `row-title` (UI vocabulary); 13/600 → `row-title` (a row or card title) or `value`; 12/600 → `value`; 12, 12/500, 13, 14 and `height="150"` → `body` (a sentence) or `caption` (a one-line sub line); 11 → `caption`, or `meta`/`time` for digits and times; 16 and up → `title-page`, `row-title` or `title-hero`. A tag that sets only `color` or `align` inherits and takes no role, except an identifier (§ Identifiers). A `<Text>` inside a primitive that carries a role (the confirm label inside a `primary` Button, `DappApprovalFooter.vue:62`) drops `size` and `weight` and takes no variant. A tag that sets `weight` without `size` inherits its size today; it takes a role only when the role's size equals that inherited size, and otherwise gets a UI impact row first.
+- **`composes … from global`.** CSS Modules resolve `from global` to the bare class name, so the module key exports `"<hash> type--label"`. Vitest stubs CSS modules, so jsdom tests see neither form, except `Button.test.ts`'s declared values (Fact 36, P2 step 2); arc 1 proves the composition in both browsers on Activity's hero title (P1 step 11) before any other rule depends on it.
+- **Runtime sweep.** `tests/e2e/fixtures/type-roles.ts`, used by the throwaway shot specs on every generated surface at every board (the before set included), by the smoke spec (its listed pages and Firefox's real toolbar panel) and by `network/type-roles-windows.test.ts` (approval windows):
+  1. Await `document.fonts.ready`. For each of the three families, at least one `FontFace` reports `status === "loaded"` and none reports `"error"`; a requested but missing face fails here, which `getComputedStyle(...).fontFamily` alone cannot show.
+  2. Collect every element whose class list contains a `type--` class. Read `fontFamily` (its first family must be the role's), `fontSize` (equal to the role's size when fixed; for every element at least `MIN_TEXT_PX`, and `MIN_MONO_PX` for a mono role, except listed exceptions), `fontWeight`, `letterSpacing` (in px, compared with tracking × computed size, within 0.1px for Firefox's rounding; `normal` for tracking 0), `textTransform` and `fontVariantNumeric`. A value that differs passes only through an `OVERRIDES` entry's value. The fixture also exports a `record` mode for arc 1's before set, where no role class exists yet: it reads the same values from every visible element with its own text, keyed by surface, nearest `data-testid` and text, and asserts nothing.
+  3. Pages in the committed smoke spec: Home with seeded tokens and a balance long enough that the fit scales below full size, Holdings, Activity, the seeded tx detail `rows.test.ts` reaches (`#/popup/tx/<hash>`), Send with a recipient typed, the Receive and Accounts popups, the Settings hub, Contacts and Display, the unlock screen. Windows (network): capabilities and execute, with an `AddressDisplay` in its address state and in its name state.
+  4. Identifiers and coverage. For each site of the identifier expected file, on its surface and in its seeded state (§ Identifiers, Conditional sites), every element at its occurrence's selector, and at least one, must carry `type--<role>` (on a native input, the class `textVariant` sets) and compute to the role's values; an `AddressDisplay` showing a name expects `name`. A site records instead of asserting before its `liveFrom` arc. Each run adds its observations to the board's coverage record, keyed by occurrence: a board fails on a live site of its surfaces with no observation, the final board on any live site with none, and it lists every `unreachable` site with its reason. A text scan then closes what the generator cannot see: a visible text node holding `0x` and two or more hex digits must sit inside a mono role, except in the JSON and log viewers' CodeMirror (`creator.js:244`); one outside is recorded with its surface and nearest testid on arcs 1 to 4 boards and fails the final board.
+  5. Named cases on top of the collection: the fitted Home figure (`[data-testid="balance-amount"]`'s visible `.hero_fit` child, not the container), with its symbol; the native `<input>` of an `Input` (`input`) and of the recipient field (`input-data`); Activity's `page-hero-title` at 48px; the tx detail amount at 24px; the review sheet's symbol (`SendReviewSheet.vue:113`) with `fontVariantNumeric` `normal` inside the tabular `amount-hero`; and the `Button` matrix: for every variant and size that has a caller (Fact 15), one button found by its testid on its surface (the surfaces expected file names it) reads family, size, weight, tracking, case and the four `padding` longhands against its role and today's box (`Button.vue:184-232,314-331`), the default-size CTA (the unlock button, `auth.vue:298`) at 14px and `20px 0`; `secondary` and `ghost` carry no role class; the small `primary` (`DappCancelledOverlay.vue:20`) is read on the network boards. A pair with no caller never renders; its classes and declarations are `Button.test.ts`'s.
+  6. Long hostname (network spec): in the open capabilities window, the hostname element's text is swapped in page for a long fixture hostname, and its `scrollWidth` and `clientWidth` are recorded, at arc 1's head (Space Grotesk 14/700) and after arc 4 (mono 13/600). The two pairs go in the arc 4 board; the clipping itself is a follow-up, not a gate.
+- **E2E probes.** The smoke spec injects one `<span data-testid="type-role-probe-<role>" class="type--<role>">` per role into the popup and checks each against its record, so a role that fails to reach a real page fails in arc 1.
+- **Screenshot boards.** Two throwaway specs, never committed: `tests/e2e/zz-type-roles-shots.test.ts` (smoke surfaces) and `tests/e2e/network/zz-type-roles-shots.test.ts` (the Send review sheet and the windows). Each shot sets the theme with `setTheme` (`tests/e2e/fixtures/helpers.ts:1502`) and waits for the colour transitions to end, because a flip-and-shoot catches them halfway (`implementations-plan/follow-ups.md:23`). They iterate the surfaces expected file, whose `reach` and `states` say how to get to each surface. Each shot also runs the sweep and saves the values and coverage record beside its images, in the session scratchpad. The lead pairs them per surface, browser and theme and publishes a private Artifact with the head SHA on it.
+
+### Trade-offs & alternatives not taken
+
+- **Roles in the generated `utilities.css` (chosen) vs CSS variables per role vs a package `.module.css`.** The generated layer is drift-pinned, keeps `base.css` frozen until arc 5 and reaches every shell through one import. Per-role variables need a `font:` shorthand, which resets line height and the `font-variant` longhands, and an inline `style` on `Text` blocks state styling. A package `.module.css` needs a new export entry (`packages/design/package.json:7-15` has none for CSS but `./base.css`).
+- **Composes first (chosen) vs a class on every element.** Composing keeps templates and testids untouched, shrinks rebase conflicts to `<style>` blocks, and puts the role and any leftover declaration in one rule, so the tie check needs no template analysis.
+- **One class per role at (0,1,0), ties banned (chosen) vs a doubled selector that always wins.** A doubled class beats every module rule in any load order, but also the compound rules that must override a role (the segment's active weight, `Input`'s mini size).
+- **Line height outside the roles (chosen) vs a line-height step in every role.** Any role value would move rows on screens the board never drew (ledger 5).
+- **The board's catalogue row by row, 28 roles (chosen) vs a short merged list.** The owner signed a table; merging rows with different values changes signed values silently. Fidelity costs nine more roles than the draft's list; each is one generated rule.
+- **Tabular figures on the heroes as drawn (default, Ask E) vs proportional.** They widen a "1" to an "8", which arc 3 measures, and stop a counting figure's width from changing every frame, which `holdHeroFit` works around today (`utils/hero-fit.ts:43`).
+- **Ban `Text`'s `size` and `weight` (chosen) vs let a `<Text>` keep picking sizes.** Without the ban a sentence could stay at 13px beside one at 12px. Site-sized roles on a `<Text>` pay for it with one module class each.
+- **Six arcs in a `gh stack` (chosen) vs one PR.** Arc 1 is invisible and reviewable as code. Arcs 2 to 4 are each reviewable against one board. Arc 5 isolates the `base.css` re-pin and the `Text` API cut. Arc 6 carries only the record, as the repo's planning rules ask.
+
+## Security & Adversarial Considerations
+
+- **Threat model.** The change is presentational. It adds no message, storage, permission, network call or dependency. The adversary that matters is a dApp or a sender who hopes the person misreads what they approve: an address, an amount, a hostname.
+- **Addresses.** Every identifier site has a mono role path (§ Identifiers), with truncation markup, separators and the receive mask unchanged; a fixed-width face puts each address's visible head and tail in fixed columns, so two compare chunk by chunk. Rule 10 fails a template `trimAddress(` outside a mono role; the identifier generator finds the rest by occurrence, the sweep must observe each at its role, and its hex text scan backs both.
+- **Hashes keep their case.** Activity rows draw hashes in upper case today (`TransactionCard.vue:192`, `TransactionIncomingCard.vue:94`), which changes the string a person compares. `meta` sets no case.
+- **Caps on contract-supplied strings.** A caps role goes on UI vocabulary. Two contract- or user-supplied strings stay under caps: the Send unit pair's token symbol (the board draws the pair as an inline action) and the chain names upper-cased in script (`AccountSelectRow.vue:75`, `settings/connected-apps/[id].vue:268`). The token itself is verified in the asset card, which keeps its case.
+- **dApp hostname.** It moves from Space Grotesk to `data-lead` mono, beside the block's homograph warning (`DappIdentityBlock.vue:40`, testid `dapp-hostname-warning`). A non-Latin glyph falls back to `monospace` (JetBrains Mono ships Latin only, `packages/design/src/base.css:30-36,78`), as it falls back to `system-ui` today (`:76`). JetBrains Mono separates 0 and O, 1, l and I, which matters in a hostname. Mono is wider per character, and `.dapp_hostname` ends in an ellipsis (`DappIdentityBlock.vue:83-93`), so a long hostname may lose more of its tail, where the registrable domain sits. Arc 4 measures it (§ Algorithms, sweep step 6) and the close-out logs the follow-up; wrapping or a start ellipsis is an owner UI decision.
+- **Approval legibility.** Amounts and addresses in the execute window move from Inter 11 to mono 12, and 8.5px and 9px details rise to 10px or more. Keys take the tx detail page's vocabulary (Ask C).
+- **Hero fit.** The three heroes keep the ruler and the number in one class, so the fit cannot measure one face, tracking or figure set and draw another. `send-amount-exact.test.ts` runs on both browsers in arcs 2, 3 and 5.
+- **Input.** A role is a static class name from a generated list. `variant` values bind no user data; an unknown value fails the validator and the guard. No `v-html`.
+- **Supply chain and assets.** No new dependency, no lockfile change, no font file, basename or `@font-face` change, so the SHA- and name-bound font claims (`packages/third-party-notices/src/policy.ts:276,290`) and the store art's font reads stay valid.
+- **Gates cannot be weakened quietly.** The baseline only shrinks, keyed by content so it cannot drift. Carve-outs and overrides are short, reasoned, stale-checked lists. Adding to any of them is a visible diff in review.
+
+## Assumptions
+
+### Facts
+
+1. `tokenGroups.fonts` names three families only (`packages/design/src/token-contract.ts:67-71`); `fontSizes` (`:83`) runs 8 to 40 without 30 or 48; `fontWeights` `:86`, `lineHeights` `:89-98`; no tracking or case token.
+2. `render-css.ts:24-26` renders one declaration per rule; `renderUtilitiesCss` emits `.fz--`, `.fw--`, `.lh--`, `.ta--`, `.color--`, `.fill--` in that order (`:31-36`).
+3. `render-tokens.ts:32-34` emits each `tokenGroups` member as CSS-variable names. The package exports `./tokens` (`packages/design/package.json:9`), not `token-contract.ts`.
+4. `gen:tokens` (`packages/design/package.json:17`) writes `tokens.ts` and `utilities.css` (`gen-tokens.ts:11-12`).
+5. `utilities.drift.test.ts:14-17` and `tokens.drift.test.ts:11-13` byte-pin both; `base.css.test.ts:21` pins `base.css` by SHA-256; `base.css:10` imports `utilities.css`.
+6. `Text` is one `<span>` (`Text.vue:80-84`); its props and test pins: `recon.md` § Design package.
+7. Two `<Text>` tags pass `role="alert"` (`DappApprovalFooter.vue:39`, `ProfileNameField.vue:34`). None passes `variant`.
+8. Two test stubs list `Text`'s props by name (`RecipientCard.test.ts:7`, `RecipientField.test.ts:15`).
+9. `base.css`'s type utilities and their users: `recon.md` § Design package and the arc 5 change map.
+10. The heroes' shared classes and `.hero_fit`'s tracking: `recon.md` § Heroes; the ruler is measured with `getBoundingClientRect` (`utils/hero-ruler.ts:14-20`).
+11. `send-amount-exact.test.ts` asserts the focused field at 40px (`:152`) and the review amount without overflow at 18px or more (`:161-162`).
+12. Smoke runs `tests/e2e/*.test.ts` minus `network/**` at 360x600; `setTheme` and the store-capture scale are in `recon.md` § Reuse map.
+13. The testids the role spec reuses and the ones it lacks are in `recon.md` § Testids for the role spec; the capabilities and execute windows pass no `hostnameTestId` (`capabilities/index.vue:383`, `execute/index.vue:609`).
+14. `Header.vue:290` upper-cases the account name in the template.
+15. `Button`'s cascade, box included, is § Proposed architecture's (`Button.vue:12,153,184-232,314-331`); the extension's wrapper also defaults to `medium` (`components/ui/Button.vue:20`); `getStyles()` builds the class list at run time (`:76-86`). Callers: 32 CTAs at the default size, 11 large CTAs (onboarding), one compact CTA, 16 large and one small `primary` or `primary_outline` (Ask G); `secondary` and `ghost` have one icon-only caller each, `text` none.
+16. `.base input` sets Inter 15/500 at (0,1,1) (`Input.vue:391-405`) and `.base.mini input` 12px (`:384-389`); the label and the left text are `<Text size="13" weight="600">` (`:269`, `:297`); no caller passes `leftText`.
+17. `copy-dash-ban.test.ts` is the guard's model (`recon.md` § Reuse map); its `REVIEWED` list pins `render-css.ts`'s header text (`:226-230`).
+18. Root `test` runs the extension only, `test:all` every workspace, `audit:vue` typecheck, test and lint, then build (`recon.md` § Repo rules that bind the plan).
+19. The landing imports only `base.css` and uses no utility class; its build reaches no network (`recon.md` § Design package).
+20. `popup/index.ts:9-11` imports `app.vue` before `base.css`.
+21. `SettingItem` pins its title and description boxes with `!important` line heights (`SettingItem.vue:258,275`) and already tracks the title at 0.01em (`:259`); the title `<Text size="14" weight="500">` (`:132`) is Inter by inheritance; the description (`:135`) has a `#description` slot (`:136`). `AccountsPopup.vue:72-76` passes the name as `title` and the trimmed address as `description`.
+22. CI runs the quality, smoke and network lanes for any `packages/design/src/**` change (`recon.md` § Arcs and blast radius); network shards split files by `vitest --shard`, so a new network spec needs no workflow edit.
+23. `implementations-plan/lessons.md` is 8,001 bytes of its 8,192-byte budget.
+24. Face picks outside CSS: `recon.md` § Faces outside CSS.
+25. A stack closes with a docs-only PR on top (`implementations-plan/README.md:52`).
+26. `AddressDisplay.vue` passes `size`, `weight` and `height` (`:26-37`) to one `<Text>` (`:96-100`) and has no `lang="ts"`; 32 call sites in 7 files, six with 13 or 14 and 600.
+27. `detail-page.module.css`'s and `.hero_title`'s users: Ask A, `recon.md` § Heroes and § Testids for the role spec.
+28. The two `font: inherit` sites on role-bearing elements: `recon.md` § Counts.
+29. `AccountAvatar`'s initials: `recon.md` § Shells and windows.
+30. Approval windows open only in the network suite; smoke reaches the passkey and logger windows and a seeded tx detail (`recon.md` § Shells and windows).
+31. Chrome's side panel and Firefox's toolbar panel: § Captures and `recon.md` § Shells and windows.
+32. One `.scss` file picks a face (`onboarding/onboarding.scss:23`).
+33. The board's A table: § UI impact, The signed source. Five rows size per slot (Screen hero title, Hero amount, Row title, Person or thing name, Fiat value); no A row uses tabular figures.
+34. `SectionLabel`'s count uses `--nulo-outline` (`SectionLabel.vue:43`), about 1.7:1 on the light background; `packages/design/src/theme-contrast.test.ts:23-43` pins no `--nulo-outline` pair.
+35. The route tree, the 26 popups and the Header's routes: `recon.md` § Shells and windows. `scripts/**/*.test.ts` runs in `bun run test` (`apps/extension/vitest.config.ts:39`).
+36. The design package's unit tests run in jsdom 29.1.1 (`packages/design/vitest.config.ts`), whose computed style ranks matching declarations by specificity and copies their values unresolved: `var(--font-headline)` and `0.2em` come back as written (`jsdom/lib/jsdom/living/css/helpers/computed-style.js:117-125`).
+37. No e2e drives the account verification failure; its barrier (`popup/app.vue:470`, `BarrierOverlay.vue:45-61`): `recon.md` § Shells and windows.
+
+### Inferences
+
+1. `composes: type--<role> from global` works in the extension's Vite build, in both browsers and in Storybook. It rests on the CSS Modules spec, which Vite's `postcss-modules` implements; no file here uses it yet. Arc 1 proves it on Activity's hero title before anything depends on it (P1 step 11).
+2. Biome accepts `composes: … from global` in `.module.css` and `<style module>`. It rests on Biome parsing the 189 existing `composes … from "<path>"` lines. Arc 1 runs `bun run lint` on the first one.
+3. Role classes do not change the landing. Arc 1 only adds rules; the landing's normalized declarations prove it in arcs 1 and 5.
+4. Space Grotesk ships a tabular-figures feature (the board's figures check draws its tabular pair; moderate). Tabular figures widen the review amount, so the fit may pick a smaller scale; arc 3 measures it against `send-amount-exact.test.ts:161-162` before the Ask E default stands.
+5. Both browsers report `letterSpacing` in px for an em value, Firefox with coarser rounding; the sweep compares px within 0.1px. A wrong guess fails the probe spec in arc 1.
+6. Raising sizes to the floors does not push a row sideways: `rows.test.ts:452-478` fails on sideways overflow in the activity list, and full smoke runs on both browsers in every arc.
+7. After the rebase, the Settings sites in `recon.md` § Settings overlap still exist in some form; P1 step 2 re-audits them.
+8. An image of Firefox's toolbar panel may be out of the test's reach; § Captures reads the panel in-test and states the image fallback.
+9. Vitest applies `Button.vue`'s module CSS and `utilities.css` in jsdom when `css.include` names them (moderate); an empty declaration fails its case in arc 2's first run.
+
+### Asks
+
+Each has a default. The build uses the default until the owner answers, and records the answer here with the date.
+
+**Answered 2026-10-09.** The owner, on the gate: "haven't we decided through the first board? Also, it's impossible for me to decide without images on the asks. But I thought we had already defined everything through the first board." Read as: the board decides, so every Ask takes its default, the value the board drew, except D, which the owner then answered on its own the same day (A: B; B: raise; C: yes; D: 11px; E: tabular, as drawn; F: `amount-total`; G: the board's two buttons at every size), and the Firefox toolbar panel's substitute image is accepted. The owner sees each of them as pictures in its arc's before-and-after screenshots; a veto there reopens only that Ask, in that arc.
+
+A. **The tx detail amount.** It is drawn by one shared rule, `.amount_value` (`popup/pages/detail-page.module.css:11`), composed by `tx/[id].vue:394`, `received/[id].vue:367` and `journal/[id].vue:333`, so one answer sets all three receipt pages. The owner's message says "the amount on the receipts, I like B more", and the board's Chosen column drew "Amount, detail" in B: Space Grotesk 24/700, -0.02em, tabular, the review amount's face at a fixed size. Default: B, as the Chosen column drew. Alternative: A's table value, JetBrains Mono 24/500, normal tracking, proportional figures, which is today's look, if "receipts" meant only the Send review sheet.
+
+B. **Raise the off-scale small sizes.** Every site is under UI impact (§ Sizes the floors change): 8, 8.5, 9 and 9.5px rise to 10px (11px for mono, Ask D), 11.5 and 12.5px move to their role's step. Each lands on its row's drawn value (10px for `tag` and `label`, 11 or 12 for `caption`, `value` and `body`), except `meta`, at 11px by Ask D, and the "size per slot" fiat line (`TransactionCardLayout.vue:234`, 9px), which the 11px mono floor raises. Default: raise.
+
+C. **Approval-window keys.** The execute window's keys take `label`, Space Grotesk 10/700 caps, as on the tx detail page. The board drew `CallArguments`' keys that way; `OperationCard`'s keys ("From account:", "Class id:", Inter 12 today) it did not draw. Default: yes, one vocabulary.
+
+D. **Small mono at 10px or 11px.** The board draws `meta` (small hashes, symbols beside amounts, counts, hints) and the small fiat lines at 10px. The default was 10px, as drawn; the plan recommended 11px. Small mono carries what a person compares character by character, a hash's head and tail or the symbol beside an amount; JetBrains Mono sets each glyph about 0.6em wide, so 10px gives about 6px a character on a 1x screen, and the typography audit flagged 9 to 10px small mono as hard to read. The decision, 11px, sets the catalogue (`meta` 11), the floor (`MIN_MONO_PX = 11`), the contract test's pins and every UI impact value of a `meta` or small `fiat` site. Sites it moves: the 21 mono 10px rules and the four mono 9px sites of `recon.md` § Floors rise to 11px; four mono 11px rules keep their 11px under `meta`, where 10px would have shrunk them (`BalanceView.vue:536`, `RecentActivityView.vue:880`, `SendReviewSheet.vue:236`, `IdentityStrip.vue:82`). Answered 2026-10-09: 11px ("Pick 11px - good fix.").
+
+E. **Tabular figures on the three heroes.** The board draws B's hero amount with tabular figures. Default: as drawn. Arc 3 re-measures the review amount (`send-amount-exact.test.ts:161-162`: no overflow, 18px or more) and the Home fit's scale at the seeded balance with tabular on, and reports the measured widths and scales in its board. Alternative: proportional figures, the draft's choice, if the measurement shows a review amount below its floor.
+
+F. **The Holdings total** (`holdings.vue:164`, Space Grotesk 26/700, -0.04em today). A's table gives a large total the "Hero amount" row: JetBrains Mono 500, -0.02em, at its own 26px. Default: A's table value (`amount-total`). Alternative: the hero treatment of the three named numbers, `amount-hero`, which is today's look plus tabular figures.
+
+G. **Button sizes.** The board draws two buttons: Primary button, Space Grotesk 14/700 caps 0.2em, and Medium button, 13/700 caps 0.03em. Default: those values at every size, as drawn: every CTA reads 14px and every `primary` and `primary_outline` 13px at 0.03em (§ Proposed architecture, `Button`). That changes the compact CTA, 12 → 14px (`PasskeyCeremonyDialog.vue:94`); the large `primary` and `primary_outline`, 14px at 0.05em → 13px at 0.03em (`LegalConsent.vue:93`, `onboarding/pages/welcome.vue:26,35`, `SelectProfilePopup.vue:143,146`, `register.vue:45,54`, `legal/declined.vue:60,61`, `settings/accounts/index.vue:153,162`, `settings/advanced/account-state/senders/index.vue:142`, `settings/contacts/index.vue:193`, `settings/fpcs/index.vue:155`, `settings/networks/index.vue:75`, `settings/tokens/index.vue:103`; Settings lines at `f5ca160`); and the small `primary`, whose tracking goes from inherited to 0.03em (`DappCancelledOverlay.vue:20`). Alternative: today's exceptions kept as compound overrides, the compact CTA at 12px (`Button.vue:326-331`) and the large `primary` and `primary_outline` at 14px, tracking 0.03em either way. The 32 default-size CTAs and the 11 large ones (onboarding) read 14px under both; no caller puts `mini` or `micro` on a CTA or a `primary`.
+
+At the approval gate, beside Asks A to G, the owner also accepts the Firefox toolbar panel's substitute image (§ Captures: a same-size window, the panel measured in-test) or provides a manual capture of the panel.
+
+## Phases
+
+The lead delegates every code edit to an Opus 5.5 subagent, reviews the diff, runs the gate and commits. Never run smoke and network e2e in this worktree at the same time: both kill the browser loaded from its dist. No arc plans a `.github/` change; if one turns out to need it, `bun run lint:actions` joins that arc's push gate.
+
+### P1. Arc 1: the role layer (no visible change)
+
+Before step 1, commit this plan: `plan.md` and `recon.md` sit untracked in `implementations-plan/type-roles/`; add `- [type-roles](type-roles/plan.md) — approved, implementing — one rulebook of 28 type roles chooses every text face; a six-PR stack` to `implementations-plan/index.md`, run `bun run check:plans` (0 findings), and commit both files with the index line as `docs(plans): add the type-roles plan`.
+
+Steps:
+
+1. Confirm `settings-by-task` is on dev: `git fetch origin && git cat-file -e origin/dev:apps/extension/src/popup/pages/settings/lock.vue`. If it fails, do steps 3 to 9, 11, 12 and 14 first (none reads a Settings page), commit each, and come back here; steps 2, 10, 13, 15 and 16 run only after this check succeeds and the branch is rebased. Then `git rebase origin/dev`. This is the only plain rebase in the plan: no stack exists yet.
+2. Re-audit each file in `recon.md` § Settings overlap against the merged code: the trailing `setting-value`, the profile card, the danger fence, the group label. The surfaces generator re-derives § Captures' Settings rows in step 13. The board's one Section label overrides the settings plan's two label levels (ledger 26). Update the Settings rows of the UI impact table and that recon table. Log it in `lessons/phase-1.md`.
+3. Add `TypeRoleSpec`, `typeRoles` (the 28 records of the rulebook table), `MIN_TEXT_PX` and `MIN_MONO_PX` to `token-contract.ts`, after `lineHeights`.
+4. In `render-css.ts`, add a rule helper that takes a list of declarations. Emit one `.type--<role>` rule per role after the `.lh--` block. Keep `HEADER` byte-identical.
+5. In `render-tokens.ts`, emit the records, `typeRoleNames`, `siteSizedTypeRoles`, `MIN_TEXT_PX`, `MIN_MONO_PX` and `TypeRole`.
+6. Run `bun run --cwd packages/design gen:tokens`. Commit the regenerated `tokens.ts` and `utilities.css` with the contract.
+7. Add `render-css.test.ts` (one `.type--` rule per role and no other new selector; `font-size` absent exactly for the six site-sized roles; `text-transform: uppercase` exactly for the upper-case roles; `font-variant-numeric: tabular-nums` for the tabular roles and `normal` for every other; `letter-spacing: normal` for tracking 0; the block after the last `.lh--` rule) and `type-roles.contract.test.ts` (`MIN_TEXT_PX` and `MIN_MONO_PX` read from `./tokens` and pinned at 10 and 11; every fixed size at least `MIN_TEXT_PX`; every mono fixed size at least `MIN_MONO_PX`; upper-case Space Grotesk tracking at most 0.12 except `button`; site-sized roles exactly the six; and a literal table of the board's 34 A rows with each row's role, failing when a record differs from its rows, except `amount-hero` (B's row) and an answered Ask, such as `meta` at 11 (Ask D)).
+8. Add `variant` to `Text.vue` with its validator. Add cases to `Text.test.ts`: `variant` emits `type--<variant>`; a tag without it emits exactly today's classes; an unknown value warns.
+9. Write `type-role-ban.test.ts` with rules 1 to 10, the content-keyed baseline, `CARVE_OUTS`, `OVERRIDES` and self-tests: each rule catches its violation and passes its allowed form; a bound `:style` object and a camelCase key; a nested rule; the SCSS file; an aliased `Text` import; a bare `tabular`; a `font:` shorthand expanded; `font: inherit` on a role element; a tie inside a composing rule; a dynamic class expression skipped as documented; two identical picks needing two entries; a moved line needing none; a stale entry, carve-out and override; a `TODO` role refused. Keep every function at cognitive complexity 15 or less; add no suppression.
+10. Run the guard with an empty `REVIEWED`. Give every printed entry its target role from the UI impact tables. Every (element, role) pair must match a UI impact row; where one does not, add the row to this plan before arc 2. Paste the entries.
+11. Prove the composition: give `tab-hero.module.css:45` `.hero_title` the line `composes: type--title-hero from global;`, keep its `font-size: 48px`, delete its face, weight, tracking and case. The computed values do not change. Run `bun run lint`, both extension builds and Storybook's build, and the smoke case below, before anything else uses `composes`.
+12. Add `apps/extension/src/design/TypeRoles.stories.ts`: one line per role, its name set in its own class.
+13. Write the two generators (§ Algorithms) with `ARC_GLOBS` from the change map, seed their expected files from § Identifiers and § Captures (each site's `liveFrom` from the change map), and add `inventory.test.ts`. Review every difference the first run prints: a site or surface the tables lack gets its row, its role or state, and a UI impact row if it changes, before arc 2 starts. Add `tests/e2e/fixtures/type-roles.ts` (the sweep, its `record` mode, its coverage count over the identifier expected file, and `withBlockedAccount`) and `tests/e2e/type-roles.test.ts`: the 28 probes, the font-load check, Activity's `page-hero-title` read through the composition (Space Grotesk 48px, 700, upper case, -1.92px), and the Firefox-only panel case (§ Captures), which at this head reads geometry and clipping only. Before any `mono` or `variant` edit, add the identifier testids marked + in § Identifiers, one per occurrence wherever the first run puts two sites on one selector, `address-display` on `AddressDisplay`'s root and `setting-title` and `setting-description` in `SettingItem`; nothing visible changes.
+14. Update `packages/design/README.md` (a Type roles section; `base.css` is hand-authored) and `CLAUDE.md` (the component model's L0 and L1 lines; one rule: a face, tracking or case comes only from a type role, enforced by `type-role-ban.test.ts` and the sweep).
+15. Grep `innerText` assertions in `tests/e2e` against every surface whose case changes in this plan; list them in `lessons/phase-1.md` for the arc that changes each surface to switch to `textContent` (`transfers.test.ts:197-198` already passes on caps it cannot see: arc 3).
+16. Shoot the before set from this head with the two throwaway specs, every row of § Captures, both browsers, both themes, in the real shells, running the sweep's `record` mode on each row: the computed values of every text element and of every identifier selector are the "before" authority of the UI impact tables. Measure Chrome's side panel default width once. Record the long-hostname measurement at this head (sweep step 6). The lead publishes the images as the before set (private Artifact, head SHA on it). Delete both specs.
+
+Validation gate:
+
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run --cwd packages/design test`; `cd apps/extension && bun --bun vitest run src/utils/type-role-ban.test.ts scripts/type-roles/inventory.test.ts`; `bun run test`; `bun run --cwd apps/extension build-storybook`; `bun run --cwd apps/landing build` at the base and at this head, comparing the normalized declarations of every rule in `apps/landing/dist/assets/*.css`; `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 bun run build:chrome`, then `NULO_E2E_MIGRATION_FIXTURE=1 bun run test:e2e tests/e2e/type-roles.test.ts`; the same flags with `bun run --cwd apps/extension build:firefox`, then `NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 bun run test:e2e tests/e2e/type-roles.test.ts`; `git diff --exit-code origin/dev -- packages/design/src/base.css`.
+- Pass criteria: every command exits 0. The guard passes with every entry carrying a role, and fails when one entry is deleted (check once, then restore). The contract test passes. Both generators' output equals their expected files, and every difference their first run printed is a reviewed row of § Identifiers or § Captures. The before set includes the undecoded call's card with its raw field open (`execute-op-arg-field` observed on both browsers); if that fixture cannot reach an open field, arc 1 reports it and names another reachable fixture before arc 2 starts, and never marks the site `unreachable`. The landing's declarations differ from the base only by the 28 added `.type--` rules. The e2e spec reads all 28 probes, the loaded faces and the composed hero title on both browsers, and the Firefox panel's geometry. `base.css` is unchanged. The before set has one image and one value record per surface, browser and theme, and every UI impact "before" matches its record or has been corrected. `git status` shows no shot spec and no image.
+- Layers: lint and typecheck, unit (design and extension), build (Storybook, landing, both extension builds), e2e smoke on both browsers.
+
+### P2. Arc 2: design primitives, shared styles and their callers
+
+Steps:
+
+1. Migrate the ten primitives. `SectionLabel`: wrapper `label-section`, count `meta`. `BrutalistTitle`: `title-hero` on `.main` and `.sub`, sizes kept. `SubPageHeaderBase`: `title-page`. `LoadingState`: `title-page`, line `body`. `ToastManagerBase`: title `label-section`, sub `caption`, action `label`. `Banner`: title `value`, description `body`, action `label`. `Tooltip`: `body`. `FieldWarning`: `body`. `Input`: label `label`, length hint `body`, left text `value`.
+2. `Button.vue`, exactly as § Proposed architecture's "`Button`, after" states: `.cta_type` and `.md_type` compose the roles, the box stays in the compound rules, the size rules keep box declarations and reach only the role-less variants. Under Ask G's alternative, add its two overrides. Add `Button.test.ts` cases: each variant's class list carries its role or none; and, with `utilities.css` and `Button.vue`'s CSS on (`css.include` in `packages/design/vitest.config.ts`), each variant and size reads its declared values as jsdom reports them, unresolved (Fact 36): a default-size `cta` `var(--font-headline)`, 14px, 700, `0.2em`, uppercase, padding `20px 0`; a compact `cta` padding `14px 0`; per size, the font size Ask G's answer gives (default: 14 for every CTA, 13 for every `primary`). Computed values are the sweep's `Button` matrix (step 9).
+3. `Input.vue`: put `type--${textVariant}` on the native `<input>`; delete face, size and weight from `.base input`; keep `.base.mini input`'s 12px (an override). Add `Input.test.ts` cases for both values of `textVariant`.
+4. Migrate `apps/extension/src/components/ui/**`. Add `titleVariant` and `descriptionVariant` to `SettingItem`; the title's 14px moves into a class used only with a site-sized title variant. `ItemsContainer`: group label `label-section`, description `body`. In the same step, migrate the callers: `titleVariant="name"` on rows titled with a person's or account's name (the Accounts popup, the accounts lists, the export account list, connected app accounts, the profile card); `descriptionVariant="data"` on the four address descriptions and Network's chain ID; the FPC fallback (`FpcRow.vue:33`). Add `Settings.test.ts` cases for both props.
+5. Migrate the shared modules of the change map with `composes … from global`. Delete each migrated rule's face, tracking and case, and its size and weight when its role is fixed-size.
+6. Replace `AddressDisplay`'s `size` and `weight` with `lead`. Edit its 32 call sites: drop `size` and `weight`; add `lead` on the six that passed 13 or 14 with 600 (§ Identifiers).
+7. Give `AddressInput`, the recipient field and the four address `Input`s of New token, New FPC, Edit FPC and New sender `textVariant="input-data"`; delete `RecipientField.vue:158-166`'s `:global(input)` font override.
+8. `AccountAvatar`: move `weight="600"` to a module class; keep the bound `fontSize`; both are carve-outs.
+9. Add `data-testid="holdings-section-label"` at `TokensView.vue:369`. Extend the smoke spec's pages (sweep step 3) and named cases (the native inputs; the `Button` matrix, sweep step 5). The sites with `liveFrom: 2` now assert: `AddressDisplay`, the `SettingItem` descriptions and FPC title, the six typed addresses.
+10. Add `tests/e2e/network/type-roles-windows.test.ts`: the sweep in the capabilities and execute windows, with an `AddressDisplay` in its address state (M 12/500) and in its name state.
+11. Delete the guard entries of every migrated file.
+12. Shoot the after board: every row of § Captures (primitives appear everywhere), the network part included, both browsers, both themes, with the sweep on each row. Give it to the lead, who publishes it beside the before set with the head SHA and asks for this arc's sign-off. Delete the shot specs. Arc 3 may start while the answer is pending; its board is shot after this sign-off, and a change this sign-off asks for recaptures every affected image.
+
+Validation gate:
+
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run --cwd packages/design test`; `bun run test`; `bun run --cwd apps/extension build-storybook`; `bun run --cwd apps/landing build` (declarations unchanged from arc 1's); the smoke builds and the full smoke suite on Chrome and on Firefox, flags as in P1 (`NULO_E2E_MIGRATION_FIXTURE=1 bun run test:e2e`, then `NULO_E2E_BROWSER=firefox NULO_E2E_MIGRATION_FIXTURE=1 bun run test:e2e`); `NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/cap-window.test.ts tests/e2e/network/connect-dapp.test.ts tests/e2e/network/authwit-variants.test.ts tests/e2e/network/window-placement.test.ts tests/e2e/network/send-amount-exact.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`; `bun run audit:vue`.
+- Pass criteria: every command exits 0. The guard lost every entry of the migrated files and gained none. The sweep passes on every listed page and window and every surface of the board, on both browsers; its coverage record observes every live site with `liveFrom: 2` and lists every unreachable one with valid evidence; the `Button` matrix passes, padding included. `Button.test.ts` reads the declared values above. `RecipientField.test.ts` and `DetailsTable.test.ts` pass in their module-key reads. `window-placement.test.ts` passes, so no window changed size. The board is published with its SHA.
+- Layers: lint and typecheck, unit, build, e2e smoke on both browsers, e2e against the local network on both browsers.
+
+### P3. Arc 3: wallet and entry surfaces
+
+Steps:
+
+1. Migrate the files of arc 3 in the change map, one surface group per subagent: Header and navigation; Home and Holdings; Activity and the tx, received and journal pages with all of `detail-page.module.css` (the amount per Ask A); Send with its modules and composites; Receive and the wallet popups; onboarding; unlock, register, legal and passkey screens; global overlays, secret cards and the boot retry.
+2. For each `<Text>` that sets `size`, `weight` or `mono`, set `variant` by job (§ Algorithms) and drop those props; give each site-sized one its size through a module class.
+3. Heroes: compose each role where § Proposed architecture's Heroes bullet puts it (`amount-total` per Ask F), deleting `.hero_fit`'s `letter-spacing`. Give the review sheet's two `<small>` symbols `type--meta` in the template, the visible one and the ruler's (`SendReviewSheet.vue:113,117`), and delete the face, size, weight and tracking from the descendant rule `.amount small` (`:231`), which would outrank the role; `meta` resets their figures to `normal` inside the tabular hero. The strut (`AmountCard.vue:482-492`) drops its `font-family` and `font-weight`: `.field_line` composes `amount-hero` and `.unit_pair` composes `label`, and the strut keeps its 40px (carve-out).
+4. Ask E: with tabular figures on, measure the review amount's computed size and overflow at `send-amount-exact.test.ts`'s amount, and the Home fit's scale at the seeded balance, on both browsers. Put the numbers in the board. If the review amount falls below 18px, stop and put the measurement to the owner with Ask E's alternative.
+5. The two `font: inherit` controls: `RecentActivityView.vue:885` `.stalled_retry` takes `type--label` on the element and loses `font: inherit` and its own weight, tracking and case; `popup/app.vue:518` `.retry` takes `type--button-md` the same way. Add a component test for each that asserts the role class on the element.
+6. Drop the duplicate body face (`onboarding/onboarding.scss:23`). The select-token initial takes `row-title` at its 16px.
+7. Add `data-testid="token-amount"` at `TokenCard.vue:97`. Add the Home hero smoke case on both browsers: at a seeded balance whose fit scales below 1, the visible `.hero_fit` reads Space Grotesk 700 with `letterSpacing / fontSize` within 0.002 of -0.04, its symbol's `letterSpacing` equals the figure's in px, and `balance-amount` does not overflow.
+8. Switch `tests/e2e/network/transfers.test.ts:197-198` and any other listed `innerText` assertion on this arc's surfaces to `textContent`.
+9. Delete the guard entries of every migrated file. The sites with `liveFrom: 3` now assert.
+10. Shoot the after board for every checklist row whose Arc names 3 (every popup and Header route: S20), the Send review sheet included, both browsers, with the sweep on each row. Give it to the lead for the owner's sign-off. Delete the shot specs.
+
+Validation gate:
+
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension build-storybook`; the full smoke suite on both browsers, as in P2; `NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/send-amount-exact.test.ts tests/e2e/network/tx-transfer-row.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/holdings.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`; `bun run audit:vue`.
+- Pass criteria: every command exits 0. `send-amount-exact.test.ts` passes at retry 0 on both browsers, and the measured widths are in the board. The Home hero case passes on both browsers. The sweep passes on every surface of the board, observes every live site with `liveFrom: 3` (every unreachable one listed with valid evidence), and reads 48px on `page-hero-title` and 24px on the tx detail amount. `rows.test.ts`'s sideways-overflow test passes on both. The guard lists no file of this arc. The board is published with its SHA.
+- Layers: lint and typecheck, unit, build, e2e smoke on both browsers, e2e against the local network on both browsers.
+
+### P4. Arc 4: settings and approval windows
+
+Steps:
+
+1. If dev moved, run `gh stack sync` (never a plain rebase of one arc) and follow Delivery's resync rule, then rerun P1 step 2 for the Settings files that changed.
+2. Migrate the files of arc 4 in the change map, one group per subagent: the Settings hub and pages; settings modules and account state; the glossary; the execute window (keys `label` per Ask C; the identifier sites of § Identifiers); the capabilities, connect, verify, discover and network-unavailable windows; dApp identity, identity strip and scope components.
+3. `ContactRow.vue:78`: the initials drop their mono face and take weight 600 (carve-out).
+4. Record the long-hostname measurement after the change (sweep step 6) and put both measurements in the board.
+5. Delete the guard entries of every migrated file. The sites with `liveFrom: 4` now assert; none still records.
+6. Shoot the after board for every checklist row whose Arc names 4, the windows included, both browsers, with the sweep on each row. Give it to the lead for the owner's sign-off. Delete the shot specs.
+
+Validation gate:
+
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd apps/extension build-storybook`; the full smoke suite on both browsers, as in P2; `NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/cap-window.test.ts tests/e2e/network/connect-dapp.test.ts tests/e2e/network/authwit-variants.test.ts tests/e2e/network/window-placement.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`; `bun run audit:vue`.
+- Pass criteria: every command exits 0. `window-placement.test.ts` passes on both browsers. The sweep passes in both windows and on every surface of the board and observes every live site with `liveFrom: 4`, the open raw field (`execute-op-arg-field`) among them, and lists every unreachable one with valid evidence. The guard lists no file of this arc. The board is published with its SHA and both hostname measurements.
+- Layers: lint and typecheck, unit, build, e2e smoke on both browsers, e2e against the local network on both browsers.
+
+### P5. Arc 5: zero, cleanup, final board
+
+Steps:
+
+1. Migrate whatever the guard still lists. `REVIEWED` becomes `[]`; keep the stale-entry test. `inventory.test.ts` passes, every site found or kept by its testid.
+2. Delete the dead utilities from `base.css` (change map). Check that `git diff origin/dev -- packages/design/src/base.css` contains only those removals, then update the hash at `base.css.test.ts:21` in the same commit.
+3. Remove `size`, `weight`, `mono` and `tabular` from `Text.vue` and their tests. Remove `.fz--*` and `.fw--*` from `render-css.ts`; run `gen:tokens`. Reword the comments and story labels that name them. Keep rule 6, so a removed prop cannot come back as a fall-through attribute.
+4. Drop the removed names from `RecipientCard.test.ts:7` and `RecipientField.test.ts:15`.
+5. Shoot the final board: every row of § Captures, both themes, both browsers, real shells, with the sweep on each row. Give it to the lead, who publishes it with the head SHA and asks for the final sign-off. Delete the shot specs.
+6. Run `bun run audit:dup` and record the css-format line against the 4.84% baseline (`CLAUDE.md:127`) in `lessons/phase-5.md`.
+
+Validation gate:
+
+- Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`; `bun run --cwd apps/extension build-storybook`; `bun run --cwd apps/landing build`, comparing normalized declarations with arc 1's build; the full smoke suite on both browsers, as in P2; `NULO_E2E_PROVERLESS=1 bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts tests/e2e/network/send-amount-exact.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`; `bun run audit:vue`; `bun run check:plans`; `bun run test:ci-gating`; `bun run audit:dup`; `git status --porcelain`.
+- Pass criteria: every command exits 0 and `git status` lists no shot spec and no image. `REVIEWED` is empty. The landing's declarations differ from arc 1's only by the removed utilities. The `base.css` diff holds only the listed removals. The window sweep and `send-amount-exact.test.ts` pass at retry 0 on both browsers. The final board's coverage record observes every live identifier site at least once and lists every unreachable one with its reason, and its text scan finds no hex outside a mono role. The final board link and its SHA are in this plan.
+- Layers: lint and typecheck, unit (all workspaces), build, e2e smoke on both browsers, e2e against the local network on both browsers, plans gate.
+
+## Decision ledger
+
+| # | Decision | Source | Alternatives considered | Audit outcome |
+|---|---|---|---|---|
+| 1 | Roles are generated from the token contract into `utilities.css`; `typeRoles` is a top-level export, not a `tokenGroups` member | lead | per-role CSS variables; a package `.module.css`; a `tokenGroups` member | Kept; codex concurs. Widened: records and both floors rendered into `tokens.ts` (F11, S6). |
+| 2 | `Text` takes `variant: TypeRole`; no prop named `role` | lead | `role`; `kind`; a sibling component | Kept, with a runtime validator for the SFCs `vue-tsc` skips (F20). |
+| 3 | Raw CSS adopts roles by `composes … from global` in the element's own single-class rule; a template class only where none exists | audit (F23) | a class on every element (the draft); copied declarations | Changed from class-first; arc 1 proves it first (P1 step 11). |
+| 4 | 28 roles reproduce the board's A table row by row, B's value on three numbers | audit (C1, F1) | 19 merged roles (the draft); A's 34 rows one to one | Changed: merges only where all five values match (ledger 18). |
+| 5 | Line height is not in a role; `height` stays allowed beside `variant` | draft | a line-height step per role | Adopted: 358 of 430 tags use `lh--100`, module rules `normal`, and `SettingItem` pins its boxes; reworded (F8). |
+| 6 | `amount-hero` takes tabular figures and -0.04; the detail amount follows the Chosen column's B, the Holdings total A | audit (C1, F1) | no tabular figures; -0.04 on all five heroes | Changed: Asks A, E and F, the board's values as defaults. |
+| 7 | Guard `type-role-ban.test.ts`: rules 1 to 10, a content-keyed baseline shrinking to empty, reasoned carve-outs and overrides | lead, widened by audit | `path:line` keys; per-file counts; a path skip list | Changed: content keys with multiplicity (C6, F7; ledger 20); rules widened (C5, F4, F6, F2). |
+| 8 | A role is one class at (0,1,0); no plain module rule sets a property its role sets; listed compound rules may | draft | a doubled selector; reorder `base.css` | Kept, tightened: shorthands expanded, `Button`'s and `Input`'s ties fixed, overrides listed (C5, F4, F5); no `Button` size rule reaches a role-bearing variant (S2; ledger 28). |
+| 9 | Floors: no text under 10px; mono at the board's 10px until Ask D (11 recommended); upper-case Space Grotesk at most 0.12em except the CTA | lead, audit (S12) | mono 11px by default | Changed: the board's value is the default until answered (S12); the contract test and the guard assert the floors (C10, F11). Ask D answered 11px on 2026-10-09. |
+| 10 | Avatar initials take no role; `AccountAvatar` keeps its dynamic size and its weight class | lead triage | a site-sized `avatar` role (F10) | Kept; `ContactRow`'s initials join; the select-token initial is a row title, as drawn (F1). |
+| 11 | `AddressDisplay`: `lead` replaces `size` and `weight`; a shown name takes `name` | draft, corrected | keep size props; mono for names | Changed: a name takes `name`, the board's row. |
+| 12 | `SettingItem` `titleVariant` and `descriptionVariant`; `Input` `textVariant` | draft, audit (C2, F2) | a slot per call site; a `mono` prop on `Input` | Widened: `descriptionVariant` for address rows and the chain ID (S15), `titleVariant` `data` for the FPC fallback; separate names kept (F20). |
+| 13 | Carve-outs: Presto banner variables, the console banner, CodeMirror's theme, `BrutalistTitle`'s sizes, avatar initials, the Send strut's size | draft, widened | migrate them | Widened (C5, C10, S3): the hero sizes and the Home symbol keyed by declaration, `MaterialIcon` and `EmojiGrid` by content (S22); all stale-checked. |
+| 14 | Arc 5 removes the dead utilities, `Text`'s `size`, `weight`, `mono` and `tabular`, `.fz--*` and `.fw--*`, and re-pins `base.css` | lead | keep the props | Kept; rule 6 covers a bare `tabular` (C5); site-sized `<Text>` sizes move to module classes. |
+| 15 | Six arcs in a `gh stack`, squash-merged bottom-up; the close-out is arc 6, docs only | lead, audit (F12) | close-out inside arc 5; a single PR | Flipped to the repo rule (`implementations-plan/README.md:52`); arc 6 has a written gate. |
+| 16 | Per-screen sign-off against before/after boards at arcs 2, 3, 4 and a final board | lead, audit (C11) | one board at the end | Widened: both browsers, real shells, SHA-bound sign-off, recapture after a visible fix; every generated surface with its shell's arcs (S4, S20); the Firefox panel measured in-test (S9). |
+| 17 | Arc 1 starts after `settings-by-task` merges, rebases and re-audits its files | lead, owner | build in parallel | Kept; later dev moves use `gh stack sync` (C13). |
+| 18 | Two A rows share a role only when face, size, weight, case and tracking are equal; any other difference from the board is an Ask with the board's value as default | lead triage (C1, F1) | a target of 12 to 18 roles | New. |
+| 19 | An undrawn surface takes the A row of its job; only typed words in `Input` keep today's value, through `input` | lead triage | a role per undrawn treatment; an Ask per surface | New. |
+| 20 | Baseline key `(file, rule, normalized text)`, matched as a multiset; each entry names its target role, so the baseline is the arcs' inventory | lead triage (C6, F7) | `path:line`; per-file counts; whole-file skips | New. |
+| 21 | `amount-hero` is composed into `.hero_fit`, shared by figure and ruler, so the em tracking computes at the fitted size | lead triage (C4, F3) | a carve-out for `.hero_fit`'s `letter-spacing` | New. |
+| 22 | A runtime computed-style sweep after a font-load check, in smoke and a network window spec | lead triage (F5, C9) | probes only (the draft) | New. Widened: every generated surface, before values by site, figures inside the hero (S5, S7, S8); every identifier site observed, the `Button` matrix with padding (S18, S21). |
+| 23 | Arc 6 (`type-roles-close-out`) carries the whole close-out | lead triage (F12) | close-out in arc 5 | New (see 15). |
+| 24 | `detail-page.module.css` migrates in arc 3 only; a fixed-size role's size goes, a site-sized role's stays | lead triage (C3) | split across arcs 2 and 3 | New. |
+| 25 | Every identifier has a mono path; guard rule 10 on template `trimAddress(` calls | audit (C2, F2) | `AddressDisplay` only (the draft) | New. F2's name-suffix guard rule not adopted: it would fail CI on non-identifiers. An exact-name list feeds the identifier generator instead, its false positives reviewed in as `none` (ledger 31). |
+| 26 | The board's Section label row merges the Settings group label with `SectionLabel` at 11px | audit (F19) | two label levels | New; P1 step 2 records it. |
+| 27 | Colours stay out of scope; `--nulo-outline` text (`SectionLabel.vue:43`, about 1.7:1 on light) is a follow-up; boards accept no new low-contrast text | lead triage (C10, F22) | fix contrast here | New. |
+| 28 | `Button`: no size rule sets a role-bearing variant's type, so every CTA is 14px and every `primary` 13px, as drawn; today's compact and large sizes are Ask G's alternative | audit (S2, S13) | size rules' `font-size` kept as overrides (made default CTAs 13px) | New. `Button.test.ts` pins classes and declared values, the sweep's `Button` matrix computed ones on both browsers (S21). |
+| 29 | A non-tabular role writes `font-variant-numeric: normal` | audit (S7) | write nothing | New: the property inherits into the hero's symbols. |
+| 30 | After every `gh stack sync`, recapture each surface whose rendered files the sync changed, renew its sign-off, rerun the changed arcs' gates | audit (S10, S19) | compare swept typography values (the previous round); trust a clean sync | Changed (S19): equal typography does not prove an equal image. |
+| 31 | Generated inventories: two scripts list identifier sites and surfaces from the code against reviewed expected files (the plan's tables); the sweep must observe every site in its seeded state, a hex text scan behind it | audit (S15, S16, S18, S20), lead triage | hand-written tables, extended each round | New: two rounds each found one more site and one more surface by hand. |
+| 32 | `Button`'s box stays in its compound rules; only the type composes a role | audit (S14) | `width` and `padding` in the single-class `.cta_type` | New: at (0,1,0) the padding lost to `.wrapper.medium`'s `padding: 0 14px`. |
+| 33 | The four plain address `Input`s take `input-data` in arc 2 with `AddressInput` | audit (S17) | split their row by arc | New: one row, one live arc, so arc 2's sweep asserts every typed address with no exemption. |
+
+## Audit verdicts
+
+- **Codex (`gpt-6.1-sol`, high):** reject (with blocking findings: C1, C2, C3, C4, C7).
+- **Opus 5.5:** conditional approve (conditions: F1, F2, F3, F4, F5, F6, F7, F9).
+- **Final fresh codex pass (`gpt-6.1-sol`, high):** round 1: reject (S1–S13); round 2: reject (S14–S22); round 3: reject (S23–S26, blocking S23–S25); round 4: **conditional approve** (with conditions: address S27 and S28 before arc 1; arc 1 must review the generated inventories and prove S29's open raw-field observation before arc 2 starts). S27 and S28 are adopted below; S29 is arc 1's condition, recorded in P1's gate.
+
+Codex findings, all adopted: **C1** (High) the A table row by row, B on three numbers, Asks A and F (ledger 4, 18). **C2** (High) `descriptionVariant` in arc 2; a mono path for every identifier. **C3** (High) only fixed-size roles lose their size; `detail-page.module.css` is arc 3's alone (ledger 24). **C4** (High) `amount-hero` in `.hero_fit` (ledger 21); the Home hero case on both browsers. **C5** (Medium) the guard's missed forms are rules or self-tests (P1 step 9); blind spots stated. **C6** (Medium) content keys with multiplicity and stale checks (ledger 20). **C7** (High) rows for `SearchField`, `Input`'s left text and `AccountAvatar`; P1 step 10 reconciles the baseline with UI impact. **C8** (Low) the Accounts popup fact (S5). **C9** (Medium) the sweep's named cases and Firefox tolerance. **C10** (Medium) floors checked apart from the generator; contrast a follow-up. **C11** (Medium) the checklist, both browsers, real shells, SHA-bound sign-off. **C12** (Medium) the landing by normalized declarations; the `base.css` diff checked before the re-pin. **C13** (Medium) caller overrides migrate with `SettingItem`; `gh stack sync`; `lint:actions` on any `.github/` change.
+
+Opus 5.5 findings. Adopted: F1 (deviations back to the board or an Ask), F3 (as C4), F4 (`Button`'s weight, `.base input`, shorthands, `font: inherit`), F5 (the sweep), F6 (rule 8), F7 (as C6), F8, F9 (arc 2's network specs), F11 (records in `tokens.ts`), F12 (arc 6), F13 (hostname measured), F15 (`innerText` list), F16 (store art follow-up), F17 (literal caps are UI rows), F19 (ledger 26), F22 (contrast follow-up), F23 (composes first, text keys, rule 8, floors test). Adopted in part, with the reason for the rest: F2 (the connected-apps string stays one string in `data`, so its markup does not change; the name heuristic is no guard rule, ledger 25); F10 and F23's `avatar` role (avatars stay a carve-out, ledger 10); F14 (the unit pair keeps the board's caps; no Ask opened); F18 (Asks A and C stay Asks); F20 (separate prop names stay: each names the element it styles); F21 (arc 3 is not held for arc 2's sign-off; its board waits for it).
+
+Final codex pass, round 1, adopted (S9 in part): **S1** (High) the missing identifier sites (ledger 25). **S2** (High) the `Button` cascade; default CTAs stay 14px (ledger 28). **S3** (High) keyed carve-outs for the hero sizes (ledger 13). **S4** (High) a capture checklist (§ Captures). **S5** (Medium) before values recorded by site (P1 step 16). **S6** (Medium) both floors exported. **S7** (Medium) `font-variant-numeric: normal` on non-tabular roles (ledger 29). **S8** (Medium) every identifier asserted on every surface (ledger 22). **S9** (Medium) in part, as triaged: the real Firefox panel checked in-test, a labelled substitute image, an approval-gate line, no new Ask (§ Captures). **S10** (Medium) a resync rule (ledger 30). **S11** (Medium) P5 runs the window sweep and `send-amount-exact.test.ts` on both browsers. **S12** (High) Ask D defaults to the board's 10px (ledger 9); answered 11px on 2026-10-09. **S13** (Medium) Ask G (ledger 28).
+
+Final codex pass, round 2, all adopted; S15, S16, S18 and S20 shared one cause, a hand-written inventory, which ledger 31 replaces. **S14** (High) the CTA box stays in its compound rules; only the type composes (ledger 32). **S15** (High) Network's chain ID: a row and a generator seed (ledger 12). **S16** (High) a seeded capture of the account verification failure (§ Captures). **S17** (Medium) the four plain address `Input`s go live in arc 2 (ledger 33). **S18** (High) every site has a surface and a seeded state; a board fails on a live site it never observes (sweep step 4, ledger 31). **S19** (Medium) a sync recaptures what it changed (Delivery, ledger 30). **S20** (Medium) a surface's arcs include its shell (§ Captures, ledger 16). **S21** (Medium) unit tests read declared values, the browsers computed ones (P2 step 2, sweep step 5, ledger 28). **S22** (Low) `EmojiGrid` and `MaterialIcon` keyed by content (ledger 13).
+
+Final codex pass, round 3, all adopted as refinements of ledger 30 and 31. **S23** (High) sites keyed by occurrence (file, expression, branch, ordinal), each selector naming one; a shared selector fails `inventory.test.ts` unless sibling branches are seeded apart; the sweep checks every element at it; a fixture reads `OperationCard.vue:340,346` as two sites. **S24** (High) bare `mono` discovered; an arc-1 testid keeps a site through migration; the cross-file formatter a stated blind spot; an undecodable call's raw field observed before arc 4's sign-off; the two window `hostnameTestId`s move to arc 1. **S25** (Medium) closures hold imported modules, the entry shell and global styles; an unclassified change recaptures every signed board (Delivery). **S26** (Medium) `withBlockedAccount` asserts the barrier, retries once after a restart, cleans up in `finally` (§ Captures). Lead follow-up: an `unreachable` site kind, set only in review, listed on the final board (Key interfaces, generators, sweep step 4, P5 gate).
+
+Final codex pass, round 4: conditional approve. **S27** (Medium, adopted) an unreachable attestation pinned only to its evidence text misses a new producer: the reason now names the producer set, every gate reruns the producer search, and a new or changed producer or a changed evidence text reverts the site to `recording` (§ Algorithms, the unreachable kind). **S28** (Low, adopted) the P2 to P4 gates said "every site" while the sweep skips unreachable ones: they now read "every live site observed, every unreachable one listed with valid evidence", as P5 already did. **S29** (Medium, arc-1 condition) the raw-field fixture (an undecoded `donate` call from the unregistered Crowdfunding consumer) is supported by the code read (operations populate before decoding, `execute/index.vue:239-250`; cards render whatever the fee estimate does, `:630-654`) but unproven: P1's gate requires the open raw field observed before arc 2 starts, and a failing fixture means another reachable fixture, never `unreachable`.
+
+The competing outline: CSS variables per role not adopted (§ Trade-offs; codex concurs); parser-based scanning and a content-keyed allowlist adopted; the `PENDING` whole-file skip list rejected (unmigrated files would go unguarded until their arc); leading per role adopted in effect (no role sets line height); no tabular figures on mono roles adopted; state roles not adopted (the segment's active weight is a record field applied by a listed compound rule); two label levels rejected (the board draws one Section label); pinned security sites adopted as § Identifiers and rule 10; a contract floors test adopted.
+
+## Post-implementation
+
+Stacked plan: the codex audit runs per arc at its boundary, before the next arc starts, then once across arcs 1 to 5 after P5 is green. `code_review` is `off`, so no `/code-review` pass runs.
+
+1. **Codex audit per arc.** Run `/codex high` on `gpt-6.1-sol` (pass the slug as `run-codex.sh`'s fifth argument). Send the arc's net diff from the arc below it (arc 1: from origin/dev), this plan with its decision ledger, the arc's board link once published, the adversarial and security ask, and the two rules below, verbatim.
+2. **Fix loop.** Verify each finding against the repo first. Apply accepted fixes on that arc's branch, commit them, and carry them up the stack with `gh stack sync`, then follow Delivery's resync rule. A fix that changes visible output recaptures the affected images and asks for their sign-off again. Log the round in `lessons/phase-N.md` for that arc. Resume the same codex session with the fix diff. Repeat until a round has no new material finding. After three rounds with material findings, stop and report to the owner.
+3. **Final cross-arc pass.** After P5's gate passes, run a fresh `/codex high` session on the diff of arcs 1 to 5 from origin/dev, with the same inputs and rules. Same fix loop and same three-round stop.
+4. **Rules sent with every codex prompt, first and resumed:**
+   - No-over-engineering: *"Report bugs and small, targeted improvements only. Do not propose speculative abstractions, extra configuration surface, new layers, or rewrites — the smallest change that fixes each real problem. If code works and is clear, leave it alone."*
+   - Comment quality: *"Audit the comments for value per character. Flag any comment that narrates what the code visibly does, restates its line, references implementation plans / phases / reviews, or spends a paragraph where a sentence works — and flag places where a non-obvious invariant or constraint deserves a comment it doesn't have. Comments are permanent context every future reader, human or LLM, pays to re-read: they must be few, dense, and exact."*
+5. **Delivery.** Only now open PRs (see Delivery). Never open a PR or a draft earlier.
+6. **Close-out, as arc 6** (`type-roles-close-out`, cut from arc 5 after `gh stack submit --auto` opened PRs 1 to 5, so the record can cite their numbers). Docs only:
+   1. Condense this plan in place into the repo's archived-record form: no front matter, `## Outcome` first under the title with Date, Status, Shipped (the six PRs), Open items, and "Seeds retired:" retiring the `/goal` and `/loop` seeds below. Then Decision, Why, What shipped and Lessons, with anchored headings. Keep the audit verdicts, the Asks' answers, the board sign-offs with their SHAs, and the ledger's rejected alternatives. Leave `lessons/phase-N.md` as they are. Move what is worth keeping from `recon.md` into `plan.md`, delete `recon.md`, and drop this plan's link to it in the same edit. In the same commit, set this plan's line in `implementations-plan/index.md` to `closed, awaiting archive`. Commit.
+   2. Promote generalizable gotchas to `implementations-plan/lessons.md`, one line each, linking `archive/type-roles/plan.md#<anchor>` or an archived `lessons/phase-N.md`. The file has 191 bytes of headroom (Fact 23): merge or retire an entry for each one added, and date anything tied to a tool version.
+   3. Move open items to `implementations-plan/follow-ups.md`, or to a GitHub issue with a pointer there: the `--nulo-outline` text contrast (`SectionLabel.vue:43` and the other outline-coloured text), the dApp hostname's end ellipsis in mono (with arc 4's measurements), and a re-run of `STORE_CAPTURES=1` and the store art before the next store submission. The plan cannot close while it owns one.
+   4. `git mv implementations-plan/type-roles implementations-plan/archive/type-roles` in its own commit. Run `git grep -n 'type-roles/'` and repair the links the extra directory level broke.
+   5. Move this plan's line from `implementations-plan/index.md` to `implementations-plan/archive/index.md`, status `completed`. Gate: `bun run check:plans` exits 0; `git diff --stat type-roles-arc5...HEAD` lists only `implementations-plan/**`; `wc -c < implementations-plan/lessons.md` prints 8192 or less. Then push with `gh stack push`, open PR 6 with `gh stack submit`, report and wait: merging is the owner's call.
+7. **Teardown after the merge**, without asking. The trigger is `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/type-roles/plan.md`, which holds once arc 6 is on dev. When it succeeds: call `ExitWorktree` with `action: "keep"` if this session entered through `EnterWorktree` (a session resumed inside the worktree has nothing to exit), then run `agent-worktree done type-roles --merged`. Report each removed branch with its last SHA. On a refusal, relay its output and stop; never force. Who notices the merge: a `/loop` session checks on every firing; a `/goal` session arms one background wait right after its wrap-up report (`Bash`, `run_in_background`, maximum timeout: `until git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/type-roles/plan.md; do sleep 300; done`) and otherwise runs this step at the start of its next turn.
+
+Post-implementation hardening: not scheduled. The change crosses no trust boundary.
+
+## Delivery
+
+| Arc | Branch | Phases | Stacks on | PR title | `/code-review` |
+|---|---|---|---|---|---|
+| 1 | `worktree-type-roles` | P1 | `dev` | `feat(design): add type roles generated from the token contract` (62) | off |
+| 2 | `type-roles-arc2` | P2 | arc 1 | `feat(design): set the design primitives and shared styles in type roles` (71) | off |
+| 3 | `type-roles-arc3` | P3 | arc 2 | `feat(ui): set wallet, send and onboarding surfaces in type roles` (64) | off |
+| 4 | `type-roles-arc4` | P4 | arc 3 | `feat(ui): set settings and approval windows in type roles` (57) | off |
+| 5 | `type-roles-arc5` | P5 | arc 4 | `refactor(design): drop hand-picked type utilities and text props` (64) | off |
+| 6 | `type-roles-close-out` | close-out (Post-implementation step 6) | arc 5 | `docs(plans): close the type-roles plan` (38) | off |
+
+Every title is a Conventional Commit under the 93-character budget (`CLAUDE.md:90`). Each arc's branch is cut from the arc below once that arc's gate and codex loop pass. After the final cross-arc pass converges, `gh stack submit --auto` opens PRs 1 to 5, each into the one below; arc 6 follows as its own PR once its record cites them. Each PR body of arcs 2 to 5 carries its arc's UI impact rows, the owner's sign-off for its board quoted with the SHA it binds to, the board's Artifact link and the attribution line. Arc 1's body, with no board to sign, links the before set's Artifact (with its SHA) and states the generators' reviewed output (surface and site counts, the expected files' paths), with the attribution line. Then `gh pr checks --watch` on each. When dev moves, `gh stack sync` rebases the stack; a plain rebase of a single arc is never used. Resync rule: after every `gh stack sync`, take each arc's changed files (`git diff --name-only <old head> <new head>`), rerun the surfaces generator, and recapture every surface whose closure (§ Algorithms: components, CSS, imported script modules, entry shell, global styles) holds one of them. A changed file the resolver cannot classify, in no closure and not a test, story, `.d.ts` or doc (a `vite.config.ts`, a lockfile, an unlisted `src/` module), recaptures every signed board whole. Renew the recaptured sign-offs against the new SHA before any PR opens or merges; rerun the gate of each arc whose tree changed. Equal typography never stands in for an image. Merges are squash, bottom-up, and the owner's call (`gh stack merge --squash` lands the named arc and everything below it). After an arc squash-merges, `gh stack sync` rebases the rest; never merge dev into an arc's old head (`implementations-plan/lessons.md:28`).
+
+## Seeds
+
+Final, 2026-10-09: approved with every default but Ask D, answered 11px; otherwise the board as drawn.
+
+ELI5 companion (private Artifact): https://claude.ai/artifact/1YHTw22wVrqoatMjAh4i3n
+
+Recommended: `/goal`. Fallback: `/loop`.
+
+```
+/goal All phases marked ✓ in implementations-plan/type-roles/plan.md (the per-phase headers in the file, not the chat, not the task list), each ✓ backed by its phase's validation gate (as defined in plan.md) reported passing in the transcript; arc 1's steps 2, 10, 13, 15 and 16 ran only after `git cat-file -e origin/dev:apps/extension/src/popup/pages/settings/lock.vue` succeeded and the branch was rebased onto origin/dev (both in the transcript), and every later dev move was taken with `gh stack sync`; Asks A to G each carry the owner's answer or the confirmed default in plan.md; for each phase the agent has printed `LESSONS_FILE=implementations-plan/type-roles/lessons/phase-N.md` in the transcript; plan.md's `code_review` is `off`, so `/code-review` was NOT run; the codex fix loop (`/codex high` on gpt-6.1-sol) converged for each arc and for the final cross-arc pass, each evidenced by a resumed codex pass reporting no new material findings, quoted in the transcript; the owner's sign-off for each board (arcs 2, 3, 4 and the final two-browser board) is quoted in plan.md's UI impact section next to the head SHA it binds to; the six stacked PRs exist on GitHub, PRs 1 to 5 created by `gh stack submit --auto` only AFTER every loop converged and PR 6 (`type-roles-close-out`, docs only) carrying the close-out that archived the plan (`gh pr view` output for each and `git show --stat` of the archive-move commit in the transcript); `bun run test`, `bun run test:all` and `bun run lint` all report exit 0 in the transcript.
+```
+
+```
+/loop 15m Drive implementations-plan/type-roles forward. Never idle waiting for my input. Delegate every code edit to a subagent and review its diff. Each firing:
+1. **Reality check**: read implementations-plan/type-roles/plan.md and lessons/ (authoritative state, not the chat), including its Outcome & Quality Bar section: every step is judged against those criteria, not just against "it runs". If that path is gone, the close-out has run: `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/type-roles/plan.md` succeeds → the stack merged and the plan is completely done: run the teardown now, without asking: `ExitWorktree` (`keep`) if this session entered the worktree through `EnterWorktree`, then `agent-worktree done type-roles --merged`. Report what it removed or, if it refused, its output verbatim (never force past a refusal), clear this loop and STOP. Fails → delivered and awaiting my merges: babysit only (CI per step 2, fixes on the arc's branch then `gh stack sync`, keep the Outcome true), never resume a phase or read the archived plan as a task list; once every PR is green, report that once and STOP. Later firings repeat only this merge check. A live plan.md that already carries an Outcome section means a close-out was interrupted: finish it on the `type-roles-close-out` branch. No phase started yet? First `git fetch origin && git cat-file -e origin/dev:apps/extension/src/popup/pages/settings/lock.vue`: if it fails, settings-by-task is not on dev yet: do the steps P1's step 1 allows before the merge (3 to 9, 11, 12 and 14), report that once, and re-check on the next firing; if it succeeds, `git rebase origin/dev` (the only plain rebase; later dev moves use `gh stack sync`) and start P1 at step 1. Otherwise, native task list empty (fresh session)? rebuild it from plan.md, one task per remaining step; run `git status` and `git log --oneline -5`. If PRs exist, `gh pr view --json statusCheckRollup` on each (no --watch). Without PRs, `gh run list --branch $(git branch --show-current) --limit 1 --json status,databaseId`.
+2. **Waiting on CI is fine.** Confirm it's actually progressing (`gh run watch <run-id>` up to 10 minutes; queued or stuck past that → inspect logs, log it as blocked in lessons). Use the wait productively: review the diff, prep the next phase, strengthen tests. Don't start work that would conflict with the in-flight change. Never run smoke and network e2e at the same time in this worktree.
+3. **No task in hand?** Pick the next pending step from plan.md and start it on the current arc's branch. After each meaningful edit, run `bun run lint` + the touched test files (and `bun run --cwd packages/design test` when packages/design changed). Catch mistakes in-step, not phases later. Then commit → push the arc branch.
+4. **Stuck, or facing a decision you'd normally bring to me?** Don't wait. Call `/codex high` (on gpt-6.1-sol) with full context and go back and forth until you two reach a defensible decision, then act on it. Log every consult + verdict in lessons/phase-N.md. Exception: hard limits stay hard. never merge to main or release branches, never merge any PR, never publish or deploy, never expand scope beyond plan.md, never change user-visible type beyond plan.md's UI impact tables and the answered Asks (an element with no row gets a row and my sign-off first), never change copy; if the decision requires crossing one, surface it and hold.
+5. **Same step failed 5 times?** Stop retrying; reassess the approach with codex, then continue down the agreed path.
+6. **Phase green?** "Green" means THE PHASE'S VALIDATION GATE as written in plan.md passes (commands + pass criteria, not generic vibes). Run the full gate, paste the result, mark ✓ in plan.md, file the lessons entry, print `LESSONS_FILE=implementations-plan/type-roles/lessons/phase-N.md` in the transcript. Then run the arc's codex audit per plan.md's Post-implementation section (`/codex high` on gpt-6.1-sol, the arc's diff from the arc below + adversarial / security ask + the plan's no-over-engineering + comment-quality rules) → apply accepted fixes, commit, `gh stack sync`, recapture any image a fix changed, then RESUME the same codex session with the fix diff. Loop until a round yields no new material findings (still churning after 3 rounds → surface and stop). Then hand the arc's board (arcs 2 to 5) to me with its head SHA for sign-off, cut the next arc's branch from this one and advance; record my sign-off and its SHA in plan.md when it arrives.
+7. **All phases ✓ in plan.md?** Run the final cross-arc codex pass the same way. Then Delivery per plan.md, the FIRST time any PR is opened: `gh stack submit --auto` for arcs 1 to 5, each PR body for arcs 2 to 5 quoting my sign-off for its board with its SHA (no PR without it), and arc 1's PR linking the before set and the generators' reviewed output. Then cut `type-roles-close-out` from arc 5, run the close-out per plan.md's Post-implementation section as its docs-only commits, `gh stack push` and `gh stack submit` for PR 6. Then `gh pr checks --watch` on each PR. Then write the wrap-up report: what shipped, every contentious decision codex and I debated, each with ELI5 context (what the question was, the options, why we picked ours), and open items. Surface and stop. Merging completes the plan, and that is my call; the firing after the last merge tears the worktree down (step 1).
+
+Keep the native task list current (`TaskUpdate` as steps start/finish; plan.md stays the source of truth).
+```
