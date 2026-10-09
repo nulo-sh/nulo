@@ -19,3 +19,7 @@
 ## Final cross-arc pass
 
 - **Codex `approve with fixes` (2 Low), both accepted.** Escaping CR and LF is not enough for a log line that carries outside text: the runner's legacy parser reads `##[` anywhere in a line. And a later arc that turns a path off (release-please's tagging) leaves operator-facing strings in older steps pointing at it; read the error text, not just the logic.
+
+## After the PRs opened
+
+- **CodeQL ran only on the PR** and caught what every review round missed: a Markdown table escape that leaves `\` alone lets `\|` in the input cancel it. Escape the escape character first. A URL needs its own rule; allow-list one that cannot be misread rather than escape it.

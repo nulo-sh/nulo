@@ -24,7 +24,7 @@ base: origin/dev 90f4fb3 (arc 1 rebased onto e49e4ce)
   - [#62](https://github.com/nulo-sh/nulo/pull/62): the audit backlog went from 72 advisories to 41, none in either zip; a pull request whose dependency diff is more than version lines fails on any advisory `scripts/ci-cd/audit-acks.json` does not acknowledge (#20).
 - **Repository settings**: S1 applied, ruleset id `24737631`. S2 and S3 not applied; their calls, readbacks and undo stay in § Repository settings.
 - **Dropped**: nothing in the approved scope. #22's `use_dynamic_url` route did not hold on Chrome 152 (I6); the import-free content script closed it instead. The store-match check, a signed `SHASUMS256.txt` and the Docker runner's Node and Bun bootstrap were outside the plan's bar.
-- **Open items**: moved to [follow-ups](../../follow-ups.md): S2 and S3 with the runbook's transition note, the live proofs on the next releases, nightly retention, the store-match check, the Docker runner's bootstrap, and CodeQL alert 23 (alert 1, which the owner dismissed as a false positive, re-raised when #50 moved its line); the existing vitest entry now names the two advisories its bump clears. #21 stays open until S3 is read back.
+- **Open items**: moved to [follow-ups](../../follow-ups.md): S2 and S3 with the runbook's transition note, the live proofs on the next releases, nightly retention, the store-match check, the Docker runner's bootstrap, CodeQL alert 23 (alert 1, which the owner dismissed as a false positive, re-raised when #50 moved its line), and unescaped error text in two release scripts' workflow commands; the existing vitest entry now names the two advisories its bump clears. #21 stays open until S3 is read back.
 - **Lessons**: the caret-floor gotcha (a raised range locks the newest version the age gate allows) went to SECURITY.md's pm review workflow, the doc that owns bumps. `lessons.md` gained no line: it sits at 8178 of 8192 bytes and nothing in it is superseded. The rest stay in `lessons/phase-*.md`.
 - **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
 
@@ -942,6 +942,16 @@ The implementing session's per-arc Codex loops review these fixes as built; no f
 ### Final cross-arc pass, round 2 (same session)
 
 **Verdict:** `approve`, no findings, on `c40b4b2`. The cross-arc loop converged in two rounds.
+
+### Final cross-arc pass, rounds 3 and 4 (same session, after the PRs opened)
+
+GitHub's CodeQL check on #62 raised a new high alert, `js/incomplete-sanitization` at `scripts/ci-cd/audit-gate.ts`: the summary's `cell()` escaped `|` but not `\`, so `\|` in advisory text cancelled the pipe escape. It is not a required check. The fix escapes backslashes first and adds one test, which fails with the fix reverted.
+
+**Round 3 verdict:** `approve with fixes`, 2 Low.
+- [Low] An advisory URL went into the link destination through `cell()`, so a `)` or a space broke the link. Accepted: only an `https` URL with none of whitespace, `()<>`, `\` or `|` becomes a link; any other renders as the bare id. One test with a success control; it fails without the guard.
+- [Low] `scripts/release/attach-assets-run.ts` (`fail`, the top-level catch) and `scripts/release/publish-firefox-amo-run.ts` (`fail`, the validation-error lines) write external error text into workflow commands unescaped. Deferred to `follow-ups.md`: the text comes from GitHub's REST API and from Mozilla's validator reading our own build, and the job still fails, so the effect is a misleading annotation on a red run. The proper fix is one shared helper for four scripts, which would pull the release scripts into a dependency-audit PR after its loops converged.
+
+**Round 4 verdict:** `approve`, no findings, on the fix (`7f8cd6d`). Codex found no unprivileged outside input reaching the deferred sinks. The loop converged.
 
 ## Post-implementation
 
