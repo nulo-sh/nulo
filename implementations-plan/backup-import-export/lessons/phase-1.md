@@ -43,3 +43,9 @@
 - Codex round 2: clean. Converged in two rounds.
 - Final smoke attempt 1 (after review fixes): 13/14 red on both browsers, every launch refused by the CSP check ("the CSP violation recorder never ran"). Cause: my run script passed the armed flags as one zsh string (`env $A` does not word-split), so the build was unarmed. Rerun with the flags as separate assignments.
 - Final smoke attempt 2 (armed, bundle grepped for the recorder first): Chrome 14/14, Firefox 14/14 at retry 0.
+
+## CI (PR #246)
+
+- First CI run (d6e291e): smoke green on both browsers; network Chrome red on one leg, `profile-reimport-matrix` "delete → full-backup re-import in one session: the same-id successor boots past the tombstone" (`expected '5c6b2e09' to be 'e91364e0'`); the Firefox network run was cancelled. Cause: the restored-id rule (#226) rerolls the synthetic fixture's `"syn-profile-id"`, so the second import no longer reuses the first import's id. The arc's gates named no network spec, and the Opus review read the fixture id as unasserted; it is asserted by that network leg.
+- Fix e00665f (pushed by the orchestrator session into this branch): the synthetic backups carry `SYNTHETIC_PROFILE_ID = "e2e5a1d0"`, generated-shaped, so the same-id leg holds. A file the wallet exports always carries a generated id, so the product behaviour stands.
+- Lesson: a change to which ids or keys a restore keeps reaches the network fixtures that re-import one file; grep the e2e helpers for the literal before choosing the arc's e2e set.
