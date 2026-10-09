@@ -60,6 +60,7 @@ export default {
 			"style-src 'self' 'unsafe-inline'",
 			"frame-src 'self'",
 			"media-src 'self'",
+			"object-src 'self'",
 		].join("; "),
 	},
 	cross_origin_embedder_policy: {

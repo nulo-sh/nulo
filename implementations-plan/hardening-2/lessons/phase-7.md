@@ -60,3 +60,8 @@ The throwing-migration case failed again in the rerun, once on the 60 s timeout 
 
 - No page plays audio or video (no `<audio>`, `<video>` or `Audio` in the build).
 - Gate: smoke green on Chrome and Firefox, the eight network files green on both, zero violations, CSP equal to the pin. No source added.
+
+### `object-src 'self'`
+
+- No page embeds an `<object>` or `<embed>`.
+- Gate: smoke green on Chrome and Firefox, the eight network files green on both, zero violations, CSP equal to the pin. No source added.

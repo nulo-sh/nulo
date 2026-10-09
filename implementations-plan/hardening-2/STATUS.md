@@ -8,3 +8,4 @@
 - 2026-10-08: Phase 7 `connect-src 'self' blob: https: http:` gated (Firefox needed `blob:` for `downloads.download`). Corrections to phase 6: the Firefox migration failure was the close check racing the in-place reload (fixed with an early check), and `typecheck:all` was not green (`zod-jitless.ts` was a script; fixed).
 - 2026-10-08: Phase 7 `font-src 'self'` gated; `style-src 'self' 'unsafe-inline'` gated after CodeMirror's generated `<style>` ruled out a hash (D-23h).
 - 2026-10-09: Phase 7 `frame-src 'self'` gated (Firefox smoke's one red was the passkey-retry timing fingerprint, green alone; ledgered as row 46).
+- 2026-10-09: Phase 7 `media-src 'self'` and `object-src 'self'` gated, each green on both browsers.
