@@ -44,3 +44,11 @@ Each attempt and measurement of the arc, in order.
 - The embedded case is reached as a person would: an embedded card, "Override with my method", a short verdict (the notice shows in the region), then "Use app's payment". `handleUseEmbedded` keeps the verdict, so `data-sponsor-funding` still reads `short` while the notice is hidden: the "no notice when embedded" assertion is not vacuous.
 - Shots of the card with the notice, base build vs the change, Chrome, both themes: every differing pixel is in the header's account address; the card draws the same pixels.
 - Chrome's accessibility tree: before, the sentence is a plain `StaticText` with no live ancestor; after, a `status` node with `live=polite` holds it and the info icon is out of the tree.
+
+## Phase 1.5
+
+- Red: the new `FeeMethodSelector.test.ts` case failed (`DIV`, not `BUTTON`) once it mounted the real `Flex` from `@nulo/design`; unregistered, `Flex` rendered as an unknown `<flex>` element in jsdom. The smoke fee test failed on the base build (Tab never reached the trigger).
+- Built as planned: `Flex tag="button" type="button"` keeps `align`/`justify`; `.trigger` resets font, colour and background and sets `width: 100%`, since a button shrinks to its content.
+- The first Chrome at-rest pair differed across the token card and amount: the "after" shot was taken before the seeded token loaded. The shot now waits for the unit switch; re-shot, every differing pixel is in the header address, both themes, both browsers.
+- On smoke the open menu has an enabled method: ArrowDown focuses a `[data-dropdown-item]`; Escape returns the focus to the trigger on both browsers.
+- Network `popup-escape-layered.test.ts` (opens the picker by pointer) green on Chrome at retry 0.

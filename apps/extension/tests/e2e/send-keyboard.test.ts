@@ -103,6 +103,32 @@ test("the token card draws the accent ring when focused", { timeout: 180_000, re
 	await shotSend(page, "send-token-focused", "send-token-trigger")
 })
 
+test("the fee method picker: a Tab stop with the ring, Enter opens it, the arrows move, Escape returns to it", {
+	timeout: 180_000,
+	retry: 0,
+}, async ({ registeredExtensionPerTest: ctx }) => {
+	const page = await openSendPage(ctx, { priced: true })
+	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
+	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
+	await shotSend(page, "send-fee-at-rest", "send-fee-method-trigger")
+
+	await tabTo(page, "send-fee-method-trigger")
+	await expectAccentRing(page, "send-fee-method-trigger")
+	await shotSend(page, "send-fee-focused", "send-fee-method-trigger")
+	const trigger = await page.$eval(sel("send-fee-method-trigger"), (el) => ({ tag: el.tagName, type: el.getAttribute("type") }))
+	expect(trigger).toEqual({ tag: "BUTTON", type: "button" })
+
+	await page.keyboard.press("Enter")
+	await page.waitForSelector('[data-dropdown-open="true"] [data-testid="send-fee-method-trigger"]', { timeout: 5_000 })
+	await page.keyboard.press("ArrowDown")
+	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
+	expect(await activeTestId(page)).toMatch(/^send-fee-method-/)
+
+	await page.keyboard.press("Escape")
+	await page.waitForSelector('[data-dropdown-open="false"] [data-testid="send-fee-method-trigger"]', { timeout: 5_000 })
+	await waitForFocus(page, "send-fee-method-trigger")
+})
+
 test("an open destination suggestion list covers neither Max nor the fee method picker", { timeout: 120_000, retry: 0 }, async ({
 	registeredExtensionPerTest: ctx,
 }) => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { Flex } from "@nulo/design"
 
 // The real-Dropdown suite below runs without a layout engine: no focus trap, no outside-click wiring.
 vi.mock("focus-trap", () => ({ createFocusTrap: vi.fn(() => ({ activate: vi.fn(), deactivate: vi.fn(), active: false })) }))
@@ -219,6 +220,22 @@ describe("FeeMethodSelector — in the real menu", () => {
 		await flushPromises()
 		expect(w.emitted("update:modelValue")?.[0]?.[0]).toMatchObject({ fpc: { id: "s1" } })
 		expect(isOpen(w)).toBe(false)
+		w.unmount()
+	})
+
+	test("the trigger is a button of its own, and a press on it opens the menu", async () => {
+		// The real Flex, which renders the tag it is given; the stub above is always a div.
+		const w = mount(FeeMethodSelector, {
+			props: { methods: baseMethods },
+			attachTo: document.body,
+			global: { components: { DropdownItem, Flex }, stubs: { Text: STUBS.Text, MaterialIcon: STUBS.MaterialIcon, Icon: STUBS.Icon } },
+		})
+		const trigger = w.get('[data-testid="send-fee-method-trigger"]')
+		expect(trigger.element.tagName).toBe("BUTTON")
+		expect(trigger.attributes("type")).toBe("button")
+		;(trigger.element as HTMLButtonElement).click()
+		await flushPromises()
+		expect(isOpen(w)).toBe(true)
 		w.unmount()
 	})
 

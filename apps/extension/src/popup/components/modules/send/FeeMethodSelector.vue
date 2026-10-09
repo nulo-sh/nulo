@@ -44,9 +44,12 @@ const onRowClick = (method, event) => {
 		<Dropdown @onOpen="emit('open')" @onClose="emit('close')">
 			<template #trigger>
 				<Flex
+					tag="button"
+					type="button"
 					align="center"
 					justify="between"
 					class="clickable"
+					:class="$style.trigger"
 					data-testid="send-fee-method-trigger"
 					:data-fee-method="modelValue?.subtitle"
 				>
@@ -93,6 +96,18 @@ const onRowClick = (method, event) => {
 
 .fee_label {
 	composes: fee_label from "./fee-shared.module.css";
+}
+
+.trigger {
+	width: 100%;
+	font: inherit;
+	color: inherit;
+	background: none;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 }
 
 .fee_value {
