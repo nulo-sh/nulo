@@ -56,12 +56,26 @@ describe("TombstoneRepository — fail-closed id reservation (D11/D15)", () => {
 		expect(still[`${PROFILE_TOMBSTONE_ROOT}@bad1`]).toBe("{not json")
 	})
 
-	test("clearIfSame only clears when the epoch matches (a re-deletion's marker survives)", async () => {
-		const { repo } = make()
-		await repo.write(mk("p1", { epoch: 2 }))
-		await repo.clearIfSame("p1", 1) // stale epoch → no clear
-		expect(await repo.get("p1")).toBeDefined()
-		await repo.clearIfSame("p1", 2) // matching → cleared
-		expect(await repo.get("p1")).toBeUndefined()
+	const KEY = `${PROFILE_TOMBSTONE_ROOT}@p1`
+	test.each([
+		["the same epoch: removed", JSON.stringify(mk("p1", { epoch: 2 })), true, false],
+		["another epoch: a re-deletion's marker survives", JSON.stringify(mk("p1", { epoch: 3 })), false, true],
+		["a corrupt row: kept", "{not json", false, true],
+		["no row", undefined, true, false],
+	])("clearIfSame(p1, 2) with %s", async (_, raw, cleared, kept) => {
+		const { api, repo } = make()
+		if (raw !== undefined) await api.storage.local.set({ [KEY]: raw })
+		expect(await repo.clearIfSame("p1", 2)).toBe(cleared)
+		expect(KEY in (await api.storage.local.get(KEY))).toBe(kept)
+	})
+
+	test("a row naming another profile than its key is corrupt: reserved under its key, never a payload", async () => {
+		const { api, repo } = make()
+		await api.storage.local.set({ [`${PROFILE_TOMBSTONE_ROOT}@A`]: JSON.stringify(mk("B")) })
+		expect(await repo.validPayloads()).toEqual([])
+		expect(await repo.corruptIds()).toEqual(["A"])
+		expect(await repo.reservedIds()).toEqual(new Set(["A"]))
+		expect(await repo.get("A")).toBeUndefined()
+		expect(await repo.get("B")).toBeUndefined()
 	})
 })

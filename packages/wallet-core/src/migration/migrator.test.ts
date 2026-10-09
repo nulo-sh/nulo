@@ -286,7 +286,13 @@ describe("Migrator — crash-safe journal", () => {
 			.seed(ver(0))
 			.seed(row("newroot", "orphan", { half: true })) // created by the interrupted run
 			.seed(journal(1, [rootRef("acct"), rootRef("newroot")], {})) // newroot had NO rows pre-migration
-		const noop = defineMigration({ version: 1, description: "n", reads: [], writes: [], up: async () => {} })
+		const noop = defineMigration({
+			version: 1,
+			description: "n",
+			reads: [rootRef("acct"), rootRef("newroot")],
+			writes: [],
+			up: async () => {},
+		})
 		await new Migrator({ store, migrations: [noop] }).run()
 		expect(store.obj("newroot", "orphan")).toBeUndefined()
 	})
@@ -299,7 +305,13 @@ describe("Migrator — crash-safe journal", () => {
 			.seed({ "nulo:ui:pref@p1": JSON.stringify({ v: "post" }) })
 			.seed({ "nulo:ui:pref@p2": JSON.stringify({ v: "sibling" }) })
 			.seed(journal(1, [{ kind: "value", key: "nulo:ui:pref@p1" }], { "nulo:ui:pref@p1": JSON.stringify({ v: "pre" }) }))
-		const noop = defineMigration({ version: 1, description: "n", reads: [], writes: [], up: async () => {} })
+		const noop = defineMigration({
+			version: 1,
+			description: "n",
+			reads: [{ kind: "value", key: "nulo:ui:pref@p1" }],
+			writes: [],
+			up: async () => {},
+		})
 		await new Migrator({ store, migrations: [noop] }).run()
 		expect(JSON.parse(store.data.get("nulo:ui:pref@p1") as string)).toEqual({ v: "pre" }) // restored
 		expect(JSON.parse(store.data.get("nulo:ui:pref@p2") as string)).toEqual({ v: "sibling" }) // untouched
@@ -383,20 +395,92 @@ describe("Migrator — crash-safe journal", () => {
 		const r2 = await mk().run()
 		expect(r2).toMatchObject({ kind: "needs-recovery", retryable: false }) // bound hit: terminal
 	})
+})
 
-	test("restore does not write engine-namespace keys from a crafted backup", async () => {
-		const store = new MemStore().seed(ver(0)).seed(
-			journal(1, [rootRef("acct")], {
-				...row("acct", "a", { n: 0 }),
-				"nulo:schema:version": 99, // crafted: must be filtered, never restored
-			}),
-		)
-		const noop = defineMigration({ version: 1, description: "n", reads: [], writes: [], up: async () => {} })
-		const mk = () => new Migrator({ store, migrations: [noop] })
-		await mk().run() // resume counts the interruption + stands down
-		expect(store.data.get(SCHEMA_VERSION_KEY)).toBe(0) // crafted 99 NEVER restored
-		await mk().run() // fresh authorization completes the migration
-		expect(store.data.get(SCHEMA_VERSION_KEY)).toBe(1) // stamped by the run, not the crafted 99
+describe("Migrator — resume refuses a journal its registry did not write", () => {
+	/** A refused resume writes and removes nothing: the whole store, journal included, is as seeded. */
+	async function expectRefused(store: MemStore, migrator: Migrator) {
+		const before = structuredClone(store.data)
+		const r = await migrator.run()
+		expect(r).toEqual({
+			kind: "needs-recovery",
+			reason: "interrupted migration journal has an invalid backup payload",
+			retryable: false,
+		})
+		expect(store.data).toEqual(before)
+		expect(store.has(BACKUP_KEY)).toBe(true)
+	}
+	const contacts = rootRef("contacts")
+	const twoRoots = defineMigration({
+		version: 1,
+		description: "t",
+		reads: [rootRef("acct")],
+		writes: [rootRef("acct"), contacts],
+		up: async () => {},
+	})
+
+	test("a version in range that names no registered migration", async () => {
+		const store = new MemStore()
+			.seed(ver(2))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(journal(3, [rootRef("acct")], {}))
+		await expectRefused(store, new Migrator({ store, migrations: [patchRows(2, "acct", {})], baselineVersion: 3 }))
+	})
+
+	test.each([
+		["an extra root", [rootRef("acct"), contacts, rootRef("profiles")]],
+		["a declared root missing", [rootRef("acct")]],
+	])("refs that differ from the declared footprint: %s", async (_, refs) => {
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(row("contacts", "c", { name: "x" }))
+			.seed(row("profiles", "p", { id: "p" }))
+			.seed(journal(1, refs, {}))
+		await expectRefused(store, new Migrator({ store, migrations: [twoRoots] }))
+	})
+
+	test.each([
+		["a user key outside the refs", row("profiles", "p", { id: "forged" })],
+		["an engine key", { [SCHEMA_VERSION_KEY]: 99 }],
+	])("an entry outside the declared footprint: %s", async (_, foreign) => {
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(row("profiles", "p", { id: "p" }))
+			.seed(journal(1, [rootRef("acct")], { ...row("acct", "a", { n: 0 }), ...foreign }))
+		await expectRefused(store, new Migrator({ store, migrations: [patchRows(1, "acct", {})] }))
+	})
+
+	test("a journal the engine itself wrote passes, restores and resumes", async () => {
+		// Captured from a real run, so its refs carry the engine's own shape (reads then writes, duplicates kept).
+		const written = new MemStore().seed(ver(0)).seed(row("acct", "a", { n: 0 }))
+		let journaled: unknown
+		const capture = defineMigration({
+			version: 1,
+			description: "capture",
+			reads: [rootRef("acct")],
+			writes: [rootRef("acct")],
+			up: async () => {
+				journaled = (await written.get(BACKUP_KEY))[BACKUP_KEY]
+				throw new Error("killed")
+			},
+		})
+		await new Migrator({ store: written, migrations: [capture] }).run()
+		expect(journaled).toMatchObject({ version: 1, refs: [rootRef("acct"), rootRef("acct")] })
+
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 0, x: 1 }))
+			.seed({ [SCHEMA_RUNNING_KEY]: 1, [BACKUP_KEY]: journaled })
+		const mk = () => new Migrator({ store, migrations: [patchRows(1, "acct", { x: 1 })] })
+		expect(await mk().run()).toMatchObject({
+			kind: "needs-recovery",
+			reason: expect.stringContaining("restored cleanly"),
+			retryable: true,
+		})
+		expect(store.obj("acct", "a")).toEqual({ n: 0 })
+		expect(await mk().run()).toEqual({ kind: "migrated", from: 0, to: 1 })
 	})
 })
 

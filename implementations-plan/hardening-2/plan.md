@@ -422,7 +422,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 
 ### Arc 2 (layer 3, branch `hardening-2-storage-fences`)
 
-#### Phase 3 — #19: resume refuses a journal its registry did not write
+#### Phase 3 — #19: resume refuses a journal its registry did not write ✓
 
 1. Add `journalMatchesRegistry` and the check before `restore(backup)`, as in Architecture.
 2. In `migrator.test.ts`, give each hand-built journal a registered migration whose footprint matches it. Two examples: the `noop` at `:288` gets `reads: [rootRef("acct"), rootRef("newroot")]`, and the value-key test gets its value ref.
@@ -446,7 +446,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - Each new refusal test fails on the base copy of `migrator.ts`.
 - Layers: unit, smoke e2e (the 9001 fixture's crash-resume).
 
-#### Phase 4 — #19: tombstones keep their reservation and their identity
+#### Phase 4 — #19: tombstones keep their reservation and their identity ✓
 
 1. Make `TombstoneRepository` decode a row as valid only when its `profileId` equals its key's id: `get`, `validPayloads` and `corruptIds`.
 2. Change `clearIfSame` to return `Promise<boolean>`, as in Architecture.
@@ -467,7 +467,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 - Pass criteria: every command exits 0. The corrupt-tombstone and misfiled-tombstone tests fail on the base copies.
 - Layers: unit, integration.
 
-#### Phase 5 — #18: close the two deferred writers
+#### Phase 5 — #18: close the two deferred writers ✓
 
 1. Delete `updateToken` and `onTokenUpdated` as in Architecture, with their tests and stubs. Reword the comment in `balance-identity.ts:7`.
 2. Run `bun run build` so `auto-imports.d.ts` regenerates. Confirm that `git grep -n -e updateToken -e onTokenUpdated -- apps packages` prints nothing.
@@ -590,6 +590,17 @@ Per-directive gate:
 | D-23k | `blob:` in `connect-src` (implementation, Phase 7) | Added on Firefox's recorded violation: it checks `downloads.download` of a blob URL against `connect-src`, and every export downloads one | Leave it out (the plan's source list): every Firefox export and backup download broke. A blob URL names data already in memory, so the source opens no network destination. |
 | D-ORD | Arc order (orchestrator, 2026-10-08) | Arc 3 first as layer 1 on `worktree-hardening-2`, then Arc 1 (layer 2, a new branch once PR #48 lands), then Arc 2 (layer 3) | The planned order 1-2-3: Arc 1 must wait for PR #48, and Arc 2 overlaps files PR #52 is changing, while Arc 3 touches neither. |
 | D-23d | IPv6 loopback | Probe; fall back to `http:` and ask (round 1) | Ship `http://[::1]:*` unprobed: the CSP host grammar has no IPv6 literal, so a saved endpoint could silently break. |
+
+### Arc 2 decisions (implementation)
+
+| # | Decision | Chosen | Rejected and why |
+|---|---|---|---|
+| D-ORD2 | Arc 2's base (orchestrator, 2026-10-09) | Stack on layer 1 (`worktree-hardening-2`, Arc 3), with `origin/dev` merged in | On layer 2 as the Delivery table says: Arc 1 waits on its own PR, and Arc 2's files (`wallet-core` migrator, `profile/`, `token/`, `token-balance/`) do not overlap Arc 1's (`wallet-bridge`, `pxe/artifact-registry`). |
+| D-19d | The refusal text of a mismatched journal (review round 1) | The engine's existing invalid-journal result, one text for every check | The three reasons in Architecture: `MigrationBarrier.vue` renders the engine's reason verbatim (`runtime.ts` stores it as the blocked detail), so each would be new copy on the recovery screen, outside this plan's UI impact. Which check refused is a storage-forensics detail. |
+| D-18d | Where the raw purge pass fences (review round 1) | `onMatch`, for every matched row before its bytes re-check | `beforeDelete`, right before the delete (Architecture): a commit that rewrote a malformed row's bytes between the snapshot and the re-read was spared unfenced and survived the purge. Safe early: the balance allocator never hands out an existing key or a fenced id, and the raw passes hold the allocation lock. |
+| D-18f | A raw-pass row a commit rewrote valid meanwhile (review round 2) | A second typed pass after the raw pass, both purges sharing one helper | Fence-only (round 1): a commit that finished before the hook ran left the row valid, in scope and fenced. A raw pass first: its predicate also matches valid rows, which it would delete without the delete event. |
+| D-18e | The post-write re-check's shape (review round 1) | Inline in each writer, in the tick the write resumes; a sync helper returns the compensating delete or `undefined` | An awaited helper (as first built): its return hop let a purge fence and delete the row between the check and the caller's emit. |
+| D-19c | An engine-namespace key in a journal's `entries` (Phase 3) | Refused with the other out-of-footprint keys | Filtered at restore as before: the journal is then not one the engine wrote, and the check refuses rather than repairs (D-19a). `restore()` keeps its filter as defence in depth. |
 
 **Unresolved disagreements.**
 
@@ -742,6 +753,41 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 ### Arc 3 implementation — Codex round 3 (same session, on the whole arc)
 
 **Verdict: clean.** No new material finding in `53e77b0...HEAD`; C5 resolved as a named gap; every earlier finding fixed or recorded. The loop converged in three rounds.
+
+### Arc 2 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11f90-2080-7563-a989-b382c99822fd`)
+
+**Verdict: findings** (two). Confirmed sound: journal check before restore with set comparison, tombstone identity on the key at both release sites, no compensation path onto a successor, canonical-id fencing, complete `updateToken` removal. Fixed in `fix(storage): re-check the balance fence in the emitting tick, …`.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C1 | Medium | The post-write check ran inside an awaited helper: a purge could fence and delete the row in the hop before the caller completed and emitted, so a purged row was announced | **Accepted, reproduced.** A hop-sweep test (the purges' own fence-and-delete at 0-7 microtasks after each writer's write) failed at 1 hop. The check now runs in the tick the write resumes (D-18e). |
+| C2 | Low | The callback doc and the commit's "frozen order" still claimed dispatch order prevents resurrection | **Accepted.** Both, and the service's fence doc, now state the before-and-after checks. |
+
+### Arc 2 implementation — Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict: approve with findings** (all Low). Confirmed: refusals write nothing and count no attempt; key-anchored tombstones; every fenced id is also deleted; no I/O between the post-write check and the emit with real storage; each test fails for the reason it names.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| O1 | Low | The raw pass skipped a row whose bytes changed between snapshot and re-read without fencing it, so a commit's rewrite of a malformed in-scope row survived the purge | **Accepted** (D-18d), with a call-order unit test that fails with the hook after the re-check. |
+| O2 | Low | Fence comments described the storage-ordering guarantee this arc removed; the migrator's "therefore" tied the footprint freeze to the missing authentication | **Accepted** (same as C2); the migrator doc now ties the freeze to the equality. |
+| O3 | Low | `CLAUDE.md`'s SFC-ordering example named the deleted `onTokenUpdated` (the plan's grep covered `apps packages` only) | **Accepted.** Now `onTokenAdded`. |
+| O4 | Low | `ARCHITECTURE.md` still said a valid backup always restores | **Accepted.** States the registry check and the frozen footprint. |
+| O5 | Low | `MigrationBarrier.vue` shows the engine's reason verbatim, so the new reasons were new copy outside UI impact | **Accepted** (D-19d): the refusals reuse the existing invalid-journal text, so the screen reads as an existing state. |
+| O6 | Note | Process: `lessons/phase-5.md` untracked, Phase 5 unrecorded, a test being edited | Recorded at the Phase 5 gate. |
+
+### Arc 2 implementation — Codex round 2 (same session, on `311f2fa..833319f`)
+
+**Verdict: findings** (two). C1 and C2 resolved (both writers checked at eight microtask placements). `return await undo` propagates a failed delete and emits nothing; the reused invalid-journal text keeps the non-retryable verdict for every new refusal. Fixed in `fix(balances): sweep a purge's scope again after its raw pass`.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C3 | Medium | A commit that rewrote a malformed in-scope row valid and finished before the raw pass's `onMatch` ran was unfenced at its post-write check; the bytes guard then spared the row, which survived the purge, fenced | **Accepted, reproduced** with the raw snapshot parked. Both purges now run typed, raw, typed through one helper (D-18f). |
+| C4 | Low | `ARCHITECTURE.md` omitted the already-stamped branch, which clears a journal without the registry check | **Accepted.** The rule names both branches. |
+
+### Arc 2 implementation — Codex round 3 (same session, on `6bfd255..6c199fa` and the whole arc)
+
+**Verdict: clean.** C3 and C4 resolved (both purges, both timings, reproduced in memory; foreign-profile rows survive; allocation locking intact). Note, kept as is: a row resurrected between the two typed passes can draw two `onTokenBalanceDeleted` events for one id, and every consumer removes by id idempotently. The loop converged in three rounds.
 
 ## Delivery
 

@@ -63,6 +63,10 @@ export async function purgeMalformedRows(
 	},
 	matchesRaw: (raw: Record<string, unknown>, storageId: string) => boolean,
 	onPurged?: (storageId: string) => void,
+	/** Runs synchronously for each matched row, before its bytes are re-checked and long
+	 *  before its delete: a writer that changes the bytes meanwhile is then still fenced,
+	 *  though the guard below spares its row. */
+	onMatch?: (storageId: string) => void,
 ): Promise<number> {
 	let purged = 0
 	for (const [storageId, rawString] of await storage.rawStringEntries()) {
@@ -74,6 +78,7 @@ export async function purgeMalformedRows(
 		}
 		if (typeof raw !== "object" || raw === null) continue
 		if (!matchesRaw(raw as Record<string, unknown>, storageId)) continue
+		onMatch?.(storageId)
 		// Guard layer 3: only delete the exact bytes the decision was made about.
 		if ((await storage.rawValue(storageId)) !== rawString) continue
 		await storage.delete(storageId)
