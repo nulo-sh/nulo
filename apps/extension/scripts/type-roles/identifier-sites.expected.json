@@ -274,7 +274,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
 			"expression": "searchTerm",
-			"branch": "!(selectedContact)",
+			"branch": "!(selectedContact && !holdView)",
 			"ordinal": 0,
 			"role": "input-data",
 			"selector": "[data-testid=\"send-destination-field\"]",
@@ -285,7 +285,7 @@
 		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
 			"expression": "trimAddress(c.address)",
-			"branch": "!(selectedContact) && showSuggestions",
+			"branch": "!(selectedContact && !holdView) && showSuggestions",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"recipient-suggestion-address\"]",

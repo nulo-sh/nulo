@@ -211,17 +211,6 @@
 			"suite": "network"
 		},
 		{
-			"id": "windows-verify-header-labels",
-			"name": "Routed module popup/windows/verify/header-labels.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/verify/header-labels.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "windows-passkey",
 			"name": "Passkey window",
 			"kind": "route",
@@ -262,61 +251,6 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "windows-execute-types",
-			"name": "Routed module popup/windows/execute/types.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/types.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-execute-signers",
-			"name": "Routed module popup/windows/execute/signers.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/signers.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-execute-scope-mismatch",
-			"name": "Routed module popup/windows/execute/scope-mismatch.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/scope-mismatch.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-execute-scope-follow",
-			"name": "Routed module popup/windows/execute/scope-follow.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/scope-follow.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-execute-operation-validation",
-			"name": "Routed module popup/windows/execute/operation-validation.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/operation-validation.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "windows-execute",
 			"name": "Execute: send, authwit, contract call",
 			"kind": "route",
@@ -325,39 +259,6 @@
 			"reach": "#/windows/execute, opened by a dApp request",
 			"states": ["send", "authwit", "contract call"],
 			"suite": "network"
-		},
-		{
-			"id": "windows-execute-humanize",
-			"name": "Routed module popup/windows/execute/humanize.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/humanize.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-execute-display-calls",
-			"name": "Routed module popup/windows/execute/display-calls.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/display-calls.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-execute-call-surface",
-			"name": "Routed module popup/windows/execute/call-surface.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/execute/call-surface.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
 			"id": "windows-execute-SignerIdentityStrip",
@@ -414,17 +315,6 @@
 			"suite": "network"
 		},
 		{
-			"id": "windows-capabilities-permission-rows",
-			"name": "Routed module popup/windows/capabilities/permission-rows.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/capabilities/permission-rows.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "windows-capabilities",
 			"name": "Connect and capabilities",
 			"kind": "route",
@@ -433,39 +323,6 @@
 			"reach": "#/windows/capabilities, opened by a dApp request",
 			"states": ["default"],
 			"suite": "network"
-		},
-		{
-			"id": "windows-capabilities-details-table",
-			"name": "Routed module popup/windows/capabilities/details-table.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/capabilities/details-table.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-capabilities-chain-mismatch",
-			"name": "Routed module popup/windows/capabilities/chain-mismatch.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/capabilities/chain-mismatch.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "windows-capabilities-build-items",
-			"name": "Routed module popup/windows/capabilities/build-items.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/windows/capabilities/build-items.ts",
-			"arcs": [4],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
 			"id": "windows-capabilities-PermissionGroup",
@@ -560,17 +417,6 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-received-received-copy",
-			"name": "Routed module popup/pages/received/received-copy.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/received/received-copy.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "popup-profile-new",
 			"name": "New profile",
 			"kind": "route",
@@ -581,17 +427,6 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-profile-new-profile-helpers",
-			"name": "Routed module popup/pages/profile/new-profile-helpers.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/profile/new-profile-helpers.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "popup-legal-declined",
 			"name": "Legal declined",
 			"kind": "route",
@@ -600,17 +435,6 @@
 			"reach": "#/popup/legal/declined",
 			"states": ["default"],
 			"suite": "smoke"
-		},
-		{
-			"id": "popup-journal-journal-detail-scope",
-			"name": "Routed module popup/pages/journal/journal-detail-scope.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/journal/journal-detail-scope.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
 			"id": "onboarding-welcome",
@@ -724,50 +548,6 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-send-submit",
-			"name": "Routed module popup/pages/send-submit.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/send-submit.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "popup-send-fiat-gate",
-			"name": "Routed module popup/pages/send-fiat-gate.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/send-fiat-gate.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "popup-send-balance-events",
-			"name": "Routed module popup/pages/send-balance-events.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/send-balance-events.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
-			"id": "popup-send-amount",
-			"name": "Routed module popup/pages/send-amount.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/send-amount.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "popup-register",
 			"name": "Register",
 			"kind": "route",
@@ -799,17 +579,6 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-import-helpers",
-			"name": "Routed module popup/pages/import-helpers.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/import-helpers.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
-		},
-		{
 			"id": "popup-holdings",
 			"name": "Holdings",
 			"kind": "route",
@@ -828,17 +597,6 @@
 			"reach": "#/popup/general",
 			"states": ["seeded tokens", "a balance whose fit scales below 1", "Chrome's side panel", "Firefox's toolbar panel"],
 			"suite": "smoke"
-		},
-		{
-			"id": "popup-detail-page",
-			"name": "Routed module popup/pages/detail-page.ts",
-			"kind": "route",
-			"source": "apps/extension/src/popup/pages/detail-page.ts",
-			"arcs": [3],
-			"reach": "none",
-			"states": [],
-			"suite": "none",
-			"why": "a component or helper module inside a routed directory: the page scan routes it, but nothing navigates to it"
 		},
 		{
 			"id": "popup-auth",
