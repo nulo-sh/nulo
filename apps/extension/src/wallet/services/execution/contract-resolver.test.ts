@@ -17,7 +17,7 @@ import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { ConfigProp, IConfig } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import type { IPXE } from "@nulo/aztec-runtime/pxe"
-import { ContractNotRegisteredError } from "@nulo/extension-messaging/errors"
+import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { Action } from "./spec"
 import { ContractResolver, ensureRegistered } from "./contract-resolver"
@@ -358,7 +358,7 @@ describe("assertSelectorBinding: a refusal names the policy, never the call", ()
 		["a fast-path call without a name", NAMED_CALL_BINDING, undefined, "Scope violation: call name does not match selector's function"],
 	])("%s: the refusal is the fixed text", (_label, policy, name, text) => {
 		const refused = refusalOf({ name, to }, policy)
-		expect(refused.constructor).toBe(Error)
+		expect(refused.constructor).toBe(ScopeViolationError)
 		expect(refused.message).toBe(text)
 		for (const value of [String(name), fn.name, to, to.slice(2)]) expect(refused.message).not.toContain(value)
 	})

@@ -12,6 +12,7 @@
  */
 
 import { describe, expect, test, vi } from "vitest"
+import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
@@ -473,7 +474,7 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 		for (const name of ["balance_of_private", ""]) {
 			contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
 			const refused = await rejectionOf(executor.executeAztecExecuteUtility(op(name)))
-			expect(refused.constructor).toBe(Error)
+			expect(refused.constructor).toBe(ScopeViolationError)
 			expect(refused.message).toBe("Scope violation: call name does not match selector's function")
 		}
 		expect(pxe.executeUtility).not.toHaveBeenCalled()

@@ -193,9 +193,9 @@ export class CapabilityNotGrantedError extends WalletError {
 
 /**
  * A dApp request asked for a contract, call, class, account or flag its stored grant does not
- * cover. Raised by the grant check before any window opens or anything runs. The message names the
- * method and the scope field, never a request value, and never reaches a dApp: its envelope is a
- * constant.
+ * cover. Raised by the grant check, or at execution when a call's selector does not run the
+ * function its name claims. The message names only the policy (the method and scope field, or
+ * the binding), never a request value, and never reaches a dApp: its envelope is a constant.
  */
 export class ScopeViolationError extends WalletError {
 	public static readonly CODE = "SCOPE_VIOLATION"

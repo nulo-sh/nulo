@@ -13,7 +13,7 @@ import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { HashedValues } from "@aztec-labs/stdlib/tx"
-import { SessionEndedError } from "@nulo/extension-messaging/errors"
+import { ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import z from "zod"
 import { getAuthRegistryAddress, getSetAuthorizedFn } from "@/wallet/utils/auth-registry"
@@ -434,7 +434,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(unknown.message).toBe("Method not found")
 		for (const name of ["sneaky", ""]) {
 			const refused = await rejectionOf(buildNoFrom(wireCall({ name, selector })))
-			expect(refused.constructor).toBe(Error)
+			expect(refused.constructor).toBe(ScopeViolationError)
 			expect(refused.message).toBe(MISMATCH)
 		}
 		expect(getCurrentMinFees).not.toHaveBeenCalled()
@@ -460,7 +460,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(unknown.message).toBe("Method not found")
 		for (const name of ["sneaky", ""]) {
 			const refused = await rejectionOf(build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [], name }]))
-			expect(refused.constructor).toBe(Error)
+			expect(refused.constructor).toBe(ScopeViolationError)
 			expect(refused.message).toBe(MISMATCH)
 		}
 		expect(h.account.buildTxExecutionRequest).not.toHaveBeenCalled()
