@@ -73,8 +73,12 @@ const DEFAULT_MAX_RETRIES = 3
 /** A policy bound, not a measurement: a data transform over extension storage takes seconds. */
 const DEFAULT_UP_TIMEOUT_MS = 60_000
 
-/** The reason for an `up()` that did not settle; it reaches the recovery screen verbatim. */
-const interruptedReason = (version: number): string => `migration ${version} was interrupted mid-write (restored cleanly)`
+const interruptedMidWrite = (version: number): string => `migration ${version} was interrupted mid-write`
+/** The reason once the footprint is restored; it reaches the recovery screen verbatim. */
+const interruptedReason = (version: number): string => `${interruptedMidWrite(version)} (restored cleanly)`
+
+/** The watchdog's error: reported as `interruptedReason` only after its restore succeeds. */
+class UpTimeoutError extends Error {}
 
 /** Awaits `up()`, or revokes `staging` and throws once `ms` pass first. The abandoned promise
  *  keeps a no-op handler, so its later rejection is never unhandled. */
@@ -85,7 +89,7 @@ async function runWithWatchdog(up: () => Promise<void>, staging: StagingArea, ms
 	const expired = new Promise<never>((_, reject) => {
 		timer = setTimeout(() => {
 			staging.revoke()
-			reject(new Error(interruptedReason(version)))
+			reject(new UpTimeoutError(interruptedMidWrite(version)))
 		}, ms)
 	})
 	try {
@@ -339,7 +343,7 @@ export class Migrator {
 				kind: "failed",
 				version: m.version,
 				breaking: m.breaking,
-				reason: errorMessageFromUnknown(err),
+				reason: err instanceof UpTimeoutError ? interruptedReason(m.version) : errorMessageFromUnknown(err),
 				attempts,
 				terminal: attempts >= this.maxRetries,
 			}

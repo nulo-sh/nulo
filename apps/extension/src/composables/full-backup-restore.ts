@@ -331,7 +331,7 @@ export type RestoreData = Record<string, unknown> & {
 	profile?: unknown
 }
 
-/** The backup's profile part as the restore reads it: selection only checked that `type` exists. */
+/** The backup's profile part as the restore reads it; the entry gates require only a `type`. */
 export type BackupProfile = { id: unknown; name: unknown; type: unknown }
 
 /** Bound on dropped-balance records. This path never reaches the collector, so it carries no cap

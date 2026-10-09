@@ -5,7 +5,6 @@ import { resolveFullBackupEnterAction } from "./import-helpers"
 
 const sel = (o: Record<string, unknown>) => o as unknown as BackupSelection
 
-/** A page state with the restore allowed and no Retry running unless the case says otherwise. */
 const at = (s: Partial<FullBackupCtaSource>): FullBackupCtaSource => ({
 	selectedBackup: null,
 	restoreStatus: "",

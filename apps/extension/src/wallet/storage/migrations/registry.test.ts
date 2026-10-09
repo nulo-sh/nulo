@@ -26,8 +26,7 @@ function memStore() {
 	}
 }
 
-/** Runs `m` from its prior version over `seed` twice; returns the store's non-reserved contents
- *  before the first run and after each run, each run asserted to have succeeded. */
+/** The store's non-reserved contents before the first run and after each of two runs. */
 async function runTwice(m: Migration, seed: Record<string, unknown>): Promise<[string, string, string]> {
 	const store = memStore()
 	await store.set(seed)
@@ -94,7 +93,7 @@ describe("migrations registry (structural)", () => {
 	})
 
 	// Every REAL migration still ships its own colocated test with seeded pre-shape fixtures
-	// (template.ts step 6); this is the safety net, not the proof.
+	// (template.ts step 9); this is the safety net, not the proof.
 	test("every migration transforms its seed and is idempotent (run twice ≡ once)", async () => {
 		expect(UNDER_TEST.length).toBeGreaterThanOrEqual(2)
 		for (const m of UNDER_TEST) {

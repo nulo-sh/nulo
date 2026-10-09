@@ -4,8 +4,8 @@ import { restoreCtaBlocked, showsDecryptCta, showsRestoreCta, showsRestoreErrorC
 export type FullBackupEnterAction = "decrypt" | "restore" | "continue" | null
 
 /**
- * The full-backup action an Enter keypress runs: the button a press would reach, and only while
- * that button is enabled. Popup-only; onboarding import has no Enter shortcut.
+ * The full-backup action an Enter keypress runs: the bar's button, never a disabled Restore or
+ * Continue (Decrypt refuses an empty password itself). Popup-only; onboarding has no shortcut.
  */
 export function resolveFullBackupEnterAction(state: FullBackupCtaSource): FullBackupEnterAction {
 	const { selectedBackup, restoreStatus, isAllowedToImportBackup, isRestoreHasErrors } = state

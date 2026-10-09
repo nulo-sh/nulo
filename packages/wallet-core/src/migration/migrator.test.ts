@@ -532,6 +532,19 @@ describe("Migrator — a stuck up() fails at the watchdog bound", () => {
 		expect(vi.getTimerCount()).toBe(0)
 	})
 
+	test("a restore that fails after the bound never claims a clean restore", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		const run = new Migrator({ store, migrations: [stuck(() => new Promise(() => {}))] }).run()
+		store.failSetKeys = new Set(["acct@a"])
+		await vi.advanceTimersByTimeAsync(60_000)
+		expect(await run).toEqual({
+			kind: "needs-recovery",
+			reason: "failed to restore after migration 1 failed: injected set failure: acct@a (migration error: migration 1 was interrupted mid-write)",
+			retryable: true,
+		})
+	})
+
 	test("after the bound the abandoned up() reads and writes nothing, a parked read included", async () => {
 		vi.useFakeTimers()
 		const store = seeded()
