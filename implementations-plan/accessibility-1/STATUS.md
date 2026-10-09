@@ -35,3 +35,8 @@
 - 2026-10-09: arc 2 review round 2: codex conditional approve, one Med (token-page wait) fixed; smoke home-links.test.ts green on chrome and firefox (retry 0).
 - 2026-10-09: arc 2 exit gate pass on the final head: audit:vue, test:all, check:plans; smoke home-links, tooltips-glossary, onboarding-tab (15/15) and network home-cap, connect-one-window (2/2) on chrome and firefox, retry 0; codex loop converged (round 3 approve).
 - 2026-10-09: merged origin/dev (index.md conflict blocked PR CI); gates re-run green on the merged head: audit:vue, test:all; smoke 15/15 and network 2/2 on chrome and firefox, retry 0.
+
+## Arc 3 (titles and the emoji check)
+
+- 2026-10-09: arc 3 started on page 2 calls 3 (Yes) and 4 (A+); PRs #56, #55 and #58 are on `dev`; branch `accessibility-1-titles-verify` cut from `dev` at `83a6c22` (no stack, D-orch-1).
+- 2026-10-09: phase 3.1 gate pass: lint, typecheck:all, test, test:all; smoke navigation.test.ts on chrome and firefox (5/5 each, retry 0, fresh builds). Unit tests red first.
