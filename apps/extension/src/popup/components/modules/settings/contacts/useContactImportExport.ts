@@ -182,7 +182,7 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 		}
 
 		const tally = await applyImportRows({ ...deps, run }, res)
-		if (tally.stopped) toastStoppedImport(openToast, tally)
+		if (tally.stopped) toastStoppedImport(openToast, tally, res.length)
 		else toastImportOutcome(openToast, tally)
 	} catch (err) {
 		if (err instanceof FilePickCanceledError) return
@@ -330,11 +330,12 @@ function logImportErrors(errors: UpsertError[]): void {
 	}
 }
 
-/** `written` counts confirmed writes, so a write whose reply the stop cut off may be saved uncounted. */
-function toastStoppedImport(openToast: ContactIoDeps["openToast"], tally: ImportTally): void {
+/** `written` counts confirmed writes, so a write whose reply the stop cut off may be saved uncounted.
+ *  `selected` counts every row the person chose, refused ones included. */
+function toastStoppedImport(openToast: ContactIoDeps["openToast"], tally: ImportTally, selected: number): void {
 	logImportErrors(tally.errors)
-	const noun = tally.written === 1 ? "contact" : "contacts"
-	openToast({ kind: "error", label: `Import incomplete · ${tally.written} ${noun} written` })
+	const noun = selected === 1 ? "contact" : "contacts"
+	openToast({ kind: "error", label: `Import incomplete · ${tally.written} of ${selected} ${noun} written` })
 }
 
 function toastImportOutcome(openToast: ContactIoDeps["openToast"], tally: ImportTally): void {

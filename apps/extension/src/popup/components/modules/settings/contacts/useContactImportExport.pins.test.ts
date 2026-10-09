@@ -309,8 +309,8 @@ describe("importContacts — a session that ends mid-import", () => {
 		return { contactService, accountStateService }
 	}
 
-	async function run(services: ReturnType<typeof stopServices>) {
-		fileWith(threeRows)
+	async function run(services: ReturnType<typeof stopServices>, file: unknown = threeRows) {
+		fileWith(file)
 		const done = useContactImportExport({ contacts: ref([]), ...services } as never).importContacts()
 		await untilSelectionGate()
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, saved))
@@ -358,11 +358,19 @@ describe("importContacts — a session that ends mid-import", () => {
 		fail(services)
 		const toast = await run(services)
 		expect(trace).toEqual(expected)
-		expect(toast).toEqual({ kind: "error", label: `Import incomplete · ${written} ${written === 1 ? "contact" : "contacts"} written` })
+		expect(toast).toEqual({ kind: "error", label: `Import incomplete · ${written} of 3 contacts written` })
 		expect(assertRunFenceMock).toHaveBeenCalledWith(RUN_FENCE)
 		const { getContacts, addContact, updateContact } = services.contactService
 		const contactCalls = [...getContacts.mock.calls, ...addContact.mock.calls, ...updateContact.mock.calls]
 		expect(contactCalls.every((args) => args.at(-1) === RUN_FENCE)).toBe(true)
+	})
+
+	test("a stop in a one-contact import counts it in the singular", async () => {
+		assertRunFenceMock.mockRejectedValue(ended())
+		const services = stopServices()
+		services.contactService.addContact.mockRejectedValueOnce(ended())
+		const toast = await run(services, { version: 2, contacts: [{ name: "A", address: ADDR_A }] })
+		expect(toast).toEqual({ kind: "error", label: "Import incomplete · 0 of 1 contact written" })
 	})
 
 	test("control: a write that fails while the session holds is counted, and the import goes on", async () => {

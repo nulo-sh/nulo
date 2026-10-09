@@ -376,10 +376,12 @@ describe("import composition — what the screen showed chosen is what is writte
 })
 
 describe("import composition — a profile switch mid-import", () => {
-	const threeNew = fileOf([
-		{ name: "Ana", address: ADDR.a, isSender: true },
-		{ name: "Ben", address: ADDR.b },
+	const fiveNew = fileOf([
+		{ name: "Ana", address: ADDR.a },
+		{ name: "Ben", address: ADDR.b, isSender: true },
 		{ name: "Cleo", address: ADDR.c },
+		{ name: "Dan", address: ADDR.d },
+		{ name: "Eve", address: ADDR.e },
 	])
 	/** Every stored contact's name by profile, read from storage itself rather than through a fence. */
 	async function namesByProfile(api: FakeBrowserApi): Promise<Record<string, string[]>> {
@@ -392,7 +394,7 @@ describe("import composition — a profile switch mid-import", () => {
 		return out
 	}
 
-	test("a switch after the first row writes nothing more, to either profile, and the toast reports it", async () => {
+	test("a switch after the second row writes nothing more, to either profile, and the toast reports it", async () => {
 		const { api, contacts } = await startWallet()
 		const page = openContactsPage(contacts)
 		accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
@@ -401,11 +403,11 @@ describe("import composition — a profile switch mid-import", () => {
 			return address
 		})
 
-		const { done } = await pick(page, threeNew)
-		expect(await confirm(page, done)).toBe("Import incomplete · 1 contact written")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana"] })
+		const { done } = await pick(page, fiveNew)
+		expect(await confirm(page, done)).toBe("Import incomplete · 2 of 5 contacts written")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben"] })
 		expect(accountState.addSender).toHaveBeenCalledTimes(1)
-		expect([...sendersOf("p1")]).toEqual([ADDR.a])
+		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 		expect(sendersOf("p2").size).toBe(0)
 	})
 
@@ -413,10 +415,10 @@ describe("import composition — a profile switch mid-import", () => {
 		const { api, contacts } = await startWallet()
 		const page = openContactsPage(contacts)
 
-		const { done } = await pick(page, threeNew)
+		const { done } = await pick(page, fiveNew)
 		expect(await confirm(page, done)).toBe("Contacts imported · 1 sender registered")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo"] })
-		expect([...sendersOf("p1")]).toEqual([ADDR.a])
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
+		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 	})
 })
 
