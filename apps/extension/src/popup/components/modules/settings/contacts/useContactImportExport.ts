@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { Ref } from "vue"
 import { useToast } from "@/composables/toast"
-import { FileTooLargeError, downloadFile, pickFile } from "@/utils"
+import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile } from "@/utils"
 import {
 	type ImportRow,
 	type ReviewedImportRow,
@@ -161,6 +161,7 @@ async function importContacts(deps: ContactIoDeps): Promise<void> {
 		const tally = await applyImportRows(deps, res)
 		toastImportOutcome(openToast, tally)
 	} catch (err) {
+		if (err instanceof FilePickCanceledError) return
 		if (err instanceof FileTooLargeError) {
 			openToast({ kind: "error", label: "Contacts file is too large" })
 			return

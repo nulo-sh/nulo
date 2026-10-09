@@ -30,6 +30,7 @@ vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: openToastMock }),
 }))
 vi.mock("@/utils", () => ({
+	FilePickCanceledError: class FilePickCanceledError extends Error {},
 	FileTooLargeError: class FileTooLargeError extends Error {},
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),

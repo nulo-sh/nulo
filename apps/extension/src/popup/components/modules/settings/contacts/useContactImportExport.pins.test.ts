@@ -28,6 +28,7 @@ vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: openToastMock }),
 }))
 vi.mock("@/utils", () => ({
+	FilePickCanceledError: class FilePickCanceledError extends Error {},
 	FileTooLargeError: class FileTooLargeError extends Error {},
 	downloadFile: vi.fn(),
 	pickFile: (...args: unknown[]) => pickFileMock(...args),
@@ -45,7 +46,7 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStoreState }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: (...args: unknown[]) => popupOpenMock(...args) }) }))
 
-import { FileTooLargeError } from "@/utils"
+import { FilePickCanceledError, FileTooLargeError } from "@/utils"
 import { MAX_CONTACT_IMPORT_BYTES } from "@/utils/contacts-export-format"
 import { classifyImportRow, indexSavedContacts } from "@/utils/contact-import-rows"
 import { useContactImportExport } from "./useContactImportExport"
@@ -159,6 +160,7 @@ describe("importContacts — per-row order and early exits", () => {
 
 	test.each<[string, () => void, string | null]>([
 		["no file picked", () => pickFileMock.mockResolvedValueOnce(null), null],
+		["chooser closed", () => pickFileMock.mockRejectedValueOnce(new FilePickCanceledError()), null],
 		["file over the byte cap", () => fileWith(twoSenders, MAX_CONTACT_IMPORT_BYTES + 1), "Contacts file is too large"],
 		[
 			"picker threw FileTooLargeError",
@@ -191,11 +193,14 @@ describe("importContacts — per-row order and early exits", () => {
 		// Leftover staging from an interrupted earlier run must be wiped by this run's `finally` too.
 		cacheStoreState.importContacts = ["stale-staging"]
 		arrange()
-		await api().importContacts()
+		const services = makeServices()
+		await api(services).importContacts()
 		expect(popupOpenMock).not.toHaveBeenCalled()
+		expect(services.contactService.getContacts).not.toHaveBeenCalled()
 		expect(cacheStoreState.importContacts).toEqual([])
 		expect(cacheStoreState.importPromise).toBeNull()
 		if (toast) expect(openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)).toContain(toast)
+		else expect(openToastMock).not.toHaveBeenCalled()
 	})
 
 	test("a file that is not JSON logs the failure's kind, never the parser's message quoting the file", async () => {
