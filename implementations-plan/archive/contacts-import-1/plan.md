@@ -19,11 +19,12 @@ post_implementation_hardening: not scheduled
 - **Status**: delivered in [#74](https://github.com/nulo-sh/nulo/pull/74), one arc (Phases 1-3), single-layer stack on `dev`. The merge that lands it closes this plan.
 - **Shipped**:
   - #45: `pickFile` settles a closed chooser. A `cancel` listener removes the hidden input and rejects with `FilePickCanceledError`; the contacts import and the full-backup import return on it with nothing shown or cleared, and the account import already swallowed it. Headless Firefox fires no `cancel` by itself, so the Firefox pick driver is unchanged.
-  - #43: the contacts import is pinned to the `RunFence` captured before its rows are shown. `getContacts`, `addContact` and `updateContact` take it as an optional trailing argument: asserted before the contact lock, acting for its profile, re-checked synchronously right before each write. A fenced call that fails makes the popup probe the fence; a failed probe stops the import (no further write or sender registration) and toasts `Import incomplete · N contacts written`.
+  - #43: the contacts import is pinned to the `RunFence` captured before its rows are shown. `getContacts`, `addContact` and `updateContact` take it as an optional trailing argument: asserted before the contact lock, acting for its profile, re-checked synchronously right before each write. A fenced call that fails makes the popup probe the fence; a failed probe stops the import (no further write or sender registration) and toasts `Import incomplete · N of M contacts written`, M being the rows selected.
   - Validation, final head, retry 0: lint, typecheck:all, test:all (extension 10536 passed), audit:vue, armed builds, smoke (`contacts-import`, `contacts`, `account-import-export`, `backup-roundtrip`, `backup-imported-account`) 16/16 on Chrome and on Firefox, check:plans 0. Codex r1 approve with fixes, Opus review alongside, all folded; Codex r2 clean.
 - **Dropped**: #44, already fixed on `dev` by #41 (3b80761) with its test; verified and commented on the issue, no code.
 - **Deviations**: D10 (the run reaches `applyImportRows` through `deps`, keeping its signature line byte-identical beside #56), D11 (`logImportErrors` shared by both toasts), D12 (pictures from the smoke harness; the "today" fact corrected: a lock mid-import shows "Error occurred during import").
-- **Open items**: none kept here. [Follow-ups](../../follow-ups.md) took the two owner calls of [OWNER-ASKS.md](OWNER-ASKS.md) (the toast's wording, recommended B; what stops an import), both shipped in their ship-now forms.
+- **Owner answers** (signed off 2026-10-09 12:48 UTC, [OWNER-ASKS.md](OWNER-ASKS.md#answers-owner-sign-off-2026-10-09)): the toast is B, `Import incomplete · N of M contacts written`, applied in #74 with its stop-table and composition tests (a stop after 2 of 5 rows) and re-validated (lint, typecheck:all, the contacts unit and composition tests, check:plans, the `contacts-import` smoke on Chrome at retry 0, pictures re-shot); the stop rule is A, as shipped.
+- **Open items**: one, moved to [follow-ups](../../follow-ups.md): with the stop-rule answer the owner asked that a lock or a profile switch not break an import, either by blocking both while an import runs or by a background import with a visible progress state that neither can break. A design-sized change, not #74's.
 - **Lessons**: none promoted. `lessons.md` sits 28 B under its 8,192 B budget; the adjacent-hunk merge rule is general git behaviour and stays in [phase 2](lessons/phase-2.md), the throwaway-branch `commit -a` slip in [phase 3](lessons/phase-3.md).
 - **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
 
@@ -48,7 +49,7 @@ Three bugs in the contacts import, filed by the owner on 2026-10-08. Recon is in
 - No storage migration: no persisted shape changes.
 
 **UI impact:**
-- The contacts import result toast. New: `Import incomplete · N contacts written` (`kind: "error"`), shown when the import stops early (OWNER-ASKS asks 1 and 2). Before: in that moment the import either wrote the remaining rows to the new profile and showed a success toast, or (after a plain lock) showed "Error occurred during import", because the next row's read failed and aborted the import ("Import ended with errors" only when the lock landed during the last row's write; checked on Chrome, see D12). Every existing label is unchanged. The PR attaches screenshots of the new toast (Phase 3).
+- The contacts import result toast. New: `Import incomplete · N of M contacts written` (`kind: "error"`; the owner's answer B, first shipped as `N contacts written`), shown when the import stops early (OWNER-ASKS asks 1 and 2). Before: in that moment the import either wrote the remaining rows to the new profile and showed a success toast, or (after a plain lock) showed "Error occurred during import", because the next row's read failed and aborted the import ("Import ended with errors" only when the lock landed during the last row's write; checked on Chrome, see D12). Every existing label is unchanged. The PR attaches screenshots of the new toast (Phase 3).
 - No other surface. Closing the file chooser leaves the contacts import, the account import and the full-backup import (onboarding and popup) exactly as they are today: nothing is shown, nothing selected is cleared.
 
 ## Outcome & Quality Bar
@@ -87,8 +88,8 @@ Three bugs in the contacts import, filed by the owner on 2026-10-08. Recon is in
 
 ### Asks
 
-- **A1 (owner, OWNER-ASKS ask 1):** the toast's wording and kind. Ship-now: `Import incomplete · N contacts written`, `kind: "error"`.
-- **A2 (owner, OWNER-ASKS ask 2):** what stops an import. Ship-now: any end of the session the rows were shown in (a profile switch, a lock or auto-lock, a re-unlock, a worker restart, a begun deletion of the profile).
+- **A1 (owner, OWNER-ASKS ask 1):** the toast's wording and kind. Ship-now: `Import incomplete · N contacts written`, `kind: "error"`. Answered B: `Import incomplete · N of M contacts written`.
+- **A2 (owner, OWNER-ASKS ask 2):** what stops an import. Ship-now: any end of the session the rows were shown in (a profile switch, a lock or auto-lock, a re-unlock, a worker restart, a begun deletion of the profile). Answered A, as shipped.
 - **A3 (orchestrator):** #44 is fixed by #41. Delivery comments on it and leaves it open (common rule); close it, or have the PR carry `Closes #44`.
 
 ## Architecture & Implementation

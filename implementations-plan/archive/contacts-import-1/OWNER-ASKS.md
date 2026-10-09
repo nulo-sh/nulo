@@ -32,3 +32,12 @@ No other change in this lane alters a screen: the file-chooser fix (#45) leaves 
 **B. Profile change only:** the import stops only when a different profile becomes active. After a plain lock the import fails as it does today, and the toast reads "Error occurred during import".
 
 **Planner's recommendation: A.** After a lock nothing more can be written anyway, and "incomplete, N written" tells the person more than "ended with errors". B needs a second, weaker check beside the existing one.
+
+## Answers: owner sign-off, 2026-10-09
+
+Signed off by the owner at 12:48 UTC on the toast page (a private Claude Artifact, "Contacts Import Decisions", calls c1 and c2).
+
+| Call | Answer | Note |
+|---|---|---|
+| 1. The toast when an import stops early | **B**: `Import incomplete · N of M contacts written`, error kind | M is the rows selected for import, refused ones included; the noun follows M (`0 of 1 contact written`). Applied in #74 with its tests: the stop table counts against a 3-row selection, and the composition test stops after 2 of 5 rows. |
+| 2. What stops an import | **A**, as shipped | The owner added, verbatim: "I mean, since we are at it... I feel we should prevent the user from interrupting it. We should either: 1. Not let him lock, or profile switch; 2. Have a better "loading" when importing" contact. I guess we want to do it in the background. But we should then prevent the user from breaking the import." A design-sized ask, not #74's: it is in [follow-ups](../../follow-ups.md) as "A lock or a profile switch can break a contacts import". |
