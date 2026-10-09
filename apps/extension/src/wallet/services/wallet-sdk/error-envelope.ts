@@ -122,8 +122,8 @@ export function toWalletResponseError(error: unknown): WalletResponse["error"] {
 		}
 	}
 	if (error instanceof ScopeViolationError) {
-		// The classification tells a dApp that its grant refused the call before execution, not that
-		// something downstream failed.
+		// The classification tells a dApp that the call is outside its grant, not that something
+		// downstream failed.
 		return SCOPE_VIOLATION_ENVELOPE
 	}
 	if (error instanceof RpcTimeoutError) {

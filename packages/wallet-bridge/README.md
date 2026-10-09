@@ -162,6 +162,11 @@ dApp reads the contracts, calls, classes and flags it holds from its own
 wider manifest. The answer lists the session's accounts only when the grant
 sets `canGet`.
 
+The same envelope answers a call whose selector does not run the function its
+name claims. That check runs at execution, so this refusal can come after the
+approval window, and no wider manifest fixes it: the call itself must name the
+function its selector runs.
+
 A call whose arguments the wallet API's schema refuses (a value that is not
 an address or a field, a call without its selector, a missing option, a
 `requestCapabilities` header without its version or metadata, a raw message

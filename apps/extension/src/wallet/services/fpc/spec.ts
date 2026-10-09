@@ -51,7 +51,7 @@ export const StoredFpcSchema: z.ZodType<Omit<FpcInfo, "isProtocol">> = z.object(
 	id: z.string(),
 	profileId: z.string(),
 	chainId: z.number(),
-	type: z.nativeEnum(FpcType),
+	type: z.enum(FpcType),
 	address: z.string(),
 	name: z.string().optional(),
 })

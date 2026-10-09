@@ -107,6 +107,14 @@ export type Profile = Omit<ProfileInfo, "recoveryMode"> & {
 		  }
 	)
 
+/** What the profile RPCs return, never the stored row: a row carries sealed key material.
+ *  `recoveryMode` is present only when true, so a persisted identity never carries the key. */
+export function toProfileInfo(profile: Pick<ProfileInfo, "id" | "name" | "type">, recoveryMode: boolean): ProfileInfo {
+	const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
+	if (recoveryMode) info.recoveryMode = true
+	return info
+}
+
 /** Mint a fresh 128-bit Web-Crypto incarnation generation (32 hex chars). */
 export function mintPxeGeneration(): string {
 	return getRandomHex(32)

@@ -10,8 +10,8 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
-import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import { markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
+import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { failureKind, markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 
 function fakeLane() {
 	return {
@@ -68,6 +68,19 @@ describe("markFailedUnlessCancelled", () => {
 		const error = new SessionEndedError()
 		expect(markFailedUnlessCancelled(error, "j1", lane)).toBe(marker)
 		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "session_ended"))
+	})
+
+	test("a ScopeViolationError on a dApp send records scope_refused", async () => {
+		const lane = fakeLane()
+		const error = new ScopeViolationError("Scope violation: call name does not match selector's function")
+		await markFailedUnlessCancelled(error, "j1", lane)
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "scope_refused"))
+	})
+
+	test("the shared failureKind never labels a first-party Send's failure as a scope refusal", () => {
+		expect(failureKind(new ScopeViolationError("Scope violation: call name does not match selector's function"), "transfer")).toBe(
+			"transfer",
+		)
 	})
 
 	test("any other error keeps the dapp_execute kind", async () => {

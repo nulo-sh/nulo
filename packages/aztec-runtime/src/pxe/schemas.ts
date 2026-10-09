@@ -37,7 +37,7 @@ export const NotesFilterSchema = z.object({
 	contractAddress: AztecAddress.schema,
 	owner: AztecAddress.schema.optional(),
 	storageSlot: Fr.schema.optional(),
-	status: z.nativeEnum(NoteStatus).optional(),
+	status: z.enum(NoteStatus).optional(),
 	siloedNullifier: Fr.schema.optional(),
 	scopes: z.array(AztecAddress.schema),
 }) satisfies ZodFor<NotesFilter>

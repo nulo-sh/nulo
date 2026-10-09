@@ -61,6 +61,7 @@ import type { PreviewSnapshots } from "./preview-snapshots"
 import { fingerprintBaseFee } from "./estimate-reuse-shared"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
+import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import type { FeeSettings } from "./models"
 
 // ── Controllable proof gate: holds proveTxTask until release() ──────────────
@@ -1077,6 +1078,48 @@ describe("ExecutionService composition — nothing is broadcast without a curren
 		expect(h.sendTx).not.toHaveBeenCalled()
 		expect(h.stages).not.toContain("succeeded")
 		expect((await h.journal.getOperation(h.getJournalId()))?.progress.stage).toBe("failed")
+	})
+})
+
+describe("ExecutionService composition — a refused operation logs at the level its reach allows", () => {
+	const bindingRefusal = () => {
+		try {
+			assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
+		} catch (error) {
+			return error
+		}
+		throw new Error("expected a refusal")
+	}
+
+	test.each([
+		["a selector-binding refusal", bindingRefusal, "refused: outside its grant"],
+		["a Terms refusal", () => new TermsAcceptanceRequiredError(), "refused: terms not accepted"],
+		["an unclassified failure", () => new Error("boom"), undefined],
+	])("%s", async (_label, makeError, debugReason) => {
+		const h = await makeHarness()
+		const service = h.service as unknown as {
+			dispatchOperation: () => Promise<unknown>
+			logDebug: (...args: unknown[]) => void
+			logError: (...args: unknown[]) => void
+		}
+		vi.spyOn(service, "dispatchOperation").mockRejectedValueOnce(makeError())
+		const logDebug = vi.spyOn(service, "logDebug")
+		const logError = vi.spyOn(service, "logError")
+
+		const [result] = await h.service.executeOperations([{ kind: "register_contract" } as never], { type: OriginType.UI } as never)
+
+		expect(result.status).toBe("failed")
+		const outcomeLines = (spy: typeof logDebug) =>
+			spy.mock.calls.map(([line]) => String(line)).filter((line) => / register_contract (refused|failed)/.test(line))
+		if (debugReason === undefined) {
+			expect(outcomeLines(logDebug)).toEqual([])
+			expect(logError).toHaveBeenCalledWith(expect.stringMatching(/executeOperations: register_contract failed:$/), "boom")
+		} else {
+			expect(outcomeLines(logDebug)).toEqual([
+				expect.stringMatching(new RegExp(`executeOperations: register_contract ${debugReason}$`)),
+			])
+			expect(outcomeLines(logError)).toEqual([])
+		}
 	})
 })
 

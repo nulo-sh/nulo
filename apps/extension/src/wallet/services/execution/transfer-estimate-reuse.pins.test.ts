@@ -121,16 +121,6 @@ async function consumeOnce(reuse: TransferEstimateReuse, e: TransferEstimateReus
 	return result
 }
 
-/** The error a bare expression throws, so a pinned message is the engine's own on every engine. */
-function thrown(f: () => unknown): Error {
-	try {
-		f()
-	} catch (error) {
-		return error as Error
-	}
-	throw new Error("expected a throw")
-}
-
 beforeEach(() => {
 	calls.length = 0
 	predicted.mockClear()
@@ -218,12 +208,13 @@ describe("the ladder's order and reasons", () => {
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee changed`]])
 	})
 
-	test("a rejecting fee read misses with its message, before the pending read", async () => {
-		predicted.mockRejectedValueOnce(new Error("block not found"))
+	test("a rejecting fee read misses with a fixed reason, before the pending read", async () => {
+		predicted.mockRejectedValueOnce(new Error("fetch failed: https://rpc.example/v1/k3y"))
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(), request())).toBeUndefined()
 		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
-		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: block not found`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
+		expect(JSON.stringify(logDebug.mock.calls)).not.toMatch(/rpc\.example|k3y/)
 	})
 
 	test("the fee step's getNode sits outside its catch: a rejection there propagates", async () => {
@@ -286,22 +277,18 @@ describe("an unknown priority or a null-like reply misses softly", () => {
 	test.each([
 		["bogus", undefined],
 		["constructor", PRIORITY_MULTIPLIERS["constructor" as never]],
-	])("priority %j: the reason carries .mul's own message", async (priorityLevel, multiplier) => {
-		const expected = thrown(() => new GasFees(2n, 3n).mul(multiplier as never))
+	])("priority %j misses with a fixed reason", async (priorityLevel, multiplier) => {
+		expect(() => new GasFees(2n, 3n).mul(multiplier as never)).toThrow()
 		const fs = { paymentMethod: { kind: "fj" }, priorityLevel } as unknown as FeeSettings
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(fs), request(fs))).toBeUndefined()
-		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: ${expected.message}`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
 	})
 
-	test.each([undefined, null])("a %s reply: the reason carries the basis read's own message", async (reply) => {
-		const expected = thrown(() => {
-			const basis = reply as unknown as { feePerDaGas: bigint }
-			return basis.feePerDaGas
-		})
+	test.each([undefined, null])("a %s reply misses with a fixed reason", async (reply) => {
 		predicted.mockResolvedValueOnce(reply as never)
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(), request())).toBeUndefined()
-		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: ${expected.message}`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
 	})
 })

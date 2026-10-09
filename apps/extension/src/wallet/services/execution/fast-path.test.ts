@@ -14,6 +14,7 @@
  * across both the test file and the module under test.
  */
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest"
+import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { FunctionCall, FunctionSelector, FunctionType, type AbiType } from "@aztec-labs/stdlib/abi"
@@ -390,7 +391,7 @@ describe("runFastPath", () => {
 		for (const name of ["balance_of_public", ""]) {
 			const split = rehydrateOptimizablePrefix([rpcShapedPublicStaticCall({ name, selector: TOTAL_SUPPLY_SELECTOR })])
 			const refused = await rejectionOf(runFastPath(makeDeps({ optimizableCalls: split!.optimizableCalls }).deps))
-			expect(refused.constructor).toBe(Error)
+			expect(refused.constructor).toBe(ScopeViolationError)
 			expect(refused.message).toBe(BINDING_REFUSAL)
 		}
 		expect(simulateViaNodeMock).not.toHaveBeenCalled()
@@ -405,7 +406,7 @@ describe("runFastPath", () => {
 		const call = rehydrateOptimizablePrefix([rpcShapedPublicStaticCall()])!.optimizableCalls[0]
 		;(call as { name?: string }).name = undefined
 		const refused = await rejectionOf(bindOptimizableCalls({} as never, fakeResolver() as never, [call]))
-		expect(refused.constructor).toBe(Error)
+		expect(refused.constructor).toBe(ScopeViolationError)
 		expect(refused.message).toBe(BINDING_REFUSAL)
 	})
 

@@ -32,7 +32,7 @@ import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { IPXE } from "@nulo/aztec-runtime/pxe"
-import { ContractNotRegisteredError } from "@nulo/extension-messaging/errors"
+import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { Action, AddPrivateAuthwitAction, AddPublicAuthwitAction, CallAuthwitContent, EncodedCallAuthwitContent } from "./spec"
 
 const LOG_SOURCE = "ContractResolver"
@@ -87,8 +87,8 @@ export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", a
 
 /** The refusal names the policy only: the claimed name, the resolved function and the target are
  *  request values, and the message reaches records and log lines that no redactor can scrub. */
-function selectorBindingRefusal(policy: SelectorBindingPolicy): Error {
-	return new Error(`Scope violation: ${policy.label} does not match selector's function`)
+function selectorBindingRefusal(policy: SelectorBindingPolicy): ScopeViolationError {
+	return new ScopeViolationError(`Scope violation: ${policy.label} does not match selector's function`)
 }
 
 /** Scope checks authorize a dApp call by its name, execution dispatches its selector: refuse

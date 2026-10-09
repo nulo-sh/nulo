@@ -32,10 +32,9 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { BalanceUpdateContent, type TaskService } from "@/wallet/services/task/service"
 import type { BalanceProjector, ProjectedBalance } from "./balance-projector"
 import type { BalanceRepository } from "./balance-repository"
-import { boundSyncFailureMessage, type TokenBalanceRaw } from "./spec"
+import { BALANCE_BATCH_SIZE, boundSyncFailureMessage, type TokenBalanceRaw } from "./spec"
 
 const TICK_INTERVAL_MS = 1000
-const BATCH_SIZE = 12
 /** A transient projection failure is retried this many times, each after the delay, before it is
  *  persisted as a failure like any other. Both live in memory only: a retry pending when the SW
  *  dies is simply not made, and the row waits for its next trigger. */
@@ -176,7 +175,7 @@ export class BalanceJobQueue {
 			while (this.queue.length) {
 				const firstAccount = this.queue.peek()!.account
 				const batch: TokenBalanceRaw[] = []
-				while (this.queue.peek()?.account === firstAccount && batch.length < BATCH_SIZE) {
+				while (this.queue.peek()?.account === firstAccount && batch.length < BALANCE_BATCH_SIZE) {
 					batch.push(this.queue.dequeue()!)
 				}
 				await this.syncBatch(batch)
