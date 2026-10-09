@@ -1,7 +1,7 @@
 ---
 plan: incoming-transfers
 tier: mid
-status: draft (awaiting orchestrator approval)
+status: approved (orchestrator, 2026-10-09); Arc 1 in implementation
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -769,8 +769,7 @@ not verify the witness. Nothing in this plan widens that assumption.
   assumption: dash on failure; "Show fee" on every open.
 - A5 (OA-5). #138: newest public receipts first on a token's first scan. Working assumption: today's
   order; Phase 2.3 not built.
-- A6. Delivery topology: the common brief asks for one `gh stack`. Working assumption: a stack, as
-  § Delivery says, unless the orchestrator says otherwise.
+- A6. Delivery topology. Answered by the orchestrator: no stack; Arc 1 opens its own PR (D-orch-1).
 - A7 (OA-6). #142: whether a linked row shows its value as the link (the Tx hash row today) or a "View
   on <explorer>" text. Working assumption: the Tx hash row's treatment.
 
@@ -818,6 +817,21 @@ not verify the witness. Nothing in this plan widens that assumption.
   text; the Details Tx hash row the record names shows the hash as the link. A presentation question,
   so it went to the owner. Round 2: a default treatment would decide it without an answer, so the rows
   stay unchanged until OA-6 is answered.
+- **D-orch-1, no stack.** Orchestrator decision at approval, overriding § Delivery's mechanics: Arc 1
+  opens its own PR against `dev` (`gh pr create --base dev`, the title in the Delivery table), with no
+  `gh stack init` or `adopt`. Arcs 2 and 3 branch from Arc 1's branch and rebase onto `dev` after it
+  lands. Resolves A6.
+- **D-orch-2, Arc 1 only.** Orchestrator decision: nothing of Arcs 2 or 3 is built in this session; they
+  wait on decision page 4, charter C12 and the OWNER-ASKS answers (OA-1 to OA-6, now on the owner's
+  page 4). Arc 1 changes nothing a person sees; a phase that turns out to need a visible change sends
+  it to OWNER-ASKS.md and ships without it.
+- **D-orch-3, the unreviewed fix first.** Orchestrator decision: the lock-entry `deletersRunning` read
+  (§ Architecture #144 and #92 step 4, Phase 1.2 steps 3 and 12, Phase 1.3 step 3) was Codex's own
+  round-3 proposal and nobody re-reviewed it. Arc 1's first Codex round and the Opus review are each
+  asked, explicitly and first, whether the entry read plus the per-write `fenced()` read closes the
+  displaced-deleter race without a new one (a deleter that starts after entry, a count that never
+  decrements on a thrown section, an Allow whose reads span a watchdog handoff). Their answers are
+  recorded under § Audit verdicts before Phase 1.2's gate counts as passed.
 - **Unresolved:** I7 (storage dispatch order) is an inference neither reviewer could check from the
   tree; Phase 1.2's handoff rows prove the fence, not the browser's ordering.
 
