@@ -34,7 +34,9 @@ vi.mock("./fee/fee-strategy", async (importOriginal) => ({ ...(await importOrigi
 const predicted = vi.mocked(predictedWorstMinFees)
 const REASON = "tryConsumeTransferEstimate est-1: "
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
-const FULL_LADDER = ["getNetwork", "getNode", "predictedWorstMinFees", "getPendingForAccount"]
+const FULL_LADDER = ["getNetwork", "getLiveChainIdentity", "getNode", "predictedWorstMinFees", "getPendingForAccount"]
+const FPC: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
+const SPONSOR = { id: "fpc-1", type: 1, address: "0xsponsor", chainId: 7, isProtocol: true } as const
 
 function request(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, overrides: Partial<TransferRequest> = {}): TransferRequest {
 	return {
@@ -60,6 +62,8 @@ function entry(feeSettings: FeeSettings = { paymentMethod: { kind: "fj" } }, ove
 		amount: r.amount,
 		feeSettingsHash: fingerprintFeeSettings(feeSettings),
 		profileId: "p1",
+		chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
+		...(feeSettings.paymentMethod.kind === "fpc" ? { fpcIdentity: { ...SPONSOR } } : {}),
 		// (2,3) × the mocked default 7.
 		baseFeeFingerprint: "14:21",
 		primaryEndpointId: "e1",
@@ -90,6 +94,14 @@ function harness(o: { network?: Network; deps?: Partial<TransferEstimateReuseDep
 		getNode: vi.fn(async () => {
 			calls.push("getNode")
 			return { marker: "node" } as never
+		}),
+		getLiveChainIdentity: vi.fn(async () => {
+			calls.push("getLiveChainIdentity")
+			return { l1ChainId: 1, rollupVersion: 6 }
+		}),
+		getFpcInfo: vi.fn(async () => {
+			calls.push("getFpcInfo")
+			return { ...SPONSOR, profileId: "p1" } as never
 		}),
 		getPendingForAccount: vi.fn(() => {
 			calls.push("getPendingForAccount")
@@ -133,6 +145,14 @@ describe("the ladder's order and reasons", () => {
 		const e = entry()
 		expect(await consumeOnce(reuse, e, request())).toBe(e)
 		expect(calls).toEqual(FULL_LADDER)
+		expect(logDebug).not.toHaveBeenCalled()
+	})
+
+	test("an fpc hit reads the sponsor row after the chain and before the node", async () => {
+		const { reuse, logDebug } = harness()
+		const e = entry(FPC)
+		expect(await consumeOnce(reuse, e, request(FPC))).toBe(e)
+		expect(calls).toEqual(["getNetwork", "getLiveChainIdentity", "getFpcInfo", ...FULL_LADDER.slice(2)])
 		expect(logDebug).not.toHaveBeenCalled()
 	})
 
@@ -194,7 +214,7 @@ describe("the ladder's order and reasons", () => {
 	test("base fee changed stops before the pending read", async () => {
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(undefined, { baseFeeFingerprint: "999:999" }), request())).toBeUndefined()
-		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
+		expect(calls).toEqual(FULL_LADDER.slice(0, 4))
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee changed`]])
 	})
 
@@ -202,11 +222,11 @@ describe("the ladder's order and reasons", () => {
 		predicted.mockRejectedValueOnce(new Error("block not found"))
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(), request())).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getNode"])
+		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed: block not found`]])
 	})
 
-	test("getNode sits outside the fee catch: its rejection propagates", async () => {
+	test("the fee step's getNode sits outside its catch: a rejection there propagates", async () => {
 		const down = new Error("node down")
 		const { reuse } = harness({
 			deps: {
@@ -218,7 +238,7 @@ describe("the ladder's order and reasons", () => {
 		})
 		reuse.stash("est-1", entry())
 		await expect(reuse.tryConsume("est-1", request(), FENCE)).rejects.toBe(down)
-		expect(calls).toEqual(["getNetwork", "getNode"])
+		expect(calls).toEqual(FULL_LADDER.slice(0, 3))
 	})
 
 	test("a changed pending set is the last step", async () => {

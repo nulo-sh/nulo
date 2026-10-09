@@ -149,18 +149,20 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 })
 
 // The adapter is the only gate for persisted URLs (a pending tx's endpoint, from a backup too), so
-// its acceptance set and its refusal text are pinned input by input. It accepts userinfo and reads
-// the raw string, where the extension's schema refuses userinfo and validates a trimmed copy.
+// its acceptance set and its refusal text are pinned input by input. It reads the raw string, where
+// the extension's schema validates a trimmed copy.
 const OK = { ok: true } as const
+const USERINFO = { ok: false, reason: "userinfo is not permitted in an RPC URL" }
+const INVALID = { ok: false, reason: "not a valid URL" }
 const scheme = (s: string) => ({ ok: false, reason: `scheme "${s}:" not in allowlist (only https: and http://loopback are permitted)` })
 const loopbackOnly = (host: string) => ({ ok: false, reason: `http: only permitted for loopback hosts (got host="${host}")` })
 const ALLOWLIST: [string, unknown][] = [
 	["https://rpc.example.com", OK],
 	["HTTPS://RPC.EXAMPLE.COM/Path?Q=1", OK],
-	["https://a@b.example", OK],
-	["https://user:pass@b.example", OK],
-	["https://user@evil.com@safe.com", OK],
-	["http://user@localhost:8080", OK],
+	["https://a@b.example", USERINFO],
+	["https://user:pass@b.example", USERINFO],
+	["https://user@evil.com@safe.com", USERINFO],
+	["http://user@localhost:8080", USERINFO],
 	["https://@b.example", OK],
 	["http://localhost:8080", OK],
 	["HTTP://localhost:8080", OK],
@@ -181,10 +183,11 @@ const ALLOWLIST: [string, unknown][] = [
 	["http://127.0.0.2:8080", loopbackOnly("127.0.0.2")],
 	["http://0.0.0.0:8080", loopbackOnly("0.0.0.0")],
 	["http://[::ffff:127.0.0.1]:8080", loopbackOnly("[::ffff:7f00:1]")],
-	["https://rpc.example.com:65536", { ok: false, reason: "not a valid URL: https://rpc.example.com:65536" }],
-	["", { ok: false, reason: "not a valid URL: " }],
-	["https://rpc.example.com ", { ok: false, reason: "not a valid URL: https://rpc.example.com " }],
-	[" https://rpc.example.com", { ok: false, reason: "not a valid URL:  https://rpc.example.com" }],
+	["https://rpc.example.com:65536", INVALID],
+	["https://user:hunter2@rpc.example.com:65536", INVALID],
+	["", INVALID],
+	["https://rpc.example.com ", INVALID],
+	[" https://rpc.example.com", INVALID],
 	["ws://localhost:8080", scheme("ws")],
 	["javascript:alert(1)", scheme("javascript")],
 	["file:///etc/passwd", scheme("file")],
@@ -194,5 +197,14 @@ const ALLOWLIST: [string, unknown][] = [
 describe("isAllowedRpcUrl", () => {
 	test.each(ALLOWLIST)("%j → %j", (url, expected) => {
 		expect(isAllowedRpcUrl(url)).toEqual(expected)
+	})
+
+	// The userinfo and unparseable rows above pin constant reasons, so no credential can reach one.
+	test("no refusal reason echoes the URL", () => {
+		for (const [url] of ALLOWLIST) {
+			const result = isAllowedRpcUrl(url)
+			if (result.ok || url.trim() === "") continue
+			expect(result.reason).not.toContain(url.trim())
+		}
 	})
 })

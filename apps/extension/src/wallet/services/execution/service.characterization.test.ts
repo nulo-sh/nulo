@@ -141,7 +141,6 @@ describe("slot-for-executeSendTransaction", () => {
 			getPXE: vi.fn() as never,
 			getAccountContract: vi.fn() as never,
 			getPendingForAccount: vi.fn(() => []) as never,
-			getFpcInfo: vi.fn() as never,
 			logDebug: () => {},
 		})
 

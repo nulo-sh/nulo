@@ -754,13 +754,13 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 		const h = makeHarness({ getActiveProfile: vi.fn(async () => ({ id: "p-active" }) as never), ...overrides })
 		const txRequest = makeTxRequest() as { txContext: { gasSettings: { maxFeesPerGas: object } } }
 		txRequest.txContext.gasSettings.maxFeesPerGas = { feePerDaGas: 7n, feePerL2Gas: 11n }
-		Object.assign(h.built, { network, txRequest })
+		Object.assign(h.built, { network, txRequest, chainIdentity: { l1ChainId: 1, rollupVersion: 6 } })
 		return h
 	}
 
 	const stashed = (deps: TransferExecutorDeps) => (deps.estimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls as unknown[][]
 
-	test("the entry: the built fee, the primary by id, the active profile, the pending set, the build", async () => {
+	test("the entry: the built fee and chain pair, the primary by id, the active profile, the pending set, the build", async () => {
 		vi.useFakeTimers({ now: NOW, toFake: ["Date"] })
 		try {
 			const { executor, deps, built } = snapshotHarness()
@@ -778,6 +778,8 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 						feeSettingsHash: "fj|default",
 						// The active profile at stash time, not the fence's p1.
 						profileId: "p-active",
+						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
+						fpcIdentity: undefined,
 						// The built request's maxFeesPerGas; the node is never asked.
 						baseFeeFingerprint: "7:11",
 						primaryEndpointId: "e2",
@@ -800,6 +802,14 @@ describe("TransferExecutor.estimateFee: the reuse snapshot", () => {
 		} finally {
 			vi.useRealTimers()
 		}
+	})
+
+	test("an fpc entry carries the sponsor row the build paid with", async () => {
+		const row = { id: "fpc-1", type: 1, address: "0xsponsor", chainId: 7, isProtocol: true }
+		const { executor, deps, built } = snapshotHarness()
+		Object.assign(built, { fpcIdentity: row })
+		await executor.estimateFee(makeReq({ feeSettings: { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } } }))
+		expect((stashed(deps)[0][1] as { fpcIdentity?: unknown }).fpcIdentity).toBe(row)
 	})
 
 	test("a pending tx that lands during the profile read is in the snapshot", async () => {

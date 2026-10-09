@@ -183,7 +183,6 @@ function makeHarness(
 		getPXE: vi.fn(() => pxe as never),
 		getAccountContract: vi.fn(async () => account as never),
 		getPendingForAccount: vi.fn(() => [] as { hash: string }[]),
-		getFpcInfo: vi.fn(async () => ({ id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true }) as never),
 		buildAndEstimateValidated,
 		addTransaction: vi.fn(async () => ({}) as never),
 		recordPendingAuthwits: vi.fn(async () => {}),
@@ -1798,6 +1797,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 	const NOW = 1_700_000_000_000
 	const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
+	const FPC_ROW = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true }
 	const PRIMARY_SECOND = {
 		id: "net-1",
 		chainId: 7,
@@ -1819,10 +1819,11 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 	const stashed = (deps: DappSendExecutorDeps) =>
 		(deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls as unknown[][]
 
-	test("the entry: the built fee and chain pair, the primary by id, the active profile, the FPC row", async () => {
+	test("the entry: the built fee, chain pair and FPC row, the primary by id, the active profile", async () => {
 		vi.useFakeTimers({ now: NOW, toFake: ["Date"] })
 		try {
 			const { executor, deps, built } = snapshotHarness()
+			Object.assign(built, { fpcIdentity: FPC_ROW })
 			const result = await executor.estimateOperationFee(makeAztecOp(), FPC_SETTINGS as never)
 			const fingerprint = fingerprintOperation({
 				networkId: "net-1",
@@ -1847,7 +1848,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 						primaryEndpointId: "ep2",
 						primaryEndpointUrl: "https://primary",
 						pendingHashes: [],
-						fpcIdentity: { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true },
+						fpcIdentity: FPC_ROW,
 						txRequest: built.txRequest,
 						initializesAccount: true,
 						nonce: built.nonce,
@@ -1864,23 +1865,22 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		}
 	})
 
-	test("an fpc entry: a pending tx that lands during the FPC read is in the snapshot", async () => {
+	test("a pending tx that lands during the profile read is in the snapshot", async () => {
 		const pending: { hash: string }[] = [{ hash: "0xpending" }]
 		const { executor, deps } = snapshotHarness({
 			getPendingForAccount: vi.fn(() => [...pending]),
-			getFpcInfo: vi.fn(async () => {
+			getActiveProfile: vi.fn(async () => {
 				pending.push({ hash: "0xraced" })
-				return { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true } as never
+				return { id: "p-active" }
 			}),
 		})
 		await executor.estimateOperationFee(makeAztecOp(), FPC_SETTINGS as never)
 		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending", "0xraced"])
 	})
 
-	test("an fj entry reads no FPC row and carries no fpcIdentity", async () => {
+	test("an fj entry carries no fpcIdentity", async () => {
 		const { executor, deps } = snapshotHarness()
 		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
-		expect(deps.getFpcInfo).not.toHaveBeenCalled()
 		expect((stashed(deps)[0][1] as { fpcIdentity?: unknown }).fpcIdentity).toBeUndefined()
 	})
 
@@ -2111,47 +2111,49 @@ describe("DappSendExecutor: each estimate cancel checkpoint", () => {
 	})
 })
 
+/** A real reuse cache over the harness's own lookups, whose node's min-fee prediction rejects and
+ *  whose sponsor read returns `row`, the live row the build's snapshot copied. The folded pipeline
+ *  (fpc's discovery) reports `0xa` at the estimate and `confirmDiscovered` on the rebuild. */
+function realReuseHarness(confirmDiscovered: string[]) {
+	const row = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true }
+	const reuseLog = vi.fn()
+	const feeNode = {
+		getPredictedMinFees: vi.fn(async () => {
+			throw new Error("block not found")
+		}),
+		getCurrentMinFees: vi.fn(),
+	}
+	const deps: { current?: DappSendExecutorDeps } = {}
+	const reuse = new OperationEstimateReuse({
+		getNetwork: (id) => (deps.current as DappSendExecutorDeps).getNetwork(id),
+		getNode: async () => feeNode as never,
+		getLiveChainIdentity: async () => ({ l1ChainId: 1, rollupVersion: 6 }),
+		getFpcInfo: async () => row as never,
+		getPendingForAccount: (account) => (deps.current as DappSendExecutorDeps).getPendingForAccount(account),
+		logDebug: reuseLog,
+	})
+	const built: { current?: unknown } = {}
+	const perBuild = [["0xa"], confirmDiscovered]
+	const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
+		const probe = args[3] as { collected: unknown[]; discovered: unknown[] }
+		for (const messageHash of perBuild.shift() ?? []) {
+			probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash } })
+			probe.discovered.push({ messageHash })
+		}
+		return built.current
+	})
+	const h = makeHarness({ operationEstimateReuse: reuse, buildAndEstimateFolded })
+	deps.current = h.deps
+	built.current = Object.assign(h.built, { chainIdentity: { l1ChainId: 1, rollupVersion: 6 }, fpcIdentity: { ...row } })
+	return { ...h, feeNode, reuseLog, row }
+}
+
 describe("DappSendExecutor — a confirm whose reuse fee read fails", () => {
 	const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
 	const PREVIEW = { interactionId: "i-1", index: 0 }
 
-	/** A real reuse cache over the harness's own lookups, whose node's min-fee prediction rejects. The
-	 *  folded pipeline (fpc's discovery) reports `0xa` at the estimate and `confirmDiscovered` on the rebuild. */
-	function failingReadHarness(confirmDiscovered: string[]) {
-		const reuseLog = vi.fn()
-		const feeNode = {
-			getPredictedMinFees: vi.fn(async () => {
-				throw new Error("block not found")
-			}),
-			getCurrentMinFees: vi.fn(),
-		}
-		const deps: { current?: DappSendExecutorDeps } = {}
-		const reuse = new OperationEstimateReuse({
-			getNetwork: (id) => (deps.current as DappSendExecutorDeps).getNetwork(id),
-			getNode: async () => feeNode as never,
-			getLiveChainIdentity: async () => ({ l1ChainId: 1, rollupVersion: 6 }),
-			getFpcInfo: (id) => (deps.current as DappSendExecutorDeps).getFpcInfo(id),
-			getPendingForAccount: (account) => (deps.current as DappSendExecutorDeps).getPendingForAccount(account),
-			logDebug: reuseLog,
-		})
-		const built: { current?: unknown } = {}
-		const perBuild = [["0xa"], confirmDiscovered]
-		const buildAndEstimateFolded = vi.fn(async (...args: unknown[]) => {
-			const probe = args[3] as { collected: unknown[]; discovered: unknown[] }
-			for (const messageHash of perBuild.shift() ?? []) {
-				probe.collected.push({ kind: "add_private_authwit", content: { kind: "message_hash", messageHash } })
-				probe.discovered.push({ messageHash })
-			}
-			return built.current
-		})
-		const h = makeHarness({ operationEstimateReuse: reuse, buildAndEstimateFolded })
-		deps.current = h.deps
-		built.current = Object.assign(h.built, { chainIdentity: { l1ChainId: 1, rollupVersion: 6 } })
-		return { ...h, feeNode, reuseLog }
-	}
-
 	test("the read rejects: the reuse misses, and the confirm rebuilds through discovery and sends", async () => {
-		const h = failingReadHarness(["0xa"])
+		const h = realReuseHarness(["0xa"])
 		const op = () => makeAztecOp({ feeSettings: FPC_SETTINGS })
 		const { estimateId } = await h.executor.estimateOperationFee(op(), FPC_SETTINGS as never, undefined, PREVIEW as never)
 		expect(estimateId).toBeDefined()
@@ -2166,7 +2168,7 @@ describe("DappSendExecutor — a confirm whose reuse fee read fails", () => {
 	})
 
 	test("the rebuild is held to the preview: an authorization the preview never showed is refused unsent", async () => {
-		const h = failingReadHarness(["0xa", "0xb"])
+		const h = realReuseHarness(["0xa", "0xb"])
 		const op = () => makeAztecOp({ feeSettings: FPC_SETTINGS })
 		const { estimateId } = await h.executor.estimateOperationFee(op(), FPC_SETTINGS as never, undefined, PREVIEW as never)
 
@@ -2177,5 +2179,31 @@ describe("DappSendExecutor — a confirm whose reuse fee read fails", () => {
 		expect(h.reuseLog.mock.calls).toEqual([["operation estimate reuse rejected: base fee fetch failed"]])
 		expect(h.proveAndSend).not.toHaveBeenCalled()
 		expect(h.deps.addTransaction).not.toHaveBeenCalled()
+	})
+})
+
+describe("DappSendExecutor — a sponsor row edited after the build read it", () => {
+	const FPC_SETTINGS = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }
+	const PREVIEW = { interactionId: "i-1", index: 0 }
+
+	test("the entry keeps the row the build paid with, so the confirm misses on the edit and rebuilds", async () => {
+		const h = realReuseHarness(["0xa"])
+		const build = h.buildAndEstimateFolded.getMockImplementation() as (...args: unknown[]) => Promise<unknown>
+		h.buildAndEstimateFolded.mockImplementationOnce(async (...args: unknown[]) => {
+			const built = await build(...args)
+			h.row.address = "0xedited"
+			return built
+		})
+		const stash = vi.spyOn(h.deps.operationEstimateReuse, "stash")
+		const op = () => makeAztecOp({ feeSettings: FPC_SETTINGS })
+		const { estimateId } = await h.executor.estimateOperationFee(op(), FPC_SETTINGS as never, undefined, PREVIEW as never)
+		expect((stash.mock.calls[0][1] as { fpcIdentity?: { address: string } }).fpcIdentity?.address).toBe("0xfpc")
+
+		await h.executor.executeAztecSendTx(op(), ORIGIN, undefined, undefined, FENCE, APPROVAL(estimateId as string))
+
+		expect(h.reuseLog.mock.calls).toEqual([["operation estimate reuse rejected: fpc identity drift"]])
+		expect(h.feeNode.getPredictedMinFees).not.toHaveBeenCalled()
+		expect(h.buildAndEstimateFolded).toHaveBeenCalledTimes(2)
+		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
 	})
 })

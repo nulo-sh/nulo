@@ -10,7 +10,7 @@
  *
  * Every node is built through the transport rule (`rpcTransportVerdict`). It is the only gate
  * for a URL that never crossed the extension's schema, such as a persisted endpoint. Unlike the
- * schema it accepts userinfo, and it judges the raw string, not a trimmed copy.
+ * schema it judges the raw string, not a trimmed copy.
  */
 
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
@@ -43,17 +43,18 @@ export const SILENT_RPC_LOG: Logger = {
 	getBindings: () => ({}),
 }
 
-/** The transport rule on the raw string; each refusal `reason` embeds the URL, host or scheme it
- *  refused. */
+/** The transport rule on the raw string. A refusal `reason` names at most the host or scheme it
+ *  refused, never the URL: an unparseable string can still carry credentials. */
 export function isAllowedRpcUrl(rpcUrl: string): { ok: true } | { ok: false; reason: string } {
 	let parsed: URL
 	try {
 		parsed = new URL(rpcUrl)
 	} catch {
-		return { ok: false, reason: `not a valid URL: ${rpcUrl}` }
+		return { ok: false, reason: "not a valid URL" }
 	}
 	const verdict = rpcTransportVerdict(parsed)
 	if (verdict.allowed) return { ok: true }
+	if (verdict.refusal === "userinfo") return { ok: false, reason: "userinfo is not permitted in an RPC URL" }
 	if (verdict.refusal === "non-loopback-http") {
 		return { ok: false, reason: `http: only permitted for loopback hosts (got host="${verdict.host}")` }
 	}

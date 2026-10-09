@@ -2,9 +2,9 @@
  * Transfer estimate-reuse cache — the one-shot "estimate on the Send
  * popup, reuse the built TxRequest on Confirm" subsystem.
  *
- * Extracted verbatim from the execution facade. The validation ladder in
- * `tryConsume` is the contract: ANY drift between estimate time and
- * confirm time (inputs, endpoint, base fee, pending set, TTL) rejects
+ * The validation ladder in `tryConsume` is the contract: ANY drift between
+ * estimate time and confirm time (inputs, endpoint, chain identity, sponsor
+ * row, base fee, pending set, TTL) rejects
  * reuse and the caller falls back to a full rebuild. A profile other than
  * the executing fence's is not drift but a session that ended: it throws,
  * so no rebuild ever runs under whichever profile is active instead.
@@ -21,13 +21,17 @@ import { GasFees } from "@aztec-labs/stdlib/gas"
 import { type MinFeeNode, predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
+import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { TransferType } from "@/wallet/services/transaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 import {
+	type ChainIdentity,
+	chainIdentityDrift,
 	ESTIMATE_REUSE_TTL_MS,
 	fingerprintBaseFee,
+	fpcIdentityDrift,
 	pendingHashesChanged,
 	primaryEndpointMoved,
 	type ReuseEntryBase,
@@ -91,6 +95,9 @@ export type TransferEstimateReuseEntry = ReuseEntryBase & {
 export interface TransferEstimateReuseDeps {
 	getNetwork(networkId: string): Promise<Network>
 	getNode(chainId: number): Promise<MinFeeNode>
+	/** Asserts the live chain against the network row and returns its raw pair. */
+	getLiveChainIdentity(network: Network): Promise<ChainIdentity>
+	getFpcInfo(fpcId: string): Promise<FpcInfo>
 	getPendingForAccount(account: string): { hash: string }[]
 	sequenceEpoch(chainId: number, account: string): number
 	logDebug(msg: string): void
@@ -114,8 +121,9 @@ export class TransferEstimateReuse {
 	}
 
 	/** Pop a cached estimate if (a) the id exists, (b) inputs match
-	 *  byte-for-byte, (c) the SW's current view of base fee + primary
-	 *  endpoint matches the snapshot, and (d) the entry is fresh (TTL).
+	 *  byte-for-byte, (c) the SW's current view of primary endpoint, chain
+	 *  identity, sponsor row and base fee matches the snapshot, and (d) the
+	 *  entry is fresh (TTL).
 	 *  Any mismatch ⇒ delete + return undefined; caller falls back to a
 	 *  full rebuild — except an entry stashed under another profile than
 	 *  `fence`'s, which throws {@link SessionEndedError}. Single-shot: the
@@ -158,26 +166,13 @@ export class TransferEstimateReuse {
 			return this.reject(estimateId, "primary endpoint changed")
 		}
 
-		// Base fee snapshot. Compare the cached entry's fingerprint
-		// (derived from the txRequest's actual `maxFeesPerGas`) against
-		// `predictedWorstMinFees * multiplier` — that's what a fresh build
-		// would have finalized (same basis + same GasFees.mul as
-		// `finalizeGasLimits`). If the basis hasn't drifted, they match.
-		const node = await this.deps.getNode(network.chainId)
-		try {
-			const basis = await predictedWorstMinFees(node)
-			const multiplier = reuseFeeMultiplier(inputs.feeSettings.priorityLevel)
-			// Re-wrap before multiplying: the basis components may arrive as a bare
-			// `{feePerDaGas, feePerL2Gas}` from a minimal node, and the fingerprint
-			// must reproduce the exact `GasFees.mul` product the build finalized.
-			const expectedFingerprint = fingerprintBaseFee(new GasFees(basis.feePerDaGas, basis.feePerL2Gas).mul(multiplier))
-			if (expectedFingerprint !== entry.baseFeeFingerprint) {
-				return this.reject(estimateId, "base fee changed")
-			}
-		} catch (error) {
-			// Conservative: if we can't verify, don't reuse.
-			return this.reject(estimateId, `base fee fetch failed: ${getErrorMessage(error)}`)
-		}
+		const chainDrift = await chainIdentityDrift(entry.chainIdentity, () => this.deps.getLiveChainIdentity(network))
+		if (chainDrift) return this.reject(estimateId, chainDrift)
+		const fpcDrift = await fpcIdentityDrift(inputs.feeSettings.paymentMethod, entry.fpcIdentity, (id) => this.deps.getFpcInfo(id))
+		if (fpcDrift) return this.reject(estimateId, fpcDrift)
+
+		const feeDrift = await this.baseFeeDrift(network, inputs, entry)
+		if (feeDrift) return this.reject(estimateId, feeDrift)
 
 		// Pending-tx drift. New same-account pending txs since estimate
 		// can consume notes the cached private-transfer TxRequest selected.
@@ -195,6 +190,24 @@ export class TransferEstimateReuse {
 		}
 
 		return entry
+	}
+
+	/** Compares the entry's fingerprint (derived from the txRequest's actual `maxFeesPerGas`) against
+	 *  `predictedWorstMinFees * multiplier`, which is what a fresh build would finalize (same basis,
+	 *  same `GasFees.mul` as `finalizeGasLimits`). A read that fails is a miss: unverifiable, not reused. */
+	private async baseFeeDrift(network: Network, inputs: TransferRequest, entry: TransferEstimateReuseEntry): Promise<string | undefined> {
+		const node = await this.deps.getNode(network.chainId)
+		try {
+			const basis = await predictedWorstMinFees(node)
+			const multiplier = reuseFeeMultiplier(inputs.feeSettings.priorityLevel)
+			// Re-wrap before multiplying: the basis components may arrive as a bare
+			// `{feePerDaGas, feePerL2Gas}` from a minimal node, and the fingerprint
+			// must reproduce the exact `GasFees.mul` product the build finalized.
+			const expectedFingerprint = fingerprintBaseFee(new GasFees(basis.feePerDaGas, basis.feePerL2Gas).mul(multiplier))
+			return expectedFingerprint === entry.baseFeeFingerprint ? undefined : "base fee changed"
+		} catch (error) {
+			return `base fee fetch failed: ${getErrorMessage(error)}`
+		}
 	}
 
 	private reject(estimateId: string, reason: string): undefined {
