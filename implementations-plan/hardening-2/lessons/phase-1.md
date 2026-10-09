@@ -77,7 +77,8 @@ Method (scratch, never committed): a detached worktree at `f5ca160` under the la
 
 - The 25 named files: 23 passed, 1 skipped by design (`tx-sendTx-delegated-authwit`: it needs the testnet standard contracts, gated on `NULO_E2E_STANDARD_CONTRACTS=1`), 1 failed: `data-privateEvents`, both tests. The wallet answered `INVALID_PARAMS` where the test expects the scope refusal.
 - Cause: the playground's `getPrivateEvents` button sent a stub the stock schema refuses (no `abiType`, an `Fr` as the event selector, `fromBlock: 0` where block numbers start at 1), and the parse now runs before the scope check the test exercises. Not a wallet regression: the call was malformed on the wire. Fixed in the playground (a schema-valid query, as the stock SDK types it); `data-privateEvents` then passed 2/2 at retry 0. This is the gate doing its job: no unit fixture could have shown it.
-- The full network suite (116 files) is not part of the phase gate; CI runs it on the PR.
+- The full network suite (116 files) is not part of the phase gate; it was run once on the reviewed head (`45b8ad0`, code-identical to the PR head but for one comment), Chrome, retry 0, in its two pools: prover-on 101 of 106 files passed (148 tests) with 5 env-gated skips, the extra file being the scratch screenshot spec; proverless (`NULO_E2E_PROVERLESS=1`, 11 files that refuse to run without it) 11 of 11 (36 tests).
+- Screenshots: a scratch spec (never committed) granted `transaction`, wrapped the playground page's `JSON.stringify` once so the sealed `sendTx` carried a bad selector, asserted the `INVALID_PARAMS` envelope, the record's outcome and context, and the card, then shot the History card, Home's recent activity and the record page in both themes.
 
 ## Review rounds
 

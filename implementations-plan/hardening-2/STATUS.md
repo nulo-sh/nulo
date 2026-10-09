@@ -14,3 +14,4 @@
 - 2026-10-09: final-head gate pass on c19f179 (rebased): lint, typecheck:all, test:all, test:ci-gating, lint:actions, check:plans green, test:release zip-only; smoke Chrome 44/Firefox 46 files; the eight network files 8/8 on both; zero violations.
 - 2026-10-09: arc 1 phases 1-2 built and committed (OA-1 C, OA-2 B, OA-3 B); lint, typecheck:all, test (10485), test:all, test:ci-gating green; red on base f5ca160: 20/20 newly closed rows red, 7/7 preservation green; phase 2 cross-store row red on base.
 - 2026-10-09: arc 1 review converged (Codex round 2: one low comment finding, applied; Opus: six findings, five fixed, O3 deferred). Phase 1 network gate 24/25 green after the playground query fix (1 env-gated skip); phase 2 gate 4/4 green.
+- 2026-10-09: full network suite green on Chrome at retry 0 (prover-on 101/106 + 5 env-gated skips; proverless 11/11); final lint, typecheck:all, test:all, test:ci-gating green.
