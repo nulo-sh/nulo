@@ -180,14 +180,14 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	account: z.string(),
 	nonce: z.string(),
 	// AccountFeePaymentMethodOptions is a NUMERIC enum in @aztec-labs/entrypoints —
-	// rows store 0|1|2. Number-shaped (not nativeEnum) so an upstream member
+	// rows store 0|1|2. Number-shaped (not an enum schema) so an upstream member
 	// addition cannot false-reject stored rows. @aztec-coupled: see UPDATE.md.
 	feePaymentMethod: z.custom<AccountFeePaymentMethodOptions>((v) => typeof v === "number"),
 	hash: z.string(),
 	createdAt: z.number(),
 	updatedAt: z.number(),
-	status: z.nativeEnum(TxStatus),
-	executionResult: z.nativeEnum(TxExecutionResult).optional(),
+	status: z.enum(TxStatus),
+	executionResult: z.enum(TxExecutionResult).optional(),
 	block: z.object({ hash: z.string(), number: z.number() }).optional(),
 	fee: z.string().optional(),
 	estimatedFee: z.string().optional(),

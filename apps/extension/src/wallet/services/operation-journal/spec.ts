@@ -244,7 +244,7 @@ export const OperationRecordSchema: z.ZodType<OperationRecord> = z.object({
 	amountRaw: z.string().optional(),
 	recipientAddress: z.string().optional(),
 	contractAddress: z.string().optional(),
-	transferType: z.nativeEnum(TransferType).optional(),
+	transferType: z.enum(TransferType).optional(),
 })
 
 /**
@@ -268,7 +268,7 @@ export const NewOperationInputSchema: z.ZodType<NewOperationInput> = z
 		amountRaw: z.string().optional(),
 		recipientAddress: z.string().optional(),
 		contractAddress: z.string().optional(),
-		transferType: z.nativeEnum(TransferType).optional(),
+		transferType: z.enum(TransferType).optional(),
 		initialStage: InitialStageSchema.optional(),
 	})
 	.refine(

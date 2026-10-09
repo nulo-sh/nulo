@@ -184,7 +184,7 @@ export const AccountSchema: z.ZodType<Account> = z.object({
 	// Fr construction, or one near 2^53 where `max + 1 === max` silently wedges new-account creation.
 	// Bound it to a nonnegative safe integer whose `+ 1` is still exactly representable.
 	index: z.number().int().nonnegative().lt(Number.MAX_SAFE_INTEGER),
-	type: z.nativeEnum(AccountType),
+	type: z.enum(AccountType),
 	// Derivation chain input — canonical u32, bounded like `index` (a hostile backup must not
 	// smuggle a value the derivation would reject or truncate).
 	l1ChainId: z.number().int().nonnegative().max(0xffffffff),
