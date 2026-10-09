@@ -1091,7 +1091,8 @@ surface this lane could widen is the CI gate itself, and the shipped bundle or m
     (`simulateTx`, `executeUtility`, an auto-approved send) no longer fills the always-on
     `warn`/`error` buffer that the user's log export carries. A windowed send's fee estimate and
     authorization preview still log their failure at `error` from the execute window
-    (`popup/windows/execute/index.vue`), unchanged and once per window the person opens.
+    (`popup/windows/execute/index.vue`), unchanged: once per failed estimate or preview, each needing
+    a window the person opened.
   - The `scope_refused` kind is recorded on the dApp send path only. A first-party Send can never be
     labelled "The app asked for more than you allowed", and a unit test pins that.
 - **34, the class id: parked.** Both available fixes change which dApp registrations succeed, so the
@@ -1329,13 +1330,19 @@ the first-party Send keeps its kind; both refusal log sites at `debug`.
 |---|---|---|
 | A1-O1 | Material. `packages/wallet-bridge/README.md`, the dApp-facing contract, says a `SCOPE_VIOLATION` comes before any window and is fixed by a wider manifest; a selector mismatch is refused at execution and no manifest fixes it | **Accepted.** One paragraph added (`721fe5c`) |
 | A1-O2 | Minor. `wallet-core/src/jobs/types.ts`'s producers list names only wallet-sdk for `scope_refused` | **Accepted** (`721fe5c`) |
-| A1-O3 | Minor. § Security claims a spamming page no longer fills the `error` buffer; a windowed send's fee estimate and authorization preview still `console.error` from the execute window | **Accepted.** The claim is narrowed to windowless calls; the window's lines are pre-existing and once per opened window |
+| A1-O3 | Minor. § Security claims a spamming page no longer fills the `error` buffer; a windowed send's fee estimate and authorization preview still `console.error` from the execute window | **Accepted.** The claim is narrowed to windowless calls; the window's lines are pre-existing and need an opened window |
 
 Checked and holds (Opus): nothing relied on the refusal being a plain `Error` (the one
 `instanceof WalletError` branch, the port rebuild, batch propagation, the fast path's fallback);
 revoke-authwits and registry-toggle also use `markFailedUnlessCancelled` but build calls by name and
 never reach the binding check; the raw view gains only the `name`; the purge-by-key widening trusts
 nothing new from values; no assertion weaker than at base.
+
+**Round 2: Codex (same session, resumed with the fixes), `approve with nits`, "no new material
+finding".** One minor: the narrowed § Security sentence bounded the window's log lines as "once per
+window", but a fee-settings change in one window re-runs the estimate, and each failure logs.
+**Accepted**, reworded. The loop converged: every round-1 fix held, and no regression was found in
+the arc diff.
 
 ## Post-implementation
 

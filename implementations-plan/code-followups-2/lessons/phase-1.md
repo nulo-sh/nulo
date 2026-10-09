@@ -45,4 +45,7 @@ Every gate, consult and deviation, in order. Paths are repo-relative.
   minor findings, all verified and accepted (`721fe5c`, plan): the wallet-bridge README's dApp-facing
   contract named only the grant check; the job-error producers list; § Security's log claim narrowed
   to windowless calls, since the execute window's own fee-estimate and preview lines still log at
-  `error` (pre-existing, once per opened window).
+  `error` (pre-existing; each needs a window the person opened).
+- Round 2 (Codex, same session resumed with `ba12c4e` + `721fe5c`): **approve with nits**, "no new
+  material finding". One minor plan wording (a fee-settings change re-runs the window's estimate,
+  so "once per window" was wrong), accepted. Loop converged.
