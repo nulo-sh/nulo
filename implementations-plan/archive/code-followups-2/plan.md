@@ -25,7 +25,7 @@ issues: [85, 95, 102, 120, 121, 145, 150, 155, 169, 173, 175, 176, 177, 185, 187
 - **Open items**: #155, #169, #185, #210, #239, GHSA-6cj6-wp78-52mc.
   - #155: the Node-side progress-stall watchdog and per-fork memory cap (entry 108).
   - #169: `resolve-ports` (never this lane's); a group whose leader exited before teardown, and the persisted-lock reaper, both need ownership evidence; nothing proves `--slots-in-an-epoch 1` (entries 125, 126).
-  - #185: CLAUDE.md's release-runbook half, wrangler's `routes` rule and the refusal of domain changes, held while #235 edits CLAUDE.md (entry 149).
+  - #185: CLAUDE.md's release-runbook half, wrangler's `routes` rule and the refusal of domain changes, held during the lane because #235 edited CLAUDE.md; #235 has merged (entry 149).
   - #210: FormPopup's raw order, non-contiguous orders after a re-open and the per-owner reducer policies, each visible and so the owner's call (entry 186).
   - #239: CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins (found in Phase 3.2).
   - GHSA-6cj6-wp78-52mc: fixed by #238; publish it with the release that carries #238 (entry 142).
