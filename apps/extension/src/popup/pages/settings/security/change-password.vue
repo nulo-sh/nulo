@@ -64,7 +64,7 @@ const isAllowedToChange = computed(
 
 const isLoading = ref(false)
 const handleChangePassword = async () => {
-	if (!isAllowedToChange.value) return
+	if (!isAllowedToChange.value || isLoading.value) return
 
 	isLoading.value = true
 	try {

@@ -86,3 +86,60 @@ describe("recovery phrase — Enter does what the focused control says", () => {
 		expect(exportMnemonic).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe("recovery phrase — one retrieve per press, none after the page left", () => {
+	function deferMnemonic() {
+		let resolve: (words: string[]) => void = () => {}
+		exportMnemonic.mockImplementationOnce(() => new Promise<string[]>((r) => (resolve = r)))
+		return (words: string[]) => resolve(words)
+	}
+
+	test("two clicks on Retrieve decrypt the phrase once", async () => {
+		const w = await mountAgreedWithPassword()
+		deferMnemonic()
+		retrieve(w).click()
+		retrieve(w).click()
+		await flushPromises()
+		expect(exportMnemonic).toHaveBeenCalledTimes(1)
+	})
+
+	test("a retrieve settling after unmount sets no phrase and arms no close timer", async () => {
+		const w = await mountAgreedWithPassword()
+		const settle = deferMnemonic()
+		retrieve(w).click()
+		await flushPromises()
+		vi.useFakeTimers()
+		try {
+			wrappers.splice(wrappers.indexOf(w), 1)
+			w.unmount()
+			const words = ["alpha", "bravo", "charlie"]
+			const join = vi.spyOn(words, "join")
+			settle(words)
+			await flushPromises()
+			expect(join).not.toHaveBeenCalled()
+			expect(vi.getTimerCount()).toBe(0)
+			vi.advanceTimersByTime(5 * 60_000)
+			expect(router.push).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("(control) a retrieve settling while mounted reveals the phrase and arms one countdown", async () => {
+		const w = await mountAgreedWithPassword()
+		const settle = deferMnemonic()
+		retrieve(w).click()
+		await flushPromises()
+		vi.useFakeTimers()
+		try {
+			settle(["alpha", "bravo", "charlie"])
+			await flushPromises()
+			expect(w.findComponent({ name: "SecretRevealCard" }).props("value")).toBe("alpha bravo charlie")
+			expect(vi.getTimerCount()).toBe(2)
+			vi.advanceTimersByTime(5 * 60_000)
+			expect(router.push).toHaveBeenCalledWith("/popup/settings/security/export")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})

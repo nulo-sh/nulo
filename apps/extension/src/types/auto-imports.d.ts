@@ -277,14 +277,12 @@ declare global {
   const resolveFromDisplay: typeof import('../utils/received-display').resolveFromDisplay
   const resolvePasskeyCredential: typeof import('../composables/full-backup-restore').resolvePasskeyCredential
   const resolveReceivedType: typeof import('../utils/received-display').resolveReceivedType
-  const resolveRestoredActiveNetworkId: typeof import('../utils/full-backup-helpers').resolveRestoredActiveNetworkId
   const resolveRestoredActiveNetworkIdByChain: typeof import('../utils/full-backup-helpers').resolveRestoredActiveNetworkIdByChain
   const restoreAccountStateStage: typeof import('../composables/full-backup-restore').restoreAccountStateStage
   const restoreAccountsAndFilterOwnedSlices: typeof import('../composables/full-backup-restore').restoreAccountsAndFilterOwnedSlices
   const restoreAccountsStage: typeof import('../composables/full-backup-restore').restoreAccountsStage
   const restoreActiveNetworkPointer: typeof import('../composables/full-backup-restore').restoreActiveNetworkPointer
   const restoreCtaBlocked: typeof import('../utils/full-backup-ctas').restoreCtaBlocked
-  const restoreNetworksStage: typeof import('../composables/full-backup-restore').restoreNetworksStage
   const restoreServiceSlices: typeof import('../composables/full-backup-restore').restoreServiceSlices
   const restoreTokensStage: typeof import('../composables/full-backup-restore').restoreTokensStage
   const retryAccountStateStage: typeof import('../composables/full-backup-restore').retryAccountStateStage
