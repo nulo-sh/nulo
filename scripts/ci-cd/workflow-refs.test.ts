@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..", "..")
-const SCOPE = ["apps", "packages", "scripts", ".github", ".githooks"]
+const SCOPE = ["apps", "packages", "infra", "scripts", ".github", ".githooks"]
 const SKIPPED = /\.(md|json|svg)$/
 const SELF = "scripts/ci-cd/workflow-refs.test.ts"
 

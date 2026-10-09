@@ -607,7 +607,7 @@ layer, a dependency, a storage shape or a new message. Paths below are relative 
     - `publish-firefox-amo-run.ts`: `fail`, and both `::add-mask::` lines. Every ordinary line that
       carries AMO text goes through `plain`, as the Chrome script's `say` does: the validation errors,
       and the `check ok`, `version ok` and `published` lines, which print AMO's `status`, `channel`
-      and `fileStatus` strings (`publish-firefox-amo.ts` accepts any string there);
+      and `fileStatus` strings;
     - `lock-version-run.ts`: `fail`, and the top-level catch, which prints GitHub GraphQL error text;
     - `auto-unstick-run.ts`: the flag warning;
     - `scripts/publish/check-digests.ts`: the failure lines;
@@ -616,9 +616,9 @@ layer, a dependency, a storage shape or a new message. Paths below are relative 
   - `audit-gate.ts` re-exports `command` and `plain` only if a caller outside the file uses them.
     Recon found only its test, whose escaping case moves to the shared module's test.
 - **3.4 Workflow-reference guard (163).**
-  - `scripts/ci-cd/workflow-refs.test.ts` uses `git grep -n -I -E` over tracked files under `apps/`,
-    `packages/`, `scripts/`, `.github/` and `.githooks/`, excluding `*.md`, `*.json`, `*.svg` and the
-    guard's own file.
+  - `scripts/ci-cd/workflow-refs.test.ts` reads the tracked text files under `apps/`, `packages/`,
+    `infra/`, `scripts/`, `.github/` and `.githooks/` (`git ls-files`, JavaScript regexes: D-arc3-2),
+    excluding `*.md`, `*.json`, `*.svg` and the guard's own file.
   - It refuses review or audit findings and rounds (`review finding`, `review CONFIRMED`,
     `audit round`, `per audit`), reviewer names with a review word, and the milestone shapes
     CLAUDE.md bans: `M4.10`, `A11.1`, `pre-A11`, `phase 4b`, `PR-2`, `Stage D`, `Arc N`.
@@ -1337,6 +1337,31 @@ Round 3 verified every round-2 fix and found nothing new; the loop converged.
 Arc 2 round 1, checked and holds (both): every real route is still scanned; the overwrite mode keeps every
 declaration a template uses; the seed latch releases in `finally`; the race results and records
 are unchanged; no template, copy or selector changed; the budgets hold.
+
+### Arc 3 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| C1 | Material: `command("add-mask", …)` rewrote `##[`, so the runner masked a different string from the secret | **Accepted.** A mask's data is kept byte for byte (a `::` line parses before the legacy form is sought); every other command still neutralises `##[`; an exact round-trip case reds at the previous head |
+| C2 | The pin test's Bun controls hardcode `1.4.2`/`1.4.3`, so a correct Bun bump reds them | **Accepted.** They derive the script's `BUN_VERSION` and use the next patch |
+| C3 | The pin test checks that `sha256sum -c --strict` is present, not that its failure stops the script | **Accepted.** The check must end its statement with no `\|\|`, condition or assignment around it, under `set -euo pipefail`; `\|\| true`, `; true` and errexit-off controls |
+| C4 | The Playwright note states the record's "best fit" as the cause and drops "at the time of the spike" | **Accepted.** Both qualifiers restored |
+| O1 | Material: the download regex misses `if curl`, `while curl`, `! curl`, so an unpinned tarball in a condition passes | **Accepted.** The command-position alternation takes `!`, `else`, `if`, `elif`, `while`, `until`; an `if curl` control |
+| O2 | `lock-version-run`'s version half proves nothing: `packageVersion` refuses with a fixed reason | **Accepted.** The case keeps the branch half and its title says so |
+| O3 | Flake-ledger row 4's Firefox sentence cites a record that does not hold it | **Accepted.** It cites issue #185, where the sighting is recorded |
+| O4 | Rows 47 and 48 cite the lessons logs for numbers that live in the archived `plan.md`; "1 in 100 CI runs" overstates "one rerun in 100 network-lane runs" | **Accepted.** Both cite `plan.md` too; row 47 says network-lane runs |
+| O5 | The guard's scope leaves out `infra/`, which holds production code | **Accepted.** `infra` added; no hits there today |
+| O6 | A parenthetical in § Architecture 3.3 went beyond describing the change (`SECURITY.md` § How findings are tracked) | **Accepted.** Removed |
+| O7 | A rewritten comment in `tx-sendTx-multicall.test.ts` still names an unarchived plan path | **Accepted.** It names the `archive/` path |
+
+Also tightened: the guard refuses a dotted plan-phase number (`Phase 3.2`), with a planted sample; no
+hits in the tree.
+
+Arc 3 round 1, checked and holds (both): every caller lost the salt pass and nothing reads it; every
+workflow-command site under `scripts/` goes through `command`; the moved audit-gate case is unweakened;
+both pins equal the publishers' `SHASUMS256.txt`; verification precedes extraction and the pinned
+tools lead `PATH`, with `npm`, `node-gyp` headers and the cache volume still resolving; the other
+routed lines match their records.
 
 ## Post-implementation
 

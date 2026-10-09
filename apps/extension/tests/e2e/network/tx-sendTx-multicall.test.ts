@@ -23,7 +23,7 @@ const hasConfig = aztecConfig !== undefined
  * multicall does N calls FROM THAT ONE ACCOUNT, not N accounts.
  *
  * Asserts on `data-stage="proving"` (wallet popup) instead of the dApp's
- * full sendTx promise. See implementations-plan/journal-stage-restructure/.
+ * full sendTx promise. See implementations-plan/archive/journal-stage-restructure/.
  * No per-test retry: the run's retry setting applies, 0 on the PR gates.
  */
 const cases: Array<{ id: number; name: string; btn: string }> = [

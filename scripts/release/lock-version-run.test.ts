@@ -72,18 +72,13 @@ describe("runLockVersion", () => {
 	})
 })
 
-test("a refusal prints the branch and version it names as escaped command data", async () => {
-	const text = "x\n::warning::y##[error]z"
+test("a refusal prints the branch it names as escaped command data", async () => {
 	const branch = harness([{ packageVersion: "0.31.0", lockVersion: "0.30.0" }])
-	expect(await runLockVersion(JSON.stringify({ headBranchName: text }), branch.io)).toBe(1)
-	const version = harness([{ packageVersion: text, lockVersion: "0.30.0" }])
-	expect(await runLockVersion(PR, version.io)).toBe(1)
-	for (const { logs } of [branch, version]) {
-		const physical = logs.flatMap((l) => l.split(/\r\n|\r|\n/))
-		expect(physical).toHaveLength(1)
-		expect(physical[0]).toStartWith("::error::")
-		expect(physical[0]).not.toContain("##[")
-	}
+	expect(await runLockVersion(JSON.stringify({ headBranchName: "x\n::warning::y##[error]z" }), branch.io)).toBe(1)
+	const physical = branch.logs.flatMap((l) => l.split(/\r\n|\r|\n/))
+	expect(physical).toHaveLength(1)
+	expect(physical[0]).toStartWith("::error::")
+	expect(physical[0]).not.toContain("##[")
 })
 
 const stale = { type: "STALE_DATA", message: 'Expected branch to point to "h0" but it did not. Pull and try again.' }

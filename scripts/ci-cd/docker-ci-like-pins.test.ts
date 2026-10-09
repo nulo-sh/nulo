@@ -40,7 +40,7 @@ function shellProblems(lines: string[]): string[] {
 /** The one download must be fetch_pinned's, and it must check the bytes against their pin. */
 function downloadProblems(joined: string, lines: string[]): string[] {
 	const body = joined.match(/^fetch_pinned\(\) \{\n([\s\S]*?)\n\}$/m)?.[1] ?? ""
-	const downloads = lines.filter((l) => /(^|[;&|(]|\bthen|\bdo)\s*(sudo\s+)?(curl|wget)\s/.test(l))
+	const downloads = lines.filter((l) => /(^|[;&|(!]|\b(then|do|else|if|elif|while|until))\s*(sudo\s+)?(curl|wget)\s/.test(l))
 	return downloads.length === 1 && body.includes(downloads[0]) ? [] : ["a download outside fetch_pinned"]
 }
 
@@ -130,6 +130,11 @@ describe("docker-ci-like.sh's Bun and Node", () => {
 		["a check whose failure is ignored", script.replace(CHECK, `${CHECK} || true`), "fetch_pinned ignores its check"],
 		["a check that only reports", script.replace(CHECK, "| sha256sum -c --strict --quiet; true)"), "fetch_pinned checks no pin"],
 		["errexit turned off", script.replace("set -euo pipefail", "set -uo pipefail"), "errexit or pipefail is off"],
+		[
+			"a download in a condition",
+			`${script}\nif curl -fsSL -o node.tar.xz https://nodejs.org/x.tar.xz; then :; fi\n`,
+			"a download outside fetch_pinned",
+		],
 		[
 			"an unpinned download",
 			`${script}\ncurl -fsSL -o node.tar.xz https://nodejs.org/dist/latest/x.tar.xz\n`,

@@ -51,3 +51,44 @@ test was run against the base copy of the code it covers and failed there before
   `PATH`, nothing installed system-wide. CI's runners carry `zip`.
 - Gate: the four new runner cases red at base; `test:release` 228 pass, 9 skip, 0 fail;
   `test:ci-gating` 419/419; lint 0; the refined grep empty.
+
+## 3.4 Workflow-reference guard
+
+- The guard reads tracked files with `git ls-files` and matches JavaScript regexes instead of
+  `git grep -E`: POSIX ERE leaves `\b` to the platform's regex library, so one pattern would read
+  differently on a macOS checkout and on CI (D-arc3-2).
+- It found seven comments at base, among them `agent.sh`'s and two in `global-setup.ts`; each now
+  states the invariant alone. A bare `phase N` stays allowed: `packages/wallet-core/src/base/`
+  names live startup phases that way.
+- Gate: `workflow-refs.test.ts` 22/22, its scan red at base with the seven hits; `test:ci-gating`
+  441/441; `network/incoming-transfers.test.ts` through the edited `agent.sh` and
+  `global-setup.ts`, retry 0: Chrome 2/2, Firefox 2/2, no anvil left listening after either run.
+
+## 3.5 Docs routing
+
+- #236 retired `follow-ups.md` while this arc ran; origin/dev was merged and its wording kept on
+  every docs conflict, with this phase's routing on top. The plan's link to the retired file became
+  plain text, since `check:plans` refuses a link to a missing file.
+- Every routed line cites its archived record, and each was read against that record before it
+  landed.
+- Gate: `check:plans` 0 (run after staging: it reads the index), each routed phrase present in its
+  owner.
+
+## Arc gate and review
+
+- Arc gate on `ca2f447`: `audit:vue` 0 (715 files, 10,667 tests), `typecheck:all` 0,
+  `test:ci-gating` 443/443, `test:release` 228 pass / 9 skip / 0 fail, `lint:actions` 0,
+  `check:plans` 0.
+- An `::add-mask::` value is registered as the runner decodes it, and a `::` line parses before the
+  legacy `##[` form is sought, so rewriting `##[` in a mask's data masks a different string. The
+  escaper keeps a mask's data exact and still neutralises `##[` in every other command.
+- A static check that a checksum command is present proves nothing about whether its failure stops
+  the script: `|| true` keeps it present. The test now requires the check to end its statement,
+  under `set -euo pipefail`, with no `||`, condition or assignment around it.
+- Negative controls that hardcode the current version break on a correct bump: they now derive
+  the script's `BUN_VERSION` and use the next patch.
+- A shell download matcher must accept every command position: after `if`, `elif`, `while`,
+  `until`, `else` and `!` as well as `;`, `&&`, `|`, `(`, `then` and `do`. Missing one let an
+  unpinned tarball fetched inside a condition pass.
+- Review round 1: Codex and Opus each `approve with fixes`; all eleven findings accepted (plan.md §
+  Audit verdicts). `test:all` green on `951f706`.
