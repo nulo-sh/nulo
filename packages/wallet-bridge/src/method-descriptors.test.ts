@@ -290,12 +290,9 @@ describe("method-descriptors — add-a-method proof (metadata only)", () => {
 
 import { METHOD_REGISTRY as REGISTRY_FOR_ARGS } from "./method-descriptors"
 
-// The exact split, frozen: 11 methods carry an arg guard; 8 deliberately do
-// NOT (no-arg methods; methods whose first-arg validation is OWNED by their
-// scope checker with pinned error strings; and the disabled method whose
-// scope-check error must remain the observable error).
+// The exact split, frozen: 10 methods carry an arity guard and 10 do not. Value shapes are the
+// schema parse's for all of them, after the capability check (`wallet-schema-args.ts`).
 const FROZEN_ARG_GUARDED = new Set([
-	"requestCapabilities",
 	"batch",
 	"createAuthWit",
 	"registerToken",
@@ -312,10 +309,11 @@ const FROZEN_ARG_UNGUARDED = new Set([
 	"getWalletFeatures", // reads no args
 	"getAccounts", // reads no args
 	"getAddressBook", // reads no args
-	"sendTx", // exec validation owned by checkSendTx (pinned error); opts optional
-	"simulateTx", // exec validation owned by checkSimulateTx (pinned error); opts optional
-	"profileTx", // exec validation owned by checkProfileTx (pinned error); opts optional
-	"executeUtility", // call validation owned by checkExecuteUtility (pinned error)
+	"requestCapabilities", // capability-exempt, so the schema parse runs right after the method check
+	"sendTx", // an ungranted call must get the capability error, never an arity one
+	"simulateTx", // an ungranted call must get the capability error, never an arity one
+	"profileTx", // an ungranted call must get the capability error, never an arity one
+	"executeUtility", // an ungranted call must get the capability error, never an arity one
 	"registerContractClass", // disabled at scope-check — that error must stay observable
 ])
 
@@ -374,30 +372,7 @@ describe("method-descriptors — arg guards (ADD-only)", () => {
 		expect(REGISTRY_FOR_ARGS.registerContract.argSchema?.(["raw-address-string"])).toBe(true)
 	})
 
-	test("requestCapabilities matches the handler's tolerance EXACTLY; batch requires well-formed legs", () => {
-		// Nullish manifest = the valid "no capabilities requested" call. BOTH forms
-		// must pass: the dApp channel JSON-serializes, so `requestCapabilities(undefined)`
-		// arrives as `null` — rejecting `[null]` would reject the actual wire encoding.
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([undefined])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([null])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{}])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: null }])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: [] }])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: [{ type: "data" }] }])).toBe(true)
-		// Tolerance-exact: non-nullish non-object entries flow as the handler tolerates
-		// them (`.type` → undefined → ignored), so they pass the guard unchanged.
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: [{}] }])).toBe(true)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: ["x"] }])).toBe(true)
-		// Reject only what the handler cannot process: a non-object manifest, a
-		// non-array `capabilities` (no `.filter`), or a NULLISH entry (`null.type`
-		// throws) — the dApp-triggerable crash the guard converts to a calibrated reject.
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.(["manifest"])).toBe(false)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: {} }])).toBe(false)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([[]])).toBe(false)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: [null] }])).toBe(false)
-		expect(REGISTRY_FOR_ARGS.requestCapabilities.argSchema?.([{ capabilities: [{ type: "data" }, null] }])).toBe(false)
-
+	test("batch requires well-formed legs", () => {
 		expect(REGISTRY_FOR_ARGS.batch.argSchema?.([[{ name: "getChainInfo", args: [] }]])).toBe(true)
 		expect(REGISTRY_FOR_ARGS.batch.argSchema?.([[]])).toBe(true)
 		expect(REGISTRY_FOR_ARGS.batch.argSchema?.(["not-an-array"])).toBe(false)

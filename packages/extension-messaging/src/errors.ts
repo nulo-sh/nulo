@@ -276,6 +276,25 @@ export class UnsupportedMethodError extends WalletError {
 }
 
 /**
+ * A dApp call whose arguments the wallet API's schema refuses, raised before any scope check,
+ * handler or window reads them. The message names only the method, never an argument value: a
+ * schema transform's own error quotes the value, and this message reaches log lines and journal
+ * rows. The dApp envelope replaces it with a constant.
+ */
+export class InvalidWalletArgumentsError extends WalletError {
+	public static readonly CODE = "INVALID_PARAMS"
+
+	public constructor(message: string, details?: unknown) {
+		super(InvalidWalletArgumentsError.CODE, message, details, "InvalidWalletArgumentsError")
+	}
+
+	/** The method has already passed `assertKnownMethod`, so it is a registry name, not wire text. */
+	public static forMethod(methodName: string): InvalidWalletArgumentsError {
+		return new InvalidWalletArgumentsError(`Invalid arguments for wallet method: ${methodName}`)
+	}
+}
+
+/**
  * A PXE operation kept failing on a chain anchor the node no longer agrees with — a reorg, or
  * nodes behind one endpoint disagreeing on the tip — after one resync and retry. The message is
  * wallet-authored and constant per operation so upstream node text never rides it; that text lives
@@ -511,6 +530,7 @@ const REBUILT_AS = [
 	DuplicateWalletError,
 	DuplicateInitializationError,
 	UnsupportedMethodError,
+	InvalidWalletArgumentsError,
 	PxeStaleAnchorError,
 	ContractNotRegisteredError,
 	ChainNotSupportedError,

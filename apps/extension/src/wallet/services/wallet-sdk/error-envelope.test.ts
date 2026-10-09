@@ -14,6 +14,7 @@ import {
 } from "@nulo/extension-messaging/errors"
 import {
 	ContractNotRegisteredError,
+	InvalidWalletArgumentsError,
 	DuplicateInitializationError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
@@ -222,6 +223,16 @@ describe("stale-anchor and unregistered-contract arms", () => {
 		expect(JSON.stringify(env)).not.toContain("0x2015")
 		// The phrase dApp-side substring classifiers key on.
 		expect((env as { message: string }).message.toLowerCase()).toContain("not registered")
+	})
+
+	test("InvalidWalletArgumentsError → {code:-32602, INVALID_PARAMS} with a constant message naming no method", () => {
+		const env = toWalletResponseError(InvalidWalletArgumentsError.forMethod("sendTx"))
+		expect(env).toEqual({
+			code: -32602,
+			message: "The request's arguments do not match the wallet API.",
+			data: { walletErrorCode: "INVALID_PARAMS" },
+		})
+		expect(JSON.stringify(env)).not.toContain("sendTx")
 	})
 
 	test("each survives the REAL production chain: classify → unwrap → envelope", () => {

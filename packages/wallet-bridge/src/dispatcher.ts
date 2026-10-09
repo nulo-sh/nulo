@@ -109,14 +109,15 @@ import type { SessionContext } from "./types"
 import {
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
 	walletErrorFromPayload,
 } from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { LogLevel } from "@nulo/wallet-core/logger"
-import { isObjectLike } from "@nulo/wallet-core/utils"
 import { describeExternalId } from "./external-id"
 import { WALLET_FEATURES } from "./wallet-features"
+import { assertWalletSchemaArgs } from "./wallet-schema-args"
 import type {
 	IAccountProvisioner,
 	IAccountReader,
@@ -199,57 +200,6 @@ const FROM_ADDRESSED_KINDS: ReadonlySet<Operation["kind"]> = new Set(["aztec_sim
 // the batching logic that lived behind `simulate_views` now lives in
 // extension/.../execution/helpers/batched-view-simulation.ts.
 
-/**
- * Structural arg-shape guard for authorization-sensitive dApp methods, run before
- * capability/scope enforcement so the scope checkers + handlers dereference validated
- * shapes rather than raw `unknown`. Deliberately dependency-free — wallet-bridge is
- * transport-shaped and does NOT import `WalletSchema`; it validates only the
- * authorization-relevant fields the scope/handler layer uses. Full Aztec-object parsing
- * stays downstream (execution-layer Zod). Residual: this is not a complete WalletSchema parse;
- * grantPublicAuthwit/registerToken rely on their handlers' own (String-coercion-tolerant) checks.
- */
-function assertAuthRelevantArgShape(methodName: string, args: unknown[]): void {
-	const bad = (m: string): never => {
-		throw new Error(`Malformed ${methodName} request: ${m}`)
-	}
-	const assertCall = (c: unknown, where: string) => {
-		if (!isObjectLike(c) || c.to === undefined || typeof c.name !== "string") {
-			bad(`${where} must have \`to\` and a string \`name\``)
-		}
-	}
-	const assertExecCalls = (exec: unknown) => {
-		if (!isObjectLike(exec)) bad("exec payload must be an object")
-		const calls = (exec as Record<string, unknown>).calls
-		if (!Array.isArray(calls)) bad("exec.calls must be an array")
-		for (const c of calls as unknown[]) assertCall(c, "each call")
-	}
-
-	switch (methodName) {
-		case "sendTx":
-		case "profileTx":
-			// simulateTx is intentionally NOT guarded here: its exec validation is owned by
-			// `checkSimulationTransactions` (optional-chains `exec?.calls`, requires
-			// an array, coerces `to`/tolerates missing `name`) plus the downstream
-			// execution-layer Zod — so a dispatcher-level shape guard is redundant and
-			// would preempt the capability error that path pins.
-			assertExecCalls(args[0])
-			break
-		case "executeUtility":
-			assertCall(args[0], "call")
-			break
-		case "createAuthWit":
-			// args[0] = from; args[1]'s CallIntent/IntentInnerHash shape is enforced by
-			// checkCreateAuthWit (structured-intent requirement + raw-Fr reject).
-			if (args[0] === undefined || args[0] === null) bad("`from` (args[0]) is required")
-			break
-		case "registerToken":
-			if (args[0] === undefined || args[0] === null || args[1] === undefined || args[1] === null) {
-				bad("both positional arguments are required")
-			}
-			break
-	}
-}
-
 export class WalletSdkDispatcher {
 	constructor(
 		private readonly networkService: INetworkReader,
@@ -278,7 +228,11 @@ export class WalletSdkDispatcher {
 		// profile, guard-verified upstream): a profile switch landing mid-await
 		// must not let this lookup resolve the NEW profile's row.
 		const dappSession = await this.dappSessionService.tryGetDappSessionByOriginAndChain(ctx.origin, String(ctx.chainId), ctx.profileId)
-		const { method, grants } = this.enforceMethodAndScope(methodName, args, ctx, dappSession)
+		const { method, grants } = this.enforceMethodAndCapability(methodName, args, ctx, dappSession)
+		// After the capability check, so an origin with no grant cannot make the worker parse a large
+		// payload; before the scope check, so no checker, handler or window reads an unparsed value.
+		await assertWalletSchemaArgs(method, args)
+		this.enforceScopeFor(method, args, grants, dappSession)
 
 		// Methods that don't go through ExecutionService return the handler's
 		// own promise, un-awaited here (rejection timing unchanged).
@@ -297,60 +251,53 @@ export class WalletSdkDispatcher {
 		return unwrapOperationResult(results[0])
 	}
 
-	/** The synchronous guard ladder every dispatch runs after the session read —
-	 *  known method → arg schema → auth-relevant arg shape → capability → scope.
-	 *  Every throw keeps its exact message/class (dApp-visible contract). */
-	private enforceMethodAndScope(
+	/** The synchronous guards before the schema parse: known method → arity → batch popup legs →
+	 *  capability. The arity refusal is the parse's own error; every other throw keeps its exact
+	 *  message and class (dApp-visible contract). */
+	private enforceMethodAndCapability(
 		methodName: string,
 		args: unknown[],
 		ctx: SessionContext,
 		dappSession: IDappSessionRef | undefined,
 	): { method: MethodName; grants: GrantedCapabilityRecord[] } {
-		// Resolve the method's descriptor up front. A method that reaches dispatch()
-		// without a registry row is unsupported (retired, or never-supported) —
-		// reject it before any enforcement/routing. This is the RUNTIME half of the
-		// silent-omission guard (the build-time exhaustiveness test is the other
-		// half): "supported but missing metadata" is impossible in both. Preserves
-		// the historical "Unsupported wallet method" string (pinned by the
-		// retired-method guards in dispatcher.test.ts).
-		// `Object.hasOwn`, not a truthy index, so prototype names (`toString`,
-		// `constructor`, …) are rejected here rather than slipping into capability
-		// handling and failing with a misleading CapabilityNotGrantedError.
-		// The guard lives in `assertKnownMethod` (the single typed choke point);
-		// on return `methodName` is narrowed to `MethodName`. Behavior is identical
-		// to the former inline `Object.hasOwn` check (same throw string).
+		// `Object.hasOwn` inside, so prototype names (`toString`, `constructor`, …) are refused as
+		// unsupported rather than failing later with a misleading CapabilityNotGrantedError.
 		assertKnownMethod(methodName)
 
-		// Arg-shape guard: a pure pass/fail predicate over the ORIGINAL
-		// args — runs BEFORE capability/scope enforcement and before any handler
-		// destructuring, and never replaces the array, so scope checkers and
-		// handlers keep seeing the exact wire values. Batch legs re-enter
-		// dispatch() and hit their own method's guard here. Methods without an
-		// argSchema keep their historical arg tolerance untouched.
+		// A pure pass/fail predicate over the ORIGINAL args, never replacing the array. Methods without
+		// an argSchema are left to the schema parse.
 		const argSchema = METHOD_REGISTRY[methodName].argSchema
-		if (argSchema && !argSchema(args)) {
-			throw new Error(`Invalid arguments for wallet method: ${methodName}`)
+		if (!Array.isArray(args) || (argSchema && !argSchema(args))) {
+			throw InvalidWalletArgumentsError.forMethod(methodName)
 		}
 
-		// Must run before any capability or scope logic dereferences the args.
-		assertAuthRelevantArgShape(methodName, args)
-
-		// Enforce capability grants (type-level) then scope (per-operation +
-		// per-account allow-list).
-		const grants = this.enforceCapability(methodName, ctx, dappSession)
-		if (grants.length) {
-			// enforceScopeWithSession includes account-scope-array validation. Build the
-			// approved-accounts set from the session.
-			// If the session is missing (shouldn't happen when grants.length>0
-			// since enforceCapability would have returned []), fall back to
-			// the plain enforceScope to avoid throwing on the wrong thing.
-			if (dappSession) {
-				enforceScopeWithSession(methodName, args, grants, sessionAccountsOf(dappSession))
-			} else {
-				enforceScope(methodName, args, grants)
+		// Legs are parsed only when they re-enter dispatch, so a popup leg is refused here, before any
+		// leg runs. A stock SDK's batch union already omits these; a raw protocol client is not bound by it.
+		if (methodName === "batch") {
+			for (const leg of args[0] as Array<{ name: string }>) {
+				if (BATCH_REFUSED_METHODS.has(leg.name)) {
+					throw new Error(`Method "${leg.name}" cannot be used inside batch — it requires a confirmation popup`)
+				}
 			}
 		}
-		return { method: methodName, grants }
+
+		return { method: methodName, grants: this.enforceCapability(methodName, ctx, dappSession) }
+	}
+
+	/** Per-operation and per-account scope, against the grants the capability check returned. */
+	private enforceScopeFor(
+		method: MethodName,
+		args: unknown[],
+		grants: GrantedCapabilityRecord[],
+		dappSession: IDappSessionRef | undefined,
+	): void {
+		if (!grants.length) return
+		// A non-empty grant list implies a session; the fallback only avoids throwing the wrong error.
+		if (dappSession) {
+			enforceScopeWithSession(method, args, grants, sessionAccountsOf(dappSession))
+		} else {
+			enforceScope(method, args, grants)
+		}
 	}
 
 	/** Routes the `via: "handler"` methods — returning the handler's EXACT promise
@@ -514,18 +461,6 @@ export class WalletSdkDispatcher {
 	 * throwing is the only contract-compatible failure signal.
 	 */
 	private async handleBatch(methods: Array<{ name: string; args: unknown[] }>, ctx: SessionContext): Promise<unknown> {
-		// Refuse legs whose semantics rely on a confirmation popup. Upstream
-		// `BatchedMethodSchema` is built from the canonical `WalletMethodSchemas`
-		// (not from runtime-patched `WalletSchema`), so a stock SDK already
-		// Zod-blocks these on the dApp side. But a raw protocol client could
-		// bypass the SDK and send the leg directly; we close that hole here
-		// so the README's "not in batch" contract is enforced server-side.
-		for (const method of methods) {
-			if (BATCH_REFUSED_METHODS.has(method.name)) {
-				throw new Error(`Method "${method.name}" cannot be used inside batch — it requires a confirmation popup`)
-			}
-		}
-
 		const results: Array<{ name: string; result: unknown }> = []
 		for (const method of methods) {
 			const result = await this.dispatch(method.name, method.args, ctx)
