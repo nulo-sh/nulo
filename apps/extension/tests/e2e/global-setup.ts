@@ -336,7 +336,7 @@ async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 /** Processes a dead agent run of this worktree left (forks, Chrome); a bare run also keeps the
  *  extension-path Chrome sweep it has always had. */
 async function reapDeadRuns(): Promise<void> {
-	const status = await sweepDeadRuns(REPO_ROOT)
+	const status = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
 	if (status !== "stopped") console.warn(`[e2e-setup] a dead run's processes are ${status}; \`bun run e2e:reap\` retries`)
 	if (!IS_AGENT_RUN) killOrphanChromes()
 }
