@@ -6,9 +6,11 @@ never import app utilities, stores, service clients, or `chrome.*`.
 
 ## Layers (low → high)
 
-- **L0 tokens** — `src/token-contract.ts` (canonical source) → generated `src/tokens.ts`
-  (+ `src/base.css`).
-- **L1 core** — `src/core/**` primitives: `Flex`, `Icon`, `Text`, `MaterialIcon`.
+- **L0 tokens** — `src/token-contract.ts` (canonical source) → generated `src/tokens.ts` and
+  `src/utilities.css`, the type roles among them; `src/base.css` (fonts, resets, per-theme values)
+  is hand-authored and imports `utilities.css`.
+- **L1 core** — `src/core/**` primitives: `Flex`, `Icon`, `Text` (its `variant` takes a type role),
+  `MaterialIcon`.
 - **L2 ui** — `src/ui/**` ui primitives.
 - **L3 composite** — `src/composite/**` (empty today; the biome layer rule stays in place).
 
@@ -20,15 +22,33 @@ PR can't silently weaken it.
 
 ## Tokens (single source)
 
-The canonical token names + scales live in **`src/token-contract.ts`**. **`src/tokens.ts` is
-GENERATED** from it by `scripts/gen-tokens.ts` — never hand-edit it. After editing the contract:
+The canonical token names + scales live in **`src/token-contract.ts`**. **`src/tokens.ts` and
+`src/utilities.css` are GENERATED** from it by `scripts/gen-tokens.ts` — never hand-edit them.
+`src/base.css` is hand-authored. After editing the contract:
 
 ```
 bun run gen:tokens
 ```
 
-`src/tokens.drift.test.ts` byte-pins the generated file (fails CI on divergence — modeled on the
-repo's other generated-artifact pins). Per-theme VALUES live in `src/base.css`.
+`src/tokens.drift.test.ts` and `src/utilities.drift.test.ts` byte-pin the generated files (fail CI
+on divergence — modeled on the repo's other generated-artifact pins). Per-theme VALUES live in
+`src/base.css`.
+
+## Type roles
+
+A face, letter spacing or upper case comes only from a **type role**: one of the 28 records of
+`typeRoles` in the contract, each the board's row for one job (`label`, `data`, `body`, …). Each
+renders one generated class, `.type--<role>`, which sets its family, weight, tracking, case and
+figures, and its size unless the role leaves the size to the element (`siteSizedTypeRoles`). No
+role sets line height. The floors are `MIN_TEXT_PX` (10) and `MIN_MONO_PX` (11).
+
+An element takes a role in one of three ways: `<Text variant="data">`; `composes: type--data from
+global;` as the first line of the element's own single-class module rule (which then declares no
+property the role sets, except a site-sized role's `font-size`); or a static `type--data` class on
+the element. A role class is one class, (0,1,0), so a plain module class on the same element must
+not set a role property: which of two equal selectors wins depends on stylesheet load order.
+`src/type-roles.contract.test.ts` pins the records to the signed board; the extension's
+`type-role-ban.test.ts` refuses a face, tracking or case picked anywhere else.
 
 ## Consumers compile the source
 
@@ -63,7 +83,7 @@ A missing root means the teleported content silently fails to mount (it is NOT a
 
 ## Scripts
 
-- `bun run gen:tokens` — regenerate `src/tokens.ts` from the contract.
+- `bun run gen:tokens` — regenerate `src/tokens.ts` and `src/utilities.css` from the contract.
 - `bun run typecheck` — `vue-tsc --noEmit`.
 - `bun run test` — vitest (drift, boundary, component tests).
 

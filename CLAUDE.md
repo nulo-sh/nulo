@@ -197,10 +197,12 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
 **L0–L2 are externalized to `@nulo/design`** (see `implementations-plan/archive/design-system-externalization/`). The framework-/host-agnostic primitives live in the shared package and are consumed by the extension via a custom `unplugin-vue-components` resolver (`apps/extension/scripts/design-resolver.ts`), so templates use `<Flex>`/`<Text>`/`<Badge>` unchanged. `src/design/tokens.ts` re-exports `@nulo/design/tokens`, and the wallet's base stylesheet is `@nulo/design/base.css`. The package has NO auto-import, so its SFCs use explicit imports. **Resolver discipline:** a name enters `NULO_DESIGN_COMPONENTS` only when its extension-local SFC is DELETED; the four host-coupled holdouts (`Button` → RouterLink, `SubPageHeader` → router/history, `ToastManager` → app-shell toast root, `RowTarget` → RouterLink) keep a thin LOCAL extension component; the first three wrap the package base (`Button`/`SubPageHeaderBase`/`ToastManagerBase`), so their bare tags resolve to the wrapper, NOT the resolver. The `toast`/`outside` composables live in `@nulo/design/composables/*`; the extension keeps `composables/{toast,outside}.js` as named re-export shims so its explicit + auto-import call sites are untouched.
 
 ```
-[L0] design tokens     @nulo/design (token-contract.ts → generated tokens.ts + base.css + fonts).
+[L0] design tokens     @nulo/design (token-contract.ts → generated tokens.ts + utilities.css,
+                       the 28 type roles included; hand-authored base.css + fonts).
                        Extension src/design/tokens.ts re-exports the package.
 
-[L1] core primitives   @nulo/design/core: Flex, Icon, MaterialIcon, Text. No chrome.*.
+[L1] core primitives   @nulo/design/core: Flex, Icon, MaterialIcon, Text (variant = a type role).
+                       No chrome.*.
 
 [L2] ui primitives     @nulo/design/ui — ALL migrated: Badge, Banner, BrutalistTitle, Button,
                        Checkbox, Input, LoadingState, Popover, RowAction, SectionLabel, Spinner,
@@ -229,6 +231,8 @@ Six layers, low → high. A layer can import only from layers below it. Enforced
 [L6] pages             src/popup/pages/
                        Orchestration. May own service-client lifecycle.
 ```
+
+**A face, letter spacing or upper case comes only from a type role** (`typeRoles` in `@nulo/design`'s contract; the rules are in [`packages/design/README.md`](./packages/design/README.md) § Type roles): `<Text variant>`, `composes: type--<role> from global` first in the element's own module rule, or a static `type--<role>` class. `apps/extension/src/utils/type-role-ban.test.ts` refuses any other pick, and a size or weight outside a role, against a content-keyed baseline that only shrinks; the e2e sweep (`tests/e2e/fixtures/type-roles.ts`) checks the computed values in both browsers. Every address, hash and id renders in a mono role.
 
 Service-bound visual components (Header, AddressDisplay, GlobalLoader, NotificationManager, Popup, PopupCard, JsonViewer, LogsViewer, PasskeyCeremonyDialog in `components/passkey/`) live flat in `src/components/` or in their own subdir, NOT in `core/`, `ui/`, or `composite/`. Cross-shell ones (e.g. `PasskeyCeremonyDialog`, consumed by both the popup and onboarding shells) MUST live under `src/components/`, never `src/popup/**`, so onboarding can import them without crossing the `@/popup/**` layer ban.
 
