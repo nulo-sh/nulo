@@ -7,11 +7,7 @@
 }
 
 .fee_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 

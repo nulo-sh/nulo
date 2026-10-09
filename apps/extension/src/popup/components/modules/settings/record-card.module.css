@@ -35,14 +35,10 @@
 }
 
 .type {
+	composes: type--label-section from global;
 	flex: 1;
 	min-width: 0;
 
-	font-family: var(--font-headline);
-	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 
 	overflow: hidden;
@@ -58,8 +54,7 @@
 }
 
 .kv_key {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--label from global;
 	color: var(--nulo-outline);
 
 	overflow: hidden;
@@ -68,8 +63,7 @@
 }
 
 .kv_val {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--txt-primary);
 
 	min-width: 0;

@@ -3,12 +3,7 @@
 }
 
 .pre_title {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
-
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -34,11 +29,7 @@
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-size: 16px;
-	font-weight: 700;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: type--title-page from global;
 	text-align: center;
 
 	color: var(--txt-primary);
