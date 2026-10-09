@@ -40,33 +40,48 @@ apt-get install -y --no-install-recommends \
 	>/dev/null
 echo "::endgroup::"
 
-echo "::group::bun + node 24"
-if ! command -v bun >/dev/null; then
-	curl -fsSL https://bun.sh/install | bash >/dev/null
+echo "::group::bun + node (pinned)"
+# The pinned archives are always installed and put first on PATH, so a bun or node already in the
+# image never stands in for them. Both are checked against their pin before either is extracted.
+if [ "$(uname -m)" != x86_64 ]; then
+	echo "::error::docker-ci-like.sh pins only linux x64 Bun and Node: run the container with --platform=linux/amd64 (this is $(uname -m))." >&2
+	exit 1
 fi
-export BUN_INSTALL=/root/.bun
-export PATH="$BUN_INSTALL/bin:$PATH"
-bun --version
+BUN_VERSION=1.4.2
+# Aztec's installer requires Node >= 24.12.0.
+NODE_VERSION=v24.16.0
+PINS="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/docker-ci-like.pins.sha256"
+TOOLS=/opt/docker-ci-like
+DOWNLOADS=$(mktemp -d)
+trap 'rm -rf "$DOWNLOADS"' EXIT
 
-if ! command -v node >/dev/null; then
-	# Retry-on-network-blip + arch detection (linux/amd64 emulation on macOS).
-	# Pin to v24.16.0 (latest 24.x LTS as of bootstrap). Aztec's install script
-	# requires Node >= 24.12.0; 24.4.0 (default in setup-node@v6) is too old.
-	NODE_VERSION="${NODE_VERSION:-v24.16.0}"
-	ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=x64;; aarch64) ARCH=arm64;; esac
-	for attempt in 1 2 3; do
-		if curl -fsSL --retry 5 --retry-delay 2 --retry-max-time 120 \
-				"https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${ARCH}.tar.xz" \
-				-o /tmp/node.tar.xz; then
-			break
-		fi
-		echo "Node download attempt $attempt failed; retrying in 5s..."
-		sleep 5
-	done
-	mkdir -p /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1
-	export PATH="/opt/node/bin:$PATH"
+fetch_pinned() {
+	local key="$1" url="$2"
+	mkdir -p "$DOWNLOADS/$(dirname "$key")"
+	curl -fsSL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 2 --retry-max-time 120 \
+		--retry-all-errors -o "$DOWNLOADS/$key" "$url"
+	# A key with no pin line gives sha256sum nothing to check, which it reports as a failure.
+	(cd "$DOWNLOADS" && awk -v key="$key" '$2 == key' "$PINS" | sha256sum -c --strict)
+}
+
+BUN_KEY="bun/$BUN_VERSION/bun-linux-x64.zip"
+NODE_KEY="node/$NODE_VERSION/node-$NODE_VERSION-linux-x64.tar.xz"
+fetch_pinned "$BUN_KEY" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/bun-linux-x64.zip"
+fetch_pinned "$NODE_KEY" "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-x64.tar.xz"
+
+rm -rf "$TOOLS"
+mkdir -p "$TOOLS/bun/bin" "$TOOLS/node"
+unzip -q -j "$DOWNLOADS/$BUN_KEY" bun-linux-x64/bun -d "$TOOLS/bun/bin"
+ln -s bun "$TOOLS/bun/bin/bunx"
+tar -xJf "$DOWNLOADS/$NODE_KEY" -C "$TOOLS/node" --strip-components=1
+# The bun cache volume mounts at $BUN_INSTALL/install/cache.
+export BUN_INSTALL=/root/.bun
+export PATH="$TOOLS/bun/bin:$TOOLS/node/bin:$PATH"
+if [ "$(bun --version)" != "$BUN_VERSION" ] || [ "$(node --version)" != "$NODE_VERSION" ]; then
+	echo "::error::the pinned archives did not install Bun $BUN_VERSION and Node $NODE_VERSION." >&2
+	exit 1
 fi
-node --version
+echo "bun: $(command -v bun) ($(bun --version)); node: $(command -v node) ($(node --version))"
 echo "::endgroup::"
 
 echo "::group::bun install"
