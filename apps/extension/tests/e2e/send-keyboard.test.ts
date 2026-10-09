@@ -1,7 +1,8 @@
 /**
  * Send by keyboard alone: Tab reaches each control in the order it is drawn, Enter or Space presses
  * it, a held Enter acts once, and the focused control draws the 2 px accent ring. An Enter meant for
- * another control never picks a destination suggestion.
+ * another control never picks a destination suggestion, and a press that leaves the destination
+ * lands where it began.
  *
  * The smoke wallet holds no balance, so the amount field and Max are disabled and out of the Tab
  * path here; Max's own stop is proven in the funded `network/send-amount-exact.test.ts`.
@@ -16,6 +17,8 @@ import { activeTestId, coveredAt, focusRing, tabAround, tabTo, waitForFocus } fr
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
+const OPEN_TRIGGER = `[data-dropdown-open="true"] ${sel("send-fee-method-trigger")}`
+const CLOSED_TRIGGER = `[data-dropdown-open="false"] ${sel("send-fee-method-trigger")}`
 
 async function openSendPage(ctx: ExtensionContext, { priced = false } = {}): Promise<Page> {
 	const page = await openPopup(ctx)
@@ -103,7 +106,7 @@ test("the token card draws the accent ring when focused", { timeout: 180_000, re
 	await shotSend(page, "send-token-focused", "send-token-trigger")
 })
 
-test("the fee method picker: a Tab stop with the ring, Enter opens it, the arrows move, Escape returns to it", {
+test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
 	timeout: 180_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
@@ -119,19 +122,51 @@ test("the fee method picker: a Tab stop with the ring, Enter opens it, the arrow
 	expect(trigger).toEqual({ tag: "BUTTON", type: "button" })
 
 	await page.keyboard.press("Enter")
-	await page.waitForSelector('[data-dropdown-open="true"] [data-testid="send-fee-method-trigger"]', { timeout: 5_000 })
+	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
 	await page.keyboard.press("ArrowDown")
 	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
-	expect(await activeTestId(page)).toMatch(/^send-fee-method-/)
+	const row = await activeTestId(page)
+	expect(row).toMatch(/^send-fee-method-/)
+	await page.keyboard.press("Enter")
+	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
+	await page.waitForFunction(
+		(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
+		{ timeout: 10_000 },
+		row.replace("send-fee-method-", ""),
+	)
+	await waitForFocus(page, "send-fee-method-trigger")
 
+	await page.keyboard.press(" ")
+	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
 	await page.keyboard.press("Escape")
-	await page.waitForSelector('[data-dropdown-open="false"] [data-testid="send-fee-method-trigger"]', { timeout: 5_000 })
+	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await waitForFocus(page, "send-fee-method-trigger")
 })
 
-test("an open destination suggestion list covers neither Max nor the fee method picker", { timeout: 120_000, retry: 0 }, async ({
-	registeredExtensionPerTest: ctx,
-}) => {
+/** The fee menu's edge and its trigger's, once the menu's entry transition has settled. */
+async function feeMenuGap(page: Page): Promise<{ above: number; below: number }> {
+	const menu = `#dropdown [data-testid^="send-fee-method-"]`
+	await page.waitForSelector(menu, { visible: true, timeout: 5_000 })
+	await page.waitForFunction(
+		(item: string) => document.querySelector(item)?.parentElement?.getAnimations().length === 0,
+		{ timeout: 2_000 },
+		menu,
+	)
+	return page.$eval(
+		menu,
+		(item, trigger) => {
+			const m = (item.parentElement as HTMLElement).getBoundingClientRect()
+			const t = ((document.querySelector(trigger) as HTMLElement).closest("#trigger") as HTMLElement).getBoundingClientRect()
+			return { above: t.top - m.bottom, below: m.top - t.bottom }
+		},
+		sel("send-fee-method-trigger"),
+	)
+}
+
+test("an open destination suggestion list covers neither Max nor the fee method picker, whose first press opens it beside itself", {
+	timeout: 120_000,
+	retry: 0,
+}, async ({ registeredExtensionPerTest: ctx }) => {
 	const page = await openSendPage(ctx)
 	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.focus(DESTINATION_INPUT)
@@ -147,4 +182,22 @@ test("an open destination suggestion list covers neither Max nor the fee method 
 	expect(await page.$(sel("send-destination-suggestions"))).not.toBeNull()
 	expect(covered.max).toBeNull()
 	expect(covered.fee).toBeNull()
+
+	// The press takes the focus from the destination, which turns into the taller card only once it
+	// ends: the menu opens on that press and sits beside the trigger where the card has put it.
+	const at = await page.$eval(sel("send-fee-method-trigger"), (el) => {
+		const box = el.getBoundingClientRect()
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+	})
+	await page.mouse.move(at.x, at.y)
+	await page.mouse.down()
+	await new Promise((resolve) => setTimeout(resolve, 300))
+	await page.mouse.up()
+	await page.waitForSelector(sel("recipient-card"), { visible: true, timeout: 5_000 })
+	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
+	const gap = await feeMenuGap(page)
+	expect(
+		[gap.above, gap.below].some((edge) => Math.abs(edge - 8) <= 1),
+		JSON.stringify(gap),
+	).toBe(true)
 })

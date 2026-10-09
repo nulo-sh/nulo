@@ -233,6 +233,8 @@ describe("FeeMethodSelector — in the real menu", () => {
 		const trigger = w.get('[data-testid="send-fee-method-trigger"]')
 		expect(trigger.element.tagName).toBe("BUTTON")
 		expect(trigger.attributes("type")).toBe("button")
+		// The chevron is a ligature: its text would join the button's spoken name.
+		expect(trigger.get("i").attributes("aria-hidden")).toBe("true")
 		;(trigger.element as HTMLButtonElement).click()
 		await flushPromises()
 		expect(isOpen(w)).toBe(true)

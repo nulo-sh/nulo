@@ -1163,7 +1163,7 @@ describe("send page — the contact list reducers", () => {
 })
 
 describe("send page — Refresh quote by keyboard", () => {
-	/** In fiat mode with no live quote: the gate asks for a requote. */
+	/** In fiat mode with no live quote: the gate asks for a requote, which a re-freeze cannot answer. */
 	async function showRequote(w: W) {
 		const amount = w.findComponent({ name: "AmountCard" })
 		amount.vm.$emit("update:fiatMode", true)
@@ -1187,13 +1187,14 @@ describe("send page — Refresh quote by keyboard", () => {
 		w.unmount()
 	})
 
-	test("a keyboard press re-freezes the quote and returns the focus to the amount", async () => {
+	test("with no live quote a keyboard press leaves the focus on Refresh quote, which stays", async () => {
 		const { w } = await mountSend()
 		const requote = await showRequote(w)
 		asKeyboardFocus(requote.element)
 		await requote.trigger("click")
 		expect(mocks.refreezeQuote).toHaveBeenCalledTimes(1)
-		expect(mocks.focusAmount).toHaveBeenCalledTimes(1)
+		expect(mocks.focusAmount).not.toHaveBeenCalled()
+		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(true)
 		w.unmount()
 	})
 

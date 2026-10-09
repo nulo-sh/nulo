@@ -539,7 +539,6 @@ const handleFiatBalanceAction = (divisor) => {
 .unit_pair {
 	flex: none;
 	font: inherit;
-	color: inherit;
 	background: none;
 	font-family: var(--font-headline);
 	font-size: 12px;
@@ -605,7 +604,6 @@ const handleFiatBalanceAction = (divisor) => {
 
 .action_link {
 	font: inherit;
-	color: inherit;
 	background: none;
 	font-family: var(--font-headline);
 	font-size: 10px;

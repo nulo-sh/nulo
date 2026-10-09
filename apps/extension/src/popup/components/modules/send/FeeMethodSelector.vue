@@ -55,7 +55,7 @@ const onRowClick = (method, event) => {
 				>
 					<span v-if="modelValue" :class="$style.fee_value">{{ modelValue.title }}</span>
 					<span v-else :class="[$style.fee_value, $style.fee_placeholder]">Select method</span>
-					<MaterialIcon name="expand_more" :size="16" color="secondary" />
+					<MaterialIcon name="expand_more" :size="16" color="secondary" aria-hidden="true" />
 				</Flex>
 			</template>
 

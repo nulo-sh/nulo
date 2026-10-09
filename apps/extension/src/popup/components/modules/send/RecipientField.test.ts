@@ -239,6 +239,18 @@ describe("modules/send/RecipientField", () => {
 			expect(w.emitted("update:searchTerm")).toBeUndefined()
 		})
 
+		test("the click a release delivers outside the field ends the hold at its capture, before its target", async () => {
+			const w = await focused({ candidates: [alice], searchTerm: alice.address })
+			const outside = document.body.appendChild(document.createElement("button"))
+			press("pointerdown")
+			await w.get("input").trigger("blur")
+			press("pointerup")
+			outside.click()
+			await nextTick()
+			expect(view(w)).toBe("card")
+			expect(vi.getTimerCount()).toBe(0)
+		})
+
 		test("a blur with no press shows the card at once", async () => {
 			const w = await focused({ candidates: [alice], searchTerm: alice.address })
 			await w.get("input").trigger("blur")
@@ -295,6 +307,32 @@ describe("modules/send/RecipientField", () => {
 			window.dispatchEvent(new Event("blur"))
 			await afterRelease()
 			expect(view(other)).toBe("card")
+		})
+
+		test("a second pointer never takes over the press holding the field", async () => {
+			const w = await focused({ candidates: [alice], searchTerm: alice.address })
+			press("pointerdown")
+			await w.get("input").trigger("blur")
+			press("pointerdown", { pointerId: 2, pointerType: "pen" })
+			press("pointerup", { pointerId: 2, pointerType: "pen" })
+			await afterRelease()
+			expect(view(w)).toBe("input")
+			press("pointerup")
+			await afterRelease()
+			expect(view(w)).toBe("card")
+		})
+
+		test("a press that starts before the last one's release ran keeps the field held until it ends", async () => {
+			const w = await focused({ candidates: [alice], searchTerm: alice.address })
+			press("pointerdown")
+			await w.get("input").trigger("blur")
+			press("pointerup")
+			press("pointerdown", { pointerId: 2, pointerType: "pen" })
+			await afterRelease()
+			expect(view(w)).toBe("input")
+			press("pointerup", { pointerId: 2, pointerType: "pen" })
+			await afterRelease()
+			expect(view(w)).toBe("card")
 		})
 
 		test("a refocus during the hold keeps the field editable, drops the blur's match and voids the queued release", async () => {

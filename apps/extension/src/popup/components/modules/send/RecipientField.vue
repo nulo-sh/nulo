@@ -88,7 +88,12 @@ const endHold = () => {
 }
 
 const onPointerDown = (e) => {
-	if (e.isPrimary && e.button === 0 && (e.pointerType === "mouse" || e.pointerType === "pen")) pressId = e.pointerId
+	if (!e.isPrimary || e.button !== 0 || (e.pointerType !== "mouse" && e.pointerType !== "pen")) return
+	// The press holding the field stays the one whose release ends the hold.
+	if (holdView.value && pressId !== null) return
+	pressId = e.pointerId
+	// A press that starts before the last one's release ran keeps the field held through itself.
+	clearTimeout(releaseTimer)
 }
 
 const onPointerUp = (e) => {
@@ -97,6 +102,13 @@ const onPointerUp = (e) => {
 	if (!holdView.value) return
 	// A browser dispatches a press's pointerup, mouseup and click in one task: the click lands first.
 	releaseTimer = setTimeout(endHold, 0)
+}
+
+// A native click runs the microtasks between its listeners, so the card renders before the click
+// reaches its target: a menu that measures its trigger on that click sees where the trigger now is.
+const onClickCapture = (e) => {
+	if (!holdView.value || pressId !== null || fieldEl.value?.contains(e.target)) return
+	endHold()
 }
 
 const onPointerCancel = (e) => {
@@ -135,6 +147,7 @@ onMounted(() => {
 	document.addEventListener("pointerdown", onPointerDown, true)
 	document.addEventListener("pointerup", onPointerUp, true)
 	document.addEventListener("pointercancel", onPointerCancel, true)
+	document.addEventListener("click", onClickCapture, true)
 	window.addEventListener("blur", onWindowBlur)
 })
 
@@ -143,6 +156,7 @@ onBeforeUnmount(() => {
 	document.removeEventListener("pointerdown", onPointerDown, true)
 	document.removeEventListener("pointerup", onPointerUp, true)
 	document.removeEventListener("pointercancel", onPointerCancel, true)
+	document.removeEventListener("click", onClickCapture, true)
 	window.removeEventListener("blur", onWindowBlur)
 	clearTimeout(closeTimer)
 	clearTimeout(releaseTimer)

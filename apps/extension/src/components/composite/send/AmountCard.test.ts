@@ -86,12 +86,6 @@ describe("composite/AmountCard", () => {
 		expect(w.emitted("update:modelValue")).toBeUndefined()
 	})
 
-	test("Use Maximum is a no-op when tokenBalanceByType is 0/falsy (disabled balance)", async () => {
-		const w = mountCard({ tokenBalanceByType: 0, modelValue: "" })
-		await w.find("[data-testid='send-amount-max']").trigger("click")
-		expect(w.emitted("update:modelValue")).toBeUndefined()
-	})
-
 	test("input is disabled when tokenBalanceByType is 0/falsy", () => {
 		const w = mountCard({ tokenBalanceByType: 0 })
 		const input = w.find("input[data-testid='send-amount-input']")

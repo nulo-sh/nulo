@@ -281,8 +281,8 @@ const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
 	amountCardRef.value?.refreezeQuote()
-	// The button unmounts once the quote is fresh: a keyboard user keeps their place in the amount.
-	if (e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
+	// With a live quote the re-freeze unmounts the button: a keyboard user keeps their place in the amount.
+	if (liveQuote.value && e.currentTarget.matches(":focus-visible")) amountCardRef.value?.focusAmount()
 }
 
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
@@ -879,7 +879,6 @@ onBeforeUnmount(() => {
 
 .requote_action {
 	font: inherit;
-	color: inherit;
 	background: none;
 	font-family: var(--font-headline);
 	font-size: 10px;

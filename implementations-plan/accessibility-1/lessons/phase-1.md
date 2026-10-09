@@ -52,3 +52,16 @@ Each attempt and measurement of the arc, in order.
 - The first Chrome at-rest pair differed across the token card and amount: the "after" shot was taken before the seeded token loaded. The shot now waits for the unit switch; re-shot, every differing pixel is in the header address, both themes, both browsers.
 - On smoke the open menu has an enabled method: ArrowDown focuses a `[data-dropdown-item]`; Escape returns the focus to the trigger on both browsers.
 - Network `popup-escape-layered.test.ts` (opens the picker by pointer) green on Chrome at retry 0.
+
+## Arc exit: review round 1
+
+Codex (high) approved with fixes; an Opus panel review ran alongside.
+
+- Accepted and fixed:
+  - A second mouse or pen pointer replaced the press holding the field, so its release ended the hold under a press still down. The held press now stays the one whose release counts.
+  - A release queued by the held press could end a press that started before it ran. A new press clears the queued release.
+  - The fee menu opened on the held press measured its trigger before the card moved it: on the old build the menu sat 30 px above the trigger instead of 8 (smoke, Chrome). The hold now also ends at the capture of the click the release delivers outside the field, whose listeners run the microtasks between them, so the card renders before the click reaches its target. The release timer stays as the path for a press that delivers no click. Smoke asserts the 8 px gap after the card appears, both browsers.
+  - The fee spec now picks a method with Enter (menu closed, `data-fee-method` set, focus back on the trigger), then reopens with Space and closes with Escape.
+  - The picker's chevron is `aria-hidden`; a keyboard press on Refresh quote moves the focus to the amount only when a live quote unmounts the button; a vacuous Max test is gone; a dead `color: inherit` is gone.
+- Rejected: deleting the `/** Composables */` import header (the repo's SFC order names its import groups); an Opus suggestion to re-check the Enter guard against the window in e2e (the red run on the base build already proved the window).
+- Noted, unverified: a pen press reaches the hold through the same pointer events as a mouse; no pen device here.
