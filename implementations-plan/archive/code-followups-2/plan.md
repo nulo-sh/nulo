@@ -1,7 +1,7 @@
 ---
 plan: code-followups-2
 tier: mid
-status: approved (orchestrator, 2026-10-09); arcs in progress
+status: completed
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -11,8 +11,35 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 3 Explore agents (sonnet); dual audit (Codex gpt-6.1-sol high + Opus Plan); one final fresh Codex pass
 base: origin/dev at f557e20 (recon read at 61060c0; #56 and #74 merged in between)
 trunk: dev
-issues: none (follow-ups.md entries; no GitHub issue)
+issues: [85, 95, 102, 120, 121, 145, 150, 155, 169, 173, 175, 176, 177, 185, 187, 193, 202, 210]
 ---
+
+## Outcome
+
+- **Date**: 2026-10-09.
+- **Status**: completed. Three PRs against `dev`, one per arc (D-orch-1: no stack), merged in order; this close-out is a fourth, docs-only PR.
+- **Shipped**:
+  - #237, Arc 1 (wallet services): entries 10, 37, 64, 65, 95, 102 and 132 whole; closed #85, #102, #120, #121, #145, #150 and #175. A selector/name mismatch is refused as a scope refusal (code `4100`, "Not allowed" in History and Home's Recent activity, owner-signed OA-2 option A); a profile deletion purges its JSON-broken account rows by key; two log lines redacted; one profile projection; one batch size; nine `z.nativeEnum` calls moved to `z.enum`.
+  - #234, Arc 2 (extension pages, build and e2e harness): entries 26, 130, 135 and 152 whole, 125, 126, 172 and 186 in part; closed #95, #173, #177, #187 and #202. Submit latches on Recovery phrase and Change password; only `.vue` files are routes; auto-import declarations overwritten on each build; the in-run e2e teardown waits on and escalates the whole process group; `probeAnvil` checks the chain id; two losing race timers cleared.
+  - #238, Arc 3 (CI, release scripts and docs): entries 134, 142, 148, 150 and 163 whole, 108 and 149 in part; closed #176 and #193. The dead salt left every workflow; `docker-ci-like.sh` installs Bun and Node from hash pins; one shared workflow-command escaper; a static guard against workflow references in code; retired gotchas routed into the `e2e-testing` and `aztec-update` skills and `COMPOSITION-TESTS.md`.
+- **Open items**: #155, #169, #185, #210, #239, GHSA-6cj6-wp78-52mc.
+  - #155: the Node-side progress-stall watchdog and per-fork memory cap (entry 108).
+  - #169: `resolve-ports` (never this lane's); a group whose leader exited before teardown, and the persisted-lock reaper, both need ownership evidence; nothing proves `--slots-in-an-epoch 1` (entries 125, 126).
+  - #185: CLAUDE.md's release-runbook half, wrangler's `routes` rule and the refusal of domain changes, held during the lane because #235 edited CLAUDE.md; #235 has merged (entry 149).
+  - #210: FormPopup's raw order, non-contiguous orders after a re-open and the per-owner reducer policies, each visible and so the owner's call (entry 186).
+  - #239: CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins (found in Phase 3.2).
+  - GHSA-6cj6-wp78-52mc: fixed by #238; publish it with the release that carries #238 (entry 142).
+- **Dropped, rejected or superseded**:
+  - Entry 34: parked (D2), since either available fix changes which dApp registrations succeed, an owner call. Tracked privately: GHSA-cwcc-mvf5-w7m9.
+  - Entry 107: found partly resolved, nothing built. Tracked privately: GHSA-hwrf-v993-jrv9.
+  - Entries 29 and 183: found resolved (§ Scope has the evidence).
+  - Entry 152's development-only CSP source: not built. The HMR socket is not refused, because crxjs serves the Chrome dev popup under Chrome's baseline extension policy (D-arc2-1).
+  - Entry 172's other bullets (`balances.store.ts`'s `withTimeout`, the test `sleep` copies): kept as today, as the entry says; #202 carried only the two race timers.
+  - The 177 entries under § Not this lane: untouched, each with its reason there; governance-1 (#236) turned each into an issue, an advisory or a recorded disposition.
+  - Deleting the `SPONSORED_FPC_SALT` repository secret: the claim did not hold. On 2026-10-09 no secret of that name exists (two repository secrets, the release App's; the environments hold only AMO's two; no organization secret is shared with the repository), so the workflows were passing an unset secret and nothing is left to delete.
+  - § Delivery's four-layer `gh stack`: superseded by D-orch-1. The final cross-arc Codex pass was not run: Arcs 1 and 2 ran in parallel and share no file, and Arc 3 branched from `dev` after Arc 2 landed and merged Arc 1 before its PR opened.
+  - § Close-out edits to follow-ups.md: superseded by D-orch-2 and by #236, which retired the file.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # code-followups-2: prune the follow-ups, ship the small code ones
 
@@ -23,8 +50,7 @@ design decision, and no visible change beyond one the owner has already signed o
 2. Build the small entries in three stacked arcs, grouped by subsystem.
 3. List the rest under "Not this lane", one reason each.
 
-Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Live progress:
-[STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
 
 **UI impact.** One surface changes, on a sign-off the owner gave on 2026-10-08. Everything else
 changes nothing a person sees.
@@ -1533,9 +1559,9 @@ No PR carries `Closes #n`: this lane closes follow-ups entries, not issues.
 
 Never merge; never `--admin`.
 
-## Outcome draft
+## Outcome per arc
 
-Filled per arc as it lands; the close-out turns it into the `## Outcome` block (D-orch-2).
+Each arc's record as it landed; § Outcome is the summary.
 
 ### Arc 1
 
@@ -1619,11 +1645,12 @@ session.
 
 ## Follow-ups found during planning
 
-To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
+Filed at close-out:
 
-- **CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins** (Phase 3.2). The drift test
-  fails a Bun bump that misses them, but the runbook should list the site beside the others.
-  CLAUDE.md is in accessibility-1's file map.
-- **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1. Deleting it is
-  a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
-  entry.)
+- **CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins** (Phase 3.2): #239. The
+  drift test fails a Bun bump that misses them, but the runbook should list the site beside the
+  others.
+- **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1: did not hold.
+  No secret of that name exists (§ Outcome), so there is nothing for the owner to delete.
+- **On Chrome, `bun run dev` never runs the popup under the manifest's CSP** (Phase 2.4): knowledge,
+  not work, so it went to `lessons.md`, not an issue.
