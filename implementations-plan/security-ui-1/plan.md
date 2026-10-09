@@ -553,6 +553,10 @@ Scope: the r1 diff only (`feat(design): add a red variant of the regular buttonâ
 | 4 | "Type and size" in the doc line: size comes from the size prop. | Nit | Accepted. |
 | 5 | The comment says neither variant sets a size; the test checked only destructive. | Nit | Accepted: the test covers both. |
 
+### Owner call r1: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `clean`. "No new material findings": the explicit size assertion closes the vacuous check, and the style-block tests have positive controls and reject the mutations (hover guard removed, padding on primary, red replaced by accent, the fill rule deleted). The hover stays an owner render note. The loop converged.
+
 ## Post-implementation
 
 Run per arc at each arc boundary, before `gh stack add` opens the next arc, scoped to that arc's diff. `/code-review` is not run (`code_review: off`).
