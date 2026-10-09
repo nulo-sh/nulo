@@ -7,7 +7,7 @@
 
 ## I-2: every argument read sits inside the method's tuple
 
-Every `args[N]` read in the dispatcher, the scope checkers and the handlers was listed and checked against the tuple length of the method's schema entry. No read reaches past it, so cutting extra trailing arguments before the parse loses nothing a later layer reads.
+Every `args[N]` read in the dispatcher, the scope checkers and the handlers was listed and checked against the tuple length of the method's schema entry. One reader goes past it: `enforceScopeWithSession` (`scope-enforcement.ts`) reads `args[0].scopes`, `args[1].scopes` and `args[1].additionalScopes` for every method, past the tuple of a one-argument method and on keys the parse strips. Those reads can only refuse, so cutting extra trailing arguments before the parse still loses nothing a later layer acts on. (Corrected after the Opus review; the first version of this note said no read went past the tuple.)
 
 | Method | Tuple length | Reads |
 |---|---|---|
@@ -72,3 +72,14 @@ Method (scratch, never committed): a detached worktree at `f5ca160` under the la
 | isTokenRegistered (a number) | different error: "not available in this wallet build" |
 | grantPublicAuthwit (content without args) | routed: the window opened |
 | Preservation: the raw-args row, ungranted `simulateTx`, `requestCapabilities(null)`, the batched `requestCapabilities`, the popup-leg batch, the partial batch, a wire-valid `createAuthWit` | all 7 pass on base |
+
+## Network gate (Chrome, retry 0)
+
+- The 25 named files: 23 passed, 1 skipped by design (`tx-sendTx-delegated-authwit`: it needs the testnet standard contracts, gated on `NULO_E2E_STANDARD_CONTRACTS=1`), 1 failed: `data-privateEvents`, both tests. The wallet answered `INVALID_PARAMS` where the test expects the scope refusal.
+- Cause: the playground's `getPrivateEvents` button sent a stub the stock schema refuses (no `abiType`, an `Fr` as the event selector, `fromBlock: 0` where block numbers start at 1), and the parse now runs before the scope check the test exercises. Not a wallet regression: the call was malformed on the wire. Fixed in the playground (a schema-valid query, as the stock SDK types it); `data-privateEvents` then passed 2/2 at retry 0. This is the gate doing its job: no unit fixture could have shown it.
+- The full network suite (116 files) is not part of the phase gate; CI runs it on the PR.
+
+## Review rounds
+
+- Commit bodies: commitlint's `body-max-line-length` is 100, and a failed commit leaves its files staged, so the next `git commit` swept them in. Redone locally before any push.
+- The authwit intent union (`MessageHashOrIntentSchema`) is the one object-or-object union in an argument position. It accepts the inner-hash branch first and strips the rest, while every reader takes the call branch when `caller` is present: a valid inner hash beside a malformed call passed the parse (Codex C1). The other unions in `WalletSchema` mix a scalar with a literal or `"*"`, where no branch can hide another.

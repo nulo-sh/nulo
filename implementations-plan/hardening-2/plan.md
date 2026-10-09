@@ -336,7 +336,7 @@ The implementer rebases each arc on whatever has landed on `dev` and re-runs tha
 - **Arc 1, as signed off by the owner on 2026-10-08 (OA-1 C, OA-2 B, OA-3 B).** Only a dApp that sends a malformed call, which a stock SDK does not, sees any of it.
   - Connect window: unchanged for every conforming dApp, its "unknown" row included. A request with a malformed header, or a known permission type with a bad field, is refused before any window opens.
   - Approval window: a call with malformed fields that used to open it now opens none.
-  - Activity list: a queued `sendTx` the parse refuses fails its row as **"Couldn't read request"**, explanation "The app sent a request the wallet could not read. Nothing was sent." Nothing else on the row changes. A malformed call outside the grant reads the same, since the parse runs before the scope check. The PR carries the row in both themes.
+  - Activity: a queued `sendTx` the parse refuses fails its row as **"Couldn't read request"** (the History and Home card, and the record's outcome), with the explanation "The app sent a request the wallet could not read. Nothing was sent." on the record's page, as a scope refusal reads "Not allowed". Nothing else on the row changes. A malformed call outside the grant reads the same, since the parse runs before the scope check. The PR carries the card and the record in both themes.
   - dApp-facing text: one new classified refusal, `-32602` with `walletErrorCode: "INVALID_PARAMS"` and "The request's arguments do not match the wallet API.". Extra trailing arguments stay ignored, as today.
 - **CSP: none intended.** A directive that breaks a page's styles, fonts or frames is a defect, fixed by widening that directive with the narrowest source the violation names, never by changing markup (D-23b).
 
@@ -673,6 +673,31 @@ Per-decision views from round 1: both judged A stronger for D-16a, b, e, f and g
 **Resumed, round 3: approve.** No new or unresolved material finding.
 
 Confirmed sound by this pass: the prescan move; the shallow schema copy (the patch assigns top-level entries only); the deleted shape checks are covered by the schemas; compensation cannot hit a successor (both creation and restore allocate through the fenced allocator); registry matching confines persisted-journal restores, and no legitimate tombstone writer needs a mismatched identity; worker capture is feasible per the CSP3 reporting algorithm, pending the probes; a synchronous first import keeps listener registration; every named test file exists.
+
+### Arc 1 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11eff-cd3c-7fd2-8030-8cff62a36738`)
+
+**Verdict: findings** (five), on `1ed536d..9da9581`. Sound per the pass: the ladder order with batch re-entry and the prescan, fail-closed missing entries, the private patched copy, the capability header and known types, refusals without causes or values, the OA-3 copy, the object-keyed cache.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C1 | Medium | `MessageHashOrIntentSchema` accepts its inner-hash branch first and strips the rest, while the scope check, the window and the signer read the call branch when `caller` is present: a valid inner hash beside a malformed call reached the approval route | **Accepted.** An intent carrying `caller` or `call` must also parse as a call intent (`wallet-schema-args.ts`). Dispatch regression red without the fix. The only object-or-object union in an argument position. |
+| C2 | Low | The queued journal reads `opts.from` before the parse; `String()` on `{ toString: "x" }` throws and logs a warning every user keeps | **Accepted.** `requestedSenderOf` returns `""` (no account) for a non-string `from`, which the parse refuses at dispatch anyway; the sender table now asserts no row warns. Red without the fix. |
+| C3 | Low | The cache keys the input object while returning the verifier's result: a verifier returning B for A leaves A cached | **Accepted, then revised by O6.** |
+| C4 | Low | `artifact-class-id.ts` recommends a class-id-keyed `Set` cache, the #26 mistake | **Accepted.** Comment states the object-and-id rule. |
+| C5 | Low | The `ArgGuard` comment repeats itself; helper comments claim values stay unvalidated | **Accepted.** Condensed to the arity contract; stale helper comments deleted. |
+
+### Arc 1 implementation — Opus 5.5 review (general-purpose agent, alongside Codex round 1)
+
+**Verdict: findings** (six), on `1ed536d..9da9581` plus the uncommitted round-1 fixes. Sound per the review: the ladder, no leaks (the message is a registry name, the envelope constant, the journal text fixed), the schema copy, every registry method has an entry, the projection after the parse, the journal wiring (`journal-state.ts` is the only consumer of the kind), the object-keyed cache.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| O1 | High | The activity card's subtitle has no `malformed_request` arm, so the card reads "Transaction failed" and the signed-off label shows only on the record's page; a malformed out-of-scope call's card moved from "Not allowed" to "Transaction failed" | **Accepted.** The card reads "Couldn't read request", as a scope refusal's reads "Not allowed": the owner's row label, unchanged copy. The first build had kept the generic subtitle on a narrow reading of "nothing else on the row changes"; the screenshots show both surfaces. |
+| O2 | Low | A raw client sending `args: null` crashed the arity guards with a bare `TypeError`: the unclassified envelope and an `error` log line per call | **Accepted.** A non-array `args` is the parse's refusal before any guard reads it. Pre-existing. |
+| O3 | Low | Passing the schema does not make a value safe to `String()`: `AztecAddress.schema` accepts a Buffer-shaped object, and one with an own `toString: 0` throws at a dozen coercion sites, failing closed with the unclassified envelope and an `error` log line | **Deferred**, pre-existing and fail-closed with nothing leaked; the fix is either every coercion site or a whole-tree walk at the parse, both outside this arc. Carried to the close-out's follow-ups. |
+| O4 | Low | The I-2 note said no read goes past the tuple; `enforceScopeWithSession` reads `scopes` and `additionalScopes` on every method | **Accepted.** `lessons/phase-1.md` corrected: those reads can only refuse, so the cut stays safe. |
+| O5 | Low | Stale comments: the verifier's cache advice, the guards' "unvalidated", the checker's "unvalidated wire data", a garbled batch sentence, the README's "once per message", `apply.ts` naming only the singleton | **Accepted.** All corrected. |
+| O6 | Low | Caching the verifier's returned object (C3's fix) would vouch for an object the verifier never hashed | **Accepted over C3.** The cache stores an artifact only when the verifier returned the object it hashed; a verifier returning another object leaves nothing cached. |
 
 ### Arc 3 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11e54-381a-7dd2-a1ba-a82a128de7e7`)
 
