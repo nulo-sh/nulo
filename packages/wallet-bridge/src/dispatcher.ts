@@ -267,12 +267,12 @@ export class WalletSdkDispatcher {
 		// A pure pass/fail predicate over the ORIGINAL args, never replacing the array. Methods without
 		// an argSchema are left to the schema parse.
 		const argSchema = METHOD_REGISTRY[methodName].argSchema
-		if (argSchema && !argSchema(args)) {
+		if (!Array.isArray(args) || (argSchema && !argSchema(args))) {
 			throw InvalidWalletArgumentsError.forMethod(methodName)
 		}
 
 		// Legs are parsed only when they re-enter dispatch, so a popup leg is refused here, before any
-		// leg runs. A stock SDK's batch union already omits these; a raw protocol client could not.
+		// leg runs. A stock SDK's batch union already omits these; a raw protocol client is not bound by it.
 		if (methodName === "batch") {
 			for (const leg of args[0] as Array<{ name: string }>) {
 				if (BATCH_REFUSED_METHODS.has(leg.name)) {

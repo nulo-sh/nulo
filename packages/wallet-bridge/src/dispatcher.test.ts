@@ -3541,6 +3541,15 @@ describe("dispatcher — arg guards: order, tolerance, batch-leg validation", ()
 		)
 	})
 
+	test("an args value that is not an array is refused before any guard reads it", async () => {
+		const dispatcher = makeBareDispatcher(makeSession())
+		for (const method of ["batch", "getContractMetadata", "simulateTx"]) {
+			for (const args of [null, undefined, "x", { 0: "y" }]) {
+				await expect(dispatcher.dispatch(method, args as never, ctx)).rejects.toThrow(InvalidWalletArgumentsError.forMethod(method))
+			}
+		}
+	})
+
 	test("malformed batch envelopes are rejected by batch's own guard", async () => {
 		const dispatcher = makeBareDispatcher(makeSession())
 		await expect(dispatcher.dispatch("batch", ["not-legs"], ctx)).rejects.toThrow("Invalid arguments for wallet method: batch")
