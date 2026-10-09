@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
 import http from "node:http"
-import { execSync, spawn, type ChildProcess } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import type { TestProject } from "vitest/node"
 import {
 	type AztecTestConfig,
@@ -36,6 +36,7 @@ import {
 	plannedRunDir,
 	reapPriorRun,
 	stopService,
+	killChromesLoading,
 	stopServiceOnExit,
 	sweepDeadRuns,
 } from "./sandbox-ownership"
@@ -135,8 +136,6 @@ let AZTEC_RUN_DIR = plannedRunDir()
 /** One launch marker per service, in its spawn environment and in the lock: the only identity
  *  teardown and the orphan reap act on. */
 const MARKERS: Record<SandboxService, string> = { anvil: newMarker(), aztec: newMarker(), playground: newMarker() }
-/** Agent runs carry a run marker from `agent.sh`; a bare `vitest` run does not. */
-const IS_AGENT_RUN = process.env.NULO_E2E_RUN !== undefined && process.env.NULO_E2E_RUN !== ""
 /** Set when the pack was claimed in the host registry for this run: nothing on it is adopted. */
 const RUN_ID = claimedRunId()
 
@@ -179,9 +178,7 @@ async function probeHttp(url: string, timeoutMs = 1500): Promise<boolean> {
  * test runs.
  */
 function killOrphanChromes() {
-	try {
-		execSync(`pkill -f "chrome.*--load-extension=${EXTENSION_PATH}" 2>/dev/null || true`, { stdio: "ignore" })
-	} catch {}
+	killChromesLoading(EXTENSION_PATH)
 }
 
 /** Vitest globalSetup contract: with a DEFAULT export present, the named `teardown` export is
@@ -345,13 +342,12 @@ async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 	return "fresh"
 }
 
-/** Processes a dead agent run of this worktree left (forks, Chrome). Without `/proc` there is no
- *  run sweep, so the extension-path Chrome sweep a bare run has always had serves every run. */
+/** Processes a prior run of this worktree left: a dead agent run's forks by run marker, and every
+ *  Chrome loading this build, which no marker can find. No live run holds the worktree by now. */
 async function reapDeadRuns(): Promise<void> {
-	const linux = process.platform === "linux"
-	const status = linux ? await sweepDeadRuns(REPO_ROOT) : "stopped"
+	const status = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
 	if (status !== "stopped") console.warn(`[e2e-setup] a dead run's processes are ${status}; \`bun run e2e:reap\` retries`)
-	if (!IS_AGENT_RUN || !linux) killOrphanChromes()
+	killOrphanChromes()
 }
 
 function priorPortsMatch(priorLock: OwnedState): boolean {

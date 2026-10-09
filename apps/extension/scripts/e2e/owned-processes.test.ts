@@ -9,19 +9,8 @@ import { afterAll, describe, expect, test, vi } from "vitest"
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-owned-processes-test-"))
 process.env.NULO_E2E_DATA_ROOT = ROOT
 
-const {
-	LAUNCH_ENV,
-	OWNER_ENV,
-	RUN_ENV,
-	RUN_OWNER_ENV,
-	WORKTREE_ENV,
-	assertInheritsRun,
-	newMarker,
-	ownIdentity,
-	ownedProcesses,
-	readEnviron,
-	readStartTime,
-} = await import("../../tests/e2e/owned-processes")
+const { LAUNCH_ENV, OWNER_ENV, RUN_ENV, RUN_OWNER_ENV, WORKTREE_ENV, newMarker, ownIdentity, ownedProcesses, readEnviron, readStartTime } =
+	await import("../../tests/e2e/owned-processes")
 const { createRunDir, deletableRunDir, reapPriorRun, stopService, stopServiceOnExit, sweepDeadRuns, sweepOrphanDataDirs } = await import(
 	"../../tests/e2e/sandbox-ownership"
 )
@@ -340,16 +329,6 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 })
 
 describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000 }, () => {
-	afterAll(() => {
-		for (const pid of spawned) {
-			try {
-				process.kill(pid, "SIGKILL")
-			} catch {
-				// Already stopped.
-			}
-		}
-	})
-
 	// A zombie's environ refuses the read exactly as a non-dumpable process's does.
 	test("a zombie reads as gone, not unreadable", async () => {
 		const parent = spawn("sh", ["-c", "sleep 0.1 & echo $!; exec sleep 5"], { stdio: ["ignore", "pipe", "ignore"] })
@@ -359,19 +338,6 @@ describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000
 			expect(readEnviron(zombie)).toBe("gone")
 		} finally {
 			parent.kill("SIGKILL")
-		}
-	})
-
-	test("a process that did not inherit the run marker is refused; one that did passes", async () => {
-		const run = newMarker()
-		process.env[RUN_ENV] = run
-		try {
-			const without = await spawnWith({ NULO_TEST_PLAIN: "1", [RUN_ENV]: "" }, "NULO_TEST_PLAIN")
-			expect(() => assertInheritsRun(without.pid, "Chrome")).toThrow("Chrome did not inherit the run marker")
-			const inherited = await spawnWith({ NULO_TEST_PLAIN: "1" }, "NULO_TEST_PLAIN")
-			expect(() => assertInheritsRun(inherited.pid, "Chrome")).not.toThrow()
-		} finally {
-			Reflect.deleteProperty(process.env, RUN_ENV)
 		}
 	})
 })

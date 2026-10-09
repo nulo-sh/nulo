@@ -95,7 +95,7 @@ bun run e2e:agent
 What keeps them apart:
 
 - **Ports.** `resolve-ports.ts` skips every port `~/.agents/ports.md` lists and claims its pack there (`nulo-e2e-<service>` rows, owner `agent.sh`'s pid) under the file's lock, which other tools on the host share (`tests/e2e/port-registry.ts` states the contract). `cat ~/.agents/ports.md` shows who holds what. Under a run id, setup bind-tests the pack after `markBootStarted()` and never adopts a listener on it. Every readiness wait fails once the child it spawned exits, even with a probe still pending, and on Linux accepts an answer only from a socket a process carrying the service's marker holds, so a stranger on a claimed port is a boot failure (exit 86), not a sandbox.
-- **Processes.** Each service carries a launch marker and its owner in its environment, and every process of an agent run (forks, Chrome, Firefox, geckodriver) inherits the run's marker, owner and worktree (`tests/e2e/owned-processes.ts`). Teardown stops a service's group, then every process with its marker, a leaderless group's included. An orphan sweep stops a process only when the owner named in its own environment is dead, so a run never signals another's processes, whatever a lock or record on disk says.
+- **Processes.** Each service carries a launch marker and its owner in its environment, and every process of an agent run (forks, Firefox, geckodriver) inherits the run's marker, owner and worktree (`tests/e2e/owned-processes.ts`). Chrome inherits them too but overwrites its environ region with its process title, in the browser and every child, so no Chrome ever shows a marker: Chromes are found by the extension path on their command line instead. Teardown stops a service's group, then every process with its marker, a leaderless group's included. An orphan sweep stops a process only when the owner named in its own environment is dead, so a run never signals another's processes, whatever a lock or record on disk says.
 - **Data.** The node's run dir sits on real disk under `~/.cache/nulo-e2e`, stamped with its marker, and is deleted only directly under that root.
 
 A run killed with `kill -9` leaves its sandbox and browsers running: `bun run e2e:reap` in that worktree stops them by marker once the run's owner is gone, removes its run dir and drops its registry rows. The next run in the worktree does the same at setup.
@@ -240,10 +240,10 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Anvil, aztec, playground | Yes | spawned by setup with a launch marker and owner in their environment, recorded in the lockfile; stopped by group, then by marker |
 | Aztec run dir | Yes | `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`), stamped with the node's marker; the node writes `<dir>/data` |
 | Ports | Yes | claimed in `~/.agents/ports.md` under the run id before the build; bind-tested again at boot |
-| Forks, Chrome, Firefox | Yes | inherit the run marker (Chrome's launch checks it); a dead run's forks and Chrome are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
+| Forks, Firefox | Yes | inherit the run marker; a dead run's forks are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
-| Chrome orphan cleanup | Yes | an agent run's by run marker on Linux; a bare run, and any run without `/proc`, keeps `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped |
+| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no live run holds the worktree (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |

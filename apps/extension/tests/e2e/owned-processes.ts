@@ -287,8 +287,8 @@ export const orphanedLaunch =
 	}
 
 /**
- * Processes of a dead agent run in `worktree`: forks, Chrome, anything that inherited the run's
- * marker. A launch-marked process is left to its own sweep, which honours its record's owner (a
+ * Processes of a dead agent run in `worktree`: forks, Firefox, anything that inherited the run's
+ * marker and still shows it. Not Chrome: it overwrites its environ with its process title. A launch-marked process is left to its own sweep, which honours its record's owner (a
  * reused sandbox outlives the run that started it). A live run's processes, this run's included,
  * are no concern of this sweep.
  */
@@ -299,13 +299,3 @@ export const deadRunIn =
 		if (env.has(LAUNCH_ENV)) return "ignore"
 		return identityIsDead(env.get(RUN_OWNER_ENV)) ? "stop" : "ignore"
 	}
-
-/** Throws when this process belongs to an agent run and `pid`, read back, does not carry the run's
- *  marker: such a process would outlive a killed run where no sweep could find it. */
-export function assertInheritsRun(pid: number | undefined, what: string, read: EnvironReader = readEnviron): void {
-	const run = process.env[RUN_ENV]
-	if (!run || pid === undefined) return
-	const env = read(pid)
-	if (typeof env !== "string" && env.get(RUN_ENV) !== run)
-		throw new Error(`${what} did not inherit the run marker, so a sweep after a killed run could not find it`)
-}

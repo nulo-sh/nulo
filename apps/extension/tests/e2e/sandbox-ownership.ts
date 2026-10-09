@@ -1,4 +1,4 @@
-import type { ChildProcess } from "node:child_process"
+import { type ChildProcess, execSync } from "node:child_process"
 import { lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { E2E_DATA_ROOT, type OwnedState, SANDBOX_SERVICES, type SandboxService, isPidAlive } from "./lockfile"
@@ -152,9 +152,21 @@ function reapUnowned(lock: OwnedState): ReapOutcome {
 	}
 }
 
-/** Every process of a dead agent run in `worktree` (forks, Chrome) not owned by a launch sweep. */
+/** Every process of a dead agent run in `worktree` (forks, Firefox) not owned by a launch sweep. */
 export function sweepDeadRuns(worktree: string, opts: SweepOptions = {}): Promise<SweepStatus> {
 	return sweep(deadRunIn(worktree), opts)
+}
+
+/**
+ * Chrome rewrites its environ region with its process title, in the browser and every child, so no
+ * Chrome shows a marker: a worktree's Chromes are found by the extension path on their command line.
+ */
+export function killChromesLoading(extensionPath: string): void {
+	try {
+		execSync(`pkill -f "chrome.*--load-extension=${extensionPath}" 2>/dev/null || true`, { stdio: "ignore" })
+	} catch {
+		// Nothing matched, or pkill is missing.
+	}
 }
 
 interface ProcessTable {

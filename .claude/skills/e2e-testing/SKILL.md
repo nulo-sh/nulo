@@ -815,7 +815,9 @@ the sanctioned response.
   carrying the service's marker, SIGTERM only, and never clears the lock (a survivor must stay findable).
 - **Ownership is the marker, never a pid.** Each service is spawned with `NULO_E2E_LAUNCH=<uuid>` and
   `NULO_E2E_OWNER=<pid>:<start time>` of the vitest process; an agent run's every process also
-  inherits `NULO_E2E_RUN`, `NULO_E2E_RUN_OWNER` (`agent.sh`'s pid) and `NULO_E2E_WORKTREE`.
+  inherits `NULO_E2E_RUN`, `NULO_E2E_RUN_OWNER` (`agent.sh`'s pid) and `NULO_E2E_WORKTREE`. Chrome
+  overwrites its environ with its process title (browser and children), so it never shows a marker:
+  Chromes are swept by extension path, at every setup and in `e2e:reap`.
   Teardown stops the group, then every process carrying the marker; an orphan sweep signals a
   process only when the owner in its own environ is dead, and nothing while the lock's `owner`
   lives (a reuse rewrites it). `/proc` unreadable, or a claimed process turned unreadable (a
