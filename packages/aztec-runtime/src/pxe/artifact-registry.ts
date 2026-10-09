@@ -136,7 +136,7 @@ export class ArtifactRegistry {
 			? (level, msg, ...rest) => this.logger?.log(this.logSource, level === "warn" ? LogLevel.Warn : LogLevel.Debug, msg, ...rest)
 			: undefined
 		const verified = await this.verifier.verify(artifact, classId, verifyLogger)
-		if (verified) this.verified.set(verified, key)
+		if (verified === artifact) this.verified.set(artifact, key)
 		return verified
 	}
 }
