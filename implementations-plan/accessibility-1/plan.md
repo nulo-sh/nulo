@@ -1,8 +1,8 @@
 ---
 plan: accessibility-1
 tier: mid
-status: planned; final Codex verdict approve; implementation waits for the owner's picks on two decision pages and the orchestrator's approval
-issues: none (the scope is eleven follow-ups.md entries; no GitHub issue tracks them)
+status: completed
+issues: "#90, #96, #111, #115, #123, #129, #131 (the follow-ups.md entries, migrated to issues by #236)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -12,6 +12,19 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: completed. Every call on both decision pages was answered on the planner's recommendation and built. Arcs 1 and 2 are squash-merged into `dev`; Arc 3 (#241) and this close-out land after them.
+- **Shipped**:
+  - [#235](https://github.com/nulo-sh/nulo/pull/235), Arc 1, Send (page 1: 1 A, 2 A, 3 C, 4 yes, 5 A, 6 A). The unit switch, Max and Refresh quote are Tab stops after the amount field, with the accent ring; the token card and the fee method picker draw it too, and the picker opens by keyboard; a mouse or pen press below the destination lands when the field turns into the account card; the sponsor notice sits in a polite region; only the destination's own Enter picks a suggestion. CLAUDE.md § Keyboard & focus order records call 1's exception. Resolves #90's send-amounts-1 and -2, #96's wallet-safety-7 and #115's amounts-sends-and-fees-20.
+  - [#76](https://github.com/nulo-sh/nulo/pull/76), Arc 2, Home and shared chrome (page 2: 1 A, 2 A, 5 A, 6 A). Home's "View all" and "View history" are links in a readable colour with the ring; the sub-page back arrow and onboarding's filled method tab draw a visible ring; the connect step bar's track and the light theme's status text pass contrast through four new tokens. Resolves #129, #96's wallet-safety-6, #111 and #123's connecting-a-dapp-3.
+  - [#241](https://github.com/nulo-sh/nulo/pull/241), Arc 3 (page 2: 3 yes, 4 A+). History's and Settings' compact title bar is hidden from screen readers; the swap to the emoji check is announced in the window's own words, with the look-alike hostname warning when shown, and nothing takes the focus. Resolves #131 and #123's connecting-a-dapp-5.
+  - This close-out closes #96, #111, #129 and #131, which the three arcs resolve in full; #90, #115 and #123 carry a comment on what shipped and stay open for the rest.
+- **Dropped**: none of the calls. Touch for page 1 call 3 (option C holds a mouse or pen press only), as the owner's page said. A screen-reader run as a gate (I4): no CI host has one; the tests pin regions and exact text instead. Delivery as one `gh stack`: replaced by plain PRs on `dev` (A2-D1, D-orch-1). Close-out step 4's `follow-ups.md` edits: the file was retired by #236, and open work is in issues (D-orch-2). Close-out step 5 shipped in #235.
+- **Open items**: #90 (send-amounts-3 to -6), #115 (amounts-sends-and-fees-19 and -21), #123 (connecting-a-dapp-1 and -2), #242 (keyboard and screen-reader gaps this plan observed outside its scope), #243 (the light status icons and dark red text on a hovered row), #244 (a shared focus ring and announcer, if a third site needs them).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # Accessibility 1: Send keyboard reach, Home and shared chrome
 
