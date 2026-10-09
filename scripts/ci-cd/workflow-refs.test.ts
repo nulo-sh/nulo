@@ -24,7 +24,7 @@ const FAMILIES: { name: string; pattern: RegExp }[] = [
 	},
 	{
 		name: "a milestone tag",
-		pattern: /\b[MA][0-9]+\.[0-9]+\b|\bpre-A[0-9]+\b|\b[Pp]hase [0-9]+[a-z]\b|\bPR-[0-9]+\b|\bStage [A-Z]\b|\bArc [0-9]+\b/,
+		pattern: /\b[MA][0-9]+\.[0-9]+\b|\bpre-A[0-9]+\b|\b[Pp]hase [0-9]+([a-z]|\.[0-9]+)\b|\bPR-[0-9]+\b|\bStage [A-Z]\b|\bArc [0-9]+\b/,
 	},
 ]
 
@@ -73,6 +73,7 @@ describe("workflow references in code and config", () => {
 		["// since A11.1", "a milestone tag"],
 		["// pre-A11 layout", "a milestone tag"],
 		["// added in phase 4b", "a milestone tag"],
+		["// moved here in Phase 3.2", "a milestone tag"],
 		["// from PR-2", "a milestone tag"],
 		["// Stage D only", "a milestone tag"],
 		["// Arc 3 adds the guard", "a milestone tag"],

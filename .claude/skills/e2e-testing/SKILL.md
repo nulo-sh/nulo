@@ -824,7 +824,7 @@ coordinator's pre-prove `checkCancelled` and before the post-prove one).
   `mac-identity-binding` (post-unlock races), `e2e-network-recovery` (probe-first),
   `network-e2e-required`, `parallel-e2e-isolation`, `e2e-proverless-stub`, `migration-lifecycle`,
   `e2e-skill-refresh` (this skill's layout). The PRF note is `apps/extension/tests/e2e/PRF-NON-PORTABLE.md`.
-- A move to Playwright is a walked dead end: the cumulative-load timeouts it was to cure are popup
-  discovery latency against fixed waits, which no automation library changes, and Playwright could
-  not open a CDP session on a service-worker target, which the passkey fixtures need
-  (`implementations-plan/archive/playwright-migration/plan.md#why`).
+- A move to Playwright is a walked dead end: the best fit for the cumulative-load timeouts it was to
+  cure is popup discovery latency against fixed waits, which no automation library changes, and at the
+  time of the spike Playwright could not open a CDP session on a service-worker target, which the
+  passkey fixtures need (`implementations-plan/archive/playwright-migration/plan.md#why`).

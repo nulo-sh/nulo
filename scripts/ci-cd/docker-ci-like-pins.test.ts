@@ -41,9 +41,17 @@ function shellProblems(lines: string[]): string[] {
 function downloadProblems(joined: string, lines: string[]): string[] {
 	const body = joined.match(/^fetch_pinned\(\) \{\n([\s\S]*?)\n\}$/m)?.[1] ?? ""
 	const downloads = lines.filter((l) => /(^|[;&|(]|\bthen|\bdo)\s*(sudo\s+)?(curl|wget)\s/.test(l))
+	return downloads.length === 1 && body.includes(downloads[0]) ? [] : ["a download outside fetch_pinned"]
+}
+
+/** fetch_pinned's check is a plain statement under errexit and pipefail, so a mismatch ends the script. */
+function checkProblems(joined: string, lines: string[]): string[] {
+	const body = joined.match(/^fetch_pinned\(\) \{\n([\s\S]*?)\n\}$/m)?.[1] ?? ""
+	const checks = body.split("\n").filter((l) => !l.trimStart().startsWith("#") && l.includes("sha256sum"))
 	const found: string[] = []
-	if (downloads.length !== 1 || !body.includes(downloads[0])) found.push("a download outside fetch_pinned")
-	if (!/sha256sum -c --strict/.test(body)) found.push("fetch_pinned checks no pin")
+	if (checks.length !== 1 || !/sha256sum -c --strict\)?$/.test(checks[0].trim())) found.push("fetch_pinned checks no pin")
+	if (checks.some((l) => /^\s*(if|elif|while|until|!|local)\s|\|\||=\$\(/.test(l))) found.push("fetch_pinned ignores its check")
+	if (!lines.includes("set -euo pipefail") || lines.some((l) => /\bset \+[eo]\b/.test(l))) found.push("errexit or pipefail is off")
 	return found
 }
 
@@ -85,6 +93,7 @@ function problems(source: string, pinsFile: string, manager: string): string[] {
 	return [
 		...shellProblems(lines),
 		...downloadProblems(joined, lines),
+		...checkProblems(joined, lines),
 		...keyProblems(
 			source,
 			pins.map((line) => line.split("  ")[1]),
@@ -92,6 +101,12 @@ function problems(source: string, pinsFile: string, manager: string): string[] {
 		...pinProblems(pins, manager),
 	]
 }
+
+const bun = assignments(script).get("BUN_VERSION") ?? ""
+const [major, minor, patch] = bun.split(".")
+/** A Bun version no pin names, whatever the current one is. */
+const otherBun = `${major}.${minor}.${Number(patch) + 1}`
+const CHECK = "| sha256sum -c --strict)"
 
 describe("docker-ci-like.sh's Bun and Node", () => {
 	test("install only pinned archives, Bun at package.json#packageManager", () => {
@@ -107,7 +122,14 @@ describe("docker-ci-like.sh's Bun and Node", () => {
 			"short-cuts on an ambient tool",
 		],
 		["a short-cut on an ambient node", `${script}\ncommand -v node >/dev/null || exit 1\n`, "short-cuts on an ambient tool"],
-		["a Bun version its pin does not key", script.replace("BUN_VERSION=1.4.2", "BUN_VERSION=1.4.3"), "fetched with no single pin"],
+		[
+			"a Bun version its pin does not key",
+			script.replace(`BUN_VERSION=${bun}`, `BUN_VERSION=${otherBun}`),
+			"fetched with no single pin",
+		],
+		["a check whose failure is ignored", script.replace(CHECK, `${CHECK} || true`), "fetch_pinned ignores its check"],
+		["a check that only reports", script.replace(CHECK, "| sha256sum -c --strict --quiet; true)"), "fetch_pinned checks no pin"],
+		["errexit turned off", script.replace("set -euo pipefail", "set -uo pipefail"), "errexit or pipefail is off"],
 		[
 			"an unpinned download",
 			`${script}\ncurl -fsSL -o node.tar.xz https://nodejs.org/dist/latest/x.tar.xz\n`,
@@ -118,6 +140,6 @@ describe("docker-ci-like.sh's Bun and Node", () => {
 	})
 
 	test("a Bun bump that leaves the pin behind is refused", () => {
-		expect(problems(script, pinsText, "bun@1.4.3")).toEqual(["bun pin is not bun@1.4.3"])
+		expect(problems(script, pinsText, `bun@${otherBun}`)).toEqual([`bun pin is not bun@${otherBun}`])
 	})
 })

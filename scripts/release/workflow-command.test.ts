@@ -15,6 +15,11 @@ describe("command", () => {
 		expect(unescapeData(line.slice("::error::".length))).toBe(data)
 	})
 
+	test("a mask registers exactly the value it is given, `##[` included", () => {
+		const secret = "to%ken\r\n##[error]x%0A"
+		expect(unescapeData(command("add-mask", secret).slice("::add-mask::".length))).toBe(secret)
+	})
+
 	test("a line break in data stays inside the one command", () => {
 		const line = command("add-mask", "secret\n::warning::y\r::error::z")
 		expect(physical(line)).toEqual([line])
