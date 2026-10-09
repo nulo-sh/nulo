@@ -1,7 +1,7 @@
 ---
 plan: code-followups-2
 tier: mid
-status: planned (awaiting approval)
+status: approved (orchestrator, 2026-10-09); arcs in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -1234,6 +1234,8 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D21 | 10: map `ScopeViolationError` to `scope_refused` in `markFailedUnlessCancelled`, not in the shared `failureKind` (Opus round 1) | `failureKind` also labels first-party Send records (`transfer-executor.ts`), which must never read "The app asked for more than you allowed" | Changing `failureKind` and accepting the Send label |
 | D22 | 10: log the refusal at `debug` in `logOperationOutcome` too (Opus round 1) | Without it every refused call still writes an `error` line; a refusal a dApp can repeat belongs at `debug` (logging policy), as the Terms refusal already does | Leaving the `error` line (the plan's first claim was wrong) |
 | D23 | Build 186's late-listener bullet, rewrite the rest (final Codex pass) | A listener added to a disconnected client after dispose is invisible; the same record's cleanup rule covers it, and the pinned-drift test flips with a mounted control | Parking the whole entry as owner UI drift (only its other three bullets are visible) |
+| D-orch-1 | No stack: each arc opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; Arcs 2 and 3 merge `dev` in after the arc before them lands; the close-out is a fourth PR after the last arc merges (orchestrator, at approval) | Arcs 1 and 2 run in parallel worktrees, and the orchestrator merges in order | `gh stack` with one layer per arc (§ Delivery as planned) |
+| D-orch-2 | No edit to `follow-ups.md`, ever, the close-out included: each PR body lists the entries its arc closes with their governance ledger ids, and a partly built entry's remainder goes into the arc's section of the Outcome draft (orchestrator, at approval) | The file is being retired by the governance-1 lane, which turns every entry into an issue or a recorded disposition | § Close-out edits to follow-ups.md as planned |
 
 ## Audit verdicts
 
