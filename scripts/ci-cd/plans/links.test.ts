@@ -421,12 +421,12 @@ describe("path-token", () => {
 			"implementations-plan/p/plan.md": stale,
 			"implementations-plan/index.md": "- [p](p/plan.md) — active — replaces `implementations-plan/gone/plan.md`\n",
 			"implementations-plan/archive/index.md": stale,
-			"implementations-plan/follow-ups.md": stale,
+			"implementations-plan/lessons.md": stale,
 		})
 		expect(findings(repo, "path-token").map((f) => f.file)).toEqual([
 			"implementations-plan/archive/index.md",
-			"implementations-plan/follow-ups.md",
 			"implementations-plan/index.md",
+			"implementations-plan/lessons.md",
 		])
 	})
 
