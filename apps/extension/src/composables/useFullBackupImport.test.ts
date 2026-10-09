@@ -2098,8 +2098,7 @@ describe("restoreStage — phase observability", () => {
 		const c = useFullBackupImport(opts)
 		// The slice must EXIST (and its networkId must survive the remap) for
 		// the account-state leg to run at all — without it the rejection mock
-		// is never invoked and every assert passes vacuously (review finding,
-		// both lenses).
+		// is never invoked and every assert passes vacuously.
 		const backup = await buildBackup({
 			data: {
 				"account-state": [{ networkId: "N1", chainId: 1, contracts: [], senders: [AS_SENDER] }],

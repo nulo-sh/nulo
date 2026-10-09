@@ -1,7 +1,7 @@
 /**
  * Pins the coordinator's PRODUCTION default deriver to the ONE shared formula.
  *
- * The R1 audits' bricking class: the default `DeriveAddress` silently re-implementing the
+ * The bricking class it guards: the default `DeriveAddress` silently re-implementing the
  * account-seed formula and drifting from AccountService's (every unlock then false-blocks).
  * The other coordinator tests inject fake derivers and can never catch that, and jsdom cannot
  * run the real poseidon (bb.js). So this test mocks the two module boundaries and asserts the
