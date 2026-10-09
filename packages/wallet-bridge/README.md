@@ -43,14 +43,16 @@ to live in the service worker while the PXE lives in the offscreen document.
 
 `dispatch()` runs, in order, for every call and again for every batch leg:
 
-1. the dApp session read, once per message;
-2. the method check, then its `argSchema` arity guard;
+1. the dApp session read, once per call (each batch leg reads it again);
+2. the method check, then the arity check (`args` is an array, and the method's `argSchema`);
 3. for a `batch`, the popup-leg refusal (`refusedInBatch`), before any leg runs;
 4. the capability check;
 5. the schema parse (`wallet-schema-args.ts`). It runs after the capability check, so an origin with
    no grant cannot make the worker parse a large payload, and before the scope check, so no checker,
    handler or window reads an unparsed value. `requestCapabilities` is parsed for its header and
-   every capability of a known type; an unknown type passes, so the connect window can show it;
+   every capability of a known type; an unknown type passes, so the connect window can show it. An
+   authwit intent naming `caller` or `call` must also parse as a call intent, the branch every
+   reader takes;
 6. the scope check;
 7. the handler, or the operation build and execution.
 

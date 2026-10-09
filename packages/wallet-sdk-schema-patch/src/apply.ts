@@ -45,7 +45,7 @@ const GRANT_AUTHWIT_SCHEMA = z.function({ input: z.tuple([schemas.AztecAddress, 
 const WALLET_FEATURES_SCHEMA = z.function({ input: z.tuple([]), output: z.array(z.string()) })
 
 /**
- * Mutate `schema` (the wallet-sdk `WalletSchema` singleton) in place, adding the
+ * Mutate `schema` (the wallet-sdk `WalletSchema` singleton, or a private copy of it) in place, adding the
  * four Nulo-custom method entries. Idempotent when the entries already match our
  * shape; throws when an upstream entry of the same name has a different signature.
  */
