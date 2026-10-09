@@ -74,8 +74,8 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	await tabTo(page, "send-token-trigger")
 	// The amount field is disabled without a balance, so the unit switch follows the token card.
 	expect(await tabAround(page, 1)).toEqual(["send-amount-fiat-toggle"])
-	await shotSend(page, "send-toggle-focused", "send-amount-row")
 	await expectAccentRing(page, "send-amount-fiat-toggle")
+	await shotSend(page, "send-toggle-focused", "send-amount-row")
 	const toggle = await page.$eval(sel("send-amount-fiat-toggle"), (el) => ({ tag: el.tagName, type: el.getAttribute("type") }))
 	expect(toggle).toEqual({ tag: "BUTTON", type: "button" })
 
@@ -93,6 +93,14 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	expect(await activeTestId(page)).toBe("send-amount-fiat-toggle")
 	// Disabled without a balance, Max is no stop: the next one is past the amount card.
 	expect((await tabAround(page, 1))[0]).not.toBe("send-amount-max")
+})
+
+test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ registeredExtensionPerTest: ctx }) => {
+	const page = await openSendPage(ctx, { priced: true })
+	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
+	await tabTo(page, "send-token-trigger")
+	await expectAccentRing(page, "send-token-trigger")
+	await shotSend(page, "send-token-focused", "send-token-trigger")
 })
 
 test("an open destination suggestion list covers neither Max nor the fee method picker", { timeout: 120_000, retry: 0 }, async ({

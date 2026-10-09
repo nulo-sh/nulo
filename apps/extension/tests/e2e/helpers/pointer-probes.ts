@@ -74,11 +74,16 @@ export async function tabTo(page: Page, testid: string, limit = 40): Promise<str
 	throw new Error(`Tab never reached ${testid}: ${visited.join(" → ")}`)
 }
 
-/** The focused element's computed outline, and the theme's accent resolved to the same colour
- *  syntax, so a ring drawn in the accent compares equal whatever notation the token uses. */
+/** The focused element's computed outline once its transitions have settled (a control with
+ *  `transition: all` brings its ring in over that time), and the theme's accent resolved to the same
+ *  colour syntax, so a ring drawn in the accent compares equal whatever notation the token uses. */
 export async function focusRing(page: Page): Promise<{ ring: string; color: string; accent: string }> {
-	return page.evaluate(() => {
-		const style = getComputedStyle(document.activeElement as Element)
+	return page.evaluate(async () => {
+		const el = document.activeElement as Element
+		// `getAnimations` flushes style first, so a transition the focus just started is in the list.
+		const settled = Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)))
+		await Promise.race([settled, new Promise((r) => setTimeout(r, 1_000))])
+		const style = getComputedStyle(el)
 		const probe = document.createElement("span")
 		probe.style.color = "var(--nulo-accent)"
 		document.body.append(probe)

@@ -92,6 +92,20 @@ for (const theme of ["light", "dark"] as const) {
 	})
 }
 
+// A focus ring is a graphic: 3:1 against what it sits on (WCAG 1.4.11). The accent ring on Send's
+// token card sits on the page and on a row's hover and pressed tints.
+const AA_GRAPHIC = 3
+const ACCENT_RING_SURFACES = ["--app-bg", "--nulo-surface-low", "--nulo-surface-high"]
+for (const theme of ["light", "dark"] as const) {
+	describe(`theme contrast — ${theme} accent focus ring on surfaces (required)`, () => {
+		for (const bg of ACCENT_RING_SURFACES) {
+			test(`${theme}: --nulo-accent on ${bg} >= ${AA_GRAPHIC}:1`, () => {
+				expect(contrast("--nulo-accent", bg, theme)).toBeGreaterThanOrEqual(AA_GRAPHIC)
+			})
+		}
+	})
+}
+
 // Regression: resolveColor must tolerate both comma and CSS Color 4 space-separated rgb() syntax.
 describe("resolveColor rgb() parsing", () => {
 	test("parses comma and space-separated rgb/rgba", () => {

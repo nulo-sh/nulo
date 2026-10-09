@@ -5,6 +5,7 @@
 - 2026-10-09: page 1 answered (A, A, C, Yes, A, A); recorded in OWNER-ASKS.md; Arc 1 implementation started on `worktree-accessibility-1`.
 - 2026-10-09: Phase 1.0 gate pass: lint, typecheck:all, test, test:all; smoke `send-keyboard.test.ts` (the Enter test) on chrome and firefox, retry 0, after a fresh build. Red on the base build on both browsers first.
 - 2026-10-09: Phase 1.1 gate pass: fast layers; smoke `send-keyboard.test.ts` (Enter, unit switch) on chrome and firefox, retry 0, fresh builds; network `send-amount-exact.test.ts` on chrome and firefox at `NULO_E2E_RETRY=0`; at-rest shots differ only in the header's account address.
+- 2026-10-09: Phase 1.2 gate pass: fast layers; smoke `send-keyboard.test.ts` (Enter, unit switch, token card) on chrome and firefox, retry 0, fresh builds.
 
 ## Planning
 

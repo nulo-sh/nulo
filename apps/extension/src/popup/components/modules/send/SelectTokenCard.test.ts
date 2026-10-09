@@ -4,6 +4,8 @@
  * the import popup when there is no token, from a tap, Enter or Space; after a failed load it
  * offers a Retry instead.
  */
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { createTestingPinia } from "@pinia/testing"
 import { mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
@@ -147,4 +149,12 @@ describe("send/SelectTokenCard — a load that failed", () => {
 		expect(popupStore.open).toHaveBeenCalledWith("select_token")
 		expect(w.emitted("retry")).toBeUndefined()
 	})
+})
+
+test("a focused card draws the accent ring inside its edge, over the hover tint", () => {
+	// jsdom computes no :focus-visible style; the rule is read from the component's source.
+	const source = readFileSync(resolve(__dirname, "SelectTokenCard.vue"), "utf8")
+	expect(source).toMatch(
+		/&:focus-visible \{\s*outline: 2px solid var\(--nulo-accent\);\s*outline-offset: -2px;\s*background: color-mix\(in srgb, var\(--nulo-surface-low\) 50%, transparent\);/,
+	)
 })

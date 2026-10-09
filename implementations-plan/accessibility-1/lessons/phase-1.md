@@ -24,3 +24,8 @@ Each attempt and measurement of the arc, in order.
 - At-rest shots (`send-at-rest`, both themes, both browsers), base build vs the change: `cmp` differs, a pixel diff finds every change inside the header's account address (x 84-160, y 36-45; a fresh profile per run), none in the amount card. Verdict: the buttons draw today's pixels at rest (I1 holds on both browsers).
 - The unit switch's ring is drawn around its whole box, which the strut makes the amount line's height: a tall ring beside the amount (shot `send-toggle-focused`). That is the press target the card already had.
 - Network `send-amount-exact.test.ts`, retry 0: the unreadable-paste step now reaches Max by Tab from the field and fills it with Enter; green on Chrome (159 s) and Firefox.
+
+## Phase 1.2
+
+- Red: the source-rule test in `SelectTokenCard.test.ts` failed; the six 3:1 rows (accent on `--app-bg`, `--nulo-surface-low`, `--nulo-surface-high`, both themes) passed from the start, as recon's ratios said (lowest 4.64:1).
+- Firefox's first shot caught the ring mid-transition: the card's `transition: all` (the same one `Button` has) brings the outline in over 0.2 s, from the text colour at offset 0 to the accent at -2px. The computed style read afterwards was final, so the assertion passed while the picture lied. `focusRing` now waits for the focused element's transitions to finish before reading, and the spec shoots after the ring check. The transition itself stays: it is the wallet's buttons' own behaviour.
