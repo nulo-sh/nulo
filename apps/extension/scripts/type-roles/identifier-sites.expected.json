@@ -8,6 +8,9 @@
 					"text": "kind: \"add_public_authwit\" as const,"
 				}
 			],
+			"digests": {
+				"packages/wallet-bridge/src/dispatcher.ts": "a655d3c254af5f64fee15f05e8505774ce629a9a6e2b46f9ab782aef18a25a11"
+			},
 			"evidence": [
 				{
 					"file": "packages/wallet-bridge/src/dispatcher.ts",

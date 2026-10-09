@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { beforeAll, describe, expect, test } from "vitest"
@@ -24,7 +25,13 @@ type SiteEntry = SiteKey & {
 	why?: string
 	review?: string
 }
-type ProducerSet = { search: string; hits: ProducerHit[]; evidence: { file: string; text: string }[] }
+/** `digests` pins each producer file's whitespace-collapsed content, so any edit to one reopens the attestation. */
+type ProducerSet = {
+	search: string
+	hits: ProducerHit[]
+	digests: Record<string, string>
+	evidence: { file: string; text: string }[]
+}
 type SurfaceEntry = {
 	id: string
 	name: string
@@ -45,6 +52,10 @@ const SUITES = new Set<string>(["smoke", "network", "none"])
 const read = (file: string): string => readFileSync(join(REPO_ROOT, file), "utf8")
 const readJson = <T>(name: string): T => JSON.parse(read(`${HERE}/${name}`)) as T
 const collapse = (text: string): string => text.replace(/\s+/g, " ")
+const digest = (file: string): string =>
+	createHash("sha256")
+		.update(collapse(read(file)).trim())
+		.digest("hex")
 const keyOf = (x: SiteKey): string => JSON.stringify([x.file, x.expression, x.branch, x.ordinal])
 const testidsIn = (selector: string): string[] => [...selector.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1])
 
@@ -148,11 +159,14 @@ describe("identifier sites", () => {
 		expect(problems).toEqual([])
 	})
 
-	test("an unreachable branch's producer set and evidence are as pinned", () => {
+	test("an unreachable branch's producer set, producer files and evidence are as pinned", () => {
 		const used = new Set(entries.flatMap((entry) => entry.unreachable ?? []))
 		for (const name of used) {
 			const pinned = expectedSites.producers[name]
-			expect(producerHits(new RegExp(pinned.search)), name).toEqual(pinned.hits)
+			const hits = producerHits(new RegExp(pinned.search))
+			expect(hits, name).toEqual(pinned.hits)
+			const files = [...new Set(hits.map(({ file }) => file))]
+			expect(Object.fromEntries(files.map((file) => [file, digest(file)])), `${name}: re-attest, then re-pin`).toEqual(pinned.digests)
 			for (const { file, text } of pinned.evidence) expect(collapse(read(file)), `${name}: ${file}`).toContain(collapse(text))
 		}
 	})
