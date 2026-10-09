@@ -10,3 +10,4 @@ One dated line per gate or decision. The close-out commit deletes this file.
 - 2026-10-09 — implementation started; merged origin/dev (cd20b86, #61) into the branch; index conflict resolved line-level (security-fixes-1's line gone, this lane's status updated).
 - 2026-10-09 — Phase 1 gate pass: lint; Chrome network run of incoming-transfers 2/2 green; new setup line once after the start line; one `os error 98` line (unchanged).
 - 2026-10-09 — Phase 2: probe confirmed the race live (12/12 reopens stage-less first, 3-14 ms; base read null 0/12); Chrome 5/5 two-windows + 13/13 full file on the pre-fix helper; arc-1 Codex loop: r1 findings (3, accepted) + Opus findings (accepted), r2 one finding (accepted), r3 clean.
+- 2026-10-09 — Phase 2 gate pass on the final helper: RecentActivityView 38/38; Firefox 5/5 two-windows + 13/13 full; Chrome 5/5 two-windows + 13/13 full (retry 0, proverless). typecheck:all and test:all pass.

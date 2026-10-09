@@ -62,3 +62,14 @@ helper; the gate is rerun on the fixed one.
   whole file 13/13 green (525 s).
 - Codex round 2: one new finding, accepted (the sample's timestamp is taken after the read, so a
   slow `page.evaluate` cannot pass after the deadline). Round 3: `clean`.
+- Final helper (after round 2), at retry 0, `NULO_E2E_PROVERLESS=1`, one run at a time (2026-10-09):
+  - Firefox: `-t "two windows"` 5/5 green (2 passed, 11 skipped each); whole file 13/13 green (572 s).
+  - Chrome: `-t "two windows"` 5/5 green; whole file 13/13 green.
+- `bun run --cwd apps/extension test -- RecentActivityView`: 38/38 green with the new case.
+
+## Gate (2026-10-09) — pass
+
+Component test green; probe recorded above (mechanism observed live, 12/12); five "two windows" runs
+plus one whole-file run per browser on the final helper, all green. In all, this phase ran the two
+changed cases 20 times (10 per browser) and the whole file 3 times, every run green. Those greens
+bound the flake rate but cannot certify it gone (see Limit).

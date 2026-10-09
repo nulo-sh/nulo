@@ -643,7 +643,7 @@ not a flake. Every run's log goes under `<SCRATCH>/runlogs/`.
 Chrome is green; its log shows the new line exactly once, after `Starting local Aztec network`, and
 the count of `os error 98` lines is unchanged (one).
 
-#### Phase 2 — the awaiting-card hydration race
+#### Phase 2 — the awaiting-card hydration race ✓
 
 1. In `same-token-concurrent-sends.test.ts`, replace `readAwaitingCard` with
    `waitForAwaitingCard(page, stage)` as described in Arc 1: a Node-side loop, one `page.evaluate` per
