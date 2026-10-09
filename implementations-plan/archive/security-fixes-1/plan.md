@@ -13,6 +13,19 @@ trunk: dev
 issues: "#28 #29 #13 #30 #31 #27 #33 #32 #25 #35"
 ---
 
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: closed. All three arcs squash-merged into `dev`; the ten issues are closed.
+- **Shipped**:
+  - [#48](https://github.com/nulo-sh/nulo/pull/48), arc 1: #28 (`grantPublicAuthwit` refused as a batch leg), #29 (stored grants re-projected on every read that interprets them; a malformed one refuses the read), #13 (the selector-binding refusal names the policy, never a request value).
+  - [#52](https://github.com/nulo-sh/nulo/pull/52), arc 2: #30 (finalize wipes the passkey stash and the DEK rewrap context on every path that does not consume them), #31 (profile RPCs return the `getProfileInfo` projection; a replacing stash `set` wipes the old entry), #27 (a restored contract's artifact is checked against its instance's original class id before it registers).
+  - [#60](https://github.com/nulo-sh/nulo/pull/60), arc 3: #33 (transfer estimate reuse bound to the sponsor row the build used and to the live chain pair), #32 (account create and import fenced on chain liveness and the deletion epoch; the reconcile delete takes the row lock), #25 (the note arm gets the public arm's epoch re-checks), #35 (userinfo refused in the shared RPC URL verdict, so the node adapter refuses it too, with fixed reasons).
+- **Owner answers** (decision page 2, 2026-10-08; [OWNER-ASKS.md](OWNER-ASKS.md) § Answers): a1 A, the recovery banner stays after a rename, built in #52 (D18); a2 A, classify the selector-binding refusal as a scope refusal, acknowledged and filed as a follow-up, not built here; a3 A, a self-mismatched backup contract is refused with the existing warning, as shipped; a4 A, a malformed stored grant stays refused until the app is disconnected, as shipped.
+- **Dropped**: OA-2's classification, because a class change alone reaches neither the journal's `failureKind` nor the execution code channel, so it is a change of its own. The #30 consumption-binding guard was rejected as unrealistic (D10). No new e2e spec, by design: each fix changes a refusal or an internal order, not a flow.
+- **Open items**: moved to [follow-ups](../../follow-ups.md): the planning out-of-scope list and the review findings outside the fixes (§ Follow-ups found during planning). No issue stays open.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
+
 # security-fixes-1 — ten audit fixes in bridge, profile, backup and service code
 
 Ten findings from the security audit, each closable in service-worker or bridge code. No fix changes
@@ -21,7 +34,7 @@ closest to today, built only from wording the wallet already has, and the choice
 owner in [OWNER-ASKS.md](OWNER-ASKS.md). Three arcs ship as three stacked PRs, then a docs-only
 close-out PR.
 
-Recon: [recon.md](recon.md). Live progress: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md).
 
 ## Tier and budget
 
@@ -431,7 +444,7 @@ that file alone; a second red is breakage, not a flake.
 
 ### Arc 3 — services
 
-#### Phase 7 — #33 the transfer ladder binds sponsor and chain
+#### Phase 7 — #33 the transfer ladder binds sponsor and chain ✓
 
 1. Move `FpcIdentitySnapshot` and `fpcIdentityOf` to `fpc/spec.ts`; add `chainIdentityDrift` and `fpcIdentityDrift` to `estimate-reuse-shared.ts`; point the operation ladder at them.
 2. Add `fpcIdentity?` to `FeeEstimate`; set it at both `FpcStrategy` return points.
@@ -448,7 +461,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0; the sponsor-edit, missing-snapshot, chain-drift and D6 tests fail on the base commit.
 - Layers: lint, typecheck, unit.
 
-#### Phase 8 — #32 account writes fenced on chain liveness
+#### Phase 8 — #32 account writes fenced on chain liveness ✓
 
 1. Add the pre-write liveness check and the post-write liveness-then-epoch check with compensation to `createAccount` and `importAccount`.
 2. Take the row lock around the reconcile re-check and delete.
@@ -461,7 +474,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0; the new fence and lock tests fail on the base commit.
 - Layers: lint, typecheck, unit, integration.
 
-#### Phase 9 — #25 the note arm gets the public arm's epoch checks
+#### Phase 9 — #25 the note arm gets the public arm's epoch checks ✓
 
 1. Pass `standDown` from the note arm; return on `undefined`; re-check after the trust read.
 2. Re-check after `markBalanceDirty` and before the `Added` emit in `commitDiscoveredNote`.
@@ -476,7 +489,7 @@ that file alone; a second red is breakage, not a flake.
 - Pass: exit 0; `bun run lint` (which runs the complexity baseline check) reports no manifest drift.
 - Layers: lint, typecheck, unit, integration.
 
-#### Phase 10 — #35 userinfo refused at the last gate, then the arc gate
+#### Phase 10 — #35 userinfo refused at the last gate, then the arc gate ✓
 
 1. Add the `"userinfo"` refusal to `rpcTransportVerdict`, judged first.
 2. Map it to the fixed reason in `isAllowedRpcUrl`; make the unparseable-URL reason fixed.
@@ -640,6 +653,11 @@ post-build sponsor snapshot for parity, a separate userinfo helper.
 | D16 | #27 which class id the restore check binds (implementation, arc 2 loop) | the original class id, with current required to equal it | the current class id (the plan's wording): the address commits to the original (`computePartialAddress`) and the PXE stores only the preimage (`hydratePreimage` rebuilds current := original), so a forged current id let any artifact through; every genuine export has current = original (PXE-hydrated, or node-read through `assertNotUpgraded`) |
 | D17 | #30 the DEK rewrap context on finalize (implementation, arc 2 loop) | its drop moves into the same identity-guarded `finally` | keep the mid-body drop: the missing-row and tombstone refusals threw before it, leaving the source and destination DEKs to the TTL |
 | D18 | #31 rename return, after the owner's OA-1 pick | `getProfileInfo(profile)`, `recoveryMode` included; the `(BUG PIN)` test becomes a pin of the banner staying | keep the bare identity (D8, D15): superseded by the owner's pick A on 2026-10-08 |
+| D19 | #33 the chain helper's reasons (implementation) | a mismatch keeps the operation ladder's pinned `chain identity drift (exact pair mismatch)`; a read that throws returns `chain identity drift` | one text for both, as the architecture section said: Phase 7 step 7 changes only the two message-bearing reasons, and the two cases stay distinguishable in a debug log |
+| D20 | #33 what the FPC helper reads and compares (implementation) | the row named by the payment method's `fpcId`, compared on `id` as well as type, address, chain and protocol flag | read by the snapshot's `id`: a snapshot could then satisfy a sponsor the request does not name, and a stored row's `id` field is not its storage key |
+| D21 | #33 where the two snapshot fields live (implementation) | `chainIdentity` and `fpcIdentity?` on `ReuseEntryBase`, with a `ChainIdentity` type beside it | a second copy on the transfer entry: both ladders read the same two fields |
+| D22 | #32 import's complexity (implementation) | two early refusals through a row-locked `unwrite` helper, and the key sealing moved to a module-level `sealSigningKey` | a combined `!live \|\| !current` check: put the serialized callback at 19, then 16, over the budget of 15 |
+| D23 | #32 `cross-profile-isolation.test.ts` (implementation) | unchanged | add `isChainLive` to its stub, as Phase 8 step 3 said: its `AccountService` runs only the chain-purge cascade, which never reads liveness |
 
 Unresolved disagreements:
 
@@ -727,6 +745,15 @@ orchestrator's routing of OA-1 to OA-4.
 | 1 | Opus (general-purpose, read-only) | one should-fix, two nits | should-fix, accepted (D16): the class-id check bound the artifact to `currentContractClassId`, which the address does not commit to and the PXE discards, so a crafted backup could name its own artifact's class as current and pass; nit, accepted (D17): finalize's missing-row and tombstone refusals left the DEK rewrap context to the TTL; nit, rejected: `session-manager.ts` `toInfo` is a third copy of the profile projection, a refactor of code no fix touches |
 | 2 | Codex (resumed) | `findings` (one nit) | the guard test replaced only the secret stash, so removing the new rewrap guard stayed green: accepted, the hook now replaces both stashes and the test fails without the guard |
 | 3 | Codex (resumed) | `clean` | none |
+
+### Arc 3 post-implementation loop — no material finding after round 3
+
+| Round | Reviewer | Verdict | Findings and calls |
+|---|---|---|---|
+| 1 | Codex (gpt-6.1-sol, high, read-only) | `findings` (one should-fix, three nits) | should-fix, accepted: a post-write `isChainLive` read that rejects bypassed the row removal, so create left an unannounced row and import's compensation dropped the key under an account row that stayed; `assertStillLive` routes the rejection through `unwrite` (rows for both writers, red before the fix); nits, accepted: the note-arm comment overstated what is fenced, the snapshot comment implied a cryptographic commitment, two comments narrated their line |
+| 1 | Opus (general-purpose, read-only) | mergeable, two nits | nit, accepted: the confirm read the sponsor row through `getFpc`, whose protocol-address cache another profile's purge of the same chain id empties, while the build snapshots through `getFpcImpl`; both ladders now read through `getFpcImpl` (a spurious miss, never a wrong send); nit, accepted: a pin's title claimed a `getNode` rejection propagates from `tryConsume`, which the wired chain step now absorbs; retitled to the fee step |
+| 2 | Codex (resumed) | `findings` (one test nit) | accepted: the composition fakes returned the same row from both sponsor reads, so reverting the wiring stayed green; a dedicated test gives `getFpc` the cold-cache shape and asserts the transfer reuse still hits and the operation ladder resolves through `getFpcImpl` (red on the old wiring) |
+| 3 | Codex (resumed) | `findings` (one test nit, not material) | accepted: the new test's `await p` passed on a caught send failure (`transfer()` returns the error); it now asserts the returned hash. The loop stops at its three-round cap with no material finding open |
 
 ## Post-implementation
 

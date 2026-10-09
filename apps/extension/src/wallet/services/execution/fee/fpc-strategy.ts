@@ -80,6 +80,7 @@ import { predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType } from "@/wallet/services/fpc/service"
+import { fpcIdentityOf } from "@/wallet/services/fpc/spec"
 import type { Action } from "../spec"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
 import {
@@ -192,7 +193,12 @@ export class FpcStrategy implements FeeStrategy {
 				built.txsLimits,
 			)
 			task.complete()
-			return { ...built, feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL, ...sponsorOf(fpc, simulatedTx) }
+			return {
+				...built,
+				feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+				...sponsorOf(fpc, simulatedTx),
+				fpcIdentity: fpcIdentityOf(fpc.infoData),
+			}
 		} catch (error) {
 			task.fail(error)
 			throw error
@@ -286,7 +292,12 @@ export class FpcStrategy implements FeeStrategy {
 				built.txsLimits,
 			)
 			task.complete()
-			return { ...built, feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL, ...sponsorOf(fpc, simulatedTx) }
+			return {
+				...built,
+				feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
+				...sponsorOf(fpc, simulatedTx),
+				fpcIdentity: fpcIdentityOf(fpc.infoData),
+			}
 		} catch (error) {
 			task.fail(error)
 			throw error

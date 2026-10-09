@@ -3,7 +3,8 @@ import { type Network, networkInfoFrom, primaryEndpointUrl, RpcUrlSchema } from 
 
 // The schema's acceptance set is a security boundary: these rows pin it input by input. The
 // adapter's own table (aztec-node-factory-adapter.test.ts) covers the same inputs, so a row whose
-// verdict differs between the two files is a deliberate policy difference (userinfo, Unicode space).
+// verdict differs between the two files is a deliberate policy difference (Unicode space, which the
+// schema trims).
 const ACCEPTED = [
 	"https://rpc.example.com",
 	"HTTPS://RPC.EXAMPLE.COM/Path?Q=1",
