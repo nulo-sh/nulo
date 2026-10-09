@@ -9,7 +9,7 @@ import { openPopup, replaceInputValue, test, waitForHash } from "../fixtures/ext
 import { captureBalanceBaseline, setActiveSendType, waitForFreshBalanceRow } from "../fixtures/helpers"
 import { closeReview, openReviewFromStrip, openSend, readSendInputs } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
-import { tabTo } from "../helpers/pointer-probes"
+import { activeTestId, tabTo } from "../helpers/pointer-probes"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -126,13 +126,10 @@ test.skipIf(!hasConfig)(
 		// Soft, so one run reports every fit check.
 		expect.soft(await fieldShowsWholeAmount(page), `typed, at rest: ${JSON.stringify(await readField(page))}`).toBe(true)
 
-		// Leaving the destination turns it into the account's card, which moves Max, so the focus goes
-		// through the amount field first. A pointer press on Max then leaves that field at rest,
-		// grouped and fitted at once.
-		await page.$eval(AMOUNT, (el) => {
-			;(el as HTMLInputElement).focus()
-			;(el as HTMLInputElement).blur()
-		})
+		// The destination still holds the focus: the press that leaves it turns it into the account's
+		// card, taller, and Max must still take that first press. It leaves the amount at rest, grouped
+		// and fitted at once.
+		expect(await activeTestId(page)).toBe("send-destination-field")
 		await pointerClick(page, "send-amount-max")
 		await waitForAmount(page, "1,235,567.123456789012345678")
 		expect.soft(await page.$eval(AMOUNT, (el) => el === document.activeElement), "Max left the field focused").toBe(false)
@@ -195,6 +192,22 @@ test.skipIf(!hasConfig)(
 		await page.keyboard.press("ArrowLeft")
 		await page.keyboard.type(",5")
 		await waitForAmount(page, "1.52")
+
+		// However long the press that leaves the destination is held, the field waits for its release.
+		await pointerClick(page, "recipient-card-change")
+		await replaceInputValue(page, DESTINATION, tokenReadyExtension.accountAddress)
+		expect(await activeTestId(page)).toBe("send-destination-field")
+		const max = await page.$eval('[data-testid="send-amount-max"]', (el) => {
+			el.scrollIntoView({ block: "center" })
+			const box = el.getBoundingClientRect()
+			return { x: box.left + box.width / 2, y: box.top + box.height / 2 }
+		})
+		await page.mouse.move(max.x, max.y)
+		await page.mouse.down()
+		await new Promise((resolve) => setTimeout(resolve, 1_500))
+		await page.mouse.up()
+		await waitForAmount(page, "1,235,567.123456789012345678")
+		await page.waitForSelector('[data-testid="recipient-card"]', { visible: true, timeout: 5_000 })
 
 		expect(tokenReadyExtension.pageErrors).toEqual([])
 	},

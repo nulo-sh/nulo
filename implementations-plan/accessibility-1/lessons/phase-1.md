@@ -29,3 +29,11 @@ Each attempt and measurement of the arc, in order.
 
 - Red: the source-rule test in `SelectTokenCard.test.ts` failed; the six 3:1 rows (accent on `--app-bg`, `--nulo-surface-low`, `--nulo-surface-high`, both themes) passed from the start, as recon's ratios said (lowest 4.64:1).
 - Firefox's first shot caught the ring mid-transition: the card's `transition: all` (the same one `Button` has) brings the outline in over 0.2 s, from the text colour at offset 0 to the accent at -2px. The computed style read afterwards was final, so the assertion passed while the picture lied. `focusRing` now waits for the focused element's transitions to finish before reading, and the spec shoots after the ring check. The transition itself stays: it is the wallet's buttons' own behaviour.
+
+## Phase 1.3
+
+- Reproduction first, on the build carrying Phases 1.0-1.2: `send-amount-exact.test.ts` with the workaround removed (the destination keeps the focus, then a `pointerClick` on Max) failed on Chrome: "the amount field reads 1,234,567.123456789012345678, not 1,235,567.123456789012345678". `pointerClick` did not throw, so the open suggestion list leaves Max's centre uncovered in the funded layout too.
+- Coverage (smoke, both browsers, the profile's own address typed): the list covers the token card's centre and leaves Max and the fee method picker uncovered. Phase 1.3's fix is claimed for those two, and for any control further down.
+- Option C built with one deviation in mechanism, not behaviour: a queued release is voided by clearing its timer handle (on refocus, on a new hold, on unmount) instead of a hold token. Same guarantee, one less piece of state; the "earlier release cannot end a newer hold" test covers it.
+- Added `data-testid="send-destination-suggestions"` on the suggestion list, so the coverage probe asserts the list is open (its success control) instead of inferring it from what covers the token card. No visible change.
+- Green: unit (ten new cases), smoke on both browsers, network `send-amount-exact.test.ts` on Chrome and Firefox at retry 0, including a 1.5 s press on Max while the destination holds the focus. On Firefox the held press's card appeared at release, so the field did blur there and the hold was exercised.

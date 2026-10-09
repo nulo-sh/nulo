@@ -11,6 +11,10 @@
  * - `searchTerm` — what the user typed (the address-like text in the
  *   field)
  * - `selectedContact` — the candidate object once they pick one
+ *
+ * A mouse or pen press that takes the focus from the field holds the typed view (and the
+ * suggestions) until the press ends: the card is taller than the field, so swapping at the blur
+ * would move whatever the press is on before its click lands.
  */
 import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { trimAddress } from "@/utils/string"
@@ -27,6 +31,12 @@ const selectedContact = defineModel("selectedContact", { default: null })
 const isSearchInputFocused = ref(false)
 const justCleared = ref(false)
 const fieldEl = useTemplateRef("fieldEl")
+/** The field shows the typed text while the press that blurred it is still down. */
+const holdView = ref(false)
+/** The `pointerId` of the primary mouse or pen press now down, or null. */
+let pressId = null
+let closeTimer
+let releaseTimer
 
 const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
 
@@ -50,9 +60,54 @@ const handleSearchBlur = () => {
 		const contact = props.candidates.find((c) => c.address === searchTerm.value)
 		if (contact) handleSelectContact(contact)
 	}
-	setTimeout(() => {
+	clearTimeout(closeTimer)
+	if (pressId !== null) {
+		clearTimeout(releaseTimer)
+		holdView.value = true
+		return
+	}
+	closeTimer = setTimeout(() => {
 		isSearchInputFocused.value = false
 	}, 250)
+}
+
+const handleSearchFocus = () => {
+	clearTimeout(closeTimer)
+	if (holdView.value) {
+		clearTimeout(releaseTimer)
+		holdView.value = false
+		selectedContact.value = null
+	}
+	isSearchInputFocused.value = true
+}
+
+const endHold = () => {
+	clearTimeout(releaseTimer)
+	holdView.value = false
+	isSearchInputFocused.value = false
+}
+
+const onPointerDown = (e) => {
+	if (e.isPrimary && e.button === 0 && (e.pointerType === "mouse" || e.pointerType === "pen")) pressId = e.pointerId
+}
+
+const onPointerUp = (e) => {
+	if (e.pointerId !== pressId) return
+	pressId = null
+	if (!holdView.value) return
+	// A browser dispatches a press's pointerup, mouseup and click in one task: the click lands first.
+	releaseTimer = setTimeout(endHold, 0)
+}
+
+const onPointerCancel = (e) => {
+	if (e.pointerId !== pressId) return
+	pressId = null
+	if (holdView.value) endHold()
+}
+
+const onWindowBlur = () => {
+	pressId = null
+	if (holdView.value) endHold()
 }
 
 watch(
@@ -76,10 +131,21 @@ const onKeydown = (e) => {
 
 onMounted(() => {
 	document.addEventListener("keydown", onKeydown)
+	// Capture: the press must be recorded before its mousedown moves the focus and blurs the field.
+	document.addEventListener("pointerdown", onPointerDown, true)
+	document.addEventListener("pointerup", onPointerUp, true)
+	document.addEventListener("pointercancel", onPointerCancel, true)
+	window.addEventListener("blur", onWindowBlur)
 })
 
 onBeforeUnmount(() => {
 	document.removeEventListener("keydown", onKeydown)
+	document.removeEventListener("pointerdown", onPointerDown, true)
+	document.removeEventListener("pointerup", onPointerUp, true)
+	document.removeEventListener("pointercancel", onPointerCancel, true)
+	window.removeEventListener("blur", onWindowBlur)
+	clearTimeout(closeTimer)
+	clearTimeout(releaseTimer)
 })
 </script>
 
@@ -96,7 +162,7 @@ onBeforeUnmount(() => {
 		</Flex>
 		<div ref="fieldEl" data-testid="send-destination-field" :class="$style.recipient_wrap">
 			<RecipientCard
-				v-if="selectedContact"
+				v-if="selectedContact && !holdView"
 				:name="selectedContact.name"
 				:address="selectedContact.address"
 				@change="handleChange"
@@ -106,13 +172,20 @@ onBeforeUnmount(() => {
 				<AddressInput
 					v-model="searchTerm"
 					:autofocus="justCleared"
-					@focus="isSearchInputFocused = true"
+					@focus="handleSearchFocus"
 					@blur="handleSearchBlur()"
 					placeholder="0x... or contact name"
 				/>
 
 				<Transition name="fade">
-					<Flex v-if="showSuggestions" align="center" direction="column" wide :class="$style.contacts_wrapper">
+					<Flex
+						v-if="showSuggestions"
+						align="center"
+						direction="column"
+						wide
+						:class="$style.contacts_wrapper"
+						data-testid="send-destination-suggestions"
+					>
 						<Flex
 							v-for="c in filteredContacts"
 							@click="handleSelectContact(c)"

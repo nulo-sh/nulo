@@ -118,6 +118,7 @@ test("an open destination suggestion list covers neither Max nor the fee method 
 	}
 	console.log(`[send-keyboard] under the open suggestion list: ${JSON.stringify(covered)}`)
 	expect(await activeTestId(page)).toBe("send-destination-field")
+	expect(await page.$(sel("send-destination-suggestions"))).not.toBeNull()
 	expect(covered.max).toBeNull()
 	expect(covered.fee).toBeNull()
 })
