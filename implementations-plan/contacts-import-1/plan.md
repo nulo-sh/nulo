@@ -322,6 +322,28 @@ Conditions: document probe-failure stops, correct the transport assumption, make
 | 3 Medium | The Firefox contingency must match the pending input, stop it before the input's listener, and clean up in `finally` | Accepted: Phase 1 step 3. |
 | 4 Low | Phase 1 ran step 3 before the class it needs; the diagnostic used a 900-second file | Accepted: steps reordered; the diagnostic runs `contacts-import.test.ts`. |
 
+### Post-implementation, Codex round 1 (gpt-6.1-sol, high, session 01a12045, the arc diff from 61060c0): approve with fixes
+
+No production bug found. Run with the Opus diff review alongside.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 Medium | The race test captured one fence for both writes; the profile reset after the add ended the session, so the update was refused at entry and never reached its in-lock check (removing `updateContact`'s check stayed green) | Accepted: one fresh fence per write and an asserted switch flag; removing only the update's check now fails its row. |
+| 2 Low | Three comments: a four-line sender comment, a doc comment restating `STOPPED`, a backup-import comment describing old behaviour | Accepted: shortened or deleted. |
+
+### Post-implementation, Opus 5.5 diff review (alongside Codex round 1): no production bug
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 Medium | Same as Codex r1 #1 | Fixed with it. |
+| 2 Low | The other-worker fence row was forged after the session had ended, so it was refused as dead and its incarnation never decided | Accepted: only the "session ended" row ends the session; the worker row is refused by its incarnation (shown red with the fake's incarnation check removed). |
+| 3 Low | No test for a failed `captureRunFence` (Popup step 1) | Accepted: an early-exit row in the pins table. |
+| 4 Low | The backup-import cancel comment describes old behaviour | Same as Codex r1 #2. |
+
+### Post-implementation, Codex round 2 (resumed session 01a12045, the fixes in `ba2a09c`): clean
+
+No new material findings. The loop converged after two rounds.
+
 ## Delivery
 
 One arc, one PR, on the lane's single-layer stack.

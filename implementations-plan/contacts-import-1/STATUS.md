@@ -12,3 +12,5 @@
 - 2026-10-09: Phase 2 gate PASS: lint 0, typecheck:all 0, the gate's vitest set 45 files / 806 tests, `git diff 61060c0 -- apps/extension/src | grep -E '^-.*label:'` prints nothing (no label removed or edited).
 - 2026-10-09: Phase 3: `EditContactPopup.test.ts` 20/20 with `EditContactPopup.vue` unchanged since 61060c0 (#44 fixed by #41); `bun run test:all` exit 0 (extension 10534 passed, 4 skipped, 7 todo).
 - 2026-10-09: toast pictures taken on Chrome (A on the arc build, B and today on throwaway local branches `shot/toast-B`, `shot/today`); today's lock mid-import reads "Error occurred during import" (OWNER-ASKS and the UI impact line corrected, D12).
+- 2026-10-09: Phase 3 gate PASS (pre-review head): audit:vue 0, armed builds chrome+firefox 0, smoke 5 files Chrome 16/16, Firefox 16/16 (retry 0).
+- 2026-10-09: Codex r1 approve with fixes + Opus review folded in `ba2a09c`; Codex r2 clean.
