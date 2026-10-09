@@ -16,3 +16,11 @@ Each attempt and measurement of the arc, in order.
 
 - Red: three of the four new `RecipientField.test.ts` cases (another control, the card's button, the repeat/composing/handled Enter) failed on the base code; the field's own Enter passed.
 - Fix: `onKeydown` returns unless Enter, not `defaultPrevented`, not repeat or composing, and the target is an `<input>` inside the field. Green; gate passed on both browsers.
+
+## Phase 1.1
+
+- Red: the four new `AmountCard.test.ts` cases and the three `send.test.ts` Refresh-quote cases failed on the base code; on base the keyboard case failed at `focusAmount` (never called), the real-card case at the focus (it fell to `body`).
+- Chrome's first Tab after `actions-send` can land past the token card (the sequential focus starting point is the clicked spot, not the page top), so the spec reaches the token card with `tabTo` and then asserts the one next stop, never a walk from the top.
+- At-rest shots (`send-at-rest`, both themes, both browsers), base build vs the change: `cmp` differs, a pixel diff finds every change inside the header's account address (x 84-160, y 36-45; a fresh profile per run), none in the amount card. Verdict: the buttons draw today's pixels at rest (I1 holds on both browsers).
+- The unit switch's ring is drawn around its whole box, which the strut makes the amount line's height: a tall ring beside the amount (shot `send-toggle-focused`). That is the press target the card already had.
+- Network `send-amount-exact.test.ts`, retry 0: the unreadable-paste step now reaches Max by Tab from the field and fills it with Enter; green on Chrome (159 s) and Firefox.

@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
 	routerReplace: vi.fn(),
 	routerPush: vi.fn(),
 	legalStatus: vi.fn(async () => "current"),
+	refreezeQuote: vi.fn(),
+	focusAmount: vi.fn(),
 }))
 
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -115,6 +117,10 @@ vi.mock("vue-router", () => ({
 }))
 
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
+import { CHAIN_IDS } from "@/utils/chain-ids"
+import { PriceServiceClient } from "@/wallet/services/price/client"
+import { getPriceMapEntry } from "@/wallet/services/price/price-map"
+import { seedsForChain } from "@/wallet/services/token/default-tokens"
 import { TRANSFER_STATUS_UNKNOWN_COPY, TRANSFER_TERMS_COPY } from "@/popup/utils/transfer-failure-copy"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -151,11 +157,12 @@ const STUBS = {
 		emits: ["update:searchTerm", "update:selectedContact"],
 	},
 	AmountCard: {
+		name: "AmountCard",
 		template:
 			'<input data-testid="stub-amount" :data-token="token?.symbol" :data-balance="tokenBalanceByType" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
 		props: ["modelValue", "fiatMode", "fiatGuard", "token", "tokenBalanceByType", "balanceRawByType", "liveQuote", "proxyTicker"],
 		emits: ["update:modelValue", "update:fiatMode", "update:fiatGuard"],
-		methods: { refreezeQuote() {} },
+		methods: { refreezeQuote: mocks.refreezeQuote, focusAmount: mocks.focusAmount },
 	},
 	FeeSettingsCard: {
 		name: "FeeSettingsCard",
@@ -204,7 +211,9 @@ function setIdentity(appStore: ReturnType<typeof useAppStore>) {
 	appStore.account = { address: ACCOUNT } as never
 }
 
-async function mountSend(opts: { errorHandler?: (error: unknown) => void; realTokenCard?: boolean; cold?: boolean } = {}) {
+async function mountSend(
+	opts: { errorHandler?: (error: unknown) => void; realTokenCard?: boolean; realAmountCard?: boolean; cold?: boolean } = {},
+) {
 	installChromeStorage()
 	const pinia = createTestingPinia({ stubActions: false })
 	const appStore = useAppStore(pinia)
@@ -216,7 +225,7 @@ async function mountSend(opts: { errorHandler?: (error: unknown) => void; realTo
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: opts.realTokenCard ? { ...STUBS, SelectTokenCard: false } : STUBS,
+			stubs: { ...STUBS, ...(opts.realTokenCard && { SelectTokenCard: false }), ...(opts.realAmountCard && { AmountCard: false }) },
 			config: opts.errorHandler ? { errorHandler: opts.errorHandler } : {},
 		},
 	})
@@ -1149,6 +1158,72 @@ describe("send page — the contact list reducers", () => {
 		expect(vmContacts(w)).not.toBe(before)
 		expect(vmContacts(w).map((c) => c.name)).toEqual(["Dave"])
 		expect(candidateNames(w)[0]).toBe("Dave")
+		w.unmount()
+	})
+})
+
+describe("send page — Refresh quote by keyboard", () => {
+	/** In fiat mode with no live quote: the gate asks for a requote. */
+	async function showRequote(w: W) {
+		const amount = w.findComponent({ name: "AmountCard" })
+		amount.vm.$emit("update:fiatMode", true)
+		amount.vm.$emit("update:fiatGuard", { frozenUsd: 1, frozenAt: Date.now(), converting: false })
+		await nextTick()
+		return w.get('[data-testid="send-fiat-requote"]')
+	}
+	const asKeyboardFocus = (el: Element) => {
+		const matches = el.matches.bind(el)
+		vi.spyOn(el, "matches").mockImplementation((selector) => selector === ":focus-visible" || matches(selector))
+	}
+
+	test("Refresh quote is a button; a pointer press re-freezes the quote and moves no focus", async () => {
+		const { w } = await mountSend()
+		const requote = await showRequote(w)
+		expect(requote.element.tagName).toBe("BUTTON")
+		expect(requote.attributes("type")).toBe("button")
+		await requote.trigger("click")
+		expect(mocks.refreezeQuote).toHaveBeenCalledTimes(1)
+		expect(mocks.focusAmount).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	test("a keyboard press re-freezes the quote and returns the focus to the amount", async () => {
+		const { w } = await mountSend()
+		const requote = await showRequote(w)
+		asKeyboardFocus(requote.element)
+		await requote.trigger("click")
+		expect(mocks.refreezeQuote).toHaveBeenCalledTimes(1)
+		expect(mocks.focusAmount).toHaveBeenCalledTimes(1)
+		w.unmount()
+	})
+
+	test("on the real card a moved quote is refreshed by keyboard: the amount re-derives and the USD field holds the focus", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract)?.coingeckoId === "usd-coin")
+		if (!seed) throw new Error("no USDC-priced testnet seed")
+		const priced = { ...TOKEN, chainId, contract: seed.contract, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w } = await mountSend({ realAmountCard: true })
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		const quote = (usd: number) => ({ "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } })
+
+		price.onQuotesUpdated.invoke(quote(1))
+		await nextTick()
+		await w.get('[data-testid="send-amount-fiat-toggle"]').trigger("click")
+		await w.get('[data-testid="send-amount-fiat-input"]').setValue("2")
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 2 USDC"))
+
+		price.onQuotesUpdated.invoke(quote(1.05))
+		await nextTick()
+		const requote = w.get('[data-testid="send-fiat-requote"]')
+		;(requote.element as HTMLButtonElement).focus()
+		asKeyboardFocus(requote.element)
+		await requote.trigger("click")
+
+		await vi.waitFor(() => expect(w.get('[data-testid="send-amount-derived"]').text()).toBe("≈ 1.904761 USDC"))
+		expect(w.find('[data-testid="send-fiat-requote"]').exists()).toBe(false)
+		expect(document.activeElement).toBe(w.get('[data-testid="send-amount-fiat-input"]').element)
 		w.unmount()
 	})
 })

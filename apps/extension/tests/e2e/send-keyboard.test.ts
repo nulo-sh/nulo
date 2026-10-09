@@ -10,9 +10,9 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, openPopup, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
-import { readSendInputs } from "./fixtures/send-page"
+import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
-import { activeTestId, coveredAt } from "./helpers/pointer-probes"
+import { activeTestId, coveredAt, focusRing, tabAround, tabTo, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
@@ -27,6 +27,17 @@ async function openSendPage(ctx: ExtensionContext, { priced = false } = {}): Pro
 	await clickByTestId(page, "actions-send")
 	await page.waitForSelector(sel("send-destination-field"), { visible: true, timeout: 15_000 })
 	return page
+}
+
+async function expectAccentRing(page: Page, testid: string): Promise<void> {
+	expect(await activeTestId(page)).toBe(testid)
+	const { ring, color, accent } = await focusRing(page)
+	expect(ring, testid).toMatch(/^solid 2px /)
+	expect(color, testid).toBe(accent)
+}
+
+async function waitForAmountMode(page: Page, mode: "token" | "usd"): Promise<void> {
+	await page.waitForSelector(sel(mode === "usd" ? "send-amount-fiat-input" : "send-amount-input"), { timeout: 5_000 })
 }
 
 test("Enter picks a destination suggestion only from the destination field", { timeout: 120_000, retry: 0 }, async ({
@@ -50,6 +61,38 @@ test("Enter picks a destination suggestion only from the destination field", { t
 	await page.keyboard.press("Tab")
 	await page.keyboard.press("Enter")
 	expect((await readSendInputs(page)).destination).toBe("Acc")
+})
+
+test("the unit switch: a Tab stop right after the token card, the accent ring, Enter and Space, a held Enter once", {
+	timeout: 180_000,
+	retry: 0,
+}, async ({ registeredExtensionPerTest: ctx }) => {
+	const page = await openSendPage(ctx, { priced: true })
+	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
+	await shotSend(page, "send-at-rest", "send-amount-row")
+
+	await tabTo(page, "send-token-trigger")
+	// The amount field is disabled without a balance, so the unit switch follows the token card.
+	expect(await tabAround(page, 1)).toEqual(["send-amount-fiat-toggle"])
+	await shotSend(page, "send-toggle-focused", "send-amount-row")
+	await expectAccentRing(page, "send-amount-fiat-toggle")
+	const toggle = await page.$eval(sel("send-amount-fiat-toggle"), (el) => ({ tag: el.tagName, type: el.getAttribute("type") }))
+	expect(toggle).toEqual({ tag: "BUTTON", type: "button" })
+
+	await page.keyboard.press("Enter")
+	await waitForAmountMode(page, "usd")
+	await page.keyboard.press(" ")
+	await waitForAmountMode(page, "token")
+
+	// A held Enter: the press and its auto-repeat. The repeat must not flip it back.
+	await page.keyboard.down("Enter")
+	await page.keyboard.down("Enter")
+	await page.keyboard.up("Enter")
+	await waitForAmountMode(page, "usd")
+	expect(await page.$(sel("send-amount-input"))).toBeNull()
+	expect(await activeTestId(page)).toBe("send-amount-fiat-toggle")
+	// Disabled without a balance, Max is no stop: the next one is past the amount card.
+	expect((await tabAround(page, 1))[0]).not.toBe("send-amount-max")
 })
 
 test("an open destination suggestion list covers neither Max nor the fee method picker", { timeout: 120_000, retry: 0 }, async ({
