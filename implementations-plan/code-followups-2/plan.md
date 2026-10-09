@@ -975,7 +975,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 
 ### Arc 3: CI, release scripts and docs
 
-#### Phase 3.1: the dead salt
+#### Phase 3.1: the dead salt ✓
 
 1. Remove the declaration, the env export and the 20 caller passes. Drop any `secrets:` block left
    empty.
@@ -992,7 +992,7 @@ actionlint parses every edited workflow. The PR's own network lanes, Chrome and 
 `_extension-network-e2e.yml` without the secret. `nightly.yml`, `release.yml` and the soak workflow
 are not dispatched from a feature branch.
 
-#### Phase 3.2: pinned bootstrap
+#### Phase 3.2: pinned bootstrap ✓
 
 1. Fetch the two artifacts and both `SHASUMS256.txt` files into `<SCRATCH>/pins/`, in a new empty
    directory. Check each hash against the publisher's list and against `sha256sum` of the artifact.
@@ -1012,7 +1012,7 @@ are not dispatched from a feature branch.
 - the same run in an image that already has another `bun` on `PATH` still uses the pinned one;
 - the same run with one pin altered exits non-zero before anything is extracted.
 
-#### Phase 3.3: one escaper
+#### Phase 3.3: one escaper ✓
 
 1. Create `workflow-command.ts` from the two copies, and use it at every site in § Architecture 3.3.
 2. `workflow-command.test.ts`:
@@ -1031,7 +1031,7 @@ are not dispatched from a feature branch.
 - ``git grep -nE '`::(error|warning|notice|add-mask)::' -- 'scripts/*.ts' 'scripts/**/*.ts' ':!*.test.ts' ':!scripts/release/workflow-command.ts'``
   returns nothing.
 
-#### Phase 3.4: workflow-reference guard
+#### Phase 3.4: workflow-reference guard ✓
 
 1. Rewrite the six comments to the invariant alone, without the provenance:
    - `agent.sh:38`: keep why there is no signal trap, drop "(review CONFIRMED x5)";
@@ -1050,7 +1050,7 @@ are not dispatched from a feature branch.
   `agent.sh` and `global-setup.ts`. This is Arc 3's local e2e: the workflow edits themselves run
   only in CI.
 
-#### Phase 3.5: docs routing
+#### Phase 3.5: docs routing ✓
 
 1. Re-check that no open PR edits the two skill files or COMPOSITION-TESTS.md (each PR's own diff).
 2. Route 148, 150, and 149's two parts that are not CLAUDE.md's (the `aztec-update` skill line and
@@ -1516,3 +1516,30 @@ Each arc writes its own section here; the close-out folds them into § Outcome a
     service-worker-served pages carry only Chrome's baseline extension policy), so a CSP
     regression shows only in production-mode builds: the e2e builds and their CSP recorder. A
     candidate issue for governance; nothing in this lane depends on it.
+
+### Arc 3: CI, release scripts and docs
+
+- **Closed whole:** 134 (`docker-ci-like.sh` installs Bun and Node only from its x64 hash pins,
+  always, first on `PATH`; a test ties the Bun pin to `package.json#packageManager`), 142 (tracked
+  privately: GHSA-6cj6-wp78-52mc; D-arc3-1), 148 and 150 (the eight gotchas, flake-ledger rows 47
+  and 48, and row 4's Firefox symptom files, without row 4's cause), 163 (the static guard, and the
+  seven comments it found rewritten; D-arc3-2).
+- **Closed in part; what is left:**
+  - 108: the network e2e workflows no longer pass `SPONSORED_FPC_SALT`. Left: the entry's first two
+    items (two concurrent sends from one spend source cannot both land; no Node-side progress stall
+    watchdog or fork memory cap), and the repository secret itself, which nothing reads now:
+    deleting it is a repository-settings change for the owner.
+  - 149: the `aztec-update` skill and `COMPOSITION-TESTS.md` lines shipped. Left: CLAUDE.md's
+    release runbook half (wrangler's `routes` rule, an agent session's refusal of domain changes);
+    CLAUDE.md is in PR #235's diff (D18).
+- **Also recorded:** the folded sighting in #185 (`waitForExecuteApprovable … feeMethod:null` in
+  `tx-sendTx-multicall` and `authwit-consume-smoke` on Firefox) now sits on flake-ledger row 4 as
+  its own symptom, without row 4's cause, which is all its issue section asks.
+- **Deviations:** the gate grep of Phase 3.3 matches one doc comment (`resolve-tag.ts:33`) that
+  prints nothing; the Firefox store script routes every ordinary line through `plain`, not only the
+  four named; `test:release` ran with a scratch `zip` on `PATH` (this host has none; CI's runners
+  do). Evidence: `lessons/phase-3.md`.
+- **Found on the way:** after #236 retired `follow-ups.md`, this plan's link to it failed
+  `check:plans` on `dev` (report mode on push); fixed here. Open, needs an issue: CLAUDE.md's
+  Bun-bump list does not name `docker-ci-like.sh`'s pins (the drift test fails a bump that misses
+  them, but the runbook should list the site).
