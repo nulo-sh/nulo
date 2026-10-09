@@ -1,7 +1,7 @@
 ---
 plan: contacts-import-1
 tier: light
-status: delivered (#74)
+status: completed (#74)
 issues: [45, 43, 44]
 driver: claude-code
 claude_model: opus
@@ -23,7 +23,7 @@ post_implementation_hardening: not scheduled
   - Validation, final head, retry 0: lint, typecheck:all, test:all (extension 10536 passed), audit:vue, armed builds, smoke (`contacts-import`, `contacts`, `account-import-export`, `backup-roundtrip`, `backup-imported-account`) 16/16 on Chrome and on Firefox, check:plans 0. Codex r1 approve with fixes, Opus review alongside, all folded; Codex r2 clean.
 - **Dropped**: #44, already fixed on `dev` by #41 (3b80761) with its test; verified and commented on the issue, no code.
 - **Deviations**: D10 (the run reaches `applyImportRows` through `deps`, keeping its signature line byte-identical beside #56), D11 (`logImportErrors` shared by both toasts), D12 (pictures from the smoke harness; the "today" fact corrected: a lock mid-import shows "Error occurred during import").
-- **Open items**: none kept here. [Follow-ups](../follow-ups.md) took the two owner calls of [OWNER-ASKS.md](OWNER-ASKS.md) (the toast's wording, recommended B; what stops an import), both shipped in their ship-now forms.
+- **Open items**: none kept here. [Follow-ups](../../follow-ups.md) took the two owner calls of [OWNER-ASKS.md](OWNER-ASKS.md) (the toast's wording, recommended B; what stops an import), both shipped in their ship-now forms.
 - **Lessons**: none promoted. `lessons.md` sits 28 B under its 8,192 B budget; the adjacent-hunk merge rule is general git behaviour and stays in [phase 2](lessons/phase-2.md), the throwaway-branch `commit -a` slip in [phase 3](lessons/phase-3.md).
 - **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
 
