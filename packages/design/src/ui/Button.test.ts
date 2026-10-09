@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { mount } from "@vue/test-utils"
-import { describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
 import Button from "./Button.vue"
 import buttonSource from "./Button.vue?raw"
 
@@ -100,9 +102,67 @@ describe("Button (router-free base)", () => {
 	})
 })
 
+describe("Button type roles", () => {
+	const ROLES: Record<string, string | undefined> = {
+		cta: "type--button",
+		cta_outline: "type--button",
+		cta_destructive: "type--button",
+		primary: "type--button-md",
+		primary_outline: "type--button-md",
+		destructive: "type--button-md",
+		secondary: undefined,
+		ghost: undefined,
+		text: undefined,
+	}
+	const SIZES = ["large", "medium", "compact", "small", "mini", "micro", "dynamic"]
+
+	// Button.vue's module CSS reaches jsdom through `css.include`; the roles it composes are read from
+	// disk, since a type-checked side-effect `.css` import has no declaration and `?raw` CSS is stubbed.
+	beforeAll(() => {
+		const sheet = document.createElement("style")
+		sheet.textContent = readFileSync(join(process.cwd(), "src/utilities.css"), "utf8")
+		document.head.append(sheet)
+	})
+
+	/** What jsdom's cascade picks for the button, unresolved: `var()` and `em` come back as written. */
+	const declared = (props: Record<string, unknown>) => {
+		const w = mount(Button, { props, slots: { default: "Continue" }, global: { stubs: STUBS }, attachTo: document.body })
+		const { fontFamily, fontSize, fontWeight, letterSpacing, textTransform, padding } = getComputedStyle(w.element)
+		w.unmount()
+		return { fontFamily, fontSize, fontWeight, letterSpacing, textTransform, padding }
+	}
+
+	test.each(Object.entries(ROLES))("%s carries %s", (variant, role) => {
+		const roles = (mountButton({ variant }, { default: "x" }).attributes("class") ?? "")
+			.split(/\s+/)
+			.filter((c) => c.startsWith("type--"))
+		expect(roles).toEqual(role ? [role] : [])
+	})
+
+	test("a CTA reads the button role in its own box, compact too", () => {
+		const type = {
+			fontFamily: "var(--font-headline)",
+			fontSize: "14px",
+			fontWeight: "700",
+			letterSpacing: "0.2em",
+			textTransform: "uppercase",
+		}
+		expect(declared({ variant: "cta" })).toEqual({ ...type, padding: "20px 0px" })
+		expect(declared({ variant: "cta", size: "compact" })).toEqual({ ...type, padding: "14px 0px" })
+	})
+
+	test.each(SIZES)("at size %s every CTA reads 14px/0.2em and every primary 13px/0.03em", (size) => {
+		for (const [variant, role] of Object.entries(ROLES).filter(([, r]) => r !== undefined)) {
+			const { fontSize, letterSpacing } = declared({ variant, size })
+			expect([variant, fontSize, letterSpacing]).toEqual(
+				role === "type--button" ? [variant, "14px", "0.2em"] : [variant, "13px", "0.03em"],
+			)
+		}
+	})
+})
+
 describe("Button destructive variant (the regular button in red)", () => {
-	/** Vitest stubs CSS modules: every name maps to `_name_<hash>`, defined or not, so only the style
-	 *  block itself shows what a variant looks like. */
+	/** Module class names are `_name_<hash>`; the style block itself shows what a variant looks like. */
 	const classes = (props: Record<string, unknown>) =>
 		(mountButton(props, { default: "Download anyway" }).attributes("class") ?? "").split(/\s+/)
 	const hasClass = (list: string[], name: string) => list.some((c) => new RegExp(`^_${name}_[0-9a-z]+$`).test(c))
@@ -118,15 +178,10 @@ describe("Button destructive variant (the regular button in red)", () => {
 		for (const other of ["primary", "cta", "cta_destructive"]) expect(hasClass(list, other)).toBe(false)
 	})
 
-	test("shares primary's type rule", () => {
-		const typeRule = rules.find((r) => r.selectors.includes(".wrapper.primary") && r.body.includes("font-family"))
-		expect(typeRule?.selectors).toContain(".wrapper.destructive")
-	})
-
-	test("stays out of the CTA contract, and neither it nor primary sets a size, so the size classes give its padding", () => {
-		const ctaContract = rules.find((r) => r.selectors.includes(".wrapper.cta") && r.body.includes("letter-spacing"))
-		expect(ctaContract).toBeDefined()
-		expect(ctaContract?.selectors).not.toContain(".wrapper.destructive")
+	test("stays out of the CTA box, and neither it nor primary sets a size, so the size classes give its padding", () => {
+		const ctaBox = rules.find((r) => r.selectors.includes(".wrapper.cta") && r.body.includes("padding"))
+		expect(ctaBox).toBeDefined()
+		expect(ctaBox?.selectors).not.toContain(".wrapper.destructive")
 		const own = rulesOf(/^\.wrapper\.(primary|destructive)(:|$)/)
 		expect(own.length).toBeGreaterThanOrEqual(4)
 		for (const r of own) expect(r.body).not.toMatch(/font-size|letter-spacing|padding|height/)
