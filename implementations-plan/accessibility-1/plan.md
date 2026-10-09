@@ -328,6 +328,7 @@ Built on page 1's answers (A, A, C, yes, A, A); every phase gate passed. The per
 - **Review.** Codex (gpt-6.1-sol, high): round 1 approve with fixes, five findings, four accepted (a second pointer took over the held press; a queued release ended a newer press; the fee menu measured its trigger before the card moved it, 30 px off on Chrome; the fee spec never picked by keyboard); round 2 clean. Opus: six findings, four accepted (the chevron's `aria-hidden`; Refresh quote moves the focus only when a live quote unmounts it; a vacuous Max test; a dead `color: inherit`), one rejected, one noted.
   - Rejected: deleting the `/** Composables */` import header (CLAUDE.md's SFC order names import groups); an e2e of the Enter guard's 250 ms window (the base-build red proved it; the unit tests pin the window).
   - Noted: a pen press reaches the hold through the same pointer events as a mouse; no pen device here to prove it.
+- **CI on the PR.** Firefox smoke failed once in CI: the fee picker spec pressed ArrowDown while every fee method was still loading, and a loading method is disabled, so the arrows had no target. The spec now waits for an enabled method first. Codex (resumed review of that hunk): approve, one Low accepted (the comment's wording).
 - **Open.** The cross-arc Codex pass runs after the last arc.
 
 ### Arc 2, Home and shared chrome (after page 2's answers)

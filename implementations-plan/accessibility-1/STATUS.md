@@ -13,6 +13,7 @@
 - 2026-10-09: merged `origin/dev`; CLAUDE.md § Keyboard & focus order gains call 1's exception.
 - 2026-10-09: merged `origin/dev` again after Arc 2 landed (#76): helpers and the 3:1 table folded onto #76's.
 - 2026-10-09: Arc 1 exit gate pass on the final head: audit:vue, test:all, typecheck:all, check:plans; smoke `send-keyboard.test.ts` 5/5 on chrome and firefox, retry 0, fresh builds; network `send-amount-exact`, `fee-sponsor-funding`, `popup-escape-layered` 5/5 on chrome and firefox at `NULO_E2E_RETRY=0`.
+- 2026-10-09: PR #235 opened on `dev`; CI's Firefox smoke red once (the fee picker spec raced the fee methods' load); spec fixed, Codex approve; smoke `send-keyboard.test.ts` 5/5 on chrome and firefox, retry 0, fresh builds.
 
 ## Planning
 

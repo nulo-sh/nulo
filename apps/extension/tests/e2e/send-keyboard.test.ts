@@ -123,6 +123,8 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(OPEN_TRIGGER, { timeout: 5_000 })
+	// Arrow navigation has no target until at least one fee method finishes loading.
+	await page.waitForSelector("#dropdown [data-dropdown-item]", { timeout: 30_000 })
 	await page.keyboard.press("ArrowDown")
 	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
 	const row = await activeTestId(page)
