@@ -7,3 +7,7 @@
 - 2026-10-09: round 2: Codex conditional approve; eight findings accepted (R2-1..R2-8); OA-9 added; final fresh Codex pass started.
 - 2026-10-09: final fresh Codex pass: reject on OA-9's unapproved sentence; six findings fixed (F-1..F-6); arc 1 now adds no copy. Plan ready for orchestrator approval.
 - 2026-10-09: orchestrator approved the plan; merged origin/dev ac259a7; D-orch-1 (no stack, arc 1 PR on dev) and D-orch-2 (arc 1 only) recorded; arc 1 started.
+- 2026-10-09: gate 1.1 pass (lint, typecheck:all, import-helpers + import tests 66/66; both new page cases fail on the old resolver).
+- 2026-10-09: gate 1.2 pass (lint, typecheck:all, account/ 9 files 105/105; parked-construction case asserts all three zero while construction waits).
+- 2026-10-09: gate 1.3 pass (lint, typecheck:all, encoding 14/14, passkey-ceremony + dapp-session 92/92, passkey neighbours 66/66).
+- 2026-10-09: gate 1.4 pass (lint, typecheck:all, composables + profile + serialization 57 files 1191/1191).
