@@ -287,7 +287,7 @@ describe("validateAndMigrateBackup — exact reject copy", () => {
 		expect(r.kind).toBe("ok")
 		if (r.kind === "ok") {
 			expect(r.backup).not.toHaveProperty("checksum")
-			expect(r.data.profile?.id).toBe("src-profile-id")
+			expect((r.data.profile as { id: unknown }).id).toBe("src-profile-id")
 		}
 	})
 })

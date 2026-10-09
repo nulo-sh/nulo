@@ -57,6 +57,7 @@ import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { wirePxeProviders } from "@/wallet/runtime"
 import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
+import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
@@ -1363,6 +1364,36 @@ describe("ProfileService integration", () => {
 			// Profile is in storage but no session.
 			expect((await service.getProfiles()).find((p) => p.id === out.id)).toBeDefined()
 			expect(await service.getActiveProfile()).toBeUndefined()
+		}, 30_000)
+
+		// A password restore keeps a free backup id, so the file would otherwise choose this
+		// profile's storage keys; only the shape the wallet generates is kept.
+		test.each<[string, unknown]>([
+			["a string of another shape", "x@y"],
+			["an array whose text is generated-shaped", ["abc12345"]],
+		])(
+			"restore() replaces %s with a fresh generated id",
+			async (_, id) => {
+				const { service } = await makeService()
+				const out = await service.restore(
+					{ id, name: "P", type: "password" } as ProfileInfo,
+					await restoreSecretFor(11),
+					"pass1234",
+				)
+				if ("restoreError" in out && out.restoreError) throw new Error(String(out.restoreError))
+				expect(out.id).toMatch(/^[0-9a-f]{8}$/)
+				expect(out.id).not.toBe("abc12345")
+			},
+			30_000,
+		)
+
+		test("restore() keeps a free generated-shaped id and rerolls a taken one", async () => {
+			const { service } = await makeService()
+			const first = await service.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+			const second = await service.restore({ id: "abc12345", name: "Q", type: "password" }, await restoreSecretFor(12), "pass1234")
+			expect(first.id).toBe("abc12345")
+			expect(second.id).toMatch(/^[0-9a-f]{8}$/)
+			expect(second.id).not.toBe("abc12345")
 		}, 30_000)
 
 		test("finalizeRestore() opens the session with the supplied password and emits onActiveProfileChanged", async () => {

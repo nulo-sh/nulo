@@ -184,7 +184,7 @@ async function rollbackAndFail(
  *  that credentialId so the service receives `credentialData` and skips its own SW-window
  *  path. Without this the service throws `credentialData is required`. */
 export async function resolvePasskeyCredential(
-	profile: { type: "password" | "passkey" },
+	profile: Pick<BackupProfile, "type">,
 	masterKey: string,
 	runCeremony: ((req: PasskeyRequest) => Promise<PasskeyCredentialData>) | undefined,
 	profileName: string,
@@ -219,7 +219,7 @@ export async function resolvePasskeyCredential(
  * blobs (extras of the OTHER carrier are deliberately ignored — asymmetry preserved).
  */
 export function buildRestoreSecret(
-	profile: { type: "password" | "passkey" },
+	profile: Pick<BackupProfile, "type">,
 	backup: Record<string, unknown>,
 	masterKey: string,
 ): ({ kind: "proceed"; restoreSecret: RestoreSecret } & Record<never, never>) | StageFail {
@@ -319,14 +319,20 @@ export async function restoreActiveNetworkPointer(
 	}
 }
 
-/** The migrated backup body the restore stages read and filter in place. */
+/**
+ * The migrated backup body the restore stages read and filter in place. `validateAndMigrateBackup`
+ * guarantees each present root slice is an array of plain objects with a valid row id; `profile`
+ * is unchecked there, and the entry gates and the profile service judge it.
+ */
 export type RestoreData = Record<string, unknown> & {
-	account?: unknown[]
-	network?: unknown[]
-	token?: unknown[]
+	account?: Array<Record<string, unknown>>
+	token?: Array<Record<string, unknown>>
 	"token-balance"?: Array<Record<string, unknown>>
-	profile?: { id: string; name?: string }
+	profile?: unknown
 }
+
+/** The backup's profile part as the restore reads it: selection only checked that `type` exists. */
+export type BackupProfile = { id: unknown; name: unknown; type: unknown }
 
 /** Bound on dropped-balance records. This path never reaches the collector, so it carries no cap
  *  of its own — and a hostile backup can ship tens of thousands of un-relinkable rows. */

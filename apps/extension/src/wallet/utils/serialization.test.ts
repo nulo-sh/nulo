@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { InvalidPasswordError, UserRejectedError, WalletError } from "@nulo/extension-messaging/errors"
 import { jsonSanitize, jsonStringify } from "@nulo/wallet-core/utils"
+import { BUFFER_BINDINGS, withBuffer } from "../../../tests/helpers/shipped-buffer"
 
 describe("jsonStringify primitives + containers", () => {
 	test("bigint → string", () => {
@@ -21,6 +22,18 @@ describe("jsonStringify primitives + containers", () => {
 	test("Set → values array", () => {
 		const s = new Set([1, 2, 3])
 		expect(JSON.parse(jsonStringify(s))).toEqual([1, 2, 3])
+	})
+})
+
+// `JSON.stringify` calls `Buffer.prototype.toJSON` before the replacer, so the replacer's
+// `{ type: "Buffer", data }` branch, not its `isBuffer` branch, is the one a Buffer reaches.
+describe.each(BUFFER_BINDINGS)("jsonStringify on a %s Buffer", (_name, binding) => {
+	afterEach(() => vi.unstubAllGlobals())
+
+	test("encodes it as standard base64, as its toJSON shape does", () => {
+		withBuffer(binding)
+		expect(jsonStringify({ b: binding.from([0, 1, 254, 255]) })).toBe('{"b":"AAH+/w=="}')
+		expect(jsonStringify({ b: { type: "Buffer", data: [0, 1, 254, 255] } })).toBe('{"b":"AAH+/w=="}')
 	})
 })
 
