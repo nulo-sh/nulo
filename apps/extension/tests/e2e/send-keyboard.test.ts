@@ -1,9 +1,4 @@
 /**
- * Send by keyboard alone: Tab reaches each control in the order it is drawn, Enter or Space presses
- * it, a held Enter acts once, and the focused control draws the 2 px accent ring. An Enter meant for
- * another control never picks a destination suggestion, and a press that leaves the destination
- * lands where it began.
- *
  * The smoke wallet holds no balance, so the amount field and Max are disabled and out of the Tab
  * path here; Max's own stop is proven in the funded `network/send-amount-exact.test.ts`.
  */

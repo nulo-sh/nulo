@@ -1,8 +1,8 @@
 ---
 plan: accessibility-1
 tier: mid
-status: planned; final Codex verdict approve; implementation waits for the owner's picks on two decision pages and the orchestrator's approval
-issues: none (the scope is eleven follow-ups.md entries; no GitHub issue tracks them)
+status: completed
+issues: "#90, #96, #111, #115, #123, #129, #131 (the follow-ups.md entries, migrated to issues by #236)"
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -12,6 +12,19 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: completed. Every call on both decision pages was answered on the planner's recommendation and built. Arcs 1 and 2 are squash-merged into `dev`; Arc 3 (#241) and this close-out land after them.
+- **Shipped**:
+  - [#235](https://github.com/nulo-sh/nulo/pull/235), Arc 1, Send (page 1: 1 A, 2 A, 3 C, 4 yes, 5 A, 6 A). The unit switch, Max and Refresh quote are Tab stops after the amount field, with the accent ring; the token card and the fee method picker draw it too, and the picker opens by keyboard; a mouse or pen press below the destination lands when the field turns into the account card; the sponsor notice sits in a polite region; only the destination's own Enter picks a suggestion. CLAUDE.md § Keyboard & focus order records call 1's exception. Resolves #90's send-amounts-1 and -2, #96's wallet-safety-7 and #115's amounts-sends-and-fees-20.
+  - [#76](https://github.com/nulo-sh/nulo/pull/76), Arc 2, Home and shared chrome (page 2: 1 A, 2 A, 5 A, 6 A). Home's "View all" and "View history" are links in a readable colour with the ring; the sub-page back arrow and onboarding's filled method tab draw a visible ring; the connect step bar's track and the light theme's status text pass contrast through four new tokens. Resolves #129, #96's wallet-safety-6, #111 and #123's connecting-a-dapp-3.
+  - [#241](https://github.com/nulo-sh/nulo/pull/241), Arc 3 (page 2: 3 yes, 4 A+). History's and Settings' compact title bar is hidden from screen readers; the swap to the emoji check is announced in the window's own words, with the look-alike hostname warning when shown, and nothing takes the focus. Resolves #131 and #123's connecting-a-dapp-5.
+  - This close-out closes #96, #111, #129 and #131, which the three arcs resolve in full; #90, #115 and #123 carry a comment on what shipped and stay open for the rest.
+- **Dropped**: none of the calls. Touch for page 1 call 3 (option C holds a mouse or pen press only), as the owner's page said. A screen-reader run as a gate (I4): no CI host has one; the tests pin regions and exact text instead. Delivery as one `gh stack`: replaced by plain PRs on `dev` (A2-D1, D-orch-1). Close-out step 4's `follow-ups.md` edits: the file was retired by #236, and open work is in issues (D-orch-2). Close-out step 5 shipped in #235.
+- **Open items**: #90 (send-amounts-3 to -6), #115 (amounts-sends-and-fees-19 and -21), #123 (connecting-a-dapp-1 and -2), #242 (keyboard and screen-reader gaps this plan observed outside its scope), #243 (the light status icons and dark red text on a hovered row), #244 (a shared focus ring and announcer, if a third site needs them).
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # Accessibility 1: Send keyboard reach, Home and shared chrome
 
@@ -419,7 +432,7 @@ Round 3, Codex (resumed) on that fix: **approve, no new material findings.** The
 
 Start each phase only when its condition in § Owner dependencies holds, after `gh stack sync`.
 
-#### Phase 3.1: History's and Settings' title, once (call 3)
+#### Phase 3.1: History's and Settings' title, once (call 3) ✓
 
 Skip this phase if call 3 is "as is".
 
@@ -428,7 +441,7 @@ Skip this phase if call 3 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `navigation.test.ts` on chrome and on firefox. Pass criteria: every command exits 0. Layers: lint, typecheck, unit, smoke e2e.
 
-#### Phase 3.2: the swap to the emoji check is announced (call 4)
+#### Phase 3.2: the swap to the emoji check is announced (call 4) ✓
 
 Skip this phase if call 4 is "as is".
 
@@ -444,6 +457,19 @@ Skip this phase if call 4 is "as is".
 **Validation gate.** Commands: the fast layers; the network run of `connect-one-window.test.ts connect-verify-mismatch.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; no test focuses or presses a verify button except through its own deliberate press. Layers: lint, typecheck, unit, network e2e on both browsers.
 
 **Arc 3 exit gate.** `bun run audit:vue` exits 0 and the Arc 3 Codex fix loop has converged.
+
+#### Arc 3 record
+
+Built on page 2's calls 3 (Yes) and 4 (A+), on `dev` at `83a6c22`, where #56, #55 and #58 had landed. The phase log is [lessons/phase-3.md](lessons/phase-3.md).
+
+- **Deviations.**
+  - The announcement's timer starts from `watch(emojis)`, not from `onMounted`: a watcher stops with the component, so a session read that answers after the window unmounted starts no timer.
+  - The instruction and the homograph warning became one constant each (`CHECK_INSTRUCTION` in `verify/index.vue`, `HOSTNAME_WARNING` in `useDappHostname.ts`, rendered by `DappIdentityBlock.vue`), so the region cannot say other words than the window shows.
+  - A+ appends the warning after the instruction, as options.md says ("adds that warning's sentence").
+  - The region is the window root's last child, so a screen-reader user browsing the page meets it after the answer buttons; its text stays after the announcement (no clearing timer).
+  - Delivery per D-orch-1: a plain PR on `dev`, no stack.
+- **Review, Arc 3.** Codex (GPT-6.1 Sol, high; session `01a1224d`): round 1 approve with fixes, two Lows, both accepted (the announcement tests ran only on a new connection, so a reconnect that dropped it would pass: both now run on both; a `/** Watchers */` label that only named the next line). Opus (alongside round 1): approve, four nits accepted (a comment over 100 characters that said "after the window closed" where the guarantee is about unmount; the `HOSTNAME_WARNING` doc named its callers; a 105-character doc comment; the cleanup test unmounted twice). Round 2: approve, no new material findings.
+- **Final cross-arc pass.** A fresh Codex session (GPT-6.1 Sol, high; `01a12256`) over #235, #76 and this branch: approve with fixes, two comment-only Lows in Arc 1's specs, both accepted (`send-keyboard.test.ts`'s header restated its five titles and said a held Enter acts once everywhere, when only the unit switch's is tested; a `fee-sponsor-funding.test.ts` comment claimed a screen reader is told, which a DOM assertion cannot prove). It found the two live regions, the rings and the shared e2e helpers consistent across the arcs, and no duplication worth a shared ring or announcer now. Round 2: approve, no new material findings.
 
 ## Delivery
 
@@ -476,6 +502,8 @@ Two outlines went to the panel. **Outline A (chosen): surgical, native elements,
 - **D6, new tokens.** No existing token clears 3:1 on the light page while staying lighter than the light accent fill (recon § Token facts). Changing `--yellow`, `--red` and `--green` would move about 70 uses. Three text tokens and one track token, with dark aliasing today's colours, change only the light pixels the owner signs off.
 - **D7, an Arc 3 layer.** Phases 3.1 and 3.2 wait on PRs the lane does not control (#56; #58 stacked on #55). A separate top layer lets Arcs 1 and 2 ship on their own (Opus).
 - **D8, the suggestion overlay stays.** The destination's suggestion list covers the token card while it shows (I6). Moving or shrinking it is a layout change no entry names; the plan measures it, limits A's and C's claims to uncovered controls, and says so on the page.
+- **D-orch-1, no stack (the orchestrator's override of § Delivery).** Arc 3 is a plain PR on `dev` (branch `accessibility-1-titles-verify`, cut from `dev` at `83a6c22` once #235 and #76 had landed). The close-out is a second branch, `accessibility-1-close-out`, cut from Arc 3's branch, its PR based on `accessibility-1-titles-verify`; the orchestrator rebases it onto `dev` after Arc 3 merges.
+- **D-orch-2, open work in issues (the orchestrator's override of the close-out).** `implementations-plan/follow-ups.md` was retired by #236 (CLAUDE.md § Where open work lives). This plan's entries are GitHub issues #90, #96, #111, #115, #123, #129 and #131, mapped from the governance ledger by entry text. The close-out PR says `Closes #N` for each issue the three arcs resolve in full; an issue they resolve in part gets a comment saying what shipped and what is left, and stays open; a new follow-up becomes an issue, never a file entry.
 - **Unresolved disagreements.** None between the reviewers on the outline or the fixes. The planner's recommendation on page 2 call 4 moved from A to A+ after Opus raised the homograph warning; the owner decides.
 
 ## Audit verdicts
