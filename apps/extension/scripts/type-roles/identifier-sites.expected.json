@@ -21,6 +21,48 @@
 					"text": "Unreachable from today's grant producer (it hardcodes `call`)"
 				}
 			]
+		},
+		"execute_window": {
+			"search": "operations:\\s*\\[\\s*\\w+\\s*\\]",
+			"hits": [
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "operations: [sendOp]"
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "operations: [authwitReq]"
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "operations: [registerOp]"
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "operations: [grantOp]"
+				}
+			],
+			"digests": {
+				"packages/wallet-bridge/src/dispatcher.ts": "a655d3c254af5f64fee15f05e8505774ce629a9a6e2b46f9ab782aef18a25a11"
+			},
+			"evidence": [
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "kind: \"aztec_sendTx\" as const,"
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "kind: \"aztec_createAuthWit\","
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "kind: \"register_token\" as const,"
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "const results = await this.executionService.executeOperations([operation], origin)"
+				}
+			]
 		}
 	},
 	"sites": [
@@ -1083,8 +1125,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-register-contract-address\"]",
 			"surface": "windows-execute",
-			"state": "a register_contract operation (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1094,8 +1138,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-register-sender-address\"]",
 			"surface": "windows-execute",
-			"state": "a register_sender operation (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1116,8 +1162,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-utility-contract\"]",
 			"surface": "windows-execute",
-			"state": "a simulate_utility operation (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1127,8 +1175,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-class-id\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_getContractClassMetadata request (network)",
-			"liveFrom": 4
+			"state": "",
+			"liveFrom": 4,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1138,8 +1188,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-contract-metadata-address\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_getContractMetadata request (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1149,8 +1201,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-private-events-contract\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_getPrivateEvents request (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1160,8 +1214,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-sdk-register-sender-address\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_registerSender request (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1171,8 +1227,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_simulateTx or aztec_profileTx request (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1182,8 +1240,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-utility-call-to\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_executeUtility request (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1193,8 +1253,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-register-contract-instance\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_registerContract request (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "execute_window",
+			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
