@@ -92,3 +92,6 @@ test was run against the base copy of the code it covers and failed there before
   unpinned tarball fetched inside a condition pass.
 - Review round 1: Codex and Opus each `approve with fixes`; all eleven findings accepted (plan.md §
   Audit verdicts). `test:all` green on `951f706`.
+- Review round 2 (Codex, resumed): `approve`, no new material finding; the loop converged. The pin
+  test reads the script's syntax, so a reworded checksum line or a quoted `curl` needs the guard
+  adjusted with it.

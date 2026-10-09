@@ -1357,6 +1357,14 @@ are unchanged; no template, copy or selector changed; the budgets hold.
 Also tightened: the guard refuses a dotted plan-phase number (`Phase 3.2`), with a planted sample; no
 hits in the tree.
 
+### Arc 3 round 2: Codex (resumed), `approve — no new material finding`
+
+Round 2 verified every round-1 fix: a mask's decoded value is exact and the runner's command echo
+prints `***`; the ignored-checksum mutations are refused and a correctly re-pinned Bun bump passes;
+the dropped version half leaves the meaningful assertions. It noted, without asking for a change,
+that the pin test is syntax-sensitive: a future `sha256sum -c --strict --quiet` or a quoted
+`"if curl …"` would need the guard adjusted. The loop converged.
+
 Arc 3 round 1, checked and holds (both): every caller lost the salt pass and nothing reads it; every
 workflow-command site under `scripts/` goes through `command`; the moved audit-gate case is unweakened;
 both pins equal the publishers' `SHASUMS256.txt`; verification precedes extraction and the pinned
