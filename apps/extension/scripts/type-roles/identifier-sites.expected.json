@@ -67,6 +67,18 @@
 	},
 	"sites": [
 		{
+			"file": "apps/extension/src/components/AddressDisplay.vue",
+			"expression": "displayedAddress",
+			"branch": "!(showsName)",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-tx-id",
+			"state": "",
+			"liveFrom": 2,
+			"why": "the component's own text; each AddressDisplay element is a site of its own, read at its call site's selector"
+		},
+		{
 			"file": "apps/extension/src/components/composite/activity/TransactionIncomingCard.vue",
 			"expression": "hashSlice",
 			"branch": "hashSlice",

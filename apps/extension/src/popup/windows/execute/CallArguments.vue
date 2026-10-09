@@ -48,16 +48,16 @@ const nonce = computed(() =>
 			</template>
 			<template v-else-if="surface.sender.kind === 'account'">
 				<Text size="11" color="secondary">From:</Text>
-				<Text size="11" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" size="11" />)</Text></Text>
+				<Text size="11" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />)</Text></Text>
 			</template>
 			<template v-else>
 				<Text size="11" color="secondary">From:</Text>
-				<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" size="11" />
+				<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
 			</template>
 		</Flex>
 		<Flex justify="between" :class="$style.row">
 			<Text size="11" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
-			<AddressDisplay :data-testid="`${prefix}-transfer-to`" :address="surface.to" size="11" />
+			<AddressDisplay :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
 		</Flex>
 		<Flex justify="between" :class="$style.row">
 			<Text size="11" color="secondary">Amount:</Text>
@@ -92,7 +92,7 @@ const nonce = computed(() =>
 			:class="$style.row"
 		>
 			<Text size="11" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
-			<AddressDisplay v-if="p.value.kind === 'address'" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" size="11" />
+			<AddressDisplay v-if="p.value.kind === 'address'" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
 				:data-testid="`${prefix}-decoded-param-value`"

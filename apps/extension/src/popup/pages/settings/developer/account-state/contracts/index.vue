@@ -80,7 +80,7 @@ onBeforeUnmount(() => {
 
 					<Flex direction="column" gap="8">
 						<Text size="14" weight="600" color="primary"> Contract </Text>
-						<AddressDisplay size="13" weight="600" color="tertiary" :address="contract" :formatter="(addr) => trimAddress(addr, 6, 4)" />
+						<AddressDisplay lead color="tertiary" :address="contract" :formatter="(addr) => trimAddress(addr, 6, 4)" />
 					</Flex>
 				</Flex>
 			</Flex>

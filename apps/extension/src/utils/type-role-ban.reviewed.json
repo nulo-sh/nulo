@@ -1,18 +1,4 @@
 {
-	"apps/extension/src/components/AddressDisplay.vue": [
-		{
-			"rule": "text-prop",
-			"text": ":size=\"size\"",
-			"role": "data",
-			"at": "Text \"{{ showName && contactName ? c\""
-		},
-		{
-			"rule": "text-prop",
-			"text": ":weight=\"weight\"",
-			"role": "data",
-			"at": "Text \"{{ showName && contactName ? c\""
-		}
-	],
 	"apps/extension/src/components/GlobalLoader.vue": [
 		{
 			"rule": "face",
