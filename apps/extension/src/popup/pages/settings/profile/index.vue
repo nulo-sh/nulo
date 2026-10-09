@@ -30,7 +30,7 @@ const popupStore = usePopupStore()
 			/>
 			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-id-row">
 				<Text size="12" weight="600" color="secondary">ID</Text>
-				<Text size="12" weight="500" color="tertiary" :class="$style.id_value">
+				<Text size="12" weight="500" color="tertiary" data-testid="identity-id-value" :class="$style.id_value">
 					{{ appStore.profile?.id }}
 				</Text>
 			</Flex>

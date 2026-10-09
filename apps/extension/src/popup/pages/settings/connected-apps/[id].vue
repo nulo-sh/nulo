@@ -267,6 +267,7 @@ onBeforeUnmount(() => {
 					:title="getAccountAlias(acc)"
 					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
 					raw
+					data-testid="connected-app-account-row"
 				>
 					<template #right>
 						<Tooltip position="end" delay="350">

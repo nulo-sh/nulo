@@ -94,6 +94,7 @@ onMounted(async () => {
 
 <template>
 	<Text
+		data-testid="address-display"
 		@click="handleClick"
 		:size="size"
 		:color="color"

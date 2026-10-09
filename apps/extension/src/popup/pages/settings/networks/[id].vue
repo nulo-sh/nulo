@@ -185,6 +185,7 @@ watch(network, (n) => {
 					iconFillColor="tertiary"
 					iconBgColor="transparent"
 					raw
+					data-testid="network-detail-chain-id"
 				/>
 			</ItemsContainer>
 		</Flex>

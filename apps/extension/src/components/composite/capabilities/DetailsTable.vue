@@ -91,7 +91,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 						<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
 						<span v-if="entry.named" :class="$style.name">{{ entry.row.name }}</span>
 						<span v-else :class="$style.address">
-							<span>{{ shownAddress(entry.row.address) }}</span>
+							<span data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
 							<RowAction
 								label="Copy address"
 								tabindex="-1"

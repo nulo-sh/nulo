@@ -40,7 +40,7 @@ const formatTimestamp = (timestamp) => {
 			<Flex wide justify="between" align="center">
 				<span :class="$style.detail_key">Tx hash</span>
 				<Flex @click="emit('copy', tx.hash)" align="center" gap="6" :class="'copyable'">
-					<span :class="$style.detail_value_mono">{{ trimAddress(tx.hash, 8, 6) }}</span>
+					<span data-testid="tx-debug-hash" :class="$style.detail_value_mono">{{ trimAddress(tx.hash, 8, 6) }}</span>
 					<Icon name="copy" size="10" color="tertiary" />
 				</Flex>
 			</Flex>
@@ -80,6 +80,7 @@ const formatTimestamp = (timestamp) => {
 						</Flex>
 						<span
 							v-if="c.chunkNonce"
+							data-testid="tx-debug-chunk-nonce"
 							@click="emit('copy', c.chunkNonce)"
 							:class="[$style.raw_call_aux, 'copyable']"
 						>

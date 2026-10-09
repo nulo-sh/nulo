@@ -14,7 +14,7 @@ defineProps<{ action: Action }>()
 				{{ humanizeMethodName(safeWire(action.kind === "call" ? action.method : (action.name ?? action.selector), 64)) }}
 			</Text>
 			<Text color="secondary"> on </Text>
-			<AddressDisplay :address="action.kind === 'call' ? action.contract : action.to" />
+			<AddressDisplay data-testid="execute-action-contract" :address="action.kind === 'call' ? action.contract : action.to" />
 		</template>
 		<!-- A public authwit is a persisted on-chain spend authorization: the spender, method, contract and args
 			must be visible, never a generic label. -->
@@ -26,7 +26,7 @@ defineProps<{ action: Action }>()
 				<Text color="secondary"> for </Text>
 				<Text weight="600">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
-				<AddressDisplay :address="action.content.contract" />
+				<AddressDisplay data-testid="execute-authwit-contract" :address="action.content.contract" />
 				<template v-if="action.content.args?.length">
 					<Text color="secondary"> args </Text>
 					<Text data-testid="execute-authwit-args">{{ action.content.args.map((a) => safeWire(String(a), 48)).join(", ") }}</Text>
@@ -40,7 +40,7 @@ defineProps<{ action: Action }>()
 				<Text color="secondary"> for </Text>
 				<Text weight="600">{{ humanizeMethodName(safeWire(action.content.name ?? action.content.selector, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
-				<AddressDisplay :address="action.content.to" />
+				<AddressDisplay data-testid="execute-authwit-to" :address="action.content.to" />
 			</template>
 			<template v-else-if="action.content.kind === 'intent'">
 				<Text color="secondary"> — consumer </Text>

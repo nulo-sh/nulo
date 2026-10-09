@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
 					<span :id="`${rowIdBase}-${i}`" :class="$style.type">
 						{{ display.type }}<span v-if="display.contractName" :class="$style.contract_name"> · {{ display.contractName }}</span>
 					</span>
-					<span v-if="display.contractTrim" :class="$style.contract">{{ display.contractTrim }}</span>
+					<span v-if="display.contractTrim" data-testid="note-contract" :class="$style.contract">{{ display.contractTrim }}</span>
 				</div>
 
 				<span v-if="display.location" :class="$style.location">{{ display.location }}</span>

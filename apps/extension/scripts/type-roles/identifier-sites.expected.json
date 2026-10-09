@@ -357,7 +357,7 @@
 			"branch": "",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"setting-title\"]",
+			"selector": "[data-testid=\"edit-fpc-header-row\"] [data-testid=\"setting-title\"]",
 			"surface": "popup:edit_fpc",
 			"state": "a seeded FPC with no name, opened for editing",
 			"liveFrom": 2
@@ -512,7 +512,7 @@
 			"branch": "op && display && recipientLabel",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"journal-recipient\"]",
+			"selector": "[data-testid=\"journal-detail-recipient\"]",
 			"surface": "popup-journal-id",
 			"state": "a journal operation with a recipient",
 			"liveFrom": 3
@@ -788,7 +788,7 @@
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && surface.sender.kind === 'account'",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"execute-op-transfer-sender\"]",
+			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a transfer from one of the wallet's accounts (network)",
 			"liveFrom": 2
@@ -799,7 +799,7 @@
 			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && surface.kind === 'transfer' && !(surface.sender.kind === 'none' || surface.sender.kind === 'account')",
 			"ordinal": 1,
 			"role": "data",
-			"selector": "[data-testid=\"execute-op-transfer-sender\"]",
+			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "a transfer from an address the wallet does not know (network)",
 			"liveFrom": 2
@@ -832,7 +832,7 @@
 			"branch": "surface.kind === 'decoded' && p.value.kind === 'address'",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"execute-op-decoded-param\"]",
+			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
 			"state": "a decoded call with an address parameter (network)",
 			"liveFrom": 2
@@ -843,7 +843,7 @@
 			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address')",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"execute-op-decoded-param\"]",
+			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
 			"state": "a decoded call with a field parameter (network)",
 			"liveFrom": 4

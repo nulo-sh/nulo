@@ -201,7 +201,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				<Text size="12" color="secondary">From account:</Text>
 				<Text size="12" color="primary">
 					{{ op.account!.name }}
-					<Text color="secondary">({{ trimAddress(op.account!.address) }})</Text>
+					<Text color="secondary" data-testid="execute-op-account">({{ trimAddress(op.account!.address) }})</Text>
 				</Text>
 			</Flex>
 			<!-- send_transaction has actions[]; aztec_sendTx has exec.calls[] -->
@@ -224,7 +224,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						:class="$style.row"
 					>
 						<Text size="12" weight="600" color="primary">{{ callName(call, surface) }}</Text>
-						<Text size="11" color="secondary">on <AddressDisplay :address="call.to" size="11" /></Text>
+						<Text size="11" color="secondary">on <AddressDisplay :address="call.to" size="11" data-testid="execute-op-call-to" /></Text>
 					</Flex>
 					<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
 				</Flex>
@@ -248,11 +248,11 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				>
 					<Flex justify="between" :class="$style.row">
 						<Text size="11" color="secondary">Consumer:</Text>
-						<AddressDisplay :address="a.consumer" size="11" />
+						<AddressDisplay :address="a.consumer" size="11" data-testid="execute-discovered-consumer" />
 					</Flex>
 					<Flex justify="between" :class="$style.row">
 						<Text size="11" color="secondary">Authorizes:</Text>
-						<AddressDisplay :address="a.caller" size="11" />
+						<AddressDisplay :address="a.caller" size="11" data-testid="execute-discovered-caller" />
 					</Flex>
 					<Flex justify="between" :class="$style.row">
 						<Text size="11" color="secondary">Function:</Text>
@@ -272,7 +272,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						<CallArguments :surface="authwitArgs(a)" :contract="a.consumer" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-discovered-authwit" />
 						<Flex justify="between" :class="$style.row">
 							<Text size="11" color="secondary">Inner hash:</Text>
-							<Text size="11" color="primary" mono :title="safeWire(a.innerHash, 80)">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
+							<Text size="11" color="primary" mono :title="safeWire(a.innerHash, 80)" data-testid="execute-discovered-inner-hash">{{ trimAddress(safeWire(a.innerHash, 80), 10, 6) }}</Text>
 						</Flex>
 					</Flex>
 				</Flex>
@@ -330,20 +330,20 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 			<Text size="12" color="secondary">From account:</Text>
 			<Text size="12" color="primary">
 				{{ op.account!.name }}
-				<Text color="secondary">({{ trimAddress(op.account!.address) }})</Text>
+				<Text color="secondary" data-testid="execute-op-account">({{ trimAddress(op.account!.address) }})</Text>
 			</Text>
 		</Flex>
 
 		<template v-if="op.kind === 'register_contract'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.address" />
+				<AddressDisplay :address="op.address" data-testid="execute-register-contract-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_sender'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Sender address:</Text>
-				<AddressDisplay :address="op.address" />
+				<AddressDisplay :address="op.address" data-testid="execute-register-sender-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'register_token'">
@@ -404,7 +404,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-else-if="op.kind === 'simulate_utility'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.contract" />
+				<AddressDisplay :address="op.contract" data-testid="execute-utility-contract" />
 			</Flex>
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Function:</Text>
@@ -414,25 +414,25 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-else-if="op.kind === 'aztec_getContractClassMetadata'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Class id:</Text>
-				<Text size="12" color="primary">{{ trimAddress(op.id.toString()) }}</Text>
+				<Text size="12" color="primary" data-testid="execute-op-class-id">{{ trimAddress(op.id.toString()) }}</Text>
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_getContractMetadata'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.address.toString()" />
+				<AddressDisplay :address="op.address.toString()" data-testid="execute-contract-metadata-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_getPrivateEvents'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.eventFilter.contractAddress.toString()" />
+				<AddressDisplay :address="op.eventFilter.contractAddress.toString()" data-testid="execute-private-events-contract" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_registerSender'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Sender address:</Text>
-				<AddressDisplay :address="op.address.toString()" />
+				<AddressDisplay :address="op.address.toString()" data-testid="execute-sdk-register-sender-address" />
 			</Flex>
 		</template>
 		<template v-else-if="op.kind === 'aztec_simulateTx' || op.kind === 'aztec_profileTx'">
@@ -450,7 +450,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					>
 						<Text weight="600">{{ humanizeMethodName(safeWire(call.name ?? call.selector, 64), wire(call.to, 80)) }}</Text>
 						<Text color="secondary"> on </Text>
-						<AddressDisplay :address="call.to" />
+						<AddressDisplay :address="call.to" data-testid="execute-op-call-to" />
 					</Text>
 				</Flex>
 			</Flex>
@@ -458,7 +458,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-else-if="op.kind === 'aztec_executeUtility'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.call.to.toString()" />
+				<AddressDisplay :address="op.call.to.toString()" data-testid="execute-utility-call-to" />
 			</Flex>
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Function:</Text>
@@ -470,7 +470,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-else-if="op.kind === 'aztec_registerContract'">
 			<Flex :class="$style.prop">
 				<Text size="12" color="secondary">Contract address:</Text>
-				<AddressDisplay :address="op.instance.address.toString()" />
+				<AddressDisplay :address="op.instance.address.toString()" data-testid="execute-register-contract-instance" />
 			</Flex>
 			<Flex v-if="op.artifact" :class="$style.prop">
 				<Text size="12" color="secondary">Artifact:</Text>
@@ -492,7 +492,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					</Flex>
 					<Flex :class="$style.prop">
 						<Text size="12" color="secondary">Target contract:</Text>
-						<AddressDisplay :address="s.to" />
+						<AddressDisplay :address="s.to" data-testid="execute-authwit-target" />
 					</Flex>
 					<Flex :class="$style.prop">
 						<Text size="12" color="secondary">Function:</Text>
@@ -506,7 +506,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				<template v-else>
 					<Flex :class="$style.prop">
 						<Text size="12" color="secondary">Consumer contract:</Text>
-						<AddressDisplay :address="s.consumer" />
+						<AddressDisplay :address="s.consumer" data-testid="execute-authwit-consumer" />
 					</Flex>
 					<Flex data-testid="execute-authwit-inner-hash" :class="$style.prop">
 						<Text size="12" color="secondary">Inner hash:</Text>

@@ -75,7 +75,7 @@ const startRename = async () => {
 					<span v-else :class="$style.chain_label">{{ getChainName(account.chainId).toUpperCase() }}</span>
 				</Flex>
 				<Flex align="center" justify="between" gap="8" wide>
-					<span :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
+					<span data-testid="account-select-address" :class="$style.row_address">{{ trimAddress(account.address, 6, 4, "...") }}</span>
 					<DottedTerm
 						v-if="canRename && !renaming"
 						term="name-for-this-app"

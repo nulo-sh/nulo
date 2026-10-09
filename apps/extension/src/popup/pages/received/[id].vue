@@ -241,6 +241,7 @@ onBeforeUnmount(() => {
 					<AddressDisplay
 						v-if="fromDisplay.kind === 'address'"
 						static
+						data-testid="received-from-address"
 						size="13"
 						weight="600"
 						:address="fromDisplay.address"
@@ -263,6 +264,7 @@ onBeforeUnmount(() => {
 				>
 					<AddressDisplay
 						static
+						data-testid="received-to-address"
 						size="13"
 						weight="600"
 						:address="received.accountAddress"
@@ -319,6 +321,7 @@ onBeforeUnmount(() => {
 							<span :class="$style.detail_value_mono">#{{ received.l2BlockNumber }}</span>
 							<span
 								v-if="isPublic"
+								data-testid="tx-block-hash"
 								@click="copy(received.blockHash, 'Block hash')"
 								:class="[$style.detail_value_aux, 'copyable']"
 							>
