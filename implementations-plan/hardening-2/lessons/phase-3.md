@@ -23,3 +23,9 @@
 - `bun --bun vitest run src/wallet/runtime.migration-gate.test.ts src/wallet/storage/migrations/ src/wallet/services/backup/`: 6 files, 113 tests pass.
 - Smoke build recipe on Chrome (recorder armed too, since layer 1 is underneath), then `migration.test.ts backup-migration.test.ts` at retry 0: 2 files, 7 tests pass, 0 skipped; the 9001 fixture's crash-resume converges through the new check.
 - `bun run lint`, `bun run typecheck:all`: pass.
+
+## Delivery mechanics (2026-10-09)
+
+- Layer 1 was pushed and opened as #70 (head `6c811b7`: a `dev` merge and one `STATUS.md` line on top of `c19f179`) while this arc ran; merged into this branch (`311f2fa`), keeping both sides of the one `STATUS.md` conflict. Layer 2 is #71 on `worktree-hardening-2`.
+- `gh stack view` here answers "current branch is not part of a stack", and `gh stack add` must run on the stack's top branch, which lives in a sibling worktree this arc may not touch. The PR is opened with `gh pr create --base worktree-hardening-2` instead; once #70 merges, its base moves to `dev`.
+

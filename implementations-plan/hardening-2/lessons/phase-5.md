@@ -19,3 +19,16 @@
 - An earlier sweep that started the real `purgeForAccounts` at 0-39 microtasks after the write never reached the gap: the purge's own awaits (initialization, lock, `getAll`) outlast it. The deterministic sweep drives the fence-and-delete directly.
 - The typed-purge row passes on the base too: the pre-write fence already catches a delete that lands before the write is dispatched. It is the plan's mutation check for `invalidateAndDelete`, not a base-red row.
 - Review round 2: a commit could rewrite a malformed in-scope row valid and finish before the raw pass fenced it; the bytes guard then spared the row. Both purges now run typed, raw, typed (`purgeScopeHoldingLock`). The regression parks the raw pass's snapshot (the repository's `rawStringEntries`, reached through the private `storage`) after it captured the malformed bytes, lets the commit finish, then releases it: red on the round-1 service for both purges, green now.
+
+## Phase 5 gate (2026-10-09)
+
+- On `8cb609c` (before review): `lint`, `typecheck:all`, `test` (704 files, 10450 tests), `test:all` (every workspace) pass; network `backup-restore-integrity`, `backup-migration-roundtrip`, `profile-reimport-matrix`, `delete-after-prove`, `account-balance-orphans`, `balance-row-reconciliation`, `token-management`, `tokens` on Chrome at retry 0: 8 files, 13 tests pass. The `git grep` for `updateToken`/`onTokenUpdated` over `apps packages` prints nothing.
+- On `833319f` (review round 1): proverless `backup-restore-sw-restart` 1 file, 3 tests; smoke build recipe on Chrome (recorder armed), then `migration`, `backup-migration`, `security-reset` at retry 0: 3 files, 8 tests, 0 skipped.
+
+## Arc 2 final-head gate (2026-10-09, code of `6c199fa`, plan head `486f36d`)
+
+- `bun run lint`, `bun run typecheck:all`, `bun run test:all` (extension 10455 tests, wallet-core 266, every other workspace green): pass.
+- The eight network files on Chrome at retry 0: 8 files, 13 tests pass. Proverless `backup-restore-sw-restart` at retry 0: 3 tests pass.
+- Smoke build recipe on Chrome with the recorder armed, then `migration`, `backup-migration`, `security-reset` at retry 0: 3 files, 8 tests, 0 skipped.
+- `test:ci-gating`, `test:release` and `lint:actions` not run: the arc touches no `scripts/` or `.github/` file.
+

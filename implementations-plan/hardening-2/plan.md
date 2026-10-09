@@ -464,7 +464,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 - Pass criteria: every command exits 0. The corrupt-tombstone and misfiled-tombstone tests fail on the base copies.
 - Layers: unit, integration.
 
-#### Phase 5 — #18: close the two deferred writers
+#### Phase 5 — #18: close the two deferred writers ✓
 
 1. Delete `updateToken` and `onTokenUpdated` as in Architecture, with their tests and stubs. Reword the comment in `balance-identity.ts:7`.
 2. Run `bun run build` so `auto-imports.d.ts` regenerates. Confirm that `git grep -n -e updateToken -e onTokenUpdated -- apps packages` prints nothing.
@@ -735,6 +735,10 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 |---|---|---|---|
 | C3 | Medium | A commit that rewrote a malformed in-scope row valid and finished before the raw pass's `onMatch` ran was unfenced at its post-write check; the bytes guard then spared the row, which survived the purge, fenced | **Accepted, reproduced** with the raw snapshot parked. Both purges now run typed, raw, typed through one helper (D-18f). |
 | C4 | Low | `ARCHITECTURE.md` omitted the already-stamped branch, which clears a journal without the registry check | **Accepted.** The rule names both branches. |
+
+### Arc 2 implementation — Codex round 3 (same session, on `6bfd255..6c199fa` and the whole arc)
+
+**Verdict: clean.** C3 and C4 resolved (both purges, both timings, reproduced in memory; foreign-profile rows survive; allocation locking intact). Note, kept as is: a row resurrected between the two typed passes can draw two `onTokenBalanceDeleted` events for one id, and every consumer removes by id idempotently. The loop converged in three rounds.
 
 ## Delivery
 
