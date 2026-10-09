@@ -583,6 +583,20 @@ None rejected.
 
 None rejected.
 
+### Arc 1 implementation review (2026-10-09)
+
+- **Codex round 1 (gpt-6.1-sol, high, read-only; session 01a122d2-e279-78a3-9a87-a042b147ef6d): approve with fixes.** It probed the watchdog (rollback, one counted attempt, revoked reads and writes, no unhandled late rejection, no fake-timer conflict), the wipe paths, the hex decoder's legitimate inputs, the profile-id rule and the Enter states, and found no functional or security defect.
+- **Opus 5.5 diff review (alongside round 1): approve, three Lows.**
+
+| # | Source | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| A1-1 | Codex | Low | Two new test comments narrate (`runTwice`'s body, `at`'s defaults) | Accepted: `at`'s removed, `runTwice`'s cut to its return contract. |
+| A1-2 | Opus | Low | A timeout whose restore then fails reads "failed to restore … (migration error: … interrupted mid-write (restored cleanly))" on the recovery screen | Accepted: the watchdog throws `UpTimeoutError` ("interrupted mid-write"); the `failed` return maps it to the "(restored cleanly)" sentence only after the restore succeeded. No new words. Test added. |
+| A1-3 | Opus | Low | The resolver's doc says Enter acts only on an enabled button, false for Decrypt; `BackupProfile`'s doc names selection as the type check | Accepted: both reworded (Decrypt refuses an empty password itself; "the entry gates"). |
+| A1-4 | Opus | Low | The registry test now needs a seed per migration and the template does not say so; its comment cited step 6 for colocated tests (step 9) | Accepted: template step 5 names the `SEEDS` entry; reference fixed. |
+
+None rejected.
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, opened only after the arc's gates pass and its Codex loop converges.
