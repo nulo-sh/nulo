@@ -194,6 +194,14 @@ describe("settings hub — rows", () => {
 	})
 })
 
+describe("settings hub — the title", () => {
+	test("a screen reader meets the title once: the compact bar is hidden from it, the hero title is not", async () => {
+		const w = await mountHub()
+		expect(w.get('[data-testid="page-title-bar"]').element.parentElement?.getAttribute("aria-hidden")).toBe("true")
+		expect(w.get('[data-testid="page-hero-title"]').element.closest('[aria-hidden="true"]')).toBeNull()
+	})
+})
+
 describe("settings hub — values", () => {
 	test("show nothing until the read answers, then one value inside each of the four rows", async () => {
 		const w = await mountHub()
