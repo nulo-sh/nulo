@@ -1953,14 +1953,6 @@
 			"at": "Text \"{{ String(p.function) === \"*\" \""
 		}
 	],
-	"apps/extension/src/components/composite/general/AccountAvatar.vue": [
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "carve-out",
-			"at": "Text \"{{ initials }}\""
-		}
-	],
 	"apps/extension/src/components/composite/general/EmojiGrid.vue": [
 		{
 			"rule": "text-prop",

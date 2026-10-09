@@ -67,6 +67,13 @@ export const CARVE_OUTS: CarveOut[] = [
 		why: "initials size with their avatar's box, which the board leaves unchanged",
 	},
 	{
+		file: "apps/extension/src/components/composite/general/AccountAvatar.vue",
+		rule: "faceless",
+		text: "font-weight: 600",
+		selector: ".initials",
+		why: "the initials' weight, which the board leaves unchanged",
+	},
+	{
 		file: "apps/extension/src/components/composite/send/AmountCard.vue",
 		rule: "faceless",
 		text: "font-size: 40px",
