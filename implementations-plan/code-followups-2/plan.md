@@ -16,7 +16,7 @@ issues: none (follow-ups.md entries; no GitHub issue)
 
 # code-followups-2: prune the follow-ups, ship the small code ones
 
-This lane covers the open entries of [`follow-ups.md`](../follow-ups.md) that are code work with no
+This lane covers the open entries of `follow-ups.md` (retired by governance-1 at `be4d044`; each entry is now a GitHub issue, see `archive/governance-1/plan.md`) that are code work with no
 design decision, and no visible change beyond one the owner has already signed off. It has three jobs:
 
 1. Prune what is already resolved.
