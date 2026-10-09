@@ -94,7 +94,7 @@ describe("background recorder", () => {
 		])
 	})
 
-	test("a write that fails makes every later flush say so", async () => {
+	test("a write that fails makes every later flush from that background say so", async () => {
 		const storage = slowStorage()
 		const { scope, flush } = background(storage)
 		await expect(flush()).resolves.toBe(true)

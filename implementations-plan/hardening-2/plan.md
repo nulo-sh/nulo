@@ -682,6 +682,14 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 | O5 | Low | Comments: the seed's "imports nothing / every copy of zod", the page recorder's borrowed reason, the check's incomplete failure list, agent.sh's "stamp", the `http:` guard unnamed, a restating sentence in `manifest.test.ts` | **Accepted.** Each rewritten; the `http:` comment names `rpcTransportVerdict`. |
 | — | Note | `https:` is redundant next to `http:` (an `http:` source also matches https URLs) | **Kept** for legibility; same reach. |
 
+### Arc 3 implementation — Codex round 2 (same session, on `957af69..d43a198`)
+
+**Verdict: findings** (one, low). C1, C3 and C4 resolved; C2 resolved within a surviving background; no other regression, release-boundary, comment or drift finding.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C5 | Low | A lost write's latch lives in one background instance: if it is stopped before the check, its successor confirms the flush | **Accepted as a named gap.** Persisting the latch would rely on the storage write that just failed. `tests/e2e/README.md` lists it with the recorder's other gaps, and the unit test's name scopes its claim to that background. |
+
 ## Delivery
 
 One `gh stack`, base `dev`, in the D-ORD order. Each layer's PR opens once that arc's gates and its Codex loop have converged; the final cross-arc pass runs before the close-out. Arc 1 rebases on `dev` after PR #48 lands; only layers 2 and up wait for it.
