@@ -1,0 +1,8 @@
+- 2026-10-09: planning started (light tier); worktree adopted at 61060c0; recon done (2 Sonnet explorers).
+- 2026-10-09: #44 found fixed on dev by #41 (3b80761); no code planned for it.
+- 2026-10-09: #45 design: typed cancel rejection (a null resolve would clear a chosen backup); #43 design: run fence carried by every contact call of the import.
+- 2026-10-09: draft plan, recon and owner ask written; audits next.
+- 2026-10-09: audits launched (Codex gpt-6.1-sol high; Opus Plan agent).
+- 2026-10-09: Codex round 1: reject (2 High, 4 Medium, 2 Low); triage pending the Opus review.
+- 2026-10-09: Opus review: conditional approve (2 High, 3 Medium, 3 Low). Both audits folded: capture at staging, in-lock isFenceLive, fence probe decides the stop, separate stop toast, armed two-browser smoke in Phase 1, second owner ask (stop trigger).
+- 2026-10-09: Codex round 2 (resumed): conditional approve; four conditions folded. Plan at the approval gate.
