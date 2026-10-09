@@ -1,0 +1,290 @@
+[
+	{
+		"bundled": false,
+		"reason": "Reached only through the exact-pinned Aztec 6.0.0-rc.1 line: undici 5 and its busboy from @aztec-labs/foundation, ws 8.18.3 pinned exactly by @aztec/viem 2.38.3, and uuid 9 from the Google Cloud Storage client @aztec-labs/stdlib depends on. All are Node-side code that neither extension zip contains (THIRD-PARTY-NOTICES.txt). Here they load only in tests, the e2e harness against a sandbox the run started, and the seed preflight script, which hands foundation's JSON-RPC client its own fetch, so undici is never imported.",
+		"revisit": "the next Aztec bump",
+		"advisories": [
+			{
+				"id": 1240982,
+				"package": "@fastify/busboy",
+				"severity": "high",
+				"vulnerable_versions": ">=1.0.0 <3.2.1"
+			},
+			{
+				"id": 1241276,
+				"package": "@fastify/busboy",
+				"severity": "moderate",
+				"vulnerable_versions": "<3.2.2"
+			},
+			{
+				"id": 1112496,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.23.0"
+			},
+			{
+				"id": 1114594,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.24.0"
+			},
+			{
+				"id": 1114638,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": "<6.24.0"
+			},
+			{
+				"id": 1114640,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": "<6.24.0"
+			},
+			{
+				"id": 1114642,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.24.0"
+			},
+			{
+				"id": 1121242,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.27.0"
+			},
+			{
+				"id": 1121245,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": "<6.27.0"
+			},
+			{
+				"id": 1121255,
+				"package": "undici",
+				"severity": "low",
+				"vulnerable_versions": "<6.27.0"
+			},
+			{
+				"id": 1130716,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.28.0"
+			},
+			{
+				"id": 1130727,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.28.0"
+			},
+			{
+				"id": 1130732,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": "<6.28.0"
+			},
+			{
+				"id": 1137243,
+				"package": "undici",
+				"severity": "low",
+				"vulnerable_versions": "<6.27.0"
+			},
+			{
+				"id": 1240039,
+				"package": "undici",
+				"severity": "low",
+				"vulnerable_versions": "<6.28.1"
+			},
+			{
+				"id": 1119441,
+				"package": "uuid",
+				"severity": "moderate",
+				"vulnerable_versions": "<11.1.1"
+			},
+			{
+				"id": 1119108,
+				"package": "ws",
+				"severity": "moderate",
+				"vulnerable_versions": ">=8.0.0 <8.20.1"
+			},
+			{
+				"id": 1123259,
+				"package": "ws",
+				"severity": "high",
+				"vulnerable_versions": ">=8.0.0 <8.21.0"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "@aztec-labs/telemetry-client's OpenTelemetry 1.x Node SDK (with the Jaeger propagator and host-metrics' systeminformation), reached only through the exact-pinned Aztec 6.0.0-rc.1 line. Neither extension zip contains it (THIRD-PARTY-NOTICES.txt), and nothing in this repository imports the telemetry client or configures an exporter, so no header is parsed and no host metric is read.",
+		"revisit": "the next Aztec bump",
+		"advisories": [
+			{
+				"id": 1153174,
+				"package": "@opentelemetry/core",
+				"severity": "moderate",
+				"vulnerable_versions": "<2.8.0"
+			},
+			{
+				"id": 1124011,
+				"package": "@opentelemetry/propagator-jaeger",
+				"severity": "high",
+				"vulnerable_versions": "<2.9.0"
+			},
+			{
+				"id": 1111529,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": "<5.27.14"
+			},
+			{
+				"id": 1113330,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": "<5.30.8"
+			},
+			{
+				"id": 1120162,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": ">=4.17.0 <=5.31.5"
+			},
+			{
+				"id": 1123570,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": "<=5.31.6"
+			},
+			{
+				"id": 1239762,
+				"package": "systeminformation",
+				"severity": "high",
+				"vulnerable_versions": "<5.31.0"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "Exact pins inside miniflare 5.20260907.0-alpha, the local Workers simulator of wrangler 4.129.1, a dev dependency of apps/landing and infra/passkey-rp. They run in a developer's `wrangler dev`; no deployed Worker and no extension zip contains them.",
+		"revisit": "the next wrangler bump",
+		"advisories": [
+			{
+				"id": 1193725,
+				"package": "sharp",
+				"severity": "high",
+				"vulnerable_versions": "<0.35.4"
+			},
+			{
+				"id": 1241331,
+				"package": "sharp",
+				"severity": "high",
+				"vulnerable_versions": "<0.35.5"
+			},
+			{
+				"id": 1239933,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.28.0 <7.29.1"
+			},
+			{
+				"id": 1240036,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.11.0 <7.29.1"
+			},
+			{
+				"id": 1240038,
+				"package": "undici",
+				"severity": "low",
+				"vulnerable_versions": ">=7.0.0 <7.29.1"
+			},
+			{
+				"id": 1240041,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.0.0 <7.29.1"
+			},
+			{
+				"id": 1240044,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.15.0 <7.29.1"
+			},
+			{
+				"id": 1240046,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.0.0 <7.29.1"
+			},
+			{
+				"id": 1240048,
+				"package": "undici",
+				"severity": "low",
+				"vulnerable_versions": ">=7.1.0 <7.29.1"
+			},
+			{
+				"id": 1240050,
+				"package": "undici",
+				"severity": "high",
+				"vulnerable_versions": ">=7.24.1 <7.29.1"
+			},
+			{
+				"id": 1240052,
+				"package": "undici",
+				"severity": "low",
+				"vulnerable_versions": ">=7.0.0 <7.29.1"
+			},
+			{
+				"id": 1240055,
+				"package": "undici",
+				"severity": "moderate",
+				"vulnerable_versions": ">=7.0.0 <7.29.1"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "The test runner. The path traversal needs control of a test file or the vitest config, which already runs arbitrary code, and CI runs only this repository's tests. vitest 4.1.11 fixes it, but any test-runtime change must pass the soak matrix (CLAUDE.md), so it moves with the next vitest bump.",
+		"revisit": "the next vitest bump",
+		"advisories": [
+			{
+				"id": 1193684,
+				"package": "@vitest/mocker",
+				"severity": "moderate",
+				"vulnerable_versions": ">=2.1.0 <4.1.11"
+			},
+			{
+				"id": 1193683,
+				"package": "vitest",
+				"severity": "moderate",
+				"vulnerable_versions": ">=2.1.0 <4.1.11"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "No patched release exists. micromatch (vite-plugin-pages) and chokidar 3 (vite-plugin-static-copy) use it at build time to expand glob patterns this repository's own config writes; no outside input reaches it, and no extension zip contains it.",
+		"revisit": "a braces release that fixes it",
+		"advisories": [
+			{
+				"id": 1240992,
+				"package": "braces",
+				"severity": "high",
+				"vulnerable_versions": "<=3.0.3"
+			}
+		]
+	},
+	{
+		"bundled": false,
+		"reason": "No patched release exists. It comes in with crypto-browserify through vite-plugin-node-polyfills, and neither extension zip contains it (THIRD-PARTY-NOTICES.txt lists no elliptic); the playground that also builds with the plugin is a local test dApp nobody deploys.",
+		"revisit": "an elliptic release that fixes it, or THIRD-PARTY-NOTICES.txt listing elliptic",
+		"advisories": [
+			{
+				"id": 1112030,
+				"package": "elliptic",
+				"severity": "low",
+				"vulnerable_versions": "<=6.6.1"
+			}
+		]
+	}
+]

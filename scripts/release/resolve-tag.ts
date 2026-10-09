@@ -7,7 +7,7 @@
  *
  * Behavior:
  *   TAG = isPush ? release-please's tag_name : the workflow_dispatch `tag` input
- *   empty TAG  -> hard error (dispatch needs the input; push needs a created release)
+ *   empty TAG  -> hard error (dispatch needs the input; a push needs auto-unstick's tag)
  *   VERSION    = TAG without a leading "v"
  *   isPrerelease = VERSION contains "-"  (e.g. 1.2.3-rc, 1.2.3-rc.1)
  */
@@ -32,7 +32,7 @@ export interface ResolvedTag {
 
 /** The `::error::` message for an unresolved tag; the workflow's `resolve` step prints the same text. */
 export const NO_TAG_ERROR =
-	"no tag resolved — workflow_dispatch requires the 'tag' input (e.g. v1.2.3), and push events need release-please to have created a release."
+	"no tag resolved — workflow_dispatch requires the 'tag' input (e.g. v1.2.3), and a push needs auto-unstick to have tagged the merged Release PR."
 
 export function resolveTag(input: ResolveTagInput): ResolvedTag {
 	const raw = (input.isPush ? input.tagFromPlease : input.tagFromInput) ?? ""
