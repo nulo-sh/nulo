@@ -81,6 +81,10 @@ export const IDENTIFIER_MEMBERS = [
 	"hostname",
 	"contractAddress",
 	"selector",
+	"caller",
+	"contract",
+	"consumer",
+	"to",
 ]
 const BOUND_TEXT_PROPS = new Set(["title", "description", "label", "value"])
 const NON_RENDERING_PROPS = new Set(["key", "class", "style", "ref", "is", "to", "href", "src", "formatter"])

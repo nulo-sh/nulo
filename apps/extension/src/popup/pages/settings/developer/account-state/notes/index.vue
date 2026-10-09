@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
 				<div v-if="display.kvEntries.length" :class="$style.kv_grid">
 					<template v-for="entry in display.kvEntries" :key="entry.key">
 						<span :class="$style.kv_key">{{ entry.key }}</span>
-						<span :class="[$style.kv_val, entry.isLongHex && $style.kv_val_wrap]">{{ entry.value }}</span>
+						<span data-testid="record-value" :class="[$style.kv_val, entry.isLongHex && $style.kv_val_wrap]">{{ entry.value }}</span>
 					</template>
 				</div>
 
