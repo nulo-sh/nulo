@@ -384,7 +384,7 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 - **Deviation (Phase 1.1): the incarnation id is the existing `ProfileService.workerId`**, which already keeps session handles from naming a later worker's session. `openBackupTransfer` returns no `dekReplaced` (it is `sourceDek === null`), and `getProfileDekSealed` is deleted, not just unlisted, since it had no caller.
 
 - **Deviation (Phase 2.1): the confirm button's red needed a ConfirmPopup field, and a compact size.** `confirm_color: "red"` never coloured ConfirmPopup's confirm button: it reaches the design Button as a `type` attribute and only picks the pre-title. Turning it into the red variant would recolour every destructive confirm in the wallet, a UI change outside this sign-off. So ConfirmPopup takes an opt-in `confirm_variant`, unset everywhere else. At the row's medium size, `cta_destructive`'s CTA type (14 px, 0.2 em tracking, no side padding) clipped "Download anyway" to "OWNLOAD ANYWA"; a CTA variant now takes `compact`, the design package's CTA size for a tight spot, where the label fits edge to edge. The look is flagged to the owner in OWNER-ASKS.md § Render notes.
-- **Owner call r1 (2026-10-09): the confirm button is a new `destructive` variant of the regular button.** It supersedes the compact `cta_destructive` above. `@nulo/design`'s `Button` takes `destructive`: primary's type rule (one selector list, so the two cannot drift) and the size classes' padding, on `--red` with `--txt-white`. The passkey confirmation's "Download anyway" uses it at medium, Cancel's size; ConfirmPopup drops its CTA-size switch and keeps `confirm_variant` as the opt-in field. Tests: seven `Button.test.ts` cases (class, regular sizes, disabled, loading, anchor, the type rule and the CTA contract read from the style block, the red fill); ConfirmPopup's variant test asserts the confirm's size equals Cancel's.
+- **Owner call r1 (2026-10-09): the confirm button is a new `destructive` variant of the regular button.** It supersedes the compact `cta_destructive` above. `@nulo/design`'s `Button` takes `destructive`: primary's type rule (one selector list, so the two cannot drift) and the size classes' padding, on `--red` with `--txt-white`. The passkey confirmation's "Download anyway" uses it at medium, Cancel's size; ConfirmPopup drops its CTA-size switch and keeps `confirm_variant` as the opt-in field. Tests: five `Button.test.ts` cases. One checks the class; four read the style block, since vitest maps every CSS-module name whether or not a rule defines it: the shared type rule, the CTA contract and no size declarations on either variant, the red fill, and hover and press excluding a disabled or loading button. ConfirmPopup's variant test asserts the confirm is medium, Cancel's size. The hover follows primary's formula; its dark-theme contrast is a render note in OWNER-ASKS.md.
 - **Deviation (Phase 2.1): one download writer, the plain-file rule held twice.** `canDownload` decides the button; `downloadBackup(isEncrypted)` refuses a plain file on a password profile again, so a confirmation answered after an in-place switch to a password profile writes nothing. The confirm callback also checks the run's `generation` and the `finished` status.
 - **Phase 2.2 helpers:** `exportPlainBackup` became `exportBackupContent` (it now encrypts, downloads and opens the file with `openFullBackupText` in Node); new `downloadEncryptedBackup`, `downloadPlainPasskeyBackup` and `openEncryptedBackup` in `tests/e2e/helpers/backup-export.ts` take the press as a parameter, so `legal-acceptance` keeps its real pointer input.
 
@@ -530,6 +530,28 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 ### Arc 2 post-implementation: Codex fix loop, round 3 (resumed session)
 
 **Verdict:** `approve with fixes`, no production finding: "The production fix looks correct … No new production bug found in this diff." One Low test finding, accepted: the switch test held the prompt forever instead of rejecting it, so the stale run's catch and `finally` never ran. The test now rejects the held prompt through the page's ceremony rejection and asserts the stale run toasts and navigates nothing while the new profile's run completes; removing the catch's generation check fails it. The loop stops here at its three-round limit, with no production finding open.
+
+### Owner call r1 (the red button): Codex fix loop, round 1 (gpt-6.1-sol, high), with one Opus review
+
+Scope: the r1 diff only (`feat(design): add a red variant of the regular button…`).
+
+**Codex verdict** (session 01a120c5): `approve with fixes`, "high confidence that there is no production regression". One Low, two Nits; all accepted.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The ConfirmPopup size check compares two attributes that are both `undefined` if neither button forwards `size`. | Low | Accepted: the test asserts `medium` before comparing with Cancel. |
+| 2 | A test comment narrates the regex under it. | Nit | Accepted: replaced by the one fact the test depends on (vitest stubs CSS-module names). |
+| 3 | The variant's doc line carries placement detail; the shared rule's comment restates its selectors. | Nit | Accepted in part: both cut to one line each, keeping the why (a CTA clips in a half-width row; one rule so the twin cannot drift). |
+
+**Opus 5.5 review (general-purpose, same round):** `approve with fixes`, no correctness bug; it measured the label at 131 px in a 154 px button, inside the padding, not clipped.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | Five of the seven Button tests cannot see the stylesheet: vitest's CSS-module proxy returns `_name_<hash>` for any key, so they pass with the rule deleted, and three repeat existing tests. | Low | Accepted, verified. The disabled, loading, anchor and size cases are replaced by style-block checks: hover and press exclude a disabled or loading button, and neither variant sets a size. Five cases remain, each failing under its mutation (hover guard removed, padding on primary, accent fill). |
+| 2 | The helper's comment omitted why the style block is read. | Low | Same as Codex 2. |
+| 3 | Primary's hover formula lightens the red in the dark theme: the label falls from 3.6:1 to about 3.1:1 (checked against `base.css`). | Low | Not changed: the hover is what a person sees, and the sign-off is "a red variant of the regular button". Raised to the owner as a render note in OWNER-ASKS.md, with two alternatives. |
+| 4 | "Type and size" in the doc line: size comes from the size prop. | Nit | Accepted. |
+| 5 | The comment says neither variant sets a size; the test checked only destructive. | Nit | Accepted: the test covers both. |
 
 ## Post-implementation
 

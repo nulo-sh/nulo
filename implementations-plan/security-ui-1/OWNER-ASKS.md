@@ -90,3 +90,5 @@ Recorded by the owner on the result page (a private Claude Artifact, "Backup Pag
 | r3. Ending an app's session is scoped to the profile that owns it | **Yes**, ship as built | none |
 
 Consequences: `@nulo/design`'s `Button` gains a `destructive` variant, the regular button's type and padding on red, and the passkey confirmation's "Download anyway" uses it at Cancel's size. The compact CTA size the render note above describes is gone from ConfirmPopup. r2 and r3 change nothing.
+
+Render note on r1, not a new call: **the red button's hover.** It follows the regular button's hover, which mixes 18% of the text colour into the fill. In the dark theme that lightens the red from `#f03c3c` to about `#f15c5b`, and the white label falls from 3.6:1 to 3.1:1 while the pointer is over it. In the light theme it darkens the red (about 4.9:1). No shot shows a hover. Two alternatives exist, each a UI change for the owner: the red CTA's hover, 90% opacity (about 4.3:1 dark, 3.3:1 light), or a darker red in both themes.
