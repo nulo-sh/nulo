@@ -168,3 +168,16 @@ Ratios are against the page; on a hovered or pressed row they stay at 4.57:1 or 
 ## Answers
 
 _Recorded here by the orchestrator, with the date, when the owner answers each page._
+
+## Answers: page 2, owner sign-off, 2026-10-09
+
+The owner answered page 2 on 2026-10-09 and signed off at 12:55 UTC, every call on the planner's recommendation, with no notes. Arc 2 builds calls 1, 2, 5 and 6; calls 3 and 4 are Arc 3, which waits for PRs #56, #55 and #58 to reach `dev`.
+
+| Call | Answer | Note |
+|---|---|---|
+| 1. Home's two view links | **A**, real, readable links | Arc 2, Phase 2.1 |
+| 2. The back arrow's and the onboarding method tab's focus rings | **A**, one ring each | Arc 2, Phase 2.2 |
+| 3. Read History's and Settings' title once | **Yes** | Arc 3, Phase 3.1; waits for PR #56 |
+| 4. Announce the swap to the emoji check | **A+**, the announcement with the look-alike warning when shown | Arc 3, Phase 3.2; waits for PRs #55 and #58 |
+| 5. The connect step bar's empty half | **A**, a visible track colour | Arc 2, Phase 2.3 |
+| 6. The status colours in the light theme | **A**, darker light-theme status text | Arc 2, Phase 2.4 |
