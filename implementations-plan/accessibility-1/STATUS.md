@@ -43,3 +43,4 @@
 - 2026-10-09: phase 3.2 gate pass (A+): lint, typecheck:all, test, test:all; network connect-one-window.test.ts connect-verify-mismatch.test.ts on chrome and firefox (3/3 each, NULO_E2E_RETRY=0). Unit tests red first.
 - 2026-10-09: arc 3 review: Codex round 1 approve with fixes (two Lows), Opus four nits, all accepted; Codex round 2 approve.
 - 2026-10-09: final cross-arc Codex pass: two comment-only Lows in Arc 1's specs, accepted; round 2 approve.
+- 2026-10-09: arc 3 exit gate pass on the final head: audit:vue, test:all, check:plans (0 findings); smoke navigation.test.ts 5/5 on chrome and firefox (retry 0, fresh builds); network connect-one-window + connect-verify-mismatch 3/3 on chrome and firefox (NULO_E2E_RETRY=0). Before/after shots: titles differ only in the header address, the check only in the per-session emoji grid.
