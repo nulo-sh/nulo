@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { FileTooLargeError, compressData, downloadFile, pickFile } from "./files"
+import { FilePickCanceledError, FileTooLargeError, compressData, downloadFile, pickFile } from "./files"
 
 /** Drives pickFile's hidden input: grabs it post-append, plants the file, fires onchange. */
 async function pickWith(file: File, maxBytes?: number): Promise<File> {
@@ -10,6 +10,17 @@ async function pickWith(file: File, maxBytes?: number): Promise<File> {
 	input.onchange(new Event("change"))
 	return picked
 }
+
+describe("pickFile cancel", () => {
+	test("a closed chooser rejects with FilePickCanceledError and removes the input", async () => {
+		const picked = pickFile()
+		const input = document.body.querySelector<HTMLInputElement>('input[type="file"]')
+		if (!input) throw new Error("pickFile input not mounted")
+		input.dispatchEvent(new Event("cancel"))
+		await expect(picked).rejects.toBeInstanceOf(FilePickCanceledError)
+		expect(input.isConnected).toBe(false)
+	})
+})
 
 describe("pickFile byte cap", () => {
 	test("rejects an oversized file before any read (plain path)", async () => {

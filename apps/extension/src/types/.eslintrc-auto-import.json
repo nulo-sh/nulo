@@ -64,6 +64,7 @@
     "FiatOf": true,
     "FieldDef": true,
     "FieldHandle": true,
+    "FilePickCanceledError": true,
     "FileTooLargeError": true,
     "FooterBox": true,
     "FormState": true,

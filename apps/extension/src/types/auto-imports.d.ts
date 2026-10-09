@@ -27,6 +27,7 @@ declare global {
   const FIRST_PROFILE_NAME: typeof import('../utils/profile-name').FIRST_PROFILE_NAME
   const FULL_BACKUP_V2_TAG: typeof import('../utils/full-backup-helpers').FULL_BACKUP_V2_TAG
   const FULL_SIZE: typeof import('../utils/hero-fit').FULL_SIZE
+  const FilePickCanceledError: typeof import('../utils/files').FilePickCanceledError
   const FileTooLargeError: typeof import('../utils/files').FileTooLargeError
   const GLOSSARY: typeof import('../utils/glossary').GLOSSARY
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
@@ -546,7 +547,7 @@ declare global {
   export type { AssetPricing } from '../utils/fee-estimation'
   import('../utils/fee-estimation')
   // @ts-ignore
-  export type { FileTooLargeError } from '../utils/files'
+  export type { FileTooLargeError, FilePickCanceledError } from '../utils/files'
   import('../utils/files')
   // @ts-ignore
   export type { FullBackupCtaSource } from '../utils/full-backup-ctas'
@@ -631,6 +632,7 @@ declare module 'vue' {
     readonly FIRST_PROFILE_NAME: UnwrapRef<typeof import('../utils/profile-name')['FIRST_PROFILE_NAME']>
     readonly FULL_BACKUP_V2_TAG: UnwrapRef<typeof import('../utils/full-backup-helpers')['FULL_BACKUP_V2_TAG']>
     readonly FULL_SIZE: UnwrapRef<typeof import('../utils/hero-fit')['FULL_SIZE']>
+    readonly FilePickCanceledError: UnwrapRef<typeof import('../utils/files')['FilePickCanceledError']>
     readonly FileTooLargeError: UnwrapRef<typeof import('../utils/files')['FileTooLargeError']>
     readonly GLOSSARY: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY']>
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
