@@ -419,7 +419,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 
 ### Arc 2 (layer 3, branch `hardening-2-storage-fences`)
 
-#### Phase 3 — #19: resume refuses a journal its registry did not write
+#### Phase 3 — #19: resume refuses a journal its registry did not write ✓
 
 1. Add `journalMatchesRegistry` and the check before `restore(backup)`, as in Architecture.
 2. In `migrator.test.ts`, give each hand-built journal a registered migration whose footprint matches it. Two examples: the `noop` at `:288` gets `reads: [rootRef("acct"), rootRef("newroot")]`, and the value-key test gets its value ref.
@@ -587,6 +587,13 @@ Per-directive gate:
 | D-23k | `blob:` in `connect-src` (implementation, Phase 7) | Added on Firefox's recorded violation: it checks `downloads.download` of a blob URL against `connect-src`, and every export downloads one | Leave it out (the plan's source list): every Firefox export and backup download broke. A blob URL names data already in memory, so the source opens no network destination. |
 | D-ORD | Arc order (orchestrator, 2026-10-08) | Arc 3 first as layer 1 on `worktree-hardening-2`, then Arc 1 (layer 2, a new branch once PR #48 lands), then Arc 2 (layer 3) | The planned order 1-2-3: Arc 1 must wait for PR #48, and Arc 2 overlaps files PR #52 is changing, while Arc 3 touches neither. |
 | D-23d | IPv6 loopback | Probe; fall back to `http:` and ask (round 1) | Ship `http://[::1]:*` unprobed: the CSP host grammar has no IPv6 literal, so a saved endpoint could silently break. |
+
+### Arc 2 decisions (implementation)
+
+| # | Decision | Chosen | Rejected and why |
+|---|---|---|---|
+| D-ORD2 | Arc 2's base (orchestrator, 2026-10-09) | Stack on layer 1 (`worktree-hardening-2`, Arc 3), with `origin/dev` merged in | On layer 2 as the Delivery table says: Arc 1 waits on its own PR, and Arc 2's files (`wallet-core` migrator, `profile/`, `token/`, `token-balance/`) do not overlap Arc 1's (`wallet-bridge`, `pxe/artifact-registry`). |
+| D-19c | An engine-namespace key in a journal's `entries` (Phase 3) | Refused with the other out-of-footprint keys | Filtered at restore as before: the journal is then not one the engine wrote, and the check refuses rather than repairs (D-19a). `restore()` keeps its filter as defence in depth. |
 
 **Unresolved disagreements.**
 
