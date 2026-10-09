@@ -1,5 +1,49 @@
 {
 	"producers": {
+		"action_operations": {
+			"search": "kind:\\s*[\"'](?:send_transaction|simulate_transaction)[\"']\\s*(?:as\\s+const\\s*)?,",
+			"hits": [
+				{
+					"file": "apps/extension/src/wallet/services/auth-registry/service.ts",
+					"text": "kind: \"send_transaction\","
+				},
+				{
+					"file": "apps/extension/src/wallet/services/auth-registry/service.ts",
+					"text": "kind: \"send_transaction\","
+				},
+				{
+					"file": "apps/extension/src/wallet/services/execution/operation-planner.ts",
+					"text": "kind: \"send_transaction\","
+				},
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "kind: \"send_transaction\" as const,"
+				}
+			],
+			"digests": {
+				"apps/extension/src/wallet/services/auth-registry/service.ts": "2a21a1631e8206130d5603d4303e77a226a940558e17eff2ab82665f9330129e",
+				"apps/extension/src/wallet/services/execution/operation-planner.ts": "1735b318a9eb12c2843e299f515a043276a445194ccdbc168e6989892b4aa1d1",
+				"packages/wallet-bridge/src/dispatcher.ts": "a655d3c254af5f64fee15f05e8505774ce629a9a6e2b46f9ab782aef18a25a11"
+			},
+			"evidence": [
+				{
+					"file": "packages/wallet-bridge/src/dispatcher.ts",
+					"text": "kind: \"send_transaction\" as const, account: caipAccount, actions: [ { kind: \"add_public_authwit\" as const,"
+				},
+				{
+					"file": "apps/extension/src/wallet/services/auth-registry/service.ts",
+					"text": "const txHash = await this.executionService.executeSendTransaction("
+				},
+				{
+					"file": "apps/extension/src/wallet/services/execution/transfer-executor.ts",
+					"text": "await this.deps.planner.buildTransferOperation(req)"
+				},
+				{
+					"file": "apps/extension/src/popup/windows/execute/OperationActionRow.vue",
+					"text": "Unreachable from today's window producers (the one request carrying actions is a grant)"
+				}
+			]
+		},
 		"add_public_authwit": {
 			"search": "kind:\\s*[\"']add_public_authwit[\"']\\s*(?:as\\s+const\\s*)?,",
 			"hits": [
@@ -1009,8 +1053,10 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-action-contract\"]",
 			"surface": "windows-execute",
-			"state": "a call action (network)",
-			"liveFrom": 2
+			"state": "",
+			"liveFrom": 2,
+			"unreachable": "action_operations",
+			"why": "every operation carrying actions is built in action_operations; the only one sent to the execute window is the dispatcher's grantPublicAuthwit, whose one action is add_public_authwit, and the auth-registry and Send builders' call and encoded_call actions execute without the window, so this branch never renders"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationActionRow.vue",
