@@ -33,6 +33,7 @@ declare global {
   const GLOSSARY_SECTIONS: typeof import('../utils/glossary').GLOSSARY_SECTIONS
   const HERO_MIN_SCALE: typeof import('../utils/hero-fit').HERO_MIN_SCALE
   const HOME_TOKEN_ROWS: typeof import('../utils/token-order').HOME_TOKEN_ROWS
+  const HOSTNAME_WARNING: typeof import('../composables/useDappHostname').HOSTNAME_WARNING
   const IMPORT_ACTIVATION_TIMEOUT_MS: typeof import('../composables/completeImportWithRecovery').IMPORT_ACTIVATION_TIMEOUT_MS
   const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
   const IMPORT_PREFLIGHT_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_PREFLIGHT_BUDGET_MS
@@ -645,6 +646,7 @@ declare module 'vue' {
     readonly GLOSSARY_SECTIONS: UnwrapRef<typeof import('../utils/glossary')['GLOSSARY_SECTIONS']>
     readonly HERO_MIN_SCALE: UnwrapRef<typeof import('../utils/hero-fit')['HERO_MIN_SCALE']>
     readonly HOME_TOKEN_ROWS: UnwrapRef<typeof import('../utils/token-order')['HOME_TOKEN_ROWS']>
+    readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappHostname')['HOSTNAME_WARNING']>
     readonly IMPORT_ACTIVATION_TIMEOUT_MS: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['IMPORT_ACTIVATION_TIMEOUT_MS']>
     readonly IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS']>
     readonly IMPORT_PREFLIGHT_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_PREFLIGHT_BUDGET_MS']>

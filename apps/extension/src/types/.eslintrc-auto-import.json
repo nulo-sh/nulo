@@ -80,6 +80,7 @@
     "GlossaryKey": true,
     "HERO_MIN_SCALE": true,
     "HOME_TOKEN_ROWS": true,
+    "HOSTNAME_WARNING": true,
     "HeroFit": true,
     "HeroWidthAt": true,
     "HubConfig": true,
