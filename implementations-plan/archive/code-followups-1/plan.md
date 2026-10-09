@@ -1,7 +1,7 @@
 ---
 plan: code-followups-1
 tier: mid
-status: planning, awaiting approval
+status: completed (#65, #66, #67)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,15 +14,27 @@ trunk: dev
 issues: none (follow-ups.md entries; no GitHub issue)
 ---
 
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: completed. Arcs 1 and 2 merged; arc 3 is [#67](https://github.com/nulo-sh/nulo/pull/67), with this close-out stacked on it.
+- **Shipped**: three PRs into `dev`.
+  - [#65](https://github.com/nulo-sh/nulo/pull/65), CI reliability. The briefed "port collision" did not hold: `[aztec-node] … os error 98` is the aztec CLI wrapper's second anvil losing its bind, printed on every shard of a green run. The setup now says so in its own log. The one real rerun in 100 network-lane runs was an awaiting-card hydration race in `same-token-concurrent-sends`, closed in the test (`waitForAwaitingCard`), with a component test of the hydration order. Entry 147 was rechecked green on Firefox prover-ON (`sendTransfer` 52-56 s).
+  - [#66](https://github.com/nulo-sh/nulo/pull/66), tests and tooling: History's `data-incoming-loaded` signal replaces a 3 s sleep; price-fixture, test-soak and `e2e/config` get honest budgets; `shotSend` waits for the theme flip; the skills agree on concurrent runs; Storybook resolves its components and fills `chrome`; the pages watcher ignores tests under a dot-directory; the landing's config imports `.ts`; a real selector hash, decoder and `callSurface` test. Entry 174 was measured and not reproduced.
+  - [#67](https://github.com/nulo-sh/nulo/pull/67), wallet code hygiene: an unreachable popup and its store fields, an unread CSS variable, an unread row flag, an unrendered form field and an unused schema removed; the restore's keys built with `accountScopeKey`; one comment corrected; the legacy boot sweep keeps bb.js's CRS cache.
+- **Dropped**: the playground change for entry 101 (D8: the wallet's utility path cannot succeed on the button's call, and existing tests already assert a successful `executeUtility`); the flake-ledger edits to the `e2e-testing` skill, since an open PR (#56) edited that file at close-out: they became one follow-up.
+- **Open items**: none kept here; [follow-ups](../../follow-ups.md) took them. Deleted 10, 97, 98, 100, 101, 102, 103, 106, 115, 119, 133, 144, 146, 147, 149 and 177 (120, 122, 123, 125, 127 and 132 were already gone with supply-chain-release's close-out). Rewritten to what is left: 63, 75, 130, 156, 163, 165, 174 and 175. Added: the five in § Follow-ups found during planning, the store-captures one from Arc 3, and the flake-ledger routing.
+- **Lessons**: `lessons.md`'s timed-tests line is retired, since `e2e/config`'s cases now carry their own budget (#66); the base-rerun line gains "grep a green run for a suspect log line". The rest stays in `lessons/phase-*.md`.
+- **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
+
 # code-followups-1 — prune the follow-ups, ship the small code ones, settle the boot-line "flake"
 
-The open entries of [`follow-ups.md`](../follow-ups.md) that are code work with no visible change and
+The open entries of [`follow-ups.md`](../../follow-ups.md) that are code work with no visible change and
 no design decision, plus one CI reliability item. Three jobs: prune what is already resolved, build the
 small entries in three stacked arcs, and list the rest under "Not this lane" with one reason each.
 Nothing here changes what a person sees.
 
-Recon: [recon.md](recon.md). Live progress: [STATUS.md](STATUS.md). Owner asks:
-[OWNER-ASKS.md](OWNER-ASKS.md) (none).
+Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none).
 
 **UI impact: none.** No wallet screen, copy, layout or value format changes. One invisible change,
 named so a reviewer can check it: the History page's root (`activity-feed-root`) gains a
@@ -756,7 +768,7 @@ suite passes.
 
 ### Arc 3 — wallet code hygiene
 
-#### Phase 7 — dead fields, a dead popup, a duplicated key
+#### Phase 7 — dead fields, a dead popup, a duplicated key ✓
 
 1. *103.* `TokensView.vue` drops `isMinting`; `TokenCard.test.ts` drops it from its fixture.
 2. *163, part.* Delete `SelectNetworksPopup.vue`, its import and its mount in `PopupManager.vue`, and
@@ -778,7 +790,7 @@ Chrome smoke suite passes (every popup mounts through `PopupManager` and `PopupC
 network run of `tests/e2e/network/store-captures.test.ts`, the one e2e that submits Edit network
 (`edit-network-submit`), is green.
 
-#### Phase 8 — keep bb.js's CRS cache
+#### Phase 8 — keep bb.js's CRS cache ✓
 
 1. Remove the `keyval-store` reclaim from `pxe/service.ts` as described in Arc 3.
 2. Tests: in `service-idb-delete.test.ts`, the first case becomes "deletes every legacy DB last-first
@@ -965,6 +977,30 @@ under "Not this lane", not asked ([OWNER-ASKS.md](OWNER-ASKS.md)).
   "the wrapper" (the PATH prepender this spawn bypasses), so the plan's "the aztec CLI wrapper" was
   ambiguous in a CI log. The line reads `the aztec CLI (scripts/aztec.sh) also starts an anvil on
   :<port>; its bind error at boot is expected`; it still does not repeat the vendor's text.
+- **D16, layer 3 is a new stack on `dev` (implementation).** Layers 1 and 2 merged (#65, #66) before
+  arc 3 began, so `code-followups-1-hygiene` was branched from `origin/dev` (`833170d`) and
+  `gh stack init --base dev` started a new stack, as layer 2 did; the close-out layer stacks on it.
+- **D17, the restore tests' account-spec mocks gain `accountScopeKey` (implementation).** Two
+  `useFullBackupImport` test files mock `account/spec` with a hand-listed export set; the swap to the
+  shared helper needed the name there (39 cases failed without it). Added beside the mocks' existing
+  `accountRowId`; the keys only meet each other, so the mock's format proves nothing about the real
+  helper and needs none. The restore's doc comment now names the helper instead of the template.
+- **D18, `deleteDb` returns `Promise<void>` (implementation).** Its boolean result fed only the
+  removed splice bookkeeping; the resolve and reject points and the tick count are unchanged.
+- **D19, `store-captures` is red on `dev`, not on this arc (implementation).** The Phase 7 gate's
+  network file is opt-in (`STORE_CAPTURES=1`). With it, both Edit network submits passed; the file
+  ended red on a soft Send-fit check that #40's restored "Select Asset" label explains, and at the
+  base it went red earlier on a hard strip read. Recorded as a found follow-up, not fixed here (it is
+  a test of Send, which this arc does not touch).
+- **D20, the flake-ledger edits became one follow-up; entry 100 is deleted (close-out).** PR #56,
+  open at close-out, edits `e2e-testing/SKILL.md`, so § Close-out edits to the skills routes the
+  three ledger edits into one new follow-ups entry. That entry carries price-fixture's ledger row, so
+  entry 100's ledger half lives there, and entry 100 is deleted rather than rewritten into a second
+  entry saying the same thing.
+- **D21, one lesson folded, one retired (close-out).** `lessons.md` sat at 8,178 of 8,192 bytes. The
+  vendor-log-line gotcha joins the existing base-rerun line instead of taking a line of its own, and
+  the timed-tests line ("`e2e/config` times out under parallel `test:all` load: rerun the file
+  alone") is retired, since #66 gave those cases their own budget.
 
 ## Audit verdicts
 
@@ -1060,6 +1096,31 @@ The conditions are met in this text; no further round was run.
   members, assigning over a browser binding may throw in strict-mode modules, and the case exists only
   in a developer's own browser; per-story mocks stay the route. Codex agreed with the rejection.
 - **Round 2** (resumed): `clean`.
+
+### Arc 3 — Codex fix loop (gpt-6.1-sol, high, read-only) and Opus review
+
+- **Round 1** (session `01a11f48-90f6-7523-a4d4-5a70d0857585`): `findings`, one material: the
+  blocked-legacy sweep case fired a late `onsuccess` before awaiting the sweep, so a skip arm that
+  never resolved would still pass (at base the re-list caught it). Accepted: the case awaits the
+  resolution right after `onblocked` and the late success is gone; a mutant with `LEGACY_SWEEP` on
+  `onBlocked: "wait"` now fails it. Codex checked and found sound: every removal unreachable
+  (including the dynamic opener in `Header.vue` and the design stylesheets), the Edit network form's
+  behaviour, byte-identical restore keys for hostile rows, the sweep's microtask shape, no stale
+  doc. Opus review alongside: `findings`, the same material point plus three nits. Accepted: the
+  wallet-bridge doc names the instance's `code`, not the static `CODE`; the sweep test file's header
+  names its keyval case. Rejected: restoring `EditNetworkPopup.test.ts`'s dangling-endpoint fixture
+  (the popup reads no endpoint now, so the fixture would document a dependency it does not have;
+  Codex agreed); dropping the sweep file's keyval case as a duplicate (it runs with the OPFS arm
+  present over a live listing, and the plan keeps it).
+- **Round 2** (resumed): `clean`.
+
+### Final cross-arc pass (fresh session, gpt-6.1-sol, high, read-only)
+
+Session `01a11f5c-9619-7880-82b2-06340487d2b2`, over the three arcs' code diffs (arcs 1 and 2 as
+their squash commits `ab54194` and `833170d`, arc 3 as `833170d..HEAD`, plan files excluded), since
+`a6c2fb5..HEAD` now carries other lanes' merges. Verdict: `clean` on the first round: no seam, no
+duplicated helper, no unrecorded drift from the plan, no combined breakage; 13 unit files (271
+tests) rerun green.
 
 ## Post-implementation
 
@@ -1200,3 +1261,9 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
   `vitest.base.ts` warn on every run that Vite's planned native config loader refuses them ("ESM
   syntax in a file loaded as CommonJS"): the extension's `package.json` declares no `"type"`. The
   landing's twin (entry 133) is fixed; this one needs its own change and soak.
+- (Found in Arc 3.) `apps/extension/tests/e2e/network/store-captures.test.ts` (opt-in,
+  `STORE_CAPTURES=1`, Chrome only) is red on `dev`. Its soft `clearAmountLine` check finds 18 px of
+  scroll room on Send where the amount line needs 35 px, since #40 put the "Select Asset" label back
+  (the page moved down one label row); one run at `833170d` failed earlier, at `fillPrivateSend`'s
+  hard strip read (`you: "unknown"`, expected `"hidden"`). The committed captures predate #40. The
+  next store-art refresh needs the Send frame re-staged; how that frame reads is the owner's call.
