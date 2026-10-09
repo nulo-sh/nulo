@@ -8,8 +8,8 @@ const hasConfig = aztecConfig !== undefined
 /**
  * Runtime wiring smoke for incoming transfers. It proves two things and only two: the popup's
  * activity page mounts on a fresh profile without a runtime error, and the
- * `IncomingTransferServiceClient` connects (explicit connect() in onMounted — a ServiceClient never
- * auto-connects on listener registration) and renders an empty incoming feed. No receive, no
+ * `IncomingTransferServiceClient` connects (through its first `getIncomingTransfers` request; a
+ * ServiceClient never connects on listener registration) and renders an empty incoming feed. No receive, no
  * outgoing hash and no self-mint is created, so neither the receive path nor the dedupe is
  * exercised here.
  *

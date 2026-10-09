@@ -1,9 +1,8 @@
 // @vitest-environment node
 /**
- * The approval card's reading of a real aztec-standards Token transfer, end to end: real
- * `encodeArguments`, the real selector hash, the real decoder and `callSurface`. Node environment on
- * purpose: poseidon2 throws `BBApiException: std::bad_cast` under jsdom. Not a composition test,
- * since that layer stays bb-free.
+ * The approval card's reading of a real aztec-standards Token transfer, nothing stood in. Node
+ * environment on purpose: poseidon2 throws `BBApiException: std::bad_cast` under jsdom, and the
+ * composition layer stays bb-free.
  */
 
 import { describe, expect, test } from "vitest"
@@ -25,7 +24,8 @@ const transferOf = (artifact: ContractArtifact): FunctionAbi => {
 	return fn
 }
 
-/** The call a dApp sends for `fn`, as the wire carries it: its selector and its encoded fields. */
+/** The selector is derived from `fn`'s own ABI, so a relabeled function decodes and only the
+ *  vocabulary's selector check can refuse it. */
 const wireCall = async (fn: FunctionAbi) => ({
 	name: fn.name,
 	to: TOKEN,

@@ -54,7 +54,7 @@ test("the node reference mode only accepts the flipped script shape", () => {
 })
 
 // Each case runs a vitest subprocess, which can outlast bun test's 5 s default on a loaded host; 90 s
-// sits above runFixture's 60 s, so the tool's own timeout, the thing under test, fires first.
+// sits above runFixture's 60 s, so a hung fixture ends as the tool's timed-out run, not bun's.
 for (const engine of ["node", "bun"] as const) {
 	describe(`fixtures on ${engine}`, () => {
 		test("passing: zero failed runs and the engine is recorded per run", async () => {
