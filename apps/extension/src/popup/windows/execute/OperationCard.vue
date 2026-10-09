@@ -488,7 +488,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					     field a phishing intent hides. -->
 					<Flex data-testid="execute-authwit-caller" :class="$style.prop">
 						<Text size="12" color="secondary">Authorizes:</Text>
-						<AddressDisplay :address="s.caller" />
+						<AddressDisplay :address="s.caller" data-testid="execute-authwit-caller-address" />
 					</Flex>
 					<Flex :class="$style.prop">
 						<Text size="12" color="secondary">Target contract:</Text>
@@ -510,7 +510,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 					</Flex>
 					<Flex data-testid="execute-authwit-inner-hash" :class="$style.prop">
 						<Text size="12" color="secondary">Inner hash:</Text>
-						<Text size="11" color="primary" mono :title="s.innerHash">{{ trimAddress(s.innerHash, 10, 6) }}</Text>
+						<Text size="11" color="primary" mono :title="s.innerHash" data-testid="execute-authwit-inner-hash-value">{{ trimAddress(s.innerHash, 10, 6) }}</Text>
 					</Flex>
 					<Flex :class="$style.prop">
 						<Text size="11" color="orange" data-testid="execute-authwit-opaque-warning">

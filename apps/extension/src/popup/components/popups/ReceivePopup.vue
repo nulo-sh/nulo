@@ -62,7 +62,7 @@ watch(
 							</Text>
 
 							<Flex @click="handleCopyAddress" align="center" gap="6" class="copyable" data-testid="receive-address">
-								<Text size="13" weight="600" color="body">
+								<Text size="13" weight="600" color="body" data-testid="receive-address-text">
 									{{ account.address.slice(0, 6) }}
 									<Text color="tertiary">•••</Text>
 									{{ account.address.slice(-4) }}

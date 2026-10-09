@@ -15,9 +15,18 @@ export type CarveOut = { file: string; rule: RuleId; text: string; selector?: st
 
 /**
  * A compound rule (two classes or more, so it outranks the role's one) allowed to override one
- * property of the role its element carries. `value` is the only value it may set.
+ * property of the role its element carries. `value` is the only value it may set. `scope` is the
+ * same element as a selector the rendered page can match, since module class names are hashed.
  */
-export type Override = { file: string; selector: string; property: string; value: string; role: TypeRole; why: string }
+export type Override = {
+	file: string
+	selector: string
+	scope: string
+	property: string
+	value: string
+	role: TypeRole
+	why: string
+}
 
 const PRESTO = "apps/extension/src/onboarding/pages/presto.vue"
 const APP = "apps/extension/src/popup/app.vue"
@@ -101,6 +110,7 @@ export const OVERRIDES: Override[] = [
 	{
 		file: "packages/design/src/ui/Input.vue",
 		selector: ".base.mini input",
+		scope: '[data-input-size="mini"] input',
 		property: "font-size",
 		value: "12px",
 		role: "input",

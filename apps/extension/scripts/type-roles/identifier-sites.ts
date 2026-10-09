@@ -68,6 +68,8 @@ export type IdentifierSite = {
 	steps: readonly BranchStep[]
 	/** The `data-testid`s on the site's element and its ancestors, nearest first; a bound one as its expression. */
 	testids: readonly string[]
+	/** The `data-testid` on the site's own element, the one the sweep reads; a bound one as its expression. */
+	ownTestid: { text: string; bound: boolean } | null
 }
 
 export const IDENTIFIER_MEMBERS = [
@@ -388,10 +390,15 @@ function steps(path: readonly TemplateNode[]): BranchStep[] {
 	return path.flatMap((node, i) => (node.type === NODE.ELEMENT ? (step(node, path[i - 1]) ?? []) : []))
 }
 
-function testidOf(node: TemplateNode): string | undefined {
-	if (node.type !== NODE.ELEMENT) return undefined
-	return node.props?.find((p) => p.name === "data-testid")?.value?.content ?? boundAttr(node, "data-testid")
+function ownTestidOf(node: TemplateNode): IdentifierSite["ownTestid"] {
+	if (node.type !== NODE.ELEMENT) return null
+	const text = node.props?.find((p) => p.name === "data-testid")?.value?.content
+	if (text !== undefined) return { text, bound: false }
+	const bound = boundAttr(node, "data-testid")
+	return bound === undefined ? null : { text: bound, bound: true }
 }
+
+const testidOf = (node: TemplateNode): string | undefined => ownTestidOf(node)?.text
 
 export const branchText = (branch: readonly BranchStep[]): string =>
 	branch.map((s) => (s.condition.startsWith("!(") ? s.condition : wrap(s.condition))).join(" && ")
@@ -417,6 +424,7 @@ export function sitesInSource(file: string, source: string, utilities: readonly 
 			ordinal,
 			steps: branch,
 			testids,
+			ownTestid: ownTestidOf(c.owner),
 		}
 	})
 }

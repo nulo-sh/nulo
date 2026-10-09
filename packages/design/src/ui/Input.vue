@@ -300,6 +300,7 @@ const handleClear = () => {
 			ref="base"
 			@click="handleClick"
 			gap="12"
+			:data-input-size="size"
 			:class="[$style.base, isFocused && $style.focused, disabled && $style.disabled, error && $style.error, $style[size]]"
 		>
 			<Flex align="center" gap="6" wide :class="$style.left">

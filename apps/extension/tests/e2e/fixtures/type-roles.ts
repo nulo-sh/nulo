@@ -48,10 +48,17 @@ export type TypeReading = {
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
+	/** An `AddressDisplay`'s `data-address-shows`: `name` while it shows a contact or account name. */
+	addressShows: string | null
+	/** The `OVERRIDES` scopes the element matches. */
+	scopes: string[]
 }
 
-/** Which elements a read collects: the role-bearing ones, the visible ones with text of their own, or those at a selector. */
-export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "at"; selector: string }
+/**
+ * Which elements a read collects: the role-bearing ones, the visible ones with text of their own, or
+ * those at a selector, each read as itself or, with `native`, as the native field at or under it.
+ */
+export type ReadScope = { kind: "roles" } | { kind: "own-text" } | { kind: "at"; selector: string; native?: boolean }
 
 /** One read of a document: the three face variables as its root resolves them, and the elements. */
 export type PageTypography = { vars: Vars; readings: TypeReading[] }
@@ -74,7 +81,7 @@ export type SweepOptions = {
  * Runs in the page, or in Firefox's panel through a frame script, so it uses nothing but its
  * arguments: `win` is the document's window (the frame script's `content`). Shipped by `toString()`.
  */
-function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]): PageTypography {
+function readTypography(win: Window, scope: ReadScope, tokens: readonly string[], scopes: readonly string[]): PageTypography {
 	const doc = win.document
 	const ROLE = '[class^="type--"], [class*=" type--"]'
 	const rolesOf = (el: Element): string[] =>
@@ -88,9 +95,10 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 	}
 	const hasOwnText = (el: Element): boolean =>
 		Array.from(el.childNodes).some((node) => node.nodeType === 3 && (node.textContent ?? "").trim() !== "")
-	const roleTarget = (el: Element): Element => (rolesOf(el).length > 0 ? el : (el.querySelector(ROLE) ?? el))
+	const FIELD = "input, textarea"
+	const field = (el: Element): Element => (el.matches(FIELD) ? el : (el.querySelector(FIELD) ?? el))
 	const collect = (): Element[] => {
-		if (scope.kind === "at") return Array.from(doc.querySelectorAll(scope.selector)).map(roleTarget)
+		if (scope.kind === "at") return Array.from(doc.querySelectorAll(scope.selector)).map((el) => (scope.native ? field(el) : el))
 		if (scope.kind === "roles") return Array.from(doc.querySelectorAll(ROLE))
 		return Array.from(doc.body.querySelectorAll("*")).filter((el) => hasOwnText(el) && isVisible(el))
 	}
@@ -110,6 +118,8 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth,
 			visible: isVisible(el),
+			addressShows: el.getAttribute("data-address-shows"),
+			scopes: scopes.filter((selector) => el.matches(selector)),
 		}
 	}
 	const rootStyle = win.getComputedStyle(doc.documentElement)
@@ -176,12 +186,14 @@ function clearProbes(win: Window, host: string): boolean {
 	return column !== null
 }
 
+const OVERRIDE_SCOPES: readonly string[] = OVERRIDES.map((entry) => entry.scope)
+
 const call = (fn: (...args: never[]) => unknown, target: "window" | "content", ...args: unknown[]): string =>
 	`(${fn.toString()})(${[target, ...args.map((arg) => JSON.stringify(arg))].join(", ")})`
 
 /** Function bodies for `evaluateInActionPopup`, whose `content` is the panel's window. */
 export const panelBodies = {
-	read: (scope: ReadScope): string => `return ${call(readTypography, "content", scope, FONT_TOKENS)};`,
+	read: (scope: ReadScope): string => `return ${call(readTypography, "content", scope, FONT_TOKENS, OVERRIDE_SCOPES)};`,
 	placeProbes: (): string => `return ${call(placeProbes, "content", PROBE_HOST, typeRoleNames, PROBE_TEXT)};`,
 	clearProbes: (): string => `return ${call(clearProbes, "content", PROBE_HOST)};`,
 }
@@ -190,7 +202,7 @@ export const panelBodies = {
 const NO_ELEMENTS: ReadScope = { kind: "at", selector: ":not(*)" }
 
 export const readPageTypography = (page: Page, scope: ReadScope): Promise<PageTypography> =>
-	page.evaluate(call(readTypography, "window", scope, FONT_TOKENS)) as Promise<PageTypography>
+	page.evaluate(call(readTypography, "window", scope, FONT_TOKENS, OVERRIDE_SCOPES)) as Promise<PageTypography>
 
 /** Places one probe per role, each `data-testid="type-role-probe-<role>"`, over the page. */
 export async function placeTypeRoleProbes(page: Page): Promise<void> {
@@ -286,7 +298,7 @@ function floorFailures(reading: TypeReading, role: TypeRole): SweepFailure[] {
 	return px(reading.fontSize) < floor - 0.01 ? [failure(reading, role, "font-size floor", `>= ${floor}px`, reading.fontSize)] : []
 }
 
-/** Judges `reading` as `role`, whatever classes it carries; a value off the role passes only as an `OVERRIDES` value of that property. */
+/** Judges `reading` as `role`, whatever classes it carries; a value off the role passes only as an `OVERRIDES` value of that role and property on an element in its scope. */
 function judgeAs(reading: TypeReading, role: TypeRole, vars: Vars): SweepFailure[] {
 	const spec = typeRoles[role]
 	const failures: SweepFailure[] = []
@@ -297,7 +309,10 @@ function judgeAs(reading: TypeReading, role: TypeRole, vars: Vars): SweepFailure
 		if (matches(actual, check.normalize(declared, reading, vars), check.within)) continue
 		const overridden = OVERRIDES.some(
 			(entry) =>
-				kebab(entry.property) === check.property && matches(actual, check.normalize(entry.value, reading, vars), check.within),
+				entry.role === role &&
+				kebab(entry.property) === check.property &&
+				reading.scopes.includes(entry.scope) &&
+				matches(actual, check.normalize(entry.value, reading, vars), check.within),
 		)
 		if (!overridden) failures.push(failure(reading, role, check.property, declared, check.computed(reading)))
 	}
@@ -457,10 +472,9 @@ export const siteKey = (site: Pick<SiteEntry, "file" | "expression" | "branch" |
 	`${site.file}|${site.expression}|${site.branch}|${site.ordinal}`
 
 const selectorOf = (selector: string): string => (/^[\w-]+$/.test(selector) ? `[data-testid="${selector}"]` : selector)
-const isAddressDisplay = (site: SiteEntry): boolean => /AddressDisplay/.test(site.expression) || /address-display/.test(site.selector)
 
 function judgeSite(reading: TypeReading, site: SiteEntry, vars: Vars): SweepFailure[] {
-	const role: TypeRole = isAddressDisplay(site) && !/0x[0-9a-f]{2}/i.test(reading.text) ? "name" : (site.role as TypeRole)
+	const role: TypeRole = reading.addressShows === "name" ? "name" : (site.role as TypeRole)
 	const carried = reading.roles.includes(role)
 		? []
 		: [failure(reading, role, "class", `type--${role}`, reading.roles.map((name) => `type--${name}`).join(" ") || "none")]
@@ -470,7 +484,11 @@ function judgeSite(reading: TypeReading, site: SiteEntry, vars: Vars): SweepFail
 async function observeSite(page: Page, site: SiteEntry, arc: number): Promise<SiteObservation> {
 	const key = siteKey(site)
 	if (site.unreachable) return { key, site, mode: "unreachable", readings: [], failures: [] }
-	const { vars, readings } = await readPageTypography(page, { kind: "at", selector: selectorOf(site.selector) })
+	const { vars, readings } = await readPageTypography(page, {
+		kind: "at",
+		selector: selectorOf(site.selector),
+		native: site.role === "input-data",
+	})
 	const failures =
 		readings.length === 0
 			? [
@@ -489,8 +507,8 @@ async function observeSite(page: Page, site: SiteEntry, arc: number): Promise<Si
 
 /**
  * Sweep step 4 on one surface in one seeded state: every element at each matching site's selector,
- * and at least one, carries the site's role and computes to it (an `AddressDisplay` whose text holds
- * no hex is showing a name, and expects `name`), then the hex text scan.
+ * and at least one, carries the site's role and computes to it (an `AddressDisplay` showing a name
+ * expects `name`; an `input-data` site is read at its native field), then the hex text scan.
  */
 export async function observeIdentifierSites(
 	page: Page,

@@ -107,7 +107,7 @@
 			"branch": "revealed",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"recipient-card-full\"]",
+			"selector": "[data-testid=\"recipient-card-full-address\"]",
 			"surface": "popup-send",
 			"state": "a chosen recipient with recipient-card-reveal clicked",
 			"liveFrom": 3
@@ -118,7 +118,7 @@
 			"branch": "!appStore._isHomeScreenOpened && route.name !== 'popup-auth' && !route.meta.hideHeader && appStore.isLogined",
 			"ordinal": 0,
 			"role": "data-lead",
-			"selector": "[data-testid=\"account-address-copy\"]",
+			"selector": "[data-testid=\"account-address-text\"]",
 			"surface": "overlay:Header",
 			"state": "",
 			"liveFrom": 3
@@ -141,9 +141,9 @@
 			"branch": "",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"scope-address\"]",
-			"surface": "windows-capabilities",
-			"state": "a contract scope (network)",
+			"selector": "[data-testid=\"scope-address-value\"]",
+			"surface": "popup-settings-connected-apps-id",
+			"state": "a connected app whose grant holds a contract scope (network)",
 			"liveFrom": 4
 		},
 		{
@@ -152,9 +152,9 @@
 			"branch": "",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"scope-class-id\"]",
-			"surface": "windows-capabilities",
-			"state": "a class scope (network)",
+			"selector": "[data-testid=\"scope-class-id-value\"]",
+			"surface": "popup-settings-connected-apps-id",
+			"state": "a connected app whose grant holds a class scope (network)",
 			"liveFrom": 4
 		},
 		{
@@ -517,7 +517,7 @@
 			"branch": "",
 			"ordinal": 0,
 			"role": "data-lead",
-			"selector": "[data-testid=\"receive-address\"]",
+			"selector": "[data-testid=\"receive-address-text\"]",
 			"surface": "popup:receive",
 			"state": "",
 			"liveFrom": 3
@@ -1209,7 +1209,7 @@
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && s.kind === 'call'",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"execute-authwit-caller\"]",
+			"selector": "[data-testid=\"execute-authwit-caller-address\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for a call (network)",
 			"liveFrom": 2
@@ -1242,7 +1242,7 @@
 			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && !(s.kind === 'call')",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"execute-authwit-inner-hash\"]",
+			"selector": "[data-testid=\"execute-authwit-inner-hash-value\"]",
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for an intent (network)",
 			"liveFrom": 4

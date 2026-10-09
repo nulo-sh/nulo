@@ -1,6 +1,7 @@
 /**
- * The type roles reach a real page: one probe per role computes to its record, the faces they ask
- * for load, History's hero title takes `title-hero` through its composed module rule, and in
+ * The type roles reach a real page: one probe per role computes to its record, the site reader
+ * judges the element it should, the faces they ask for load, History's hero title takes
+ * `title-hero` through its composed module rule, and in
  * Firefox's real toolbar panel the role-bearing text neither clips nor moves the layout.
  */
 import { typeRoleNames, typeRoles } from "@nulo/design/tokens"
@@ -16,11 +17,13 @@ import {
 	expectSweepClean,
 	firstFamily,
 	judgeTypography,
+	observeIdentifierSites,
 	type PageTypography,
 	panelBodies,
 	PROBE_TEXT,
 	placeTypeRoleProbes,
 	readPageTypography,
+	type SiteEntry,
 	sweepTypeRoles,
 	type TypeReading,
 	withBlockedAccount,
@@ -71,6 +74,50 @@ test("every role's probe computes to its record, and a probe pushed off it is ca
 	])
 	const tracked = probes.filter((reading) => typeRoles[reading.roles[0] as keyof typeof typeRoles].tracking !== 0)
 	console.log(`[type-roles] probe tracking: ${tracked.map(describeTracking).join(", ")}`)
+	expect(ctx.pageErrors).toEqual([])
+})
+
+const FIXTURE_HTML = `
+	<div data-input-size="mini">
+		<input class="type--input" data-testid="tr-mini-input" value="12" style="font-size: 12px" />
+		<input class="type--input-data" data-testid="tr-mini-data" value="0x1a" style="font-size: 12px" />
+	</div>
+	<div data-testid="tr-field"><span class="type--label">To</span><input class="type--input-data" value="0x1a" /></div>
+	<span class="type--name" data-testid="tr-name" data-address-shows="name">Alice</span>`
+
+const fixtureSite = (selector: string, role: SiteEntry["role"]): SiteEntry => ({
+	file: "fixture.vue",
+	expression: selector,
+	branch: "",
+	ordinal: 0,
+	role,
+	selector,
+	surface: "fixture",
+	state: "fixture",
+	liveFrom: 2,
+})
+
+test("a site reads its value or its native field, a name shown is judged as name, an override holds only its role in its scope", async ({
+	registeredExtension: ctx,
+}) => {
+	const page = await openHome(ctx)
+	await page.evaluate((html: string) => {
+		const host = document.createElement("div")
+		host.setAttribute("data-testid", "tr-host")
+		host.innerHTML = html
+		document.body.appendChild(host)
+	}, FIXTURE_HTML)
+	try {
+		const failures = judgeTypography(await readPageTypography(page, { kind: "at", selector: '[data-testid="tr-host"] input' }))
+		expect(failures.map(({ testid, property }) => `${testid} ${property}`)).toEqual(["tr-mini-data font-size"])
+
+		const sites = [fixtureSite("tr-field", "input-data"), fixtureSite("tr-name", "data-lead")]
+		const { sites: observed } = await observeIdentifierSites(page, "fixture", "fixture", { arc: 5, sites })
+		expect(observed.map(({ readings }) => readings.map(({ roles }) => roles.join(" ")))).toEqual([["input-data"], ["name"]])
+		expect(observed.flatMap(({ failures }) => failures)).toEqual([])
+	} finally {
+		await page.evaluate(() => document.querySelector('[data-testid="tr-host"]')?.remove())
+	}
 	expect(ctx.pageErrors).toEqual([])
 })
 

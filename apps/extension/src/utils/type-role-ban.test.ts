@@ -838,6 +838,7 @@ describe("type role ban baseline", () => {
 		const override: Override = {
 			file: "a.module.css",
 			selector: ".a.b",
+			scope: "",
 			property: "font-weight",
 			value: "700",
 			role: "segment",
@@ -855,6 +856,7 @@ describe("type role ban baseline", () => {
 		const override: Override = {
 			file: "a.module.css",
 			selector: ".base.mini input",
+			scope: "",
 			property: "font-size",
 			value: "12px",
 			role: "input",
@@ -878,7 +880,7 @@ describe("type role ban baseline", () => {
 	})
 
 	test("an override is compound, sets its role's property, and a segment weight is its active weight", () => {
-		const base = { file: "a.vue", why: "" }
+		const base = { file: "a.vue", scope: "", why: "" }
 		expect(overrideProblems([{ ...base, selector: ".tab", property: "font-weight", value: "700", role: "segment" }])).toHaveLength(1)
 		expect(
 			overrideProblems([{ ...base, selector: ".tab.active", property: "font-weight", value: "600", role: "segment" }]),

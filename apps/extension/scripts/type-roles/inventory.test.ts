@@ -73,6 +73,25 @@ function siteProblems(entry: SiteEntry, surfaceIds: ReadonlySet<string>): string
 	return problems
 }
 
+/**
+ * Whether a selector's last testid is the site's own element: its own testid (a bound template
+ * literal matches any text in place of its `${…}`, a bound name is the caller's to choose), or one no
+ * ancestor in the site's file carries, so one inside the component the site renders through.
+ */
+function namesOwnElement(site: IdentifierSite, selector: readonly string[]): boolean {
+	const testid = selector.at(-1) ?? ""
+	const own = site.ownTestid
+	const inside = !site.testids.includes(testid)
+	if (own === null) return inside
+	if (!own.bound) return own.text === testid || (selector.includes(own.text) && inside)
+	if (!own.text.startsWith("`")) return true
+	const pattern = own.text
+		.slice(1, -1)
+		.split(/\$\{[^}]*\}/)
+		.map((part) => part.replace(/[.*+?^$()|[\]\\]/g, "\\$&"))
+	return new RegExp(`^${pattern.join(".*")}$`).test(testid)
+}
+
 /** Why a group of entries that share one surface and one selector cannot be told apart, or nothing. */
 function sharedSelectorProblem(group: readonly SiteEntry[], sitesByKey: ReadonlyMap<string, IdentifierSite>): string | undefined {
 	const label = `${group[0].surface} ${group[0].selector}`
@@ -136,6 +155,16 @@ describe("identifier sites", () => {
 			expect(producerHits(new RegExp(pinned.search)), name).toEqual(pinned.hits)
 			for (const { file, text } of pinned.evidence) expect(collapse(read(file)), `${name}: ${file}`).toContain(collapse(text))
 		}
+	})
+
+	test("a selector names the site's own element, never a row around its label", () => {
+		const wrapping = entries.filter((entry) => {
+			const site = sitesByKey.get(keyOf(entry))
+			const named = testidsIn(entry.selector)
+			if (!site || !named.length || entry.role === "none" || entry.role === "input-data" || entry.unreachable) return false
+			return !namesOwnElement(site, named)
+		})
+		expect(wrapping.map(keyOf)).toEqual([])
 	})
 
 	test("one expression on two branches of a chain reads as two sites", () => {
