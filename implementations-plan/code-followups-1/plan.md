@@ -742,7 +742,7 @@ not by count; both lists in `lessons/phase-5.md`). `bun run --cwd apps/landing b
 warning, `bun run --cwd apps/landing typecheck` passes, and a throwaway
 `bun x vite build --configLoader native` in `apps/landing` succeeds.
 
-#### Phase 6 — the real decoder test, the test-count measurement
+#### Phase 6 — the real decoder test, the test-count measurement ✓
 
 1. *106.* `call-surface.real.test.ts` with the three cases in Arc 2.
 2. *174.* The measurement, then the fix or the record, per its stop rule.
@@ -1179,3 +1179,7 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
 - On reopening the popup during a queued send, Home's activity shows a stage-less awaiting card until
   the journal snapshot lands (`RecentActivityView.vue` loads the executing-task snapshot first).
   Whether the view should hold the card until it knows the stage is a UI call for the owner.
+- (Found in Arc 2.) `apps/extension`'s `vitest.config.ts`, `vite.shared.ts` and the root
+  `vitest.base.ts` warn on every run that Vite's planned native config loader refuses them ("ESM
+  syntax in a file loaded as CommonJS"): the extension's `package.json` declares no `"type"`. The
+  landing's twin (entry 133) is fixed; this one needs its own change and soak.
