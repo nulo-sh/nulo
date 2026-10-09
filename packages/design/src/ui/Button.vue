@@ -207,7 +207,6 @@ const rel = computed(() => {
 	padding: 0 14px;
 }
 
-/* A 44 px touch target. */
 .wrapper.compact {
 	min-height: 44px;
 	gap: 8px;

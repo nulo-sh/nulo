@@ -151,11 +151,24 @@ describe("Button type roles", () => {
 		expect(declared({ variant: "cta", size: "compact" })).toEqual({ ...type, padding: "14px 0px" })
 	})
 
-	test.each(SIZES)("at size %s every CTA reads 14px/0.2em and every primary 13px/0.03em", (size) => {
+	/** Today's box: a CTA keeps its compound padding (compact its own), every other variant its size's. */
+	const SIZE_PADDING: Record<string, string> = {
+		large: "0px 16px",
+		medium: "0px 14px",
+		compact: "0px 16px",
+		small: "0px 12px",
+		mini: "0px 10px",
+		micro: "0px 8px",
+		dynamic: "10px 0px",
+	}
+
+	test.each(SIZES)("at size %s every CTA reads 14px/0.2em and every primary 13px/0.03em, each in its box", (size) => {
 		for (const [variant, role] of Object.entries(ROLES).filter(([, r]) => r !== undefined)) {
-			const { fontSize, letterSpacing } = declared({ variant, size })
-			expect([variant, fontSize, letterSpacing]).toEqual(
-				role === "type--button" ? [variant, "14px", "0.2em"] : [variant, "13px", "0.03em"],
+			const { fontSize, letterSpacing, padding } = declared({ variant, size })
+			const cta = role === "type--button"
+			const box = cta ? (size === "compact" ? "14px 0px" : "20px 0px") : SIZE_PADDING[size]
+			expect([variant, fontSize, letterSpacing, padding]).toEqual(
+				cta ? [variant, "14px", "0.2em", box] : [variant, "13px", "0.03em", box],
 			)
 		}
 	})
