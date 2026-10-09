@@ -142,7 +142,7 @@ Home, Holdings, Activity:
 | "NO MATCHES · TRY A DIFFERENT TERM" (`ListStatusMessage.vue:24`, rule `:44-52`, literal caps) | G 12/700 0.1, no transform | `body` I 12/400; reads in Inter caps, copy unchanged |
 | Activity's collapsed title bar (`tab-hero.module.css:21` `.page_title_label`, `activity.vue:178`, `page-title-bar`) | G 13/700 caps 0.12 | `title-page`, unchanged † |
 | Home action buttons, "SEND" and "RECEIVE" (`ActionButtonsView.vue:71-77`, `.label`) | G 14/700 caps 0.2 | `button`, unchanged † |
-| Section links "View all" (`TokensView.vue:492-497`) and "View history" (`RecentActivityView.vue:855-860`) | G 10/700 caps 0.1 | `label`, unchanged † |
+| Section links "View all" (`TokensView.vue:487-492`) and "View history" (`RecentActivityView.vue:853-858`), `RouterLink`s since #76 | G 10/700 caps 0.1 | `label`, unchanged † |
 | Token row failure line, "Couldn't refresh" (`TokenCard.vue:231-235`) | M 10/400 red | `caption` I 11/400 † |
 | Token seed row (`TokenSeedRow.vue:61-112`): symbol; sub line (the token's name); failure reason; RETRY (literal caps) | G 14/700 -0.02; M 10; M 10 red; G 10/700 0.1, no transform | symbol `row-title`, unchanged; sub line and reason `caption` I 11/400; RETRY `label` G 10/700 caps 0.1, unchanged (the copy is caps already) † |
 | Token import row (`TokenImportRow.vue:70-83`): title; subtitle ("Adding token…" or the failure message) | G 14/700 -0.02; M 10 caps | title `row-title`, unchanged (its no-name branch `data`, § Identifiers); subtitle `caption` I 11/400, no caps † |

@@ -89,3 +89,7 @@ Picks changed by the lead:
 ## Codex implementation round 3
 
 - Verdict reject, one finding (C12, plan § Audit verdicts, R3), adopted after the round: proving a testid exists in a component is not proving it renders the site's value, so the check now ties it to the bound prop. Three rounds, so the loop stops here; C12's fix had no codex pass of its own and goes to the final cross-arc pass.
+
+## Rebase onto dev after #76
+
+- #76 (accessibility-1 arc 2) landed while codex round 2 ran: Home's two view links became `RouterLink`s, a focus ring on the back arrow and the method tab, `--nulo-track` and three `--txt-*` status tokens. Only the index line conflicted; the regenerated `tokens.ts` merged cleanly, and the guard, the inventories and the design tests found no new type pick, colour and focus being outside the roles. The before set is shot from this rebased head, so its Home carries #76's links.
