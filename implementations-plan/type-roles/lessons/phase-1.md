@@ -76,3 +76,8 @@ Picks changed by the lead:
 ## Rebase onto dev after #55, #58 and #75
 
 - `origin/dev` moved while step 16 waited: #55 added a `destructive` `Button` variant (`primary`'s type on red, one rule with it, so it takes `button-md` with `primary`), #58 rewrote the verify window's copy and buttons and added its refusal error, #75 closed security-ui-1 (the one index conflict). The guard found the change exactly: one stale entry (the old "OK" label's `size`) and one new pick (the refusal error's `size="12"`, `body`); the inventories did not move. The before set is shot from the rebased head.
+
+## Codex implementation round 1
+
+- Verdict reject, eight findings (plan § Audit verdicts, R1), all adopted. The ones worth remembering: an `unreachable` claim must consider every path that writes the value, restore included, not only the live producer (C1); a reader that descends to "the first role-bearing element" reads a label as soon as roles land, so selectors name the value element and a test holds them to it (C2); a property a component exposes (`data-address-shows`, `data-input-size`) beats inferring its state from text or testids (C3, C4); module class names are hashed at runtime, so a source selector cannot scope a runtime exception (C4).
+- The dry-run Chrome shots (15:15 to 15:31, 405 files, 8 unreached) were taken with the old reader; the before set is reshot at the fixed head.
