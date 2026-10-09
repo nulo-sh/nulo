@@ -59,13 +59,15 @@ async function readErrorKind(page: Page, id: string): Promise<string | undefined
 	}, `nulo:journal@${id}`)
 }
 
-/** History's subtitle for the one terminal card it lists, read after the wait: the fixtures'
+/** The subtitle of the one terminal card on the page at `hash`, read after the wait: the fixtures'
  *  `waitForSelector` resolves `null`, never an element handle. */
-async function readHistoryCard(page: Page): Promise<string | null> {
-	await navigateByHash(page, "#/popup/activity")
+async function readTerminalCard(page: Page, hash: string): Promise<string | null> {
+	await navigateByHash(page, hash)
 	await page.waitForSelector(CARD_SUBTITLE, { visible: true, timeout: 15_000 })
 	return page.$eval(CARD_SUBTITLE, (el) => el.textContent?.trim() ?? null)
 }
+
+const readHistoryCard = (page: Page) => readTerminalCard(page, "#/popup/activity")
 
 test.skipIf(!hasConfig)(
 	"scope-refusal — a send outside the listed scope is refused without a window and filed as not allowed",
@@ -153,12 +155,14 @@ test.skipIf(!hasConfig)(
 			status: answer.status,
 			error: answer.errorJson,
 			kind: await readErrorKind(wallet, record.id),
+			home: await readTerminalCard(wallet, "#/popup/general"),
 			detail: await readJournalDetail(wallet, record.id),
 			card: await readHistoryCard(wallet),
 		}).toEqual({
 			status: "error",
 			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
 			kind: "scope_refused",
+			home: "Not allowed",
 			detail: {
 				"journal-detail-category": "Not allowed",
 				"journal-detail-context": "The app asked for more than you allowed. Nothing was sent.",

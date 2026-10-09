@@ -9,7 +9,8 @@ export const TOKEN_BALANCE_SERVICE_NAME = "token-balance"
  *  renaming detaches every existing row; the backup-migration registry pins it. */
 export const TOKEN_BALANCE_STORAGE_ROOT = "nulo:core:token-balances"
 
-/** Shared by the projector's chunk and the queue's drain limit: one drain must fill exactly one chunk. */
+/** Bounds both the queue's per-account drain and the projector's per-chain chunk, so one drain
+ *  projects in at most one chunk per chain. */
 export const BALANCE_BATCH_SIZE = 12
 
 /** Single owner of the persisted failure-text bound: live queue writes AND the

@@ -99,7 +99,6 @@ export class BalanceProjector {
 		}
 
 		for (const group of groups.values()) {
-			// Chunk into batches of 12 inside the group.
 			for (let offset = 0; offset < group.balances.length; offset += BALANCE_BATCH_SIZE) {
 				const chunk = group.balances.slice(offset, offset + BALANCE_BATCH_SIZE)
 				const chunkResults = await this.projectChunk(group.account, group.chainId, chunk)
