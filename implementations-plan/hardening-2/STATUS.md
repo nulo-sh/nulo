@@ -16,3 +16,4 @@
 - 2026-10-09: arc 1 review converged (Codex round 2: one low comment finding, applied; Opus: six findings, five fixed, O3 deferred). Phase 1 network gate 24/25 green after the playground query fix (1 env-gated skip); phase 2 gate 4/4 green.
 - 2026-10-09: full network suite green on Chrome at retry 0 (prover-on 101/106 + 5 env-gated skips; proverless 11/11); final lint, typecheck:all, test:all, test:ci-gating green.
 - 2026-10-09: arc 1 restacked on layer 1 (PR #70, rebased onto dev 833170d); on the restacked head lint, typecheck:all, test:all, test:ci-gating green and the 25 phase-gate network files 24/25 at retry 0 on Chrome (1 env-gated skip).
+- 2026-10-09: #70 squash-merged; #71 retargeted to dev and the branch rebased onto dev f83703f without conflicts; lint, typecheck:all, test:all, test:ci-gating green on the new head. CI on the previous head (stacked): 43/43 green.

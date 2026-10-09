@@ -676,7 +676,7 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 
 ### Arc 1 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11eff-cd3c-7fd2-8030-8cff62a36738`)
 
-**Verdict: findings** (five), on `829996b..70800eb`. Sound per the pass: the ladder order with batch re-entry and the prescan, fail-closed missing entries, the private patched copy, the capability header and known types, refusals without causes or values, the OA-3 copy, the object-keyed cache.
+**Verdict: findings** (five), on `f83703f..f2213dd`. Sound per the pass: the ladder order with batch re-entry and the prescan, fail-closed missing entries, the private patched copy, the capability header and known types, refusals without causes or values, the OA-3 copy, the object-keyed cache.
 
 | # | Sev | Finding | Resolution |
 |---|---|---|---|
@@ -688,7 +688,7 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 
 ### Arc 1 implementation — Opus 5.5 review (general-purpose agent, alongside Codex round 1)
 
-**Verdict: findings** (six), on `829996b..70800eb` plus the uncommitted round-1 fixes. Sound per the review: the ladder, no leaks (the message is a registry name, the envelope constant, the journal text fixed), the schema copy, every registry method has an entry, the projection after the parse, the journal wiring (`journal-state.ts` is the only consumer of the kind), the object-keyed cache.
+**Verdict: findings** (six), on `f83703f..f2213dd` plus the uncommitted round-1 fixes. Sound per the review: the ladder, no leaks (the message is a registry name, the envelope constant, the journal text fixed), the schema copy, every registry method has an entry, the projection after the parse, the journal wiring (`journal-state.ts` is the only consumer of the kind), the object-keyed cache.
 
 | # | Sev | Finding | Resolution |
 |---|---|---|---|
@@ -699,7 +699,7 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 | O5 | Low | Stale comments: the verifier's cache advice, the guards' "unvalidated", the checker's "unvalidated wire data", a garbled batch sentence, the README's "once per message", `apply.ts` naming only the singleton | **Accepted.** All corrected. |
 | O6 | Low | Caching the verifier's returned object (C3's fix) would vouch for an object the verifier never hashed | **Accepted over C3.** The cache stores an artifact only when the verifier returned the object it hashed; a verifier returning another object leaves nothing cached. |
 
-### Arc 1 implementation — Codex round 2 (same session, on `70800eb..f73a606`)
+### Arc 1 implementation — Codex round 2 (same session, on `f2213dd..d2f894b`)
 
 **Verdict: findings** (one, low): converged, no material finding. Confirmed each round-1 fix (C1, C2, C4, C5, O1, O2, the playground query) closes its finding; agreed with the C3/O6 resolution and with deferring O3 as a tracked residual (it narrows the claim that every malformed input gets `INVALID_PARAMS`; the failure still closes access).
 
