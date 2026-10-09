@@ -681,7 +681,7 @@ the component test). Then, with `NULO_E2E_PROVERLESS=1` at retry 0, one at a tim
 one run of the whole file, on Chrome and again on Firefox, all green. `lessons/phase-2.md` states the
 limit: these greens cannot certify a flake seen once in about 100 runs.
 
-#### Phase 3 — entry 147 rechecked
+#### Phase 3 — entry 147 rechecked ✓
 
 1. Confirm nothing listens on this build's Presto endpoint (`127.0.0.1:59833` and `:59834`,
    `src/presto/config.ts`; `ss -ltn`), so the run proves in-browser (WASM), and after the run confirm
