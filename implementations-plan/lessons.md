@@ -29,7 +29,7 @@ Gotchas from closed plans, read before every task: one line each with evidence, 
 ## Extension runtime
 
 - A popup-to-background call rejects after 60 s unless its client overrides `getRequestTimeoutMs`: one awaiting a proof fails while the send lands. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
-- `PopupManager` mounts every popup at start, never unmounting: setup waits for `show` or sits behind `v-if`; a profile switch elsewhere updates open pages in place too: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](security-ui-1/lessons/phase-2.md)
+- `PopupManager` mounts every popup at start, never unmounting: setup waits for `show` or sits behind `v-if`; a profile switch elsewhere updates open pages in place too: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, a rejection escapes, event-chained cleanup is fire-and-forget. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - An awaited helper adds a microtask, breaking a one-tick span: keep it inline. [Evidence](archive/approval-scope-follow/plan.md#microtask)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
