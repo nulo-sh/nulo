@@ -6,6 +6,8 @@ of this repository. While any survives, `nulo.sh/terms` and `/privacy` carry a *
 
 Find every one: `git grep -n "«FILL" -- legal/`. What each one needs is described in
 [`legal/README.md` § Placeholders](./legal/README.md#placeholders). This file is the schedule.
+Accepted code work that blocks launch is not listed here: it is the
+[`v1.0.0` milestone](https://github.com/nulo-sh/nulo/milestone/1).
 
 ## 1. Any time before v1.0.0 — look these up, do not guess
 
@@ -30,6 +32,15 @@ links. Each filled fact reads in place in `legal/privacy.md` and `legal/terms.md
 |---|---|
 | ~~Chrome Web Store listing URL~~ | `legal/terms.md` § 1 — done |
 | ~~Firefox Add-ons listing URL~~ | `legal/terms.md` § 1 — done |
+
+The store launch left two owner steps in the dashboards
+([record](./implementations-plan/archive/nulo-v6/plan.md#store-upload)):
+
+- [ ] Chrome: publish the staged V6 submission from the dashboard once Google approves it, before
+      the approval lapses (30 days). The item stays Unlisted until a `/harden security` pass and
+      the owner decides on Public.
+- [ ] AMO: the listing still carries the "This add-on is experimental" flag (owner decision);
+      Mozilla may review the live version later, the modified-library rule being the open risk.
 
 Also at this point, not a placeholder but the same deadline: the **Chrome trader disclosure**
 ([`legal/README.md`](./legal/README.md), blocker 5) is declared non-trader; it must be re-declared

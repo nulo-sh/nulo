@@ -10,6 +10,17 @@ Use GitHub's private vulnerability reporting:
 <https://github.com/nulo-sh/nulo/security/advisories/new>. Do not file public
 issues for security bugs.
 
+### How findings are tracked
+
+A suspected exploitable weakness, whoever finds it, is a private draft security
+advisory, never a public issue. Until the advisory is published its finding
+appears in no committed plan, PR body or test name: a plan records only
+"tracked privately: GHSA-…", and the fix's PR and tests describe the change,
+not the weakness. The advisory is published once its fix ships in a tagged
+release, with no CVE request unless store-installed users must be notified, or
+it is closed with a written disposition. Everything else, hardening with no
+exploit path included, is a GitHub issue.
+
 ## Crypto-bound invariants (never change without a migration)
 
 These values are cryptographically bound. Changing any of them invalidates
