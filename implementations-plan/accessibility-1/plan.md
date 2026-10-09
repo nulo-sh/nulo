@@ -312,6 +312,24 @@ Skip this phase if call 6 is B or "as is".
 
 **Arc 1 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 1 Codex fix loop has converged.
 
+#### Arc 1 record
+
+Built on page 1's answers (A, A, C, yes, A, A); every phase gate passed. The per-run detail is in [`lessons/phase-1.md`](lessons/phase-1.md).
+
+- **Deviations.**
+  - Option C voids a queued release by clearing its timer handle, not with a hold token: the same guarantee with one less piece of state.
+  - The hold also ends at the capture of the click its release delivers outside the field: a native click runs the microtasks between its listeners, so the card renders before the click reaches its target and the fee menu measures its trigger where the card moved it. The release timer stays for a press that delivers no click.
+  - `data-testid="send-destination-suggestions"` on the suggestion list, so the coverage probe asserts the list is open. No visible change.
+  - `tabTo` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`; `focusRing` waits for the focused element's transitions, since Firefox shot the token card's ring mid-transition.
+  - The unit-switch spec asserts the single stop after the token card, not a whole logged sequence: Chrome starts the first Tab after a click from the clicked spot.
+  - The real-card `send.test.ts` case prices a testnet seed through `getPriceMapEntry`.
+  - CLAUDE.md § Keyboard & focus order gains call 1's exception in this PR, not at close-out: the rule lands with the code that makes it true.
+  - Delivery: a plain PR on `dev`, with `dev` merged in, never rebased; the arcs run in parallel worktrees, so this layer opens no `gh stack`.
+- **Review.** Codex (gpt-6.1-sol, high): round 1 approve with fixes, five findings, four accepted (a second pointer took over the held press; a queued release ended a newer press; the fee menu measured its trigger before the card moved it, 30 px off on Chrome; the fee spec never picked by keyboard); round 2 clean. Opus: six findings, four accepted (the chevron's `aria-hidden`; Refresh quote moves the focus only when a live quote unmounts it; a vacuous Max test; a dead `color: inherit`), one rejected, one noted.
+  - Rejected: deleting the `/** Composables */` import header (CLAUDE.md's SFC order names import groups); an e2e of the Enter guard's 250 ms window (the base-build red proved it; the unit tests pin the window).
+  - Noted: a pen press reaches the hold through the same pointer events as a mouse; no pen device here to prove it.
+- **Open.** The cross-arc Codex pass runs after the last arc.
+
 ### Arc 2, Home and shared chrome (after page 2's answers)
 
 #### Phase 2.1: Home's view links (call 1)

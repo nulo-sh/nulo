@@ -9,6 +9,8 @@
 - 2026-10-09: Phase 1.3 gate pass (option C): reproduction red on Chrome first; fast layers; smoke `send-keyboard.test.ts` on chrome and firefox; network `send-amount-exact.test.ts` on chrome and firefox at `NULO_E2E_RETRY=0`.
 - 2026-10-09: Phase 1.4 gate pass: fast layers; network `fee-sponsor-funding.test.ts` on chrome at `NULO_E2E_RETRY=0` (red on today's card first); shots identical outside the header address.
 - 2026-10-09: Phase 1.5 gate pass: fast layers; smoke `send-keyboard.test.ts` (all five) on chrome and firefox, retry 0, fresh builds; network `popup-escape-layered.test.ts` on chrome at `NULO_E2E_RETRY=0`; at-rest trigger shots identical outside the header address.
+- 2026-10-09: Arc 1 review: Codex round 1 approve with fixes (four accepted, one rejected), Opus six findings (four accepted); fixes committed; smoke `send-keyboard.test.ts` on chrome and firefox, retry 0, fresh builds; Codex round 2 clean.
+- 2026-10-09: merged `origin/dev`; CLAUDE.md § Keyboard & focus order gains call 1's exception.
 
 ## Planning
 
