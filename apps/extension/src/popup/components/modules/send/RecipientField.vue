@@ -12,6 +12,7 @@
  *   field)
  * - `selectedContact` — the candidate object once they pick one
  */
+import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { trimAddress } from "@/utils/string"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { matchRecipients } from "./recipient-search"
@@ -25,6 +26,7 @@ const selectedContact = defineModel("selectedContact", { default: null })
 
 const isSearchInputFocused = ref(false)
 const justCleared = ref(false)
+const fieldEl = useTemplateRef("fieldEl")
 
 const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
 
@@ -62,11 +64,14 @@ watch(
 	},
 )
 
+// Only the field's own input may pick: the suggestions outlive its blur, and an Enter meant for
+// another control must never set where the money goes.
 const onKeydown = (e) => {
-	if (e.key === "Enter" && showSuggestions.value) {
-		handleSelectContact(filteredContacts.value[0])
-		document.activeElement?.blur()
-	}
+	if (e.key !== "Enter" || e.defaultPrevented || isRepeatOrComposing(e)) return
+	if (!(e.target instanceof HTMLInputElement) || !fieldEl.value?.contains(e.target)) return
+	if (!showSuggestions.value) return
+	handleSelectContact(filteredContacts.value[0])
+	e.target.blur()
 }
 
 onMounted(() => {
@@ -89,7 +94,7 @@ onBeforeUnmount(() => {
 				</Flex>
 			</Transition>
 		</Flex>
-		<div data-testid="send-destination-field" :class="$style.recipient_wrap">
+		<div ref="fieldEl" data-testid="send-destination-field" :class="$style.recipient_wrap">
 			<RecipientCard
 				v-if="selectedContact"
 				:name="selectedContact.name"

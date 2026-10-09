@@ -1,5 +1,12 @@
 # Status: accessibility-1
 
+## Arc 1 (Send keyboard reach)
+
+- 2026-10-09: page 1 answered (A, A, C, Yes, A, A); recorded in OWNER-ASKS.md; Arc 1 implementation started on `worktree-accessibility-1`.
+- 2026-10-09: Phase 1.0 gate pass: lint, typecheck:all, test, test:all; smoke `send-keyboard.test.ts` (the Enter test) on chrome and firefox, retry 0, after a fresh build. Red on the base build on both browsers first.
+
+## Planning
+
 - 2026-10-09: adopted the worktree (`worktree-accessibility-1`, from `origin/dev` at `c42033e`); dependencies installed; registered.
 - 2026-10-09: recon done (two Explore agents on sonnet, then direct reads); every follow-up claim checked, four stale line numbers noted.
 - 2026-10-09: drafted plan.md, options.md, OWNER-ASKS.md; competing outline B (primitives first) prepared for the audit.

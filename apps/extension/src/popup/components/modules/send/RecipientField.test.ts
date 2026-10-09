@@ -6,7 +6,7 @@
  *     replacing the typing input
  *   - the card's `change` action clears the selection and restores the input
  */
-import { describe, expect, test } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import RecipientField from "./RecipientField.vue"
 
@@ -112,5 +112,76 @@ describe("modules/send/RecipientField", () => {
 		const w = mountField({ candidates: [], searchTerm: "0xbad" })
 		await w.find("input").trigger("focus")
 		expect(w.find('[data-testid="recipient-invalid-hint"]').exists()).toBe(false)
+	})
+
+	describe("Enter picks a suggestion only from the field's own input", () => {
+		// Named after the address, so it is suggested first while the blur matches Alice's address.
+		const namesake = { id: "5", name: "0xaaaa fan", address: "0xcccc" }
+		const mounted: ReturnType<typeof mount>[] = []
+		const mountAttached = (props: Record<string, unknown>) => {
+			const w = mount(RecipientField, { props, global: { stubs: STUBS }, attachTo: document.body })
+			mounted.push(w)
+			return w
+		}
+		const enter = (init: KeyboardEventInit = {}) =>
+			new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init })
+		const picks = (w: ReturnType<typeof mount>) => ({
+			term: w.emitted("update:searchTerm") ?? [],
+			contact: w.emitted("update:selectedContact") ?? [],
+		})
+
+		beforeEach(() => {
+			vi.useFakeTimers()
+		})
+		afterEach(() => {
+			for (const w of mounted.splice(0)) w.unmount()
+			document.body.innerHTML = ""
+			vi.useRealTimers()
+		})
+
+		test("an Enter on another control within the blur's grace period picks nothing and blurs nothing", async () => {
+			const w = mountAttached({ candidates: [alice, account1], searchTerm: "a" })
+			await w.find("input").trigger("focus")
+			await w.find("input").trigger("blur")
+			const other = document.createElement("button")
+			document.body.append(other)
+			other.focus()
+			other.dispatchEvent(enter())
+			expect(picks(w)).toEqual({ term: [], contact: [] })
+			expect(document.activeElement).toBe(other)
+		})
+
+		test("an Enter on the account card's own button within the grace period picks nothing", async () => {
+			const w = mountAttached({ candidates: [namesake, alice], searchTerm: alice.address })
+			await w.find("input").trigger("focus")
+			await w.find("input").trigger("blur")
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
+			const before = picks(w)
+			const change = w.find('[data-testid="card-change-btn"]')
+			change.element.dispatchEvent(enter())
+			expect(picks(w)).toEqual(before)
+		})
+
+		test("an Enter in the field's input picks the first suggestion", async () => {
+			const w = mountAttached({ candidates: [alice, account1], searchTerm: "a" })
+			const input = w.find("input")
+			await input.trigger("focus")
+			input.element.dispatchEvent(enter())
+			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([alice.address])
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([alice])
+		})
+
+		test("a repeat, composing or already handled Enter in the input picks nothing", async () => {
+			const w = mountAttached({ candidates: [alice, account1], searchTerm: "a" })
+			const input = w.find("input")
+			await input.trigger("focus")
+			input.element.dispatchEvent(enter({ repeat: true }))
+			input.element.dispatchEvent(enter({ isComposing: true }))
+			const handled = (e: Event) => e.preventDefault()
+			input.element.addEventListener("keydown", handled)
+			input.element.dispatchEvent(enter())
+			input.element.removeEventListener("keydown", handled)
+			expect(picks(w)).toEqual({ term: [], contact: [] })
+		})
 	})
 })

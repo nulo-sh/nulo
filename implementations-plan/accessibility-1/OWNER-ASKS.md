@@ -88,6 +88,19 @@ A puts two in-field controls in the Tab path. The wallet's written rule (CLAUDE.
 
 **Planner's recommendation: A.** The fee method is a real choice on every send; it should not need a mouse.
 
+## Answers: page 1, owner sign-off, 2026-10-09
+
+Signed off at 12:52 UTC; every call on the planner's recommendation, no notes. Arc 1 builds exactly these.
+
+| Call | Answer | Note |
+|---|---|---|
+| 1. The unit switch, Max and Refresh quote in the Tab order | A | Max disabled with no balance; the focus returns to the amount field after a keyboard press on Refresh quote; CLAUDE.md § Keyboard & focus order gains the exception |
+| 2. How focus shows on Send's controls | A | the designed 2 px accent ring |
+| 3. A press below the destination | C | the field waits for the press to end; touch is not covered |
+| 4. Announce the sponsor notice | Yes | no visible change |
+| 5. An Enter elsewhere must not pick a contact | A | only the field's own Enter picks a suggestion |
+| 6. The fee method picker by keyboard | A | a Tab stop with call 2's ring |
+
 # Page 2: Home and shared chrome (Arcs 2 and 3)
 
 ## 1. Home's two view links

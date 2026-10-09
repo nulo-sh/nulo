@@ -63,6 +63,31 @@ export async function tabAround(page: Page, times: number): Promise<string[]> {
 	return visited
 }
 
+/** Presses Tab until the named control holds the focus and returns every stop on the way; throws,
+ *  naming them, after `limit` presses. */
+export async function tabTo(page: Page, testid: string, limit = 40): Promise<string[]> {
+	const visited: string[] = []
+	while (visited.length < limit) {
+		visited.push(...(await tabAround(page, 1)))
+		if (visited.at(-1) === testid) return visited
+	}
+	throw new Error(`Tab never reached ${testid}: ${visited.join(" → ")}`)
+}
+
+/** The focused element's computed outline, and the theme's accent resolved to the same colour
+ *  syntax, so a ring drawn in the accent compares equal whatever notation the token uses. */
+export async function focusRing(page: Page): Promise<{ ring: string; color: string; accent: string }> {
+	return page.evaluate(() => {
+		const style = getComputedStyle(document.activeElement as Element)
+		const probe = document.createElement("span")
+		probe.style.color = "var(--nulo-accent)"
+		document.body.append(probe)
+		const accent = getComputedStyle(probe).color
+		probe.remove()
+		return { ring: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`, color: style.outlineColor, accent }
+	})
+}
+
 type EscapeRead = { __escapeHandled?: boolean }
 
 /** Presses Escape and returns whether the page marked it handled, which decides whether Chrome's
