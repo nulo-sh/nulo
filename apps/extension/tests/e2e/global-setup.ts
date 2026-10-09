@@ -8,7 +8,6 @@ import type { TestProject } from "vitest/node"
 import {
 	type AztecTestConfig,
 	checkNodeHealth,
-	waitForLocalNode,
 	createTestWallet,
 	deployTestToken,
 	getContractClassId,
@@ -19,6 +18,7 @@ import { type OwnedState, REPO_ROOT, SANDBOX_SERVICES, type SandboxService, clea
 import { markBootReady, markBootStarted } from "./sentinel"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
 import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
+import { assertPackFree, claimedRunId, mayAdopt, waitWhileAlive } from "./boot-guard"
 import { identityIsDead, launchEnv, newMarker, ownIdentity } from "./owned-processes"
 import {
 	createRunDir,
@@ -127,6 +127,8 @@ let AZTEC_RUN_DIR = plannedRunDir()
 const MARKERS: Record<SandboxService, string> = { anvil: newMarker(), aztec: newMarker(), playground: newMarker() }
 /** Agent runs carry a run marker from `agent.sh`; a bare `vitest` run does not. */
 const IS_AGENT_RUN = process.env.NULO_E2E_RUN !== undefined && process.env.NULO_E2E_RUN !== ""
+/** Set when the pack was claimed in the host registry for this run: nothing on it is adopted. */
+const RUN_ID = claimedRunId()
 
 let anvilProcess: ChildProcess | null = null
 /** True only when THIS run wrote `.e2e-state/owned.json` (fresh sandbox or progressive partial
@@ -157,24 +159,6 @@ async function probeHttp(url: string, timeoutMs = 1500): Promise<boolean> {
 			resolve(false)
 		})
 	})
-}
-
-async function waitForHttp(url: string, timeoutMs = 30_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeoutMs) {
-		if (await probeHttp(url)) return
-		await new Promise((r) => setTimeout(r, 500))
-	}
-	throw new Error(`Timed out waiting for ${url} (${timeoutMs}ms)`)
-}
-
-async function waitForAnvil(url: string, timeoutMs = 30_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeoutMs) {
-		if (await probeAnvil(url)) return
-		await new Promise((r) => setTimeout(r, 250))
-	}
-	throw new Error(`Timed out waiting for anvil at ${url} (${timeoutMs}ms)`)
 }
 
 /**
@@ -250,6 +234,16 @@ export async function setup(project: TestProject) {
 	// must NOT be retried.
 	markBootStarted()
 
+	if (RUN_ID) {
+		await assertPackFree({
+			anvil: ANVIL_PORT,
+			aztec: AZTEC_PORT,
+			aztecAdmin: AZTEC_ADMIN_PORT,
+			aztecP2P: AZTEC_P2P_PORT,
+			playground: PLAYGROUND_PORT,
+		})
+	}
+
 	if ((await ensureAnvil()) === "skip") {
 		provideWithoutSandbox(project)
 		return
@@ -309,7 +303,7 @@ async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 			`[e2e-setup] another run in this worktree holds the sandbox (owner ${priorLock.owner}, see .e2e-state/owned.json); wait for it to finish`,
 		)
 	}
-	if (priorPortsMatch(priorLock)) {
+	if (!RUN_ID && priorPortsMatch(priorLock)) {
 		console.log("[e2e-setup] prior ownership lock matches current run — probing for reuse")
 		if (await priorPackHealthy(priorLock)) {
 			const identityOk = await verifyIdentity(LOCAL_NODE_URL, priorLock.l1ContractAddresses)
@@ -365,10 +359,10 @@ async function priorPackHealthy(priorLock: OwnedState): Promise<boolean> {
 }
 
 // ── Anvil (L1) ─────────────────────────────────────────────────────
-/** Probe first: an L1 on chain 31337 already speaking JSON-RPC on our port is adopted, never respawned. */
+/** A bare run probes first: an L1 on chain 31337 already speaking JSON-RPC on its port is adopted,
+ *  trusting it runs with `--slots-in-an-epoch 1`. An agent run adopts nothing. */
 async function ensureAnvil(): Promise<"ready" | "skip"> {
-	const anvilAlreadyRunning = await probeAnvil(ANVIL_URL)
-	if (anvilAlreadyRunning) {
+	if (await mayAdopt(RUN_ID, () => probeAnvil(ANVIL_URL))) {
 		console.log("[e2e-setup] Anvil already speaking JSON-RPC at", ANVIL_URL)
 		weStartedAnvil = false
 		return "ready"
@@ -417,7 +411,7 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 	})
 
 	try {
-		await waitForAnvil(ANVIL_URL, 30_000)
+		await waitWhileAlive(anvilProcess, () => probeAnvil(ANVIL_URL), `anvil at ${ANVIL_URL}`, 30_000, 250)
 		console.log("[e2e-setup] Anvil is ready")
 	} catch (error) {
 		console.error("[e2e-setup] Failed to start anvil:", error)
@@ -435,12 +429,11 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 }
 
 // ── Aztec (L2) ─────────────────────────────────────────────────────
-/** Probe first: a healthy node on our port is adopted. Otherwise the pinned toolchain is checked,
+/** A bare run probes first: a healthy node on its port is adopted. Otherwise the pinned toolchain is checked,
  *  the node is spawned with a per-run data directory, and a node that never becomes healthy is
  *  torn down together with anvil. A missing CLI leaves anvil alive until teardown, as before. */
 async function ensureAztecNode(): Promise<"ready" | "skip"> {
-	const nodeAlreadyRunning = await checkNodeHealth(LOCAL_NODE_URL)
-	if (nodeAlreadyRunning) {
+	if (await mayAdopt(RUN_ID, () => checkNodeHealth(LOCAL_NODE_URL))) {
 		console.log("[e2e-setup] Local Aztec node already running at", LOCAL_NODE_URL)
 		weStartedNode = false
 		return "ready"
@@ -464,10 +457,10 @@ async function ensureAztecNode(): Promise<"ready" | "skip"> {
 	// Mandatory --data-directory per agent: aztec writes to $HOME/.aztec/data
 	// by default for some subsystems, which would corrupt LMDB if two
 	// agents run concurrently with the default path.
-	spawnAztecNode(createRunDir(AZTEC_RUN_DIR, MARKERS.aztec))
+	const node = spawnAztecNode(createRunDir(AZTEC_RUN_DIR, MARKERS.aztec))
 
 	try {
-		await waitForLocalNode(LOCAL_NODE_URL, 90_000)
+		await waitWhileAlive(node, () => checkNodeHealth(LOCAL_NODE_URL), `the local Aztec node at ${LOCAL_NODE_URL}`, 90_000, 2_000)
 		console.log("[e2e-setup] Local Aztec node is ready")
 	} catch (error) {
 		console.error("[e2e-setup] Failed to start local node:", error)
@@ -505,8 +498,8 @@ function requirePinnedToolchainOrWarn(): void {
 
 /** Spawn the pinned aztec CLI as its own process group, own it (handle → flag → lock record, in
  *  that order), and pipe its logs. */
-function spawnAztecNode(dataDir: string): void {
-	nodeProcess = spawn(
+function spawnAztecNode(dataDir: string): ChildProcess {
+	const node = spawn(
 		AZTEC_BIN,
 		[
 			"start",
@@ -554,22 +547,24 @@ function spawnAztecNode(dataDir: string): void {
 			},
 		},
 	)
+	nodeProcess = node
 	weStartedNode = true
 	recordSpawnedPid()
 	console.log(`[e2e-setup] the aztec CLI (scripts/aztec.sh) also starts an anvil on :${ANVIL_PORT}; its bind error at boot is expected`)
 
-	nodeProcess.stdout?.on("data", (data: Buffer) => {
+	node.stdout?.on("data", (data: Buffer) => {
 		const line = data.toString().trim()
 		if (line.includes("Aztec") || line.includes("ready") || line.includes("error")) {
 			console.log("[aztec-node]", line.slice(0, 200))
 		}
 	})
-	nodeProcess.stderr?.on("data", (data: Buffer) => {
+	node.stderr?.on("data", (data: Buffer) => {
 		const line = data.toString().trim()
 		if (line.includes("error") || line.includes("Error")) {
 			console.error("[aztec-node]", line.slice(0, 200))
 		}
 	})
+	return node
 }
 
 // ── Vite dev server (playground) ─────────────────────────────────
@@ -587,12 +582,11 @@ interface DevServerSpec {
 	setStarted: (started: boolean) => void
 }
 
-/** Adopt a server already answering on its URL, else spawn `bun run dev`, own it, pipe its logs
- *  and wait up to 30 s. A server that fails to come up is killed and the boot continues — only
- *  the tests that depend on it fail individually. */
+/** A bare run adopts a server already answering on its URL. Otherwise spawn `bun run dev`, own it,
+ *  pipe its logs and wait up to 30 s. A server that fails to come up is killed; under
+ *  `E2E_REQUIRE_SETUP=1` that fails the boot, else only the tests that depend on it fail. */
 async function ensureDevServer(spec: DevServerSpec): Promise<void> {
-	const alreadyRunning = await probeHttp(spec.url, 1500)
-	if (alreadyRunning) {
+	if (await mayAdopt(RUN_ID, () => probeHttp(spec.url, 1500))) {
 		console.log(`[e2e-setup] ${spec.title} already running at`, spec.url)
 		spec.setStarted(false)
 		return
@@ -623,13 +617,15 @@ async function ensureDevServer(spec: DevServerSpec): Promise<void> {
 			}
 		})
 
-		await waitForHttp(spec.url, 30_000)
+		await waitWhileAlive(child, () => probeHttp(spec.url), spec.url, 30_000, 500)
 		console.log(`[e2e-setup] ${spec.title} is ready`)
 	} catch (error) {
 		console.warn(`[e2e-setup] Failed to start ${spec.label}:`, error)
 		await stopService(child, spec.label, true, MARKERS[spec.label])
 		spec.setHandle(null)
-		// Continue without the server — tests that depend on it will skip / fail individually
+		if (process.env.E2E_REQUIRE_SETUP === "1") {
+			throw new Error(`[e2e-setup] FATAL: ${spec.label} failed to become healthy and E2E_REQUIRE_SETUP=1 is set.`)
+		}
 	}
 }
 
