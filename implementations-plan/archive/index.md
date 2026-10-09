@@ -3,6 +3,7 @@
 Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — one-line hook`. Each is a short record of what was decided and why, never a task list.
 
 - [accelerator-server-ci](accelerator-server-ci/plan.md) — completed — native `bb` proving in the network e2e CI through the vendor's headless prover server
+- [accessibility-1](accessibility-1/plan.md) — completed — Send by keyboard, Home's links, focus rings, titles read once, the emoji check announced, two contrast fixes
 - [account-artifact-freeze](account-artifact-freeze/plan.md) — completed — account addresses frozen per extension major: vendored artifact, frozen descriptor, execution canary
 - [account-balance-orphans](account-balance-orphans/plan.md) — completed — balance rows carry their own profile, chain and contract scope, judged by one identity predicate
 - [account-profile-siloing](account-profile-siloing/plan.md) — completed — one composite scope of profile, network, chain and account governs every activity record and slice

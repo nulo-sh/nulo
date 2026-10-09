@@ -18,7 +18,7 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 
 ## Git & GitHub
 
-- A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent: merge `dev` before debugging. [Evidence](archive/dedup-ledger/plan.md#merge-ref)
+- A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent; a conflicted PR gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/accessibility-1/plan.md)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
 - Never skip required aggregators; cancel only a push's first run. Same-head cancels can leave a failed check beside a green one; an earlier green still satisfies the requirement while an opt-in rerun works (accepted). [Evidence](archive/ci-gates/plan.md#how-github-judges-a-required-check-with-several-runs-of-one-name)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
@@ -52,4 +52,4 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 - Agent Bash (zsh 5.9): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
 - `pgrep -f` matches the agent's `zsh -c` wrapper, so a teardown can kill itself: signal your launcher's pgid, never `$$`/`$PPID`; a signal-killed Node child keeps `exitCode` null, so wait on `signalCode` too. [Evidence](archive/harden-findings-remediation/plan.md#pgrep), [more](archive/code-followups-2/lessons/phase-2.md)
 - Under Puppeteer mobile emulation, `innerWidth` grows to the content, so `scrollWidth > innerWidth` never flags a sideways scroll: compare against the viewport width you set (25.8). [Evidence](archive/landing-store-buttons/plan.md#mobile-emulation-width)
-- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first; grep a green run for a suspect log line (aztec 6.0.0-rc.1's `os error 98` prints on every shard). [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base), [more](archive/code-followups-1/plan.md)
+- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base), [more](archive/code-followups-1/plan.md)
