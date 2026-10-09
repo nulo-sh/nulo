@@ -10,3 +10,20 @@
 - 2026-10-08: arc 1 Codex round 2 (resumed) clean; loop converged. Final gates next.
 - 2026-10-08: final arc 1 gates pass on the head: `bun run audit:vue`, `bun run test:all`, `bun run lint:actions`, `bun run check:plans`, the four smoke specs with `--retry=0` (7/7).
 - 2026-10-08: arc 1 PR #51 opened ready (gh stack, base `dev`); `Closes #17`. Arcs 2 and 3 stack on `worktree-security-ui-1`.
+- 2026-10-08: arc 1 merged to `dev` as #51 (squash f5ca160). Arc 2 branch `security-ui-1-backup-download` stacks on `dev`.
+- 2026-10-08: Phase 2.1 gate pass: `bun run audit:vue` (lint, typecheck:all, test, build); new component tests pass and fail when each guard is removed.
+- 2026-10-08: Phase 2.1 deviation: the destructive confirm renders `cta_destructive` at the compact size; at medium its CTA tracking clipped "Download anyway" in the half-width row. Render note added to OWNER-ASKS.md.
+- 2026-10-08: Phase 2.2 Chrome smoke pass with `--retry=0`: `security-backup`, `passkey-backup`, `backup-imported-account`, `legal-acceptance`, `backup-roundtrip`, `passkey-retry`, `own-window` (32 passed; `passkey-toolbar-panel` skips on Chrome).
+- 2026-10-08: Phase 2.2 Chrome network pass (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): `account-balance-orphans`, `backup-import-stalled-network`, `backup-migration-roundtrip`, `backup-restore-integrity`, `backup-restore-sw-restart`, `import-handshake-note`, `import-handshake-note-matrix`, `same-token-concurrent-sends` (28/28).
+- 2026-10-08: arc 2 Codex round 1 (session 01a11cfc) reject: one High (a profile switch elsewhere let a password backup pass the passkey confirmation), two Low; Opus review approve with fixes (same finding). All fixed; the page now resets on a profile switch.
+- 2026-10-08: arc 2 Codex round 2 approve with fixes: three findings (pending passkey prompt on switch, sync flush, a comment), all fixed.
+- 2026-10-08: arc 2 Codex round 3 approve with fixes: no production finding, one Low test finding (fixed). Loop stopped at the three-round limit.
+- 2026-10-08: Phase 2.2 Firefox smoke pass on the final source with `--retry=0`: the seven Chrome specs plus `passkey-toolbar-panel` (all 5, including the panel export that presses Download anyway) and `contacts-import` (42/42).
+- 2026-10-08: final head: `bun run test:all` and `bun run lint:actions` pass.
+- 2026-10-08: final head: `bun run audit:vue` pass; Chrome smoke with `--retry=0`: `security-backup`, `passkey-backup`, `backup-imported-account`, `legal-acceptance`, `backup-roundtrip`, `passkey-retry`, `own-window`, `contacts-import` (37/37).
+- 2026-10-08: final head Chrome network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): the eight Phase 2.2 network specs (28/28).
+- 2026-10-08: final screenshots taken through the e2e harness (Chrome, both themes, both profile types, ready and confirmation states).
+- 2026-10-08: final head Firefox network (`e2e:agent`, `NULO_E2E_RETRY=0`, proverless): `import-handshake-note` and `import-handshake-note-matrix` (4/4, the passkey profile included); `account-balance-orphans`, `backup-migration-roundtrip`, `backup-restore-integrity`, `same-token-concurrent-sends` (19/19); `backup-import-stalled-network` and `backup-restore-sw-restart` skip as Chrome-only. Phase 2.2 gate pass.
+- 2026-10-09: owner answers on the result page recorded (r1 C, r2 yes, r3 yes); arc 2 merged origin/dev (index.md conflict only); r1 built: `destructive` Button variant in `@nulo/design`, used by the passkey confirmation.
+- 2026-10-09: r1 gates: `bun run audit:vue` pass; Chrome smoke `--retry=0` `security-backup`, `passkey-backup` (5/5; `passkey-toolbar-panel` skips on Chrome); Firefox smoke `--retry=0` the same three (10/10); shots of the confirmation in both themes.
+- 2026-10-09: r1 Codex round 1 (session 01a120c5) approve with fixes, three accepted; Opus review approve with fixes, four accepted, the hover contrast raised as a render note. Round 2 clean; loop converged.

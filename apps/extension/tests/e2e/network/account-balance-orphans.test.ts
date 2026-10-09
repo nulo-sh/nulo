@@ -38,7 +38,7 @@ import {
 } from "../fixtures/extension"
 import { navigateByHash, reopenAndRecoverAfterImport } from "../fixtures/helpers"
 import { confirmImport, exportAccountBody, FIRST_ACCOUNT_NAME, previewImport } from "../helpers/account-io"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "../helpers/backup-export"
+import { downloadEncryptedBackup, openEncryptedBackup } from "../helpers/backup-export"
 import { TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -136,20 +136,10 @@ test.skipIf(!hasConfig)(
 		await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 		await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 		await clickByTestId(page, "unlock-submit-btn")
-		await page.waitForFunction(
-			() => {
-				const btn = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-				return !!btn && !btn.disabled
-			},
-			{ timeout: 120_000, polling: 250 },
-		)
-		await armBackupDownloadCapture(page)
-		await clickByTestId(page, "download-backup-btn")
-		const backupJson = await readCapturedBackupDownload(page)
+		const exported = await openEncryptedBackup(await downloadEncryptedBackup(page))
 		await page.close()
 
 		// ── Stage 3: doctor — strip the key slice, keep the Account row + balance rows ──
-		const exported = JSON.parse(backupJson) as { checksum?: string; data: Record<string, unknown> } & Record<string, unknown>
 		expect((exported.data["imported-account-keys"] as unknown[]).length).toBe(1)
 		// The doctored premise must be real: the blob carries balance row(s) for the account.
 		const blobBalances = (exported.data["token-balance"] as Array<{ account?: string }>).filter((b) => b.account === importedAddress)

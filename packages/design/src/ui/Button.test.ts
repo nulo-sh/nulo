@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils"
 import { describe, expect, test } from "vitest"
 import Button from "./Button.vue"
+import buttonSource from "./Button.vue?raw"
 
 const STUBS = {
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
@@ -96,5 +97,52 @@ describe("Button (router-free base)", () => {
 		// `tag === 'button' && disabled`.
 		const w = mountButton({ tag: "a", href: "/x", disabled: true }, { default: "Link" })
 		expect(w.attributes("disabled")).toBeUndefined()
+	})
+})
+
+describe("Button destructive variant (the regular button in red)", () => {
+	/** Vitest stubs CSS modules: every name maps to `_name_<hash>`, defined or not, so only the style
+	 *  block itself shows what a variant looks like. */
+	const classes = (props: Record<string, unknown>) =>
+		(mountButton(props, { default: "Download anyway" }).attributes("class") ?? "").split(/\s+/)
+	const hasClass = (list: string[], name: string) => list.some((c) => new RegExp(`^_${name}_[0-9a-z]+$`).test(c))
+
+	const rules = [
+		...(buttonSource.split("<style module>")[1] ?? "").replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g),
+	].map((m) => ({ selectors: m[1].split(",").map((sel) => sel.trim()), body: m[2] }))
+	const rulesOf = (pattern: RegExp) => rules.filter((r) => r.selectors.some((sel) => pattern.test(sel)))
+
+	test("maps to its own class, never primary's or a CTA's", () => {
+		const list = classes({ variant: "destructive" })
+		expect(hasClass(list, "destructive")).toBe(true)
+		for (const other of ["primary", "cta", "cta_destructive"]) expect(hasClass(list, other)).toBe(false)
+	})
+
+	test("shares primary's type rule", () => {
+		const typeRule = rules.find((r) => r.selectors.includes(".wrapper.primary") && r.body.includes("font-family"))
+		expect(typeRule?.selectors).toContain(".wrapper.destructive")
+	})
+
+	test("stays out of the CTA contract, and neither it nor primary sets a size, so the size classes give its padding", () => {
+		const ctaContract = rules.find((r) => r.selectors.includes(".wrapper.cta") && r.body.includes("letter-spacing"))
+		expect(ctaContract).toBeDefined()
+		expect(ctaContract?.selectors).not.toContain(".wrapper.destructive")
+		const own = rulesOf(/^\.wrapper\.(primary|destructive)(:|$)/)
+		expect(own.length).toBeGreaterThanOrEqual(4)
+		for (const r of own) expect(r.body).not.toMatch(/font-size|letter-spacing|padding|height/)
+	})
+
+	test("fills red with white text", () => {
+		const fill = rules.find((r) => r.selectors.length === 1 && r.selectors[0] === ".wrapper.destructive")
+		expect(fill?.body).toMatch(/background:\s*var\(--red\)/)
+		expect(fill?.body).toMatch(/color:\s*var\(--txt-white\)/)
+	})
+
+	test("its hover and press never answer a disabled or loading button", () => {
+		const states = rulesOf(/^\.wrapper\.destructive:(hover|active)/).flatMap((r) =>
+			r.selectors.filter((sel) => sel.startsWith(".wrapper.destructive:")),
+		)
+		expect(states).toHaveLength(2)
+		for (const sel of states) expect(sel).toMatch(/:not\(\.disabled\):not\(\.loading\)$/)
 	})
 })

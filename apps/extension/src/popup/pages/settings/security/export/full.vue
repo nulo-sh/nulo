@@ -49,7 +49,11 @@ const { request: ceremonyRequest, runCeremony, onResolve: onCeremonyResolve, onR
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
+const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
 
 const router = useRouter()
 
@@ -138,6 +142,10 @@ const handleAgree = () => {
 }
 
 const backupStatus = ref("")
+// A password profile's unencrypted file holds its master secret and every key, so only its encrypted
+// file leaves the page. A passkey profile's plain file reaches no funds without the passkey, so it
+// may leave once the person confirms what it exposes.
+const canDownload = computed(() => backupStatus.value === "encrypted" || (isPasskeyProfile.value && backupStatus.value === "finished"))
 
 /** After a failed passkey step: back, or in an own window, which has no page behind it, the
  *  agreement step. */
@@ -385,14 +393,16 @@ async function handleEncrypt() {
 	}
 }
 
-async function handleDownloadBackup() {
+async function downloadBackup(isEncrypted) {
 	if (isDownloading.value || isBusy.value) return
+	// `canDownload`'s rule, held again where the file is written.
+	if (!isEncrypted && !isPasskeyProfile.value) return
+	const fileContent = isEncrypted ? encryptedB64 : payloadPretty
+	if (!fileContent) return
 	isDownloading.value = true
 	const gen = generation
-	const isEncrypted = backupStatus.value === "encrypted"
 	let filename = `_${appStore.profile.name.replace(" ", "_")}_${Math.floor(Date.now() / 1000)}`
 	filename = isEncrypted ? `NuloEncryptedBackup${filename}.txt` : `NuloBackup${filename}.json`
-	const fileContent = isEncrypted ? encryptedB64 : payloadPretty
 
 	try {
 		await downloadFile({ data: fileContent, filename, compressionFormat: "gzip" })
@@ -407,36 +417,35 @@ async function handleDownloadBackup() {
 	}
 }
 
-const onKeydown = (e) => {
-	if (!isAgreed.value || e.defaultPrevented || !isPopupSubmitKey(e)) return
-	switch (backupStatus.value) {
-		case "":
-			handleBackup()
-			break
-		case "finished":
-			handleEncrypt()
-			break
-		case "encrypted":
-			handleDownloadBackup()
-			break
-		default:
-			// "progress" / "encrypting": a run is in flight, so Enter starts nothing.
-			break
+/** ConfirmPopup runs its callback without awaiting it, and the page may have moved on by then:
+ *  the callback downloads only the plain file of the run the person was warned about. */
+function confirmPlainDownload() {
+	const gen = generation
+	cacheStore.confirm = {
+		pre_title: "Not encrypted",
+		title: "Download without a password?",
+		description:
+			"This file will show your accounts, contacts and activity to anyone who opens it. It holds no key that can move funds without your passkey.",
+		confirm_color: "red",
+		confirm_variant: "destructive",
+		confirm_text: "Download anyway",
+		callback: () => {
+			if (gen === generation && backupStatus.value === "finished") void downloadBackup(false)
+		},
 	}
+	popupStore.open("confirm")
 }
 
-// Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
-// to its own window first. A failed move keeps the page where it is.
-onBeforeMount(() => {
-	if (isPasskeyProfile.value && passkeyNeedsOwnWindow()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
-})
+function handleDownloadClick() {
+	if (backupStatus.value === "encrypted") void downloadBackup(true)
+	else if (canDownload.value) confirmPlainDownload()
+}
 
-onBeforeUnmount(() => {
-	// Fence first so no in-flight continuation can publish or resurrect state;
-	// then services (cleanup-order rule), then the secret scrub — the payload
-	// strings hold the plaintext master/entropy/DEK and must not outlive the
-	// page (best-effort: references cleared; in-flight closures die with the
-	// aborted run).
+/** Ends the run and drops what it made. Fence first so no in-flight continuation can publish or
+ *  resurrect state; then services (cleanup-order rule), then the secret scrub: the payload strings
+ *  hold the plaintext master, entropy and imported-keys key (best-effort: references cleared;
+ *  pending operations keep what they captured until they settle). */
+function discardRun() {
 	generation++
 	if (activeRunClients) {
 		disconnectAll(activeRunClients)
@@ -447,7 +456,53 @@ onBeforeUnmount(() => {
 	encryptedB64 = null
 	password.value = null
 	repeatedPassword.value = null
+}
+
+const onKeydown = (e) => {
+	if (!isAgreed.value || e.defaultPrevented || !isPopupSubmitKey(e)) return
+	switch (backupStatus.value) {
+		case "":
+			handleBackup()
+			break
+		case "finished":
+			handleEncrypt()
+			break
+		case "encrypted":
+			downloadBackup(true)
+			break
+		default:
+			// "progress" / "encrypting": a run is in flight, so Enter starts nothing.
+			break
+	}
+}
+
+// A profile switch made elsewhere updates this page in place. A backup it holds is the previous
+// profile's, and the download rule would read the new profile's type, so the page starts over.
+watch(
+	() => appStore.profile?.id,
+	() => {
+		discardRun()
+		onCeremonyReject(new Error("The active profile changed"))
+		isBusy.value = false
+		isDownloading.value = false
+		isAgreed.value = false
+		backupStatus.value = ""
+		showRecommendation.value = false
+		isWrongPassword.value = false
+		isPasswordMismatch.value = false
+		dekReplaced.value = false
+		chainStateOmitted.value = false
+	},
+	{ flush: "sync" },
+)
+
+// Firefox's toolbar panel closes under the passkey prompt this page runs, so a passkey export moves
+// to its own window first. A failed move keeps the page where it is.
+onBeforeMount(() => {
+	if (isPasskeyProfile.value && passkeyNeedsOwnWindow()) void moveToOwnWindow(OWN_WINDOW_ROUTES.export)
 })
+
+onBeforeUnmount(discardRun)
 </script>
 
 <template>
@@ -567,11 +622,16 @@ onBeforeUnmount(() => {
 							</Text>
 						</template>
 					</Banner>
-					<Banner v-if="showRecommendation" variant="info" direction="vertical">
-						<template #title> Backup is ready </template>
+					<Banner v-if="showRecommendation" variant="info" direction="vertical" data-testid="backup-ready-banner">
+						<template #title> {{ isPasskeyProfile ? "Backup is ready" : "Protect your backup" }} </template>
 						<template #description>
-							<Text height="140">
-								You can download it right now, but we strongly recommend to encrypt it before downloading.
+							<Text v-if="isPasskeyProfile" height="140">
+								Protect it with a password before you download it. Without a password, the file is saved in
+								plain text.
+							</Text>
+							<Text v-else height="140">
+								Encrypt the file with your profile password before you download it. Without a password, anyone
+								who opens the file controls this profile.
 							</Text>
 						</template>
 					</Banner>
@@ -669,9 +729,9 @@ onBeforeUnmount(() => {
 					{{ backupStatus === 'encrypting' ? 'Encrypting…' : 'Protect with Password' }}
 				</Button>
 				<Button
-					@click="handleDownloadBackup"
+					@click="handleDownloadClick"
 					@keydown.enter="refuseRepeatEnter"
-					:disabled="!backupStatus || backupStatus === 'progress' || backupStatus === 'encrypting' || isDownloading"
+					:disabled="!canDownload || isDownloading"
 					:variant="backupStatus !== 'encrypted' ? 'cta_outline' : 'cta'"
 					data-testid="download-backup-btn"
 				>

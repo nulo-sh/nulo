@@ -10,8 +10,9 @@
  *
  * Coverage:
  *   1. Export full backup as a passkey profile — modal appears, virtual
- *      authenticator completes, CTAs become available. Locks in the
- *      `usePasskeyCeremony` wiring on the export page.
+ *      authenticator completes, CTAs become available, and an unencrypted
+ *      download passes the confirmation that names what the file exposes.
+ *      Locks in the `usePasskeyCeremony` wiring on the export page.
  *   2. Export cancel UX — Escape during the modal is marked handled and
  *      returns the user to the agreement gate (`isAgreed = false`), NOT a
  *      dead form or a toast+bounce.
@@ -24,6 +25,8 @@ import type { Page } from "puppeteer"
 import { clickByTestId, expectNoNameField, openPopup, waitForHash, test } from "./fixtures/extension"
 import { getActiveProfileName } from "./fixtures/helpers"
 import { setupPasskeyVirtualAuth, stallNextPasskeyCeremony } from "./fixtures/passkey"
+import { shotSend } from "./fixtures/send-page"
+import { armBackupDownloadCapture, downloadPlainPasskeyBackup } from "./helpers/backup-export"
 import {
 	buildSyntheticPasskeyBackup,
 	readActiveAccount,
@@ -168,6 +171,27 @@ test.skipIf(process.env.CI === "true")(
 				},
 				{ timeout: 180_000, polling: 250 },
 			)
+			await shotSend(page, "export-full-ready-passkey", "backup-ready-banner")
+
+			// An unencrypted download asks first: Cancel writes nothing, Download anyway writes the
+			// plain file, whose master-key field is only the passkey's credential id.
+			await armBackupDownloadCapture(page)
+			await clickByTestId(page, "download-backup-btn")
+			await page.waitForSelector('[data-testid="confirm-submit"]', { visible: true, timeout: 5_000 })
+			expect(await page.$eval('[data-testid="confirm-title"]', (el) => el.textContent?.trim())).toBe("Download without a password?")
+			await shotSend(page, "export-full-confirm-passkey", "confirm-submit")
+			await clickByTestId(page, "confirm-cancel")
+			await page.waitForFunction(() => !document.querySelector('[data-testid="confirm-submit"]'), { timeout: 5_000 })
+			const afterCancel = await page.evaluate(() =>
+				Promise.race([
+					(window as unknown as { __backupCapture: Promise<string> }).__backupCapture.then(() => "downloaded"),
+					new Promise<string>((resolve) => setTimeout(() => resolve("nothing"), 1_000)),
+				]),
+			)
+			expect(afterCancel).toBe("nothing")
+			const plain = JSON.parse(await downloadPlainPasskeyBackup(page)) as Record<string, unknown>
+			expect(plain["master-key"]).toBe((await readRegisteredPasskey(page)).credentialId)
+			expect("entropy" in plain).toBe(false)
 
 			// Drive the encryption path so the second status card variant
 			// ("Encrypting your backup") is exercised too. For passkey profiles
