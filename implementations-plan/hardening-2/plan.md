@@ -699,6 +699,14 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 | O5 | Low | Stale comments: the verifier's cache advice, the guards' "unvalidated", the checker's "unvalidated wire data", a garbled batch sentence, the README's "once per message", `apply.ts` naming only the singleton | **Accepted.** All corrected. |
 | O6 | Low | Caching the verifier's returned object (C3's fix) would vouch for an object the verifier never hashed | **Accepted over C3.** The cache stores an artifact only when the verifier returned the object it hashed; a verifier returning another object leaves nothing cached. |
 
+### Arc 1 implementation — Codex round 2 (same session, on `9da9581..45b8ad0`)
+
+**Verdict: findings** (one, low): converged, no material finding. Confirmed each round-1 fix (C1, C2, C4, C5, O1, O2, the playground query) closes its finding; agreed with the C3/O6 resolution and with deferring O3 as a tracked residual (it narrows the claim that every malformed input gets `INVALID_PARAMS`; the failure still closes access).
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C6 | Low | The rewritten scope-checker comment narrates the check and misstates the boundary: the parse refuses a non-string `name` first | **Accepted.** Deleted; the defensive check stays. |
+
 ### Arc 3 implementation — Codex round 1 (gpt-6.1-sol, high; session `01a11e54-381a-7dd2-a1ba-a82a128de7e7`)
 
 **Verdict: findings** (four). No release leakage, no externally driven recorder, no directive breakage or unjustified widening, no unrecorded drift found. Fixed in `test(e2e): surface a lost csp record write, …`.
