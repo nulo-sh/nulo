@@ -595,6 +595,7 @@ Per-directive gate:
 | D-ORD2 | Arc 2's base (orchestrator, 2026-10-09) | Stack on layer 1 (`worktree-hardening-2`, Arc 3), with `origin/dev` merged in | On layer 2 as the Delivery table says: Arc 1 waits on its own PR, and Arc 2's files (`wallet-core` migrator, `profile/`, `token/`, `token-balance/`) do not overlap Arc 1's (`wallet-bridge`, `pxe/artifact-registry`). |
 | D-19d | The refusal text of a mismatched journal (review round 1) | The engine's existing invalid-journal result, one text for every check | The three reasons in Architecture: `MigrationBarrier.vue` renders the engine's reason verbatim (`runtime.ts` stores it as the blocked detail), so each would be new copy on the recovery screen, outside this plan's UI impact. Which check refused is a storage-forensics detail. |
 | D-18d | Where the raw purge pass fences (review round 1) | `onMatch`, for every matched row before its bytes re-check | `beforeDelete`, right before the delete (Architecture): a commit that rewrote a malformed row's bytes between the snapshot and the re-read was spared unfenced and survived the purge. Safe early: the balance allocator never hands out an existing key or a fenced id, and the raw passes hold the allocation lock. |
+| D-18f | A raw-pass row a commit rewrote valid meanwhile (review round 2) | A second typed pass after the raw pass, both purges sharing one helper | Fence-only (round 1): a commit that finished before the hook ran left the row valid, in scope and fenced. A raw pass first: its predicate also matches valid rows, which it would delete without the delete event. |
 | D-18e | The post-write re-check's shape (review round 1) | Inline in each writer, in the tick the write resumes; a sync helper returns the compensating delete or `undefined` | An awaited helper (as first built): its return hop let a purge fence and delete the row between the check and the caller's emit. |
 | D-19c | An engine-namespace key in a journal's `entries` (Phase 3) | Refused with the other out-of-footprint keys | Filtered at restore as before: the journal is then not one the engine wrote, and the check refuses rather than repairs (D-19a). `restore()` keeps its filter as defence in depth. |
 
@@ -725,6 +726,15 @@ Confirmed sound by this pass: the prescan move; the shallow schema copy (the pat
 | O4 | Low | `ARCHITECTURE.md` still said a valid backup always restores | **Accepted.** States the registry check and the frozen footprint. |
 | O5 | Low | `MigrationBarrier.vue` shows the engine's reason verbatim, so the new reasons were new copy outside UI impact | **Accepted** (D-19d): the refusals reuse the existing invalid-journal text, so the screen reads as an existing state. |
 | O6 | Note | Process: `lessons/phase-5.md` untracked, Phase 5 unrecorded, a test being edited | Recorded at the Phase 5 gate. |
+
+### Arc 2 implementation — Codex round 2 (same session, on `311f2fa..833319f`)
+
+**Verdict: findings** (two). C1 and C2 resolved (both writers checked at eight microtask placements). `return await undo` propagates a failed delete and emits nothing; the reused invalid-journal text keeps the non-retryable verdict for every new refusal. Fixed in `fix(balances): sweep a purge's scope again after its raw pass`.
+
+| # | Sev | Finding | Resolution |
+|---|---|---|---|
+| C3 | Medium | A commit that rewrote a malformed in-scope row valid and finished before the raw pass's `onMatch` ran was unfenced at its post-write check; the bytes guard then spared the row, which survived the purge, fenced | **Accepted, reproduced** with the raw snapshot parked. Both purges now run typed, raw, typed through one helper (D-18f). |
+| C4 | Low | `ARCHITECTURE.md` omitted the already-stamped branch, which clears a journal without the registry check | **Accepted.** The rule names both branches. |
 
 ## Delivery
 
