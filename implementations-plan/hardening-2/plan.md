@@ -113,6 +113,7 @@ Out:
 - A-3 → OA-3: what a person sees when the wallet refuses a malformed call before any popup? Built now: the refusal, with today's activity label. Arc 1 merges only after the owner signs off.
 - A-4 → OA-4: an `http://[::1]` node URL, if CSP cannot express it. Ships now: `connect-src` keeps it reachable.
 - A-5 → OA-5: tighten the published patch schema for `grantPublicAuthwit`'s content? Ships now: unchanged.
+- **Arc 1, answered 2026-10-08:** OA-1 C, OA-2 B, OA-3 B (`OWNER-ASKS.md` § Answers). Arc 1 builds those, not the ship-now forms above (D-16j to D-16l).
 
 ## Architecture & Implementation
 
@@ -332,13 +333,11 @@ The implementer rebases each arc on whatever has landed on `dev` and re-runs tha
 
 ## UI impact
 
-- **Popup, connect window, onboarding, settings: none in the form that ships now.** `requestCapabilities` keeps today's guards, also as a batch leg, so the connect window and its "unknown" row are unchanged (OA-1).
-- **Approval window and activity list (OA-3). Arc 1 is built in this form, and its PR does not merge without the owner's explicit sign-off on the before/after below, quoted in the PR body.** The PR attaches a screenshot of the activity row for a refused malformed `sendTx`.
-  - Only a dApp that sends a malformed call, which a stock SDK does not, sees these changes.
-  - A malformed call that used to open the approval window (wrong field types, wrong address form) now opens none. The dApp receives the generic text.
-  - A refused top-level `sendTx` keeps today's activity label for such refusals, "Popup closed early", which today's malformed-`sendTx` refusals already show.
-  - A malformed call that is also out of scope moved from "Not allowed" to that label, because the parse now precedes the scope check.
-- **dApp-facing text: none new.** A schema refusal carries "The wallet could not process the request.", as every malformed call does today. Extra trailing arguments stay ignored, as today.
+- **Arc 1, as signed off by the owner on 2026-10-08 (OA-1 C, OA-2 B, OA-3 B).** Only a dApp that sends a malformed call, which a stock SDK does not, sees any of it.
+  - Connect window: unchanged for every conforming dApp, its "unknown" row included. A request with a malformed header, or a known permission type with a bad field, is refused before any window opens.
+  - Approval window: a call with malformed fields that used to open it now opens none.
+  - Activity list: a queued `sendTx` the parse refuses fails its row as **"Couldn't read request"**, explanation "The app sent a request the wallet could not read. Nothing was sent." Nothing else on the row changes. A malformed call outside the grant reads the same, since the parse runs before the scope check. The PR carries the row in both themes.
+  - dApp-facing text: one new classified refusal, `-32602` with `walletErrorCode: "INVALID_PARAMS"` and "The request's arguments do not match the wallet API.". Extra trailing arguments stay ignored, as today.
 - **CSP: none intended.** A directive that breaks a page's styles, fonts or frames is a defect, fixed by widening that directive with the narrowest source the violation names, never by changing markup (D-23b).
 
 ## Implementation phases
@@ -357,6 +356,8 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 ### Arc 1 (layer 2, branch `hardening-2-dapp-parse`, after PR #48 lands)
 
 #### Phase 1 — #16: parse every dApp call against the schema
+
+**Arc 1: done 2026-10-09.** Built with the owner's answers, not the ship-now forms steps 4, 8 and 9 name (D-16j to D-16q). Evidence, the I-2 table and the red-on-base results: `lessons/phase-1.md`.
 
 1. Rebase on `dev` with PR #48 merged. Add the module and the ladder step. Run `bun run --cwd packages/wallet-bridge test` and `bun run test`. Record in `lessons/phase-1.md` which existing tests the parse now refuses.
 2. Verify I-2. For each parsed method, list every `args[N]` read in the dispatcher, the scope checkers and the handlers. Confirm `N` is below the method's tuple length. Record the table in the lessons file.
@@ -397,6 +398,8 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 - Layers: typecheck/lint, unit, network e2e on Chrome. Nothing here touches fixtures, focus, windows or WebAuthn.
 
 #### Phase 2 — #26: key the verified cache by the artifact object
+
+**Arc 1: done 2026-10-09.** As written; evidence in `lessons/phase-2.md`.
 
 1. In `artifact-registry.ts`, replace `verifiedClassIds` with `verified: WeakMap<ContractArtifact, string>` and change `verifyAndCache` as in Architecture. Replace the field's doc-comment with the one-sentence invariant.
 2. In `apps/extension/src/wallet/services/pxe/artifact-registry.test.ts`, with the existing fake verifier:
@@ -591,6 +594,19 @@ Per-directive gate:
 **Unresolved disagreements.**
 
 - None open. D-26 was split in round 1: Opus judged B marginally stronger, Codex judged A stronger since neither authenticates persisted bytes. The final Codex pass judged B marginally stronger as runtime defence and A defensible only under a trusted store. Checking the tree settled it: one registry serves every runtime's store, and upstream's stable per-runtime objects make B cheap. B adopted.
+
+### Arc 1 implementation decisions (2026-10-09)
+
+| # | Decision | Chosen | Rejected and why |
+|---|---|---|---|
+| D-16j | `requestCapabilities` (owner, OA-1 C) | Parsed: the header, each entry an object with a string `type`, known types through `CapabilitySchema`, then the wallet's own `projectRequestedCapabilities`; unknown types pass to the window; `requestCapabilities(null)` still asks for nothing | Skipped (D-16d, the ship-now form): superseded. Refusing `null` (Codex, design consult): there is no header to parse, it opens and grants nothing, and an existing pin made the tolerance deliberate. |
+| D-16k | Refusal class and text (owner, OA-2 B) | `InvalidWalletArgumentsError` (`INVALID_PARAMS`) in `@nulo/extension-messaging/errors`, rebuilt across the transport; the envelope answers `-32602` with one constant message | The class in `wallet-bridge` (the plan's file map): the envelope classifies it and `REBUILT_AS` rebuilds it, both on the messaging layer. The unmapped class (D-16e): superseded. |
+| D-16l | The refused row (owner, OA-3 B) | A new journal outcome, `malformed_request`, labelled "Couldn't read request" | "Popup closed early" (the ship-now form): superseded. |
+| D-16m | Arity refusals | The parse's class and text, so `INVALID_PARAMS` on the wire | The unclassified constant: two answers for one fault. |
+| D-16n | Envelope mapping | The four constant-message envelopes as one table | A fourth `if`: over the cognitive budget. A suppression: forbidden. |
+| D-16o | `argsRequestCapabilities` | Deleted | Kept: an arity refusal ahead of a method with no capability check, and the parse covers its shape. |
+| D-16p | Test fixtures | Converted to wire shape in place, with helpers exported as `@nulo/wallet-bridge/testing`; no file mocks the parse | `vi.mock` per file (allowed by step 7 for downstream subjects): no file needed it once the helpers existed. |
+| D-16q | Parse tables | 15 refused rows (every method that takes an argument) and 20 allowed rows (every registry method) | 18 rows each (step 8): `requestCapabilities` is now parsed, and a method with an empty tuple has nothing to refuse. |
 
 ## Audit verdicts
 
