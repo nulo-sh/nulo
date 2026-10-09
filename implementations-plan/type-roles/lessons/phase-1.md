@@ -36,7 +36,7 @@ Picks the boards should look at, most visible first (pick → alternative):
 4. The passkey window body `body`, 15 → 12px (`PasskeyScreen.vue:227`) → 15px as an `OVERRIDES` entry, the owner's call.
 5. Execute group labels `label`, a full sentence in caps (`OperationCard.vue:239`) → `label-section` G 11, or `body` for that sentence.
 6. Confirm's toggle label `row-title` G 13/700 (`ConfirmPopup.vue:108`) → `label` G 10 caps, the rulebook's toggle label.
-7. "Always trust": `label` in Settings (`DappSessionVerification.vue:29`), `row-title` in the verify window (`verify/index.vue:170`) → one role for both.
+7. The verification toggle, "Skip this check next time": `label` in Settings (`DappSessionVerification.vue:29`), `row-title` in the verify window (`verify/index.vue:212`) → one role for both.
 8. "Override with my method", "Use app's payment" `label`, now caps (`FeeSettingsCard.vue:872,905`) → `value` I 12/600, sentence case.
 9. The notification title `title-page`, 16 → 13px caps (`NotificationManager.vue:56`) → `row-title` G 16/700.
 10. Delete profile's checkbox labels `body`, 14/600 → 12/400 (`settings/security/reset.vue:135,138,141`) → `row-title` G 14/700.
@@ -72,3 +72,7 @@ Picks changed by the lead:
 - **Review cleared, 53 items.** Accepted the generator's splits of two selectors § Identifiers shared (`activity-row-hash` / `activity-incoming-hash`; `import-contact-address-saved` / `-incoming`), its `none` calls (Terms versions, the consent hint, a hidden accessible name), Edit FPC's title and the decoded non-address value as new sites, the 29 routed non-page modules and `common-about` as no surface, and the change-map arcs over § Captures' (the tables now follow). `journal-recipient` was never needed: the element carries `journal-detail-recipient`.
 - **A gap the first run hid.** `AuthwitCard` renders `caller`, `contract`, `to` and `consumer` as plain members, outside the pattern list, so the one live branch (a granted call) had no site. Adding the four names finds exactly AuthwitCard's five and nothing else; three are pinned unreachable beside the two the first run found. A note's `entry.value` stays a hand entry.
 - **Two row testids wrapped their label.** `execute-op-transfer-sender` and `execute-op-decoded-param` sit on rows that also hold "From:" or the parameter name, so the sweep would judge the label once labels carry roles; the values take `-address` / `-value` testids of their own. Edit FPC's bare `setting-title` matched the FPC rows under the popup: scoped to `edit-fpc-header-row`.
+
+## Rebase onto dev after #55, #58 and #75
+
+- `origin/dev` moved while step 16 waited: #55 added a `destructive` `Button` variant (`primary`'s type on red, one rule with it, so it takes `button-md` with `primary`), #58 rewrote the verify window's copy and buttons and added its refusal error, #75 closed security-ui-1 (the one index conflict). The guard found the change exactly: one stale entry (the old "OK" label's `size`) and one new pick (the refusal error's `size="12"`, `body`); the inventories did not move. The before set is shot from the rebased head.
