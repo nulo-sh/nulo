@@ -330,8 +330,6 @@ jobs:
       proverless: ${{ matrix.leg.proverless }}
       # The PR lane's kill switch, minus its dispatch input; it only reaches the prover-ON leg.
       disable_presto: ${{ !matrix.leg.proverless && vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   build-chrome:
     needs: [resolve, lint-and-typecheck, unit-tests]
