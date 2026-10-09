@@ -10,3 +10,4 @@
 - 2026-10-09: Phase 7 `frame-src 'self'` gated (Firefox smoke's one red was the passkey-retry timing fingerprint, green alone; ledgered as row 46).
 - 2026-10-09: Phase 7 `media-src 'self'` and `object-src 'self'` gated, each green on both browsers.
 - 2026-10-09: Arc 3 gate pass on d43a198 (static green but test:release's zip; smoke Chrome 44/Firefox 46 files; network proverless Chrome 106/Firefox 105, canaries 5/5 on both; zero violations). Codex loop clean at round 3; Opus approve.
+- 2026-10-09: rebased onto dev 833170d (10 commits; only implementations-plan/index.md conflicted, resolved by keeping dev's lines plus ours); re-gating the rebased head.
