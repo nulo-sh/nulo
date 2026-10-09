@@ -36,3 +36,4 @@
 - 2026-10-09: owner answers on the result page recorded (r1 C, r2 yes, r3 yes); arc 2 merged origin/dev (index.md conflict only); r1 built: `destructive` Button variant in `@nulo/design`, used by the passkey confirmation.
 - 2026-10-09: r1 gates: `bun run audit:vue` pass; Chrome smoke `--retry=0` `security-backup`, `passkey-backup` (5/5; `passkey-toolbar-panel` skips on Chrome); Firefox smoke `--retry=0` the same three (10/10); shots of the confirmation in both themes.
 - 2026-10-09: r1 Codex round 1 (session 01a120c5) approve with fixes, three accepted; Opus review approve with fixes, four accepted, the hover contrast raised as a render note. Round 2 clean; loop converged.
+- 2026-10-09: arc 3 merged the updated arc 2 (red button, `dev`; conflicts in plan.md and STATUS.md only, both sides kept). Gates on 25c71be: network (`e2e:agent`, proverless, `NULO_E2E_RETRY=0`) Chrome `connect-verify-mismatch` (2/2); `bun run audit:vue` pass.
