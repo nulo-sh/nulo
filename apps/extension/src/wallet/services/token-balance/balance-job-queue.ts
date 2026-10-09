@@ -222,7 +222,7 @@ export class BalanceJobQueue {
 		// Generation fence: silent return, not failTask — this helper holds no
 		// taskId; both callers have already failed the task before writing.
 		if (gen !== this.callbacks.getGeneration()) return
-		await this.repo.set(updated)
+		if (!(await this.setUnlessInvalidated(updated))) return
 		// Re-check AFTER the awaited write: a token deleted during the await must
 		// not be emitted — the service's token lookup would throw and the outer
 		// batch catch would falsely fail every remaining healthy row.
@@ -387,7 +387,10 @@ export class BalanceJobQueue {
 			this.tasks.failTask(taskId, "Profile changed mid-sync")
 			return
 		}
-		await this.repo.set(updated)
+		if (!(await this.setUnlessInvalidated(updated))) {
+			this.tasks.failTask(taskId, "Balance record deleted mid-sync")
+			return
+		}
 		this.tasks.completeTask(taskId)
 		this.retryDue.delete(result.id)
 		this.transientRetries.delete(result.id)
@@ -395,6 +398,17 @@ export class BalanceJobQueue {
 		// failure path's emit.
 		if (this.callbacks.isRowEmittable?.(current) === false) return
 		this.callbacks.onBalanceUpdated(updated)
+	}
+
+	/** Writes `row`; `false` when its id was fenced while the write was in flight. The purge's delete
+	 *  may then have landed first, so the row is deleted again: storage ordering never decides
+	 *  whether a purged row survives. A fenced id is never reallocated in this worker's lifetime,
+	 *  so the delete cannot hit a successor. */
+	private async setUnlessInvalidated(row: TokenBalanceRaw): Promise<boolean> {
+		await this.repo.set(row)
+		if (!this.callbacks.isBalanceInvalidated?.(row.id)) return true
+		await this.repo.delete(row.id)
+		return false
 	}
 
 	/** Projector-level failure that survived its own catch. Every balance in

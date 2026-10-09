@@ -13,6 +13,7 @@ import { type AccountScope, accountScopeKey } from "@/wallet/services/account/sp
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
+import { canonicalNumericStorageId } from "@/wallet/services/purge-rows"
 import { TokenService, type Token, type TokenDeleted, type TokenInfo } from "@/wallet/services/token/service"
 import { ExecutionService } from "@/wallet/services/execution/service"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -97,6 +98,13 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		return this.repo.delete(id)
 	}
 
+	/** The raw purge pass's fence: a malformed row may still be mid-commit from before it turned
+	 *  malformed. Only a canonical key names a balance id; key "01" must not fence live row 1. */
+	private readonly invalidateRawKey = (storageId: string): void => {
+		const id = canonicalNumericStorageId(storageId)
+		if (id !== undefined) this.invalidatedBalanceIds.add(id)
+	}
+
 	public constructor(
 		logger: ILogger,
 		browserApi: BrowserApi,
@@ -149,7 +157,6 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		// BEFORE the Account row is deleted. No RPC surface, no event race.
 		this.accountService.registerAccountPurgeSubscriber((profileId, scopes) => this.purgeForAccounts(scopes, profileId))
 		this.tokenService.onTokenAdded.add(this.onTokenAdded)
-		this.tokenService.onTokenUpdated.add(this.onTokenUpdated)
 		this.tokenService.onTokenDeleted.add(this.onTokenDeleted)
 		this.transactionService.onTransactionUpdated.add(this.onTransactionUpdated)
 
@@ -488,20 +495,6 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		await this.lock.withLock(() => this.ensurePairsHoldingLock(pairs, gen))
 	}
 
-	private readonly onTokenUpdated = async (token: TokenInfo) => {
-		const gen = this.profileGeneration
-		const tokenRaw = await this.tokenService.getTokenRaw(token.id)
-		// Same generation fence as onTokenAdded: a switch mid-await must not let this
-		// token repopulate the active-only map or enqueue foreign rows.
-		if (gen !== this.profileGeneration || tokenRaw.profileId !== this.profile?.id) return
-		this.tokens.set(token.id, tokenRaw)
-		const rows = (await this.repo.getAll()).filter((x) => rowMatchesToken(x, tokenRaw))
-		if (gen !== this.profileGeneration) return
-		for (const tb of rows) {
-			this.queue.enqueue(tb)
-		}
-	}
-
 	private readonly onTokenDeleted = async (token: TokenDeleted) => {
 		// Synchronous, before any await: a creation that checks token liveness
 		// after this point must see the token gone.
@@ -545,6 +538,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 			await this.repo.purgeMalformed(
 				(raw) => typeof raw.token === "number" && set.has(raw.token) && raw.profileId === profileId,
 				(id) => this.logDebug(`purged malformed balance row ${id}`),
+				this.invalidateRawKey,
 			)
 		})
 		for (const id of set) {
@@ -584,6 +578,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 					typeof raw.account === "string" &&
 					keys.has(accountScopeKey(raw.chainId, raw.account)),
 				(id) => this.logDebug(`purged malformed balance row ${id}`),
+				this.invalidateRawKey,
 			)
 		})
 	}

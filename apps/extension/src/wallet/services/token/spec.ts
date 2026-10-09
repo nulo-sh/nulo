@@ -192,16 +192,6 @@ export type Methods = {
 	): TokenInfo
 
 	/**
-	 * Updates token and returns it.
-	 * @param profileId Profile id.
-	 * @param networkId Network id.
-	 * @param accountAddress Account address.
-	 * @param tokenId Token id.
-	 * @param tokenInterface Token interface, determining token's functionality.
-	 */
-	updateToken(profileId: string, networkId: string, accountAddress: string, tokenId: number, tokenInterface: TokenInterface): TokenInfo
-
-	/**
 	 * Deletes token with the specified id and returns it.
 	 * @param id Token id.
 	 */
@@ -277,8 +267,6 @@ export type TokenAdded = TokenInfo & { profileId: string }
 export type Events = {
 	/** Emitted when a new token is created */
 	onTokenAdded: TokenAdded
-	/** Emitted when an existing token is updated */
-	onTokenUpdated: TokenInfo
 	/** Emitted when an existing token is deleted */
 	onTokenDeleted: TokenDeleted
 	/** A default's status changed in this scope. An invalidation: consumers refetch `getSeedStatus`. */
