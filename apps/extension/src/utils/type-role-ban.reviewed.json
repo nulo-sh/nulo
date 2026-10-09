@@ -9368,55 +9368,5 @@
 			"role": "row-title",
 			"at": "Text \"Skip this check next time\""
 		}
-	],
-	"packages/design/src/ui/Input.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-body)",
-			"role": "input",
-			"at": ".base input"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "body",
-			"at": "Text \"Maximum length reached\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "value",
-			"at": "Text \"{{ leftText }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "value",
-			"at": "Text \"{{ leftText }}\""
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 15px",
-			"role": "input",
-			"at": ".base input"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "input",
-			"at": ".base input"
-		}
 	]
 }
