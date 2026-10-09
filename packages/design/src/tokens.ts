@@ -20,6 +20,7 @@ export const brand = {
 	secondary: "--nulo-secondary",
 	outline: "--nulo-outline",
 	border: "--nulo-border",
+	track: "--nulo-track",
 } as const
 
 export const text = {

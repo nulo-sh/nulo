@@ -339,7 +339,7 @@ Skip this phase if call 2 is "as is".
 
 **Validation gate.** Commands: the fast layers (`test:all` runs the design package); the smoke run of `tooltips-glossary.test.ts onboarding-tab.test.ts` on chrome and on firefox; `bun run --cwd apps/extension build-storybook`. Pass criteria: every command exits 0; the outlines read `2px solid` in the accent colour (back) and the page colour (tab). Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 2.3: the step bar's empty half (call 5)
+#### Phase 2.3: the step bar's empty half (call 5) ✓
 
 Skip this phase if call 5 is "as is".
 

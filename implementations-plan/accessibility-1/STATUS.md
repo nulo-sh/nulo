@@ -9,3 +9,4 @@
 - 2026-10-09: arc 2 started on the owner's page 2 picks (calls 1 A, 2 A, 5 A, 6 A); branch `accessibility-1-home-chrome` from the plan commit; `agent-worktree register` refused (branch name), no manifest row.
 - 2026-10-09: phase 2.1 gate pass: lint, typecheck:all, test, test:all; smoke home-links.test.ts on chrome and firefox (retry 0).
 - 2026-10-09: phase 2.2 gate pass: lint, typecheck:all, test, test:all, build-storybook; smoke tooltips-glossary.test.ts onboarding-tab.test.ts on chrome and firefox (retry 0).
+- 2026-10-09: phase 2.3 gate pass: lint, typecheck:all, test, test:all; network connect-one-window.test.ts on chrome and firefox (retry 0).

@@ -18,3 +18,9 @@ Commands as plan.md § Implementation phases defines them (smoke runs build firs
 
 - Red: the two source-rule tests (`SubPageHeaderBase.test.ts`, `create.test.ts`) before the rules existed; the smoke reds are above.
 - Green: unit and design tests; smoke `tooltips-glossary.test.ts onboarding-tab.test.ts` on Chrome and Firefox, retry 0, 14 of 14 each; the focused back arrow reads `solid 2px -2px` in the accent and the focused method tab `solid 2px -5px` in `--app-bg`, both browsers; fast layers; `build-storybook`.
+
+## Phase 2.3
+
+- Red: the two 3:1 rows for `--nulo-track` and the bar's source-rule test, before the token existed; the network red is above.
+- `--nulo-track` sits beside the brand tokens it belongs to, in `:root` (dark, `#68625a`) and `[theme="light"]` (`#8f8a82`); `tokens.ts` regenerated, `utilities.css` unchanged; `base.css.test.ts` re-pinned in the same commit. Ratios on the page from `contrast()`: 3.30 dark, 3.15 light (the plan's figures).
+- Green: design tests (drift, parity, hash, unthemed vs dark parity); network `connect-one-window.test.ts` on Chrome and Firefox at retry 0, 1 of 1 each; fast layers.

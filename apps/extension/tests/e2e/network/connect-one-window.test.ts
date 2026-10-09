@@ -6,6 +6,8 @@ import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveVerify, rejectCapabilities, waitForPopup } from "../fixtures/popups"
+import { shotSend } from "../fixtures/send-page"
+import { tokenColor } from "../helpers/pointer-probes"
 
 /**
  * A new connection's emoji check shows in the connect window itself: Allow keeps that window, the
@@ -19,6 +21,7 @@ type Created = { id?: number; type?: string }
 
 const ALLOW = '[data-testid="discover-allow-btn"]'
 const GRID = '[data-testid="verify-emoji-grid"]'
+const STEP_BAR = '[data-testid="connect-step-bar"]'
 const TRUST = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
 const REPEATS_KEY = "e2e:enter-repeats"
 
@@ -108,6 +111,9 @@ test.skipIf(!aztecConfig)(
 			{ timeout: 30_000, polling: 200 },
 			ALLOW,
 		)
+		await shotSend(page, "connect-step-bar", "connect-step-bar")
+		const emptyHalf = await page.$eval(`${STEP_BAR} [data-filled="false"]`, (el) => getComputedStyle(el).backgroundColor)
+		expect(emptyHalf, "step 1's empty half").toBe(await tokenColor(page, "--nulo-track"))
 
 		await recordEnterRepeats(page)
 		await page.evaluate(() => {

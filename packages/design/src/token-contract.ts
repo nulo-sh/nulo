@@ -28,6 +28,7 @@ export const tokenGroups = {
 		secondary: "--nulo-secondary",
 		outline: "--nulo-outline",
 		border: "--nulo-border",
+		track: "--nulo-track",
 	},
 	text: {
 		primary: "--txt-primary",

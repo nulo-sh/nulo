@@ -85,6 +85,8 @@
 	--nulo-outline: #4a463f;
 	--nulo-border: #231f1c;
 	--nulo-secondary: #999187;
+	/* A graphic's empty track: 3:1 on the page, unlike --nulo-border, and lighter than the light accent. */
+	--nulo-track: #68625a;
 }
 
 /* The dark palette, declared once: an unthemed root (the landing) and an explicit dark theme share
@@ -157,6 +159,7 @@
 	--nulo-outline: #c9c5bd;
 	--nulo-border: #d8d4cc;
 	--nulo-secondary: #6b655c;
+	--nulo-track: #8f8a82;
 
 	/* Explicit values — replaces the bug-on-bug `var(--nulo-surface-highest)` alias (a DARK token). */
 	--border: rgba(124, 116, 104, 0.3);
