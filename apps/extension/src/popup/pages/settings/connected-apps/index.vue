@@ -206,6 +206,7 @@ onBeforeUnmount(() => {
 }
 
 .row_grants {
+	composes: type--caption from global;
 	composes: row_sub from "../../../../components/ui/Settings/settings-row.module.css";
 }
 

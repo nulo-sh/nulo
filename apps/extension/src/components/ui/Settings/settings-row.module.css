@@ -53,21 +53,18 @@
 }
 
 .row_name {
-	font-family: var(--font-body);
+	composes: type--name from global;
 	font-size: 14px;
-	font-weight: 600;
 	color: var(--txt-primary);
 	line-height: 20px;
-	letter-spacing: 0.01em;
 
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+/* No role: its consumers differ, so each composes its own. */
 .row_sub {
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--nulo-secondary);
 	line-height: 16px;
 

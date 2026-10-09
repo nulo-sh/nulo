@@ -265,7 +265,9 @@ onBeforeUnmount(() => {
 					:key="`${acc.chainId}:${acc.address}`"
 					materialIcon="account_balance_wallet"
 					:title="getAccountAlias(acc)"
+					titleVariant="name"
 					:description="`${getChainName(acc.chainId).toUpperCase()} · ${trimAddress(acc.address, 6, 4, '...')}`"
+					descriptionVariant="data"
 					raw
 					data-testid="connected-app-account-row"
 				>

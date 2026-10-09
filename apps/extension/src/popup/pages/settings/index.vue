@@ -116,6 +116,7 @@ onBeforeUnmount(() => {
 					size="large"
 					to="/popup/settings/profile"
 					:title="appStore.profile?.name"
+					titleVariant="name"
 					:description="profileKind"
 					chevron
 					data-testid="setting-nav-profile"

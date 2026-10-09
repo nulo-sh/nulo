@@ -31,6 +31,7 @@ const isSynthetic = computed(() => props.synthetic === "public-fj")
 <template>
 	<SettingItem
 		:title="fpc.name || fpc.address"
+		:titleVariant="fpc.name ? 'row-title' : 'data'"
 		:description="fpc.typeDescription"
 		icon="fpc"
 		iconBgColor="transparent"

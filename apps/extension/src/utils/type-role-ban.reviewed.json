@@ -2555,186 +2555,6 @@
 			"at": ".toggle_active"
 		}
 	],
-	"apps/extension/src/components/ui/Dropdown/DropdownItem.vue": [
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "row-title",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "row-title",
-			"at": ".wrapper"
-		}
-	],
-	"apps/extension/src/components/ui/Dropdown/DropdownTitle.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "label-section",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "label-section",
-			"at": "Text"
-		}
-	],
-	"apps/extension/src/components/ui/Settings/ItemsContainer.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-body)",
-			"role": "body",
-			"at": ".description"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.2em",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 10px",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "body",
-			"at": ".description"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".title"
-		}
-	],
-	"apps/extension/src/components/ui/Settings/SettingField.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "name",
-			"at": "Text \"{{ value }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "name",
-			"at": "Text \"{{ value }}\""
-		}
-	],
-	"apps/extension/src/components/ui/Settings/SettingItem.vue": [
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.01em",
-			"role": "row-title",
-			"at": ".title"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "caption",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "value",
-			"at": "Text[data-testid=setting-value]"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"14\"",
-			"role": "row-title",
-			"at": "Text \"{{ title }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "caption",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "row-title",
-			"at": "Text \"{{ title }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "value",
-			"at": "Text[data-testid=setting-value]"
-		}
-	],
-	"apps/extension/src/components/ui/Settings/settings-row.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-body)",
-			"role": "name",
-			"at": ".row_name"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "data",
-			"at": ".row_sub"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.01em",
-			"role": "name",
-			"at": ".row_name"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "data",
-			"at": ".row_sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "name",
-			"at": ".row_name"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 600",
-			"role": "name",
-			"at": ".row_name"
-		}
-	],
 	"apps/extension/src/onboarding/app.vue": [
 		{
 			"rule": "face",
@@ -4893,12 +4713,6 @@
 			"text": "font-weight: 700",
 			"role": "tag",
 			"at": ".sender_chip"
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(contact.address)",
-			"role": "data",
-			"at": "span[data-testid=contact-row-address]"
 		}
 	],
 	"apps/extension/src/popup/components/modules/settings/new-profile/NewProfileCredentials.vue": [
@@ -5375,12 +5189,6 @@
 			"text": "font-weight: 700",
 			"role": "title-page",
 			"at": ".title"
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(acc.address, 6, 4, '...')",
-			"role": "data",
-			"at": "SettingItem[data-testid=account-item]"
 		}
 	],
 	"apps/extension/src/popup/components/popups/ChangeAuthwitsRegistryPopup.vue": [
@@ -7439,12 +7247,6 @@
 			"text": "weight=\"600\"",
 			"role": "name",
 			"at": "Text \"{{ session.dappMetadata.name ?\""
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(acc.address, 6, 4, '...')",
-			"role": "data",
-			"at": "SettingItem"
 		}
 	],
 	"apps/extension/src/popup/pages/settings/connected-apps/index.vue": [
@@ -8205,12 +8007,6 @@
 			"text": "weight=\"500\"",
 			"role": "body",
 			"at": "Text \"This account is not covered by\""
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(account.address, 6, 4, '...')",
-			"role": "data",
-			"at": "SettingItem[data-testid=export-account-row]"
 		}
 	],
 	"apps/extension/src/popup/pages/settings/security/export/full.vue": [
