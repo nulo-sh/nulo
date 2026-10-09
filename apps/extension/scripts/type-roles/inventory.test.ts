@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { beforeAll, describe, expect, test } from "vitest"
 import { type BranchStep, type IdentifierSite, identifierSites, type ProducerHit, producerHits, sitesInSource } from "./identifier-sites"
-import { REPO_ROOT } from "./source-scan"
+import { REPO_ROOT, sourceFiles } from "./source-scan"
 import { type Surface, surfaces } from "./surfaces"
 
 /**
@@ -84,23 +84,30 @@ function siteProblems(entry: SiteEntry, surfaceIds: ReadonlySet<string>): string
 	return problems
 }
 
+/** Whether the component a site renders through puts `testid` on an element of its own template. */
+function declaresInside(component: string, testid: string): boolean {
+	const files = sourceFiles().filter((file) => file.endsWith(`/${component}.vue`))
+	return files.some((file) => read(file).includes(`data-testid="${testid}"`))
+}
+
 /**
  * Whether a selector's last testid is the site's own element: its own testid (a bound template
- * literal matches any text in place of its `${…}`, a bound name is the caller's to choose), or one no
- * ancestor in the site's file carries, so one inside the component the site renders through.
+ * literal matches any text in place of its `${…}`; a bound name, chosen by the caller, may be no
+ * ancestor's), or, under its own or no testid, one the component it renders through declares.
  */
 function namesOwnElement(site: IdentifierSite, selector: readonly string[]): boolean {
 	const testid = selector.at(-1) ?? ""
 	const own = site.ownTestid
-	const inside = !site.testids.includes(testid)
-	if (own === null) return inside
-	if (!own.bound) return own.text === testid || (selector.includes(own.text) && inside)
-	if (!own.text.startsWith("`")) return true
-	const pattern = own.text
-		.slice(1, -1)
-		.split(/\$\{[^}]*\}/)
-		.map((part) => part.replace(/[.*+?^$()|[\]\\]/g, "\\$&"))
-	return new RegExp(`^${pattern.join(".*")}$`).test(testid)
+	if (own?.bound && !own.text.startsWith("`")) return !site.testids.includes(testid)
+	if (own?.bound) {
+		const pattern = own.text
+			.slice(1, -1)
+			.split(/\$\{[^}]*\}/)
+			.map((part) => part.replace(/[.*+?^$()|[\]\\]/g, "\\$&"))
+		return new RegExp(`^${pattern.join(".*")}$`).test(testid)
+	}
+	if (own?.text === testid) return true
+	return (own === null || selector.includes(own.text)) && declaresInside(site.component, testid)
 }
 
 /** Why a group of entries that share one surface and one selector cannot be told apart, or nothing. */

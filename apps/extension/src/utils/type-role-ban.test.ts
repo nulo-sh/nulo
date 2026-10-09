@@ -84,8 +84,8 @@ const STRING_PICKS: readonly (readonly [RuleId, RegExp])[] = [
 	["tracking", /letter-spacing\s*:\s*[^;"'`]*/i],
 	["case", /text-transform\s*:\s*uppercase/i],
 ]
-/** A `font` shorthand in a style string, judged through its longhands. */
-const STRING_FONT = /(?<![\w-])font\s*:\s*([^;"'`]*)/i
+/** A `font` shorthand in a style string, judged through its longhands; a later one wins, so each is judged. */
+const STRING_FONT = /(?<![\w-])font\s*:\s*([^;"'`]*)/gi
 
 type Finding = { file: string; rule: RuleId; text: string; at: string; line: number; selector?: string; hard?: string }
 type Entry = { rule: RuleId; text: string; role: TypeRole | "carve-out" | "drop"; at: string }
@@ -301,10 +301,12 @@ function stringPick(text: string, context: ScriptContext): readonly [RuleId, str
 		const match = pattern.exec(text)
 		if (match) return [rule, match[0]]
 	}
-	const font = STRING_FONT.exec(text)
-	const value = font?.[1].trim() ?? ""
-	const rule = font && judge("font", value, { module: context.module, carrier: context.carrier, mono: MONO_FAMILY.test(value) })
-	return rule ? [rule, font[0]] : undefined
+	for (const font of text.matchAll(STRING_FONT)) {
+		const value = font[1].trim()
+		const rule = judge("font", value, { module: context.module, carrier: context.carrier, mono: MONO_FAMILY.test(value) })
+		if (rule) return [rule, font[0]]
+	}
+	return undefined
 }
 
 function scanString(scan: Scan, tree: ts.SourceFile, node: ts.Node, context: ScriptContext): void {
@@ -808,6 +810,11 @@ describe("type role ban rules", () => {
 		["script: a font shorthand key", '<script setup>const s = { font: "700 12px serif" }</script>', ["face"]],
 		["a bound :style string with a font shorthand", "<template><span :style=\"'font: 700 12px serif'\">x</span></template>", ["face"]],
 		["a font: inherit style string passes", "<template><span :style=\"'font: inherit'\">x</span></template>", []],
+		[
+			"a font shorthand after a font: inherit",
+			"<template><span :style=\"'font: inherit; font: 700 9px monospace'\">x</span></template>",
+			["face"],
+		],
 	])("%s", (_case, source, rules) => {
 		expect(rulesOf("x.vue", source)).toEqual(rules)
 	})

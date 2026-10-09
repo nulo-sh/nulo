@@ -655,7 +655,7 @@
 			"branch": "",
 			"ordinal": 0,
 			"role": "data",
-			"selector": "[data-testid=\"manage-accounts-row\"] [data-testid=\"setting-description\"]",
+			"selector": "[data-testid=\"manage-accounts-row\"] [data-testid=\"manage-accounts-address\"]",
 			"surface": "popup-settings-accounts",
 			"state": "",
 			"liveFrom": 4
