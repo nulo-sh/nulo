@@ -198,12 +198,6 @@
 		},
 		{
 			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "body",
-			"at": "Text \"{{ getDisplayName(kind, k) }}\""
-		},
-		{
-			"rule": "text-prop",
 			"text": "weight=\"500\"",
 			"role": "body",
 			"at": "Text \"Nothing was found\""
@@ -3745,24 +3739,6 @@
 			"text": "letter-spacing: 0.1em",
 			"role": "tag",
 			"at": ".tag"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"11\"",
-			"role": "caption",
-			"at": "Text \"{{ method.disabled && method.d\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "name",
-			"at": "Text \"{{ method.title }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "name",
-			"at": "Text \"{{ method.title }}\""
 		},
 		{
 			"rule": "faceless",

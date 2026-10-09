@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" icon="user" raw />
+				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 		</div>
 

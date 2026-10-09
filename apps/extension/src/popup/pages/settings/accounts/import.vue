@@ -221,6 +221,7 @@ const collapsingLabel = "Import Account"
 					<SettingItem
 						size="large"
 						:title="accountName.trim() || 'Account'"
+						titleVariant="name"
 						icon="user"
 						raw
 						data-testid="import-account-preview"

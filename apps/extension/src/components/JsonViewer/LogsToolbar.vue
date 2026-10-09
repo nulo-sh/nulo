@@ -118,7 +118,7 @@ const filteredKeys = (kind, filters, search) => {
 				<DropdownItem @click="emit('exportCsv')" :class="$style.filter_content_item">
 					<Flex align="center" gap="8">
 						<Icon name="download-outline" size="12" />
-						<Text size="12">Export logs to CSV</Text>
+						<Text variant="body">Export logs to CSV</Text>
 					</Flex>
 				</DropdownItem>
 				<DropdownItem @click="emit('clearLogs')" :class="$style.filter_content_item">
