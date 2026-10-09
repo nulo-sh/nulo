@@ -1,8 +1,8 @@
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
-import type { AztecTestConfig } from "../fixtures/aztec"
-import { clickByTestId, type ExtensionContext, test } from "../fixtures/extension"
-import { requestPgBundle, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { type AztecTestConfig, deployDelegatedPullRig, ensureStandardPublicChecks } from "../fixtures/aztec"
+import { clickByTestId, type ExtensionContext, grantCapBundle, test } from "../fixtures/extension"
+import { requestPgBundle, setPgInput, setPgTextarea, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import {
 	rejectCapabilities,
 	rejectExecute,
@@ -152,5 +152,49 @@ test.skipIf(!hasConfig)(
 			expect((await waitForPgResult(pg, request.method, seq, 30_000)).status).toBe("error")
 		}
 		expect([...shown].sort()).toEqual(["address", "name"])
+	},
+)
+
+/** A contract instance as the playground's textareas take it: bigints and field-likes as strings. */
+async function instanceJson(address: string): Promise<string> {
+	const { createAztecNodeClient } = await import("@aztec-labs/aztec.js/node")
+	const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
+	const instance = await createAztecNodeClient(aztecConfig!.nodeUrl).getContract(AztecAddress.fromStringUnsafe(address))
+	if (!instance) throw new Error(`no contract instance at ${address}`)
+	return JSON.stringify(instance, (_k, x) => {
+		if (typeof x === "bigint") return x.toString()
+		const ctor = x && typeof x === "object" ? Object.getPrototypeOf(x)?.constructor?.name : undefined
+		return ctor === "Fr" || ctor === "AztecAddress" || ctor === "EthAddress" ? x.toString() : x
+	})
+}
+
+test.skipIf(!hasConfig)(
+	"the execute window holds its roles on a send whose simulation discovers an authwit",
+	{ timeout: 600_000 },
+	async ({ dappConnectedExtensionPerTest: ctx }) => {
+		const pg = ctx.playgroundPage
+		const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
+		await ensureStandardPublicChecks(aztecConfig!)
+		const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, account!)
+		await setPgInput(pg, "consumerAddress", consumerAddress)
+		await setPgInput(pg, "amount", "100")
+		await setPgTextarea(pg, "delegatedTokenInstance", await instanceJson(pullTokenAddress))
+		await setPgTextarea(pg, "delegatedConsumerInstance", await instanceJson(consumerAddress))
+		const seq = await snapshotResultSeq(pg)
+		const win = await openExecute(ctx, {
+			method: "sendTx",
+			button: "pg-btn-sendTx-delegated",
+			inputs: {},
+			ready: sel("execute-discovered-caller"),
+			states: [],
+		})
+		try {
+			const [observation] = await sweepWindow(win, "windows-execute", ["a send with a discovered authwit (network)"])
+			const asserted = observation!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)
+			expect(asserted).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
+		} finally {
+			await dismiss(win, rejectExecute)
+		}
+		expect((await waitForPgResult(pg, "sendTx", seq, 30_000)).status).toBe("error")
 	},
 )

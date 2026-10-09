@@ -821,6 +821,32 @@ export async function deployDelegatedPullRig(
 	}
 }
 
+/**
+ * Publishes the standard `PublicChecks` contract at its canonical address, which the local network
+ * leaves unpublished (it publishes only the standard AuthRegistry, by the same two steps, and seeds
+ * neither at genesis). The Crowdfunding consumer of `deployDelegatedPullRig` calls it, so its pull
+ * cannot simulate, and no authwit is discovered, until it exists. Idempotent.
+ */
+export async function ensureStandardPublicChecks(aztecConfig: AztecTestConfig): Promise<void> {
+	const { publishContractClass, publishInstance } = await import("@aztec-labs/aztec.js/deployment")
+	const { PublicChecksArtifact, getStandardPublicChecks } = await import("@aztec-labs/standard-contracts/public-checks")
+	const { instance, contractClass } = await getStandardPublicChecks()
+	const { wallet, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+	try {
+		const from = AztecAddress.fromStringUnsafe(aztecConfig.minterAddress)
+		const fee = { ...(await createSponsoredFeeOptions(wallet)), gasSettings: E2E_FEE_GAS }
+		const send = { from, fee, wait: { timeout: 120 } } as never
+		if (!(await wallet.getContractClassMetadata(contractClass.id)).isContractClassPubliclyRegistered) {
+			await (await publishContractClass(wallet as never, PublicChecksArtifact)).send(send)
+		}
+		if (!(await wallet.getContractMetadata(instance.address)).isContractPublished) {
+			await publishInstance(wallet as never, instance).send(send)
+		}
+	} finally {
+		await cleanup()
+	}
+}
+
 /** Wait until the node reports `txHash` proven or finalized with a successful execution: a flow's
  *  next step may read state the tx wrote, and the wallet resolves a dApp's send at submission.
  *  Rejects when the node reports it dropped, when its public execution reverted, when a receipt read
