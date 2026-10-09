@@ -11,3 +11,4 @@
 - 2026-10-09: gate 1.2 pass (lint, typecheck:all, account/ 9 files 105/105; parked-construction case asserts all three zero while construction waits).
 - 2026-10-09: gate 1.3 pass (lint, typecheck:all, encoding 14/14, passkey-ceremony + dapp-session 92/92, passkey neighbours 66/66).
 - 2026-10-09: gate 1.4 pass (lint, typecheck:all, composables + profile + serialization 57 files 1191/1191).
+- 2026-10-09: gate 1.5 pass (lint, typecheck:all, wallet-core migration 60/60, extension storage + backup 105/105; the value-key appender control is reported non-idempotent; the parked-read case fails with the post-await re-check removed).

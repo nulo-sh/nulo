@@ -8,8 +8,19 @@ import { errorMessageFromUnknown } from "../utils/errors"
  *  backup may be the only other copy of a row. */
 export class StagingArea implements MigrationArea {
 	private readonly staged = new Map<string, { op: "set"; raw: string } | { op: "remove" }>()
+	private revoked = false
 
 	constructor(private readonly store: MinimalStorageArea) {}
+
+	/** Ends this area for an `up()` the engine abandoned: every later call throws, and a read
+	 *  already awaiting the store throws when it resumes, so no live data reaches it after this. */
+	revoke(): void {
+		this.revoked = true
+	}
+
+	private assertLive(): void {
+		if (this.revoked) throw new Error("migration staging area revoked")
+	}
 
 	private static parse(fullKey: string, raw: unknown): unknown {
 		try {
@@ -24,8 +35,10 @@ export class StagingArea implements MigrationArea {
 	// parameter is a call-site assertion over untrusted JSON; the ENGINE deals
 	// in unknown and validation stays the migration's job (see MigrationArea).
 	async rows<T = unknown>(root: string): Promise<Array<[string, T]>> {
+		this.assertLive()
 		const prefix = `${root}@`
 		const live = await this.store.get()
+		this.assertLive()
 		const merged = new Map<string, unknown>()
 		for (const [k, v] of Object.entries(live)) if (k.startsWith(prefix)) merged.set(k, v)
 		for (const [k, s] of this.staged) {
@@ -39,22 +52,27 @@ export class StagingArea implements MigrationArea {
 	}
 
 	async setRows<T = unknown>(root: string, upserts: Array<[string, T]>, deletes: string[] = []): Promise<void> {
+		this.assertLive()
 		for (const [id, value] of upserts) this.staged.set(`${root}@${id}`, { op: "set", raw: JSON.stringify(value) })
 		for (const id of deletes) this.staged.set(`${root}@${id}`, { op: "remove" })
 	}
 
 	async value<T = unknown>(key: string): Promise<T | undefined> {
+		this.assertLive()
 		const s = this.staged.get(key)
 		if (s) return s.op === "remove" ? undefined : (StagingArea.parse(key, s.raw) as T)
 		const live = await this.store.get(key)
+		this.assertLive()
 		return key in live ? (StagingArea.parse(key, live[key]) as T) : undefined
 	}
 
 	async setValue<T = unknown>(key: string, value: T): Promise<void> {
+		this.assertLive()
 		this.staged.set(key, { op: "set", raw: JSON.stringify(value) })
 	}
 
 	async deleteValue(key: string): Promise<void> {
+		this.assertLive()
 		this.staged.set(key, { op: "remove" })
 	}
 

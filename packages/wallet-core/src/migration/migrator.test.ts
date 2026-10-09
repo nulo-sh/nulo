@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { EntityStorage } from "../storage/entity_storage"
 import { MemoryStorageArea } from "../storage/memory-storage-area"
 import { Migrator, RESERVED_KEYS, SCHEMA_RUNNING_KEY, SCHEMA_VERSION_KEY } from "./migrator"
@@ -14,13 +14,19 @@ class MemStore extends MemoryStorageArea {
 	failRemoveKeysOnce?: Set<string>
 	/** If true, the next `get()` throws (simulates a read failure at boot). */
 	failNextGet = false
+	/** If set, the next `get()` reads the store, then waits for this before answering. */
+	parkNextGet?: Promise<void>
 
 	override async get(keys?: string | string[]): Promise<Record<string, unknown>> {
 		if (this.failNextGet) {
 			this.failNextGet = false
 			throw new Error("injected get failure")
 		}
-		return super.get(keys)
+		const park = this.parkNextGet
+		this.parkNextGet = undefined
+		const out = await super.get(keys)
+		if (park) await park
+		return out
 	}
 
 	override async set(items: Record<string, unknown>): Promise<void> {
@@ -481,6 +487,100 @@ describe("Migrator — resume refuses a journal its registry did not write", () 
 		})
 		expect(store.obj("acct", "a")).toEqual({ n: 0 })
 		expect(await mk().run()).toEqual({ kind: "migrated", from: 0, to: 1 })
+	})
+
+	test("a forged journal whose refs match is trusted: it empties its footprint and nothing outside it", async () => {
+		const store = new MemStore()
+			.seed(ver(0))
+			.seed(row("acct", "a", { n: 5 }))
+			.seed(row("profiles", "p", { id: "p" }))
+			.seed(journal(1, [rootRef("acct")], {}))
+		const r = await new Migrator({ store, migrations: [patchRows(1, "acct", {})] }).run()
+		expect(r).toMatchObject({ kind: "needs-recovery", reason: "migration 1 was interrupted mid-write (restored cleanly)" })
+		expect(store.has("acct@a")).toBe(false)
+		expect(store.obj("profiles", "p")).toEqual({ id: "p" })
+	})
+})
+
+describe("Migrator — a stuck up() fails at the watchdog bound", () => {
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const INTERRUPTED = "migration 1 was interrupted mid-write (restored cleanly)"
+	const seeded = () => new MemStore().seed(ver(0)).seed(row("acct", "a", { n: 0 }))
+	const stuck = (up: Migration["up"]): Migration => defineMigration({ ...patchRows(1, "acct", {}), up })
+
+	test("an up() that never settles fails at 60 s: footprint intact, one attempt, barrier cleared", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		const migration = stuck(async (ctx) => {
+			await ctx.local.setRows("acct", [["a", { n: 9 }]])
+			await new Promise(() => {})
+		})
+		let settled = false
+		const run = new Migrator({ store, migrations: [migration] }).run().finally(() => {
+			settled = true
+		})
+		await vi.advanceTimersByTimeAsync(59_999)
+		expect(settled).toBe(false)
+		await vi.advanceTimersByTimeAsync(1)
+		expect(await run).toEqual({ kind: "failed", version: 1, breaking: true, reason: INTERRUPTED, attempts: 1, terminal: false })
+		expect(store.obj("acct", "a")).toEqual({ n: 0 })
+		expect([store.has(SCHEMA_RUNNING_KEY), store.has(BACKUP_KEY)]).toEqual([false, false])
+		expect((await store.get(ATTEMPTS_KEY))[ATTEMPTS_KEY]).toEqual({ version: 1, phase: "up", count: 1 })
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
+	test("after the bound the abandoned up() reads and writes nothing, a parked read included", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		let release!: () => void
+		const gate = new Promise<void>((r) => {
+			release = r
+		})
+		const outcomes: string[] = []
+		let finished!: () => void
+		const done = new Promise<void>((r) => {
+			finished = r
+		})
+		const record = async (label: string, call: () => Promise<unknown>) => {
+			await call().then(
+				() => outcomes.push(`${label}: ok`),
+				(err: Error) => outcomes.push(`${label}: ${err.message}`),
+			)
+		}
+		const migration = stuck(async (ctx) => {
+			store.parkNextGet = gate
+			await record("parked read", () => ctx.local.value("acct@a"))
+			await record("read", () => ctx.local.rows("acct"))
+			await record("write", () => ctx.local.setRows("acct", [["a", { n: 9 }]]))
+			finished()
+		})
+		const run = new Migrator({ store, migrations: [migration], upTimeoutMs: 1_000 }).run()
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(await run).toMatchObject({ kind: "failed", reason: INTERRUPTED })
+		const after = structuredClone(store.data)
+		release()
+		await done
+		const revoked = "migration staging area revoked"
+		expect(outcomes).toEqual([`parked read: ${revoked}`, `read: ${revoked}`, `write: ${revoked}`])
+		expect(store.data).toEqual(after)
+		expect(store.obj("acct", "a")).toEqual({ n: 0 })
+	})
+
+	test("(control) an up() that settles inside the bound commits", async () => {
+		vi.useFakeTimers()
+		const store = seeded()
+		const migration = stuck(async (ctx) => {
+			await new Promise((r) => setTimeout(r, 30_000))
+			await ctx.local.setRows("acct", [["a", { n: 9 }]])
+		})
+		const run = new Migrator({ store, migrations: [migration] }).run()
+		await vi.advanceTimersByTimeAsync(30_000)
+		expect(await run).toEqual({ kind: "migrated", from: 0, to: 1 })
+		expect(store.obj("acct", "a")).toEqual({ n: 9 })
+		expect(vi.getTimerCount()).toBe(0)
 	})
 })
 

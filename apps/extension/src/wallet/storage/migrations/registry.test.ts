@@ -1,6 +1,9 @@
-import { Migrator, RESERVED_KEYS, SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
+import { defineMigration, type Migration, Migrator, RESERVED_KEYS, SCHEMA_VERSION_KEY } from "@nulo/wallet-core/migration"
 import { describe, expect, test } from "vitest"
-import { BASELINE_VERSION, migrations } from "./index"
+import { backupMigrationFixture } from "@/e2e/backup-migration-fixture"
+import { MIGRATION_FIXTURE_ROOT, migrationFixture } from "@/e2e/migration-fixture"
+import { CONTACT_STORAGE_ROOT } from "@/wallet/services/contact/spec"
+import { BASELINE_VERSION, backupMigrations, migrations, realMigrations } from "./index"
 
 /** Minimal in-memory store for structural registry checks. */
 function memStore() {
@@ -23,9 +26,34 @@ function memStore() {
 	}
 }
 
-/** Structural invariants over the REAL registry — every migration that ever
- *  lands here is checked, so a non-idempotent or mis-versioned entry fails the
- *  unit gate the moment it's registered. (Empty registry ⇒ vacuously green.) */
+/** Runs `m` from its prior version over `seed` twice; returns the store's non-reserved contents
+ *  before the first run and after each run, each run asserted to have succeeded. */
+async function runTwice(m: Migration, seed: Record<string, unknown>): Promise<[string, string, string]> {
+	const store = memStore()
+	await store.set(seed)
+	const contents = () => JSON.stringify(Object.fromEntries([...store.data].filter(([k]) => !RESERVED_KEYS.includes(k))))
+	const pass = async () => {
+		await store.set({ [SCHEMA_VERSION_KEY]: m.version - 1 })
+		const result = await new Migrator({ store, migrations: [m] }).run()
+		expect(result, `migration ${m.version} did not run`).toEqual({ kind: "migrated", from: m.version - 1, to: m.version })
+		return contents()
+	}
+	const before = contents()
+	return [before, await pass(), await pass()]
+}
+
+const legacyRow = (root: string) => ({ [`${root}@seed`]: JSON.stringify({ id: "seed", legacyName: "Ada" }) })
+
+/** Every migration the wallet can run, real or fixture, once each: the two fixtures share version
+ *  9001, so they are told apart by identity. Each needs a pre-shape seed its `up()` transforms. */
+const UNDER_TEST = [...new Set([...realMigrations, ...migrations, ...backupMigrations, migrationFixture, backupMigrationFixture])]
+const SEEDS = new Map<Migration, Record<string, unknown>>([
+	[migrationFixture, legacyRow(MIGRATION_FIXTURE_ROOT)],
+	[backupMigrationFixture, legacyRow(CONTACT_STORAGE_ROOT)],
+])
+
+/** Structural invariants over the registry and both e2e fixtures, so a non-idempotent or
+ *  mis-versioned entry fails the unit gate the moment it is registered. */
 describe("migrations registry (structural)", () => {
 	test("versions are unique, ascending, and above the baseline", () => {
 		const versions = migrations.map((m) => m.version)
@@ -59,26 +87,37 @@ describe("migrations registry (structural)", () => {
 		}
 	})
 
-	test("every registered migration declares a footprint", () => {
-		for (const m of migrations) {
+	test("every migration declares a footprint", () => {
+		for (const m of UNDER_TEST) {
 			expect(m.reads.length + m.writes.length, `migration ${m.version} declares no refs`).toBeGreaterThan(0)
 		}
 	})
 
-	// Empty-store double-runs catch structural non-idempotency only; a row
-	// transform can pass vacuously here. Every REAL migration must ship its own
-	// colocated test with seeded pre-shape fixtures (see template.ts step 6) —
-	// this is the safety net, not the proof.
-	test("every registered migration is idempotent (run twice ≡ once) from an empty store", async () => {
-		for (const m of migrations) {
-			const store = memStore()
-			await store.set({ [SCHEMA_VERSION_KEY]: m.version - 1 })
-			await new Migrator({ store, migrations: [m] }).run()
-			const nonReserved = () => JSON.stringify(Object.fromEntries([...store.data].filter(([k]) => !RESERVED_KEYS.includes(k))))
-			const once = nonReserved()
-			await store.set({ [SCHEMA_VERSION_KEY]: m.version - 1 })
-			await new Migrator({ store, migrations: [m] }).run()
-			expect(nonReserved(), `migration ${m.version} is not idempotent`).toBe(once)
+	// Every REAL migration still ships its own colocated test with seeded pre-shape fixtures
+	// (template.ts step 6); this is the safety net, not the proof.
+	test("every migration transforms its seed and is idempotent (run twice ≡ once)", async () => {
+		expect(UNDER_TEST.length).toBeGreaterThanOrEqual(2)
+		for (const m of UNDER_TEST) {
+			const seed = SEEDS.get(m)
+			expect(seed, `migration ${m.version} has no pre-shape seed here`).toBeDefined()
+			const [before, once, twice] = await runTwice(m, seed ?? {})
+			expect(once, `migration ${m.version} left its seed unchanged`).not.toBe(before)
+			expect(twice, `migration ${m.version} is not idempotent`).toBe(once)
 		}
+	})
+
+	test("(control) the same check reports a migration that appends to a value key", async () => {
+		const key = "nulo:test:log"
+		const appender = defineMigration({
+			version: 2,
+			description: "appends on every run",
+			reads: [{ kind: "value", key }],
+			writes: [{ kind: "value", key }],
+			up: async (ctx) => {
+				await ctx.local.setValue(key, [...((await ctx.local.value<string[]>(key)) ?? []), "run"])
+			},
+		})
+		const [, once, twice] = await runTwice(appender, {})
+		expect(twice).not.toBe(once)
 	})
 })
