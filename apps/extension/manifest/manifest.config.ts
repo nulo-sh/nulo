@@ -59,6 +59,7 @@ export default {
 			// 'unsafe-inline' off for the Presto banner's inline stylesheet.
 			"style-src 'self' 'unsafe-inline'",
 			"frame-src 'self'",
+			"media-src 'self'",
 		].join("; "),
 	},
 	cross_origin_embedder_policy: {
