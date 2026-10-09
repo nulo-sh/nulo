@@ -6,6 +6,7 @@
  */
 
 import { EXTENSION_PACKAGE_JSON, LOCKFILE, lockWithVersion, packageVersion, releaseBranch } from "./lock-version"
+import { command } from "./workflow-command"
 
 export interface LockIO {
 	head(branch: string): Promise<string>
@@ -52,7 +53,7 @@ export async function runLockVersion(prJson: string, io: LockIO): Promise<0 | 1>
 }
 
 function fail(io: LockIO, reason: string): 1 {
-	io.log(`::error::${reason}`)
+	io.log(command("error", reason))
 	return 1
 }
 
@@ -106,7 +107,7 @@ if (import.meta.main) {
 	try {
 		process.exit(await runLockVersion(process.env.PR_JSON ?? "", io))
 	} catch (e) {
-		console.log(`::error::${e instanceof Error ? e.message : "unexpected failure"}`)
+		console.log(command("error", e instanceof Error ? e.message : "unexpected failure"))
 		process.exit(1)
 	}
 }

@@ -13,6 +13,7 @@
  */
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { command } from "../release/workflow-command"
 
 export type AssertionResult = { title: string; status: string }
 export type FileResult = { name: string; status: string; assertionResults: AssertionResult[] }
@@ -64,7 +65,7 @@ function readReport(path: string): CanaryReport {
 	try {
 		return JSON.parse(readFileSync(path, "utf8"))
 	} catch (error) {
-		console.error(`::error::canary report unreadable at ${path}: ${error instanceof Error ? error.message : String(error)}`)
+		console.error(command("error", `canary report unreadable at ${path}: ${error instanceof Error ? error.message : String(error)}`))
 		process.exit(1)
 	}
 }
@@ -76,7 +77,7 @@ if (import.meta.main) {
 		process.exit(2)
 	}
 	const problems = canaryProblems(readReport(reportPath), files, loadExpectations())
-	for (const problem of problems) console.error(`::error::canary results: ${problem}`)
+	for (const problem of problems) console.error(command("error", `canary results: ${problem}`))
 	if (problems.length > 0) process.exit(1)
 	console.log(`canary results: ${files.length} file(s) present, every test passed`)
 }

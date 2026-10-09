@@ -16,6 +16,7 @@
  */
 
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL, type AutoUnstickAction, decideUnstick } from "./auto-unstick"
+import { command } from "./workflow-command"
 
 export interface MergedPrRef {
 	number: number
@@ -182,7 +183,7 @@ if (import.meta.main) {
 
 	const version = process.env.VERSION?.trim() || ((await Bun.file("package.json").json()) as { version: string }).version
 	const flag = parseAutoUnstickFlag(process.env.AUTO_UNSTICK_ENABLED)
-	if (flag.warning) console.log(`::warning::${flag.warning}`)
+	if (flag.warning) console.log(command("warning", flag.warning))
 
 	const result = await runUnstick({
 		autoUnstickEnabled: flag.enabled,

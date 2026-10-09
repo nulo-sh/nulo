@@ -180,6 +180,17 @@ describe("apply", () => {
 		expect(logs.join("\n")).toContain("now belongs to v9.9.9")
 	})
 
+	test("the refusal prints the tag name GitHub returns as escaped command data", async () => {
+		const world: World = { releases: [], tags: new Map([["v1.2.3", SHA]]), retarget: "v9.9.9\n::warning::y##[error]z" }
+		const { exit, logs } = run(world, "apply", "--expect", "publish")
+		expect(await exit).toBe(1)
+		const physical = logs.flatMap((l) => l.split(/\r\n|\r|\n/))
+		expect(physical.filter((l) => l.startsWith("::"))).toEqual([
+			expect.stringMatching(/^::error::draft \d+ now belongs to v9\.9\.9%0A::warning::y/),
+		])
+		expect(physical.filter((l) => l.includes("##["))).toEqual([])
+	})
+
 	test("refuses when the release changed since plan", async () => {
 		const { exit, calls } = run({ releases: [complete()], tags: new Map([["v1.2.3", SHA]]) }, "apply", "--expect", "publish")
 		expect(await exit).toBe(1)
