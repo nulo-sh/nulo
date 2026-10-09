@@ -18,6 +18,8 @@ import {
 import { type OwnedState, clearLock, isPidAlive, killOrphanByPid, newAztecDataDir, readLock, writeLock } from "./lockfile"
 import { markBootReady, markBootStarted } from "./sentinel"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
+import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
+import { killProcessGroup } from "./process-group"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Resolved here so an unusable selector fails before this file boots anvil, a node and a
@@ -147,45 +149,6 @@ async function waitForHttp(url: string, timeoutMs = 30_000): Promise<void> {
 		await new Promise((r) => setTimeout(r, 500))
 	}
 	throw new Error(`Timed out waiting for ${url} (${timeoutMs}ms)`)
-}
-
-/** Single-shot anvil JSON-RPC eth_blockNumber probe. Confirms the L1 is
- *  speaking JSON-RPC, not just answering HTTP. */
-async function probeAnvil(url: string, timeoutMs = 1500): Promise<boolean> {
-	return new Promise((resolve) => {
-		const u = new URL(url)
-		const req = http.request(
-			{
-				hostname: u.hostname,
-				port: u.port,
-				path: "/",
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				timeout: timeoutMs,
-			},
-			(res) => {
-				let body = ""
-				res.on("data", (c) => {
-					body += c.toString()
-				})
-				res.on("end", () => {
-					try {
-						const parsed = JSON.parse(body)
-						resolve(typeof parsed.result === "string")
-					} catch {
-						resolve(false)
-					}
-				})
-			},
-		)
-		req.on("error", () => resolve(false))
-		req.on("timeout", () => {
-			req.destroy()
-			resolve(false)
-		})
-		req.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }))
-		req.end()
-	})
 }
 
 async function waitForAnvil(url: string, timeoutMs = 30_000): Promise<void> {
@@ -376,7 +339,7 @@ function reapPrior(priorLock: OwnedState): void {
 }
 
 // ── Anvil (L1) ─────────────────────────────────────────────────────
-/** Probe first: an anvil already speaking JSON-RPC on our port is adopted, never respawned. */
+/** Probe first: an L1 on chain 31337 already speaking JSON-RPC on our port is adopted, never respawned. */
 async function ensureAnvil(): Promise<"ready" | "skip"> {
 	const anvilAlreadyRunning = await probeAnvil(ANVIL_URL)
 	if (anvilAlreadyRunning) {
@@ -405,7 +368,7 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 	console.log("[e2e-setup] Starting anvil at", ANVIL_URL, "...")
 	anvilProcess = spawn(
 		ANVIL_BIN,
-		["--host", "127.0.0.1", "--port", String(ANVIL_PORT), "--chain-id", "31337", "--slots-in-an-epoch", "1", "--silent"],
+		["--host", "127.0.0.1", "--port", String(ANVIL_PORT), "--chain-id", String(ANVIL_CHAIN_ID), "--slots-in-an-epoch", "1", "--silent"],
 		{
 			stdio: "pipe",
 			detached: true,
@@ -830,41 +793,6 @@ export async function teardown() {
 
 	if (weOwnLock) clearLock()
 	killOrphanChromes()
-}
-
-/**
- * Send SIGTERM to the process group, wait up to 5s for clean exit, then
- * SIGKILL escalate. Synchronous best-effort fallback for the `process.on("exit")`
- * path lives in `bestEffortKill` below.
- */
-async function killProcessGroup(child: ChildProcess | null, label: string, weStarted: boolean): Promise<void> {
-	if (!child?.pid || !weStarted) return
-	console.log(`[e2e-setup] Stopping ${label} (pid=${child.pid})...`)
-	try {
-		process.kill(-child.pid, "SIGTERM")
-	} catch {
-		try {
-			child.kill("SIGTERM")
-		} catch {
-			// ignore
-		}
-	}
-	const start = Date.now()
-	while (child.exitCode === null && !child.killed && Date.now() - start < 5_000) {
-		await new Promise((r) => setTimeout(r, 100))
-	}
-	if (child.exitCode === null && !child.killed) {
-		console.warn(`[e2e-setup] ${label} did not exit on SIGTERM; sending SIGKILL`)
-		try {
-			process.kill(-child.pid, "SIGKILL")
-		} catch {
-			try {
-				child.kill("SIGKILL")
-			} catch {
-				// ignore
-			}
-		}
-	}
 }
 
 /** Best-effort sync kill for the `process.on("exit")` path. Sync-only:
