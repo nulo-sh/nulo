@@ -597,6 +597,8 @@ None rejected.
 
 None rejected.
 
+- **Codex round 2 (resumed session): clean.** It re-probed both timeout outcomes (a clean restore reports the "(restored cleanly)" sentence; a failed one keeps the journal and the barrier and says only "interrupted mid-write") and found nothing further in the arc. The loop converged in two rounds.
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, opened only after the arc's gates pass and its Codex loop converges.

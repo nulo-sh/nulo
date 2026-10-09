@@ -28,7 +28,7 @@
 ## Phase 1.5 (#146)
 
 - A watchdog failure carries the migration's own `breaking` flag (`defineMigration` defaults it to `true`), like any other `up()` failure.
-- If the restore itself fails after a timeout, the reason reads "failed to restore after migration N failed: … (migration error: migration N was interrupted mid-write (restored cleanly))". That nesting already exists for any `up()` error; reaching it needs storage to fail during the restore. Left as is (OA-6 keeps today's words).
+- If the restore itself fails after a timeout, the reason reads "failed to restore after migration N failed: … (migration error: migration N was interrupted mid-write (restored cleanly))". That nesting already exists for any `up()` error; reaching it needs storage to fail during the restore. First left as is, then fixed in review (A1-2): the inner text now stops at "interrupted mid-write".
 - The parked-read case fails when the post-await re-check in `StagingArea.value` is removed (mutation checked once).
 - `registry.test.ts`: a `SEEDS` map keyed by migration object holds a pre-shape seed for each migration under test; a migration with no seed fails the check, so the first real migration adds its seed in the same PR. Each run must end `migrated`, and the first run must change the seed.
 
@@ -40,3 +40,4 @@
 ## Review loop
 
 - Codex round 1: approve with fixes (one Low). Opus review: approve (three Lows). All four verified and accepted; plan.md § Arc 1 implementation review has the table.
+- Codex round 2: clean. Converged in two rounds.
