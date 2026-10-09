@@ -90,7 +90,7 @@ This matches passkey profile behavior (which always requires fresh auth on
 SW death — see below): in strict mode both profile types behave the same way
 on SW death.
 
-**Opt-out: lenient mode** — Settings → Security → "Strict security mode" →
+**Opt-out: lenient mode** — Settings → Lock → "Strict security mode" →
 toggle OFF (with a confirm dialog). A password-profile session opened from
 then on also persists a silent-restore bearer (`SessionSecretBox`,
 `packages/wallet-crypto/src/session-secret-box.ts`):
@@ -326,7 +326,7 @@ patch.
 ### External price feed (CoinGecko)
 
 While a profile session is unlocked (and `showFiatValues` is on — the default,
-toggleable in Settings → Appearance), the wallet fetches USD quotes from
+toggleable in Settings → Privacy), the wallet fetches USD quotes from
 CoinGecko's keyless public API every ~3 minutes. Privacy posture:
 
 - The request is ONE batched query for a FIXED id set compiled into the build

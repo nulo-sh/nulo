@@ -400,13 +400,13 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("Settings → Advanced's Logs row: one Tab stop with the ring; Enter opens the log window and Space runs the same handler", async ({
+test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens the log window and Space runs the same handler", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 	await setDeveloperMode(page, true)
-	await navigateByHash(page, "#/popup/settings/advanced")
+	await navigateByHash(page, "#/popup/settings/developer")
 	await page.waitForSelector(sel("settings-logs-row"), { visible: true, timeout: 10_000 })
 	await page.evaluate(() => {
 		const w = window as unknown as Probe
@@ -604,7 +604,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	await page.bringToFront()
 
 	for (const theme of ["dark", "light"] as const) {
-		await navigateToSettings(page, "appearance")
+		await navigateToSettings(page, "display")
 		await setTheme(page, theme)
 		for (const surface of SURFACES) {
 			await openSurface(page, surface.hash)

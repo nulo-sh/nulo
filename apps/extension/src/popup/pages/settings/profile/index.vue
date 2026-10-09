@@ -8,6 +8,9 @@
 </route>
 
 <script setup>
+/** Utils */
+import { profileTypeLabel } from "@/utils/settings-labels"
+
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { usePopupStore } from "@/stores/popup.store"
@@ -16,7 +19,7 @@ const popupStore = usePopupStore()
 </script>
 
 <template>
-	<SettingsPageShell title="Profile" :backTo="'/popup/settings'" gap="24">
+	<SettingsPageShell title="Your profile" :backTo="'/popup/settings'" gap="24">
 		<ItemsContainer v-if="appStore.profile" title="Identity">
 			<SettingField
 				@click="popupStore.open('edit_profile')"
@@ -25,43 +28,34 @@ const popupStore = usePopupStore()
 				icon="edit"
 				data-testid="identity-name-row"
 			/>
-			<Flex direction="column" gap="6" :class="$style.id_row" data-testid="identity-id-row">
+			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-id-row">
 				<Text size="12" weight="600" color="secondary">ID</Text>
 				<Text size="12" weight="500" color="tertiary" :class="$style.id_value">
 					{{ appStore.profile?.id }}
 				</Text>
 			</Flex>
-		</ItemsContainer>
-
-		<ItemsContainer title="Security">
-			<SettingItem to="/popup/settings/security/export" title="Backup profile" icon="key-square" chevron data-testid="backup-link-btn" />
-			<SettingItem
-				to="/popup/settings/security/change-password"
-				title="Change password"
-				icon="profile-password"
-				:disabled="appStore.profile?.type === 'passkey'"
-				chevron
-				data-testid="change-password-link-btn"
-			/>
-		</ItemsContainer>
-
-		<ItemsContainer>
-			<SettingItem
-				to="/popup/settings/security/reset"
-				title="Delete profile"
-				icon="trash"
-				iconBgColor="red"
-				chevron
-				data-testid="delete-profile-link-btn"
-			/>
+			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-type-row">
+				<Text size="12" weight="600" color="secondary">Type</Text>
+				<Text size="13" weight="600" color="primary">{{ profileTypeLabel(appStore.profile?.type) }}</Text>
+			</Flex>
 		</ItemsContainer>
 	</SettingsPageShell>
 </template>
 
 <style module>
-.id_row {
-	position: relative;
+.field_row {
+	composes: divider from "../../../../components/ui/Settings/settings-row.module.css";
+
 	padding: 14px 16px;
+
+	&::after {
+		left: 16px;
+		right: 16px;
+	}
+
+	&:last-child::after {
+		display: none;
+	}
 }
 
 .id_value {

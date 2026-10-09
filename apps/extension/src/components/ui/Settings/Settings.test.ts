@@ -58,6 +58,23 @@ describe("ui/Settings — ItemsContainer", () => {
 		const w = mount(ItemsContainer, { slots: { default: "<div />" }, global: { stubs: STUBS } })
 		expect(w.html()).not.toMatch(/wrapper_flat/)
 	})
+
+	test("danger fences the rows in red and leaves the title's class alone; absent, no fence", () => {
+		const fenced = mount(ItemsContainer, {
+			props: { title: "Danger zone", danger: true },
+			slots: { default: '<div data-testid="row" />' },
+			global: { stubs: STUBS },
+		})
+		const fence = fenced.get('[data-testid="row"]').element.parentElement as HTMLElement
+		expect(fence.className).toMatch(/wrapper_danger/)
+		const title = fenced.get("span")
+		expect(title.text()).toBe("Danger zone")
+		expect(title.classes()).toHaveLength(1)
+		expect(title.classes()[0]).toMatch(/title/)
+
+		const plain = mount(ItemsContainer, { props: { title: "Help" }, slots: { default: "<div />" }, global: { stubs: STUBS } })
+		expect(plain.html()).not.toMatch(/wrapper_danger/)
+	})
 })
 
 describe("ui/Settings — SettingItem", () => {
@@ -205,6 +222,44 @@ describe("ui/Settings — SettingItem", () => {
 		const { w } = await mountItem({ title: "X", icon: "user", loading: true })
 		expect(w.find('[data-testid="stub-spinner"]').exists()).toBe(true)
 		w.unmount()
+	})
+
+	test("value renders in setting-value, before the default chevron", async () => {
+		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", value: "1 h 30 min" })
+		const value = w.get('[data-testid="setting-value"]')
+		expect(value.text()).toBe("1 h 30 min")
+		const chevron = w.get('[data-name="chevron_right"]')
+		expect(value.element.compareDocumentPosition(chevron.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+		w.unmount()
+	})
+
+	test.each([
+		["absent", {}],
+		["empty", { value: "" }],
+	])("value %s: no setting-value element, and the row renders as before", async (_name, props) => {
+		const { w } = await mountItem({ title: "Lock", to: "/popup/settings/lock", ...props })
+		expect(w.find('[data-testid="setting-value"]').exists()).toBe(false)
+		expect(w.find('[data-name="chevron_right"]').exists()).toBe(true)
+		w.unmount()
+	})
+
+	test("icon box: a prop or #dot icon keeps the fixed 20x20 box; only a filled #icon gets the relaxed one", async () => {
+		const iconBoxOf = (w: Awaited<ReturnType<typeof mountItem>>["w"], selector: string) =>
+			(w.get(selector).element.parentElement as HTMLElement).className
+
+		const prop = await mountItem({ title: "Display", materialIcon: "palette" })
+		expect(iconBoxOf(prop.w, '[data-name="palette"]')).toMatch(/icon_wrapper/)
+		expect(iconBoxOf(prop.w, '[data-name="palette"]')).not.toMatch(/icon_slotted/)
+		prop.w.unmount()
+
+		const dot = await mountItem({ title: "Alpha" }, {}, { dot: () => h("i", { "data-testid": "dot" }) })
+		expect(iconBoxOf(dot.w, '[data-testid="dot"]')).not.toMatch(/icon_slotted/)
+		dot.w.unmount()
+
+		const slotted = await mountItem({ title: "Primary" }, {}, { icon: () => h("i", { "data-testid": "avatar" }) })
+		expect(iconBoxOf(slotted.w, '[data-testid="avatar"]')).toMatch(/icon_wrapper/)
+		expect(iconBoxOf(slotted.w, '[data-testid="avatar"]')).toMatch(/icon_slotted/)
+		slotted.w.unmount()
 	})
 })
 

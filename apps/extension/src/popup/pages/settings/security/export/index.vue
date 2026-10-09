@@ -14,7 +14,7 @@ const appStore = useAppStore()
 </script>
 
 <template>
-	<SettingsPageShell title="Backup" :backTo="'/popup/settings/security'" gap="24">
+	<SettingsPageShell title="Backup" :backTo="'/popup/settings'" gap="24">
 		<!-- Passkey profile -->
 		<template v-if="appStore.profile.type === 'passkey'">
 			<ItemsContainer title="Profile">

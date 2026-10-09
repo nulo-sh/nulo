@@ -13,7 +13,6 @@ vi.mock("@/wallet/services/config/client", () => ({
 		}
 	},
 }))
-vi.mock("@/components/ui/Dropdown", () => ({ Dropdown: { render: () => null } }))
 
 const windows = { create: vi.fn(), get: vi.fn(), update: vi.fn() }
 

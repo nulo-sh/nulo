@@ -33,7 +33,7 @@ import {
 } from "./helpers/import-drivers"
 import { pressEscape } from "./helpers/pointer-probes"
 
-/** Reset the wallet via the in-app reset flow (settings → security → reset).
+/** Reset the wallet via the in-app reset flow (Settings → Delete profile).
  *  Cascades through every service (NetworkService.onProfileDeleted, etc.) so
  *  storage AND in-memory SW state are properly cleaned — a plain
  *  `chrome.storage.local.clear()` would leave the SW's cached account map

@@ -72,7 +72,7 @@ describe("change password — Enter does what the focused control says", () => {
 		expect(window.history.length).toBe(1)
 		pressOn(w.get('[data-testid="subpage-back"]').element as HTMLElement, "Enter")
 		await flushPromises()
-		expect(router.push).toHaveBeenCalledWith("/popup/settings/profile")
+		expect(router.push).toHaveBeenCalledWith("/popup/settings")
 		expect(profileClient.changeProfilePassword).not.toHaveBeenCalled()
 	})
 
