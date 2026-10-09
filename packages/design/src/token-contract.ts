@@ -101,6 +101,60 @@ export const lineHeights = {
 	180: 1.8,
 } as const
 
+export type TypeRoleSpec = {
+	/** A family token from `tokenGroups.fonts`. */
+	readonly family: (typeof tokenGroups.fonts)[keyof typeof tokenGroups.fonts]
+	/** A `fontSizes` step, or `null` when the element keeps its own size (the board's "size per slot"). */
+	readonly size: (typeof fontSizes)[number] | null
+	readonly weight: (typeof fontWeights)[number]
+	/** The weight of the selected item, applied by the component's own compound rule. */
+	readonly activeWeight?: (typeof fontWeights)[number]
+	/** In em; 0 renders `letter-spacing: normal`. */
+	readonly tracking: number
+	readonly uppercase: boolean
+	readonly tabular: boolean
+}
+
+/** No text renders below this size (px). */
+export const MIN_TEXT_PX = 10
+/** A step above `MIN_TEXT_PX`: small mono holds what a person compares glyph by glyph, a hash's head and tail. */
+export const MIN_MONO_PX = 11
+
+/**
+ * The only way the wallet picks a face, tracking or case. Each key renders `.type--<key>` in
+ * `utilities.css`. No role sets line height, so a line box moves only where face or size changes.
+ */
+export const typeRoles = {
+	"title-hero": { family: "--font-headline", size: null, weight: 700, tracking: -0.04, uppercase: true, tabular: false },
+	"amount-hero": { family: "--font-headline", size: null, weight: 700, tracking: -0.04, uppercase: false, tabular: true },
+	"amount-total": { family: "--font-mono", size: null, weight: 500, tracking: -0.02, uppercase: false, tabular: false },
+	"title-page": { family: "--font-headline", size: 13, weight: 700, tracking: 0.12, uppercase: true, tabular: false },
+	"label-section": { family: "--font-headline", size: 11, weight: 700, tracking: 0.1, uppercase: true, tabular: false },
+	label: { family: "--font-headline", size: 10, weight: 700, tracking: 0.1, uppercase: true, tabular: false },
+	"row-title": { family: "--font-headline", size: null, weight: 700, tracking: -0.02, uppercase: false, tabular: false },
+	caption: { family: "--font-body", size: 11, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	name: { family: "--font-body", size: null, weight: 600, tracking: 0, uppercase: false, tabular: false },
+	"name-tag": { family: "--font-body", size: 11, weight: 600, tracking: 0.04, uppercase: true, tabular: false },
+	body: { family: "--font-body", size: 12, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	button: { family: "--font-headline", size: 14, weight: 700, tracking: 0.2, uppercase: true, tabular: false },
+	"button-md": { family: "--font-headline", size: 13, weight: 700, tracking: 0.03, uppercase: true, tabular: false },
+	nav: { family: "--font-headline", size: 10, weight: 500, tracking: 0.05, uppercase: true, tabular: false },
+	segment: { family: "--font-headline", size: 10, weight: 500, activeWeight: 700, tracking: 0.06, uppercase: true, tabular: false },
+	tag: { family: "--font-headline", size: 10, weight: 600, tracking: 0.08, uppercase: true, tabular: false },
+	"tag-name": { family: "--font-headline", size: 10, weight: 700, tracking: 0.08, uppercase: true, tabular: false },
+	brand: { family: "--font-headline", size: 10, weight: 700, tracking: 0.2, uppercase: false, tabular: false },
+	"input-data": { family: "--font-mono", size: 14, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	data: { family: "--font-mono", size: 12, weight: 500, tracking: 0, uppercase: false, tabular: false },
+	"data-lead": { family: "--font-mono", size: 13, weight: 600, tracking: 0, uppercase: false, tabular: false },
+	"amount-row": { family: "--font-mono", size: 14, weight: 500, tracking: 0, uppercase: false, tabular: false },
+	"amount-detail": { family: "--font-headline", size: 24, weight: 700, tracking: -0.02, uppercase: false, tabular: true },
+	fiat: { family: "--font-mono", size: null, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	time: { family: "--font-mono", size: 11, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	meta: { family: "--font-mono", size: 11, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	value: { family: "--font-body", size: 12, weight: 600, tracking: 0, uppercase: false, tabular: false },
+	input: { family: "--font-body", size: 15, weight: 500, tracking: 0, uppercase: false, tabular: false },
+} as const satisfies Record<string, TypeRoleSpec>
+
 /** Informal transition-duration scale (literal values, not CSS vars). */
 export const durations = {
 	short: "150ms",
