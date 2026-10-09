@@ -1,7 +1,7 @@
 ---
 plan: backup-import-export
 tier: mid
-status: planned; round 1 (Codex reject, Opus conditional approve), round 2 (Codex conditional approve) and the final fresh Codex pass (reject on one owner-boundary finding, fixed) dispositioned; waits on orchestrator approval; arcs 2 and 3 wait on decision page 1
+status: approved by the orchestrator; arc 1 in progress; arc 1b waits on the orchestrator's A1 call; arcs 2 and 3 wait on decision page 1
 issues: "#146, #203, #207, #223, #226 (arc 1); #148 in-repo half (arc 1b, stays open); #147, #191, #221 (arc 2); #98, #189, #192, #230, #231 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -489,6 +489,8 @@ Each row: the chosen design, the alternatives weighed, the panel's views, and wh
 | D14 | Fetch the protected file at Create; Download only once protected; handler re-check | mirror `full.vue` and keep the plain fetch (round-1 draft) | Opus: no plaintext file in the page | `account.vue` encrypts in the service, so the plain body has no use once Download needs protection. |
 | D15 | Count unopened rows under the DEK the file carries, on both paths | session DEK on the passkey path (round-1 draft); password path only | Codex: wrong DEK authority; Opus: name the RPC, read rows once | The count must describe the file; the probe DEK is what opens the file's rows at restore. The callback runs outside the unseal `catch`, so its failure aborts instead of reading as an unrecoverable DEK (Codex round 2). |
 | D16 | The watchdog reason reuses the engine's interrupted wording | a new sentence | both legs: new copy is the owner's | No new copy ships without sign-off (OA-6). |
+| D-orch-1 | No stack: arc 1 opens its own PR against `dev` (`gh pr create --base dev`), titled per the Delivery table; arc 1b and later arcs branch from arc 1's branch and rebase onto `dev` after it lands | the Delivery section's `gh stack` | orchestrator decision (overrides Delivery) | The orchestrator merges each arc in order; a plain PR per arc keeps that merge independent of the stack tooling. |
+| D-orch-2 | Arc 1 only: nothing of 1b, 2 or 3 is built in arc 1's run; OA-6 and OA-9 ship as the plan states (the watchdog with the engine's existing sentence; the profile-id rule with no new words) | build 1b alongside | orchestrator decision | The orchestrator decides A1 (arc 1b's PXE patch) separately; arcs 2 and 3 wait on decision page 1. OA-6 and OA-9 are information with a veto on that page; a strike reaches the next arc through the orchestrator. |
 
 ### Competing outline (cheapest-first), sent to both audits
 

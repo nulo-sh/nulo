@@ -6,3 +6,4 @@
 - 2026-10-09: round 2 started: Codex resume on the rewritten plan.
 - 2026-10-09: round 2: Codex conditional approve; eight findings accepted (R2-1..R2-8); OA-9 added; final fresh Codex pass started.
 - 2026-10-09: final fresh Codex pass: reject on OA-9's unapproved sentence; six findings fixed (F-1..F-6); arc 1 now adds no copy. Plan ready for orchestrator approval.
+- 2026-10-09: orchestrator approved the plan; merged origin/dev ac259a7; D-orch-1 (no stack, arc 1 PR on dev) and D-orch-2 (arc 1 only) recorded; arc 1 started.
