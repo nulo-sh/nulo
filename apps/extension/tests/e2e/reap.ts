@@ -22,10 +22,11 @@
  * markers and a dead owner — never a blanket `pkill -f aztec` that could hit another agent.
  */
 import { reapOrphanLaunches } from "./fixtures/browser/ownership"
-import { REPO_ROOT, clearLock, readLock } from "./lockfile"
+import { REPO_ROOT, clearLock, readLock, withReconcileLock } from "./lockfile"
 import { releaseDeadRows } from "./port-registry"
 import { reapPriorRun, sweepDeadRuns, sweepOrphanDataDirs } from "./sandbox-ownership"
 
+/** Under the reconcile lock, so a setup in this worktree cannot adopt the sandbox mid-reap. */
 async function reapOwnedRun(): Promise<boolean> {
 	const lock = readLock()
 	if (!lock) return false
@@ -40,7 +41,7 @@ async function reapOwnedRun(): Promise<boolean> {
 	return true
 }
 
-const reaped = await reapOwnedRun()
+const reaped = await withReconcileLock(reapOwnedRun)
 const runs = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
 if (runs !== "stopped") console.warn(`[e2e:reap] a dead run's processes are ${runs}`)
 const launches = process.platform === "linux" ? await reapOrphanLaunches() : []

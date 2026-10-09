@@ -30,15 +30,25 @@ export const IDENTITY_SHAPE = /^([1-9]\d*):(\d+)$/
 
 export const newMarker = (): string => randomUUID()
 
-/** `undefined` when the pid is gone: a dead process has no start time to compare. */
+const isGone = (err: unknown): boolean => {
+	const code = (err as NodeJS.ErrnoException).code
+	return code === "ENOENT" || code === "ESRCH"
+}
+
+/** The fields after the parenthesised comm, which may itself contain spaces. Throws as the read does. */
+function statFields(pid: number): string[] {
+	const stat = readFileSync(`/proc/${pid}/stat`, "utf8")
+	return stat.slice(stat.lastIndexOf(")") + 2).split(" ")
+}
+
+/** `undefined` when the pid is gone: a dead process has no start time to compare. Any other read
+ *  failure throws: a `/proc` that cannot answer is no evidence of death. */
 export function readStartTime(pid: number): string | undefined {
 	try {
-		const stat = readFileSync(`/proc/${pid}/stat`, "utf8")
-		// The comm field is parenthesised and may itself contain spaces, so split after it.
-		const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ")
-		return fields[19]
-	} catch {
-		return undefined
+		return statFields(pid)[19]
+	} catch (err) {
+		if (isGone(err)) return undefined
+		throw err
 	}
 }
 
@@ -48,8 +58,12 @@ export function readStartTime(pid: number): string | undefined {
  * a host without `/proc`, where a launch names no owner and no sweep may signal it.
  */
 export function ownIdentity(): string | undefined {
-	const startTime = readStartTime(process.pid)
-	return startTime ? `${process.pid}:${startTime}` : undefined
+	try {
+		const startTime = readStartTime(process.pid)
+		return startTime ? `${process.pid}:${startTime}` : undefined
+	} catch {
+		return undefined
+	}
 }
 
 /** True only for a well-formed identity whose process is gone. A malformed or missing one is never
@@ -57,7 +71,11 @@ export function ownIdentity(): string | undefined {
 export function identityIsDead(identity: string | undefined): boolean {
 	const match = identity?.match(IDENTITY_SHAPE)
 	if (!match) return false
-	return readStartTime(Number(match[1])) !== match[2]
+	try {
+		return readStartTime(Number(match[1])) !== match[2]
+	} catch {
+		return false
+	}
 }
 
 /** The spawn environment of a launch this process owns. */
@@ -71,13 +89,21 @@ export type Environ = Map<string, string>
  *  (another user's, or a process that made itself non-dumpable). */
 export type EnvironReader = (pid: number) => Environ | "gone" | "unreadable"
 
+/** A zombie's environ refuses the read like a non-dumpable process's, but it has exited. */
+function isZombie(pid: number): boolean {
+	try {
+		return statFields(pid)[0] === "Z"
+	} catch (err) {
+		return isGone(err)
+	}
+}
+
 export const readEnviron: EnvironReader = (pid) => {
 	let raw: string
 	try {
 		raw = readFileSync(`/proc/${pid}/environ`, "utf8")
 	} catch (err) {
-		const code = (err as NodeJS.ErrnoException).code
-		return code === "ENOENT" || code === "ESRCH" ? "gone" : "unreadable"
+		return isGone(err) || isZombie(pid) ? "gone" : "unreadable"
 	}
 	const env: Environ = new Map()
 	for (const entry of raw.split("\0")) {
@@ -136,22 +162,40 @@ export function ownedProcesses(marker: string, read: EnvironReader = readEnviron
 /**
  * `stopped`: two scans a poll apart found nothing the selector claims. `retained`: something it
  * claims outlived the sweep, or is not ours to signal. `unknown`: `/proc` could not be listed, or a
- * process the sweep had seen as claimed can no longer be read, so nothing proves it gone.
+ * process the sweep had seen as claimed, or a record names, can no longer be read, so nothing
+ * proves it gone.
  */
 export type SweepStatus = "stopped" | "retained" | "unknown"
+
+/** A process a record names, with the start time that tells it from a later holder of its pid. */
+export interface RecordedProcess {
+	pid: number
+	startTime: string
+}
 
 export interface SweepOptions {
 	graceMs?: number
 	killGraceMs?: number
 	read?: EnvironReader
 	pollMs?: number
+	/** Never signalled on a record's word, but one still running and unreadable leaves the sweep
+	 *  `unknown`: once a process turns unreadable, no later sweep can see that it was ever marked. */
+	recorded?: RecordedProcess[]
+}
+
+function stillRunning({ pid, startTime }: RecordedProcess): boolean {
+	try {
+		return readStartTime(pid) === startTime
+	} catch {
+		return true
+	}
 }
 
 /** SIGTERM, then SIGKILL to whatever outlived the grace period. */
 export async function sweep(select: Selector, opts: SweepOptions = {}): Promise<SweepStatus> {
-	const seen = new Set<number>()
+	const seen = new Set((opts.recorded ?? []).filter(stillRunning).map(({ pid }) => pid))
 	const term = await sweepPhase(select, "SIGTERM", opts.graceMs ?? 5_000, seen, opts)
-	if (term !== "retained") return term
+	if (term === "stopped") return term
 	return sweepPhase(select, "SIGKILL", opts.killGraceMs ?? 2_000, seen, opts)
 }
 
@@ -255,3 +299,13 @@ export const deadRunIn =
 		if (env.has(LAUNCH_ENV)) return "ignore"
 		return identityIsDead(env.get(RUN_OWNER_ENV)) ? "stop" : "ignore"
 	}
+
+/** Throws when this process belongs to an agent run and `pid`, read back, does not carry the run's
+ *  marker: such a process would outlive a killed run where no sweep could find it. */
+export function assertInheritsRun(pid: number | undefined, what: string, read: EnvironReader = readEnviron): void {
+	const run = process.env[RUN_ENV]
+	if (!run || pid === undefined) return
+	const env = read(pid)
+	if (typeof env !== "string" && env.get(RUN_ENV) !== run)
+		throw new Error(`${what} did not inherit the run marker, so a sweep after a killed run could not find it`)
+}

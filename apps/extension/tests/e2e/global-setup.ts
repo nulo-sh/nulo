@@ -14,12 +14,22 @@ import {
 	createSponsoredFeeOptions,
 	LOCAL_NODE_URL,
 } from "./fixtures/aztec"
-import { type OwnedState, REPO_ROOT, SANDBOX_SERVICES, type SandboxService, clearLock, isPidAlive, readLock, writeLock } from "./lockfile"
+import {
+	type OwnedState,
+	REPO_ROOT,
+	SANDBOX_SERVICES,
+	type SandboxService,
+	clearLock,
+	isPidAlive,
+	readLock,
+	withReconcileLock,
+	writeLock,
+} from "./lockfile"
 import { markBootReady, markBootStarted } from "./sentinel"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
 import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
-import { assertPackFree, claimedRunId, mayAdopt, waitWhileAlive } from "./boot-guard"
-import { identityIsDead, launchEnv, newMarker, ownIdentity } from "./owned-processes"
+import { assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, waitWhileAlive } from "./boot-guard"
+import { identityIsDead, launchEnv, newMarker, ownIdentity, readStartTime } from "./owned-processes"
 import {
 	createRunDir,
 	deletableRunDir,
@@ -197,7 +207,8 @@ export default async function setupWithTeardown(project: TestProject): Promise<(
 
 /**
  * Boot coordinator. The ORDER here is the contract: orphan reap + build guard run before the
- * boot-failure (exit 86) window opens; the provisional lock is written before the first spawn;
+ * boot-failure (exit 86) window opens; the provisional lock is written under the reconcile lock,
+ * before the first spawn;
  * `markBootStarted()` sits between them and the first spawn so a missing-binary FATAL is still a
  * retryable boot failure; on reuse this run owns nothing (no provisional lock, `weOwnLock` stays
  * false) and skips straight to the shared tail.
@@ -214,19 +225,20 @@ export async function setup(project: TestProject) {
 		`[e2e-setup] ports: anvil=:${ANVIL_PORT} aztec=:${AZTEC_PORT} (admin :${AZTEC_ADMIN_PORT}, p2p :${AZTEC_P2P_PORT}) playground=:${PLAYGROUND_PORT}`,
 	)
 
-	const prior = await reconcilePriorLock()
+	// The provisional lock names this run's owner and every service's marker before the first
+	// spawn: from then on no other run's sweep touches what this one starts, and a run killed in
+	// the minutes of boot still leaves the markers the next run reaps by.
+	const prior = await withReconcileLock(async () => {
+		const outcome = await reconcilePriorLock()
+		if (outcome === "fresh") writeProvisionalLock()
+		return outcome
+	})
 	reconciled = true
 	await reapDeadRuns()
 	if (prior === "reused") {
 		await finishBoot(project)
 		return
 	}
-
-	// Provisional lock BEFORE the first spawn, updated after each spawn (recordSpawnedPid): the
-	// agent.sh signal trap and future-run orphan reap read pids from the lock, and the final
-	// post-deploy write used to land only after MINUTES of boot — a cancel in that window left
-	// untracked process groups behind.
-	writeProvisionalLock()
 
 	// Sandbox bring-up begins here — this opens the boot-failure (exit 86)
 	// window. Manifest validation + orphan reap above are deliberately OUTSIDE
@@ -333,12 +345,13 @@ async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 	return "fresh"
 }
 
-/** Processes a dead agent run of this worktree left (forks, Chrome); a bare run also keeps the
- *  extension-path Chrome sweep it has always had. */
+/** Processes a dead agent run of this worktree left (forks, Chrome). Without `/proc` there is no
+ *  run sweep, so the extension-path Chrome sweep a bare run has always had serves every run. */
 async function reapDeadRuns(): Promise<void> {
-	const status = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
+	const linux = process.platform === "linux"
+	const status = linux ? await sweepDeadRuns(REPO_ROOT) : "stopped"
 	if (status !== "stopped") console.warn(`[e2e-setup] a dead run's processes are ${status}; \`bun run e2e:reap\` retries`)
-	if (!IS_AGENT_RUN) killOrphanChromes()
+	if (!IS_AGENT_RUN || !linux) killOrphanChromes()
 }
 
 function priorPortsMatch(priorLock: OwnedState): boolean {
@@ -411,7 +424,14 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 	})
 
 	try {
-		await waitWhileAlive(anvilProcess, () => probeAnvil(ANVIL_URL), `anvil at ${ANVIL_URL}`, 30_000, 250)
+		await waitWhileAlive(
+			anvilProcess,
+			() => probeAnvil(ANVIL_URL),
+			`anvil at ${ANVIL_URL}`,
+			30_000,
+			250,
+			() => listenerIsOurs(ANVIL_PORT, MARKERS.anvil),
+		)
 		console.log("[e2e-setup] Anvil is ready")
 	} catch (error) {
 		console.error("[e2e-setup] Failed to start anvil:", error)
@@ -460,7 +480,14 @@ async function ensureAztecNode(): Promise<"ready" | "skip"> {
 	const node = spawnAztecNode(createRunDir(AZTEC_RUN_DIR, MARKERS.aztec))
 
 	try {
-		await waitWhileAlive(node, () => checkNodeHealth(LOCAL_NODE_URL), `the local Aztec node at ${LOCAL_NODE_URL}`, 90_000, 2_000)
+		await waitWhileAlive(
+			node,
+			() => checkNodeHealth(LOCAL_NODE_URL),
+			`the local Aztec node at ${LOCAL_NODE_URL}`,
+			90_000,
+			2_000,
+			() => listenerIsOurs(AZTEC_PORT, MARKERS.aztec),
+		)
 		console.log("[e2e-setup] Local Aztec node is ready")
 	} catch (error) {
 		console.error("[e2e-setup] Failed to start local node:", error)
@@ -617,7 +644,14 @@ async function ensureDevServer(spec: DevServerSpec): Promise<void> {
 			}
 		})
 
-		await waitWhileAlive(child, () => probeHttp(spec.url), spec.url, 30_000, 500)
+		await waitWhileAlive(
+			child,
+			() => probeHttp(spec.url),
+			spec.url,
+			30_000,
+			500,
+			() => listenerIsOurs(PLAYGROUND_PORT, MARKERS[spec.label]),
+		)
 		console.log(`[e2e-setup] ${spec.title} is ready`)
 	} catch (error) {
 		console.warn(`[e2e-setup] Failed to start ${spec.label}:`, error)
@@ -715,6 +749,7 @@ async function deployContractsAndProvide(project: TestProject): Promise<void> {
 }
 
 function buildOwnedState(extra: Partial<OwnedState> = {}): OwnedState {
+	const pids = currentPids()
 	return {
 		startedAt: new Date().toISOString(),
 		bakedLocalRpcUrl: LOCAL_NODE_URL,
@@ -725,7 +760,8 @@ function buildOwnedState(extra: Partial<OwnedState> = {}): OwnedState {
 			aztecP2P: AZTEC_P2P_PORT,
 			playground: PLAYGROUND_PORT,
 		},
-		pids: currentPids(),
+		pids,
+		starts: startTimes(pids),
 		aztecDataDir: AZTEC_RUN_DIR,
 		markers: MARKERS,
 		owner: ownIdentity(),
@@ -738,8 +774,8 @@ function writeProvisionalLock(): void {
 	weOwnLock = true
 }
 
-/** Update the owned lock's pid map right after a spawn — keeps the agent trap + orphan reap
- *  current through the whole boot instead of only after deployment. */
+/** The lock's pids and start times, right after each spawn: what tells a later sweep that a
+ *  recorded service is still running even once its environ cannot be read. */
 function recordSpawnedPid(): void {
 	if (!weOwnLock) return
 	writeLock(buildOwnedState())
@@ -751,6 +787,20 @@ function currentPids(): OwnedState["pids"] {
 		aztec: weStartedNode ? nodeProcess?.pid : undefined,
 		playground: weStartedPlayground ? playgroundProcess?.pid : undefined,
 	}
+}
+
+function startTimes(pids: OwnedState["pids"]): OwnedState["starts"] {
+	const starts: OwnedState["starts"] = {}
+	for (const service of SANDBOX_SERVICES) {
+		const pid = pids[service]
+		try {
+			const start = pid ? readStartTime(pid) : undefined
+			if (start) starts[service] = start
+		} catch {
+			// Unrecorded, the service is judged by its environ alone.
+		}
+	}
+	return starts
 }
 
 function serializeL1ContractAddresses(addrs: unknown): Record<string, string> {

@@ -1,10 +1,11 @@
 import type { ChildProcess } from "node:child_process"
 import { lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { E2E_DATA_ROOT, type OwnedState, SANDBOX_SERVICES, isPidAlive } from "./lockfile"
+import { E2E_DATA_ROOT, type OwnedState, SANDBOX_SERVICES, type SandboxService, isPidAlive } from "./lockfile"
 import {
 	type EnvironReader,
 	LAUNCH_ENV,
+	type RecordedProcess,
 	type SweepOptions,
 	type SweepStatus,
 	deadRunIn,
@@ -18,17 +19,11 @@ import {
 } from "./owned-processes"
 import { killProcessGroup } from "./process-group"
 
-/**
- * Teardown and orphan reaping for the sandbox services (anvil, the node, the playground), by the
- * launch marker each one is spawned with. A group signal reaches a group only while its leader
- * lives; the marker reaches every descendant, a leaderless group's included.
- */
-
 const RUN_DIR_PREFIX = "nulo-aztec-"
 const RUN_DIR_STAMP = ".nulo-launch"
 
 /** A run dir under {@link E2E_DATA_ROOT}, named for this process so the dir sweep can tell a dead
- *  run's from a live one's. Not created: the node's start does that. */
+ *  run's from a live one's. Not created here: {@link createRunDir} does that as the node starts. */
 export const plannedRunDir = (): string => path.join(E2E_DATA_ROOT, `${RUN_DIR_PREFIX}${process.pid}-${Date.now()}`)
 
 /** Creates the run dir stamped with the node's marker; the node writes under `<dir>/data`, so the
@@ -65,7 +60,8 @@ const hasProc = (): boolean => {
 
 /**
  * Teardown of a service this run started: its group while the leader lives, then every process
- * carrying its marker. The status is the sweep's; on a host without `/proc` it is the group's.
+ * carrying its marker, a leaderless group's included. The status is the sweep's; on a host without
+ * `/proc` it is the group's.
  */
 export async function stopService(
 	child: ChildProcess | null,
@@ -113,30 +109,47 @@ export type ReapOutcome = { cleared: true } | { cleared: false; reason: string }
 /**
  * Reap the sandbox a prior run in this worktree left behind, by its lock. Signals only processes
  * that carry a service's marker AND name an owner that is dead, and nothing at all while the lock's
- * own owner lives (a run in progress, or one that reused the sandbox). A lock written before
- * markers existed is never signalled. Deletes the run dir only once every service is stopped. The
- * caller clears the lock on `cleared`.
+ * own owner lives (a run in progress, or one that reused the sandbox). A lock that names no owner
+ * is never signalled. Deletes the run dir only once every service is stopped. The caller holds the
+ * reconcile lock and clears `owned.json` on `cleared`.
  */
 export async function reapPriorRun(lock: OwnedState, opts: SweepOptions = {}): Promise<ReapOutcome> {
-	if (!lock.markers || !lock.owner) return reapUnmarked(lock)
+	if (!lock.markers || !lock.owner) return reapUnowned(lock)
 	if (!identityIsDead(lock.owner)) return { cleared: false, reason: `its owner ${lock.owner} is alive` }
 	const statuses: string[] = []
 	for (const service of SANDBOX_SERVICES) {
 		const marker = lock.markers[service]
 		if (!marker) continue
-		const status = await sweep(orphanedLaunch(marker), opts)
+		const status = await sweep(orphanedLaunch(marker), { ...opts, recorded: recordedOf(lock, service) })
 		if (status !== "stopped") statuses.push(`${service} ${status}`)
 	}
 	if (statuses.length > 0) return { cleared: false, reason: `not every service stopped (${statuses.join(", ")})` }
-	const dir = deletableRunDir(lock.aztecDataDir, lock.markers.aztec)
-	if (dir) rmSync(dir, { recursive: true, force: true })
+	removeRunDir(lock)
 	return { cleared: true }
 }
 
-function reapUnmarked(lock: OwnedState): ReapOutcome {
+function recordedOf(lock: OwnedState, service: SandboxService): RecordedProcess[] {
+	const pid = lock.pids[service]
+	const startTime = lock.starts?.[service]
+	return pid && startTime ? [{ pid, startTime }] : []
+}
+
+function removeRunDir(lock: OwnedState): void {
+	const dir = deletableRunDir(lock.aztecDataDir, lock.markers?.aztec)
+	if (dir) rmSync(dir, { recursive: true, force: true })
+}
+
+/** A lock written before markers, or on a host without `/proc`: liveness of its pids is all there is. */
+function reapUnowned(lock: OwnedState): ReapOutcome {
 	const live = SANDBOX_SERVICES.flatMap((service) => (isPidAlive(lock.pids[service]) ? [`${service} pid ${lock.pids[service]}`] : []))
-	if (live.length === 0) return { cleared: true }
-	return { cleared: false, reason: `it carries no markers and records live processes (${live.join(", ")}); check and stop them by hand` }
+	if (live.length === 0) {
+		removeRunDir(lock)
+		return { cleared: true }
+	}
+	return {
+		cleared: false,
+		reason: `it names no owner and records live pids (${live.join(", ")}), which may since belong to unrelated processes; stop them only if they are this worktree's sandbox, else delete .e2e-state/owned.json`,
+	}
 }
 
 /** Every process of a dead agent run in `worktree` (forks, Chrome) not owned by a launch sweep. */
@@ -160,8 +173,9 @@ function readProcessTable(read: EnvironReader): ProcessTable | undefined {
 	for (const pid of pids) {
 		try {
 			table.cmdlines.push(readFileSync(`/proc/${pid}/cmdline`, "utf8"))
-		} catch {
-			// Exited since it was listed.
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException).code
+			if (code !== "ENOENT" && code !== "ESRCH") return undefined
 		}
 		const env = read(Number(pid))
 		const marker = typeof env === "string" ? undefined : env.get(LAUNCH_ENV)
@@ -181,8 +195,9 @@ function namesDir(cmdline: string, dir: string): boolean {
 /**
  * Remove `nulo-aztec-<pid>-<ts>` run dirs nothing uses any more: the pid in the name is dead, no
  * process's command line names the path (the node gets it, or its `data` subdir, as
- * `--data-directory`), and no live process carries the marker it is stamped with. An unlistable
- * `/proc` keeps every dir.
+ * `--data-directory`), and no live process carries the marker it is stamped with. A `/proc` that
+ * cannot be listed, or a command line that cannot be read, keeps every dir. An unreadable environ
+ * cannot: a same-user non-dumpable process (`systemd --user`) always has one.
  */
 export function sweepOrphanDataDirs(read: EnvironReader = readEnviron): string[] {
 	let names: string[]

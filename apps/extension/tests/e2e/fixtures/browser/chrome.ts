@@ -2,6 +2,7 @@
 import type { Browser, CDPSession, Page, Target } from "puppeteer"
 import puppeteer from "puppeteer"
 import { cdpInterceptRpc } from "./chrome-rpc-intercept"
+import { assertInheritsRun } from "../../owned-processes"
 import { cdpVirtualAuthenticator } from "./chrome-webauthn"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, PxeHostState } from "./index"
 
@@ -58,6 +59,12 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 		// pressure, and the call then times out on work that did complete.
 		protocolTimeout: 300_000,
 	})
+	try {
+		assertInheritsRun(browser.process()?.pid, "Chrome")
+	} catch (err) {
+		await browser.close()
+		throw err
+	}
 	// Chrome owns nothing outside its own process tree, so closing the browser is the whole
 	// teardown. A driver that also owns a WebDriver process reaps it here instead.
 	return { browser, close: () => browser.close() }

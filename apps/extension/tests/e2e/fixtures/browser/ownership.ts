@@ -1,7 +1,16 @@
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { E2E_DATA_ROOT } from "../../lockfile"
-import { MARKER_SHAPE, type SweepOptions, newMarker, orphanedLaunch, readStartTime, selfLaunch, sweep } from "../../owned-processes"
+import {
+	MARKER_SHAPE,
+	type RecordedProcess,
+	type SweepOptions,
+	newMarker,
+	orphanedLaunch,
+	readStartTime,
+	selfLaunch,
+	sweep,
+} from "../../owned-processes"
 
 /**
  * Ownership records for launched WebDriver processes.
@@ -27,8 +36,10 @@ export const newLaunchMarker = newMarker
 
 export interface LaunchOwnership {
 	marker: string
-	/** The process we spawned. For the log line only; never an identity. */
+	/** The process we spawned, 0 until it exists. Never an identity for a signal. */
 	pid: number
+	/** Its `/proc` start time: what tells it from a later holder of its pid. */
+	pidStartTime?: string
 	/** The test run that spawned it. A record whose owner is still alive belongs to a run in
 	 *  progress — possibly another agent's — and is never an orphan. Pid plus start time is sound
 	 *  here where it is not for the launch, because the owner is only ever COMPARED, never
@@ -91,6 +102,7 @@ function isRecord(value: unknown): value is LaunchOwnership {
 		typeof r.marker === "string" &&
 		MARKER_SHAPE.test(r.marker) &&
 		Number.isInteger(r.pid) &&
+		(r.pidStartTime === undefined || typeof r.pidStartTime === "string") &&
 		Number.isInteger(r.ownerPid) &&
 		typeof r.ownerStartTime === "string" &&
 		typeof r.profileDir === "string" &&
@@ -145,7 +157,8 @@ export function listOwnedLaunches(): LaunchOwnership[] {
  * `orphan` release signals only processes whose own owner is dead, whatever the record says.
  */
 export async function releaseLaunch(record: LaunchOwnership, mode: "self" | "orphan" = "self", opts: SweepOptions = {}): Promise<boolean> {
-	const status = await sweep(mode === "self" ? selfLaunch(record.marker) : orphanedLaunch(record.marker), opts)
+	const recorded: RecordedProcess[] = record.pidStartTime ? [{ pid: record.pid, startTime: record.pidStartTime }] : []
+	const status = await sweep(mode === "self" ? selfLaunch(record.marker) : orphanedLaunch(record.marker), { ...opts, recorded })
 	// A process that outlived SIGKILL, one still owned by a live run, or one nobody could read: the
 	// profile stays, the lesser harm, and the record survives for the next sweep.
 	if (status !== "stopped") {
@@ -156,6 +169,15 @@ export async function releaseLaunch(record: LaunchOwnership, mode: "self" | "orp
 	if (profile) rmSync(profile, { recursive: true, force: true })
 	rmSync(recordFile(record), { force: true })
 	return true
+}
+
+/** A `/proc` that cannot answer is no evidence the owner died. */
+function ownerLives(record: LaunchOwnership): boolean {
+	try {
+		return readStartTime(record.ownerPid) === record.ownerStartTime
+	} catch {
+		return true
+	}
 }
 
 /**
@@ -172,7 +194,7 @@ export async function reapOrphanLaunches(): Promise<string[]> {
 			rmSync(path.join(RECORD_ROOT, file), { force: true })
 			continue
 		}
-		if (readStartTime(record.ownerPid) === record.ownerStartTime) continue
+		if (ownerLives(record)) continue
 		if (await releaseLaunch(record, "orphan")) reaped.push(record.label)
 	}
 	return reaped

@@ -10,7 +10,7 @@ import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
 import { observeAndRefuse } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
-import { launchEnv, ownedProcesses } from "../../owned-processes"
+import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
 import {
 	type LaunchOwnership,
 	disownProfile,
@@ -100,9 +100,13 @@ async function launch({ extensionPath, userDataDir, headless }: LaunchOptions): 
 		if (!userDataDir) record.profileDir = newProfileDir(marker)
 		const { profileDir } = record
 		mkdirSync(profileDir, { recursive: true })
+		// On disk before the spawn: a worker killed between the two would otherwise leave a marked
+		// geckodriver no record names, which no sweep would ever look for.
+		recordLaunch(record)
 
 		const { gecko, base } = await spawnGeckodriver(marker)
 		record.pid = gecko.pid
+		record.pidStartTime = readStartTime(gecko.pid)
 		record.label = `geckodriver:${base}`
 		recordLaunch(record)
 

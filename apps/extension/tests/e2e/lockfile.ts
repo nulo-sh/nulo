@@ -5,8 +5,7 @@
  *  - **Orphan cleanup.** When a previous `bun run e2e:agent` run was killed
  *    abnormally (Ctrl-C, OOM, machine sleep), its anvil/aztec/playground
  *    children may still be alive on the previous run's ports. The lockfile
- *    records those PIDs/pgids so the next run can reap them before
- *    allocating new ports.
+ *    records their launch markers so the next run can reap them.
  *  - **Stable-port reuse.** When the user runs `vitest` directly (no agent
  *    wrapper) with the same env vars across runs, setup reuses the prior
  *    sandbox if every check passes:
@@ -19,17 +18,19 @@
  *    `bun run e2e:agent` always allocates fresh ports, so it never hits
  *    the reuse path; orphan cleanup is the value there.
  */
+import { randomBytes } from "node:crypto"
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, existsSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { IDENTITY_SHAPE, MARKER_SHAPE } from "./owned-processes"
+import { IDENTITY_SHAPE, MARKER_SHAPE, identityIsDead, ownIdentity } from "./owned-processes"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const E2E_STATE_DIR = path.resolve(__dirname, "../../.e2e-state")
 /** The checkout this harness runs from: the worktree a run's registry rows and markers name. */
 export const REPO_ROOT = path.resolve(__dirname, "../../../..")
 const LOCK_PATH = path.join(E2E_STATE_DIR, "owned.json")
+const RECONCILE_PATH = path.join(E2E_STATE_DIR, "reconcile.lock")
 
 /**
  * Real-disk root for per-run aztec data dirs. Deliberately NOT tmpdir()/`/tmp` — that is
@@ -59,6 +60,8 @@ export interface OwnedState {
 	ports: OwnedPorts
 	/** For health and log lines only: ownership is the markers, never these numbers. */
 	pids: Partial<Record<SandboxService, number>>
+	/** Each recorded pid's `/proc` start time, which tells the service from a later holder of its pid. */
+	starts?: Partial<Record<SandboxService, string>>
 	/** The node's run dir, stamped with its marker; the node writes under `<dir>/data`. A lock
 	 *  written before markers existed names the data dir itself, unstamped. */
 	aztecDataDir: string
@@ -86,8 +89,10 @@ const isPid = (v: unknown) => Number.isInteger(v) && (v as number) > 0
 const isStringRecord = (v: unknown) => isObject(v) && Object.values(v).every((x) => typeof x === "string")
 
 function hasValidServices(lock: Record<string, unknown>): boolean {
-	const { pids, markers } = lock
+	const { pids, starts, markers } = lock
 	if (!isObject(pids) || !Object.values(pids).every((pid) => pid === undefined || isPid(pid))) return false
+	if (starts !== undefined && !(isObject(starts) && Object.values(starts).every((t) => typeof t === "string" && /^\d+$/.test(t))))
+		return false
 	if (markers === undefined) return true
 	return (
 		isObject(markers) &&
@@ -147,4 +152,70 @@ export function isPidAlive(pid: number | undefined): boolean {
 	} catch {
 		return false
 	}
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export interface ReconcileLockOptions {
+	file?: string
+	waitMs?: number
+	pollMs?: number
+}
+
+/**
+ * Runs `fn` holding this worktree's reconcile lock. Reading `owned.json`, acting on the owner it
+ * names and writing a new owner into it must be one step: two setups, or a setup and `e2e:reap`,
+ * that interleave it can each act on the same dead owner, one reaping the sandbox the other has
+ * just adopted. A dead holder's lock is replaced; a live holder is waited for up to `waitMs`.
+ */
+export async function withReconcileLock<T>(fn: () => Promise<T>, opts: ReconcileLockOptions = {}): Promise<T> {
+	const file = opts.file ?? RECONCILE_PATH
+	const holder = `${ownIdentity() ?? process.pid} ${randomBytes(8).toString("hex")}`
+	await acquireReconcileLock(file, holder, opts.waitMs ?? 120_000, opts.pollMs ?? 250)
+	try {
+		return await fn()
+	} finally {
+		if (readHolder(file) === holder) rmSync(file, { force: true })
+	}
+}
+
+async function acquireReconcileLock(file: string, holder: string, waitMs: number, pollMs: number): Promise<void> {
+	mkdirSync(path.dirname(file), { recursive: true })
+	const deadline = Date.now() + waitMs
+	for (;;) {
+		try {
+			writeFileSync(file, holder, { encoding: "utf8", flag: "wx" })
+			return
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
+		}
+		const current = readHolder(file)
+		if (current === undefined) continue
+		// Re-read right before the unlink: a holder that replaced the dead one meanwhile stays.
+		if (holderIsDead(current) && readHolder(file) === current) {
+			rmSync(file, { force: true })
+			continue
+		}
+		if (Date.now() >= deadline)
+			throw new Error(
+				`[e2e-setup] another run in this worktree is reconciling its sandbox (${file} held by "${current}"); if none is, delete that file`,
+			)
+		await sleep(pollMs)
+	}
+}
+
+function readHolder(file: string): string | undefined {
+	try {
+		return readFileSync(file, "utf8")
+	} catch {
+		return undefined
+	}
+}
+
+/** A holder not yet fully written, or not shaped like one, is never dead. Without `/proc` the
+ *  holder is a bare pid, judged by liveness. */
+function holderIsDead(holder: string): boolean {
+	const id = holder.match(/^(\S+) [0-9a-f]{16}$/)?.[1]
+	if (!id) return false
+	return IDENTITY_SHAPE.test(id) ? identityIsDead(id) : /^[1-9]\d*$/.test(id) && !isPidAlive(Number(id))
 }

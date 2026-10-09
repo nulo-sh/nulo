@@ -275,7 +275,15 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 					])
 				: ("unreadable" as const)
 		}
-		expect(await recordSignals(pid, () => releaseLaunch(record, "orphan", { graceMs: 500, killGraceMs: 500, read }))).toEqual([])
+		const unreadable = (p: number) => (p === pid ? ("unreadable" as const) : ("gone" as const))
+		recordLaunch({ ...record, pidStartTime: readStartTime(pid) })
+		const quick = { graceMs: 500, killGraceMs: 500 }
+		expect(
+			await recordSignals(pid, () => releaseLaunch({ ...record, pidStartTime: readStartTime(pid) }, "orphan", { ...quick, read })),
+		).toEqual([])
+		expect(existsSync(profileDir)).toBe(true)
+		// A later reap never saw it marked; the record's pid and start time are what keep the profile.
+		expect(await releaseLaunch({ ...record, pidStartTime: readStartTime(pid) }, "orphan", { ...quick, read: unreadable })).toBe(false)
 		expect(existsSync(profileDir)).toBe(true)
 		expect(existsSync(path.join(RECORDS, `${marker}.json`))).toBe(true)
 	})

@@ -3,7 +3,8 @@ import http from "node:http"
 import type { AddressInfo } from "node:net"
 import { afterEach, describe, expect, test } from "vitest"
 import { probeAnvil } from "../../tests/e2e/anvil-probe"
-import { assertPackFree, mayAdopt, waitWhileAlive } from "../../tests/e2e/boot-guard"
+import { assertPackFree, listenerIsOurs, mayAdopt, waitWhileAlive } from "../../tests/e2e/boot-guard"
+import { launchEnv, newMarker, readEnviron } from "../../tests/e2e/owned-processes"
 
 const servers: http.Server[] = []
 afterEach(async () => {
@@ -65,14 +66,83 @@ describe("boot guard", () => {
 		expect(Date.now() - started).toBeLessThan(250)
 	})
 
-	test("a live child that answers reaches ready", async () => {
+	test("a probe still pending when the child exits fails on the exit, not the deadline", async () => {
+		const child = spawn("sleep", ["0.2"])
+		const started = Date.now()
+		await expect(waitWhileAlive(child, () => new Promise<boolean>(() => {}), "node", 30_000, 10)).rejects.toThrow(/exited/)
+		expect(Date.now() - started).toBeLessThan(2_000)
+	})
+
+	test("a probe that never settles fails at the deadline", async () => {
 		const child = spawn("sleep", ["30"])
 		try {
-			let polls = 0
-			await waitWhileAlive(child, async () => ++polls >= 3, "anvil", 5_000, 10)
-			expect(polls).toBe(3)
+			await expect(waitWhileAlive(child, () => new Promise<boolean>(() => {}), "node", 300, 10)).rejects.toThrow(/Timed out/)
 		} finally {
 			child.kill("SIGKILL")
 		}
+	})
+
+	describe.skipIf(process.platform !== "linux")("listener ownership", () => {
+		const environShown = (pid: number | undefined) => {
+			const env = pid ? readEnviron(pid) : "gone"
+			return typeof env !== "string" && env.size > 0
+		}
+
+		/** A detached process carrying `marker`, once its environ shows it (a child in execve reads empty). */
+		async function spawnMarked(marker: string, args: string[]) {
+			const child = spawn(process.execPath, args, {
+				detached: true,
+				stdio: ["ignore", "pipe", "ignore"],
+				env: { ...process.env, ...launchEnv(marker) },
+			})
+			const deadline = Date.now() + 5_000
+			while (!environShown(child.pid)) {
+				if (Date.now() > deadline) throw new Error("the marked child never became readable")
+				await new Promise((resolve) => setTimeout(resolve, 20))
+			}
+			return child
+		}
+
+		test("a stranger answering while the live, still-unbound child starts is refused", async () => {
+			const port = await strangerAnvil()
+			const child = await spawnMarked(newMarker(), ["-e", "setTimeout(() => {}, 30_000)"])
+			const marker = newMarker()
+			try {
+				await expect(
+					waitWhileAlive(
+						child,
+						() => probeAnvil(`http://127.0.0.1:${port}`),
+						"anvil",
+						5_000,
+						10,
+						() => listenerIsOurs(port, marker),
+					),
+				).rejects.toThrow("answered by a listener this run did not start")
+			} finally {
+				child.kill("SIGKILL")
+			}
+		})
+
+		test("the child's own listener reaches ready", async () => {
+			const marker = newMarker()
+			// The child picks its own port: a port freed here for it could be taken first on a busy host.
+			const child = await spawnMarked(marker, [
+				"-e",
+				`const s = require("node:http").createServer((_, res) => res.end("ok")).listen(0, "127.0.0.1", () => console.log(s.address().port))`,
+			])
+			try {
+				const port = Number(
+					await new Promise<string>((resolve) => child.stdout?.once("data", (d: Buffer) => resolve(d.toString()))),
+				)
+				const answers = () =>
+					new Promise<boolean>((resolve) =>
+						http.get(`http://127.0.0.1:${port}/`, (res) => resolve(res.statusCode === 200)).on("error", () => resolve(false)),
+					)
+				await waitWhileAlive(child, answers, "playground", 5_000, 20, () => listenerIsOurs(port, marker))
+				expect(listenerIsOurs(port, newMarker())).toBe(false)
+			} finally {
+				child.kill("SIGKILL")
+			}
+		})
 	})
 })

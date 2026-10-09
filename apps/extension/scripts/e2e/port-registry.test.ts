@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -121,6 +121,14 @@ describe("host port registry", { timeout: 20_000 }, () => {
 		const file = registry([...HEADER, row(16001, "nulo-e2e-anvil", "mine", "/w", process.pid), ...others])
 		expect(await releasePorts("mine", opts(file))).toBe(true)
 		expect(read(file)).toBe(`${[...HEADER, ...others].join("\n")}\n`)
+	})
+
+	// The rewrite is a rename onto a new inode, which would otherwise take the umask's mode.
+	test("a rewrite keeps the registry's own mode", async () => {
+		const file = registry([...HEADER, row(16101, "nulo-e2e-anvil", "mine", "/w", process.pid)])
+		chmodSync(file, 0o600)
+		expect(await releasePorts("mine", opts(file))).toBe(true)
+		expect(statSync(file).mode & 0o777).toBe(0o600)
 	})
 
 	test("releaseDeadRows drops only the named worktree's dead nulo-e2e rows", async () => {

@@ -9,8 +9,19 @@ import { afterAll, describe, expect, test, vi } from "vitest"
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-owned-processes-test-"))
 process.env.NULO_E2E_DATA_ROOT = ROOT
 
-const { LAUNCH_ENV, OWNER_ENV, RUN_ENV, RUN_OWNER_ENV, WORKTREE_ENV, newMarker, ownIdentity, ownedProcesses, readEnviron, readStartTime } =
-	await import("../../tests/e2e/owned-processes")
+const {
+	LAUNCH_ENV,
+	OWNER_ENV,
+	RUN_ENV,
+	RUN_OWNER_ENV,
+	WORKTREE_ENV,
+	assertInheritsRun,
+	newMarker,
+	ownIdentity,
+	ownedProcesses,
+	readEnviron,
+	readStartTime,
+} = await import("../../tests/e2e/owned-processes")
 const { createRunDir, deletableRunDir, reapPriorRun, stopService, stopServiceOnExit, sweepDeadRuns, sweepOrphanDataDirs } = await import(
 	"../../tests/e2e/sandbox-ownership"
 )
@@ -171,8 +182,19 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 					])
 				: ("unreadable" as const)
 		}
-		const outcome = await reapPriorRun(lock({ markers: { aztec: m }, owner: DEAD, aztecDataDir: dir }), { ...fast, read })
+		const prior = lock({
+			markers: { aztec: m },
+			owner: DEAD,
+			aztecDataDir: dir,
+			pids: { aztec: pid },
+			starts: { aztec: readStartTime(pid) },
+		})
+		const outcome = await reapPriorRun(prior, { ...fast, read })
 		expect(outcome).toMatchObject({ cleared: false, reason: expect.stringContaining("aztec unknown") })
+		expect(existsSync(dir)).toBe(true)
+		// A later reap never saw it marked; the lock's pid and start time are what keep the dir.
+		const again = await reapPriorRun(prior, { ...fast, read: (p: number) => (p === pid ? "unreadable" : "gone") })
+		expect(again).toMatchObject({ cleared: false, reason: expect.stringContaining("aztec unknown") })
 		expect(existsSync(dir)).toBe(true)
 	})
 
@@ -203,11 +225,16 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 		rmSync(outside, { recursive: true, force: true })
 	})
 
-	test("a lock without markers is never signalled: all pids dead clears it, one live pid refuses", async () => {
+	test("a lock naming no owner is never signalled: all pids dead clears it and its stamped run dir, one live pid refuses", async () => {
 		const owner = await liveOwner()
+		const m = marker()
+		const dir = path.join(ROOT, `nulo-aztec-${deadPid()}-5`)
+		createRunDir(dir, m)
 		const spy = spyKill()
 		try {
-			expect(await reapPriorRun(lock({ pids: { anvil: deadPid(), aztec: deadPid() } }))).toEqual({ cleared: true })
+			const unowned = lock({ pids: { anvil: deadPid(), aztec: deadPid() }, markers: { aztec: m }, aztecDataDir: dir })
+			expect(await reapPriorRun(unowned)).toEqual({ cleared: true })
+			expect(existsSync(dir)).toBe(false)
 			const refused = await reapPriorRun(lock({ pids: { anvil: deadPid(), aztec: owner.pid } }))
 			expect(refused).toMatchObject({ cleared: false, reason: expect.stringContaining(`aztec pid ${owner.pid}`) })
 		} finally {
@@ -309,5 +336,42 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 			}
 			expect(spy.sent).toEqual([[member, "SIGTERM"]])
 		})
+	})
+})
+
+describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000 }, () => {
+	afterAll(() => {
+		for (const pid of spawned) {
+			try {
+				process.kill(pid, "SIGKILL")
+			} catch {
+				// Already stopped.
+			}
+		}
+	})
+
+	// A zombie's environ refuses the read exactly as a non-dumpable process's does.
+	test("a zombie reads as gone, not unreadable", async () => {
+		const parent = spawn("sh", ["-c", "sleep 0.1 & echo $!; exec sleep 5"], { stdio: ["ignore", "pipe", "ignore"] })
+		const zombie = Number(await new Promise<string>((resolve) => parent.stdout?.once("data", (d: Buffer) => resolve(d.toString()))))
+		try {
+			expect(await until(() => readFileSync(`/proc/${zombie}/stat`, "utf8").includes(") Z "))).toBe(true)
+			expect(readEnviron(zombie)).toBe("gone")
+		} finally {
+			parent.kill("SIGKILL")
+		}
+	})
+
+	test("a process that did not inherit the run marker is refused; one that did passes", async () => {
+		const run = newMarker()
+		process.env[RUN_ENV] = run
+		try {
+			const without = await spawnWith({ NULO_TEST_PLAIN: "1", [RUN_ENV]: "" }, "NULO_TEST_PLAIN")
+			expect(() => assertInheritsRun(without.pid, "Chrome")).toThrow("Chrome did not inherit the run marker")
+			const inherited = await spawnWith({ NULO_TEST_PLAIN: "1" }, "NULO_TEST_PLAIN")
+			expect(() => assertInheritsRun(inherited.pid, "Chrome")).not.toThrow()
+		} finally {
+			Reflect.deleteProperty(process.env, RUN_ENV)
+		}
 	})
 })

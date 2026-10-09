@@ -16,6 +16,7 @@
  */
 import { randomBytes } from "node:crypto"
 import {
+	chmodSync,
 	closeSync,
 	existsSync,
 	mkdirSync,
@@ -153,7 +154,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export interface RegistryLock {
 	/** Unlinks the lock only while it still holds this holder's token, so a lock another writer took
-	 *  after a break of ours is never removed. */
+	 *  after breaking ours is never removed. */
 	release(): void
 }
 
@@ -214,6 +215,8 @@ export async function withRegistry(
 		const tmp = `${target}.${SERVICE_PREFIX}${randomBytes(6).toString("hex")}.tmp`
 		try {
 			writeFileSync(tmp, text, "utf8")
+			// The rename replaces the inode, so the file would take the umask's mode instead of its own.
+			if (current !== undefined) chmodSync(tmp, statSync(target).mode & 0o777)
 			renameSync(tmp, target)
 		} finally {
 			rmSync(tmp, { force: true })
@@ -267,7 +270,7 @@ export async function claimPorts(claim: PortClaim, opts: RegistryOptions = {}): 
 	if (conflicts.length > 0) throw new PortClaimConflict(conflicts)
 }
 
-/** Drops the `nulo-e2e-*` rows `keep` refuses, under the lock. The count dropped, or `undefined`
+/** Drops the `nulo-e2e-*` rows `drop` accepts, under the lock. The count dropped, or `undefined`
  *  when the lock never came free or the file could not be rewritten; never throws, so a registry
  *  problem cannot change a finished run's exit status. */
 async function dropOwnRows(drop: (row: OwnRow) => boolean, opts: RegistryOptions): Promise<number | undefined> {
