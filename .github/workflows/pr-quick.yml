@@ -290,8 +290,8 @@ jobs:
           bun scripts/ci-cd/preview-comment.ts
 
   # The landing deploys from Cloudflare's own Git integration, so without this job the first
-  # build of a change is the production one. No network: the release stub stands in for the
-  # GitHub API call `prebuild` makes, and the legal pages are generated from legal/*.md.
+  # build of a change is the production one. `bun run build` is the production build: `prebuild`
+  # generates the legal pages from legal/*.md, and nothing in it reaches the network.
   build-landing:
     name: Build Landing
     needs: changes
@@ -303,12 +303,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - uses: ./.github/actions/setup-bun
-      - name: Generate the release stub and the legal pages
-        working-directory: apps/landing
-        run: bun run scripts/ensure-release-json.ts && bun run scripts/build-legal.ts
       - name: Build
         working-directory: apps/landing
-        run: bunx vite build
+        run: bun run build
       - name: Verify the legal pages shipped
         working-directory: apps/landing
         run: |
