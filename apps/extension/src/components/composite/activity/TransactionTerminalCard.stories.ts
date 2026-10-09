@@ -6,7 +6,7 @@ const meta: Meta<typeof TransactionTerminalCard> = {
 	component: TransactionTerminalCard,
 	tags: ["autodocs"],
 	argTypes: {
-		color: { control: "select", options: ["gray", "amber", "red"] },
+		color: { control: "select", options: ["gray", "amber", "red", "green"] },
 		icon: { control: "text" },
 		activityIcon: { control: "text" },
 	},
@@ -64,6 +64,19 @@ export const FailedSimulation: Story = {
 		subtitle: "Simulation failed",
 		icon: "close-circle",
 		color: "red",
+		activityIcon: "arrow-narrow-up-right",
+		amount: "5.00",
+		amountSymbol: "USDC",
+	},
+}
+
+/** Sent — green. The check of a send that reported a failure found it on the network. */
+export const Sent: Story = {
+	args: {
+		title: "Send 5 USDC",
+		subtitle: "Sent",
+		icon: "check-circle",
+		color: "green",
 		activityIcon: "arrow-narrow-up-right",
 		amount: "5.00",
 		amountSymbol: "USDC",

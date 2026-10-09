@@ -3,11 +3,12 @@ import type { Page } from "puppeteer"
 import { TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { GLOSSARY, GLOSSARY_SECTIONS } from "@/utils/glossary"
-import { isFirefox, reloadExtensionPage } from "./fixtures/browser"
-import { clickByTestId, openPopup, test, waitForHash } from "./fixtures/extension"
+import { isFirefox, prepareKeys, reloadExtensionPage } from "./fixtures/browser"
+import { openPopup, test, waitForHash } from "./fixtures/extension"
 import { lockWallet, navigateToSettings } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
-import { pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
+import { shotSend } from "./fixtures/send-page"
+import { focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const BUBBLE = sel("tooltip-bubble")
@@ -106,7 +107,9 @@ async function openHome(page: Page): Promise<void> {
 	await page.waitForSelector(TERM, { visible: true, timeout: 15_000 })
 }
 
-test("Settings → Glossary lists every entry in section order, and its back arrow returns to Settings", async ({ registeredExtension }) => {
+test("Settings → Glossary lists every entry in section order, and its back arrow shows the accent ring and returns to Settings on Enter", async ({
+	registeredExtension,
+}) => {
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
@@ -116,7 +119,11 @@ test("Settings → Glossary lists every entry in section order, and its back arr
 	const entries = await page.$$eval('[data-testid^="glossary-entry-"]', (els) => els.map((el) => el.getAttribute("data-testid")))
 	expect(entries).toEqual(GLOSSARY_SECTIONS.flatMap((section) => section.keys.map((key) => `glossary-entry-${key}`)))
 
-	await clickByTestId(page, "subpage-back")
+	await prepareKeys(page)
+	await tabTo(page, "subpage-back", 10)
+	await shotSend(page, "subpage-back-focused", "subpage-back")
+	expect(await focusRing(page, "subpage-back")).toEqual({ ring: "solid 2px -2px", color: await tokenColor(page, "--nulo-accent") })
+	await page.keyboard.press("Enter")
 	await waitForHash(page, "#/popup/settings")
 
 	expect(registeredExtension.consoleErrors).toEqual([])

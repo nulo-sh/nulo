@@ -169,3 +169,36 @@ describe("light palette landed (was the root cause)", () => {
 		expect(resolveColor("--border", themeMap("light")).r).toBeGreaterThan(100) // rgba(124,116,104,.3)
 	})
 })
+
+// A focus ring or a graphic needs 3:1 against what it sits on (WCAG 1.4.11), link text 4.5:1.
+describe("theme contrast — home links, focus rings and the step bar (required)", () => {
+	const AA_NON_TEXT = 3
+	const pairs: Pair[] = [
+		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link on the page" },
+		{ fg: "--nulo-accent", bg: "--app-bg", min: AA_NON_TEXT, label: "the accent ring on the page" },
+		{ fg: "--app-bg", bg: "--nulo-accent", min: AA_NON_TEXT, label: "a page-coloured ring on an accent fill" },
+		{ fg: "--nulo-track", bg: "--app-bg", min: AA_NON_TEXT, label: "a step bar's empty track on the page" },
+	]
+	for (const theme of ["dark", "light"] as const) {
+		for (const p of pairs) {
+			test(`${theme}: ${p.label} (${p.fg} on ${p.bg}) >= ${p.min}:1`, () => {
+				expect(contrast(p.fg, p.bg, theme)).toBeGreaterThanOrEqual(p.min)
+			})
+		}
+	}
+})
+
+// Status text: light needs its own darker values; dark keeps the status colours it always drew.
+describe("theme contrast — status text (required)", () => {
+	const STATUS = { "--txt-warning": "--yellow", "--txt-danger": "--red", "--txt-success": "--green" }
+	for (const [fg, status] of Object.entries(STATUS)) {
+		for (const bg of ["--app-bg", "--nulo-surface-low", "--nulo-surface-high"]) {
+			test(`light: ${fg} on ${bg} >= ${AA_TEXT}:1`, () => {
+				expect(contrast(fg, bg, "light")).toBeGreaterThanOrEqual(AA_TEXT)
+			})
+		}
+		test(`dark: ${fg} is ${status}`, () => {
+			expect(resolveColor(fg, themeMap("dark"))).toEqual(resolveColor(status, themeMap("dark")))
+		})
+	}
+})
