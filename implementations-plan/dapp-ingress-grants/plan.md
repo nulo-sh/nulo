@@ -266,7 +266,7 @@ Plain-language steps. "Gate" means the validation block at the end of the phase.
 
 ### Arc 1 (decision-free; build first)
 
-#### Phase 1.1: read stored grants through the projection (#88)
+#### Phase 1.1: read stored grants through the projection (#88) ✓
 
 1. Export `projectStoredGrants` from `packages/wallet-bridge/src/index.ts`.
 2. In `dapp-session/service.ts`, project held grants once in `applyCapabilityDecision` and on the On branch of `setAuthorizationsWithoutAsking`.

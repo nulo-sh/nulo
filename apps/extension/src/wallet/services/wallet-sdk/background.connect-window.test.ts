@@ -457,7 +457,7 @@ describe("establishment shows the check in the connect window", () => {
 		await approvedIn(h, "f1", 41)
 		Object.assign([...h.rows.values()][0], {
 			accounts: [`aztec:1:${FAKE_SENDER}`],
-			capabilityGrants: [{ capability: { type: "transaction" } }],
+			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } }],
 		})
 		const navigation = deferred<void>()
 		h.windows.holdNextNavigation(navigation.promise)
