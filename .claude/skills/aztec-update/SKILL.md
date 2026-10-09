@@ -203,9 +203,11 @@ Then Branch A's delivery gates.
   only a 3-file canary lane prover-ON. Running all ~70 files prover-ON locally is ~2.5h for no
   extra signal; run prover-ON for the canaries + fee/tx-send paths and proverless for the rest.
   Two files carry `@requires-proverless` and the runner hard-fails if they're in a prover-ON set.
-  And SHARD the proverless pass locally — `agent.sh` allocates its own ports per run, so 3-4
-  concurrent shards are safe (CI runs 5) and cut it from ~25min to under 10. Prover-ON is the
-  exception: every shard would queue on the single presto-server at the hardcoded port 59833.
+  And SHARD the proverless pass locally, one shard per checkout (CI runs 5): never two `e2e:agent`
+  runs in one worktree, since each rebuilds and owns that worktree's `dist` and `.e2e-state/`, and
+  its global setup `pkill`s every Chrome loaded from that `dist` (e2e-testing skill, § Hazards).
+  Shards from separate checkouts cut it from ~25min to under 10. Prover-ON is the exception: every
+  shard would queue on the single presto-server at the hardcoded port 59833.
 - **`BB_BINARY_PATH` is a footgun**: Presto's `find_bb` honours the seed before the versioned
   cache, so a version-mismatched seed proves everything with the wrong bb while the log shows a
   download of the right one. Run the server unseeded.

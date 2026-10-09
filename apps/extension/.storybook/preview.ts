@@ -38,25 +38,24 @@ function ensureTeleportRoots() {
 // per-story, not globally.
 function ensureChromeStub() {
 	if (typeof globalThis === "undefined") return
-	const g = globalThis as { chrome?: unknown }
-	if (g.chrome) return
-	g.chrome = {
-		runtime: {
-			id: "story-stub",
-			getURL: (path: string) => path,
-			connect: () => ({
-				postMessage: () => {},
-				onMessage: { addListener: () => {}, removeListener: () => {} },
-				onDisconnect: { addListener: () => {}, removeListener: () => {} },
-				disconnect: () => {},
-			}),
-			sendMessage: () => Promise.resolve(),
+	const g = globalThis as { chrome?: Record<string, unknown> }
+	// Chromium defines `chrome` on every page, but outside an extension without these two members.
+	g.chrome ??= {}
+	g.chrome.runtime ??= {
+		id: "story-stub",
+		getURL: (path: string) => path,
+		connect: () => ({
+			postMessage: () => {},
 			onMessage: { addListener: () => {}, removeListener: () => {} },
-		},
-		storage: {
-			local: { get: async () => ({}), set: async () => {} },
-			session: { get: async () => ({}), set: async () => {} },
-		},
+			onDisconnect: { addListener: () => {}, removeListener: () => {} },
+			disconnect: () => {},
+		}),
+		sendMessage: () => Promise.resolve(),
+		onMessage: { addListener: () => {}, removeListener: () => {} },
+	}
+	g.chrome.storage ??= {
+		local: { get: async () => ({}), set: async () => {} },
+		session: { get: async () => ({}), set: async () => {} },
 	}
 }
 

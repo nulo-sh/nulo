@@ -206,6 +206,18 @@ export async function readSendInputs(page: Page): Promise<{ amount: string; dest
 	})
 }
 
+/** Waits, at most 1 s and never throwing, for the CSS transitions a theme flip started: sheets and
+ *  buttons fade their colours over 0.2 s, and a shot taken mid-fade reads washed out. Only transitions
+ *  count, so an endless spinner animation cannot hold it. */
+async function settleThemeTransitions(page: Page): Promise<void> {
+	await page
+		.evaluate(() => {
+			const ends = document.getAnimations().flatMap((a) => (a instanceof CSSTransition ? [a.finished.catch(() => undefined)] : []))
+			return Promise.race([Promise.all(ends), new Promise((r) => setTimeout(r, 1_000))])
+		})
+		.catch(() => undefined)
+}
+
 /** Opt-in capture of the popup (`NULO_E2E_SHOT_DIR`), both themes: a popup-surface change ships with a
  *  picture of it, and a colour token that only reads well on one theme is what a row count never sees. */
 export async function shotSend(page: Page, name: string, focus = "send-publish-strip"): Promise<void> {
@@ -227,9 +239,12 @@ export async function shotSend(page: Page, name: string, focus = "send-publish-s
 		root.setAttribute("theme", was === "dark" ? "light" : "dark")
 		return was
 	})
+	await settleThemeTransitions(page)
 	await page.screenshot({ path: `${dir}/${name}-${flipped === "dark" ? "light" : "dark"}.png` as `${string}.png` })
 	await page.evaluate((was: string | null) => {
 		if (was === null) document.documentElement.removeAttribute("theme")
 		else document.documentElement.setAttribute("theme", was)
 	}, flipped)
+	// A caller's next shot can follow at once; it must not catch the restore mid-fade.
+	await settleThemeTransitions(page)
 }

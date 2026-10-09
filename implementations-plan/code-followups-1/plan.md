@@ -699,7 +699,7 @@ overrun is recorded, not fixed.
 
 ### Arc 2 — tests and tooling
 
-#### Phase 4 — signals instead of sleeps, honest budgets
+#### Phase 4 — signals instead of sleeps, honest budgets ✓
 
 1. *98.* `useIncomingTransfers` returns `loaded`; `useIncomingTransfers.test.ts` adds: `loaded` is
    false while the first read is held and true once it resolves (success control); stays false when
@@ -717,7 +717,7 @@ Chrome with `NULO_E2E_SHOT_DIR=<SCRATCH>/shots` of `incoming-transfers`, `price-
 the sheet and its buttons in the flipped theme's final colours, not a blend. The same invocation under
 `NULO_E2E_BROWSER=firefox` is green (a fixture changed).
 
-#### Phase 5 — tooling and config
+#### Phase 5 — tooling and config ✓
 
 1. *97.* Reword `aztec-update/SKILL.md:206-208`.
 2. *102.* `.storybook/main.ts` `dirs`; `.storybook/preview.ts` fills missing `chrome` members.
@@ -742,7 +742,7 @@ not by count; both lists in `lessons/phase-5.md`). `bun run --cwd apps/landing b
 warning, `bun run --cwd apps/landing typecheck` passes, and a throwaway
 `bun x vite build --configLoader native` in `apps/landing` succeeds.
 
-#### Phase 6 — the real decoder test, the test-count measurement
+#### Phase 6 — the real decoder test, the test-count measurement ✓
 
 1. *106.* `call-surface.real.test.ts` with the three cases in Arc 2.
 2. *174.* The measurement, then the fix or the record, per its stop rule.
@@ -1044,6 +1044,23 @@ The conditions are met in this text; no further round was run.
   so a slow read could pass after the deadline. Accepted: it is taken after the read.
 - **Round 3** (resumed): `clean`.
 
+### Arc 2 — Codex fix loop (gpt-6.1-sol, high, read-only) and Opus review
+
+- **Round 1** (session `01a11ee7-f430-7c00-9f99-d8281b3f4588`): `findings`, one nit: the real decoder
+  test's header and helper comment narrated the pipeline. Accepted: they now state the jsdom and
+  bb-free constraints and why the selector is derived from the function's own ABI. Codex checked and
+  found sound: `loaded` against every refresh path, the waits and budgets, the pages globs (probed
+  with the plugin's micromatch), the Storybook root and stub, the relabeled case reaching
+  `corroborates`. Opus review alongside: `findings`, all nits. Accepted: record the arc-boundary
+  gates; the pages comment says EXACTLY one dot-directory; the soak comment no longer calls the 60 s
+  timeout the thing under test for the five non-hang cases; the incoming-transfers header said the
+  client connects via `connect()` in `onMounted` (it connects on its first request). Rejected:
+  replacing a partial `chrome.runtime` in the Storybook stub when one is present (an extension's
+  `externally_connectable` can expose `connect` without `id`): the rule is to fill only missing
+  members, assigning over a browser binding may throw in strict-mode modules, and the case exists only
+  in a developer's own browser; per-story mocks stay the route. Codex agreed with the rejection.
+- **Round 2** (resumed): `clean`.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no `/code-review`
@@ -1179,3 +1196,7 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
 - On reopening the popup during a queued send, Home's activity shows a stage-less awaiting card until
   the journal snapshot lands (`RecentActivityView.vue` loads the executing-task snapshot first).
   Whether the view should hold the card until it knows the stage is a UI call for the owner.
+- (Found in Arc 2.) `apps/extension`'s `vitest.config.ts`, `vite.shared.ts` and the root
+  `vitest.base.ts` warn on every run that Vite's planned native config loader refuses them ("ESM
+  syntax in a file loaded as CommonJS"): the extension's `package.json` declares no `"type"`. The
+  landing's twin (entry 133) is fixed; this one needs its own change and soak.
