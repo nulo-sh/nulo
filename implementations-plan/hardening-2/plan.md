@@ -1,6 +1,7 @@
 ---
 plan: hardening-2
 tier: mid
+status: completed (#70, #71, #72)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -12,6 +13,23 @@ issues: [16, 26, 18, 19, 23]
 base: origin/dev f5ca160
 ---
 
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: completed. The three arcs were squash-merged into `dev` in the D-ORD order; this close-out is a docs-only PR on `dev`.
+- **Shipped**: three PRs.
+  - [#70](https://github.com/nulo-sh/nulo/pull/70), Arc 3, closes #23. The extension pages' CSP has a `default-src 'self'` floor, added one directive at a time while an e2e-only `securitypolicyviolation` recorder ran in every extension context on both browsers. The final policy is `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; style-src 'self' 'unsafe-inline'`. Two sources were added on recorded violations: `blob:` in `connect-src`, because Firefox checks `downloads.download` of a blob URL against it (D-23k), and `'unsafe-inline'` in `style-src`, because CodeMirror generates its theme `<style>` (D-23h). zod's JIT is off (`zod-jitless.ts`), since its `eval` probe raised a violation under the old policy too (D-23e). Both browsers' full smoke and network suites passed at retry 0 with zero recorded violations; the recorder's named gaps are in `apps/extension/tests/e2e/README.md` § CSP violations.
+  - [#71](https://github.com/nulo-sh/nulo/pull/71), Arc 1, closes #16 and #26. Every dApp call is parsed against a private copy of `WalletSchema` carrying the Nulo RPCs, after its capability check and before its scope check. A refusal is `InvalidWalletArgumentsError` with fixed text, so no argument value reaches a log line or a journal row. `assertAuthRelevantArgShape` and `argsRequestCapabilities` are deleted. The verified-artifact cache is keyed by the artifact object, since one registry serves every PXE runtime's store.
+  - [#72](https://github.com/nulo-sh/nulo/pull/72), Arc 2, closes #18 and #19. Migration resume refuses a journal that names no registered migration or strays outside its footprint, keeps it and writes nothing. A corrupt or misfiled tombstone keeps its id reserved and is never resumed under another id. `updateToken` and `onTokenUpdated` are deleted. Both balance writers re-check the purge fence in the tick their write resumes, and both purges run typed, raw, typed, fencing every matched raw row first.
+- **Owner answers** (2026-10-08, [OWNER-ASKS.md](OWNER-ASKS.md) § Answers), built in #71:
+  - OA-1 **C**: the permission request's header and each known capability type are parsed; an unknown type still reaches the connect window as its "unknown" row.
+  - OA-2 **B**: a schema refusal answers `-32602` with `walletErrorCode: "INVALID_PARAMS"` and "The request's arguments do not match the wallet API."
+  - OA-3 **B**: a queued send the parse refuses fails with the new `malformed_request` outcome. Row label "Couldn't read request", explanation "The app sent a request the wallet could not read. Nothing was sent."
+- **Dropped or deferred**: the ship-now forms of OA-1 to OA-3, superseded by the answers. OA-4 and OA-5 are unanswered, so `connect-src` keeps `http:` and the published patch keeps `z.string()` for `grantPublicAuthwit`'s two addresses. Narrowing `style-src` needs CodeMirror mounted in a shadow root, a UI change. Arc 1's Opus O3 (a Buffer-shaped address with a non-function `toString`) is pre-existing and fails closed. No general `isLive` gate was built (D-18c), and `base-uri` and `form-action` are outside #23. No final cross-arc Codex pass is recorded (see the Status line).
+- **Open items**: none kept here; [follow-ups](../follow-ups.md) took OA-4, OA-5, the `style-src` narrowing, O3, the live hosts a smoke build still contacts, the `bun run dev` run nobody made under the new policy, and the unauthenticated journal (added to the migration-engine entry). Rewritten to what is left: the "Popup closed early" entry (a malformed request now reads "Couldn't read request") and first-party `profileId` trust (`updateToken` is gone). The flake ledger's row 46 landed in the `e2e-testing` skill with #70.
+- **Lessons**: none promoted. `lessons.md` sat 28 B under its 8,192 B budget, and each candidate already lives where its next reader looks, or would have paid for itself only by retiring another plan's live entry. The CSP sources' reasons sit at the policy in `manifest.config.ts`; the recorder, its reach and its gaps in `tests/e2e/README.md`; the stale `dist` and the literal build-flag guard in the `e2e-testing` skill; the object-keyed cache at `artifact-registry.ts`. The zod object union that hides a malformed sibling and the squash merge that retargets a stacked PR stay in [phase 1](lessons/phase-1.md) and [phase 3](lessons/phase-3.md).
+- **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
+
 # hardening-2 — boundary parsing, storage fences, CSP floor
 
 Five hardening findings in three arcs:
@@ -22,7 +40,7 @@ Five hardening findings in three arcs:
 
 What a person can notice is listed under UI impact and in `OWNER-ASKS.md`.
 
-Status: approved by the orchestrator on 2026-10-08, with one reorder (D-ORD): Arc 3, the CSP floor, ships first as layer 1; Arc 1 follows as layer 2 once PR #48 lands, Arc 2 as layer 3. Arc 3 (phases 6-7) implemented and gated on 2026-10-09; its Codex loop was clean at round 3.
+Status: closed on 2026-10-09 (see Outcome). Approved by the orchestrator on 2026-10-08 with one reorder (D-ORD): Arc 3, the CSP floor, shipped first as #70; Arc 1 followed as #71 once PR #48 had landed, and Arc 2 as #72, stacked on Arc 3 (D-ORD2). Each arc's Codex loop converged before its PR opened: Arc 1 at round 2, Arcs 2 and 3 at round 3. No final cross-arc Codex pass is recorded: the arcs merged into `dev` one at a time, each once its own loop had converged.
 
 ## Outcome & Quality Bar
 
@@ -353,9 +371,9 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
 
 `e2e:agent` builds its own `dist/<browser>`. Run the smoke recipe after any `e2e:agent` run, never before it.
 
-### Arc 1 (layer 2, branch `hardening-2-dapp-parse`, after PR #48 lands)
+### Arc 1 (layer 2, branch `hardening-2-dapp-parse`, after PR #48 lands): merged as #71
 
-#### Phase 1 — #16: parse every dApp call against the schema
+#### Phase 1 — #16: parse every dApp call against the schema ✓
 
 **Arc 1: done 2026-10-09.** Built with the owner's answers, not the ship-now forms steps 4, 8 and 9 name (D-16j to D-16q). Evidence, the I-2 table and the red-on-base results: `lessons/phase-1.md`.
 
@@ -397,7 +415,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - The network files pass at retry 0. This proves I-1 for every method they call.
 - Layers: typecheck/lint, unit, network e2e on Chrome. Nothing here touches fixtures, focus, windows or WebAuthn.
 
-#### Phase 2 — #26: key the verified cache by the artifact object
+#### Phase 2 — #26: key the verified cache by the artifact object ✓
 
 **Arc 1: done 2026-10-09.** As written; evidence in `lessons/phase-2.md`.
 
@@ -420,7 +438,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - The refused row fails on the base copy of `artifact-registry.ts`; the cached and other-id rows pass on both.
 - Layers: unit, lint, typecheck, network e2e on Chrome (registration, lookups and a prover-on send through the changed path).
 
-### Arc 2 (layer 3, branch `hardening-2-storage-fences`)
+### Arc 2 (layer 3, branch `hardening-2-storage-fences`): merged as #72
 
 #### Phase 3 — #19: resume refuses a journal its registry did not write ✓
 
@@ -495,9 +513,9 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - Each fence test fails with its fence removed.
 - Layers: typecheck/lint, unit, integration, network e2e (restore and purge), smoke e2e.
 
-### Arc 3 (layer 1, branch `worktree-hardening-2`)
+### Arc 3 (layer 1, branch `worktree-hardening-2`): merged as #70
 
-#### Phase 6 — record before tightening
+#### Phase 6 — record before tightening ✓
 
 1. Pin today's policy in `manifest.test.ts` on both manifests, as an exact string. Each directive commit updates the pin.
 2. Add the recorder, its unit test, its imports, the release guard and the flag wiring (Architecture). The unit test proves that an entry recorded before a successor context's recorder loads survives that load. Record each browser's reach in `tests/e2e/README.md` and `FIREFOX.md`.
@@ -521,7 +539,7 @@ cd <WT>/apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 [NULO_E2E_CSP_REPORT=1, a
   - The probe results are recorded for every context on both browsers.
 - Layers: unit, CI-gating, smoke e2e on Chrome and Firefox (the fixtures changed).
 
-#### Phase 7 — one directive at a time
+#### Phase 7 — one directive at a time ✓
 
 Order: `connect-src`, then `font-src`, `style-src`, `frame-src`, `media-src`, `object-src`, and last `default-src 'self'` with the redundant explicit directives removed. For each directive:
 
