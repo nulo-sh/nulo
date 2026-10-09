@@ -37,3 +37,13 @@ Seen along the way, not acted on: five test names repeat inside their file (7 ex
 
 `bun run --cwd apps/extension test -- call-surface.real`: 3/3; the forced-open check fails the
 relabeled case; the 174 measurement is recorded above.
+
+## Arc 2 boundary (2026-10-09)
+
+- `bun run test:all` at `08d4463`: every workspace green; extension 700 files passed (3 skipped),
+  10,426 passed, 4 skipped, 7 todo.
+- `bun run test:ci-gating` (Phase 5): 413 pass; `bun run lint`, `bun run typecheck:all`: pass.
+- Full Chrome smoke suite, armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
+  VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 bun run build:chrome`), `NULO_E2E_MIGRATION_FIXTURE=1 bun run test:e2e --retry=0`:
+  44 files passed, 3 skipped; 186 tests passed, 11 skipped.
+- Codex loop: round 1 one nit (accepted), Opus nits (four accepted, one rejected), round 2 `clean`.

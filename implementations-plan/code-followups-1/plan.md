@@ -1044,6 +1044,23 @@ The conditions are met in this text; no further round was run.
   so a slow read could pass after the deadline. Accepted: it is taken after the read.
 - **Round 3** (resumed): `clean`.
 
+### Arc 2 — Codex fix loop (gpt-6.1-sol, high, read-only) and Opus review
+
+- **Round 1** (session `01a11ee7-f430-7c00-9f99-d8281b3f4588`): `findings`, one nit: the real decoder
+  test's header and helper comment narrated the pipeline. Accepted: they now state the jsdom and
+  bb-free constraints and why the selector is derived from the function's own ABI. Codex checked and
+  found sound: `loaded` against every refresh path, the waits and budgets, the pages globs (probed
+  with the plugin's micromatch), the Storybook root and stub, the relabeled case reaching
+  `corroborates`. Opus review alongside: `findings`, all nits. Accepted: record the arc-boundary
+  gates; the pages comment says EXACTLY one dot-directory; the soak comment no longer calls the 60 s
+  timeout the thing under test for the five non-hang cases; the incoming-transfers header said the
+  client connects via `connect()` in `onMounted` (it connects on its first request). Rejected:
+  replacing a partial `chrome.runtime` in the Storybook stub when one is present (an extension's
+  `externally_connectable` can expose `connect` without `id`): the rule is to fill only missing
+  members, assigning over a browser binding may throw in strict-mode modules, and the case exists only
+  in a developer's own browser; per-story mocks stay the route. Codex agreed with the rejection.
+- **Round 2** (resumed): `clean`.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no `/code-review`
