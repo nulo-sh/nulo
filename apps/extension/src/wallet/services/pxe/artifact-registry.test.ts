@@ -179,6 +179,24 @@ describe("ArtifactRegistry.resolve — class-id trust enforcement", () => {
 		expect(seen).toEqual([verified, forged])
 	})
 
+	test("the cache vouches only for the object the verifier returned", async () => {
+		const input = makeArtifact("input")
+		const returned = makeArtifact("returned")
+		const seen: ContractArtifact[] = []
+		const verifier: ArtifactClassIdVerifier = {
+			verify: async (artifact) => {
+				seen.push(artifact)
+				return artifact === input ? returned : artifact
+			},
+		}
+		const reg = new ArtifactRegistry(emptyLoader, { verifier })
+
+		await expect(reg.resolve(new Fr(5), async () => input)).resolves.toBe(returned)
+		await expect(reg.resolve(new Fr(5), async () => input)).resolves.toBe(returned)
+		await expect(reg.resolve(new Fr(5), async () => returned)).resolves.toBe(returned)
+		expect(seen).toEqual([input, input])
+	})
+
 	test("the same artifact object under another class id is verified again", async () => {
 		const artifact = makeArtifact("pxe-hit")
 		const { verifier, calls } = makeRecordingVerifier()
