@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the workspace unit suites run on the Bun runtime through `bun --bun vitest run` (all but `packages/resolve-asset`, still on Node), with a shared base in `vitest.base.ts` and a fail-closed soak tool in `scripts/ci-cd/test-soak/`.
-- **Open items**: `packages/resolve-asset` still tests on Node, and the interop stopgap in `vitest.base.ts` awaits a vitest release that carries the upstream fix, both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: `packages/resolve-asset` still tests on Node, and the interop stopgap in `vitest.base.ts` awaits a vitest release that carries the upstream fix, both tracked in #174. Moving `packages/resolve-asset` off Node was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

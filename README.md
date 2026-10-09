@@ -24,7 +24,7 @@ The extension exposes the canonical `@aztec-labs/wallet-sdk` surface to dApps an
 - dApp surface: discover, connect, capability bundles, sendTx, simulateTx, registerContract, getPrivateEvents.
 - Local testing: a playground dApp and parallel-safe e2e suite per worktree.
 
-Open follow-ups are tracked in [`implementations-plan/follow-ups.md`](./implementations-plan/follow-ups.md), and plans in progress in [`implementations-plan/index.md`](./implementations-plan/index.md).
+Open work is tracked in [GitHub issues](https://github.com/nulo-sh/nulo/issues), and plans in progress in [`implementations-plan/index.md`](./implementations-plan/index.md).
 
 ## Quick start
 

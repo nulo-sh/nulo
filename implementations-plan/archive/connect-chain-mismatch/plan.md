@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the dispatcher derives a dApp chain's default account on demand (`packages/wallet-bridge/src/dispatcher.ts`, `apps/extension/src/wallet/services/account/service.ts`) and the connect window offers a switch to that chain (`apps/extension/src/popup/windows/capabilities/chain-mismatch.ts`, `apps/extension/src/composables/useNetworkActivation.ts`).
-- **Open items**: `AccountService` has no chain-scoped critical section, tracked in [follow-ups](../../follow-ups.md). Account creation and import lock different profile, chain and type tuples and a network purge takes neither, so a purge between a derivation's read and write can leave an orphan row, and a same-address import during a creation is overwritten.
+- **Open items**: `AccountService` has no chain-scoped critical section, tracked in #99. Account creation and import lock different profile, chain and type tuples and a network purge takes neither, so a purge between a derivation's read and write can leave an orphan row, and a same-address import during a creation is overwritten.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

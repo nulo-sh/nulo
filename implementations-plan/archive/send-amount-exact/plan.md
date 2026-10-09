@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: exact amount handling on the Send page in `apps/extension/src/popup/pages/send-amount.ts`, `apps/extension/src/components/composite/send/amount-field.ts` and `apps/extension/src/components/composite/send/AmountCard.vue`, the shared fit in `apps/extension/src/utils/hero-fit.ts` and `apps/extension/src/utils/hero-ruler.ts`, and the review line in `apps/extension/src/popup/components/modules/send/SendReviewSheet.vue`.
-- **Open items**: seven Send-page interaction and layout issues found in the work (flipped-theme captures, mouse-only controls, Max under focus, long USD amounts, the USD field's hidden tail, the review symbol indent, the fiat notice wording), tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: seven Send-page interaction and layout issues found in the work (flipped-theme captures, mouse-only controls, Max under focus, long USD amounts, the USD field's hidden tail, the review symbol indent, the fiat notice wording), tracked in #90. The flipped-theme captures were closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

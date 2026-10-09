@@ -111,6 +111,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
 - [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions
 - [god-service-splits](god-service-splits/plan.md) — completed — the three largest wallet services split into collaborators behind unchanged surfaces
+- [governance-1](governance-1/plan.md) — completed — open work moves to GitHub issues and draft advisories; follow-ups.md retired
 - [grant-check-address-case](grant-check-address-case/plan.md) — completed — contract addresses in the grant check compared case-insensitively, after validation
 - [harden-dedupe](harden-dedupe/plan.md) — completed — a quality audit's duplication folded into shared helpers on one integration branch, with today's behaviour pinned first
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units

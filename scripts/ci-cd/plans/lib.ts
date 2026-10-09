@@ -26,6 +26,7 @@ export type RuleId =
 	| "index-structure"
 	| "archive-structure"
 	| "curated-budget"
+	| "retired-file"
 	| "local-path"
 
 export const RULE_IDS: readonly RuleId[] = [
@@ -43,6 +44,7 @@ export const RULE_IDS: readonly RuleId[] = [
 	"index-structure",
 	"archive-structure",
 	"curated-budget",
+	"retired-file",
 	"local-path",
 ]
 
@@ -56,7 +58,9 @@ export const ACTIVE_INDEX = `${PLANS}/index.md`
 export const ARCHIVE_INDEX = `${ARCHIVE}/index.md`
 export const INDEX_FILES: readonly string[] = [ACTIVE_INDEX, `${PLANS}/README.md`, ARCHIVE_INDEX]
 export const LESSONS_FILE = `${PLANS}/lessons.md`
-export const CURATED_FILES: readonly string[] = [LESSONS_FILE, `${PLANS}/follow-ups.md`]
+export const CURATED_FILES: readonly string[] = [LESSONS_FILE]
+/** Open work lives in the issue tracker; a backlog file beside the plans drifts from it, so these may not come back. */
+export const RETIRED_FILES: readonly string[] = [`${PLANS}/follow-ups.md`]
 
 /** Transcript and draft shapes the plans `.gitignore` keeps out of the tree; `lessons/` is exempt. */
 export const CANONICAL_PATTERNS: readonly string[] = ["audit-*.md", "plan-*.md", "_*.md", "eli5.html"]
@@ -271,6 +275,7 @@ export const ENFORCED: ReadonlySet<RuleId> = new Set<RuleId>([
 	"index-structure",
 	"archive-structure",
 	"curated-budget",
+	"retired-file",
 	"local-path",
 ])
 

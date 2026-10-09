@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Activity amounts come from decimals the wallet knows (`apps/extension/src/utils/tx-amount.ts`, `knownDecimals` in `apps/extension/src/utils/token-amount.ts`), and the Send amount field reads its text whole (`apps/extension/src/components/composite/send/amount-field.ts`).
-- **Open items**: the surfaces that still read a token without a decimals getter, the mints outside the standard shapes, the listed-token mint rule, the unlisted-token lookup and the restored-token trust, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the surfaces that still read a token without a decimals getter, the mints outside the standard shapes, the listed-token mint rule and the unlisted-token lookup, tracked in #103, #104, #105 and #106. The restored-token trust is done: a full-backup restore trusts each restored token that has no trust row.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

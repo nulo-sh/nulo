@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The PXE refuses to sync an account it holds no keys for (`packages/aztec-runtime/src/pxe/scope-guard.ts`, called from six methods of `packages/aztec-runtime/src/pxe/service.ts`), and the service worker registers the refused op's own accounts and retries it once (`packages/aztec-runtime/src/pxe/client.ts`, `apps/extension/src/wallet/services/pxe/scope-registrar.ts`).
-- **Open items**: a report to upstream of the Aztec behaviours behind the loss, and how recovery advice, or an in-place recovery, reaches installs already hit, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: a report to upstream of the Aztec behaviours behind the loss, and how recovery advice, or an in-place recovery, reaches installs already hit, tracked in #148.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

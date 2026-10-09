@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Profile purges that also delete rows the codec cannot read, in `apps/extension/src/wallet/services/purge-rows.ts` with key-based attribution through `parseAccountRowId` in `apps/extension/src/wallet/services/account/spec.ts` and `rawStringEntries` in `packages/wallet-core/src/storage/entity_storage.ts`.
-- **Open items**: A profile deletion leaves a JSON-broken account row at its canonical key, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: A profile deletion leaves a JSON-broken account row at its canonical key, tracked in #145.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

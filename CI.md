@@ -42,7 +42,7 @@ Triggers:
 - **Auto** on PRs to `dev` whose diff touches the `smoke-surface` paths-filter (popup, components, manifest, the wallet services smoke exercises, build inputs, the harness, etc. — see [`pr-extension-smoke-e2e.yml`](./.github/workflows/pr-extension-smoke-e2e.yml) `filters:`)
 - **Manual** by adding the `e2e:extension-smoke` label
 
-`extension-smoke-e2e-status` emits `pass` when the suite is skipped (no relevant changes / no label), so branch protection sees a green check either way. When the suite runs, GitHub hands the aggregator the three shards as one result, so a failed or cancelled shard reds it; re-run a red lane with "Re-run failed jobs", never one shard ([`follow-ups.md`](./implementations-plan/follow-ups.md) records why). It is a **required** check on both `dev` and `main` (see "Check names and the protection runbook").
+`extension-smoke-e2e-status` emits `pass` when the suite is skipped (no relevant changes / no label), so branch protection sees a green check either way. When the suite runs, GitHub hands the aggregator the three shards as one result, so a failed or cancelled shard reds it; re-run a red lane with "Re-run failed jobs", never one shard ([#168](https://github.com/nulo-sh/nulo/issues/168) records why). It is a **required** check on both `dev` and `main` (see "Check names and the protection runbook").
 
 ### `pr-extension-network-e2e.yml`
 
