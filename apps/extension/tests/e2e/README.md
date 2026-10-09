@@ -25,12 +25,12 @@ Both suites run on Chrome by default and on Firefox with `NULO_E2E_BROWSER=firef
 
 Internally `scripts/e2e/agent.sh`:
 
-1. Calls `scripts/e2e/resolve-ports.ts` to allocate five ephemeral TCP ports (anvil, aztec, aztec admin, aztec p2p, playground) and persists them to `.e2e-state/ports.json`.
+1. Calls `scripts/e2e/resolve-ports.ts` to draw five TCP ports (anvil, aztec, aztec admin, aztec p2p, playground), claim them in the host registry `~/.agents/ports.md` under a run id, and persist them with the run id and a run marker to `.e2e-state/ports.json`. The claim is released when the run ends.
 2. Builds the extension for the run's browser with `VITE_LOCAL_NETWORK_RPC_URL=http://localhost:<aztec port>` so the wallet's "Local Network" preset talks to this run's sandbox.
 3. Greps the bundle for the URL — fails fast if the vite env didn't propagate.
 4. Runs the network suite with `ANVIL_URL` / `ANVIL_PORT` / `AZTEC_NODE_URL` / `AZTEC_PORT` / `AZTEC_ADMIN_PORT` / `AZTEC_P2P_PORT` / `PLAYGROUND_URL` / `PLAYGROUND_PORT` in env.
 
-`global-setup.ts` reads those env vars, spawns anvil + aztec + playground (each with the assigned port) and writes an ownership lockfile at `.e2e-state/owned.json`. Its `setup` is a short coordinator whose ORDER is the contract — orphan reap + build guard → `reconcilePriorLock` (reuse a healthy pack, or reap a stale one) → provisional lock → `markBootStarted()` (the exit-86 window opens here, AFTER the build/env checks that must never be retried) → `ensureAnvil` → `ensureAztecNode` → `ensureDevServer` (playground) → `finishBoot` (provide URLs, deploy, `markBootReady()`). Each stage probes first and adopts an already-running service; a stage detects a permissive failure and returns `"skip"` (the strict-mode `E2E_REQUIRE_SETUP=1` throws stay inside it), and the coordinator owns the exit (`provideWithoutSandbox` + `return`), so a lost or doubled `provide` is visible in one place. Process handles and the `weStarted*` flags stay module-level, shared with `teardown` and the signal hooks.
+`global-setup.ts` reads those env vars, spawns anvil + aztec + playground (each with the assigned port and its own launch marker) and writes an ownership lockfile at `.e2e-state/owned.json`. Its `setup` is a short coordinator whose ORDER is the contract — build guard → `reconcilePriorLock` (refuse a live owner, reuse a healthy pack on a bare run, or reap a stale one by marker) → the dead-run sweep → provisional lock → `markBootStarted()` (the exit-86 window opens here, AFTER the build/env checks that must never be retried) → on an agent run, a bind test of the claimed pack → `ensureAnvil` → `ensureAztecNode` → `ensureDevServer` (playground) → `finishBoot` (provide URLs, deploy, `markBootReady()`). On a bare run each stage probes first and adopts an already-running service; an agent run adopts nothing. A stage detects a permissive failure and returns `"skip"` (the strict-mode `E2E_REQUIRE_SETUP=1` throws stay inside it), and the coordinator owns the exit (`provideWithoutSandbox` + `return`), so a lost or doubled `provide` is visible in one place. Process handles and the `weStarted*` flags stay module-level, shared with `teardown` and the signal hooks.
 
 ### Presto: local vs CI
 
@@ -82,7 +82,7 @@ cd apps/extension && bun scripts/store-art.ts
 
 ## Running multiple agents in parallel
 
-Open one terminal per worktree and run `bun run e2e:agent` in each. Each agent allocates fresh ports and owns its own anvil + aztec + playground:
+Open one terminal per worktree and run `bun run e2e:agent` in each. Each run claims its own ports in the host registry and owns its own anvil + aztec + playground:
 
 ```bash
 # terminal 1 — worktree A
@@ -92,13 +92,13 @@ bun run e2e:agent
 bun run e2e:agent
 ```
 
-Verify with `lsof`:
+What keeps them apart:
 
-```bash
-lsof -iTCP -sTCP:LISTEN -P | grep -E "anvil|node"
-```
+- **Ports.** `resolve-ports.ts` skips every port `~/.agents/ports.md` lists and claims its pack there (`nulo-e2e-<service>` rows, owner `agent.sh`'s pid) under the file's lock, which other tools on the host share (`tests/e2e/port-registry.ts` states the contract). `cat ~/.agents/ports.md` shows who holds what. Under a run id, setup bind-tests the pack after `markBootStarted()`, never adopts a listener on it, and fails a readiness wait once the child it spawned has exited, so a stranger on a claimed port is a boot failure (exit 86), not a sandbox.
+- **Processes.** Each service carries a launch marker and its owner in its environment, and every process of an agent run (forks, Chrome, Firefox, geckodriver) inherits the run's marker, owner and worktree (`tests/e2e/owned-processes.ts`). Teardown stops a service's group, then every process with its marker, a leaderless group's included. An orphan sweep stops a process only when the owner named in its own environment is dead, so a run never signals another's processes, whatever a lock or record on disk says.
+- **Data.** The node's run dir sits on real disk under `~/.cache/nulo-e2e`, stamped with its marker, and is deleted only directly under that root.
 
-You should see two of each, on different ports. The Chrome processes are scoped via `--load-extension=$EXTENSION_PATH` so the orphan-cleanup `pkill` in setup only kills *this* worktree's chromes.
+A run killed with `kill -9` leaves its sandbox and browsers running: `bun run e2e:reap` in that worktree stops them by marker once the run's owner is gone, removes its run dir and drops its registry rows. The next run in the worktree does the same at setup.
 
 ### Verified concurrent run
 
@@ -120,7 +120,7 @@ If you `bun run vitest run --config vitest.e2e.network.config.ts` directly with 
 - the recorded PIDs must still be alive
 - the candidate sandbox must report the same L1 contract addresses recorded post-deploy (proves we're talking to *our* sandbox, not a stranger that drifted onto the same port)
 
-If any check fails, setup reaps the stale children and cold-starts a fresh stack. `bun run e2e:agent` always allocates fresh ports, so it never hits the reuse path — the lockfile only serves orphan cleanup there.
+If any check fails, setup reaps the stale children by marker and cold-starts a fresh stack. A reuse rewrites the lock's owner to the reusing run, so no reap touches the sandbox while that run lives. A bare run also adopts any service already answering on its ports (an anvil on chain 31337 is trusted to run with `--slots-in-an-epoch 1`). `bun run e2e:agent` always allocates fresh ports and never reuses or adopts — the lockfile only serves orphan cleanup there.
 
 ## CI sharding (5-way matrix)
 
@@ -160,9 +160,15 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **`prior sandbox identity mismatch — tearing down and starting fresh`** — a previous run's sandbox died and a foreign process took over its port. Setup detects this via the L1-contract-address check and recovers automatically.
 
-**`reaped orphan <name> pid=<n>`** — a previous agent run left children alive (Ctrl-C, OOM). Setup found them through the lockfile and reaped them. No action needed.
+**`another run in this worktree holds the sandbox`** — `owned.json` names a live owner: two runs in one worktree. Wait for it to finish.
 
-**Manual cleanup of stale state.** Delete `.e2e-state/` in the worktree, then `pkill -f "anvil.*--port"` and `pkill -f "aztec.*start.*--local-network"` if you suspect leftover processes.
+**`the prior run's sandbox could not be reaped: …`** — a service of the previous run did not stop (`retained`), could not be read (`unknown`), or its lock predates markers and records live pids. The lock and the run dir stay; stop what the message names, or run `bun run e2e:reap` once its owner is gone.
+
+**`<service>'s claimed port <n> is already in use`** — something listens on a port this run just claimed. The run fails as a boot failure (exit 86) and CI retries on fresh ports.
+
+**`~/.agents/ports.md.lock stayed held`** — another registry writer holds the lock, or one died holding it. The other writers break a lock older than 15 s; this client never does. If no writer is running, delete the lock.
+
+**Manual cleanup of stale state.** `bun run e2e:reap` in the worktree. It stops only processes carrying this worktree's markers whose owner is dead, never a process by name, which on a shared host would take down another agent's run.
 
 ## Terms-acceptance state
 
@@ -227,13 +233,13 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 
 | Resource | Per-worktree isolated? | How |
 |---|---|---|
-| Anvil PID | Yes | spawned by setup; tracked in lockfile |
-| Aztec sandbox PID | Yes | spawned by setup; tracked in lockfile; data dir `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`). Reap leftovers with `bun run e2e:reap`. |
-| Playground vite PID | Yes | spawned by setup; tracked in lockfile |
-| Ports | Yes | bind-and-release via `resolve-ports.ts`; spawn re-binds |
+| Anvil, aztec, playground | Yes | spawned by setup with a launch marker and owner in their environment, recorded in the lockfile; stopped by group, then by marker |
+| Aztec run dir | Yes | `~/.cache/nulo-e2e/nulo-aztec-<pid>-<ts>` on real disk (NOT tmpfs — see `lockfile.ts` `E2E_DATA_ROOT`; override `NULO_E2E_DATA_ROOT`), stamped with the node's marker; the node writes `<dir>/data` |
+| Ports | Yes | claimed in `~/.agents/ports.md` under the run id before the build; bind-tested again at boot |
+| Forks, Chrome, Firefox | Yes | inherit the run marker; a dead run's are stopped by `e2e:reap` and the next run's setup |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
-| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"` is path-scoped |
+| Chrome orphan cleanup | Yes | an agent run's by run marker; a bare run keeps `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |
