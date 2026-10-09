@@ -13,7 +13,6 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 - Root `test`/`audit:vue` run only `apps/extension` (with aztec-runtime's tests, in jsdom); CI adds `test:all`, `test:release`, `test:ci-gating`. [Evidence](archive/harden-security-prerelease/plan.md#root-test)
 - `bun run lint` prints only Biome's first 20 diagnostics, so a new error can hide: rerun on changed files (2.5.13). [Evidence](archive/wallet-error-resilience/plan.md#lint-cap)
 - `vue-tsc` skips an SFC whose script lacks `lang="ts"` (149 of the extension's 205), so a bad prop there passes `typecheck:all`. [Evidence](archive/storage-migration-backup/plan.md#vue-tsc)
-- `auto-imports.d.ts` regenerates only under Vite and keeps a removed export's global: build before committing (unplugin-auto-import 21.1.0). [Evidence](archive/send-amount-exact/plan.md#auto-imports)
 - Vue unit tests (3.5.41, VTU 2.4.11): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; fake timers run a native event's first listener only; a second `mount` strips the first's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check accepting a wrong state passes broken code: pair never-happens tests with a success control; match screenshot state exactly; stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
 
@@ -36,8 +35,9 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category, never the message. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
 - A MAC binds only what it names, and a row's stored `id` moves with the row: anchor it on the storage key; on a MAC failure refuse, never self-heal. Likewise an address commits to the original class id, not `currentContractClassId`: check an artifact against the original. [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md)
+- On Chrome, `bun run dev` runs the popup under Chrome's baseline policy, not the manifest CSP: check CSP on a production build. [Evidence](archive/code-followups-2/lessons/phase-2.md)
 - A dropped port reconnects under a mounted page and replays nothing: reread on each later `onConnected`. [Evidence](archive/settings-by-task/plan.md#hub-reads)
-- Every `.vue`/`.ts`/`.js` under `pages/` is a route, and beats a same-path redirect (vite-plugin-pages 0.33.3). [Evidence](archive/settings-by-task/plan.md#route-moves)
+- A page under `pages/` beats a same-path redirect (vite-plugin-pages 0.33.3). [Evidence](archive/settings-by-task/plan.md#route-moves)
 
 ## Aztec
 
@@ -50,6 +50,6 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 ## Agent tooling
 
 - Agent Bash (zsh 5.9): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
-- `pgrep -f` matches the agent's `zsh -c` wrapper, so a teardown can kill itself: signal your launcher's pgid, never `$$`/`$PPID`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep)
+- `pgrep -f` matches the agent's `zsh -c` wrapper, so a teardown can kill itself: signal your launcher's pgid, never `$$`/`$PPID`; a signal-killed Node child keeps `exitCode` null, so wait on `signalCode` too. [Evidence](archive/harden-findings-remediation/plan.md#pgrep), [more](archive/code-followups-2/lessons/phase-2.md)
 - Under Puppeteer mobile emulation, `innerWidth` grows to the content, so `scrollWidth > innerWidth` never flags a sideways scroll: compare against the viewport width you set (25.8). [Evidence](archive/landing-store-buttons/plan.md#mobile-emulation-width)
 - Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first; grep a green run for a suspect log line (aztec 6.0.0-rc.1's `os error 98` prints on every shard). [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base), [more](archive/code-followups-1/plan.md)
