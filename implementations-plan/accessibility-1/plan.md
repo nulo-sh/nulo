@@ -360,7 +360,7 @@ Skip this phase if call 6 is "as is".
 
 **Validation gate.** Commands: the fast layers; `bun run --cwd apps/extension build-storybook`. Pass criteria: every command exits 0. Layers: lint, typecheck, unit.
 
-**Arc 2 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 2 Codex fix loop has converged.
+**Arc 2 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 2 Codex fix loop has converged. ✓
 
 #### Arc 2 record (Home and shared chrome)
 
@@ -392,6 +392,8 @@ Round 2, Codex (resumed, same session) on the fix commit: **conditional approve 
 | # | Sev | Finding | Disposition |
 |---|---|---|---|
 | 7 | Med | After `navigateByHash` to the token page, Home's own "View history" could satisfy the wait, so the walk could test Home's link | Accepted: the spec waits for the token page's `token-menu-trigger` first |
+
+Round 3, Codex (resumed) on that fix: **approve, no new material findings.** The Arc 2 loop converged.
 
 ### Arc 3, after PRs #56, #55 and #58 (page 2, calls 3 and 4)
 
