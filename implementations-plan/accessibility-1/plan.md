@@ -419,7 +419,7 @@ Round 3, Codex (resumed) on that fix: **approve, no new material findings.** The
 
 Start each phase only when its condition in § Owner dependencies holds, after `gh stack sync`.
 
-#### Phase 3.1: History's and Settings' title, once (call 3)
+#### Phase 3.1: History's and Settings' title, once (call 3) ✓
 
 Skip this phase if call 3 is "as is".
 
@@ -428,7 +428,7 @@ Skip this phase if call 3 is "as is".
 
 **Validation gate.** Commands: the fast layers; the smoke run of `navigation.test.ts` on chrome and on firefox. Pass criteria: every command exits 0. Layers: lint, typecheck, unit, smoke e2e.
 
-#### Phase 3.2: the swap to the emoji check is announced (call 4)
+#### Phase 3.2: the swap to the emoji check is announced (call 4) ✓
 
 Skip this phase if call 4 is "as is".
 
@@ -444,6 +444,19 @@ Skip this phase if call 4 is "as is".
 **Validation gate.** Commands: the fast layers; the network run of `connect-one-window.test.ts connect-verify-mismatch.test.ts` on chrome and on firefox. Pass criteria: every command exits 0; no test focuses or presses a verify button except through its own deliberate press. Layers: lint, typecheck, unit, network e2e on both browsers.
 
 **Arc 3 exit gate.** `bun run audit:vue` exits 0 and the Arc 3 Codex fix loop has converged.
+
+#### Arc 3 record
+
+Built on page 2's calls 3 (Yes) and 4 (A+), on `dev` at `83a6c22`, where #56, #55 and #58 had landed. The phase log is [lessons/phase-3.md](lessons/phase-3.md).
+
+- **Deviations.**
+  - The announcement's timer starts from `watch(emojis)`, not from `onMounted`: a watcher stops with the component, so a session read that answers after the window unmounted starts no timer.
+  - The instruction and the homograph warning became one constant each (`CHECK_INSTRUCTION` in `verify/index.vue`, `HOSTNAME_WARNING` in `useDappHostname.ts`, rendered by `DappIdentityBlock.vue`), so the region cannot say other words than the window shows.
+  - A+ appends the warning after the instruction, as options.md says ("adds that warning's sentence").
+  - The region is the window root's last child, so a screen-reader user browsing the page meets it after the answer buttons; its text stays after the announcement (no clearing timer).
+  - Delivery per D-orch-1: a plain PR on `dev`, no stack.
+- **Review, Arc 3.** Codex (GPT-6.1 Sol, high; session `01a1224d`): round 1 approve with fixes, two Lows, both accepted (the announcement tests ran only on a new connection, so a reconnect that dropped it would pass: both now run on both; a `/** Watchers */` label that only named the next line). Opus (alongside round 1): approve, four nits accepted (a comment over 100 characters that said "after the window closed" where the guarantee is about unmount; the `HOSTNAME_WARNING` doc named its callers; a 105-character doc comment; the cleanup test unmounted twice). Round 2: approve, no new material findings.
+- **Final cross-arc pass.** A fresh Codex session (GPT-6.1 Sol, high; `01a12256`) over #235, #76 and this branch: approve with fixes, two comment-only Lows in Arc 1's specs, both accepted (`send-keyboard.test.ts`'s header restated its five titles and said a held Enter acts once everywhere, when only the unit switch's is tested; a `fee-sponsor-funding.test.ts` comment claimed a screen reader is told, which a DOM assertion cannot prove). It found the two live regions, the rings and the shared e2e helpers consistent across the arcs, and no duplication worth a shared ring or announcer now. Round 2: approve, no new material findings.
 
 ## Delivery
 

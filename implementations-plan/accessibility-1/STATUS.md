@@ -40,3 +40,6 @@
 
 - 2026-10-09: arc 3 started on page 2 calls 3 (Yes) and 4 (A+); PRs #56, #55 and #58 are on `dev`; branch `accessibility-1-titles-verify` cut from `dev` at `83a6c22` (no stack, D-orch-1).
 - 2026-10-09: phase 3.1 gate pass: lint, typecheck:all, test, test:all; smoke navigation.test.ts on chrome and firefox (5/5 each, retry 0, fresh builds). Unit tests red first.
+- 2026-10-09: phase 3.2 gate pass (A+): lint, typecheck:all, test, test:all; network connect-one-window.test.ts connect-verify-mismatch.test.ts on chrome and firefox (3/3 each, NULO_E2E_RETRY=0). Unit tests red first.
+- 2026-10-09: arc 3 review: Codex round 1 approve with fixes (two Lows), Opus four nits, all accepted; Codex round 2 approve.
+- 2026-10-09: final cross-arc Codex pass: two comment-only Lows in Arc 1's specs, accepted; round 2 approve.
