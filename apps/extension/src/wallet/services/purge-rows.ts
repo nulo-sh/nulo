@@ -47,13 +47,11 @@ export async function purgeRows<T>(rows: readonly T[], remove: (row: T) => Promi
  *      malformed row's key there (see each site's comment).
  *
  * Deleted silently, no events (the row was never visible to consumers).
- * JSON-syntax-broken values fail the parse and are skipped, fail-closed. For
- * value-attributed stores they are unattributable by construction; for a
- * key-attributed store (account) the KEY could attribute them — such a parent
- * row currently survives (only its value is unreadable; its dependents still
- * cascade via the key-based harvest), an accepted gap owned as a follow-up.
- * Pattern lifted from `dapp-session/mac-storage.rowsForProfile` and
- * `incoming-transfer/repository.deleteKeysWhere`.
+ * A value that is not a JSON object has no predicate field, so it is skipped,
+ * fail-closed, unless `attributeByKey` claims its key: a store whose keys encode
+ * ownership (account) can attribute such a row by key alone; a value-attributed
+ * store passes nothing. Pattern lifted from `dapp-session/mac-storage.rowsForProfile`
+ * and `incoming-transfer/repository.deleteKeysWhere`.
  */
 export async function purgeMalformedRows(
 	storage: {
@@ -67,17 +65,14 @@ export async function purgeMalformedRows(
 	 *  before its delete: a writer that changes the bytes meanwhile is then still fenced,
 	 *  though the guard below spares its row. */
 	onMatch?: (storageId: string) => void,
+	/** Consulted only for a value that is not a JSON object; never overrides `matchesRaw`. */
+	attributeByKey?: (storageId: string) => boolean,
 ): Promise<number> {
 	let purged = 0
 	for (const [storageId, rawString] of await storage.rawStringEntries()) {
-		let raw: unknown
-		try {
-			raw = JSON.parse(rawString)
-		} catch {
-			continue // syntax-broken — no readable predicate field; fail-closed
-		}
-		if (typeof raw !== "object" || raw === null) continue
-		if (!matchesRaw(raw as Record<string, unknown>, storageId)) continue
+		const raw = parseObject(rawString)
+		const matched = raw === undefined ? (attributeByKey?.(storageId) ?? false) : matchesRaw(raw, storageId)
+		if (!matched) continue
 		onMatch?.(storageId)
 		// Guard layer 3: only delete the exact bytes the decision was made about.
 		if ((await storage.rawValue(storageId)) !== rawString) continue
@@ -86,6 +81,15 @@ export async function purgeMalformedRows(
 		purged++
 	}
 	return purged
+}
+
+function parseObject(rawString: string): Record<string, unknown> | undefined {
+	try {
+		const raw: unknown = JSON.parse(rawString)
+		return typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : undefined
+	} catch {
+		return undefined
+	}
 }
 
 /**

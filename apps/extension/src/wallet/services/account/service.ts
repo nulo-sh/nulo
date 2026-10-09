@@ -691,8 +691,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// (another profile's restore/create) can legitimately target a key this
 		// pass deletes, and the delete races nobody. Rows at non-canonical keys
 		// (legacy shapes, which no writer ever produces) fall back to the value's
-		// profileId claim. The restoreLock hold additionally excludes concurrent
-		// restores outright while the pass runs.
+		// profileId claim; an unreadable value at such a key is kept, since only
+		// a canonical key can attribute it. The restoreLock hold additionally
+		// excludes concurrent restores outright while the pass runs.
 		await this.restoreLock.withLock(() =>
 			purgeMalformedRows(
 				this.storage,
@@ -702,6 +703,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 					return raw.profileId === profileId
 				},
 				(id) => this.logDebug(`purged malformed account row ${id}`),
+				undefined,
+				(id) => parseAccountRowId(id)?.profileId === profileId,
 			),
 		)
 	}

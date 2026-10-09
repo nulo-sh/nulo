@@ -1,5 +1,5 @@
 import { type JobError, type JobErrorKind, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
-import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
 
 /**
  * Shared catch-arm disposition for the three dapp-send pipelines
@@ -16,7 +16,9 @@ import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension
  * context). `transfer-executor` deliberately does NOT use this — its catch
  * differs (RPC-cancel conversion via `maybeRethrowAsRpcCancel`, `task.fail`, and
  * a local `markJournal` closure over `transitionJournal` with a `"transfer"`
- * context) — but it shares {@link failureKind}.
+ * context) — but it shares {@link failureKind}. A scope refusal is mapped here, not in
+ * `failureKind`: only a dApp's call can exceed a grant, and a first-party Send record must never
+ * read as one.
  */
 export function markFailedUnlessCancelled(
 	error: unknown,
@@ -26,7 +28,8 @@ export function markFailedUnlessCancelled(
 	if (error instanceof JobCancelledSentinel) {
 		throw error
 	}
-	return lane.markJournal(journalId, { stage: "failed" }, normalizeError(error, failureKind(error, "dapp_execute")))
+	const kind = error instanceof ScopeViolationError ? "scope_refused" : failureKind(error, "dapp_execute")
+	return lane.markJournal(journalId, { stage: "failed" }, normalizeError(error, kind))
 }
 
 /** The journal kind of a send failure. Classified failures keep their own kind:

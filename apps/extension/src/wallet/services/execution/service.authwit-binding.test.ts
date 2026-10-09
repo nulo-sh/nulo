@@ -10,6 +10,7 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionCall, FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { describe, expect, test, vi } from "vitest"
+import { ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { ExecutionService } from "./service"
 
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
@@ -133,7 +134,7 @@ describe("aztec_createAuthWit: the selector binding of a call intent", () => {
 		for (const name of ["sneaky", ""]) {
 			const { facade, createAuthWit } = makeFacade()
 			const refused = await rejectionOf(facade.executeAztecCreateAuthWit(op(callIntent({ name, selector })), FENCE))
-			expect(refused.constructor).toBe(Error)
+			expect(refused.constructor).toBe(ScopeViolationError)
 			expect(refused.message).toBe("Scope violation: authwit call name does not match selector's function")
 			expect(createAuthWit).not.toHaveBeenCalled()
 		}

@@ -175,7 +175,7 @@ export const NetworkSchema: z.ZodType<Network> = z.object({
 	kind: ChainKindSchema.optional(),
 })
 
-export const NodeStatusSchema: z.ZodType<NodeStatus> = z.nativeEnum(NodeStatus)
+export const NodeStatusSchema: z.ZodType<NodeStatus> = z.enum(NodeStatus)
 
 /**
  * Per-method schemas. Tuples preserve positional-param ordering (our wire

@@ -55,6 +55,7 @@ import {
 	type Methods,
 	type RestoreSecret,
 	type RunFence,
+	toProfileInfo,
 } from "./spec"
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
@@ -2161,21 +2162,14 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/** What the profile RPCs return, never the stored row: a row carries sealed key material. */
 	private getProfileInfo(profile: Profile): ProfileInfo {
-		const info = this.profileIdentity(profile)
-		if (this.sessionManager.isRecoveryMode(profile.id)) info.recoveryMode = true
-		return info
-	}
-
-	private profileIdentity(profile: Pick<ProfileInfo, "id" | "name" | "type">): ProfileInfo {
-		return { id: profile.id, name: profile.name, type: profile.type }
+		return toProfileInfo(profile, this.sessionManager.isRecoveryMode(profile.id))
 	}
 
 	/** The persisted identity only: `recoveryMode` is a live-session projection and never travels. */
 	public async backup(): Promise<ProfileInfo | undefined> {
 		const active = await this.getActiveProfile()
-		return active && this.profileIdentity(active)
+		return active && toProfileInfo(active, false)
 	}
 
 	public async restore(

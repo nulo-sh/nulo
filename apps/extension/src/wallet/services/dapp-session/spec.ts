@@ -85,7 +85,7 @@ export const DappSessionSchema: z.ZodType<DappSession> = z.object({
 	}),
 	permissions: z.array(z.object({ methods: z.array(z.string()).optional(), events: z.array(z.string()).optional() })),
 	accounts: z.array(z.string()),
-	confirmationLevel: z.nativeEnum(AccessLevel),
+	confirmationLevel: z.enum(AccessLevel),
 	expiry: z.number(),
 	verificationHash: z.string().optional(),
 	trustedVerification: z.boolean().optional(),

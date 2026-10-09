@@ -4,13 +4,15 @@ import {
 	DuplicateInitializationError,
 	JobCancelledError,
 	PxeStaleAnchorError,
+	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
 	walletErrorFromPayload,
 } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { SCOPE_VIOLATION_MESSAGE, toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import { classifyOperationCatch, maybeRethrowAsRpcCancel } from "./rpc-cancel"
 
 describe("maybeRethrowAsRpcCancel", () => {
@@ -104,6 +106,26 @@ describe("classifyOperationCatch", () => {
 			code: 4100,
 			message: TermsAcceptanceRequiredError.MESSAGE,
 			data: { walletErrorCode: TermsAcceptanceRequiredError.CODE },
+		})
+	})
+
+	test("a selector-binding refusal keeps its scope code all the way to the dApp envelope", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		let refusal: unknown
+		try {
+			assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
+		} catch (error) {
+			refusal = error
+		}
+		const result = classifyOperationCatch(refusal, task, errorMessage) as { code: string; error: string }
+		expect(result).toMatchObject({ status: "failed", code: ScopeViolationError.CODE })
+		const rebuilt = walletErrorFromPayload({ code: result.code, message: result.error })
+		expect(rebuilt).toBeInstanceOf(ScopeViolationError)
+		expect(rebuilt.message).toBe("Scope violation: call name does not match selector's function")
+		expect(toWalletResponseError(rebuilt)).toEqual({
+			code: 4100,
+			message: SCOPE_VIOLATION_MESSAGE,
+			data: { walletErrorCode: ScopeViolationError.CODE },
 		})
 	})
 

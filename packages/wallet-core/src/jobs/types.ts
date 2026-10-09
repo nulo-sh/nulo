@@ -92,7 +92,8 @@ export type JobProgress =
  * autocomplete + the runtime drift guard, NOT for compiler exhaustiveness.
  *
  * Producers: `normalizeError(…, "transfer" | "dapp_execute" | "prover" |
- * "network" | "unknown")`, `popup_bound`, `scope_refused` and `malformed_request` (wallet-sdk), the reaper
+ * "network" | "unknown")`, `popup_bound`, `scope_refused` and `malformed_request` (wallet-sdk;
+ * `scope_refused` also from execution's `markFailedUnlessCancelled`), the reaper
  * (`sw_restart_post_prove` | `stuck_proving` | `stuck_queued` | `stale_on_resume`),
  * and `classifyTokenImportError` (`network_unreachable` | `contract_invalid` |
  * `metadata_fetch` | `unknown`). `user_rejected` | `network` | `simulation` are
