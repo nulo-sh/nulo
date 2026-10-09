@@ -1328,6 +1328,14 @@ import registers process handlers and creates a data directory.
 | R2-2 | The stubborn-member cases race the shells' trap installation | **Accepted.** Each case waits for its member's `ready` after the traps are set; the leaderless case uses a member that dies on SIGTERM, so its survival shows nothing was sent |
 | R2-3 | The lock comment overstates what the next run's reap does safely | **Accepted.** Reworded to a best-effort record; the reaper's unconditional data removal is in entry 125's remainder |
 
+### Arc 2 round 3: Codex (resumed), `approve with fixes — no new material finding`
+
+| # | Finding | Verdict |
+|---|---|---|
+| R3-1 | Minor: `killProcessGroup`'s doc comment still claims a member holds the group id from entry on, stronger than the accepted residual risk | **Accepted.** It now says an unreaped leader pins the id for the first signal and escalation assumes no reuse between two polls |
+
+Round 3 verified every round-2 fix and found nothing new; the loop converged.
+
 Arc 2 round 1, checked and holds (both): every real route is still scanned; the overwrite mode keeps every
 declaration a template uses; the seed latch releases in `finally`; the race results and records
 are unchanged; no template, copy or selector changed; the budgets hold.

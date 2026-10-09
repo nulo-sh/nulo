@@ -94,3 +94,18 @@ and released the claim.
 
 `bun run audit:vue` 0 (typecheck:all, 718 files / 10,673 tests with 4 skipped and 7 todo, lint,
 build); `bun run test:ci-gating` 413/413.
+
+## Codex loop
+
+Session `gpt-6.1-sol` at high, read-only, over `git diff a78cee1..HEAD`; each round resumed the
+same session. Findings and verdicts are in `plan.md` § Audit verdicts.
+
+- Round 1 (with one Opus review): approve with fixes. Accepted: signal ownership (C1/O2), the
+  dropped final-wait result (C2), the CSP control that could not tell the policies apart (C3/O1),
+  the plain test glob left unguarded (O3), caller-naming comments (O4).
+- Round 2: approve with fixes. Accepted: no signal to a group whose leader was reaped before
+  teardown, trap-readiness in the real-process cases, the lock comment. Rejected: refusing
+  escalation once the leader dies during the grace wait, since that undoes entry 125 (D-arc2-3).
+- Round 3: no new material finding; one comment tightened to the accepted residual risk.
+- Network `incoming-transfers.test.ts` re-run on the round-2 head: Chrome 2/2, retry 0, nothing
+  left on its anvil port.

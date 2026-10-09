@@ -39,10 +39,10 @@ function signal(child: ChildProcess, pgid: number, sig: StopSignal): void {
 
 /**
  * Stops a child this run spawned `detached`, so it leads its own group: SIGTERM to the group, then
- * SIGKILL if any member outlives `graceMs`. Only a group whose leader is alive at entry is
- * signalled: from then on some member holds the group id, so it cannot pass to another run's
- * group, whereas once the leader has exited nothing proves the group never emptied. `stopped` is
- * false while any member may still run.
+ * SIGKILL if any member outlives `graceMs`. Only a group whose leader is not yet reaped is
+ * signalled: that leader pins the group id for the first signal, whereas once it has exited
+ * nothing proves the group never emptied. Escalation assumes the id is not reused between two
+ * liveness polls. `stopped` is false while any member may still run.
  */
 export async function killProcessGroup(
 	child: ChildProcess | null,
