@@ -26,6 +26,8 @@ const cacheStoreState: {
 	importPromise: null,
 }
 
+// The run fence the profile service hands the import; every contact call of the run must carry it.
+const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
 vi.mock("@/composables/toast", () => ({
 	useToast: () => ({ openToast: openToastMock }),
 }))
@@ -37,7 +39,13 @@ vi.mock("@/utils", () => ({
 }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }) }
+		return {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }),
+			captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+			assertRunFence: vi.fn().mockResolvedValue(undefined),
+		}
 	}),
 }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStoreState }))
@@ -133,7 +141,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 
 		await runImport(api, existing.value)
 
-		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B)
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B, RUN_FENCE)
 		expect(accountStateService.deleteSender).not.toHaveBeenCalled()
 		expect(accountStateService.addSender).not.toHaveBeenCalled()
 	})
@@ -169,7 +177,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		await runImport(api)
 
 		expect(contactService.addContact).toHaveBeenCalledTimes(1)
-		expect(contactService.addContact).toHaveBeenCalledWith("First", ADDR_A)
+		expect(contactService.addContact).toHaveBeenCalledWith("First", ADDR_A, RUN_FENCE)
 		expect(accountStateService.addSender).toHaveBeenCalledTimes(1)
 	})
 
@@ -187,7 +195,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		await runImport(api)
 
 		expect(contactService.addContact).toHaveBeenCalledTimes(1)
-		expect(contactService.addContact).toHaveBeenCalledWith("Lower", ADDR_A)
+		expect(contactService.addContact).toHaveBeenCalledWith("Lower", ADDR_A, RUN_FENCE)
 		expect(accountStateService.addSender).toHaveBeenCalledTimes(1)
 		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A)
 	})
@@ -223,7 +231,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		await runImport(api, existing.value)
 
 		expect(contactService.addContact).not.toHaveBeenCalled()
-		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice2", ADDR_A)
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice2", ADDR_A, RUN_FENCE)
 	})
 
 	test("a malformed row (non-string fields) is dropped without aborting the import", async () => {
@@ -237,7 +245,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		await runImport(api)
 
 		expect(contactService.addContact).toHaveBeenCalledTimes(1)
-		expect(contactService.addContact).toHaveBeenCalledWith("Good", ADDR_A)
+		expect(contactService.addContact).toHaveBeenCalledWith("Good", ADDR_A, RUN_FENCE)
 	})
 
 	test("an explicit isSender intent is attempted and counted even when the contact upsert fails", async () => {
@@ -390,7 +398,7 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 		await runImport(api, contacts.value)
 
 		expect(contactService.updateContact).toHaveBeenCalledTimes(1)
-		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B)
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B, RUN_FENCE)
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
 	})
 
@@ -438,7 +446,7 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 			if (!cacheStoreState.importPromise) throw new Error("selection gate not reached")
 		})
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
-		await vi.waitFor(() => expect(contactService.getContacts).toHaveBeenCalled())
+		await vi.waitFor(() => expect(contactService.getContacts).toHaveBeenCalledWith(RUN_FENCE))
 		appStoreState.network = { id: "net-2", name: "Mainnet" }
 		release([])
 		await done
@@ -474,7 +482,7 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 		await confirmRows(api, ([dana, eli, finn]) => [dana, { ...eli, name: "Dana" }, { ...finn, address: ADDR_A }])
 
 		expect(contactService.addContact).toHaveBeenCalledTimes(1)
-		expect(contactService.addContact).toHaveBeenCalledWith("Dana", ADDR_A)
+		expect(contactService.addContact).toHaveBeenCalledWith("Dana", ADDR_A, RUN_FENCE)
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
 	})
 })
