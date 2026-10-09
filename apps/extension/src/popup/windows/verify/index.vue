@@ -35,7 +35,7 @@ const appStore = useAppStore()
 const CHECK_LABEL = "Connection check"
 const CHECK_INSTRUCTION =
 	"Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
-/** A polite region given its text as it mounts may stay silent, so the text follows the empty region. */
+/** A polite region given its text as it mounts may stay silent, so the text follows it. */
 const ANNOUNCE_DELAY_MS = 300
 
 type UIDappMetadata = DappMetadata & {
@@ -142,8 +142,7 @@ async function resolveSigners() {
 	}
 }
 
-/** Watchers */
-// A watcher stops with the component, so a session read that answers after the window closed starts no timer.
+// The watcher stops at unmount, so a session read that answers later starts no timer.
 watch(emojis, (shown) => {
 	if (!shown) return
 	announceTimer = setTimeout(() => {

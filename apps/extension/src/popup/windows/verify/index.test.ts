@@ -192,41 +192,55 @@ describe("windows/verify — the swap to the check is announced", () => {
 	const said = (w: ReturnType<typeof mount>) => region(w).element.textContent
 	const leaksTheApp = (text: string) =>
 		["Phishy", "Dapp", "Vault", "dapp.example", "exmple", "xn--"].filter((part) => text.includes(part))
+	const unmountNow = (w: ReturnType<typeof mount>) => {
+		wrappers.splice(wrappers.indexOf(w), 1)
+		w.unmount()
+	}
+	const CHECKS = [
+		["a new connection's", "false"],
+		["a reconnect's", "true"],
+	] as const
 
-	test("the polite region mounts empty, and 300 ms after the grid shows it reads the window's own words; nothing takes the focus", async () => {
-		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-		const w = await mountCheck()
-		expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
-		expect(said(w)).toBe("")
+	test.each(CHECKS)(
+		"%s polite region mounts empty, and 300 ms after the grid shows it reads the window's own words; nothing takes the focus",
+		async (_, isReconnect) => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+			const w = await mountCheck({ isReconnect })
+			expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(said(w)).toBe("")
 
-		await vi.advanceTimersByTimeAsync(299)
-		expect(said(w)).toBe("")
-		await vi.advanceTimersByTimeAsync(1)
-		expect(said(w)).toBe(CHECK_ANNOUNCEMENT)
-		expect(leaksTheApp(said(w) ?? "")).toEqual([])
-		expect([document.body, null]).toContain(document.activeElement)
-	})
+			await vi.advanceTimersByTimeAsync(299)
+			expect(said(w)).toBe("")
+			await vi.advanceTimersByTimeAsync(1)
+			expect(said(w)).toBe(CHECK_ANNOUNCEMENT)
+			expect(leaksTheApp(said(w) ?? "")).toEqual([])
+			expect([document.body, null]).toContain(document.activeElement)
+		},
+	)
 
-	test("a look-alike hostname adds the window's warning to the announcement, still naming nothing of the app", async () => {
-		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-		sessionRow = newConnectionRow({ dappMetadata: { name: HOSTILE_NAME, url: "https://xn--exmple-cua.com" } })
-		const w = await mountCheck()
-		await vi.advanceTimersByTimeAsync(300)
-		expect(said(w)).toBe(`${CHECK_ANNOUNCEMENT} ${LOOKALIKE_WARNING}`)
-		expect(leaksTheApp(said(w) ?? "")).toEqual([])
-	})
+	test.each(CHECKS)(
+		"on %s check, a look-alike hostname adds the window's warning to the announcement, still naming nothing of the app",
+		async (_, isReconnect) => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+			sessionRow = newConnectionRow({ dappMetadata: { name: HOSTILE_NAME, url: "https://xn--exmple-cua.com" } })
+			const w = await mountCheck({ isReconnect })
+			await vi.advanceTimersByTimeAsync(300)
+			expect(said(w)).toBe(`${CHECK_ANNOUNCEMENT} ${LOOKALIKE_WARNING}`)
+			expect(leaksTheApp(said(w) ?? "")).toEqual([])
+		},
+	)
 
 	test("an unmount before the 300 ms, or before the session read answers, leaves no timer behind", async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		const early = await mountCheck()
 		await vi.advanceTimersByTimeAsync(100)
-		early.unmount()
+		unmountNow(early)
 		expect(vi.getTimerCount()).toBe(0)
 
 		let answer!: (row: unknown) => void
 		readSession = () => new Promise((resolve) => (answer = resolve))
 		const pending = await mountCheck()
-		pending.unmount()
+		unmountNow(pending)
 		answer(sessionRow)
 		await flushPromises()
 		expect(vi.getTimerCount()).toBe(0)

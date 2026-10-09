@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue"
 
-/** What a window shows, and its emoji check announces, under a hostname `isSuspicious` flags. */
+/** The warning for a hostname `isSuspicious` flags; one string, so shown and announced copy cannot differ. */
 export const HOSTNAME_WARNING =
 	"This hostname contains non-ASCII or punycoded characters. Verify carefully. Some characters can imitate Latin letters."
 
