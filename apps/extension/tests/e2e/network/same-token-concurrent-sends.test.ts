@@ -254,19 +254,44 @@ test.skipIf(!hasConfig)(
 	},
 )
 
-/** The awaiting card of the only send in flight: its stage, subtitle and whether it offers focus. */
-async function readAwaitingCard(page: Page) {
-	await page.waitForSelector('[data-testid="tx-awaiting-card"]', { timeout: 30_000 })
-	return page.evaluate(() => {
-		const cards = document.querySelectorAll('[data-testid="tx-awaiting-card"]')
-		const card = cards[0]
-		return {
-			count: cards.length,
-			stage: card?.getAttribute("data-stage") ?? null,
-			subtitle: card?.querySelector('[data-testid="tx-awaiting-subtitle"]')?.textContent?.trim() ?? null,
-			focus: Boolean(card?.querySelector('[data-testid="tx-awaiting-focus"]')),
-		}
-	})
+interface AwaitingCard {
+	stage: string | null
+	subtitle: string | null
+	focus: boolean
+	cancel: boolean
+}
+
+async function readAwaitingCards(page: Page): Promise<AwaitingCard[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll('[data-testid="tx-awaiting-card"]')].map((card) => ({
+			stage: card.getAttribute("data-stage"),
+			subtitle: card.querySelector('[data-testid="tx-awaiting-subtitle"]')?.textContent?.trim() ?? null,
+			focus: Boolean(card.querySelector('[data-testid="tx-awaiting-focus"]')),
+			cancel: Boolean(card.querySelector('[data-testid="tx-awaiting-cancel"]')),
+		})),
+	)
+}
+
+/**
+ * The only awaiting card, at `stage` with its cancel control. A reopened popup can first render a
+ * stage-less card (the executing-task snapshot lands before the journal's); only that is waited
+ * through, and a second card or any other stage fails at once.
+ */
+async function waitForAwaitingCard(page: Page, stage: string): Promise<AwaitingCard> {
+	const appearBy = Date.now() + 30_000
+	let settleBy: number | undefined
+	for (;;) {
+		const cards = await readAwaitingCards(page)
+		const sampledAt = Date.now()
+		const seen = JSON.stringify(cards)
+		if (cards.length > 1) throw new Error(`${cards.length} awaiting cards for one send: ${seen}`)
+		if (sampledAt > (settleBy ?? appearBy)) throw new Error(`no awaiting card reached ${stage} in time: ${seen}`)
+		const [card] = cards
+		if (card?.stage === stage && card.cancel) return card
+		if (card?.stage) throw new Error(`the awaiting card is not at ${stage} with a cancel control: ${seen}`)
+		if (card) settleBy ??= sampledAt + 10_000
+		await new Promise((r) => setTimeout(r, 250))
+	}
 }
 
 /**
@@ -301,7 +326,12 @@ test.skipIf(!hasConfig)(
 		await tab.close()
 		await reopen(burst)
 		await expectStageHeld(burst.page, raw(b.amount), "queued", 5_000)
-		expect(await readAwaitingCard(burst.page)).toEqual({ count: 1, stage: "queued", subtitle: "Queued...", focus: false })
+		expect(await waitForAwaitingCard(burst.page, "queued")).toEqual({
+			stage: "queued",
+			subtitle: "Queued...",
+			focus: false,
+			cancel: true,
+		})
 		await releaseMining()
 		await expectBothSucceed(burst, a, b)
 	},
@@ -317,7 +347,8 @@ test.skipIf(!hasConfig)(
 		const tab = await confirmInTwoWindows(burst.ctx, burst.page, a, b)
 		await tab.close()
 		await reopen(burst)
-		expect((await readAwaitingCard(burst.page)).stage).toBe("queued")
+		await waitForTransferStage(burst.page, raw(b.amount), ["queued"], 5_000)
+		await waitForAwaitingCard(burst.page, "queued")
 		await clickByTestId(burst.page, "tx-awaiting-cancel")
 		const cancelled = await waitForTransferStage(burst.page, raw(b.amount), ["cancelled", "failed", "succeeded"])
 		expect([cancelled.stage, cancelled.txHash]).toEqual(["cancelled", undefined])

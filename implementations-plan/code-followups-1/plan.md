@@ -953,6 +953,18 @@ under "Not this lane", not asked ([OWNER-ASKS.md](OWNER-ASKS.md)).
 - **D13, base moved to `a6c2fb5`.** The worktree was fast-forwarded to `origin/dev` before the plan
   commit, so line references and gates run on the tree that ships; #60 changed only
   `network/spec.ts` among this plan's files.
+- **D14, the awaiting-card wait settles any staged card on sight (implementation).** The plan's
+  helper waited up to 10 s through any non-matching card and returned `{ count, … }`. Codex and Opus
+  (arc 1, round 1) showed that tolerated a card first rendered at the wrong stage, which the base read
+  failed. Now only a sole stage-less card is waited through: a staged card returns if it is at `stage`
+  with its cancel control and throws otherwise, each sample's deadline is checked before it can
+  return, and `count` (always 1 on return) is dropped. The cancel case's journal pre-check is
+  `waitForTransferStage(…, ["queued"], 5_000)`, which throws with the row if the send moved on, instead
+  of a hand-copied list of every stage that could drift from the journal schema.
+- **D15, the setup line names `scripts/aztec.sh` (implementation).** The file already calls `bin/aztec`
+  "the wrapper" (the PATH prepender this spawn bypasses), so the plan's "the aztec CLI wrapper" was
+  ambiguous in a CI log. The line reads `the aztec CLI (scripts/aztec.sh) also starts an anvil on
+  :<port>; its bind error at boot is expected`; it still does not repeat the vendor's text.
 
 ## Audit verdicts
 
@@ -1016,6 +1028,21 @@ All accepted and applied:
   base, recon's restore-key list; the `/loop` seed reassesses after three failures, not five.
 
 The conditions are met in this text; no further round was run.
+
+### Arc 1 — Codex fix loop (gpt-6.1-sol, high, read-only) and Opus review
+
+- **Round 1** (session `01a11e40-4180-74c0-99da-e5b7a033bc03`): `findings`. Accepted: (1) the wait
+  tolerated a wrong non-null stage until it became `queued`, weaker than base: a staged card now
+  settles on sight (D14); (2) success was checked before the deadline, so a first card seen after 30 s
+  could pass: each sample's start is checked against the live deadline first; (3) the `ANVIL_PORT`
+  comment's "a second L1 nobody owns" was wrong (the wrapper's anvil sits in the setup-owned process
+  group): reworded. Opus review alongside: `findings`, the same material point plus nits, all
+  accepted: drop the constant `count`; the component test's comment named its consumer (rewritten as
+  a characterization); the log line names `scripts/aztec.sh` (D15); the hand-copied stage list goes
+  (D14).
+- **Round 2** (resumed): `findings`, one new: the sample timestamp was taken before `page.evaluate`,
+  so a slow read could pass after the deadline. Accepted: it is taken after the read.
+- **Round 3** (resumed): `clean`.
 
 ## Post-implementation
 
