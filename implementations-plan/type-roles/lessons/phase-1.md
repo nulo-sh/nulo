@@ -81,3 +81,7 @@ Picks changed by the lead:
 
 - Verdict reject, eight findings (plan § Audit verdicts, R1), all adopted. The ones worth remembering: an `unreachable` claim must consider every path that writes the value, restore included, not only the live producer (C1); a reader that descends to "the first role-bearing element" reads a label as soon as roles land, so selectors name the value element and a test holds them to it (C2); a property a component exposes (`data-address-shows`, `data-input-size`) beats inferring its state from text or testids (C3, C4); module class names are hashed at runtime, so a source selector cannot scope a runtime exception (C4).
 - The dry-run Chrome shots (15:15 to 15:31, 405 files, 8 unreached) were taken with the old reader; the before set is reshot at the fixed head.
+
+## Codex implementation round 2
+
+- Verdict reject, three findings (plan § Audit verdicts, R2), all adopted. A "testid no ancestor carries" is not proof that it sits inside the site's component: a slot's content renders inside the component's wrapper, so the check now reads the component's own template (C10). When a selector moves to a child, the role's composition target moves with it, or the sweep's own-class check fails a correct inheritance (C11).
