@@ -7,7 +7,18 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { lockWithVersion } from "../release/lock-version"
-import { ACKS_FILE, auditMode, command, DEPENDENCY_PATHSPECS, dependencyDiff, failing, judgeAudit, parseAcks, plain } from "./audit-gate"
+import {
+	ACKS_FILE,
+	auditMode,
+	command,
+	DEPENDENCY_PATHSPECS,
+	dependencyDiff,
+	failing,
+	judgeAudit,
+	parseAcks,
+	plain,
+	renderSummary,
+} from "./audit-gate"
 
 const ROOT = join(import.meta.dir, "..", "..")
 const GATE = join(import.meta.dir, "audit-gate.ts")
@@ -121,6 +132,22 @@ describe("log output", () => {
 			expect(physical).toHaveLength(1)
 			expect(line).not.toContain("##[")
 		}
+	})
+
+	test("a backslash in report text cannot cancel a summary cell's pipe escape", () => {
+		const report = JSON.stringify({ ws: [{ ...advisory(12, "moderate", "<8.20.1"), title: "a\\|b" }] })
+		const summary = renderSummary(judgeAudit({ report, exitCode: 1, acks: [] }), "enforce")
+		expect(summary).toContain("a\\\\\\|b")
+	})
+
+	test("only a URL a summary link cannot misread becomes a link", () => {
+		const report = JSON.stringify({
+			undici: [advisory(11, "high", "<6.24.0")],
+			ws: [{ ...advisory(12, "moderate", "<8.20.1"), url: "https://example.org/a)b c" }],
+		})
+		const summary = renderSummary(judgeAudit({ report, exitCode: 1, acks: [] }), "enforce")
+		expect(summary).toContain("[11](https://github.com/advisories/GHSA-test-11)")
+		expect(summary).toContain("| moderate | 12 advisory 12 |")
 	})
 })
 

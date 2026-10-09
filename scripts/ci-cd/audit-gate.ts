@@ -263,8 +263,16 @@ export function dependencyDiff(base: string, head: string, cwd = process.cwd()):
 	)
 }
 
-const cell = (text: string): string => text.replace(/[\r\n]+/g, " ").replace(/\|/g, "\\|")
-const advisoryLink = (advisory: Advisory): string => (advisory.url ? `[${advisory.id}](${cell(advisory.url)})` : String(advisory.id))
+/** A Markdown table cell: escaping backslashes first keeps a `\` in the text from cancelling the pipe escape. */
+const cell = (text: string): string =>
+	text
+		.replace(/[\r\n]+/g, " ")
+		.replace(/\\/g, "\\\\")
+		.replace(/\|/g, "\\|")
+/** A link destination neither GFM nor the table can misread; any other URL renders as the bare id. */
+const LINKABLE = /^https:\/\/[^\s()<>\\|]+$/
+const advisoryLink = (advisory: Advisory): string =>
+	advisory.url && LINKABLE.test(advisory.url) ? `[${advisory.id}](${advisory.url})` : String(advisory.id)
 
 export function renderSummary(judgement: Judgement, mode: AuditMode): string {
 	const lines = [`## bun audit (${mode})`, ""]
