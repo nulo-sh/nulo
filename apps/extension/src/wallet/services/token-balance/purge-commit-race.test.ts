@@ -207,6 +207,37 @@ describe("a purge racing a balance commit", () => {
 		expect(w.emitted).toEqual([])
 	})
 
+	test.each([
+		["purgeForTokens", purgeTokens],
+		["purgeForAccounts", purgeAccounts],
+	])("%s whose raw pass captured the malformed bytes before a commit rewrote them still removes the row", async (_, purge) => {
+		const w = await world()
+		// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the repository's storage
+		const raw = (w.repo as any).storage as { rawStringEntries(): Promise<Array<[string, string]>> }
+		const realEntries = raw.rawStringEntries.bind(raw)
+		let snapshotTaken!: () => void
+		const taken = new Promise<void>((r) => (snapshotTaken = r))
+		let releaseSnapshot!: () => void
+		const snapshotGate = new Promise<void>((r) => (releaseSnapshot = r))
+		raw.rawStringEntries = async () => {
+			const entries = await realEntries()
+			raw.rawStringEntries = realEntries
+			snapshotTaken()
+			await snapshotGate
+			return entries
+		}
+		let purging: Promise<void> = Promise.resolve()
+		await syncWithReReadParked(w, async () => {
+			await w.api.storage.local.set({ [key("1")]: JSON.stringify(MALFORMED) })
+			purging = purge(w.service)
+			await taken
+		})
+		expect(JSON.parse((await w.stored("1")) as string)).toMatchObject({ privateBalance: "7" })
+		releaseSnapshot()
+		await purging
+		expect(await w.stored("1")).toBeUndefined()
+	})
+
 	test('a malformed row at key "01" fences nothing: live row 1 still commits and emits', async () => {
 		const w = await world()
 		await w.api.storage.local.set({ [key("01")]: JSON.stringify({ ...MALFORMED, token: 200 }) })

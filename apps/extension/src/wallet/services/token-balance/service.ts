@@ -526,25 +526,39 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		const set = new Set(tokenIds)
 		// Typed and raw passes share ONE hold with the creators: unlocked, a
 		// creation whose `repo.set` settles after this snapshot survives the purge.
-		await this.lock.withLock(async () => {
-			for (const tb of (await this.repo.getAll()).filter((x) => set.has(x.token) && x.profileId === profileId)) {
-				await this.invalidateAndDelete(tb.id)
-				// Delete-before-emit (the repo-wide purge invariant); decorate only
-				// with the row's OWN token, never a reused id's successor.
-				if (rowMatchesItsToken(tb, this.tokens)) this.emit("onTokenBalanceDeleted", this.getTokenBalanceInfo(tb))
-			}
-			// Raw second pass — a validation-failed balance row for a purged
-			// token is invisible to getAll() and would otherwise survive forever.
-			// Old-shape rows carry no profileId and are left to the legacy sweep.
-			await this.repo.purgeMalformed(
+		await this.lock.withLock(() =>
+			this.purgeScopeHoldingLock(
+				(x) => set.has(x.token) && x.profileId === profileId,
+				// A validation-failed row for a purged token is invisible to getAll(). Old-shape
+				// rows carry no profileId and are left to the legacy sweep.
 				(raw) => typeof raw.token === "number" && set.has(raw.token) && raw.profileId === profileId,
-				(id) => this.logDebug(`purged malformed balance row ${id}`),
-				this.invalidateRawKey,
-			)
-		})
+			),
+		)
 		for (const id of set) {
 			const live = this.tokens.get(id)
 			if (live && live.profileId === profileId) this.tokens.delete(id)
+		}
+	}
+
+	/** Typed pass, raw pass, then the typed pass again, all under the caller's hold of `this.lock`.
+	 *  The raw pass fences every malformed row it matches, but its bytes guard spares one a queue
+	 *  commit rewrote valid meanwhile: typed and in scope by then, the second typed pass takes it. */
+	private async purgeScopeHoldingLock(
+		inScope: (row: TokenBalanceRaw) => boolean,
+		matchesRaw: (raw: Record<string, unknown>) => boolean,
+	): Promise<void> {
+		await this.purgeTypedHoldingLock(inScope)
+		await this.repo.purgeMalformed(matchesRaw, (id) => this.logDebug(`purged malformed balance row ${id}`), this.invalidateRawKey)
+		await this.purgeTypedHoldingLock(inScope)
+	}
+
+	private async purgeTypedHoldingLock(inScope: (row: TokenBalanceRaw) => boolean): Promise<void> {
+		for (const tb of (await this.repo.getAll()).filter(inScope)) {
+			await this.invalidateAndDelete(tb.id)
+			// Delete-before-emit (the repo-wide purge invariant). The scope's profile is often not
+			// active (deletion, restore finalize): decorate only with the row's OWN token, never a
+			// reused id's successor.
+			if (rowMatchesItsToken(tb, this.tokens)) this.emit("onTokenBalanceDeleted", this.getTokenBalanceInfo(tb))
 		}
 	}
 
@@ -559,29 +573,18 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		if (scopes.length === 0) return
 		const keys = new Set(scopes.map((s) => accountScopeKey(s.chainId, s.address)))
 		// One hold with the creators, fence before every delete — mirrors purgeForTokens.
-		await this.lock.withLock(async () => {
-			for (const tb of (await this.repo.getAll()).filter(
+		await this.lock.withLock(() =>
+			this.purgeScopeHoldingLock(
 				(row) => row.profileId === profileId && keys.has(accountScopeKey(row.chainId, row.account)),
-			)) {
-				await this.invalidateAndDelete(tb.id)
-				// Delete-before-emit (the repo-wide purge invariant). The scope's profile
-				// is typically NOT active here (restore finalize) — emit only when the map
-				// holds the row's OWN token, never a reused id's successor.
-				if (rowMatchesItsToken(tb, this.tokens)) this.emit("onTokenBalanceDeleted", this.getTokenBalanceInfo(tb))
-			}
-			// Raw second pass: a validation-failed new-shape row in scope must not
-			// survive as hidden debris. Old-shape rows carry no profileId/chainId —
-			// unattributable — and are DELIBERATELY left to the init legacy sweep.
-			await this.repo.purgeMalformed(
+				// Old-shape rows carry no profileId/chainId (unattributable) and are
+				// DELIBERATELY left to the init legacy sweep.
 				(raw) =>
 					raw.profileId === profileId &&
 					typeof raw.chainId === "number" &&
 					typeof raw.account === "string" &&
 					keys.has(accountScopeKey(raw.chainId, raw.account)),
-				(id) => this.logDebug(`purged malformed balance row ${id}`),
-				this.invalidateRawKey,
-			)
-		})
+			),
+		)
 	}
 
 	private readonly onTransactionUpdated = async (tx: Tx) => {
