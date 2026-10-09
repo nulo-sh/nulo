@@ -56,6 +56,9 @@ export interface UseIncomingTransfersResult {
 	/** Visible (trusted) incoming-transfer records; the service layer already
 	 *  filters + sorts, so consumers attach them as feed rows directly. */
 	incomingTransfers: Ref<IncomingTransferRecord[]>
+	/** True once a read for the current scope has assigned its rows, false again on a scope switch; a
+	 *  read that rejects or was superseded never sets it, so an empty list under it is a real answer. */
+	loaded: Ref<boolean>
 	/** Re-fetch for the current scope. Returns `[]` (clearing atomically) when
 	 *  the visibility toggle is off. No-op when scope isn't ready. */
 	refresh: () => Promise<void>
@@ -66,6 +69,7 @@ export function useIncomingTransfers(options: UseIncomingTransfersOptions): UseI
 	const { incomingTransferService, configService, priceService, scope, afterRead } = options
 
 	const incomingTransfers = ref<IncomingTransferRecord[]>([])
+	const loaded = ref(false)
 	let disposed = false
 
 	// Stable identity of the active scope ("" when not ready). Drives both the
@@ -94,6 +98,7 @@ export function useIncomingTransfers(options: UseIncomingTransfersOptions): UseI
 			if (isStale(isCurrent, key)) return
 		}
 		incomingTransfers.value = deleted.size ? rows.filter((x) => !deleted.has(x.id)) : rows
+		loaded.value = true
 	}
 
 	const refresh = async (): Promise<void> => {
@@ -149,6 +154,7 @@ export function useIncomingTransfers(options: UseIncomingTransfersOptions): UseI
 		() => scopeKey(scope()),
 		(key) => {
 			incomingTransfers.value = []
+			loaded.value = false
 			if (key) refresh()
 		},
 		{ flush: "sync" },
@@ -175,5 +181,5 @@ export function useIncomingTransfers(options: UseIncomingTransfersOptions): UseI
 	}
 	onScopeDispose(dispose)
 
-	return { incomingTransfers, refresh, dispose }
+	return { incomingTransfers, loaded, refresh, dispose }
 }

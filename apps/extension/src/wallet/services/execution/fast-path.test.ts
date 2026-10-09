@@ -50,6 +50,7 @@ const ABI_TOTAL_SUPPLY = { name: "total_supply", parameters: [], functionType: F
 const ABI_TRANSFER = { name: "transfer", parameters: [FIELD_PARAM], functionType: FunctionType.PRIVATE, isStatic: false, returnTypes: [] }
 const FAKE_ARTIFACT = { functions: [ABI_BALANCE_OF_PUBLIC, ABI_TOTAL_SUPPLY, ABI_TRANSFER], nonDispatchPublicFunctions: [] }
 const selectorOf = (fn: { name: string; parameters: unknown[] }) => FunctionSelector.fromNameAndParameters(fn.name, fn.parameters as never)
+const BINDING_REFUSAL = "Scope violation: call name does not match selector's function"
 
 /** Minimal fake ContractResolver: every address resolves to FAKE_ARTIFACT's class. */
 function fakeResolver(opts: { instanceMissing?: boolean } = {}) {
@@ -296,9 +297,7 @@ describe("runFastPath", () => {
 	test("a wire name that does not match the selector's ABI function is a scope violation, before any simulation", async () => {
 		const split = rehydrateOptimizablePrefix([rpcShapedPublicStaticCall({ selector: TOTAL_SUPPLY_SELECTOR })])
 		const { deps, runStandardArm } = makeDeps({ optimizableCalls: split!.optimizableCalls })
-		await expect(runFastPath(deps)).rejects.toThrow(
-			/Scope violation: call name "balance_of_public" does not match selector's function "total_supply"/,
-		)
+		await expect(runFastPath(deps)).rejects.toThrow(BINDING_REFUSAL)
 		expect(simulateViaNodeMock).not.toHaveBeenCalled()
 		expect(runStandardArm).not.toHaveBeenCalled()
 	})
@@ -359,7 +358,6 @@ describe("runFastPath", () => {
 		}
 		throw new Error("expected a rejection")
 	}
-	const ZERO = AztecAddress.ZERO.toString()
 
 	test("a drifted live L1 is refused before any call is bound or simulated", async () => {
 		const { deps, resolver } = makeDeps({ node: fakeNode({ nodeInfo: { l1ChainId: 1, rollupVersion: 4127419662 } }) })
@@ -393,9 +391,7 @@ describe("runFastPath", () => {
 			const split = rehydrateOptimizablePrefix([rpcShapedPublicStaticCall({ name, selector: TOTAL_SUPPLY_SELECTOR })])
 			const refused = await rejectionOf(runFastPath(makeDeps({ optimizableCalls: split!.optimizableCalls }).deps))
 			expect(refused.constructor).toBe(Error)
-			expect(refused.message).toBe(
-				`Scope violation: call name "${name}" does not match selector's function "total_supply" on ${ZERO}`,
-			)
+			expect(refused.message).toBe(BINDING_REFUSAL)
 		}
 		expect(simulateViaNodeMock).not.toHaveBeenCalled()
 	})
@@ -410,9 +406,7 @@ describe("runFastPath", () => {
 		;(call as { name?: string }).name = undefined
 		const refused = await rejectionOf(bindOptimizableCalls({} as never, fakeResolver() as never, [call]))
 		expect(refused.constructor).toBe(Error)
-		expect(refused.message).toBe(
-			`Scope violation: call name "undefined" does not match selector's function "balance_of_public" on ${ZERO}`,
-		)
+		expect(refused.message).toBe(BINDING_REFUSAL)
 	})
 
 	test("14. PXE getSyncedBlockHeader is preferred over node.getBlock", async () => {
@@ -558,6 +552,7 @@ describe("fallback chain: real binder → ViewExecutor standard path → real Tx
 	}
 
 	function makeExecutor() {
+		const logError = vi.fn()
 		const instance = { currentContractClassId: { toString: () => "0xfakeclass" } }
 		const resolver = {
 			...fakeResolver(),
@@ -566,14 +561,19 @@ describe("fallback chain: real binder → ViewExecutor standard path → real Tx
 			resolveArtifacts: vi.fn(async () => new Map([["0xfakeclass", FAKE_ARTIFACT]])),
 			ensureContractsRegistered: vi.fn(async () => undefined),
 		}
-		const node = { getNodeInfo: vi.fn(async () => NODE_INFO) }
+		const node = { ...fakeNode(), getNodeInfo: vi.fn(async () => NODE_INFO) }
 		const account = {
 			address: ACCOUNT,
 			ensureRegistered: vi.fn(async () => {}),
 			requiresInitialization: vi.fn(async () => false),
 			buildTxExecutionRequest: vi.fn(async () => ({ fake: "txRequest" })),
 		}
-		const pxe = { simulateTx: vi.fn(), getContracts: vi.fn(async () => []), registerContract: vi.fn(async () => {}) }
+		const pxe = {
+			...fakePxe(),
+			simulateTx: vi.fn(),
+			getContracts: vi.fn(async () => []),
+			registerContract: vi.fn(async () => {}),
+		}
 		const pxeService = { getPXE: vi.fn(() => pxe) }
 		const profileService = {
 			getActiveProfile: vi.fn(async () => ({ id: "p1", name: "P", type: "password" })),
@@ -611,9 +611,9 @@ describe("fallback chain: real binder → ViewExecutor standard path → real Tx
 			accountService: accountService as never,
 			contactService: { getContacts: vi.fn(async () => []) } as never,
 			logDebug: vi.fn(),
-			logError: vi.fn(),
+			logError,
 		})
-		return { executor, planner, pxe }
+		return { executor, planner, pxe, logError }
 	}
 
 	test("a forged-static first call sends every call to the standard path, where a later name/selector mismatch is rejected before any simulation", async () => {
@@ -631,13 +631,36 @@ describe("fallback chain: real binder → ViewExecutor standard path → real Tx
 			exec: { calls },
 			opts: { from: ACCOUNT, additionalScopes: [] },
 		}
-		await expect(executor.executeAztecSimulateTx(op as never)).rejects.toThrow(
-			/Scope violation: call name "balance_of_public" does not match selector's function "total_supply"/,
-		)
+		await expect(executor.executeAztecSimulateTx(op as never)).rejects.toThrow(BINDING_REFUSAL)
 		expect(simulateViaNodeMock).not.toHaveBeenCalled()
 		expect(pxe.simulateTx).not.toHaveBeenCalled()
 		const planned = planner.processAztecJsPayload.mock.calls[0][0] as { calls: { name: string }[] }
 		expect(planned.calls.map((c) => c.name)).toEqual(["transfer", "balance_of_public"])
+	})
+
+	// The fallback logs at error level for every user, so its line is the one that must stay free
+	// of the call's name and target.
+	test("a remainder whose name mismatches its selector is logged by the fallback without the name or the target", async () => {
+		simulateViaNodeMock.mockResolvedValue([fakeSimResult()])
+		const { executor, logError } = makeExecutor()
+		const transferSelector = (await selectorOf(ABI_TRANSFER)).toString()
+		const calls = [
+			rpcShapedPublicStaticCall({ to: CONTRACT }),
+			rpcShapedPublicStaticCall({ to: CONTRACT, selector: transferSelector, type: FunctionType.PRIVATE, isStatic: false }),
+		]
+		const op = {
+			kind: "aztec_simulateTx",
+			networkId: "net-1",
+			accountAddress: ACCOUNT.toString(),
+			exec: { calls },
+			opts: { from: ACCOUNT, additionalScopes: [] },
+		}
+		await expect(executor.executeAztecSimulateTx(op as never)).rejects.toThrow(BINDING_REFUSAL)
+		const [msg, err] = logError.mock.calls.find(([line]) => line === "fast-path failed, falling back to standard path") ?? []
+		expect(simulateViaNodeMock).toHaveBeenCalledTimes(1)
+		expect((err as Error | undefined)?.message).toBe(BINDING_REFUSAL)
+		const logged = `${msg} ${(err as Error | undefined)?.message}`
+		for (const value of ["balance_of_public", "transfer", CONTRACT, CONTRACT.slice(2)]) expect(logged).not.toContain(value)
 	})
 })
 

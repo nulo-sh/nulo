@@ -206,6 +206,14 @@ describe("verify's registry wait against a fake registry", () => {
 				},
 			},
 		})
+		const packument = (req: Request, url: URL) => {
+			// Only npm's own escaping and Accept value: anything else reads another CDN entry than npm does.
+			const name = names.find((n) => url.pathname === `/${n.replaceAll("/", "%2f")}`)
+			if (!name || req.headers.get("accept") !== "application/json") return new Response("unexpected request", { status: 400 })
+			const origin = name === late && withheld === "transfer" ? `http://127.0.0.1:${cut.port}` : url.origin
+			const listed = holds(name, "document") ? {} : { [VERSION]: { dist: { tarball: origin + tarballPath(name) } } }
+			return Response.json({ name, versions: { "0.0.0-bootstrap.0": {}, ...listed } })
+		}
 		const server = Bun.serve({
 			hostname: "127.0.0.1",
 			port: 0,
@@ -213,12 +221,7 @@ describe("verify's registry wait against a fake registry", () => {
 				const url = new URL(req.url)
 				const tarball = names.find((n) => url.pathname === tarballPath(n))
 				if (tarball) return new Response("tgz", { status: holds(tarball, "tarball") ? 404 : 200 })
-				// Only npm's own escaping and Accept value: anything else reads another CDN entry than npm does.
-				const name = names.find((n) => url.pathname === `/${n.replaceAll("/", "%2f")}`)
-				if (!name || req.headers.get("accept") !== "application/json") return new Response("unexpected request", { status: 400 })
-				const origin = name === late && withheld === "transfer" ? `http://127.0.0.1:${cut.port}` : url.origin
-				const listed = holds(name, "document") ? {} : { [VERSION]: { dist: { tarball: origin + tarballPath(name) } } }
-				return Response.json({ name, versions: { "0.0.0-bootstrap.0": {}, ...listed } })
+				return packument(req, url)
 			},
 		})
 		try {

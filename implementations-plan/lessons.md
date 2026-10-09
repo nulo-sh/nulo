@@ -17,7 +17,6 @@ Gotchas from closed plans, read before every task: one line each with evidence, 
 - `auto-imports.d.ts` regenerates only under Vite and keeps a removed export's global: build before committing (unplugin-auto-import 21.1.0). [Evidence](archive/send-amount-exact/plan.md#auto-imports)
 - Vue unit tests (3.5.41, VTU 2.4.11): only `vue`/`vue-router` auto-import; stub `@nulo/design`'s recursing `Button`; fake timers run a native event's first listener only; a second `mount` strips the first's stubs. [Evidence](archive/ux-feedback/plan.md#vue-tests)
 - A check accepting a wrong state passes broken code: pair never-happens tests with a success control; match screenshot state exactly; stub only what production returns. [Evidence](archive/connect-window/plan.md#controls), [more](archive/harden-dedupe/plan.md#success-control)
-- Timed tests (`e2e/config`) time out under parallel `test:all` load: rerun the file alone. [Evidence](archive/e2e-reliability-fixes/plan.md#timed-tests)
 
 ## Git & GitHub
 
@@ -39,7 +38,7 @@ Gotchas from closed plans, read before every task: one line each with evidence, 
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category, never the message. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
 - bb.js never closes its CRS cache (idb-keyval's `keyval-store`) once a page loads the CRS: deleting it blocks. [Evidence](archive/hd-delete-after-prove/plan.md#crs-cache)
-- A MAC binds only what it names, and a row's stored `id` moves with the row: anchor it on the storage key; on a MAC failure refuse, never self-heal. [Evidence](archive/mac-identity-binding/plan.md#mac-scope)
+- A MAC binds only what it names, and a row's stored `id` moves with the row: anchor it on the storage key; on a MAC failure refuse, never self-heal. Likewise an address commits to the original class id, not `currentContractClassId`: check an artifact against the original. [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md)
 
 ## Aztec
 
@@ -54,4 +53,4 @@ Gotchas from closed plans, read before every task: one line each with evidence, 
 - Agent Bash (zsh 5.9): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
 - `pgrep -f` matches the agent's `zsh -c` wrapper, so a teardown can kill itself: signal your launcher's pgid, never `$$`/`$PPID`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep)
 - Under Puppeteer mobile emulation, `innerWidth` grows to the content, so `scrollWidth > innerWidth` never flags a sideways scroll: compare against the viewport width you set (25.8). [Evidence](archive/landing-store-buttons/plan.md#mobile-emulation-width)
-- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base)
+- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first; grep a green run for a suspect log line (aztec 6.0.0-rc.1's `os error 98` prints on every shard). [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base), [more](archive/code-followups-1/plan.md)

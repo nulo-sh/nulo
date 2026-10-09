@@ -74,6 +74,7 @@ import {
 import type { ClockPort, WindowPort } from "@nulo/wallet-core/ports"
 import {
 	ChainNotSupportedError,
+	InvalidWalletArgumentsError,
 	ScopeViolationError,
 	TermsAcceptanceRequiredError,
 	isReceiverGoneRejection,
@@ -1354,5 +1355,10 @@ export async function handleWalletMessage(
 /** A refusal a connected dApp can repeat on every poll, so it logs at `debug`: an `error` line lands
  *  in every user's log buffer. */
 function isExpectedRefusal(error: unknown): boolean {
-	return error instanceof TermsAcceptanceRequiredError || error instanceof ScopeViolationError || error instanceof ChainNotSupportedError
+	return (
+		error instanceof TermsAcceptanceRequiredError ||
+		error instanceof ScopeViolationError ||
+		error instanceof ChainNotSupportedError ||
+		error instanceof InvalidWalletArgumentsError
+	)
 }

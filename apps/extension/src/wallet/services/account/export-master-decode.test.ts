@@ -56,7 +56,7 @@ async function makeService(): Promise<AccountService> {
 			exportPlain: async () => state.master,
 		}),
 	)
-	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
+	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 	const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 	services.add(service)
 	await services.start()

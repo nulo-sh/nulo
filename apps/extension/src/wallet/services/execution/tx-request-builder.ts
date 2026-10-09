@@ -344,11 +344,7 @@ export class TxRequestBuilder {
 		}
 		const call = await FunctionCall.schema.parseAsync(rawCalls[0])
 		const noFromArtifact = requireArtifact(instances, artifacts, call.to.toString())
-		const noFromFn = assertSelectorBinding(
-			await findFunctionBySelector(noFromArtifact, call.selector.toString()),
-			{ name: call.name, to: call.to.toString() },
-			CALL_BINDING,
-		)
+		const noFromFn = assertSelectorBinding(await findFunctionBySelector(noFromArtifact, call.selector.toString()), call, CALL_BINDING)
 		if (noFromFn.functionType !== FunctionType.PRIVATE) {
 			throw new Error("DefaultEntrypoint only supports private functions")
 		}

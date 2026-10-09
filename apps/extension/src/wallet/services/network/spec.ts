@@ -133,8 +133,8 @@ export const ChainKindSchema: z.ZodType<ChainKind> = z.enum(["mainnet", "testnet
 
 /**
  * An RPC URL the wallet may treat as its chain authority: the transport rule
- * (`rpcTransportVerdict`), and no userinfo, which only this schema refuses.
- * zod trims the string before the refine sees it.
+ * (`rpcTransportVerdict`), userinfo refused. zod trims the string before the
+ * refine sees it.
  *
  * Runs on the popup client's params and results (`network/client.ts`), on the
  * service's params, and on the backup-restore network filter
@@ -153,9 +153,6 @@ export const RpcUrlSchema = z
 			} catch {
 				return false
 			}
-			// WHATWG parses `https://user@evil.com@safe.com` as username `user@evil.com` on host
-			// `safe.com`: the userinfo is the part a person reads, so it is a phishing vector.
-			if (parsed.username !== "" || parsed.password !== "") return false
 			return rpcTransportVerdict(parsed).allowed
 		},
 		{ message: "RPC URL must use https:// or http://localhost / http://127.0.0.1 / http://[::1] and contain no userinfo" },
@@ -179,14 +176,6 @@ export const NetworkSchema: z.ZodType<Network> = z.object({
 })
 
 export const NodeStatusSchema: z.ZodType<NodeStatus> = z.nativeEnum(NodeStatus)
-
-/** `getNetworkInfo` synthesized struct — opaque to the wire validator,
- *  but carrying the same fields the PXE adapter expects. */
-export const NetworkInfoSchema: z.ZodType<NetworkInfo> = z.object({
-	profileId: z.string(),
-	chainId: z.number(),
-	rpcUrl: RpcUrlSchema,
-})
 
 /**
  * Per-method schemas. Tuples preserve positional-param ordering (our wire

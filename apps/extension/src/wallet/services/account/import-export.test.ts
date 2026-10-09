@@ -84,14 +84,19 @@ async function build(withBalances = false) {
 			},
 		}),
 	)
-	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => L1 }))
+	services.add(
+		svc(NETWORK_SERVICE_NAME, {
+			registerChainPurgeSubscriber: () => {},
+			isChainLive: async () => true,
+			getL1ChainIdStored: async () => L1,
+		}),
+	)
 	const account = new AccountService(new LoggerStore(new ConfigStore()), api)
 	services.add(account)
 	if (withBalances) {
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async (pid: string) => (pid === "p1" ? [BAL_TOKEN] : []),
 			}),

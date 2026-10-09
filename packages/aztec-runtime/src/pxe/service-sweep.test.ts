@@ -1,8 +1,7 @@
 /**
- * The deferred orphan-store sweep's recheck-at-commit obligations: a same-id
- * re-import provisioning after the sweep's snapshots must keep its store, and
- * bb.js's CRS cache (keyval-store) may only be deleted against a re-proven-empty live
- * listing — never the boot-time snapshot.
+ * The deferred orphan-store sweep: a same-id re-import provisioning after the
+ * sweep's snapshots must keep its store, and the legacy IndexedDB arm never
+ * deletes bb.js's CRS cache (keyval-store).
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -113,18 +112,11 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 		expect(removeProfileStoreDirs).toHaveBeenCalledWith("p1")
 	})
 
-	test("keyval-store is kept when a NEW pxe DB appears after the boot snapshot", async () => {
+	test("keyval-store survives the sweep that deletes the last legacy DB", async () => {
 		const deleted: string[] = []
-		let listCalls = 0
 		vi.stubGlobal("indexedDB", {
-			databases: async () => {
-				listCalls += 1
-				// Boot snapshot: one legacy pxe DB + keyval. Commit re-list: the
-				// legacy DB is gone but a NEW profile's pxe DB has appeared.
-				return listCalls === 1
-					? [{ name: "pxe/p1/1" }, { name: "keyval-store" }]
-					: [{ name: "pxe/pNEW/1" }, { name: "keyval-store" }]
-			},
+			// A live listing: a deleted DB drops out, as it does in the browser.
+			databases: async () => [{ name: "pxe/p1/1" }, { name: "keyval-store" }].filter((x) => !deleted.includes(x.name)),
 			deleteDatabase: (name: string) => {
 				deleted.push(name)
 				return fireSuccess()
@@ -139,7 +131,6 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 
 		await sweep(service)
 
-		expect(deleted).toContain("pxe/p1/1")
-		expect(deleted).not.toContain("keyval-store")
+		expect(deleted).toEqual(["pxe/p1/1"])
 	})
 })

@@ -79,7 +79,6 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		"getTokens",
 		"getToken",
 		"addToken",
-		"updateToken",
 		"deleteToken",
 		"parseTokenInterface",
 		"previewTokenMetadata",
@@ -90,7 +89,6 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 	public static name = TOKEN_SERVICE_NAME
 
 	public readonly onTokenAdded = new EventHandler<TokenAdded>()
-	public readonly onTokenUpdated = new EventHandler<TokenInfo>()
 	public readonly onTokenDeleted = new EventHandler<TokenDeleted>()
 	public readonly onSeedStatusChanged = new EventHandler<SeedScope>()
 
@@ -520,76 +518,6 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			tokenInterface,
 			journal: { origin: "seed", accountAddress, title: symbol, subtitle: "Default token" },
 			metadata: { kind: "seeded", name, symbol, decimals },
-		})
-	}
-
-	public async updateToken(
-		profileId: string,
-		networkId: string,
-		accountAddress: string,
-		tokenId: number,
-		tokenInterface: TokenInterface,
-	): Promise<TokenInfo> {
-		await this.ensureInitialized()
-		const stepContent = new StepContent("Updating token")
-		const task = this.tasks.startNewTask(stepContent)
-
-		// Catch stays INSIDE the locked section: task.fail must be recorded
-		// while the token lock is held, so a freed waiter can never run before
-		// the task reflects the failure (same class as addToken).
-		return await this.lock.withLock(async () => {
-			try {
-				const _token = await this.tokens.get(`${tokenId}`)
-				if (!_token) {
-					throw new Error("unknown token id")
-				}
-				if (
-					_token.profileId !== profileId ||
-					_token.chainId !== tokenInterface.chainId ||
-					_token.contract !== tokenInterface.contract
-				) {
-					throw new Error("token profile id, chain id and contract cannot change")
-				}
-				const [name, symbol, decimals] = await this.fetchTokenMetadata(profileId, networkId, accountAddress, tokenInterface)
-				const token: Token = {
-					id: _token.id,
-					profileId: _token.profileId,
-					chainId: _token.chainId,
-					contract: _token.contract,
-					name: name,
-					symbol: symbol,
-					decimals: decimals,
-					getNameFn: tokenInterface.getNameFn,
-					getSymbolFn: tokenInterface.getSymbolFn,
-					getDecimalsFn: tokenInterface.getDecimalsFn,
-					balanceOfPublicFn: tokenInterface.balanceOfPublicFn,
-					balanceOfPrivateFn: tokenInterface.balanceOfPrivateFn,
-					transferPublicFn: tokenInterface.transferPublicFn,
-					transferPrivateFn: tokenInterface.transferPrivateFn,
-					transferPublicToPrivateFn: tokenInterface.transferPublicToPrivateFn,
-					transferPrivateToPublicFn: tokenInterface.transferPrivateToPublicFn,
-				}
-				// The metadata fetch above parks with the token lock held, but the
-				// chain sweep is LOCKLESS (see clearChainState) — re-read the row so
-				// a swept token is not resurrected by the set below.
-				if (!(await this.tokens.get(`${tokenId}`))) {
-					throw new Error("token deleted")
-				}
-				await this.tokens.set(`${token.id}`, token)
-				// The set awaits — a sweep whose snapshot predates it would miss this
-				// row; self-compensate, mirroring persistToken's commit.
-				if (!(await this.networks.isNetworkLive(networkId))) {
-					await this.tokens.delete(`${token.id}`)
-					throw new Error("network deleted")
-				}
-				this.emit("onTokenUpdated", getTokenInfo(token))
-				const result = getTokenInfo(token)
-				task.complete()
-				return result
-			} catch (error) {
-				task.fail(error)
-				throw error
-			}
 		})
 	}
 

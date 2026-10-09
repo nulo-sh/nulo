@@ -1,8 +1,6 @@
 <!-- Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0. -->
 <script setup>
 import { FieldWarning } from "@nulo/design"
-/** Utils */
-import { findPrimaryEndpoint } from "@/wallet/services/network/spec"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -33,13 +31,9 @@ const form = useFormState({
 			return null
 		},
 	},
-	/** Vestigial — kept for the URL input that's now read-only. Endpoint URL
-	 *  editing lives in the per-`Network` detail page. */
-	url: { initial: "" },
 })
 
 const nameTerm = form.fields.name.value
-const urlTerm = form.fields.url.value
 
 const isStartedEditingName = form.fields.name.isDirty
 const isNameAlreadyExist = computed(() => form.fields.name.error.value === "Already exists" && isStartedEditingName.value)
@@ -55,10 +49,9 @@ const isAvailableToUpdateNetwork = computed(() => {
 })
 
 const handleFillFieldsWithDefaultValues = () => {
-	const primary = networkToEdit.value && findPrimaryEndpoint(networkToEdit.value)
 	// rebase() loads values + sets the dirty-baseline so `field.isDirty` drives
 	// the "Already exists" warning gating (isStartedEditingName) above.
-	form.rebase({ name: networkToEdit.value?.name ?? "", url: primary?.rpcUrl ?? "" })
+	form.rebase({ name: networkToEdit.value?.name ?? "" })
 }
 
 const isNetworkUpdateInProgress = ref(false)

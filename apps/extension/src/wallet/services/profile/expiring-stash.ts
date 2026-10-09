@@ -2,10 +2,11 @@
  * An in-memory map of secret-bearing entries that expire `ttlMs` after `capturedAt`.
  *
  * Ownership: the stash owns each entry's buffers until a successful `take` hands them to the
- * caller. `drop`, an expired `take` and `sweep` wipe; the inherited `delete`, `clear` and `set`
- * do NOT (a `set` over a live key discards the old entry unwiped). Expiry is checked only on
- * these calls, never by a timer. Callers serialize access (the profile facade lock); every
- * method is synchronous, so no call interleaves with another.
+ * caller. `drop`, an expired `take`, `sweep` and a `set` that replaces a different entry wipe, so
+ * a new entry must never share a buffer with the entry it replaces; the inherited `delete` and
+ * `clear` do NOT wipe. Expiry is checked only on these calls, never by a timer. Callers serialize
+ * access (the profile facade lock); every method is synchronous, so no call interleaves with
+ * another.
  */
 export class ExpiringStash<E extends { capturedAt: number }> extends Map<string, E> {
 	public constructor(
@@ -13,6 +14,13 @@ export class ExpiringStash<E extends { capturedAt: number }> extends Map<string,
 		private readonly wipe: (entry: E) => void,
 	) {
 		super()
+	}
+
+	public override set(id: string, entry: E): this {
+		const replaced = this.get(id)
+		super.set(id, entry)
+		if (replaced && replaced !== entry) this.wipe(replaced)
+		return this
 	}
 
 	/** Wipes and drops every expired entry except `exceptId`'s. */

@@ -40,7 +40,7 @@ async function build(opts: { failBlockWrite?: boolean } = {}) {
 			persistIntegrityBlockIfLive: async (record: Parameters<typeof repo.set>[0]) => repo.set(record),
 		}),
 	)
-	services.add(svc(NetworkService.name, { registerChainPurgeSubscriber: () => {} }))
+	services.add(svc(NetworkService.name, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 	const accounts = new AccountService(new LoggerStore(new ConfigStore()), api)
 	services.add(accounts)
 	await services.start()

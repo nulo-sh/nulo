@@ -399,7 +399,7 @@ async function rejectionOf(run: Promise<unknown>): Promise<Error> {
 describe("selector binding: the dApp's name must be the selector's function", () => {
 	const UNKNOWN_SELECTOR = "0x0badc0de"
 	const selectorOf = async () => (await FunctionSelector.fromNameAndParameters(FN.name, FN.parameters)).toString()
-	const mismatch = (name: string) => `Scope violation: call name "${name}" does not match selector's function "${FN.name}" on ${CONTRACT}`
+	const MISMATCH = "Scope violation: call name does not match selector's function"
 
 	function noFromHarness() {
 		const getCurrentMinFees = vi.fn(async () => new GasFees(1, 1))
@@ -435,7 +435,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		for (const name of ["sneaky", ""]) {
 			const refused = await rejectionOf(buildNoFrom(wireCall({ name, selector })))
 			expect(refused.constructor).toBe(Error)
-			expect(refused.message).toBe(mismatch(name))
+			expect(refused.message).toBe(MISMATCH)
 		}
 		expect(getCurrentMinFees).not.toHaveBeenCalled()
 
@@ -461,7 +461,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		for (const name of ["sneaky", ""]) {
 			const refused = await rejectionOf(build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [], name }]))
 			expect(refused.constructor).toBe(Error)
-			expect(refused.message).toBe(mismatch(name))
+			expect(refused.message).toBe(MISMATCH)
 		}
 		expect(h.account.buildTxExecutionRequest).not.toHaveBeenCalled()
 	})

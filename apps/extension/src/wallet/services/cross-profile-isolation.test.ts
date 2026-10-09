@@ -232,7 +232,6 @@ describe("cross-profile isolation (standing gate)", () => {
 			services.add(
 				svc(TokenService.name, {
 					onTokenAdded: new EventHandler(),
-					onTokenUpdated: new EventHandler(),
 					onTokenDeleted: new EventHandler(),
 					getTokensRaw: async (pid: string) => (pid === p1.id ? [mkToken(1, p1.id)] : pid === p2.id ? [mkToken(2, p2.id)] : []),
 				}),

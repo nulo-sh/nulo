@@ -20,7 +20,7 @@ import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
 import { getErrorMessage, Lock } from "@nulo/wallet-core/utils"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
@@ -224,7 +224,7 @@ export async function failQueuedIfUnclaimed(
 	journalId: string,
 	message: string,
 	logger: ILogger,
-	kind: Extract<KnownJobErrorKind, "popup_bound" | "scope_refused"> = "popup_bound",
+	kind: Extract<KnownJobErrorKind, "popup_bound" | "scope_refused" | "malformed_request"> = "popup_bound",
 ): Promise<void> {
 	try {
 		await operationJournal.transitionIfStage(journalId, ["queued"], { stage: "failed" }, { kind, message, normalizedRaw: null })
@@ -234,13 +234,19 @@ export async function failQueuedIfUnclaimed(
 }
 
 /** Fails a still-queued row with the error that ended its message before any claim: `scope_refused`
- *  for a grant-check refusal, whose message is fixed text, and `popup_bound` for anything else. */
+ *  for a grant-check refusal and `malformed_request` for a schema refusal, both fixed text, and
+ *  `popup_bound` for anything else. */
 export async function failQueuedForError(
 	operationJournal: OperationJournalService,
 	journalId: string,
 	error: unknown,
 	logger: ILogger,
 ): Promise<void> {
-	const kind = error instanceof ScopeViolationError ? "scope_refused" : "popup_bound"
-	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, kind)
+	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, queuedFailureKind(error))
+}
+
+function queuedFailureKind(error: unknown): "scope_refused" | "malformed_request" | "popup_bound" {
+	if (error instanceof ScopeViolationError) return "scope_refused"
+	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
+	return "popup_bound"
 }

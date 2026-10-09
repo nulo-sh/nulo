@@ -474,9 +474,7 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 			contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
 			const refused = await rejectionOf(executor.executeAztecExecuteUtility(op(name)))
 			expect(refused.constructor).toBe(Error)
-			expect(refused.message).toBe(
-				`Scope violation: call name "${name}" does not match selector's function "symbol" on ${TO.toString()}`,
-			)
+			expect(refused.message).toBe("Scope violation: call name does not match selector's function")
 		}
 		expect(pxe.executeUtility).not.toHaveBeenCalled()
 	})

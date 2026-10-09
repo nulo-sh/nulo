@@ -80,7 +80,8 @@ const config: StorybookConfig = {
 				dts: false,
 			}),
 			useComponents({
-				dirs: ["../src/components"],
+				// Resolved against the Vite root, which Storybook sets to this app's directory.
+				dirs: ["src/components"],
 				resolvers: [nuloDesignResolver()],
 				dts: false,
 			}),

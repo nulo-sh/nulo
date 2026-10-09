@@ -116,8 +116,8 @@ jobs:
   # explicit PR-to-SHA check, never a title heuristic) — creates the tag itself (or
   # finds the one an earlier attempt created), and feeds `resolve` so the chain
   # continues. All logic + guards live in unit-tested scripts/release/auto-unstick*.ts.
-  # vars.AUTO_UNSTICK_ENABLED is the kill switch: unset or anything but on/true/1 and
-  # the script no-ops (unstuck=false), resolve stays skipped, and the manual unstick applies.
+  # vars.AUTO_UNSTICK_ENABLED is the kill switch: off/false/0 or an unrecognised value makes the
+  # script no-op (unstuck=false), resolve stays skipped, and the manual unstick applies. Unset is on.
   auto-unstick:
     needs: release-please
     if: |
@@ -195,17 +195,17 @@ jobs:
           IS_PUSH: ${{ github.event_name == 'push' }}
         run: |
           if [ "$IS_PUSH" = "true" ]; then
-            # release-please's tag on the happy path; the auto-unstick's tag on the abort path.
+            # release-please never tags (skip-github-release), so a push's tag is auto-unstick's.
             TAG="${TAG_FROM_PLEASE:-$TAG_FROM_UNSTICK}"
           else
             TAG="$TAG_FROM_INPUT"
           fi
           if [ -z "$TAG" ]; then
-            echo "::error::no tag resolved — workflow_dispatch requires the 'tag' input (e.g. v1.2.3), and push events need release-please to have created a release."
+            echo "::error::no tag resolved — workflow_dispatch requires the 'tag' input (e.g. v1.2.3), and a push needs auto-unstick to have tagged the merged Release PR."
             exit 1
           fi
           if ! git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::error::tag $TAG not found in repo (fetch-tags should have brought it; was the release-please commit pushed?)"
+            echo "::error::tag $TAG not found in repo (fetch-tags should have brought it; was it pushed?)"
             exit 1
           fi
           SHA=$(git rev-list -n 1 "$TAG")

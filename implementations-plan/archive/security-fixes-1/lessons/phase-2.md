@@ -1,0 +1,9 @@
+# Phase 2 — #29 stored grants re-projected on read
+
+- Gate: wallet-bridge `bun --bun vitest run` green (15 files, 615 tests); `bun run lint` and `bun run typecheck:all` exit 0; the extension unit suite (`bun run test`) green, 10268 tests.
+- Red on the base: with the base `capability-negotiation.ts` and `dispatcher.ts` (plus a pass-through `projectStoredGrants` stub so the new import resolves), seven tests fail: the four rewritten characterization rows, the `isTokenRegistered` held-value test, the consent test and the post-decision test.
+- Two wallet-bridge tests the plan did not list pinned a malformed stored grant and needed rewriting:
+  - `dispatcher.test.ts` "a held value that is not an address grants no call" stored `contracts: ["0xtok"]`; it now expects `ValidationError("Malformed contracts capability")`, the same class as the characterization `MALFORMED` row.
+  - "a held grant the popup echoes but the decision does not store is not re-validated" stored a legacy `{ type: "data" }` grant, which the read now refuses before any window. Its property is about the echo, not the stored row, so it now holds a valid data grant and the popup echoes a malformed `{ type: "data" }`: the decision still skips the echo and stores nothing from it.
+- One extension test needed a fixture fix: `background.refusal-log.test.ts` stored `{ type: "data", addressBook: false }`, a data grant that asks for nothing, which no writer stores and the projector refuses. It now holds `addressBook: false` beside a private-events list, so the address-book refusals still reach the scope-refusal path whose sinks the file checks.
+- The post-decision test first injected a malformed grant of the requested type; the decision replaces that type, so the answer read a clean row. It now injects a malformed grant of another type (`data`) during the window, which the decided row keeps.

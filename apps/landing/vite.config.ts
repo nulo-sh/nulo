@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
-import { siteHeaders } from "./scripts/headers"
+import { siteHeaders } from "./scripts/headers.ts"
 
 const here = dirname(fileURLToPath(import.meta.url))
 

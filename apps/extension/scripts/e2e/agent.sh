@@ -79,6 +79,9 @@ echo "[e2e:agent] building $BROWSER wallet with VITE_LOCAL_NETWORK_RPC_URL=$AZTE
 # every other network test (fresh installs stamp max and run nothing; the
 # backup fixture only runs on backup import). Never ships: prod builds omit
 # the env and _build-extension.yml greps release bundles for the markers.
+# VITE_NULO_E2E_CSP_REPORT builds in the e2e-only violation recorder
+# (src/e2e/csp-report.ts); the run below arms the launch fixture's check, which
+# fails every launch that recorded a violation.
 if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   if [ "${VITE_NULO_PRESTO_REQUIRED:-}" = "1" ]; then
     echo "[e2e:agent] FATAL: NULO_E2E_PROVERLESS and VITE_NULO_PRESTO_REQUIRED are mutually exclusive" >&2
@@ -90,6 +93,7 @@ if [ "${NULO_E2E_PROVERLESS:-}" = "1" ]; then
   VITE_NULO_E2E_MIGRATION_FIXTURE=1 \
   VITE_NULO_E2E_TOKEN_SEEDS=1 \
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
+  VITE_NULO_E2E_CSP_REPORT=1 \
   VITE_NULO_E2E_PROVERLESS=1 \
   VITE_NULO_E2E_PROVERLESS_CONFIRM=1 \
     bun run "build:$BROWSER"
@@ -103,6 +107,7 @@ else
   VITE_NULO_E2E_MIGRATION_FIXTURE=1 \
   VITE_NULO_E2E_TOKEN_SEEDS=1 \
   VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 \
+  VITE_NULO_E2E_CSP_REPORT=1 \
     bun run "build:$BROWSER"
 fi
 
@@ -139,6 +144,14 @@ for marker in "NULO_E2E_TOKEN_SEEDS_BUILD_STAMP" "nulo:e2e:token-seeds"; do
   fi
 done
 echo "[e2e:agent] bundle contains the e2e token-seed source ✓"
+
+# Positive CSP-recorder assertion: the run arms the check below, and a build
+# without the recorder fails every launch on its missing key, far from the cause.
+if ! grep -rq "nulo:e2e:csp-violations" "$DIST_DIR" 2>/dev/null; then
+  echo "[e2e:agent] FATAL: VITE_NULO_E2E_CSP_REPORT did not propagate (recorder key absent from $DIST_DIR)" >&2
+  exit 2
+fi
+echo "[e2e:agent] bundle contains the CSP violation recorder ✓"
 
 # Parallel bundle assertion for VITE_NULO_PRESTO_REQUIRED: if the env var ever
 # stops propagating from the workflow into the build, the chain-runtime
@@ -197,6 +210,7 @@ echo "[e2e:agent] running network e2e..."
 set +e
 E2E_REQUIRE_SETUP=1 \
 NULO_E2E_MIGRATION_FIXTURE=1 \
+NULO_E2E_CSP_REPORT=1 \
 ANVIL_URL="$ANVIL_URL" \
 ANVIL_PORT="$ANVIL_PORT" \
 AZTEC_NODE_URL="$AZTEC_NODE_URL" \

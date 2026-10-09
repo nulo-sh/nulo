@@ -197,7 +197,6 @@ let scopeGen = 0
 const withTaskFlags = (tb) => ({
 	...tb,
 	isUpdating: tasks.value.some((t) => t.content.tbId === tb.id && !t.finishedAt),
-	isMinting: tasks.value.some((t) => t.content.name === tb.token.name && t.content.symbol === tb.token.symbol && !t.finishedAt),
 })
 
 const tokenBalanceService = new TokenBalanceServiceClient()

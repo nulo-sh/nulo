@@ -1,0 +1,10 @@
+# Phase 7 — #33 the transfer ladder binds the sponsor row and the live chain
+
+- `chainIdentity` and `fpcIdentity?` moved onto `ReuseEntryBase`, so both entries carry them from one declaration; `ChainIdentity` (the raw pair) lives next to it.
+- `chainIdentityDrift` keeps the operation ladder's existing mismatch text, `chain identity drift (exact pair mismatch)`, and returns `chain identity drift` for a read that throws. The plan's architecture section named one text for both; its Phase 7 step 7 changed only the two message-bearing reasons. The step wins: the pinned mismatch reason stays and the two cases stay distinguishable in a debug log.
+- `fpcIdentityDrift` reads the row by the payment method's `fpcId` and compares `id` too, so a snapshot can only satisfy the sponsor the request names (a stored row's `id` field is not its storage key). New pin row: `id` alone misses.
+- The transfer ladder's base-fee step moved into a private `baseFeeDrift` to keep `tryConsume` under the cognitive budget; `getNode` stays outside its catch, so a node lookup rejection still propagates (pinned).
+- Two `strategies-structural.test.ts` fakes built an `Fpc` without `infoData` (impossible in production: `getFpcImpl` always constructs it). They now carry a row; the cold-cache test models the real undecorated shape (`isProtocol: undefined`), which still falls back to two-pass.
+- `service.composition.test.ts` seeded an fpc reuse entry with no `fpcId`, no chain pair and a node without `getNodeInfo`; it now seeds a coherent pair (`l1ChainId: 5`, `rollupVersion: 4`, composite 1) and sponsor row, so its fast path still hits.
+- Base proof: the production files checked out from 86a89c5 under the new tests. The transfer refused rows, the operation pins and the D6 test fail; D6 fails because the base stash records the edited row (`0xedited`), with the base dependency injected so the failure is the bug, not a missing stub.
+- Shell gotcha (zsh): an unquoted multi-line `$VAR` stays one word in `for` and in a pathspec. Use `ARR=(${(f)"$(cmd)"})` and `"${ARR[@]}"`.

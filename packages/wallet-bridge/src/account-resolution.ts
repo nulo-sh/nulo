@@ -21,13 +21,14 @@ export function isNoFromRequest(from: unknown): boolean {
 
 /**
  * The sender a request's options name, or `undefined` when they name none (`from` absent, nullish
- * or NO_FROM). Anything else is stringified, exactly as the dispatcher sends it: a stricter rule on
- * the journal's side would file a non-string `from` the dispatcher coerces and honors under the
- * default account, while the send goes out as another.
+ * or NO_FROM). A `from` that is not a string names no account, so it comes back as `""`, which
+ * matches none: the journal reads options before the dispatch parse refuses them, and coercing a
+ * hostile value can throw.
  */
 export function requestedSenderOf(opts: unknown): string | undefined {
 	const from = (opts as { from?: unknown } | null | undefined)?.from
-	return from == null || isNoFromRequest(from) ? undefined : String(from)
+	if (from == null || isNoFromRequest(from)) return undefined
+	return typeof from === "string" ? from : ""
 }
 
 /** The minimum an account needs for resolution. Wallet order is the caller's. */

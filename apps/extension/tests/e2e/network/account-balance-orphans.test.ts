@@ -223,11 +223,14 @@ test.skipIf(!hasConfig)(
 
 			expect(ctx2.pageErrors.filter((e) => !e.message.includes("Client disconnected"))).toEqual([])
 		} finally {
-			await ctx2.close()
-			rmSync(profileDir, { recursive: true, force: true })
-			// The doctored file embeds the wallet's REAL (local-chain test) master key —
-			// never leave it in the temp dir.
-			rmSync(dirname(filePath), { recursive: true, force: true })
+			try {
+				await ctx2.close()
+			} finally {
+				rmSync(profileDir, { recursive: true, force: true })
+				// The doctored file embeds the wallet's REAL (local-chain test) master key —
+				// never leave it in the temp dir.
+				rmSync(dirname(filePath), { recursive: true, force: true })
+			}
 		}
 	},
 )

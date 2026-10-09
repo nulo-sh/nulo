@@ -191,6 +191,17 @@ SDK. The upstream handler:
   cross-frame spoofing via the synchronous same-origin check).
 - Never reads or writes page DOM state.
 
+The script is built as one self-contained file
+(`apps/extension/scripts/content-script-isolation.ts`), which the browser
+injects directly, so the built manifest lists no web-accessible file. A file
+that is listed can be fetched by any page the entry matches, and on Chrome the
+extension's origin is fixed by its store id, so one fetch tells a page the
+wallet is installed (Firefox's origin is random per install). Chrome's
+`use_dynamic_url` cannot stand in for this: the loader crxjs uses for a
+multi-chunk script imports sibling chunks by relative URL, which Chrome
+resolves against the fixed origin and refuses. The smoke suite fetches every
+injected file from a web page on both browsers (`tests/e2e/security.test.ts`).
+
 ### Content-script boundary (defense-in-depth)
 
 Because the protocol mandates broad injection, a zod-validated boundary
@@ -368,14 +379,43 @@ actions use: one grouped pull request a week, after a 7-day cooldown
 (`.github/dependabot.yml`). It cannot read Bun's lockfile, so npm
 dependencies are updated by hand, under the age gate above.
 
-**`bun audit`** runs as an advisory step in `_lint-and-typecheck.yml`. It
-surfaces npm advisories in the GitHub Action step summary but does not
-block PRs (today). Bun 1.4 exits 1 on findings (1.3.x always exited 0),
-so exit-code gating is mechanically possible — the step stays advisory
-deliberately: the existing backlog (every HIGH chain classified as
-dev/build/test tooling or the exact-pinned `@aztec` line, none
-extension-bundle-reachable; the moderate and low ones not individually
-classified) must be triaged to zero first, or a blocking flip is pure noise.
+**`bun audit`** runs at every severity in `_lint-and-typecheck.yml`, through
+`scripts/ci-cd/audit-gate.ts`. Each advisory it reports must have an entry in
+`scripts/ci-cd/audit-acks.json` with the same id, package, affected range and
+severity; the entry says whether the extension zips contain the package
+(decided by the build's `THIRD-PARTY-NOTICES.txt`, not by reading dependency
+trees), why the advisory cannot reach a user, and the event that reopens it.
+An entry no advisory matches any more is stale and must be deleted, and a
+report the gate cannot read, or an exit code other than 0 or 1, is a failure
+rather than a clean result.
+
+- **When it blocks.** On a pull request whose `bun.lock`, `package.json`,
+  `bunfig.toml` or ack-file diff is more than `"version"` lines, an
+  unacknowledged, stale or unreadable result fails `quality-status`. Release
+  PRs and the `main → dev` sync change only version lines, so they, and every
+  push, nightly and release run, report in the step summary without failing.
+  The cost: a new advisory blocks the next dependency change, a promote PR
+  included, until it is fixed or acknowledged on `dev`, and a release can ship
+  while one is open.
+- **Acknowledging.** Fix it first (`bun audit fix --dry-run`, then a bump
+  reviewed as below). Only an advisory that cannot move and cannot reach a
+  user is acknowledged, in a reviewed PR. A bundled one needs a reason that
+  says why the extension cannot reach it; without one it is not acknowledged.
+
+What is acknowledged today (41 advisories; the ack file holds each one):
+
+| Package | Advisories | Comes in through | Reopens at |
+|---|---|---|---|
+| `undici` 5.29.0, `@fastify/busboy` 2.1.1 | 15 (4 high) | `@aztec-labs/foundation` | the next Aztec bump |
+| `ws` 8.18.3 | 2 (1 high) | `@aztec/viem` 2.38.3, an exact pin | the next Aztec bump |
+| `uuid` 9.0.1 | 1 | `@aztec-labs/stdlib`'s Google Cloud Storage client | the next Aztec bump |
+| `@opentelemetry/core`, `@opentelemetry/propagator-jaeger` 1.x, `systeminformation` 5.23.8 | 7 (6 high) | `@aztec-labs/telemetry-client`, which nothing here imports | the next Aztec bump |
+| `undici` 7.29.0, `sharp` 0.35.2 | 12 (4 high) | miniflare, wrangler's local simulator (`apps/landing`, `infra/passkey-rp`) | the next wrangler bump |
+| `vitest`, `@vitest/mocker` 4.1.10 | 2 | the test runner; 4.1.11 needs the soak matrix | the next vitest bump |
+| `braces` 3.0.3 | 1 (high) | build-time globbing (micromatch, chokidar 3) | a fixed release (none exists) |
+| `elliptic` 6.6.1 | 1 (low) | `vite-plugin-node-polyfills`' crypto-browserify | a fixed release (none exists) |
+
+None of them is in either extension zip.
 
 **Bun pinned** to a specific patch version in `package.json#packageManager`
 and in `setup-bun/action.yml`, plus the five `bun-version:` literals in jobs
@@ -392,6 +432,12 @@ development requires bun ≥1.4 (`bun run --parallel` scripts), and
   On a checked-out bump branch the lockfile already holds the NEW
   version, so the unqualified `bun pm diff <pkg>` form (lock → latest)
   reviews the wrong or an empty delta — always name both versions.
+- Raising a range's floor (`^3.5.41` → `^3.5.42`) locks the newest
+  version the age gate allows, which can be releases past the one
+  reviewed. To land exactly one version: `bun add <pkg>@<version>` in
+  the workspace, restore the manifest it rewrote (exact pins, re-sorted
+  keys), raise the floor by hand, `bun install`, then read `bun.lock`
+  for nested copies still on the old version (Bun 1.4.2).
 - `bun audit fix --dry-run` for advisory triage — shows the in-range
   upgrade set without touching anything; `--latest` previews
   cross-major fixes.
@@ -489,6 +535,39 @@ composite action. Trust posture:
   single-maintainer repo. The maintainer is the same person who owns
   Nulo, so the trust model is what it is. Defense: pinning + per-bump
   PR review.
+
+The Aztec toolchain (the `aztec` CLI and its npm tree, Foundry's `forge`,
+`cast`, `anvil` and `chisel`, noir's `nargo`) is installed on every runner
+that boots a local network by
+[`setup-aztec`](./.github/actions/setup-aztec/action.yml)'s `install.sh`,
+which the local Docker runner (`docker-ci-like.sh`) runs too:
+
+- **Every download is SHA-256-pinned** in `installer-pins.sha256` and checked
+  before use: the per-version installer and its `versions` manifest, and the
+  noir and Foundry release tarballs that manifest names. The Foundry tarball
+  must hold exactly its four tools, as regular files. Its pin equals the
+  release asset's GitHub digest, and the binaries match Foundry's
+  build-provenance attestation, checked once at pin time (the pin file's
+  header names the signer); CI does not re-check the attestation.
+- **The installer runs from the verified file with two steps replaced.** Its
+  Foundry step (`foundryup` from `foundry.paradigm.xyz`) becomes a copy of
+  the verified binaries, and its lockfile-less `npm install` becomes
+  `npm ci --ignore-scripts` against the committed `cli/package-lock.json`,
+  every entry of which is a registry tarball with a sha512
+  (`scripts/ci-cd/setup-aztec-pins.test.ts`). An installer whose shape no
+  longer fits the replacement fails the install.
+- **One install script runs**: `bcrypto`'s, which `@aztec-labs/aztec-node`
+  needs to load. It compiles the package's bundled C sources against the
+  running Node's headers, with no header download.
+- **What stays trusted**: the npm registry when the lockfile is generated
+  (`lock.sh`, under the 7-day gate with the Aztec scopes exempt; each Aztec
+  bump's lockfile diff is reviewed), Aztec's install host and the noir and
+  Foundry release pipelines when they are pinned, Node from
+  `actions/setup-node`, and a restored toolchain cache, checked only by
+  `--version` probes. A run restores caches written on its own ref or on
+  `dev`, the default branch; a pull request also restores its base branch's
+  and writes only its own, so poisoning what `dev` or `main` restores takes
+  code merged to one of them.
 
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is

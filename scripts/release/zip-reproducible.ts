@@ -33,7 +33,8 @@ export function listFiles(dir: string, prefix = ""): string[] {
 }
 
 export function zipReproducible(sourceDir: string, outZip: string, epochSeconds: number): string[] {
-	if (!Number.isInteger(epochSeconds) || epochSeconds <= 0) throw new Error(`SOURCE_DATE_EPOCH must be a positive integer, got ${epochSeconds}`)
+	if (!Number.isInteger(epochSeconds) || epochSeconds <= 0)
+		throw new Error(`SOURCE_DATE_EPOCH must be a positive integer, got ${epochSeconds}`)
 	const files = listFiles(sourceDir)
 	if (files.length === 0) throw new Error(`${sourceDir}: nothing to zip`)
 	for (const file of files) utimesSync(join(sourceDir, file), epochSeconds, epochSeconds)

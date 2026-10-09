@@ -43,13 +43,12 @@ import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
-import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
 import { fingerprintBaseFee } from "./estimate-reuse-shared"
 import type { ExecutionMutexRelease } from "./execution-mutex"
-import type { OperationEstimateReuse, OperationEstimateReuseEntry } from "./operation-estimate-reuse"
+import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
@@ -162,8 +161,6 @@ export interface DappSendExecutorDeps {
 	getPXE(network: Network): FeeEstimate["pxe"]
 	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<FeeEstimate["account"]>
 	getPendingForAccount(account: string): { hash: string }[]
-	/** Fresh decorated FPC row — identity snapshot for fpc-kind reuse entries. */
-	getFpcInfo(fpcId: string): Promise<FpcInfo>
 	/** The probe-free validated pipeline (the service's strategy map). */
 	buildAndEstimateValidated(
 		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
@@ -466,17 +463,6 @@ export class DappSendExecutor {
 			if (!primary) return undefined
 			const profile = await this.deps.getActiveProfile()
 			if (!profile) return undefined
-			let fpcIdentity: OperationEstimateReuseEntry["fpcIdentity"]
-			if (feeSettings.paymentMethod.kind === "fpc") {
-				const info = await this.deps.getFpcInfo(feeSettings.paymentMethod.fpcId)
-				fpcIdentity = {
-					id: info.id,
-					type: info.type,
-					address: info.address,
-					chainId: info.chainId,
-					isProtocol: info.isProtocol ?? false,
-				}
-			}
 			const builtFees = built.txRequest.txContext.gasSettings.maxFeesPerGas
 			const estimateId = crypto.randomUUID()
 			this.deps.operationEstimateReuse.stash(estimateId, {
@@ -496,7 +482,7 @@ export class DappSendExecutor {
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
 				pendingHashes: this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash),
-				fpcIdentity,
+				fpcIdentity: built.fpcIdentity,
 				txRequest: built.txRequest,
 				initializesAccount: built.initializesAccount,
 				nonce: built.nonce,

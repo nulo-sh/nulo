@@ -2,6 +2,7 @@ import { crx } from "@crxjs/vite-plugin"
 import { thirdPartyNotices } from "@nulo/third-party-notices"
 import { mergeConfig } from "vite"
 import manifest from "./manifest/manifest.firefox.config"
+import { contentScriptIsolation } from "./scripts/content-script-isolation"
 import viteConfig from "./vite.config"
 
 // Registered here, not in the shared config: Storybook and vitest load that one too, and the
@@ -13,7 +14,7 @@ const notices = thirdPartyNotices()
 // instead of mutating the shared `viteConfig` singleton in place — so importing
 // this wrapper can never leak the crx plugin / outDir into the chrome wrapper.
 export default mergeConfig(viteConfig, {
-	plugins: [crx({ manifest, browser: "firefox" }), notices.main],
+	plugins: [crx({ manifest, browser: "firefox" }), ...contentScriptIsolation(), notices.main],
 	worker: { plugins: () => [notices.worker] },
 	build: { outDir: "dist/firefox" },
 })

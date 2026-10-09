@@ -28,7 +28,9 @@ if (manifest.biomeVersion !== installed) {
 	)
 }
 if (!hasEntries(manifest)) {
-	problems.push("manifest.json carries no per-acceptance entries — restore it from git; it is only ever written by `bun run baseline:complexity`.")
+	problems.push(
+		"manifest.json carries no per-acceptance entries — restore it from git; it is only ever written by `bun run baseline:complexity`.",
+	)
 }
 
 const scan = scanTree({ staged })
@@ -51,16 +53,24 @@ if (diff.restamped.length > 0) {
 	)
 }
 if (diff.removed.length > 0) {
-	problems.push(`Accepted function(s) fixed or removed — record the progress: rerun \`bun run baseline:complexity\` in this PR:${list(diff.removed.map((e) => `${e.file} ${e.rule} — ${e.anchor}`))}`)
+	problems.push(
+		`Accepted function(s) fixed or removed — record the progress: rerun \`bun run baseline:complexity\` in this PR:${list(diff.removed.map((e) => `${e.file} ${e.rule} — ${e.anchor}`))}`,
+	)
 }
 if (diff.moved.length > 0) {
-	problems.push(`Accepted declaration(s) renamed or moved — rerun \`bun run baseline:complexity\` so the manifest follows:${list(diff.moved.map((m) => `${m.from.file} — ${m.from.anchor}  →  ${m.to.file} — ${m.to.anchor}`))}`)
+	problems.push(
+		`Accepted declaration(s) renamed or moved — rerun \`bun run baseline:complexity\` so the manifest follows:${list(diff.moved.map((m) => `${m.from.file} — ${m.from.anchor}  →  ${m.to.file} — ${m.to.anchor}`))}`,
+	)
 }
 if (diff.reworded.length > 0) {
-	problems.push(`Accepted sentence(s) edited — rerun \`bun run baseline:complexity\` so the manifest carries the new wording:${list(diff.reworded)}`)
+	problems.push(
+		`Accepted sentence(s) edited — rerun \`bun run baseline:complexity\` so the manifest carries the new wording:${list(diff.reworded)}`,
+	)
 }
 if (hasEntries(manifest) && JSON.stringify(manifest.rules) !== JSON.stringify(ruleCountsOf(manifest.accepted))) {
-	problems.push("manifest.json's `rules` summary does not match its entries — it was edited by hand; rerun `bun run baseline:complexity`.")
+	problems.push(
+		"manifest.json's `rules` summary does not match its entries — it was edited by hand; rerun `bun run baseline:complexity`.",
+	)
 }
 
 if (problems.length > 0) {

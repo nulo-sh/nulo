@@ -13,7 +13,18 @@ const m = manifest as unknown as {
 	optional_host_permissions?: unknown
 	optional_permissions?: unknown
 	content_scripts: ContentScript[]
+	content_security_policy: unknown
 }
+
+type FirefoxManifest = {
+	permissions: string[]
+	content_security_policy: unknown
+	browser_specific_settings: {
+		gecko: { id: string; strict_min_version: string; data_collection_permissions: { required: string[] } }
+	}
+}
+const buildFirefox = () =>
+	(firefoxManifest as unknown as (env: { command: string; mode: string }) => FirefoxManifest)({ command: "build", mode: "production" })
 
 /** Chrome match-pattern semantics for the subset the manifest uses: `<scheme>://<host>/<path>`,
  *  where host is `*`, `*.domain` (domain and every subdomain) or an exact domain. */
@@ -37,8 +48,9 @@ const injectsInto = (cs: ContentScript, href: string) => {
 /**
  * The source manifest declares no web-accessible resources: the logo entry let every page fetch
  * it and so fingerprint the install, and the wallet-sdk discovery icon — the one asset a page
- * legitimately needs — travels inline instead. (The build plugin still emits entries for the
- * content-script chunks; that is a separate, tracked exposure.)
+ * legitimately needs — travels inline instead. The build adds none either: the content script
+ * ships as one file the browser injects directly (`scripts/content-script-isolation.ts`), and the
+ * smoke suite's security spec reads the built manifest.
  */
 describe("manifest surface", () => {
 	test("declares no web-accessible resources", () => {
@@ -106,16 +118,19 @@ describe("passkey relying party", () => {
 	})
 })
 
+/** Every extension page, the background and the PXE host run under this one policy; Firefox
+ *  inherits it. */
+const EXTENSION_PAGES_CSP =
+	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; style-src 'self' 'unsafe-inline'"
+
+describe("content security policy", () => {
+	test("the extension pages' policy is exactly the pinned one, on both browsers", () => {
+		expect(m.content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
+		expect(buildFirefox().content_security_policy).toEqual({ extension_pages: EXTENSION_PAGES_CSP })
+	})
+})
+
 describe("firefox manifest", () => {
-	const buildFirefox = () => {
-		const build = firefoxManifest as unknown as (env: { command: string; mode: string }) => {
-			permissions: string[]
-			browser_specific_settings: {
-				gecko: { id: string; strict_min_version: string; data_collection_permissions: { required: string[] } }
-			}
-		}
-		return build({ command: "build", mode: "production" })
-	}
 	const buildGecko = () => buildFirefox().browser_specific_settings.gecko
 
 	test("gecko id is well-formed and frozen — Firefox rejects the add-on as invalid otherwise", () => {

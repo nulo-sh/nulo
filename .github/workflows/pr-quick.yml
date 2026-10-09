@@ -42,7 +42,7 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       core-foundation: ${{ steps.override.outputs.full || steps.filter.outputs.core-foundation }}
       aztec-runtime: ${{ steps.override.outputs.full || steps.filter.outputs.aztec-runtime }}
@@ -54,6 +54,7 @@ jobs:
       root-config: ${{ steps.override.outputs.full || steps.filter.outputs.root-config }}
       needs-extension-build: ${{ steps.compute.outputs.needs-extension-build }}
       needs-landing-build: ${{ steps.compute.outputs.needs-landing-build }}
+      audit-mode: ${{ steps.audit-mode.outputs.audit-mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,10 +125,36 @@ jobs:
               - '.commitlintrc.json'
               - '.githooks/**'
               - 'patches/**'
+            # What decides the audit gate's mode; scripts/ci-cd/audit-gate.ts reads the same set.
+            deps:
+              - 'bun.lock'
+              - 'bunfig.toml'
+              - 'scripts/ci-cd/audit-acks.json'
+              - '**/package.json'
       - name: Override for manual dispatch
         if: github.event_name == 'workflow_dispatch'
         id: override
         run: echo "full=true" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup-bun
+        if: github.event_name == 'pull_request' && steps.filter.outputs.deps == 'true'
+        with:
+          cache: "false"
+          install: "false"
+      # A pull request that changes dependencies beyond version lines must leave no advisory
+      # unacknowledged; a Release PR, the main → dev sync and every other run only report.
+      - name: Choose the audit mode
+        id: audit-mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DEPS: ${{ steps.filter.outputs.deps }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ] && [ "$DEPS" = true ]; then
+            bun scripts/ci-cd/audit-gate.ts mode --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            echo "audit-mode=report" >> "$GITHUB_OUTPUT"
+          fi
       - name: Compute downstream flags
         id: compute
         env:
@@ -201,6 +228,7 @@ jobs:
     uses: ./.github/workflows/_lint-and-typecheck.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      audit_mode: ${{ needs.changes.outputs.audit-mode }}
 
   unit-tests:
     name: Unit tests
