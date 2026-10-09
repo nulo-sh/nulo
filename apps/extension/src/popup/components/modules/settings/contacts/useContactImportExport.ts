@@ -85,7 +85,6 @@ interface ImportTally {
 	senderSkippedNoNetwork: number
 }
 
-/** What a fenced call yields once the run has stopped. */
 const STOPPED = Symbol("import stopped")
 
 async function exportContacts(deps: ContactIoServices): Promise<void> {
@@ -267,10 +266,7 @@ async function importRow(pass: ImportPass, { row, targetId }: ImportWrite<Select
 	if (error) tally.errors.push(error)
 	else tally.written++
 
-	// Sender registration is INDEPENDENT of the contact upsert's
-	// outcome (decoupled state): an explicit isSender intent is
-	// attempted — and counted — even when the address-book row
-	// failed, so the toast accounting never silently drops it.
+	// Sender intent is independent of the upsert: it is attempted and counted even when the write failed.
 	if (row.isSender) await registerSender(deps, tally, pass.activeNetworkId, row.address)
 }
 

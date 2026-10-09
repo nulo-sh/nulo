@@ -17,6 +17,7 @@ const openToastMock = vi.fn()
 const pickFileMock = vi.fn()
 const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
 const assertRunFenceMock = vi.hoisted(() => vi.fn())
+const captureRunFenceMock = vi.hoisted(() => vi.fn())
 const popupOpenMock = vi.fn()
 const trace: string[] = []
 
@@ -45,7 +46,7 @@ vi.mock("@/wallet/services/profile/client", () => ({
 			connect: vi.fn(),
 			disconnect: vi.fn(),
 			getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }),
-			captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+			captureRunFence: (...args: unknown[]) => captureRunFenceMock(...args),
 			assertRunFence: (...args: unknown[]) => assertRunFenceMock(...args),
 		}
 	}),
@@ -112,6 +113,7 @@ beforeEach(() => {
 	vi.clearAllMocks()
 	popupOpenMock.mockReset()
 	assertRunFenceMock.mockReset().mockResolvedValue(undefined)
+	captureRunFenceMock.mockReset().mockResolvedValue(RUN_FENCE)
 	trace.length = 0
 	appStoreState.network = { id: "net-1", name: "Testnet" }
 	cacheStoreState.importContacts = []
@@ -171,6 +173,14 @@ describe("importContacts — per-row order and early exits", () => {
 	test.each<[string, () => void, string | null]>([
 		["no file picked", () => pickFileMock.mockResolvedValueOnce(null), null],
 		["chooser closed", () => pickFileMock.mockRejectedValueOnce(new FilePickCanceledError()), null],
+		[
+			"the run fence cannot be captured",
+			() => {
+				fileWith(twoSenders)
+				captureRunFenceMock.mockRejectedValueOnce(new Error("Wallet locked"))
+			},
+			"Error occurred during import",
+		],
 		["file over the byte cap", () => fileWith(twoSenders, MAX_CONTACT_IMPORT_BYTES + 1), "Contacts file is too large"],
 		[
 			"picker threw FileTooLargeError",

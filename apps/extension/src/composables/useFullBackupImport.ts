@@ -501,7 +501,7 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 		state.decryptionPassword.value = ""
 		opts.clearError()
 	} catch (err) {
-		// A closed chooser keeps the chosen backup, as it did before the pick could settle on it.
+		// A closed chooser keeps the chosen backup, its name and its Retry.
 		if (err instanceof FilePickCanceledError) return
 		opts.fillError("full_backup", "Failed to read the backup file")
 		console.error("Failed to read backup file:", (err as Error)?.message || err)

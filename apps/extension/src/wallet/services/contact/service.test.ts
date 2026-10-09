@@ -542,35 +542,40 @@ describe("ContactService (port-migrated)", () => {
 		const ADDR = "0xaaaa"
 		const contactWrites = () => recordWrites(api.storage.local, "nulo:core:contacts@")
 
-		test("a switch after the fence check refuses the write and stores nothing", async () => {
+		test.each<[string, (savedId: string, fence: RunFence) => Promise<unknown>]>([
+			["addContact", (_id, fence) => contactService.addContact("Bob", "0xbbbb", fence)],
+			["updateContact", (id, fence) => contactService.updateContact(id, "Alicia", undefined, fence)],
+		])("a switch after the fence check refuses %s's write and stores nothing", async (_method, write) => {
 			const saved = await contactService.addContact("Alice", ADDR)
 			const fence = await profile.captureRunFence()
-			const writes = contactWrites()
-			for (const write of [
-				() => contactService.addContact("Bob", "0xbbbb", fence),
-				() => contactService.updateContact(saved.id, "Alicia", undefined, fence),
-			]) {
-				profile.afterAssert = () => {
-					profile.afterAssert = undefined
-					profile.setActiveProfile(profileB)
-				}
-				await expect(write()).rejects.toBeInstanceOf(SessionEndedError)
-				profile.setActiveProfile(profileA)
+			let switched = false
+			profile.afterAssert = () => {
+				profile.afterAssert = undefined
+				profile.setActiveProfile(profileB)
+				switched = true
 			}
+			const writes = contactWrites()
+			await expect(write(saved.id, fence)).rejects.toBeInstanceOf(SessionEndedError)
 			writes.restore()
+			expect(switched).toBe(true)
 			expect(writes.log).toEqual([])
+			profile.setActiveProfile(profileA)
 			expect((await contactService.getContacts()).map((c) => c.name)).toEqual(["Alice"])
 		})
 
 		test.each<[string, (live: RunFence) => unknown]>([
-			["a fence whose session ended", (live) => live],
+			[
+				"a fence whose session ended",
+				(live) => {
+					profile.setActiveProfile(profileA)
+					return live
+				},
+			],
 			["a fence another worker issued", (live) => ({ ...live, incarnation: "w0" })],
 			["a string", () => profileA.id],
 		])("%s is refused by every fenced method, and nothing is written", async (_label, forge) => {
 			const saved = await contactService.addContact("Alice", ADDR)
-			const live = await profile.captureRunFence()
-			profile.setActiveProfile(profileA)
-			const fence = forge(live) as RunFence
+			const fence = forge(await profile.captureRunFence()) as RunFence
 			const writes = contactWrites()
 			await expect(contactService.getContacts(fence)).rejects.toBeInstanceOf(SessionEndedError)
 			await expect(contactService.addContact("Bob", "0xbbbb", fence)).rejects.toBeInstanceOf(SessionEndedError)
