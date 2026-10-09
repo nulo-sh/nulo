@@ -4,13 +4,13 @@ import EmojiGrid from "@/components/composite/general/EmojiGrid.vue"
 import ConnectStepBar from "../ConnectStepBar.vue"
 
 /** Vendor */
-import { onMounted, onUnmounted } from "vue"
+import { onMounted, onUnmounted, watch } from "vue"
 import { hashToEmoji } from "@aztec-labs/wallet-sdk/crypto"
 
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
 import { refuseRepeatEnter } from "@/composables/usePopupEntity"
-import { useDappHostname } from "@/composables/useDappHostname"
+import { HOSTNAME_WARNING, useDappHostname } from "@/composables/useDappHostname"
 import { untilSessionChecked } from "@/composables/useDappApprovalWindow"
 
 /** Services */
@@ -32,6 +32,12 @@ import { verifyHeaderLabels } from "./header-labels"
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
 
+const CHECK_LABEL = "Connection check"
+const CHECK_INSTRUCTION =
+	"Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
+/** A polite region given its text as it mounts may stay silent, so the text follows it. */
+const ANNOUNCE_DELAY_MS = 300
+
 type UIDappMetadata = DappMetadata & {
 	loadingLogo?: boolean
 	logoBlobUrl?: string
@@ -47,6 +53,9 @@ const alwaysTrust = ref(false)
 /** One answer per window: either control locks both, released only when that answer fails. */
 const isBusy = ref(false)
 const refusalError = ref<"unremoved" | "failed">()
+/** Fixed wallet copy only: the app's name or hostname never reaches a screen reader through it. */
+const announcement = ref("")
+let announceTimer: ReturnType<typeof setTimeout> | undefined
 
 const signerAccounts = ref<Account[]>([])
 const header = computed(() =>
@@ -133,6 +142,16 @@ async function resolveSigners() {
 	}
 }
 
+// The watcher stops at unmount, so a session read that answers later starts no timer.
+watch(emojis, (shown) => {
+	if (!shown) return
+	announceTimer = setTimeout(() => {
+		const words = [`${CHECK_LABEL}.`, CHECK_INSTRUCTION]
+		if (hostnameHasNonAscii.value) words.push(HOSTNAME_WARNING)
+		announcement.value = words.join(" ")
+	}, ANNOUNCE_DELAY_MS)
+})
+
 onMounted(async () => {
 	dappSessionService.connect()
 
@@ -176,6 +195,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+	clearTimeout(announceTimer)
 	dappSessionService.disconnect()
 })
 </script>
@@ -194,14 +214,11 @@ onUnmounted(() => {
 				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
 			/>
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">
-				<SectionLabel label="Connection check" />
+				<SectionLabel :label="CHECK_LABEL" />
 
 				<Flex direction="column" align="center" gap="12">
 					<div data-testid="verify-emoji-grid"><EmojiGrid :emojis="emojis" /></div>
-					<Text size="12" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">
-						Check that the app shows these same emojis in the same order. If they differ, the connection may not be
-						safe. Choose They don't match.
-					</Text>
+					<Text size="12" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">{{ CHECK_INSTRUCTION }}</Text>
 				</Flex>
 			</Flex>
 		</Flex>
@@ -247,6 +264,10 @@ onUnmounted(() => {
 				}}
 			</Text>
 		</Flex>
+
+		<p :class="$style.visually_hidden" role="status" aria-live="polite" aria-atomic="true" data-testid="verify-announce">
+			{{ announcement }}
+		</p>
 	</Flex>
 </template>
 
@@ -269,5 +290,9 @@ onUnmounted(() => {
 
 .footer {
 	composes: footer from "../window-shell.module.css";
+}
+
+.visually_hidden {
+	composes: visually_hidden from "../../components/modules/send/fee-shared.module.css";
 }
 </style>

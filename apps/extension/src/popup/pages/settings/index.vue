@@ -114,7 +114,8 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="settings-page">
-		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]">
+		<!-- The hero's h1 names the page for a screen reader; this bar repeats it for sight only. -->
+		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]" aria-hidden="true">
 			<span :class="$style.page_title_label" data-testid="page-title-bar">SETTINGS</span>
 		</div>
 

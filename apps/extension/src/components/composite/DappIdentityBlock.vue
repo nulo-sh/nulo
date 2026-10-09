@@ -5,6 +5,7 @@
  * impersonate a familiar name via Unicode tricks.
  */
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
+import { HOSTNAME_WARNING } from "@/composables/useDappHostname"
 
 const props = defineProps({
 	/** From useDappInteractionPayload.dapp; reads `loadingLogo`,
@@ -39,9 +40,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 			</Flex>
 			<Flex v-if="hostnameSuspicious" align="start" gap="6" data-testid="dapp-hostname-warning">
 				<Icon name="warning" size="12" color="orange" aria-hidden="true" :class="$style.warning_icon" />
-				<span :class="$style.warning_text">
-					This hostname contains non-ASCII or punycoded characters. Verify carefully. Some characters can imitate Latin letters.
-				</span>
+				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
 			<span v-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
 			<span :class="$style.dapp_action">{{ actionLabel }}</span>

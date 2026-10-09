@@ -285,3 +285,12 @@ describe("pages/activity — the incoming load signal", () => {
 		expect(root().attributes("data-incoming-loaded")).toBe("true")
 	})
 })
+
+describe("pages/activity — the title", () => {
+	test("a screen reader meets the title once: the compact bar is hidden from it, the hero title is not", async () => {
+		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		await flushPromises()
+		expect(w.get('[data-testid="page-title-bar"]').element.parentElement?.getAttribute("aria-hidden")).toBe("true")
+		expect(w.get('[data-testid="page-hero-title"]').element.closest('[aria-hidden="true"]')).toBeNull()
+	})
+})
