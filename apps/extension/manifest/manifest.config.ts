@@ -58,6 +58,7 @@ export default {
 			// rewrites it as themes mount, so no hash can name it; a hash would also switch
 			// 'unsafe-inline' off for the Presto banner's inline stylesheet.
 			"style-src 'self' 'unsafe-inline'",
+			"frame-src 'self'",
 		].join("; "),
 	},
 	cross_origin_embedder_policy: {

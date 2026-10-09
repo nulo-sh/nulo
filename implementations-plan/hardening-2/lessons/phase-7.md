@@ -50,3 +50,8 @@ The throwing-migration case failed again in the rerun, once on the 60 s timeout 
 - `tab-size` on `.cm-content` is not affected: CodeMirror writes its `style` attribute through `style.cssText`, which CSP does not govern (the probe read `tab-size` 4 on both browsers).
 - What the directive still buys: no stylesheet from another origin (the banner's Google Fonts link, were `fonts="none"` dropped). Narrowing it further means mounting the editors in a shadow root, a UI change; recorded for follow-ups.
 - Gate with `'self' 'unsafe-inline'`: smoke green on Chrome and Firefox, the eight network files green on both, zero violations, CSP equal to the pin.
+
+### `frame-src 'self'`
+
+- The only frame any page loads is Firefox's offscreen document, hosted as a frame of the background page from the extension's own origin.
+- Gate: Chrome smoke green; Firefox smoke green except `passkey-retry.test.ts`'s closing `waitForToastGone(…, 1_000)`, the same timing failure phase 6 saw once on Chrome, with no violation recorded. Alone it passed 2 of 2. It is now row 46 of the e2e-testing skill's flake ledger: a 1 s budget that a loaded host spends on the first poll's round trip. The eight network files green on both browsers, zero violations, CSP equal to the pin. No source added.
