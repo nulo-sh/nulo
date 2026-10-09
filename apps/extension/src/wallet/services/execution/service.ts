@@ -40,6 +40,7 @@ import { EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
 	JobCancelledError,
+	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 } from "@nulo/extension-messaging/errors"
@@ -743,13 +744,15 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return results
 	}
 
-	/** Level by reach: a Terms refusal is expected and a connected dApp retries, so at `error` it
-	 *  would fill every user's log buffer. */
+	/** Level by reach: a Terms refusal and a scope refusal are expected, and a connected dApp can
+	 *  repeat either, so at `error` they would fill every user's log buffer. */
 	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult): void {
 		if (classified.status === "cancelled") {
 			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`)
 		} else if (classified.code === TermsAcceptanceRequiredError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: terms not accepted`)
+		} else if (classified.code === ScopeViolationError.CODE) {
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: outside its grant`)
 		} else {
 			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error)
 		}

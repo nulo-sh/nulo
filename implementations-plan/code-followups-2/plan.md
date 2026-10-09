@@ -16,7 +16,7 @@ issues: none (follow-ups.md entries; no GitHub issue)
 
 # code-followups-2: prune the follow-ups, ship the small code ones
 
-This lane covers the open entries of [`follow-ups.md`](../follow-ups.md) that are code work with no
+This lane covers the open entries of `follow-ups.md` (retired by governance-1 at `be4d044`; each entry is now a GitHub issue, see `archive/governance-1/plan.md`) that are code work with no
 design decision, and no visible change beyond one the owner has already signed off. It has three jobs:
 
 1. Prune what is already resolved.
@@ -39,13 +39,13 @@ changes nothing a person sees.
   | Where | Before | After |
   |---|---|---|
   | What the dApp receives | "The wallet could not process the request.", no code | code `4100`, "This request is outside the permissions you gave this app.", `data.walletErrorCode: "SCOPE_VIOLATION"` |
-  | History card subtitle | "Transaction failed" | "Not allowed" |
+  | Card subtitle, in History and in Home's Recent activity (one card component) | "Transaction failed" | "Not allowed" |
   | Journal detail label | "Stopped before broadcast" ("Your wallet caught this before reaching the network…") | "Not allowed" ("The app asked for more than you allowed. Nothing was sent.") |
   | Journal detail, developer-mode raw error (OA-2's surface 1) | message "Scope violation: call name does not match selector's function", `"name": "Error"` | the same message, `"name": "ScopeViolationError"` |
 
   The "before" images are security-fixes-1's `oa2-*-after-*` shots, which show today's tree. Its
   `oa2-*-before-*` shots show an older raw text that still named the functions and the address.
-  Phase 1.5 produces the after-shots of all three popup surfaces for the PR.
+  Phase 1.5 produces the after-shots of these popup surfaces for the PR.
 - **One log-level change with no screen, named so a reviewer can check it.** Phase 1.5 moves this
   refusal's two log lines from `error` to `debug`: the wallet's "Method X failed" line, through the
   existing `isExpectedRefusal` list (it already names `ScopeViolationError`, so `background.ts` is
@@ -734,7 +734,7 @@ each step. A phase gets its ✓ only when its gate passes. `<WT>` is the worktre
 
 ### Arc 1: wallet services
 
-#### Phase 1.1: two log lines
+#### Phase 1.1: two log lines ✓
 
 1. `transfer-estimate-reuse.ts`: return `"base fee fetch failed"` and drop the unused import.
 2. `transfer-estimate-reuse.pins.test.ts`: the three base-fee pins expect `${REASON}base fee fetch failed`.
@@ -754,7 +754,7 @@ each step. A phase gets its ✓ only when its gate passes. `<WT>` is the worktre
 - `apps/extension/src/utils/log-payload-ban.test.ts` passes;
 - `git grep -n "base fee fetch failed:" apps/extension/src` returns nothing.
 
-#### Phase 1.2: one projection, one constant
+#### Phase 1.2: one projection, one constant ✓
 
 1. `profile/spec.ts`: add `toProfileInfo`. Point `getProfileInfo`, `profileIdentity` and `toInfo` at it.
 2. `profile/spec.test.ts`: two cases:
@@ -773,7 +773,7 @@ each step. A phase gets its ✓ only when its gate passes. `<WT>` is the worktre
 
 The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts` on Chrome.
 
-#### Phase 1.3: broken account rows
+#### Phase 1.3: broken account rows ✓
 
 1. `purge-rows.ts`: add `attributeByKey`; reword the doc comment.
 2. `account/service.ts`: pass the `parseAccountRowId` predicate.
@@ -797,7 +797,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 - both files pass, and so does the rest of `account/`;
 - smoke `security-reset.test.ts` and `passkey-retry.test.ts` (both delete a profile) pass on Chrome.
 
-#### Phase 1.4: zod enums
+#### Phase 1.4: zod enums ✓
 
 1. Swap the eight calls (nine if #58 has merged; check with `git log origin/dev --oneline -1 -- apps/extension/src/wallet/services/dapp-session/spec.ts`
    after merging `origin/dev` at the arc's start).
@@ -811,7 +811,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 - `git grep -n "nativeEnum" -- apps packages ':!**/node_modules/**'` lists only the PR #58 call, or
   nothing.
 
-#### Phase 1.5: the selector-binding refusal as a scope refusal
+#### Phase 1.5: the selector-binding refusal as a scope refusal ✓
 
 1. The six source edits in § Architecture 1.5.
 2. Unit and composition tests:
@@ -1087,8 +1087,12 @@ surface this lane could widen is the CI gate itself, and the shipped bundle or m
     ratified (owner sign-off), and the rebuild is lossless (message-only constructor). A blanket
     `WalletError` pass-through stays refused.
   - The log level drops from `error` to `debug` for this refusal, at both lines that log it
-    (`isExpectedRefusal`, `logOperationOutcome`). A page spamming mismatched calls no longer fills
-    the always-on `warn`/`error` buffer that the user's log export carries.
+    (`isExpectedRefusal`, `logOperationOutcome`). A page spamming mismatched windowless calls
+    (`simulateTx`, `executeUtility`, an auto-approved send) no longer fills the always-on
+    `warn`/`error` buffer that the user's log export carries. A windowed send's fee estimate and
+    authorization preview still log their failure at `error` from the execute window
+    (`popup/windows/execute/index.vue`), unchanged: once per failed estimate or preview, each needing
+    a window the person opened.
   - The `scope_refused` kind is recorded on the dApp send path only. A first-party Send can never be
     labelled "The app asked for more than you allowed", and a unit test pins that.
 - **34, the class id: parked.** Both available fixes change which dApp registrations succeed, so the
@@ -1310,35 +1314,41 @@ written into the wrong table (§ What this lane builds and § File-level change 
 **Driver's own fix before the round-1 results:** `probeAnvil` moved out of `global-setup.ts`, whose
 import registers process handlers and creates a data directory.
 
-### Arc 2 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
+### Arc 1 fix loop
+
+Diff: `origin/dev...HEAD -- apps packages` on `worktree-code-followups-2`.
+
+**Round 1: Codex (gpt-6.1-sol, high, read-only), `approve with nits`.**
 
 | # | Finding | Verdict |
 |---|---|---|
-| C1 / O2 | `killProcessGroup` can signal, and now SIGKILL, a reused group id when the leader and every member exited before teardown; the test's cleanup kills ids it proved gone | **Accepted** (D-arc2-3): only a group whose leader was alive at entry is escalated; the cleanup signals only a group still alive |
-| C2 | The final wait's result is dropped, so teardown deletes the data directory and clears the lock while a member survives | **Accepted** (D-arc2-3): `stopped` is returned; teardown keeps the lock and the node's data directory for the next run's reap |
-| C3 / O1 | The inline-script control does not separate the manifest policy from Chrome's baseline, so "`http:` admits `ws:`" is unproven | **Accepted.** A `fetch("data:")` control showed the dev popup runs under the baseline only; the claim is narrowed, the no-change decision stands (D-arc2-1, I1) |
-| O3 | `pages-options.test.ts` no longer reds when the plain `**/*.test.*` glob is deleted | **Accepted.** The watcher case runs under a dot-directory and a plain one; deleting the glob reds the plain case |
-| O4 | Three comments name their callers; "fails loudly" holds only under `E2E_REQUIRE_SETUP=1` | **Accepted.** Restated as invariants; the post-SIGKILL comment went with the `stopped` result |
+| A1-C1 | Minor. Home's Recent activity card renders the same terminal-card subtitle, so it also reads "Not allowed"; § UI impact named History only | **Accepted.** Option A's "the subtitle 'Not allowed'" covers both lists; the table names both, and the e2e reads Home's card before History's (`ba12c4e`) |
+| A1-C2 | Minor. `token-balance/spec.ts`: "one drain must fill exactly one chunk" is false (the queue drains per account, the projector chunks per chain) | **Accepted.** The comment states the bound that holds (`ba12c4e`) |
+| A1-C3 | Minor. `account-state/service.ts`'s rewritten doc comment narrates | **Accepted.** Cut to its contract (`ba12c4e`) |
 
-### Arc 2 round 2: Codex (resumed), `approve with fixes`
+Checked and holds (Codex): no edited assertion weaker than at base; canonical account keys; the six
+binding sites run in the service worker; classification survives aggregation, rebuild and envelope;
+the first-party Send keeps its kind; both refusal log sites at `debug`.
 
-| # | Finding | Verdict |
-|---|---|---|
-| R2-1 | A group whose leader exited before teardown still gets SIGTERM, possibly on a reused id; `leaderAliveOnEntry` does not prove ownership across the grace wait; the test cleanup cannot tell a replacement group | **Accepted in part** (D-arc2-3): an exited leader's group gets no signal; the cleanup signals only groups no case proved gone. **Rejected:** refusing escalation once the leader dies during the wait, which would undo entry 125 itself; reuse there needs the pid cursor to wrap back to the id within one 100 ms poll |
-| R2-2 | The stubborn-member cases race the shells' trap installation | **Accepted.** Each case waits for its member's `ready` after the traps are set; the leaderless case uses a member that dies on SIGTERM, so its survival shows nothing was sent |
-| R2-3 | The lock comment overstates what the next run's reap does safely | **Accepted.** Reworded to a best-effort record; the reaper's unconditional data removal is in entry 125's remainder |
-
-### Arc 2 round 3: Codex (resumed), `approve with fixes — no new material finding`
+**Round 1: Opus (general-purpose), `approve with nits`.**
 
 | # | Finding | Verdict |
 |---|---|---|
-| R3-1 | Minor: `killProcessGroup`'s doc comment still claims a member holds the group id from entry on, stronger than the accepted residual risk | **Accepted.** It now says an unreaped leader pins the id for the first signal and escalation assumes no reuse between two polls |
+| A1-O1 | Material. `packages/wallet-bridge/README.md`, the dApp-facing contract, says a `SCOPE_VIOLATION` comes before any window and is fixed by a wider manifest; a selector mismatch is refused at execution and no manifest fixes it | **Accepted.** One paragraph added (`721fe5c`) |
+| A1-O2 | Minor. `wallet-core/src/jobs/types.ts`'s producers list names only wallet-sdk for `scope_refused` | **Accepted** (`721fe5c`) |
+| A1-O3 | Minor. § Security claims a spamming page no longer fills the `error` buffer; a windowed send's fee estimate and authorization preview still `console.error` from the execute window | **Accepted.** The claim is narrowed to windowless calls; the window's lines are pre-existing and need an opened window |
 
-Round 3 verified every round-2 fix and found nothing new; the loop converged.
+Checked and holds (Opus): nothing relied on the refusal being a plain `Error` (the one
+`instanceof WalletError` branch, the port rebuild, batch propagation, the fast path's fallback);
+revoke-authwits and registry-toggle also use `markFailedUnlessCancelled` but build calls by name and
+never reach the binding check; the raw view gains only the `name`; the purge-by-key widening trusts
+nothing new from values; no assertion weaker than at base.
 
-Arc 2 round 1, checked and holds (both): every real route is still scanned; the overwrite mode keeps every
-declaration a template uses; the seed latch releases in `finally`; the race results and records
-are unchanged; no template, copy or selector changed; the budgets hold.
+**Round 2: Codex (same session, resumed with the fixes), `approve with nits`, "no new material
+finding".** One minor: the narrowed § Security sentence bounded the window's log lines as "once per
+window", but a fee-settings change in one window re-runs the estimate, and each failure logs.
+**Accepted**, reworded. The loop converged: every round-1 fix held, and no regression was found in
+the arc diff.
 
 ## Post-implementation
 
@@ -1405,6 +1415,9 @@ exact."*
 
 ### Close-out edits to follow-ups.md
 
+**Superseded by D-orch-2:** nothing below is applied to `follow-ups.md`. It is the record of what
+each entry's disposition is; the PR bodies and § Outcome draft carry it instead.
+
 Numbers are positions at `f557e20`. Match by text, since other lanes edit the file.
 
 - **Delete:**
@@ -1420,6 +1433,9 @@ Numbers are positions at `f557e20`. Match by text, since other lanes edit the fi
   are not rewritten, so the shared file's diff stays small.
 
 ## Delivery
+
+**Superseded in part by D-orch-1 (no stack: one PR per arc against `dev`) and D-orch-2 (no
+`follow-ups.md` edits; entries closed are listed in each PR body).** The titles below still hold.
 
 One `gh stack`, one PR per arc. PRs open only after each arc's loop and the cross-arc pass converge.
 No PR carries `Closes #n`: this lane closes follow-ups entries, not issues.
@@ -1457,6 +1473,16 @@ No PR carries `Closes #n`: this lane closes follow-ups entries, not issues.
 
 Never merge; never `--admin`.
 
+## Outcome draft
+
+Filled per arc as it lands; the close-out turns it into the `## Outcome` block (D-orch-2).
+
+### Arc 1
+
+- Base moved: `origin/dev` at `79bbd7b` merged in (PR #58 has merged, so Phase 1.4 converts all nine calls and entry 132 closes whole); later `b55d88f` (#76) merged before the PR opened.
+- Closed whole: 10, 37, 64, 65, 95, 102, 132 (issues #85, #102, #120, #121, #145, #150, #175). Nothing is left in part.
+- Deviations: § UI impact gained Home's Recent activity card, which shares History's card component (Codex A1-C1; the e2e asserts it and the PR shows it). `packages/wallet-bridge/README.md` and `packages/wallet-core/src/jobs/types.ts` were edited beyond the file map, docs only (Opus A1-O1, A1-O2).
+
 ## Seeds
 
 Recommended: `/goal`, because its completion is visible in the transcript. Use exactly one per
@@ -1481,9 +1507,7 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
   a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
   entry.)
 
-## Outcome draft
 
-Each arc writes its own section here; the close-out folds them into § Outcome after the front matter.
 
 ### Arc 2: extension pages, build and e2e harness
 

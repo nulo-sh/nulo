@@ -21,6 +21,7 @@ import {
 	UnsupportedMethodError,
 } from "@nulo/extension-messaging/errors"
 import { unwrapOperationResult } from "@nulo/wallet-bridge"
+import { assertSelectorBinding, CALL_BINDING } from "@/wallet/services/execution/contract-resolver"
 import { classifyOperationCatch } from "@/wallet/services/execution/rpc-cancel"
 import { SCOPE_VIOLATION_ENVELOPE, toWalletResponseError, UNCLASSIFIED_ERROR_MESSAGE } from "./error-envelope"
 
@@ -263,6 +264,15 @@ describe("stale-anchor and unregistered-contract arms", () => {
 			message: PxeScopeUnregisteredError.MESSAGE,
 			data: { walletErrorCode: "PXE_SCOPE_UNREGISTERED" },
 		})
+
+		const bindingRefusal = (() => {
+			try {
+				return assertSelectorBinding({ name: "transfer" } as never, { name: "balance_of_public" }, CALL_BINDING)
+			} catch (e) {
+				return e
+			}
+		})()
+		expect(toWalletResponseError(rethrown(bindingRefusal))).toBe(SCOPE_VIOLATION_ENVELOPE)
 	})
 })
 

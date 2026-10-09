@@ -40,6 +40,7 @@ import {
 	JobCancelledError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
+	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
 } from "@nulo/extension-messaging/errors"
@@ -97,7 +98,8 @@ export function classifyOperationCatch(error: unknown, task: CancellableTask, er
 		error instanceof PxeScopeUnregisteredError ||
 		error instanceof ContractNotRegisteredError ||
 		error instanceof SessionEndedError ||
-		error instanceof TermsAcceptanceRequiredError
+		error instanceof TermsAcceptanceRequiredError ||
+		error instanceof ScopeViolationError
 	return {
 		status: "failed",
 		error: errorMessage(error),

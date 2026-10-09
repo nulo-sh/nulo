@@ -367,6 +367,19 @@ describe("AccountService.restore — validation + provenance", () => {
 		expect((await api.storage.local.get(p1Key))[p1Key]).toBeUndefined()
 	})
 
+	test("an unreadable value is purged by its canonical key alone: p1's goes, p2's and a non-canonical key's stay", async () => {
+		const p1Key = `nulo:core:accounts@${accountRowId("p1", 1, "0xbroken")}`
+		const p2Key = `nulo:core:accounts@${accountRowId("p2", 1, "0xbroken")}`
+		await api.storage.local.set({ [p1Key]: "{not json", [p2Key]: "{not json", "nulo:core:accounts@legacy": "{not json" })
+
+		await accountService.purgeForProfile("p1")
+
+		const raw = await api.storage.local.get(null)
+		expect(raw[p1Key]).toBeUndefined()
+		expect(raw[p2Key]).toBe("{not json")
+		expect(raw["nulo:core:accounts@legacy"]).toBe("{not json")
+	})
+
 	test("a concurrent restore of ANOTHER profile survives the purge's raw pass (key-attribution + restoreLock)", async () => {
 		// End-state guard for the aliased-key hazard under real concurrency: the
 		// malformed bytes claim p1 but sit at the canonical key p2's restore
