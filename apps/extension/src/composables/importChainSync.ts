@@ -114,7 +114,7 @@ async function registerOneNetwork(
 	// launch, so nothing useful runs past it). A rejection's message never reaches a record.
 	let timer: ReturnType<typeof setTimeout> | undefined
 	const deadline = new Promise<undefined>((resolve) => {
-		timer = setTimeout(resolve, remaining)
+		timer = setTimeout(() => resolve(undefined), remaining)
 	})
 	const result = await Promise.race([deps.restore([item], remaining).catch(() => undefined), deadline]).finally(() => clearTimeout(timer))
 	if (!Array.isArray(result)) return skipOutcome(item, ACCOUNT_STATE_SKIP_DEADLINE, true)
