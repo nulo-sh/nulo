@@ -7,7 +7,8 @@
 
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
+import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransferType } from "@/wallet/services/transaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { FeeSettings } from "./spec"
@@ -38,6 +39,15 @@ const CURRENT_MIN = new GasFees(50n, 100n)
 const MATCHING_BASE_FEE_FINGERPRINT = "100:200"
 
 const PRIMARY_ENDPOINT = { id: "ep-1", rpcUrl: "http://localhost:8080" }
+const CHAIN = { l1ChainId: 31337, rollupVersion: 31337 }
+
+const SPONSOR_ROW: FpcInfo = { id: "fpc-1", profileId: "profile-1", chainId: 0, type: 1, address: "0xsponsor", isProtocol: true }
+const FPC_SETTINGS: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: SPONSOR_ROW.id } }
+const FPC_INPUTS = { ...INPUTS, feeSettings: FPC_SETTINGS }
+const FPC_ENTRY: Partial<TransferEstimateReuseEntry> = {
+	feeSettingsHash: fingerprintFeeSettings(FPC_SETTINGS),
+	fpcIdentity: { id: "fpc-1", type: 1, address: "0xsponsor", chainId: 0, isProtocol: true },
+}
 
 function makeEntry(overrides: Partial<TransferEstimateReuseEntry> = {}): TransferEstimateReuseEntry {
 	return {
@@ -51,6 +61,7 @@ function makeEntry(overrides: Partial<TransferEstimateReuseEntry> = {}): Transfe
 		sequenceEpoch: 0,
 		feeSettingsHash: fingerprintFeeSettings(FEE_SETTINGS),
 		profileId: "profile-1",
+		chainIdentity: CHAIN,
 		baseFeeFingerprint: MATCHING_BASE_FEE_FINGERPRINT,
 		primaryEndpointId: PRIMARY_ENDPOINT.id,
 		primaryEndpointUrl: PRIMARY_ENDPOINT.rpcUrl,
@@ -74,9 +85,13 @@ function makeReuse(
 		getPredictedMinFees?: () => Promise<GasFees[]>
 		pending?: Array<{ hash: string }>
 		epoch?: number
+		liveChain?: () => Promise<{ l1ChainId: number; rollupVersion: number }>
+		fpcRow?: () => Promise<FpcInfo>
 	} = {},
 ) {
 	const entry = makeEntry(overrides.entry)
+	const logDebug = vi.fn()
+	const getFpcInfo = vi.fn(overrides.fpcRow ?? (async () => ({ ...SPONSOR_ROW })))
 	const deps: TransferEstimateReuseDeps = {
 		sequenceEpoch: () => overrides.epoch ?? 0,
 		getNetwork: async () =>
@@ -89,12 +104,14 @@ function makeReuse(
 			getCurrentMinFees: overrides.getCurrentMinFees ?? (async () => CURRENT_MIN),
 			getPredictedMinFees: overrides.getPredictedMinFees,
 		}),
+		getLiveChainIdentity: overrides.liveChain ?? (async () => CHAIN),
+		getFpcInfo,
 		getPendingForAccount: () => overrides.pending ?? [],
-		logDebug: () => {},
+		logDebug,
 	}
 	const reuse = new TransferEstimateReuse(deps)
 	reuse.stash("est-1", entry)
-	return { reuse, entry }
+	return { reuse, entry, logDebug, getFpcInfo }
 }
 
 describe("fingerprint byte-stability (cache-compare contract)", () => {
@@ -238,5 +255,60 @@ describe("stash: opportunistic TTL sweep", () => {
 		const { reuse } = makeReuse({ entry: { initializesAccount: true } })
 		const consumed = await reuse.tryConsume("est-1", INPUTS, FENCE)
 		expect(consumed?.initializesAccount).toBe(true)
+	})
+})
+
+describe("tryConsume: the request binds the chain it was signed under and the sponsor row it paid with", () => {
+	const reason = (logDebug: ReturnType<typeof vi.fn>) => logDebug.mock.calls.map(([msg]) => msg)
+
+	test("an unchanged sponsor and chain hit", async () => {
+		const { reuse, entry } = makeReuse({ entry: FPC_ENTRY })
+		expect(await reuse.tryConsume("est-1", FPC_INPUTS, FENCE)).toBe(entry)
+	})
+
+	test("the sponsor address edited in place misses", async () => {
+		const { reuse, logDebug } = makeReuse({ entry: FPC_ENTRY, fpcRow: async () => ({ ...SPONSOR_ROW, address: "0xedited" }) })
+		expect(await reuse.tryConsume("est-1", FPC_INPUTS, FENCE)).toBeUndefined()
+		expect(reason(logDebug)).toEqual(["tryConsumeTransferEstimate est-1: fpc identity drift"])
+	})
+
+	test("the sponsor row deleted misses with the category only", async () => {
+		const { reuse, logDebug } = makeReuse({
+			entry: FPC_ENTRY,
+			fpcRow: async () => {
+				throw new Error("Invalid id fpc-1")
+			},
+		})
+		expect(await reuse.tryConsume("est-1", FPC_INPUTS, FENCE)).toBeUndefined()
+		expect(reason(logDebug)).toEqual(["tryConsumeTransferEstimate est-1: fpc row unavailable"])
+	})
+
+	test("an fpc entry without a sponsor snapshot misses before any row read", async () => {
+		const { reuse, logDebug, getFpcInfo } = makeReuse({ entry: { ...FPC_ENTRY, fpcIdentity: undefined } })
+		expect(await reuse.tryConsume("est-1", FPC_INPUTS, FENCE)).toBeUndefined()
+		expect(getFpcInfo).not.toHaveBeenCalled()
+		expect(reason(logDebug)).toEqual(["tryConsumeTransferEstimate est-1: fpc identity missing"])
+	})
+
+	test("a drifted chain pair misses", async () => {
+		const { reuse, logDebug } = makeReuse({ liveChain: async () => ({ ...CHAIN, rollupVersion: 1 }) })
+		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBeUndefined()
+		expect(reason(logDebug)).toEqual(["tryConsumeTransferEstimate est-1: chain identity drift (exact pair mismatch)"])
+	})
+
+	test("a live-chain read that throws misses with the category only", async () => {
+		const { reuse, logDebug } = makeReuse({
+			liveChain: async () => {
+				throw new Error("Chain identity mismatch: live node reports l1ChainId=1")
+			},
+		})
+		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBeUndefined()
+		expect(reason(logDebug)).toEqual(["tryConsumeTransferEstimate est-1: chain identity drift"])
+	})
+
+	test("an fj entry reads no sponsor row", async () => {
+		const { reuse, entry, getFpcInfo } = makeReuse()
+		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBe(entry)
+		expect(getFpcInfo).not.toHaveBeenCalled()
 	})
 })

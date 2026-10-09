@@ -132,5 +132,9 @@ if (import.meta.main) {
 		],
 	})
 	const action = await upsertPreviewComment(env("REPO"), Number(env("PR_NUMBER")), env("HEAD_SHA"), body)
-	console.log(action === "stale" ? `PR #${env("PR_NUMBER")} head moved past ${env("HEAD_SHA")}; comment left alone` : `preview comment ${action} on #${env("PR_NUMBER")}`)
+	console.log(
+		action === "stale"
+			? `PR #${env("PR_NUMBER")} head moved past ${env("HEAD_SHA")}; comment left alone`
+			: `preview comment ${action} on #${env("PR_NUMBER")}`,
+	)
 }

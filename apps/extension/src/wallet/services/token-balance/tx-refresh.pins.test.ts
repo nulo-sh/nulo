@@ -83,7 +83,6 @@ describe("onTransactionUpdated pins", () => {
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [],
 			}),

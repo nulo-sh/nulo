@@ -51,8 +51,7 @@ function assertSingleProducer(checks: Check[]): Check[] {
 	for (const c of checks) producers.set(c.context, (producers.get(c.context) ?? new Set()).add(c.app_id))
 	const conflicts = [...producers].filter(([, apps]) => apps.size > 1).map(([ctx, apps]) => `${ctx} (apps ${[...apps].join(", ")})`)
 	if (conflicts.length > 0) throw new Error(`refusing: a context would have two producers — ${conflicts.join("; ")}`)
-	const seen = new Set<string>()
-	return checks.filter((c) => (seen.has(`${c.context}@${c.app_id}`) ? false : (seen.add(`${c.context}@${c.app_id}`), true)))
+	return [...new Map(checks.map((c) => [`${c.context}@${c.app_id}`, c])).values()]
 }
 
 export function planRename(current: RequiredChecks, renames: Readonly<Record<string, string>> = RENAMES): RequiredChecks {
@@ -62,7 +61,8 @@ export function planRename(current: RequiredChecks, renames: Readonly<Record<str
 
 export function planAdd(current: RequiredChecks, names: string[], appId = GITHUB_ACTIONS_APP_ID): RequiredChecks {
 	const checks = [...current.checks]
-	for (const name of names) if (!checks.some((c) => c.context === name && c.app_id === appId)) checks.push({ context: name, app_id: appId })
+	for (const name of names)
+		if (!checks.some((c) => c.context === name && c.app_id === appId)) checks.push({ context: name, app_id: appId })
 	return normalize({ strict: current.strict, checks: assertSingleProducer(checks) })
 }
 
@@ -111,7 +111,11 @@ async function main(): Promise<void> {
 	const live = normalize(JSON.parse(await gh(["api", endpoint])) as RequiredChecks)
 
 	if (positionals[0] === "print" || (!values.apply && !values.add)) {
-		console.log(values.json ? JSON.stringify(live, null, 2) : `${repo}@${branch}: strict=${live.strict}\n${live.checks.map((c) => `  ${c.context} (app ${c.app_id})`).join("\n")}`)
+		console.log(
+			values.json
+				? JSON.stringify(live, null, 2)
+				: `${repo}@${branch}: strict=${live.strict}\n${live.checks.map((c) => `  ${c.context} (app ${c.app_id})`).join("\n")}`,
+		)
 		return
 	}
 
@@ -120,7 +124,15 @@ async function main(): Promise<void> {
 	const match = expectationMatches(live, expected)
 	if (!match.ok) throw new Error(`refusing: live protection on ${branch} differs from the reviewed snapshot\n${match.diff}`)
 
-	const plan = values.add ? planAdd(live, values.add.split(",").map((s) => s.trim()).filter(Boolean)) : planRename(live)
+	const plan = values.add
+		? planAdd(
+				live,
+				values.add
+					.split(",")
+					.map((s) => s.trim())
+					.filter(Boolean),
+			)
+		: planRename(live)
 	if (JSON.stringify(plan) === JSON.stringify(live)) {
 		console.log(`${repo}@${branch}: nothing to change`)
 		return
@@ -130,8 +142,13 @@ async function main(): Promise<void> {
 	await gh(["api", "--method", "PATCH", endpoint, "--input", "-"], JSON.stringify({ strict: plan.strict, checks: plan.checks }))
 	const after = normalize(JSON.parse(await gh(["api", endpoint])) as RequiredChecks)
 	const verified = expectationMatches(after, plan)
-	if (!verified.ok) throw new Error(`write did not verify on ${branch}\n${verified.diff}\nrollback: gh api --method PATCH ${endpoint} --input ${backup}`)
-	console.log(`${repo}@${branch}: applied\n${after.checks.map((c) => `  ${c.context}`).join("\n")}\nrollback: gh api --method PATCH ${endpoint} --input ${backup}`)
+	if (!verified.ok)
+		throw new Error(
+			`write did not verify on ${branch}\n${verified.diff}\nrollback: gh api --method PATCH ${endpoint} --input ${backup}`,
+		)
+	console.log(
+		`${repo}@${branch}: applied\n${after.checks.map((c) => `  ${c.context}`).join("\n")}\nrollback: gh api --method PATCH ${endpoint} --input ${backup}`,
+	)
 }
 
 if (import.meta.main) {

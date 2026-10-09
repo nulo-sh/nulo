@@ -10,7 +10,7 @@
  * wrong-SHA cases) unit-testable with zero secrets.
  *
  * Safety, by construction:
- *  - guarded by `autoUnstickEnabled` (the staged-rollout kill switch);
+ *  - guarded by `autoUnstickEnabled` (the kill switch);
  *  - only acts on a real `push` whose HEAD is the merge commit of a MERGED
  *    `autorelease: pending` Release PR with base `main` (an explicit PR-to-SHA
  *    check — never a title heuristic);
@@ -23,7 +23,7 @@ export const AUTORELEASE_PENDING_LABEL = "autorelease: pending"
 export const AUTORELEASE_TAGGED_LABEL = "autorelease: tagged"
 
 export interface AutoUnstickInput {
-	/** `vars.AUTO_UNSTICK_ENABLED` — the staged-rollout kill switch. */
+	/** `vars.AUTO_UNSTICK_ENABLED` — the kill switch. */
 	autoUnstickEnabled: boolean
 	/** release-please's `release_created` output — true means it worked, no unstick. */
 	releaseCreated: boolean
@@ -52,7 +52,7 @@ export interface AutoUnstickDecision {
 }
 
 export function decideUnstick(input: AutoUnstickInput): AutoUnstickDecision {
-	if (!input.autoUnstickEnabled) return { action: "disabled", reason: "AUTO_UNSTICK_ENABLED is off (staged rollout) — manual unstick applies" }
+	if (!input.autoUnstickEnabled) return { action: "disabled", reason: "AUTO_UNSTICK_ENABLED is off — manual unstick applies" }
 	if (input.releaseCreated) return { action: "noop", reason: "release-please created the release; no unstick needed" }
 	if (input.eventName !== "push") return { action: "noop", reason: `event is '${input.eventName}', not a push to main` }
 

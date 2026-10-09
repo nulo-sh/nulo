@@ -212,7 +212,6 @@ describe("TokenBalanceService.restore — hostile-row validation", () => {
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				// restore() derives identity from the profile's OWN token table — the
 				// explicit-profileId read, not the (empty pre-activation) active map.
@@ -387,7 +386,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw,
 			}),
@@ -445,7 +443,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [],
 				getTokenRaw: async () => tokenRaw(100, "A"),
@@ -505,7 +502,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [],
 				getTokenRaw: async () => tokenRaw(100, "A"),
@@ -577,7 +573,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A"), tokenRaw(200, "A")],
 			}),
@@ -633,7 +628,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
@@ -691,7 +685,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
@@ -766,7 +759,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 				getTokenRaw: async () => tokenRaw(100, "A"),
@@ -830,7 +822,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted,
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
@@ -892,7 +883,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async (profileId: string) => {
 					// Park ONLY init's read (profile A, first call).
@@ -963,7 +953,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [tokenRaw(100, "A")],
 			}),
@@ -1013,7 +1002,6 @@ describe("TokenBalanceService.onActiveProfileChanged — token-map rebuild gener
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded,
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				// Token 100 is already mapped, so the account-added path has work.
 				getTokensRaw: async () => [tokenRaw(100, "A")],
@@ -1095,7 +1083,6 @@ describe("TokenBalanceService legacy sweep + schema transition", () => {
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => [
 					{ id: 100, profileId: "A", chainId: 1, contract: "0xtok100", name: "T", symbol: "T", decimals: 18 } as never,
@@ -1154,7 +1141,6 @@ describe("TokenBalanceService reconcile — identity hardening", () => {
 		services.add(
 			svc(TOKEN_SERVICE_NAME, {
 				onTokenAdded: new EventHandler(),
-				onTokenUpdated: new EventHandler(),
 				onTokenDeleted: new EventHandler(),
 				getTokensRaw: async () => opts.tokens as never[],
 			}),

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL } from "./auto-unstick"
-import { type MergedPrRef, type RunUnstickOpts, runUnstick, type UnstickIO } from "./auto-unstick-run"
+import { type MergedPrRef, parseAutoUnstickFlag, type RunUnstickOpts, runUnstick, type UnstickIO } from "./auto-unstick-run"
 
 const MERGE = "abc123def456abc123def456abc123def456abcd"
 
@@ -50,8 +50,30 @@ function opts(over: Partial<RunUnstickOpts> & Pick<RunUnstickOpts, "io">): RunUn
 	}
 }
 
+describe("parseAutoUnstickFlag — on by default; the variable only turns it off", () => {
+	test("unset or empty → on: deleting the variable never strands a release", () => {
+		for (const raw of [undefined, "", "  "]) expect(parseAutoUnstickFlag(raw), String(raw)).toEqual({ enabled: true })
+	})
+
+	test("on, true, 1 → on, in any case and with whitespace", () => {
+		for (const raw of ["on", "TRUE", " 1 "]) expect(parseAutoUnstickFlag(raw), raw).toEqual({ enabled: true })
+	})
+
+	test("off, false, 0 → off, without a warning", () => {
+		for (const raw of ["off", "False", " 0"]) expect(parseAutoUnstickFlag(raw), raw).toEqual({ enabled: false })
+	})
+
+	test("any other value → off with a warning: a typo meant to disable never enables", () => {
+		for (const raw of ["of", "no", "disabled"]) {
+			const flag = parseAutoUnstickFlag(raw)
+			expect(flag.enabled, raw).toBe(false)
+			expect(flag.warning, raw).toContain("stays off")
+		}
+	})
+})
+
 describe("runUnstick — zero-API short-circuit on the common path", () => {
-	test("flag off → disabled, NO resolution calls (default path)", async () => {
+	test("flag off → disabled, NO resolution calls", async () => {
 		const { io, calls } = fakeIO({ pr: releasePr() })
 		const r = await runUnstick(opts({ io, autoUnstickEnabled: false }))
 		expect(r.action).toBe("disabled")

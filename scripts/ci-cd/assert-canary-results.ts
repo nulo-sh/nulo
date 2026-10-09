@@ -44,11 +44,7 @@ function fileProblems(file: string, result: FileResult, expected: readonly strin
 }
 
 /** Every reason the report does not prove the listed files ran and passed; empty means it does. */
-export function canaryProblems(
-	report: CanaryReport,
-	files: readonly string[],
-	expectations: CanaryExpectations,
-): string[] {
+export function canaryProblems(report: CanaryReport, files: readonly string[], expectations: CanaryExpectations): string[] {
 	if (files.length === 0) return ["no test files were given — nothing to assert"]
 	const problems: string[] = []
 	for (const file of files) {

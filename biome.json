@@ -8,9 +8,8 @@
 			"infra/**",
 			"packages/**",
 			"vitest.base.ts",
-			"scripts/ci-cd/test-soak/**",
+			"scripts/**",
 			"!scripts/ci-cd/test-soak/baselines",
-			"scripts/ci-cd/plans/**",
 			"!**/node_modules",
 			"!**/dist",
 			"!**/target",
@@ -85,6 +84,16 @@
 				"rules": {
 					"complexity": {
 						"noExcessiveLinesPerFunction": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["scripts/ci-cd/**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noTemplateCurlyInString": "off"
 					}
 				}
 			}

@@ -39,6 +39,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
+- [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
 - [cognitive-shallow-tail](cognitive-shallow-tail/plan.md) — completed — the 16 to 20 cognitive-complexity band cleared by extracting named helpers
 - [complexity-budgets](complexity-budgets/plan.md) — completed — Biome complexity budgets at error severity in the existing pipeline
 - [complexity-residue](complexity-residue/plan.md) — completed — the complexity residue burned down, with each surviving acceptance justified
@@ -114,6 +115,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
+- [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
 - [hd-behaviour-alignment](hd-behaviour-alignment/plan.md) — completed in part — four of the dedupe program's owner calls (History by network, trimmed contact names, new-password hints, motion and focus) and a dead protocol deleted
 - [hd-delete-after-prove](hd-delete-after-prove/plan.md) — completed — a profile erase stops deleting bb.js's public CRS cache, which a page that loaded the CRS holds open, guarded by a prover-on e2e in the canary job
@@ -207,6 +209,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [runtime-edges](runtime-edges/plan.md) — completed — three low-severity runtime edge fixes, each pinned
 - [runtime-start-single-flight](runtime-start-single-flight/plan.md) — completed — a single-flight service-worker start replaces the started latch
 - [security-audit-remediation](security-audit-remediation/plan.md) — completed — a security audit's findings fixed in small, separately reviewed phases
+- [security-fixes-1](security-fixes-1/plan.md) — completed — ten audit fixes in bridge, profile, backup and service code, each a refusal or an internal order
 - [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
@@ -219,6 +222,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [stable-release](stable-release/plan.md) — completed — the stable release cut as a short, repeatable procedure
 - [storage-migration-backup](storage-migration-backup/plan.md) — completed — imported backups migrate through the same migrations as live storage
 - [storage-migration-framework](storage-migration-framework/plan.md) — completed — persisted storage shapes transformed in place on update, never wiped
+- [supply-chain-release](supply-chain-release/plan.md) — completed — release zips attested and published through a draft, a pinned CI toolchain, an import-free content script, a blocking audit gate (#21 #12 #22 #20)
 - [sw-wallet-protocol](sw-wallet-protocol/plan.md) — completed — the service-worker boot and wallet protocol path under the complexity budget
 - [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
 - [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC

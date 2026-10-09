@@ -63,7 +63,7 @@ describe("AccountService.serializePerTuple — rejection emits NO unhandledrejec
 				getProfileSecret: async () => undefined,
 			}),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
+		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 		accountService = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(accountService)
 		await services.start()

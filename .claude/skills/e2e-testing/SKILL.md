@@ -87,13 +87,14 @@ falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you alr
    host-wide registry file; safety is probabilistic plus the bind test.
 3. Builds the wallet armed: `VITE_LOCAL_NETWORK_RPC_URL` (this sandbox),
    `VITE_NULO_E2E_PRICE_MAP=1`, `VITE_NULO_E2E_MIGRATION_FIXTURE=1`,
-   `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, plus the proverless pair when asked. Then asserts
-   the bundle before spending a sandbox (exit 2 on a miss): the sandbox URL literal, the
-   migration-fixture stamp, the token-seed stamp and key, the presto stamp when armed, the
+   `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, `VITE_NULO_E2E_CSP_REPORT=1`, plus the proverless
+   pair when asked. Then asserts the bundle before spending a sandbox (exit 2 on a miss): the
+   sandbox URL literal, the migration-fixture stamp, the token-seed stamp and key, the CSP
+   recorder's key, the presto stamp when armed, the
    proverless stamp when armed, the fee multiplier when set. The price map has no stamp check.
 4. Runs vitest with `E2E_REQUIRE_SETUP=1` (a sandbox or deploy failure is `FATAL`, never a silent
    `describe.skipIf` — the suite once showed `61 skipped, exit 0` for weeks) and the runtime
-   declarations the tests read (`NULO_E2E_MIGRATION_FIXTURE=1`, the `*_URL`s).
+   declarations the tests read (`NULO_E2E_MIGRATION_FIXTURE=1`, `NULO_E2E_CSP_REPORT=1`, the `*_URL`s).
 5. `classify-exit.ts` maps the run through `.e2e-state/{boot-started,boot-ready,tests-started}`:
    boot started, never ready, no test ran → exit 86 (CI retries the agent once on 86 only); anything
    else passes through. A test that ran cannot masquerade as infra.
@@ -120,8 +121,9 @@ runtime env var can never arm a build-time flag.
   the end of `bun run audit:vue` — silently disarms the dist.
 - Smoke needs its fixtures armed AND the migration one declared: build with
   `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1
-  VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 bun run build:chrome` (the seed pair keeps the fresh wallet off
-  the live seed RPC — `_extension-smoke-e2e.yml` says why), run with `NULO_E2E_MIGRATION_FIXTURE=1`.
+  VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run build:chrome` (the seed pair
+  keeps the fresh wallet off the live seed RPC — `_extension-smoke-e2e.yml` says why), run with
+  `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
   `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
   remedy.
 - A file that depends on the PROVERLESS build carries the `@requires-proverless` marker (the only
@@ -143,6 +145,7 @@ runtime env var can never arm a build-time flag.
 | `E2E_REQUIRE_SETUP=1` | sandbox/deploy failures are fatal (set by `agent.sh`) |
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
+| `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
 | `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): blocks the price host, skips the encrypted `backup-roundtrip` spec; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
 | `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |
@@ -394,8 +397,10 @@ assertion; drive the rest of the flow with the ordinary helpers.
   instead. Approval sub-windows carry no listeners at all.
 - **`chrome.runtime.reload()` disables an unpacked `--load-extension` build** (every later
   `chrome-extension://` goto is `ERR_BLOCKED_BY_CLIENT`). Never use it for harness state reset; when
-  the product calls it (the migration barrier's Retry), click, wait for the pre-reload write, then
-  `browser.close()` and relaunch over the same `userDataDir` (`migration.test.ts` `retryAndReopen`).
+  the product calls it (the migration barrier's Retry), check the CSP record first
+  (`ctx.checkCspViolations()`), click, wait for the pre-reload write, then close at once and
+  relaunch over the same `userDataDir` (`migration.test.ts` `retryAndReopen`). Firefox reloads the
+  add-on in place instead, and its boot takes the retry token: a slow close kills that run midway.
 - **The first-run onboarding tab.** `onInstalled` (`reason === "install"`) opens it before
   `launchExtension` can seed `nulo:onboarding:completed`; the fixture closes it by the id the worker
   stores in `nulo:onboarding:tab-id` BEFORE flipping the flag (a mounted onboarding page that reads the
@@ -734,6 +739,7 @@ the sanctioned response.
 | 43 | `expected [ '$1,046.00', '$1,052.00' ] to deeply equal [ '$0.00', '$1,052.00' ]` at the last assertion of `expectCalmArrival` in `network/incoming-arrival`, on its second call (Chrome under emulated reduced motion), one Chrome network shard on CI (shard 2/5) | read in the code and reproduced with the price replies held: `setAnimationsDisabled` returns to Home through `waitForHomeTotal`, which waits only for the hero's skeleton (`balance-hero-loading`) to go. The remounted hero then values a holding with no quote yet at $0.00 (`usePrices` starts empty and fetches its quotes after mount), so `heroBefore` read "$0.00" and the sampler's first value was the priced $1,046.00, before the receipt's $1,052.00. The first call, after "Disable animations", has the same exposure. The shard passed on re-run with no code change, which fits this settle race | `expectCalmArrival` reads the hero only once it shows a priced figure, a dollar amount other than $0.00, on both calls. With the price replies held across the read, the old check failed and the new one passed on both browsers (`implementations-plan/archive/hygiene/plan.md#price-settle`). Rule: on Home, a fiat figure is settled only once the quotes have landed, not when the skeleton goes | fixed, `hygiene` |
 | 44 | `Waiting failed: 15000ms exceeded` in `rows.test.ts`'s `backToHome` on every attempt, both artifact smokes (two nightly runs); the first Tab walk lists no `tokens-empty-import-link`, the retries' walks two `tokens-card` | row 40's wait assumed an empty token card, which only the source build draws: its smoke arms the seed list empty (§1, build-armed tests), while an artifact runs the shipped list, whose default tokens draw rows where the empty state would be. An empty shipped list hides the failure until a seed ships; then a red `smoke-against-artifact` also stops `release.yml`'s `attach-assets` | the wait takes the empty state, or token rows none of which is still loading (a default token's placeholder in a non-terminal status, a balance's first sync, an import row), and also runs when the test first opens Home, where the defaults land. Against a release build's artifacts the old wait failed and the new one passed 4 of 4 on each browser, its first wait 5.4 s on Chrome and 8.1 s on Firefox. Rule: a smoke test's wait must also hold for the artifact smokes, which run the shipped default tokens. With the four V6 testnet seeds the wait reads `tokens-list[data-settled="true"]` (both snapshots answered) with no row loading, ghost rows included, gives the first wait 150 s for the seeder's retries, and scrolls the row into view before the hit-test, since three seeded rows push it under the bottom nav | fixed; tightened for the V6 seeds |
 | 45 | `TimeoutError: Waiting failed: 2000ms exceeded` at `selectFeeMethod`'s commit wait (`fixtures/helpers.ts`), `network/fee-methods` "transfer with private Fee Juice", the Firefox heavy job at retry 0 (twice, 5.6 s and 5.9 s into the test); the file passed on rerun | the Send card draws Private Fee Juice disabled and no sponsor row until its first FPC and balance read lands, a forced read on every Send mount, while the amount input the test waits on enables on the token balance alone. The helper clicked the row in-page as soon as it was drawn; a disabled row drops the click and the menu closes on it, so the trigger kept showing another method. Read in the code; the chaos run's 2 s miss, which `send-burst` answered with a click retry, fits the same drop | `selectFeeMethod` clicks through `clickByTestId`, which waits for the row to be enabled; every wait takes `mountTimeoutMs` and names what it saw on a timeout; the spec passes 30 s and the retry is gone. Rule: as row 37, wait for what only the loaded card draws, an enabled row | fixed |
+| 46 | `TimeoutError: Waiting failed: 1000ms exceeded` in `waitForToastGone` at `passkey-retry.test.ts`'s closing check that the "not confirmed" toast is absent, local smoke with three or four browsers running at once (once on Chrome, once on Firefox); the file passed alone every time (8 of 8, 2 of 2) | the check's 1 s budget also covers its first poll's protocol round trip, which a loaded host can exceed while the toast is already gone. The error toast stays until closed, so a real return would fail at any budget | none: rerun the file alone. CI's smoke runs files one at a time and has not shown it | open |
 
 ## 6. Editing the harness
 

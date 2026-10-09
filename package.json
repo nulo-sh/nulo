@@ -25,7 +25,8 @@
     "format": "biome format --write",
     "check": "biome check",
     "typecheck": "bun run --cwd apps/extension typecheck",
-    "typecheck:all": "bun run --filter '@nulo/*' typecheck",
+    "typecheck:all": "bun run --filter '@nulo/*' typecheck && bun run typecheck:scripts",
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json",
     "test:all": "bun run --filter '@nulo/*' --if-present test",
     "test:release": "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 bun test scripts/release/ scripts/publish/",
     "test:ci-gating": "bun test scripts/ci-cd/",
@@ -40,7 +41,9 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.13",
     "@commitlint/cli": "^21.0.2",
-    "@commitlint/config-conventional": "^21.0.2"
+    "@commitlint/config-conventional": "^21.0.2",
+    "@types/bun": "1.4.2",
+    "typescript": "^6.0.3"
   },
   "packageManager": "bun@1.4.2",
   "version": "0.30.2",

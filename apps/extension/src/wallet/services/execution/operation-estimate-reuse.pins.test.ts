@@ -225,7 +225,7 @@ describe("the ladder's order and reasons", () => {
 		expect(logDebug.mock.calls).toEqual([[`${REASON}chain identity drift (exact pair mismatch)`]])
 	})
 
-	test("chain identity: a throwing assert misses with its message", async () => {
+	test("chain identity: a throwing assert misses with the category only", async () => {
 		const { reuse, logDebug } = harness({
 			deps: {
 				getLiveChainIdentity: vi.fn(async () => {
@@ -236,10 +236,11 @@ describe("the ladder's order and reasons", () => {
 		})
 		expect(await consumeOnce(reuse, entry())).toBeUndefined()
 		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity"])
-		expect(logDebug.mock.calls).toEqual([[`${REASON}chain identity drift: Chain identity mismatch`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}chain identity drift`]])
 	})
 
 	test.each([
+		["id", { id: "fpc-2" }],
 		["type", { type: 1 }],
 		["address", { address: "0xother" }],
 		["chainId", { chainId: 8 }],
@@ -256,7 +257,7 @@ describe("the ladder's order and reasons", () => {
 		expect(await consumeOnce(reuse, entry(undefined, { fpcIdentity: { ...FPC, type: 2 as never, isProtocol: false } }))).toBeDefined()
 	})
 
-	test("FPC identity: an unreadable row misses with its message", async () => {
+	test("FPC identity: an unreadable row misses with the category only", async () => {
 		const { reuse, logDebug } = harness({
 			deps: {
 				getFpcInfo: vi.fn(async () => {
@@ -267,7 +268,14 @@ describe("the ladder's order and reasons", () => {
 		})
 		expect(await consumeOnce(reuse, entry())).toBeUndefined()
 		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity", "getFpcInfo"])
-		expect(logDebug.mock.calls).toEqual([[`${REASON}fpc row unavailable: row gone`]])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}fpc row unavailable`]])
+	})
+
+	test("FPC identity: an fpc entry without a snapshot misses before any row read", async () => {
+		const { reuse, logDebug } = harness()
+		expect(await consumeOnce(reuse, entry(undefined, { fpcIdentity: undefined }))).toBeUndefined()
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity"])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}fpc identity missing`]])
 	})
 
 	test("an fj entry skips the FPC read", async () => {

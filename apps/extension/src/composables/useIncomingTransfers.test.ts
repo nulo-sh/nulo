@@ -75,6 +75,63 @@ describe("useIncomingTransfers", () => {
 		expect(incomingTransfers.value).toEqual([])
 	})
 
+	it("loaded turns true once a read for the scope assigns its rows, and false again on a switch", async () => {
+		const account = ref("a")
+		let releaseA!: (rows: IncomingTransferRecord[]) => void
+		const incoming = makeIncomingService()
+		incoming.getIncomingTransfers
+			.mockReturnValueOnce(new Promise<IncomingTransferRecord[]>((r) => (releaseA = r)))
+			.mockResolvedValueOnce([rec("b1", { accountAddress: "b" })])
+		const scope = () => ({ profileId: "p", networkId: "n", account: account.value })
+		const { loaded, refresh } = setup({ incoming, config: makeConfigService(), scope })
+
+		const read = refresh()
+		await Promise.resolve()
+		expect(loaded.value).toBe(false)
+		releaseA([])
+		await read
+		expect(loaded.value).toBe(true)
+
+		account.value = "b"
+		expect(loaded.value).toBe(false)
+		await vi.waitFor(() => expect(loaded.value).toBe(true))
+	})
+
+	it("loaded stays false when the scope is not ready or the read rejects", async () => {
+		const notReady = setup({ incoming: makeIncomingService(), config: makeConfigService(), scope: () => undefined })
+		await notReady.refresh()
+		expect(notReady.loaded.value).toBe(false)
+
+		const incoming = makeIncomingService()
+		incoming.getIncomingTransfers.mockRejectedValueOnce(new Error("port closed"))
+		const rejected = setup({ incoming, config: makeConfigService() })
+		await expect(rejected.refresh()).rejects.toThrow("port closed")
+		expect(rejected.loaded.value).toBe(false)
+	})
+
+	it("a read for a superseded scope never sets loaded; the current scope's read does", async () => {
+		const account = ref("a")
+		let releaseA!: (rows: IncomingTransferRecord[]) => void
+		let releaseB!: (rows: IncomingTransferRecord[]) => void
+		const incoming = makeIncomingService()
+		incoming.getIncomingTransfers
+			.mockReturnValueOnce(new Promise<IncomingTransferRecord[]>((r) => (releaseA = r)))
+			.mockReturnValueOnce(new Promise<IncomingTransferRecord[]>((r) => (releaseB = r)))
+		const scope = () => ({ profileId: "p", networkId: "n", account: account.value })
+		const { incomingTransfers, loaded, refresh } = setup({ incoming, config: makeConfigService(), scope })
+
+		const readA = refresh()
+		account.value = "b"
+		releaseA([rec("a1")])
+		await readA
+		expect(loaded.value).toBe(false)
+		expect(incomingTransfers.value).toEqual([])
+
+		releaseB([rec("b1", { accountAddress: "b" })])
+		await vi.waitFor(() => expect(loaded.value).toBe(true))
+		expect(incomingTransfers.value.map((x) => x.id)).toEqual(["b1"])
+	})
+
 	it("refresh() clears atomically when the service returns [] (visibility off)", async () => {
 		const incoming = makeIncomingService([rec("a")])
 		const { incomingTransfers, refresh } = setup({ incoming, config: makeConfigService() })

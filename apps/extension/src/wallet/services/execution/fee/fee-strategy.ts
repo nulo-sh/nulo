@@ -48,6 +48,7 @@ import type { TxExecutionRequest, TxSimulationResult } from "@aztec-labs/stdlib/
 import type { ILogger } from "@/wallet/logger"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { FpcService } from "@/wallet/services/fpc/service"
+import type { FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
 import { StepContent, type TaskService, type WrappedTask } from "@/wallet/services/task/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
@@ -75,6 +76,9 @@ export interface FeeEstimate extends BuiltStandardTx {
 	/** Set only when a sponsor row pays and the final simulation's kernel names that row's own
 	 *  address as fee payer: the account whose Fee Juice the node's admission check reads. */
 	sponsor?: { fpcId: string; address: AztecAddress }
+	/** The sponsor row this build paid with, as it read it: a reuse entry binds to this, never to a
+	 *  later read, which an edit during the build would have moved. Set by every `fpc` build. */
+	fpcIdentity?: FpcIdentitySnapshot
 }
 
 /** Simulate callback — facade owns the TaskService wrapping so that

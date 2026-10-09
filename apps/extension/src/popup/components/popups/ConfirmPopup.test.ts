@@ -136,18 +136,19 @@ describe("ConfirmPopup — the confirm button's variant", () => {
 		H.store.current = reactive({ confirm: {} })
 	})
 
-	test("a caller's CTA variant reaches the confirm button only, at the compact size, and clears on close", async () => {
+	test("a caller's variant reaches the confirm button only, at Cancel's size, and clears on close", async () => {
 		const wrapper = mount(ConfirmPopup, { props: { show: false }, global: { stubs: STUBS } })
-		await open(wrapper, { confirm_color: "red", confirm_variant: "cta_destructive" })
+		await open(wrapper, { confirm_color: "red", confirm_variant: "destructive" })
 		const submit = wrapper.find('[data-testid="confirm-submit"]')
-		expect(submit.attributes("data-variant")).toBe("cta_destructive")
-		expect(submit.attributes("data-size")).toBe("compact")
-		expect(wrapper.find('[data-testid="confirm-cancel"]').attributes("data-variant")).toBe("primary_outline")
+		const cancel = wrapper.find('[data-testid="confirm-cancel"]')
+		expect(submit.attributes("data-variant")).toBe("destructive")
+		expect(cancel.attributes("data-variant")).toBe("primary_outline")
+		expect(submit.attributes("data-size")).toBe("medium")
+		expect(submit.attributes("data-size")).toBe(cancel.attributes("data-size"))
 
 		await wrapper.setProps({ show: false })
 		await nextTick()
 		await open(wrapper, { confirm_color: "red" })
 		expect(wrapper.find('[data-testid="confirm-submit"]').attributes("data-variant")).toBeUndefined()
-		expect(wrapper.find('[data-testid="confirm-submit"]').attributes("data-size")).toBe("medium")
 	})
 })

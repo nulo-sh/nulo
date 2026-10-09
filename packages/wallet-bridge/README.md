@@ -22,6 +22,8 @@ to live in the service worker while the PXE lives in the offscreen document.
 | `src/dispatcher.ts` | The dispatcher. Routes every wallet-sdk method to typed service calls; narrows protocol shapes; threads the right session/capabilities through. |
 | `src/capability-negotiation.ts` | Pure consent planning for `requestCapabilities`: projects the requested capabilities, decides which the stored grants already cover, and folds the window's answer into one session decision. The dispatcher owns every service call around it. |
 | `src/method-descriptors.ts` | **Single source of truth** for per-method metadata: capability, routing (network/account/handler), scope-checker reference, exempt flag, batch refusal, F-/AUDIT markers. The six former parallel tables (`METHOD_CAPABILITY_MAP`, `EXEMPT_METHODS`, `METHOD_TO_KIND`, `NETWORK_ONLY_KINDS`, `ACCOUNT_KINDS`, `METHOD_SCOPE_CHECKER`) and `BATCH_REFUSED_METHODS` are DERIVED from `METHOD_REGISTRY` here. Add/reclassify a method = one row (a build-failing exhaustiveness test + the dispatch-entry guard catch a forgotten one). |
+| `src/wallet-schema-args.ts` | The schema parse every dApp call passes before any scope checker, handler or window reads it: the reference wallet's `WalletSchema`, patched on a private copy, cut to each method's arity. A pass/fail predicate; every refusal is one `InvalidWalletArgumentsError`. |
+| `src/testing/wire.ts` (`@nulo/wallet-bridge/testing`) | Test-only: call arguments as the SDK serializes them, for tests that must get past the parse. |
 | `src/method-scope-checkers.ts` | Leaf module: per-method scope-check function bodies + their helpers. Referenced by the registry's `scopeCheck` fields and by `scope-enforcement.ts` — kept here (depended-on, never depending back) to break the registry↔scope-enforcement cycle. |
 | `src/field-address.ts` | Leaf module: the listed-contract address form (`isFieldAddress`) and the one comparison every grant-to-call contract check uses (`sameFieldAddress`, over `fieldAddressKey`). It compares the 32-byte value, so the case a dApp wrote never decides a match, and a malformed value matches nothing, itself included. |
 | `src/capability-map.ts` | Thin facade over the registry: `getRequiredCapability` / `isCapabilityExempt` read the derived capability map. |
@@ -36,6 +38,25 @@ to live in the service worker while the PXE lives in the offscreen document.
 | `src/authwit-content.ts` | Auth-witness content shapes. |
 | `src/discovery-queue.ts` | Discovery-request queue. |
 | `src/types.ts` | Shared protocol types. |
+
+## The guard ladder
+
+`dispatch()` runs, in order, for every call and again for every batch leg:
+
+1. the dApp session read, once per call (each batch leg reads it again);
+2. the method check, then the arity check (`args` is an array, and the method's `argSchema`);
+3. for a `batch`, the popup-leg refusal (`refusedInBatch`), before any leg runs;
+4. the capability check;
+5. the schema parse (`wallet-schema-args.ts`). It runs after the capability check, so an origin with
+   no grant cannot make the worker parse a large payload, and before the scope check, so no checker,
+   handler or window reads an unparsed value. `requestCapabilities` is parsed for its header and
+   every capability of a known type; an unknown type passes, so the connect window can show it. An
+   authwit intent naming `caller` or `call` must also parse as a call intent, the branch every
+   reader takes;
+6. the scope check;
+7. the handler, or the operation build and execution.
+
+The parse discards its output: every layer after it reads the exact wire values.
 
 ## OperationResult
 
@@ -139,8 +160,24 @@ The message is a constant and the envelope names no field and no value. A
 dApp reads the contracts, calls, classes and flags it holds from its own
 `requestCapabilities` answer, which is the stored grant, and asks again with a
 wider manifest. The answer lists the session's accounts only when the grant
-sets `canGet`. `createAuthWit` for a raw message hash is not a scope refusal
-(no grant can admit one) and answers the plain string.
+sets `canGet`.
+
+A call whose arguments the wallet API's schema refuses (a value that is not
+an address or a field, a call without its selector, a missing option, a
+`requestCapabilities` header without its version or metadata, a raw message
+hash given to `createAuthWit`) is refused before the scope check, before any
+window opens and before anything runs, with one envelope:
+
+```jsonc
+{
+  "code": -32602,                                // JSON-RPC invalid params
+  "message": "The request's arguments do not match the wallet API.",
+  "data": { "walletErrorCode": "INVALID_PARAMS" }
+}
+```
+
+The message is a constant: it names no method and no argument value. A stock
+SDK never sends such a call, so it is the dApp's to fix.
 
 ## getAccounts before requestCapabilities
 
@@ -285,7 +322,9 @@ by both apps:
 | Playground | `import "@nulo/wallet-sdk-schema-patch/register"` | `lib/wallet.ts` (first import) |
 
 `./register` is **side-effect only** — importing it first mutates `WalletSchema`
-before any wallet-sdk proxy reads it. The package also exports `./apply`
+before any wallet-sdk proxy reads it. The dispatcher's own parse does not rely on
+it: `wallet-schema-args.ts` applies `./apply` to a private copy at load, so neither
+the host's import order nor a test that mocks `./register` can turn the parse off. The package also exports `./apply`
 (`applyNuloSchemaPatch(schema)`), the pure patch body, unit-tested against mock
 schema objects in `packages/wallet-sdk-schema-patch/src/apply.test.ts`. The
 reachability guarantee is pinned by `dispatcher.test.ts` ("schema patch extends
@@ -324,5 +363,7 @@ assumptions are stable across upgrades.
 `BatchedMethodSchema` is built from `WalletMethodSchemas` upstream, not from
 `WalletSchema`. Our runtime patch mutates `WalletSchema` but the upstream
 `BatchedMethodSchema` is already frozen. So `wallet.batch([{name:
-"registerToken", ...}])` Zod-rejects on the dApp side. Treat `registerToken`
-as a single-shot call.
+"registerToken", ...}])` Zod-rejects on the dApp side, and so does a
+`grantPublicAuthwit` leg. A raw protocol client skips that Zod, so the
+dispatcher refuses both, like `sendTx`, before any leg of that batch runs
+(`refusedInBatch` in `method-descriptors.ts`). Treat them as single-shot calls.

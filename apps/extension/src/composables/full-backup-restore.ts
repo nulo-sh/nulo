@@ -17,7 +17,7 @@ import { handleCancelOrUnconfirmed, passkeyFailureCopy } from "@/utils/passkey-c
 import type { ToastOptions } from "@/composables/toast"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { RestoreSecret } from "@/wallet/services/profile/client"
-import { ACCOUNT_SERVICE_NAME, IMPORTED_KEYS_SERVICE_NAME } from "@/wallet/services/account/spec"
+import { ACCOUNT_SERVICE_NAME, IMPORTED_KEYS_SERVICE_NAME, accountScopeKey } from "@/wallet/services/account/spec"
 import { AUTH_REGISTRY_SERVICE_NAME } from "@/wallet/services/auth-registry/spec"
 import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
 import { ACCOUNT_STATE_SERVICE_NAME } from "@/wallet/services/account-state/spec"
@@ -338,7 +338,7 @@ const MAX_DROPPED_BALANCES_RECORDED = 200
 /**
  * Restores the account slice, then drops every transaction, authwit and token-balance row whose
  * account this restore did not import successfully. Mutates `data` in place and returns the
- * `${chainId}:${address}` allow-set of imported accounts, which the balance re-link requires for
+ * `accountScopeKey` allow-set of imported accounts, which the balance re-link requires for
  * its chain-equality check: thread it, never re-derive it. Client lifecycle, the duplicate-account
  * catch and stage markers stay with the caller; every throw propagates with its identity intact
  * (the caller matches `.message`, the outer catch classifies disconnects).
@@ -365,7 +365,7 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	for (const a of newAccounts as Array<{ address?: unknown; chainId?: unknown; restoreError?: unknown }>) {
 		if (a.restoreError || typeof a.address !== "string") continue
 		importedAddresses.add(a.address)
-		if (typeof a.chainId === "number") importedChainAddress.add(`${a.chainId}:${a.address}`)
+		if (typeof a.chainId === "number") importedChainAddress.add(accountScopeKey(a.chainId, a.address))
 	}
 	// Drop-and-record via console.warn, NOT restoreErrorLog: a filtered row
 	// is a security action (foreign/corrupt account, nothing the user did or
@@ -389,7 +389,10 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	// tx can't reference an imported address on a DIFFERENT chain.
 	filterByAccount(
 		TRANSACTION_SERVICE_NAME,
-		(tx) => typeof tx.account === "string" && typeof tx.chainId === "number" && importedChainAddress.has(`${tx.chainId}:${tx.account}`),
+		(tx) =>
+			typeof tx.account === "string" &&
+			typeof tx.chainId === "number" &&
+			importedChainAddress.has(accountScopeKey(tx.chainId, tx.account)),
 		"transaction(s)",
 	)
 	// auth-registry rows carry their own chainId → the same (chainId, account) key as txs.
@@ -398,7 +401,10 @@ export async function restoreAccountsAndFilterOwnedSlices(
 	// in the re-link step below.
 	filterByAccount(
 		AUTH_REGISTRY_SERVICE_NAME,
-		(aw) => typeof aw.account === "string" && typeof aw.chainId === "number" && importedChainAddress.has(`${aw.chainId}:${aw.account}`),
+		(aw) =>
+			typeof aw.account === "string" &&
+			typeof aw.chainId === "number" &&
+			importedChainAddress.has(accountScopeKey(aw.chainId, aw.account)),
 		"authwit(s)",
 	)
 	filterByAccount(
@@ -453,7 +459,9 @@ export function relinkRestoredTokenBalances(
 			// account with a token on a chain that account wasn't imported on.
 			const tokenChain = oldIdToChain.get(tb.token)
 			const chainOk =
-				tokenChain !== undefined && typeof tb.account === "string" && importedChainAddress.has(`${tokenChain}:${tb.account}`)
+				tokenChain !== undefined &&
+				typeof tb.account === "string" &&
+				importedChainAddress.has(accountScopeKey(tokenChain, tb.account))
 			if (newId === undefined || !chainOk) {
 				// This path bypasses `collectRestoreErrors` entirely — these rows are dropped BEFORE any
 				// service sees them — so it must do its own allowlisting AND its own bounding.

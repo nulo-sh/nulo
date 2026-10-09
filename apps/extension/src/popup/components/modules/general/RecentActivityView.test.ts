@@ -953,3 +953,26 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 		expect(w.findAllComponents({ name: "TransactionAwaitingCard" }).map((c) => c.props("jobId"))).toEqual(["mine"])
 	})
 })
+
+describe("RecentActivityView — hydration order", () => {
+	// A characterization, not a requirement: the executing-task snapshot lands before the journal's,
+	// so a queued send first shows stage-less.
+	test("a queued send shows one stage-less card until the journal snapshot lands, then one card at queued", async () => {
+		const ops = deferred<unknown[]>()
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		const cards = () =>
+			w
+				.findAllComponents({ name: "TransactionAwaitingCard" })
+				.map((c) => ({ stage: c.props("stage"), cancellable: c.props("cancellable") }))
+		await flushPromises()
+		expect(vmOf(w).hasOrphanExecutingTask).toBe(true)
+		expect(cards()).toEqual([{ stage: null, cancellable: false }])
+
+		ops.resolve([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
+		await flushPromises()
+		expect(vmOf(w).hasOrphanExecutingTask).toBe(false)
+		expect(cards()).toEqual([{ stage: "queued", cancellable: true }])
+	})
+})

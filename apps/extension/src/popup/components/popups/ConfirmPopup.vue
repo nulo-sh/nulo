@@ -29,9 +29,6 @@ const props = defineProps({
 
 /** `confirm_color: "red"` picks the pre-title only; the confirm button's look is `confirm_variant`. */
 const isDestructive = computed(() => cacheStore.confirm.confirm_color === "red")
-/** A CTA variant's tracking overflows this half-width row at the medium size; compact is the design
- *  package's CTA size for a tight spot. */
-const confirmSize = computed(() => (cacheStore.confirm.confirm_variant?.startsWith("cta") ? "compact" : "medium"))
 /** Informational use: one button, no Cancel, no callback required; cleared with the rest on close. */
 const isSingle = computed(() => cacheStore.confirm.single === true)
 
@@ -153,7 +150,7 @@ watch(
 						:type="cacheStore.confirm.confirm_color"
 						:variant="cacheStore.confirm.confirm_variant"
 						:disabled="!isConfirmed"
-						:size="confirmSize"
+						size="medium"
 						data-testid="confirm-submit"
 					>
 						{{ cacheStore.confirm.confirm_text || "Confirm" }}

@@ -554,6 +554,8 @@ export class TransferExecutor {
 						amount,
 						feeSettingsHash: fingerprintFeeSettings(op.feeSettings),
 						profileId: profile.id,
+						chainIdentity: built.chainIdentity,
+						fpcIdentity: built.fpcIdentity,
 						baseFeeFingerprint,
 						primaryEndpointId: primary.id,
 						primaryEndpointUrl: primary.rpcUrl,

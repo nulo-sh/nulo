@@ -27,6 +27,20 @@ const PASSKEY = "tests/e2e/network/passkey-execution-canary.test.ts"
 const CONTRACT_TEST = "agent-runner contract: a live sandbox must be configured (no false skip)"
 
 const report = (name: string): CanaryReport => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"))
+
+function canaryJobFiles(workflow: string): [job: string, file: string][] {
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const { jobs } = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as any
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	return (Object.entries(jobs) as [string, any][])
+		.filter(([, job]) => String(job.with?.shard_label ?? "").startsWith("canary"))
+		.flatMap(([name, job]) =>
+			String(job.with.test_files)
+				.split(/\s+/)
+				.filter(Boolean)
+				.map((file): [job: string, file: string] => [name, file]),
+		)
+}
 const expectations = loadExpectations()
 const [PASSKEY_TITLE] = expectations[PASSKEY] ?? []
 
@@ -103,14 +117,8 @@ describe("canary-expectations.json", () => {
 		expect(onDisk.length).toBeGreaterThan(0)
 		for (const file of onDisk) expect(expectations[file], file).toBeDefined()
 		for (const workflow of ["pr-extension-network-e2e.yml", "pr-extension-network-e2e-firefox.yml", "nightly.yml"]) {
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			const { jobs } = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as any
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			for (const [name, job] of Object.entries(jobs) as [string, any][]) {
-				if (!String(job.with?.shard_label ?? "").startsWith("canary")) continue
-				for (const file of String(job.with.test_files).split(/\s+/).filter(Boolean)) {
-					expect(expectations[file], `${workflow} → ${name}: ${file}`).toBeDefined()
-				}
+			for (const [name, file] of canaryJobFiles(workflow)) {
+				expect(expectations[file], `${workflow} → ${name}: ${file}`).toBeDefined()
 			}
 		}
 	})

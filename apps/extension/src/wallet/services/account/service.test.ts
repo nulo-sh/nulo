@@ -35,6 +35,12 @@ vi.mock("@nulo/aztec-runtime/account", async (importOriginal) => ({
 	NuloAccount: { new: async () => ({ address: { toString: () => "0xderived-addr" } }) },
 }))
 
+/** A liveness read that rejects after the row write, as a storage read error would. */
+const readFailsOnSecondCall = (call: number): boolean => {
+	if (call === 2) throw new Error("read failed")
+	return true
+}
+
 describe("AccountService.createAccount — deletion fence", () => {
 	function _deferred<T>() {
 		let resolve!: (v: T) => void
@@ -44,12 +50,13 @@ describe("AccountService.createAccount — deletion fence", () => {
 		return { promise, resolve }
 	}
 
-	async function makeHarness(over: { secret?: Promise<unknown>; probe?: Promise<number> } = {}) {
+	async function makeHarness(over: { secret?: Promise<unknown>; probe?: Promise<number>; chainLive?: (call: number) => boolean } = {}) {
 		const api = new FakeBrowserApi()
 		api.reset()
 		const deletion = new ProfileDeletionState()
 		const master = new Fr(42n)
 		const services = new ServiceCollection()
+		let liveCalls = 0
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
 				onProfileDeleted: new EventHandler(),
@@ -60,13 +67,15 @@ describe("AccountService.createAccount — deletion fence", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => over.chainLive?.(++liveCalls) ?? true,
 				resolveVerifiedL1ChainId: () => over.probe ?? Promise.resolve(1),
 			}),
 		)
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
 		await services.start()
-		return { api, deletion, master, service }
+		const emit = vi.spyOn(service as unknown as { emit: (e: string, p: unknown) => void }, "emit")
+		return { api, deletion, master, service, emit }
 	}
 
 	async function accountRowCount(api: FakeBrowserApi): Promise<number> {
@@ -106,6 +115,30 @@ describe("AccountService.createAccount — deletion fence", () => {
 		const account = await h.service.createAccount("p1", 1, 0, "A")
 		expect(account.address.length).toBeGreaterThan(0)
 		expect(await accountRowCount(h.api)).toBe(1)
+		expect(h.emit.mock.calls.filter(([e]) => e === "onAccountAdded")).toEqual([["onAccountAdded", account]])
+	})
+
+	test.each([
+		["a chain reserved for deletion before the write: refused, nothing written", (call: number) => call !== 1, /^network deleted$/],
+		["a chain reserved during the row write: the row is removed", (call: number) => call !== 2, /^network deleted$/],
+		["a liveness read that fails after the row write: the row is removed", readFailsOnSecondCall, /^read failed$/],
+	])("%s", async (_label, chainLive, refusal) => {
+		const h = await makeHarness({ chainLive })
+		await expect(h.service.createAccount("p1", 1, 0, "A")).rejects.toThrow(refusal)
+		expect(await accountRowCount(h.api)).toBe(0)
+		expect(h.emit).not.toHaveBeenCalled()
+	})
+
+	test("a profile deletion landing during the post-write liveness read: the row is removed, nothing emitted", async () => {
+		const h = await makeHarness({
+			chainLive: (call) => {
+				if (call === 2) h.deletion.beginDeletion("p1")
+				return true
+			},
+		})
+		await expect(h.service.createAccount("p1", 1, 0, "A")).rejects.toThrow(/^profile p1 deleted$/)
+		expect(await accountRowCount(h.api)).toBe(0)
+		expect(h.emit).not.toHaveBeenCalled()
 	})
 })
 
@@ -122,7 +155,13 @@ describe("AccountService restore writers — deletion fence", () => {
 				consumeDekRewrapContext: async () => ({ sourceDek: {} as never, destinationDek: {} as never }),
 			}),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => 1 }))
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
+				getL1ChainIdStored: async () => 1,
+			}),
+		)
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
 		await services.start()
@@ -206,7 +245,13 @@ describe("AccountService.restore — validation + provenance", () => {
 		services.add(
 			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => 1 }))
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
+				getL1ChainIdStored: async () => 1,
+			}),
+		)
 		accountService = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(accountService)
 		await services.start()
@@ -400,7 +445,13 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		services.add(
 			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => 1 }))
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
+				getL1ChainIdStored: async () => 1,
+			}),
+		)
 		services.add(new AccountService(new LoggerStore(new ConfigStore()), api))
 		await services.start()
 	}
@@ -458,6 +509,7 @@ describe("AccountService — same-row field editors serialize", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
 			}),
 		)
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
@@ -504,11 +556,19 @@ describe("AccountService.importAccount — deletion fence", () => {
 	const keyRowKey = `nulo:core:imported-account-keys@${accountRowId("p1", 1, "0xI")}`
 	const staleText = /^profile p1 is being deleted — write rejected \(epoch 0 → 1\)$/
 
-	async function makeHarness(over: { dekGate?: Promise<void>; l1Gate?: Promise<void>; afterSet?: (key: string) => void } = {}) {
+	async function makeHarness(
+		over: {
+			dekGate?: Promise<void>
+			l1Gate?: Promise<void>
+			afterSet?: (key: string) => void
+			chainLive?: (call: number) => boolean
+		} = {},
+	) {
 		const api = new FakeBrowserApi()
 		api.reset()
 		const deletion = new ProfileDeletionState()
 		const deks: Uint8Array[] = []
+		let liveCalls = 0
 		const services = new ServiceCollection()
 		services.add(
 			svc(PROFILE_SERVICE_NAME, {
@@ -525,6 +585,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => over.chainLive?.(++liveCalls) ?? true,
 				getL1ChainIdStored: async () => {
 					if (over.l1Gate) await over.l1Gate
 					return 1
@@ -658,6 +719,34 @@ describe("AccountService.importAccount — deletion fence", () => {
 		expect(h.dekWiped()).toBe(true)
 	})
 
+	test("a chain reserved for deletion before the writes: refused, nothing written", async () => {
+		const h = await makeHarness({ chainLive: () => false })
+		await expect(h.run()).rejects.toThrow(/^network deleted$/)
+		expect(h.log).toEqual([])
+		expect(added(h.emit)).toEqual([])
+		expect(h.dekWiped()).toBe(true)
+	})
+
+	test.each([
+		["a chain reserved during the account-row write", /^network deleted$/, () => false],
+		["a liveness read that fails after the account-row write", /^read failed$/, () => readFailsOnSecondCall(2)],
+		["a profile deletion landing during the post-write liveness read", /^profile p1 deleted$/, undefined],
+	])("%s: both rows removed, nothing announced", async (_label, refusal, postWrite) => {
+		const h = await makeHarness({
+			chainLive: (call) => {
+				if (call === 1) return true
+				if (postWrite) return postWrite()
+				h.deletion.beginDeletion("p1")
+				return true
+			},
+		})
+		await expect(h.run()).rejects.toThrow(refusal)
+		expect(h.log).toEqual([`set:${keyRowKey}`, `set:${accountKey}`, `remove:${accountKey}`, `remove:${keyRowKey}`])
+		expect(await h.keysLeft()).toEqual([])
+		expect(added(h.emit)).toEqual([])
+		expect(h.dekWiped()).toBe(true)
+	})
+
 	test("control: with no deletion both rows land and the account is announced", async () => {
 		const h = await makeHarness()
 		expect(await h.run()).toMatchObject({ profileId: "p1", chainId: 1, address: "0xI", type: 1, name: "I" })
@@ -679,7 +768,7 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		services.add(
 			svc(PROFILE_SERVICE_NAME, { onProfileDeleted: new EventHandler(), getDeletionState: () => new ProfileDeletionState() }),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
+		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
 		await services.start()
@@ -728,6 +817,20 @@ describe("AccountService purges wait for a rename holding the same row", () => {
 		const keys = Object.keys(await api.storage.local.get(null))
 		expect(keys.filter((k) => k === rowKey || k === keyRowKey)).toEqual([])
 	})
+
+	test("reconcileImportedAccounts: a keyless row is not written back by a rename parked on it", async () => {
+		const { api, service } = await makeHarness()
+		await api.storage.local.remove(keyRowKey)
+		const gate = parkRowRead(api)
+		const rename = service.changeAccountName("p1", 1, "0xaa", "renamed")
+		await gate.parked
+		const reconciling = service.reconcileImportedAccounts("p1")
+		await new Promise((r) => setTimeout(r, 0))
+		gate.release()
+		const [, dropped] = await Promise.all([rename, reconciling])
+		expect(dropped).toEqual([{ chainId: 1, address: "0xaa" }])
+		expect(Object.keys(await api.storage.local.get(null)).filter((k) => k === rowKey)).toEqual([])
+	})
 })
 
 describe("AccountService.provisionDefaultAccount — unattended rule", () => {
@@ -746,6 +849,7 @@ describe("AccountService.provisionDefaultAccount — unattended rule", () => {
 		services.add(
 			svc(NETWORK_SERVICE_NAME, {
 				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
 				resolveVerifiedL1ChainId: (_profileId: string, _chainId: number, opts?: { unattended?: boolean }) => resolve(opts),
 			}),
 		)
@@ -828,7 +932,13 @@ describe("AccountService keyed reads bind the row body to the requested address"
 				getProfileDek: async () => undefined,
 			}),
 		)
-		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => 1 }))
+		services.add(
+			svc(NETWORK_SERVICE_NAME, {
+				registerChainPurgeSubscriber: () => {},
+				isChainLive: async () => true,
+				getL1ChainIdStored: async () => 1,
+			}),
+		)
 		const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 		services.add(service)
 		await services.start()

@@ -23,7 +23,8 @@ const hasConfig = aztecConfig !== undefined
 
 test.skipIf(!hasConfig)(
 	"gas card fiat line renders from a seeded price cache (no live API)",
-	{ timeout: 120_000 },
+	// The fixture's L1 Fee Juice bridge runs inside this budget (about 90-110 s on its own).
+	{ timeout: 300_000 },
 	async ({ feeJuiceImportedExtension }) => {
 		const page = await openPopup(feeJuiceImportedExtension)
 		await waitForHash(page, "#/popup/general")

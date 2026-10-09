@@ -85,12 +85,17 @@ export const AUTHWIT_CALL_BINDING: SelectorBindingPolicy = { label: "authwit cal
 /** For the fast path, whose scope check authorized the call by its name alone. */
 export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "refused" }
 
+/** The refusal names the policy only: the claimed name, the resolved function and the target are
+ *  request values, and the message reaches records and log lines that no redactor can scrub. */
+function selectorBindingRefusal(policy: SelectorBindingPolicy): Error {
+	return new Error(`Scope violation: ${policy.label} does not match selector's function`)
+}
+
 /** Scope checks authorize a dApp call by its name, execution dispatches its selector: refuse
- *  unless the selector resolved (`fn`) to the function the name claims. `claim.to` appears in the
- *  message exactly as the caller passes it. */
+ *  unless the selector resolved (`fn`) to the function the name claims. */
 export function assertSelectorBinding(
 	fn: FunctionAbi | undefined,
-	claim: { readonly name?: string; readonly to: { toString(): string } },
+	claim: { readonly name?: string },
 	policy: SelectorBindingPolicy,
 ): FunctionAbi {
 	if (!fn) {
@@ -98,7 +103,7 @@ export function assertSelectorBinding(
 	}
 	const absentAllowed = policy.absentName === "allowed" && claim.name === undefined
 	if (!absentAllowed && claim.name !== fn.name) {
-		throw new Error(`Scope violation: ${policy.label} "${claim.name}" does not match selector's function "${fn.name}" on ${claim.to}`)
+		throw selectorBindingRefusal(policy)
 	}
 	return fn
 }

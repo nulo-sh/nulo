@@ -17,7 +17,7 @@
  *  - all I/O is injected, so every branch is unit-testable with zero secrets.
  */
 
-import { decideSyncPrAction, type Mergeability, NEEDS_RESOLUTION_LABEL, syncEligible } from "./open-sync-pr"
+import { decideSyncPrAction, type Mergeability, syncEligible } from "./open-sync-pr"
 
 export const SYNC_BRANCH_PREFIX = "sync/main-to-dev-v"
 
@@ -129,13 +129,18 @@ if (import.meta.main) {
 					merge_commit_sha?: string
 				}
 				const labels = (pr.labels ?? []).map((l) => l.name)
-				const isReleasePr = pr.merged_at != null && pr.base?.ref === "main" && (labels.includes("autorelease: tagged") || labels.includes("autorelease: pending"))
+				const isReleasePr =
+					pr.merged_at != null &&
+					pr.base?.ref === "main" &&
+					(labels.includes("autorelease: tagged") || labels.includes("autorelease: pending"))
 				if (isReleasePr && pr.merge_commit_sha) return pr.merge_commit_sha
 			}
 			return null
 		},
 		async findOpenSyncPr(branch) {
-			const res = await $`gh pr list --head ${branch} --base dev --state open --json number --jq ${".[0].number // empty"}`.nothrow().quiet()
+			const res = await $`gh pr list --head ${branch} --base dev --state open --json number --jq ${".[0].number // empty"}`
+				.nothrow()
+				.quiet()
 			if (res.exitCode !== 0) return null
 			const out = res.stdout.toString().trim()
 			return out ? Number(out) : null
@@ -154,9 +159,13 @@ if (import.meta.main) {
 			// re-baseline commit below is App-authored + signed. A fresh per-version branch on
 			// the normal path: if the ref already exists it's a stale branch from a prior
 			// partial run → fail loud so a human deletes it + re-runs.
-			const mkRef = await $`gh api -X POST ${`repos/${repo}/git/refs`} -f ref=${`refs/heads/${branch}`} -f sha=${baseSha}`.nothrow().quiet()
+			const mkRef = await $`gh api -X POST ${`repos/${repo}/git/refs`} -f ref=${`refs/heads/${branch}`} -f sha=${baseSha}`
+				.nothrow()
+				.quiet()
 			if (mkRef.exitCode !== 0) {
-				throw new Error(`could not create branch ${branch} at ${baseSha} (stale branch from a prior run? delete it + re-run): ${mkRef.stderr.toString().trim()}`)
+				throw new Error(
+					`could not create branch ${branch} at ${baseSha} (stale branch from a prior run? delete it + re-run): ${mkRef.stderr.toString().trim()}`,
+				)
 			}
 			// If the manifest already reads `version`, no re-baseline commit is needed — the
 			// branch (== baseSha) alone carries main's release commits into dev's ancestry
@@ -168,7 +177,10 @@ if (import.meta.main) {
 			// and satisfies dev's classic `required_signatures` with NO `--admin`. A plain bot
 			// `git commit` would be UNSIGNED → the merge would be blocked.
 			const shaArgs = blob ? ["-f", `sha=${blob.sha}`] : []
-			const put = await $`gh api -X PUT ${`repos/${repo}/contents/${PRERELEASE_MANIFEST}`} -f branch=${branch} -f message=${`chore: re-baseline prerelease manifest to ${version}`} -f content=${Buffer.from(desired).toString("base64")} ${shaArgs}`.nothrow().quiet()
+			const put =
+				await $`gh api -X PUT ${`repos/${repo}/contents/${PRERELEASE_MANIFEST}`} -f branch=${branch} -f message=${`chore: re-baseline prerelease manifest to ${version}`} -f content=${Buffer.from(desired).toString("base64")} ${shaArgs}`
+					.nothrow()
+					.quiet()
 			if (put.exitCode !== 0) {
 				throw new Error(`could not write ${PRERELEASE_MANIFEST} via the Contents API on ${branch}: ${put.stderr.toString().trim()}`)
 			}

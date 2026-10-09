@@ -19,7 +19,10 @@
  *     clear the journal WITHOUT restoring (restoring here would silently revert
  *     committed data underneath the new version marker).
  *   - valid backup + `version < backup.version` ⇒ interrupted mid-migration;
- *     restore the declared footprint from the backup, then clear + re-run.
+ *     restore the declared footprint from the backup, then clear + re-run —
+ *     only when the journal's refs equal its registered migration's declared
+ *     footprint and every entry lies inside it; otherwise fail closed to
+ *     `needs-recovery`, journal kept.
  *   - no backup ⇒ the crash predated any write; clear + proceed.
  *   - PRESENT-but-invalid backup ⇒ tampering/corruption (the backup is written
  *     as one atomic set, so a prep-crash cannot produce a partial one); fail
@@ -92,6 +95,24 @@ function isValidBackup(v: unknown): v is BackupPayload {
 		b.entries !== null &&
 		!Array.isArray(b.entries)
 	)
+}
+
+/** One text for every journal resume will not trust: the reason reaches the recovery screen
+ *  verbatim, and which check refused is a storage-forensics detail. */
+const INVALID_JOURNAL: MigrationResult = {
+	kind: "needs-recovery",
+	reason: "interrupted migration journal has an invalid backup payload",
+	retryable: false,
+}
+
+const refId = (r: StorageRef): string => (r.kind === "root" ? `root:${r.root}` : `value:${r.key}`)
+
+/** The keys `refs` cover. The engine's namespace is excluded unconditionally:
+ *  a migration cannot footprint the journal itself. */
+function footprintCovers(refs: StorageRef[]): (key: string) => boolean {
+	const roots = refs.flatMap((r) => (r.kind === "root" ? [`${r.root}@`] : []))
+	const values = new Set(refs.flatMap((r) => (r.kind === "value" ? [r.key] : [])))
+	return (k) => !k.startsWith(RESERVED_PREFIX) && (values.has(k) || roots.some((p) => k.startsWith(p)))
 }
 
 export interface MigratorOptions {
@@ -317,7 +338,7 @@ export class Migrator {
 		if (!isValidBackup(backup)) {
 			// The backup is written atomically, so partial-from-crash is impossible;
 			// an invalid one means tampering or corruption. Keep it, fail closed.
-			return { kind: "needs-recovery", reason: "interrupted migration journal has an invalid backup payload", retryable: false }
+			return INVALID_JOURNAL
 		}
 		// An armed journal REQUIRES a valid marker AND an in-range backup version
 		// (every path that writes the journal starts from a validated marker and
@@ -346,6 +367,7 @@ export class Migrator {
 			await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 			return undefined
 		}
+		if (!this.journalMatchesRegistry(backup)) return INVALID_JOURNAL
 		try {
 			await this.restore(backup)
 		} catch (err) {
@@ -379,6 +401,21 @@ export class Migrator {
 		// the run continuing past this point IS this boot's one authorized up().
 		await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 		return undefined
+	}
+
+	/** Whether the registered migration of the journal's version could have written it: its refs
+	 *  equal that migration's declared footprint and every entry lies inside them. `restore()`
+	 *  writes every entry and removes every key the refs cover, so this confines a restore to the
+	 *  registered footprint. It does not authenticate the journal: forged entries under matching
+	 *  refs still restore. Because of the equality, a shipped migration's footprint is frozen. */
+	private journalMatchesRegistry(backup: BackupPayload): boolean {
+		const m = this.migrations.find((x) => x.version === backup.version)
+		if (!m) return false
+		const declared = new Set([...m.reads, ...m.writes].map(refId))
+		const journaled = new Set(backup.refs.map(refId))
+		if (declared.size !== journaled.size || [...journaled].some((r) => !declared.has(r))) return false
+		const covers = footprintCovers(backup.refs)
+		return Object.keys(backup.entries).every(covers)
 	}
 
 	/** Bring the DECLARED footprint back to its pre-migration state: re-set the
@@ -429,18 +466,8 @@ export class Migrator {
 		await this.store.set({ [SCHEMA_BACKUP_KEY]: { ...backup, counted: true } satisfies BackupPayload })
 	}
 
-	/** Every live key covered by the refs. The engine's namespace is excluded
-	 *  unconditionally — a migration cannot footprint the journal itself. */
 	private async footprintKeysFor(refs: StorageRef[]): Promise<string[]> {
-		const roots = refs.flatMap((r) => (r.kind === "root" ? [`${r.root}@`] : []))
-		const values = new Set(refs.flatMap((r) => (r.kind === "value" ? [r.key] : [])))
-		const all = await this.store.get()
-		const out: string[] = []
-		for (const k of Object.keys(all)) {
-			if (k.startsWith(RESERVED_PREFIX)) continue
-			if (values.has(k) || roots.some((p) => k.startsWith(p))) out.push(k)
-		}
-		return out
+		return Object.keys(await this.store.get()).filter(footprintCovers(refs))
 	}
 
 	private async snapshot(keys: string[]): Promise<Record<string, unknown>> {

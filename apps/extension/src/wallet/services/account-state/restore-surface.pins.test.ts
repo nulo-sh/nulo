@@ -13,6 +13,12 @@ import { LoggerStore } from "@/wallet/logger"
 import { NETWORK_SERVICE_NAME, type Network, NodeStatus } from "@/wallet/services/network/spec"
 import { AccountStateService } from "./service"
 
+// The fixtures carry stub instances and artifacts; the class-id check has its own real-data tests.
+vi.mock("@nulo/aztec-runtime/pxe", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@nulo/aztec-runtime/pxe")>()),
+	assertWireArtifactClassId: vi.fn(async () => undefined),
+}))
+
 class FakeNetworkService implements IService {
 	public static readonly name = NETWORK_SERVICE_NAME
 	public readonly name = NETWORK_SERVICE_NAME

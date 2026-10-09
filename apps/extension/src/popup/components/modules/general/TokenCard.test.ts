@@ -57,7 +57,6 @@ const factory = (overrides: Record<string, unknown> = {}, tokenOverrides: Record
 		privateBalance: "0",
 		updatedAt: 0,
 		isUpdating: false,
-		isMinting: false,
 		...overrides,
 	}
 	return mount(TokenCard, {

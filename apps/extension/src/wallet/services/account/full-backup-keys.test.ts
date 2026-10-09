@@ -63,7 +63,13 @@ async function build() {
 	const logger = new LoggerStore(config)
 	const services = new ServiceCollection()
 	services.add(svc(PASSKEY_SERVICE_NAME, {}))
-	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, getL1ChainIdStored: async () => L1 }))
+	services.add(
+		svc(NETWORK_SERVICE_NAME, {
+			registerChainPurgeSubscriber: () => {},
+			isChainLive: async () => true,
+			getL1ChainIdStored: async () => L1,
+		}),
+	)
 	const profile = new ProfileService(config, logger, api)
 	services.add(profile)
 	const account = new AccountService(logger, api)

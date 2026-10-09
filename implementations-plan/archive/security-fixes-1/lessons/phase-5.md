@@ -1,0 +1,9 @@
+# Phase 5 — #31 profile RPCs return the projection
+
+- Eight returns now project: `createProfile`, `createPasskeyProfile`, `changeProfilePassword`, `importMnemonic` and `importPasskey` (through the two private import helpers, whose return type became `ProfileInfo`), and both `deleteProfile` returns go through `getProfileInfo`; `changeProfileName` returns the bare identity. `getProfileInfo` and `backup()` build their identity through `profileIdentity`.
+- The row known-answer vector tests pinned "returns it" (the stored row) for six RPCs. They keep their row vectors and lose the return assertion; the return shape lives in one table over all eight returns, which pins the exact projection rather than a key subset (no session in it is in recovery mode).
+- The `(BUG PIN)` rename test reaches recovery mode the way the degraded-open tests do (a corrupted `envelopeMac`, then unlock). Its comment states the pending product decision without naming the owner ask, per the comment rules (deviation from the plan's "name OA-1 in its comment").
+- `ExpiringStash.set` wipes the replaced entry after storing the new one, so the map never holds a wiped entry; the constructor passes no iterable, so `Map`'s constructor never calls the override before `wipe` is assigned.
+- Red on the base: the eight table rows, the BUG PIN (the base returns the row) and the two replacing-`set` stash tests; the two no-wipe stash tests are controls and pass on the base.
+- Gate: `vitest run src/wallet/services/profile/ src/popup/components/popups/EditProfilePopup.test.ts` 364 passed; `bun run lint` 0; `typecheck:all` 0.
+- Owner sign-off (2026-10-08) picked OA-1 = A: `changeProfileName` now returns `getProfileInfo`, and the `(BUG PIN)` test became a pin that the rename keeps `recoveryMode: true` (red on the identity return). The projection table's rename row, outside recovery mode, stays the control.

@@ -56,6 +56,7 @@ const incomingPriceService = new PriceServiceClient()
 const arrivals = inject(ARRIVALS_KEY, undefined)
 const {
 	incomingTransfers,
+	loaded: incomingLoaded,
 	refresh: loadIncomingTransfers,
 	dispose: disposeIncomingTransfers,
 } = useIncomingTransfers({
@@ -171,6 +172,7 @@ onBeforeUnmount(() => {
 		:class="$style.wrapper"
 		data-testid="activity-feed-root"
 		:data-active-account="appStore.account?.address"
+		:data-incoming-loaded="incomingLoaded ? 'true' : undefined"
 	>
 		<div :class="[$style.page_title_bar, !heroVisible && $style.page_title_bar_visible]">
 			<span :class="$style.page_title_label" data-testid="page-title-bar">HISTORY</span>

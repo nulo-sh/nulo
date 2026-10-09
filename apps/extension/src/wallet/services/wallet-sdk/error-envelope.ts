@@ -21,6 +21,7 @@ import {
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	ContractNotRegisteredError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
@@ -36,15 +37,26 @@ import {
 } from "@nulo/extension-messaging/errors"
 import type { WalletResponse } from "@aztec-labs/wallet-sdk/types"
 
+/** Every schema refusal's dApp text: one sentence that names no method and no argument value. */
+export const INVALID_PARAMS_MESSAGE = "The request's arguments do not match the wallet API."
+
 /**
- * PXE failures one in-wallet retry did not clear, transient from the dApp's side: the same -32603 +
- * discriminator shape as DuplicateInitializationError, with a constant message so neither the
- * node's text nor an account address crosses. A stale anchor fell out of the node's view (a reorg,
- * or nodes behind one endpoint disagreeing); an unregistered scope could not be loaded into the PXE.
+ * Classified errors whose dApp message is a wallet constant, so no node text, class id, address or
+ * argument value crosses.
+ * - -32603, transient from the dApp's side, the same shape as DuplicateInitializationError: PXE
+ *   failures one in-wallet retry did not clear. A stale anchor fell out of the node's view (a reorg,
+ *   or nodes behind one endpoint disagreeing); an unregistered scope could not be loaded into the PXE.
+ * - -32602 (JSON-RPC "Invalid params"), the dApp's to fix, raised before proving or any broadcast:
+ *   a contract the wallet was never given, which the dApp may register and retry ("not registered"
+ *   is the phrase dApp-side classifiers key on; no class id, since instance lookup can be served
+ *   from wallet-local data), and arguments the wallet API's schema refuses, whose own errors quote
+ *   the values.
  */
-const PXE_RETRY_ENVELOPES = [
-	[PxeStaleAnchorError, "The wallet's view of the chain was behind the node. Retry the request."],
-	[PxeScopeUnregisteredError, PxeScopeUnregisteredError.MESSAGE],
+const CONSTANT_ENVELOPES = [
+	[PxeStaleAnchorError, -32603, "The wallet's view of the chain was behind the node. Retry the request."],
+	[PxeScopeUnregisteredError, -32603, PxeScopeUnregisteredError.MESSAGE],
+	[ContractNotRegisteredError, -32602, "Contract not registered with the wallet. Register it and retry."],
+	[InvalidWalletArgumentsError, -32602, INVALID_PARAMS_MESSAGE],
 ] as const
 
 export function toWalletResponseError(error: unknown): WalletResponse["error"] {
@@ -180,20 +192,8 @@ export function toWalletResponseError(error: unknown): WalletResponse["error"] {
 			data: { walletErrorCode: DuplicateInitializationError.CODE },
 		}
 	}
-	const pxeRetry = PXE_RETRY_ENVELOPES.find(([ctor]) => error instanceof ctor)
-	if (pxeRetry) return { code: -32603, message: pxeRetry[1], data: { walletErrorCode: pxeRetry[0].CODE } }
-	if (error instanceof ContractNotRegisteredError) {
-		// -32602 = JSON-RPC "Invalid params": the request named a contract the wallet was never
-		// given. Raised only while resolving contracts — before proving, before any broadcast — so
-		// a dApp may register it and retry the same call safely. Constant message ("not registered"
-		// is the phrase dApp-side classifiers key on); no class id, since instance lookup can be
-		// served from wallet-local data and is therefore not established as public.
-		return {
-			code: -32602,
-			message: "Contract not registered with the wallet. Register it and retry.",
-			data: { walletErrorCode: ContractNotRegisteredError.CODE },
-		}
-	}
+	const constant = CONSTANT_ENVELOPES.find(([ctor]) => error instanceof ctor)
+	if (constant) return { code: constant[1], message: constant[2], data: { walletErrorCode: constant[0].CODE } }
 	// This value crosses the trust boundary INTO an arbitrary dApp — the one path here that leaves
 	// the machine — and by definition we did not recognise the error, so nothing about its text is
 	// known to be safe. Scrubbing and capping were tried and are not enough: a cap BOUNDS exposure
