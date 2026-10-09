@@ -159,9 +159,9 @@ No file this plan changes is in the list above, except the shared planning files
 - **134.** `docker-ci-like.sh` pipes `https://bun.sh/install` to `bash` and downloads Node
   `v24.16.0` (`NODE_VERSION` overridable) with no hash; the script already installs Aztec through the
   pinned `setup-aztec/install.sh`.
-- **142.** Unescaped: `attach-assets-run.ts` (`fail`, the `::warning::` asset line, the top-level
-  catch) and `publish-firefox-amo-run.ts` (`fail`, both `::add-mask::` lines, the validation-error
-  lines). The audits found the same pattern in `lock-version-run.ts` (2), `auto-unstick-run.ts`,
+- **142.** Tracked privately: GHSA-6cj6-wp78-52mc. The workflow-command sites: `attach-assets-run.ts`
+  (`fail`, the `::warning::` asset line, the top-level catch) and `publish-firefox-amo-run.ts`
+  (`fail`, both `::add-mask::` lines, the validation-error lines). The audits found more in `lock-version-run.ts` (2), `auto-unstick-run.ts`,
   `scripts/publish/check-digests.ts` and `scripts/ci-cd/assert-canary-results.ts` (2). Escaping pairs:
   `audit-gate.ts` and `publish-chrome-store-run.ts`. `test:release` runs `scripts/release/` and
   `scripts/publish/`; `test:ci-gating` runs `scripts/ci-cd/`.
@@ -357,7 +357,7 @@ entry's position at `61060c0`. Lane: *build P* (phase), *delete*, *rewrite*, or 
 | 139 | 134 | Nightly tags and releases are kept forever. | UNCHECKABLE | keep |
 | 140 | 135 | A store-match check. | HOLDS | keep |
 | 141 | 136 | CodeQL alert 23 re-raises dismissed alert 1 (`actions/cache-poisoning/poisonable-step`, hi | UNCHECKABLE | keep |
-| 142 | 137 | Two release scripts write error text into workflow commands unescaped. | HOLDS | build 3.3 |
+| 142 | 137 | Tracked privately: GHSA-6cj6-wp78-52mc. | HOLDS | build 3.3 |
 | 143 | NEW | The store's "security" capture now frames the Lock page. | NEW (checked by the driver) | keep |
 | 144 | NEW | Privacy § 5.3 still names Settings → Advanced. | NEW (checked by the driver) | keep |
 | 145 | 138 | The plans `.gitignore` catches only four transcript shapes. | HOLDS | keep |

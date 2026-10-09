@@ -686,8 +686,7 @@ async function deployContractsAndProvide(project: TestProject): Promise<void> {
 	} else {
 		// REUSE path (this run started nothing): the on-disk lock records the PRIOR run's live pids.
 		// Update ONLY the deployment fields in place - overwriting with our (empty) pid map and
-		// claiming ownership would let teardown clear a lock whose processes we cannot reap later
-		// (review CONFIRMED finding).
+		// claiming ownership would let teardown clear a lock whose processes we cannot reap later.
 		const prior = readLock()
 		if (prior) writeLock({ ...prior, l1ContractAddresses, deployedConfig: config })
 	}
@@ -818,7 +817,7 @@ const onExit = () => {
 	bestEffortKill(anvilProcess, weStartedAnvil)
 	// Deliberately NO clearLock here: these kills are fire-and-forget TERMs. If a TERM-resistant
 	// process survives, the lock is the ONLY record the next run's liveness-checked orphan reap
-	// can find it by - deleting it would orphan the survivor permanently (review CONFIRMED).
+	// can find it by - deleting it would orphan the survivor permanently.
 	// The awaited teardown() (KILL escalation) remains the sole ownership-gated lock clearer.
 }
 process.on("SIGINT", onExit)

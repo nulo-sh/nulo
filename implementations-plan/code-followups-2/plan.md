@@ -596,18 +596,17 @@ layer, a dependency, a storage shape or a new message. Paths below are relative 
       the pin's key;
     - the Bun pin's version equals `package.json#packageManager`, so a Bun bump that misses this site
       fails CI.
-- **3.3 One escaper (142).**
+- **3.3 One escaper (142, tracked privately: GHSA-6cj6-wp78-52mc).**
   - `scripts/release/workflow-command.ts` exports the `command(name, data)` / `plain(text)` pair. The
     two copies in `publish-chrome-store-run.ts` and `audit-gate.ts` have the same bodies; audit-gate's
     `command` narrows `name` to `"error" | "warning"`, and the shared one takes `string`.
   - Every TypeScript script that prints a workflow command uses it. The entry names two scripts; the
-    audits found the same unescaped pattern at eight more sites, all moved in this phase:
+    audits found eight more sites, all moved in this phase:
     - `attach-assets-run.ts`: `fail`, the `::warning::` asset line, the top-level catch;
-    - `publish-firefox-amo-run.ts`: `fail`, and both `::add-mask::` lines. A newline in a secret
-      would otherwise leave the rest of it unmasked. Every ordinary line that carries AMO text goes
-      through `plain`, as the Chrome script's `say` does: the validation errors, and the `check ok`,
-      `version ok` and `published` lines, which print AMO's `status`, `channel` and `fileStatus`
-      strings (`publish-firefox-amo.ts` accepts any string there);
+    - `publish-firefox-amo-run.ts`: `fail`, and both `::add-mask::` lines. Every ordinary line that
+      carries AMO text goes through `plain`, as the Chrome script's `say` does: the validation errors,
+      and the `check ok`, `version ok` and `published` lines, which print AMO's `status`, `channel`
+      and `fileStatus` strings;
     - `lock-version-run.ts`: `fail`, and the top-level catch, which prints GitHub GraphQL error text;
     - `auto-unstick-run.ts`: the flag warning;
     - `scripts/publish/check-digests.ts`: the failure lines;
@@ -616,9 +615,9 @@ layer, a dependency, a storage shape or a new message. Paths below are relative 
   - `audit-gate.ts` re-exports `command` and `plain` only if a caller outside the file uses them.
     Recon found only its test, whose escaping case moves to the shared module's test.
 - **3.4 Workflow-reference guard (163).**
-  - `scripts/ci-cd/workflow-refs.test.ts` uses `git grep -n -I -E` over tracked files under `apps/`,
-    `packages/`, `scripts/`, `.github/` and `.githooks/`, excluding `*.md`, `*.json`, `*.svg` and the
-    guard's own file.
+  - `scripts/ci-cd/workflow-refs.test.ts` reads the tracked text files under `apps/`, `packages/`,
+    `infra/`, `scripts/`, `.github/` and `.githooks/` (`git ls-files`, JavaScript regexes: D-arc3-2),
+    excluding `*.md`, `*.json`, `*.svg` and the guard's own file.
   - It refuses review or audit findings and rounds (`review finding`, `review CONFIRMED`,
     `audit round`, `per audit`), reviewer names with a review word, and the milestone shapes
     CLAUDE.md bans: `M4.10`, `A11.1`, `pre-A11`, `phase 4b`, `PR-2`, `Stage D`, `Arc N`.
@@ -975,7 +974,7 @@ The e2e gate is a smoke run of `profile-rename.test.ts` and `auth-flows.test.ts`
 
 ### Arc 3: CI, release scripts and docs
 
-#### Phase 3.1: the dead salt
+#### Phase 3.1: the dead salt ✓
 
 1. Remove the declaration, the env export and the 20 caller passes. Drop any `secrets:` block left
    empty.
@@ -992,7 +991,7 @@ actionlint parses every edited workflow. The PR's own network lanes, Chrome and 
 `_extension-network-e2e.yml` without the secret. `nightly.yml`, `release.yml` and the soak workflow
 are not dispatched from a feature branch.
 
-#### Phase 3.2: pinned bootstrap
+#### Phase 3.2: pinned bootstrap ✓
 
 1. Fetch the two artifacts and both `SHASUMS256.txt` files into `<SCRATCH>/pins/`, in a new empty
    directory. Check each hash against the publisher's list and against `sha256sum` of the artifact.
@@ -1012,7 +1011,7 @@ are not dispatched from a feature branch.
 - the same run in an image that already has another `bun` on `PATH` still uses the pinned one;
 - the same run with one pin altered exits non-zero before anything is extracted.
 
-#### Phase 3.3: one escaper
+#### Phase 3.3: one escaper ✓
 
 1. Create `workflow-command.ts` from the two copies, and use it at every site in § Architecture 3.3.
 2. `workflow-command.test.ts`:
@@ -1022,9 +1021,8 @@ are not dispatched from a feature branch.
    - a newline cannot start a second `::` command;
    - `plain` folds line breaks.
 3. `attach-assets-run.test.ts`, `publish-firefox-amo-run.test.ts` and `lock-version-run.test.ts`: a
-   `fail` reason or a validation error holding `\n::warning::forged` prints as one line with no
-   second command. In the AMO test, so does an add-on `status` holding the same payload on the
-   `check ok` line. The existing failure and normal-status cases are the controls.
+   `fail` reason or a validation error holding a line break and `##[` prints as one escaped line. In
+   the AMO test, so does an add-on `status` holding the same text on the `check ok` line. The existing failure and normal-status cases are the controls.
 
 **Gate:**
 
@@ -1032,7 +1030,7 @@ are not dispatched from a feature branch.
 - ``git grep -nE '`::(error|warning|notice|add-mask)::' -- 'scripts/*.ts' 'scripts/**/*.ts' ':!*.test.ts' ':!scripts/release/workflow-command.ts'``
   returns nothing.
 
-#### Phase 3.4: workflow-reference guard
+#### Phase 3.4: workflow-reference guard ✓
 
 1. Rewrite the six comments to the invariant alone, without the provenance:
    - `agent.sh:38`: keep why there is no signal trap, drop "(review CONFIRMED x5)";
@@ -1051,7 +1049,7 @@ are not dispatched from a feature branch.
   `agent.sh` and `global-setup.ts`. This is Arc 3's local e2e: the workflow edits themselves run
   only in CI.
 
-#### Phase 3.5: docs routing
+#### Phase 3.5: docs routing ✓
 
 1. Re-check that no open PR edits the two skill files or COMPOSITION-TESTS.md (each PR's own diff).
 2. Route 148, 150, and 149's two parts that are not CLAUDE.md's (the `aztec-update` skill line and
@@ -1136,10 +1134,7 @@ surface this lane could widen is the CI gate itself, and the shipped bundle or m
 - **134, the bootstrap.** It replaces a pipe-to-shell and an unchecked tarball with hash-pinned
   artifacts. The drift test stops a silent Bun bump from leaving a stale pin. Hashes are
   cross-checked against the publisher's list and the artifact itself.
-- **142, the escaper.** Release scripts print GitHub API and AMO validator text. Unescaped, a
-  newline or `##[` in that text can forge a workflow command: an annotation, `::add-mask::`, or
-  `::stop-commands::`, which silences the rest of the step's commands. The shared escaper closes
-  that at every site, and the tests feed a forged-command payload.
+- **142, the escaper.** Tracked privately: GHSA-6cj6-wp78-52mc.
 - **163, the guard.** It is a new gate. It can only fail a PR, never pass one that would fail today.
   - The risk is false positives. The vocabulary is narrow, and a clean control sample pins what it
     must allow.
@@ -1246,6 +1241,8 @@ None go to the owner (OWNER-ASKS.md). These are the working assumptions an audit
 | D-arc2-2 | 26: the seed page's unmount case asserts the late mnemonic's `join` is never called, beside the timer count | The countdown's own dispose guard already arms nothing after unmount, so a timer count alone passes without the page's fence; only a page that sets the phrase calls `join` | Reading the phrase from the DOM (the page is gone) |
 | D-arc2-3 | 125: signal only a group whose leader is alive at teardown's entry (a group whose leader already exited gets no signal at all, where base sent SIGTERM); report `stopped`, and keep the lock and the node's data directory when a group may survive (Arc 2 audit rounds 1 and 2: Codex C1, C2, R2-1; Opus 2) | From entry on, some member holds the group id, so it cannot pass to another run's group; once the leader has exited before teardown nothing proves the group never emptied, which § Architecture 2.3's "while any member lives" did not cover, and the lock reaper already refuses such a group (D9). The lock is a survivor's only record | A per-spawn ownership marker read from `/proc` (Linux-only, and more than the entry needs); escalating every group (signals a reused id); refusing escalation once the leader dies during the grace wait (R2-1's second half: it would undo the entry, and reuse in that window needs the cyclic pid cursor to wrap back to the id within one 100 ms poll) |
 | D-orch-2 | No edit to `follow-ups.md`, ever, the close-out included: each PR body lists the entries its arc closes with their governance ledger ids, and a partly built entry's remainder goes into the arc's section of the Outcome draft (orchestrator, at approval) | The file is being retired by the governance-1 lane, which turns every entry into an issue or a recorded disposition | § Close-out edits to follow-ups.md as planned |
+| D-arc3-1 | 142 is tracked privately (GHSA-6cj6-wp78-52mc, filed by the governance lane, #236): the arc's commits, test names, lessons and PR body describe the change only, and this plan's and recon's text that described the weakness is replaced by that pointer | `SECURITY.md` § How findings are tracked: until the advisory is published its finding appears in no committed plan, PR body or test name | Keeping the approved text (it predates the rule, and an archived plan's copy was already rewritten by #236) |
+| D-arc3-2 | 163: the guard reads the tracked files in JavaScript (`git ls-files`, then one regex per family) rather than `git grep -E`; its vocabulary adds `R<n>` and `round <n>` with a review word, which found a seventh comment (`coordinator.default-deriver.test.ts`, "The R1 audits'") | `git grep -E` has no portable `\b` (POSIX ERE leaves it to the platform's regex library), and the milestone shapes need word boundaries and case; a round number beside "audits" is the same provenance as "audit round" | `git grep -P` (needs a PCRE build); the plan's six-hit vocabulary (misses the seventh) |
 
 ## Audit verdicts
 
@@ -1279,7 +1276,7 @@ overlap with #55, #58, #75 or accessibility-1; F5 to F7, F9 to F11; titles and l
 | O3 | Binding the original id accepts an upgraded contract registered without an artifact; the entry's model is the stricter check | **Accepted** as a reason to park (D2). Opus's fix, the strict check, still changes which registrations succeed: an owner call |
 | O4 | Orphan reaping by group is wider than today; the tree's `ownership.ts` already rejects that reasoning | **Accepted** (D9), with the same fix as C3 |
 | O5 | The test's control signals an arbitrary pid on a shared host; a zombie answers `kill(pid, 0)` | **Accepted.** The reaper test is gone; the teardown test signals only its own groups and awaits the leader's exit |
-| O6 | Eight more unescaped workflow-command sites; the gate grep cannot pass; `command`'s type differs | **Accepted** (D16). All twelve sites are in the change map; the gate grep is rewritten; F10 corrected |
+| O6 | Eight more workflow-command sites; the gate grep cannot pass; `command`'s type differs | **Accepted** (D16). All twelve sites are in the change map; the gate grep is rewritten; F10 corrected |
 | O7 | `failureKind` is shared with the first-party Send path | **Accepted** (D21) |
 | O8 | `SendRecordView` has no error kind; the `TextEncoder` patch is unproven on Firefox | **Accepted.** The test reads the kind inline; a Firefox miss is recorded, never weakened |
 | O9 | The dev-watcher test goes vacuous under `extensions: ["vue"]`; the change map misstates two files | **Accepted.** The test plants `.test.vue`; the map is corrected |
@@ -1294,11 +1291,11 @@ Checked and holds (Opus): F1 and the overlap map against each PR's own diff; F2;
 constructor flips; OA-2's relay; 1.1 to 1.4's claims; F6 to F9, F11; deletions 29 and 183; the 107
 evidence; titles; no kept reason names a merged PR; the production CSP is unaffected.
 
-### Final fresh Codex pass (gpt-6.1-sol, high, read-only), `conditional approve (conditions: close the remaining workflow-command injection paths and correct the parking of small, invisible cleanup subitems)`
+### Final fresh Codex pass (gpt-6.1-sol, high, read-only), `conditional approve (conditions: move the remaining workflow-command sites onto the escaper and correct the parking of small, invisible cleanup subitems)`
 
 | # | Finding | Verdict |
 |---|---|---|
-| F1 | AMO's ordinary log lines print API strings (`status`, `channel`, `fileStatus`) raw, so a status holding `\n::warning::…` still forges a command | **Accepted.** Every AMO line carrying API text goes through `plain`; a hostile-status test with a normal-status control |
+| F1 | AMO's ordinary log lines that carry API strings (`status`, `channel`, `fileStatus`) belong on `plain` too | **Accepted.** Every AMO line carrying API text goes through `plain`; tested beside a normal-status control |
 | F2 | 172's first bullet and 186's late-listener bullet are invisible cleanups the record allowed; D19 misread it | **Accepted** (D19 revised, D23). Phase 2.5 builds both; both entries are rewritten to the rest |
 | F3 | Adding the scope refusal to the Terms debug branch would log "terms not accepted" for it | **Accepted** (D22 revised): its own branch and fixed text, asserted |
 | F4 | recon.md's reuse map still says to change `failureKind` and to bind the original class id | **Accepted.** Both rows corrected |
@@ -1349,6 +1346,69 @@ finding".** One minor: the narrowed § Security sentence bounded the window's lo
 window", but a fee-settings change in one window re-runs the estimate, and each failure logs.
 **Accepted**, reworded. The loop converged: every round-1 fix held, and no regression was found in
 the arc diff.
+
+### Arc 2 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| C1 / O2 | `killProcessGroup` can signal, and now SIGKILL, a reused group id when the leader and every member exited before teardown; the test's cleanup kills ids it proved gone | **Accepted** (D-arc2-3): only a group whose leader was alive at entry is escalated; the cleanup signals only a group still alive |
+| C2 | The final wait's result is dropped, so teardown deletes the data directory and clears the lock while a member survives | **Accepted** (D-arc2-3): `stopped` is returned; teardown keeps the lock and the node's data directory for the next run's reap |
+| C3 / O1 | The inline-script control does not separate the manifest policy from Chrome's baseline, so "`http:` admits `ws:`" is unproven | **Accepted.** A `fetch("data:")` control showed the dev popup runs under the baseline only; the claim is narrowed, the no-change decision stands (D-arc2-1, I1) |
+| O3 | `pages-options.test.ts` no longer reds when the plain `**/*.test.*` glob is deleted | **Accepted.** The watcher case runs under a dot-directory and a plain one; deleting the glob reds the plain case |
+| O4 | Three comments name their callers; "fails loudly" holds only under `E2E_REQUIRE_SETUP=1` | **Accepted.** Restated as invariants; the post-SIGKILL comment went with the `stopped` result |
+
+### Arc 2 round 2: Codex (resumed), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| R2-1 | A group whose leader exited before teardown still gets SIGTERM, possibly on a reused id; `leaderAliveOnEntry` does not prove ownership across the grace wait; the test cleanup cannot tell a replacement group | **Accepted in part** (D-arc2-3): an exited leader's group gets no signal; the cleanup signals only groups no case proved gone. **Rejected:** refusing escalation once the leader dies during the wait, which would undo entry 125 itself; reuse there needs the pid cursor to wrap back to the id within one 100 ms poll |
+| R2-2 | The stubborn-member cases race the shells' trap installation | **Accepted.** Each case waits for its member's `ready` after the traps are set; the leaderless case uses a member that dies on SIGTERM, so its survival shows nothing was sent |
+| R2-3 | The lock comment overstates what the next run's reap does safely | **Accepted.** Reworded to a best-effort record; the reaper's unconditional data removal is in entry 125's remainder |
+
+### Arc 2 round 3: Codex (resumed), `approve with fixes — no new material finding`
+
+| # | Finding | Verdict |
+|---|---|---|
+| R3-1 | Minor: `killProcessGroup`'s doc comment still claims a member holds the group id from entry on, stronger than the accepted residual risk | **Accepted.** It now says an unreaped leader pins the id for the first signal and escalation assumes no reuse between two polls |
+
+Round 3 verified every round-2 fix and found nothing new; the loop converged.
+
+Arc 2 round 1, checked and holds (both): every real route is still scanned; the overwrite mode keeps every
+declaration a template uses; the seed latch releases in `finally`; the race results and records
+are unchanged; no template, copy or selector changed; the budgets hold.
+
+### Arc 3 round 1: Codex (gpt-6.1-sol, high, read-only), `approve with fixes`; Opus (general-purpose), `approve with fixes`
+
+| # | Finding | Verdict |
+|---|---|---|
+| C1 | Material: `command("add-mask", …)` rewrote `##[`, so the runner masked a different string from the secret | **Accepted.** A mask's data is kept byte for byte (a `::` line parses before the legacy form is sought); every other command still neutralises `##[`; an exact round-trip case reds at the previous head |
+| C2 | The pin test's Bun controls hardcode `1.4.2`/`1.4.3`, so a correct Bun bump reds them | **Accepted.** They derive the script's `BUN_VERSION` and use the next patch |
+| C3 | The pin test checks that `sha256sum -c --strict` is present, not that its failure stops the script | **Accepted.** The check must end its statement with no `\|\|`, condition or assignment around it, under `set -euo pipefail`; `\|\| true`, `; true` and errexit-off controls |
+| C4 | The Playwright note states the record's "best fit" as the cause and drops "at the time of the spike" | **Accepted.** Both qualifiers restored |
+| O1 | Material: the download regex misses `if curl`, `while curl`, `! curl`, so an unpinned tarball in a condition passes | **Accepted.** The command-position alternation takes `!`, `else`, `if`, `elif`, `while`, `until`; an `if curl` control |
+| O2 | `lock-version-run`'s version half proves nothing: `packageVersion` refuses with a fixed reason | **Accepted.** The case keeps the branch half and its title says so |
+| O3 | Flake-ledger row 4's Firefox sentence cites a record that does not hold it | **Accepted.** It cites issue #185, where the sighting is recorded |
+| O4 | Rows 47 and 48 cite the lessons logs for numbers that live in the archived `plan.md`; "1 in 100 CI runs" overstates "one rerun in 100 network-lane runs" | **Accepted.** Both cite `plan.md` too; row 47 says network-lane runs |
+| O5 | The guard's scope leaves out `infra/`, which holds production code | **Accepted.** `infra` added; no hits there today |
+| O6 | A parenthetical in § Architecture 3.3 went beyond describing the change (`SECURITY.md` § How findings are tracked) | **Accepted.** Removed |
+| O7 | A rewritten comment in `tx-sendTx-multicall.test.ts` still names an unarchived plan path | **Accepted.** It names the `archive/` path |
+
+Also tightened: the guard refuses a dotted plan-phase number (`Phase 3.2`), with a planted sample; no
+hits in the tree.
+
+### Arc 3 round 2: Codex (resumed), `approve — no new material finding`
+
+Round 2 verified every round-1 fix: a mask's decoded value is exact and the runner's command echo
+prints `***`; the ignored-checksum mutations are refused and a correctly re-pinned Bun bump passes;
+the dropped version half leaves the meaningful assertions. It noted, without asking for a change,
+that the pin test is syntax-sensitive: a future `sha256sum -c --strict --quiet` or a quoted
+`"if curl …"` would need the guard adjusted. The loop converged.
+
+Arc 3 round 1, checked and holds (both): every caller lost the salt pass and nothing reads it; every
+workflow-command site under `scripts/` goes through `command`; the moved audit-gate case is unweakened;
+both pins equal the publishers' `SHASUMS256.txt`; verification precedes extraction and the pinned
+tools lead `PATH`, with `npm`, `node-gyp` headers and the cache volume still resolving; the other
+routed lines match their records.
 
 ## Post-implementation
 
@@ -1483,32 +1543,6 @@ Filled per arc as it lands; the close-out turns it into the `## Outcome` block (
 - Closed whole: 10, 37, 64, 65, 95, 102, 132 (issues #85, #102, #120, #121, #145, #150, #175). Nothing is left in part.
 - Deviations: § UI impact gained Home's Recent activity card, which shares History's card component (Codex A1-C1; the e2e asserts it and the PR shows it). `packages/wallet-bridge/README.md` and `packages/wallet-core/src/jobs/types.ts` were edited beyond the file map, docs only (Opus A1-O1, A1-O2).
 
-## Seeds
-
-Recommended: `/goal`, because its completion is visible in the transcript. Use exactly one per
-session.
-
-```
-/goal All phases in implementations-plan/code-followups-2/plan.md are marked ✓, each backed by its validation gate reported passing in the transcript; for each phase LESSONS_FILE=implementations-plan/code-followups-2/lessons/phase-N.md is printed; /code-review was NOT run (code_review is off); the Codex fix loop converged for each of the three arcs at its boundary and for the final cross-arc pass, each shown by a resumed gpt-6.1-sol pass reporting no new material finding, quoted in the transcript (or stopped at its third round and reported); Phase 1.5's after-shot texts match the plan's UI-impact table, quoted in the transcript; the four-layer gh stack exists on GitHub (gh stack view output in the transcript), opened only after the loops converged, with the close-out layer's archive-move commit shown by git show --stat; bun run test, bun run test:all and bun run lint all exit 0 in the transcript.
-```
-
-```
-/loop 15m Drive implementations-plan/code-followups-2 forward. Never idle. Each firing: (1) read plan.md and lessons/ from the stack's top layer; if the plan path is gone and `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/code-followups-2/plan.md` succeeds, run `agent-worktree done code-followups-2 --merged`, report its output, clear this loop and stop; if it fails, babysit the PRs only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step; run lint and the touched tests after each edit; commit; push only after the loops converge. (4) Stuck: consult Codex (gpt-6.1-sol, high) and log the verdict in lessons/phase-N.md; never cross a hard limit. (5) Same step failed 3 times: stop and reassess with Codex. (6) Phase gate green: paste it, mark ✓, print LESSONS_FILE; at an arc boundary run the Codex loop (hard stop at three rounds), then gh stack add. (7) All ✓: final cross-arc pass, Delivery, close-out, gh pr checks --watch, wrap-up report, stop.
-```
-
-## Follow-ups found during planning
-
-To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
-
-- **CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins** (Phase 3.2). The drift test
-  fails a Bun bump that misses them, but the runbook should list the site beside the others.
-  CLAUDE.md is in accessibility-1's file map.
-- **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1. Deleting it is
-  a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
-  entry.)
-
-
-
 ### Arc 2: extension pages, build and e2e harness
 
 - **Closed whole:** 26 (submit latches and the seed page's unmount fence; the countdown's `start()`
@@ -1542,3 +1576,54 @@ To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
     service-worker-served pages carry only Chrome's baseline extension policy), so a CSP
     regression shows only in production-mode builds: the e2e builds and their CSP recorder. A
     candidate issue for governance; nothing in this lane depends on it.
+
+### Arc 3: CI, release scripts and docs
+
+- **Closed whole:** 134 (`docker-ci-like.sh` installs Bun and Node only from its x64 hash pins,
+  always, first on `PATH`; a test ties the Bun pin to `package.json#packageManager`), 142 (tracked
+  privately: GHSA-6cj6-wp78-52mc; D-arc3-1), 148 and 150 (the eight gotchas, flake-ledger rows 47
+  and 48, and row 4's Firefox symptom files, without row 4's cause), 163 (the static guard, and the
+  seven comments it found rewritten; D-arc3-2).
+- **Closed in part; what is left:**
+  - 108: the network e2e workflows no longer pass `SPONSORED_FPC_SALT`. Left: the entry's first two
+    items (two concurrent sends from one spend source cannot both land; no Node-side progress stall
+    watchdog or fork memory cap), and the repository secret itself, which nothing reads now:
+    deleting it is a repository-settings change for the owner.
+  - 149: the `aztec-update` skill and `COMPOSITION-TESTS.md` lines shipped. Left: CLAUDE.md's
+    release runbook half (wrangler's `routes` rule, an agent session's refusal of domain changes);
+    CLAUDE.md is in PR #235's diff (D18).
+- **Also recorded:** the folded sighting in #185 (`waitForExecuteApprovable … feeMethod:null` in
+  `tx-sendTx-multicall` and `authwit-consume-smoke` on Firefox) now sits on flake-ledger row 4 as
+  its own symptom, without row 4's cause, which is all its issue section asks.
+- **Deviations:** the gate grep of Phase 3.3 matches one doc comment (`resolve-tag.ts:33`) that
+  prints nothing; the Firefox store script routes every ordinary line through `plain`, not only the
+  four named; `test:release` ran with a scratch `zip` on `PATH` (this host has none; CI's runners
+  do). Evidence: `lessons/phase-3.md`.
+- **Found on the way:** after #236 retired `follow-ups.md`, this plan's link to it failed
+  `check:plans` on `dev` (report mode on push); fixed here. Open, needs an issue: CLAUDE.md's
+  Bun-bump list does not name `docker-ci-like.sh`'s pins (the drift test fails a bump that misses
+  them, but the runbook should list the site).
+
+## Seeds
+
+Recommended: `/goal`, because its completion is visible in the transcript. Use exactly one per
+session.
+
+```
+/goal All phases in implementations-plan/code-followups-2/plan.md are marked ✓, each backed by its validation gate reported passing in the transcript; for each phase LESSONS_FILE=implementations-plan/code-followups-2/lessons/phase-N.md is printed; /code-review was NOT run (code_review is off); the Codex fix loop converged for each of the three arcs at its boundary and for the final cross-arc pass, each shown by a resumed gpt-6.1-sol pass reporting no new material finding, quoted in the transcript (or stopped at its third round and reported); Phase 1.5's after-shot texts match the plan's UI-impact table, quoted in the transcript; the four-layer gh stack exists on GitHub (gh stack view output in the transcript), opened only after the loops converged, with the close-out layer's archive-move commit shown by git show --stat; bun run test, bun run test:all and bun run lint all exit 0 in the transcript.
+```
+
+```
+/loop 15m Drive implementations-plan/code-followups-2 forward. Never idle. Each firing: (1) read plan.md and lessons/ from the stack's top layer; if the plan path is gone and `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/code-followups-2/plan.md` succeeds, run `agent-worktree done code-followups-2 --merged`, report its output, clear this loop and stop; if it fails, babysit the PRs only. (2) Waiting on CI is fine; confirm it progresses. (3) No task in hand: take the next pending step; run lint and the touched tests after each edit; commit; push only after the loops converge. (4) Stuck: consult Codex (gpt-6.1-sol, high) and log the verdict in lessons/phase-N.md; never cross a hard limit. (5) Same step failed 3 times: stop and reassess with Codex. (6) Phase gate green: paste it, mark ✓, print LESSONS_FILE; at an arc boundary run the Codex loop (hard stop at three rounds), then gh stack add. (7) All ✓: final cross-arc pass, Delivery, close-out, gh pr checks --watch, wrap-up report, stop.
+```
+
+## Follow-ups found during planning
+
+To move into `implementations-plan/follow-ups.md` at close-out unless resolved:
+
+- **CLAUDE.md's Bun-bump list does not name `docker-ci-like.sh`'s pins** (Phase 3.2). The drift test
+  fails a Bun bump that misses them, but the runbook should list the site beside the others.
+  CLAUDE.md is in accessibility-1's file map.
+- **The `SPONSORED_FPC_SALT` repository secret is read by nothing** after Phase 3.1. Deleting it is
+  a repository-settings change for the owner. (This goes into entry 108's rewrite, not a new
+  entry.)

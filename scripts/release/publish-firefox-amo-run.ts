@@ -35,6 +35,7 @@ import {
 	uploadStatusRequest,
 	versionRequest,
 } from "./publish-firefox-amo"
+import { command, plain } from "./workflow-command"
 
 export const REQUEST_TIMEOUT_MS = 15_000
 /** The upload of a 41 MB zip and its server-side validation are one request each; both get the long timeout. */
@@ -73,8 +74,11 @@ export interface RunIO {
 
 export type RunResult = { exit: 0 | 1 }
 
+/** Every ordinary line goes through here: several carry AMO's own strings. */
+const say = (io: RunIO, line: string) => io.log(plain(line))
+
 const fail = (io: RunIO, reason: string): RunResult => {
-	io.log(`::error::publish-firefox-amo: ${reason}`)
+	io.log(command("error", `publish-firefox-amo: ${reason}`))
 	return { exit: 1 }
 }
 
@@ -103,7 +107,7 @@ function readAuth(env: Record<string, string | undefined>, io: RunIO): Auth | nu
 	const issuer = env.AMO_JWT_ISSUER ?? ""
 	const secret = env.AMO_JWT_SECRET ?? ""
 	if (!issuer || !secret) return null
-	io.log(`::add-mask::${secret}`)
+	io.log(command("add-mask", secret))
 	return { issuer, secret }
 }
 
@@ -119,7 +123,7 @@ async function runCheck(env: Record<string, string | undefined>, io: RunIO): Pro
 		const mine = interpretOwnAddons(res.json, GECKO_ID)
 		if (!mine.ok) return fail(io, mine.reason)
 		if (mine.value.kind === "found") {
-			io.log(`check ok: ${GECKO_ID} is authored by this key pair — status ${mine.value.status}`)
+			say(io, `check ok: ${GECKO_ID} is authored by this key pair — status ${mine.value.status}`)
 			return { exit: 0 }
 		}
 		listed += mine.value.listed
@@ -145,13 +149,15 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 	const inputs = readInputs(env, io)
 	if (!inputs.ok) return fail(io, inputs.reason)
 	const { version, storeVersion, zipPath, sourcePath, notes } = inputs.value
-	io.log(
+	say(
+		io,
 		`zip ok: ${zipPath} — manifest version ${storeVersion} (version_name ${version}), gecko id ${GECKO_ID}, settled data declaration`,
 	)
-	io.log(`source ok: ${sourcePath}; reviewer notes: ${amoChars(notes)} chars`)
+	say(io, `source ok: ${sourcePath}; reviewer notes: ${amoChars(notes)} chars`)
 
 	if (dryRun === "true") {
-		io.log(
+		say(
+			io,
 			`dry run: would upload, validate, create version ${storeVersion} on the listed channel and attach the source; no request was made`,
 		)
 		return { exit: 0 }
@@ -165,7 +171,7 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 
 	const uploaded = await upload(io, auth, zipBytes, `nulo-firefox-${version}.zip`)
 	if (!uploaded.ok) return fail(io, uploaded.reason)
-	io.log(`upload ok: ${uploaded.value} validated`)
+	say(io, `upload ok: ${uploaded.value} validated`)
 
 	// From here on a failure may leave a version behind, whatever throws: the recovery always follows.
 	let created: Awaited<ReturnType<typeof createVersion>>
@@ -175,7 +181,7 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 		return fail(io, `create version: unexpected failure (${errorName(e)}); ${RECOVERY}`)
 	}
 	if (!created.ok) return fail(io, `${created.reason}; ${"rejected" in created && created.rejected ? REJECTED : RECOVERY}`)
-	io.log(`version ok: id ${created.value.id}, ${storeVersion} on ${created.value.channel}; file ${created.value.fileStatus}`)
+	say(io, `version ok: id ${created.value.id}, ${storeVersion} on ${created.value.channel}; file ${created.value.fileStatus}`)
 
 	let attached: Awaited<ReturnType<typeof attachSource>>
 	try {
@@ -185,7 +191,8 @@ async function runPublish(env: Record<string, string | undefined>, io: RunIO): P
 	}
 	if (!attached.ok) return fail(io, `version ${created.value.id} exists but ${attached.reason}; ${RECOVERY}`)
 
-	io.log(
+	say(
+		io,
 		`published: version ${created.value.id} (${storeVersion}, ${created.value.channel}, file ${created.value.fileStatus}); source attached; follow it in the Developer Hub`,
 	)
 	return { exit: 0 }
@@ -247,7 +254,7 @@ async function upload(io: RunIO, auth: Auth, zip: Uint8Array, filename: string):
 		if (!status.ok) return status
 		if (status.value.kind === "valid") return uuid
 		if (status.value.kind === "invalid") {
-			for (const e of status.value.errors) io.log(`validation error: ${e}`)
+			for (const e of status.value.errors) say(io, `validation error: ${e}`)
 			return { ok: false, reason: `AMO validation failed with ${status.value.errors.length} error(s); no version was created` }
 		}
 	}
@@ -272,7 +279,7 @@ type CallResult = { ok: true; status: number; json: unknown } | { ok: false; rea
 /** One request under its timeout with a fresh, masked JWT. A 4xx/5xx is a failure carrying only the API's strings. */
 async function call(io: RunIO, auth: Auth, req: ApiRequest, what: string, timeoutMs: number): Promise<CallResult> {
 	const token = jwt(auth.issuer, auth.secret, Math.floor(io.now() / 1000), io.jti())
-	io.log(`::add-mask::${token}`)
+	io.log(command("add-mask", token))
 	let res: ApiResponse
 	try {
 		res = await io.fetch(req, `JWT ${token}`, timeoutMs)

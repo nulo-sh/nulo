@@ -172,8 +172,6 @@ jobs:
       # partition is pinned by scripts/ci-cd/behavior-gating.test.ts.
       exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy:
     name: Run / heavy / fee-methods + selfpay-phase
@@ -197,8 +195,6 @@ jobs:
       # fee-methods is PLAIN proverless (no barrier; the fee flows don't depend
       # on prove duration). Proverless implies Presto OFF.
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy-concurrent:
     name: Run / heavy / concurrent-confirm
@@ -220,8 +216,6 @@ jobs:
       # STUB + barrier: proverless makes prove sub-second, so the test holds T1
       # at `proving` via the ProofGate to keep the ordering assert deterministic.
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-canary:
     name: Run / canary / real-proving
@@ -254,8 +248,6 @@ jobs:
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       # Real proving — Presto ON unless the emergency kill switch is set.
       disable_presto: ${{ github.event.inputs.disable_presto == 'true' || vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   status:
     name: extension-network-e2e-status

@@ -104,9 +104,6 @@ on:
         required: false
         type: string
         default: chrome
-    secrets:
-      SPONSORED_FPC_SALT:
-        required: false
 
 jobs:
   network-e2e:
@@ -119,7 +116,6 @@ jobs:
     env:
       NULO_E2E_BROWSER: ${{ inputs.browser }}
       AZTEC_NODE_URL: ${{ inputs.aztec_node_url }}
-      SPONSORED_FPC_SALT: ${{ !contains(inputs.aztec_node_url, 'localhost') && secrets.SPONSORED_FPC_SALT || '' }}
       # Baked into the wallet build at `bun run build:chrome` time (via the
       # agent.sh subprocess). When "1", `apps/extension/src/presto/config.ts`
       # sets `PRESTO_REQUIRED=true`, which makes the offscreen factory

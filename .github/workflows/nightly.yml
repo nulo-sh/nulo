@@ -208,8 +208,6 @@ jobs:
       # No `retry` input → config default (2 retries, 3 attempts). See header, flake policy.
       exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy:
     name: Run / heavy / fee-methods + selfpay-phase
@@ -221,8 +219,6 @@ jobs:
       shard_label: "heavy"
       test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy-concurrent:
     name: Run / heavy / concurrent-confirm
@@ -234,8 +230,6 @@ jobs:
       shard_label: "heavy-concurrent"
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-canary:
     name: Run / canary / real-proving
@@ -247,8 +241,6 @@ jobs:
       shard_label: "canary"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   # The seeded send chaos run (send-chaos.test.ts): a lead, not a gate. A fixed seed fixes the
   # actions, not their timing, so no aggregator or publish step waits on it; a red run logs the
@@ -265,8 +257,6 @@ jobs:
       proverless: true
       chaos: true
       chaos_seed: ${{ github.event.inputs.chaos_seed || '' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   # Advisory duplication trend (jscpd) — a report instrument, never a gate.
   # Deliberately absent from publish-nightly's needs; continue-on-error keeps a
@@ -375,8 +365,6 @@ jobs:
       shard_label: ${{ matrix.shard.label }}
       exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-chaos-firefox:
     name: Firefox / Run / chaos / sends
@@ -391,8 +379,6 @@ jobs:
       proverless: true
       chaos: true
       chaos_seed: ${{ github.event.inputs.chaos_seed || '' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy-firefox:
     name: Firefox / Run / heavy / fee-methods + selfpay-phase
@@ -405,8 +391,6 @@ jobs:
       shard_label: "heavy"
       test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-heavy-concurrent-firefox:
     name: Firefox / Run / heavy / concurrent-confirm
@@ -419,8 +403,6 @@ jobs:
       shard_label: "heavy-concurrent"
       test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
       proverless: true
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   network-e2e-canary-firefox:
     name: Firefox / Run / canary / real-proving
@@ -433,8 +415,6 @@ jobs:
       shard_label: "canary"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
-    secrets:
-      SPONSORED_FPC_SALT: ${{ secrets.SPONSORED_FPC_SALT }}
 
   smoke-firefox-against-artifact:
     needs: [resolve, build-firefox]

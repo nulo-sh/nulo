@@ -34,6 +34,7 @@ import {
 	truncate,
 	uploadRequest,
 } from "./publish-chrome-store"
+import { command, plain } from "./workflow-command"
 
 export const REQUEST_TIMEOUT_MS = 15_000
 export const UPLOAD_DEADLINE_MS = 3 * 60_000
@@ -63,14 +64,6 @@ export interface RunIO {
 
 export type RunResult = { exit: 0 | 1 }
 
-/** A workflow command with its data escaped the way the runner unescapes it, so API text cannot forge a second command. */
-const command = (name: string, data: string) =>
-	`::${name}::${data.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/##\[/g, "## [")}`
-/**
- * An ordinary line that may carry API text: no line break (a `::` command counts only at the
- * start of a physical line) and no `##[`, which the runner's legacy parser accepts anywhere.
- */
-const plain = (s: string) => s.replace(/[\r\n]+/g, " ").replace(/##\[/g, "## [")
 const say = (io: RunIO, line: string) => io.log(plain(line))
 
 const fail = (io: RunIO, reason: string): RunResult => {

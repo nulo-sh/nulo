@@ -14,6 +14,7 @@
 
 import { appendFileSync, mkdirSync } from "node:fs"
 import { assetNames, compareAssets, type LocalAsset, parseShasums, planAttach, type ReleaseState, type RemoteAsset } from "./attach-assets"
+import { command } from "./workflow-command"
 
 export interface ReleaseRecord {
 	id: number
@@ -63,7 +64,7 @@ export const SOURCE_COMMIT = "@SOURCE_COMMIT@"
 const READS = 3
 
 function fail(io: AttachIO, reason: string): 1 {
-	io.log(`::error::${reason}`)
+	io.log(command("error", reason))
 	return 1
 }
 
@@ -162,7 +163,8 @@ export async function runVerifyPublished(io: AttachIO, input: RunInput, notes: s
 	if (sums) return fail(io, sums)
 	for (const asset of local) {
 		const published = await io.sha256(`${dir}/${asset.name}`)
-		if (published !== asset.sha256) io.log(`::warning::${asset.name}: this run rebuilt ${asset.sha256}; the release ships ${published}`)
+		if (published !== asset.sha256)
+			io.log(command("warning", `${asset.name}: this run rebuilt ${asset.sha256}; the release ships ${published}`))
 	}
 	await io.editRelease(state.id, { body: notes })
 	io.output("dir", dir)
@@ -335,7 +337,7 @@ if (import.meta.main) {
 	try {
 		process.exit(await main(process.argv.slice(2), process.env, io))
 	} catch (e) {
-		console.log(`::error::${e instanceof Error ? e.message : "unexpected failure"}`)
+		console.log(command("error", e instanceof Error ? e.message : "unexpected failure"))
 		process.exit(1)
 	}
 }

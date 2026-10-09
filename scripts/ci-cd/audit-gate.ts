@@ -13,6 +13,7 @@
 import { appendFileSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { parseArgs } from "node:util"
+import { command, plain } from "../release/workflow-command"
 
 export const ACKS_FILE = join(import.meta.dir, "audit-acks.json")
 export const SEVERITIES = ["low", "moderate", "high", "critical"] as const
@@ -312,13 +313,6 @@ export function renderSummary(judgement: Judgement, mode: AuditMode): string {
 	}
 	return lines.join("\n")
 }
-
-/** A workflow command whose data is escaped as the runner unescapes it, so report text cannot forge another. */
-export const command = (level: "error" | "warning", message: string): string =>
-	`::${level}::${message.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/##\[/g, "## [")}`
-
-/** An ordinary log line: a `::` command counts only at a line's start, but the runner's legacy `##[` anywhere. */
-export const plain = (text: string): string => text.replace(/[\r\n]+/g, " ").replace(/##\[/g, "## [")
 
 function problems(judgement: Judgement): string[] {
 	return [
