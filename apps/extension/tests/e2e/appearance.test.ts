@@ -6,7 +6,7 @@ test("cycle theme system → light → dark verifies html[theme=…] each step",
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 
 	await setTheme(page, "system")
 	const systemTheme = await page.evaluate(() => document.documentElement.getAttribute("theme"))
@@ -26,7 +26,7 @@ test("animations toggle persists across navigation", async ({ registeredExtensio
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await page.waitForSelector('[data-testid="animations-toggle"]', { visible: true, timeout: 5_000 })
 
 	// `data-toggle-active` reflects the Toggle's modelValue directly — a stable
@@ -49,17 +49,13 @@ test("animations toggle persists across navigation", async ({ registeredExtensio
 	expect(after).not.toBe(before)
 
 	// Navigate away and back. Use `/about` — a real sibling settings page.
-	// (Previously navigated to `/privacy`, but `src/popup/pages/settings/`
-	// has no `privacy.vue`, so the hash never settled and waitForFunction
-	// timed out at 5s. about.vue exists, has no auto-redirect, and is
-	// already exercised by `navigation.test.ts`.)
 	await navigateByHash(page, "#/popup/settings/about")
-	// The hash wait proves nothing about RENDERING — until the appearance
+	// The hash wait proves nothing about RENDERING — until the Display
 	// component actually unmounts, the later waitForSelector could satisfy
 	// itself on the same mounted toggle and the "persisted" read would prove
 	// nothing. Gate on the toggle leaving the DOM first.
 	await page.waitForFunction(() => !document.querySelector('[data-testid="animations-toggle"]'), { timeout: 5_000, polling: 100 })
-	await navigateByHash(page, "#/popup/settings/appearance")
+	await navigateByHash(page, "#/popup/settings/display")
 	await page.waitForSelector('[data-testid="animations-toggle"]', { visible: true, timeout: 5_000 })
 
 	// The remount's `getProps` RPC resolves BEFORE the toggle renders (the
@@ -79,16 +75,15 @@ test.skip("theme persists across navigation away and back", async ({ registeredE
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await setTheme(page, "light")
 
 	// Navigate to a different settings page and back. Uses `/about` — a real
-	// sibling settings page. (Previously `/privacy`, which has no `.vue`
-	// page; vue-router never settles the hash there.)
+	// sibling settings page.
 	await navigateByHash(page, "#/popup/settings/about")
 	expect(await page.evaluate(() => document.documentElement.getAttribute("theme"))).toBe("light")
 
-	await navigateByHash(page, "#/popup/settings/appearance")
+	await navigateByHash(page, "#/popup/settings/display")
 	expect(await page.evaluate(() => document.documentElement.getAttribute("theme"))).toBe("light")
 
 	expect(registeredExtension.consoleErrors).toEqual([])

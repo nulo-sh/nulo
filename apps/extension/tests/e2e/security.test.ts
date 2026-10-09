@@ -88,7 +88,7 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateByHash(page, "#/popup/settings/security")
+	await navigateByHash(page, "#/popup/settings/lock")
 	await page.waitForSelector('[data-testid="auto-lock-input"]', { visible: true, timeout: 5_000 })
 
 	// Targets the descendant <input> of the wrapper that received the testid
@@ -100,11 +100,8 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	await waitForToast(page, "Auto-lock timeout updated")
 
 	// Navigate away and back. Uses `/about` — a real sibling settings page.
-	// (Previously `/privacy`, which has no `.vue` page in
-	// `src/popup/pages/settings/`; vue-router never settled the hash there
-	// and waitForFunction timed out at 5s.)
 	await navigateByHash(page, "#/popup/settings/about")
-	await navigateByHash(page, "#/popup/settings/security")
+	await navigateByHash(page, "#/popup/settings/lock")
 
 	await page.waitForSelector('[data-testid="auto-lock-input"]', { visible: true, timeout: 5_000 })
 

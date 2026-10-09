@@ -391,7 +391,7 @@ assertion; drive the rest of the flow with the ordinary helpers.
   (`console._log`). `pageerror` is reliable for uncaught throws and rejections. `readSwLogTrail`
   (`fixtures/journal.ts`, `nulo:logs`, 2s flush debounce, bounded) reads the worker's log ring — but
   that flush is gated on `developerMode`, which e2e profiles do not enable, so it returns an empty
-  trail unless the test turned Developer Mode on first (the toggles on `#/popup/settings/advanced`,
+  trail unless the test turned Developer Mode on first (the toggles on `#/popup/settings/developer`,
   see the playground subsection); empty means not retained. An error the app
   catches and merely logs reaches neither fixture array. Assert on DOM, storage, or stage evidence
   instead. Approval sub-windows carry no listeners at all.
@@ -457,7 +457,7 @@ the pattern.
 - **The dApp never sees the wallet's real error.** A failed `simulateTx` / `sendTx` reaches the feed
   as `"The wallet could not process the request."` (the scrubbed envelope, by design). The reason
   is in the worker's log trail, retained only with Developer Mode on: toggle
-  `settings-toggle-developerMode` + `settings-toggle-debugMode` on `#/popup/settings/advanced`
+  `settings-toggle-developerMode` + `settings-toggle-debugMode` on `#/popup/settings/developer`
   (reach it with `navigateByHash`, not `page.goto`), then `readSwLogTrail(popup, { match })`,
   polling for an entry with `timestamp >= <the cell's start>` past the 2s flush debounce
   (`swTrail` in the spec).

@@ -1,7 +1,7 @@
 /**
  * Coverage focus: a single malformed note must NOT blank out the entire list.
  * The failure mode under test is the silent-render symptom the user reported
- * on `Settings → Advanced → Account State → Notes` — fetch succeeded with
+ * on `Settings → Developer → Account State → Notes` — fetch succeeded with
  * non-empty results, but no cards rendered. Root cause class: `parseNote`
  * throwing on one entry crashed the whole list. Fix: per-note try/catch
  * surfacing the bad entry as `renderError`.

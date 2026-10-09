@@ -211,7 +211,7 @@ to log something sensitive.
   Mode on; turning it off purges the stored copy, and so does "Clear logs". `chrome.storage.session`
   is memory-backed — a browser restart, extension update or reload clears it, so a log is a
   short-lived in-session artifact, not a disk record.
-- **Reading them**: with Developer Mode on, Settings → Advanced shows a Logs row that opens the
+- **Reading them**: with Developer Mode on, Settings → Developer shows a Logs row that opens the
   viewer window (`popup/windows/logger/`), which renders the buffer and exports it as CSV. That
   export is the reason this policy exists — it is the path by which a user's logs become a public
   bug report.

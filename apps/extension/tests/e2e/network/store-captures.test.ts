@@ -126,7 +126,7 @@ async function stageWallet(page: Page, chain: Chain): Promise<void> {
 	await importSeed(page, chain.words.join(" "), TEST_PASSWORD, POPUP_IMPORT_SHELL)
 	await switchToLocalNetwork(page)
 	await waitForActiveAccount(page, chain.account, 60_000)
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await setTheme(page, "dark")
 	await renameNetwork(page, "Testnet", "Aztec Testnet")
 	await renameNetwork(page, "Local Network", "Testnet")
@@ -354,7 +354,7 @@ async function captureHistory(page: Page): Promise<void> {
 }
 
 async function captureSecurity(page: Page): Promise<void> {
-	await navigateToSettings(page, "security")
+	await navigateToSettings(page, "lock")
 	await page.waitForSelector('[data-testid="setting-strict-security-mode"]', { visible: true, timeout: 15_000 })
 	await capture(page, "security")
 }

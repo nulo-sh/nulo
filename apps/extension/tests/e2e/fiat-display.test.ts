@@ -32,7 +32,7 @@ test("settings carries the 'Show fiat values' kill-switch and it toggles", async
 	const page = await openPopup(registeredExtension)
 	await waitForHash(page, "#/popup/general")
 
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "privacy")
 	await page.waitForSelector('[data-testid="fiat-values-toggle"]', { visible: true, timeout: 5_000 })
 
 	// Toggle publishes its state as `data-toggle-active`; read and wait on that

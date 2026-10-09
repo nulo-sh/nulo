@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { z } from "zod"
+import type { RunFence } from "@/wallet/services/profile/spec"
 
 export const CONTACT_SERVICE_NAME = "contact"
 
@@ -34,8 +35,10 @@ export const ContactSchema: z.ZodType<Contact> = z.object({
 export type Methods = {
 	/**
 	 * Returns a list of contacts.
+	 * @param fence When given, the contacts of the fence's profile, refused unless its session is the
+	 * live one (`assertRunFence`). Omitted or `null`: the active profile's.
 	 */
-	getContacts(): Contact[]
+	getContacts(fence?: RunFence | null): Contact[]
 
 	/**
 	 * Returns a contact with the specified id.
@@ -54,16 +57,20 @@ export type Methods = {
 	 * @param name Display name, stored as `sanitizeContactName` returns it; refused when nothing of it
 	 * would be stored.
 	 * @param address contact address.
+	 * @param fence When given, the contact is written to the fence's profile, refused unless its
+	 * session is live when the call starts and again right before the write starts.
 	 */
-	addContact(name: string, address: string): Contact
+	addContact(name: string, address: string, fence?: RunFence | null): Contact
 
 	/**
 	 * Changes contact name and address and returns the updated contact.
 	 * @param id Contact id.
 	 * @param name New contact name, stored and refused as in `addContact`; omitted or empty keeps it.
 	 * @param address New contact address.
+	 * @param fence When given, the contact must belong to the fence's profile; refused as in
+	 * `addContact`.
 	 */
-	updateContact(id: string, name?: string, address?: string): Contact
+	updateContact(id: string, name?: string, address?: string, fence?: RunFence | null): Contact
 
 	/**
 	 * Deletes contact with the specified id.
