@@ -23,7 +23,7 @@ post_implementation_hardening: not scheduled
   - [#58](https://github.com/nulo-sh/nulo/pull/58), arc 3: #14, option A. The emoji check has "They don't match" beside "They match": it ends the app's live channels on that network under its profile and deletes every row of the app under that profile, read raw by storage key. The check's copy no longer claims more than it proves, on the window and the app's settings page. Session teardown keeps another profile's stamped channels.
 - **Owner answers.** Decision page, 2026-10-08 ([OWNER-ASKS.md](OWNER-ASKS.md) § Answers): 1. "**D**, split by profile type: A on password profiles, B on passkey profiles"; 2. "**A**, two equal controls"; 3. "**Yes**, keep today's behaviour: closing answers nothing"; 4. "**Yes**, go ahead". Result page, signed off 2026-10-09 12:50 UTC (§ Answers: result page, 2026-10-09): r1 "**C**, a red variant of the regular button"; r2 "**Yes**, ship as built" (a profile switch in another window resets the export page); r3 "**Yes**, ship as built" (ending an app's session is scoped to the profile that owns it).
 - **Dropped**: Phase 3.3 (closing the check window ends the session), on call 3's "yes"; turning the check into a gate is #15. Phase 1.1's per-backup key for passkey profiles, since whoever opens that file's key already holds the passkey. The cross-arc Codex pass over the net diff (Post-implementation step 3) was not run: each arc's loop converged, and the last loop was scoped to the red button's diff.
-- **Open items**: moved to [follow-ups](../../follow-ups.md): the single-account export's unencrypted download, a full backup that cannot open some imported-key rows naming no loss, the render caveats (the red button's hover contrast, the instruction against an uppercase label), closing the check window keeping the session (under #15), and the residual of the cross-profile teardown entry (a handshake not yet stamped still ends). No issue stays open.
+- **Open items**: the single-account export's unencrypted download (#230), a full backup that cannot open some imported-key rows naming no loss (#231), the render caveats (the red button's hover contrast, the instruction against an uppercase label; #229), closing the check window keeping the session (#15), and the residual of the cross-profile teardown entry, a handshake not yet stamped still ending (#228).
 - **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # Security UI 1: backup encryption, a refusal on the emoji check, a per-backup key
@@ -40,7 +40,7 @@ Three security findings. Two of them change a screen, so the owner picks how the
 
 **Out, with reason:**
 - #15 (dApp calls dispatch before the person answers the check). "They don't match" ends the session but cannot undo a call already dispatched; making the check a gate is #15's work.
-- The single-account export page (`settings/security/export/account.vue`) also saves an unencrypted signing key after a recommendation banner (`:273`). Same class as #34, outside its scope; it goes to `follow-ups.md` at close-out.
+- The single-account export page (`settings/security/export/account.vue`) also saves an unencrypted signing key after a recommendation banner (`:273`). Same class as #34, outside its scope; it goes to `follow-ups.md` at close-out (now #230).
 - No storage migration. The change keeps every persisted shape.
 
 ## Owner dependencies
@@ -507,7 +507,7 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 | 3 | Key wiping was tested only on the seal-failure path. | Low | Accepted: the lock test asserts both keys are zero after a fence refusal. |
 | 4 | A doc comment still pointed at `exportBackupMaterial`. | Low | Accepted. |
 | 5 | The orphan sweep runs at service start, not "after a restore". | Low | Accepted: reworded. |
-| 6 | Rows that do not open still report `dekReplaced: false`, so the page names no loss though the restore drops those accounts (unchanged from before). | Observation | Not acted on: surfacing it changes what the page shows, an owner call. Goes to `follow-ups.md` at close-out. |
+| 6 | Rows that do not open still report `dekReplaced: false`, so the page names no loss though the restore drops those accounts (unchanged from before). | Observation | Not acted on: surfacing it changes what the page shows, an owner call. Goes to `follow-ups.md` (now #231) at close-out. |
 | 7 | A fence refusal during the key export shows "wrong password". | Observation | Already accepted (lessons/phase-1.md). |
 | 8 | `atob` accepts whitespace inside the body and unpadded base64. | Observation | Harmless: the tag match is exact and AES-GCM authenticates the frame. |
 

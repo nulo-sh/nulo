@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Importing a full backup exported at an older backup schema now migrates it in memory through the real migration engine before restore (`apps/extension/src/wallet/services/backup/backup-migrator.ts`, `apps/extension/src/wallet/services/backup/backup-migration-registry.ts`, `apps/extension/src/wallet/services/backup/row-map-migration.ts`, wired in `apps/extension/src/composables/useFullBackupImport.ts`).
-- **Open items**: `passkey-backup.test.ts`'s export case is skipped on CI and fails on a fast host, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: `passkey-backup.test.ts`'s export case is skipped on CI and fails on a fast host, tracked in #163.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the clause-dash ban in `apps/extension/src/utils/copy-dash-ban.test.ts`, the glossary line in `apps/extension/src/utils/glossary.ts`, the snack layer over the Terms sheet in `apps/extension/src/popup/app.vue`, and the spoken unknown-contract row in `apps/extension/src/components/composite/capabilities/DetailsTable.vue`.
-- **Open items**: Add token shows the PXE store's two developer errors (the wedged-store refusal and the store version mismatch) in developer wording, split at the dash only; mapping them to user copy is a copy decision, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: Add token shows the PXE store's two developer errors (the wedged-store refusal and the store version mismatch) in developer wording, split at the dash only; mapping them to user copy is a copy decision, tracked in #136.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

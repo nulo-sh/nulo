@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Enter confirms a transaction popup only from its own focused confirm button, `createAuthWit` refusals carry fixed text, trust writes land only in the session and profile incarnation that decided them, and profile deletion removes the pinned-tokens key (`apps/extension/src/composables/usePopupEntity.ts`, `packages/wallet-bridge/src/method-scope-checkers.ts`, `apps/extension/src/wallet/services/incoming-transfer/service.ts`).
-- **Open items**: residual cases around profile-keyed state, trust writes and token-add cleanup, and the e2e notes to route into the testing skill, all tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: residual cases around profile-keyed state, trust writes and token-add cleanup, and the e2e notes to route into the testing skill, all tracked in #91, #92, #93, #94 and #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

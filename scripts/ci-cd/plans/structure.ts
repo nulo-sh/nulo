@@ -23,6 +23,7 @@ import {
 	PLANS,
 	parseIndex,
 	REGULAR_MODES,
+	RETIRED_FILES,
 	type RuleId,
 } from "./lib"
 import { type Bases, isAllowedPermalink } from "./permalinks"
@@ -316,6 +317,18 @@ export function curatedBudgetFindings(ctx: Ctx, docs: ReadonlyMap<string, Doc>, 
 		}
 	}
 	return findings
+}
+
+export function retiredFileFindings(ctx: Ctx): Finding[] {
+	return RETIRED_FILES.filter((path) => ctx.tracked.has(path)).map((path) =>
+		finding(
+			"retired-file",
+			path,
+			1,
+			`${path} is retired: open work lives in GitHub issues`,
+			"delete it; open an issue per item, or a draft advisory for an exploitable one (CLAUDE.md § Where open work lives)",
+		),
+	)
 }
 
 function localPathScope(ctx: Ctx): (path: string) => boolean {

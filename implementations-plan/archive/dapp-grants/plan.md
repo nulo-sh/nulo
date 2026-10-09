@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: A typed scope-refusal class (`packages/wallet-bridge/src/scope-violation.ts`, `packages/extension-messaging/src/errors.ts`), one frozen dApp-facing refusal envelope (`apps/extension/src/wallet/services/wallet-sdk/error-envelope.ts`, documented in `packages/wallet-bridge/README.md`), a `scope_refused` journal outcome (`apps/extension/src/wallet/services/wallet-sdk/queued-journal.ts`, `apps/extension/src/utils/journal-state.ts`) and a capability answer that reports the stored grant, covered by `apps/extension/tests/e2e/network/scope-refusal.test.ts`.
-- **Open items**: honest labels for failures other than scope refusals before a dApp send is claimed, a way for a dApp to widen a contract-classes grant, and a cap on repeated refusal rows in Activity, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: honest labels for failures other than scope refusals before a dApp send is claimed (#83) and a way for a dApp to widen a contract-classes grant (#84); one more is tracked privately: GHSA-gmg4-4ccr-fr65.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

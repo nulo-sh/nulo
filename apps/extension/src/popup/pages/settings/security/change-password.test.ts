@@ -100,6 +100,24 @@ describe("change password — Enter does what the focused control says", () => {
 	})
 })
 
+describe("change password — one change per press", () => {
+	test("two same-tick clicks, before the disabled state renders, send one change", async () => {
+		const w = await mountWithValidFields()
+		submit(w).click()
+		submit(w).click()
+		await flushPromises()
+		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+	})
+
+	test("(control) one click sends one change", async () => {
+		const w = await mountWithValidFields()
+		submit(w).click()
+		await flushPromises()
+		expect(profileClient.changeProfilePassword).toHaveBeenCalledTimes(1)
+		expect(profileClient.changeProfilePassword).toHaveBeenCalledWith("p1", "old-password", "new-password-1")
+	})
+})
+
 describe("change password — the credential fields' controls", () => {
 	const FIELDS = ["current-password-input", "new-password-input", "new-password-repeat-input"]
 	async function mountEmpty() {

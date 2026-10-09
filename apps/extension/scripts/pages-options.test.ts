@@ -28,25 +28,35 @@ describe("the Pages route scan", () => {
 		expect(colocatedTests.length).toBeGreaterThan(0)
 	})
 
-	test("the configured scan drops exactly the test modules the defaults would route", async () => {
+	test("the configured scan routes exactly the .vue pages", async () => {
+		const pages = PAGES_OPTIONS.dirs
+			.flatMap(({ dir }) => filesUnder(dir))
+			.filter((file) => file.endsWith(".vue") && !TEST_MODULE.test(file))
+			.map((file) => join(root, file))
+		const configured = await routedFiles(PAGES_OPTIONS)
+		expect(pages.length).toBeGreaterThan(0)
+		expect(configured.toSorted()).toEqual(pages.toSorted())
+	})
+
+	test("no helper module becomes a route, where the defaults would route them", async () => {
 		const byDefault = await routedFiles({ dirs: PAGES_OPTIONS.dirs })
 		const configured = await routedFiles(PAGES_OPTIONS)
-		expect(byDefault.filter((file) => TEST_MODULE.test(file)).length).toBeGreaterThan(0)
-		expect(configured.toSorted()).toEqual(byDefault.filter((file) => !TEST_MODULE.test(file)).toSorted())
+		expect(byDefault.filter((file) => file.endsWith(".ts") && !TEST_MODULE.test(file)).length).toBeGreaterThan(0)
+		expect(configured.filter((file) => file.endsWith(".ts"))).toEqual([])
 	})
 })
 
 describe("the Pages dev watcher", () => {
-	test("under a dot-directory, an added test module never becomes a route and an added page does", async () => {
+	test.each([".worktrees/ext", "ext"])("under %s, an added test page never becomes a route and an added page does", async (checkout) => {
 		const base = mkdtempSync(join(tmpdir(), "pages-watch-"))
 		try {
-			const worktree = join(base, ".worktrees", "ext")
+			const worktree = join(base, checkout)
 			for (const { dir } of PAGES_OPTIONS.dirs) mkdirSync(join(worktree, dir), { recursive: true })
 			const context = new PageContext(PAGES_OPTIONS, worktree)
 			const watcher = new EventEmitter()
 			context.setupWatcher(watcher as unknown as Parameters<PageContext["setupWatcher"]>[0])
 
-			const testModule = join(worktree, "src/popup/pages/new-page.test.ts")
+			const testModule = join(worktree, "src/popup/pages/new-page.test.vue")
 			const page = join(worktree, "src/popup/pages/new-page.vue")
 			watcher.emit("add", testModule)
 			watcher.emit("add", page)

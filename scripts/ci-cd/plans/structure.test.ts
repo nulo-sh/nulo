@@ -314,12 +314,20 @@ describe("curated-budget", () => {
 		expect(findings(makeRepo({ "implementations-plan/lessons.md": src }), "curated-budget")).toEqual([])
 	})
 
-	test("follow-ups may point at this repository's issues and at plans", () => {
-		const repo = makeRepo({
-			"implementations-plan/follow-ups.md":
-				"- Tracked in [an issue](https://github.com/nulo-sh/nulo/issues/1), see [plan](archive/p/plan.md).\n",
-		})
-		expect(findings(repo, "curated-budget")).toEqual([])
+	test("a lessons entry may point at this repository's issues beside its evidence", () => {
+		const src = "- One gotcha, see [#1](https://github.com/nulo-sh/nulo/issues/1) ([log](archive/p/lessons/phase-1.md)).\n"
+		expect(findings(makeRepo({ "implementations-plan/lessons.md": src }), "curated-budget")).toEqual([])
+	})
+})
+
+describe("retired-file", () => {
+	test("a tracked follow-ups.md fails, so the backlog file cannot come back", () => {
+		const repo = makeRepo({ ...HYGIENE, "implementations-plan/follow-ups.md": "- An open item.\n" })
+		expect(findings(repo, "retired-file").map((f) => f.file)).toEqual(["implementations-plan/follow-ups.md"])
+	})
+
+	test("a tree without it passes", () => {
+		expect(findings(makeRepo({ ...HYGIENE, "implementations-plan/lessons.md": "# Lessons\n" }), "retired-file")).toEqual([])
 	})
 })
 

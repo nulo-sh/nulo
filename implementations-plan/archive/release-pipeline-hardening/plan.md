@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the `always() && !cancelled()` guard pattern for jobs downstream of optional release jobs, which the publish jobs in `.github/workflows/release.yml` still use, and the auto-unstick job in the same file turned on by repository variable with an in-code default of off.
-- **Open items**: the auto-unstick switch's next stage, flipping its in-code default, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: none. Flipping the auto-unstick switch's in-code default was closed by supply-chain-release (#63): it is on unless `AUTO_UNSTICK_ENABLED` turns it off.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

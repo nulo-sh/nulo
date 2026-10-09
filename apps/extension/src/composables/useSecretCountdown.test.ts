@@ -112,6 +112,49 @@ describe("composables/useSecretCountdown", () => {
 		expect(onTimeout).not.toHaveBeenCalled()
 	})
 
+	test("a second start() replaces the first countdown: one close and one tick timer, one onTimeout", () => {
+		const onTimeout = vi.fn()
+		const scope = effectScope()
+		scope.run(() => {
+			const c = useSecretCountdown({ autoCloseMs: 120_000, onTimeout })
+			c.start()
+			const afterOne = vi.getTimerCount()
+			c.start()
+			expect(afterOne).toBe(2)
+			expect(vi.getTimerCount()).toBe(afterOne)
+			vi.advanceTimersByTime(120_000)
+		})
+		expect(onTimeout).toHaveBeenCalledTimes(1)
+		scope.stop()
+	})
+
+	test("disable() after a double start leaves no pending close", () => {
+		const onTimeout = vi.fn()
+		const scope = effectScope()
+		scope.run(() => {
+			const c = useSecretCountdown({ autoCloseMs: 120_000, onTimeout })
+			c.start()
+			c.start()
+			c.disable()
+			expect(vi.getTimerCount()).toBe(0)
+			vi.advanceTimersByTime(120_000)
+		})
+		expect(onTimeout).not.toHaveBeenCalled()
+		scope.stop()
+	})
+
+	test("start() after scope dispose arms nothing", () => {
+		const onTimeout = vi.fn()
+		const scope = effectScope()
+		const c = scope.run(() => useSecretCountdown({ autoCloseMs: 120_000, onTimeout }))
+		scope.stop()
+		c?.start()
+		expect(c?.closeDeadline.value).toBe(0)
+		expect(vi.getTimerCount()).toBe(0)
+		vi.advanceTimersByTime(120_000)
+		expect(onTimeout).not.toHaveBeenCalled()
+	})
+
 	test("countdownLabel returns '0:00' once deadline is reached", async () => {
 		vi.setSystemTime(1_700_000_000_000)
 		const scope = effectScope()

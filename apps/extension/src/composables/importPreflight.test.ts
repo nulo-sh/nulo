@@ -36,6 +36,16 @@ describe("preflightNetworkConnectivity", () => {
 		expect(calls).toEqual([{ id: "n1", timeoutMs: 5_000 }])
 	})
 
+	test("a probe that wins its race leaves no timer behind", async () => {
+		const verdicts = await preflightNetworkConnectivity({
+			networkIds: ["n1"],
+			probe: async () => NodeStatus.Active,
+			deadlineAt: Date.now() + 21_000,
+		})
+		expect(verdicts.get("n1")).toBe("go")
+		expect(vi.getTimerCount()).toBe(0)
+	})
+
 	test("InvalidChain → wrong-network immediately, NO retries (the node answered)", async () => {
 		let calls = 0
 		const verdicts = await run(
