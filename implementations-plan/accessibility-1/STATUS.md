@@ -12,3 +12,4 @@
 - 2026-10-09: phase 2.3 gate pass: lint, typecheck:all, test, test:all; network connect-one-window.test.ts on chrome and firefox (retry 0).
 - 2026-10-09: phase 2.4 gate pass: lint, typecheck:all, test, test:all, build-storybook; dark story shots cmp-identical before and after on chrome and firefox.
 - 2026-10-09: arc 2 review round 1: codex conditional approve, opus approve after one Med; six findings accepted (plan.md § Arc 2 audit verdicts); smoke home-links.test.ts and network home-cap.test.ts green on chrome and firefox (retry 0).
+- 2026-10-09: arc 2 review round 2: codex conditional approve, one Med (token-page wait) fixed; smoke home-links.test.ts green on chrome and firefox (retry 0).

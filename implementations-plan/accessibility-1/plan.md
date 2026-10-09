@@ -387,6 +387,12 @@ Round 1, Codex (GPT-6.1 Sol, `high`, read-only; session `01a120f5`): **condition
 | 5 | Opus | Low | The `--nulo-track` comment in the dark block spoke of the light accent | Accepted: reworded; `base.css` re-pinned |
 | 6 | Opus | Low | `.subtitle_green` asserted twice | Accepted: the duplicate removed |
 
+Round 2, Codex (resumed, same session) on the fix commit: **conditional approve (one new test gap).**
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 7 | Med | After `navigateByHash` to the token page, Home's own "View history" could satisfy the wait, so the walk could test Home's link | Accepted: the spec waits for the token page's `token-menu-trigger` first |
+
 ### Arc 3, after PRs #56, #55 and #58 (page 2, calls 3 and 4)
 
 Start each phase only when its condition in § Owner dependencies holds, after `gh stack sync`.

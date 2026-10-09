@@ -66,6 +66,8 @@ test("View history on Home and on a token's page is a Tab stop after the token l
 	await seedTokenRow(page, scope, TOKEN_ID)
 	await seedUsdQuoteAndReload(page)
 	await navigateByHash(page, `#/popup/tokens/${TOKEN_ID}`)
+	// Home has the same link; the token page's own menu proves the page has swapped.
+	await page.waitForSelector(sel("token-menu-trigger"), { visible: true, timeout: 15_000 })
 	await page.waitForSelector(sel("activity-view-all"), { visible: true, timeout: 15_000 })
 	await prepareKeys(page)
 	await tabTo(page, "activity-view-all")
