@@ -207,6 +207,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [runtime-edges](runtime-edges/plan.md) — completed — three low-severity runtime edge fixes, each pinned
 - [runtime-start-single-flight](runtime-start-single-flight/plan.md) — completed — a single-flight service-worker start replaces the started latch
 - [security-audit-remediation](security-audit-remediation/plan.md) — completed — a security audit's findings fixed in small, separately reviewed phases
+- [security-fixes-1](security-fixes-1/plan.md) — completed — ten audit fixes in bridge, profile, backup and service code, each a refusal or an internal order
 - [self-pay-setup-fix](self-pay-setup-fix/plan.md) — completed — simulate and profile run as the account the dApp named
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
