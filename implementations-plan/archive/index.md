@@ -115,6 +115,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [harden-findings-remediation](harden-findings-remediation/plan.md) — completed — a whole-codebase security audit remediated as eleven reviewable units
 - [harden-quality-arc](harden-quality-arc/plan.md) — completed — a quality audit's findings landed on one integration branch, tiered by risk
 - [harden-security-prerelease](harden-security-prerelease/plan.md) — completed — a security audit's verified findings fixed before the first release, in four batches
+- [hardening-2](hardening-2/plan.md) — completed — every dApp call parsed against the wallet schema, an object-keyed artifact cache, storage fences and a CSP floor
 - [harness-fixtures](harness-fixtures/plan.md) — completed — six complexity suppressions in the e2e harness removed by refactoring
 - [hd-behaviour-alignment](hd-behaviour-alignment/plan.md) — completed in part — four of the dedupe program's owner calls (History by network, trimmed contact names, new-password hints, motion and focus) and a dead protocol deleted
 - [hd-delete-after-prove](hd-delete-after-prove/plan.md) — completed — a profile erase stops deleting bb.js's public CRS cache, which a page that loaded the CRS holds open, guarded by a prover-on e2e in the canary job
