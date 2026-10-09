@@ -59,7 +59,7 @@ function applyDecisionTo(session: IDappSessionRef, decision: CapabilityDecision)
 import type { IAccountRef, IDappSessionRef, INetworkRef } from "./session-types"
 import { LogLevel, type ILogger } from "@nulo/wallet-core/logger"
 import { DAPP_SELF_PAY_FEATURE, WALLET_FEATURES } from "./wallet-features"
-import { wireAddress, wireCall, wirePayload, withHeader } from "./testing/wire"
+import { onWire, wireAddress, wireCall, wirePayload, withHeader } from "./testing/wire"
 
 type AccountFake = IAccountReader & IAccountProvisioner
 /** The wallet declining to provision (its no-op branch) — fixtures that list no accounts stay empty. */
@@ -3418,6 +3418,19 @@ describe("dispatcher — the schema parse", () => {
 		const h = harness()
 		await expect(h.dispatch("registerToken", [ACCOUNT, null])).rejects.toThrow(invalid("registerToken"))
 		expect(h.sent).toHaveLength(0)
+	})
+
+	test("an authwit intent with a valid inner hash beside a malformed call never reaches the window", async () => {
+		const h = harness([
+			{ capability: { type: "accounts", canGet: true, canCreateAuthWit: true }, grantedAt: 1 },
+			GRANTS[1],
+		] as GrantedCapabilityRecord[])
+		const innerHash = { consumer: TOKEN, innerHash: onWire(new Fr(0x0cn)) }
+		const mixed = { ...innerHash, caller: ACCOUNT, call: withoutSelector() }
+		await expect(h.dispatch("createAuthWit", [ACCOUNT, mixed])).rejects.toThrow(invalid("createAuthWit"))
+		expect(h.sent).toHaveLength(0)
+		await h.dispatch("createAuthWit", [ACCOUNT, innerHash])
+		expect(h.sent).toHaveLength(1)
 	})
 
 	test("createAuthWit with no args is refused by its arity guard, with the parse's error", async () => {

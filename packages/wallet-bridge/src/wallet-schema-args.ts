@@ -1,4 +1,4 @@
-import { AppCapabilitiesSchema, CapabilitySchema, WalletSchema } from "@aztec-labs/aztec.js/wallet"
+import { AppCapabilitiesSchema, CapabilitySchema, MessageHashOrIntentSchema, WalletSchema } from "@aztec-labs/aztec.js/wallet"
 import { getSchemaParameters, parseWithOptionals } from "@aztec-labs/foundation/schemas"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { applyNuloSchemaPatch } from "@nulo/wallet-sdk-schema-patch/apply"
@@ -21,6 +21,7 @@ const NOT_PARSED: Partial<Record<MethodName, string>> = {
 
 const CAPABILITY_HEADER = AppCapabilitiesSchema.omit({ capabilities: true })
 const KNOWN_CAPABILITY_TYPES: ReadonlySet<string> = new Set(CapabilitySchema.options.map((option) => option.shape.type.value))
+const CALL_INTENT = MessageHashOrIntentSchema.options[1]
 
 /**
  * Refuses an argument list the wallet API's schema refuses, after cutting it to the schema's own
@@ -37,6 +38,7 @@ export async function assertWalletSchemaArgs(method: MethodName, args: readonly 
 		}
 		const parameters = getSchemaParameters(SCHEMA[method])
 		await parseWithOptionals(args.slice(0, parameters.def.items.length), parameters)
+		if (method === "createAuthWit") await parseCallIntentKeys(args[1])
 	} catch {
 		throw InvalidWalletArgumentsError.forMethod(method)
 	}
@@ -56,4 +58,11 @@ async function parseCapabilityRequest(manifest: unknown): Promise<void> {
 		if (KNOWN_CAPABILITY_TYPES.has(capability.type)) await CapabilitySchema.parseAsync(capability)
 	}
 	projectRequestedCapabilities(capabilities)
+}
+
+/** The intent union takes its inner-hash branch first and strips other keys, while the scope check,
+ *  the window and the signer all read the call branch whenever `caller` or `call` is present, so
+ *  such an intent must parse as a call intent too. */
+async function parseCallIntentKeys(intent: unknown): Promise<void> {
+	if (isRecord(intent) && ("caller" in intent || "call" in intent)) await CALL_INTENT.parseAsync(intent)
 }
