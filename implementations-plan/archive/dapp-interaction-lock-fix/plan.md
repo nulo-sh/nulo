@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The queued journal stage and its journal-level transition lock, the early release of the per-session message queue as a request enqueues on the mutex, the per-lane `ExecutionMutex` with its capacity cap, and the network e2e that pin them: `apps/extension/src/wallet/services/execution/execution-mutex.ts`, `apps/extension/src/wallet/services/execution/execution-lane.ts`, `apps/extension/src/wallet/services/execution/claim-helper.ts` and `apps/extension/tests/e2e/network/concurrent-sendtx-approve.test.ts`.
-- **Open items**: no network e2e proves two concurrent NO_FROM sends serialize and both confirm, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: no network e2e proves two concurrent NO_FROM sends serialize and both confirm, tracked in #153.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

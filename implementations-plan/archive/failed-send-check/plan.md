@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The background check in `apps/extension/src/wallet/services/operation-journal/send-check.ts`, the shared rules in `apps/extension/src/wallet/services/transaction/receipt-status.ts`, the failure copy in `apps/extension/src/popup/utils/transfer-failure-copy.ts`, the journal page `apps/extension/src/popup/pages/journal/[id].vue`, and the spec `apps/extension/tests/e2e/network/failed-send-check.test.ts`.
-- **Open items**: the authwit popups' 60 second ceiling, a definitive "won't go through" from a transaction's expiry, a checked dApp send missing from the revoke index, a chain prune after inclusion, a failed card beside a settled row, a neutral snack style, light-theme status contrast, a node's refusal reading "Not confirmed yet", a missing hash or explorer link on a checked record, the error snack covering the awaiting card, and a Firefox rerun of the imported-account execution spec, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the authwit popups' 60 second ceiling, a definitive "won't go through" from a transaction's expiry, a chain prune after inclusion, a failed card beside a settled row, a neutral snack style, light-theme status contrast, a node's refusal reading "Not confirmed yet", a missing hash or explorer link on a checked record, and the error snack covering the awaiting card, tracked in #107, #108, #109, #110, #111 and #112; one more is tracked privately: GHSA-vx7h-rpq3-2p9x. The Firefox rerun of the imported-account execution spec was closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the seed-status surface in `apps/extension/src/wallet/services/token/`, outcome-based scan health in `apps/extension/src/wallet/services/incoming-transfer/scan-health.ts`, the `Skeleton` primitive in `packages/design/src/ui/Skeleton.vue`, and the popup pieces `apps/extension/src/composables/useSeedStatus.ts`, `apps/extension/src/composables/useIncomingSyncHealth.ts` and `apps/extension/src/popup/components/modules/general/TokenSeedRow.vue`.
-- **Open items**: new incoming public transfers still wait on a from-zero history scan, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: new incoming public transfers still wait on a from-zero history scan, tracked in #138.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

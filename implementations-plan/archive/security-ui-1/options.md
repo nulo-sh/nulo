@@ -6,7 +6,7 @@ The owner picks from these. Each option lists the exact component changes, the c
 
 - `shotSend(page, name, focus)` lives in `apps/extension/tests/e2e/fixtures/send-page.ts:209-235`. Import it from there. It does nothing unless `NULO_E2E_SHOT_DIR` is set, and it writes `<name>.png` plus `<name>-<other theme>.png`.
 - Pass a `focus` testid that exists on the page. The default, `send-publish-strip`, is absent here, so the scroll would do nothing.
-- Its second shot can land inside a 0.2 s colour transition (open item in `follow-ups.md`, Send amounts). Before you trust a button's or a popup's colour in the flipped shot, wait about 300 ms after the flip, or read that element in the first shot.
+- Its second shot can land inside a 0.2 s colour transition (already fixed: #66 waits out the transition before the flipped shot). Before you trust a button's or a popup's colour in the flipped shot, wait about 300 ms after the flip, or read that element in the first shot.
 - Smoke runs: `cd apps/extension && NULO_E2E_SHOT_DIR=<dir> bun run test:e2e -- <file> --retry=0`. Network runs: from the worktree root, `NULO_E2E_SHOT_DIR=<dir> NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>.test.ts`.
 
 ---

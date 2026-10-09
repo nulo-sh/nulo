@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the strict PR gate in `.github/workflows/pr-extension-network-e2e.yml` and `.github/workflows/_extension-network-e2e.yml`, the boot-failure classification in `apps/extension/scripts/e2e/classify-exit.ts` and `apps/extension/scripts/e2e/agent.sh`, the session-bounded `from` resolution in `packages/wallet-bridge/src/dispatcher.ts`, and the post-send pending-authwit recording in `apps/extension/src/wallet/services/auth-registry/service.ts`.
-- **Open items**: routing the e2e gotchas that the lessons rewrite retired into the `e2e-testing` skill, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: routing the e2e gotchas that the lessons rewrite retired into the `e2e-testing` skill, tracked in #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

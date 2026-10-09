@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: a root `overrides` pin of `vite` to `^8.0.0` in `package.json`, the unused Vue devtools plugin removed, and the extension `test` script in `apps/extension/package.json` made non-watching.
-- **Open items**: two stale auto-import globals that outlive their exports, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: two stale auto-import globals that outlive their exports, tracked in #173.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

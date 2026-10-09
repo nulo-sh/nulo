@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: Four passes of root-cause e2e fixes: causal-signal waits and the failure-evidence helpers in `apps/extension/tests/e2e/fixtures/helpers.ts` and `apps/extension/tests/e2e/fixtures/popups.ts`, a real service-worker kill in `apps/extension/tests/e2e/network/backup-restore-sw-restart.test.ts`, and the crash-rollback liveness gate in `apps/extension/src/composables/full-backup-restore.ts` backed by `apps/extension/src/utils/background-liveness.ts`.
-- **Open items**: the five-second anchor sleep that `withStaleAnchorRetry` may retire, the three-second sleep in `apps/extension/tests/e2e/network/incoming-transfers.test.ts`, the strict-mode opt-out restore with no e2e, the unread `isMinting` field in `TokensView.vue`, and routing the retired e2e gotchas into the e2e-testing skill, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the five-second anchor sleep that `withStaleAnchorRetry` may retire, the three-second sleep in `apps/extension/tests/e2e/network/incoming-transfers.test.ts`, the strict-mode opt-out restore with no e2e, the unread `isMinting` field in `TokensView.vue`, and routing the retired e2e gotchas into the e2e-testing skill, tracked in #157, #161, #162 and #185. The three-second sleep and the unread `isMinting` field were closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

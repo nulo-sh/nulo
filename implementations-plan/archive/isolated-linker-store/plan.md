@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The isolated linker in `bunfig.toml` (with `globalStore` deliberately unset), the layout-agnostic resolver package `packages/resolve-asset`, the executable identity guarantees in `apps/extension/scripts/layout-identity.test.ts`, and a dependency lockfile regenerated under the real 7-day release-age gate.
-- **Open items**: `hoist = false` is still not set, and the e2e gotchas the lessons rewrite retired still need routing into the `e2e-testing` skill, both tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: `hoist = false` is still not set, and the e2e gotchas the lessons rewrite retired still need routing into the `e2e-testing` skill, both tracked in #172 and #185.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

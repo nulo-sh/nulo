@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: The `simulate_views` operation kind is gone. The batching and decode logic it held is a pure helper, `apps/extension/src/wallet/services/execution/helpers/batched-view-simulation.ts`, used by the balance projector, the gas-balance reads and the token metadata read.
-- **Open items**: the two `BATCH_SIZE = 12` constants that size the batched balance views, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: the two `BATCH_SIZE = 12` constants that size the batched balance views, tracked in #120.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

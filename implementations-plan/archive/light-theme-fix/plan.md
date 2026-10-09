@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: the repaired light palette in `packages/design/src/base.css`, the contrast gate in `packages/design/src/theme-contrast.test.ts`, the undefined-variable guard in `packages/design/src/theme-vars.test.ts`, and the pre-paint theme hint in `apps/extension/public/theme-boot.js`.
-- **Open items**: onboarding applies the default `system` theme instead of the stored choice, so a person who chose light or dark sees onboarding in the OS scheme, tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: onboarding applies the default `system` theme instead of the stored choice, so a person who chose light or dark sees onboarding in the OS scheme, tracked in #133.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision

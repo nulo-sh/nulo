@@ -5,7 +5,7 @@
 - **Date**: —
 - **Status**: completed.
 - **Shipped**: five pages answer Enter only from their own fields and controls, and repeat or composing Enter is refused on submit controls: `refuseRepeatEnter` and `isPopupSubmitKey` in `apps/extension/src/composables/usePopupEntity.ts`, `apps/extension/src/components/composite/DappApprovalFooter.vue`, and the real-key proof in `apps/extension/tests/e2e/keyboard-guards.test.ts`.
-- **Open items**: no submit latch on Recovery phrase and Change password, two keyboard focus rings that do not show, routing retired e2e gotchas into the `e2e-testing` skill, and per-test timeouts for the soak fixture cases, all tracked in [follow-ups](../../follow-ups.md).
+- **Open items**: no submit latch on Recovery phrase and Change password, two keyboard focus rings that do not show, routing retired e2e gotchas into the `e2e-testing` skill, and per-test timeouts for the soak fixture cases, all tracked in #95, #96 and #185. The soak fixture's per-test timeouts were closed by a later plan before `follow-ups.md` was retired.
 - **Seeds retired**: none; this record carries no seed prompts.
 
 ## Decision
