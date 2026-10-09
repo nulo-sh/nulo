@@ -23,13 +23,13 @@ issues: none (follow-ups.md entries; no GitHub issue)
   - [#66](https://github.com/nulo-sh/nulo/pull/66), tests and tooling: History's `data-incoming-loaded` signal replaces a 3 s sleep; price-fixture, test-soak and `e2e/config` get honest budgets; `shotSend` waits for the theme flip; the skills agree on concurrent runs; Storybook resolves its components and fills `chrome`; the pages watcher ignores tests under a dot-directory; the landing's config imports `.ts`; a real selector hash, decoder and `callSurface` test. Entry 174 was measured and not reproduced.
   - [#67](https://github.com/nulo-sh/nulo/pull/67), wallet code hygiene: an unreachable popup and its store fields, an unread CSS variable, an unread row flag, an unrendered form field and an unused schema removed; the restore's keys built with `accountScopeKey`; one comment corrected; the legacy boot sweep keeps bb.js's CRS cache.
 - **Dropped**: the playground change for entry 101 (D8: the wallet's utility path cannot succeed on the button's call, and existing tests already assert a successful `executeUtility`); the flake-ledger edits to the `e2e-testing` skill, since an open PR (#56) edited that file at close-out: they became one follow-up.
-- **Open items**: none kept here; [follow-ups](../follow-ups.md) took them. Deleted 10, 97, 98, 100, 101, 102, 103, 106, 115, 119, 133, 144, 146, 147, 149 and 177 (120, 122, 123, 125, 127 and 132 were already gone with supply-chain-release's close-out). Rewritten to what is left: 63, 75, 130, 156, 163, 165, 174 and 175. Added: the five in § Follow-ups found during planning, the store-captures one from Arc 3, and the flake-ledger routing.
+- **Open items**: none kept here; [follow-ups](../../follow-ups.md) took them. Deleted 10, 97, 98, 100, 101, 102, 103, 106, 115, 119, 133, 144, 146, 147, 149 and 177 (120, 122, 123, 125, 127 and 132 were already gone with supply-chain-release's close-out). Rewritten to what is left: 63, 75, 130, 156, 163, 165, 174 and 175. Added: the five in § Follow-ups found during planning, the store-captures one from Arc 3, and the flake-ledger routing.
 - **Lessons**: `lessons.md`'s timed-tests line is retired, since `e2e/config`'s cases now carry their own budget (#66); the base-rerun line gains "grep a green run for a suspect log line". The rest stays in `lessons/phase-*.md`.
 - **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
 
 # code-followups-1 — prune the follow-ups, ship the small code ones, settle the boot-line "flake"
 
-The open entries of [`follow-ups.md`](../follow-ups.md) that are code work with no visible change and
+The open entries of [`follow-ups.md`](../../follow-ups.md) that are code work with no visible change and
 no design decision, plus one CI reliability item. Three jobs: prune what is already resolved, build the
 small entries in three stacked arcs, and list the rest under "Not this lane" with one reason each.
 Nothing here changes what a person sees.
