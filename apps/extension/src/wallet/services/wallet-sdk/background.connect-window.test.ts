@@ -522,7 +522,7 @@ describe("establishment shows the check in the connect window", () => {
 		expect(h.windows.created).toHaveLength(1)
 		expect(h.windows.created[0].url).toContain("verificationHash=HASH-r2&isReconnect=true")
 
-		// A sibling's check set "Always trust" on the row the abandoned attempt wrote.
+		// A sibling's check set "Skip this check next time" on the row the abandoned attempt wrote.
 		const row = [...h.rows.values()][0]
 		row.trustedVerification = true
 		await h.establish("f1")

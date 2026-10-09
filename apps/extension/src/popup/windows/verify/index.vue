@@ -14,7 +14,12 @@ import { useDappHostname } from "@/composables/useDappHostname"
 import { untilSessionChecked } from "@/composables/useDappApprovalWindow"
 
 /** Services */
-import { DappSessionServiceClient, type DappSession, type DappMetadata } from "@/wallet/services/dapp-session/client"
+import {
+	DappSessionServiceClient,
+	type DappSession,
+	type DappMetadata,
+	type VerificationRefusal,
+} from "@/wallet/services/dapp-session/client"
 import { type Account, AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient, type Network } from "@/wallet/services/network/client"
 import { parseCaipAccount, resolveNetworkByChainId } from "@/wallet/utils/caip"
@@ -39,6 +44,9 @@ const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
 const alwaysTrust = ref(false)
+/** One answer per window: either control locks both, released only when that answer fails. */
+const isBusy = ref(false)
+const refusalError = ref<"unremoved" | "failed">()
 
 const signerAccounts = ref<Account[]>([])
 const header = computed(() =>
@@ -57,8 +65,41 @@ const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHos
 const dappSessionService = new DappSessionServiceClient()
 
 const handleConfirm = async () => {
-	if (alwaysTrust.value && session.value) {
-		await dappSessionService.setTrustedVerification(session.value.id, true)
+	if (isBusy.value) return
+	isBusy.value = true
+	try {
+		if (alwaysTrust.value && session.value) {
+			await dappSessionService.setTrustedVerification(session.value.id, true)
+		}
+	} catch (err) {
+		isBusy.value = false
+		throw err
+	}
+	closeCurrentWindow()
+}
+
+/** The window closes only once the app's channels have ended and its rows are known to be gone. */
+const handleRefuse = async () => {
+	const row = session.value
+	if (isBusy.value || !row) return
+	isBusy.value = true
+	refusalError.value = undefined
+	let result: VerificationRefusal
+	try {
+		result = await dappSessionService.refuseVerification({
+			origin: row.dappMetadata?.url ?? "",
+			chainId: row.chainId,
+			profileId: row.profileId,
+		})
+	} catch {
+		refusalError.value = "failed"
+		isBusy.value = false
+		return
+	}
+	if (result === "unavailable") {
+		refusalError.value = "unremoved"
+		isBusy.value = false
+		return
 	}
 	closeCurrentWindow()
 }
@@ -153,12 +194,13 @@ onUnmounted(() => {
 				:actionLabel="isReconnect ? 'Reconnected' : 'Connection established'"
 			/>
 			<Flex v-if="emojis" direction="column" gap="12" :class="$style.verification">
-				<SectionLabel label="Connection verification" />
+				<SectionLabel label="Connection check" />
 
 				<Flex direction="column" align="center" gap="12">
 					<div data-testid="verify-emoji-grid"><EmojiGrid :emojis="emojis" /></div>
 					<Text size="12" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">
-						Verify these emojis match what the app displays to confirm a secure connection
+						Check that the app shows these same emojis in the same order. If they differ, the connection may not be
+						safe. Choose They don't match.
 					</Text>
 				</Flex>
 			</Flex>
@@ -167,23 +209,43 @@ onUnmounted(() => {
 		<Flex v-snack-footer direction="column" gap="12" :class="$style.footer">
 			<Flex align="center" justify="between" gap="12" wide>
 				<Flex direction="column" gap="4">
-					<Text size="13" weight="600" color="primary">Always trust</Text>
-					<Text size="12" weight="500" color="tertiary">Skip verification on reconnect</Text>
+					<Text size="13" weight="600" color="primary">Skip this check next time</Text>
+					<Text size="12" weight="500" color="tertiary">Only for this app on this network.</Text>
 				</Flex>
 				<div data-testid="verify-always-trust-toggle"><Toggle :modelValue="alwaysTrust" @update:modelValue="(v: boolean) => (alwaysTrust = v)" /></div>
 			</Flex>
 
-			<Button
-				data-testid="verify-confirm-btn"
-				@click="handleConfirm"
-				@keydown.enter="refuseRepeatEnter"
-				wide
-				variant="primary"
-				size="medium"
-				:disabled="!session"
-			>
-				<Text size="13" color="inverse">OK</Text>
-			</Button>
+			<Flex align="center" justify="between" gap="12" wide>
+				<Button
+					data-testid="verify-mismatch-btn"
+					@click="handleRefuse"
+					@keydown.enter="refuseRepeatEnter"
+					wide
+					variant="primary_outline"
+					size="medium"
+					:disabled="!session || isBusy"
+				>
+					They don't match
+				</Button>
+				<Button
+					data-testid="verify-confirm-btn"
+					@click="handleConfirm"
+					@keydown.enter="refuseRepeatEnter"
+					wide
+					variant="primary"
+					size="medium"
+					:disabled="!session || isBusy"
+				>
+					They match
+				</Button>
+			</Flex>
+			<Text v-if="refusalError" size="12" color="red" role="alert" data-testid="verify-mismatch-error">
+				{{
+					refusalError === "unremoved"
+						? "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps."
+						: "Couldn't disconnect this app. Disconnect it in Settings, Connected apps."
+				}}
+			</Text>
 		</Flex>
 	</Flex>
 </template>

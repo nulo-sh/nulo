@@ -86,6 +86,7 @@ import { failQueuedForError, failQueuedIfUnclaimed, tryCreateQueuedJournal } fro
 import { chainSendTxWithVouching } from "./queued-wait-vouching"
 import { createSessionBaton } from "./session-baton"
 import { chainInfoToChainId, handleSessionEstablished } from "./session-established"
+import { revokeLiveSessions } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
@@ -140,7 +141,7 @@ export function initWalletSdkHandler(
 	ports.windows.onRemoved((windowId) => state.admission.windowRemoved(windowId))
 
 	serializeDecryption(handler, state.decryptLocks)
-	wireSessionTeardown(handler, deps.dappSessionService, logger)
+	wireSessionTeardown(handler, deps.dappSessionService, state.sessionProfiles, logger)
 
 	// Profile-bound channel teardown: a switch disconnects every live session
 	// stamped to another profile (and unstamped debris) BEFORE the discovery
@@ -621,42 +622,39 @@ function serializeDecryption(handler: BackgroundConnectionHandler, decryptLocks:
 		decryptLocks.withLock(sessionId, () => origDecrypt(sessionId, encrypted))
 }
 
-/** When a stored DappSession is deleted (settings disconnect OR
- *  TTL expiry — both emit the same event), tear down every matching
- *  live wallet-sdk ActiveSession so the dApp can't keep calling
- *  network-only methods over the still-open channel.
- *
- *  Tuple-match by `(origin, chainId)`, NOT a single
- *  `walletSdkSessionId` field, because a single
- *  stored DappSession may correspond to MULTIPLE live ActiveSessions
- *  (multi-tab same dApp). O(n) iteration where n is bounded by tabs-with-
- *  dApp-loaded — typically <10. */
-function wireSessionTeardown(handler: BackgroundConnectionHandler, dappSessionService: DappSessionService, logger: ILogger): void {
+/** A deleted row (a Settings disconnect, an expiry, a profile purge, the emoji check's refusal) and
+ *  a refusal itself end the live channels of that app on that network under the row's profile.
+ *  Tuple-matched, since one row serves every tab's channel to the app. */
+function wireSessionTeardown(
+	handler: BackgroundConnectionHandler,
+	dappSessionService: DappSessionService,
+	sessionProfiles: Map<string, string>,
+	logger: ILogger,
+): void {
+	const revoke = (app: { origin: string; chainId: string; profileId: string }) =>
+		revokeLiveSessions(
+			{
+				getActiveSessions: () => handler.getActiveSessions(),
+				sessionProfiles,
+				terminateSession: (sessionId) => handler.terminateSession(sessionId),
+				logger,
+			},
+			app,
+		)
 	dappSessionService.onDappSessionDeleted.add((deleted) => {
-		try {
-			const origin = deleted.dappMetadata?.url
-			const chainId = deleted.chainId
-			if (!origin || !chainId) {
-				logger.log(
-					"wallet-sdk-bg",
-					LogLevel.Warn,
-					`DappSession deleted with missing origin/chainId — cannot match active sessions; skipping teardown`,
-				)
-				return
-			}
-			const matches = handler.getActiveSessions().filter((s) => s.origin === origin && String(chainInfoToChainId(s)) === chainId)
-			for (const match of matches) {
-				logger.log(
-					"wallet-sdk-bg",
-					LogLevel.Info,
-					`Terminating live session ${describeExternalId(match.sessionId)} on chain ${chainId} — dApp access revoked`,
-				)
-				handler.terminateSession(match.sessionId)
-			}
-		} catch (err) {
-			logger.log("wallet-sdk-bg", LogLevel.Error, `Failed to terminate live sessions on dapp-session-deleted: ${err}`)
+		const origin = deleted.dappMetadata?.url
+		const { chainId, profileId } = deleted
+		if (!origin || !chainId || !profileId) {
+			logger.log(
+				"wallet-sdk-bg",
+				LogLevel.Warn,
+				`DappSession deleted with missing origin/chainId/profileId — cannot match active sessions; skipping teardown`,
+			)
+			return
 		}
+		revoke({ origin, chainId, profileId })
 	})
+	dappSessionService.onVerificationRefused.add(revoke)
 }
 
 /** On unlock, drain any queued discovery requests */

@@ -175,7 +175,7 @@ export async function denyDiscover(page: Page): Promise<void> {
 
 export async function approveVerify(page: Page, opts: { alwaysTrust?: boolean } = {}): Promise<void> {
 	if (opts.alwaysTrust) {
-		// Toggle the "Always trust" switch + WAIT for the toggle to latch before
+		// Toggle the "Skip this check next time" switch + WAIT for the toggle to latch before
 		// we click confirm. Without this assertion, handleConfirm runs while
 		// alwaysTrust is still false, the trustedVerification setter is never
 		// called, and the next reconnect surprises us with a verify popup.

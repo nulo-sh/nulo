@@ -26,6 +26,8 @@ import {
 	type AccessLevel,
 	type Methods,
 	type Events,
+	type VerificationRefusal,
+	type VerificationRefusalTarget,
 	DappSessionSchema,
 } from "./spec"
 
@@ -56,6 +58,17 @@ function consentAfter(
 	return consent
 }
 
+function readRefusalTarget(target: VerificationRefusalTarget): VerificationRefusalTarget {
+	const { origin, chainId, profileId } = (target ?? {}) as Partial<Record<keyof VerificationRefusalTarget, unknown>>
+	if (typeof profileId !== "string" || profileId === "") {
+		throw new ValidationError("refuseVerification needs the row's profile id")
+	}
+	if (typeof origin !== "string" || typeof chainId !== "string") {
+		throw new ValidationError("refuseVerification needs the app's origin and chain id")
+	}
+	return { origin, chainId, profileId }
+}
+
 export class DappSessionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getDappSessions",
@@ -63,6 +76,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		"addDappSession",
 		"updateDappSession",
 		"deleteDappSession",
+		"refuseVerification",
 		"setVerificationHash",
 		"setTrustedVerification",
 		"setAuthorizationsWithoutAsking",
@@ -78,6 +92,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public readonly onDappSessionAdded = new EventHandler<DappSession>()
 	public readonly onDappSessionUpdated = new EventHandler<DappSession>()
 	public readonly onDappSessionDeleted = new EventHandler<DappSession>()
+	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
 
 	private readonly storage: DappSessionMacStorage
 	private readonly lock = new Lock()
@@ -394,6 +409,37 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			this.emit("onDappSessionDeleted", session)
 
 			return session
+		})
+	}
+
+	/**
+	 * The emoji check's refusal. The app's live channels end first, on every path; then every row of
+	 * the app under the window's profile is deleted, read raw and by storage key as the profile
+	 * purge does, so neither a lock, another active profile nor recovery mode can hide one.
+	 * `unavailable` means the channels ended but a row could not be deleted.
+	 */
+	public async refuseVerification(target: VerificationRefusalTarget): Promise<VerificationRefusal> {
+		const { origin, chainId, profileId } = readRefusalTarget(target)
+		await this.ensureInitialized()
+		return await this.lock.withLock(async () => {
+			this.emit("onVerificationRefused", { origin, chainId, profileId })
+			try {
+				const rows = (await this.storage.rowsForProfile(profileId)).filter(
+					({ row }) => row.dappMetadata?.url === origin && row.chainId === chainId,
+				)
+				await purgeRows(
+					rows,
+					({ storageId }) => this.storage.delete(storageId),
+					({ storageId, row }) => this.emit("onDappSessionDeleted", { ...row, id: storageId }),
+				)
+				return rows.length > 0 ? "revoked" : "absent"
+			} catch (err) {
+				// No delete event will follow, and an establishment that read the row before the lock
+				// may have stamped its channel since the first event: end the channels again.
+				this.emit("onVerificationRefused", { origin, chainId, profileId })
+				this.logWarn("refuseVerification: the app's channels ended but its rows could not be deleted", err)
+				return "unavailable"
+			}
 		})
 	}
 

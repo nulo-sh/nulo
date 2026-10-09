@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
 			<GrantedCapabilitiesList :grants="grantedCapabilities" />
 		</Flex>
 
-		<!-- Connection verification -->
+		<!-- Connection check -->
 		<DappSessionVerification
 			v-if="verificationEmojis"
 			:emojis="verificationEmojis"

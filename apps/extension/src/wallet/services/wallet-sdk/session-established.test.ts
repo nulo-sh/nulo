@@ -463,7 +463,7 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		gate.windowRemoved(41)
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 
-		// A sibling's check set "Always trust" on the row, and the SDK replays the restored discovery.
+		// A sibling's check set "Skip this check next time" on the row, and the SDK replays the restored discovery.
 		tryGetDappSessionByOriginAndChain.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: true })
 		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
 		expect(terminate).toHaveBeenCalledTimes(2)

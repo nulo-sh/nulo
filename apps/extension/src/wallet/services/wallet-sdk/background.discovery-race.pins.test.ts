@@ -70,6 +70,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 		},
 		"dapp-session": {
 			onDappSessionDeleted: new EventHandler<unknown>(),
+			onVerificationRefused: new EventHandler<unknown>(),
 			// The SECOND lookup is the one the test times (discovery B's up-front one);
 			// every other lookup (A's, B's post-popup re-check) resolves at once.
 			tryGetDappSessionByOriginAndChain: () => {
