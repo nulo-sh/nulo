@@ -330,13 +330,13 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	}
 
 	/** Truncate + connectivity-classify one registration failure, flipping the
-	 *  item's fail-fast flag; the log line is the field-diagnosable record (the
-	 *  per-item errors only travel back in the RPC result, which gates the
-	 *  import's Continue screen without ever being rendered). */
+	 *  item's fail-fast flag. The returned text travels back in the RPC result to
+	 *  the import's error viewer; the log takes the error as an argument, so the
+	 *  redactor projects it and no node text sits in the line itself. */
 	private classifyRestoreFailure(networkId: string, err: unknown, reg: RestoreRegistrationState): string {
 		const message = truncateErrorMessage(toRestoreError(err))
 		if (isConnectivityErrorMessage(message)) reg.unreachable = true
-		this.logWarn(`restore: registration failed on ${networkId} — ${message}`)
+		this.logWarn(`restore: registration failed on ${networkId}`, err)
 		return message
 	}
 

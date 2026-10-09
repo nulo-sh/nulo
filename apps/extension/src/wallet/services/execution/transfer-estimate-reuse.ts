@@ -20,7 +20,6 @@
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { type MinFeeNode, predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
-import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { TransferType } from "@/wallet/services/transaction/spec"
@@ -205,8 +204,9 @@ export class TransferEstimateReuse {
 			// must reproduce the exact `GasFees.mul` product the build finalized.
 			const expectedFingerprint = fingerprintBaseFee(new GasFees(basis.feePerDaGas, basis.feePerL2Gas).mul(multiplier))
 			return expectedFingerprint === entry.baseFeeFingerprint ? undefined : "base fee changed"
-		} catch (error) {
-			return `base fee fetch failed: ${getErrorMessage(error)}`
+		} catch {
+			// A fixed category: the node's message never reaches the log.
+			return "base fee fetch failed"
 		}
 	}
 

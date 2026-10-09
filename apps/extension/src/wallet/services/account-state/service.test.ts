@@ -283,6 +283,22 @@ describe("AccountStateService.restore (nested restoreError normalization)", () =
 		expect(typeof item?.senders[0]?.restoreError).toBe("string")
 	})
 
+	test("a registration failure logs its error as an argument, never inside the line", async () => {
+		const warn = vi.spyOn(accountStateService as unknown as { logWarn: (...a: unknown[]) => void }, "logWarn")
+		const backup = [{ networkId: "missing", senders: [{ address: "0x1" }], contracts: [] }] as unknown as Parameters<
+			typeof accountStateService.restore
+		>[0]
+
+		const restored = await accountStateService.restore(backup, [])
+		expect(restored.find((r) => r.networkId === "missing")?.senders[0]?.restoreError).toBe("Network not found")
+		const registrationLines = warn.mock.calls.filter(([line]) => String(line).startsWith("restore: registration failed"))
+		expect(registrationLines).toHaveLength(1)
+		const [line, err] = registrationLines[0]
+		expect(line).toBe("restore: registration failed on missing")
+		expect(err).toBeInstanceOf(Error)
+		expect((err as Error).message).toBe("Network not found")
+	})
+
 	test("a shape-malformed item (senders: null) becomes a bounded violation record, NOT an uncaught throw", async () => {
 		// This runs AFTER finalizeRestore where rollback is suppressed — a checksum-valid but
 		// malformed slice must not throw uncaught mid-iteration and strand a partial restore
