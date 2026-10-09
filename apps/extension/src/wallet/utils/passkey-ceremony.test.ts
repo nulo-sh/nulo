@@ -33,6 +33,10 @@ describe("buildCreateOptions", () => {
 		expect(toHex(opts.user.id)).toBe(ID)
 	})
 
+	it.each(["a3f29b1", "a3f29b1x", " a3f29b14"])("rejects the malformed handle %j instead of truncating user.id", async (handle) => {
+		await expect(buildCreateOptions(handle, "Alice")).rejects.toThrow("invalid hex")
+	})
+
 	it("keeps the PRF eval input = SHA-256('nulo:profile:v1')", async () => {
 		const opts = await buildCreateOptions(ID, "Alice")
 		const first = opts.extensions?.prf?.eval?.first
