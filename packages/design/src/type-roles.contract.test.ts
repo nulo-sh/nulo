@@ -66,13 +66,13 @@ const BOARD_A: Row[] = [
 	row("Avatar initial", null, "I", 13, 600, false),
 ]
 
-/** The owner's answers where the build departs from an A cell (plan § Asks). */
+/** Where the build departs from an A cell, each by the owner's choice. */
 const ANSWERED: Record<string, Partial<Drawn>> = {
-	// Ask D: small mono at 11px.
+	// Small mono holds the 11px mono floor.
 	"Hash, small": { size: 11 },
 	"Token symbol": { size: 11 },
 	"Meta / count / hint": { size: 11 },
-	// Ask A: the receipt amount takes B's row, as the Chosen column drew it.
+	// The receipt amount takes B's row, as the board's Chosen column drew it.
 	"Amount, detail": { face: "G", weight: 700, tracking: -0.02, tabular: true },
 }
 
