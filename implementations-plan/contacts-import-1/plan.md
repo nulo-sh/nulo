@@ -1,7 +1,7 @@
 ---
 plan: contacts-import-1
 tier: light
-status: at the approval gate (Codex r1 reject → folded; Opus conditional approve → folded; Codex r2 conditional approve → conditions folded)
+status: delivered (#74)
 issues: [45, 43, 44]
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,20 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); one Codex audit (gpt-6.1-sol, high, resumed once for the fix-up) + one Opus Plan-agent review
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: delivered in [#74](https://github.com/nulo-sh/nulo/pull/74), one arc (Phases 1-3), single-layer stack on `dev`. The merge that lands it closes this plan.
+- **Shipped**:
+  - #45: `pickFile` settles a closed chooser. A `cancel` listener removes the hidden input and rejects with `FilePickCanceledError`; the contacts import and the full-backup import return on it with nothing shown or cleared, and the account import already swallowed it. Headless Firefox fires no `cancel` by itself, so the Firefox pick driver is unchanged.
+  - #43: the contacts import is pinned to the `RunFence` captured before its rows are shown. `getContacts`, `addContact` and `updateContact` take it as an optional trailing argument: asserted before the contact lock, acting for its profile, re-checked synchronously right before each write. A fenced call that fails makes the popup probe the fence; a failed probe stops the import (no further write or sender registration) and toasts `Import incomplete · N contacts written`.
+  - Validation, final head, retry 0: lint, typecheck:all, test:all (extension 10536 passed), audit:vue, armed builds, smoke (`contacts-import`, `contacts`, `account-import-export`, `backup-roundtrip`, `backup-imported-account`) 16/16 on Chrome and on Firefox, check:plans 0. Codex r1 approve with fixes, Opus review alongside, all folded; Codex r2 clean.
+- **Dropped**: #44, already fixed on `dev` by #41 (3b80761) with its test; verified and commented on the issue, no code.
+- **Deviations**: D10 (the run reaches `applyImportRows` through `deps`, keeping its signature line byte-identical beside #56), D11 (`logImportErrors` shared by both toasts), D12 (pictures from the smoke harness; the "today" fact corrected: a lock mid-import shows "Error occurred during import").
+- **Open items**: none kept here. [Follow-ups](../follow-ups.md) took the two owner calls of [OWNER-ASKS.md](OWNER-ASKS.md) (the toast's wording, recommended B; what stops an import), both shipped in their ship-now forms.
+- **Lessons**: none promoted. `lessons.md` sits 28 B under its 8,192 B budget; the adjacent-hunk merge rule is general git behaviour and stays in [phase 2](lessons/phase-2.md), the throwaway-branch `commit -a` slip in [phase 3](lessons/phase-3.md).
+- **Seeds retired**: the `/goal` and `/loop` in § Seeds are retired. Do not run them.
 
 # Contacts import 1: a closed file chooser, a staged-row edit, a profile switch mid-import
 
