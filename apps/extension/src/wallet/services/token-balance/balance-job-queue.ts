@@ -50,10 +50,11 @@ export type BalanceJobQueueCallbacks = {
 	/** Called when a balance is projected but its storage record has
 	 *  been deleted mid-sync (mirrors service.ts:395-401). */
 	onOrphanDetected?: (balance: TokenBalanceRaw) => void
-	/** Deletion fence (TOCTOU guard): checked SYNCHRONOUSLY immediately before
-	 *  every storage write — a delete that began after the queue's re-read adds
-	 *  the id here BEFORE its awaited `repo.delete`, so single-threaded dispatch
-	 *  order makes write-after-delete resurrection impossible. */
+	/** Deletion fence: a purge adds the id BEFORE dispatching its delete. Checked
+	 *  synchronously right before every write, and again in the tick the write
+	 *  resumes, where a hit deletes the row again and drops the emit: whichever
+	 *  order storage applies the two in, a purged row neither survives nor is
+	 *  announced after its deletion. */
 	isBalanceInvalidated?: (id: number) => boolean
 	/** Ownership guard for failure writes: a shared-address row from ANOTHER
 	 *  profile, or a dead incarnation's row at a reused token id, can reach
@@ -222,7 +223,9 @@ export class BalanceJobQueue {
 		// Generation fence: silent return, not failTask — this helper holds no
 		// taskId; both callers have already failed the task before writing.
 		if (gen !== this.callbacks.getGeneration()) return
-		if (!(await this.setUnlessInvalidated(updated))) return
+		await this.repo.set(updated)
+		const undo = this.deleteIfInvalidated(id)
+		if (undo) return await undo
 		// Re-check AFTER the awaited write: a token deleted during the await must
 		// not be emitted — the service's token lookup would throw and the outer
 		// batch catch would falsely fail every remaining healthy row.
@@ -341,8 +344,9 @@ export class BalanceJobQueue {
 
 	/** One successful projection's commit, in the frozen order: re-read → the
 	 *  sync fence ladder (deletion, ownership, generation — NO await between any
-	 *  fence and the write dispatch) → write → task completion → post-write
-	 *  ownership re-check → emit. */
+	 *  fence and the write dispatch) → write → deletion re-check → task
+	 *  completion → ownership re-check → emit, the last four in the tick the
+	 *  write resumes. */
 	private async applyProjectedOk(
 		result: Extract<ProjectedBalance, { kind: "ok" }>,
 		taskId: string,
@@ -387,9 +391,11 @@ export class BalanceJobQueue {
 			this.tasks.failTask(taskId, "Profile changed mid-sync")
 			return
 		}
-		if (!(await this.setUnlessInvalidated(updated))) {
+		await this.repo.set(updated)
+		const undo = this.deleteIfInvalidated(result.id)
+		if (undo) {
 			this.tasks.failTask(taskId, "Balance record deleted mid-sync")
-			return
+			return await undo
 		}
 		this.tasks.completeTask(taskId)
 		this.retryDue.delete(result.id)
@@ -400,15 +406,13 @@ export class BalanceJobQueue {
 		this.callbacks.onBalanceUpdated(updated)
 	}
 
-	/** Writes `row`; `false` when its id was fenced while the write was in flight. The purge's delete
-	 *  may then have landed first, so the row is deleted again: storage ordering never decides
-	 *  whether a purged row survives. A fenced id is never reallocated in this worker's lifetime,
-	 *  so the delete cannot hit a successor. */
-	private async setUnlessInvalidated(row: TokenBalanceRaw): Promise<boolean> {
-		await this.repo.set(row)
-		if (!this.callbacks.isBalanceInvalidated?.(row.id)) return true
-		await this.repo.delete(row.id)
-		return false
+	/** Called in the tick a write resumes, never through an `await`, so nothing can fence the id
+	 *  between this check and the caller's emit. A purge that fenced it while the write was in
+	 *  flight may have had its delete applied first: the row is deleted again, and the returned
+	 *  delete tells the caller to emit nothing. A fenced id is never reallocated in this worker's
+	 *  lifetime, so the delete cannot hit a successor. */
+	private deleteIfInvalidated(id: number): Promise<void> | undefined {
+		return this.callbacks.isBalanceInvalidated?.(id) ? this.repo.delete(id) : undefined
 	}
 
 	/** Projector-level failure that survived its own catch. Every balance in

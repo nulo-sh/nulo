@@ -82,9 +82,9 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	private profileGeneration = 0
 
 	/** Deletion fence for the job queue's re-read→write window: ids are added
-	 *  BEFORE the awaited `repo.delete` and checked SYNCHRONOUSLY right before
-	 *  every queue write, so a delete interleaving between the queue's re-read
-	 *  and its `repo.set` cannot resurrect the row. Fenced ids are NEVER
+	 *  BEFORE the awaited `repo.delete`, and the queue checks them right before
+	 *  every write and again as the write resumes (deleting the row again on a
+	 *  hit), so no purged row is resurrected. Fenced ids are NEVER
 	 *  reallocated within this worker lifetime (`allocateUnfencedId` skips
 	 *  past them); a worker restart forgets the fence safely — no old
 	 *  projection survives it. */
@@ -98,8 +98,9 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 		return this.repo.delete(id)
 	}
 
-	/** The raw purge pass's fence: a malformed row may still be mid-commit from before it turned
-	 *  malformed. Only a canonical key names a balance id; key "01" must not fence live row 1. */
+	/** The raw purge pass's fence, for every row it matches: a malformed row may still be
+	 *  mid-commit from before it turned malformed. Only a canonical key names a balance id;
+	 *  key "01" must not fence live row 1. */
 	private readonly invalidateRawKey = (storageId: string): void => {
 		const id = canonicalNumericStorageId(storageId)
 		if (id !== undefined) this.invalidatedBalanceIds.add(id)

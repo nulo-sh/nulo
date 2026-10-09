@@ -131,6 +131,36 @@ describe("purgeMalformedRows", () => {
 		expect(await storage.get("aliased")).toEqual({ id: "aliased", profileId: "p2", name: "fresh" })
 	})
 
+	test("onMatch runs for each matched row before its bytes re-check, a spared row included", async () => {
+		const { api, storage } = makeStore()
+		await api.storage.local.set({
+			"t:rows@changed": JSON.stringify({ profileId: "p1", junk: 1 }),
+			"t:rows@stale": JSON.stringify({ profileId: "p1", junk: 2 }),
+			"t:rows@other": JSON.stringify({ profileId: "p2", junk: 3 }),
+		})
+		const snapshot = await storage.rawStringEntries()
+		await api.storage.local.set({ "t:rows@changed": JSON.stringify({ profileId: "p1", junk: 4 }) })
+		const calls: string[] = []
+		const purged = await purgeMalformedRows(
+			{
+				rawStringEntries: async () => snapshot,
+				rawValue: (id) => {
+					calls.push(`reread ${id}`)
+					return storage.rawValue(id)
+				},
+				delete: (id) => {
+					calls.push(`delete ${id}`)
+					return storage.delete(id)
+				},
+			},
+			(raw) => raw.profileId === "p1",
+			undefined,
+			(id) => calls.push(`match ${id}`),
+		)
+		expect(purged).toBe(1)
+		expect(calls).toEqual(["match changed", "reread changed", "match stale", "reread stale", "delete stale"])
+	})
+
 	test("run AFTER a typed purge, it removes exactly the codec-invisible leftovers (valid rows already gone)", async () => {
 		const { api, storage } = makeStore()
 		await storage.set("good", { id: "good", profileId: "p1", name: "A" })

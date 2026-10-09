@@ -161,6 +161,39 @@ describe("a purge racing a balance commit", () => {
 	})
 
 	test.each([
+		["a projected balance", ok],
+		["a sync failure record", failed],
+	])(
+		"a purge's fence and delete landing at any microtask after %s's write: no row, and no update announced once fenced",
+		async (_, project) => {
+			for (let hops = 0; hops < 8; hops++) {
+				const w = await world(project)
+				// biome-ignore lint/suspicious/noExplicitAny: test-only reach-in to the purges' own fence-then-delete
+				const internals = w.service as any
+				const announced: boolean[] = []
+				w.service.onTokenBalanceUpdated.add(() => {
+					announced.push(internals.invalidatedBalanceIds.has(ROW.id))
+				})
+				await w.service.refreshTokenBalance(ROW.id)
+				const realSet = w.repo.set.bind(w.repo)
+				let purged: Promise<void> = Promise.resolve()
+				w.repo.set = (row) => {
+					w.repo.set = realSet
+					const written = realSet(row)
+					let landed: Promise<void> = written
+					for (let i = 0; i < hops; i++) landed = landed.then(() => {})
+					purged = landed.then(() => internals.invalidateAndDelete(row.id))
+					return written
+				}
+				await w.queue.tick()
+				await purged
+				expect(await w.stored("1"), `${hops} hops`).toBeUndefined()
+				expect(announced, `${hops} hops`).not.toContain(true)
+			}
+		},
+	)
+
+	test.each([
 		["purgeForTokens", purgeTokens],
 		["purgeForAccounts", purgeAccounts],
 	])("%s deleting the row through its malformed pass fences it: the commit writes nothing back", async (_, purge) => {

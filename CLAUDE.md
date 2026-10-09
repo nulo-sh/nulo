@@ -406,8 +406,8 @@ const itemCount = computed(() => items.value.length)
 
 /** 7. Service clients + event subscriptions */
 const tokenService = new TokenServiceClient()
-tokenService.onTokenUpdated.add(onTokenUpdated)
-function onTokenUpdated(token) { ... }
+tokenService.onTokenAdded.add(onTokenAdded)
+function onTokenAdded(token) { ... }
 
 /** 8. Functions/Handlers */
 const handleClick = () => { ... }

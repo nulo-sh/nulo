@@ -97,6 +97,14 @@ function isValidBackup(v: unknown): v is BackupPayload {
 	)
 }
 
+/** One text for every journal resume will not trust: the reason reaches the recovery screen
+ *  verbatim, and which check refused is a storage-forensics detail. */
+const INVALID_JOURNAL: MigrationResult = {
+	kind: "needs-recovery",
+	reason: "interrupted migration journal has an invalid backup payload",
+	retryable: false,
+}
+
 const refId = (r: StorageRef): string => (r.kind === "root" ? `root:${r.root}` : `value:${r.key}`)
 
 /** The keys `refs` cover. The engine's namespace is excluded unconditionally:
@@ -330,7 +338,7 @@ export class Migrator {
 		if (!isValidBackup(backup)) {
 			// The backup is written atomically, so partial-from-crash is impossible;
 			// an invalid one means tampering or corruption. Keep it, fail closed.
-			return { kind: "needs-recovery", reason: "interrupted migration journal has an invalid backup payload", retryable: false }
+			return INVALID_JOURNAL
 		}
 		// An armed journal REQUIRES a valid marker AND an in-range backup version
 		// (every path that writes the journal starts from a validated marker and
@@ -359,14 +367,7 @@ export class Migrator {
 			await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 			return undefined
 		}
-		const mismatch = this.journalMismatch(backup)
-		if (mismatch) {
-			return {
-				kind: "needs-recovery",
-				reason: `interrupted migration journal ${mismatch} (version ${backup.version})`,
-				retryable: false,
-			}
-		}
+		if (!this.journalMatchesRegistry(backup)) return INVALID_JOURNAL
 		try {
 			await this.restore(backup)
 		} catch (err) {
@@ -402,23 +403,19 @@ export class Migrator {
 		return undefined
 	}
 
-	/** Why a journal is not one the registered migration could have written, or
-	 *  `undefined`. `restore()` writes every entry and removes every key the refs
-	 *  cover, so this confines it to that migration's declared footprint. It does
-	 *  not authenticate the journal: forged refs that match still restore that
-	 *  footprint from forged entries. A shipped migration's footprint is therefore
-	 *  frozen: changing it turns its interrupted journals into recovery states. */
-	private journalMismatch(backup: BackupPayload): string | undefined {
+	/** Whether the registered migration of the journal's version could have written it: its refs
+	 *  equal that migration's declared footprint and every entry lies inside them. `restore()`
+	 *  writes every entry and removes every key the refs cover, so this confines a restore to the
+	 *  registered footprint. It does not authenticate the journal: forged entries under matching
+	 *  refs still restore. Because of the equality, a shipped migration's footprint is frozen. */
+	private journalMatchesRegistry(backup: BackupPayload): boolean {
 		const m = this.migrations.find((x) => x.version === backup.version)
-		if (!m) return "names no registered migration"
+		if (!m) return false
 		const declared = new Set([...m.reads, ...m.writes].map(refId))
 		const journaled = new Set(backup.refs.map(refId))
-		if (declared.size !== journaled.size || [...journaled].some((r) => !declared.has(r))) {
-			return "does not match the migration's declared footprint"
-		}
+		if (declared.size !== journaled.size || [...journaled].some((r) => !declared.has(r))) return false
 		const covers = footprintCovers(backup.refs)
-		if (Object.keys(backup.entries).some((k) => !covers(k))) return "holds a key outside the migration's declared footprint"
-		return undefined
+		return Object.keys(backup.entries).every(covers)
 	}
 
 	/** Bring the DECLARED footprint back to its pre-migration state: re-set the
