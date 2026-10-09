@@ -185,55 +185,24 @@ afterEach(() => {
 describe("boot sweep: best-effort, skips a blocked delete", () => {
 	const sweep = (service: PxeService) => internals(service).sweepOrphanStores()
 
-	test("deletes legacy DBs last-first, then the store from the boot snapshot once a fresh listing shows no PXE DB", async () => {
-		listings = [[P1_1, P2_1, KEYVAL], []]
+	test("deletes every legacy DB last-first and never keyval-store", async () => {
+		listings = [[P1_1, P2_1, KEYVAL]]
 		await sweep(makeService())
-		expect(h.calls).toEqual(["databases", "delete:pxe/p2/1", "delete:pxe/p1/1", "databases", "delete:keyval-store"])
+		expect(h.calls).toEqual(["databases", "delete:pxe/p2/1", "delete:pxe/p1/1"])
 		expect(warns).toEqual([])
 	})
 
-	test("a blocked legacy DB warns with two arguments, stays counted, and stops before the re-list", async () => {
+	test("a blocked legacy DB warns with two arguments and the sweep still resolves", async () => {
 		listings = [[P1_1, P2_1, KEYVAL]]
 		outcomes = { "pxe/p1/1": "manual" }
 		const run = sweep(makeService())
 		await until(() => reqs.has("pxe/p1/1"))
 		req("pxe/p1/1").onblocked?.()
 		expect(warns).toEqual([["deleteDatabase blocked (DB still in use):", "pxe/p1/1"]])
-		// A late success settles nothing: the skip already resolved `false`.
+		// A late success settles nothing: the skip already resolved.
 		req("pxe/p1/1").onsuccess?.()
-		await run
-		expect(h.calls).toEqual(["databases", "delete:pxe/p2/1", "delete:pxe/p1/1"])
-	})
-
-	test("a PXE DB that appears after the boot-snapshot deletions keeps the store: the log ends at the re-list", async () => {
-		listings = [
-			[P1_1, KEYVAL],
-			[db("pxe/pNEW/1"), KEYVAL],
-		]
-		await sweep(makeService())
-		expect(h.calls).toEqual(["databases", "delete:pxe/p1/1", "databases"])
-	})
-
-	test("the store is looked up in the boot snapshot, so one created after boot is kept", async () => {
-		listings = [[P1_1], [KEYVAL]]
-		await sweep(makeService())
-		expect(h.calls).toEqual(["databases", "delete:pxe/p1/1", "databases"])
-	})
-
-	test("a blocked store delete warns one string and the sweep still resolves", async () => {
-		listings = [[P1_1, KEYVAL], []]
-		outcomes = { "keyval-store": "manual" }
-		const run = sweep(makeService())
-		await until(() => reqs.has("keyval-store"))
-		req("keyval-store").onblocked?.()
-		expect(warns).toEqual([["deleteDatabase blocked (DB still in use): keyval-store"]])
 		await expect(run).resolves.toBeUndefined()
-	})
-
-	test("a store delete error rejects with the request's own error", async () => {
-		listings = [[P1_1, KEYVAL], []]
-		outcomes = { "keyval-store": "error" }
-		await expect(sweep(makeService())).rejects.toBe(boom)
+		expect(h.calls).toEqual(["databases", "delete:pxe/p2/1", "delete:pxe/p1/1"])
 	})
 
 	test("a legacy DB error with no request error rejects with that raw undefined", async () => {
@@ -242,25 +211,19 @@ describe("boot sweep: best-effort, skips a blocked delete", () => {
 		await expect(sweep(makeService())).rejects.toBeUndefined()
 	})
 
-	test("await shape: the first delete follows the boot listing, and the store delete the re-list, by fixed ticks", async () => {
+	test("await shape: the first delete follows the boot listing by a fixed tick", async () => {
 		const boot = gate<IDBDatabaseInfo[]>()
-		const relist = gate<IDBDatabaseInfo[]>()
-		listings = [boot.promise, relist.promise]
+		listings = [boot.promise]
 		const run = sweep(makeService())
 		await until(listed(1))
-		let counter = tickCounter()
+		const counter = tickCounter()
 		let firstDeleteAt = -1
-		let keyvalDeleteAt = -1
 		h.onDelete = (name) => {
 			if (name === "pxe/p1/1") firstDeleteAt = counter.now()
-			if (name === "keyval-store") keyvalDeleteAt = counter.now()
 		}
 		boot.open([P1_1, KEYVAL])
-		await until(listed(2))
-		counter = tickCounter()
-		relist.open([])
 		await run
-		expect({ firstDeleteAt, keyvalDeleteAt }).toEqual({ firstDeleteAt: 1, keyvalDeleteAt: 1 })
+		expect(firstDeleteAt).toBe(1)
 	})
 })
 
