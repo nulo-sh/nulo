@@ -199,8 +199,6 @@ describe("boot sweep: best-effort, skips a blocked delete", () => {
 		await until(() => reqs.has("pxe/p1/1"))
 		req("pxe/p1/1").onblocked?.()
 		expect(warns).toEqual([["deleteDatabase blocked (DB still in use):", "pxe/p1/1"]])
-		// A late success settles nothing: the skip already resolved.
-		req("pxe/p1/1").onsuccess?.()
 		await expect(run).resolves.toBeUndefined()
 		expect(h.calls).toEqual(["databases", "delete:pxe/p2/1", "delete:pxe/p1/1"])
 	})

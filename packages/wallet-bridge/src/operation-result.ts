@@ -9,7 +9,7 @@ export type OkOperationResult<T> = {
 export type FailedOperationResult = {
 	status: "failed"
 	error: string
-	/** The thrown typed error's `CODE`, set only for a class whose dApp
+	/** The thrown typed error's `code`, set only for a class whose dApp
 	 *  discrimination is a ratified contract and whose reconstruction is
 	 *  lossless message-only. The result crosses process boundaries as data,
 	 *  so the class identity is carried here and re-materialized at unwrap —

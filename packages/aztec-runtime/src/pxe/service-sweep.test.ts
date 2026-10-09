@@ -1,6 +1,7 @@
 /**
- * The deferred orphan-store sweep's recheck-at-commit obligation: a same-id
- * re-import provisioning after the sweep's snapshots must keep its store.
+ * The deferred orphan-store sweep: a same-id re-import provisioning after the
+ * sweep's snapshots must keep its store, and the legacy IndexedDB arm never
+ * deletes bb.js's CRS cache (keyval-store).
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
