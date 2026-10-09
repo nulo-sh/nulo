@@ -120,7 +120,10 @@ describe("resolve-ports — host registry", () => {
 		const portsPath = path.join(ROOT, "claimed", "ports.json")
 		const { runId, ports } = await resolvePorts({ ownerPid: String(process.pid), portsPath, registry: { file } })
 		expect(runId).toMatch(new RegExp(`^nulo-e2e-${process.pid}-[0-9a-f]{8}$`))
-		expect(JSON.parse(readFileSync(portsPath, "utf8"))).toMatchObject({ ...ports, runId })
+		expect(JSON.parse(readFileSync(portsPath, "utf8"))).toMatchObject({ ...ports, runId, worktree: REPO_ROOT })
+		const { runMarker, runOwner } = JSON.parse(readFileSync(portsPath, "utf8"))
+		expect(runMarker).toMatch(/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
+		if (process.platform === "linux") expect(runOwner).toMatch(new RegExp(`^${process.pid}:\\d+$`))
 		const rows = ownRows(file).map((l) =>
 			l
 				.split("|")

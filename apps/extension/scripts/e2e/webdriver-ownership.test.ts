@@ -10,19 +10,16 @@ const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-ownership-test-"))
 process.env.NULO_E2E_DATA_ROOT = ROOT
 
 const {
-	LAUNCH_ENV,
 	disownProfile,
 	listOwnedLaunches,
 	newLaunchMarker,
 	newProfileDir,
 	ownedByThisRun,
-	ownedProcesses,
-	ownsProcess,
-	readStartTime,
 	reapOrphanLaunches,
 	recordLaunch,
 	releaseLaunch,
 } = await import("../../tests/e2e/fixtures/browser/ownership")
+const { LAUNCH_ENV, OWNER_ENV, ownIdentity, ownedProcesses, readStartTime } = await import("../../tests/e2e/owned-processes")
 
 const RECORDS = path.join(ROOT, "webdriver-owned")
 
@@ -39,12 +36,17 @@ function launchMarker(): string {
 	return marker
 }
 
+/** An owner identity no live process has: what a launch of a run that has since died names. */
+const DEAD_OWNER = "2000000000:1"
+
 /** Real processes to own, so the kill path is exercised rather than mocked. Returns once a scan has
  *  found the child carrying its marker: Bun's spawn returns while the child is still inside execve,
  *  and until the kernel has set up the new image its `/proc/<pid>/environ` reads empty. A child that
- *  execs again reads empty again, so one sighting is the proof, not a second read. */
-async function spawnMarked(marker: string, command = "sleep", args = ["120"]): Promise<number> {
-	const child = spawn(command, args, { detached: true, stdio: "ignore", env: { ...process.env, [LAUNCH_ENV]: marker } })
+ *  execs again reads empty again, so one sighting is the proof, not a second read. Owned by this
+ *  test process unless `owner` names another. */
+async function spawnMarked(marker: string, command = "sleep", args = ["120"], owner = ownIdentity()): Promise<number> {
+	const env = { ...process.env, [LAUNCH_ENV]: marker, ...(owner ? { [OWNER_ENV]: owner } : {}) }
+	const child = spawn(command, args, { detached: true, stdio: "ignore", env })
 	const pid = child.pid
 	if (!pid) throw new Error("could not spawn a test process")
 	let seen = false
@@ -59,7 +61,7 @@ async function spawnMarked(marker: string, command = "sleep", args = ["120"]): P
 /** Runs a release on fake timers, so each poll lands on a fixed tick however slow a scan is, and
  *  records every signal meant for `pid` instead of sending it; with `failFirst` the first send
  *  fails. Returns the signals in the order they were sent. */
-async function recordSignals(pid: number, release: () => Promise<void>, failFirst = false): Promise<unknown[]> {
+async function recordSignals(pid: number, release: () => Promise<unknown>, failFirst = false): Promise<unknown[]> {
 	const sent: unknown[] = []
 	const realKill = process.kill.bind(process)
 	const kill = vi.spyOn(process, "kill").mockImplementation((target, signal) => {
@@ -119,7 +121,7 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		const pid = await spawnMarked(marker)
 		expect(ownedProcesses(marker)).toEqual([pid])
 		// The same pid under another launch's marker is a stranger: this is the recycled-number case.
-		expect(ownsProcess(ownedByThisRun({ marker: launchMarker(), pid, profileDir: "", ownsProfile: false, label: "t" }))).toBe(false)
+		expect(ownedProcesses(launchMarker())).toEqual([])
 	})
 
 	test("release stops the processes and only then removes the profile", async () => {
@@ -128,8 +130,8 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		const profileDir = newProfileDir(marker)
 		const record = ownedByThisRun({ marker, pid, profileDir, ownsProfile: true, label: "release" })
 		recordLaunch(record)
-		await releaseLaunch(record)
-		expect(ownsProcess(record)).toBe(false)
+		expect(await releaseLaunch(record)).toBe(true)
+		expect(ownedProcesses(marker)).toEqual([])
 		expect(existsSync(profileDir)).toBe(false)
 		expect(existsSync(path.join(RECORDS, `${marker}.json`))).toBe(false)
 	})
@@ -142,7 +144,11 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		const profileDir = newProfileDir(marker)
 		const record = ownedByThisRun({ marker, pid, profileDir, ownsProfile: true, label: "unkillable" })
 		recordLaunch(record)
-		expect(await recordSignals(pid, () => releaseLaunch(record, 1_000), true)).toEqual(["SIGTERM", "SIGTERM", "SIGKILL"])
+		expect(await recordSignals(pid, () => releaseLaunch(record, "self", { graceMs: 1_000 }), true)).toEqual([
+			"SIGTERM",
+			"SIGTERM",
+			"SIGKILL",
+		])
 		expect(existsSync(profileDir)).toBe(true)
 		expect(existsSync(path.join(RECORDS, `${marker}.json`))).toBe(true)
 	})
@@ -154,14 +160,21 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		const profileDir = newProfileDir(marker)
 		const record = ownedByThisRun({ marker, pid, profileDir, ownsProfile: true, label: "late" })
 		recordLaunch(record)
-		const polls = [[], [pid], [], []]
-		const profileAtPoll: boolean[] = []
-		const scan = () => {
-			profileAtPoll.push(existsSync(profileDir))
-			return polls[profileAtPoll.length - 1] ?? []
+		const marked = new Map([
+			[LAUNCH_ENV, marker],
+			[OWNER_ENV, ownIdentity() ?? ""],
+		])
+		// Per scan of this pid: inside execve, then marked (scan and re-check), then gone.
+		const reads: Array<Map<string, string> | "gone"> = [new Map(), marked, marked]
+		const profileAtRead: boolean[] = []
+		const read = (p: number) => {
+			if (p !== pid) return "gone" as const
+			profileAtRead.push(existsSync(profileDir))
+			return reads.shift() ?? "gone"
 		}
-		expect(await recordSignals(pid, () => releaseLaunch(record, 1_000, scan))).toEqual(["SIGTERM"])
-		expect(profileAtPoll).toEqual([true, true, true, true])
+		expect(await recordSignals(pid, () => releaseLaunch(record, "self", { graceMs: 1_000, read }))).toEqual(["SIGTERM"])
+		expect(profileAtRead.every(Boolean)).toBe(true)
+		expect(profileAtRead.length).toBeGreaterThanOrEqual(5)
 		expect(existsSync(profileDir)).toBe(false)
 	})
 
@@ -180,7 +193,7 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		expect(found).toHaveLength(2)
 
 		const record = ownedByThisRun({ marker, pid: leader, profileDir: newProfileDir(marker), ownsProfile: true, label: "escaped" })
-		await releaseLaunch(record)
+		expect(await releaseLaunch(record)).toBe(true)
 		expect(ownedProcesses(marker)).toEqual([])
 		expect(existsSync(record.profileDir)).toBe(false)
 	})
@@ -193,7 +206,7 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		const record = ownedByThisRun({ marker, pid: await spawnMarked(marker), profileDir, ownsProfile: false, label: "borrowed" })
 		recordLaunch(record)
 		await releaseLaunch(record)
-		expect(ownsProcess(record)).toBe(false)
+		expect(ownedProcesses(marker)).toEqual([])
 		expect(existsSync(profileDir)).toBe(true)
 		expect(listOwnedLaunches().map((r) => r.marker)).not.toContain(marker)
 	})
@@ -211,7 +224,7 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 
 	test("a record whose owner is gone is reaped, processes and profile both", async () => {
 		const marker = launchMarker()
-		const pid = await spawnMarked(marker)
+		const pid = await spawnMarked(marker, "sleep", ["120"], DEAD_OWNER)
 		const profileDir = newProfileDir(marker)
 		recordLaunch(orphaned({ marker, pid, profileDir, ownsProfile: true, label: "orphan" }))
 		expect(await reapOrphanLaunches()).toContain("orphan")
@@ -228,6 +241,43 @@ describe.skipIf(process.platform !== "linux")("webdriver launch ownership", { ti
 		expect(await reapOrphanLaunches()).toContain("disowned")
 		expect(existsSync(profileDir)).toBe(true)
 		expect(existsSync(path.join(RECORDS, `${marker}.json`))).toBe(false)
+	})
+
+	// A record is a file anyone on the host can write: one naming a live launch's marker, with a
+	// dead owner of its own, must not reach that launch's processes, which name their live owner.
+	test("an orphaned record naming a live launch's marker stops nothing and is kept", async () => {
+		const marker = launchMarker()
+		const pid = await spawnMarked(marker)
+		const profileDir = newProfileDir(marker)
+		recordLaunch(orphaned({ marker, pid, profileDir, ownsProfile: true, label: "forged-live" }))
+		expect(await reapOrphanLaunches()).not.toContain("forged-live")
+		expect(ownedProcesses(marker)).toEqual([pid])
+		expect(existsSync(profileDir)).toBe(true)
+		expect(listOwnedLaunches().map((r) => r.marker)).toContain(marker)
+	})
+
+	// A marked process that can no longer be read (it made itself non-dumpable, or exec'd into
+	// another user) cannot be shown gone.
+	test("a marked process that turns unreadable leaves the release unknown, keeping profile and record", async () => {
+		const marker = launchMarker()
+		const pid = await spawnMarked(marker, "sleep", ["120"], DEAD_OWNER)
+		const profileDir = newProfileDir(marker)
+		const record = orphaned({ marker, pid, profileDir, ownsProfile: true, label: "unreadable" })
+		recordLaunch(record)
+		let reads = 0
+		const read = (p: number) => {
+			if (p !== pid) return "gone" as const
+			reads++
+			return reads === 1
+				? new Map([
+						[LAUNCH_ENV, marker],
+						[OWNER_ENV, DEAD_OWNER],
+					])
+				: ("unreadable" as const)
+		}
+		expect(await recordSignals(pid, () => releaseLaunch(record, "orphan", { graceMs: 500, killGraceMs: 500, read }))).toEqual([])
+		expect(existsSync(profileDir)).toBe(true)
+		expect(existsSync(path.join(RECORDS, `${marker}.json`))).toBe(true)
 	})
 
 	// The interval an orphan's record sits unattended is exactly when its numbers get reissued.

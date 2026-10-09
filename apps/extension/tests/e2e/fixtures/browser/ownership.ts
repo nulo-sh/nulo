@@ -1,20 +1,15 @@
-import { randomUUID } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { E2E_DATA_ROOT } from "../../lockfile"
+import { MARKER_SHAPE, type SweepOptions, newMarker, orphanedLaunch, readStartTime, selfLaunch, sweep } from "../../owned-processes"
 
 /**
  * Ownership records for launched WebDriver processes.
  *
  * Many agents share this host, so teardown must kill exactly what this launch started and nothing
  * else: no `pkill -f geckodriver`, which would take down a neighbour's run and leave it believing
- * its browser crashed.
- *
- * Identity is a random marker in the launch's environment, which every process it starts
- * inherits. Numbers cannot carry it: a pid is reissued once its process is gone, a pgid once its
- * group is, and an orphan's record sits unattended for exactly the interval in which that happens
- * — so neither "the leader's start time matches" nor "the group still has members" proves the
- * processes found are the ones recorded. A marker also follows a child that leaves the group.
+ * its browser crashed. Identity is the launch marker of `owned-processes.ts`, which every process
+ * the launch starts inherits together with its owner.
  *
  * Records live on real disk, not tmpfs: a run killed before teardown must leave a record the next
  * run can read, and a profile directory under `/tmp` would be RAM-backed and pinned open by the
@@ -28,10 +23,7 @@ const PROFILE_ROOT = path.join(E2E_DATA_ROOT, "firefox-profiles")
 const PROFILE_PREFIX = "profile-"
 const PROFILE_MARKER_FILE = ".nulo-launch"
 
-export const LAUNCH_ENV = "NULO_E2E_LAUNCH"
-const MARKER_SHAPE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
-
-export const newLaunchMarker = (): string => randomUUID()
+export const newLaunchMarker = newMarker
 
 export interface LaunchOwnership {
 	marker: string
@@ -60,18 +52,6 @@ export function ownedByThisRun(record: Omit<LaunchOwnership, "ownerPid" | "owner
 	return { ...record, ownerPid: process.pid, ownerStartTime }
 }
 
-/** `undefined` when the pid is gone — a dead process has no start time to compare. */
-export function readStartTime(pid: number): string | undefined {
-	try {
-		const stat = readFileSync(`/proc/${pid}/stat`, "utf8")
-		// The comm field is parenthesised and may itself contain spaces, so split after it.
-		const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ")
-		return fields[19]
-	} catch {
-		return undefined
-	}
-}
-
 /** A profile stamped with the launch that will own it, so a record cannot claim another's. */
 export function newProfileDir(marker: string): string {
 	mkdirSync(PROFILE_ROOT, { recursive: true })
@@ -85,26 +65,6 @@ export function newProfileDir(marker: string): string {
 	}
 	return dir
 }
-
-/** Every live process carrying the marker. Another user's environ is unreadable, and skipped:
- *  a process we cannot read is not one we started. */
-export function ownedProcesses(marker: string): number[] {
-	return readdirSync("/proc")
-		.filter((name) => /^\d+$/.test(name))
-		.map(Number)
-		.filter((pid) => carriesMarker(pid, marker))
-}
-
-function carriesMarker(pid: number, marker: string): boolean {
-	try {
-		return readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").includes(`${LAUNCH_ENV}=${marker}`)
-	} catch {
-		// Exited since it was listed, or not ours to read.
-		return false
-	}
-}
-
-export const ownsProcess = (record: LaunchOwnership): boolean => ownedProcesses(record.marker).length > 0
 
 /**
  * The canonical path to delete, or `undefined` if this record has no right to one. A record is a
@@ -181,41 +141,21 @@ export function listOwnedLaunches(): LaunchOwnership[] {
 /**
  * Stop the launch's processes and only then delete the profile. Deleting a profile a live Firefox
  * still holds open leaves the store pinned as a deleted-but-open file, which is how a reaper turns
- * one failed run into host-wide memory pressure. `scan` is a parameter so that what each poll finds
- * can be scripted.
+ * one failed run into host-wide memory pressure. `self` releases a launch this process owns; an
+ * `orphan` release signals only processes whose own owner is dead, whatever the record says.
  */
-export async function releaseLaunch(record: LaunchOwnership, graceMs = 5_000, scan = ownedProcesses): Promise<void> {
-	// A killed process stays in /proc until it is reaped, so SIGKILL is waited out as well.
-	const stopped = (await stopOwned(record, "SIGTERM", graceMs, scan)) || (await stopOwned(record, "SIGKILL", 2_000, scan))
-	// A process that outlived SIGKILL is unkillable (uninterruptible sleep); leaving its profile is
-	// the lesser harm, and the record survives for the next run's sweep.
-	if (!stopped) return
+export async function releaseLaunch(record: LaunchOwnership, mode: "self" | "orphan" = "self", opts: SweepOptions = {}): Promise<boolean> {
+	const status = await sweep(mode === "self" ? selfLaunch(record.marker) : orphanedLaunch(record.marker), opts)
+	// A process that outlived SIGKILL, one still owned by a live run, or one nobody could read: the
+	// profile stays, the lesser harm, and the record survives for the next sweep.
+	if (status !== "stopped") {
+		console.warn(`[firefox] ${record.label}: processes ${status}; its profile and record are kept`)
+		return false
+	}
 	const profile = record.ownsProfile ? deletableProfile(record) : undefined
 	if (profile) rmSync(profile, { recursive: true, force: true })
 	rmSync(recordFile(record), { force: true })
-}
-
-/** Signals each process carrying the marker once, rescanning until two scans a poll apart find none.
- *  A process inside execve reads an empty environ until the kernel has set up its new image, so it
- *  is signalled when a later scan finds it. Best effort: nothing bounds how long an exec reads
- *  empty, and a process no scan ever found cannot be shown gone. */
-async function stopOwned(
-	record: LaunchOwnership,
-	signal: NodeJS.Signals,
-	timeoutMs: number,
-	scan: (marker: string) => number[],
-): Promise<boolean> {
-	const deadline = Date.now() + timeoutMs
-	const signalled = new Set<number>()
-	let emptyScans = 0
-	for (;;) {
-		const live = scan(record.marker)
-		for (const pid of live) if (!signalled.has(pid) && signalIfOwned(pid, record.marker, signal)) signalled.add(pid)
-		emptyScans = live.length === 0 ? emptyScans + 1 : 0
-		if (emptyScans === 2) return true
-		if (Date.now() >= deadline) return false
-		await new Promise((resolve) => setTimeout(resolve, 100))
-	}
+	return true
 }
 
 /**
@@ -233,23 +173,7 @@ export async function reapOrphanLaunches(): Promise<string[]> {
 			continue
 		}
 		if (readStartTime(record.ownerPid) === record.ownerStartTime) continue
-		await releaseLaunch(record)
-		reaped.push(record.label)
+		if (await releaseLaunch(record, "orphan")) reaped.push(record.label)
 	}
 	return reaped
-}
-
-/** Whether the signal was sent. */
-function signalIfOwned(pid: number, marker: string, signal: NodeJS.Signals): boolean {
-	// A whole /proc scan separates finding this pid from signalling it, long enough for it to exit
-	// and be reissued. Asking again leaves one read between the check and the signal, which is as
-	// narrow as it gets without a pidfd — and the runtime exposes none.
-	if (!carriesMarker(pid, marker)) return false
-	try {
-		process.kill(pid, signal)
-		return true
-	} catch {
-		// Gone since the re-check, or not ours to signal: the next scan decides.
-		return false
-	}
 }

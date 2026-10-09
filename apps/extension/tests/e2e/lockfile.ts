@@ -23,6 +23,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, existsSync 
 import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { IDENTITY_SHAPE, MARKER_SHAPE } from "./owned-processes"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const E2E_STATE_DIR = path.resolve(__dirname, "../../.e2e-state")
@@ -41,11 +42,8 @@ const LOCK_PATH = path.join(E2E_STATE_DIR, "owned.json")
  */
 export const E2E_DATA_ROOT = process.env.NULO_E2E_DATA_ROOT ?? path.join(homedir(), ".cache", "nulo-e2e")
 
-/** Per-run aztec data dir path under {@link E2E_DATA_ROOT}. The `<pid>` segment lets `e2e:reap`
- *  sweep orphaned dirs whose owning process is dead. */
-export function newAztecDataDir(): string {
-	return path.join(E2E_DATA_ROOT, `nulo-aztec-${process.pid}-${Date.now()}`)
-}
+export const SANDBOX_SERVICES = ["anvil", "aztec", "playground"] as const
+export type SandboxService = (typeof SANDBOX_SERVICES)[number]
 
 export interface OwnedPorts {
 	anvil: number
@@ -59,25 +57,65 @@ export interface OwnedState {
 	startedAt: string
 	bakedLocalRpcUrl: string
 	ports: OwnedPorts
-	pids: { anvil?: number; aztec?: number; playground?: number }
+	/** For health and log lines only: ownership is the markers, never these numbers. */
+	pids: Partial<Record<SandboxService, number>>
+	/** The node's run dir, stamped with its marker; the node writes under `<dir>/data`. A lock
+	 *  written before markers existed names the data dir itself, unstamped. */
 	aztecDataDir: string
+	/** Each service's launch marker. Absent on a lock written before markers existed, which no
+	 *  sweep ever signals. */
+	markers?: Partial<Record<SandboxService, string>>
+	/** `<pid>:<start time>` of the vitest process that holds the sandbox: the one that started it,
+	 *  or the one that reused it last. No sweep touches the sandbox while it lives. */
+	owner?: string
 	/** Recorded post-deploy. Used as the identity assertion on reuse. */
 	l1ContractAddresses?: Record<string, string>
 	/** Address book emitted to .test-config.json. Persisted so the reuse
-	 *  path can recreate that file (teardown deletes it). */
+	 *  path can recreate that file (teardown deletes it). A lock from before `tokenClassId` lacks it. */
 	deployedConfig?: {
 		nodeUrl: string
 		tokenAddress: string
+		tokenClassId?: string
 		sponsoredFpcAddress: string
 		minterAddress: string
 	}
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
+const isPid = (v: unknown) => Number.isInteger(v) && (v as number) > 0
+const isStringRecord = (v: unknown) => isObject(v) && Object.values(v).every((x) => typeof x === "string")
+
+function hasValidServices(lock: Record<string, unknown>): boolean {
+	const { pids, markers } = lock
+	if (!isObject(pids) || !Object.values(pids).every((pid) => pid === undefined || isPid(pid))) return false
+	if (markers === undefined) return true
+	return (
+		isObject(markers) &&
+		Object.entries(markers).every(
+			([k, m]) => SANDBOX_SERVICES.includes(k as SandboxService) && typeof m === "string" && MARKER_SHAPE.test(m),
+		)
+	)
+}
+
+/** The lock is a file any process on this host can write, and it names processes to stop and a
+ *  directory to delete, so anything not shaped like one is treated as unreadable. */
+export function isOwnedState(value: unknown): value is OwnedState {
+	if (!isObject(value)) return false
+	const { ports, owner, l1ContractAddresses, deployedConfig } = value
+	if (typeof value.startedAt !== "string" || typeof value.bakedLocalRpcUrl !== "string" || typeof value.aztecDataDir !== "string")
+		return false
+	if (!isObject(ports) || !["anvil", "aztec", "aztecAdmin", "aztecP2P", "playground"].every((k) => isPid(ports[k]))) return false
+	if (owner !== undefined && !(typeof owner === "string" && IDENTITY_SHAPE.test(owner))) return false
+	if (l1ContractAddresses !== undefined && !isStringRecord(l1ContractAddresses)) return false
+	if (deployedConfig !== undefined && !isStringRecord(deployedConfig)) return false
+	return hasValidServices(value)
+}
+
 export function readLock(): OwnedState | undefined {
 	try {
 		if (!existsSync(LOCK_PATH)) return undefined
-		const raw = readFileSync(LOCK_PATH, "utf-8")
-		return JSON.parse(raw) as OwnedState
+		const parsed: unknown = JSON.parse(readFileSync(LOCK_PATH, "utf-8"))
+		return isOwnedState(parsed) ? parsed : undefined
 	} catch {
 		return undefined
 	}
@@ -109,19 +147,4 @@ export function isPidAlive(pid: number | undefined): boolean {
 	} catch {
 		return false
 	}
-}
-
-/** Best-effort kill of a PID's process group. Used by orphan cleanup. */
-export function killOrphanByPid(pid: number | undefined, label: string): void {
-	if (!isPidAlive(pid)) return
-	try {
-		process.kill(-(pid as number), "SIGTERM")
-	} catch {
-		try {
-			process.kill(pid as number, "SIGTERM")
-		} catch {
-			// ignore
-		}
-	}
-	console.warn(`[e2e-setup] reaped orphan ${label} pid=${pid}`)
 }

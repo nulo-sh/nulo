@@ -44,6 +44,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createServer } from "node:net"
 import { REPO_ROOT } from "../../tests/e2e/lockfile"
+import { newMarker, readStartTime } from "../../tests/e2e/owned-processes"
 import { PortClaimConflict, type RegistryOptions, claimPorts, registeredPorts, releasePorts } from "../../tests/e2e/port-registry"
 
 export interface PortReservation {
@@ -243,10 +244,17 @@ export interface ResolveOptions {
 	registry?: RegistryOptions
 }
 
+/** The run marker `agent.sh` exports to everything the run starts, and the owner it names: once
+ *  that owner is dead, `e2e:reap` and the next run's setup stop whatever still carries the marker. */
+function runIdentity(ownerPid: number): Record<string, string> {
+	const startTime = readStartTime(ownerPid)
+	return { runMarker: newMarker(), ...(startTime ? { runOwner: `${ownerPid}:${startTime}` } : {}), worktree: REPO_ROOT }
+}
+
 /**
  * Draws a pack and, when an owner pid is given, claims it in the host registry under a fresh run
- * id before writing `ports.json`. A `ports.json` that cannot be written releases the claim: no run
- * would ever release it.
+ * id before writing `ports.json` with the run's marker. A `ports.json` that cannot be written
+ * releases the claim: no run would ever release it.
  */
 export async function resolvePorts(opts: ResolveOptions = {}): Promise<{ runId?: string; ports: PortPack }> {
 	const { portsPath = PORTS_PATH, registry = {} } = opts
@@ -261,7 +269,7 @@ export async function resolvePorts(opts: ResolveOptions = {}): Promise<{ runId?:
 			anvilUrl: `http://127.0.0.1:${ports.anvil}`,
 			aztecUrl: `http://localhost:${ports.aztec}`,
 			playgroundUrl: `http://localhost:${ports.playground}/`,
-			...(runId ? { runId } : {}),
+			...(runId && ownerPid ? { runId, ...runIdentity(ownerPid) } : {}),
 			resolvedAt: new Date().toISOString(),
 		}
 		await writeFile(portsPath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8")

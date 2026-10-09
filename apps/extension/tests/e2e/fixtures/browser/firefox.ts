@@ -10,14 +10,13 @@ import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
 import { observeAndRefuse } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
+import { launchEnv, ownedProcesses } from "../../owned-processes"
 import {
-	LAUNCH_ENV,
 	type LaunchOwnership,
 	disownProfile,
 	newLaunchMarker,
 	newProfileDir,
 	ownedByThisRun,
-	ownedProcesses,
 	reapOrphanLaunches,
 	recordLaunch,
 	releaseLaunch,
@@ -167,7 +166,7 @@ async function spawnGeckodriver(marker: string): Promise<{ gecko: ChildProcess &
 		["--host", "127.0.0.1", "--port", String(http.port), "--websocket-port", String(bidi.port), "--allow-system-access"],
 		// Detached so a signal to this run's own group — a Ctrl-C — cannot stop it half-way through a
 		// session. The marker is how teardown finds it, and the Firefox that inherits it.
-		{ detached: true, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, [LAUNCH_ENV]: marker } },
+		{ detached: true, stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, ...launchEnv(marker) } },
 	)
 	// Without a listener a missing binary surfaces as an unhandled `error` event, not a rejection.
 	const failed = new Promise<never>((_, reject) =>

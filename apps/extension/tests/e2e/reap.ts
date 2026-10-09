@@ -7,78 +7,46 @@
  * multi-GB data dir open, which under the old tmpfs layout pinned that space in RAM until the box
  * thrashed. This script is the explicit "clean up after myself" step:
  *
- *   1. Reap THIS worktree's owned run (from `.e2e-state/owned.json`): kill the recorded process
- *      groups, remove the recorded data dir, clear the lock.
- *   2. Sweep {@link E2E_DATA_ROOT} for orphaned `nulo-aztec-<pid>-*` dirs whose owning process is
- *      DEAD, and remove them (live pids are skipped, so a concurrent agent's run is never touched).
- *
+ *   1. Reap THIS worktree's sandbox (from `.e2e-state/owned.json`) once the run holding it is dead:
+ *      stop every process carrying a service's marker whose own owner is dead, then remove the
+ *      stamped run dir and clear the lock.
+ *   2. Stop every process of a dead agent run of this worktree (forks, Chrome) by its run marker.
  *   3. Release Firefox launches (geckodriver, its Firefox, the profile) whose owning test run is
  *      gone — otherwise they wait for the next Firefox launch on this host to sweep them.
- *
- *   4. Drop this worktree's rows from the host port registry whose owning run is dead. Never a row
+ *   4. Sweep {@link E2E_DATA_ROOT} for `nulo-aztec-<pid>-*` dirs nothing uses any more.
+ *   5. Drop this worktree's rows from the host port registry whose owning run is dead. Never a row
  *      by the run id `ports.json` names: that file is writable by anything, and a live run's rows
  *      must outlast any reap.
  *
- * Ownership-scoped by design: it only kills pids this worktree's lock recorded and only deletes
- * data dirs whose owner is gone — never a blanket `pkill -f aztec` that could hit another agent.
+ * Ownership-scoped by design: it signals only processes whose own environment names this worktree's
+ * markers and a dead owner — never a blanket `pkill -f aztec` that could hit another agent.
  */
-import { readdirSync, rmSync, statSync } from "node:fs"
-import path from "node:path"
 import { reapOrphanLaunches } from "./fixtures/browser/ownership"
-import { E2E_DATA_ROOT, REPO_ROOT, clearLock, isPidAlive, killOrphanByPid, readLock } from "./lockfile"
+import { REPO_ROOT, clearLock, readLock } from "./lockfile"
 import { releaseDeadRows } from "./port-registry"
+import { reapPriorRun, sweepDeadRuns, sweepOrphanDataDirs } from "./sandbox-ownership"
 
-function reapOwnedRun(): boolean {
+async function reapOwnedRun(): Promise<boolean> {
 	const lock = readLock()
 	if (!lock) return false
-	console.log("[e2e:reap] found owned.json — reaping this worktree's run")
-	killOrphanByPid(lock.pids.anvil, "anvil")
-	killOrphanByPid(lock.pids.aztec, "aztec")
-	killOrphanByPid(lock.pids.playground, "playground")
-	if (lock.aztecDataDir) {
-		rmSync(lock.aztecDataDir, { recursive: true, force: true })
-		console.log(`[e2e:reap] removed data dir ${lock.aztecDataDir}`)
+	console.log("[e2e:reap] found owned.json — reaping this worktree's sandbox")
+	const outcome = await reapPriorRun(lock)
+	if (!outcome.cleared) {
+		console.warn(`[e2e:reap] kept owned.json: ${outcome.reason}`)
+		return false
 	}
 	clearLock()
-	console.log("[e2e:reap] cleared lock")
+	console.log("[e2e:reap] stopped the sandbox and cleared the lock")
 	return true
 }
 
-/** Remove `nulo-aztec-<pid>-<ts>` dirs whose `<pid>` is no longer alive. */
-function sweepOrphanDataDirs(): number {
-	let removed = 0
-	let entries: string[]
-	try {
-		entries = readdirSync(E2E_DATA_ROOT)
-	} catch {
-		return 0 // root doesn't exist yet — nothing to sweep
-	}
-	for (const name of entries) {
-		const match = name.match(/^nulo-aztec-(\d+)-\d+$/)
-		if (!match) continue
-		const pid = Number(match[1])
-		if (isPidAlive(pid)) continue // a live (possibly another worktree's) run owns it — leave it
-		const full = path.join(E2E_DATA_ROOT, name)
-		try {
-			if (!statSync(full).isDirectory()) continue
-			rmSync(full, { recursive: true, force: true })
-			removed++
-			console.log(`[e2e:reap] swept orphan data dir ${full} (pid ${pid} dead)`)
-		} catch {
-			// best-effort
-		}
-	}
-	return removed
-}
-
-const reaped = reapOwnedRun()
-const swept = sweepOrphanDataDirs()
+const reaped = await reapOwnedRun()
+const runs = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
+if (runs !== "stopped") console.warn(`[e2e:reap] a dead run's processes are ${runs}`)
 const launches = process.platform === "linux" ? await reapOrphanLaunches() : []
+const swept = sweepOrphanDataDirs()
+for (const dir of swept) console.log(`[e2e:reap] swept orphan data dir ${dir}`)
 const rows = (await releaseDeadRows(REPO_ROOT)) ?? 0
-if (!reaped && swept === 0 && launches.length === 0 && rows === 0) {
-	console.log("[e2e:reap] nothing to reap — no owned run, no orphaned data dirs, no orphaned Firefox launches, no dead registry rows")
-} else {
-	console.log(
-		`[e2e:reap] done (owned run reaped: ${reaped}, orphan data dirs swept: ${swept}, orphaned Firefox launches released: ${launches.length}, dead registry rows dropped: ${rows})`,
-	)
-}
+console.log(
+	`[e2e:reap] done (sandbox reaped: ${reaped}, orphaned Firefox launches released: ${launches.length}, orphan data dirs swept: ${swept.length}, dead registry rows dropped: ${rows})`,
+)
