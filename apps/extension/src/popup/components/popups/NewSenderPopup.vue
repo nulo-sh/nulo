@@ -108,6 +108,7 @@ usePopupEntity(() => props.show, {
 					sanitize
 					v-model="senderAddress"
 					data-testid="new-sender-address-input"
+					textVariant="input-data"
 				>
 					<template #right>
 						<Transition name="fade">

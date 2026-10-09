@@ -124,6 +124,18 @@
 			"liveFrom": 4
 		},
 		{
+			"file": "apps/extension/src/components/composite/general/AddressInput.vue",
+			"expression": "Input",
+			"branch": "",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "popup-send",
+			"state": "",
+			"liveFrom": 2,
+			"why": "the component's own field; each AddressInput element is a site of its own, read at its call site's selector"
+		},
+		{
 			"file": "apps/extension/src/components/composite/LegalConsent.vue",
 			"expression": "String(index + 1).padStart(2, \"0\")",
 			"branch": "points?.length",

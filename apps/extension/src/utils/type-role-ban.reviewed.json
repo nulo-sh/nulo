@@ -3989,12 +3989,6 @@
 			"at": ".section_label"
 		},
 		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "input-data",
-			"at": ".recipient_wrap :global(input)"
-		},
-		{
 			"rule": "tracking",
 			"text": "letter-spacing: 0.1em",
 			"role": "label-section",
@@ -4047,12 +4041,6 @@
 			"text": "font-size: 10px",
 			"role": "label-section",
 			"at": ".section_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "input-data",
-			"at": ".recipient_wrap :global(input)"
 		},
 		{
 			"rule": "faceless",

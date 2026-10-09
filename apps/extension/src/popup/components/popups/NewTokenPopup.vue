@@ -311,6 +311,7 @@ usePopupEntity(
 			placeholder="0x"
 			data-testid="token-address-input"
 			inputTestid="token-address-field"
+			textVariant="input-data"
 			autofocus
 			sanitize
 			:disabled="isBusy"
