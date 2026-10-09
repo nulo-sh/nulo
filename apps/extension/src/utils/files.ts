@@ -87,6 +87,14 @@ export class FileTooLargeError extends Error {
 	}
 }
 
+/** Thrown when the person closes the file chooser without picking a file. */
+export class FilePickCanceledError extends Error {
+	constructor() {
+		super("File pick canceled")
+		this.name = "FilePickCanceledError"
+	}
+}
+
 export async function pickFile(accept = ".json,.txt,.gz,.gzip", delay = false, autoDecompress = true, maxBytes?: number): Promise<File> {
 	return new Promise((resolve, reject) => {
 		const input = document.createElement("input")
@@ -96,9 +104,20 @@ export async function pickFile(accept = ".json,.txt,.gz,.gzip", delay = false, a
 
 		document.body.appendChild(input)
 
+		// Without this a closed chooser leaves the pick pending and the input in the page. Both
+		// paths remove the input; `remove()` is idempotent, so a late second event never throws.
+		input.addEventListener(
+			"cancel",
+			() => {
+				input.remove()
+				reject(new FilePickCanceledError())
+			},
+			{ once: true },
+		)
+
 		input.onchange = () => {
 			const file = input.files?.[0]
-			document.body.removeChild(input)
+			input.remove()
 
 			if (!file) {
 				reject(new Error("No file selected"))

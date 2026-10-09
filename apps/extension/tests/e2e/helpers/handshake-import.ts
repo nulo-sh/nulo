@@ -51,10 +51,11 @@ import { type PasskeyAuthSetup, registerPasskeyProfile, setupPasskeyVirtualAuth 
 import { holdAccountRegistration, isAccountRegistrationHeld, releaseAccountRegistration } from "../fixtures/projection-gate"
 import {
 	accountChainId,
-	armBackupDownloadCapture,
+	downloadEncryptedBackup,
+	downloadPlainPasskeyBackup,
 	keepChainAccountState,
+	openEncryptedBackup,
 	type PlainBackup,
-	readCapturedBackupDownload,
 	sealPlainBackup,
 } from "./backup-export"
 import { importFullBackup, POPUP_IMPORT_SHELL } from "./import-drivers"
@@ -192,16 +193,10 @@ export async function exportBackup(page: Page, credential: Credential, account: 
 		await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 		await clickByTestId(page, "unlock-submit-btn")
 	}
-	await page.waitForFunction(
-		() => {
-			const button = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-			return !!button && !button.disabled
-		},
-		{ timeout: 180_000, polling: 250 },
-	)
-	await armBackupDownloadCapture(page)
-	await clickByTestId(page, "download-backup-btn")
-	const backup = JSON.parse(await readCapturedBackupDownload(page)) as PlainBackup
+	const backup =
+		credential === "password"
+			? await openEncryptedBackup(await downloadEncryptedBackup(page, clickByTestId, 180_000))
+			: (JSON.parse(await downloadPlainPasskeyBackup(page)) as PlainBackup)
 	keepChainAccountState(backup.data, accountChainId(backup, account), token)
 	const file = join(dir, "backup.json")
 	writeFileSync(file, sealPlainBackup(backup))

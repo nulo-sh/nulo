@@ -32,15 +32,10 @@ export class ArtifactRegistry {
 			this.known = known
 		}),
 	)
-	/**
-	 * Cache of class-ids whose artifact has been recomputed and verified
-	 * at least once during the current registry lifetime. Skips the
-	 * ~10–50ms Poseidon recompute for repeat resolves of the same
-	 * artifact.
-	 *
-	 * Cache key: `Fr.toString()` of the verified class-id.
-	 */
-	private readonly verifiedClassIds: Set<string> = new Set()
+	/** Each verified artifact object, mapped to the class id it matched. A skip requires that very
+	 *  object, because one registry serves every runtime's store: a class id verified in one store
+	 *  says nothing about the object another store returns for it. */
+	private readonly verified = new WeakMap<ContractArtifact, string>()
 
 	private readonly verifier: ArtifactClassIdVerifier
 	private readonly logger?: ILogger
@@ -95,8 +90,8 @@ export class ArtifactRegistry {
 	 *    lookup is by definition a class-id match. Recomputing would
 	 *    be the same Poseidon hash twice.
 	 *
-	 *  Cache: `verifiedClassIds: Set<string>` skips the recompute for a
-	 *  class id already verified once, keyed by class id alone. */
+	 *  Cache: `verified` skips the recompute only for the same artifact
+	 *  object under the same class id. */
 	public async resolve(
 		classId: Fr,
 		pxeLookup: (id: Fr) => Promise<ContractArtifact | undefined>,
@@ -132,23 +127,16 @@ export class ArtifactRegistry {
 		}
 	}
 
-	/**
-	 * Verify class id, then cache `classId.toString()` in
-	 * `verifiedClassIds` so repeat resolves skip the recompute.
-	 *
-	 * Returns the artifact on match, undefined on mismatch.
-	 */
+	/** Returns the artifact on a class-id match, undefined on a mismatch. */
 	private async verifyAndCache(classId: Fr, artifact: ContractArtifact): Promise<ContractArtifact | undefined> {
 		const key = classId.toString()
-		if (this.verifiedClassIds.has(key)) return artifact
+		if (this.verified.get(artifact) === key) return artifact
 
 		const verifyLogger: ClassIdVerifyLogger | undefined = this.logger
 			? (level, msg, ...rest) => this.logger?.log(this.logSource, level === "warn" ? LogLevel.Warn : LogLevel.Debug, msg, ...rest)
 			: undefined
 		const verified = await this.verifier.verify(artifact, classId, verifyLogger)
-		if (verified) {
-			this.verifiedClassIds.add(key)
-		}
+		if (verified === artifact) this.verified.set(artifact, key)
 		return verified
 	}
 }

@@ -9,7 +9,7 @@
 import type { Page } from "puppeteer"
 import { clickByTestId, waitForHash, withTimeoutMessage, type ExtensionContext } from "../fixtures/extension"
 import { getActiveProfileName } from "../fixtures/helpers"
-import { accountChainId, exportPlainBackup, keepChainAccountState, sealPlainBackup } from "./backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState, sealPlainBackup } from "./backup-export"
 import { POPUP_IMPORT_SHELL, submitFullBackupImport, submitWhenEnabled, TEST_PASSWORD, writeBackupToTemp } from "./import-drivers"
 
 // The rollback/delete budget is STRUCTURAL, not sampled: the crash path's
@@ -116,7 +116,7 @@ export async function exportFundedBackup(
 	tokenAddress: string,
 ): Promise<{ filePath: string; funded: string }> {
 	if (exported) return exported
-	const backup = await exportPlainBackup(ctx)
+	const backup = await exportBackupContent(ctx)
 	keepChainAccountState(backup.data, accountChainId(backup, ctx.accountAddress), tokenAddress)
 	exported = { filePath: writeBackupToTemp(sealPlainBackup(backup)), funded: ctx.accountAddress }
 	return exported

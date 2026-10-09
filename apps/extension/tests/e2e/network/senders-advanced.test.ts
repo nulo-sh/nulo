@@ -1,6 +1,6 @@
 /**
  * Network-suite coverage for the Advanced senders surface (Settings →
- * Advanced → Account State → Senders) — the ONE place sender registrations
+ * Developer → Account State → Senders) — the ONE place sender registrations
  * are managed now that contacts are decoupled — plus the decoupling pins:
  * adding a contact registers nothing, deleting a contact unregisters
  * nothing, and the contact-row chip is a read-only view of PXE truth.
@@ -13,7 +13,16 @@
  */
 import { afterAll, expect, inject } from "vitest"
 import { test, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
-import { addContact, closeStuckPopup, contactRow, navigateByHash, navigateToSettings, senderChip, waitForToast } from "../fixtures/helpers"
+import {
+	addContact,
+	closeStuckPopup,
+	contactRow,
+	navigateByHash,
+	navigateToSettings,
+	openAccountState,
+	senderChip,
+	waitForToast,
+} from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import {
 	closeImportWith,
@@ -131,7 +140,7 @@ test.skipIf(!hasConfig)(
 		// Register a sender via Advanced, then add a contact with that address.
 		// Same settle rule as gotoSenders: don't act on the list mid-fetch —
 		// the initial snapshot could overwrite the add-event's row render.
-		await navigateToSettings(page, "advanced", "account-state", "senders")
+		await openAccountState(page, "senders")
 		await page.waitForSelector('[data-testid="senders-add-btn"]', { visible: true, timeout: 10_000 })
 		await page.waitForFunction(() => !document.querySelector('[data-testid="loading-state"]'), { timeout: 15_000, polling: 100 })
 		await addSenderViaAdvanced(page, address)

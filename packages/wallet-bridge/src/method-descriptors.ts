@@ -74,21 +74,10 @@ export type MethodRouting =
 	| { readonly via: "handler" }
 
 /**
- * Per-method argument guard. A pure, NON-MUTATING predicate over the ORIGINAL
- * args array — deliberately not a parser: it can return only pass/fail, so it
- * cannot coerce, normalize, or substitute values, and everything downstream
- * (scope checkers reading `args` positionally, handler destructuring) keeps
- * seeing the exact wire values. Runs in dispatch() right after
- * `assertKnownMethod`, BEFORE capability/scope enforcement and before any
- * handler destructuring.
- *
- * Calibration is tolerance-exact (pinned by tests): required-LEADING arity only
- * where no working absent-arg path exists today; optional trailing args stay
- * optional; extra args stay ignored; no value-type requirements on args the
- * code `String()`-coerces. Methods whose first-arg validation is OWNED by
- * their scope checker (sendTx/simulateTx/profileTx/executeUtility — pinned
- * error strings) or that read no args at all OMIT the field: absence = no arg
- * validation, exactly today's behavior.
+ * Per-method arity guard, run before the capability check: required leading positions only (and
+ * the batch envelope), never value shapes, which the schema parse checks after the capability
+ * check (`wallet-schema-args.ts`). A pass/fail predicate, so the wire args reach every reader
+ * unchanged.
  */
 export type ArgGuard = (args: readonly unknown[]) => boolean
 
@@ -100,7 +89,7 @@ export interface MethodDescriptor {
 	readonly routing: MethodRouting
 	/** Per-origin scope gate. Omitted = no scope dimension (enforceScope no-ops). */
 	readonly scopeCheck?: ScopeCheck
-	/** Arg-shape guard (see {@link ArgGuard}). Omitted = no arg validation (historical tolerance). */
+	/** Arity guard (see {@link ArgGuard}). Omitted = no check before the capability check. */
 	readonly argSchema?: ArgGuard
 	/** Refused as a batch leg before any leg runs. Named for the refusal, not for popup routing, so
 	 *  routing a new method through a popup never widens the set by itself. */
@@ -112,55 +101,22 @@ export interface MethodDescriptor {
 }
 
 // ── Arg guards ─────────────────────────────────────────────────────────
-// Each is a pure pass/fail PREDICATE over the raw positional args; the
-// dispatcher throws the "invalid arguments" rejection when one returns false.
-// Named (not inline) so the registry reads as a table of guarded methods.
 
-/** requestCapabilities(manifest?): the handler optional-chains the manifest
- *  (`manifest?.capabilities ?? []`) then `.filter`s the list, reading `cap.type`
- *  on each entry. The guard mirrors that tolerance for OBJECT manifests and
- *  rejects only inputs the handler cannot process:
- *   - A nullish manifest is the valid "no capabilities requested" call. It is
- *     `== null` (not `=== undefined`) because the dApp channel JSON-serializes,
- *     so a caller's `requestCapabilities(undefined)` arrives as `null`.
- *   - A non-object manifest (array / string / number) is malformed → reject.
- *   - `capabilities` nullish mirrors the handler's `?? []` (empty) → pass.
- *   - `capabilities` non-array (no `.filter`) or with a NULLISH entry
- *     (`null.type` throws) is a dApp-triggerable crash → calibrated reject.
- *     Non-nullish non-object entries flow exactly as the handler tolerates them
- *     (`.type` → undefined → ignored), so this stays a crash guard, not a validator. */
-export function argsRequestCapabilities(args: readonly unknown[]): boolean {
-	const manifest = args[0]
-	if (manifest == null) return true
-	if (!isRecord(manifest)) return false
-	const caps = manifest.capabilities
-	if (caps == null) return true
-	return Array.isArray(caps) && caps.every((cap) => cap != null)
-}
-
-/** batch(legs): handleBatch iterates legs and re-dispatches `leg.name(leg.args)`;
- *  each leg is then validated by its OWN method's guard on re-entry. */
+/** Each leg is checked by its own method's guard and parse when it re-enters dispatch. */
 export function argsBatch(args: readonly unknown[]): boolean {
 	const legs = args[0]
 	if (!Array.isArray(legs)) return false
 	return legs.every((leg) => isRecord(leg) && typeof leg.name === "string" && Array.isArray(leg.args))
 }
 
-/** createAuthWit(from, messageHashOrIntent): both positions are read; there is
- *  no working path with the intent absent (the built operation would carry
- *  `messageHashOrIntent: undefined` into execution). Values stay unvalidated —
- *  the scope checker handles the 3 intent shapes tolerantly. */
 export function argsCreateAuthWit(args: readonly unknown[]): boolean {
 	return args.length >= 2
 }
 
-/** Single leading arg that the checker/handler `String()`-coerces — presence
- *  only, no type requirement (coercion tolerance preserved). */
 export function argsOneRequired(args: readonly unknown[]): boolean {
 	return args.length >= 1
 }
 
-/** Two leading args read (getPrivateEvents / registerToken / grantPublicAuthwit). */
 export function argsTwoRequired(args: readonly unknown[]): boolean {
 	return args.length >= 2
 }
@@ -181,7 +137,6 @@ const METHOD_REGISTRY_SOURCE = {
 		capability: null,
 		exemptReason: "capability-negotiation meta-protocol — the method by which grants are obtained",
 		routing: { via: "handler" },
-		argSchema: argsRequestCapabilities,
 	},
 	batch: {
 		capability: null,

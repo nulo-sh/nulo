@@ -1,7 +1,7 @@
 ---
 plan: security-ui-1
 tier: mid
-status: approved (owner calls 1-4 answered: D, A, yes, yes); arc 1 in implementation
+status: completed (arc 1 merged as #51; arcs 2 and 3, #55 and #58, land with this close-out)
 issues: [17, 34, 14]
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,19 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date**: 2026-10-09
+- **Status**: closed with this delivery. Arc 1 squash-merged into `dev` as #51; arcs 2 and 3 (#55, #58) and this close-out are stacked on it and land together. All three issues close with them.
+- **Shipped**:
+  - [#51](https://github.com/nulo-sh/nulo/pull/51), arc 1: #17. A password profile's full backup carries a key made for that one backup for its imported keys, never the profile's lasting one, so a leaked file opens only the imported keys that existed when it was made. The encrypted file gains a tagged, versioned wrapper bound to its purpose (AAD). Every older backup still restores; a new encrypted file does not open in an older Nulo.
+  - [#55](https://github.com/nulo-sh/nulo/pull/55), arc 2: #34, option D. A password profile's full backup downloads only once encrypted; a passkey profile's plain download asks first, and its "Download anyway" is `@nulo/design`'s new `destructive` Button variant (the regular button's type and padding on red). The export page starts over when a profile switch made in another window reaches it.
+  - [#58](https://github.com/nulo-sh/nulo/pull/58), arc 3: #14, option A. The emoji check has "They don't match" beside "They match": it ends the app's live channels on that network under its profile and deletes every row of the app under that profile, read raw by storage key. The check's copy no longer claims more than it proves, on the window and the app's settings page. Session teardown keeps another profile's stamped channels.
+- **Owner answers.** Decision page, 2026-10-08 ([OWNER-ASKS.md](OWNER-ASKS.md) § Answers): 1. "**D**, split by profile type: A on password profiles, B on passkey profiles"; 2. "**A**, two equal controls"; 3. "**Yes**, keep today's behaviour: closing answers nothing"; 4. "**Yes**, go ahead". Result page, signed off 2026-10-09 12:50 UTC (§ Answers: result page, 2026-10-09): r1 "**C**, a red variant of the regular button"; r2 "**Yes**, ship as built" (a profile switch in another window resets the export page); r3 "**Yes**, ship as built" (ending an app's session is scoped to the profile that owns it).
+- **Dropped**: Phase 3.3 (closing the check window ends the session), on call 3's "yes"; turning the check into a gate is #15. Phase 1.1's per-backup key for passkey profiles, since whoever opens that file's key already holds the passkey. The cross-arc Codex pass over the net diff (Post-implementation step 3) was not run: each arc's loop converged, and the last loop was scoped to the red button's diff.
+- **Open items**: moved to [follow-ups](../../follow-ups.md): the single-account export's unencrypted download, a full backup that cannot open some imported-key rows naming no loss, the render caveats (the red button's hover contrast, the instruction against an uppercase label), closing the check window keeping the session (under #15), and the residual of the cross-profile teardown entry (a handshake not yet stamped still ends). No issue stays open.
+- **Seeds retired**: the `/goal` and `/loop` seeds below are no longer live. Do not run them.
 
 # Security UI 1: backup encryption, a refusal on the emoji check, a per-backup key
 
@@ -224,7 +237,7 @@ The background must tell a close apart from "They match". Shape: the verify page
 - **Hostile restore input.** The restore path does not change in Phase 1.1. In Phase 1.2 the prefix parser accepts exactly one tag and a base64 body; anything else is `unknown`. The checksum, epoch and version gates run after decryption, unchanged.
 - **Memory hygiene.** Zeroize `sourceDek`, `transferKey` and each plaintext signing key in `finally`; the base64 transfer key goes to the popup as the DEK did, and the page scrubs its payload strings on unmount as today.
 - **Logging.** No new log line carries key material. The redaction list already covers `imported-keys-dek`; `sourceDek`, `transferKey`, `importedKeysKey` and `importedKeyRows` join `REDACTED_KEYS` (CLAUDE.md § Logging policy), with a case in `logger/utils.test.ts`.
-- **#14.** "They don't match" is the safe action, so it asks no confirmation and cannot be undone except by reconnecting. It cannot reach calls already dispatched (#15). Deleting the row ends every live session of that app on that network, other tabs included: a fail-safe outcome. The refusal ends every live channel for the captured tuple first, on every path, unstamping each before terminating it, so a failed termination cannot leave a usable channel. It then deletes the row by its storage key even while the wallet is locked (Facts 13, 14). It reports `unavailable`, and the window stays open, only when that row is gone and a replacement cannot be verified under a held fence. The window's captured identity comes from the wallet's own MAC-verified row read at mount, never from the dApp, and the URL contributes only the row id. A raw delete by id skips the MAC, as the profile purge does; any extension page could already delete a row, so this widens nothing.
+- **#14.** "They don't match" is the safe action, so it asks no confirmation and cannot be undone except by reconnecting. It cannot reach calls already dispatched (#15). The refusal ends every live channel of the app on that network under the row's profile first, on every path, unstamping each before terminating it, so a failed termination cannot leave a usable channel; a channel stamped to another profile is that profile's and is kept, an unstamped one ends (fail closed). It then deletes every row of the app under that profile, read raw and by storage key as the profile purge does, so a lock, another active profile or recovery mode cannot hide one (Facts 13, 14). It reports `unavailable`, and the window stays open, only when a delete throws after the channels ended. The identity comes from the wallet's own MAC-verified row read at mount, never from the dApp. A raw delete skips the MAC, as the profile purge does; any extension page could already delete a row, so this widens nothing.
 - **#34.** The rule that blocks or confirms runs in the page; it is a usability control against a mistake, not a boundary against a hostile page (a hostile extension page could already read the payload).
 - **Least privilege, supply chain.** No new permission, dependency, workflow or token.
 
@@ -281,7 +294,7 @@ Tests, one per refused class plus the controls:
 - Pass criteria: every command exits 0; tests (a) to (i) pass; the encrypted round trip passes in both smoke specs (the passkey one locally).
 - Layers: lint, typecheck, unit, component, build, smoke e2e.
 
-### Phase 2.1: the export page per the owner's #34 pick (Arc 2)
+### Phase 2.1: the export page per the owner's #34 pick (Arc 2) ✓
 
 1. Build the picked option in `full.vue` exactly as options.md states it, copy included.
 2. Update `full.test.ts` and `full-passkey.pins.test.ts`; add one test per refused path.
@@ -294,7 +307,7 @@ Tests: for every option, the plain path either does not exist (A, D-password) or
 - Pass criteria: every command exits 0; the new tests pass.
 - Layers: lint, typecheck, unit, component, build.
 
-### Phase 2.2: the export page's e2e (Arc 2)
+### Phase 2.2: the export page's e2e (Arc 2) ✓
 
 1. Update every helper and spec that downloads a plain backup (recon.md § E2E hooks) for the pick.
 2. Extend `security-backup.test.ts` with the picked rule and a `shotSend` capture of the new state.
@@ -305,7 +318,7 @@ Tests: for every option, the plain path either does not exist (A, D-password) or
 - Pass criteria: every listed spec passes on both browsers; the screenshots exist for the PR body.
 - Layers: smoke e2e (Chrome, Firefox), network e2e.
 
-### Phase 3.1: the emoji check per the owner's #14 pick (Arc 3)
+### Phase 3.1: the emoji check per the owner's #14 pick (Arc 3) ✓
 
 1. Add `revokeLiveSessions` to the wallet-sdk background and move `wireSessionTeardown` onto it.
 2. Add `DappSessionService.refuseVerification`, the `onVerificationRefused` event and the client entry.
@@ -332,7 +345,7 @@ Tests:
 - Pass criteria: every command exits 0; the new tests pass.
 - Layers: lint, typecheck, unit, component, build.
 
-### Phase 3.2: the emoji check's e2e (Arc 3)
+### Phase 3.2: the emoji check's e2e (Arc 3) ✓
 
 1. Add `tests/e2e/network/connect-verify-mismatch.test.ts` with two cases.
    - New connection: connect the playground, reach the check with `approveConnect`, and press "They don't match".
@@ -366,7 +379,7 @@ One `gh stack`, one PR per arc, PRs opened only after each arc's Codex loop conv
 | Arc | Phases | Branch | Stacks on | Closes |
 |---|---|---|---|---|
 | 1 | 1.1, 1.2 (1.2 only on a "yes") | `worktree-security-ui-1` (adopted with `gh stack init --adopt`) | `dev` | #17 (or comments on it if 1.2 is declined) |
-| 2 | 2.1, 2.2 | `security-ui-1-backup-download` | Arc 1 | #34 |
+| 2 | 2.1, 2.2 | `security-ui-1-backup-download` | `dev` (Arc 1 merged as #51) | #34 |
 | 3 | 3.1, 3.2, 3.3 (3.3 only on a "no") | `security-ui-1-emoji-refuse` | Arc 2 | #14 |
 | close-out | docs only | `security-ui-1-close-out` | Arc 3 | none |
 
@@ -382,6 +395,18 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 - **Deviation (Phase 1.1, at implementation): the account slice comes from the key export, and the page's completeness check is dropped.** The plan had `full.vue` fail the run when an imported account had no key row. `EntityStorage.getAll` hides a row its codec rejects, so one corrupt key row would fail that check on every retry and the profile could never be backed up again; today the backup ships and the restore drops that one account. `exportFullBackupKeys` now also returns `accounts`, read before the key rows in the same call, and the page serves both slices from it. A concurrent import can then add a key row with no account (the orphan sweep removes it), never an account without its key. Test (i)'s "fails when an imported account has no key row" case is replaced by a test that the file's account and key slices are the export's. The run fence and the profile-id check stay.
 - **Deviation (Phase 1.2): the restore's stale fence moves after the shared opener.** `openEncryptedBackup` now calls `openFullBackupText` and checks staleness once it settles, instead of between the KDF and decrypt awaits. Nothing is published in between, so correctness is unchanged; a superseded run only finishes its decrypt. The parser exposes `parseEncryptedBackup` so the detector and the opener share one decision.
 - **Deviation (Phase 1.1): the incarnation id is the existing `ProfileService.workerId`**, which already keeps session handles from naming a later worker's session. `openBackupTransfer` returns no `dekReplaced` (it is `sourceDek === null`), and `getProfileDekSealed` is deleted, not just unlisted, since it had no caller.
+
+- **Deviation (Phase 2.1): the confirm button's red needed a ConfirmPopup field, and a compact size.** `confirm_color: "red"` never coloured ConfirmPopup's confirm button: it reaches the design Button as a `type` attribute and only picks the pre-title. Turning it into the red variant would recolour every destructive confirm in the wallet, a UI change outside this sign-off. So ConfirmPopup takes an opt-in `confirm_variant`, unset everywhere else. At the row's medium size, `cta_destructive`'s CTA type (14 px, 0.2 em tracking, no side padding) clipped "Download anyway" to "OWNLOAD ANYWA"; a CTA variant now takes `compact`, the design package's CTA size for a tight spot, where the label fits edge to edge. The look is flagged to the owner in OWNER-ASKS.md § Render notes.
+- **Owner call r1 (2026-10-09): the confirm button is a new `destructive` variant of the regular button.** It supersedes the compact `cta_destructive` above. `@nulo/design`'s `Button` takes `destructive`: primary's type rule (one selector list, so the two cannot drift) and the size classes' padding, on `--red` with `--txt-white`. The passkey confirmation's "Download anyway" uses it at medium, Cancel's size; ConfirmPopup drops its CTA-size switch and keeps `confirm_variant` as the opt-in field. Tests: five `Button.test.ts` cases. One checks the class; four read the style block, since vitest maps every CSS-module name whether or not a rule defines it: the shared type rule, the CTA contract and no size declarations on either variant, the red fill, and hover and press excluding a disabled or loading button. ConfirmPopup's variant test asserts the confirm is medium, Cancel's size. The hover follows primary's formula; its dark-theme contrast is a render note in OWNER-ASKS.md.
+- **Deviation (Phase 2.1): one download writer, the plain-file rule held twice.** `canDownload` decides the button; `downloadBackup(isEncrypted)` refuses a plain file on a password profile again, so a confirmation answered after an in-place switch to a password profile writes nothing. The confirm callback also checks the run's `generation` and the `finished` status.
+- **Phase 2.2 helpers:** `exportPlainBackup` became `exportBackupContent` (it now encrypts, downloads and opens the file with `openFullBackupText` in Node); new `downloadEncryptedBackup`, `downloadPlainPasskeyBackup` and `openEncryptedBackup` in `tests/e2e/helpers/backup-export.ts` take the press as a parameter, so `legal-acceptance` keeps its real pointer input.
+
+- **Deviation (Phase 3.1, after Codex round 1): the refusal sweeps the app's rows raw; no fence, no row id.** The plan deleted the window's row by id raw and, with it gone, looked for a replacement through the MAC view under a held fence, answering `unavailable` when the fence broke. Codex found two holes: a second row for the same app survives the id delete (nothing enforces one row per app), and recovery mode passes the fence yet hides every row, so a stored replacement read as `absent`. Codex proposed continuing the fenced sweep and answering `unavailable` whenever completeness is unknown; rejected, because every refusal made while locked would then show "could not be removed" even when the only row was deleted. Instead every row of the app under the window's profile is read raw and by storage key (`rowsForProfile`, as `purgeForProfile`), which no lock state hides, so `absent` is exact; `unavailable` now means a delete threw after the channels ended. The target drops `rowId`: the window's own row matches the tuple it was read from, and a row with no url authorizes nothing, since every lookup matches `url === origin`.
+- **Deviation (Phase 3.1, after Codex round 1): revocation is profile-scoped.** `onVerificationRefused` carries the row's profile, and `revokeLiveSessions` keeps a channel stamped to another profile (a check left open across a switch otherwise ended the new profile's channel to the same app). `wireSessionTeardown` applies the same filter to deleted rows, which also stops the purge of an inactive profile from ending the active profile's channels to the same app: a behaviour change outside the owner's options, narrower and fail-safe, reported as such.
+- **Deviation (Phase 3.1): the window's latch is released when "They match" fails to write the trust flag**, so a failed write leaves both controls usable, as OK was before. It is never released once the window starts closing, so a press during the close runs nothing.
+- **Deviation (Phase 3.1): `refuseVerification` validates its target** and refuses a missing profile id and a non-string origin or chain id with `ValidationError` before it ends anything (one test per refused class).
+- **Deviation (Phase 3.1): two planned tests take another shape.** "The same holds after the row is re-created" is not a separate case: the dispatch guard reads the stamp, never a row, and the test proves the unstamped call never reaches the dispatcher. "Both settings pages mounted" is split: the service tests pin the delete event's `id` to the deleted storage key, the list page's delete test already existed, and `[id].test.ts` adds the detail page leaving on its own row's id only.
+- **Phase 3.2: one testid added, nothing visible:** `connected-app-verification` on the settings row's block, so the e2e reaches the row by testid (CLAUDE.md § testid preservation).
 
 ## Issue claims checked against the tree
 
@@ -489,6 +514,106 @@ If a pick has not arrived when the arc before it converges, the lane stops there
 ### Arc 1 post-implementation: Codex fix loop, round 2 (resumed session)
 
 **Verdict:** `clean`. "No material findings remain": the revised tests exercise the successful stale decrypt, validated legacy and new envelopes, same-id re-creation, early refusal and key wiping after a fence refusal. The loop converged for arc 1.
+
+### Arc 2 post-implementation: Codex fix loop, round 1 (gpt-6.1-sol, high), with one Opus review
+
+**Codex verdict:** `reject`. One High, two Low; all accepted after checking them against the tree.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | A profile switch made in another window updates the page in place (`bootstrapActiveProfile` sets `appStore.profile`; the shell neither navigates nor closes popups), so a finished password backup was judged by the new profile's type: switched to a passkey profile, "Download anyway" wrote the password profile's master, entropy and imported-keys key. A passkey-to-passkey switch left a stale confirmation live. | High | Accepted, verified. A watch on the active profile id runs the unmount path (`discardRun`: fence, run clients, scrub) and returns the page to the agreement step. Tests: password to passkey (the page starts over), passkey to passkey (a confirmation from before the switch writes nothing after the new profile's run is ready; a fresh one does). |
+| 2 | The unmount test cannot catch removal of the callback's generation check (unmount also nulls the payload), and nothing tests the `finished` half. | Low | Accepted: the passkey-to-passkey test pins the generation check, and "a confirmation answered after the file was encrypted writes nothing" pins `finished`. Each mutation fails exactly its test. |
+| 3 | The capture helper's header claims an optional `downloads` permission and stubs a check nothing makes; a test doc comment walks through its helper. | Low | Accepted: header corrected, stub removed, doc cut to one line. |
+
+**Opus 5.5 review (general-purpose, same round):** `approve with fixes`.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | Same as Codex 1 (it traced `SessionManager.open` emitting `onActiveProfileChanged` with no lock first). Proposed binding eligibility to the run's `{ id, passkey }`. | Medium | Accepted as Codex 1, with the reset instead: the whole page is profile-type driven (banner copy, whether Protect reuses the profile password or asks for a new one), so a backup held across a switch is wrong beyond the download rule. |
+| 2 | The callback's two guards lack failing tests. | Low | Same as Codex 2. |
+| 3 | The confirm's doc comment overclaimed ("the run whose payload…") while `generation` changed only on unmount. | Low | Accepted: the switch reset bumps `generation`, and the comment says what the code guarantees. |
+| 4 | "An Enter with nothing focused starts nothing" dispatches on `document.body`, which never reaches the page root, so it cannot fail. | Low | Not acted on: pre-existing and unchanged by this arc. |
+| 5 | `Object.assign(cacheStore.confirm, …)` could inherit `single`, `confirmation_text` or `toggle` from an earlier request. | Nit | Accepted: the confirmation is a fresh object. |
+
+**Where the panel disagreed, and the call.** Opus: bind the download rule to the run's profile. Codex: invalidate and reset the page on a profile change. Decided for the reset (reason above). What a person sees: after switching profiles in another window, this page returns to its agreement step, its own first screen, instead of showing the previous profile's backup.
+
+### Arc 2 post-implementation: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `approve with fixes`. The reset to the agreement step is "a reasonable fail-safe"; the round-1 bypass and test gaps are closed. Three findings, all accepted.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The reset left a pending passkey prompt for the previous profile open over the new agreement step. | Medium | Accepted: the reset rejects the page's pending ceremony, which unmounts its dialog and aborts the prompt. Test: a held prompt is ended by the switch, then the new profile's run completes. |
+| 2 | The default watcher flush defers the reset, and a switch away and back within one tick coalesces it away. | Low | Accepted: `flush: "sync"`; the test asserts the prompt's end with no flush. |
+| 3 | "In-flight closures die with the aborted run" overstated the scrub. | Low | Accepted: reworded. |
+
+### Arc 2 post-implementation: Codex fix loop, round 3 (resumed session)
+
+**Verdict:** `approve with fixes`, no production finding: "The production fix looks correct … No new production bug found in this diff." One Low test finding, accepted: the switch test held the prompt forever instead of rejecting it, so the stale run's catch and `finally` never ran. The test now rejects the held prompt through the page's ceremony rejection and asserts the stale run toasts and navigates nothing while the new profile's run completes; removing the catch's generation check fails it. The loop stops here at its three-round limit, with no production finding open.
+
+### Arc 3 post-implementation: Codex fix loop, round 1 (gpt-6.1-sol, high), with one Opus review
+
+**Codex verdict** (session 01a11d7b): `approve with fixes`. Three Medium, two Low; all accepted after checking them against the tree.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | A second valid row for the same app survives the delete by id, and the window closes on `revoked` (no tuple uniqueness in `addDappSession`). | Medium | Accepted, verified. The refusal now sweeps every row of the app under the window's profile, raw and by storage key. Test: two rows deleted while locked, with another profile active, and in recovery mode. |
+| 2 | Recovery mode passes the fence but cannot derive the MAC key, so a stored replacement reads as `absent`; the new stub overrode the recovery guard. | Medium | Accepted, verified (`profile/service.ts:985`). Fixed by the raw sweep, which reads no MAC; the stub keeps the recovery guard. Codex's proposal (fenced sweep, `unavailable` when incomplete) rejected: see the ledger. |
+| 3 | The refusal event has no profile, so a check left open across a switch ends the new profile's channel to the same app. | Medium | Accepted. The event carries the profile; revocation keeps other profiles' stamped channels, on the delete path too. Test on the booted wiring. |
+| 4 | The latch test cannot fail: Vue Test Utils does not click a disabled button. | Low | Accepted. The test emits `click` on the component, also after the refusal settled; removing either guard fails it. |
+| 5 | The e2e header narrates the tests. | Low | Accepted: one sentence on the constraint. |
+
+**Opus 5.5 review (general-purpose, same round):** `approve with fixes`, no bug that closes the window over a usable channel on the tested paths.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The fence's profile check had no test. | Medium | Moot: the raw sweep has no fence. |
+| 2 | The app-match filter had no test: dropping it deletes every row the owner has on that chain. | Medium | Accepted: another app's row on the same chain must survive; removing the url check fails it. |
+| 3 | Nothing tested that the background subscribes to the refusal event or passes the real stamp map. | Medium | Accepted: `background.refusal-teardown.test.ts`; removing the subscription or passing a fresh map fails it. |
+| 4 | A refusal can end another profile's channel. | Low | Same as Codex 3. |
+| 5 | The raw path's delete event was a partial row cast as `DappSession`. | Low | Moot: the sweep emits the stored row with its storage key as `id`. |
+| 6 | The per-match log line sat outside its `try`. | Nit | Accepted: moved inside. |
+| 7 | The e2e's "no row" wait also passes if the tab navigated away. | Nit | Accepted: the wait also requires the list's hash. |
+| 8 | Two comments: the target's "as the window read it" names the caller; the latch's "until it settles" is wrong on success. | Nit | Accepted, both reworded. |
+
+### Arc 3 post-implementation: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `approve with fixes`. The raw sweep is "sound: every authorizing row must contain the exact profile, origin, and chain it matches"; the profile filter, latch test and wiring test hold. Two findings, both accepted.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | An establishment that read the row before the refusal took the lock can stamp its channel after the first refusal event; if that channel's termination throws and the delete also throws, no delete event follows, so the stamp and the row survive (Codex reproduced it in memory). | Medium | Accepted. A failed delete emits the refusal event again before answering `unavailable`. Test: the event order is refused, remove, refused; removing the second emit fails it. |
+| 2 | Every fixture's embedded id equals its storage key, so deleting by `row.id` would pass. | Low | Accepted: a signed row copied to another key is deleted at that key and named by it; switching to `row.id` fails it. |
+
+### Arc 3 post-implementation: Codex fix loop, round 3 (resumed session)
+
+**Verdict:** `clean`. "No material findings remain": the round-2 race, re-run against the fixed methods, left no stamp, and the copied row distinguishes the storage key from `row.id`. The loop converged for arc 3.
+
+### Owner call r1 (the red button): Codex fix loop, round 1 (gpt-6.1-sol, high), with one Opus review
+
+Scope: the r1 diff only (`feat(design): add a red variant of the regular button…`).
+
+**Codex verdict** (session 01a120c5): `approve with fixes`, "high confidence that there is no production regression". One Low, two Nits; all accepted.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The ConfirmPopup size check compares two attributes that are both `undefined` if neither button forwards `size`. | Low | Accepted: the test asserts `medium` before comparing with Cancel. |
+| 2 | A test comment narrates the regex under it. | Nit | Accepted: replaced by the one fact the test depends on (vitest stubs CSS-module names). |
+| 3 | The variant's doc line carries placement detail; the shared rule's comment restates its selectors. | Nit | Accepted in part: both cut to one line each, keeping the why (a CTA clips in a half-width row; one rule so the twin cannot drift). |
+
+**Opus 5.5 review (general-purpose, same round):** `approve with fixes`, no correctness bug; it measured the label at 131 px in a 154 px button, inside the padding, not clipped.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | Five of the seven Button tests cannot see the stylesheet: vitest's CSS-module proxy returns `_name_<hash>` for any key, so they pass with the rule deleted, and three repeat existing tests. | Low | Accepted, verified. The disabled, loading, anchor and size cases are replaced by style-block checks: hover and press exclude a disabled or loading button, and neither variant sets a size. Five cases remain, each failing under its mutation (hover guard removed, padding on primary, accent fill). |
+| 2 | The helper's comment omitted why the style block is read. | Low | Same as Codex 2. |
+| 3 | Primary's hover formula lightens the red in the dark theme: the label falls from 3.6:1 to about 3.1:1 (checked against `base.css`). | Low | Not changed: the hover is what a person sees, and the sign-off is "a red variant of the regular button". Raised to the owner as a render note in OWNER-ASKS.md, with two alternatives. |
+| 4 | "Type and size" in the doc line: size comes from the size prop. | Nit | Accepted. |
+| 5 | The comment says neither variant sets a size; the test checked only destructive. | Nit | Accepted: the test covers both. |
+
+### Owner call r1: Codex fix loop, round 2 (resumed session)
+
+**Verdict:** `clean`. "No new material findings": the explicit size assertion closes the vacuous check, and the style-block tests have positive controls and reject the mutations (hover guard removed, padding on primary, red replaced by accent, the fill rule deleted). The hover stays an owner render note. The loop converged.
 
 ## Post-implementation
 

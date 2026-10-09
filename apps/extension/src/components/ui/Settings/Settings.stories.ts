@@ -4,6 +4,7 @@
  * "settings list" pattern used across the extension.
  */
 import type { Meta, StoryObj } from "@storybook/vue3-vite"
+import { MaterialIcon } from "@nulo/design"
 import ItemsContainer from "./ItemsContainer.vue"
 import SettingItem from "./SettingItem.vue"
 import SettingField from "./SettingField.vue"
@@ -75,6 +76,48 @@ export const SettingItemSizes: Story = {
 					<SettingItem size="large" title="Large" description="Roomy padding" icon="user" chevron />
 					<SettingItem size="medium" title="Medium" description="Default density" icon="user" chevron />
 					<SettingItem size="small" title="Small" description="Compact" icon="user" chevron />
+				</ItemsContainer>
+			</div>
+		`,
+	}),
+}
+
+export const SettingItemValues: Story = {
+	render: () => ({
+		components: { ItemsContainer, SettingItem },
+		template: `
+			<div style="padding: 24px; width: 360px;">
+				<ItemsContainer title="Safety">
+					<SettingItem title="Lock" description="Auto-lock, strict mode" materialIcon="lock" value="1 h 30 min" chevron />
+					<SettingItem title="Privacy" description="Prices, explorer" materialIcon="visibility" value="Prices on" chevron />
+					<SettingItem title="Display" description="Theme, layout" materialIcon="palette" value="System" chevron />
+					<SettingItem title="Developer" description="Mode, logs, account state" materialIcon="bolt" value="Off" chevron />
+				</ItemsContainer>
+			</div>
+		`,
+	}),
+}
+
+export const IconSlotAndDanger: Story = {
+	render: () => ({
+		components: { ItemsContainer, SettingItem, MaterialIcon },
+		template: `
+			<div style="padding: 24px; width: 360px; display: flex; flex-direction: column; gap: 16px;">
+				<ItemsContainer>
+					<SettingItem size="large" title="Primary" description="Password profile" chevron>
+						<template #icon>
+							<div style="width: 40px; height: 40px; display: grid; place-items: center; background: var(--nulo-surface-high); font: 700 14px var(--font-headline);">PR</div>
+						</template>
+					</SettingItem>
+				</ItemsContainer>
+				<ItemsContainer title="Danger zone" danger>
+					<SettingItem title="Delete profile" chevron>
+						<template #icon>
+							<span style="display: inline-flex; width: 20px; height: 20px; overflow: hidden;">
+								<MaterialIcon name="delete" :size="20" color="red" />
+							</span>
+						</template>
+					</SettingItem>
 				</ItemsContainer>
 			</div>
 		`,

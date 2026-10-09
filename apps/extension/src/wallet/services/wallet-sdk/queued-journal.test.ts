@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { LogLevel } from "@/wallet/logger"
 import { MAX_QUEUED_GLOBAL, MAX_QUEUED_PER_SESSION, failQueuedForError, tryCreateQueuedJournal } from "./queued-journal"
 import { makeAccountStub, makeDappSessionStub, makeDeps, makeSession } from "./queued-journal.fixtures"
@@ -328,6 +328,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 
 	test.each([
 		["a scope refusal", "scope_refused", refusal],
+		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx")],
 		["any other failure", "popup_bound", new Error("session gone")],
 	])("a still-queued record failed by %s gets the %s kind and the error's message", async (_name, kind, error) => {
 		const { deps, journal } = makeDeps()
@@ -372,9 +373,10 @@ describe("tryCreateQueuedJournal — the session's chain id", () => {
 
 /**
  * The same sender rows the dispatcher's characterization runs (`@nulo/wallet-bridge`
- * `dapp-grant.characterization.test.ts`), so each row shows the record is filed under the account
- * the send goes out as, or that nothing is filed for a send the dispatcher refuses. Wire-shaped
- * addresses; the session lists ACC2 first while wallet order is [ACC1, ACC2, STRANGER].
+ * `dapp-grant.characterization.test.ts`): a record is filed under the account the send would go
+ * out as, or not at all, and no row logs a warning. A row filed here that the dispatch parse then
+ * refuses (no options, no `from`) is failed by `failQueuedForError`. Wire-shaped addresses; the
+ * session lists ACC2 first while wallet order is [ACC1, ACC2, STRANGER].
  */
 describe("tryCreateQueuedJournal — the sender a request names", () => {
 	const ACC1 = new Fr(1n).toString()
@@ -398,7 +400,7 @@ describe("tryCreateQueuedJournal — the sender a request names", () => {
 		["a session account", [{ from: ACC2 }], ACC2],
 		["a session account in upper case", [{ from: ACC2_UP }], undefined],
 		["a wallet account outside the session", [{ from: STRANGER }], undefined],
-		["an Fr naming a session account", [{ from: new Fr(0xabcdefn) }], ACC2],
+		["an Fr naming a session account", [{ from: new Fr(0xabcdefn) }], undefined],
 		["an object String() cannot convert", [{ from: { toString: "x" } }], undefined],
 	]
 
@@ -415,8 +417,10 @@ describe("tryCreateQueuedJournal — the sender a request names", () => {
 		})
 		const message = { messageId: "msg-sender", type: "sendTx", args: [{ calls: [{ name: "transfer" }] }, ...tail] }
 
+		const log = vi.spyOn(deps.logger, "log")
 		const id = await tryCreateQueuedJournal(message as unknown as WalletMessage, makeSession(), deps)
 
+		expect(log.mock.calls.filter(([, level]) => level === LogLevel.Warn)).toEqual([])
 		if (filedUnder === undefined) {
 			expect(id).toBeUndefined()
 			expect(await journal.countOperations({ stage: "queued" })).toBe(0)

@@ -18,6 +18,7 @@ import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import type { PasskeyRequest } from "@/wallet/services/passkey/spec"
 import type { ToastOptions } from "@/composables/toast"
+import { FilePickCanceledError } from "@/utils/files"
 import {
 	type BackupSelection,
 	collectRestoreErrors,
@@ -500,6 +501,8 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 		state.decryptionPassword.value = ""
 		opts.clearError()
 	} catch (err) {
+		// A closed chooser keeps the chosen backup, its name and its Retry.
+		if (err instanceof FilePickCanceledError) return
 		opts.fillError("full_backup", "Failed to read the backup file")
 		console.error("Failed to read backup file:", (err as Error)?.message || err)
 	}

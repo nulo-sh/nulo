@@ -1445,7 +1445,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *     writes) → delete the profile row → close the session → UI-only emit.
 	 *  2. OUTSIDE the lock: the coordinator's awaited purge of EVERY profile-bearing
 	 *     root. A failure leaves the tombstone → resume retries; the id stays reserved.
-	 *  3. UNDER the lock: clear the tombstone (epoch-guarded) + release the reservation.
+	 *  3. UNDER the lock: clear the tombstone (epoch-guarded); release the reservation once its key is gone.
 	 *
 	 * `tornGuard` (torn-import sweep only): phase 1 refuses unless the observed
 	 * generation + marker tuple are unchanged — see `assertTornGuardUnchangedHoldingLock`.
@@ -1514,10 +1514,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			return this.getProfileInfo(profile)
 		}
 
-		await this.runExclusive(async () => {
-			await this.tombstones.clearIfSame(id, epoch)
-			this.deletionState.release(id)
-		})
+		await this.runExclusive(() => this.clearTombstoneAndRelease(id, epoch))
 		return this.getProfileInfo(profile)
 	}
 
@@ -1584,14 +1581,17 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 					networkIds: t.networkIds,
 					pxeGeneration: t.pxeGeneration,
 				})
-				await this.runExclusive(async () => {
-					await this.tombstones.clearIfSame(t.profileId, t.epoch)
-					this.deletionState.release(t.profileId)
-				})
+				await this.runExclusive(() => this.clearTombstoneAndRelease(t.profileId, t.epoch))
 			} catch (err) {
 				this.logError(`resume deletion failed for ${t.profileId}`, err)
 			}
 		}
+	}
+
+	/** Phase 3 of a deletion, under the facade lock. A tombstone left in place (corrupt,
+	 *  or another epoch's) keeps the id reserved, as every later boot would. */
+	private async clearTombstoneAndRelease(id: string, epoch: number): Promise<void> {
+		if (await this.tombstones.clearIfSame(id, epoch)) this.deletionState.release(id)
 	}
 
 	/** The torn-import sweep body — see `resumePendingDeletions`' doc for the

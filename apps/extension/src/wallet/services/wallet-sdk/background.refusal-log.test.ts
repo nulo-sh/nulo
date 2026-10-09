@@ -1,10 +1,12 @@
 /**
- * A scope refusal reaches no sink with a request value, and a refused `sendTx` is filed as refused.
- * Each request carries a sentinel in every field it controls and runs through the arrival check and
- * the real dispatcher; only the connection handler and the wallet services are stubbed.
+ * A scope or schema refusal reaches no sink with a request value, and a refused `sendTx` is filed as
+ * refused. Each request carries a sentinel in every field it controls, wire-valid where the refusal
+ * under test comes after the schema parse, and runs through the arrival check and the real
+ * dispatcher; only the connection handler and the wallet services are stubbed.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { type GrantedCapabilityRecord, WalletSdkDispatcher } from "@nulo/wallet-bridge"
+import { wireCall, wireInstance, wirePayload } from "@nulo/wallet-bridge/testing"
 import { LogLevel } from "@/wallet/logger"
 
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({ BackgroundConnectionHandler: class {} }))
@@ -13,7 +15,7 @@ vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { handleWalletMessage } from "./background"
-import { SCOPE_VIOLATION_ENVELOPE, UNCLASSIFIED_ERROR_MESSAGE } from "./error-envelope"
+import { INVALID_PARAMS_MESSAGE, SCOPE_VIOLATION_ENVELOPE } from "./error-envelope"
 import { tryCreateQueuedJournal } from "./queued-journal"
 import { makeAccountStub, makeDeps, makeSession } from "./queued-journal.fixtures"
 
@@ -31,12 +33,20 @@ const listedSimulation = (sub: "transactions" | "utilities") => grant({ type: "s
 const authWit = { type: "accounts", canGet: true, canCreateAuthWit: true }
 const noAddressBook = grant({ type: "data", addressBook: false, privateEvents: { contracts: [A] } })
 
-const call = { to: "SENTINEL-TO", name: "SENTINEL-NAME" }
-const exec = { calls: [call], scopes: ["SENTINEL-EXEC-SCOPE"] }
-const opts = { from: "SENTINEL-FROM", scopes: ["SENTINEL-OPTS-SCOPE"], additionalScopes: ["SENTINEL-ADDITIONAL-SCOPE"] }
-const callIntent = { caller: "SENTINEL-CALLER", call }
-const innerHash = { consumer: "SENTINEL-CONSUMER", innerHash: "SENTINEL-INNER-HASH" }
-const events = { contractAddress: "SENTINEL-CONTRACT", scopes: ["SENTINEL-EVENT-SCOPE"] }
+/** A field value no wallet account or grant names: its marker digits appear nowhere else. */
+const sentinel = (n: number) => `0x${SENTINEL_HEX}${n.toString(16).padStart(56, "0")}`
+const SENTINEL_HEX = "2e5e17e1"
+const LEAK = new RegExp(`SENTINEL-|${SENTINEL_HEX}`)
+
+const call = wireCall(sentinel(1), "SENTINEL-NAME")
+const exec = { ...wirePayload([call]), scopes: [sentinel(2)] }
+const opts = { from: sentinel(3), scopes: [sentinel(4)], additionalScopes: [sentinel(5)] }
+const callIntent = { caller: sentinel(6), call }
+const innerHash = { consumer: sentinel(7), innerHash: sentinel(8) }
+const eventQuery = [
+	{ eventSelector: "0x00000001", abiType: { kind: "field" }, fieldNames: ["SENTINEL-EVENT"] },
+	{ contractAddress: sentinel(9), scopes: [sentinel(10)] },
+]
 const outsideSession = (field: string) => `Scope violation: ${field} entry not in session's approved accounts`
 
 type Refusal = [name: string, method: string, args: unknown[], grants: GrantedCapabilityRecord[], message: string]
@@ -54,14 +64,14 @@ const JOURNALED: Refusal[] = [
 	[
 		"an opts.scopes account",
 		"sendTx",
-		[{ calls: [call] }, { from: ACCOUNT, scopes: opts.scopes }],
+		[wirePayload([call]), { from: ACCOUNT, scopes: opts.scopes }],
 		[tx("*")],
 		outsideSession("sendTx.opts.scopes"),
 	],
 	[
 		"an opts.additionalScopes account",
 		"sendTx",
-		[{ calls: [call] }, { from: ACCOUNT, additionalScopes: opts.additionalScopes }],
+		[wirePayload([call]), { from: ACCOUNT, additionalScopes: opts.additionalScopes }],
 		[tx("*")],
 		outsideSession("sendTx.opts.additionalScopes"),
 	],
@@ -71,42 +81,42 @@ const NOT_JOURNALED: Refusal[] = [
 	[
 		"sendTx, an explicit `from` outside the session (its missing row is a regression control)",
 		"sendTx",
-		[{ calls: [call] }, { from: "SENTINEL-FROM" }],
+		[wirePayload([call]), { from: opts.from }],
 		[tx("*")],
 		"Scope violation: requested account not authorized for this dApp session",
 	],
 	[
 		"registerContract, the contract",
 		"registerContract",
-		[{ address: "SENTINEL-ADDRESS" }],
+		[wireInstance(sentinel(11))],
 		[contracts({ canRegister: true })],
 		"Scope violation: registerContract contract not permitted by granted contracts scope",
 	],
 	[
 		"getContractMetadata, the contract",
 		"getContractMetadata",
-		["SENTINEL-ADDRESS"],
+		[sentinel(11)],
 		[contracts({ canGetMetadata: true })],
 		"Scope violation: getContractMetadata contract not permitted by granted contracts scope",
 	],
 	[
 		"isTokenRegistered, the token",
 		"isTokenRegistered",
-		["SENTINEL-TOKEN", { scopes: ["SENTINEL-OPTS-SCOPE"] }],
+		[sentinel(12), { scopes: opts.scopes }],
 		[contracts({ canGetMetadata: true })],
 		"Scope violation: isTokenRegistered contract not permitted by granted contracts scope",
 	],
 	[
 		"getContractClassMetadata, the class",
 		"getContractClassMetadata",
-		["SENTINEL-CLASS"],
+		[sentinel(13)],
 		[grant({ type: "contractClasses", classes: [A], canGetMetadata: true })],
 		"Scope violation: getContractClassMetadata class not permitted by granted contractClasses scope",
 	],
 	[
 		"grantPublicAuthwit, the call",
 		"grantPublicAuthwit",
-		["SENTINEL-FROM", { caller: "SENTINEL-CALLER", contract: "SENTINEL-CONTRACT", method: "SENTINEL-METHOD", args: ["SENTINEL-ARG"] }],
+		[opts.from, { caller: "SENTINEL-CALLER", contract: "SENTINEL-CONTRACT", method: "SENTINEL-METHOD", args: ["SENTINEL-ARG"] }],
 		[tx(listed(A))],
 		"Scope violation: grantPublicAuthwit call not permitted by granted transaction scope",
 	],
@@ -120,7 +130,7 @@ const NOT_JOURNALED: Refusal[] = [
 	[
 		"profileTx, a call",
 		"profileTx",
-		[exec, opts],
+		[exec, { ...opts, profileMode: "gates" }],
 		[listedSimulation("transactions")],
 		"Scope violation: profileTx call not permitted by granted simulation.transactions scope",
 	],
@@ -134,35 +144,35 @@ const NOT_JOURNALED: Refusal[] = [
 	[
 		"getPrivateEvents, the contract",
 		"getPrivateEvents",
-		[{ eventName: "SENTINEL-EVENT" }, events],
+		eventQuery,
 		[grant({ type: "data", privateEvents: { contracts: [A] } })],
 		"Scope violation: getPrivateEvents contract not permitted by granted data.privateEvents scope",
 	],
 	[
 		"getPrivateEvents, a filter's scopes account",
 		"getPrivateEvents",
-		[{ eventName: "SENTINEL-EVENT" }, events],
+		eventQuery,
 		[grant({ type: "data", privateEvents: { contracts: "*" } })],
 		outsideSession("getPrivateEvents.opts.scopes"),
 	],
 	[
 		"createAuthWit, the account",
 		"createAuthWit",
-		["SENTINEL-FROM", callIntent],
+		[opts.from, callIntent],
 		[grant({ ...authWit, accounts: [{ alias: "a", item: A }] })],
 		"Scope violation: createAuthWit account not permitted by granted accounts scope",
 	],
 	[
 		"createAuthWit, the call",
 		"createAuthWit",
-		["SENTINEL-FROM", callIntent],
+		[opts.from, callIntent],
 		[grant(authWit), tx(listed(A))],
 		"Scope violation: createAuthWit call not permitted by granted transaction or simulation scope",
 	],
 	[
 		"createAuthWit, the inner hash's consumer",
 		"createAuthWit",
-		["SENTINEL-FROM", innerHash],
+		[opts.from, innerHash],
 		[grant(authWit), tx(listed(A))],
 		"Scope violation: createAuthWit inner-hash consumer not permitted by granted transaction or simulation scope",
 	],
@@ -183,7 +193,7 @@ const NOT_JOURNALED: Refusal[] = [
 	[
 		"registerSender, the addressBook flag",
 		"registerSender",
-		["SENTINEL-ADDRESS", "SENTINEL-ALIAS"],
+		[sentinel(11), "SENTINEL-ALIAS"],
 		[noAddressBook],
 		"Scope violation: registerSender requires data.addressBook=true",
 	],
@@ -261,15 +271,15 @@ async function refuse(method: string, args: unknown[], grants: GrantedCapability
 		refusal: refusal?.message,
 		level: failureLine?.[1],
 		envelope: (sendResponse.mock.calls[0]?.[1] as { error?: unknown } | undefined)?.error,
-		leakingLines: lines.map(serialize).filter((line) => /SENTINEL-/.test(line)),
-		responseLeaks: /SENTINEL-/.test(serialize(sendResponse.mock.calls)),
+		leakingLines: lines.map(serialize).filter((line) => LEAK.test(line)),
+		responseLeaks: LEAK.test(serialize(sendResponse.mock.calls)),
 		ran: [execution.executeOperations, interaction.execute, interaction.requestCapabilities].flatMap((fn) => fn.mock.calls),
 		rows: await journal.countOperations({ sessionId: SESSION.sessionId }),
 		row: row && {
 			stage: row.progress.stage,
 			kind: row.error?.kind,
 			message: row.error?.message,
-			leaks: /SENTINEL-/.test(serialize(row.error)),
+			leaks: LEAK.test(serialize(row.error)),
 			title: row.title,
 		},
 	}
@@ -304,12 +314,37 @@ describe("handleWalletMessage — a scope refusal", () => {
 	test.each(NOT_JOURNALED)("of %s leaves no row", async (_name, method, args, grants, message) => {
 		expect(await refuse(method, args, grants)).toEqual({ ...refusedCleanly(message), rows: 0, row: undefined })
 	})
+})
 
-	test("a createAuthWit for a raw message hash, which no grant can admit, stays unclassified (regression control)", async () => {
-		expect(await refuse("createAuthWit", ["SENTINEL-FROM", "SENTINEL-HASH"], [grant(authWit)])).toEqual({
-			...refusedCleanly("Scope violation: createAuthWit requires a structured call intent; a raw message hash cannot be authorized"),
-			level: LogLevel.Error,
-			envelope: UNCLASSIFIED_ERROR_MESSAGE,
+describe("handleWalletMessage — a schema refusal", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	const refusedByParse = (method: string) => ({
+		...refusedCleanly(`Invalid arguments for wallet method: ${method}`),
+		envelope: { code: -32602, message: INVALID_PARAMS_MESSAGE, data: { walletErrorCode: "INVALID_PARAMS" } },
+	})
+
+	test("of a sendTx whose call argument is above the field modulus fails its queued row as unreadable", async () => {
+		const overModulus = `0xffffffff${SENTINEL_HEX}${"0".repeat(48)}`
+		const malformed = wirePayload([{ ...call, args: [overModulus] }])
+		expect(await refuse("sendTx", [malformed, { from: ACCOUNT }], [tx("*")])).toEqual({
+			...refusedByParse("sendTx"),
+			rows: 1,
+			row: {
+				stage: "failed",
+				kind: "malformed_request",
+				message: "Invalid arguments for wallet method: sendTx",
+				leaks: false,
+				title: "SENTINEL-NAME",
+			},
+		})
+	})
+
+	test("of a createAuthWit for a raw message hash, which no grant can admit, leaves no row", async () => {
+		expect(await refuse("createAuthWit", [opts.from, "SENTINEL-HASH"], [grant(authWit)])).toEqual({
+			...refusedByParse("createAuthWit"),
 			rows: 0,
 			row: undefined,
 		})

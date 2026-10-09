@@ -59,6 +59,7 @@ import { flushPromises } from "@vue/test-utils"
 import { ProfileService } from "./service"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
+import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
 import { deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
@@ -1983,6 +1984,49 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 		const q = await boot2.createProfile("B", "password123")
 		await boot2.deleteProfile(q.id)
 		expect(await boot2.getProfiles()).toHaveLength(0)
+	})
+
+	test.each([
+		["a clean purge releases the id and removes the tombstone", false],
+		["a tombstone corrupted during the purge stays, and keeps the id reserved", true],
+	])("%s", async (_, corrupt) => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+		const key = `${PROFILE_TOMBSTONE_ROOT}@${p.id}`
+		service.setDeletionDelegate({
+			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+			runFor: async () => {
+				if (corrupt) await api.storage.local.set({ [key]: "{not json" })
+			},
+		})
+		await service.deleteProfile(p.id)
+		expect(service.getDeletionState().isReserved(p.id)).toBe(corrupt)
+		expect(key in (await api.storage.local.get(key))).toBe(corrupt)
+	})
+
+	test("a tombstone filed under one id but naming another neither hydrates nor deletes the profile it names", async () => {
+		const { api, service } = await makeService()
+		const named = await service.createProfile("Named", "password123")
+		const misfiled: Tombstone = { profileId: named.id, addresses: [], tokenIds: [], networkIds: [], epoch: 7, pxeGeneration: "gen" }
+		await api.storage.local.set({ [`${PROFILE_TOMBSTONE_ROOT}@other`]: JSON.stringify(misfiled) })
+
+		const { service: boot2 } = await makeServiceFromExistingApi(api)
+		const purged: string[] = []
+		boot2.setDeletionDelegate({
+			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+			runFor: async (id: string) => {
+				purged.push(id)
+			},
+		})
+		const state = boot2.getDeletionState()
+		expect(state.isReserved("other")).toBe(true)
+		expect(state.isReserved(named.id)).toBe(false)
+		expect(state.capture(named.id)).toBe(0)
+
+		await boot2.resumePendingDeletions()
+		expect(purged).toEqual([])
+		expect((await boot2.getProfiles()).map((x) => x.id)).toContain(named.id)
+		expect(state.isReserved("other")).toBe(true)
 	})
 })
 

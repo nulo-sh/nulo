@@ -251,6 +251,8 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Popup closed early", context: "The popup closed before this transaction could finish." }
 		case "scope_refused":
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
+		case "malformed_request":
+			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
 		case "simulation":
 		case "prover":
 		case "stuck_proving":
@@ -297,6 +299,8 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Stopped when the wallet locked"
 		case "scope_refused":
 			return "Not allowed"
+		case "malformed_request":
+			return "Couldn't read request"
 		// popup_bound, transfer, dapp_execute, unknown, and any other / future
 		// kind all fall through to the generic copy. The kind is still preserved
 		// in the journal record's error.kind field for debugging / future

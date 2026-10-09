@@ -36,7 +36,7 @@ import {
 	gotoAccounts,
 	previewImport,
 } from "./helpers/account-io"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./helpers/backup-export"
+import { downloadEncryptedBackup, openEncryptedBackup } from "./helpers/backup-export"
 import { writeBackupToTemp } from "./helpers/import-drivers"
 
 /** The restored profile gets its own password — distinct on purpose, so an assertion passing
@@ -69,32 +69,19 @@ test("a full backup carries an imported account; restoring it (dup-confirmed) re
 	await gotoAccounts(page)
 	await page.waitForSelector('[data-testid="account-imported-badge"]', { visible: true, timeout: 20_000 })
 
-	// ── Stage 2: export a PLAIN full backup (the imported-key slice rides along) ──
+	// ── Stage 2: export the full backup (the imported-key slice rides along) and open it ──
 	await navigateByHash(page, "#/popup/settings/security/export/full")
 	await clickByTestId(page, "agree-continue-btn")
 	await page.waitForSelector('[data-testid="unlock-password-input"]', { visible: true, timeout: 10_000 })
 	await replaceInputValue(page, '[data-testid="unlock-password-input"]', TEST_PASSWORD)
 	await clickByTestId(page, "unlock-submit-btn")
-	// The multi-service backup chain is slow on hosted runners (same budget as
-	// backup-roundtrip.test.ts).
-	await page.waitForFunction(
-		() => {
-			const btn = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-			return !!btn && !btn.disabled
-		},
-		{ timeout: 120_000, polling: 250 },
-	)
-	await armBackupDownloadCapture(page)
-	await clickByTestId(page, "download-backup-btn")
-	const backupJson = await readCapturedBackupDownload(page)
-	expect(backupJson.trim().startsWith("{")).toBe(true)
+	const parsedBackup = await openEncryptedBackup(await downloadEncryptedBackup(page))
 	// The backup genuinely carries the imported-key slice — without this, the restore stages
 	// below would "pass" by restoring nothing.
-	const parsedBackup = JSON.parse(backupJson) as { data?: Record<string, unknown> }
 	expect(Array.isArray(parsedBackup.data?.["imported-account-keys"])).toBe(true)
 	expect((parsedBackup.data?.["imported-account-keys"] as unknown[] | undefined)?.length).toBe(1)
 
-	const filePath = writeBackupToTemp(backupJson, "backup-with-imported-account.json")
+	const filePath = writeBackupToTemp(JSON.stringify(parsedBackup), "backup-with-imported-account.json")
 	try {
 		// ── Stage 3: import the backup into the SAME extension → dup-phrase warn → confirm ──
 		await navigateByHash(page, "#/popup/import", 15_000)

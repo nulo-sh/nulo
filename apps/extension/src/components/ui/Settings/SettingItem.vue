@@ -26,6 +26,8 @@ const props = defineProps({
 		default: "secondary",
 	},
 	to: String,
+	/** The setting's current state, shown before the chevron. */
+	value: String,
 	chevron: {
 		type: Boolean,
 		required: false,
@@ -100,7 +102,7 @@ const Root = (_, { slots }) => {
 
 		<Flex wide align="center" justify="between" gap="16">
 			<Flex align="center" gap="14" wide>
-				<div v-if="icon || materialIcon || $slots.dot || $slots.icon" :class="$style.icon_wrapper">
+				<div v-if="icon || materialIcon || $slots.dot || $slots.icon" :class="[$style.icon_wrapper, $slots.icon && $style.icon_slotted]">
 					<!-- Dot -->
 					<slot name="dot" />
 
@@ -139,6 +141,7 @@ const Root = (_, { slots }) => {
 			</Flex>
 
 			<Flex align="center" gap="12">
+				<Text v-if="value" data-testid="setting-value" size="12" weight="500" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
 					<MaterialIcon
 						v-if="to || chevron"
@@ -227,6 +230,15 @@ const Root = (_, { slots }) => {
 	flex-shrink: 0;
 }
 
+/* A slotted icon sets its own size. The fixed box stays the default: a material icon's ligature
+ * text lays out wider than 20px until its font loads, and the box keeps the row from widening. */
+.icon_slotted {
+	width: auto;
+	height: auto;
+	min-width: 20px;
+	min-height: 20px;
+}
+
 .material_icon {
 	color: var(--nulo-secondary);
 	transition: color 0.2s var(--bezier);
@@ -240,6 +252,11 @@ const Root = (_, { slots }) => {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+}
+
+.value {
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 .chevron_icon {

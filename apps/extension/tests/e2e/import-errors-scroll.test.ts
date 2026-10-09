@@ -63,8 +63,11 @@ async function onErrorsScreen(items: Items, surface: "popup" | "onboarding", fn:
 		await fn(page)
 	} finally {
 		await armed?.stop()
-		await ctx.close()
-		rmSync(profileDir, { recursive: true, force: true })
+		try {
+			await ctx.close()
+		} finally {
+			rmSync(profileDir, { recursive: true, force: true })
+		}
 	}
 }
 
