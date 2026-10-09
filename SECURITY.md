@@ -580,6 +580,11 @@ which the local Docker runner (`docker-ci-like.sh`) runs too:
   and writes only its own, so poisoning what `dev` or `main` restores takes
   code merged to one of them.
 
+The Docker runner's own Bun and Node come only from the x64 archives
+`apps/extension/scripts/e2e/docker-ci-like.pins.sha256` pins, each checked
+before extraction and put first on `PATH`; a Bun bump that leaves that pin
+behind fails `scripts/ci-cd/docker-ci-like-pins.test.ts`.
+
 `geckodriver` (Linux x86_64, from
 [`mozilla/geckodriver`](https://github.com/mozilla/geckodriver) releases) is
 installed on every CI runner that executes a Firefox e2e lane, via the

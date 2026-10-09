@@ -33,7 +33,7 @@ function cleanupOrphanChromeProcesses() {
 
 /** Smoke test global setup — validates the extension build and cleans up stale Chrome processes. */
 /** Same vitest contract as global-setup.ts: with a default export present, the named `teardown`
- *  is IGNORED - it must be the default's return value (review CONFIRMED the identical bug here). */
+ *  is IGNORED - it must be the default's return value. */
 export default async function setupWithTeardown(project: TestProject): Promise<() => Promise<void>> {
 	await setup(project)
 	return teardown

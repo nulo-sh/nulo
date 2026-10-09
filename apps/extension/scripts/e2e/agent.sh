@@ -35,7 +35,7 @@ fi
 
 PORTS_JSON=".e2e-state/ports.json"
 
-# DELIBERATELY NO signal trap here (review CONFIRMED x5): bash defers INT/TERM traps until the
+# DELIBERATELY NO signal trap here: bash defers INT/TERM traps until the
 # foreground child exits, so a trap can never run during the build or vitest - the only windows
 # worth protecting - and a DEFERRED trap that fires after the child completes would clobber the
 # real classified exit (a green 25-min run reported as 130, or an exit-86 that must trigger the

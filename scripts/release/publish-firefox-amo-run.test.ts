@@ -408,3 +408,40 @@ describe("publish flow", () => {
 		expectNoSecretLeak(h)
 	})
 })
+
+describe("workflow commands", () => {
+	const TEXT = "x\n::warning::y##[error]z"
+	/** Physical lines, as the runner reads them: a command counts only at a line's start, `##[` anywhere. */
+	function expectEscaped(h: ReturnType<typeof harness>) {
+		const physical = h.lines.flatMap((l) => l.split(/\r\n|\r|\n/))
+		const commands = physical.filter((l) => l.startsWith("::"))
+		expect(commands.filter((l) => !/^::(add-mask::|error::publish-firefox-amo: )/.test(l))).toEqual([])
+		expect(physical.filter((l) => l.includes("##["))).toEqual([])
+	}
+
+	test("AMO text on the check line, a validation error and a failure reason prints escaped", async () => {
+		const check = harness([ok({ results: [{ guid: GECKO_ID, status: `public${TEXT}` }] })])
+		expect((await runPublishFirefoxAmo(env({ MODE: "check" }), check.io)).exit).toBe(0)
+		expect(check.lines.filter((l) => l.startsWith("check ok: "))).toHaveLength(1)
+		expectEscaped(check)
+
+		const messages = [{ type: "error", message: `Manifest is invalid${TEXT}` }]
+		const invalid = harness([ok({ uuid: "u-1" }), ok({ processed: true, valid: false, validation: { messages } })])
+		expect((await runPublishFirefoxAmo(env(), invalid.io)).exit).toBe(1)
+		expect(invalid.lines.filter((l) => l.startsWith("validation error: Manifest is invalid"))).toHaveLength(1)
+		expectEscaped(invalid)
+
+		const refused = harness([ok({ uuid: "u-1" }), VALID, ok({ detail: `Version exists${TEXT}` }, 409)])
+		expect((await runPublishFirefoxAmo(env(), refused.io)).exit).toBe(1)
+		expect(refused.lines.filter((l) => l.startsWith("::error::publish-firefox-amo: "))).toHaveLength(1)
+		expectEscaped(refused)
+	})
+
+	test("AMO's strings on the upload, version and published lines print as plain lines", async () => {
+		const created = ok({ id: `9001${TEXT}`, version: "0.27.0.0", channel: "listed", file: { status: `unreviewed${TEXT}` } }, 201)
+		const h = harness([ok({ uuid: `u-1${TEXT}` }), VALID, created, SOURCED])
+		expect((await runPublishFirefoxAmo(env(), h.io)).exit).toBe(0)
+		expect(h.lines.filter((l) => /^(upload ok|version ok|published): /.test(l))).toHaveLength(3)
+		expectEscaped(h)
+	})
+})

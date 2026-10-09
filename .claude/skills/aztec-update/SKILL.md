@@ -242,6 +242,10 @@ Then Branch A's delivery gates.
   carries its API key in the path, so a script that reads it goes through the silent single-read
   client (`createPreflightNodeClient` in `apps/extension/scripts/seed-preflight-node.ts`) and
   prints origins only.
+- **Grep `node_modules` for an unknown contract address before theorizing.** On 5.0.1, seven wrong
+  identifications of an address in an error came before the grep that named it: a registry from the
+  old standards package, pulled in by the test token and absent on the new sandbox
+  (`implementations-plan/archive/aztec-5.0.1-line/plan.md#unknown-address`).
 
 - **Standards/token package swaps: noir struct paths are NOT stable across dep graphs.** The same
   `AztecAddress` param can arrive as `aztec::protocol_types::…::AztecAddress` from one compile and

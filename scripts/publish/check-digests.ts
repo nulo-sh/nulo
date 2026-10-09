@@ -10,6 +10,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+import { command } from "../release/workflow-command"
 
 export const FIRST_VERSION = "0.1.0"
 /** Canonical `X.Y.Z` only: npm normalizes `00.1.0` to `0.1.0`, which would dodge a string-keyed binding. */
@@ -61,6 +62,6 @@ if (import.meta.main) {
 	const result = checkDigests(version, approved, tarballs)
 	for (const { name, sha256 } of tarballs) console.log(`${sha256}  ${name}`)
 	for (const note of result.notes) console.log(note)
-	for (const failure of result.failures) console.error(`::error::${failure}`)
+	for (const failure of result.failures) console.error(command("error", failure))
 	process.exit(result.ok ? 0 : 1)
 }
