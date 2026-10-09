@@ -106,12 +106,18 @@ function isWalletFeaturesShape(existing: SchemaEntry): boolean {
 	)
 }
 
+const GRANT_CONTENT_KEYS = Object.keys(GRANT_CONTENT_SCHEMA.shape)
+
+/** The content object must declare every key the handler reads, or a same-arity upstream entry
+ *  could pass content the wallet's parse never checked. */
 function isGrantAuthwitShape(existing: SchemaEntry): boolean {
 	const items = existing?.def?.input?.def?.items
+	const content = items?.[1]?.def
 	return (
 		items?.length === 2 &&
 		items[0] === schemas.AztecAddress &&
-		items[1]?.def?.type === "object" &&
+		content?.type === "object" &&
+		GRANT_CONTENT_KEYS.every((key) => Object.hasOwn(content.shape ?? {}, key)) &&
 		existing?.def?.output?.def?.type === "string"
 	)
 }
