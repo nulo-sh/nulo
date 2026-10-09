@@ -373,6 +373,7 @@ Built on the owner's page 2 picks (OWNER-ASKS.md § Answers: page 2): calls 1 A,
 - **A2-D3, test helpers.** `tabTo`, `tokenColor` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`, shared by the three specs that read a ring; `rows.test.ts` keeps its own `tabTo` because PR #56 rewrites that file.
 - **A2-D4, Firefox focus.** Each Tab walk calls `prepareKeys` first: on an unfocused Firefox page `document.hasFocus()` is false and no `:focus-visible` rule matches. Onboarding's create page focuses the password field on arrival, so its walk goes back one stop with Shift+Tab; a forward walk leaves the document on Firefox.
 - **A2-D5, "View all" in the network spec.** Smoke Home draws "View all" only once every default token lands from the live testnet; one failed default leaves three rows and no link (`capHomeSlots`). Its assertions moved to `network/home-cap.test.ts`, the plan's own fallback, on four funded tokens; smoke `home-links.test.ts` keeps "View history", on Home and on a token's page.
+- **A2-D6, `dev` merged in.** The opened PR conflicted with `dev` on `implementations-plan/index.md` (the plan commit's line against security-ui-1's close-out), so GitHub ran no PR workflow. `origin/dev` was merged into the branch (`7032ab3`, no history rewrite), keeping `dev`'s removal and this plan's line, and every Arc 2 gate re-ran green on the merged head. The rebase onto `dev` after Arc 1 lands still follows A2-D1.
 
 **Arc 2 audit verdicts.**
 

@@ -14,3 +14,4 @@
 - 2026-10-09: arc 2 review round 1: codex conditional approve, opus approve after one Med; six findings accepted (plan.md § Arc 2 audit verdicts); smoke home-links.test.ts and network home-cap.test.ts green on chrome and firefox (retry 0).
 - 2026-10-09: arc 2 review round 2: codex conditional approve, one Med (token-page wait) fixed; smoke home-links.test.ts green on chrome and firefox (retry 0).
 - 2026-10-09: arc 2 exit gate pass on the final head: audit:vue, test:all, check:plans; smoke home-links, tooltips-glossary, onboarding-tab (15/15) and network home-cap, connect-one-window (2/2) on chrome and firefox, retry 0; codex loop converged (round 3 approve).
+- 2026-10-09: merged origin/dev (index.md conflict blocked PR CI); gates re-run green on the merged head: audit:vue, test:all; smoke 15/15 and network 2/2 on chrome and firefox, retry 0.
