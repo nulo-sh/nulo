@@ -7066,12 +7066,6 @@
 		},
 		{
 			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "drop",
-			"at": ".contract_name"
-		},
-		{
-			"rule": "faceless",
 			"text": "font-weight: 600",
 			"role": "meta",
 			"at": ".contract"
