@@ -100,3 +100,29 @@ Picks changed by the lead:
 - The dry run's eight unreached surfaces were all spec faults: `popup-profile-new` carries `?from=`; a light-pass Terms shot left the next onboarding pass at the Terms gate; GlobalLoader needs `chrome.runtime.connect` to throw; the boot Banner needs the boot's own profile lookup to time out while the route guard's read still answers, since a port that answers nothing never readies the router. Neither overlay can be forced on Firefox, where the preload never reaches moz-extension pages.
 - The plan claimed ten execute-window operation cards reachable; the network run showed no dApp method opens a window for them (the dispatcher hands only four operation kinds to the interaction service). They are attested unreachable under the `execute_window` producer set. Lesson: an inventory state is a claim about a producer, and only a run that reaches it, or a producer search, proves it.
 - The shot spec credited the simulate branch's `call.to` from the send state, because both branches share `execute-op-call-to`; coverage counts the expected file's live sites, so that credit does not count.
+
+## The before cells against the before set
+
+- Six readers checked every row of § UI impact's tables, 237 in all, against the recorded JSON (`records` per surface, `sites` per identifier selector). 122 agree, 20 cells were corrected, 93 hold an element no shot reached (an error or empty state, a mini size, a confirm toggle: they stay as the code reads), and the four cells that describe the five sites the set never observed say so. The corrections, as recorded:
+  - `SectionLabel`: `G 12/700 caps 0.1; count M 10 in the label's caps and tracking` → `G 12/700 caps 0.1; count M 10/700 in the label's caps and tracking`.
+  - Home balance (`.balance_amount`, the fitted `.hero_fit` and its symbol: `G 48/700 -0.04, fitted; symbol 0.5em` → `G 48/700 -0.04, fitted; symbol 0.5em -0.08 (the fit's px tracking inherited)`.
+  - Recipient field text: `M 14/400` → `M 14/500`.
+  - Publish strip: `cells M 8.5 caps 0.05; name G 8.5/700 caps 0.1` → `cells M 8.5/500 caps 0.05; name G 8.5/700 caps 0.1`.
+  - Review sheet: `title G 12/700 caps 0.2; amount G 30/700 -0.02 at the fit's scale; symbol M 11; recipient M 11; rows head G 9 caps 0.12; row top I 11.5/600; row word M 9.5 caps 0.06; row note I 11/500; fee M 11` → `title G 12/700 caps 0.2; amount G 30/700 -0.02 at the fit's scale; symbol M 11; recipient M 11; rows head G 9 caps 0.12; row top I 11.5/600; row word M 9.5/500 caps 0.06; row note I 11/500; fee M 11`.
+  - Accounts popup rows: `name I 14/500 (inherited, `SettingItem.vue:134`)` → `name I 14/500 0.01 (inherited, `SettingItem.vue:134`)`.
+  - Accounts list; export account list; connected app accounts: `names I 14/500` → `names I 14/500 0.01`.
+  - FPC rows: `title I 14/500 (the FPC's name, or its address when it has none)` → `title I 14/500 0.01 (the FPC's name, or its address when it has none)`.
+  - Glossary: `"where" M 9.5 caps` → `"where" M 9.5 caps 0.06`.
+  - Operation values; amounts; addresses; account in parentheses; function: `I 11 to 12 (`AddressDisplay`)` → `I 11/500 to 12/500 (`AddressDisplay`) (the discovered authwit's consumer, caller and hash not observed in the before set)`.
+  - Capabilities: `table sub G 10 caps; address M 11; function M 10 (`DetailsTable.vue:267` only; `capability-shared.module.css`'s `.mono` renders only in Settings); tag M 10/600 0.08` → `table sub G 10 caps 0.1; address M 11; function M 10 (`DetailsTable.vue:267` only; `capability-shared.module.css`'s `.mono` renders only in Settings); tag M 10/600 caps 0.08`.
+  - Header address (`Header.vue:249-252`, the copy button's rule `.account: `G 14/700` → `G 14/700 -0.02`.
+  - Every other `AddressDisplay` call (26 in `OperationActionRow.vue`, `Op: `I 11 to 12` → `I 11/500 to 12/500 (`OperationActionRow`'s call target and the discovered authwit's consumer and caller not observed in the before set)`.
+  - FPC row title when the FPC has no name (`FpcRow.vue:33`): `I 14/500` → `I 14/500 0.01`.
+  - Edit FPC's header row, titled like `FpcRow` with the FPC's name or, wi: `I 14/500` → `I 14/500 0.01`.
+  - Contact suggestion address (`RecipientField.vue:123-124`); imported co: ``<Text>` I 12/500, I 13/600, `mono` 12, `mono` 11` → ``<Text>` I 12/500, I 13/600, `mono` 12/500, `mono` 11/500`.
+  - Rows and tables: contacts (`ContactRow.vue:33`), account select (`Acco: `M 11 to 12, I` → `M 11 to 12; profile ID M 12/500`.
+  - Aux ids: block hashes (`tx/[id].vue:318`, `received/[id].vue:325`), ch: `M 10` → `M 10; notes contract M 10/600 0.02`.
+  - Typed addresses: `AddressInput` (the recipient field, the contact form: `I 15/500; the recipient M 14/400` → `I 15/500; the recipient M 14/500`.
+  - dApp hostname (`DappIdentityBlock.vue:38`, rule `:83`): `G 14/700` → `G 14/700 0.01`.
+- Reading rule used: Grotesk without a weight means 700 and mono without one 400, as the plan writes them, so a bare `G 9 caps` agrees with a computed 700 and a bare `M 9.5` does not agree with a computed 500. A 0.01em tracking declared in source counts (SettingItem titles, the dApp hostname). The patterns behind the misses: inherited weights (an `AddressDisplay`'s 500, a section count inside a 700 label), inherited px tracking that is a different em at a different size (the Home symbol's -0.08), and tracking the cell left out.
+
