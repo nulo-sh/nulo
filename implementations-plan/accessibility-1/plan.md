@@ -314,7 +314,7 @@ Skip this phase if call 6 is B or "as is".
 
 ### Arc 2, Home and shared chrome (after page 2's answers)
 
-#### Phase 2.1: Home's view links (call 1)
+#### Phase 2.1: Home's view links (call 1) ✓
 
 Skip this phase if call 1 is "as is".
 
@@ -361,6 +361,17 @@ Skip this phase if call 6 is "as is".
 **Validation gate.** Commands: the fast layers; `bun run --cwd apps/extension build-storybook`. Pass criteria: every command exits 0. Layers: lint, typecheck, unit.
 
 **Arc 2 exit gate.** `bun run audit:vue` and `bun run test:all` exit 0, and the Arc 2 Codex fix loop has converged.
+
+#### Arc 2 record (Home and shared chrome)
+
+Built on the owner's page 2 picks (OWNER-ASKS.md § Answers: page 2): calls 1 A, 2 A, 5 A and 6 A. Calls 3 and 4 are Arc 3. The phase log is [lessons/phase-2.md](lessons/phase-2.md).
+
+**Arc 2 deviations from the plan as written.**
+
+- **A2-D1, delivery.** The orchestrator ran Arcs 1 and 2 in parallel from the plan commit. Arc 2's branch `accessibility-1-home-chrome` stacks on the plan commit, not on Arc 1, and its PR targets `dev`; Arc 1 merges first, then Arc 2 is rebased onto `dev`. This replaces § Delivery's layer order for these two arcs; Arc 3 and the close-out still stack on top.
+- **A2-D2, Phase 2.1.** The smoke spec seeds one transaction, not three: "View history" needs one row, and fewer rows move under the Tab walk. Smoke Home draws "View all" from the four testnet default tokens (I5 holds), so `network/home-cap.test.ts` is untouched.
+- **A2-D3, test helpers.** `tabTo`, `tokenColor` and `focusRing` live in `tests/e2e/helpers/pointer-probes.ts`, shared by the three specs that read a ring; `rows.test.ts` keeps its own `tabTo` because PR #56 rewrites that file.
+- **A2-D4, Firefox focus.** Each Tab walk calls `prepareKeys` first: on an unfocused Firefox page `document.hasFocus()` is false and no `:focus-visible` rule matches. Onboarding's create page focuses the password field on arrival, so its walk goes back one stop with Shift+Tab; a forward walk leaves the document on Firefox.
 
 ### Arc 3, after PRs #56, #55 and #58 (page 2, calls 3 and 4)
 

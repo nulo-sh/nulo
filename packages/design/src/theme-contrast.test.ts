@@ -169,3 +169,19 @@ describe("light palette landed (was the root cause)", () => {
 		expect(resolveColor("--border", themeMap("light")).r).toBeGreaterThan(100) // rgba(124,116,104,.3)
 	})
 })
+
+// A focus ring or a graphic needs 3:1 against what it sits on (WCAG 1.4.11), link text 4.5:1.
+describe("theme contrast — home links, focus rings and the step bar (required)", () => {
+	const AA_NON_TEXT = 3
+	const pairs: Pair[] = [
+		{ fg: "--nulo-secondary", bg: "--app-bg", min: AA_TEXT, label: "a view link on the page" },
+		{ fg: "--nulo-accent", bg: "--app-bg", min: AA_NON_TEXT, label: "the accent ring on the page" },
+	]
+	for (const theme of ["dark", "light"] as const) {
+		for (const p of pairs) {
+			test(`${theme}: ${p.label} (${p.fg} on ${p.bg}) >= ${p.min}:1`, () => {
+				expect(contrast(p.fg, p.bg, theme)).toBeGreaterThanOrEqual(p.min)
+			})
+		}
+	}
+})
