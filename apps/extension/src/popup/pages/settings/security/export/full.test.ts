@@ -1,6 +1,6 @@
 import { EncryptionKey } from "@nulo/wallet-crypto"
 import { MaterialIcon } from "@nulo/design"
-import { FULL_BACKUP_V2_TAG, MAX_BACKUP_FILE_BYTES } from "@/utils/full-backup-helpers"
+import { FULL_BACKUP_V2_TAG, MAX_BACKUP_FILE_BYTES, openFullBackupText } from "@/utils/full-backup-helpers"
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -8,6 +8,7 @@ import { pressOn } from "../../../../../../tests/helpers/press-key"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../../../tests/helpers/shipped-buffer"
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import { useAppStore } from "@/stores/app.store"
+import { usePopupStore } from "@/stores/popup.store"
 import FullExportPage from "./full.vue"
 
 /**
@@ -208,6 +209,19 @@ async function reachBackupReady(wrapper: ReturnType<typeof mountPage>) {
 	await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
 }
 
+const downloadButton = (wrapper: ReturnType<typeof mountPage>) => wrapper.get("[data-testid='download-backup-btn']")
+
+/** A password profile's file, which leaves the page only encrypted, opened as a restore opens it. */
+async function downloadAndOpen(wrapper: ReturnType<typeof mountPage>): Promise<Record<string, unknown>> {
+	await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+	await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined(), { timeout: 10_000 })
+	await downloadButton(wrapper).trigger("click")
+	await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+	const { data, filename } = downloadFile.mock.calls[0][0]
+	expect(filename).toMatch(/^NuloEncryptedBackup_/)
+	return JSON.parse(await openFullBackupText(data, "pw")) as Record<string, unknown>
+}
+
 /** Holds encryption at its first await: `EncryptionKey.getPasshash` never settles. */
 function holdEncryption() {
 	return vi.spyOn(EncryptionKey, "getPasshash").mockReturnValue(new Promise<never>(() => {}) as never)
@@ -283,27 +297,6 @@ describe("export/full.vue — Enter does what the focused control says", () => {
 		expect(exportFullBackupKeys).not.toHaveBeenCalled()
 	})
 
-	it("at the backup-ready stage, Enter on Download Backup downloads and does not encrypt", async () => {
-		const wrapper = mountPage()
-		await reachBackupReady(wrapper)
-		const passhash = holdEncryption()
-		pressOn(wrapper.get("[data-testid='download-backup-btn']").element as HTMLElement, "Enter")
-		await flushPromises()
-		expect(downloadFile).toHaveBeenCalledTimes(1)
-		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloBackup_/)
-		expect(passhash).not.toHaveBeenCalled()
-	})
-
-	it("at the backup-ready stage, a repeat Enter on Download Backup downloads and encrypts nothing", async () => {
-		const wrapper = mountPage()
-		await reachBackupReady(wrapper)
-		const passhash = holdEncryption()
-		pressOn(wrapper.get("[data-testid='download-backup-btn']").element as HTMLElement, "Enter", { repeat: true })
-		await flushPromises()
-		expect(downloadFile).not.toHaveBeenCalled()
-		expect(passhash).not.toHaveBeenCalled()
-	})
-
 	it("at the backup-ready stage, an Enter with nothing focused starts nothing", async () => {
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
@@ -313,6 +306,48 @@ describe("export/full.vue — Enter does what the focused control says", () => {
 		await flushPromises()
 		expect(passhash).not.toHaveBeenCalled()
 		expect(downloadFile).not.toHaveBeenCalled()
+	})
+})
+
+describe("export/full.vue — a password profile's file leaves only encrypted", () => {
+	it("Download stays disabled at the backup-ready stage, under the banner that says why, and saves the encrypted file once there is one", async () => {
+		const encrypt = vi.fn(async () => new Uint8Array(29))
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt } as never)
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		expect(downloadButton(wrapper).attributes("disabled")).toBeDefined()
+		expect(wrapper.text()).toContain("Protect your backup")
+		expect(wrapper.text()).toContain("anyone who opens the file controls this profile")
+
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
+		expect(downloadFile.mock.calls[0][0].filename).toMatch(/^NuloEncryptedBackup_/)
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+
+	it("a switch to a passkey profile made elsewhere starts the page over instead of offering the password backup", async () => {
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		useAppStore().profile = { id: "p2", type: "passkey", name: "Other" } as never
+		await flushPromises()
+		expect(wrapper.find("[data-testid='agree-continue-btn']").exists()).toBe(true)
+		expect(wrapper.find("[data-testid='download-backup-btn']").exists()).toBe(false)
+		expect(downloadFile).not.toHaveBeenCalled()
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
+	})
+
+	it("a Download press that reaches the page before encryption writes nothing and asks nothing", async () => {
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		const button = downloadButton(wrapper).element as HTMLButtonElement
+		button.disabled = false
+		button.click()
+		await flushPromises()
+		expect(downloadFile).not.toHaveBeenCalled()
+		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 })
 
@@ -370,19 +405,13 @@ describe("export/full.vue — error boundary", () => {
 })
 
 describe("export/full.vue — sealed artifact", () => {
-	it("the downloaded pretty file verifies against the import-side recompute", async () => {
+	it("the downloaded file verifies against the import-side recompute", async () => {
 		profileClient.backup.mockResolvedValue([{ id: "p1", type: "password" }])
 		const wrapper = mountPage()
-		await reachUnlockAndSubmit(wrapper)
-		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
+		await reachBackupReady(wrapper)
 
-		await wrapper.find("[data-testid='download-backup-btn']").trigger("click")
-		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
-		const { data, filename } = downloadFile.mock.calls[0][0]
-		expect(filename).toMatch(/^NuloBackup_/)
-
-		// Exactly what the importer does with the downloaded file.
-		const parsed = JSON.parse(data) as Record<string, unknown>
+		// Exactly what the importer does with the opened file.
+		const parsed = await downloadAndOpen(wrapper)
 		const { checksum, ...body } = parsed
 		expect(await EncryptionKey.getHashHex(JSON.stringify(body))).toBe(checksum)
 		expect(parsed["master-key"]).toBe("mk")
@@ -402,11 +431,8 @@ describe("export/full.vue — sealed artifact", () => {
 		profileClient.backup.mockResolvedValue([{ id: "p1", type: "password" }])
 		const wrapper = mountPage()
 		useAppStore().network = { id: "local", chainId: 0 } as never
-		await reachUnlockAndSubmit(wrapper)
-		await vi.waitFor(() => expect(wrapper.find("[data-testid='protect-password-btn']").exists()).toBe(true))
-		await wrapper.find("[data-testid='download-backup-btn']").trigger("click")
-		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
-		const parsed = JSON.parse(downloadFile.mock.calls[0][0].data) as Record<string, unknown>
+		await reachBackupReady(wrapper)
+		const parsed = await downloadAndOpen(wrapper)
 		expect(parsed["active-chain-id"]).toBe(0)
 	})
 })
@@ -419,10 +445,7 @@ describe("export/full.vue — the password backup's keys and run fence", () => {
 		exportFullBackupKeys.mockResolvedValue({ ...material, importedKeyRows: [KEY_ROW], accounts: [ACCOUNT] })
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)
-		await wrapper.find("[data-testid='download-backup-btn']").trigger("click")
-		await vi.waitFor(() => expect(downloadFile).toHaveBeenCalledTimes(1))
-
-		const parsed = JSON.parse(downloadFile.mock.calls[0][0].data) as Record<string, unknown>
+		const parsed = await downloadAndOpen(wrapper)
 		const data = parsed.data as Record<string, unknown>
 		expect(exportFullBackupKeys).toHaveBeenCalledWith(FENCE, "pw")
 		expect(parsed["imported-keys-dek"]).toBe("transfer-key")

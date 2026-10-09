@@ -11,7 +11,7 @@
 </script>
 
 <template>
-	<SettingsPageShell title="Account State" :backTo="'/popup/settings/advanced'" gap="20">
+	<SettingsPageShell title="Account State" :backTo="'/popup/settings/developer'" gap="20">
 		<ItemsContainer>
 			<SettingItem
 				size="large"

@@ -12,6 +12,8 @@ const cacheStoreState: {
 	importPromise: { resolve: (rows: unknown[]) => void; reject: (v: unknown) => void } | null
 } = { importContacts: [], importPromise: null }
 
+// The run fence the profile service hands the import; every contact call of the run must carry it.
+const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/utils", async (importOriginal) => {
 	const real = await importOriginal<typeof import("@/utils")>()
@@ -24,7 +26,13 @@ vi.mock("@/utils", async (importOriginal) => {
 })
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: vi.fn(function () {
-		return { connect: vi.fn(), disconnect: vi.fn(), getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }) }
+		return {
+			connect: vi.fn(),
+			disconnect: vi.fn(),
+			getActiveProfile: vi.fn().mockResolvedValue({ name: "p" }),
+			captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+			assertRunFence: vi.fn().mockResolvedValue(undefined),
+		}
 	}),
 }))
 vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ network: { id: "net-1", name: "Testnet" } }) }))
@@ -72,7 +80,7 @@ describe("importContacts — a file name differing from a saved one by outer spa
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, contacts.value))
 		await done
 
-		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B)
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B, RUN_FENCE)
 		expect(contactService.addContact).not.toHaveBeenCalled()
 	})
 
@@ -94,7 +102,7 @@ describe("importContacts — a file name differing from a saved one by outer spa
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts, contacts.value))
 		await done
 
-		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B)
+		expect(contactService.updateContact).toHaveBeenCalledWith("c1", "Alice", ADDR_B, RUN_FENCE)
 		expect(contactService.addContact).not.toHaveBeenCalled()
 	})
 })

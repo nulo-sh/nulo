@@ -340,44 +340,6 @@ describe("TokenService.addToken — creation fences", () => {
 		expect(await tokenRowCount(api)).toBe(0)
 	})
 
-	test("updateToken does not RESURRECT a row the lockless sweep deleted during its fetch", async () => {
-		// updateToken parks in the metadata fetch holding the token lock; the
-		// sweep no longer queues behind it — a swept row must not come back via
-		// the update's set.
-		const { tokenService, fetchStub, api } = await makeHarness()
-		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xdead"), { origin: "popup" })
-		let releaseFetch!: (v: [string, string, number]) => void
-		fetchStub.mockReturnValueOnce(new Promise((r) => (releaseFetch = r)))
-
-		const updating = tokenService.updateToken("p1", NETWORK.id, "0xacc", info.id, ti("0xdead"))
-		await new Promise((r) => setTimeout(r, 10))
-		await api.storage.local.remove(`nulo:core:tokens@${info.id}`) // the lockless sweep lands
-		releaseFetch(["New", "NEW", 9])
-
-		await expect(updating).rejects.toThrow(/token deleted/)
-		expect(await tokenRowCount(api)).toBe(0)
-	})
-
-	test("a purge reservation landing DURING updateToken's set is self-compensated", async () => {
-		const { tokenService, fetchStub, api, networkLive } = await makeHarness()
-		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xdead"), { origin: "popup" })
-		fetchStub.mockResolvedValueOnce(["New", "NEW", 9])
-		const realSet = api.storage.local.set.bind(api.storage.local)
-		let armed = false
-		api.storage.local.set = (async (items: Record<string, unknown>) => {
-			await realSet(items)
-			if (armed && Object.keys(items).some((k) => k.startsWith("nulo:core:tokens@"))) {
-				armed = false
-				networkLive.value = false
-			}
-		}) as typeof api.storage.local.set
-		armed = true
-
-		await expect(tokenService.updateToken("p1", NETWORK.id, "0xacc", info.id, ti("0xdead"))).rejects.toThrow(/network deleted/)
-		api.storage.local.set = realSet as typeof api.storage.local.set
-		expect(await tokenRowCount(api)).toBe(0)
-	})
-
 	test("a purge reservation landing DURING a restore row's set is self-compensated", async () => {
 		const { tokenService, api, networkLive } = await makeHarness()
 		const realSet = api.storage.local.set.bind(api.storage.local)

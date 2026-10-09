@@ -64,6 +64,9 @@ jobs:
       # these ever diverge, migration.test.ts silently skips (build armed,
       # runner unaware) or times out (runner armed, build without the fixture).
       MIGRATION_FIXTURE_ARMED: ${{ (inputs.artifact_name == '' && inputs.extension_path == '') && '1' || '' }}
+      # Same single-source rule for the e2e-only CSP violation recorder: a source build carries it
+      # and the run checks it; an artifact run has neither (release zips refuse the recorder).
+      CSP_REPORT_ARMED: ${{ (inputs.artifact_name == '' && inputs.extension_path == '') && '1' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -117,6 +120,7 @@ jobs:
           # on a server we don't own.
           VITE_NULO_E2E_TOKEN_SEEDS: "1"
           VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM: "1"
+          VITE_NULO_E2E_CSP_REPORT: ${{ env.CSP_REPORT_ARMED }}
 
       # Both literals, because an unused export can tree-shake away even in an
       # armed build (see price-map.ts): the stamp proves the flag propagated,
@@ -135,6 +139,19 @@ jobs:
           done
           echo "e2e token-seed source present in the smoke build"
 
+      # The run arms the launch fixture's CSP check, and a build without the recorder would fail
+      # every launch on its missing key, far from the cause.
+      - name: Assert the e2e CSP violation recorder propagated (source build only)
+        if: inputs.artifact_name == '' && inputs.extension_path == ''
+        env:
+          BROWSER: ${{ inputs.browser }}
+        run: |
+          if ! grep -rq "nulo:e2e:csp-violations" "apps/extension/dist/${BROWSER}"; then
+            echo "::error::CSP violation recorder did not propagate (key absent from dist/${BROWSER})" >&2
+            exit 1
+          fi
+          echo "e2e CSP violation recorder present in the smoke build"
+
       - name: Run smoke e2e
         run: |
           if [ -n "$SHARD" ]; then
@@ -148,6 +165,7 @@ jobs:
           # on the release-artifact path (prod zips exclude the fixture by
           # design), where migration.test.ts skips itself.
           NULO_E2E_MIGRATION_FIXTURE: ${{ env.MIGRATION_FIXTURE_ARMED }}
+          NULO_E2E_CSP_REPORT: ${{ env.CSP_REPORT_ARMED }}
 
       - name: Upload smoke logs on failure
         if: failure()

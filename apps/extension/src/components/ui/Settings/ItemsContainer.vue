@@ -15,6 +15,11 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	/** A red fence for destructive rows; the title keeps its normal color. */
+	danger: {
+		type: Boolean,
+		default: false,
+	},
 })
 </script>
 
@@ -22,7 +27,7 @@ const props = defineProps({
 	<Flex direction="column" gap="12">
 		<span v-if="title" :class="$style.title">{{ title }}</span>
 
-		<Flex direction="column" :class="[$style.wrapper, flat && $style.wrapper_flat]">
+		<Flex direction="column" :class="[$style.wrapper, flat && $style.wrapper_flat, danger && $style.wrapper_danger]">
 			<slot />
 		</Flex>
 
@@ -40,6 +45,10 @@ const props = defineProps({
 .wrapper_flat {
 	background: transparent;
 	border: none;
+}
+
+.wrapper_danger {
+	border-color: color-mix(in srgb, var(--red) 55%, var(--nulo-border));
 }
 
 .title {

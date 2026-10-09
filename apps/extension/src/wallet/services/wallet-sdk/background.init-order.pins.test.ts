@@ -85,6 +85,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		},
 		"dapp-session": {
 			onDappSessionDeleted,
+			onVerificationRefused: new EventHandler<unknown>(),
 			tryGetDappSessionByOriginAndChain: async () => undefined,
 			addDappSession: async () => {
 				const s = { id: `s${sessions.size + 1}`, profileId: "p1" }

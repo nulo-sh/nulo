@@ -278,7 +278,7 @@ async function openPopupAt(page: Page, extensionId: string, hash: string): Promi
 }
 
 async function setAnimationsDisabled(page: Page, disabled: boolean): Promise<void> {
-	await navigateToSettings(page, "appearance")
+	await navigateToSettings(page, "display")
 	await page.waitForSelector(sel("animations-toggle"), { visible: true, timeout: 10_000 })
 	const active = await page.evaluate(() =>
 		document.querySelector('[data-testid="animations-toggle"]')?.getAttribute("data-toggle-active"),

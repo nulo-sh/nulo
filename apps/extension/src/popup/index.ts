@@ -1,5 +1,9 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import "@/utils/zod-jitless"
+import { recordCspViolationsInPage } from "@/e2e/csp-report"
 import { installConsoleForwarding } from "@/wallet/logger/console-forwarding"
+
+if (import.meta.env.VITE_NULO_E2E_CSP_REPORT === "1") recordCspViolationsInPage()
 
 installConsoleForwarding("popup")
 
@@ -13,6 +17,7 @@ import "./index.scss"
 
 import { initAppServiceContext, managers } from "@/utils/core"
 import { captureOwnWindow } from "@/utils/own-window"
+import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
 
 // Eagerly open profile + contact service-worker ports at boot. Matches the
@@ -29,6 +34,7 @@ routes.push({
 	path: "/",
 	redirect: "/popup",
 })
+routes.push(...LEGACY_SETTINGS_REDIRECTS)
 
 // Read before the router rewrites the URL: the guard may redirect the first route.
 captureOwnWindow(window.location.hash)

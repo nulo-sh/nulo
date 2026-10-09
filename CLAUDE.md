@@ -138,7 +138,7 @@ Each package can import only the layers below it. `wallet-bridge` deliberately d
 
 ### Custom RPC schema patch (`registerToken`)
 
-`registerToken` (plus `isTokenRegistered` and `grantPublicAuthwit`) is added to `@aztec-labs/wallet-sdk`'s `WalletSchema` at runtime by the **single private package [`@nulo/wallet-sdk-schema-patch`](./packages/wallet-sdk-schema-patch/README.md)**. Both apps activate it the same way: `import "@nulo/wallet-sdk-schema-patch/register"` as the **first import** in the module that constructs the wallet-sdk client (extension `wallet-sdk/background.ts`, playground `lib/wallet.ts`). The package also exports `./apply` (`applyNuloSchemaPatch(schema)`), the pure patch body, unit-tested in `packages/wallet-sdk-schema-patch/src/apply.test.ts`. (With one source there is no copy to drift, so no copy-identity pin exists.) The reachability guarantee (the patch actually extends `WalletSchema` and the dispatcher routes the methods) is pinned by [`packages/wallet-bridge/src/dispatcher.test.ts`](./packages/wallet-bridge/src/dispatcher.test.ts). When adding a new Nulo-custom RPC, edit the ONE source in `@nulo/wallet-sdk-schema-patch`, add a paired reachability assertion, and list the method in the npm package's README (`scripts/publish/readme/wallet-sdk-schema-patch.md`; `scripts/publish/stage.test.ts` fails until you do). See [`packages/wallet-bridge/README.md`](./packages/wallet-bridge/README.md) "Custom RPC methods" for the full contract.
+`registerToken` (plus `isTokenRegistered` and `grantPublicAuthwit`) is added to `@aztec-labs/wallet-sdk`'s `WalletSchema` at runtime by the **single private package [`@nulo/wallet-sdk-schema-patch`](./packages/wallet-sdk-schema-patch/README.md)**. Both apps activate it the same way: `import "@nulo/wallet-sdk-schema-patch/register"` as the **first import** in the module that constructs the wallet-sdk client (extension `wallet-sdk/background.ts`, playground `lib/wallet.ts`). The package also exports `./apply` (`applyNuloSchemaPatch(schema)`), the pure patch body, unit-tested in `packages/wallet-sdk-schema-patch/src/apply.test.ts`; the bridge applies it to its own private copy of `WalletSchema` for the dispatch-time parse of every dApp call (`packages/wallet-bridge/src/wallet-schema-args.ts`), so that parse depends on neither import order nor the `register` side effect. (With one source there is no copy to drift, so no copy-identity pin exists.) The reachability guarantee (the patch actually extends `WalletSchema` and the dispatcher routes the methods) is pinned by [`packages/wallet-bridge/src/dispatcher.test.ts`](./packages/wallet-bridge/src/dispatcher.test.ts). When adding a new Nulo-custom RPC, edit the ONE source in `@nulo/wallet-sdk-schema-patch`, add a paired reachability assertion, and list the method in the npm package's README (`scripts/publish/readme/wallet-sdk-schema-patch.md`; `scripts/publish/stage.test.ts` fails until you do). See [`packages/wallet-bridge/README.md`](./packages/wallet-bridge/README.md) "Custom RPC methods" for the full contract.
 
 ## Persisted-storage shape changes (migrations)
 
@@ -211,7 +211,7 @@ to log something sensitive.
   Mode on; turning it off purges the stored copy, and so does "Clear logs". `chrome.storage.session`
   is memory-backed — a browser restart, extension update or reload clears it, so a log is a
   short-lived in-session artifact, not a disk record.
-- **Reading them**: with Developer Mode on, Settings → Advanced shows a Logs row that opens the
+- **Reading them**: with Developer Mode on, Settings → Developer shows a Logs row that opens the
   viewer window (`popup/windows/logger/`), which renders the buffer and exports it as CSV. That
   export is the reason this policy exists — it is the path by which a user's logs become a public
   bug report.
@@ -406,8 +406,8 @@ const itemCount = computed(() => items.value.length)
 
 /** 7. Service clients + event subscriptions */
 const tokenService = new TokenServiceClient()
-tokenService.onTokenUpdated.add(onTokenUpdated)
-function onTokenUpdated(token) { ... }
+tokenService.onTokenAdded.add(onTokenAdded)
+function onTokenAdded(token) { ... }
 
 /** 8. Functions/Handlers */
 const handleClick = () => { ... }

@@ -589,6 +589,16 @@ export async function navigateToSettings(page: Page, ...segments: string[]): Pro
 	}
 }
 
+/** Open Settings → Developer → Account State → `section`. Account State keeps its `advanced/` URL
+ *  and its `setting-nav-advanced-account-state-*` ids, which `navigateToSettings` cannot build. */
+export async function openAccountState(page: Page, section: "notes" | "authwits" | "contracts" | "senders"): Promise<void> {
+	await navigateToSettings(page, "developer")
+	await clickByTestId(page, "setting-nav-advanced-account-state")
+	await waitForHash(page, "#/popup/settings/advanced/account-state", 5_000)
+	await clickByTestId(page, `setting-nav-advanced-account-state-${section}`)
+	await waitForHash(page, `#/popup/settings/advanced/account-state/${section}`, 5_000)
+}
+
 // ── Network ────────────────────────────────────────────────────────────
 
 /**
@@ -848,7 +858,7 @@ export async function fillNewContactForm(page: Page, name: string, address: stri
 
 /** Add a contact via the NewContactPopup. Saving a contact touches the
  *  contact service only — sender registration is a separate concern
- *  (Settings → Advanced → Account State → Senders). */
+ *  (Settings → Developer → Account State → Senders). */
 export async function addContact(page: Page, name: string, address: string): Promise<void> {
 	await fillNewContactForm(page, name, address)
 	await clickByTestId(page, "new-contact-submit")
@@ -885,7 +895,7 @@ export async function closeStuckPopup(page: Page): Promise<void> {
 
 /** Delete a contact by name (assumes contacts page is open). Deleting a
  *  contact never touches sender registration — senders are managed only
- *  in Settings → Advanced → Account State → Senders. */
+ *  in Settings → Developer → Account State → Senders. */
 export async function deleteContact(page: Page, name: string): Promise<void> {
 	const rowSelector = contactRow(name)
 	await page.waitForSelector(rowSelector, { visible: true, timeout: 5_000 })
@@ -2091,7 +2101,7 @@ export async function waitForWorkerLiveness(page: Page, afterTs: number, opts: {
 	)
 }
 
-/** Set Developer Mode from Settings → Advanced, wait for the write to land, and return to the
+/** Set Developer Mode from Settings → Developer, wait for the write to land, and return to the
  *  general tab (the settings subpages hide the nav tabs the other helpers click). */
 export async function setDeveloperMode(page: Page, on: boolean): Promise<void> {
 	await setAdvancedToggle(page, "developerMode", on)
@@ -2104,7 +2114,7 @@ export async function setDebugMode(page: Page, on: boolean): Promise<void> {
 }
 
 async function setAdvancedToggle(page: Page, key: "developerMode" | "debugMode", on: boolean): Promise<void> {
-	await navigateByHash(page, "#/popup/settings/advanced")
+	await navigateByHash(page, "#/popup/settings/developer")
 	const toggle = `[data-testid="settings-toggle-${key}"]`
 	await page.waitForSelector(toggle, { visible: true, timeout: 30_000 })
 	const isOn = async () => (await page.$eval(toggle, (el) => el.getAttribute("aria-checked"))) === "true"

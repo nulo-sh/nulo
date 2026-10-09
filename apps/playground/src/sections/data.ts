@@ -2,7 +2,7 @@
  * Data capability methods. Wires `getPrivateEvents`.
  */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
-import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { EventSelector, type EventMetadataDefinition } from "@aztec-labs/stdlib/abi"
 import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
@@ -35,12 +35,16 @@ export function bindData(root: HTMLElement): void {
 				const acct = s.selectedAccount
 					? AztecAddress.fromStringUnsafe(s.selectedAccount)
 					: AztecAddress.fromStringUnsafe(tokenAddress)
-				// Minimal eventMetadata stub — wallet may reject, but the call is silent-path
-				// either way (PrivateData=4 < confirmationLevel=5).
-				const eventMetadata = { eventSelector: Fr.ZERO, fieldNames: [], decode: (_: unknown[]) => null }
+				// Schema-valid, as the stock SDK types it: the wallet refuses a call its schema rejects
+				// (block numbers start at 1) before the scope check this button exercises.
+				const eventMetadata: EventMetadataDefinition = {
+					eventSelector: EventSelector.empty(),
+					abiType: { kind: "field" },
+					fieldNames: [],
+				}
 				const eventFilter = {
 					contractAddress: AztecAddress.fromStringUnsafe(tokenAddress),
-					fromBlock: 0,
+					fromBlock: 1,
 					toBlock: 1000,
 					scopes: [acct],
 				}

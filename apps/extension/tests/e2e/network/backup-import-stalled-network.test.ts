@@ -34,7 +34,7 @@ import {
 } from "../fixtures/extension"
 import { captureBalanceBaseline, navigateByHash, switchToLocalNetwork, waitForFreshBalanceRow } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
-import { accountChainId, exportPlainBackup, keepChainAccountState, type PlainBackup, sealPlainBackup } from "../helpers/backup-export"
+import { accountChainId, exportBackupContent, keepChainAccountState, type PlainBackup, sealPlainBackup } from "../helpers/backup-export"
 import { readStage } from "../helpers/crash-truth"
 import { gotoPopupImport, POPUP_IMPORT_SHELL, submitFullBackupImport, TEST_PASSWORD, writeBackupToTemp } from "../helpers/import-drivers"
 import { pressEscape } from "../helpers/pointer-probes"
@@ -164,7 +164,7 @@ describe.skipIf(isFirefox)(CHROME_ONLY.hangingRequest, () => {
 			const sender = (await AztecAddress.random()).toString()
 			const funded = tokenReadyExtension.accountAddress
 			const tokenAddress = aztecConfig!.tokenAddress
-			const filePath = stalledTestnetBackup(await exportPlainBackup(tokenReadyExtension), funded, tokenAddress, sender)
+			const filePath = stalledTestnetBackup(await exportBackupContent(tokenReadyExtension), funded, tokenAddress, sender)
 
 			const stub = await startStub((method) =>
 				method === "aztec_getNodeInfo" ? nodeInfoResult(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION) : undefined,

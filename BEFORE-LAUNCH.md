@@ -97,6 +97,16 @@ archived, versioned and effective 6 October 2026:
 - [ ] After the deploy, `nulo.sh/privacy` shows no DRAFT banner, and AMO's Privacy policy field
   carries the 1.1.1 text (`apps/extension/store/listing.md` § Privacy policy text)
 
+**Due at the release that carries the Privacy page:** privacy § 5.3 says the explorer "can be
+disabled in Settings → Advanced". That control now lives in Settings → Privacy. Ship a new privacy
+version before that release reaches users (procedure above):
+
+- [ ] `legal/privacy.md` — § 5.3 reads "Settings → Privacy"; the version line and a new history
+      row, effective the day it is published
+- [ ] `packages/legal/src/manifest.ts` — the new `privacy` entry, `material: false`, same date
+- [ ] After the deploy, AMO's Privacy policy field carries the new text
+      (`apps/extension/store/listing.md` § Privacy policy text)
+
 ## Not legal text, same deadline
 
 - Firefox `data_collection_permissions` (`financialAndPaymentInfo`) and the Firefox 153 minimum

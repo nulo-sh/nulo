@@ -30,7 +30,7 @@ import {
 import { navigateByHash, readProfileNames, readSessionRow } from "./fixtures/helpers"
 import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
 import { refusePasskeyStep, registerPasskeyProfile } from "./fixtures/passkey"
-import { armBackupDownloadCapture, readCapturedBackupDownload } from "./helpers/backup-export"
+import { downloadPlainPasskeyBackup } from "./helpers/backup-export"
 import { completeResetRitual } from "./helpers/crash-truth"
 import {
 	buildSyntheticPasskeyBackup,
@@ -491,10 +491,10 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				const exportWindow = await toOwnWindow(ctx, control, () => routePanel(browser, EXPORT))
 				await waitForHash(exportWindow, EXPORT, 60_000)
 				await clickByTestId(exportWindow, "agree-continue-btn")
-				await waitForEnabled(exportWindow, "download-backup-btn", 300_000)
-				await armBackupDownloadCapture(exportWindow)
-				await clickByTestId(exportWindow, "download-backup-btn")
-				const file = writeBackupToTemp(await readCapturedBackupDownload(exportWindow), "passkey-backup.json")
+				const file = writeBackupToTemp(
+					await downloadPlainPasskeyBackup(exportWindow, clickByTestId, 300_000),
+					"passkey-backup.json",
+				)
 				await clickByTestId(exportWindow, "subpage-back")
 				await waitForPopupClosed(exportWindow, 10_000)
 

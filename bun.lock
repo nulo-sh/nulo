@@ -259,9 +259,9 @@
         "@aztec-labs/wallet-sdk": "6.0.0-rc.1",
         "@nulo/extension-messaging": "workspace:*",
         "@nulo/wallet-core": "workspace:*",
+        "@nulo/wallet-sdk-schema-patch": "workspace:*",
       },
       "devDependencies": {
-        "@nulo/wallet-sdk-schema-patch": "workspace:*",
         "chrome-types": "^0.1.429",
         "typescript": "^6.0.3",
         "vitest": "^4.1.9",

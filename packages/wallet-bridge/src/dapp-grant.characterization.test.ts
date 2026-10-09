@@ -6,13 +6,20 @@
  */
 import { beforeAll, describe, expect, test } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-import { ScopeViolationError, UnsupportedMethodError, UserRejectedError, ValidationError } from "@nulo/extension-messaging/errors"
+import {
+	InvalidWalletArgumentsError,
+	ScopeViolationError,
+	UnsupportedMethodError,
+	UserRejectedError,
+	ValidationError,
+} from "@nulo/extension-messaging/errors"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { WalletSdkDispatcher } from "./dispatcher"
 import { METHOD_REGISTRY } from "./method-descriptors"
 import type { Operation } from "./operation"
 import type { IAccountProvisioner, IAccountReader, IDappInteractionRunner, IDappSessionWriter, IExecutionRunner } from "./services-contract"
 import type { IDappSessionRef } from "./session-types"
+import { wireArtifact, wireCall, wireEventQuery, wireInstance, wirePayload, withHeader } from "./testing/wire"
 
 const hex = (byte: string) => `0x${byte.repeat(32)}`
 const TOKEN = hex("0d")
@@ -99,20 +106,10 @@ async function outcome(pending: Promise<unknown>): Promise<Outcome> {
 	}
 }
 
-/** The engine's own wording for what `run` throws: engines word a TypeError differently. */
-function thrownBy(run: () => unknown): { threw: unknown; message: string } {
-	try {
-		run()
-	} catch (error) {
-		return { threw: (error as Error).constructor, message: (error as Error).message }
-	}
-	throw new Error("the reference did not throw")
-}
-
 /** "covered" when the request answers with no window, "window" when one opened, else the throw. */
 async function coverage(grant: unknown, requested: unknown): Promise<unknown> {
 	const h = harness([grant])
-	const result = await outcome(h.dispatch("requestCapabilities", [{ capabilities: [requested] }]))
+	const result = await outcome(h.dispatch("requestCapabilities", [withHeader({ capabilities: [requested] })]))
 	if ("ok" in result) return h.seen.windows === 0 ? "covered" : result
 	if (result.threw === UserRejectedError && h.seen.windows === 1) return "window"
 	return result
@@ -144,7 +141,7 @@ describe("grant coverage agrees with enforcement", () => {
 	test.each(scopeRows)("transaction scope, %s", async (_label, scope, pattern, held) => {
 		const grant = { type: "transaction", scope }
 		expect(await coverage(grant, { type: "transaction", scope: [pattern] })).toBe(held ? "covered" : "window")
-		const call = [{ calls: [{ to: pattern.contract, name: pattern.function }] }, {}]
+		const call = [wirePayload([wireCall(pattern.contract, pattern.function)]), { from: ACC1 }]
 		expect(await enforcement(grant, "sendTx", call)).toEqual(held ? "allowed" : sendTxRefused)
 	})
 
@@ -169,19 +166,19 @@ describe("grant coverage agrees with enforcement", () => {
 		expect(await enforcement(grant, "sendTx", [{ calls: [{ to: MALFORMED, name: "transfer" }] }, {}])).toEqual(malformed("transaction"))
 	})
 
-	test("an empty function name: enforcement refuses it under *, the request projection refuses to ask for it", async () => {
+	test("an empty function name: enforcement refuses it under *, the request parse refuses to ask for it", async () => {
 		const grant = { type: "transaction", scope: "*" }
-		expect(await enforcement(grant, "sendTx", [{ calls: [{ to: TOKEN, name: "" }] }, {}])).toEqual(sendTxRefused)
+		expect(await enforcement(grant, "sendTx", [wirePayload([wireCall(TOKEN, "")]), { from: ACC1 }])).toEqual(sendTxRefused)
 		expect(await coverage(grant, { type: "transaction", scope: [{ contract: TOKEN, function: "" }] })).toEqual({
-			threw: ValidationError,
-			message: "Malformed transaction capability",
+			threw: InvalidWalletArgumentsError,
+			message: "Invalid arguments for wallet method: requestCapabilities",
 		})
 	})
 
 	test("contracts: a listing in another case covers and admits", async () => {
 		const grant = { type: "contracts", contracts: [TOKEN_UP], canRegister: true }
 		expect(await coverage(grant, { type: "contracts", contracts: [TOKEN], canRegister: true })).toBe("covered")
-		expect(await enforcement(grant, "registerContract", [{ address: TOKEN }])).toBe("allowed")
+		expect(await enforcement(grant, "registerContract", [wireInstance(TOKEN)])).toBe("allowed")
 	})
 
 	test("contracts: a grant without the asked flag neither covers nor admits", async () => {
@@ -195,7 +192,7 @@ describe("grant coverage agrees with enforcement", () => {
 	test("contracts: another address neither covers nor admits", async () => {
 		const grant = { type: "contracts", contracts: [TOKEN], canRegister: true }
 		expect(await coverage(grant, { type: "contracts", contracts: [OTHER], canRegister: true })).toBe("window")
-		expect(await enforcement(grant, "registerContract", [{ address: OTHER }])).toEqual(
+		expect(await enforcement(grant, "registerContract", [wireInstance(OTHER)])).toEqual(
 			refused("Scope violation: registerContract contract not permitted by granted contracts scope"),
 		)
 	})
@@ -203,25 +200,25 @@ describe("grant coverage agrees with enforcement", () => {
 	test("contracts: a held * covers and admits any address", async () => {
 		const grant = { type: "contracts", contracts: "*", canRegister: true }
 		expect(await coverage(grant, { type: "contracts", contracts: [OTHER], canRegister: true })).toBe("covered")
-		expect(await enforcement(grant, "registerContract", [{ address: OTHER }])).toBe("allowed")
+		expect(await enforcement(grant, "registerContract", [wireInstance(OTHER)])).toBe("allowed")
 	})
 
 	test("contracts: a held list that is not an array refuses both reads", async () => {
 		const grant = { type: "contracts", contracts: {}, canRegister: true }
 		expect(await coverage(grant, { type: "contracts", contracts: [TOKEN], canRegister: true })).toEqual(malformed("contracts"))
-		expect(await enforcement(grant, "registerContract", [{ address: TOKEN }])).toEqual(malformed("contracts"))
+		expect(await enforcement(grant, "registerContract", [wireInstance(TOKEN)])).toEqual(malformed("contracts"))
 	})
 
 	test("private events: a listing in another case covers and admits", async () => {
 		const grant = { type: "data", privateEvents: { contracts: [TOKEN_UP] } }
 		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toBe("covered")
-		expect(await enforcement(grant, "getPrivateEvents", [{}, { contractAddress: TOKEN }])).toBe("allowed")
+		expect(await enforcement(grant, "getPrivateEvents", wireEventQuery(TOKEN))).toBe("allowed")
 	})
 
 	test("private events: an address-book-only grant opens the window without throwing, and refuses the call", async () => {
 		const grant = { type: "data", addressBook: true }
 		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toBe("window")
-		expect(await enforcement(grant, "getPrivateEvents", [{}, { contractAddress: TOKEN }])).toEqual(
+		expect(await enforcement(grant, "getPrivateEvents", wireEventQuery(TOKEN))).toEqual(
 			refused("Scope violation: getPrivateEvents contract not permitted by granted data.privateEvents scope"),
 		)
 	})
@@ -231,17 +228,19 @@ describe("grant coverage agrees with enforcement", () => {
 		expect(await coverage(grant, { type: "transaction", scope: [{ contract: TOKEN, function: "transfer" }] })).toEqual(
 			malformed("transaction"),
 		)
-		expect(await enforcement(grant, "sendTx", [{ calls: [{ to: TOKEN, name: "transfer" }] }, {}])).toEqual(malformed("transaction"))
+		expect(await enforcement(grant, "sendTx", [wirePayload([wireCall(TOKEN, "transfer")]), { from: ACC1 }])).toEqual(
+			malformed("transaction"),
+		)
 	})
 
 	test("private events: a held element String() cannot convert refuses both reads", async () => {
 		const grant = { type: "data", privateEvents: { contracts: [{ toString: 1 }] } }
 		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toEqual(malformed("data"))
-		expect(await enforcement(grant, "getPrivateEvents", [{}, { contractAddress: TOKEN }])).toEqual(malformed("data"))
+		expect(await enforcement(grant, "getPrivateEvents", wireEventQuery(TOKEN))).toEqual(malformed("data"))
 	})
 })
 
-const SEND_LEG = { name: "sendTx", args: [{ calls: [] }, {}] }
+const SEND_LEG = { name: "sendTx", args: [wirePayload([]), { from: ACC1 }] }
 const TOKEN_LEG = { name: "registerToken", args: [ACC1, TOKEN] }
 const GRANT_LEG = { name: "grantPublicAuthwit", args: [ACC1, { caller: OTHER, contract: TOKEN, method: "transfer", args: [] }] }
 const CHAIN_LEG = { name: "getChainInfo", args: [] }
@@ -270,7 +269,7 @@ describe("batch refusal", () => {
 
 	test("a malformed envelope is refused by batch's own guard first", async () => {
 		expect((await runBatch([{ name: "sendTx", args: "x" }])).result).toEqual({
-			threw: Error,
+			threw: InvalidWalletArgumentsError,
 			message: "Invalid arguments for wallet method: batch",
 		})
 	})
@@ -318,7 +317,7 @@ describe("batch refusal", () => {
 
 	test("registerContractClass inside a batch keeps its scope-check refusal", async () => {
 		const grant = { type: "contractClasses", classes: "*", canGetMetadata: true }
-		expect((await runBatch([{ name: "registerContractClass", args: [{}] }], [grant])).result).toEqual({
+		expect((await runBatch([{ name: "registerContractClass", args: [wireArtifact()] }], [grant])).result).toEqual({
 			threw: Error,
 			message:
 				"registerContractClass is intentionally disabled in Nulo pending contractClasses.canRegister support and class-id-scoped enforcement.",
@@ -326,34 +325,43 @@ describe("batch refusal", () => {
 	})
 })
 
-/** The trailing args after `exec`, and the account the request acts as (or the exact refusal). */
-type SenderRow = [label: string, tail: unknown[], expected: string | { threw: unknown; message: string }]
+const INVALID = Symbol("refused by the schema parse")
 
-/** The engine's own wording for converting an object whose `toString` is not callable. */
-function stringConversionError(value: unknown): { threw: unknown; message: string } {
-	return thrownBy(() => String(value))
-}
-
+/** The trailing args after `exec`, and the account the request acts as, the exact refusal, or
+ *  `INVALID` for a call the schema parse refuses before any account is resolved. */
+type SenderRow = [label: string, tail: unknown[], expected: string | { threw: unknown; message: string } | typeof INVALID]
 const notAuthorized = refused("Scope violation: requested account not authorized for this dApp session")
 const SENDER_ROWS: SenderRow[] = [
-	["opts absent", [], ACC1],
-	["opts undefined", [undefined], ACC1],
-	["opts null", [null], ACC1],
-	["from absent", [{}], ACC1],
-	["from undefined", [{ from: undefined }], ACC1],
-	["from null", [{ from: null }], ACC1],
+	["opts absent", [], INVALID],
+	["opts undefined", [undefined], INVALID],
+	["opts null", [null], INVALID],
+	["from absent", [{}], INVALID],
+	["from undefined", [{ from: undefined }], INVALID],
+	["from null", [{ from: null }], INVALID],
 	["NO_FROM", [{ from: "NO_FROM" }], ACC1],
-	["no_from", [{ from: "no_from" }], notAuthorized],
-	["empty string", [{ from: "" }], notAuthorized],
-	["zero", [{ from: 0 }], notAuthorized],
-	["false", [{ from: false }], notAuthorized],
-	["an object", [{ from: {} }], notAuthorized],
+	["no_from", [{ from: "no_from" }], INVALID],
+	["empty string", [{ from: "" }], INVALID],
+	["zero", [{ from: 0 }], INVALID],
+	["false", [{ from: false }], INVALID],
+	["an object", [{ from: {} }], INVALID],
 	["a session account", [{ from: ACC2 }], ACC2],
 	["a session account in upper case", [{ from: ACC2_UP }], notAuthorized],
 	["a wallet account outside the session", [{ from: STRANGER }], notAuthorized],
-	["an Fr naming a session account", [{ from: new Fr(0xabcdefn) }], ACC2],
-	["an object String() cannot convert", [{ from: { toString: "x" } }], stringConversionError({ toString: "x" })],
+	["an Fr instance rather than its wire string", [{ from: new Fr(0xabcdefn) }], INVALID],
+	["an object String() cannot convert", [{ from: { toString: "x" } }], INVALID],
 ]
+
+/** The row's expected outcome for `method`, resolving `INVALID` to that method's refusal. */
+function expectedFor(method: string, expected: SenderRow[2]): string | { threw: unknown; message: string } {
+	if (expected !== INVALID) return expected
+	return { threw: InvalidWalletArgumentsError, message: `Invalid arguments for wallet method: ${method}` }
+}
+
+/** `profileTx` requires a profile mode beside `from`; the other two take the options as given. */
+function tailFor(method: string, tail: unknown[]): unknown[] {
+	if (method !== "profileTx" || typeof tail[0] !== "object" || tail[0] === null) return tail
+	return [{ profileMode: "gates", ...tail[0] }, ...tail.slice(1)]
+}
 
 const SENDER_GRANTS = [
 	{ type: "accounts", canGet: true, canCreateAuthWit: false, accounts: [] },
@@ -362,9 +370,10 @@ const SENDER_GRANTS = [
 ]
 
 describe("the sender a request names", () => {
-	test.each(SENDER_ROWS)("sendTx, %s", async (label, tail, expected) => {
+	test.each(SENDER_ROWS)("sendTx, %s", async (label, tail, row) => {
 		const h = harness(SENDER_GRANTS)
-		const result = await outcome(h.dispatch("sendTx", [{ calls: [] }, ...tail]))
+		const result = await outcome(h.dispatch("sendTx", [wirePayload([]), ...tail]))
+		const expected = expectedFor("sendTx", row)
 		if (typeof expected !== "string") {
 			expect(result).toEqual(expected)
 			expect(h.seen.sent).toEqual([])
@@ -382,9 +391,10 @@ describe("the sender a request names", () => {
 
 	test.each(["simulateTx", "profileTx"].flatMap((method) => SENDER_ROWS.map((row) => [method, ...row] as const)))(
 		"%s, %s",
-		async (method, _label, tail, expected) => {
+		async (method, _label, tail, row) => {
 			const h = harness(SENDER_GRANTS)
-			const result = await outcome(h.dispatch(method, [{ calls: [] }, ...tail]))
+			const result = await outcome(h.dispatch(method, [wirePayload([]), ...tailFor(method, tail)]))
+			const expected = expectedFor(method, row)
 			if (typeof expected !== "string") {
 				expect(result).toEqual(expected)
 				expect(h.seen.executed).toEqual([])

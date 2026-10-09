@@ -46,11 +46,24 @@ describe("applyNuloSchemaPatch pins", () => {
 		)
 	})
 
+	test("a same-arity grantPublicAuthwit whose content lacks a key the handler reads is drift", () => {
+		const schema = {
+			grantPublicAuthwit: z.function({
+				input: z.tuple([schemas.AztecAddress, z.object({ caller: z.string() })]),
+				output: z.string(),
+			}),
+		}
+		expect(() => applyNuloSchemaPatch(schema)).toThrow("Nulo schema-patch: upstream WalletSchema.grantPublicAuthwit signature changed")
+	})
+
 	test("a shape-compatible upstream entry for EACH method is kept by identity", () => {
 		const registerToken = z.function({ input: z.tuple([schemas.AztecAddress, schemas.AztecAddress]), output: z.void() })
 		const isTokenRegistered = z.function({ input: z.tuple([schemas.AztecAddress]), output: z.boolean() })
 		const grantPublicAuthwit = z.function({
-			input: z.tuple([schemas.AztecAddress, z.object({ caller: z.string() })]),
+			input: z.tuple([
+				schemas.AztecAddress,
+				z.object({ caller: z.string(), contract: z.string(), method: z.string(), args: z.array(z.unknown()) }),
+			]),
 			output: z.string(),
 		})
 		const getWalletFeatures = z.function({ input: z.tuple([]), output: z.array(z.string()) })

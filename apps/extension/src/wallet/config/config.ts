@@ -21,7 +21,7 @@ export const ConfigSchema = z.object({
 	sessionTtl: z.number().default(1_800_000), // 30 minutes.
 	// When ON (default), password profiles do not cache the
 	// passhash in `chrome.storage.session`. SW death → re-auth required.
-	// Opt OUT in Settings → Security. The default is FROZEN by
+	// Opt OUT in Settings → Lock. The default is FROZEN by
 	// `config.test.ts` — flipping it to `false` is an explicit security
 	// regression that requires audit / security sign-off.
 	strictSecurityMode: z.boolean().default(true),
