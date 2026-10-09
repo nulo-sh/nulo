@@ -27,5 +27,6 @@
 ## Delivery mechanics (2026-10-09)
 
 - Layer 1 was pushed and opened as #70 (head `6c811b7`: a `dev` merge and one `STATUS.md` line on top of `c19f179`) while this arc ran; merged into this branch (`311f2fa`), keeping both sides of the one `STATUS.md` conflict. Layer 2 is #71 on `worktree-hardening-2`.
-- `gh stack view` here answers "current branch is not part of a stack", and `gh stack add` must run on the stack's top branch, which lives in a sibling worktree this arc may not touch. The PR is opened with `gh pr create --base worktree-hardening-2` instead; once #70 merges, its base moves to `dev`.
+- `gh stack view` here answers "current branch is not part of a stack", and `gh stack add` must run on the stack's top branch, which lives in a sibling worktree this arc may not touch.
+- Before this arc's PR opened, #70 was squash-merged into `dev` (`f83703f`, a tree identical to `6c811b7`) and its branch deleted. The arc's ten commits were rebased onto `origin/dev` (`git rebase --onto origin/dev 6c811b7`, dropping the two merge commits); the one `STATUS.md` conflict kept both sides, and the rebased tree equals the gated one byte for byte. The PR is opened with `gh pr create --base dev`.
 
