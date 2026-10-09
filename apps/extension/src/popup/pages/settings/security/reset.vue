@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
 		heroMain="Delete"
 		heroSub="Profile"
 		collapsingLabel="Delete Profile"
-		backTo="/popup/settings/profile"
+		backTo="/popup/settings"
 		tone="destructive"
 		:data-profile-name="appStore.profile?.name ?? ''"
 	>

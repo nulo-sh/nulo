@@ -12,7 +12,7 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
-import { navigateToSettings } from "../fixtures/helpers"
+import { openAccountState } from "../fixtures/helpers"
 import { settleClosedPopup } from "../fixtures/popup-leave"
 import { pointerClick } from "../helpers/legal-drivers"
 import { activeTestId, focusInPopupOf, pressEscape, waitForFocus } from "../helpers/pointer-probes"
@@ -120,7 +120,7 @@ test.skipIf(!hasConfig)(
 		const page = await openPopup(localNetworkExtension)
 		await waitForHash(page, "#/popup/general")
 
-		await navigateToSettings(page, "advanced", "account-state", "authwits")
+		await openAccountState(page, "authwits")
 		await clickByTestId(page, "authwits-actions-btn")
 		await clickByTestId(page, "authwits-toggle-registry")
 		await waitForSubmitLive(page)
@@ -167,7 +167,7 @@ test.skipIf(!hasConfig)(
 		const page = await openPopup(localNetworkExtension)
 		await waitForHash(page, "#/popup/general")
 
-		await navigateToSettings(page, "advanced", "account-state", "authwits")
+		await openAccountState(page, "authwits")
 		await clickByTestId(page, "authwits-actions-btn")
 		await clickByTestId(page, "authwits-toggle-registry")
 		await waitForSubmitLive(page)

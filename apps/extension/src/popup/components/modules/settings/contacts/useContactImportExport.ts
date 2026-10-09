@@ -219,7 +219,7 @@ function openImportSelection(
 /** Upsert every selected row, then register its sender intent. Import is adds-only toward sender
  *  state: rows explicitly carrying `isSender: true` (from a previous deliberate export) get registered
  *  on the active network. It never deletes or migrates registrations — those live in
- *  Settings → Advanced → Senders. */
+ *  Settings → Developer → Account State → Senders. */
 async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise<ImportTally> {
 	// Snapshot active network ONCE, before the first await, so it is the network the confirmed banner
 	// named and a swap mid-loop can't split sender registrations across chains. Null-safe: if no

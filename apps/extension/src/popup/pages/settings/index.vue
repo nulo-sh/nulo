@@ -13,12 +13,22 @@
 import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { ExecutionServiceClient } from "@/wallet/services/execution/client"
 
+/** Composables */
+import { usePrestoCheck } from "@/composables/usePrestoCheck"
+
 /** Utils */
 import { rowDescriptionFor } from "@/utils/presto-ui-state"
+import { hubValues, profileTypeLabel } from "@/utils/settings-labels"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
+
+const isPasskey = computed(() => appStore.profile?.type === "passkey")
+const profileKind = computed(() => {
+	const type = profileTypeLabel(appStore.profile?.type)
+	return type && `${type} profile`
+})
 
 /** Proving row: Presto's live status plus the SW's memory of the last prove attempt. */
 const configService = new ConfigServiceClient()
@@ -27,8 +37,49 @@ const lastProve = ref(null)
 const provingDescription = computed(() => rowDescriptionFor(prestoState.value, lastProve.value))
 const executionService = new ExecutionServiceClient()
 
+/** Trailing values: shown only once read, and never overwritten by an answer older than the value. */
+const HUB_KEYS = new Set(["sessionTtl", "showFiatValues", "theme", "developerMode"])
+const hubConfig = reactive({})
+const values = computed(() => hubValues(hubConfig))
+let readGeneration = 0
+let readFence = new Set()
+let connections = 0
+
+configService.onUpdate.add(onHubUpdate)
+configService.onConnected.add(onHubConnected)
+
+function onHubUpdate({ key, value }) {
+	if (!HUB_KEYS.has(key)) return
+	hubConfig[key] = value
+	readFence.add(key)
+}
+
+// The port's first open serves the mount's own read. A reconnect keeps the hub mounted, and nothing
+// replays the updates sent while the port was down.
+function onHubConnected() {
+	connections++
+	if (connections > 1) void readHubConfig()
+}
+
+async function readHubConfig() {
+	const generation = ++readGeneration
+	const fence = new Set()
+	readFence = fence
+	let props
+	try {
+		props = await configService.getProps()
+	} catch {
+		return
+	}
+	if (generation !== readGeneration) return
+	for (const { key, value } of props) {
+		if (HUB_KEYS.has(key) && !fence.has(key)) hubConfig[key] = value
+	}
+}
+
 onBeforeMount(async () => {
 	void startPresto()
+	void readHubConfig()
 	try {
 		lastProve.value = await executionService.getLastProveOutcome()
 	} catch {
@@ -75,15 +126,22 @@ onBeforeUnmount(() => {
 		</div>
 
 		<Flex direction="column" gap="32" :class="$style.content">
-			<ItemsContainer title="Identity">
+			<ItemsContainer>
 				<SettingItem
+					size="large"
 					to="/popup/settings/profile"
-					title="Profile"
-					description="Profile name, password, backup"
-					materialIcon="person"
+					:title="appStore.profile?.name"
+					:description="profileKind"
 					chevron
 					data-testid="setting-nav-profile"
-				/>
+				>
+					<template #icon>
+						<AccountAvatar :name="appStore.profile?.name" :size="40" data-testid="profile-card-avatar" />
+					</template>
+				</SettingItem>
+			</ItemsContainer>
+
+			<ItemsContainer title="Your wallet">
 				<SettingItem
 					to="/popup/settings/accounts"
 					title="Accounts"
@@ -92,9 +150,6 @@ onBeforeUnmount(() => {
 					chevron
 					data-testid="setting-nav-accounts"
 				/>
-			</ItemsContainer>
-
-			<ItemsContainer title="Connections">
 				<SettingItem
 					to="/popup/settings/contacts"
 					title="Contacts"
@@ -102,6 +157,25 @@ onBeforeUnmount(() => {
 					materialIcon="group"
 					chevron
 					data-testid="setting-nav-contacts"
+				/>
+				<SettingItem
+					to="/popup/settings/tokens"
+					title="Tokens"
+					description="Tracked tokens and balances"
+					materialIcon="toll"
+					chevron
+					data-testid="setting-nav-tokens"
+				/>
+			</ItemsContainer>
+
+			<ItemsContainer title="Apps and networks">
+				<SettingItem
+					to="/popup/settings/connected-apps"
+					title="Connected Apps"
+					description="Apps with granted permissions"
+					materialIcon="extension"
+					chevron
+					data-testid="setting-nav-connected-apps"
 				/>
 				<SettingItem
 					to="/popup/settings/networks"
@@ -112,50 +186,12 @@ onBeforeUnmount(() => {
 					data-testid="setting-nav-networks"
 				/>
 				<SettingItem
-					to="/popup/settings/tokens"
-					title="Tokens"
-					description="Tracked tokens and balances"
-					materialIcon="toll"
-					chevron
-					data-testid="setting-nav-tokens"
-				/>
-				<SettingItem
 					to="/popup/settings/fpcs"
 					title="Fee Payments"
 					description="FPCs and fee methods"
 					materialIcon="local_gas_station"
 					chevron
 					data-testid="setting-nav-fpcs"
-				/>
-			</ItemsContainer>
-
-			<ItemsContainer title="Security">
-				<SettingItem
-					to="/popup/settings/security"
-					title="Security & Backup"
-					description="Auto-lock, recovery phrase"
-					materialIcon="lock"
-					chevron
-					data-testid="setting-nav-security"
-				/>
-				<SettingItem
-					to="/popup/settings/connected-apps"
-					title="Connected Apps"
-					description="Apps with granted permissions"
-					materialIcon="extension"
-					chevron
-					data-testid="setting-nav-connected-apps"
-				/>
-			</ItemsContainer>
-
-			<ItemsContainer title="App">
-				<SettingItem
-					to="/popup/settings/appearance"
-					title="Appearance"
-					description="Theme and display"
-					materialIcon="palette"
-					chevron
-					data-testid="setting-nav-appearance"
 				/>
 				<SettingItem
 					to="/popup/settings/proving"
@@ -166,6 +202,67 @@ onBeforeUnmount(() => {
 					data-testid="setting-nav-proving"
 					:data-status="prestoState.kind"
 				/>
+			</ItemsContainer>
+
+			<ItemsContainer title="Safety">
+				<SettingItem
+					to="/popup/settings/lock"
+					title="Lock"
+					:description="isPasskey ? 'Auto-lock' : 'Auto-lock, strict mode'"
+					materialIcon="lock"
+					:value="values.lock"
+					chevron
+					data-testid="setting-nav-lock"
+				/>
+				<SettingItem
+					to="/popup/settings/security/export"
+					title="Back up profile"
+					description="Keep a copy of this profile"
+					materialIcon="download"
+					chevron
+					data-testid="backup-link-btn"
+				/>
+				<SettingItem
+					v-if="!isPasskey"
+					to="/popup/settings/security/change-password"
+					title="Change password"
+					materialIcon="password"
+					chevron
+					data-testid="change-password-link-btn"
+				/>
+			</ItemsContainer>
+
+			<ItemsContainer title="Preferences">
+				<SettingItem
+					to="/popup/settings/privacy"
+					title="Privacy"
+					description="Prices, explorer"
+					materialIcon="visibility"
+					:value="values.privacy"
+					chevron
+					data-testid="setting-nav-privacy"
+				/>
+				<SettingItem
+					to="/popup/settings/display"
+					title="Display"
+					description="Theme, layout"
+					materialIcon="palette"
+					:value="values.display"
+					chevron
+					data-testid="setting-nav-display"
+				/>
+				<SettingItem
+					to="/popup/settings/developer"
+					title="Developer"
+					description="Mode, logs, account state"
+					materialIcon="bolt"
+					:value="values.developer"
+					chevron
+					data-testid="setting-nav-developer"
+				/>
+			</ItemsContainer>
+
+			<ItemsContainer title="Help">
 				<SettingItem
 					to="/popup/settings/glossary"
 					title="Glossary"
@@ -175,18 +272,24 @@ onBeforeUnmount(() => {
 					data-testid="setting-nav-glossary"
 				/>
 				<SettingItem
-					to="/popup/settings/advanced"
-					title="Advanced"
-					description="Developer, account state, explorer"
-					materialIcon="bolt"
+					to="/popup/settings/about"
+					title="About Nulo"
+					description="Version, contact, legal"
+					materialIcon="info"
 					chevron
-					data-testid="setting-nav-advanced"
+					data-testid="setting-nav-about"
 				/>
 			</ItemsContainer>
 
-			<RouterLink to="/popup/settings/about" :class="$style.footer_link">
-				About Nulo
-			</RouterLink>
+			<ItemsContainer title="Danger zone" danger>
+				<SettingItem to="/popup/settings/security/reset" title="Delete profile" chevron data-testid="delete-profile-link-btn">
+					<template #icon>
+						<span :class="$style.danger_icon">
+							<MaterialIcon name="delete" :size="20" color="red" />
+						</span>
+					</template>
+				</SettingItem>
+			</ItemsContainer>
 		</Flex>
 	</Flex>
 </template>
@@ -230,25 +333,11 @@ onBeforeUnmount(() => {
 	padding: 0 24px;
 }
 
-.footer_link {
-	align-self: center;
-
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
-	color: var(--nulo-secondary);
-	text-decoration: underline;
-	text-decoration-color: var(--nulo-outline);
-	text-underline-offset: 6px;
-
-	margin-top: 16px;
-
-	transition: color 0.2s var(--bezier);
-
-	&:hover {
-		color: var(--nulo-accent);
-	}
+/* The ligature text lays out wider than the glyph until the icon font loads; the box holds the row. */
+.danger_icon {
+	display: inline-flex;
+	width: 20px;
+	height: 20px;
+	overflow: hidden;
 }
 </style>
