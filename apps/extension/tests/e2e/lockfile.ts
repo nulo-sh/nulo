@@ -26,6 +26,8 @@ import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const E2E_STATE_DIR = path.resolve(__dirname, "../../.e2e-state")
+/** The checkout this harness runs from: the worktree a run's registry rows and markers name. */
+export const REPO_ROOT = path.resolve(__dirname, "../../../..")
 const LOCK_PATH = path.join(E2E_STATE_DIR, "owned.json")
 
 /**

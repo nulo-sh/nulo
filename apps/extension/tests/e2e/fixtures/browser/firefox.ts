@@ -5,6 +5,7 @@ import path from "node:path"
 import * as puppeteer from "puppeteer"
 import type { Browser, ElementHandle, Page, Target } from "puppeteer"
 import { reservePort } from "../../../../scripts/e2e/resolve-ports"
+import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
 import { observeAndRefuse } from "./firefox-rpc-intercept"
@@ -143,14 +144,16 @@ async function launch({ extensionPath, userDataDir, headless }: LaunchOptions): 
 }
 
 /**
- * The reservations are held until the moment before spawn. Another launch can still win a port in
- * that window; geckodriver then exits on the failed bind, which `WebDriverSession.open` reports
+ * The reservations skip every port the host registry lists, which another run may have claimed
+ * but not bound yet, and are held until the moment before spawn. Another launch can still win a
+ * port in that window; geckodriver then exits on the failed bind, which `WebDriverSession.open` reports
  * instead of opening a session on the winner's geckodriver.
  */
 async function spawnGeckodriver(marker: string): Promise<{ gecko: ChildProcess & { pid: number }; base: string }> {
-	const reserved = [await reservePort()]
+	const claimed = registeredPorts()
+	const reserved = [await reservePort(claimed)]
 	try {
-		reserved.push(await reservePort())
+		reserved.push(await reservePort(claimed))
 	} finally {
 		if (reserved.length < 2) await reserved[0].release()
 	}

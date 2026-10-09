@@ -15,13 +15,18 @@
  *   3. Release Firefox launches (geckodriver, its Firefox, the profile) whose owning test run is
  *      gone — otherwise they wait for the next Firefox launch on this host to sweep them.
  *
+ *   4. Drop this worktree's rows from the host port registry whose owning run is dead. Never a row
+ *      by the run id `ports.json` names: that file is writable by anything, and a live run's rows
+ *      must outlast any reap.
+ *
  * Ownership-scoped by design: it only kills pids this worktree's lock recorded and only deletes
  * data dirs whose owner is gone — never a blanket `pkill -f aztec` that could hit another agent.
  */
 import { readdirSync, rmSync, statSync } from "node:fs"
 import path from "node:path"
 import { reapOrphanLaunches } from "./fixtures/browser/ownership"
-import { E2E_DATA_ROOT, clearLock, isPidAlive, killOrphanByPid, readLock } from "./lockfile"
+import { E2E_DATA_ROOT, REPO_ROOT, clearLock, isPidAlive, killOrphanByPid, readLock } from "./lockfile"
+import { releaseDeadRows } from "./port-registry"
 
 function reapOwnedRun(): boolean {
 	const lock = readLock()
@@ -69,10 +74,11 @@ function sweepOrphanDataDirs(): number {
 const reaped = reapOwnedRun()
 const swept = sweepOrphanDataDirs()
 const launches = process.platform === "linux" ? await reapOrphanLaunches() : []
-if (!reaped && swept === 0 && launches.length === 0) {
-	console.log("[e2e:reap] nothing to reap — no owned run, no orphaned data dirs, no orphaned Firefox launches")
+const rows = (await releaseDeadRows(REPO_ROOT)) ?? 0
+if (!reaped && swept === 0 && launches.length === 0 && rows === 0) {
+	console.log("[e2e:reap] nothing to reap — no owned run, no orphaned data dirs, no orphaned Firefox launches, no dead registry rows")
 } else {
 	console.log(
-		`[e2e:reap] done (owned run reaped: ${reaped}, orphan data dirs swept: ${swept}, orphaned Firefox launches released: ${launches.length})`,
+		`[e2e:reap] done (owned run reaped: ${reaped}, orphan data dirs swept: ${swept}, orphaned Firefox launches released: ${launches.length}, dead registry rows dropped: ${rows})`,
 	)
 }

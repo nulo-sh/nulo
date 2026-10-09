@@ -9,3 +9,4 @@
 - 2026-10-09 — final Codex confirmation: conditional approve (K1-K7 closed; playground sign-off now gates arc 3's merge); plan committed, awaiting orchestrator approval.
 - 2026-10-09 — approved by the orchestrator (D-orch-1 no stack, D-orch-2 arc 1a ships alone as G1); merged origin/dev ac259a7; arc 1a starts.
 - 2026-10-09 — phase 1.1 gate: pass (lint, typecheck:all, test, port-registry.test.ts 15/15).
+- 2026-10-09 — phase 1.2 gate: pass (fast; unit 25/25; networks.test.ts chrome 4/4 with 5 rows during, 0 after; bogus build exit 1, no row).

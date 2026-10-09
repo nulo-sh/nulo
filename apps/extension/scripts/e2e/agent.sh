@@ -35,15 +35,34 @@ fi
 
 PORTS_JSON=".e2e-state/ports.json"
 
-# DELIBERATELY NO signal trap here: bash defers INT/TERM traps until the
-# foreground child exits, so a trap can never run during the build or vitest - the only windows
-# worth protecting - and a DEFERRED trap that fires after the child completes would clobber the
-# real classified exit (a green 25-min run reported as 130, or an exit-86 that must trigger the
-# CI retry swallowed). Pre-vitest this script owns NO processes (spawns happen inside vitest's
-# global-setup), and a trap reading owned.json in that window would kill a PRIOR/CONCURRENT run's
-# recorded pids. Sandbox lifecycle is owned end-to-end by the TypeScript side: vitest's wired
-# global teardown (KILL-escalated, ownership-gated) + its signal hooks + the next run's
-# liveness-checked orphan reap via the progressively-written lock.
+# DELIBERATELY NO INT/TERM trap here: bash defers those until the foreground child exits, so a
+# trap can never run during the build or vitest - the only windows worth protecting - and a
+# DEFERRED trap that fires after the child completes would clobber the real classified exit (a
+# green 25-min run reported as 130, or an exit-86 that must trigger the CI retry swallowed).
+# Pre-vitest this script owns NO processes (spawns happen inside vitest's global-setup), and a
+# trap reading owned.json in that window would kill a PRIOR/CONCURRENT run's recorded pids.
+# Sandbox lifecycle is owned end-to-end by the TypeScript side: vitest's wired global teardown
+# (KILL-escalated, ownership-gated) + its signal hooks + the next run's orphan reap.
+#
+# The one trap is on EXIT, and it signals nothing: it drops this run's rows from the host port
+# registry and re-exits with the status it was given, so a failed build or bundle assertion
+# neither leaks the claim nor changes its exit code. `exec` skips EXIT traps, hence the explicit
+# release before the final exec. The rows name this shell's pid as their owner, so a SIGKILLed
+# run's rows are dropped by the next claim on the host.
+export NULO_E2E_OWNER_PID=$$
+NULO_E2E_RUN_ID=""
+release_ports() {
+  if [ -n "$NULO_E2E_RUN_ID" ]; then
+    bun run scripts/e2e/resolve-ports.ts --release "$NULO_E2E_RUN_ID" || true
+    NULO_E2E_RUN_ID=""
+  fi
+}
+on_exit() {
+  local rc=$?
+  release_ports
+  exit "$rc"
+}
+trap on_exit EXIT
 
 # Clear stale boot-sentinel markers from a prior run so the boot-failure
 # classifier (scripts/e2e/classify-exit.ts) sees only THIS run's state.
@@ -51,6 +70,12 @@ rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started
 
 echo "[e2e:agent] resolving ports..."
 bun run scripts/e2e/resolve-ports.ts
+NULO_E2E_RUN_ID=$(jq -r '.runId // empty' "$PORTS_JSON")
+if [ -z "$NULO_E2E_RUN_ID" ]; then
+  echo "[e2e:agent] FATAL: resolve-ports claimed no ports in the host registry" >&2
+  exit 2
+fi
+export NULO_E2E_RUN_ID
 
 ANVIL_PORT=$(jq -r .anvil "$PORTS_JSON")
 AZTEC_PORT=$(jq -r .aztec "$PORTS_JSON")
@@ -222,6 +247,8 @@ PLAYGROUND_PORT="$PLAYGROUND_PORT" \
   bun run vitest run --config vitest.e2e.network.config.ts "$@"
 VITEST_EXIT=$?
 set -e
+
+release_ports
 
 # Map an infra-boot failure (sandbox never became ready AND no test ran) to exit
 # 86 so _extension-network-e2e.yml retries the agent ONCE. Any other non-zero — including a
