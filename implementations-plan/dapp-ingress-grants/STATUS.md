@@ -5,3 +5,4 @@
 - 2026-10-09: plan.md drafted with the lane map's four arcs (outline A) and a competing outline (B); OWNER-ASKS.md has 6 asks.
 - 2026-10-09: dual audit done. Codex: reject (12 findings); Opus: conditional approve (7 conditions). Every finding verified and dispositioned in plan.md § Panel; OWNER-ASKS now has 8 asks.
 - 2026-10-09: final fresh Codex pass converged: reject → reject → approve over three rounds (11 findings, all dispositioned in plan.md § Panel). Plan status: audited, awaiting the orchestrator's approval.
+- 2026-10-09: orchestrator approved the plan with D-orch-1 (no stack, arc 1 PR on `dev`) and D-orch-2 (arc 1 only); arc 1 started.

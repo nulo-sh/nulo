@@ -1,7 +1,7 @@
 ---
 plan: dapp-ingress-grants
 tier: mid
-status: audited (final Codex pass: approve); awaiting the orchestrator's approval
+status: approved (orchestrator, D-orch-1 and D-orch-2); arc 1 in progress
 issues: "#15, #83, #84, #86, #87, #88, #89, #123, #124, #125, #126, #127, #128, #199, #201, #228"
 driver: claude-code
 claude_model: opus
@@ -539,6 +539,11 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 6. **Teardown after the merge.** When `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/dapp-ingress-grants/plan.md` succeeds, run `agent-worktree done dapp-ingress-grants --merged` (this session started inside the worktree, so there is nothing to exit). It refuses rather than forces; relay a refusal and stop. A `/loop` session checks on every firing; a `/goal` session arms one background wait after its report: `until git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/dapp-ingress-grants/plan.md; do sleep 300; done`.
 
 ## Decision ledger
+
+### Orchestrator decisions (override the Delivery section)
+
+- **D-orch-1, no stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; no `gh stack init` or `adopt`. Arcs 2 and 3 branch from arc 1's branch and rebase onto `dev` after it lands (the accessibility-1 precedent the Delivery section already allows).
+- **D-orch-2, arc 1 only.** Nothing of arcs 2, 3 or 4 is built: they wait on decision pages 2 and 3, charter C11, holds H1 and H5 and the OWNER-ASKS answers (all eight asks are on pages 2 and 3). Arc 1's two behaviour changes for rows no writer can produce (a fixed `ValidationError("Malformed capability")` instead of a `TypeError`; a `debug` line instead of `warn` when a malformed grant skips the queued row) are accepted as stated; nothing a screen shows, a string, or an app-facing error for a producible row changes.
 
 ### Plan-space search: the competing outline
 
