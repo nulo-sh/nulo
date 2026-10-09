@@ -109,6 +109,8 @@ export default defineConfig({
 				},
 			],
 			dts: "src/types/auto-imports.d.ts",
+			// The default "append" keeps a removed export's global, so CI's freshness diff never sees it.
+			dtsMode: "overwrite",
 			dirs: ["src/composables/", "src/stores/", "src/utils/", "src/onboarding/composables/"],
 			// Rewrites compiled _ctx.<name> template references to resolve against the
 			// auto-import registry so {{ trimAddress(...) }} works without explicit
