@@ -121,7 +121,7 @@ describe("passkey relying party", () => {
 /** Every extension page, the background and the PXE host run under this one policy; Firefox
  *  inherits it. A change to it is a change to what every context may load or reach. */
 const EXTENSION_PAGES_CSP =
-	"script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; font-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; media-src 'self'; object-src 'self'"
+	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; style-src 'self' 'unsafe-inline'"
 
 describe("content security policy", () => {
 	test("the extension pages' policy is exactly the pinned one, on both browsers", () => {

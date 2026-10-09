@@ -46,6 +46,7 @@ export default {
 	permissions: ["alarms", "offscreen", "storage", "sidePanel", "unlimitedStorage", "downloads"],
 	content_security_policy: {
 		extension_pages: [
+			"default-src 'self'",
 			"script-src 'self' 'wasm-unsafe-eval'",
 			"img-src 'self' data: blob:",
 			// Every node URL the network form accepts: any HTTPS host, and plain HTTP on localhost,
@@ -53,14 +54,10 @@ export default {
 			// allowed by scheme; the form still refuses a remote one. Firefox checks
 			// `downloads.download` of a blob URL against this directive.
 			"connect-src 'self' blob: https: http:",
-			"font-src 'self'",
 			// CodeMirror (the logs and JSON viewers) generates its theme into a `<style>` element and
 			// rewrites it as themes mount, so no hash can name it; a hash would also switch
 			// 'unsafe-inline' off for the Presto banner's inline stylesheet.
 			"style-src 'self' 'unsafe-inline'",
-			"frame-src 'self'",
-			"media-src 'self'",
-			"object-src 'self'",
 		].join("; "),
 	},
 	cross_origin_embedder_policy: {

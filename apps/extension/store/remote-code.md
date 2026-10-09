@@ -28,13 +28,15 @@ the bundled copy is a property of the loaders, not of the policy: the ACVM glue 
 Vite emits next to it), and the prover's loader is replaced by a shim that fetches
 `/assets/barretenberg.wasm.gz` from the extension's own origin
 (`apps/extension/src/shims/bb-fetch-code.ts:15-18`). The content security policy,
-`script-src 'self' 'wasm-unsafe-eval'` (`apps/extension/manifest/manifest.config.ts:47-49`), forbids
-remote scripts, `eval` and `Function()`. The one upstream package that built a function from a
-string with no fallback, `function-bind`, is replaced by a stub for that reason
-(`apps/extension/src/shims/function-bind-stub.cjs:1-26`); the others that try (zod, msgpackr,
-get-intrinsic) catch the refusal and fall back. But `'wasm-unsafe-eval'` permits compiling WASM
-bytes from any source and the policy sets no `connect-src`, so it does not by itself prove where
-the bytes came from; the loaders above do.
+`script-src 'self' 'wasm-unsafe-eval'` under `default-src 'self'`
+(`apps/extension/manifest/manifest.config.ts:47-62`), forbids remote scripts, `eval` and
+`Function()`. The one upstream package that built a function from a string with no fallback,
+`function-bind`, is replaced by a stub for that reason
+(`apps/extension/src/shims/function-bind-stub.cjs:1-26`); zod's compiler is switched off before
+any schema is built (`apps/extension/src/utils/zod-jitless.ts:11-13`), and the others that try
+(msgpackr, get-intrinsic) catch the refusal and fall back. But `'wasm-unsafe-eval'` permits
+compiling WASM bytes from any source and `connect-src` admits any HTTPS host, so the policy does not
+by itself prove where the bytes came from; the loaders above do.
 
 ## What the bytecode can reach
 

@@ -65,3 +65,9 @@ The throwing-migration case failed again in the rerun, once on the 60 s timeout 
 
 - No page embeds an `<object>` or `<embed>`.
 - Gate: smoke green on Chrome and Firefox, the eight network files green on both, zero violations, CSP equal to the pin. No source added.
+
+### `default-src 'self'`, and the directives that equal it removed
+
+- Final policy: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' blob: https: http:; style-src 'self' 'unsafe-inline'`. `font-src`, `frame-src`, `media-src` and `object-src` now come from `default-src`, as does `manifest-src`; `worker-src` still falls back to `script-src`, unchanged by the arc.
+- `store/remote-code.md` now cites the new block and states what the policy does and does not prove: `connect-src` admits any HTTPS host, so the bundled loaders, not the policy, keep the WASM local; zod no longer tries `Function()` at all.
+- Gate: the Arc 3 gate below runs on this policy; it is a superset of the per-directive gate (the eight files are in the full network suite).
