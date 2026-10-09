@@ -65,7 +65,7 @@ import {
 	zeroize,
 } from "@nulo/wallet-crypto"
 import { macEnvelopeV3 } from "./profile-row"
-import type { ActiveSession, Profile, ProfileInfo, Session } from "./spec"
+import { type ActiveSession, type Profile, type ProfileInfo, type Session, toProfileInfo } from "./spec"
 
 const LOG_SOURCE = "SessionManager"
 
@@ -718,9 +718,7 @@ export class SessionManager {
 	}
 
 	private toInfo(profile: Profile): ProfileInfo {
-		const info: ProfileInfo = { id: profile.id, name: profile.name, type: profile.type }
-		if (this.isRecoveryMode(profile.id)) info.recoveryMode = true
-		return info
+		return toProfileInfo(profile, this.isRecoveryMode(profile.id))
 	}
 
 	/**

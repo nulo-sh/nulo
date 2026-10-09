@@ -184,7 +184,7 @@ describe("BalanceProjector", () => {
 		expect(batchedViewSimulationMock).toHaveBeenCalledTimes(2)
 	})
 
-	test("15 tokens in one group → chunked into 12 + 3 (BATCH_SIZE = 12 regression)", async () => {
+	test("15 tokens in one group → chunked into 12 + 3 (BALANCE_BATCH_SIZE = 12 regression)", async () => {
 		const tokens = Array.from({ length: 15 }, (_, i) => token(i + 1))
 		const projector = makeProjector({ tokens })
 		// 12 tokens × 2 fns = 24 results in batch 1; 3 tokens × 2 fns = 6 in batch 2
