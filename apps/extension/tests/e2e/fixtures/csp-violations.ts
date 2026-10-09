@@ -48,14 +48,16 @@ export async function closeAfterCspCheck(close: () => Promise<void>, read: () =>
 export async function readCspViolations(browser: Browser, extensionId: string): Promise<unknown> {
 	const page = await openScratchPage(browser, extensionId)
 	try {
-		return await page.evaluate(
-			async ({ flush, key }) => {
-				// An unarmed background answers nothing; the missing key then names that cause.
-				await chrome.runtime.sendMessage({ type: flush }).catch(() => undefined)
-				return (await chrome.storage.session.get(key))[key] ?? null
-			},
+		const { flushed, stored } = await page.evaluate(
+			async ({ flush, key }) => ({
+				flushed: await chrome.runtime.sendMessage({ type: flush }).catch((err) => String(err)),
+				stored: (await chrome.storage.session.get(key))[key] ?? null,
+			}),
 			{ flush: CSP_FLUSH_MESSAGE, key: CSP_VIOLATIONS_KEY },
 		)
+		// An unarmed build answers nothing and stores nothing; the missing key then names that cause.
+		if (stored !== null && flushed !== true) throw new Error(`the CSP violation recorder did not confirm its writes: ${flushed}`)
+		return stored
 	} finally {
 		await page.close().catch(() => {})
 	}

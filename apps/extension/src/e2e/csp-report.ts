@@ -13,15 +13,13 @@ import { scrubUrls } from "@/utils/scrub-urls"
  * Built in only when `VITE_NULO_E2E_CSP_REPORT=1`. Each entry tests that variable as a literal
  * rather than through a constant in `./config.ts`: a module that several entries import gets a
  * chunk of its own unless the bundler can fold every importer's condition before it splits, so a
- * shared constant would ship this module, unused, in a release build. The single flag is
- * proportionate, as for the migration fixture: an armed recorder only listens and keeps a
- * session-scoped list, and the release build refuses the flag and greps its bundles for the key.
+ * shared constant would ship this module, unused, in a release build.
  */
 
 /** Read by the e2e launch fixture; the release workflow greps release bundles for it. */
 export const CSP_VIOLATIONS_KEY = "nulo:e2e:csp-violations"
 export const CSP_VIOLATION_MESSAGE = "nulo:e2e:csp-violation"
-/** Answered once every append received before it has been written. */
+/** Answered once every append received before it has been written: `true`, or why one was lost. */
 export const CSP_FLUSH_MESSAGE = "nulo:e2e:csp-flush"
 
 /** One entry already fails the run; the cap keeps a violation in a loop from filling session storage. */
@@ -98,8 +96,12 @@ async function appendViolation(storage: SessionArea, violation: CspViolation): P
 export function installBackgroundRecorder(deps: BackgroundRecorderDeps): void {
 	const { storage } = deps
 	let chain = Promise.resolve()
+	let lost: string | undefined
 	const enqueue = (step: () => Promise<void>) => {
-		chain = chain.then(step).catch((err) => console.warn("[e2e-csp] recording a violation failed", { error: err }))
+		chain = chain.then(step).catch((err) => {
+			lost ??= err instanceof Error ? err.message : String(err)
+			console.warn("[e2e-csp] recording a violation failed", { error: err })
+		})
 	}
 	enqueue(async () => {
 		if ((await storage.get(CSP_VIOLATIONS_KEY))[CSP_VIOLATIONS_KEY] === undefined) await storage.set({ [CSP_VIOLATIONS_KEY]: [] })
@@ -118,7 +120,7 @@ export function installBackgroundRecorder(deps: BackgroundRecorderDeps): void {
 			return false
 		}
 		if (type !== CSP_FLUSH_MESSAGE) return false
-		void chain.then(() => sendResponse(true))
+		void chain.then(() => sendResponse(lost === undefined ? true : `a violation was not recorded: ${lost}`))
 		return true
 	})
 }

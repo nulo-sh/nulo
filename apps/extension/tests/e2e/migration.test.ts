@@ -168,12 +168,15 @@ describe.skipIf(!HAS_FIXTURE)("storage migration through the real boot path", ()
 	}
 
 	afterEach(async () => {
-		await ctx?.close()
-		ctx = undefined
-		// Guarded: a failure before mkdtemp must not turn into an rmSync throw
-		// that masks the real assertion error.
-		if (profileDir) rmSync(profileDir, { recursive: true, force: true })
-		profileDir = ""
+		try {
+			await ctx?.close()
+		} finally {
+			ctx = undefined
+			// Guarded: a failure before mkdtemp must not turn into an rmSync throw
+			// that masks the real assertion error.
+			if (profileDir) rmSync(profileDir, { recursive: true, force: true })
+			profileDir = ""
+		}
 	})
 
 	test("transforms seeded pre-shape rows and checkpoints the version", async () => {

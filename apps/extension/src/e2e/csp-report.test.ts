@@ -94,6 +94,18 @@ describe("background recorder", () => {
 		])
 	})
 
+	test("a write that fails makes every later flush say so", async () => {
+		const storage = slowStorage()
+		const { scope, flush } = background(storage)
+		await expect(flush()).resolves.toBe(true)
+		storage.set = async () => {
+			throw new Error("quota")
+		}
+		scope.dispatchEvent(violationEvent({ effectiveDirective: "connect-src", blockedURI: "https://node.example" }))
+		await expect(flush()).resolves.toBe("a violation was not recorded: quota")
+		await expect(flush()).resolves.toBe("a violation was not recorded: quota")
+	})
+
 	test("a report from outside the extension, or of the wrong shape, is not recorded", async () => {
 		const storage = slowStorage()
 		const { deliver, flush } = background(storage)

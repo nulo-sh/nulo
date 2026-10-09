@@ -208,9 +208,12 @@ test("encrypted full backup: export → wrong password rejects → decrypt → r
 		await waitForActiveAccount(page2, addressBefore)
 		await page2.close()
 	} finally {
-		await ctx2.close()
-		rmSync(profileDir, { recursive: true, force: true })
-		// The ciphertext file embeds the (test) master key — never leave it around.
-		rmSync(dir, { recursive: true, force: true })
+		try {
+			await ctx2.close()
+		} finally {
+			rmSync(profileDir, { recursive: true, force: true })
+			// The ciphertext file embeds the (test) master key — never leave it around.
+			rmSync(dir, { recursive: true, force: true })
+		}
 	}
 })
