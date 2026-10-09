@@ -16,8 +16,9 @@ issues: none (follow-ups.md entries; no GitHub issue)
 
 # code-followups-2: prune the follow-ups, ship the small code ones
 
-This lane covers the open entries of [`follow-ups.md`](../follow-ups.md) that are code work with no
-design decision, and no visible change beyond one the owner has already signed off. It has three jobs:
+This lane covers the open entries of `follow-ups.md` (retired by #236: its entries are now issues and
+advisories, D-orch-2) that are code work with no design decision, and no visible change beyond one the
+owner has already signed off. It has three jobs:
 
 1. Prune what is already resolved.
 2. Build the small entries in three stacked arcs, grouped by subsystem.
