@@ -147,7 +147,7 @@ BEFORE-LAUNCH.md §3's checkbox becomes `git grep -n "«FILL" -- legal/terms.md 
 
 ### Arc 3: docs (#185)
 
-CLAUDE.md § Release runbook, under Prerequisites, after the `nulo-landing` line: `apps/landing/wrangler.jsonc` names no `routes` on purpose. Wrangler reconciles a custom domain only when `routes` lists one, and the Workers Builds token holds no zone permission, so listing `nulo.sh` would fail every build. Attaching or moving the domain is the owner's step in the Cloudflare dashboard; an agent session does not make domain or DNS changes. Evidence: the `wrangler.jsonc:11-15` comment and the retired follow-up entry the issue quotes.
+CLAUDE.md § Release runbook, under Prerequisites, after the `nulo-landing` line: `apps/landing/wrangler.jsonc` names no `routes` on purpose: wrangler leaves an attached domain alone while `routes` names none, and listing `nulo.sh` there would make every production deploy reconcile it, which needs a zone permission the Workers Builds token does not hold. Attaching or moving the domain is the owner's step in the Cloudflare dashboard; an agent session does not make domain or DNS changes. Evidence: the `wrangler.jsonc:12-14` comment and the retired follow-up entry the issue quotes. (Revised in the arc's review: preview builds run `wrangler versions upload`, which applies no routes, so only a production deploy would fail.)
 
 ### Arc 4: plans ignore patterns (#182)
 
@@ -327,7 +327,7 @@ Validation gate (the battery): `bun run audit:vue` (typecheck, unit, lint, build
 
 ### Arc 3: docs
 
-**Phase 3.1, the landing domain rule (#185).** Add the lines § Arc 3 gives to CLAUDE.md's release runbook.
+**Phase 3.1, the landing domain rule (#185).** Add the lines § Arc 3 gives to CLAUDE.md's release runbook. ✓ (2026-10-10, `lessons/phase-3.md`)
 
 Validation gate: Fast; Gating; `scripts/check-no-local-paths.sh`. Pass: all exit 0. Layers: lint, unit.
 
@@ -624,7 +624,18 @@ On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same
 
 ### Arc 3, Codex round 1 (gpt-6.1-sol, high, read-only)
 
-Pending.
+On `origin/dev...ci-release-supply-docs`, beside one Opus review (same family, read-only). Codex: one Low finding; Opus: three Low and two Nit. Every finding was verified and accepted; the branch was unpushed, so the shared plan commit was rebuilt in place and stays byte-identical to arc 4's.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 | Low. "Would fail every build" overstates: preview builds run `wrangler versions upload`, which applies no routes | Accepted: "every production deploy", in CLAUDE.md and § Arc 3 |
+| O1 | Low. "Reconciles a custom domain only when `routes` lists one" claims more than `wrangler.jsonc:12-14` | Accepted: the bullet mirrors the comment ("leaves an attached domain alone while `routes` names none") |
+| O2 | Low. A STATUS.md append on either branch would conflict | Accepted: each arc rewrites only its own pre-placed line, with an unchanged line between them |
+| O3 | Low. D-orch-8 leaves § Post-implementation's `<top arc>` undefined with two side-by-side PRs | Accepted: the final cross-arc pass runs on the close-out branch once both merge |
+| O4 | Nit. The status line and STATUS.md called arc 4 built before its branch existed | Accepted: neutral wording |
+| O5 | Nit. § Arc 3 cited `wrangler.jsonc:11-15`; the comment is lines 12-14 | Accepted |
+
+Round 2 (resumed) on the rebuilt branch: **CLEAN**. Not changed: the `wrangler.jsonc` comment's own "every build" (outside the two docs this lane may edit, D-orch-9).
 
 ### Arc 4, Codex rounds (gpt-6.1-sol, high, read-only)
 
