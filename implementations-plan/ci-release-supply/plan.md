@@ -616,6 +616,10 @@ On `f1c0618..6d5e7ea`. Every accepted round-1 finding is fixed with no regressio
 |---|---|---|
 | 1 | Medium. Round 1's finding 2, held: v0.30.2 skips the attestation and its release is mutable, so its asset's bytes are no longer only this repository's build. `attach-assets-run.ts`'s download buffers the whole response before the digest is checked. | Accepted. `realIO` takes an asset byte limit, unbounded by default so the publish path keeps its behaviour. `realStoreIO` passes `DOWNLOAD_LIMIT` (128 MiB), and the store downloads share `readBounded`, which refuses while streaming. New cases: the exact limit kept and one byte more refused; a 200 MiB release asset stops streaming at the limit while a small one is written. Each is red with its wiring or its check removed. `attach-assets-run.test.ts` is unedited and passes. |
 
+### Arc 2, Codex round 3 (resumed), 2026-10-10
+
+On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same bytes, same HTTP error text, and a null body yields empty bytes as `arrayBuffer()` did. The test routes the API call to the redirect and the storage call to the body, needs the exact limit error, and the small control proves the routing reaches the write. The loop converged in three rounds.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before the next arc's branch starts; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
