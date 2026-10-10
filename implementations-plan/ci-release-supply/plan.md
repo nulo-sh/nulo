@@ -1,7 +1,7 @@
 ---
 plan: ci-release-supply
 tier: mid
-status: draft, awaiting the orchestrator's approval
+status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -443,6 +443,10 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D10 | #172 proven by a deterministic battery plus a test-inventory compare; the full e2e on both browsers comes from the PR's lanes | Layout changes resolution, not timing | Opus: the plan silently overrode the archived soak decision (accepted: stated as A6 for the orchestrator) and proposed the hybrid (accepted). Codex: root dependencies stay reachable (accepted: boundary corrected). Final pass: the archived plan prescribes no 30-run matrix (`archive/isolated-linker-store/plan.md:41`); compare test identities against the commit just before, not totals against the arc base (accepted) |
 | D11 | Arc 5 is a job inside `nightly.yml`, after `publish-nightly` | Publication and deletion are serialized by construction; no `actions: read` needed to see a running nightly | Codex: a separate workflow races the nightly (accepted). Opus: refusing while a nightly runs needs `actions: read`, contradicting "contents: write only" (resolved by the move). Rejected: a separate workflow sharing the `nightly` group. Final pass: the job's checkout takes no `ref` (`CLEAN`), the first dry run needs `force=true`, and an interrupted prune is finished by the next one (accepted) |
 | D12 | Keep `queue: single` (the default) | With live labels a replaced waiting run would have decided the same way; `queue: max` would run every queued duplicate and cannot pair with dispatch's cancel | Codex proposed `queue: max` (rejected with this reason). Opus agreed the per-head key needs no queue change |
+| D-orch-1 | No stack: arc 1 opens its own PR against `dev` (`gh pr create --base dev`), titled per the Delivery table; later arcs branch from arc 1's branch and rebase onto `dev` once it lands | The orchestrator's delivery call | Supersedes the `gh stack` mechanics in § Delivery for this lane (A5) |
+| D-orch-2 | Arc 1 only for this run; nothing of arcs 2 to 5 is built. OA-1, OA-2 and OA-3 sit on the owner's decision page 5; none touches arc 1 | The orchestrator's scope call | — |
+| D-orch-3 | A3 approved: the probe pushes the scratch branch `ci-release-supply-probe` to `nulo-sh/nulo` and deletes it once the readings are recorded (`git ls-remote origin ci-release-supply-probe` prints nothing before the arc ends); nothing is pushed to `dev`, `main` or a `v*` tag. A6 accepted: the deterministic battery stands in for the soak in arc 2 | The orchestrator's answers to A3 and A6 | — |
+| D-orch-4 | The final pass's unreviewed arc-1 fixes come first: the first Codex round and the Opus review are asked, explicitly and before anything else, about D2 (list, read, revalidate; the force-push rewind), D3 (no fallback on the live label read; the `true`/`false` refusal) and D5 (rule 1's fresh `status` at the re-run's attempt; the skipped-matrix probe cases). Phase 1.3's gate counts as passed only once their answers are recorded under Audit verdicts | The final Codex pass rejected twice and its last fixes were never re-reviewed | — |
 
 ## Audit verdicts
 
