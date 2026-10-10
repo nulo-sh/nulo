@@ -595,10 +595,25 @@ describe("popup import — Enter runs the action the bar offers", () => {
 		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
 	})
 
-	test("(drift pin) Enter after a failed restore restores again, though its button is disabled", async () => {
+	test("Enter after a failed restore restores nothing, as its button is disabled", async () => {
 		holder.flow.nameFieldState.value = "shown"
 		holder.flow.restoreStatus.value = "failed"
 		const w = await mountImport()
+		nameInput(w).dispatchEvent(enterKey())
+		await flushPromises()
+		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
+	})
+
+	test("Enter on an incomplete form restores nothing; completed, it restores once", async () => {
+		holder.flow.nameFieldState.value = "shown"
+		holder.flow.isAllowedToImportBackup.value = false
+		const w = await mountImport()
+		nameInput(w).dispatchEvent(enterKey())
+		await flushPromises()
+		expect(holder.flow.restoreBackup).not.toHaveBeenCalled()
+
+		holder.flow.isAllowedToImportBackup.value = true
+		await flushPromises()
 		nameInput(w).dispatchEvent(enterKey())
 		await flushPromises()
 		expect(holder.flow.restoreBackup).toHaveBeenCalledTimes(1)
