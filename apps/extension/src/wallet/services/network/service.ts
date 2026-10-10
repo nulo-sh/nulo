@@ -554,6 +554,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			// journal create landing between its sweep and the row delete. The
 			// reservation makes `isNetworkLive` refuse for the whole window.
 			this.deletingNetworks.add(id)
+			this.reservations.set(id, (this.reservations.get(id) ?? 0) + 1)
 			try {
 				// Purge chain-scoped state via the awaited coordinator
 				await this.purgeChain(profile.id, network.chainId, network.id)
@@ -569,16 +570,28 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 
 	/** Network ids whose delete cascade is in progress — see `isNetworkLive`. */
 	private readonly deletingNetworks = new Set<string>()
+	/** Reservations ever made per network id, never decremented: a reservation that began and ended
+	 *  during a liveness read still moves its count. */
+	private readonly reservations = new Map<string, number>()
+
+	/** A reservation is open now, or one began since `countBefore` was read. */
+	private reservedSince(networkId: string, countBefore: number): boolean {
+		return this.deletingNetworks.has(networkId) || (this.reservations.get(networkId) ?? 0) !== countBefore
+	}
 
 	/**
 	 * Whether a network row exists AND is not mid-deletion. In-memory only:
 	 * a SW restart kills both the flag and any stale creator closure that
-	 * captured the network, so cross-restart staleness cannot occur.
+	 * captured the network, so cross-restart staleness cannot occur. A read
+	 * that a reservation overlapped answers false: its cascade may already have
+	 * swept what the caller is about to treat as live.
 	 */
 	public async isNetworkLive(networkId: string): Promise<boolean> {
 		await this.ensureInitialized()
+		const countBefore = this.reservations.get(networkId) ?? 0
 		if (this.deletingNetworks.has(networkId)) return false
-		return (await this.storage.get(networkId)) !== undefined
+		const row = await this.storage.get(networkId)
+		return row !== undefined && !this.reservedSince(networkId, countBefore)
 	}
 
 	/** Chain-keyed variant of {@link isNetworkLive} for writers that carry only
@@ -588,8 +601,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	 *  on why the sweep/create ordering depends on that). */
 	public async isChainLive(profileId: string, chainId: number): Promise<boolean> {
 		await this.ensureInitialized()
+		// Copied before the read: the network it resolves is known only after.
+		const countsBefore = new Map(this.reservations)
 		const network = (await this.storage.getValues()).find((n) => n.profileId === profileId && n.chainId === chainId)
-		return network !== undefined && !this.deletingNetworks.has(network.id)
+		return network !== undefined && !this.reservedSince(network.id, countsBefore.get(network.id) ?? 0)
 	}
 
 	/** {@link isChainLive} for a dApp asking to connect, where a profile with no network rows, or one

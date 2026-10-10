@@ -9,7 +9,8 @@
 
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
-import { describe, expect, test, vi } from "vitest"
+import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
+import { afterEach, describe, expect, test, vi } from "vitest"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
@@ -536,5 +537,434 @@ describe("TokenService.addToken — creation fences", () => {
 		expect(rows).toHaveLength(1)
 		expect(String(rows[0][1])).toContain("0xcafe")
 		expect(emitted).toHaveLength(0)
+	})
+})
+
+describe("TokenService — a token-lock holder the watchdog released", () => {
+	const WATCHDOG_MS = 5 * 60_000 + 1
+	const mk = (contract: string, profileId = "p1") => ({ id: 0, profileId, chainId: 1, contract, name: "T", symbol: "T", decimals: 9 })
+
+	function gate<T = void>() {
+		let resolve!: (v: T) => void
+		let reject!: (e: unknown) => void
+		const promise = new Promise<T>((res, rej) => {
+			resolve = res
+			reject = rej
+		})
+		return { promise, resolve, reject }
+	}
+
+	type Harness = Awaited<ReturnType<typeof makeHarness>>
+	type Networks = {
+		isNetworkLive: (id: string) => Promise<boolean>
+		isChainLive: (profileId: string, chainId: number) => Promise<boolean>
+	}
+	const networksOf = (h: Harness) => (h.tokenService as unknown as { networks: Networks }).networks
+
+	async function setup() {
+		const h = await makeHarness()
+		const added: string[] = []
+		h.tokenService.onTokenAdded.add((t) => {
+			added.push(t.contract)
+		})
+		vi.useFakeTimers()
+		return { ...h, added }
+	}
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const add = (h: Harness, contract: string) => h.tokenService.addToken("p1", NETWORK.id, "0xacc", ti(contract), { origin: "popup" })
+	const settle = () => vi.advanceTimersByTimeAsync(0)
+	const release = () => vi.advanceTimersByTimeAsync(WATCHDOG_MS)
+	async function rows(h: Harness): Promise<Record<string, string>> {
+		const out: Record<string, string> = {}
+		for (const [key, raw] of Object.entries(await h.api.storage.local.get(null))) {
+			if (key.startsWith("nulo:core:tokens@")) out[key.slice("nulo:core:tokens@".length)] = JSON.parse(raw as string).contract
+		}
+		return out
+	}
+	const stagesOf = (h: Harness, opId: string) =>
+		(h.journal.transitionOperation.mock.calls as unknown as [string, { stage: string }][])
+			.filter(([id]) => id === opId)
+			.map(([, progress]) => progress.stage)
+
+	/** Holds the answer of the `nth` read of `key`, already taken, until `release`. */
+	function holdRead(h: Harness, key: string, nth = 1) {
+		const get = h.api.storage.local.get.bind(h.api.storage.local)
+		const held = gate()
+		const reached = gate()
+		let reads = 0
+		h.api.storage.local.get = (async (keys?: string | string[] | null) => {
+			const answer = await get(keys)
+			if (keys === key && ++reads === nth) {
+				reached.resolve()
+				await held.promise
+			}
+			return answer
+		}) as typeof h.api.storage.local.get
+		return { reached: reached.promise, release: () => held.resolve() }
+	}
+
+	/** Parks the `nth` call of `isNetworkLive` until `release(answer)`; other calls read `networkLive`. */
+	function holdNetworkCheck(h: Harness, nth: number) {
+		const held = gate<boolean>()
+		let calls = 0
+		networksOf(h).isNetworkLive = async () => {
+			calls += 1
+			return calls === nth ? await held.promise : h.networkLive.value
+		}
+		return { calls: () => calls, release: (answer: boolean) => held.resolve(answer) }
+	}
+
+	test("released in the pre-set network check, it resumes on a fresh id: an add that took its id keeps its row", async () => {
+		const h = await setup()
+		const check = holdNetworkCheck(h, 1)
+		const first = add(h, "0xa11")
+		await settle()
+		expect(check.calls()).toBe(1)
+		await release()
+
+		await add(h, "0xb0b")
+		check.release(true)
+		await first
+
+		expect(Object.values(await rows(h)).sort()).toEqual(["0xa11", "0xb0b"])
+		expect(h.added).toEqual(["0xb0b", "0xa11"])
+		expect(h.fetchStub).toHaveBeenCalledTimes(2)
+	})
+
+	test("released in the fetch, it reports a same-contract add that landed meanwhile and writes nothing", async () => {
+		const h = await setup()
+		h.journal.createOperation.mockResolvedValueOnce({ id: "op-1" }).mockResolvedValueOnce({ id: "op-2" })
+		const fetch = gate<[string, string, number]>()
+		h.fetchStub.mockReturnValueOnce(fetch.promise)
+		const first = add(h, "0xa11")
+		await settle()
+		await release()
+
+		const second = await add(h, "0xa11")
+		fetch.resolve(["Late", "LATE", 6])
+
+		expect(await first).toEqual(second)
+		expect(Object.values(await rows(h))).toEqual(["0xa11"])
+		expect(h.added).toEqual(["0xa11"])
+		expect(stagesOf(h, "op-1")).toEqual(["simulating", "succeeded"])
+	})
+
+	test("released in the fetch and again in the resumed pre-set check, it still writes one row and emits once", async () => {
+		const h = await setup()
+		const fetch = gate<[string, string, number]>()
+		h.fetchStub.mockReturnValueOnce(fetch.promise)
+		const check = holdNetworkCheck(h, 2)
+		const run = add(h, "0xa11")
+		await settle()
+		await release()
+		fetch.resolve(["Name", "NAM", 6])
+		await settle()
+		expect(check.calls()).toBe(2)
+		await release()
+		check.release(true)
+		await run
+
+		expect(Object.values(await rows(h))).toEqual(["0xa11"])
+		expect(h.added).toEqual(["0xa11"])
+		expect(h.fetchStub).toHaveBeenCalledTimes(1)
+	})
+
+	test("released while its set is still applying, a successor waits for that set before it allocates", async () => {
+		const h = await setup()
+		const set = gate()
+		let sets = 0
+		const writes = recordWrites(h.api.storage.local, "nulo:core:tokens@", undefined, () => (++sets === 1 ? set.promise : undefined))
+		const first = add(h, "0xa11")
+		await settle()
+		expect(sets).toBe(1)
+		await release()
+
+		const second = add(h, "0xb0b")
+		await settle()
+		set.resolve()
+		await Promise.all([first, second])
+		writes.restore()
+
+		expect(Object.values(await rows(h)).sort()).toEqual(["0xa11", "0xb0b"])
+		expect(h.added.sort()).toEqual(["0xa11", "0xb0b"])
+	})
+
+	test("its set rejecting while a successor drains it, the successor also waits for the failure it journals", async () => {
+		const h = await setup()
+		const set = gate()
+		const failed = gate()
+		recordWrites(h.api.storage.local, "nulo:core:tokens@", undefined, () => set.promise)
+		;(h.journal.transitionOperation as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+			if ((args[1] as { stage: string }).stage === "failed") await failed.promise
+		})
+		const first = add(h, "0xa11").catch((error: unknown) => error)
+		await settle()
+		await release()
+		let admitted = false
+		const successor = h.tokenService.restore([]).then(() => {
+			admitted = true
+		})
+		await settle()
+		expect(admitted).toBe(false)
+
+		set.reject(new Error("disk full"))
+		await settle()
+		expect(admitted).toBe(false)
+		failed.resolve()
+		await successor
+		expect(admitted).toBe(true)
+		expect(await first).toEqual(expect.objectContaining({ message: "disk full" }))
+	})
+
+	test("an add parked before the lock while its profile is deleted and restored with that contract rejects", async () => {
+		const h = await setup()
+		const created = gate<{ id: string }>()
+		h.journal.createOperation.mockReturnValueOnce(created.promise)
+		const run = add(h, "0xa11")
+		await settle()
+		h.deletionState.beginDeletion("p1")
+		h.deletionState.release("p1")
+		const [restored] = await h.tokenService.restore([mk("0xa11")])
+		expect(restored.restoreError).toBeUndefined()
+		created.resolve({ id: "op-1" })
+
+		await expect(run).rejects.toThrow(/^profile p1 deleted$/)
+		expect(stagesOf(h, "op-1")).not.toContain("succeeded")
+		expect(Object.values(await rows(h))).toEqual(["0xa11"])
+	})
+
+	test.each([
+		{ name: "another token", identical: false, replacement: () => mk("0xccc") },
+		{ name: "the same token, byte for byte", identical: true, replacement: (own: string) => JSON.parse(own) },
+	])("released after its set, it keeps a restore's row at its id on a replaced network: $name", async ({ identical, replacement }) => {
+		const h = await setup()
+		const check = holdNetworkCheck(h, 2)
+		networksOf(h).isChainLive = async () => true
+		const run = add(h, "0xa11").catch((error: unknown) => error)
+		await settle()
+		expect(check.calls()).toBe(2)
+		const [[key, own]] = Object.entries(await h.api.storage.local.get(null)).filter(([k]) => k.startsWith("nulo:core:tokens@"))
+		await release()
+
+		h.networkLive.value = false
+		await h.tokenService.clearChainState("p1", 1)
+		const [restored] = await h.tokenService.restore([replacement(own as string)])
+		expect(`nulo:core:tokens@${restored.id}`).toBe(key)
+		const written = (await h.api.storage.local.get(key))[key]
+		expect(written === own).toBe(identical)
+		check.release(false)
+
+		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
+		expect((await h.api.storage.local.get(key))[key]).toBe(written)
+	})
+
+	test("released in the dead-chain read, it deletes nothing on resume", async () => {
+		const h = await setup()
+		h.networkLive.value = true
+		let chainReads = 0
+		const chainRead = gate<boolean>()
+		networksOf(h).isChainLive = async () => (++chainReads === 1 ? await chainRead.promise : true)
+		let checks = 0
+		networksOf(h).isNetworkLive = async () => ++checks === 1
+		const run = add(h, "0xa11").catch((error: unknown) => error)
+		await settle()
+		expect(chainReads).toBe(1)
+		await release()
+
+		await h.tokenService.clearChainState("p1", 1)
+		const [restored] = await h.tokenService.restore([mk("0xccc")])
+		chainRead.resolve(false)
+
+		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
+		expect(await rows(h)).toEqual({ [`${restored.id}`]: "0xccc" })
+	})
+
+	test("released after its set while the person deleted the token, it succeeds without announcing a row", async () => {
+		const h = await setup()
+		const check = holdNetworkCheck(h, 2)
+		const run = add(h, "0xa11")
+		await settle()
+		await release()
+
+		const [id] = Object.keys(await rows(h))
+		await h.tokenService.deleteToken(Number(id))
+		check.release(true)
+
+		expect((await run).contract).toBe("0xa11")
+		expect(h.added).toEqual([])
+		expect(await rows(h)).toEqual({})
+		expect(stagesOf(h, "op-1")).toEqual(["simulating", "succeeded"])
+	})
+
+	test("resumed after its set, a deletion beginning while it reads its row rejects it with no success", async () => {
+		const h = await setup()
+		const check = holdNetworkCheck(h, 2)
+		const run = add(h, "0xa11").catch((error: unknown) => error)
+		await settle()
+		await release()
+		const [id] = Object.keys(await rows(h))
+		const read = holdRead(h, `nulo:core:tokens@${id}`)
+		check.release(true)
+		await read.reached
+		h.deletionState.beginDeletion("p1")
+		read.release()
+
+		expect(await run).toEqual(expect.objectContaining({ message: "profile p1 deleted" }))
+		expect(stagesOf(h, "op-1")).not.toContain("succeeded")
+		expect(h.added).toEqual([])
+	})
+
+	test("owned throughout, a network deletion that reserves and sweeps during its post-set check fails it with no row", async () => {
+		const h = await setup()
+		vi.useRealTimers()
+		const factory = new FakeNodeFactory()
+		for (const chainId of [1, 2]) {
+			factory.setOverrides(`https://rpc.test/${chainId}`, {
+				getNodeInfo: vi.fn().mockResolvedValue({ l1ChainId: 0, rollupVersion: chainId }) as never,
+			})
+		}
+		const networks = new NetworkService(new LoggerStore(new ConfigStore()), h.api, factory)
+		Object.assign(networks as unknown as Record<string, unknown>, {
+			initialized: true,
+			pxeServiceClient: { clearChainState: async () => {} },
+			profileService: {
+				getActiveProfile: async () => ({ id: "p1" }),
+				getDeletionState: () => h.deletionState,
+				captureExecutionFence: async () => ({ profileId: "p1", epoch: h.deletionState.capture("p1"), session: 1 }),
+			},
+		})
+		const doomed = await networks.addNetwork("One", "https://rpc.test/1")
+		await networks.setActiveNetwork((await networks.addNetwork("Two", "https://rpc.test/2")).id)
+		networks.registerChainPurgeSubscriber((profileId, chainId) => h.tokenService.clearChainState(profileId, chainId))
+		Object.assign(networksOf(h), {
+			isNetworkLive: (id: string) => networks.isNetworkLive(id),
+			isChainLive: (profileId: string, chainId: number) => networks.isChainLive(profileId, chainId),
+		})
+		const postSetRead = holdRead(h, `nulo:core:networks@${doomed.id}`, 2)
+		const run = h.tokenService.addToken("p1", doomed.id, "0xacc", ti("0xa11"), { origin: "popup" }).catch((error: unknown) => error)
+		await postSetRead.reached
+		await networks.deleteNetwork(doomed.id)
+		postSetRead.release()
+
+		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
+		expect(h.added).toEqual([])
+		expect(await rows(h)).toEqual({})
+	})
+
+	test("released after its set on a dead chain, it removes its own row on resume", async () => {
+		const h = await setup()
+		const check = holdNetworkCheck(h, 2)
+		const run = add(h, "0xa11").catch((error: unknown) => error)
+		await settle()
+		await release()
+		h.networkLive.value = false
+		check.release(false)
+
+		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
+		expect(await rows(h)).toEqual({})
+	})
+
+	test("a fetch rejected after the release journals its failure before a token operation queued after it runs", async () => {
+		const h = await setup()
+		const fetch = gate<[string, string, number]>()
+		h.fetchStub.mockReturnValueOnce(fetch.promise)
+		const failed = gate()
+		;(h.journal.transitionOperation as ReturnType<typeof vi.fn>).mockImplementation(async (...args: unknown[]) => {
+			if ((args[1] as { stage: string }).stage === "failed") await failed.promise
+		})
+		const run = add(h, "0xa11").catch((error: unknown) => error)
+		await settle()
+		await release()
+		fetch.reject(new Error("metadata boom"))
+		await settle()
+
+		let ran = false
+		const queued = h.tokenService.restore([]).then(() => {
+			ran = true
+		})
+		await settle()
+		expect(ran).toBe(false)
+		failed.resolve()
+		await queued
+		expect(ran).toBe(true)
+		expect(await run).toEqual(expect.objectContaining({ message: "metadata boom" }))
+	})
+
+	test("a restore released in a row's pre-set chain read refuses that row and the rest; an add's row at its id survives", async () => {
+		const h = await setup()
+		let chainReads = 0
+		const chainRead = gate<boolean>()
+		networksOf(h).isChainLive = async () => (++chainReads === 1 ? await chainRead.promise : true)
+		const restoring = h.tokenService.restore([mk("0xaaa"), mk("0xbbb")])
+		await settle()
+		expect(chainReads).toBe(1)
+		await release()
+
+		const added = await add(h, "0xb0b")
+		chainRead.resolve(true)
+
+		expect((await restoring).map((r) => r.restoreError)).toEqual(["token lock lost", "token lock lost"])
+		expect(await rows(h)).toEqual({ [`${added.id}`]: "0xb0b" })
+	})
+
+	test("a deletion released after its read refuses to delete the row that reused the id", async () => {
+		const h = await setup()
+		const { id } = await add(h, "0xa11")
+		const read = holdRead(h, `nulo:core:tokens@${id}`, 2)
+		const deleting = h.tokenService.deleteToken(id).catch((error: unknown) => error)
+		await read.reached
+		await release()
+
+		await h.tokenService.deleteToken(id)
+		const [restored] = await h.tokenService.restore([mk("0xccc")])
+		expect(restored.id).toBe(id)
+		read.release()
+
+		expect(await deleting).toEqual(expect.objectContaining({ message: "token lock lost" }))
+		expect(await rows(h)).toEqual({ [`${id}`]: "0xccc" })
+	})
+
+	test("a deletion released while its remove applies still announces the removal", async () => {
+		const h = await setup()
+		const { id } = await add(h, "0xa11")
+		const deleted: number[] = []
+		h.tokenService.onTokenDeleted.add((t) => {
+			deleted.push(t.id)
+		})
+		const removal = gate()
+		const remove = h.api.storage.local.remove.bind(h.api.storage.local)
+		h.api.storage.local.remove = async (keys) => {
+			await removal.promise
+			await remove(keys)
+		}
+		const deleting = h.tokenService.deleteToken(id)
+		await settle()
+		await release()
+		removal.resolve()
+
+		expect((await deleting).id).toBe(id)
+		expect(deleted).toEqual([id])
+		expect(await rows(h)).toEqual({})
+	})
+
+	test("a profile purge released after its snapshot throws instead of deleting another profile's row at a freed id", async () => {
+		const h = await setup()
+		const a = await add(h, "0xa11")
+		const b = await add(h, "0xa22")
+		const read = holdRead(h, `nulo:core:tokens@${a.id}`)
+		const purging = h.tokenService.purgeForProfile("p1").catch((error: unknown) => error)
+		await read.reached
+		await release()
+
+		await h.tokenService.deleteToken(b.id)
+		const [restored] = await h.tokenService.restore([mk("0xccc", "p2")])
+		expect(restored.id).toBe(b.id)
+		read.release()
+
+		expect(await purging).toEqual(expect.objectContaining({ message: "token lock lost" }))
+		expect(await rows(h)).toEqual({ [`${a.id}`]: "0xa11", [`${b.id}`]: "0xccc" })
 	})
 })

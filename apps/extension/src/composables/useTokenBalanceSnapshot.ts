@@ -85,10 +85,25 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>({
 		land(fetched, chainId)
 	}
 
+	const isListed = (id: unknown) => rows.value.some((row) => (row as { id: unknown }).id === id)
+
+	/** An add carries its row as created, so a listed id already holds that row or a newer one. */
+	function onBalanceAdded(tb: TokenBalanceInfo) {
+		if (!inActiveScope(tb)) return
+		markDirty()
+		if (isListed(tb.id)) return
+		rows.value.push(mapRow ? mapRow(tb) : (tb as T))
+	}
+
 	function onBalanceUpdated(tb: TokenBalanceInfo) {
 		if (inActiveScope(tb)) markDirty()
 		const idx = rows.value.findIndex((row) => (row as { id: unknown }).id === tb.id)
 		if (idx !== -1) rows.value[idx] = tb as T
+	}
+
+	function onBalanceDeleted(tb: TokenBalanceInfo) {
+		if (inActiveScope(tb)) markDirty()
+		rows.value = rows.value.filter((row) => (row as { id: unknown }).id !== tb.id)
 	}
 
 	function onReconnected() {
@@ -103,5 +118,13 @@ export function useTokenBalanceSnapshot<T = TokenBalanceInfo>({
 		client.onConnected.remove(onReconnected)
 	}
 
-	return { fetchTokenBalances, markDirty, inActiveScope, onBalanceUpdated, dispose }
+	return {
+		fetchTokenBalances,
+		markDirty,
+		inActiveScope,
+		onBalanceAdded,
+		onBalanceUpdated,
+		onBalanceDeleted,
+		dispose,
+	}
 }
