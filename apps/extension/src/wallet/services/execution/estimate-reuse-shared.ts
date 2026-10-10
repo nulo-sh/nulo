@@ -105,8 +105,8 @@ export async function fpcIdentityDrift(
 	return drifted ? "fpc identity drift" : undefined
 }
 
-/** The fee multiplier for a known or absent priority. The lookup stays unvalidated, so an unknown
- *  priority keeps its existing failure. */
+/** The fee multiplier for a known or absent priority. The popup RPC boundary refuses an unknown
+ *  priority; the lookup stays unchecked here, so one that bypassed it still fails, never a default. */
 export function reuseFeeMultiplier(priority: PriorityLevel | undefined): number {
 	return priority ? PRIORITY_MULTIPLIERS[priority] : DEFAULT_FEE_MULTIPLIER
 }

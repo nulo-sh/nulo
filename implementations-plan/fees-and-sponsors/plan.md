@@ -509,7 +509,7 @@ Questions for the orchestrator (a question a person would see goes to OWNER-ASKS
 
 ### Arc 1: estimate and cap internals (decision-free; ships first)
 
-#### Phase 1.1: the speed level at the RPC boundary (#196)
+#### Phase 1.1: the speed level at the RPC boundary (#196) ✓
 
 **Warning.** Start this phase only after send-queue-activity arc 1 has merged into `dev` and `origin/dev` is merged into this branch.
 

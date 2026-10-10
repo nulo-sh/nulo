@@ -148,7 +148,8 @@ export class OperationEstimateReuse {
 		return entry
 	}
 
-	/** The priority lookup is unvalidated; a non-number multiplier is an unknown priority and must keep throwing. */
+	/** A non-number multiplier is an unknown priority that bypassed the RPC boundary: it keeps throwing, so
+	 *  it can never miss reuse into a fresh build at a default fee. */
 	private feeReadFailed(error: unknown, multiplier: unknown): undefined {
 		if (typeof multiplier !== "number") throw error
 		// A fixed category: the node's message never reaches the log.

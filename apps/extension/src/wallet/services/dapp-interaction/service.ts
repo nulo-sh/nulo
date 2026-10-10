@@ -25,7 +25,7 @@ import { Lock } from "@/wallet/utils"
 import type { WindowManager } from "@/wallet/services/window-manager/window-manager"
 import { parseCaipAccount, parseCaipChain, resolveNetworkByChainId } from "@/wallet/utils/caip"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { isSelfPay } from "@nulo/wallet-bridge"
+import { type FeeSettingsReaders, isSelfPay, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { assertSilentExecutable, materializeRequest, type MaterializeDeps } from "./materialize"
 import { knownContracts } from "./known-contracts"
 import { applyFeeSelection, type OperationApprovalDelta } from "./approval-delta"
@@ -104,6 +104,11 @@ const OPERATION_ACCESS_LEVEL: Record<OperationKind, AccessLevel> = {
 	aztec_createAuthWit: AccessLevel.Transactions,
 }
 
+/** The popup's fee settings, one per approved operation. */
+const FEE_SETTINGS_OF = {
+	approveInteraction: ([, deltas]) => (Array.isArray(deltas) ? deltas.map((delta) => delta?.feeSettings) : []),
+} satisfies FeeSettingsReaders<Methods>
+
 export class DappInteractionService extends Service<Methods, Events> implements ServiceSpec<Methods, Events>, InteractionOperationSource {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getInteractionPayload",
@@ -133,6 +138,12 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		private readonly windowManager: WindowManager,
 	) {
 		super(DAPP_INTERACTION_SERVICE_NAME, logger)
+	}
+
+	/** An unknown speed level is refused before the method runs; fee math never reads one. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		refuseUnknownPriorities(FEE_SETTINGS_OF, method, params)
+		return super.invoke(method, params)
 	}
 
 	protected async init(services: ServiceCollection) {

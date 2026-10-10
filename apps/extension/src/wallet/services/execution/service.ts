@@ -49,6 +49,7 @@ import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
+import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -130,6 +131,17 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"register_token",
 	"aztec_createAuthWit",
 ])
+
+/** The popup's fee settings: one per transfer or estimate, one per broadcasting operation. */
+const FEE_SETTINGS_OF = {
+	executeTransfer: ([, , , , , , feeSettings]) => [feeSettings],
+	estimateTransferFee: ([, , , , , , feeSettings]) => [feeSettings],
+	estimateOperationFee: ([, , feeSettings]) => [feeSettings],
+	executeOperations: ([operations]) =>
+		Array.isArray(operations)
+			? operations.flatMap((op) => (op?.kind === "send_transaction" || op?.kind === "aztec_sendTx" ? [op.feeSettings] : []))
+			: [],
+} satisfies FeeSettingsReaders<Methods>
 
 export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -223,6 +235,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		private readonly pxeClientFactory: (logger: ILogger) => PxeServiceClient = DEFAULT_PXE_CLIENT_FACTORY,
 	) {
 		super(EXECUTION_SERVICE_NAME, logger)
+	}
+
+	/** An unknown speed level is refused before the method runs; fee math never reads one. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		refuseUnknownPriorities(FEE_SETTINGS_OF, method, params)
+		return super.invoke(method, params)
 	}
 
 	protected async init(services: ServiceCollection) {

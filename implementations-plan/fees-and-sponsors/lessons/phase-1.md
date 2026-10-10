@@ -19,3 +19,14 @@
 - "The two reply pins": read as one refusal pin per reply source (a null-like current min; a null-like predicted slot), beside a success control. Both refusals fail against the base copy (checked).
 - Not covered, by scope: the other direct `getCurrentMinFees()` reads (`embedded-fpc-cap.ts`, the NO_FROM build, `completeFeeOptions`); #197 names only `fee-juice.ts`.
 - Gate: `bun run lint` ✓, `bun run --cwd packages/aztec-runtime typecheck` ✓, aztec-runtime tests (375 passed, 2 skipped) ✓, `apps/extension` execution suite (1026 passed) ✓.
+
+## Phase 1.1: the speed level at the popup RPC boundary (#196, 2026-10-10)
+
+- Built after #264 landed and `origin/dev` 45075a3 was merged in.
+- `@nulo/wallet-bridge` `fee.ts`: `isPriorityLevel` (own key of `PRIORITY_MULTIPLIERS`), `refuseUnknownPriority`, and `refuseUnknownPriorities(readers, method, params)` with a `FeeSettingsReaders<Methods>` type, so each service declares one `satisfies`-checked reader map and its `invoke` override is two lines. The readers return `FeeSettings | undefined`, so a signature whose fee slot moves fails to compile.
+- **Deviation (shape):** `refuseUnknownPriorities` takes a plain index-signature map, not a generic over `Methods`: TypeScript cannot infer `M` back through the mapped reader type at the call site.
+- Tests: one table-driven file through each service's real `handleRequest` (`src/wallet/services/fee-settings-rpc-guard.test.ts`): each of the seven methods refuses `"constructor"` and runs `"fast"`; per service an unknown name, a non-string and `""` are refused; an absent level, a non-object `feeSettings`, non-array `deltas`/`operations` and a `simulate_transaction` operation reach the method; the refusal logs only at debug. `wallet-bridge/src/fee.test.ts` covers the predicate.
+- Base-copy check: with the three services at `HEAD`, 17 never-happens rows fail and the 7 controls pass.
+- Inner second line kept: the operation pins' describe and header and the `reuseFeeMultiplier` / `feeReadFailed` docs now name the RPC boundary as the first line.
+- **"The two reply pins" (Phase 1.6), found here:** `operation-estimate-reuse.pins.test.ts`'s and `transfer-estimate-reuse.pins.test.ts`'s null-like reply rows mocked the read resolving `undefined`/`null`, which the real read can no longer do; they now answer the real read from a null-like node (commit "drive the reuse ladders' null-reply pins through the real fee read").
+- Gate: `bun run lint` ✓, `bun run typecheck:all` ✓, `bun run --cwd packages/wallet-bridge test` (681) ✓, `bun --bun vitest run src/wallet/services/execution/ src/wallet/services/dapp-interaction/ src/wallet/services/auth-registry/` plus the guard file (1187 passed) ✓.

@@ -1,7 +1,7 @@
 /**
  * `OperationEstimateReuse.tryConsume` pins: the ordered collaborator calls and the exact reason at
  * every exit, one guarded field at a time, the multiplier per priority, and the unknown-priority
- * throws (an unvalidated popup input this ladder does not absorb).
+ * throws (the second line behind the popup RPC boundary, which refuses such a level first).
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { GasFees } from "@aztec-labs/stdlib/gas"
@@ -374,7 +374,7 @@ describe("the multiplier per priority", () => {
 	})
 })
 
-describe("an unknown priority keeps its throw (an owner lead, not absorbed)", () => {
+describe("an unknown priority keeps its throw (the inner second line behind the RPC boundary)", () => {
 	const bogus = { paymentMethod: { kind: "fj" }, priorityLevel: "bogus" } as unknown as FeeSettings
 	const ctor = { paymentMethod: { kind: "fj" }, priorityLevel: "constructor" } as unknown as FeeSettings
 
