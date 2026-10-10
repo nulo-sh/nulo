@@ -96,4 +96,31 @@ describe("createPasskeyProfileWithRetry", () => {
 			profileName: "My Wallet",
 		})
 	})
+
+	test("with a saved credential: no new id is reserved, and the ceremony confirms that credential under its own id", async () => {
+		const deps = makeDeps()
+		await createPasskeyProfileWithRetry("My Wallet", deps, { credentialId: "Y3JlZA==", userHandle: "saved-id" })
+		expect(deps.mocks.generateProfileId).not.toHaveBeenCalled()
+		expect(deps.mocks.runCeremony).toHaveBeenCalledWith({
+			mode: "create",
+			userHandle: "saved-id",
+			name: "My Wallet",
+			step: "create",
+			profileName: "My Wallet",
+			credentialId: "Y3JlZA==",
+		})
+	})
+
+	test("a conflict on the saved credential's id falls back to a fresh id and a fresh create", async () => {
+		let attempts = 0
+		const deps = makeDeps({
+			createPasskeyProfile: async (name) => {
+				if (++attempts === 1) throw new ProfileIdConflictError()
+				return { id: "fresh", name, type: "passkey" }
+			},
+		})
+		await createPasskeyProfileWithRetry("My Wallet", deps, { credentialId: "Y3JlZA==", userHandle: "saved-id" })
+		expect(deps.mocks.generateProfileId).toHaveBeenCalledTimes(1)
+		expect((deps.mocks.runCeremony.mock.calls as unknown[][])[1]?.[0]).toMatchObject({ userHandle: "id-1", credentialId: undefined })
+	})
 })

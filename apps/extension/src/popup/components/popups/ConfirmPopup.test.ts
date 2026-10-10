@@ -12,7 +12,6 @@ const H = vi.hoisted(() => ({
 }))
 
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: H.openToast }) }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({ profile: { id: "p1" } }) }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => H.store.current }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ len: 1, popups: { confirm: { order: 1 } } }) }))
 
@@ -50,7 +49,6 @@ async function open(wrapper: ReturnType<typeof mount>, confirm: Record<string, u
 
 describe("ConfirmPopup — single-action mode", () => {
 	beforeEach(() => {
-		vi.stubGlobal("managers", { profile: { confirmProfileOperation: vi.fn() } })
 		H.store.current = reactive({ confirm: {} })
 	})
 
@@ -101,7 +99,6 @@ describe("ConfirmPopup — single-action mode", () => {
 
 describe("ConfirmPopup — pre-title", () => {
 	beforeEach(() => {
-		vi.stubGlobal("managers", { profile: { confirmProfileOperation: vi.fn() } })
 		H.store.current = reactive({ confirm: {} })
 	})
 
@@ -132,7 +129,6 @@ describe("ConfirmPopup — pre-title", () => {
 
 describe("ConfirmPopup — the confirm button's variant", () => {
 	beforeEach(() => {
-		vi.stubGlobal("managers", { profile: { confirmProfileOperation: vi.fn() } })
 		H.store.current = reactive({ confirm: {} })
 	})
 

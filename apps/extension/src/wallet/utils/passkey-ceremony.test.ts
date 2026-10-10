@@ -171,6 +171,22 @@ describe("runPasskeyCeremony in create mode", () => {
 		expect((cause as Error).message).toBe("Passkey PRF has no results")
 	})
 
+	it("with a saved credential: no new credential is created, and a refused confirmation keeps the same id", async () => {
+		const dismissed = new DOMException("not allowed", "NotAllowedError")
+		get.mockRejectedValue(dismissed)
+		const err = await runPasskeyCeremony({ ...CREATE_REQUEST, credentialId: b64(RAW_ID) }).catch((e: unknown) => e)
+		expect(create).not.toHaveBeenCalled()
+		expect(err).toBeInstanceOf(PasskeyUnconfirmedError)
+		expect(err).toMatchObject({ credentialId: b64(RAW_ID), userHandle: ID, cause: dismissed })
+	})
+
+	it("with a saved credential: the confirmation returns its PRF under the registration handle", async () => {
+		get.mockResolvedValue(withPrfOnGet())
+		const data = await runPasskeyCeremony({ ...CREATE_REQUEST, credentialId: b64(RAW_ID) })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(create).not.toHaveBeenCalled()
+	})
+
 	it("forwards the abort signal to both ceremonies", async () => {
 		const { signal } = new AbortController()
 		create.mockResolvedValue(new StubCredential(RAW_ID, { prf: { enabled: true } }))
