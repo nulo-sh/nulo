@@ -221,9 +221,10 @@ tagged commit. `apps/extension/store/SOURCE-BUILD.md` inside it names the exact 
 one script to run; the output must match `dist/firefox` byte for byte.
 
 Modifications to third-party code, stated exactly:
-- `@aztec-foundation/noir-noirc_abi` and `@aztec-foundation/noir-acvm_js` (one version each, 6.0.0-rc.1, `patches/`): the
-  `package.json` `module` entry is replaced with an `exports` map so bundlers pick the web build.
-  Only package resolution metadata changes; no JavaScript or WASM is altered.
+- `patches/` (6.0.0-rc.1): in `@aztec-foundation/noir-noirc_abi` and `@aztec-foundation/noir-acvm_js` the
+  `package.json` `module` entry is replaced with an `exports` map so bundlers pick the web build (no
+  JavaScript or WASM changes); in `@aztec-labs/pxe`, one `return` in `dest/pxe.js` `registerAccount`
+  becomes a comment.
 - `detect-node` is aliased to a module that exports `false` (`apps/extension/vite.config.ts:56-60`)
   so `@aztec-labs/foundation`'s logger uses its browser transport.
 - `function-bind` is aliased to a stub that delegates to the native `Function.prototype.bind`

@@ -88,6 +88,13 @@ const SQLITE3MC_NOTE =
 
 const SQLITE3MC_TEXTS = ["sqlite3mc.MIT.txt", "sqlite-wasm-bundle-header.txt", "emscripten.MIT.txt", "musl.MIT.txt"] as const
 
+const AZTEC_NODE_LICENCE = {
+	reviewedVersion: "6.0.0-rc.1",
+	license: "Apache-2.0",
+	source: `${AZTEC_NODE_TAG}/LICENSE`,
+	texts: ["aztec-node.Apache-2.0.txt"],
+} as const
+
 export const OVERRIDES: readonly Override[] = [
 	{
 		names: [
@@ -104,17 +111,18 @@ export const OVERRIDES: readonly Override[] = [
 			"@aztec-labs/noir-contracts.js",
 			"@aztec-labs/noir-protocol-circuits-types",
 			"@aztec-labs/protocol-contracts",
-			"@aztec-labs/pxe",
 			"@aztec-labs/simulator",
 			"@aztec-labs/standard-contracts",
 			"@aztec-labs/stdlib",
 			"@aztec-labs/wallet-sdk",
 		],
-		reviewedVersion: "6.0.0-rc.1",
-		license: "Apache-2.0",
-		source: `${AZTEC_NODE_TAG}/LICENSE`,
-		texts: ["aztec-node.Apache-2.0.txt"],
+		...AZTEC_NODE_LICENCE,
 		note: "Published from the aztec-node repository with no licence field and no licence file; the repository root LICENSE at the release tag governs the tree these packages are built from.",
+	},
+	{
+		names: ["@aztec-labs/pxe"],
+		...AZTEC_NODE_LICENCE,
+		note: "Published from the aztec-node repository with no licence field and no licence file; the repository root LICENSE at the release tag governs the tree this package is built from. Nulo modifies dest/pxe.js, marked in the file: registerAccount always reaches its address write, so an account whose keys were stored without its address is completed by the next registration.",
 	},
 	{
 		names: ["@aztec-foundation/bb.js"],

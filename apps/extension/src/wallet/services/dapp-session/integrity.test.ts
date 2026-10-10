@@ -65,6 +65,11 @@ describe("DappSession integrity", () => {
 		expect(await verifyDappSession(key, row(), "")).toBe(false)
 		expect(await verifyDappSession(key, row(), "!!!not-base64!!!")).toBe(false)
 	})
+
+	test("a non-string stored mac → false, never throws", async () => {
+		expect(await verifyDappSession(key, row(), await signDappSession(key, row()))).toBe(true)
+		for (const mac of [42, null, [1, 2, 3]]) expect(await verifyDappSession(key, row(), mac as unknown as string)).toBe(false)
+	})
 })
 
 describe.each(BUFFER_BINDINGS)("stored-MAC decode is lenient (%s Buffer)", (_name, binding) => {

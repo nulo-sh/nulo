@@ -423,6 +423,11 @@ export interface SyntheticBackupOpts {
 	bodyOverrides?: Record<string, unknown>
 }
 
+/** The synthetic backup's profile id. It has the shape the wallet generates (8 hex chars) because a
+ *  restore keeps a backup's id only when it does; a leg that re-imports the same file and expects the
+ *  same profile id (the tombstone successor in profile-reimport-matrix) depends on that reuse. */
+export const SYNTHETIC_PROFILE_ID = "e2e5a1d0"
+
 /** Build a minimum-viable full-backup payload (current metadata fields + valid SHA-256
  *  checksum) the importer accepts: profile + one network + one account + empty
  *  token slice. Missing slices are treated as no-ops by the importer. */
@@ -448,12 +453,12 @@ export function buildSyntheticBackup({
 		// for a synthetic backup with no imported-key rows).
 		"imported-keys-dek": Buffer.from(new Uint8Array(32).fill(0x33)).toString("base64"),
 		data: {
-			profile: { id: "syn-profile-id", name: profileName, type: "password" },
+			profile: { id: SYNTHETIC_PROFILE_ID, name: profileName, type: "password" },
 			// No network slice: the import reseeds the built-in networks and binds rows by chainId.
 			account: [
 				{
 					address: accountAddress ?? `0x${"01".repeat(32)}`,
-					profileId: "syn-profile-id",
+					profileId: SYNTHETIC_PROFILE_ID,
 					chainId: 0,
 					l1ChainId,
 					name: "Account",
@@ -514,8 +519,8 @@ export function buildSyntheticPasskeyBackup(passkey: RegisteredPasskey, profileN
 		"master-key": passkey.credentialId,
 		"imported-keys-dek-sealed": passkey.dekSealed,
 		data: {
-			profile: { id: "syn-profile-id", name: profileName, type: "passkey" },
-			account: [{ ...passkey.account, profileId: "syn-profile-id", name: "Account", visible: true }],
+			profile: { id: SYNTHETIC_PROFILE_ID, name: profileName, type: "passkey" },
+			account: [{ ...passkey.account, profileId: SYNTHETIC_PROFILE_ID, name: "Account", visible: true }],
 			token: [],
 			// Present though empty: the e2e builds' backup migration reads this slice.
 			contact: [],
