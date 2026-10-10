@@ -18,7 +18,7 @@
  *    `bun run e2e:agent` always allocates fresh ports, so it never hits
  *    the reuse path; orphan cleanup is the value there.
  */
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, existsSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -166,7 +166,7 @@ export interface ReconcileLockOptions {
  * Runs `fn` holding this worktree's reconcile lock. Reading `owned.json`, acting on the owner it
  * names and writing a new owner into it must be one step: two setups, or a setup and `e2e:reap`,
  * that interleave it can each act on the same dead owner, one reaping the sandbox the other has
- * just adopted. A dead holder's lock is replaced; a live holder is waited for up to `waitMs`.
+ * just adopted. A dead holder's lock is broken; a live holder is waited for up to `waitMs`.
  */
 export async function withReconcileLock<T>(fn: () => Promise<T>, opts: ReconcileLockOptions = {}): Promise<T> {
 	const file = opts.file ?? RECONCILE_PATH
@@ -175,40 +175,67 @@ export async function withReconcileLock<T>(fn: () => Promise<T>, opts: Reconcile
 	try {
 		return await fn()
 	} finally {
-		if (readHolder(file) === holder) rmSync(file, { force: true })
+		releaseReconcileLock(file, holder)
 	}
 }
 
 async function acquireReconcileLock(file: string, holder: string, waitMs: number, pollMs: number): Promise<void> {
 	mkdirSync(path.dirname(file), { recursive: true })
 	const deadline = Date.now() + waitMs
-	for (;;) {
-		try {
-			writeFileSync(file, holder, { encoding: "utf8", flag: "wx" })
-			return
-		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
-		}
+	while (!createExclusive(file, holder)) {
 		const current = readHolder(file)
-		if (current === undefined) continue
-		// Re-read right before the unlink: a holder that replaced the dead one meanwhile stays.
-		if (holderIsDead(current) && readHolder(file) === current) {
-			rmSync(file, { force: true })
-			continue
-		}
+		if (current !== undefined && holderIsDead(current) && breakStale(file, current)) continue
 		if (Date.now() >= deadline)
 			throw new Error(
-				`[e2e-setup] another run in this worktree is reconciling its sandbox (${file} held by "${current}"); if none is, delete that file`,
+				`[e2e-setup] another run in this worktree is reconciling its sandbox (${file} held by "${current}"); if none is, delete that file and any ${path.basename(file)}.break-* beside it`,
 			)
 		await sleep(pollMs)
 	}
 }
 
+function createExclusive(file: string, content: string): boolean {
+	try {
+		writeFileSync(file, content, { encoding: "utf8", flag: "wx" })
+		return true
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "EEXIST") return false
+		throw err
+	}
+}
+
+/** `undefined` once the lock is gone; any other read failure throws rather than spin on it. */
 function readHolder(file: string): string | undefined {
 	try {
 		return readFileSync(file, "utf8")
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined
+		throw err
+	}
+}
+
+/**
+ * Unlinks a dead holder's lock. Two waiters can judge one holder dead, and an unlink by the slower
+ * would remove the faster one's fresh lock, so only the waiter that creates the break file for that
+ * holder may unlink, after reading the lock again; it removes the break file only after the unlink,
+ * so a later breaker of the same holder reads a different lock. A breaker that dies holding the
+ * break file leaves that lock to a person.
+ */
+function breakStale(file: string, dead: string): boolean {
+	const token = `${file}.break-${createHash("sha256").update(dead).digest("hex").slice(0, 16)}`
+	if (!createExclusive(token, "")) return false
+	try {
+		if (readHolder(file) === dead) rmSync(file, { force: true })
+		return true
+	} finally {
+		rmSync(token, { force: true })
+	}
+}
+
+function releaseReconcileLock(file: string, holder: string): void {
+	try {
+		if (readFileSync(file, "utf8") === holder) rmSync(file, { force: true })
 	} catch {
-		return undefined
+		// Gone, or unreadable: never removed on a guess.
 	}
 }
 

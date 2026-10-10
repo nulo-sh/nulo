@@ -162,7 +162,7 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **`another run in this worktree holds the sandbox`** — `owned.json` names a live owner: two runs in one worktree. Wait for it to finish.
 
-**`another run in this worktree is reconciling its sandbox`** — `.e2e-state/reconcile.lock` names a live process. Setup, and `e2e:reap`, hold it while they read `owned.json`, reap or adopt what it names and write their own owner into it, so two of them cannot act on the same dead owner. A dead holder's lock is replaced on its own; delete the file only if no run or reap is in progress.
+**`another run in this worktree is reconciling its sandbox`** — `.e2e-state/reconcile.lock` names a live process. Setup, and `e2e:reap`, hold it while they read `owned.json`, reap or adopt what it names and write their own owner into it, so two of them cannot act on the same dead owner. A dead holder's lock is broken on its own, by one waiter only (it holds `reconcile.lock.break-<hash>` while it does); delete the lock and any break file beside it only if no run or reap is in progress.
 
 **`the prior run's sandbox could not be reaped: …`** — a service of the previous run did not stop (`retained`), could not be read (`unknown`), or the lock names no owner (written before markers, or on a host without `/proc`) and records live pids. Those pids may since belong to unrelated processes: stop them only if they are this worktree's sandbox, else delete `.e2e-state/owned.json`. Otherwise run `bun run e2e:reap` once the owner is gone.
 

@@ -187,6 +187,23 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 		expect(existsSync(dir)).toBe(true)
 	})
 
+	// Its handle ignores kill and it leads no group, so the group stop can only fail; it then turns
+	// unreadable before the sweep's first scan.
+	test("teardown of a leader that outlives its group stop and turns unreadable is unknown, not stopped", async () => {
+		const m = marker()
+		const child = spawn("sleep", ["120"], {
+			stdio: "ignore",
+			env: { ...process.env, [LAUNCH_ENV]: m, [OWNER_ENV]: ownIdentity() ?? "" },
+		})
+		const pid = child.pid
+		if (!pid) throw new Error("could not spawn")
+		spawned.push(pid)
+		const handle = { pid, exitCode: null, signalCode: null, kill: () => true } as unknown as ChildProcess
+		const read = (p: number) => (p === pid ? ("unreadable" as const) : ("gone" as const))
+		expect(await stopService(handle, "anvil", true, m, { ...fast, read })).toBe("unknown")
+		expect(running(pid)).toBe(true)
+	})
+
 	// The control for the case above: another user's processes (pid 1's environ is unreadable to
 	// anyone but root) never make a sweep unknown, because none of them was ever seen as marked.
 	test("unreadable strangers do not make a sweep unknown", async () => {

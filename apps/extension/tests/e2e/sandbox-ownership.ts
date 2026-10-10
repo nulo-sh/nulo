@@ -13,6 +13,7 @@ import {
 	orphanedLaunch,
 	ownIdentity,
 	readEnviron,
+	readStartTime,
 	selfLaunch,
 	sweep,
 	sweepOnce,
@@ -71,13 +72,25 @@ export async function stopService(
 	opts: SweepOptions = {},
 ): Promise<SweepStatus> {
 	if (!weStarted) return "stopped"
+	const leader = unreapedLeader(child)
 	const group = await killProcessGroup(child, label, weStarted)
 	const self = ownIdentity()
 	if (!marker || !self || !hasProc()) return group.stopped ? "stopped" : "retained"
-	const status = await sweep(selfLaunch(marker, self), opts)
+	const status = await sweep(selfLaunch(marker, self), { ...opts, recorded: leader })
 	if (status !== "stopped")
 		console.warn(`[e2e-setup] ${label}'s marked processes are ${status} after teardown; its lock and data dir stay`)
 	return status
+}
+
+/** The leader's identity, read while it is unreaped: until then its pid cannot have been reissued. */
+function unreapedLeader(child: ChildProcess | null): RecordedProcess[] {
+	if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return []
+	try {
+		const startTime = readStartTime(child.pid)
+		return startTime ? [{ pid: child.pid, startTime }] : []
+	} catch {
+		return []
+	}
 }
 
 /**
@@ -209,7 +222,7 @@ function namesDir(cmdline: string, dir: string): boolean {
  * process's command line names the path (the node gets it, or its `data` subdir, as
  * `--data-directory`), and no live process carries the marker it is stamped with. A `/proc` that
  * cannot be listed, or a command line that cannot be read, keeps every dir. An unreadable environ
- * cannot: a same-user non-dumpable process (`systemd --user`) always has one.
+ * cannot: unrelated non-dumpable processes have one too.
  */
 export function sweepOrphanDataDirs(read: EnvironReader = readEnviron): string[] {
 	let names: string[]

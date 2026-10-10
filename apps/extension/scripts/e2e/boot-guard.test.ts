@@ -105,8 +105,8 @@ describe("boot guard", () => {
 
 		test("a stranger answering while the live, still-unbound child starts is refused", async () => {
 			const port = await strangerAnvil()
-			const child = await spawnMarked(newMarker(), ["-e", "setTimeout(() => {}, 30_000)"])
 			const marker = newMarker()
+			const child = await spawnMarked(marker, ["-e", "setTimeout(() => {}, 30_000)"])
 			try {
 				await expect(
 					waitWhileAlive(

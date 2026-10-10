@@ -1,10 +1,15 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { spawn } from "node:child_process"
+import { createHash } from "node:crypto"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { afterAll, describe, expect, test } from "vitest"
 import { withReconcileLock } from "../../tests/e2e/lockfile"
 import { ownIdentity } from "../../tests/e2e/owned-processes"
 
+const MODULE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tests/e2e/lockfile.ts")
+const DEAD_HOLDER = "2000000000:1 0123456789abcdef"
 const DIR = mkdtempSync(path.join(tmpdir(), "nulo-reconcile-lock-test-"))
 let n = 0
 const lockFile = () => path.join(DIR, `reconcile-${n++}.lock`)
@@ -43,7 +48,7 @@ describe.skipIf(process.platform !== "linux")("worktree reconcile lock", () => {
 
 	test("a lock left by a dead holder is replaced", async () => {
 		const file = lockFile()
-		writeFileSync(file, "2000000000:1 0123456789abcdef")
+		writeFileSync(file, DEAD_HOLDER)
 		expect(await withReconcileLock(async () => readFileSync(file, "utf8"), { file, waitMs: 1_000 })).toMatch(
 			new RegExp(`^${ownIdentity()} [0-9a-f]{16}$`),
 		)
@@ -58,5 +63,72 @@ describe.skipIf(process.platform !== "linux")("worktree reconcile lock", () => {
 			)
 			expect(readFileSync(file, "utf8")).toBe(holder)
 		}
+	})
+
+	// Every waiter finds the same dead holder at once: only one may break it, or a slower breaker
+	// unlinks the lock the faster one has just taken and both enter.
+	test("waiters in separate processes that all find one dead holder never overlap", async () => {
+		const file = lockFile()
+		writeFileSync(file, DEAD_HOLDER)
+		const log = path.join(DIR, "critical.log")
+		const script = path.join(DIR, "waiter.mjs")
+		writeFileSync(
+			script,
+			`import { appendFileSync } from "node:fs"
+const { withReconcileLock } = await import(${JSON.stringify(MODULE)})
+const { LOCK: file, LOG: log, ID: id } = process.env
+const spin = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+for (let i = 0; i < 3; i++) {
+	await withReconcileLock(async () => {
+		appendFileSync(log, id + " enter\\n")
+		spin(15)
+		appendFileSync(log, id + " exit\\n")
+	}, { file, waitMs: 15000, pollMs: 2 })
+}
+`,
+		)
+		const exits = await Promise.all(
+			[1, 2, 3, 4].map(
+				(id) =>
+					new Promise<number | null>((resolve) => {
+						const child = spawn(process.execPath, [script], {
+							stdio: "inherit",
+							env: { ...process.env, LOCK: file, LOG: log, ID: String(id) },
+						})
+						child.once("exit", resolve)
+					}),
+			),
+		)
+		expect(exits).toEqual([0, 0, 0, 0])
+		const events = readFileSync(log, "utf8").trim().split("\n")
+		expect(events).toHaveLength(24)
+		for (let i = 0; i < events.length; i += 2) {
+			const [id, what] = events[i].split(" ")
+			expect([what, events[i + 1]]).toEqual(["enter", `${id} exit`])
+		}
+		expect(existsSync(file)).toBe(false)
+	})
+
+	// The interleaving the separate-process case can only hit by chance: a breaker that read the dead
+	// holder while another was mid-break must not unlink what is there by the time it acts.
+	test("while another waiter holds the break for a dead holder, no one else unlinks its lock", async () => {
+		const file = lockFile()
+		writeFileSync(file, DEAD_HOLDER)
+		const breaking = `${file}.break-${createHash("sha256").update(DEAD_HOLDER).digest("hex").slice(0, 16)}`
+		writeFileSync(breaking, "")
+		await expect(withReconcileLock(async () => "ran", { file, waitMs: 150, pollMs: 10 })).rejects.toThrow(
+			"another run in this worktree is reconciling",
+		)
+		expect(readFileSync(file, "utf8")).toBe(DEAD_HOLDER)
+		rmSync(breaking)
+		expect(await withReconcileLock(async () => "ran", { file, waitMs: 1_000 })).toBe("ran")
+	})
+
+	test("a lock that cannot be read fails at once instead of spinning", async () => {
+		const file = lockFile()
+		writeFileSync(file, DEAD_HOLDER)
+		chmodSync(file, 0o000)
+		await expect(withReconcileLock(async () => "ran", { file, waitMs: 60_000 })).rejects.toThrow(/EACCES/)
+		chmodSync(file, 0o600)
 	})
 })

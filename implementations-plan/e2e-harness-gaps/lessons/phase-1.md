@@ -39,3 +39,16 @@
 - Test flake found and fixed during the round (1 failure in 37 runs, not reproduced in 33 more under 6-way load): a test freed a port for a child to bind, and a busy host can take it in between. The child now binds port 0 and prints its port.
 - Mutation checks, each red with the guard removed and green with it: the marked-listener check, the exit race, the reconcile lock (all three cases), the recorded-pid seed (sandbox and Firefox), the zombie rule, the registry mode.
 - Chrome never shows a marker: Chromium's process-title code overwrites the environ region, in the browser and every child, so `/proc/<pid>/environ` holds the tail of the command line (a Puppeteer probe with a marker set: none of 8 Chrome processes showed it, nor any other variable). A launch guard added for O11 failed every Chrome test of the first concurrency proof (both worktrees, 8/8 each, after a clean boot that passed the new listener checks). Chrome orphans go back to the extension-path sweep at every setup, plus `e2e:reap`.
+
+## 1.5 Docs and the isolation proof
+
+- Scratch second worktree of this branch outside the repo (`git worktree add --detach`), `bun install --frozen-lockfile`, synced to each tested head.
+- Concurrency proof (`e4c421a`, both worktrees 4 s apart, `networks`, `connect-deny`, `sim-methods`, Chrome, proverless, retry 0): worktree 1 8/8 on anvil 23631, aztec 17530, admin 30901, p2p 29051, playground 31604; worktree 2 8/8 on 23749, 26723, 30697, 29399, 14601. A 4 s registry watcher saw both run ids' five rows together in 55 of 57 samples, and neither run id's rows after the runs. Both boots passed the marked-listener check on all three services.
+- The first attempt (`ae7c9ed`) booted both clean and failed every test (8/8 each) on the Chrome run-marker guard; see review round 1.
+- Kill proof (`e4c421a`), second attempt: at the moment worktree 2 had a Chrome up, `kill -9` of its `agent.sh`, the `bun run vitest` wrapper and the node vitest main. Worktree 1 finished 8/8. Left behind: the three services' processes (anvil, the node with its `bb` and `aztec-wsdb` children, the playground), reparented to pid 1, and worktree 2's five registry rows; its forks, Chrome and crashpad handlers were already gone. `bun run e2e:reap` in worktree 2: `stopped the sandbox and cleared the lock`, 5 dead rows dropped; afterwards no process carried its run marker or any service marker, no Chrome loaded its build, and no row named it.
+- The first kill attempt killed the `bun run vitest` wrapper instead of the node process under it: vitest finished normally and tore down by itself, so only the row release was exercised. The vitest main is the wrapper's child whose command line runs `vitest run`; vitest's own processes and forks report `MainThread` as their comm.
+
+## Review round 2 (Codex), fixes
+
+- Breaking a stale path lock by re-read-then-unlink is unsafe with two breakers; the registry avoids breaking at all. The reconcile lock is ours alone, so it breaks through a per-holder break file created with `wx` and removed only after the unlink. The race is too narrow for a multi-process test to hit; the deterministic test holds the break file and shows nobody else unlinks.
+- Mutation checks this round: the break file check, the read-error throw, the teardown seed; each red without its fix.

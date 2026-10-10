@@ -221,8 +221,8 @@ function poll(
 /**
  * Signals each claimed process once, rescanning until two scans a poll apart find none. A process
  * inside execve reads an empty environ until the kernel has set up its new image, so it is
- * signalled when a later scan finds it. A killed process stays in `/proc` until it is reaped, so
- * SIGKILL is waited out as well.
+ * signalled when a later scan finds it. SIGKILL is waited out too, until no claimed process is
+ * still running.
  */
 async function sweepPhase(
 	select: Selector,
