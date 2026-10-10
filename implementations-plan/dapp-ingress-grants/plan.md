@@ -642,6 +642,8 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 |---|---|---|---|
 | 1 | Codex gpt-6.1-sol, high (session `01a12317`) | reject (with blocking findings: replacement attempts remain vulnerable to stale callback cleanup and revocation) | C1 High accepted (D-impl-4); C2 Med accepted (D-impl-2 withdrawn); C3 Med pushed back: pre-existing id-keyed cleanup, self-inflicted id reuse, upstream #127; recorded as a residual under #228; C4 Low accepted (marker comment rewritten) |
 | 1 | Opus general-purpose review | approve with fixes (3 Low) | O1 (no test for D-impl-2) superseded by its withdrawal, the stamped row now pins the planned rule; O2 same as C1; O3 accepted (D-impl-5) |
+| 2 | Codex, same session resumed | approve | 1 Low: the marker comment still overclaimed; rewritten. C3 confirmed non-blocking (no new cross-origin disclosure or cross-profile bypass; the residual tied to #127 is appropriate) |
+| 3 | Codex, same session resumed | **approve** | no findings; the loop converged |
 
 ## Seeds (draft; finalized after approval)
 

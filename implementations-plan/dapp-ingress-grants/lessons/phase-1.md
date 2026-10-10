@@ -27,3 +27,4 @@
 - Mutations, each red: always terminating (5 replaced-exit cases), never terminating a replaced stamped channel (the post-stamp case), tombstoning stamped channels (the new table row).
 - C3 pushed back in round 2 as pre-existing and upstream (#127); recorded as a residual in plan.md § Arc 1.
 - The first smoke run (`smoke-1`) started on the build before these fixes; smoke reruns on the final head.
+- Round 2 (resumed): **approve**, one Low (the marker comment overclaimed); C3 judged non-blocking. Round 3 (resumed): **approve**, no findings. Converged.
