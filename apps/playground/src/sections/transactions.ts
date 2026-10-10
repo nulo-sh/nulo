@@ -59,9 +59,10 @@ async function buildTransferExec(callCount = 1) {
 
 	// Build N transfer calls. For the chunked variant (callCount > 5) we issue
 	// N independent BatchCall.request() requests and concat their calls arrays.
+	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
-		const exec = await token.methods.transfer_public_to_public(fromAddr, toAddr, BigInt(amount), BigInt(i)).request()
+		const exec = await token.methods.transfer_public_to_public(fromAddr, toAddr, BigInt(amount), 0n).request()
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }
