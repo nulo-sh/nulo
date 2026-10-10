@@ -1,7 +1,7 @@
 ---
 plan: fees-and-sponsors
 tier: mid
-status: draft v3.1 (final Codex pass: conditional approve, conditions applied; awaiting orchestrator approval)
+status: approved v3.1 (D-orch-1 to D-orch-5); arc 1 building
 issues: "#196, #119, #222, #188 pin, #118 comment (arc 1); #91, #107, #113, #114, #115, #188, #118 (arc 2, waits on decision page 6, and on pages 6 and 9 for anything hold H3 covers); #117 (no arc, blocked:external)"
 driver: claude-code
 claude_model: opus
@@ -914,6 +914,11 @@ Run this section in order. It is the whole procedure; no other document is neede
 | D11 | **#115, P6-06:** only a Sponsored row with a funding read in flight draws as loading, in a state that stays selectable. A speed change waits on OA-10. | Only the selected payer is probed, so an unprobed row would check forever (Codex C7). P6-06 says "a transaction change". | Every Sponsored row as checking. Folding speed changes in without an ask (Opus). |
 | D12 | **H3:** wait on recorded answers on pages 6 and 9, plus the change's own ask, for any change to a cap, a charge or which cap wins, and for any change to whether a send can go out on a fee the person has not seen. This covers OA-1 to OA-9 and Phase 2.3 as a whole. | H3's own words: both clauses (Codex S1; final pass 2). | Page 6 alone (v1). Caps only (v2). |
 | D13 | **Sequencing:** Phases 1.1, 1.3 and 1.4 wait for send-queue-activity arc 1; Phase 1.2 may start now; Phase 2.2 waits for that lane's arc 1b. | Shared files: `EX/service.ts` (estimate admission, registry construction), `fpc-strategy.ts`, `runInSlot` (Codex C4, Opus). | v1's A-3, which let 1.3 start early. |
+| D-orch-1 | **No stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; no `gh stack`. Later arcs branch from `dev` after arc 1 lands. | The orchestrator's call at approval. | The Delivery section's `gh stack` mechanics (superseded for arc 1). |
+| D-orch-2 | **Arc 1 only, inside hold H3.** Arc 1 moves no cap and changes no screen: #188 ships as the precedence pins only, #118 as the comment fix. OA-1 to OA-11 are now decision page 6's records P6-08 to P6-18 (OA-1 to OA-9 stay under H3: built only on an answer there and on page 9); each ships its "What ships now" form. Nothing of arc 2 is built. No new user-facing words. | The orchestrator's call at approval. | — |
+| D-orch-3 | **A-3, order against send-queue-activity arc 1 (#264).** Merge `origin/dev` and build Phase 1.2 first; then wait for #264 to land (poll every 2 minutes, up to 90), merge `origin/dev` again and build Phases 1.1, 1.3, 1.4 and 1.5 on top of it. If #264 does not land in time, stop at the phase reached and report blocked. | The orchestrator's answer to A-3; the shared files are #264's. | — |
+| D-orch-4 | **A-2 accepted.** #222 closes with the two extractions and the eight written declines. | The orchestrator's answer to A-2. | — |
+| D-orch-5 | **A-1 accepted as Phase 1.6, `Refs #197`.** A shape check at `predictedWorstMinFees`'s returns with a fixed refusal and the two reply pins; it reuses the existing failed-estimate path and adds no copy. #197 stays open for its external half; the PR says `Refs #197`. | The orchestrator's answer to A-1. | — |
 
 ## Audit verdicts
 
