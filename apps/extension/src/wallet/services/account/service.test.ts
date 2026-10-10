@@ -989,8 +989,8 @@ describe("AccountService keyed reads bind the row body to the requested address"
 	})
 
 	test("an omitted profile id with no row throws the engine's own TypeError, naming the local `account`", async () => {
-		// RPC arguments are spread unvalidated, so `undefined === undefined` passes the first check
-		// and the second read throws; the text is whatever this engine says for that expression.
+		// In-process calls skip the RPC params check, so `undefined === undefined` passes the first
+		// check and the second read throws; the text is whatever this engine says for that expression.
 		const reference = (() => {
 			// Read through `Reflect.get` so no transpiler folds the local into `(void 0)`.
 			const account = Reflect.get({}, "absent") as { chainId: number }

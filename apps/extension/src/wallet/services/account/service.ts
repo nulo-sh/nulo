@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { z } from "zod"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
 import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { restoreRows } from "@/wallet/services/restore-rows"
@@ -28,13 +29,14 @@ import {
 } from "@nulo/aztec-runtime/account"
 import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
 import { type ImportedKeysDek, sealImportedSigningKeyV2, unsealImportedSigningKeyV2, zeroize } from "@nulo/wallet-crypto"
-import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
+import { AccountAddressInconsistencyError, InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import type { AccountIntegrityBlocked } from "../account-integrity/types"
 import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
 import {
 	ACCOUNT_SERVICE_NAME,
 	ACCOUNT_STORAGE_ROOT,
+	AccountMethodSchemas,
 	AccountSchema,
 	AccountType,
 	DEFAULT_ACCOUNT_NAME,
@@ -121,6 +123,18 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		super(ACCOUNT_SERVICE_NAME, logger)
 		this.storage = new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, browserApi.storage.local, (raw) => AccountSchema.parse(raw))
 		this.importedKeys = new ImportedKeysRepository(browserApi.storage.local)
+	}
+
+	/**
+	 * Checks an RPC's argument tuple before the method runs and refuses a bad one with
+	 * `INVALID_PARAMS`, whose message names only the method. The method gets the original
+	 * arguments, not zod's parsed copies. The framework RPCs (`backup`, `restore`) have no schema
+	 * here and pass through.
+	 */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		const schema = (AccountMethodSchemas as Record<string, z.ZodType | undefined>)[method]
+		if (schema && !schema.safeParse(params).success) throw InvalidWalletArgumentsError.forMethod(method)
+		return super.invoke(method, params)
 	}
 
 	/**

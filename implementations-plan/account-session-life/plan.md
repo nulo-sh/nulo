@@ -306,7 +306,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0 on both browsers. The new e2e case fails on the base copy of the three source files (the counter reads 2).
 - Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
 
-#### Phase 1.4: account RPC params (#198)
+#### Phase 1.4: account RPC params (#198) ✓
 
 1. Add `AccountMethodSchemas` to `account/spec.ts`; rewrite the stale comment at `:37-41`.
 2. Override `invoke` in `AccountService` as the Architecture section states.

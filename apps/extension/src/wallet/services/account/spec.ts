@@ -36,8 +36,6 @@ export function accountRowIdOf(account: Pick<Account, "profileId" | "chainId" | 
 /**
  * Whether the row read from `accountRowId(profileId, chainId, address)` agrees with that key on
  * every identity field: a row transplanted under another key must not redirect signing or export.
- * RPC arguments are not validated, so with `profileId` omitted and no row the second read throws
- * the engine's TypeError, which names this parameter.
  */
 export function rowMatchesKey<T extends Pick<Account, "profileId" | "chainId" | "address">>(
 	account: T | undefined,
@@ -284,6 +282,30 @@ export type Methods = {
 	/** At restore finalize: drop imported Account rows with no matching key row; returns their addresses. */
 	reconcileImportedAccounts(profileId: string): AccountScope[]
 }
+
+const RunFenceParamSchema = z.object({ profileId: z.string(), epoch: z.number(), session: z.number(), incarnation: z.string() })
+
+/**
+ * The argument tuple of every account RPC, checked at the port before the method runs. A trailing
+ * `.optional()` member also matches an omitted argument: the transport keeps `undefined` holes.
+ * Imported-key rows are only checked to be an array: the restore records each bad row as its own
+ * error.
+ */
+export const AccountMethodSchemas = {
+	getAccounts: z.tuple([z.string(), z.number(), z.boolean().optional()]),
+	getAccount: z.tuple([z.string(), z.number(), z.string()]),
+	createAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
+	ensureDefaultAccount: z.tuple([z.string(), z.number(), z.enum(AccountType), z.string()]),
+	changeAccountName: z.tuple([z.string(), z.number(), z.string(), z.string()]),
+	changeAccountVisibility: z.tuple([z.string(), z.number(), z.string(), z.boolean()]),
+	exportAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.boolean()]),
+	importAccount: z.tuple([z.string(), z.number(), z.string(), z.string(), z.string(), z.string().optional()]),
+	previewImportAccount: z.tuple([z.string(), z.string()]),
+	exportFullBackupKeys: z.tuple([RunFenceParamSchema, z.string()]),
+	backupImportedKeys: z.tuple([]),
+	restoreImportedKeys: z.tuple([z.array(z.unknown())]),
+	reconcileImportedAccounts: z.tuple([z.string()]),
+} satisfies Record<keyof Methods, z.ZodType<unknown[]>>
 
 export type Events = {
 	/** Emitted when a new account is created */
