@@ -12,9 +12,16 @@ function fakeBrowser() {
 	const armed = new Set<string>()
 	let arms = 0
 	let failNextArm = false
+	let pause: { entered: () => void; until: Promise<void> } | undefined
 	const arm = async (_browser: object, _id: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception> => {
 		const origin = new URL(fromOrigin).origin
 		const name = `${mode.kind} ${origin}`
+		if (pause) {
+			const { entered, until } = pause
+			pause = undefined
+			entered()
+			await until
+		}
 		if (failNextArm) {
 			failNextArm = false
 			throw new Error(`cannot arm ${name}`)
@@ -32,7 +39,15 @@ function fakeBrowser() {
 			},
 		}
 	}
-	return { browser: {}, log, arm, failArm: () => (failNextArm = true) }
+	/** Holds the next arm once it starts, until `release()`. */
+	const pauseArm = () => {
+		let release = () => {}
+		let entered = () => {}
+		const started = new Promise<void>((resolve) => (entered = resolve))
+		pause = { entered, until: new Promise<void>((resolve) => (release = resolve)) }
+		return { started, release }
+	}
+	return { browser: {}, log, arm, failArm: () => (failNextArm = true), pauseArm }
 }
 
 const REDIRECT: RpcInterception = { kind: "redirect", to: "http://127.0.0.1:1" }
@@ -98,6 +113,36 @@ describe("standing interceptions", () => {
 		failArm()
 		await own.stop()
 		expect((await held.failures()).at(-1)).toMatch(/^re-arming after a spec's own interception failed: Error: cannot arm redirect/)
+	})
+
+	test("a second spec's interception asked for while the first is still arming is refused", async () => {
+		const { browser, log, arm } = fakeBrowser()
+		const standing = standingInterceptions(arm)
+		await standing.hold(browser, "ext", NODE, REDIRECT)
+		const first = standing.intercept(browser, "ext", NODE, REFUSE)
+		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("a spec already intercepts https://node.test")
+		await (await first).stop()
+		expect(log).toEqual([
+			"arm redirect https://node.test",
+			"stop redirect https://node.test",
+			"arm refuse https://node.test",
+			"stop refuse https://node.test",
+			"arm redirect https://node.test",
+		])
+	})
+
+	test("a re-arm that lands after the launch let go is stopped at once", async () => {
+		const { browser, log, arm, pauseArm } = fakeBrowser()
+		const standing = standingInterceptions(arm)
+		const held = await standing.hold(browser, "ext", NODE, REDIRECT)
+		const own = await standing.intercept(browser, "ext", NODE, REFUSE)
+		const rearm = pauseArm()
+		const stopped = own.stop()
+		await rearm.started
+		await held.stop()
+		rearm.release()
+		await stopped
+		expect(log.slice(-2)).toEqual(["arm redirect https://node.test", "stop redirect https://node.test"])
 	})
 
 	test("a spec that stops after the launch let go re-arms nothing", async () => {

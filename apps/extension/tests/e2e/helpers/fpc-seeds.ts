@@ -7,6 +7,9 @@ const PROTOCOL_FPCS = [
 	{ type: 2, name: "Private Fee Juice", address: "0x0b3bc795b5c077b57920d590ecc163af18705554abf7164cb0f8c52850943c08" },
 ] as const
 
+/** The row id the sponsor, the one protocol FPC a wallet with no balance can pay with, is seeded under. */
+export const SEEDED_SPONSOR_FPC_ID = "e2e-protocol-fpc-1"
+
 /**
  * Stores the two protocol FPC rows the wallet's discovery writes, so the Send page lists Nulo's
  * sponsor without a node: with both rows present `getFpcs` returns them and never discovers.
@@ -14,7 +17,7 @@ const PROTOCOL_FPCS = [
 export async function seedProtocolFpcs(page: Page, scope: ActivityScope): Promise<void> {
 	const rows = Object.fromEntries(
 		PROTOCOL_FPCS.map(({ type, name, address }) => {
-			const id = `e2e-protocol-fpc-${type}`
+			const id = type === 1 ? SEEDED_SPONSOR_FPC_ID : `e2e-protocol-fpc-${type}`
 			return [`nulo:core:fpcs@${id}`, JSON.stringify({ id, profileId: scope.profileId, chainId: scope.chainId, type, address, name })]
 		}),
 	)

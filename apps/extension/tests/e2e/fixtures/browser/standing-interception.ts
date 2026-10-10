@@ -9,8 +9,8 @@ interface Standing {
 	mode: RpcInterception
 	/** Undefined while a spec's own interception holds the origin. */
 	current: ArmedInterception | undefined
-	/** Set while a spec's own interception holds the origin. */
-	override: ArmedInterception | undefined
+	/** Reserved from a spec's admission until its interception is stopped and the launch's re-armed. */
+	overridden: boolean
 	/** What earlier arms counted, kept across a spec's suspension. */
 	hits: number
 	failures: string[]
@@ -21,7 +21,8 @@ interface Standing {
  * own. A spec arming an origin the launch holds suspends the launch's until the spec's `stop()`,
  * which re-arms it: two interceptions on one origin would race for each request, and Firefox
  * keeps one per origin. The held interception's `failures` also carry the spec's, a failed re-arm,
- * and a spec's interception still unstopped when they are read.
+ * and a spec's interception still unstopped when they are read. A re-arm that lands after the
+ * launch let go is stopped at once, so nothing is left armed unowned.
  */
 export function standingInterceptions<B extends object>(arm: Arm<B>) {
 	const held = new WeakMap<B, Map<string, Standing>>()
@@ -34,11 +35,15 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 
 	const resume = async (browser: B, standing: Standing): Promise<void> => {
 		if (!isHeld(browser, standing) || standing.current) return
+		let rearmed: ArmedInterception
 		try {
-			standing.current = await arm(browser, standing.extensionId, standing.fromOrigin, standing.mode)
+			rearmed = await arm(browser, standing.extensionId, standing.fromOrigin, standing.mode)
 		} catch (err) {
 			standing.failures.push(`re-arming after a spec's own interception failed: ${String(err)}`)
+			return
 		}
+		if (isHeld(browser, standing) && !standing.current) standing.current = rearmed
+		else await rearmed.stop()
 	}
 
 	return {
@@ -47,7 +52,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 			const byOrigin = held.get(browser) ?? new Map<string, Standing>()
 			if (byOrigin.has(origin)) throw new Error(`rpc-intercept: the launch already holds ${origin}`)
 			const current = await arm(browser, extensionId, fromOrigin, mode)
-			const standing: Standing = { origin, extensionId, fromOrigin, mode, current, override: undefined, hits: 0, failures: [] }
+			const standing: Standing = { origin, extensionId, fromOrigin, mode, current, overridden: false, hits: 0, failures: [] }
 			byOrigin.set(origin, standing)
 			held.set(browser, byOrigin)
 			return {
@@ -55,7 +60,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 				failures: async () => [
 					...standing.failures,
 					...((await standing.current?.failures()) ?? []),
-					...(standing.override ? [`a spec's interception on ${origin} was never stopped`] : []),
+					...(standing.overridden ? [`a spec's interception on ${origin} was never stopped`] : []),
 				],
 				stop: async () => {
 					byOrigin.delete(origin)
@@ -69,21 +74,23 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 		async intercept(browser: B, extensionId: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception> {
 			const standing = held.get(browser)?.get(new URL(fromOrigin).origin)
 			if (!standing) return arm(browser, extensionId, fromOrigin, mode)
-			if (standing.override) throw new Error(`rpc-intercept: a spec already intercepts ${standing.origin}`)
-			const current = standing.current
-			standing.current = undefined
-			if (current) {
-				standing.hits += await current.hits()
-				await drain(standing, current)
-			}
+			if (standing.overridden) throw new Error(`rpc-intercept: a spec already intercepts ${standing.origin}`)
+			standing.overridden = true
 			let own: ArmedInterception
 			try {
+				const current = standing.current
+				standing.current = undefined
+				if (current) {
+					standing.hits += await current.hits()
+					await drain(standing, current)
+				}
 				own = await arm(browser, extensionId, fromOrigin, mode)
 			} catch (err) {
-				await resume(browser, standing)
+				await resume(browser, standing).finally(() => {
+					standing.overridden = false
+				})
 				throw err
 			}
-			standing.override = own
 			let stopping: Promise<void> | undefined
 			return {
 				...own,
@@ -92,8 +99,9 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 						try {
 							await drain(standing, own, "a spec's interception: ")
 						} finally {
-							standing.override = undefined
-							await resume(browser, standing)
+							await resume(browser, standing).finally(() => {
+								standing.overridden = false
+							})
 						}
 					})()
 					return stopping

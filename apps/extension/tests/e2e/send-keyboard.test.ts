@@ -9,7 +9,7 @@ import { clickByTestId, openPopup, test, waitForHash, type ExtensionContext } fr
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
-import { seedProtocolFpcs } from "./helpers/fpc-seeds"
+import { SEEDED_SPONSOR_FPC_ID, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { activeTestId, coveredAt, focusRing, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -130,9 +130,8 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
 	const row = await activeTestId(page)
 	expect(row).toMatch(/^send-fee-method-/)
-	// With no balance, the seeded sponsor is the only row a pick can land on.
 	const fpcId = await page.evaluate(() => document.activeElement?.closest("[data-dropdown-item]")?.getAttribute("data-fpc-id"))
-	if (!fpcId) throw new Error(`the focused row ${row} is not the seeded sponsor`)
+	expect(fpcId, `the focused row ${row}`).toBe(SEEDED_SPONSOR_FPC_ID)
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await page.waitForFunction(
@@ -152,7 +151,7 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 		{ timeout: 10_000 },
 		UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS,
 		account,
-		fpcId,
+		SEEDED_SPONSOR_FPC_ID,
 	)
 	await waitForFocus(page, "send-fee-method-trigger")
 
