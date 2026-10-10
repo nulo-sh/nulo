@@ -1,13 +1,17 @@
 import type { Router } from "vue-router"
+import { ActivationSupersededError, awaitProfileActivation } from "@/composables/unlockWait"
 import { isPopupSubmitKey } from "@/composables/usePopupEntity"
 import type { useAppStore } from "@/stores/app.store"
 import { initTransactionService, managers } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { storageLocalSet } from "@/utils/storage"
 import { AccountServiceClient } from "@/wallet/services/account/client"
-import { sleep } from "@/wallet/utils"
 
 type AppStore = ReturnType<typeof useAppStore>
+
+/** How long a created profile may take to start bootstrapping in the shell. Once it has, the
+ *  bootstrap ends the wait by itself (`deadlineCovers: "start"`). */
+export const CREATE_START_WAIT_MS = 30_000
 
 /**
  * Popup-only activation of a freshly created profile.
@@ -19,27 +23,37 @@ type AppStore = ReturnType<typeof useAppStore>
  * `useProfileBootstrap.bootstrapActiveProfile` (which onboarding uses and which
  * does strictly more) — do NOT merge the two. Extracted from the page so the
  * call ordering is unit-testable.
+ *
+ * Another window can open another profile at any await, so nothing is written or routed unless
+ * the created profile is still the active, bootstrapped one right after each await. Rejects with
+ * the wait's typed errors, and with `ActivationSupersededError` when that check fails, so the caller
+ * keeps its latch: the profile exists, and another create would make a second one.
  */
 export async function activateCreatedProfile(profile: { id: string }, deps: { appStore: AppStore; router: Router }): Promise<void> {
 	const { appStore, router } = deps
-	while (!appStore.isLogined) {
-		await sleep(100)
+	const assertActive = () => {
+		if (!appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
 	}
+	await awaitProfileActivation(appStore, profile.id, CREATE_START_WAIT_MS, { deadlineCovers: "start" })
+	assertActive()
 
 	// Keep an existing client: replacing it abandoned a connected port, and disconnecting it would
 	// reject the calls of any flow still holding it.
 	managers.account ??= new AccountServiceClient()
 
-	appStore.profile = profile as AppStore["profile"]
 	await setLastActiveProfileId(profile.id)
+	assertActive()
 	if (!appStore.network) throw new Error("Network not set")
-	appStore.accounts = await managers.account.getAccounts(profile.id, appStore.network.chainId, true)
+	const accounts = await managers.account.getAccounts(profile.id, appStore.network.chainId, true)
+	assertActive()
+	appStore.accounts = accounts
 
 	initTransactionService(appStore.onTxAdded, appStore.onTxUpdated)
 
 	await storageLocalSet({
 		"nulo:ui:activeAccount": appStore.account?.address,
 	})
+	assertActive()
 
 	router.push("/popup/general")
 }

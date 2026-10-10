@@ -48,6 +48,7 @@ describe("handleCancelOrUnconfirmed", () => {
 	test("a cancel is handled silently, an unconfirmed prompt with the one line, anything else not at all", () => {
 		const openToast = vi.fn()
 		expect(handleCancelOrUnconfirmed(new UserRejectedError(), openToast)).toBe(true)
+		expect(handleCancelOrUnconfirmed(unconfirmed(new UserRejectedError()), openToast)).toBe(true)
 		expect(openToast).not.toHaveBeenCalled()
 		expect(handleCancelOrUnconfirmed(unconfirmed(dismissed()), openToast)).toBe(true)
 		expect(openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Passkey not confirmed. Try again." })

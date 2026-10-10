@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import type { z } from "zod"
 import { assertRestoreEpoch, captureRestoreEpochs, restoreRowProfileId } from "@/wallet/services/restore-fence"
 import { profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { restoreRows } from "@/wallet/services/restore-rows"
@@ -28,13 +29,14 @@ import {
 } from "@nulo/aztec-runtime/account"
 import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
 import { type ImportedKeysDek, sealImportedSigningKeyV2, unsealImportedSigningKeyV2, zeroize } from "@nulo/wallet-crypto"
-import { AccountAddressInconsistencyError } from "@nulo/extension-messaging/errors"
+import { AccountAddressInconsistencyError, InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import type { AccountIntegrityBlocked } from "../account-integrity/types"
 import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
 import {
 	ACCOUNT_SERVICE_NAME,
 	ACCOUNT_STORAGE_ROOT,
+	AccountMethodSchemas,
 	AccountSchema,
 	AccountType,
 	DEFAULT_ACCOUNT_NAME,
@@ -121,6 +123,14 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		super(ACCOUNT_SERVICE_NAME, logger)
 		this.storage = new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, browserApi.storage.local, (raw) => AccountSchema.parse(raw))
 		this.importedKeys = new ImportedKeysRepository(browserApi.storage.local)
+	}
+
+	/** The method gets the caller's own argument objects, not zod's parsed copies; the framework
+	 *  RPCs `backup` and `restore` have no schema and pass through. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		const schema = (AccountMethodSchemas as Record<string, z.ZodType | undefined>)[method]
+		if (schema && !schema.safeParse(params).success) throw InvalidWalletArgumentsError.forMethod(method)
+		return super.invoke(method, params)
 	}
 
 	/**
@@ -320,11 +330,14 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// A chain reserved for deletion may already have snapshotted its rows: a row written now
 		// would outlive the purge.
 		if (!(await this.networkService.isChainLive(profileId, chainId))) throw new Error("network deleted")
-		// A deletion that began during the probe/derivation bumped the epoch — the
-		// purge has already harvested addresses, so writing now would mint a row it
-		// can never reclaim. No await between this assert and the write.
-		deletion.assertCurrent(profileId, epoch)
-		await this.storage.set(accountRowIdOf(account), account)
+		await this.tupleLocks.withLock(accountRowIdOf(account), async () => {
+			// A deletion that began during the probe/derivation bumped the epoch — the
+			// purge has already harvested addresses, so writing now would mint a row it
+			// can never reclaim. No await between this assert and the write.
+			deletion.assertCurrent(profileId, epoch)
+			await this.storage.set(accountRowIdOf(account), account)
+			await this.dropReplacedImportedKey(account)
+		})
 		// Either purge can snapshot during the set. The epoch check runs after the liveness await,
 		// and nothing awaits between it and the emit.
 		await this.assertStillLive(account)
@@ -345,10 +358,27 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		if (!live) await this.unwrite(account, new Error("network deleted"))
 	}
 
+	/** A derived address is a pure function of its signing key, as an imported one is, so an
+	 *  imported key stored at the address a create just took is the derived row's own key: nothing
+	 *  else would remove it while the derived row stands. Called under the row's lock. The row is
+	 *  already written, so a failed delete is logged, not thrown. */
+	private async dropReplacedImportedKey(account: Account): Promise<void> {
+		try {
+			await this.importedKeys.delete(account.profileId, account.chainId, account.address)
+		} catch {
+			this.logWarn("replaced imported key not deleted")
+		}
+	}
+
 	/** Removes a row no purge will see, then throws `refusal`. Under the row's lock, so a rename
-	 *  that read the row cannot write it back. */
+	 *  that read the row cannot write it back, and only while the row still has the type and index
+	 *  this writer gave it: a create that replaced an import's row keeps it. */
 	private async unwrite(account: Account, refusal: unknown): Promise<never> {
-		await this.tupleLocks.withLock(accountRowIdOf(account), () => this.storage.delete(accountRowIdOf(account)))
+		const id = accountRowIdOf(account)
+		await this.tupleLocks.withLock(id, async () => {
+			const stored = await this.storage.get(id)
+			if (stored?.type === account.type && stored.index === account.index) await this.storage.delete(id)
+		})
 		throw refusal
 	}
 
@@ -520,23 +550,17 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			if (recomputed !== expectedAddress) throw new Error("Imported account address does not match the confirmed address")
 
 			return await this.serializePerTuple(profileId, chainId, AccountType.Imported, async () => {
-				const rows = (await this.liveRows()).filter((x) => x.profileId === profileId && x.chainId === chainId)
-				if (rows.some((x) => x.address === recomputed)) throw new Error("This account is already in your wallet")
-				const sameType = rows.filter((x) => x.type === AccountType.Imported)
+				const sameType = (await this.liveRows()).filter(
+					(x) => x.profileId === profileId && x.chainId === chainId && x.type === AccountType.Imported,
+				)
 				const index = sameType.length > 0 ? array_max(sameType.map((x) => +x.index)) + 1 : 0
 
 				// Imported accounts bind to the ACTIVE network's L1 identity (they don't derive from it,
-				// but the row must carry a coherent value for the Account↔Network cross-check). Resolve
-				// it BEFORE the key row is written — a throw here would otherwise orphan a sealed key row
-				// (the compensation below only covers the Account row).
+				// but the row must carry a coherent value for the Account↔Network cross-check).
 				const l1ChainId = await this.networkService.getL1ChainIdStored(profileId, chainId)
 
 				const sealed = await sealSigningKey(dek, chainId, recomputed, signingKey)
 				if (!(await this.networkService.isChainLive(profileId, chainId))) throw new Error("network deleted")
-				// KEY ROW FIRST, then the Account row — with compensation. A crash between the two
-				// leaves an orphan key (swept on init) rather than an Account that cannot sign.
-				deletion.assertCurrent(profileId, epoch)
-				await this.importedKeys.set({ profileId, chainId, address: recomputed, encryptedSigningKey: sealed })
 				const account: Account = {
 					profileId,
 					chainId,
@@ -549,17 +573,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 					name: (typeof name === "string" && name.trim().slice(0, 40)) || "Imported account",
 					visible: true,
 				}
-				try {
-					deletion.assertCurrent(profileId, epoch)
-					await this.storage.set(accountRowIdOf(account), account)
-					// As in createAccountInternal: liveness, then the epoch, then the emit with no await.
-					await this.assertStillLive(account)
-					if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
-				} catch (rowErr) {
-					await this.importedKeys.delete(profileId, chainId, recomputed).catch(() => {})
-					throw rowErr
-				}
-				this.emit("onAccountAdded", account)
+				await this.commitImportedAccount(account, sealed, epoch)
 				return account
 			})
 		} finally {
@@ -567,6 +581,39 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			// rejection, l1 lookup throw, seal throw, success).
 			zeroize(dek)
 		}
+	}
+
+	/**
+	 * The duplicate check and both writes share one hold of the row's lock, the lock a create of the
+	 * same address takes, so neither can land between the other's check and write. Key row first:
+	 * a crash between the two writes leaves an orphan key (swept on init), never an account that
+	 * cannot sign. A failure after the key write removes it; the duplicate refusal writes nothing.
+	 */
+	private async commitImportedAccount(account: Account, sealed: string, epoch: number): Promise<void> {
+		const { profileId, chainId, address } = account
+		const deletion = this.profileService.getDeletionState()
+		const id = accountRowIdOf(account)
+		let keyWritten = false
+		try {
+			await this.tupleLocks.withLock(id, async () => {
+				// The physical key, not the decoded view: a row the codec hides is still occupied.
+				if (await this.storage.contains(id)) throw new Error("This account is already in your wallet")
+				deletion.assertCurrent(profileId, epoch)
+				await this.importedKeys.set({ profileId, chainId, address, encryptedSigningKey: sealed })
+				keyWritten = true
+				deletion.assertCurrent(profileId, epoch)
+				await this.storage.set(id, account)
+			})
+			// As in createAccountInternal: liveness, then the epoch, then the emit. The emit stays in
+			// here because an await between it and the epoch check would let a deletion begin unseen.
+			await this.assertStillLive(account)
+			if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
+		} catch (rowErr) {
+			// Imports of one (profile, chain) serialise, so this key is this import's or already gone.
+			if (keyWritten) await this.importedKeys.delete(profileId, chainId, address).catch(() => {})
+			throw rowErr
+		}
+		this.emit("onAccountAdded", account)
 	}
 
 	/**
@@ -921,22 +968,25 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * After a full-backup restore, drop any IMPORTED Account row that has no matching key row —
 	 * a hostile epoch-4 backup can carry a type-1 row with the key slice omitted, which would
-	 * otherwise restore as a zombie that fails only at signing. Runs at restore FINALIZE, after
-	 * both the account rows and the key rows have landed.
+	 * otherwise restore as a zombie that fails only at signing. Runs during the restore, after both
+	 * the account rows and the key rows have landed and before the profile's session opens.
 	 *
 	 * Ordering is list → awaited dependent purges → delete: a crash before the purge changes
 	 * nothing; a crash after it leaves a keyless account with no stale dependents, repaired by
 	 * the next reconcile. Scopes are full (chainId, address) tuples — the same address can
 	 * legitimately exist on another chain of this profile and must survive. Returns only the
-	 * scopes actually deleted: the delete pass re-checks key absence per row, so an account
-	 * whose key appeared during the awaited purge is kept and not reported.
+	 * scopes actually deleted: the delete pass re-reads each row under its lock, so an account
+	 * whose key appeared during the awaited purge, or a derived row a create wrote over it, is kept
+	 * and not reported. The purges hold no row lock (a holder awaits storage only), so a create of a
+	 * candidate's address during them would lose its new dependents; none runs, as create needs the
+	 * session.
 	 */
 	public async reconcileImportedAccounts(profileId: string): Promise<AccountScope[]> {
 		await this.ensureInitialized()
 		const imported = (await this.liveRows()).filter((a) => a.profileId === profileId && a.type === AccountType.Imported)
 		const keyless: Account[] = []
 		for (const account of imported) {
-			if (!(await this.importedKeys.get(profileId, account.chainId, account.address))) keyless.push(account)
+			if (await this.tupleLocks.withLock(accountRowIdOf(account), () => this.isKeylessImport(account))) keyless.push(account)
 		}
 		if (keyless.length === 0) return []
 		const scopes = keyless.map((a) => ({ chainId: a.chainId, address: a.address }))
@@ -947,7 +997,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		for (const account of keyless) {
 			// Under the row's lock: a rename parked on the row's read would otherwise write it back.
 			const deleted = await this.tupleLocks.withLock(accountRowIdOf(account), async () => {
-				if (await this.importedKeys.get(profileId, account.chainId, account.address)) return false
+				if (!(await this.isKeylessImport(account))) return false
 				await this.storage.delete(accountRowIdOf(account))
 				return true
 			})
@@ -956,5 +1006,15 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			dropped.push({ chainId: account.chainId, address: account.address })
 		}
 		return dropped
+	}
+
+	/** Whether the row stored at `account`'s address is still an imported account with no key row,
+	 *  read fresh: a create may have replaced it with a derived row since it was listed. Called
+	 *  under the row's lock. */
+	private async isKeylessImport(account: Account): Promise<boolean> {
+		const { profileId, chainId, address } = account
+		const stored = await this.storage.get(accountRowIdOf(account))
+		if (!rowMatchesKey(stored, profileId, chainId, address) || stored.type !== AccountType.Imported) return false
+		return !(await this.importedKeys.get(profileId, chainId, address))
 	}
 }
