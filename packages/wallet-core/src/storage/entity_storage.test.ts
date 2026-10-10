@@ -32,6 +32,16 @@ describe("EntityStorage", () => {
 		expect(await storage.get("alice")).toEqual({ name: "Alice", age: 30 })
 	})
 
+	test("item is the exact pair set writes, so a caller can batch rows of several roots", async () => {
+		const other = new EntityStorage<User>("admins", api.storage.local)
+		const batch = { ...storage.item("alice", { name: "Alice", age: 30 }), ...other.item("bob", { name: "Bob", age: 40 }) }
+		expect(Object.keys(batch)).toEqual(["users@alice", "admins@bob"])
+
+		await api.storage.local.set(batch)
+		expect(await storage.get("alice")).toEqual({ name: "Alice", age: 30 })
+		expect(await other.get("bob")).toEqual({ name: "Bob", age: 40 })
+	})
+
 	test("get of missing id returns undefined (not null, not {})", async () => {
 		expect(await storage.get("nobody")).toBeUndefined()
 	})
