@@ -17,3 +17,8 @@
 - 2026-10-10 — phase 1.5 gate pass: lint 0 (after one format fix), typecheck:all 0, ConfirmPopup 8/8, rg gate 0.
 - 2026-10-10 — arc 1 boundary gate on 9c4b9c8: audit:vue 0, test:all 0; smoke retry-0 Chrome 6 files 29/29, Firefox 3 passkey files 15/15.
 - 2026-10-10 — arc 1 review: Codex round 1 CHANGES (3 Medium, fixed a5c3170 dd9bc51 95c6ec7), Opus CHANGES (pin + comments 1a6e040; one rejected), Codex round 2 APPROVE (comment aaa0ac7). R2-1 unreachable on HEAD per both legs.
+- 2026-10-10 — arc 2 started: branch `account-session-life-arc-2` off dev fd47407 (D-orch-4); D-orch-4 to D-orch-6 recorded.
+- 2026-10-10 — arc 2 design asked first (D-orch-6): Codex 1a/1b HOLD, 1c HOLE (popup 60 s budget); Opus all HOLD with the shared deadline. Fixed in 2.2 (one 30 s budget); the pre-existing reset-page timeout is OWNER-ASKS OA-5.
+- 2026-10-10 — phase 2.1 gate pass: lint 0, typecheck:all 0, test:all 0; two new proofs red on fd47407.
+- 2026-10-10 — phase 2.2 gate pass: lint 0, typecheck:all 0, profile + profile-deletion unit 370/370; wait and shared-budget proofs red on fd47407.
+- 2026-10-10 — phase 2.3 gate pass: lint 0, typecheck:all 0, test:all 0; four new proofs red on fd47407.

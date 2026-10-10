@@ -1,7 +1,7 @@
 ---
 plan: account-session-life
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-3); arc 1 built and reviewed (Codex approve), in delivery
+status: approved by the orchestrator (D-orch-1 to D-orch-6); arc 1 merged (#253); arc 2 built, in review
 issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
 driver: claude-code
 claude_model: opus
@@ -35,6 +35,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Co
 - The passkey window's own retry for an authenticator that returns no PRF (OWNER-ASKS OA-3).
 - Fee-map cleanup on profile deletion (#91, fees-and-sponsors arc 2). Arc 2 stays out of `ProfileDeletionCoordinator.purge` and the tombstone shape.
 - `restore()`'s account writes (backup-import-export owns them; recon § Collisions).
+- The popup's 60 s call limit on `deleteProfile`, which a purge waiting behind a proof outlives (OWNER-ASKS OA-5): changing it changes what the Delete Profile page shows.
 - A reconnect backoff for the port client: it would make the start-up loader visible between attempts (`components/GlobalLoader.vue:14`), so it waits with arc 4.
 
 ## Regrouping against the lane map
@@ -86,7 +87,7 @@ The lane map has three arcs. This plan keeps arcs 1 and 3, narrows arc 2, and ad
 
 ### Asks
 
-None block arcs 1 and 2. OWNER-ASKS.md holds OA-1 (#100, a create whose activation fails or wedges), OA-2 (#99, a create that lands on an imported account's address), OA-3 (the window's retry for a no-PRF authenticator) and OA-4 (the Ready handshake's visible effects; gates arc 4). Page 7's four records gate arc 3.
+None block arcs 1 and 2. OWNER-ASKS.md holds OA-1 (#100, a create whose activation fails or wedges), OA-2 (#99, a create that lands on an imported account's address), OA-3 (the window's retry for a no-PRF authenticator) OA-4 (the Ready handshake's visible effects; gates arc 4) and OA-5 (found in arc 2's review: Delete Profile gives up at the popup's 60 s call limit while the page promises up to 30 minutes; not built). Page 7's four records gate arc 3.
 
 ## Architecture & Implementation
 
@@ -127,7 +128,7 @@ The tail follows `auth.vue`. It drops the redundant `appStore.profile = profile`
 - The client's `onDisconnect` reads `chrome.runtime.lastError` (Chrome) and the port's `error` (Firefox), so neither browser reports an unchecked error, and logs a fixed category at debug. Its timing and events are unchanged.
 - The server `disconnect()`s a port from an untrusted sender after logging it, instead of leaving it open. A port for another service name is still ignored: every service sees every `onConnect`.
 
-**Delegate wait (`profile/service.ts`).** `setDeletionDelegate` resolves a one-shot promise. `deleteProfile` awaits it before any lock, bounded by `DEFAULT_INIT_TIMEOUT_MS` (30 s); at the bound it throws the existing "deletion coordinator not ready", having written nothing. This is the only edit to the deletion path, in the first lines of `ProfileService.deleteProfile` (the R4 seam, below).
+**Delegate wait (`profile/service.ts`).** `setDeletionDelegate` resolves a one-shot promise. `deleteProfile` awaits it before any lock, inside the one `DEFAULT_INIT_TIMEOUT_MS` (30 s) budget its `ensureInitialized` already spends, taken at entry; at the bound it throws the existing "deletion coordinator not ready", having written nothing. So the call reaches its first write no later than it does today (Audit verdicts, D1). This is the only edit to the deletion path, in the first lines of `ProfileService.deleteProfile` (the R4 seam, below).
 
 **Dead generations (`pxe/service.ts`).** `profileLifecycles` becomes a per-profile record `{ current?: { kind: "live" | "deleting"; gen }, dead: Set<gen>, clearing?: { gen, done: Promise<void> } }`. A record exists while a profile is live, deleting or has any dead generation, so the orphan sweep's `has` check (`:286`) keeps its meaning.
 - `clearProfileState(id, gen)`, in this order:
@@ -186,8 +187,8 @@ Built as below if the owner picks OA-4 B or C; with A, nothing is built and #157
 | 1 | `apps/extension/tests/e2e/fixtures/passkey.ts`, `apps/extension/tests/e2e/passkey-retry.test.ts` | the withheld-PRF interceptor; the one-credential case |
 | 1 | `apps/extension/src/popup/components/popups/ConfirmPopup.vue` (+ `.test.ts`) | the deletion |
 | 2 | `packages/extension-messaging/src/background/client.ts`, `service.ts` (+ tests) | `lastError`; close refused ports |
-| 2 | `apps/extension/src/wallet/services/profile/service.ts` (+ `service.integration.test.ts`) | delegate wait |
-| 2 | `packages/aztec-runtime/src/pxe/service.ts`, `incarnation-fence.test.ts` | dead generations, joined clears |
+| 2 | `apps/extension/src/wallet/services/profile/service.ts` (+ `service.integration.test.ts`), `packages/extension-messaging/src/background/index.ts` | delegate wait under the init budget; export `DEFAULT_INIT_TIMEOUT_MS` |
+| 2 | `packages/aztec-runtime/src/pxe/service.ts`, `incarnation-fence.test.ts`, `service-sweep.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` | dead generations, joined clears; tests on the record shape |
 | 3 | `apps/extension/src/popup/pages/auth.vue` (+ `auth.test.ts`), `apps/extension/tests/e2e/auth-flows.test.ts` | the toast |
 | 3 | `apps/extension/src/popup/pages/settings/security/change-password.vue` (+ `.test.ts`) | two reveal flags |
 | 3 | `apps/extension/src/components/composite/import/ImportFullBackupForm.vue`, `apps/extension/src/popup/pages/settings/security/export/full.vue` (+ tests) | `autocomplete` |
@@ -350,7 +351,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 
 **Warning:** arc 2 edits `ProfileService.deleteProfile`, under reservation R4. If fees-and-sponsors arc 2 (#91) is ready at the same time, it lands first. Whichever lands second rebases on the other and re-runs its network gate.
 
-#### Phase 2.1: transport hardening
+#### Phase 2.1: transport hardening ✓
 
 1. Read `lastError` and the port's `error` in the client's `onDisconnect`; log the fixed category at debug.
 2. `disconnect()` an untrusted sender's port on the server.
@@ -363,7 +364,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0. The new proofs fail against the base copies of `client.ts` and `service.ts`.
 - Layers: lint, typecheck, unit.
 
-#### Phase 2.2: the delegate wait
+#### Phase 2.2: the delegate wait ✓
 
 1. Add the one-shot delegate promise and await it in `deleteProfile`.
 2. Tests in `service.integration.test.ts`, with fake timers:
@@ -375,7 +376,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0. The new proof fails against the base copy of `profile/service.ts`.
 - Layers: lint, typecheck, unit.
 
-#### Phase 2.3: dead generations and joined clears
+#### Phase 2.3: dead generations and joined clears ✓
 
 1. Reshape `profileLifecycles` and its four readers (clear, provision, the op guard, the orphan sweep) as the Architecture section states; update their comments.
 2. Tests in `incarnation-fence.test.ts`:
@@ -559,6 +560,12 @@ Sign-off: arc 1's one visible change rides the recorded no-ask decision for #159
 - **D-orch-2. Arc 1 only.** Nothing of arcs 2, 3 or 4 is built now: arc 2 waits on reservation R4 (fees-and-sponsors #91); arc 3 on decision page 7 and hold H2; arc 4 on OA-4, which is now page 7's item P7-08 (OA-1 to OA-3 are P7-05 to P7-07, and each ships its "what ships now" form in arc 1). Nothing a screen shows changes beyond § UI impact; no new words.
 - **D-orch-3. R2-1 is asked first.** Before phase 1.1's gate counts as passed, the first Codex round and the Opus review are each asked, first and explicitly, whether R2-1's schedule is reachable on the merged tree (a create from a second window, a restore that activates the profile early, an import that reconciles later). Reachable: build the fix (the row lock across the purge, or an equivalent that keeps lock order 1) with a never-happens test. Unreachable: record the evidence below and keep the plan. Result: both unreachable (Audit verdicts, "R2-1 asked first").
 
+### Orchestrator decisions (arc 2, 2026-10-10)
+
+- **D-orch-4. After a squash merge, an arc branches from `dev`.** Arc 1 merged as fd47407 (#253, squash), so arc 2 is `account-session-life-arc-2` cut from `origin/dev` at fd47407, not from arc 1's branch. Its PR opens against `dev` (`gh pr create --base dev`) with the Delivery table's title and says `Refs #157`, never `Closes`. D-orch-1 to D-orch-3 stand.
+- **D-orch-5. Arc 2 only, and it lands first under R4.** fees-and-sponsors arc 2 (#91) waits on decision page 6, which is unsigned, so arc 2 edits `ProfileService.deleteProfile`'s first lines now and #91 rebases later. Nothing else on the deletion path changes: `coordinator.ts`, `profile-deletion/types.ts` and the tombstone repository stay untouched (the R4 seam). Nothing of arcs 3 or 4 is built (page 7 and H2; P7-08). Nothing a screen shows changes; no new words.
+- **D-orch-6. Any open panel finding on arc 2 comes first.** Before phase 2.1's gate counts as passed, the first Codex round and the Opus review are each asked, first and explicitly, whether the arc-2 design holds on the merged tree: the per-profile lifecycle record (`live`/`deleting`/`dead`/`clearing`), the joined clear, and the delegate wait's 30 s bound against a `deleteProfile` that starts before the offscreen document exists. A hole is fixed within the plan's lock order with a never-happens test. The answers are under Audit verdicts, "Arc 2 design asked first".
+
 ### Audit verdicts
 
 **Round 1, Codex** (`gpt-6.1-sol`, high): `reject (with blocking findings: unsafe imported-key cleanup, unfenced activation tail, Ready-to-send race, unsupported session-isolation claim, overlapping erasures)`.
@@ -646,6 +653,26 @@ Opus's phase 1.1 notes:
   - **Accepted.** Four stale comments: the import's L1-ordering note, `importAccount`'s "omit/empty for plaintext", `createPasskeyProfileWithRetry`'s `@throws`, and a doubled invariant on the emit (1a6e040).
   - **Rejected.** "Clear the saved credential after an `other`-classed failure." The passkey window keeps an unconfirmed credential for every later failure (`popup/windows/passkey/index.vue` `prompt`). #159's recorded decision is to mirror the window, and the quality bar is that a retry never creates a second passkey. The in-page flow is already narrower than the window: it clears the credential on no-PRF and on a name change.
 - **Codex round 2 (same session): APPROVE**, with high confidence and no new runtime defect. It checked all four fixes, and it rejected an injected optional-argument mismatch through the schema pin. It accepted the Opus rejection: an `other` failure does not show that the credential is unusable. One Comment was applied: `Promise.race` handles the loser's late rejection, so the `unlockWait` doc now names only the live watcher. The loop closed at round 2 of 3.
+
+**Arc 2 design asked first (D-orch-6), on the merged tree (`fd47407`).** Both legs were asked only the three design questions first, in parallel with phase 2.1's code.
+
+- **Codex** (`gpt-6.1-sol`, high, new session `01a12405-c32c-7a61-aa62-ac211ca2740a`): `1a HOLDS (high), 1b HOLDS (high), 1c HOLE (high)`.
+- **Opus 5.5** (general-purpose, read-only): `1a HOLDS (moderate-high), 1b HOLDS (high), 1c HOLDS (moderate-high)`, the last given the shared deadline that the working copy already had by then.
+
+| # | Finding | Disposition |
+|---|---|---|
+| D1 [High, Codex 1c] | The popup's `ProfileServiceClient` sets no timeout, so `deleteProfile` gets 60 s (`DEFAULT_RPC_TIMEOUT_MS`). `ensureInitialized` (≤ 30 s) plus a separate 30 s delegate wait can spend all of it before the first write, so the popup can report failure after the tombstone is written while the deletion continues. Codex's fix: give this call a longer client timeout | **Accepted for arc 2's share; the rest goes to OA-5.** One 30 s budget, taken at entry, now covers both waits, so the call reaches its first write no later than it does today (new proof: a delete that arrives while init runs for 20 s refuses at 30 s, not 50 s). Opus confirmed this closes the arc-2 part. The longer client timeout is **not built**: the pre-existing gap (`reset.vue` promises "up to ~30 minutes" while the call gives up at 60 s and shows "Couldn't delete profile. Try again") changes what the page shows, so it is OWNER-ASKS OA-5 |
+| D2 [Codex 1a, Opus 1a] | `clearing` must be cleared on every way the erase settles, identity-checked, or a retry joins a rejected promise forever; the dead check must come before the no-current fallthrough | **Accepted.** Both are built as stated; a never-happens test pins the retry |
+| D3 [Codex 1b, Opus 1b] | Publish the erase synchronously; add a test that two joined callers both reject and the retry runs one fresh erase | **Accepted.** Built and tested |
+| D4 [Opus 1b, nuance] | A joiner inherits the first erase's failure, so a deletion whose resume joined a failing erase waits for the next boot's resume instead of trying once more itself | **Accepted as the cost of the join.** The id stays fenced meanwhile, and the next boot's resume retries |
+| D5 [Codex 1c, Opus 1c] | No start phase before the coordinator awaits the offscreen document, a READY or a PXE RPC; a failed boot leaves every waiter to its bound with nothing written | **Confirmed**; no change |
+| D6 [Opus Q2] | Plan gaps: `DEFAULT_INIT_TIMEOUT_MS` has no package export at fd47407; three more test files read the old `{kind, gen}` map shape; the tick-count pin in `service-idb-delete.test.ts` must hold | **Accepted.** Recorded below as deviations; the pin holds unchanged (2 and 2) |
+| D7 [Codex Q2, Opus Q2] | Phase 2.1 is correct; disconnecting a refused port fires nothing on our side, and foreign extensions reach `onConnectExternal`, which nothing registers | **Confirmed.** Keep the refused-port warn line to the sender id, never `sender.url` |
+
+**Arc 2 deviations from the plan text** (the tree wins):
+- Phase 2.2: the delegate wait is not a separate 30 s after `ensureInitialized`. One deadline, taken at entry, covers both (D1). `DEFAULT_INIT_TIMEOUT_MS` is exported from `packages/extension-messaging/src/background/index.ts`.
+- Phase 2.3: besides `incarnation-fence.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` and `service-sweep.test.ts` move to the record shape or gain the sweep guard. The failed-joined-erase test (D3) is added to the plan's list.
+- Phase 2.1: the shared `PortRegistry` fake now passes the port to `onDisconnect` listeners, as the browsers do; `connectServiceClient` takes an optional sender.
 
 ## Delivery
 

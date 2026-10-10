@@ -62,3 +62,18 @@ Under both B and C, the banner for a service that never starts comes after up to
 **Recommendation.** C: it fixes the failures without a new screen. B is the more honest picture if a visible "starting" state is wanted. If the 60-second banner is not acceptable under either, say so: the boot's own reads can keep a short bound, at the cost of the banner again showing for a service that is only slow to start.
 
 **What ships now.** A. Arc 4 is built only on B or C.
+
+## OA-5: Delete Profile that outlives the popup's 60-second call limit (found in arc 2's review)
+
+**Surface.** Settings → Security → Delete Profile (`popup/pages/settings/security/reset.vue`), while the deletion waits for an in-flight proof to finish.
+
+**Today.** After 10 seconds the page shows "Waiting for an in-flight operation to finish. This can take up to ~30 minutes while a transaction is proving. Keep this window open." But the popup gives every call to the background 60 seconds (`DEFAULT_RPC_TIMEOUT_MS`; the profile client sets no longer limit for this one). At 60 seconds the page drops the hint and shows "Couldn't delete profile. Try again", while the background keeps deleting: it has already removed the profile and is erasing its data. Try again then fails, because the profile no longer exists. The same holds for any deletion slower than 60 seconds, such as a cold start of the PXE document.
+
+**Options.**
+- **A. As today.**
+- **B. Give this one call the time the page promises.** The popup waits for `deleteProfile` up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words.
+- **C. B, and say "Profile deleted" once the profile is gone.** The page treats the deletion as done when the profile leaves the list, and the erase finishes in the background, as a resumed deletion already does after a restart.
+
+**Recommendation.** B: it makes the page do what its own hint says, with no new words.
+
+**What ships now.** A. Arc 2 adds no time to it: `deleteProfile`'s new wait for the deletion coordinator shares the 30-second budget the call already spends waiting for the service to start, so the call reaches its first write no later than it does today.
