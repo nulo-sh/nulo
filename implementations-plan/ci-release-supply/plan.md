@@ -1,7 +1,7 @@
 ---
 plan: ci-release-supply
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in progress
+status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 merged (#252); arc 2 phases 2.1-2.3 built, 2.4 reverted by its stop rule (D21)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -280,7 +280,7 @@ Validation gate: Fast; Gating; Release; Actions. Pass: all exit 0; the planted f
 
 ### Arc 2: scripts and installs
 
-**Phase 2.1, the launch gate (#183).**
+**Phase 2.1, the launch gate (#183).** ✓
 1. Add `packages/legal/src/launch.ts` and `launch.test.ts`. Read `legal/<doc>.md` for each document the package's manifest lists; do not glob `legal/`.
 2. Unit cases: `1.0.0` with «FILL» in Terms is refused and names the file and line; `2.1.0` with «FILL» in Privacy is refused. Controls: `0.30.2` with «FILL», `1.0.0-rc.1` with «FILL», and a clean `1.0.0` all pass.
 3. Add the live assertion under `NULO_LAUNCH_GATE=1`.
@@ -291,7 +291,7 @@ Validation gate: Fast; Gating; Release; Actions. Pass: all exit 0; the planted f
 
 Validation gate: Fast; `bun run test:all`; Gating; Release; Actions. Pass: all exit 0; the `1.0.0` unit case fails with the version check removed; the auto-unstick refusal case fails with the preflight removed; step 5's run failed as expected. Layers: lint, typecheck, unit.
 
-**Phase 2.2, presto-banners 1.2.0 (#82).**
+**Phase 2.2, presto-banners 1.2.0 (#82).** ✓
 1. Run `bun pm diff @alejoamiras/presto-banners@1.1.0 1.2.0`; summarise it in `lessons/phase-2.md`.
 2. Set the pin to `1.2.0`; run `bun install`; then `bun install --frozen-lockfile`.
 3. Give the onboarding `permission-blocked` arm the literal title; adjust the module header; rename the test.
@@ -299,7 +299,7 @@ Validation gate: Fast; `bun run test:all`; Gating; Release; Actions. Pass: all e
 
 Validation gate: Fast; `bun run test:all`; `bun run build:chrome` and `bun run build:firefox` (the notices generator runs inside); `cd apps/extension && bun run test:e2e -- tests/e2e/onboarding-tab.test.ts --retry=0`; `bun audit`. Pass: all exit 0; `presto-ui-state.test.ts:146` and `presto-licence.test.ts` pass with no assertion edited. Layers: lint, typecheck, unit, build, smoke e2e (Chrome).
 
-**Phase 2.3, store copies (#179).**
+**Phase 2.3, store copies (#179).** ✓
 1. Re-measure, as § Arc 2 step 1 says; record it in `lessons/phase-2.md` before writing code.
 2. Export `fetchVerified` and narrow its parameter types (step 3); `attach-assets-run.test.ts` stays green with no edit, its call-order assertion included.
 3. Add `zip-read.ts` and its real-zip test.
@@ -312,7 +312,7 @@ Validation gate: Fast; `bun run test:all`; `bun run build:chrome` and `bun run b
 
 Validation gate: Release; Gating; Actions; Fast; `NULO_STORE_COPY_LIVE=1 bun test scripts/release/store-copy.test.ts`. Pass: all exit 0, and the live case passes for both stores. Layers: lint, unit, integration (live stores).
 
-**Phase 2.4, `hoist = false` and the battery (#172).**
+**Phase 2.4, `hoist = false` and the battery (#172).** Stop rule fired: reverted, #172 stays open (D21)
 
 Warning: run this phase last in the arc. Run its network file only after gate G1 (#169 merged), and never beside another `e2e:agent` run in this worktree.
 1. On the commit immediately before this phase (phase 2.3's tip), run `bun run test:all` with vitest's json reporter and `bun test`'s output saved, and record every collected test's identity (file and full name) with its skip state.
@@ -448,6 +448,12 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D-orch-2 | Arc 1 only for this run; nothing of arcs 2 to 5 is built. OA-1, OA-2 and OA-3 sit on the owner's decision page 5; none touches arc 1 | The orchestrator's scope call | — |
 | D-orch-3 | A3 approved: the probe pushes the scratch branch `ci-release-supply-probe` to `nulo-sh/nulo` and deletes it once the readings are recorded (`git ls-remote origin ci-release-supply-probe` prints nothing before the arc ends); nothing is pushed to `dev`, `main` or a `v*` tag. A6 accepted: the deterministic battery stands in for the soak in arc 2 | The orchestrator's answers to A3 and A6 | — |
 | D-orch-4 | The final pass's unreviewed arc-1 fixes come first: the first Codex round and the Opus review are asked, explicitly and before anything else, about D2 (list, read, revalidate; the force-push rewind), D3 (no fallback on the live label read; the `true`/`false` refusal) and D5 (rule 1's fresh `status` at the re-run's attempt; the skipped-matrix probe cases). Phase 1.3's gate counts as passed only once their answers are recorded under Audit verdicts | The final Codex pass rejected twice and its last fixes were never re-reviewed | — |
+| D-orch-5 | After a squash merge an arc branches from `dev`: arc 2's `ci-release-supply-scripts` starts at `origin/dev` c0e1e69 (#252), whose tree equals arc 1's last head | The orchestrator's delivery call; arc 1's branch history is not in `dev` after the squash, so branching from it would replay it | Supersedes "later arcs branch from arc 1's branch" in D-orch-1 |
+| D-orch-6 | Arc 2 only for this run, with the owner's asks in their "what ships now" form: OA-1 option B (today's onboarding title kept as Nulo's own string, page 5 P5-05), OA-3 option A (PRs into `main` only, plus the `auto-unstick` preflight, page 5 P5-06). Nothing of arcs 3, 4 or 5 is built | The orchestrator's scope call | — |
+| D-orch-7 | The unreviewed verifier fix comes first: before phase 2.3's gate counts as passed, the first Codex round and the Opus review are each asked, explicitly and first, whether `fetchVerified` as exported keeps every check the publish path makes (digest, `SHASUMS256.txt`, the attestation, the frozen pre-attestation list) for the store-copy caller, with `attach-assets-run.test.ts`'s call-order assertion unchanged; their answers go under Audit verdicts | The planning panel's last Codex round rejected on that fix and it was applied unreviewed | — |
+| D19 | `verify-store-copies.yml`'s job holds `contents: read` and `attestations: read` | The plan grants the second scope only if `gh attestation verify` needs it, as measured; the job token cannot be measured before the workflow reaches `dev` (scheduled and dispatched runs start there), and anonymous `api.github.com` is rate-limited from this host. A read scope on public data costs nothing, while a missing one would red the first run for a permission instead of a store difference | Implementation decision (phase 2.3); put to the arc's Codex round and Opus review |
+| D20 | Chrome's allowlist names the `_metadata/` directory entry beside `_metadata/verified_contents.json` | The re-measure found it in the central directory (627 entries); phase 0 compared unpacked trees, which hide directory entries. It holds no bytes | Implementation deviation from § Arc 2 (#179) step 2, found by its own step 1 |
+| D21 | `hoist = false` is reverted and #172 stays open; the PR title drops "hoist nothing" and says `Refs #172` | The battery on a fresh install found six third-party packages importing what they do not declare (`@aztec-labs/aztec.js` from aztec-standards, `vue` from `@pinia/testing`, `@vue/compiler-sfc` from local-pkg for vite-plugin-pages, `@storybook/vue3-vite` from storybook, the polyfill plugin's rewritten `buffer` shim, `@aztec-labs/simulator` from presto), past the stop rule's three. One bounded probe hoisted them to complete the list for #172, then the key and the probe were reverted; nothing of it is committed | The stop rule pre-registered in § Arc 2 (#172) |
 | D13 | The `live` step runs `scripts/ci-cd/live-labels.sh <label> <alias>` after the checkout, instead of four inline copies before it; its tests live in `behavior-gating.test.ts` (`live labels`) and the `decide` refusal's in `aggregators.test.ts` | One source that shellcheck lints and the shim test runs directly, pinned identical in all four lanes; an obsolete run now pays one checkout before it stops, seconds against a suite's minutes | Implementation deviation from § Arc 1's inline step (arc 1 build). `pr-supersede.yml` stays inline: its job holds `actions: write` and checks nothing out |
 | D14 | `implementations-plan/lessons.md`'s concurrency line is rewritten in arc 1, not at close-out | It states the push-first-attempt rule arc 1 replaces; every task reads that file first, so it must not outlive the merge | Implementation deviation from § Post-implementation step 5 |
 | D15 | The live step also writes the pull request's live `base`; `decide` reads it and refuses an empty one on a pull request | A run admitted late, or re-run, after a retarget would otherwise decide from the event's base | Codex round 1 finding 2 (accepted in part). Rejected: subscribing the lanes to `edited`, because every title or body edit would re-run the suites and an `edited` run that re-decided to skip would post a success copy; a retarget still starts no run, the recovery (close and reopen, or push) is in CI.md. Codex round 2 holds that the retarget gap stays a bypass; it is pre-existing (`pr-quick.yml` documents it for `quality-status`) and is recorded as an accepted residual of arc 1, filed as #251 (`owner-decision`: CI cost against coverage, with a cheaper base-change re-run job as the possible fix) |
@@ -566,6 +572,53 @@ Verdict: **approve with fixes**. The three answers: D2 holds for ordering but no
 | 5 | Low. Tests: a wrong comment, a misnamed case, an unbound env value passing as a literal | Accepted: comment replaced, a failing-read case added, unbound `${{ }}` throws |
 | D5 | A reading whose re-run leg did not pass is void; the probe lacks the lanes' `needs: decide` shape | Accepted: precondition and `gate` job |
 | 6 | Low, out of scope. `complexity-baseline.test.ts` reads `baseline:move-approved` from the event payload | Filed as #250; not arc 1's surface |
+
+### Arc 2, Codex round 1 (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Session 01a123e0-aece-7ed3-9f04-4189a3807f85, on `c0e1e69...f1c0618` (phases 2.1 to 2.3). Verdict: **approve with fixes**. The D-orch-7 question first:
+
+| Check, for the store-copy caller | Answer | Where it checked |
+|---|---|---|
+| (a) GitHub's asset digest against the downloaded bytes | Yes | `attach-assets-run.ts` `fetchVerified`: digest required, download hashed and compared |
+| (b) `SHASUMS256.txt` | Yes | `store-copy-run.ts` fetches it through `fetchVerified` itself, then requires exactly the two zips and the store zip's line |
+| (c) the attestation | Yes | `attested`, then `gh attestation verify --signer-workflow … --source-digest <tagSha> --deny-self-hosted-runners` |
+| (d) the frozen pre-attestation list | Yes | `PRE_ATTESTATION = ["0.30.2"]` is the only digest-only branch |
+| the publish path unchanged | Yes | only types and export visibility changed; `runApply` and `runVerifyPublished` unchanged; `attach-assets-run.test.ts` unedited and green |
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. The manual unstick tagged on empty `git grep` output, so a failing `git grep` (exit 128) tagged a release with blanks | Accepted, and widened: `git grep` also exits 1 on a missing path, so the block now tags only when both files exist (`git cat-file -e`) and `git grep` exits 1. Exercised in bash and zsh on five commits: blanks refused, a 0.x tagged, a filled 1.0.0 tagged, a commit without the files refused, an unknown commit refused. zsh read `$MERGE_COMMIT:l…` as its lowercase modifier; the variable is braced |
+| 2 | Medium. The release downloads inherit `attach-assets-run.ts`'s unbounded `arrayBuffer()` | Rejected: a non-frozen asset is downloaded only after `attested` finds an attestation for its digest, which only this repository's release and nightly workflows can create, so its bytes are this repository's own build; the frozen v0.30.2's are fixed. Every remaining failure (a replaced oversized asset on v0.30.2) ends the run red. A second downloader would duplicate the publish path's redirect handling without changing any conclusion the check can reach |
+| 3 | Low. A served `manifest.json` with a `"__proto__"` key hid a difference against the inherited prototype | Accepted: own keys only (`Object.hasOwn`); case added, red on the old copy |
+| 4 | Low. The "no release" case stopped at the missing tag; malformed AMO fields had no case | Accepted: a tag with zero and with two releases, an AMO file outside addons.mozilla.org and a non-sha256 AMO hash |
+| 5 | Low. The cache-poisoning comment ended up above the store-copy pins | Accepted: moved back above `describe("Bun's install cache")` |
+
+### Arc 2, Opus review (same family, read-only), 2026-10-10
+
+On `c0e1e69...f1c0618`, alongside Codex round 1. Verdict: **approve with fixes**, every finding Low. The D-orch-7 question first: **yes** on (a) the digest (`attach-assets-run.ts` `fetchVerified`, digest refused when absent and compared after the download), (b) `SHASUMS256.txt` (fetched through `fetchVerified`, then exactly the two zips and the store zip's line), (c) the attestation (`attested` before the download, `verifyAttestation` with `tagSha` from `tagCommit` after it), (d) the frozen list (the one digest-only branch; nothing compares before `releaseZip` returns), and the publish path (`runApply`, `runVerifyPublished`, `realIO` untouched; the call-order assertion passes). It ran the release tests, the live-gate test, the presto and pin suites, and the manual block in bash and zsh.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `__proto__` in a served manifest hides a difference | Same as Codex 3; fixed |
+| 2 | `git grep` exits 1 on a missing path, so the manual block tags a commit without the documents | Accepted (merged into Codex 1's fix: `git cat-file -e` on both files first) |
+| 3 | The live case's directory is created at describe scope, so a skipped run leaves an empty temp directory | Accepted: created and removed inside the test; the empty leftovers removed |
+| 4 | Three run guards have no planted case: `SHASUMS256.txt` naming another zip, the entry-list check inside `readArchive`, the shared output budget | Accepted: three cases, each red when its guard is removed |
+| 5 | The import-free pin misses `export … from` | Accepted: the pattern refuses any `from "…"` |
+| 6 | Renaming `NULO_LAUNCH_GATE` in the test would skip the live assertion and pass `launch-legal` | Accepted: the pin also reads the test file for `process.env.NULO_LAUNCH_GATE` |
+| 7 | Docs: the tag-creation ruleset still lets the owner push a tag; a Release PR is opened against `main`, so `--admin` is its realistic bypass | Accepted: CLAUDE.md says the ruleset leaves a hand-pushed tag to the owner alone; the troubleshooting cause names `--admin`; CI.md names both a retarget (a promote PR) and `--admin` |
+| 8 | With no `node_modules`, Bun auto-installs a bare import from npm at run time in every job that installs nothing (moderate confidence) | Verified in Bun's docs (`install.auto` defaults to `"auto"`). Accepted for this arc's workflow: `bun --no-install`, pinned. The pre-existing jobs (`auto-unstick`, `attach-assets`, `sync-main-to-dev`, both store publishers, `publish-nightly`, `preview-comment`) are outside arc 2's change map: filed as #260 |
+
+### Arc 2, Codex round 2 (resumed), 2026-10-10
+
+On `f1c0618..6d5e7ea`. Every accepted round-1 finding is fixed with no regression. Codex ran the manual block through 24 bash and zsh cases, with and without `errexit`, and each new guard went red under its mutation. Nothing new in the fix commit was wrong. The phase 2.4 record holds: the tree outside the plan files equals `2f46ecf`, and six entries against three is the stop rule as written.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. Round 1's finding 2, held: v0.30.2 skips the attestation and its release is mutable, so its asset's bytes are no longer only this repository's build. `attach-assets-run.ts`'s download buffers the whole response before the digest is checked. | Accepted. `realIO` takes an asset byte limit, unbounded by default so the publish path keeps its behaviour. `realStoreIO` passes `DOWNLOAD_LIMIT` (128 MiB), and the store downloads share `readBounded`, which refuses while streaming. New cases: the exact limit kept and one byte more refused; a 200 MiB release asset stops streaming at the limit while a small one is written. Each is red with its wiring or its check removed. `attach-assets-run.test.ts` is unedited and passes. |
+
+### Arc 2, Codex round 3 (resumed), 2026-10-10
+
+On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same bytes, same HTTP error text, and a null body yields empty bytes as `arrayBuffer()` did. The test routes the API call to the redirect and the storage call to the body, needs the exact limit error, and the small control proves the routing reaches the write. The loop converged in three rounds.
 
 ## Post-implementation
 
