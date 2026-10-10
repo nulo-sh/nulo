@@ -31,7 +31,7 @@ import { TransferType } from "@/wallet/services/transaction/client"
 import { managers } from "@/utils/core"
 import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
-import { withoutId } from "@/utils/entity-list"
+import { contactListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feeLine } from "@/popup/components/modules/send/fee-helpers"
 import { validateSendAmount } from "@/popup/pages/send-amount"
@@ -192,26 +192,13 @@ const initReceiverType = () => {
 	}
 }
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
-
 const contacts = ref([])
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(contactList.onUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
+
 const selectedContact = ref()
 const searchTerm = ref("")
 const recipientCandidates = computed(() => [...contacts.value, ...appStore.accounts])
