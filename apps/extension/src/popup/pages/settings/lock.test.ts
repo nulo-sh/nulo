@@ -1,6 +1,6 @@
 import { createTestingPinia } from "@pinia/testing"
 import { Flex, MaterialIcon, Text } from "@nulo/design"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const fakes = vi.hoisted(() => ({
@@ -92,7 +92,7 @@ describe("settings/lock", () => {
 		fakes.config.setValue.mockRejectedValueOnce(new Error("persist failed"))
 		const w = await mountLock()
 		await debounced()
-		const field = () => w.findComponent('[data-testid="auto-lock-input"]')
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
 
 		field().vm.$emit("update:modelValue", "0")
 		await debounced()
@@ -110,7 +110,7 @@ describe("settings/lock", () => {
 		fakes.config.setValue.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
 		const w = await mountLock()
 		await debounced()
-		const field = () => w.findComponent('[data-testid="auto-lock-input"]')
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
 
 		field().vm.$emit("update:modelValue", "0")
 		await debounced()
