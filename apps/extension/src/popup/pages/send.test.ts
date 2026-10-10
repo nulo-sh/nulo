@@ -130,6 +130,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { TransferType } from "@/wallet/services/transaction/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
+import { held, holdReads } from "../../../tests/helpers/held-read"
 import Send from "./send.vue"
 
 const STUBS = {
@@ -803,26 +804,7 @@ describe("send page — the token card while the tokens load", () => {
 	/** Another chain's token that carries the id the page keeps selected. */
 	const FOREIGN = { ...TOKEN, chainId: 999, contract: `0x${"f".repeat(64)}`, symbol: "FRN" }
 
-	type Held = { promise: Promise<unknown[]>; resolve: (tokens: unknown[]) => void; reject: (error: unknown) => void }
-	function held(): Held {
-		let resolve!: Held["resolve"]
-		let reject!: Held["reject"]
-		const promise = new Promise<unknown[]>((res, rej) => {
-			resolve = res
-			reject = rej
-		})
-		return { promise, resolve, reject }
-	}
-	/** Every getTokens call waits for the test: `reads[n]` settles the n-th. */
-	function holdTokenReads(): Held[] {
-		const reads: Held[] = []
-		mocks.getTokens.mockImplementation(() => {
-			const read = held()
-			reads.push(read)
-			return read.promise
-		})
-		return reads
-	}
+	const holdTokenReads = () => holdReads<unknown[]>(mocks.getTokens)
 	const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
@@ -1092,7 +1074,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("a token added for this identity during the load is in the loaded list", async () => {
-		const first = held()
+		const first = held<unknown[]>()
 		mocks.getTokens.mockReturnValueOnce(first.promise).mockResolvedValue([TOKEN, OTHER])
 		const { w, cacheStore } = await mountSend()
 		tokenAdded().invoke(OTHER)
