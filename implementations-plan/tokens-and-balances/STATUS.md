@@ -14,3 +14,4 @@
 - 2026-10-10 — gate 1.2 pass: lint, typecheck:all, token + network + write log 296/296; 15 of the new token tests and both R4 tests red on base fd47407 (lessons/phase-1.md); D-arc1-1, D-arc1-2 recorded.
 - 2026-10-10 — gate 1.3 pass: lint, typecheck:all, profile + profile-deletion + utils + usePinnedTokens 1500/1500; the two #93 order tests red on base fd47407.
 - 2026-10-10 — arc gate: audit:vue pass (extension 10901), test:all pass; Codex r1 approve with fixes (1 Medium, 1 Low), Opus approve with fixes (4 Low, 2 nits); fixes applied (D-arc1-3, D-arc1-4).
+- 2026-10-10 — Codex r2: approve, no new material code finding (one Low on plan wording, applied). Loop converged after two rounds.

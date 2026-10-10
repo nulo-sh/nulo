@@ -639,7 +639,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	/** Body of `_deleteTokenById`. The caller MUST already hold `this.lock`
 	 *  (the lock is not reentrant — taking it again here would deadlock).
-	 *  Released, it refuses: the id may hold a successor's row by then. */
+	 *  Released before it issues the remove, it refuses: the id may hold a successor's row by then. */
 	private async _deleteTokenByIdHoldingLock(id: number, ownsLock: () => boolean, emit = true): Promise<TokenInfo> {
 		const token = await this.tokens.get(`${id}`)
 		if (!token) {

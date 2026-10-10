@@ -51,3 +51,6 @@
   wallet already shows.
 - Lesson: R5's "check before every observable step" over-applied to a step that follows a write in the same
   turn: refusing the announcement of a write that already landed is worse than announcing it.
+- 2026-10-10 — Codex round 2 (resumed): approve, no new material code finding; it verified D-arc1-3's ordering
+  with the extracted methods and a real `Lock`. One Low on plan wording (R5, § Security, § UI impact still
+  stated the old rule), applied. Loop converged in two rounds.

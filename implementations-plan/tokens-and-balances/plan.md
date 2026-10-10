@@ -150,8 +150,10 @@ function onBalanceDeleted(tb: TokenBalanceInfo) {
 
 - **R5, a displaced restore, deletion or purge refuses.** `restore`, token deletion (`deleteToken` →
   `_deleteTokenByIdHoldingLock`) and the profile purge (its typed deletes, `:758-763`, and its raw
-  pass, `purgeMalformedRows`, which gains an optional ownership guard) receive `ownsLock` and check it
-  synchronously right before each token-row `set`, `delete` and emit, with no await between. A
+  pass, `purgeMalformedRows`, through a guarded storage view, D-arc1-1) receive `ownsLock` and check it
+  synchronously right before each token-row `set`, `delete` and emit, with no await between. One
+  exemption (D-arc1-3): a deletion announces a tracked remove it issued while owned once that remove
+  settles, since no successor can act before that turn. A
   released one refuses that step with a fixed `token lock lost` error: restore records it on that row
   and every later one through `restoreRows` (best-effort by design, `restore-rows.ts:13-16`);
   deletion rejects; the purge throws, so the deletion coordinator keeps the profile's tombstone and a
@@ -345,7 +347,7 @@ Built only on OA-1 = A or C; designed here so the answer can be built without a 
 | 1 | `apps/extension/src/wallet/services/token/service.ts` (+ `service.test.ts`, `service.composition.test.ts`) | the write tracker and `withTokenLock`, the attempt loop, `persistAttempt` and its helpers, the hit fence |
 | 1 | `apps/extension/src/wallet/services/storage-write-log.ts` | hold-before-apply hook, `afterSet` awaitable (test helper) |
 | 1 | `apps/extension/src/wallet/services/network/service.ts` (+ test) | R4: a reservation during the liveness read reads as dead |
-| 1 | `apps/extension/src/wallet/services/purge-rows.ts` | `purgeMalformedRows` takes an optional ownership guard (R5) |
+| 1 | `apps/extension/src/wallet/services/purge-rows.ts` | unchanged: the guard lives in the storage view the token service passes (D-arc1-1) |
 | 1 | `apps/extension/src/wallet/services/profile/service.ts` (+ test) | remove UI keys at the two adoption points |
 | 1 | `apps/extension/src/utils/profile-ui-keys.ts` | header comment |
 | 2 | `apps/extension/src/popup/components/modules/holdings/TokenList.vue` (+ test) | add row |
@@ -449,7 +451,7 @@ Validation gate:
 3. In `TokenService`, add the tracker and `withTokenLock` (R2): route the four `withLock` sites, every
    token-row `set`/`delete` and `persistToken`'s journal writes through them, and drain before
    `clearChainState`'s snapshot; give restore, token deletion and the purge R5's ownership checks
-   (an optional guard on `purgeMalformedRows`). Then split
+   (a guarded storage view for `purgeMalformedRows`, D-arc1-1). Then split
    `persistToken` into the attempt loop and `persistAttempt` with its helpers, as in Architecture.
 4. Test in `token/service.test.ts` and `service.composition.test.ts`, with the watchdog test's
    technique (`service.test.ts:498`: fake timers, advance five minutes and one millisecond) and the
@@ -665,7 +667,7 @@ Validation gate:
     the lock fails with a new raw `token lock lost` message (a restored row records it; a deletion
     rejects; a profile deletion stops, keeps its tombstone and finishes on the next background start,
     as any failed purge does) instead of overwriting or
-    deleting another token's row. A deletion whose own remove landed before the lock was lost
+    deleting another token's row. A deletion whose own remove was issued before the lock was lost
     completes and announces it, as today (D-arc1-3). A restored row whose network was deleted during that wait stays,
     and is listed again if a network for its chain is added back.
 - **Arc 2:** P8-01 and P8-02, quoted in their phases. Anything beyond them is OA-2 and OA-4.
@@ -683,7 +685,8 @@ extension view that has not seen a deletion.
   another add or a restore wrote, nor write a second row for one contract. A displaced add's
   in-flight writes land before any successor reads (R2), so no successor allocates over a write it
   cannot see yet; R2 tracks every token-row write in the service, and a displaced restore or
-  deletion or purge refuses its next write instead of making it (R5). The deletion leg never deletes once released (a same-contract restore under the
+  deletion or purge refuses its next write instead of making it (R5; a deletion still announces a
+  remove it issued while owned, D-arc1-3). The deletion leg never deletes once released (a same-contract restore under the
   reused id keeps its row). The network leg deletes only under an owned ticket, only the exact bytes
   it wrote, only when no live network holds the chain, and a liveness read that overlapped a
   reservation reads as dead (R4). Every exit, the `findToken` hit included, re-asserts the deletion
@@ -906,6 +909,15 @@ Both conditions are wording and are applied; no further round was run. The revie
 | 4 | Low | R4 plus a failed network deletion leaves a kept row reporting "network deleted" | Accepted as residue (D-arc1-4), disclosed |
 | 5 | Nit | Comment placement in the profile suite | Accepted (same as Codex 2) |
 | 6 | Nit | "today's idempotent re-add"; "the metadata fetch above" points at a call | Accepted |
+
+### Arc 1 implementation, Codex round 2 (same session, resumed), `approve (no new material code finding)`
+
+The reviewer verified D-arc1-3's ordering argument with the extracted methods and a real `Lock`, including
+a successor that loses its ticket while draining.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | R5, § Security and § UI impact still state the pre-D-arc1-3 rule, and the deletion's doc comment says "released, it refuses" without saying before what | Accepted: the exemption is written into R5, § Security and § UI impact ("issued before", not "landed before"); the comment says "released before it issues the remove" |
 
 ## Post-implementation
 
