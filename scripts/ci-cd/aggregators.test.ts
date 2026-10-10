@@ -137,7 +137,12 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 		worlds: {
 			"a PR that builds everything": quality("pull_request", "true", "true", []),
 			"a PR that builds the extension only": quality("pull_request", "true", "false", ["build-landing"]),
-			"a PR that builds nothing": quality("pull_request", "false", "false", ["build-chrome", "build-firefox", "build-landing"]),
+			"a PR that builds nothing": quality("pull_request", "false", "false", [
+				"build-chrome",
+				"build-firefox",
+				"build-landing",
+				"build-storybook",
+			]),
 			"a manual dispatch": quality("workflow_dispatch", "true", "true", ["commitlint"]),
 		},
 	},
@@ -232,8 +237,11 @@ function expectEveryOtherResultFails(agg: Aggregator, world: World): void {
 // `cancelled`. These scripts read their results inline.
 const SMOKE = aggregator("pr-extension-smoke-e2e.yml")
 const SMOKE_FIREFOX = aggregator("pr-extension-smoke-e2e-firefox.yml")
+const READ_ATTEMPT = "needs.changes.outputs.read-attempt"
 const smoke = (run: string, skipped: string[]): World => ({
 	"needs.decide.outputs.run": run,
+	[READ_ATTEMPT]: "1",
+	"github.run_attempt": "1",
 	...results(SMOKE.needs, skipped),
 })
 const SMOKE_WORLDS: Record<string, World> = {
@@ -266,7 +274,7 @@ test.each([
 		"needs.changes.outputs.needs-extension-build",
 		QUALITY,
 		quality("pull_request", "true", "true", []),
-		["build-chrome", "build-firefox"],
+		["build-chrome", "build-firefox", "build-storybook"],
 	],
 	["needs.changes.outputs.needs-landing-build", QUALITY, quality("pull_request", "true", "true", []), ["build-landing"]],
 	["needs.changes.outputs.workflows", ACTIONLINT, lint("true", "true", []), ["actionlint"]],
@@ -334,39 +342,72 @@ test("release runs the network suite in the one job attach-assets and status rea
 // for the suites, and the aggregator must then fail on them skipped. A draft-flag read spelled any
 // other way than the one this world binds has no value here, and throws.
 const E2E_LANES = [
-	{ file: "pr-extension-smoke-e2e.yml", surface: "smoke-surface", label: "smoke" },
-	{ file: "pr-extension-smoke-e2e-firefox.yml", surface: "smoke-surface", label: "smoke" },
-	{ file: "pr-extension-network-e2e.yml", surface: "extension-network", label: "network" },
-	{ file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network", label: "network" },
+	{ file: "pr-extension-smoke-e2e.yml", surface: "smoke-surface" },
+	{ file: "pr-extension-smoke-e2e-firefox.yml", surface: "smoke-surface" },
+	{ file: "pr-extension-network-e2e.yml", surface: "extension-network" },
+	{ file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network" },
 ]
-const labels = (label: string): string =>
-	`contains(github.event.pull_request.labels.*.name, 'e2e:extension-${label}') || contains(github.event.pull_request.labels.*.name, 'e2e:${label}')`
+const LABEL_HIT = "needs.changes.outputs.label-hit"
 
-/** What a lane's `Decide` step writes to `$GITHUB_OUTPUT`. */
-function decided(file: string, world: World): string {
+/** Runs a lane's `Decide` step: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
+function decide(file: string, world: World): { code: number; output: string } {
 	const step = workflow(file).jobs.decide.steps[0]
 	const dir = mkdtempSync(join(tmpdir(), "decide-"))
 	try {
 		const output = join(dir, "output")
-		expect(exitCode({ file, run: step.run, env: step.env ?? {} }, world, { GITHUB_OUTPUT: output }), `${file}: decide`).toBe(0)
-		return readFileSync(output, "utf8").trim()
+		const code = exitCode({ file, run: step.run, env: step.env ?? {} }, world, { GITHUB_OUTPUT: output })
+		return { code, output: code === 0 ? readFileSync(output, "utf8").trim() : "" }
 	} finally {
 		rmSync(dir, { recursive: true, force: true })
 	}
 }
 
-test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface, label }) => {
+function decided(file: string, world: World): string {
+	const { code, output } = decide(file, world)
+	expect(code, `${file}: decide`).toBe(0)
+	return output
+}
+
+const prWorld = (surface: string, over: World = {}): World => ({
+	"github.event_name": "pull_request",
+	"needs.changes.outputs.base": "dev",
+	[`needs.changes.outputs.${surface}`]: "false",
+	[LABEL_HIT]: "false",
+	...over,
+})
+
+// The live read always writes true or false; anything else is a wiring fault, and reading it as
+// false would skip a suite the labels ask for.
+test.each(E2E_LANES)("$file decides from the live label and base, and refuses a malformed one", ({ file, surface }) => {
+	expect(decided(file, prWorld(surface, { [LABEL_HIT]: "true" }))).toBe("run=true")
+	expect(decided(file, prWorld(surface))).toBe("run=false")
+	for (const value of ["", "yes", "True"]) expect(decide(file, prWorld(surface, { [LABEL_HIT]: value })).code, `'${value}'`).not.toBe(0)
+	expect(decided(file, prWorld(surface, { "needs.changes.outputs.base": "main" })), "the live base forces main's run").toBe("run=true")
+	expect(decide(file, prWorld(surface, { "needs.changes.outputs.base": "" })).code, "an empty base").not.toBe(0)
+})
+
+test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface }) => {
 	const draft: World = {
-		"github.event_name": "pull_request",
-		"github.base_ref": "dev",
+		...prWorld(surface, { [`needs.changes.outputs.${surface}`]: "true" }),
 		"github.event.pull_request.draft": "true",
-		[`needs.changes.outputs.${surface}`]: "true",
-		[labels(label)]: "false",
 	}
 	expect(decided(file, draft)).toBe("run=true")
 	const agg = aggregator(file)
 	const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
-	const ran = { "needs.decide.outputs.run": "true", ...results(agg.needs, []) }
+	const ran = { "needs.decide.outputs.run": "true", [READ_ATTEMPT]: "1", "github.run_attempt": "1", ...results(agg.needs, []) }
 	expect(exitCode(agg, ran)).toBe(0)
 	expect(exitCode(agg, { ...ran, ...results(suites, suites) })).not.toBe(0)
+})
+
+// A re-run of `status` or `decide` alone carries the earlier attempt's gate inputs, so a skip decided
+// on labels read before a label was added could pass; a re-run of failed suites keeps its ran gate.
+test.each(E2E_LANES)("$file accepts skipped suites only on labels read in this attempt", ({ file }) => {
+	const agg = aggregator(file)
+	const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
+	const skip = { "needs.decide.outputs.run": "false", ...results(agg.needs, suites) }
+	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "2", "github.run_attempt": "2" })).toBe(0)
+	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "1", "github.run_attempt": "2" })).not.toBe(0)
+	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "", "github.run_attempt": "1" })).not.toBe(0)
+	const rerunSuites = { "needs.decide.outputs.run": "true", ...results(agg.needs, []), [READ_ATTEMPT]: "1", "github.run_attempt": "2" }
+	expect(exitCode(agg, rerunSuites)).toBe(0)
 })
