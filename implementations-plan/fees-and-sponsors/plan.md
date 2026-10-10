@@ -617,6 +617,10 @@ May start now (tests and comments only). Rebase on send-queue-activity arc 1 bef
 - **Pass:** every command exits 0 after each extraction commit, and no existing pin was edited except for a renamed import.
 - **Layers:** lint, typecheck, unit.
 
+#### Phase 1.6: the fee reply shape (#197, `Refs #197`; D-orch-5) ✓
+
+A shape check at `predictedWorstMinFees`'s returns refuses a reply without integer fee components with a fixed error; the estimate path shows its existing failed-estimate toast and the reuse ladders miss. Pins: a null-like current min and a null-like predicted slot are refused; well-formed replies pass. Gate: lint, aztec-runtime typecheck and tests, the execution unit suite. Log: [lessons/phase-1.md](lessons/phase-1.md).
+
 #### Phase 1.5: arc 1 end-to-end gate
 
 **Warning.** Until e2e-harness-gaps arc 1a (#169) merges, run one `e2e:agent` on the host at a time (gate G1). Wait for any other worktree's run to end first.

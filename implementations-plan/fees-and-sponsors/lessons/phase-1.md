@@ -10,3 +10,12 @@
   - `operation-planner.test.ts`: the planner's Send-page `send_transaction` carries no `fee`.
 - **Deviation: five comment sites, not four.** The "byte-for-byte" claim the plan placed in `account/fee-options.ts` lives in `account/nulo-account.ts`; `fee-options.ts` carries a sibling "(matches upstream)" claim. Upstream 6.0.0-rc.1 defaults to `getMinFees(Limit)` × 1.5 (`wallet-sdk/dest/base-wallet/base_wallet.js:180`), Nulo to `getCurrentMinFees()` × 1.5, so both claims were false. Both were corrected; no code changed. The embedded strategy's inline "keeps max_gas_cost within the dApp's embedded amount" repeated the budget claim and was cut with it.
 - Gate: `bun run lint` ✓, `bun run typecheck:all` ✓, the phase's vitest command (8 files, 200 tests) ✓, `bun run --cwd packages/aztec-runtime test` (372 passed, 2 skipped) ✓.
+
+## Phase 1.6: the fee reply shape (#197's in-repo half, 2026-10-10)
+
+- Built before #264 lands: `packages/aztec-runtime/src/fee-juice.ts` and its callers are outside #264's files.
+- `predictedWorstMinFees` passes every node reply (each current-min read, each predicted slot) through `checkedFees`, which refuses anything without bigint components with the fixed `Error("Malformed fee reply from the node")`. The check is structural, not `instanceof`: test nodes hand back bare `{feePerDaGas, feePerL2Gas}` objects (`transfer-estimate-reuse.ts:202-205` re-wraps for that reason).
+- **Where the refusal goes (traced, read-only Explore agent):** an estimate failure reaches the popup as a plain `Error`; Send and the execute window log it and show their existing fixed toast "Couldn't estimate fee. Try again." (`send.vue:394-400`, `windows/execute/index.vue:153-156`); the reuse ladders treat a failed fee read as a miss (`operation-estimate-reuse.ts:144-148`, `transfer-estimate-reuse.ts:207-210`). The only place an error's own text can show is the execute window's processing-error detail (`windows/execute/index.vue:517`), which today would show the TypeError's text for the same reply.
+- "The two reply pins": read as one refusal pin per reply source (a null-like current min; a null-like predicted slot), beside a success control. Both refusals fail against the base copy (checked).
+- Not covered, by scope: the other direct `getCurrentMinFees()` reads (`embedded-fpc-cap.ts`, the NO_FROM build, `completeFeeOptions`); #197 names only `fee-juice.ts`.
+- Gate: `bun run lint` ✓, `bun run --cwd packages/aztec-runtime typecheck` ✓, aztec-runtime tests (375 passed, 2 skipped) ✓, `apps/extension` execution suite (1026 passed) ✓.

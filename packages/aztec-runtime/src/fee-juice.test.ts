@@ -51,3 +51,30 @@ describe("predictedWorstMinFees fallback", () => {
 		expect(box.currentCalls).toBe(1)
 	})
 })
+
+// The JSON-RPC client returns a null-like node result as `undefined` before any schema parse.
+describe("predictedWorstMinFees reply shape", () => {
+	const MALFORMED = "Malformed fee reply from the node"
+
+	test("a null-like current-min reply is refused with the fixed error", async () => {
+		const n: MinFeeNode = { getCurrentMinFees: async () => undefined as unknown as GasFees }
+		await expect(predictedWorstMinFees(n)).rejects.toThrow(new Error(MALFORMED))
+	})
+
+	test("a null-like predicted slot is refused with the fixed error", async () => {
+		const n: MinFeeNode = {
+			getPredictedMinFees: async () => [new GasFees(5n, 6n), undefined as unknown as GasFees],
+			getCurrentMinFees: async () => new GasFees(1n, 1n),
+		}
+		await expect(predictedWorstMinFees(n)).rejects.toThrow(new Error(MALFORMED))
+	})
+
+	test("well-formed replies pass: the component-wise worst slot, and the current min without predictions", async () => {
+		const predicting: MinFeeNode = {
+			getPredictedMinFees: async () => [new GasFees(5n, 9n), new GasFees(7n, 6n)],
+			getCurrentMinFees: async () => new GasFees(1n, 1n),
+		}
+		expect(await predictedWorstMinFees(predicting)).toEqual(new GasFees(7n, 9n))
+		expect(await predictedWorstMinFees({ getCurrentMinFees: async () => new GasFees(3n, 4n) })).toEqual(new GasFees(3n, 4n))
+	})
+})

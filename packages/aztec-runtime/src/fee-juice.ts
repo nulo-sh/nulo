@@ -6,6 +6,20 @@ export type MinFeeNode = {
 	getCurrentMinFees: () => Promise<GasFees>
 }
 
+/** The node's fee reply, refused unless both components are integers: the JSON-RPC client returns a
+ *  null-like result as `undefined` without parsing it, so fee math would otherwise fail opaquely. */
+function checkedFees(reply: unknown): GasFees {
+	const fees = reply as { feePerDaGas?: unknown; feePerL2Gas?: unknown } | null | undefined
+	if (typeof fees?.feePerDaGas !== "bigint" || typeof fees.feePerL2Gas !== "bigint") {
+		throw new Error("Malformed fee reply from the node")
+	}
+	return reply as GasFees
+}
+
+async function currentMinFees(node: MinFeeNode): Promise<GasFees> {
+	return checkedFees(await node.getCurrentMinFees())
+}
+
 /**
  * The protocol's worst-case min fee across predicted future slots — the inclusion-safe basis for a
  * committed `maxFeesPerGas`. Like `@aztec-labs/wallet-sdk` `BaseWallet.getMinFees` (Limit estimate,
@@ -16,7 +30,7 @@ export type MinFeeNode = {
  * CURRENT min fee risks an inclusion-time reject if the base fee rises in that window.
  */
 export async function predictedWorstMinFees(node: MinFeeNode): Promise<GasFees> {
-	if (!node.getPredictedMinFees) return node.getCurrentMinFees()
+	if (!node.getPredictedMinFees) return currentMinFees(node)
 	let predicted: GasFees[]
 	try {
 		// Limit-congestion estimate (blocks at max capacity), matching BaseWallet's conservative default -
@@ -28,19 +42,20 @@ export async function predictedWorstMinFees(node: MinFeeNode): Promise<GasFees> 
 		// propagate, or the cap is silently under-priced.
 		const code = (e as { cause?: { code?: number } } | null | undefined)?.cause?.code
 		const msg = e instanceof Error ? e.message : String(e)
-		if (code === -32601 || /method not found/i.test(msg)) return node.getCurrentMinFees()
+		if (code === -32601 || /method not found/i.test(msg)) return currentMinFees(node)
 		throw e
 	}
-	if (!predicted || predicted.length === 0) return node.getCurrentMinFees()
+	if (!predicted || predicted.length === 0) return currentMinFees(node)
 	// Component-wise worst across slots (max each fee independently) — a true upper bound even if the DA
 	// and L2 fees peak in different slots, so the committed cap is never under-priced on either axis.
 	const first = predicted[0]
-	if (!first) return node.getCurrentMinFees()
-	let worstDa = first.feePerDaGas
+	if (!first) return currentMinFees(node)
+	let worstDa = checkedFees(first).feePerDaGas
 	let worstL2 = first.feePerL2Gas
 	for (const f of predicted) {
-		if (f.feePerDaGas > worstDa) worstDa = f.feePerDaGas
-		if (f.feePerL2Gas > worstL2) worstL2 = f.feePerL2Gas
+		const fees = checkedFees(f)
+		if (fees.feePerDaGas > worstDa) worstDa = fees.feePerDaGas
+		if (fees.feePerL2Gas > worstL2) worstL2 = fees.feePerL2Gas
 	}
 	return new GasFees(worstDa, worstL2)
 }
