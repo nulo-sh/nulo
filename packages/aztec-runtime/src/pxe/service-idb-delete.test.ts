@@ -39,7 +39,7 @@ type Listing = IDBDatabaseInfo[] | Promise<IDBDatabaseInfo[]>
 type Internals = {
 	sweepOrphanStores(): Promise<void>
 	storeKeys: Map<string, Uint8Array>
-	profileLifecycles: Map<string, { kind: string; gen: string }>
+	profileLifecycles: Map<string, { current?: { kind: string; gen: string }; dead: Set<string> }>
 	profileBarriers: Map<string, unknown>
 	getProfileBarrier(profileId: string): ReadWriteGuard
 }
@@ -231,7 +231,7 @@ describe("profile erasure: verified, waits 5 s on a blocked delete then rejects"
 		const service = makeService()
 		await service.clearProfileState("p1", "gen-1")
 		expect(h.calls).toEqual(["disposeProfile", "removeProfileStoreDirs", "databases", "delete:pxe/p1/1", "delete:pxe/p1/2"])
-		expect(internals(service).profileLifecycles.get("p1")).toEqual({ kind: "deleted", gen: "gen-1" })
+		expect(internals(service).profileLifecycles.get("p1")).toEqual({ dead: new Set(["gen-1"]) })
 		expect(internals(service).profileBarriers.has("p1")).toBe(false)
 		expect(warns).toEqual([])
 	})
@@ -265,7 +265,7 @@ describe("profile erasure: verified, waits 5 s on a blocked delete then rejects"
 		await until(() => run.outcome() !== "pending")
 		expect(run.outcome()).toBe("resolved")
 		expect(h.calls).not.toContain("delete:keyval-store")
-		expect(internals(service).profileLifecycles.get("p1")).toEqual({ kind: "deleted", gen: "gen-1" })
+		expect(internals(service).profileLifecycles.get("p1")).toEqual({ dead: new Set(["gen-1"]) })
 		expect(internals(service).profileBarriers.has("p1")).toBe(false)
 	})
 
@@ -283,7 +283,7 @@ describe("profile erasure: verified, waits 5 s on a blocked delete then rejects"
 		expect(run.outcome()).toBe("pending")
 		await vi.advanceTimersByTimeAsync(1)
 		expect(run.outcome()).toEqual(new Error("deleteDatabase blocked past timeout: pxe/p1/1"))
-		expect(internals(service).profileLifecycles.get("p1")).toEqual({ kind: "deleting", gen: "gen-1" })
+		expect(internals(service).profileLifecycles.get("p1")).toEqual({ current: { kind: "deleting", gen: "gen-1" }, dead: new Set() })
 		expect(internals(service).profileBarriers.has("p1")).toBe(true)
 		await expect(
 			internals(service)
@@ -337,7 +337,7 @@ describe("profile erasure: verified, waits 5 s on a blocked delete then rejects"
 		const run = service.clearProfileState("p1", "gen-1")
 		await until(() => reqs.has("pxe/p1/1"))
 		let readAt = -1
-		const counter = tickCounter(() => internals(service).profileLifecycles.get("p1")?.kind === "deleted")
+		const counter = tickCounter(() => internals(service).profileLifecycles.get("p1")?.dead.has("gen-1") === true)
 		const read = internals(service)
 			.getProfileBarrier("p1")
 			.read(async () => {
