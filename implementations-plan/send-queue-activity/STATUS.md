@@ -7,3 +7,4 @@
 - 2026-10-10 — final Codex pass (fresh): reject (8, all accepted); plan v3: lag gate split into OA-5, fee identity pinned, snapshot scope, reservation abort rule, arc 3a evidence and inclusion contract; resumed pass running.
 - 2026-10-10 — resumed final pass r3: reject (4, all accepted; 6/8 of r2 resolved); plan v4; resumed pass r4 running.
 - 2026-10-10 — resumed final pass r4: approve; plan v4 converged; committing.
+- 2026-10-10 — arc 1 start: orchestrator approved v4; D-orch-1..3 recorded (no stack, no Phase 1.2, holds H3/H7).

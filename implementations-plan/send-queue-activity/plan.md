@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: draft v4, panel converged (Codex approve, round 4); awaiting orchestrator approval
+status: approved v4 (orchestrator); arc 1 in progress (Phases 1.1, 1.3-1.5; 1.2 waits on OA-5)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -823,6 +823,12 @@ Each entry gives the choice, the alternatives rejected, the reason, and where it
 - **D15 Refusal and expiry evidence (arc 3a).**
   - Chosen: per-call HTTP evidence from the counting transport for #112; chain time first, receipt second, from one node, for #108.
   - Rejected: an attempt count alone, or a JSON-RPC error shape (the client synthesizes those for transport failures); receipt first (an inclusion between the two reads would read as expired).
+
+The orchestrator's calls at arc 1's start (they override § Delivery where they differ):
+
+- **D-orch-1 No stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) under the Delivery table's title; no `gh stack`. Later arcs branch from arc 1's branch and rebase onto `dev` after it lands.
+- **D-orch-2 Arc 1 without Phase 1.2.** Arc 1 ships Phases 1.1, 1.3, 1.4 and 1.5; the chain-tip gate waits on the owner (OA-5, page 9 P9-08). Nothing of arcs 1b, 2, 3a, 3b, 4 or 5 is built: OA-1 to OA-5 sit on pages 9 and 10 (P9-06, P9-07, P9-08, P10-14; OA-2 rides P9-04). Phase 1.1's restart ordering ships under the archived concurrent-sends decision; if the owner answers otherwise, the next arc re-points it.
+- **D-orch-3 Holds.** H3 gates arc 4 and H7 gates arc 3a, as § Delivery says.
 
 ## Audit verdicts
 
