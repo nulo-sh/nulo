@@ -399,7 +399,7 @@ export async function deriveNuloAccountAddress(masterBase64: string, l1ChainId: 
 	const { createLogger } = await import("@aztec-labs/foundation/log")
 	const master = Fr.fromBuffer(Buffer.from(masterBase64, "base64"))
 	const seed = await deriveAccountSeed(master, l1ChainId, 0, index) // AccountType.Nulo_v1 = 0
-	// NuloAccount logs only while it registers with a PXE, which address derivation never does.
+	// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
 	const account = await NuloAccount.new(seed, createLogger("import-drivers") as unknown as ILogger)
 	return account.address.toString()
 }

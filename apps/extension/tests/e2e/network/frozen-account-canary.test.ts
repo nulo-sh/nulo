@@ -127,7 +127,7 @@ describe("frozen-account canary — the execution gate every @aztec bump runs, o
 			const derived = await Promise.all(
 				[0, 1].map(async (index) => {
 					const seed = poseidon2Hash([new Fr(NULO_ACCOUNT_SEED_SEP), master, new Fr(LOCAL_L1_CHAIN_ID), new Fr(0), new Fr(index)])
-					// NuloAccount logs only while it registers with a PXE, which address derivation never does.
+					// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
 					const account = await NuloAccount.new(seed, logger as unknown as ILogger)
 					const instance = (account as unknown as { instance: { initializationHash: InstanceType<typeof Fr> } }).instance
 					const initNullifier = await computeSiloedPrivateInitializationNullifier(account.address, instance.initializationHash)

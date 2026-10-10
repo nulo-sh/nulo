@@ -25,3 +25,9 @@
 - **(c) No suppression.** `git diff $(git merge-base HEAD origin/dev) HEAD -- apps/extension | grep -c '^+.*@ts-'` prints 0 (merge base 8c3c671); `git grep` finds no `@ts-nocheck`, `@ts-ignore` or `@ts-expect-error` anywhere under `tests/e2e`.
 - **(d) A Bun global.** `await Bun.sleep(1)` in an exported function appended to `fixtures/helpers.ts`: `typecheck:all` exit 2, `error TS2868: Cannot find name 'Bun'`. Reverted.
 - **(e) The scan's own classes**, beyond the four: `import { notExported } from "./constants"` and a bare `missingName` in `fixtures/aztec.ts`: `tsc -p tsconfig.e2e.json` exit 2 with TS2305 and TS2304; reverted, exit 0. Only then was `scripts/e2e/unresolved-names.test.ts` deleted (D10).
+
+## 2.1 Review round 1
+
+- Codex (session `01a12598`) and Opus: approve with fixes, wording only; verdicts in `plan.md` § Audit verdicts. Fixed: the three `NuloAccount` cast comments, the skill line, the portal-manager comment's length. The `pageerror` primitive-payload bug predates the arc and needs a runtime fix: #275.
+- `include` widened to `tests/e2e/**/*`: a probe `zz-probe.mts` and `zz-probe.cts`, each with `const x: number = "a"`, fail under it (TS2322 in both) and pass silently under `tests/e2e/**/*.ts`. Removed after; the file list stays 234.
+- Opus: the deleted scan's seven codes never included TS2867/TS2868 ("Cannot find name 'Bun'"), so the plan's "a `Bun` global must stay an error, as the name scan makes it today" was never true of the scan. Probe (d) shows the gate makes it one.

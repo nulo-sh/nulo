@@ -14,5 +14,5 @@
 		"skipLibCheck": true,
 		"paths": { "@/*": ["./src/*"] }
 	},
-	"include": ["tests/e2e/**/*.ts"]
+	"include": ["tests/e2e/**/*"]
 }

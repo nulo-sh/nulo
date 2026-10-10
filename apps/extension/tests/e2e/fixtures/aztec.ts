@@ -431,7 +431,7 @@ const ANVIL_MNEMONIC = "test test test test test test test test test test test j
 export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClient>, toAddress: string, amount = 1000n * 10n ** 18n) {
 	const nodeInfo = await node.getNodeInfo()
 	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" } as Chain)
-	// Console stand-ins for the level methods the portal manager calls; it reads nothing else of a Logger.
+	// Console stand-ins for the only part of a Logger the portal manager reads: its level methods.
 	const logger = {
 		info: console.log,
 		debug: console.log,
@@ -579,7 +579,7 @@ export async function setupPreFundedAccount(
 
 	// Sanity check the derived address against NuloAccount's path so the fixture
 	// fails fast if the frozen-artifact account below and NuloAccount ever disagree.
-	// NuloAccount logs only while it registers with a PXE, which address derivation never does.
+	// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
 	const nuloAccountContract = await NuloAccount.new(accountSeed, logger as unknown as ILogger)
 	const expectedAddress = nuloAccountContract.address
 	logger.info(`Expected derived address: ${expectedAddress.toString()}`)

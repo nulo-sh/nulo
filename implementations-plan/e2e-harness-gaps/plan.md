@@ -586,6 +586,29 @@ Verdict: **approve with fixes**, every claim checked against vitest 4.1.10's dis
 
 Verdict: **approve**, no findings. Teardown's reaper judged safe: it signals only launches whose recorded owner is dead and whose processes carry the record's marker, so a forged record cannot reach a live launch.
 
+### Arc 2 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, high confidence. Checked and found sound: no edit changes runtime behaviour (13 files emit identical JavaScript, reproduced; the fourth `test()` argument is never read; Vite's transform erases every added type import); both declared call forms are documented for Chrome and Firefox and reach neither the `src` nor the scripts program; the gate covers all 233 scanned files and reports every code the scan filtered; the 68 `src` modules it reaches compile cleanly; CI picks it up with no workflow edit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| A1 | Medium. The `pageerror` handlers' `as Error` keeps a pre-existing bug: a primitive payload (`null`, `undefined`) makes the handler throw, and other primitives land in an `Error[]` (`fixtures/extension.ts`, `connect-one-window.test.ts`) | Accepted as an open item, not fixed here: the fix changes runtime behaviour, outside this arc's type-only rule. Filed as #275 |
+| A2 | Low. The skill line's "Node types only" is inexact: the program also loads Vite client, Chrome and DOM declarations | Accepted: "it loads Node's types and no Bun types" |
+| A3 | Low. The `NuloAccount` cast comment overstates the invariant: it also logs while building a transaction | Accepted at all three sites: "Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods" |
+
+### Arc 2 implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run independently), vitest's `base.extend` wrapper forwards three arguments, fixture detection ignores whitespace so Biome's re-wrap cannot change which fixtures a test uses, the augmentation stays out of the other two programs, no `bun-types` reached. It also found the plan's premise inexact: the scan's seven codes never included TS2867/TS2868 ("Cannot find name 'Bun'"), so the scan never made a `Bun` global an error; the gate does.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OA1 | Low. Same as A3 | Accepted (A3) |
+| OA2 | Low. Same as A2 | Accepted (A2) |
+| OA3 | Nit. The portal-manager comment runs past the 100-character soft cap | Accepted: one sentence under the cap |
+| OA4 | Low. File the `pageerror` gap before the plan closes | Accepted: #275 |
+| OA5 | Optional. `extends: ./tsconfig.scripts.json`; `include: tests/e2e/**/*` so a future `.mts`/`.cts` is checked | `extends` rejected: the scripts program runs on Bun and this one on Node, so a Bun-side option must not move the Node program. The wider include accepted: a probe `.mts` and `.cts` with a wrong-typed constant fail under it and pass silently under `**/*.ts`; the file list is unchanged (234) |
+| OA6 | Info. Phase 2.1's validation runs not yet recorded | Accepted: recorded in `lessons/phase-2.md` once run |
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
