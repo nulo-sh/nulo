@@ -341,7 +341,7 @@ Validation gate: Fast; Gating; `scripts/check-no-local-paths.sh`. Pass: all exit
 
 Validation gate: Gating; Plans; Fast. Pass: all exit 0; the planted file is reported; `git ls-files -ci --exclude-standard -- implementations-plan` prints nothing. Layers: lint, unit.
 
-**Review** (Codex gpt-6.1-sol, high, read-only, beside one Opus review). Round 1: Codex one Low, Opus one Medium, one Low and one Nit.
+**Review** (Codex gpt-6.1-sol, high, read-only, beside one Opus review). Round 1: Codex one Low, Opus one Medium, one Low and one Nit. Round 2 (resumed) **CLEAN**: both merge orders give one tree with both arcs' records, and so does merging arc 3's squash into this branch.
 
 | # | Finding | Disposition |
 |---|---|---|
