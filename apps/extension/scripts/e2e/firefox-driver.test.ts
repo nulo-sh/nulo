@@ -4,6 +4,8 @@ import {
 	FIREFOX_LAUNCH_PREFS,
 	type SilentCloseWatch,
 	abandonSession,
+	capabilities,
+	egressGuardPrefs,
 	firefoxDirFor,
 	silentlyClosed,
 	stopBackgroundWith,
@@ -15,6 +17,38 @@ import {
 describe("launch prefs", () => {
 	test("no pref masks timer throttling", () => {
 		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => /timeout|throttl/i.test(key))).toEqual([])
+	})
+})
+
+describe("egress guard prefs", () => {
+	const prefs = egressGuardPrefs(4321)
+	const pac = decodeURIComponent(String(prefs["network.proxy.autoconfig_url"]).replace(/^data:text\/javascript,/, ""))
+	const findProxy = new Function(`${pac}; return FindProxyForURL`)() as (url: string, host: string) => string
+
+	test("route by PAC with no fail-over to direct, and resolve only the canary name locally", () => {
+		expect(prefs).toEqual({
+			"network.proxy.type": 2,
+			"network.proxy.autoconfig_url": expect.stringMatching(/^data:text\/javascript,/),
+			"network.proxy.failover_direct": false,
+			"network.dns.localDomains": "egress-canary.test",
+		})
+	})
+
+	test("send loopback direct and every other host to the guard, with nothing after it", () => {
+		for (const host of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(findProxy(`http://${host}/`, host)).toBe("DIRECT")
+		for (const host of ["lb.drpc.live", "egress-canary.test", "169.254.0.1", "[fe80::1]"]) {
+			expect(findProxy(`https://${host}/`, host)).toBe("PROXY 127.0.0.1:4321")
+		}
+	})
+
+	test("stay out of the prefs users run with", () => {
+		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => key.startsWith("network."))).toEqual([])
+	})
+
+	test("cannot be combined with an artifact run's price-host block", () => {
+		expect(() => capabilities({ profileDir: "/p", headless: true, egress: { guardPort: 1 }, artifactRun: true })).toThrow(
+			/both behind the egress guard and an artifact run/,
+		)
 	})
 })
 

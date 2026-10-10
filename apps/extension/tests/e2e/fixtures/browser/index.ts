@@ -2,6 +2,7 @@ import type { Browser, Page, Target } from "puppeteer"
 import { chromeDriver } from "./chrome"
 import { firefoxDriver } from "./firefox"
 import { type BrowserKind, resolveBrowserKind } from "./selection"
+import { standingInterceptions } from "./standing-interception"
 
 export type { BrowserKind }
 
@@ -13,6 +14,8 @@ export interface LaunchOptions {
 	headless: boolean
 	/** `false` drops the fixed window size a driver launches with; only Chrome's launch has one. */
 	fixedWindowSize?: boolean
+	/** Route every request for an outside host to the egress guard on this loopback port. */
+	egress?: { guardPort: number }
 }
 
 export interface LaunchedBrowser {
@@ -68,6 +71,12 @@ export interface BrowserDriver {
 	 * background kill reads this to know whether its ceremony may move to a fresh popup.
 	 */
 	readonly credentialOutlivesPage: boolean
+	/**
+	 * Hosts this browser reaches on its own on every run, whatever the wallet does, each with why.
+	 * The egress guard refuses them without failing a launch. Exact names, never a domain, so a wallet
+	 * dependency that calls a new host under a vendor's domain still fails the run.
+	 */
+	readonly ownHosts: ReadonlyMap<string, string>
 	launch(opts: LaunchOptions): Promise<LaunchedBrowser>
 	/** `path` starts at the package root: `/src/popup/index.html#/windows/execute`. */
 	extensionUrl(extensionId: string, path: string): string
@@ -117,9 +126,16 @@ export interface BrowserDriver {
 	waitForNewTab(browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab>
 	/**
 	 * Answer every request the browser makes to `fromOrigin` — whichever of the extension's
-	 * contexts issues it — without touching the network. Resolves once no request can escape.
+	 * contexts issues it — without touching the network. Resolves once no request can escape. With
+	 * `backgroundDown`, a killed background's successor may not run yet; it is armed before it does.
 	 */
-	interceptRpc(browser: Browser, extensionId: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception>
+	interceptRpc(
+		browser: Browser,
+		extensionId: string,
+		fromOrigin: string,
+		mode: RpcInterception,
+		backgroundDown?: boolean,
+	): Promise<ArmedInterception>
 	/**
 	 * Runs before every scripted click. The suite clicks from inside the page, which — unlike a
 	 * person's click — neither focuses the window nor, on every browser, counts as a user gesture.
@@ -188,12 +204,14 @@ export const BROWSER: BrowserKind = driver.kind
 export const EXTENSION_SCHEME = driver.scheme
 export const isFirefox = BROWSER === "firefox"
 export const credentialOutlivesPage = driver.credentialOutlivesPage
+/** What the egress guard checks a launch's record against: whose traffic it is, and which of it is the browser's own. */
+export const browserTraffic = { browser: driver.kind, ownHosts: driver.ownHosts }
 
 /** Why a whole file does not run on Firefox: a capability the browser lacks — never a failing test. */
 export const CHROME_ONLY = {
 	backgroundKillUnderPage: "ends the background under an open extension page; Firefox will not end an event page one keeps busy",
 	cdpFetch: "arms CDP Fetch interception on held targets; BiDi has no equivalent",
-	hangingRequest: "stalls a network on a request that hangs, which Firefox's interception cannot make",
+	hangingRequest: "stalls a network on a request a loopback stub never answers; unproven on Firefox, whose interception redirects",
 } as const
 
 /** Why a test does not run on Chrome: a state headless Chrome cannot be driven into — never a failing test. */
@@ -221,12 +239,23 @@ export const waitForOpenedUrl = (browser: Browser, url: string, timeout: number)
 	driver.waitForOpenedUrl(browser, url, timeout)
 export const waitForNewTab = (browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab> =>
 	driver.waitForNewTab(browser, open, timeout)
+const standing = standingInterceptions<Browser>((browser, extensionId, fromOrigin, mode, backgroundDown) =>
+	driver.interceptRpc(browser, extensionId, fromOrigin, mode, backgroundDown),
+)
+/** A spec's interception; on an origin the launch holds, it replaces the launch's until `stop()`. */
 export const interceptRpc = (
 	browser: Browser,
 	extensionId: string,
 	fromOrigin: string,
 	mode: RpcInterception,
-): Promise<ArmedInterception> => driver.interceptRpc(browser, extensionId, fromOrigin, mode)
+): Promise<ArmedInterception> => standing.intercept(browser, extensionId, fromOrigin, mode)
+/** An interception the launch holds for its life; a spec's own on the same origin suspends it. */
+export const holdRpcInterception = (
+	browser: Browser,
+	extensionId: string,
+	fromOrigin: string,
+	mode: RpcInterception,
+): Promise<ArmedInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)
@@ -235,7 +264,8 @@ export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promis
 	driver.virtualAuthenticator(browser, anchorPage)
 export const holdNextCredentialGet = (page: Page): Promise<void> => driver.holdNextCredentialGet(page)
 export const pxeHostState = (page: Page): Promise<PxeHostState> => driver.pxeHostState(page)
-export const stopBackground = (owner: BackgroundOwner): Promise<void> => driver.stopBackground(owner.browser, owner.extensionId)
+export const stopBackground = (owner: BackgroundOwner): Promise<void> =>
+	standing.whileReleased(owner.browser, () => driver.stopBackground(owner.browser, owner.extensionId))
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)
 export const evaluateInBackground = <T>(owner: BackgroundOwner, body: string): Promise<T> =>
 	driver.evaluateInBackground<T>(owner.browser, owner.extensionId, body)
