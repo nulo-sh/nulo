@@ -333,13 +333,21 @@ Validation gate: Fast; Gating; `scripts/check-no-local-paths.sh`. Pass: all exit
 
 ### Arc 4: plans ignore patterns
 
-**Phase 4.1, four more shapes (#182).**
+**Phase 4.1, four more shapes (#182).** ✓ (2026-10-10, `lessons/phase-4.md`)
 1. Add the four lines to `implementations-plan/.gitignore`, above `!**/lessons/**`, and to `CANONICAL_PATTERNS`.
 2. Update the fixture, the count, the negation's line number and the `isCanonical` cases.
 3. Update `implementations-plan/README.md` and CLAUDE.md.
 4. Plant a tracked `draft-x.md` in a fixture repo and show `check:plans` reports it.
 
 Validation gate: Gating; Plans; Fast. Pass: all exit 0; the planted file is reported; `git ls-files -ci --exclude-standard -- implementations-plan` prints nothing. Layers: lint, unit.
+
+**Review** (Codex gpt-6.1-sol, high, read-only, beside one Opus review). Round 1: Codex one Low, Opus one Medium, one Low and one Nit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1, O1 | Low (Codex), Medium (Opus). The two PRs do not merge clean: `git merge-tree` conflicts in STATUS.md and plan.md in both orders. Each branch carries the shared plan commit under its own SHA, so the merge base (`dev`, and after a squash still `dev`) lacks the block both insert, and arc 3 had edited inside it | Accepted, fixed without a rebase (arc 3 is pushed): both branches end with the same shared block, and each arc records its review under its own phase and its gates in its own lessons file (§ Arcs 3 and 4). Rejected: rebasing the second branch onto `dev` (Opus), a history rewrite once pushed; resolving the conflict by hand at merge time (Codex), work the orchestrator would carry for each PR |
+| O2 | Low, pre-existing. `gitignoreFindings` checks each line's presence, not that it sits above `!**/lessons/**` | Declined: outside #182, and a line placed below the re-include over-ignores a `lessons/` file without ever letting a transcript be tracked |
+| O3 | Nit. The `lib.test.ts` `lessons/` cases for `draft-x.md` and `leg-codex.md` pass with or without the change | Accepted: removed; the `legacy.md` case stays (it catches a `leg*.md` typo) |
 
 ### Arc 5: nightly retention (waits on page 5 and the owner's ruleset)
 
@@ -622,13 +630,9 @@ On `f1c0618..6d5e7ea`. Every accepted round-1 finding is fixed with no regressio
 
 On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same bytes, same HTTP error text, and a null body yields empty bytes as `arrayBuffer()` did. The test routes the API call to the redirect and the storage call to the body, needs the exact limit error, and the small control proves the routing reaches the write. The loop converged in three rounds.
 
-### Arc 3, Codex round 1 (gpt-6.1-sol, high, read-only)
+### Arcs 3 and 4
 
-Pending.
-
-### Arc 4, Codex rounds (gpt-6.1-sol, high, read-only)
-
-Pending.
+Built in parallel as two PRs off `dev` (D-orch-8). A block both branches insert merges once only while neither edits inside it, so each arc records its Codex rounds and Opus review, with every finding's disposition, under its own phase in § Phases (3.1, 4.1).
 
 ## Post-implementation
 
