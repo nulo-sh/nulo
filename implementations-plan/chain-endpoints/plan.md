@@ -534,6 +534,7 @@ Validation gate: Fast; `bun run test:all`; the armed smoke builds; `tests/e2e/fi
 | D23 | The Testnet node (`TESTNET_RPC_URL`'s origin) is answered inside the browser by a per-launch loopback stub with HTTP 400 and a JSON-RPC error body, armed once the launch settles; a request before that reaches the guard and is refused, so `lb.drpc.live` stays declared. CoinGecko stays refused | The node client retries a refusal for about 6 s per call, so ten smoke tests failed on refusal alone (`lessons/phase-1.md`); a JSON 400 is terminal (`NoRetryError`). Ordinary guarded smoke meets terminal RPC errors; the specs about being offline (`send-fee-privacy`, `contacts-import`, `import-errors-scroll`, `import-dead-rpc`) arm their own refusal, which replaces the redirect while they run (D24). Harness only, so D-orch-2 holds | Refusal (D2 as written); F2, a build seam (needs D-orch-2 relaxed); a method-aware fake node (discovery reaches PXE registration) |
 | D24 | One interception per browser and origin: a spec's `interceptRpc` on an origin the launch holds suspends the launch's until the spec's `stop()`, which re-arms it; Firefox keeps one observer per origin and gains `redirect` | Two CDP `Fetch` sessions on one origin would both pause its requests, in an order the harness does not control; Firefox's single slot refused any second arm, a different origin included | Letting the spec's and the launch's interceptions coexist |
 | D25 | The fee-method-picker case seeds the two protocol FPC rows discovery writes and asserts that Enter saved the pick | It needs a pickable row, not a node: with both rows stored `getFpcs` never discovers, and Nulo's sponsor is eligible without a gas balance. The pick can land on the row already showing, so the saved pick is what tells Enter from a no-op | Moving the pick to the network suite, which turns that step's Firefox coverage on `main` from required to advisory |
+| D26 | A background kill (`stopBackground`) suspends the launch's held interceptions for the kill and re-arms them after; a spec's own stays armed | A DevTools session attached to Chrome's stopping service worker keeps its host for the successor, which then never starts clean: with the stand-in held, `sw-resilience` failed the same two tests on all three Chrome runs, and passed with the interception released for the kill (`lessons/phase-1.md`) | Detaching only the worker's session (no seam reaches it from the driver); leaving the stand-in out of kill specs (each spec would have to know) |
 
 ## Audit verdicts
 
@@ -699,6 +700,17 @@ Verdict: **reject**, on two races the sequential fixes left open. It confirmed e
 | 1 | Medium. A re-arm that completes after the launch let go leaves a redirect armed that nothing owns or reports | Accepted: a re-arm that lands once the origin is no longer held, or already re-armed, is stopped at once. A spec's own interception armed after the launch let go stays the spec's to stop |
 | 2 | Medium. The override slot is taken only after awaits, so two specs' interceptions on one origin can both arm | Accepted: the slot is reserved before the first await and held through draining, arming, stopping and the re-arm; a second request in that window throws |
 | 3 | Low. The picker check accepts any FPC id, not the seeded sponsor's | Accepted: the focused row's id must be the sponsor's seeded id, and the saved pick must name it |
+
+### Arc 1, round 3, Opus check of the race fix (general-purpose, read-only), 2026-10-10
+
+Verdict: **approve**. Both races are closed, and the listed interleavings leave nothing unowned, double-armed or stuck reserved. The two new tests fail on the round-2 code.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. A count or failures read that rejects (Firefox reads them through a privileged script) skips the stop of the launch's interception, leaving it armed with no owner | Accepted: the read and the stop are a `try`/`finally` |
+| 2 | Low. Only admission is pinned; clearing the reservation before the re-arm would pass every test | Accepted: a test asks for a second interception while the first's stop is re-arming |
+| 3 | Info. A failed stop of a re-arm nothing holds replaces the spec's original arm error | Accepted: it becomes a failure instead |
+| 4 | Info. A read during a spec's stop says "never stopped" | Accepted: it says "not stopped before this read" |
 
 ## Delivery
 

@@ -59,3 +59,24 @@ Opus's condition for option 2. A local patch, never committed: Firefox's interce
 - Codex, re-consulted with the probe's results: option 2, conditioned on a spec's own refusal taking precedence over the launch's redirect, and on a seeded-sponsor fixture for the fee picker. Both panel legs now agree; the hold above is lifted (plan D23 to D25).
 - The fee picker needs a pickable row, not a node: with the two protocol FPC rows stored (`nulo:core:fpcs@…`, the canonical addresses `protocol-fpcs.test.ts` pins), `getFpcs` returns without discovery and Nulo's sponsor is eligible with no gas balance. With the guard and the stub, `send-keyboard.test.ts` passes 5/5 on Chrome (33 s) and Firefox (60 s).
 - The old assertion could not tell a pick from a no-op: the only pickable row is the one already showing. With Enter replaced by Escape, the `data-fee-method` wait passed and only the new saved-pick wait (`nulo:ui:sendFeePaymentMethods`) failed.
+
+## The whole-smoke runs with the stand-in, and a background kill (2026-10-10)
+
+On the tree merged with `dev` at `236a2cd` (#270), armed dists rebuilt, retry 0:
+
+| Run | Result |
+|---|---|
+| Chrome, runs 1-3 | 204/206 each (11 skipped); the same two `sw-resilience` tests fail every time: "an open popup outlives the kill" (`waitForWorkerLiveness` times out) and "strict mode default ON" (the lock screen never comes) |
+| Firefox, runs 1-2 | 207/207 each (10 skipped), 1721 s and 1769 s; run 3 was stopped once the fix below changed the fixtures |
+
+Isolated in a throwaway worktree on the same build, `sw-resilience` alone on Chrome:
+
+| Variant | Result |
+|---|---|
+| A: as built, interception log on | 2/4 fail as above; no interception failure, no new service-worker attach after any kill |
+| B: no stand-in (node refused at the guard) | 4/4 pass, so #270 is not the cause |
+| C: stand-in on, auto-attach without `waitForDebuggerOnStart` | 2/4 fail, so it is not a target held for the debugger |
+| D: stand-in on, its interception stopped for the kill and re-armed after | 4/4 pass |
+
+- Cause: a DevTools session attached to Chrome's stopping service worker keeps its host for the successor, the hazard `stopBackground`'s own comment names, and the stand-in's interception holds one for the launch's life. Firefox's observer lives in the parent process and attaches to nothing.
+- Fix (plan D26): `stopBackground` suspends the launch's held interceptions for the kill and re-arms them after; a spec's own stays armed. After it, `sw-resilience`, `sw-restart-network`, `imported-account-lifecycle` and the control spec pass on Chrome (13/13, 1 skipped) and Firefox (12/12, 2 skipped).
