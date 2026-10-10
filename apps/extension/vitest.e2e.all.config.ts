@@ -30,7 +30,7 @@ export default defineConfig({
 		isolate: true,
 		// Match the network runner's retry budget (NULO_E2E_RETRY override, default 2).
 		retry: process.env.NULO_E2E_RETRY ? Number(process.env.NULO_E2E_RETRY) : 2,
-		reporters: e2eReporters(),
+		reporters: e2eReporters({ stall: {} }),
 		// Node v24 enforces JSON import attributes; `@aztec-labs/accounts` lazy
 		// loaders import their .json artifacts without the `with: { type:
 		// "json" }` attribute, so vanilla Node refuses them in global-setup

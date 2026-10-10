@@ -10,6 +10,7 @@ import packageJson from "./package.json"
  * aliases). Single-owning them here is the fix.
  */
 import RetryErrorReporter from "./tests/e2e/retry-error-reporter"
+import StallWatchdog, { type StallWatchdogOptions } from "./tests/e2e/stall-watchdog"
 
 /**
  * Resolve a file inside an npm package, bypassing its `exports` field.
@@ -78,12 +79,15 @@ export const noirAliases: Record<string, string> = {
  * first-attempt errors of retried passes. `NULO_E2E_RESULTS_FILE` adds the `json`
  * report a canary lane is asserted on (`scripts/ci-cd/assert-canary-results.ts`).
  */
-export function e2eReporters(): ("default" | "github-actions" | ["json", { outputFile: string }] | RetryErrorReporter)[] {
+export function e2eReporters(
+	options: { stall?: StallWatchdogOptions } = {},
+): ("default" | "github-actions" | ["json", { outputFile: string }] | RetryErrorReporter | StallWatchdog)[] {
 	const resultsFile = process.env.NULO_E2E_RESULTS_FILE
 	return [
 		"default",
 		...(process.env.GITHUB_ACTIONS ? (["github-actions"] as const) : []),
 		...(resultsFile ? [["json", { outputFile: resultsFile }] as ["json", { outputFile: string }]] : []),
 		new RetryErrorReporter(),
+		...(options.stall ? [new StallWatchdog(options.stall)] : []),
 	]
 }

@@ -37,7 +37,7 @@ export default defineConfig({
 		// absorbed were a popup race, fixed at the source
 		// (see implementations-plan/archive/e2e-network-recovery/plan.md, Slow test investigation).
 		retry: process.env.NULO_E2E_RETRY ? Number(process.env.NULO_E2E_RETRY) : 2,
-		reporters: e2eReporters(),
+		reporters: e2eReporters({ stall: {} }),
 		// Node v24 enforces JSON import attributes; @aztec-labs/accounts imports JSON without them.
 		// Use the unstable loader to relax this check in the global setup process.
 		server: {
