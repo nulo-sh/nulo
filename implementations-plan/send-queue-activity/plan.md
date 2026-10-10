@@ -345,7 +345,7 @@ Every gate runs from the worktree root unless it says otherwise. "Single test fi
 
 ### Arc 1: restart, lag and feed (decision-free; build first)
 
-#### Phase 1.1: the fee spender on the transaction row (#219 a)
+#### Phase 1.1: the fee spender on the transaction row (#219 a) ✓
 
 1. Add `feeSpender` to `Tx`, `TxSchema` and `AddTransactionInput`, and write it in `addTransaction`.
 2. Let `FpcStrategy` take a pre-resolved, validated `Fpc` from `getFpcImpl` in place of its own lookup, for fresh and reused builds, and resolve `sequence()`'s spender through `getFpcImpl` too; record what changed in `lessons/phase-1.md`.

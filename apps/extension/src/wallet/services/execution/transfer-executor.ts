@@ -25,7 +25,8 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
 import { type TaskService, type WrappedTask, TransferContent } from "@/wallet/services/task/service"
 import { OriginType, type LocalTxOrigin, type TransactionService, type Tx } from "@/wallet/services/transaction/service"
-import { type FpcInfo, FpcType } from "@/wallet/services/fpc/spec"
+import type { Fpc } from "@/wallet/services/fpc/fpc"
+import { FpcType } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
@@ -73,8 +74,12 @@ export interface TransferExecutorLane {
 	acquireTransferSlot(networkId: string, journalId: string, fence: ExecutionFence, signal: AbortSignal): Promise<ExecutionMutexRelease>
 }
 
-/** Where a transfer stands in its account's line, and what it holds there. */
-export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey> }
+/** Where a transfer stands in its account's line, and what it holds there; `feeSpender` is the fee
+ *  contract its `fpc:` key names. */
+export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string }
+
+/** A send's place in line, replaced when its keys change while it waits. */
+type TransferLine = { sequence: TransferSequence; ticket: SequenceTicket }
 
 export interface TransferExecutorDeps {
 	tasks: TaskService
@@ -84,7 +89,8 @@ export interface TransferExecutorDeps {
 	lane: TransferExecutorLane
 	sequencer: SendSequencer
 	getTokenContract(tokenId: number): Promise<string>
-	getFpc(fpcId: string): Promise<FpcInfo>
+	/** The validated row a build pays with: owned, with its protocol addresses derived even on a cold worker. */
+	getFpcImpl(fpcId: string): Promise<Fpc>
 	getTransactions(account: string): Promise<Tx[]>
 	getActiveProfile(): Promise<ProfileInfo | undefined>
 	captureExecutionFence(): Promise<ExecutionFence>
@@ -106,6 +112,7 @@ export interface TransferExecutorDeps {
 		fence: ExecutionFence,
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
+		fpc?: Fpc,
 	): Promise<FeeEstimate>
 	createJournalOperation(input: NewOperationInput): Promise<OperationRecord>
 	transitionJournal(journalId: string, progress: JobProgress, error?: JobError | null): Promise<unknown>
@@ -114,6 +121,14 @@ export interface TransferExecutorDeps {
 }
 
 const QUEUED_SPENT: TransferFeeQueued = { queued: true, tokenSpent: true }
+
+/** An FPC that may spend the payer's notes: any but the protocol sponsor on this chain. */
+function feeSpenderOf(fpc: Fpc | undefined, chainId: number): string | undefined {
+	const info = fpc?.infoData
+	if (!info) return undefined
+	const protocolSponsor = info.type === FpcType.DefaultSponsoredFpc && info.isProtocol === true && info.chainId === chainId
+	return protocolSponsor ? undefined : info.address
+}
 /** The failure once a send has waited its whole `MAX_WAIT_MS` for earlier sends and the slot. */
 const WAIT_LIMIT_MESSAGE = "An earlier send of this account is still in flight"
 
@@ -124,10 +139,11 @@ export class TransferExecutor {
 	public async sequence(req: TransferRequest): Promise<TransferSequence> {
 		const [token, network] = await Promise.all([this.deps.getTokenContract(req.tokenId), this.deps.getNetwork(req.networkId)])
 		const chainId = network.chainId
-		const [feeSpender, history] = await Promise.all([
-			this.feeSpender(req.feeSettings, chainId),
+		const [fpc, history] = await Promise.all([
+			this.payingFpc(req.feeSettings),
 			this.deps.getTransactions(req.accountAddress).then((txs) => txs.filter((tx) => tx.chainId === chainId)),
 		])
+		const feeSpender = feeSpenderOf(fpc, chainId)
 		const keys = transferSequenceKeys({
 			me: req.accountAddress,
 			token,
@@ -138,15 +154,12 @@ export class TransferExecutor {
 			initializing: !history.some(minedSuccessfully),
 			used: usedSequences(history, req.accountAddress),
 		})
-		return { scope: { chainId, account: req.accountAddress }, keys }
+		return { scope: { chainId, account: req.accountAddress }, keys, feeSpender }
 	}
 
-	/** An FPC that may spend the payer's notes: any but the protocol sponsor on this chain. */
-	private async feeSpender(feeSettings: FeeSettings, chainId: number): Promise<string | undefined> {
-		if (feeSettings.paymentMethod.kind !== "fpc") return undefined
-		const fpc = await this.deps.getFpc(feeSettings.paymentMethod.fpcId)
-		const protocolSponsor = fpc.type === FpcType.DefaultSponsoredFpc && fpc.isProtocol === true && fpc.chainId === chainId
-		return protocolSponsor ? undefined : fpc.address
+	/** The validated fee contract a transfer pays through; `undefined` for Fee Juice. */
+	private async payingFpc(feeSettings: FeeSettings): Promise<Fpc | undefined> {
+		return feeSettings.paymentMethod.kind === "fpc" ? this.deps.getFpcImpl(feeSettings.paymentMethod.fpcId) : undefined
 	}
 
 	public async execute(req: TransferRequest, precomputedEstimateId: string | undefined, fence: ExecutionFence): Promise<string> {
@@ -159,7 +172,7 @@ export class TransferExecutor {
 		// journal-create refusal below throws before they are assigned.
 		let journalId: string | undefined
 		let controller: AbortController | undefined
-		let ticket: SequenceTicket | undefined
+		let line: TransferLine | undefined
 		let releaseSlot: ExecutionMutexRelease | undefined
 		const markJournal = async (progress: JobProgress, error?: JobError | null): Promise<boolean> => {
 			if (!journalId) return false
@@ -182,16 +195,20 @@ export class TransferExecutor {
 		try {
 			// The ticket's place in line is taken before the row exists, so the row's first stage says
 			// whether it waits. Fail closed here, inside the try: a transfer with no durable record never runs.
-			const { scope, keys } = await this.sequence(req)
-			ticket = this.deps.sequencer.enter(scope, keys)
-			const queued = ticket.blocked() || this.deps.lane.isSlotBusy(fence.profileId, scope.chainId)
+			const sequence = await this.sequence(req)
+			const held: TransferLine = { sequence, ticket: this.deps.sequencer.enter(sequence.scope, sequence.keys) }
+			line = held
+			const queued = held.ticket.blocked() || this.deps.lane.isSlotBusy(fence.profileId, sequence.scope.chainId)
 			const created = await this.createTransferJournal(req, fence, queued)
 			journalId = created.journalId
 			controller = created.controller
 			if (!created.live) throw new SessionEndedError()
-			releaseSlot = await this.takeTurn(req.networkId, created.journalId, controller as AbortController, ticket, fence, queued)
+			const turn = await this.takeTurn(req, created.journalId, controller as AbortController, held, fence, queued)
+			releaseSlot = turn.release
 			// The cached estimate first; any drift from its snapshot (`tryConsume`'s ladder) rebuilds.
-			const reused = precomputedEstimateId ? await this.deps.estimateReuse.tryConsume(precomputedEstimateId, req, fence) : undefined
+			const reused = precomputedEstimateId
+				? await this.deps.estimateReuse.tryConsume(precomputedEstimateId, req, fence, turn.fpc)
+				: undefined
 
 			// `simulating` before the build: its fee strategies simulate for seconds, which `pending`
 			// would hide from the popup. The reused path enters it too, so the FSM stays uniform.
@@ -200,7 +217,7 @@ export class TransferExecutor {
 
 			const built = reused
 				? await this.fromReusedEstimate(reused, req, precomputedEstimateId, fence)
-				: await this.buildFresh(req, fence, transferTask)
+				: await this.buildFresh(req, fence, transferTask, turn.fpc)
 			const { txRequest, node, pxe, account, initializesAccount } = built
 			const { txHash } = await this.deps.coordinator.proveAndSend({
 				pxe,
@@ -217,8 +234,8 @@ export class TransferExecutor {
 					await this.deps.transitionJournal(created.journalId, { stage: "submitting", ...patch })
 				},
 				submittedEndpointUrl: primaryEndpointUrl(built.network),
-				onSent: (hash) => ticket?.sent(hash),
-				recordTransaction: (hash) => this.recordTransfer(hash, req, built, origin, fence),
+				onSent: (hash) => held.ticket.sent(hash),
+				recordTransaction: (hash) => this.recordTransfer(hash, req, built, origin, fence, held.sequence.feeSpender),
 			})
 			// Released at submit, as a dApp send's: the ticket, not the slot, holds until inclusion.
 			releaseSlot()
@@ -236,7 +253,7 @@ export class TransferExecutor {
 			throw recorded && journalId ? new JournaledRejection(error, journalId) : error
 		} finally {
 			releaseSlot?.()
-			ticket?.release()
+			line?.ticket.release()
 			if (journalId) this.deps.lane.deleteController(journalId)
 		}
 	}
@@ -247,7 +264,14 @@ export class TransferExecutor {
 	 * surface as the card title via `getPrimaryCall`; the card shows the token symbol and transfer
 	 * type whatever the fee payment method.
 	 */
-	private recordTransfer(hash: string, req: TransferRequest, built: TransferBuildInputs, origin: LocalTxOrigin, fence: ExecutionFence) {
+	private recordTransfer(
+		hash: string,
+		req: TransferRequest,
+		built: TransferBuildInputs,
+		origin: LocalTxOrigin,
+		fence: ExecutionFence,
+		feeSpender: string | undefined,
+	) {
 		const { txRequest, network, nonce, feePaymentMethod, activity } = built
 		return this.deps.addTransaction({
 			origin,
@@ -277,32 +301,57 @@ export class TransferExecutor {
 			gasDetails: getGasDetails(txRequest),
 			fence,
 			networkId: network.id,
+			feeSpender,
 		})
 	}
 
 	/**
 	 * Waits for the earlier sends this one depends on, then takes the slot. A dApp tx that was proving
 	 * when the wait ended is pending by the time it frees the slot, so a blocked re-check gives the
-	 * slot straight back and waits again. A row created `queued` is claimed only once both are clear.
+	 * slot straight back and waits again. A fee contract whose address moved during the wait gives it
+	 * back too, and the send enters the line again under its new key. A row created `queued` is
+	 * claimed only once all are clear. Returns the validated fee contract the build pays with, the
+	 * one this send was ordered against.
 	 */
 	private async takeTurn(
-		networkId: string,
+		req: TransferRequest,
 		journalId: string,
 		controller: AbortController,
-		ticket: SequenceTicket,
+		line: TransferLine,
 		fence: ExecutionFence,
 		queued: boolean,
-	): Promise<ExecutionMutexRelease> {
+	): Promise<{ release: ExecutionMutexRelease; fpc: Fpc | undefined }> {
 		for (;;) {
-			await this.waitForDependencies(journalId, controller, ticket)
-			const release = await this.acquireSlotWithin(networkId, journalId, fence, controller, ticket)
-			if (ticket.blocked()) {
+			await this.waitForDependencies(journalId, controller, line.ticket)
+			const release = await this.acquireSlotWithin(req.networkId, journalId, fence, controller, line.ticket)
+			// The caller holds no release until this returns, so every throw past the grant gives it back.
+			try {
+				if (line.ticket.blocked()) {
+					release()
+					continue
+				}
+				const fpc = await this.payingFpc(req.feeSettings)
+				if (feeSpenderOf(fpc, line.sequence.scope.chainId) !== line.sequence.feeSpender) {
+					release()
+					await this.reenter(req, line)
+					continue
+				}
+				if (queued) await this.claim(journalId, controller)
+				return { release, fpc }
+			} catch (err) {
 				release()
-				continue
+				throw err
 			}
-			if (queued) await this.claim(journalId, controller, release)
-			return release
 		}
+	}
+
+	/** Takes a new place in line under the keys the request gives now, within the first ticket's deadline. */
+	private async reenter(req: TransferRequest, line: TransferLine): Promise<void> {
+		const next = await this.sequence(req)
+		const { deadline } = line.ticket
+		line.ticket.release()
+		line.sequence = next
+		line.ticket = this.deps.sequencer.enter(next.scope, next.keys, deadline)
 	}
 
 	private async waitForDependencies(journalId: string, controller: AbortController, ticket: SequenceTicket): Promise<void> {
@@ -344,11 +393,10 @@ export class TransferExecutor {
 	}
 
 	/** `queued → pending`; a cancel that landed first leaves the transition illegal. */
-	private async claim(journalId: string, controller: AbortController, release: ExecutionMutexRelease): Promise<void> {
+	private async claim(journalId: string, controller: AbortController): Promise<void> {
 		try {
 			await this.deps.transitionJournal(journalId, { stage: "pending" })
 		} catch (err) {
-			release()
 			if (controller.signal.aborted) throw new JobCancelledSentinel(journalId)
 			throw err
 		}
@@ -447,9 +495,14 @@ export class TransferExecutor {
 	 *  `buildAndEstimate` txCalls, so the persisted record stays just the
 	 *  user-intent transfer (no `pay_fee` / `fee_entrypoint_*` fee-payload
 	 *  pollution leaking into the activity card title). */
-	private async buildFresh(req: TransferRequest, fence: ExecutionFence, transferTask: WrappedTask): Promise<TransferBuildInputs> {
+	private async buildFresh(
+		req: TransferRequest,
+		fence: ExecutionFence,
+		transferTask: WrappedTask,
+		fpc: Fpc | undefined,
+	): Promise<TransferBuildInputs> {
 		const { op, token, fn, args } = await this.deps.planner.buildTransferOperation(req)
-		const built = await this.deps.buildAndEstimate(op, op.feeSettings, fence, transferTask)
+		const built = await this.deps.buildAndEstimate(op, op.feeSettings, fence, transferTask, undefined, fpc)
 		return {
 			txRequest: built.txRequest,
 			node: built.node,

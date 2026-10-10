@@ -68,6 +68,8 @@ export type AddTransactionInput = {
 	submittedEndpointUrl: string | undefined
 	estimatedFee?: string
 	gasDetails?: TxGasDetails
+	/** See {@link Tx.feeSpender}. */
+	feeSpender?: string
 	fence?: ExecutionFence
 	/** Owning network row id. Together with the fence's profile this is the
 	 *  row's activity scope — without it, two profiles holding the same
@@ -184,6 +186,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 			submittedEndpointUrl,
 			estimatedFee,
 			gasDetails,
+			feeSpender,
 			fence,
 			networkId,
 		} = input
@@ -229,6 +232,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 				status: TxStatus.Pending,
 				estimatedFee,
 				gasDetails,
+				...(feeSpender ? { feeSpender } : {}),
 				submittedEndpointUrl,
 			}
 			await this.txs.set(tx.hash, tx)
