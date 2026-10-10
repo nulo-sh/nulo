@@ -72,17 +72,24 @@ export async function handleSessionEstablished(
 	deps: SessionEstablishedDeps,
 ): Promise<boolean> {
 	const chainId = String(chainInfoToChainId(session))
-	// The marker is keyed by the transport REQUEST id, which the upstream reuses
-	// verbatim as the sessionId — so this session can only ever see its OWN
-	// approval's marker (a concurrent same-tuple handshake or reconnect cannot
-	// consume it). Read BEFORE any fallible await so `finally` settles it on every exit.
+	// Keyed by the request id the page chose, which upstream reuses as the session id: captured before
+	// any await, and termination before the stamp and the final settlement check the map still holds
+	// this very object.
 	const marker = deps.pendingVerification.get(session.sessionId)
 	const isNewConnection = marker !== undefined
 	const reservation = deps.reservations.reservation(session.sessionId)
+	let stamped = false
+	// Before the stamp, a reused id may name another attempt, which termination by id would end; a
+	// stamped channel ends whatever the id names.
+	const terminate = (): false => {
+		if (stamped || lostApproval(deps.pendingVerification, session.sessionId, marker) !== "replaced") {
+			deps.terminateSession(session.sessionId)
+		}
+		return false
+	}
 	const terminateWith = (message: string): false => {
 		deps.logger.log("wallet-sdk-bg", LogLevel.Warn, message)
-		deps.terminateSession(session.sessionId)
-		return false
+		return terminate()
 	}
 	let established = false
 	try {
@@ -139,9 +146,17 @@ export async function handleSessionEstablished(
 			)
 			return false
 		}
+		// A revocation tombstones the marker before it terminates, so a termination that threw cannot
+		// be followed by a stamp.
+		if (lostApproval(deps.pendingVerification, session.sessionId, marker) !== undefined) {
+			return terminateWith(
+				`Session ${describeExternalId(session.sessionId)} on chain ${chainId} lost its approval during establishment, so it is not stamped`,
+			)
+		}
 		// Bind the live channel to its owning profile — consumed by the dispatch
 		// guard and the profile-switch teardown.
 		deps.stampSessionProfile(session.sessionId, dappSession.profileId)
+		stamped = true
 
 		const needsVerification = isNewConnection || !dappSession.trustedVerification
 		if (needsVerification) {
@@ -162,15 +177,37 @@ export async function handleSessionEstablished(
 			`onSessionEstablished failed for session ${describeExternalId(session.sessionId)} on chain ${chainId} — terminating`,
 			err,
 		)
-		deps.terminateSession(session.sessionId)
-		return false
+		return terminate()
 	} finally {
 		// A failed exit leaves a tombstone: the SDK restores the discovery, and a marker-less retry of
 		// this id would pass as a reconnect, which skips the check on a row since marked trusted.
-		if (isNewConnection) settlePendingVerification(deps.pendingVerification, session.sessionId, established)
+		settleCapturedMarker(deps.pendingVerification, session.sessionId, marker, established)
 		// Every exit that opened no window gives the slot back; an issued creation keeps it.
 		reservation?.releaseIfUnstarted()
 	}
+}
+
+/** Why the approval this attempt captured no longer stands: it was tombstoned (a revocation, or its
+ *  slot given back), or an id the page reused now names another attempt's approval. Staleness is
+ *  judged once, on entry. */
+function lostApproval(
+	markers: Map<string, PendingVerificationEntry>,
+	id: string,
+	marker: PendingVerificationEntry | undefined,
+): "cancelled" | "replaced" | undefined {
+	if (marker === undefined) return undefined
+	if (markers.get(id) !== marker) return "replaced"
+	return marker.cancelled === true ? "cancelled" : undefined
+}
+
+/** A marker that replaced the captured one belongs to its own attempt, which settles it. */
+function settleCapturedMarker(
+	markers: Map<string, PendingVerificationEntry>,
+	id: string,
+	marker: PendingVerificationEntry | undefined,
+	established: boolean,
+): void {
+	if (marker !== undefined && markers.get(id) === marker) settlePendingVerification(markers, id, established)
 }
 
 function showVerifyWindow(url: string, sessionId: string, reservation: WindowReservation, deps: SessionEstablishedDeps): Promise<void> {

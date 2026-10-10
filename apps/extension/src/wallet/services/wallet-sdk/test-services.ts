@@ -39,6 +39,7 @@ export function fakeSdkServices(
 	services: never
 	rows: Map<string, FakeDappSessionRow>
 	onActiveProfileChanged: EventHandler<unknown>
+	onDappSessionDeleted: EventHandler<unknown>
 	onVerificationRefused: EventHandler<unknown>
 } {
 	const rows = new Map<string, FakeDappSessionRow>()
@@ -97,5 +98,5 @@ export function fakeSdkServices(
 				"legal-acceptance": { assertCurrent: opts.legal ?? (async () => undefined) },
 			})[name],
 	} as never
-	return { services, rows, onActiveProfileChanged, onVerificationRefused }
+	return { services, rows, onActiveProfileChanged, onDappSessionDeleted, onVerificationRefused }
 }
