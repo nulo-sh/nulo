@@ -168,7 +168,7 @@ const HELD_MS = 15_000
 /**
  * The ordering contract for sends that share chain state: while A is held unmined, B's fee row reads
  * queued and Send stays disabled (never the failure toast, never a fee). Lifting the hold mines A;
- * B's estimate then lands, B confirms, and both succeed. `afterA` runs once A is submitted.
+ * B's estimate then lands, B confirms, and both succeed.
  */
 async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend, afterA?: (burst: Burst) => Promise<void>): Promise<void> {
 	const aHash = await fireIntoHeldWindow(burst, a)

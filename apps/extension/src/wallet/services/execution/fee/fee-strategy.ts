@@ -132,8 +132,8 @@ export type FeeStrategyContext = {
 	 *  into one sim. Absent on every non-dApp path (transfer, send,
 	 *  embedded), which therefore keep byte-identical sim options. */
 	probe?: DiscoveryProbe
-	/** The validated `fpc` row to pay with, resolved by the caller: a transfer builds with the row it
-	 *  was ordered against, never a later read an edit may have moved. Absent, the strategy resolves it. */
+	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
+	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
 	fpc?: Fpc
 }
 

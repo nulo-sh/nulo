@@ -29,3 +29,14 @@ Revert check: deleting the `fpc:<feeSpender>` line from `recordedTxKeys` fails f
 - **The token is not part of that scope.** The predicate split in two: `journalRecordInActiveScope` (account, profile, network) gates state and side effects; `journalRecordInScope` adds the token page's token for the two render filters. On a token page, another token's terminal record still clears its own token's placeholder in the shared store, as before; scoping it by the page's token would have kept that placeholder alive until the send's promise settles.
 - **Unfixed-handler check:** with the component at base, the three foreign-scope cases and the snapshot case fail (4); the two in-scope controls pass on both.
 - **Seam (R5):** the change touches the predicate block, the two handlers' first lines and the snapshot's assignment; `type-roles-arc3` edits the same file elsewhere.
+
+## Phase 1.5: the restart case and the arc gate
+
+- **The never-happens is the queued estimate, not a queued record** (ledger D20). Send stays disabled while B's estimate reads queued, so B never creates a record before A mines. The case reuses the file's `expectQueued` contract with the background stopped between A's submission and B's start. It closes the popup first: Firefox keeps the event page alive while any extension page is open.
+- **Why it fails at base:** the burst fixture mines five sends first, so B carries no `init` key. A public-to-public TST send has no delivery targets, so B's only key is `fpc:<PrivateFPC>`. A's stored row yields that key only through `feeSpender`.
+
+## Arc 1 review, round 1 (Codex session 01a123d6, plus one Opus review)
+
+- Codex (gpt-6.1-sol, high, default login): no material regression. Opus: no bug. Both found nothing awaited on the network under the slot, and no path from an imported row to the sequencer (`restore` refuses Pending rows).
+- Accepted: comment precision (`deadline`/`remainingMs`, the reuse comment, the `fpc` context doc, `payingFpc`, `TransferLine`, `takeTurn`, the dApp ladder enumeration), the composition header, and named enums for the composition test's mined row.
+- Rejected, with reasons in plan.md § Audit verdicts: the inherited uppercase-sponsor over-ordering (the FPC path belongs to fees-and-sponsors), the two fixture-helper docs, and the fail-closed PrivateFPC throw before the journal record.

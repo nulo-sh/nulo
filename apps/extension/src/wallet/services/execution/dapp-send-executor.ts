@@ -744,7 +744,7 @@ export class DappSendExecutor {
 	/**
 	 * Resolve the standard path's build: consume a still-valid precomputed estimate
 	 * (tryConsume validates the full drift ladder — fingerprint at the same
-	 * pre-discovery normalization point, endpoint, pending set, chain identity,
+	 * pre-discovery normalization point, endpoint, pending set, sequencer epoch, chain identity,
 	 * FPC identity, base fee — and refuses another profile's entry outright),
 	 * else fall through to the full build —
 	 * probe-free for embedded fee payments (the dApp's own fee calls conflict with

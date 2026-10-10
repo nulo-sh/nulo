@@ -78,7 +78,7 @@ export interface TransferExecutorLane {
  *  contract its `fpc:` key names. */
 export type TransferSequence = { scope: SequenceScope; keys: ReadonlySet<SequenceKey>; feeSpender?: string }
 
-/** A send's place in line, replaced when its keys change while it waits. */
+/** Mutated in place on re-entry, so the submit callback and the cleanup see the current ticket. */
 type TransferLine = { sequence: TransferSequence; ticket: SequenceTicket }
 
 export interface TransferExecutorDeps {
@@ -157,7 +157,7 @@ export class TransferExecutor {
 		return { scope: { chainId, account: req.accountAddress }, keys, feeSpender }
 	}
 
-	/** The validated fee contract a transfer pays through; `undefined` for Fee Juice. */
+	/** The validated fee contract a transfer pays through; `undefined` when it pays without an FPC. */
 	private async payingFpc(feeSettings: FeeSettings): Promise<Fpc | undefined> {
 		return feeSettings.paymentMethod.kind === "fpc" ? this.deps.getFpcImpl(feeSettings.paymentMethod.fpcId) : undefined
 	}
@@ -306,12 +306,10 @@ export class TransferExecutor {
 	}
 
 	/**
-	 * Waits for the earlier sends this one depends on, then takes the slot. A dApp tx that was proving
-	 * when the wait ended is pending by the time it frees the slot, so a blocked re-check gives the
-	 * slot straight back and waits again. A fee contract whose address moved during the wait gives it
-	 * back too, and the send enters the line again under its new key. A row created `queued` is
-	 * claimed only once all are clear. Returns the validated fee contract the build pays with, the
-	 * one this send was ordered against.
+	 * Waits for the sends this one depends on, then takes the slot and re-checks under it: a dApp tx
+	 * proving when the wait ended is pending by now, and an edited fee contract moves this send's key,
+	 * so either gives the slot back (an edit re-enters the line). Returns the fee contract row the
+	 * build pays with, the one this send was ordered against.
 	 */
 	private async takeTurn(
 		req: TransferRequest,

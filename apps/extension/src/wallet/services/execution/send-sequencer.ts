@@ -34,11 +34,11 @@ export interface SendSequencerDeps {
 }
 
 export interface SequenceTicket {
-	/** When the ticket's wait runs out: {@link MAX_WAIT_MS} after `enter`, or the deadline it was entered with. */
+	/** When the ticket's wait runs out: the earlier of {@link MAX_WAIT_MS} after `enter` and the deadline it was entered with. */
 	readonly deadline: number
 	/** Whether an earlier ticket or estimate, or a pending tx, shares a key right now. */
 	blocked(): boolean
-	/** What is left of the ticket's {@link MAX_WAIT_MS}, counted from `enter`, never below 0. */
+	/** What is left until `deadline`, never below 0. */
 	remainingMs(): number
 	/** `turn` once no earlier ticket or estimate and no pending tx shares a key; `expired` past the deadline. */
 	waitTurn(signal: AbortSignal): Promise<"turn" | "aborted" | "expired">

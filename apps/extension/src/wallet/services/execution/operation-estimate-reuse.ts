@@ -125,8 +125,8 @@ export class OperationEstimateReuse {
 		if (pendingHashesChanged(pendingNow, entry.pendingHashes)) {
 			return this.reject("pending tx set changed")
 		}
-		// A send of the account that reached the node after the build may have spent this request's
-		// notes even when it has already left the pending set.
+		// A send of the account that reached the node since the estimate began may have spent this
+		// request's notes even when it has already left the pending set.
 		if (entry.sequenceEpoch !== this.deps.sequenceEpoch(network.chainId, entry.accountAddress)) {
 			return this.reject("a send reached the node since the estimate")
 		}

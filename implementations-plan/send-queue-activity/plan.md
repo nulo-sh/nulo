@@ -940,6 +940,27 @@ What Codex said holds:
 
 **Codex: approve** (high confidence). All four round-3 findings are resolved, and there is no new material finding. The plan stands as v4. Nothing is approved for implementation until the orchestrator says so.
 
+### Arc 1 code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `9574a9d..HEAD`
+
+**Codex: no material regression** (high confidence). **Opus: no bug, nothing blocking.** Both answer the two lead questions the same way:
+- Nothing new is awaited on the network under the slot: `getFpcImpl` reads storage and derives the protocol addresses from bundled artifacts.
+- An imported row cannot reach the sequencer: `restore` refuses Pending rows, and only Pending rows are re-armed. A row forged straight into storage can only over-block, capped by `SUBMITTED_HOLD_MS`.
+
+Accepted, comment and fixture changes only:
+- the `deadline` and `remainingMs` docs say "the earlier of";
+- the reuse comment says "since the estimate began";
+- the `FeeStrategyContext.fpc` doc no longer names its caller;
+- `payingFpc` is documented as `undefined` without an FPC;
+- `TransferLine` and the `takeTurn` doc are tightened;
+- `resolveStandardBuild`'s ladder enumeration gains the epoch;
+- the composition header is shortened, and its mined row uses `TxStatus.Proposed` and `TxExecutionResult.Success` (a renumbered enum would otherwise give the send the `init` key, and both cases would pass on unfixed code);
+- one narrating e2e doc clause is gone.
+
+Rejected:
+- **Uppercase protocol-sponsor row reads as a spender** (`fpc/service.ts` `decorate`, inherited). It errs toward over-ordering only. The fix belongs to the FPC path that fees-and-sponsors owns.
+- **Two fixture-helper docs in the tests.** They state the scenario each helper models, which the helper's name does not.
+- **A non-protocol PrivateFPC row now throws in `sequence()`, before the journal record exists** (Opus, no fix asked). It fails closed, and the estimate already refuses that row before Send enables.
+
 ## Seeds
 
 Draft until the orchestrator approves; no ELI5 is produced (orchestrator-owned).

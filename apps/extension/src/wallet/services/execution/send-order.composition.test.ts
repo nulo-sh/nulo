@@ -1,9 +1,7 @@
 /**
- * Composition test: send ordering after a worker restart. A freshly started ExecutionService (its
- * real lane, sequencer and transfer executor, which keep nothing across a restart) and the real
- * OperationJournalService run against a TransactionService fake whose pending set holds one row,
- * submitted before the restart, that names fee contract F. Every case stops before the build, so
- * no PXE call is made and nothing is simulated or proved (COMPOSITION-TESTS D2, D3).
+ * Send ordering after a worker restart: a freshly started ExecutionService (its lane, sequencer and
+ * transfer executor keep nothing across one) and the real journal, against a pending row that names
+ * fee contract F. Every case stops before the build: no PXE call, no simulation, no proof.
  */
 import { describe, expect, test, vi } from "vitest"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
@@ -24,6 +22,7 @@ import { PriceService } from "@/wallet/services/price/service"
 import { FpcService } from "@/wallet/services/fpc/service"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { TransactionService, TransferType, TxStatus } from "@/wallet/services/transaction/service"
+import { TxExecutionResult } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
@@ -96,7 +95,10 @@ async function makeHarness() {
 		svc(TransactionService.name, {
 			getPendingForAccount: () => [pendingRow],
 			// One mined tx: the account is initialized, so a public send here holds only its fee contract.
-			getTransactions: async () => [{ chainId: NETWORK.chainId, status: 2, executionResult: 0, calls: [] }, pendingRow],
+			getTransactions: async () => [
+				{ chainId: NETWORK.chainId, status: TxStatus.Proposed, executionResult: TxExecutionResult.Success, calls: [] },
+				pendingRow,
+			],
 			addTransaction: vi.fn(),
 			onTransactionUpdated: { add: () => {} },
 		}),
