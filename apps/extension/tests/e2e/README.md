@@ -172,6 +172,10 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **`~/.agents/ports.md.lock stayed held`** — another registry writer holds the lock, or one died holding it. The other writers break a lock older than 15 s; this client never does. If no writer is running, delete the lock.
 
+**`[stall-watchdog] no progress for 600.0 s`** — no file, test, hook or console event for `STALL_MS` (`tests/e2e/run-limits.ts`). `.e2e-state/stalled` names the running tests (only the file when the fork's event loop is blocked); the run is cancelled and fails, its forks are killed 30 s later, and teardown stops the sandbox. A test that legitimately waits that long without logging needs a progress line. Every run's last lines print its longest silence, the figure `STALL_MS` is set from.
+
+**`this fork's V8 heap limit is … MiB, not the 2048 MiB cap`** — the network config's `execArgv` (`--max-old-space-size=FORK_HEAP_MIB`) did not reach the fork, or V8 sized the young generation differently: check a vitest or Node bump.
+
 **Manual cleanup of stale state.** `bun run e2e:reap` in the worktree. It stops processes carrying this worktree's markers whose owner is dead and, while no run of this worktree is live, the Chromes loading this worktree's build (Chrome shows no environment, so its exact `--load-extension` path stands in). Never a process by name, which on a shared host would take down another agent's run.
 
 ## Terms-acceptance state

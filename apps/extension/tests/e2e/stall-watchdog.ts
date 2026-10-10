@@ -7,8 +7,8 @@ import { STATE_DIR } from "./sentinel"
 export const FORK_ENTRY = "/vitest/dist/workers/forks.js"
 
 export interface StallWatchdogOptions {
-	/** Silence after which the run is failed and cancelled; without it the reporter only measures. */
-	stallMs?: number
+	/** Silence after which the run is failed and cancelled. */
+	stallMs: number
 	/** How long a cancelled run's forks get to end before they are killed. */
 	killAfterMs?: number
 	stateDir?: string
@@ -23,6 +23,8 @@ type Silence = { ms: number; file: string; after: string; until: string }
  * classifier. After `stallMs` of silence it names the running tests in `.e2e-state/stalled`, fails the
  * run and cancels it so no new file starts. A fork that cannot answer the cancel (a blocked event
  * loop) is killed after `killAfterMs`; global teardown then stops the sandbox as on any red run.
+ * Every run ends by printing its longest silence and the events around it, the measure `STALL_MS`
+ * is set from.
  * Limit: a test that logs while it hangs is never silent; its own timeout is what stops it.
  */
 export default class StallWatchdog implements Reporter {
@@ -35,7 +37,7 @@ export default class StallWatchdog implements Reporter {
 	private longest?: Silence
 	private readonly running = new Map<string, string>()
 
-	constructor(private readonly options: StallWatchdogOptions = {}) {}
+	constructor(private readonly options: StallWatchdogOptions) {}
 
 	onInit(vitest: Vitest): void {
 		this.vitest = vitest
@@ -86,7 +88,6 @@ export default class StallWatchdog implements Reporter {
 		}
 		this.lastAt = now
 		this.lastEvent = event
-		if (this.options.stallMs === undefined) return
 		clearTimeout(this.stallTimer)
 		this.stallTimer = setTimeout(() => this.stall(), this.options.stallMs)
 		this.stallTimer.unref()
@@ -95,7 +96,7 @@ export default class StallWatchdog implements Reporter {
 	private stall(): void {
 		// A blocked fork never reports its test's start, so the file is the most that can be named.
 		const running = this.running.size ? [...this.running.values()] : [this.file]
-		const report = [`no progress for ${seconds(this.options.stallMs ?? 0)} after ${this.lastEvent}; running:`, ...running]
+		const report = [`no progress for ${seconds(this.options.stallMs)} after ${this.lastEvent}; running:`, ...running]
 		console.error(report.map((line) => `[stall-watchdog] ${line}`).join("\n"))
 		const dir = this.options.stateDir ?? STATE_DIR
 		mkdirSync(dir, { recursive: true })

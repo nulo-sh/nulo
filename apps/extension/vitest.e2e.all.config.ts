@@ -1,5 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { defineConfig } from "vitest/config"
+import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits"
 import { e2eReporters, noirAliases, srcDir } from "./vite.shared"
 
 export default defineConfig({
@@ -30,7 +31,8 @@ export default defineConfig({
 		isolate: true,
 		// Match the network runner's retry budget (NULO_E2E_RETRY override, default 2).
 		retry: process.env.NULO_E2E_RETRY ? Number(process.env.NULO_E2E_RETRY) : 2,
-		reporters: e2eReporters({ stall: {} }),
+		execArgv: [`--max-old-space-size=${FORK_HEAP_MIB}`],
+		reporters: e2eReporters({ stall: { stallMs: STALL_MS } }),
 		// Node v24 enforces JSON import attributes; `@aztec-labs/accounts` lazy
 		// loaders import their .json artifacts without the `with: { type:
 		// "json" }` attribute, so vanilla Node refuses them in global-setup

@@ -64,9 +64,9 @@ on_exit() {
 }
 trap on_exit EXIT
 
-# Clear stale boot-sentinel markers from a prior run so the boot-failure
-# classifier (scripts/e2e/classify-exit.ts) sees only THIS run's state.
-rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started
+# Clear a prior run's markers so the boot-failure classifier
+# (scripts/e2e/classify-exit.ts) and the stall report read only THIS run's state.
+rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started .e2e-state/stalled
 
 echo "[e2e:agent] resolving ports..."
 bun run scripts/e2e/resolve-ports.ts

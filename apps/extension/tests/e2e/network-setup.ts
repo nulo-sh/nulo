@@ -1,5 +1,5 @@
 import { getHeapStatistics } from "node:v8"
-import { afterAll } from "vitest"
+import { FORK_HEAP_MIB } from "./run-limits"
 import { markTestsStarted } from "./sentinel"
 
 // Runs once per test-file worker, before any test body, AFTER global-setup. The
@@ -8,18 +8,9 @@ import { markTestsStarted } from "./sentinel"
 // infra-boot failure (exit 86).
 markTestsStarted()
 
-// Temporary calibration sampler: this fork's peak V8 heap and its default limit.
-let peakHeap = 0
-const sampleHeap = () => {
-	peakHeap = Math.max(peakHeap, process.memoryUsage().heapUsed)
+// V8 adds its young generation (192 MiB on Node 24) to the old-space cap; a fork the config's
+// execArgv never reached reports the default instead (4288 MiB on a hosted runner).
+const heapLimitMib = getHeapStatistics().heap_size_limit / 2 ** 20
+if (heapLimitMib < FORK_HEAP_MIB || heapLimitMib > FORK_HEAP_MIB + 512) {
+	throw new Error(`this fork's V8 heap limit is ${heapLimitMib} MiB, not the ${FORK_HEAP_MIB} MiB cap`)
 }
-const heapTimer = setInterval(sampleHeap, 1_000)
-heapTimer.unref()
-afterAll(() => {
-	clearInterval(heapTimer)
-	sampleHeap()
-	const mib = (n: number) => Math.ceil(n / 2 ** 20)
-	console.log(
-		`[heap-sample] pid ${process.pid} peak heapUsed ${mib(peakHeap)} MiB, heap_size_limit ${mib(getHeapStatistics().heap_size_limit)} MiB`,
-	)
-})
