@@ -1,7 +1,7 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: draft, awaiting orchestrator approval
+status: approved; arc 1 in progress (arcs 2 and 3 wait on their gates)
 issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #211, #215, #216, #229 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -42,7 +42,7 @@ Recon: [recon.md](recon.md). Owner questions beyond page 11: [OWNER-ASKS.md](OWN
 | Item | What it gates | Where |
 |---|---|---|
 | No-ask (orchestrator, decisions.json `no_ask` #210) | Arc 1's #210: "Pass the card depth, not the raw stack order." | recorded |
-| The orchestrator's record for #205, #212 and #214 (a `no_ask` entry like #210's, or a page item) | Arc 1's three visible corrections (§ UI impact). Without it each stays as it is (SR2) and its issue moves to a page | requested in OWNER-ASKS.md § Arc 1 corrections |
+| The orchestrator's record for #205, #212 and #214 | Arc 1's three visible corrections (§ UI impact) | recorded: D-orch-3 |
 | Page 11, P11-01 (approve), hold H6 | Arc 3 phase 3.1 (#151, the fenced sender) | decision page 11 |
 | Page 11, P11-01, FA-1, FA-2, FA-7 | Arc 3 phases 3.2-3.3 (#151, the running state and its e2e) | decision page 11; OWNER-ASKS.md |
 | Page 11, P11-02 (visual: A, B, As is), FA-5 if B | Arc 3 phase 3.4 (#216) | decision page 11 |
@@ -103,7 +103,7 @@ Sibling gates: arc 2 starts on a base that contains `account-session-life` arc 3
 
 ### Asks (each with the working assumption the plan proceeds on)
 
-- A1. The orchestrator may merge arc 1 without a stack (as `backup-import-export` did). Working assumption: arc 1's PR targets `dev` directly; arcs 2 and 3 restack later.
+- A1. The orchestrator may merge arc 1 without a stack (as `backup-import-export` did). Answered: D-orch-1, no stack; arc 1's PR targets `dev`.
 - A2. FA-1, FA-2, FA-4 and FA-7 go on decision page 11 before it is signed; they block their phases. Working assumption: those phases wait; the rest of arc 3 ships when page 11 is signed.
 - A3. FA-3, FA-5, FA-6, FA-8, FA-9, FA-10 and FA-11 ship in their "what ships now" form until answered.
 
@@ -249,7 +249,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 3. Tests in `client.test.ts` with `PortRegistry` answering `LogLevel.Info`: after the first answer a Debug line is not posted (control); Warn and Error lines are. For answers and events of `Warn`, `Error`, `7` and `"x"`: Warn and Error lines still post, and so do Debug lines (the minimum stays unknown). An `onLevel` Debug event makes the next Debug line post. A remote close resets to sending everything. A real service and client pair (the service over a `LoggerStore` with a mutable config) turns `debugMode` on and the next Debug line reaches the store. `store.test.ts`: `onLevel` fires once per real level change. `client.ports.test.ts` S1-S4 pass unchanged.
 - Validation gate: fast layers; `bun run test` and `bun run test:all` exit 0.
 
-**Arc 1 precondition.** The orchestrator's record for #205, #212 and #214 (§ Owner dependencies). A part it does not cover stays as it is and its issue stays open for a page.
+**Arc 1 precondition.** The orchestrator's record for #205, #212 and #214: met (D-orch-3).
 
 **Arc 1 gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` exit 0. The full smoke suite, both browsers (no `<files>`), every file passing; one rerun of a known flake, named in `lessons/phase-1.md`. PR screenshots: a form popup under the delete confirm, dark and light. Filed with the PR: the issues for `EditAccountPopup`'s missing duplicate check, the spaces-only account name, and the logs viewer's dead trim branch (dedupe first).
 
@@ -361,7 +361,10 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D13 (#215): stops scoped to shakes and shimmers through the shared modules. Rejected: `.noanimations * { animation: none }` (stops spinners, pulses and the countdown bar, beyond P11-05's words).
 - D14 (#216 A): the right slot's fallback. Rejected: filtering `useSlots().right?.()` for comment nodes (C-10: mishandles empty fragments and evaluates the slot by hand).
 - D15 (blocking asks): FA-1, FA-2, FA-4 and FA-7 hold their phases instead of shipping a reduced P11-01 or P11-03 (C-4, O-3).
-- D16 (delivery): one stack, arc 1 first; titles ≤ 93 characters (O-12 caught a 95-character arc 3 title).
+- D16 (delivery): one stack, arc 1 first; titles ≤ 93 characters (O-12 caught a 95-character arc 3 title). Superseded for arc 1 by D-orch-1.
+- D-orch-1 (orchestrator, 2026-10-10): no stack. Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; later arcs branch from `worktree-forms-and-contacts` and rebase onto `dev` after arc 1 lands.
+- D-orch-2 (orchestrator, 2026-10-10): arc 1 only. Arc 2 waits on `account-session-life` arc 3; arc 3 waits on decision page 11, where FA-1 to FA-11 sit as items P11-06 to P11-17. FA-8 and FA-10 ship as today in arc 1 (today's behaviour pinned, as phases 1.3 and 1.4 say).
+- D-orch-3 (orchestrator, 2026-10-10): arc 1's three visible corrections are no-ask decisions on the #210 precedent (bug fixes restoring intended behaviour with existing words) and ship in full: #205, after a failed config write the toggle shows the stored value again beside the existing "Failed to update setting" toast; #212, each log line on its own line, and after "Clear logs" the list starts on the first line; #214, duplicate checks compare trimmed input, so "Alice " beside a saved "Alice" shows the existing "Already exist" warning with Save disabled, and saved names are not changed. No other visible change and no new words.
 
 ### Competing outline (cheapest-first), sent to both audits
 
