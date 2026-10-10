@@ -662,6 +662,34 @@ Evidence in `lessons/phase-1.md`: 10 smoke tests in 6 files pass only while the 
 - **Codex, after the probe** (same session): **option 2, with a test-only FPC storage fixture for the picker.** The probe settles feasibility; option 2 keeps D-orch-2 and avoids F2's flag, stamp and release checks. Its conditions: a spec's explicit refusal takes precedence over the launch's redirect and keeps counting hits (Firefox's one slot must stop conflicting); D2's revision is recorded precisely; the offline reset delay stays a product defect, not something a stub hides. For the picker: seed both canonical protocol FPC rows (`fpc/service.ts:136-142` returns them without discovery), keep the blanket 400 and every keyboard assertion, and assert that Enter saved the pick. A method-aware stub is rejected: discovery reaches PXE registration.
 - **Decision**: option 2 with the FPC fixture (D23 to D25). The panel converged, no build input changes (D-orch-2 holds) and no gate narrows, so no orchestrator call is needed. The fixture passed `send-keyboard` 5/5 on both browsers behind the guard and the stub; with Enter replaced by Escape the saved-pick assertion fails, while the old `data-fee-method` check alone passed that no-op.
 
+### Arc 1, round 2, Codex (gpt-6.1-sol, high, read-only; session `01a124f5-534e-7222-bbe8-93d69f51f545`), 2026-10-10
+
+Verdict: **reject** (the stand-in could go quiet unreported). Run on the alejo-icloud account: the call omitted `env -u CODEX_ACCOUNT`.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. While a spec holds the origin the launch reports none of its failures, and a spec that never stops leaves the stand-in suspended with the close passing | Accepted: the launch keeps the spec's failures, and its `failures()` reports a spec interception still unstopped |
+| 2 | Medium. A spec's `stop()` can run twice; on Firefox a stale handle removes whichever observer holds the origin | Accepted: the stop runs once, a re-arm happens only when nothing is armed, and each Firefox observer carries its arm's token |
+| 3 | Low. The `< 900 ms` assertion in `node-stub.test.ts` depends on timing | Accepted: removed; one request after an awaited rejection already proves no retry |
+| 4 | Low. A comment in `firefox.ts` narrates `capabilities` and names its test caller | Accepted: removed |
+
+### Arc 1, round 2, Opus (general-purpose, read-only), 2026-10-10
+
+Verdict: **reject**. No path reaches an outside host; two ways the stand-in can stop answering with nothing failing.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. A node request the interception never sees (an unattached target, a swap gap) reaches the guard, matches the declared host and passes; the README claimed the close catches it | Fallback accepted: the README and the declared reason now say what the close catches and that such a request is refused unflagged. Failing on any guard hit after arming was rejected: a request already in flight when the interception arms would race the snapshot and make launches flaky, and the egress guarantee holds either way |
+| 2 | Medium. A spec interception never stopped leaves the stand-in off, unreported | Accepted (Codex 1) |
+| 3 | Low. A repeated `stop()` re-arms twice; a stale Firefox handle deletes the current owner | Accepted (Codex 2) |
+| 4 | Low. Every launch now holds an interception for life, so a reply that fails because its target died (a killed background, a closed offscreen document) fails the launch | Accepted: a reply error on a gone target counts as gone, as an arm or resume error already did; a request whose target died was never sent |
+| 5 | Low. The saved-pick check passes for any non-sponsor row | Accepted: the focused row must be the seeded sponsor, and the saved record must name type `fpc` and its id |
+| 6 | Low. Equal fake counts hide which arm a hit came from; three branches untested | Accepted: each arm counts differently; cases for a failed spec arm, a second spec, and unreadable node failures |
+| 7 | Low. An egress failure hides the node's failures | Accepted: both are reported |
+| 8 | Low. `CHROME_ONLY.hangingRequest`'s reason is false now that Firefox redirects | Accepted in part: the reason is reworded in the code, `CLAUDE.md`, `CI.md`, `FIREFOX.md` and the skill; running the spec on Firefox moves CI pins outside this arc and is #272 |
+| 9 | Low. An uncommitted inventory hook in `egress-guard.ts` | Already local only; never committed |
+| 10 | Gate. No whole-smoke run on the stub build yet | Accepted: the six runs are the phase 1.2 gate, run next |
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
