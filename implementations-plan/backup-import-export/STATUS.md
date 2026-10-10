@@ -19,3 +19,4 @@
 - 2026-10-10: gate 1b.1 local half pass: `bun install --frozen-lockfile --force`, lint, typecheck:all, test:all (aztec-runtime heal 5/5; extension 10743), audit gate enforce (41 acknowledged, 0 unacknowledged), build (notices accepted the pxe record). Heal test fails with the patch reverted (4 of 5 red; lessons/phase-1b.md).
 - 2026-10-10: gate 1b.1 network half pass, Chrome, retry 0: `profile-reimport-matrix` 3/3 (default build); `import-handshake-note` 2/2 on a proverless build (run 1 without `NULO_E2E_PROVERLESS` failed on the proverless-only gate; D-arc1b-3). Phase 1b.1 ✓.
 - 2026-10-10: arc 1b review loop converged (Codex r1 approve with fixes + Opus approve with fixes, five Lows fixed in d090132 and c38b5e9; Codex r2 clean).
+- 2026-10-10: final gates on the final head pass: lint, typecheck:all, test:all (extension 10743, aztec-runtime 372), check:plans 0 findings; revert check repeated on the final test (4 of 5 red unpatched).
