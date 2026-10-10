@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config"
-import { e2eReporters, srcDir } from "./vite.shared"
+import { e2eReporters, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	resolve: {

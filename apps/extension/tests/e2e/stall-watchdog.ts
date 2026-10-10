@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import type { RunnerTaskEventPack } from "vitest"
 import type { Reporter, ReportedHookContext, TestCase, TestModule, Vitest } from "vitest/node"
-import { STATE_DIR } from "./sentinel"
+import { STATE_DIR } from "./sentinel.ts"
 
 /** The fork pool's worker entry in vitest 4.1.10; `scripts/e2e/stall-watchdog.test.ts` pins it. */
 export const FORK_ENTRY = "/vitest/dist/workers/forks.js"
@@ -33,8 +33,11 @@ export default class StallWatchdog implements Reporter {
 	private file = ""
 	private longest?: Silence
 	private readonly running = new Map<string, string>()
+	private readonly options: StallWatchdogOptions
 
-	constructor(private readonly options: StallWatchdogOptions) {}
+	constructor(options: StallWatchdogOptions) {
+		this.options = options
+	}
 
 	onInit(vitest: Vitest): void {
 		this.vitest = vitest

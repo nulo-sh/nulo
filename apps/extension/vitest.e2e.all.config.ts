@@ -1,7 +1,7 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { defineConfig } from "vitest/config"
-import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits"
-import { e2eReporters, noirAliases, srcDir } from "./vite.shared"
+import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits.ts"
+import { e2eReporters, noirAliases, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	resolve: {

@@ -2,7 +2,7 @@ import vue from "@vitejs/plugin-vue"
 import useAutoImport from "unplugin-auto-import/vite"
 import { defineConfig } from "vitest/config"
 import { sharedTest } from "../../vitest.base.mts"
-import { artifactAliases, sharedDefine, srcDir } from "./vite.shared"
+import { artifactAliases, sharedDefine, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	// Vue plugin + auto-import: required so vitest can compile *.vue

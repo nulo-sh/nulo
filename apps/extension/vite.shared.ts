@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from "node:url"
 import { resolvePackageAsset } from "@nulo/resolve-asset"
-import packageJson from "./package.json"
+import packageJson from "./package.json" with { type: "json" }
 
 /**
  * Shared building blocks for the vite/vitest config family
@@ -9,8 +9,8 @@ import packageJson from "./package.json"
  * comments — the sync drifted (the e2e:all config silently lost the noir
  * aliases). Single-owning them here is the fix.
  */
-import RetryErrorReporter from "./tests/e2e/retry-error-reporter"
-import StallWatchdog, { type StallWatchdogOptions } from "./tests/e2e/stall-watchdog"
+import RetryErrorReporter from "./tests/e2e/retry-error-reporter.ts"
+import StallWatchdog, { type StallWatchdogOptions } from "./tests/e2e/stall-watchdog.ts"
 
 /**
  * Resolve a file inside an npm package, bypassing its `exports` field.

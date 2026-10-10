@@ -1,5 +1,5 @@
 import { defineManifest } from "@crxjs/vite-plugin"
-import ManifestConfig from "./manifest.config"
+import ManifestConfig from "./manifest.config.ts"
 
 // Permissions that don't exist in Firefox MV3:
 // - "background": Firefox uses a persistent background page model, not

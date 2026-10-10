@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config"
-import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits"
-import { e2eReporters, noirAliases, srcDir } from "./vite.shared"
+import { FORK_HEAP_MIB, STALL_MS } from "./tests/e2e/run-limits.ts"
+import { e2eReporters, noirAliases, srcDir } from "./vite.shared.ts"
 
 export default defineConfig({
 	resolve: {
