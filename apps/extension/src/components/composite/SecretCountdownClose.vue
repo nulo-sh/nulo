@@ -51,18 +51,13 @@ const emit = defineEmits(["close", "disableAutoClose"])
 
 <style module>
 .cta {
+	composes: type--button from global;
 	position: relative;
 	width: 100%;
 	border: none;
 
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
-
-	font-family: var(--font-headline);
-	font-weight: 700;
-	font-size: 14px;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
 
 	padding: 20px 0;
 	cursor: pointer;
@@ -136,13 +131,8 @@ const emit = defineEmits(["close", "disableAutoClose"])
 }
 
 .ghost_link {
+	composes: type--label from global;
 	align-self: center;
-
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 
 	color: var(--nulo-secondary);
 	background: transparent;

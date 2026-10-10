@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
 		<!-- Agreement gate -->
 		<template v-if="!isStarted">
 			<div class="export_section">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text size="13" height="150" color="body">
 						Your recovery phrase is direct and full access to your entire profile, once you lose it you will not
@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
 		<!-- Revealed phrase -->
 		<template v-else>
 			<div class="export_section">
-				<span class="export_section_label">Your recovery phrase</span>
+				<span class="export_section_label type--label-section">Your recovery phrase</span>
 				<SecretRevealCard
 					:value="phrase"
 					label="Recovery Phrase"
@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
 			</div>
 
 			<div class="export_section_last">
-				<span class="export_section_label">Keep in mind</span>
+				<span class="export_section_label type--label-section">Keep in mind</span>
 				<Flex direction="column" gap="10">
 					<Flex gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />

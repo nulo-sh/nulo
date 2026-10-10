@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
 		<Header />
 
 		<Banner v-if="bootOutcome || bootRetrying" variant="warning" direction="vertical" data-testid="boot-outcome-banner">
-			<Text size="13" weight="500">
+			<Text>
 				{{
 					bootRetrying
 						? "Retrying…"
@@ -479,7 +479,7 @@ onBeforeUnmount(() => {
 							: "The wallet service could not be reached."
 				}}
 			</Text>
-			<button type="button" :class="$style.retry" data-testid="boot-retry" :disabled="bootRetrying" @click="loadProfile()">RETRY</button>
+			<button type="button" :class="$style.retry" class="type--button-md" data-testid="boot-retry" :disabled="bootRetrying" @click="loadProfile()">RETRY</button>
 		</Banner>
 
 		<RouterView v-slot="{ Component }">
@@ -515,11 +515,8 @@ onBeforeUnmount(() => {
 	align-self: flex-start;
 	margin-top: 8px;
 	padding: 4px 10px;
-	font: inherit;
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: 0.04em;
 	color: inherit;
+	line-height: inherit;
 	background: transparent;
 	border: 1px solid currentColor;
 	border-radius: 4px;

@@ -322,6 +322,7 @@ onBeforeUnmount(() => {
 }
 
 .account_label {
+	composes: type--name-tag from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -333,11 +334,6 @@ onBeforeUnmount(() => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);
@@ -363,16 +359,13 @@ onBeforeUnmount(() => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 }
 
 /* Hover/focus underlines the address and reveals the copy icon — the icon is absolutely
  * positioned in the free space to its right, so nothing shifts and no target shrinks. */
 .address_text {
+	composes: type--data-lead from global;
 	position: relative;
 	display: inline-flex;
 	align-items: center;
@@ -432,15 +425,11 @@ onBeforeUnmount(() => {
 }
 
 .network_label {
+	composes: type--tag from global;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -470,11 +459,7 @@ onBeforeUnmount(() => {
 }
 
 .lock_label {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--nulo-secondary);
 }
 
