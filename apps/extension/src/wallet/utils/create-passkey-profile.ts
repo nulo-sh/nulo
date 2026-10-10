@@ -43,7 +43,8 @@ export interface SavedPasskeyCredential {
  * bootstrap orchestration, routing, etc.
  *
  * @throws ProfileIdConflictError if both attempts hit the conflict.
- * @throws UserRejectedError if the ceremony was cancelled.
+ * @throws UserRejectedError if the ceremony was cancelled before a passkey was created; a later
+ *   cancel arrives as `PasskeyUnconfirmedError` with that cause.
  * @throws Other Error from the service-client.
  */
 export async function createPasskeyProfileWithRetry(

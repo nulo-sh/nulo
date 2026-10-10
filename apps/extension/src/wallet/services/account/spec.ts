@@ -255,7 +255,7 @@ export type Methods = {
 	 * the envelope (regime digests, canonical signing key, checksum), recomputes the address from
 	 * the signing key and requires it to equal `expectedAddress` (the address the UI showed the
 	 * user for confirmation), rejects a duplicate, seals the signing key, and writes the row.
-	 * `password` decrypts an encrypted file (omit/empty for plaintext).
+	 * `password` decrypts an encrypted file (empty for plaintext).
 	 */
 	importAccount(profileId: string, chainId: number, fileBody: string, expectedAddress: string, password: string, name?: string): Account
 

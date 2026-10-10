@@ -556,9 +556,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 				const index = sameType.length > 0 ? array_max(sameType.map((x) => +x.index)) + 1 : 0
 
 				// Imported accounts bind to the ACTIVE network's L1 identity (they don't derive from it,
-				// but the row must carry a coherent value for the Account↔Network cross-check). Resolve
-				// it BEFORE the key row is written — a throw here would otherwise orphan a sealed key row
-				// (the compensation below only covers the Account row).
+				// but the row must carry a coherent value for the Account↔Network cross-check).
 				const l1ChainId = await this.networkService.getL1ChainIdStored(profileId, chainId)
 
 				const sealed = await sealSigningKey(dek, chainId, recomputed, signingKey)
@@ -590,8 +588,6 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * same address takes, so neither can land between the other's check and write. Key row first:
 	 * a crash between the two writes leaves an orphan key (swept on init), never an account that
 	 * cannot sign. A failure after the key write removes it; the duplicate refusal writes nothing.
-	 * Emits the add itself: an await between the final epoch check and the emit would let a deletion
-	 * begin unseen.
 	 */
 	private async commitImportedAccount(account: Account, sealed: string, epoch: number): Promise<void> {
 		const { profileId, chainId, address } = account
@@ -608,7 +604,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 				deletion.assertCurrent(profileId, epoch)
 				await this.storage.set(id, account)
 			})
-			// As in createAccountInternal: liveness, then the epoch, then the emit with no await.
+			// As in createAccountInternal: liveness, then the epoch, then the emit. The emit stays in
+			// here because an await between it and the epoch check would let a deletion begin unseen.
 			await this.assertStillLive(account)
 			if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 		} catch (rowErr) {

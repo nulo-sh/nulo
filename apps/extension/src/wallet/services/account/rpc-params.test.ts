@@ -3,7 +3,8 @@
  * message that names only the method, before the method runs. Driven through the real
  * `handleRequest` with the params wrapped as the client's wire carries them.
  */
-import { describe, expect, test, vi } from "vitest"
+import { describe, expect, expectTypeOf, test, vi } from "vitest"
+import type { z } from "zod"
 import { MessageType } from "@nulo/extension-messaging/messages"
 import { wrapParams } from "@nulo/extension-messaging/utils"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
@@ -16,7 +17,7 @@ import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
-import { AccountMethodSchemas } from "./spec"
+import { AccountMethodSchemas, type Methods } from "./spec"
 
 type Port = {
 	name: string
@@ -56,6 +57,13 @@ describe("account RPC params", () => {
 		const { service } = await started()
 		const rpcMethods = (service as unknown as { rpcMethods: ReadonlySet<string> }).rpcMethods
 		expect(Object.keys(AccountMethodSchemas).sort()).toEqual([...rpcMethods].sort())
+	})
+
+	test("every argument list a method's signature allows fits its schema", () => {
+		type Refused = {
+			[K in keyof Methods]: Parameters<Methods[K]> extends z.input<(typeof AccountMethodSchemas)[K]> ? never : K
+		}[keyof Methods]
+		expectTypeOf<Refused>().toBeNever()
 	})
 
 	test.each([
