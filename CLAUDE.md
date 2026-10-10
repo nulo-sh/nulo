@@ -587,6 +587,7 @@ A **stable release** turns the current `main` into a published `vX.Y.Z`: a GitHu
 **Prerequisites** (one-time, already done):
 - GitHub App `nulo-sh-release` installed on the repo with `RELEASE_PLEASE_APP_ID` + `RELEASE_PLEASE_APP_PRIVATE_KEY` repo secrets wired.
 - The `nulo-landing` Worker serves `nulo.sh` (custom domain) and has no deploy hook: Workers Builds' Git connection (set up in the Cloudflare dashboard) builds `main` for production and other branches as previews. No Cloudflare credential exists in GitHub Actions.
+  - `apps/landing/wrangler.jsonc` names no `routes` on purpose: wrangler leaves an attached domain alone while `routes` names none, and listing `nulo.sh` there would make every production deploy reconcile it, which needs a zone permission the Workers Builds token does not hold. Attaching or moving the domain is the owner's step in the Cloudflare dashboard; an agent session does not make domain or DNS changes.
 
 #### Stable release (from `main`)
 
