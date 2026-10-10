@@ -23,7 +23,7 @@ const { openToast } = useToast()
 /** Store */
 import { useCacheStore } from "@/stores/cache.store"
 const cacheStore = useCacheStore()
-const { order } = usePopupStack("edit_contact")
+const { order, depth } = usePopupStack("edit_contact")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -227,6 +227,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit contact"
 		submitLabel="Update contact"
 		:submitDisabled="

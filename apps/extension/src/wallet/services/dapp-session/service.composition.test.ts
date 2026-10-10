@@ -91,7 +91,7 @@ describe("DappSessionService composition — in-process, no sandbox", () => {
 	test("setCapabilityGrants persists + round-trips through real storage", async () => {
 		const { service } = await makeHarness()
 		const added = await service.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "0xA")
-		const grants = [{ capability: { type: "data" }, scopes: [] }] as unknown as GrantedCapabilityRecord[]
+		const grants = [{ capability: { type: "data", addressBook: true }, scopes: [] }] as unknown as GrantedCapabilityRecord[]
 
 		await service.setCapabilityGrants(added.id, grants)
 		expect(await service.getCapabilityGrants(added.id)).toEqual(grants)

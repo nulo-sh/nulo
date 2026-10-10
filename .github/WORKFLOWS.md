@@ -8,7 +8,7 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 
 | Workflow | Required check-run | Required on | Runs when | What it checks |
 |---|---|---|---|---|
-| `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build, landing build, Storybook build |
+| `pr-quick.yml` | `quality-status` | dev + main | every PR to `main` / `dev` | commitlint, lint, typecheck, units, chrome+firefox build, landing build, Storybook build, launch legal check (PRs into `main`) |
 | `pr-extension-smoke-e2e.yml` | `extension-smoke-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-smoke` label, OR `smoke-surface` paths-filter | chrome build + puppeteer smoke, 3 shards |
 | `pr-extension-network-e2e.yml` | `extension-network-e2e-status` | dev + main | PR to `main`, OR `e2e:extension-network` label, OR `extension-network` paths-filter | full network e2e (anvil + Aztec sandbox + playground) |
 | `pr-extension-smoke-e2e-firefox.yml` | `extension-smoke-e2e-firefox-status` | dev + main | same gate as the Chrome twin (its own file + `setup-geckodriver` in the filter), drafts included | firefox build + the smoke suite over geckodriver + Puppeteer BiDi, the same 3 shards |
@@ -17,6 +17,7 @@ These `status` aggregators are what branch protection on `main` / `dev` requires
 | `actionlint.yml` | `Status` (not required) | — | when `.github/workflows/**` or shell scripts change | actionlint + shellcheck |
 | `release.yml` | `status` (not required) | — | push to `main` + manual `workflow_dispatch` | release-please + gates + build + smoke against artifact + assets; `publish_chrome` / `publish_firefox` inputs run the store uploads in their protected environments |
 | `store-check.yml` | — | — | manual `workflow_dispatch` (`store`: chrome / firefox / both) | proves a store credential read-only (Chrome: one `fetchStatus`; Firefox: the author-scoped add-on list; no upload) |
+| `verify-store-copies.yml` | — | — | weekly (Mondays) + manual `workflow_dispatch` (`store`: both / chrome / firefox) | compares each store's public copy with the release zip it names (digest, `SHASUMS256.txt` and attestation checked) and fails on any difference beyond the store's own additions |
 | `source-rebuild.yml` | — | — | weekly (Mondays) + manual `workflow_dispatch` (`tag`) | rebuilds `git archive` of a release (or of the commit) on x86_64 + Ubuntu ARM64 with the reviewer script and fails on any byte differing from the shipped Firefox zip |
 | `publish-packages.yml` | — | — | manual `workflow_dispatch` (`version`, `dry_run`) | tests, stages, packs and digest-checks the three `@nulo-sh/*` npm packages; with `dry_run` false and the `npm-publish` environment approved, publishes them with provenance (no npm token) and verifies the provenance the registry serves |
 | `nightly.yml` | `status` (not required) | — | schedule (daily) + manual dispatch | full quality bar incl. network suite → prerelease GitHub Release from dev (`v<ver>-nightly.<YYDDD>`) |
