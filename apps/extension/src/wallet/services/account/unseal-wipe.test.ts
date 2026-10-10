@@ -1,14 +1,18 @@
 /**
- * The two imported-key unseal blocks (signing load, account export) in use-and-wipe order. They
- * wipe in different orders at different points, so each is pinned as it stands: load wipes only
- * after the awaited contract construction, export right after the scalar is built.
+ * The two imported-key unseal paths (signing load, account export) share one helper, which wipes
+ * the DEK, the plaintext and its copy, in that order, right after the scalar is built and before
+ * either path continues, so both pin the same order.
  */
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { describe, expect, test, vi } from "vitest"
 
+type Wiped = "dek" | "sk" | "copy"
+
 const state = vi.hoisted(() => ({
 	log: [] as string[],
+	/** Each wiped buffer, and a snapshot of what it held when its wipe began. */
+	wiped: {} as Partial<Record<Wiped, { buf: Uint8Array; held: Uint8Array }>>,
 	dek: undefined as Uint8Array | undefined,
 	sk: undefined as Uint8Array | undefined,
 	skFill: 7,
@@ -23,7 +27,9 @@ vi.mock("@nulo/wallet-crypto", async (importOriginal) => {
 	return {
 		...original,
 		zeroize: (b: Uint8Array) => {
-			state.log.push(`wipe:${label(b)}`)
+			const name = label(b)
+			state.log.push(`wipe:${name}`)
+			state.wiped[name] = { buf: b, held: Uint8Array.from(b) }
 			original.zeroize(b)
 		},
 		unsealImportedSigningKeyV2: async () => {
@@ -64,7 +70,11 @@ import { AccountService } from "./service"
 import { accountRowId } from "./spec"
 
 async function makeHarness(over: { skFill?: number; unsealFails?: boolean; address?: string; gate?: Promise<void> } = {}) {
-	Object.assign(state, { log: [], dek: undefined, sk: undefined, skFill: 7, unsealFails: false, gate: undefined, address: "0xA" }, over)
+	Object.assign(
+		state,
+		{ log: [], wiped: {}, dek: undefined, sk: undefined, skFill: 7, unsealFails: false, gate: undefined, address: "0xA" },
+		over,
+	)
 	const api = new FakeBrowserApi()
 	api.reset()
 	const key = accountRowId("p1", 1, "0xA")
@@ -99,8 +109,10 @@ async function makeHarness(over: { skFill?: number; unsealFails?: boolean; addre
 	return service
 }
 
-describe("signing load: wipes DEK, plaintext, copy only after construction and the address check", () => {
-	test("success with construction parked: nothing is wiped until it resolves", async () => {
+const ALL_WIPED = ["unseal", "wipe:dek", "wipe:sk", "wipe:copy"]
+
+describe("signing load: wipes DEK, plaintext, copy before the contract is constructed", () => {
+	test("with construction parked, all three held the key and are already zero", async () => {
 		let release!: () => void
 		const gate = new Promise<void>((r) => {
 			release = r
@@ -108,17 +120,19 @@ describe("signing load: wipes DEK, plaintext, copy only after construction and t
 		const service = await makeHarness({ gate })
 		const run = service.getAccountContract("p1", 1, "0xA")
 		await vi.waitFor(() => expect(state.log).toContain("construct"))
-		expect(state.log).toEqual(["unseal", "construct"])
+		expect(state.log).toEqual([...ALL_WIPED, "construct"])
+		const { dek, sk, copy } = state.wiped
+		expect([dek?.held.every((x) => x === 1), sk?.held[31], copy?.held[31]]).toEqual([true, 7, 7])
+		expect([dek, sk, copy].every((w) => w?.buf.every((x) => x === 0))).toBe(true)
 		release()
 		await run
-		expect(state.log).toEqual(["unseal", "construct", "constructed", "wipe:dek", "wipe:sk", "wipe:copy"])
-		expect([state.dek, state.sk].every((b) => b?.every((x) => x === 0))).toBe(true)
+		expect(state.log).toEqual([...ALL_WIPED, "construct", "constructed"])
 	})
 
-	test("an address mismatch wipes the same three, after construction", async () => {
+	test("an address mismatch has already wiped all three", async () => {
 		const service = await makeHarness({ address: "0xB" })
 		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(/^Imported account 0xA is unusable: address mismatch$/)
-		expect(state.log).toEqual(["unseal", "construct", "constructed", "wipe:dek", "wipe:sk", "wipe:copy"])
+		expect(state.log).toEqual([...ALL_WIPED, "construct", "constructed"])
 	})
 
 	test("a non-canonical scalar never constructs and still wipes all three", async () => {
@@ -126,7 +140,7 @@ describe("signing load: wipes DEK, plaintext, copy only after construction and t
 		await expect(service.getAccountContract("p1", 1, "0xA")).rejects.toThrow(
 			/^Imported account 0xA is unusable: signing key could not be recovered$/,
 		)
-		expect(state.log).toEqual(["unseal", "wipe:dek", "wipe:sk", "wipe:copy"])
+		expect(state.log).toEqual(ALL_WIPED)
 	})
 
 	test("an unseal rejection wipes the DEK, the only buffer that exists", async () => {
@@ -138,11 +152,11 @@ describe("signing load: wipes DEK, plaintext, copy only after construction and t
 	})
 })
 
-describe("account export: wipes plaintext, copy, DEK right after the scalar is built", () => {
-	test("success wipes before the envelope is built", async () => {
+describe("account export: the same wipes, before the envelope is built", () => {
+	test("success wipes all three before the envelope is built", async () => {
 		const service = await makeHarness()
 		expect(await service.exportAccount("p1", 1, "0xA", "pw", false)).toBe("body")
-		expect(state.log).toEqual(["unseal", "wipe:sk", "wipe:copy", "wipe:dek", "build"])
+		expect(state.log).toEqual([...ALL_WIPED, "build"])
 	})
 
 	test("a non-canonical scalar propagates the field error raw, after the same wipes", async () => {
@@ -150,7 +164,7 @@ describe("account export: wipes plaintext, copy, DEK right after the scalar is b
 		await expect(service.exportAccount("p1", 1, "0xA", "pw", false)).rejects.toThrow(
 			/^Value 0xf{64} is greater or equal to field modulus\.$/,
 		)
-		expect(state.log).toEqual(["unseal", "wipe:sk", "wipe:copy", "wipe:dek"])
+		expect(state.log).toEqual(ALL_WIPED)
 	})
 
 	test("an unseal rejection propagates raw and wipes only the DEK", async () => {

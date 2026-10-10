@@ -13,6 +13,17 @@ export const bytesToHex = (bytes: Uint8Array): string => {
 	return hex
 }
 
+const EVEN_HEX = /^(?:[0-9a-fA-F]{2})*$/
+
+/** Hex → bytes. Strict: a non-string, an odd length or any character outside `[0-9a-fA-F]`,
+ *  whitespace included, throws, where `Buffer.from(hex, "hex")` truncates and differs by binding. */
+export const fromHex = (hex: string): Uint8Array<ArrayBuffer> => {
+	if (typeof hex !== "string" || !EVEN_HEX.test(hex)) throw new Error("invalid hex")
+	const bytes = new Uint8Array(hex.length / 2)
+	for (let i = 0; i < bytes.length; i++) bytes[i] = Number.parseInt(hex.slice(2 * i, 2 * i + 2), 16)
+	return bytes
+}
+
 // `btoa` needs a binary (latin1) string. Build it in chunks: spreading a large
 // byte array through `String.fromCharCode(...bytes)` overflows the call stack.
 const FROM_CHARCODE_CHUNK = 0x8000

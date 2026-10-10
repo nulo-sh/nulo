@@ -19,7 +19,7 @@ import {
 	PASSKEY_PRF_LABEL,
 } from "@nulo/wallet-crypto"
 import { PASSKEY_TIMEOUT, type PasskeyRequest, RP_ID } from "@/wallet/services/passkey/spec"
-import { bytesToHex, fromBase64, toBase64 } from "@/wallet/utils"
+import { bytesToHex, fromBase64, fromHex, toBase64 } from "@/wallet/utils"
 import { formatPasskeyUserName } from "./passkey-label"
 import { PasskeyPrfError, PasskeyUnconfirmedError } from "./passkey-errors"
 
@@ -40,7 +40,7 @@ async function buildPrfInput(): Promise<ArrayBuffer> {
 export async function buildCreateOptions(userHandle: string, name: string): Promise<PublicKeyCredentialCreationOptions> {
 	const challenge = crypto.getRandomValues(new Uint8Array(32))
 	const prfInput = await buildPrfInput()
-	const userHandleBytes = Uint8Array.from(Buffer.from(userHandle, "hex"))
+	const userHandleBytes = fromHex(userHandle)
 	// The label shown by iCloud Keychain / password managers. `user.name` and
 	// `user.displayName` carry the same value so the credential renders
 	// consistently regardless of which field a given manager surfaces.
