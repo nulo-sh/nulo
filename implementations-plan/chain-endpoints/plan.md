@@ -712,6 +712,17 @@ Verdict: **approve**. Both races are closed, and the listed interleavings leave 
 | 3 | Info. A failed stop of a re-arm nothing holds replaces the spec's original arm error | Accepted: it becomes a failure instead |
 | 4 | Info. A read during a spec's stop says "never stopped" | Accepted: it says "not stopped before this read" |
 
+### Arc 1, Opus check of the background-kill fix (general-purpose, read-only), 2026-10-10
+
+Verdict: **approve**. All 16 kill sites go through the exported `stopBackground`; a reload in `migration.test.ts` is followed at once by the close. Requests the successor makes before the re-arm reach the guard, which refuses a declared host: retry latency, no failure.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium, latent. Chrome's re-arm refuses when no service worker runs yet, and `stopBackground` can return before a successor starts: the launch would fail at close with the node unheld for the rest of the file | Accepted: the re-arm after a kill tells the driver the background may be down; Chrome's auto-attach then holds a later successor until it is armed |
+| 2 | Low. A kill while a spec's stop is still re-arming skips that origin, so the re-arm lands during the kill | Rejected: no file uses both `interceptRpc` and `stopBackground`, and a spec awaits its stop before anything else |
+| 3 | Info. The refusal and the unstopped-read messages name only a spec, while a kill now takes the origin too | Accepted: both are worded for either holder |
+| 4 | Info. Three comments still describe only a spec's suspension, and the kill hazard is Chrome's | Accepted |
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
