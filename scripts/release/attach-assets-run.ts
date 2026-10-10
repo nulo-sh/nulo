@@ -252,7 +252,19 @@ export async function main(argv: string[], env: Record<string, string | undefine
 	return fail(io, `usage: plan | apply --expect publish [--target <sha>] | verify-published (got ${argv.join(" ")})`)
 }
 
-export function realIO(repo: string, token: string): AttachIO {
+/** The body of `res`, refused once it passes `limit` bytes, before the rest reaches memory. */
+export async function readBounded(res: Response, limit: number, where: string): Promise<Uint8Array> {
+	const chunks: Uint8Array[] = []
+	let total = 0
+	for await (const chunk of res.body ?? []) {
+		total += chunk.byteLength
+		if (total > limit) throw new Error(`${where}: more than ${limit} bytes`)
+		chunks.push(chunk)
+	}
+	return Buffer.concat(chunks)
+}
+
+export function realIO(repo: string, token: string, assetLimit = Number.POSITIVE_INFINITY): AttachIO {
 	const call = async (url: string, init: RequestInit = {}, accept = "application/vnd.github+json"): Promise<Response> => {
 		const res = await fetch(url.startsWith("https://") ? url : `https://api.github.com/repos/${repo}/${url}`, {
 			...init,
@@ -330,7 +342,7 @@ export function realIO(repo: string, token: string): AttachIO {
 			const file = location ? await fetch(location, { signal: AbortSignal.timeout(300_000) }) : res
 			if (!file.ok) throw new Error(`download of asset ${id}: HTTP ${file.status}`)
 			mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true })
-			await Bun.write(path, await file.arrayBuffer())
+			await Bun.write(path, await readBounded(file, assetLimit, `download of asset ${id}`))
 		},
 		sha256: async (path) => new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex"),
 		readText: (path) => Bun.file(path).text(),

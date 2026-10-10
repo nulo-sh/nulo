@@ -10,7 +10,7 @@
 
 import { mkdirSync } from "node:fs"
 import { assetNames, parseShasums, type RemoteAsset } from "./attach-assets"
-import { fetchVerified, type PublishedReadIO, realIO as releaseIO } from "./attach-assets-run"
+import { fetchVerified, type PublishedReadIO, readBounded, realIO as releaseIO } from "./attach-assets-run"
 import { AMO_API, GECKO_ID } from "./publish-firefox-amo"
 import { compareCopies, crxPayload, entryListProblem, type Store } from "./store-copy"
 import { command } from "./workflow-command"
@@ -23,8 +23,8 @@ export const PRE_ATTESTATION: readonly string[] = ["0.30.2"]
 
 const CHROME_CRX = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=140.0&acceptformat=crx3&x=id%3D${CHROME_ITEM_ID}%26uc`
 const AMO_ADDON = `${AMO_API}/addons/addon/${encodeURIComponent(GECKO_ID)}/`
-/** The Chrome copy measured 36.7 MB. */
-const DOWNLOAD_LIMIT = 128 << 20
+/** Every download, store copy and release asset alike; the Chrome copy measured 36.7 MB. */
+export const DOWNLOAD_LIMIT = 128 << 20
 /** What all of one archive's entries may inflate to, whatever its central directory claims. */
 const OUTPUT_LIMIT = 512 << 20
 
@@ -151,7 +151,7 @@ export async function main(argv: string[], io: StoreCopyIO, dir: string): Promis
 
 export function realStoreIO(repo: string, token: string): StoreCopyIO {
 	// Only the read half of the publish path's IO: nothing here can write to a release.
-	const r = releaseIO(repo, token)
+	const r = releaseIO(repo, token, DOWNLOAD_LIMIT)
 	return {
 		releasesFor: r.releasesFor,
 		tagCommit: r.tagCommit,
@@ -163,16 +163,9 @@ export function realStoreIO(repo: string, token: string): StoreCopyIO {
 		log: r.log,
 		async fetchBytes(url, limit) {
 			const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(300_000) })
-			const where = url.split("?")[0]
-			if (!res.ok || !res.body) throw new Error(`GET ${where}: HTTP ${res.status}`)
-			const chunks: Uint8Array[] = []
-			let total = 0
-			for await (const chunk of res.body) {
-				total += chunk.byteLength
-				if (total > limit) throw new Error(`GET ${where}: more than ${limit} bytes`)
-				chunks.push(chunk)
-			}
-			return Buffer.concat(chunks)
+			const where = `GET ${url.split("?")[0]}`
+			if (!res.ok || !res.body) throw new Error(`${where}: HTTP ${res.status}`)
+			return readBounded(res, limit, where)
 		},
 		async writeBytes(path, bytes) {
 			mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true })

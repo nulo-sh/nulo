@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { describe, expect, spyOn, test } from "bun:test"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ReleaseRecord } from "./attach-assets-run"
-import { CHROME_ITEM_ID, main, PRE_ATTESTATION, realStoreIO, type StoreCopyIO } from "./store-copy-run"
+import { type ReleaseRecord, readBounded } from "./attach-assets-run"
+import { CHROME_ITEM_ID, DOWNLOAD_LIMIT, main, PRE_ATTESTATION, realStoreIO, type StoreCopyIO } from "./store-copy-run"
 
 const SHA = "a".repeat(40)
 const text = (s: string) => new TextEncoder().encode(s)
@@ -310,6 +311,50 @@ describe("store-copy-run", () => {
 
 	test("refuses anything but one store name", async () => {
 		for (const argv of [[], ["edge"], ["chrome", "firefox"]]) expect(await run(world(), ...argv).exit).toBe(1)
+	})
+})
+
+/** `count` copies of `chunk`, then `tail` bytes; `pulled()` says how many chunks were asked for. */
+function stream(count: number, chunk: Uint8Array, tail = 0) {
+	let sent = 0
+	const body = new ReadableStream<Uint8Array>({
+		pull(c) {
+			if (sent++ < count) return c.enqueue(chunk)
+			if (tail) c.enqueue(new Uint8Array(tail))
+			c.close()
+		},
+	})
+	return { body, pulled: () => sent }
+}
+
+describe("bounded downloads", () => {
+	test("readBounded keeps a body of exactly the limit and refuses one byte more", async () => {
+		const four = new Uint8Array([1, 2, 3, 4])
+		expect([...(await readBounded(new Response(stream(2, four).body), 8, "x"))]).toEqual([1, 2, 3, 4, 1, 2, 3, 4])
+		await expect(readBounded(new Response(stream(2, four, 1).body), 8, "x")).rejects.toThrow("x: more than 8 bytes")
+		expect((await readBounded(new Response(null), 0, "x")).length).toBe(0)
+	})
+
+	test("a release asset past the download limit stops streaming; a small one is written", async () => {
+		const mib = new Uint8Array(1 << 20)
+		const big = stream(200, mib)
+		let body: ReadableStream<Uint8Array> = big.body
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request) =>
+			String(input).startsWith("https://api.github.com/")
+				? new Response(null, { status: 302, headers: { location: "https://objects.example/asset" } })
+				: new Response(body)) as typeof fetch)
+		const dir = mkdtempSync(join(tmpdir(), "store-copy-dl-"))
+		try {
+			const io = realStoreIO("o/r", "")
+			await expect(io.downloadAsset(7, `${dir}/big.zip`)).rejects.toThrow(`download of asset 7: more than ${DOWNLOAD_LIMIT} bytes`)
+			expect(big.pulled()).toBeLessThan(200)
+			body = stream(1, text("small")).body
+			await io.downloadAsset(8, `${dir}/small.zip`)
+			expect(readFileSync(`${dir}/small.zip`, "utf8")).toBe("small")
+		} finally {
+			fetchSpy.mockRestore()
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 })
 

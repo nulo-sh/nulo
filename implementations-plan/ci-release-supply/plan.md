@@ -608,6 +608,14 @@ On `c0e1e69...f1c0618`, alongside Codex round 1. Verdict: **approve with fixes**
 | 7 | Docs: the tag-creation ruleset still lets the owner push a tag; a Release PR is opened against `main`, so `--admin` is its realistic bypass | Accepted: CLAUDE.md says the ruleset leaves a hand-pushed tag to the owner alone; the troubleshooting cause names `--admin`; CI.md names both a retarget (a promote PR) and `--admin` |
 | 8 | With no `node_modules`, Bun auto-installs a bare import from npm at run time in every job that installs nothing (moderate confidence) | Verified in Bun's docs (`install.auto` defaults to `"auto"`). Accepted for this arc's workflow: `bun --no-install`, pinned. The pre-existing jobs (`auto-unstick`, `attach-assets`, `sync-main-to-dev`, both store publishers, `publish-nightly`, `preview-comment`) are outside arc 2's change map: filed as #260 |
 
+### Arc 2, Codex round 2 (resumed), 2026-10-10
+
+On `f1c0618..6d5e7ea`. Every accepted round-1 finding is fixed with no regression. Codex ran the manual block through 24 bash and zsh cases, with and without `errexit`, and each new guard went red under its mutation. Nothing new in the fix commit was wrong. The phase 2.4 record holds: the tree outside the plan files equals `2f46ecf`, and six entries against three is the stop rule as written.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. Round 1's finding 2, held: v0.30.2 skips the attestation and its release is mutable, so its asset's bytes are no longer only this repository's build. `attach-assets-run.ts`'s download buffers the whole response before the digest is checked. | Accepted. `realIO` takes an asset byte limit, unbounded by default so the publish path keeps its behaviour. `realStoreIO` passes `DOWNLOAD_LIMIT` (128 MiB), and the store downloads share `readBounded`, which refuses while streaming. New cases: the exact limit kept and one byte more refused; a 200 MiB release asset stops streaming at the limit while a small one is written. Each is red with its wiring or its check removed. `attach-assets-run.test.ts` is unedited and passes. |
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before the next arc's branch starts; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
