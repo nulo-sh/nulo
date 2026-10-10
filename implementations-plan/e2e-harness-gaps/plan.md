@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arc 1a merged (#267); arc 1b in review (#273)
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267) and 1b (#273) merged; arc 2 in review
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -608,6 +608,10 @@ Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run inde
 | OA4 | Low. File the `pageerror` gap before the plan closes | Accepted: #275 |
 | OA5 | Optional. `extends: ./tsconfig.scripts.json`; `include: tests/e2e/**/*` so a future `.mts`/`.cts` is checked | `extends` rejected: the scripts program runs on Bun and this one on Node, so a Bun-side option must not move the Node program. The wider include accepted: a probe `.mts` and `.cts` with a wrong-typed constant fail under it and pass silently under `**/*.ts`; the file list is unchanged (234) |
 | OA6 | Info. Phase 2.1's validation runs not yet recorded | Accepted: recorded in `lessons/phase-2.md` once run |
+
+### Arc 2 implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
 
 ## Post-implementation
 
