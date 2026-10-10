@@ -23,6 +23,7 @@ import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { stopBackground } from "../fixtures/browser"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
 import { TEST_PASSWORD } from "../fixtures/constants"
 import {
@@ -43,6 +44,7 @@ import {
 	navigateByHash,
 	readSessionRow,
 	switchToLocalNetwork,
+	unlockAfterBackgroundDeath,
 	unlockProfile,
 	waitForProfilePurged,
 } from "../fixtures/helpers"
@@ -166,10 +168,11 @@ const HELD_MS = 15_000
 /**
  * The ordering contract for sends that share chain state: while A is held unmined, B's fee row reads
  * queued and Send stays disabled (never the failure toast, never a fee). Lifting the hold mines A;
- * B's estimate then lands, B confirms, and both succeed.
+ * B's estimate then lands, B confirms, and both succeed. `afterA` runs once A is submitted.
  */
-async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend): Promise<void> {
+async function expectQueued(burst: Burst, a: BurstSend, b: BurstSend, afterA?: (burst: Burst) => Promise<void>): Promise<void> {
 	const aHash = await fireIntoHeldWindow(burst, a)
+	await afterA?.(burst)
 	const { page } = burst
 	await startSend(page, b)
 	await expectEstimateQueued(page, HELD_MS)
@@ -236,6 +239,27 @@ test.skipIf(!hasConfig)(
 			burst,
 			{ token: "TST", from: "public", to: "public", amount: "21", destination: to(), fee: "private" },
 			{ token: "TST", from: "public", to: "public", amount: "22", destination: to(), fee: "private" },
+		)
+	},
+)
+
+/** Ends the background under the held send, so all that orders the next one is A's stored tx row. */
+async function restartBackground(burst: Burst): Promise<void> {
+	await burst.page.close()
+	await stopBackground(burst.ctx)
+	burst.page = await openPopup(burst.ctx)
+	await unlockAfterBackgroundDeath(burst.page)
+}
+
+test.skipIf(!hasConfig)(
+	"after a background restart, a send on the same private fee contract waits for the pending one",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		await expectQueued(
+			burst,
+			{ token: "TST", from: "public", to: "public", amount: "31", destination: to(), fee: "private" },
+			{ token: "TST", from: "public", to: "public", amount: "32", destination: to(), fee: "private" },
+			restartBackground,
 		)
 	},
 )
