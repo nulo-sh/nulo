@@ -254,7 +254,7 @@ Validation gate: Fast; Gating; Actions. Pass: all exit 0; each new case shown re
 
 Validation gate: Fast; Gating; Actions. Pass: all exit 0; the shim test goes red when the two calls swap order and when the head filter is removed. Hosted proof waits for the PR (§ Delivery). Layers: lint, unit.
 
-**Phase 1.4, the fold probe (#168).**
+**Phase 1.4, the fold probe (#168).** ✓ (rule 1 applies: no fold)
 1. Create the branch `ci-release-supply-probe` from `dev`. Add the two probe workflows as § Arc 1 says. Push it.
 2. Run the four single-job re-runs in order. Save each `status` log.
 3. Record every `needs.*.result`, whether `status` re-ran, and both job lists per attempt in `lessons/phase-1.md`, with the run URL.
@@ -263,7 +263,7 @@ Validation gate: Fast; Gating; Actions. Pass: all exit 0; the shim test goes red
 
 Validation gate: the four re-runs completed and a fresh `status` log per re-run is recorded (at the re-run's attempt, or at the status-only attempt that follows it); the `sk`/`rsk` listings are recorded; `git ls-remote origin ci-release-supply-probe` prints nothing. Pass: the lessons file shows, per re-run, the attempt number and each value the rule reads. Layers: hosted CI.
 
-**Phase 1.5, the per-shard fix (#168), by the rule.**
+**Phase 1.5, the per-shard fix (#168), by the rule.** ✓ (rule 1: CI.md rewritten; no workflow change)
 - Rule 1: rewrite CI.md:45 to the measured behaviour with the probe run's link.
 - Rule 2(b):
   1. Unroll each sharded matrix the gates read into named jobs; keep each check-run name and each reusable workflow input.
@@ -453,6 +453,7 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D15 | The live step also writes the pull request's live `base`; `decide` reads it and refuses an empty one on a pull request | A run admitted late, or re-run, after a retarget would otherwise decide from the event's base | Codex round 1 finding 2 (accepted in part). Rejected: subscribing the lanes to `edited`, because every title or body edit would re-run the suites and an `edited` run that re-decided to skip would post a success copy; a retarget still starts no run, the recovery (close and reopen, or push) is in CI.md. Codex round 2 holds that the retarget gap stays a bypass; it is pre-existing (`pr-quick.yml` documents it for `quality-status`) and is recorded as an accepted residual of arc 1, filed as #251 (`owner-decision`: CI cost against coverage, with a cheaper base-change re-run job as the possible fix) |
 | D16 | Each lane's aggregator accepts skipped suites only when `changes` read the labels in its own attempt (`read-attempt` == `github.run_attempt`); otherwise it fails with "re-run all jobs" | A re-run of `status` or `decide` alone carries the earlier attempt's `run=false` over, so a skip decided before a label was added could post green | Codex round 1 finding 1 (High, accepted; Codex evaluated all four scripts green on the carried inputs). A re-run of failed suites keeps its ran gate and passes |
 | D17 | `pr-supersede.yml` acts only for its event's head: it never selects `EVENT_HEAD`'s runs and stops, cancelling nothing more, when any head read differs from it; runs are listed in lifecycle order; `live-labels.sh` reads once more after a pause before calling a run superseded | Every head change, a rewind included, starts its own sweep, so stopping never cancels what another sweep needs, and it also covers a pull request read staler than the event; sweeps share no concurrency group, so a late-admitted older sweep cannot cancel a newer one | Opus round 1 finding 1 (Medium, accepted) supersedes the skip-if-current re-read of D2; findings 2 and 3 (Low, accepted). Codex round 1 finding 3: the claims are best effort, residuals restated in CI.md and § Arc 1. Codex round 2 finding 2: the per-PR group with `cancel-in-progress` let an older sweep cancel the newer one (accepted: group removed, pinned absent) |
+| D18 | #168 closes under rule 1: no fold | The probe's four fresh readings (run 38013958157) kept `needs.m.result` and `needs.rm.result` at `failure` after single-leg re-runs, with each re-run leg green at its attempt and the dependent `status` re-run directly; the separate-job controls flipped to their own new results | Pre-registered rule (D4, D5). Phase 1.5 is the CI.md rewrite only; no gate, `release.yml` or `nightly.yml` change |
 
 ## Audit verdicts
 

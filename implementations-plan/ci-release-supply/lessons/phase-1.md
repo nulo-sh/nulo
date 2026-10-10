@@ -30,3 +30,27 @@
 - `test.each([...] as const)` makes readonly tuples that `tsc` refuses where a mutable `Scenario` is expected; type the table instead.
 - Out-of-scope finding filed as #250 (the complexity ratchet reads `baseline:move-approved` from the event payload).
 - Gate after the fixes: `lint` 0, `typecheck:all` 0, `test` 0, `test:ci-gating` 0 (474 tests), `lint:actions` 0.
+
+## 1.4 The fold probe (#168)
+
+Branch `ci-release-supply-probe` (commit 03c11c0 off dev ed59711, signed, two probe workflows, push-triggered only), run [38013958157](https://github.com/nulo-sh/nulo/actions/runs/38013958157). Each re-run was `gh run rerun <run> --job <id>` on the latest attempt's job id, awaited to completion before the next. Every reading below comes from the `status` job GitHub re-ran as the dependent, at the re-run's attempt.
+
+| Attempt | Re-run | Re-run leg (filter=latest) | `status` attempt | needs.m | needs.rm | needs.ja | needs.jb | needs.rja | needs.rjb | sk / rsk |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | — (push) | — | 1 | failure | failure | failure | failure | failure | failure | skipped / skipped |
+| 2 | `m (a)` | `m (a)` attempt 2 success | 2 | **failure** | failure | failure | failure | failure | failure | skipped / skipped |
+| 3 | `rm (a) / leg` | attempt 3 success | 3 | failure | **failure** | failure | failure | failure | failure | skipped / skipped |
+| 4 | `ja` | attempt 4 success | 4 | failure | failure | success | failure | failure | failure | skipped / skipped |
+| 5 | `rja / leg` | attempt 5 success | 5 | failure | failure | success | failure | **success** | **failure** | skipped / skipped |
+
+- The untouched `m (b)` and `rm (b) / leg` read `failure` at every attempt.
+- `filter=latest` lists every job at the newest attempt: GitHub copies each job it did not re-run into the new attempt under a new job id with its old conclusion (`ja` stayed `failure` at attempts 2 and 3, though leg `a` passes from attempt 2 on, so those rows are copies, not runs). `filter=all` lists one row per job per attempt (80 rows at attempt 5).
+- A matrix whose `if` is false never expands: GitHub records one skipped job named with the unexpanded expression (`sk (${{ matrix.leg }})`, `rsk (${{ matrix.leg }})`), with no legs, and `needs.<job>.result` reads `skipped`.
+- Decision rule: rule 1. After single-leg re-runs, a fresh dependent `status` read `needs.m.result` and `needs.rm.result` as `failure` with the other leg's failure standing; the community report of a fold did not reproduce. No workflow changes; CI.md states the measured behaviour with the run link, and #168 closes on it.
+- Branch deleted; `git ls-remote origin ci-release-supply-probe` prints nothing. The run and its logs stay readable at the link.
+- zsh expands `"$c:refs/…"` as the `:r` modifier on `$c`, so the first push named a mangled ref and failed harmlessly; brace the variable (`"${c}:refs/…"`).
+
+## 1.5 Rule 1 (#168)
+
+- CI.md's smoke paragraph now states the measured behaviour with the run link, replacing "never one shard". No workflow, gate, `release.yml` or `nightly.yml` change.
+- Gate, 2026-10-10: `lint` 0, `typecheck:all` 0, `test` 0, `test:ci-gating` 0, `lint:actions` 0. `test:release` 1: 235 of 238 pass; the three failures are `zip-reproducible.test.ts`, which shells out to `zip`, absent on this host (`which zip` finds nothing, no busybox or 7z either), and arc 1 changes nothing under `scripts/release/` or `scripts/publish/` (`git diff ac259a7 --stat -- scripts/release scripts/publish` is empty). CI's runner has `zip`, so the PR's `quality-status` runs them.
