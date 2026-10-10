@@ -19,9 +19,6 @@ jobs:
     permissions:
       actions: write
       pull-requests: read
-    concurrency:
-      group: pr-supersede-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     steps:
       - name: Cancel the runs of superseded heads
         env:
@@ -67,8 +64,9 @@ jobs:
             jq -er '.head.sha | select(test("^[0-9a-f]{40}$"))' <<<"$pr"
           }
 
-          # Every head change, a rewind included, fires its own `synchronize`, whose sweep replaces
-          # this one in the group: this sweep acts only while the head is still its event's.
+          # A sweep acts only while the head is still its event's: every head change, a rewind
+          # included, starts its own sweep. Sweeps share no group, since GitHub may admit an older
+          # one last and a group would let it cancel the newer one before stopping.
           failed=0
           hold_head() {
             local now
@@ -77,7 +75,7 @@ jobs:
               exit 1
             fi
             if [ "$now" != "$EVENT_HEAD" ]; then
-              echo "the head is now $now, not $EVENT_HEAD: its own sweep takes over ($(wc -l <"$calls") API call(s))"
+              echo "the head is now $now, not $EVENT_HEAD: stopping ($(wc -l <"$calls") API call(s))"
               exit "$failed"
             fi
           }

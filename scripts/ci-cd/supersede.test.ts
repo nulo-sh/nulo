@@ -150,8 +150,8 @@ describe("pr-supersede.yml", () => {
 		expect(result.stdout, "the event head's run is never selected").toContain("2 superseded run(s) found")
 	})
 
-	// Every head change fires its own sweep, so a sweep that sees any other head, newer, rewound or
-	// read stale, cancels nothing more and leaves the rest to that sweep.
+	// Every head change starts its own sweep, so a sweep that sees any other head, newer, rewound or
+	// read stale, cancels nothing more.
 	test.each<[string, Pick<Scenario, "heads" | "pushOnList">]>([
 		["a push lands with the listing", { heads: [H2], pushOnList: H3 }],
 		["a force-push rewinds the branch before the first cancel", { heads: [H2, H1] }],
@@ -166,7 +166,7 @@ describe("pr-supersede.yml", () => {
 		})
 		expect(result.code).toBe(0)
 		expect(result.cancelled).toEqual([])
-		expect(result.stdout).toContain("its own sweep takes over")
+		expect(result.stdout).toContain(`not ${H2}: stopping`)
 	})
 
 	test("a run that already finished counts as done", () => {

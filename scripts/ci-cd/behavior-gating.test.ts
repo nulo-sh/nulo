@@ -185,7 +185,9 @@ describe("PR concurrency", () => {
 		const job = wf.jobs["cancel-superseded"]
 		expect(job.permissions).toEqual({ actions: "write", "pull-requests": "read" })
 		expect(job.if).toBe("github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'")
-		expect(job.concurrency).toEqual({ group: "pr-supersede-${{ github.event.pull_request.number }}", "cancel-in-progress": true })
+		// A shared group would let a late-admitted older sweep cancel the newer one.
+		expect(wf.concurrency).toBeUndefined()
+		expect(job.concurrency).toBeUndefined()
 		expect(job.steps).toHaveLength(1)
 		const [step] = job.steps
 		expect(step.uses).toBeUndefined()
@@ -282,7 +284,7 @@ describe("live labels", () => {
 			const log = join(dir, "calls")
 			const output = join(dir, "output")
 			const bodies = gh.bodies ?? [{}]
-			bodies.forEach((body, i) => writeFileSync(join(dir, `body-${i + 1}.json`), JSON.stringify(body)))
+			for (const [i, body] of bodies.entries()) writeFileSync(join(dir, `body-${i + 1}.json`), JSON.stringify(body))
 			writeFileSync(log, "")
 			writeFileSync(output, "")
 			const shim = gh.failure
