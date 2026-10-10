@@ -15,3 +15,4 @@
 - 2026-10-10: phase 1.4 probe run 38013958157: no fold (rule 1); branch deleted. Phase 1.5 = CI.md rewrite; gate passed (test:release: 3 zip-missing host failures, no release script touched).
 - 2026-10-10: arc 1 Codex round 3: approve, no new material findings; loop converged.
 - 2026-10-10: PR #252 opened against dev (head 02176f1); hosted proof in progress.
+- 2026-10-10: hosted proof recorded (supersede cancelled 5 runs of the old head in 16 API calls; label add/remove read live); one smoke flake on the labelled re-run (settings-crud).
