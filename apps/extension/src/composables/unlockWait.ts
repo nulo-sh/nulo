@@ -49,8 +49,8 @@ function activationStep(
  * deadline ends once the shell selects the profile; from then on the shell selecting another one
  * rejects with `ActivationSupersededError`, and a lock that clears the profile leaves it pending.
  *
- * One watcher covers every signal ON PURPOSE: racing separate watchers leaks the loser's watcher
- * until its own timeout and then fires an unobserved rejection. Callers branch on `instanceof`.
+ * One watcher covers every signal ON PURPOSE, so every settlement stops it: racing separate
+ * watchers leaves the loser's live until its own timeout. Callers branch on `instanceof`.
  */
 export function awaitProfileActivation(
 	store: ProfileActivationWithFailureSubject,
