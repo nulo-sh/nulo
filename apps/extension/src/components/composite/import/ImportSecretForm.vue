@@ -53,7 +53,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 			<template v-if="seedPhrase?.split(' ').length === 24" #bottom>
 				<Flex align="center" gap="4" :class="$style.hint_row">
 					<Icon name="check-circle" size="12" color="green" />
-					<Text size="12" weight="600" color="primary">Correct</Text>
+					<Text variant="body" color="primary">Correct</Text>
 				</Flex>
 			</template>
 		</Input>
@@ -81,7 +81,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 				<template #bottom>
 					<Flex align="center" gap="6" :class="$style.hint_row">
 						<MaterialIcon name="lock" :size="12" color="tertiary" />
-						<Text size="12" weight="600" color="tertiary">{{ passwordHint }}</Text>
+						<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 					</Flex>
 				</template>
 			</Input>
@@ -98,7 +98,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 
 		<Flex v-if="error.type === 'unknown'" align="center" gap="8" :class="$style.unknown_error">
 			<span :class="$style.error_tag">Error</span>
-			<Text size="12" weight="600" color="secondary">{{ error.title }}</Text>
+			<Text variant="body" color="secondary">{{ error.title }}</Text>
 		</Flex>
 	</div>
 </template>
@@ -125,8 +125,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 }
 
 .note {
-	font-size: 12px;
-	font-weight: 500;
+	composes: type--body from global;
 	line-height: 1.35;
 	color: var(--txt-tertiary);
 }
@@ -140,11 +139,7 @@ const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeat
 }
 
 .error_tag {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--red);
 	border: 1px solid var(--red);
 	padding: 2px 6px;
