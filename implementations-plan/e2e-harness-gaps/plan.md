@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 4 in progress, arc 3 held (C13)
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 4 blocked at its soak (#279), arc 3 held (C13)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -652,6 +652,8 @@ Verdict: **approve** D22's code (1518723), no defect; it loaded the eight config
 | R4-2 to R4-6 | Medium/low. The 8 failures are tests written for Bun: `port-registry` and `reconcile-lock` launch children with `process.execPath`, which then import raw TypeScript Node cannot strip; `store-icons` calls `Bun.Image`; `LegalAcceptanceSheet` natively `require`s a workspace barrel with an extensionless import; `windows/{json,logger}` pin Bun's TypeError wording; `presto-core-deps` reads an unexported `package.json` subpath | Not fixed here: outside Phase 4.1's change map, and two of the fixes loosen what a test asserts. The smallest fix per file goes to the orchestrator |
 
 The Codex loop stops at its three-round limit with no open finding on the arc's code.
+
+Phase 4.1's gate, 2026-10-10: **blocked**. At f8d1200 nine workspaces pass the soak; `apps/landing` and `apps/extension` fail `compare` on their Node reference alone, on tests written for Bun that fail at the base as well (#279, `lessons/phase-4.md`). D-orch-11 stops the arc; no PR is open.
 
 ## Post-implementation
 
