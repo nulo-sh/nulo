@@ -17,3 +17,5 @@
 - 2026-10-10: final gates at bb46d81: lint, typecheck:all, test:all (extension 10782 passed) exit 0 (run 1 red on a pre-existing balances fuzz seed, reproduced on origin/dev; run 2 green); check:plans 0; smoke Chrome 47 files passed, 3 skipped, 198 tests; smoke Firefox 49 files passed, 1 skipped, 199 tests; both armed builds, retry 0.
 - 2026-10-10: PR #255 opened against dev (no label at creation); issues #256, #257, #258, #259 filed (five sections, deduped).
 - 2026-10-10: CI run 1 on c25feea: all 5 required checks pass (48 pass, 3 skipped: Shellcheck, Actionlint, Build Landing). Docs-only delivery record pushed after it.
+- 2026-10-10: arc 2 started on forms-and-contacts-arc-2 off origin/dev af4afcc (arc 1 merged as #255); D-orch-4 and D-orch-5 recorded.
+- 2026-10-10: gate 2.1 pass: lint, typecheck:all, send.test.ts 66/66 (base 66/66).

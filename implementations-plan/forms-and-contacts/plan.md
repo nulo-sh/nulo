@@ -1,7 +1,7 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: approved; arc 1 in progress (arcs 2 and 3 wait on their gates)
+status: approved; arc 1 merged (#255); arc 2 in progress; arc 3 waits on page 11
 issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #211, #215, #216, #229 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -253,9 +253,9 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 **Arc 1 gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` exit 0. The full smoke suite, both browsers (no `<files>`), every file passing; one rerun of a known flake, named in `lessons/phase-1.md`. PR screenshots: a form popup under the delete confirm, dark and light. Filed with the PR: the issues for `EditAccountPopup`'s missing duplicate check, the spaces-only account name, and the logs viewer's dead trim branch (dedupe first).
 
-### Arc 2: harness-gated refactors (decision-free; base must contain `account-session-life` arc 3)
+### Arc 2: harness-gated refactors (decision-free; the sibling gate lifted by D-orch-4)
 
-**2.1 The held-read helper.**
+**2.1 The held-read helper.** ✓
 1. Add `tests/helpers/held-read.ts` (`held`, `liveBus`).
 2. Move `send.test.ts`'s `held()`/`holdTokenReads()` onto it.
 - Validation gate: fast layers; `send.test.ts` passes with the same test count.
@@ -369,6 +369,8 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-arc1-2 (#210, phase 1.3): the re-open BUG PIN in `popup.store.test.ts` says the fix is an owner decision without naming FA-8, since code comments carry no plan ids (CLAUDE.md § Code-comment style). The pins test also gains a closed-key case for the eleven form popups (`undefined|NaN`).
 - D-arc1-3 (#205, review): Settings → Lock's auto-lock field and Display's dust field put the stored value back after a failed write only while the field still holds the attempted value (A1-O1, A1-C3). Within the plan's Lock and Display `UI impact` line and D-orch-3; no new words.
 - D-arc1-4 (delivery): arc 1 is PR #255 against `dev` (D-orch-1). Filed with it: #256 (Edit account duplicate or outer-spaced name), #257 (spaces-only New account name), #258 (logs viewer trim branch), and #259 (a balances store fuzz seed that fails on `dev` too, found by the final `test:all`). PR screenshots were committed in one commit and dropped in the next (the repo's earlier practice); the PR links them by that commit's SHA.
+- D-orch-4 (orchestrator, 2026-10-10): arc 2 runs now, before `account-session-life` arc 3. The "base must contain account-session-life arc 3" condition is lifted: that arc is held on decision page 7 with no date, and the two arcs meet only in `export/full.vue`. Arc 2 lands first and that arc rebases onto it; the `full.vue` edit is the shake only (keyframes, reduced-motion rule, class composition). Arc 2's branch is `forms-and-contacts-arc-2` off `origin/dev` (af4afcc, arc 1 merged as #255), PR against `dev`, no stack (D-orch-1).
+- D-orch-5 (orchestrator, 2026-10-10): arc 2 builds exactly its plan and no repair. FA-9's race repair, the import's `fieldAddressKey` swap and FA-8's re-open gap stay unbuilt (today's behaviour pinned); the snack card stays local. Phase 2.3's proof runs in full against the arc's parent commit; a difference fails that shell (SR2): it goes to `OWNER-ASKS.md` and that shell's change is left out.
 
 ### Competing outline (cheapest-first), sent to both audits
 
