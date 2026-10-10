@@ -1,0 +1,15 @@
+# Phase 0: planning log
+
+## Recon
+
+- Three Explore agents (sonnet): reuse sweep over nine capabilities; network e2e run-path map; playground and coverage map. All returned; the planner re-verified every load-bearing claim (recon.md § Verified claims).
+- Type probe for #194: a tsconfig kept outside the repo, extending `apps/extension/tsconfig.scripts.json`, over `tests/e2e/**/*.ts`: 461 errors, 312 of them the fixture context type. A first attempt failed on type resolution (types resolve relative to the tsconfig's directory) and a second on `baseUrl` being deprecated in TypeScript 6 (TS5101); `typeRoots` pointed at the extension's `node_modules` fixed both.
+- #186 reproduced with `bun --bun vitest run src/utils/copy-dash-ban.test.ts` and with the e2e config under Node: four files warn.
+- The host registry `~/.agents/ports.md` uses a different format and lock from the `my-stack` skill's template; the live file is the contract.
+
+## Consults
+
+- **Audit round 1, Codex** (`run-codex.sh`, gpt-6.1-sol, high, read-only; prompt: adversarial, assumption attack, implementation critique, the competing outline). Verdict: reject, 12 findings (C1-C12). Eleven accepted, one ask rejected (owner sign-off for playground controls: the playground is no wallet surface), one ask partly accepted (the other repository's lock is not ours to change). The biggest corrections: the soak `compare` the plan named cannot pass across commits, the stale-lock break was racy, and the reap could clear a live run's lock or delete a data dir whose services survived. Dispositions in plan.md § Audit verdicts.
+- **Audit round 1, Opus Plan agent** (same family, read-only, run in parallel with Codex). Verdict: conditional approve, 15 findings (O1-O15), all accepted after re-checking each against the tree; it read the plan mid-revision, so O1 was largely the revision in flight. The ones Codex missed: a reused sandbox looked orphaned to the reaper (its services name a dead owner), the other registry writers' locks are empty so a content check cannot verify a break, the heap cap as drafted sat above Node's default limit and limited nothing, and `biome.json` names `vitest.base.ts` explicitly, so the rename would have silently dropped it from lint. #186 moved to its own top arc (D15).
+- **Final pass, Codex** (fresh session, gpt-6.1-sol, high). Verdict: reject, 7 findings (K1-K7), all verified and accepted. The two that changed the design: any break of the shared path lock races (a third writer can enter the emptied path), so our client now never breaks the lock and fails closed; and the exit hooks (`bestEffortKill`) signal `-pid` without checking the leader, a path the plan had missed. The playground sign-off ask was raised a second time and is now parked in OWNER-ASKS.md with a default. The script reported `sandbox=approve-for-me` although `read-only` was passed; `git status` showed no change by the reviewer.
+- **Final pass, confirming round** (same Codex session, resumed). Verdict: conditional approve; K1-K7 closed. Its condition: the playground sign-off must be an explicit answer, not an opt-out. Accepted: arc 3's merge waits on OWNER-ASKS.md Ask 1.

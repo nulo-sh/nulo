@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, test, vi } from "vitest"
-import type { ILogger } from "@nulo/wallet-core/logger"
+import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
 import { buildErrorResponseContent } from "../core/error-response"
 import {
 	JobCancelledError,
@@ -623,6 +623,53 @@ describe("port onDisconnect → reconnect", () => {
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: probing the correlator's pending count
 		expect((client as any).pendingCount).toBe(0)
+	})
+
+	test("every remote close reads lastError and logs only which channel was set", async () => {
+		const ERROR_TEXT = "Could not establish connection. Receiving end does not exist."
+		let lastErrorReads = 0
+		let lastError: { message: string } | undefined = { message: ERROR_TEXT }
+		Object.defineProperty(chrome.runtime, "lastError", {
+			configurable: true,
+			get: () => {
+				lastErrorReads += 1
+				return lastError
+			},
+		})
+		const watchPortError = (error: Error | undefined) => {
+			const port = connectMock().mock.results.at(-1)?.value as object
+			Object.defineProperty(port, "error", { get: () => error })
+		}
+		const { logger, calls } = makeSpyLogger()
+		const client = new TestClient(logger)
+		await client.connect()
+		const connected = vi.fn()
+		const disconnected = vi.fn()
+		client.onConnected.add(connected)
+		client.onDisconnected.add(disconnected)
+
+		// Chrome: the reason is on runtime.lastError.
+		watchPortError(undefined)
+		emitPortDisconnect(SERVICE)
+		// Firefox: the reason is on the port.
+		lastError = undefined
+		watchPortError(new Error(ERROR_TEXT))
+		emitPortDisconnect(SERVICE)
+		// A clean close: neither is set.
+		watchPortError(undefined)
+		emitPortDisconnect(SERVICE)
+
+		expect(lastErrorReads).toBe(3)
+		const closeLines = calls.filter((line) => line[2] === "Port closed with an error")
+		expect(closeLines.map((line) => line.slice(1))).toEqual([
+			[LogLevel.Debug, "Port closed with an error", { reason: "runtime.lastError" }],
+			[LogLevel.Debug, "Port closed with an error", { reason: "port.error" }],
+		])
+		expect(JSON.stringify(calls)).not.toContain(ERROR_TEXT)
+		// Each close still reconnects at once, as before.
+		expect(disconnected).toHaveBeenCalledTimes(3)
+		expect(connected).toHaveBeenCalledTimes(3)
+		expect(connectMock()).toHaveBeenCalledTimes(4)
 	})
 
 	test("a replacement open that throws still rejects in-flight requests cleanly, and a later request reopens", async () => {

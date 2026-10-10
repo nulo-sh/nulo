@@ -44,7 +44,9 @@ function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDep
 		estimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn() } as never,
 		coordinator: { proveAndSend: vi.fn(async () => ({ txHash: { toString: () => "0xhash" } })) } as never,
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 5)), now: () => 0 }),
-		getFpc: vi.fn(async () => ({ type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" }) as never),
+		getFpcImpl: vi.fn(
+			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
+		),
 		getTokenContract: vi.fn(async () => "0xtoken"),
 		// One mined tx: the account is initialized.
 		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),

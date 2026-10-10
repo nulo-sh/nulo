@@ -338,6 +338,19 @@ describe("FpcStrategy canonical-Sponsored fast path (single-pass)", () => {
 		})
 	})
 
+	test("a row the caller pinned is paid with as given: the strategy reads no row itself", async () => {
+		const pinned = makeSponsoredFpc()
+		const { deps, buildStandard } = makeFpcDeps(makeSponsoredFpc({ isProtocol: false }))
+		const ctx = { ...makeFpcCtx(), fpc: pinned as never }
+
+		const result = await new FpcStrategy(deps).buildAndEstimate(ctx)
+
+		expect(deps.fpcService.getFpcImpl).not.toHaveBeenCalled()
+		expect(buildStandard).toHaveBeenCalledTimes(1)
+		expect(ctx.op.actions[0]).toBe(pinned.feePayloadAction)
+		expect(result.fpcIdentity?.isProtocol).toBe(true)
+	})
+
 	test("dApp-supplied custom gas limits force the two-pass path", async () => {
 		const fpc = makeSponsoredFpc()
 		const { deps, buildStandard, simulateTxTask } = makeFpcDeps(fpc)

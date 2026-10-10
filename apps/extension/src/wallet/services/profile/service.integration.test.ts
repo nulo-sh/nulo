@@ -2092,6 +2092,120 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 		expect(key in (await api.storage.local.get(key))).toBe(corrupt)
 	})
 
+	describe("a delete that arrives before the coordinator has started", () => {
+		const noopDelegate = () => ({
+			snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+			runFor: async () => {},
+		})
+
+		/** A started service whose coordinator has not injected its delegate yet: the boot window in
+		 *  which this service already answers RPCs. */
+		async function bootWithoutDelegate() {
+			const api = new FakeBrowserApi()
+			api.reset()
+			const config = fakeConfig({})
+			const services = new ServiceCollection()
+			services.add(new FakePasskeyService(new LoggerStore(config)))
+			const service = new ProfileService(config, new LoggerStore(config), api)
+			services.add(service)
+			await services.start()
+			return { api, service }
+		}
+
+		const tombstoneKey = (id: string) => `${PROFILE_TOMBSTONE_ROOT}@${id}`
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		test("it waits, holding no lock, and completes once the delegate is set", async () => {
+			const { api, service } = await bootWithoutDelegate()
+			const p = await service.createProfile("A", "password123")
+			vi.useFakeTimers()
+
+			let settled = false
+			const deleting = service.deleteProfile(p.id).finally(() => {
+				settled = true
+			})
+			await vi.advanceTimersByTimeAsync(29_000)
+			expect(settled).toBe(false)
+			// The wait holds no facade lock: another profile operation runs to completion meanwhile.
+			await expect(service.changeProfileName(p.id, "Renamed")).resolves.toMatchObject({ name: "Renamed" })
+			expect(await api.storage.local.get(tombstoneKey(p.id))).toEqual({})
+
+			service.setDeletionDelegate(noopDelegate())
+			await expect(deleting).resolves.toMatchObject({ id: p.id })
+			expect(await service.getProfiles()).toEqual([])
+		})
+
+		test("with no delegate, it refuses at the bound having written nothing", async () => {
+			const { api, service } = await bootWithoutDelegate()
+			const p = await service.createProfile("A", "password123")
+			vi.useFakeTimers()
+
+			const deleting = service.deleteProfile(p.id).catch((e: unknown) => e)
+			await vi.advanceTimersByTimeAsync(30_000)
+
+			expect(((await deleting) as Error).message).toBe("deletion coordinator not ready")
+			expect(await api.storage.local.get(tombstoneKey(p.id))).toEqual({})
+			expect((await service.getProfiles()).map((x) => x.id)).toEqual([p.id])
+			expect(service.getDeletionState().isReserved(p.id)).toBe(false)
+		})
+
+		test("the init wait and the delegate wait share one budget, so the whole wait never outlasts init's", async () => {
+			const { api, service } = await bootWithoutDelegate()
+			const p = await service.createProfile("A", "password123")
+			const svc = service as unknown as { initialized: boolean }
+			vi.useFakeTimers()
+
+			// A delete that arrives before this service has finished its own init.
+			svc.initialized = false
+			let settled = false
+			const deleting = service
+				.deleteProfile(p.id)
+				.catch((e: unknown) => e)
+				.finally(() => {
+					settled = true
+				})
+			await vi.advanceTimersByTimeAsync(20_000)
+			svc.initialized = true
+			await vi.advanceTimersByTimeAsync(9_000)
+			expect(settled).toBe(false)
+			await vi.advanceTimersByTimeAsync(1_000)
+			expect(settled).toBe(true)
+
+			expect(((await deleting) as Error).message).toBe("deletion coordinator not ready")
+			expect(await api.storage.local.get(tombstoneKey(p.id))).toEqual({})
+		})
+
+		test.each([
+			["set back an hour", -3_600_000],
+			["set forward an hour", 3_600_000],
+		])("a wall clock %s mid-wait neither stretches nor cuts the budget", async (_, shift) => {
+			const { service } = await bootWithoutDelegate()
+			const p = await service.createProfile("A", "password123")
+			const svc = service as unknown as { initialized: boolean }
+			vi.useFakeTimers()
+
+			svc.initialized = false
+			let settled = false
+			const deleting = service
+				.deleteProfile(p.id)
+				.catch((e: unknown) => e)
+				.finally(() => {
+					settled = true
+				})
+			await vi.advanceTimersByTimeAsync(20_000)
+			vi.setSystemTime(Date.now() + shift)
+			svc.initialized = true
+			await vi.advanceTimersByTimeAsync(9_000)
+			expect(settled).toBe(false)
+			await vi.advanceTimersByTimeAsync(1_000)
+			expect(settled).toBe(true)
+			expect(((await deleting) as Error).message).toBe("deletion coordinator not ready")
+		})
+	})
+
 	test("a tombstone filed under one id but naming another neither hydrates nor deletes the profile it names", async () => {
 		const { api, service } = await makeService()
 		const named = await service.createProfile("Named", "password123")

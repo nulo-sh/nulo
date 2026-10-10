@@ -20,6 +20,7 @@
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { type MinFeeNode, predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import { SessionEndedError } from "@nulo/extension-messaging/errors"
+import type { Fpc } from "@/wallet/services/fpc/fpc"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { TransferType } from "@/wallet/services/transaction/spec"
@@ -126,11 +127,13 @@ export class TransferEstimateReuse {
 	 *  Any mismatch ⇒ delete + return undefined; caller falls back to a
 	 *  full rebuild — except an entry stashed under another profile than
 	 *  `fence`'s, which throws {@link SessionEndedError}. Single-shot: the
-	 *  entry is consumed on first lookup. */
+	 *  entry is consumed on first lookup. `fpc` is the row the send was
+	 *  ordered against: given, the entry must have been built with exactly it. */
 	public async tryConsume(
 		estimateId: string,
 		inputs: TransferRequest,
 		fence: ExecutionFence,
+		fpc?: Fpc,
 	): Promise<TransferEstimateReuseEntry | undefined> {
 		const entry = this.cache.consume(estimateId) // single-shot
 		if (!entry) return undefined
@@ -167,7 +170,9 @@ export class TransferEstimateReuse {
 
 		const chainDrift = await chainIdentityDrift(entry.chainIdentity, () => this.deps.getLiveChainIdentity(network))
 		if (chainDrift) return this.reject(estimateId, chainDrift)
-		const fpcDrift = await fpcIdentityDrift(inputs.feeSettings.paymentMethod, entry.fpcIdentity, (id) => this.deps.getFpcInfo(id))
+		const fpcDrift = await fpcIdentityDrift(inputs.feeSettings.paymentMethod, entry.fpcIdentity, async (id) =>
+			fpc ? fpc.infoData : this.deps.getFpcInfo(id),
+		)
 		if (fpcDrift) return this.reject(estimateId, fpcDrift)
 
 		const feeDrift = await this.baseFeeDrift(network, inputs, entry)
