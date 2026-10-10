@@ -4,10 +4,12 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
+import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
 import { clickByTestId, openPopup, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
+import { SEEDED_SPONSOR_FPC_ID, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { activeTestId, coveredAt, focusRing, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -15,11 +17,13 @@ const DESTINATION_INPUT = `${sel("send-destination-field")} input`
 const OPEN_TRIGGER = `[data-dropdown-open="true"] ${sel("send-fee-method-trigger")}`
 const CLOSED_TRIGGER = `[data-dropdown-open="false"] ${sel("send-fee-method-trigger")}`
 
-async function openSendPage(ctx: ExtensionContext, { priced = false } = {}): Promise<Page> {
+async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = false } = {}): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
-	if (priced) {
-		await seedTokenRow(page, await readActivityScope(page), 1)
+	const scope = priced || sponsors ? await readActivityScope(page) : undefined
+	if (scope && sponsors) await seedProtocolFpcs(page, scope)
+	if (scope && priced) {
+		await seedTokenRow(page, scope, 1)
 		await seedUsdQuoteAndReload(page)
 	}
 	await clickByTestId(page, "actions-send")
@@ -105,7 +109,9 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	timeout: 180_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
-	const page = await openSendPage(ctx, { priced: true })
+	// The smoke run has no node to discover sponsors from, so the rows discovery writes are seeded.
+	const page = await openSendPage(ctx, { priced: true, sponsors: true })
+	const account = await getAccountAddress(page)
 	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-fee-at-rest", "send-fee-method-trigger")
@@ -124,12 +130,28 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
 	const row = await activeTestId(page)
 	expect(row).toMatch(/^send-fee-method-/)
+	const fpcId = await page.evaluate(() => document.activeElement?.closest("[data-dropdown-item]")?.getAttribute("data-fpc-id"))
+	expect(fpcId, `the focused row ${row}`).toBe(SEEDED_SPONSOR_FPC_ID)
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await page.waitForFunction(
 		(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
 		{ timeout: 10_000 },
 		row.replace("send-fee-method-", ""),
+	)
+	// The pick may land on the row already showing, so only the saved pick tells Enter from a no-op.
+	await page.waitForFunction(
+		async (key: string, address: string, want: string) => {
+			const saved = (await chrome.storage.local.get(key))[key] as
+				| Record<string, { private?: { type?: string; fpc?: { id?: string } | null } }>
+				| undefined
+			const pick = saved?.[address]?.private
+			return pick?.type === "fpc" && pick.fpc?.id === want
+		},
+		{ timeout: 10_000 },
+		UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS,
+		account,
+		SEEDED_SPONSOR_FPC_ID,
 	)
 	await waitForFocus(page, "send-fee-method-trigger")
 

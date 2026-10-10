@@ -1,8 +1,12 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { existsSync, readdirSync } from "node:fs"
 import { TimeoutError, type Browser, type Page, type ConsoleMessage } from "puppeteer"
-import { test as base, inject } from "vitest"
+import { test as base, expect, inject } from "vitest"
+import path from "node:path"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import {
+	type LaunchedBrowser,
+	browserTraffic,
 	discoverExtensionId,
 	extensionUrl,
 	gotoExtensionPage,
@@ -28,6 +32,8 @@ import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
+import { type EgressCanary, type EgressGuard, type HeldNode, guardArmed, ownGuardedLaunch } from "./egress-guard"
+import { holdNodeStub } from "./node-stub"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -40,6 +46,9 @@ export interface ExtensionContext {
 	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
+	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
+	 *  no guard is armed. */
+	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }
 
 /**
@@ -85,33 +94,92 @@ export async function launchExtension(
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
-	const { browser, close: closeBrowser } = await launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize })
+	const launch = (egress?: { guardPort: number }) => launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
+	const settle = (browser: Browser) =>
+		settleLaunchedExtension(browser, { freshProfile, waitForLiveness, legal: opts.legal ?? (freshProfile ? "current" : "keep") })
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle)
 
+	const { browser, close: closeBrowser } = await launch()
 	try {
-		const extensionId = await settleLaunchedExtension(browser, {
-			freshProfile,
-			waitForLiveness,
-			legal: opts.legal ?? (freshProfile ? "current" : "keep"),
-		})
-		// Every launch, a spec's own included, answers once for the violations recorded while it ran;
-		// a second close is the plain teardown it always was.
-		let checked = !CSP_REPORT_ARMED
-		const read = () => readCspViolations(browser, extensionId)
-		const checkCspViolations = async () => {
-			if (checked) return
-			checked = true
-			await assertNoCspViolations(read)
-		}
-		const close = () => {
-			if (checked) return closeBrowser()
-			checked = true
-			return closeAfterCspCheck(closeBrowser, read)
-		}
-		return { browser, extensionId, consoleErrors: [], pageErrors: [], close, checkCspViolations }
+		const extensionId = await settle(browser)
+		return { browser, extensionId, consoleErrors: [], pageErrors: [], ...cspLatch(browser, extensionId, closeBrowser) }
 	} catch (err) {
 		// Nothing else holds this launch yet; an escaping error would strand its browser.
 		await closeBrowser().catch(() => {})
 		throw err
+	}
+}
+
+/** Every launch, a spec's own included, answers once for the violations recorded while it ran; a
+ *  second close is the plain teardown it always was. */
+function cspLatch(
+	browser: Browser,
+	extensionId: string,
+	closeBrowser: () => Promise<void>,
+): Pick<ExtensionContext, "close" | "checkCspViolations"> {
+	let checked = !CSP_REPORT_ARMED
+	const read = () => readCspViolations(browser, extensionId)
+	return {
+		checkCspViolations: async () => {
+			if (checked) return
+			checked = true
+			await assertNoCspViolations(read)
+		},
+		close: () => {
+			if (checked) return closeBrowser()
+			checked = true
+			return closeAfterCspCheck(closeBrowser, read)
+		},
+	}
+}
+
+async function launchBehindEgressGuard(
+	launch: (egress: { guardPort: number }) => Promise<LaunchedBrowser>,
+	settle: (browser: Browser) => Promise<string>,
+): Promise<ExtensionContext> {
+	const guarded = await ownGuardedLaunch({
+		label: launchLabel(),
+		traffic: browserTraffic,
+		launch: async (egress) => {
+			const launched = await launch(egress)
+			return { value: launched.browser, close: launched.close }
+		},
+		settle,
+		probeCanary: fireCanary,
+		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
+		holdNode: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
+	})
+	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
+	return {
+		browser,
+		extensionId,
+		consoleErrors: [],
+		pageErrors: [],
+		close: guarded.close,
+		checkCspViolations: wrapped.checkCspViolations,
+		egress: { guard, canary, node },
+	}
+}
+
+/** The file alone: vitest keeps the last test's name through a later hook, and a file-scoped
+ *  fixture outlives the test that first asked for it. */
+function launchLabel(): string {
+	const { testPath } = expect.getState()
+	return testPath ? path.basename(testPath) : "an e2e launch"
+}
+
+/** Starts a request for `url` from an extension page, under the extension's own CSP, and waits for
+ *  the guard to record it. The page stays open until then: closing it could cancel the request. */
+async function fireCanary(browser: Browser, extensionId: string, url: string, recorded: () => boolean, budgetMs: number): Promise<void> {
+	const page = await openScratchPage(browser, extensionId)
+	try {
+		await page.evaluate((target: string) => {
+			fetch(target, { mode: "no-cors", cache: "no-store" }).catch(() => {})
+		}, url)
+		const deadline = Date.now() + budgetMs
+		while (!recorded() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+	} finally {
+		await page.close().catch(() => {})
 	}
 }
 

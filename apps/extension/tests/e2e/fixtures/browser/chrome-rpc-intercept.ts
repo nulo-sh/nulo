@@ -28,6 +28,7 @@ export async function cdpInterceptRpc(
 	extensionRoot: string,
 	fromOrigin: string,
 	mode: RpcInterception,
+	backgroundDown = false,
 ): Promise<ArmedInterception> {
 	const origin = new URL(fromOrigin).origin
 	const sessions = new Set<CDPSession>()
@@ -45,7 +46,8 @@ export async function cdpInterceptRpc(
 		log(`FAILURE ${msg}`)
 	}
 	// A target that went away while being armed (Chrome's transient about:blank pages do) issued
-	// no request; only a live target that could not be armed or resumed is a failure.
+	// no request, and one that went away with a request paused never sent it; only a live target
+	// that could not be armed, resumed or answered is a failure.
 	const failUnlessGone = (msg: string, e: unknown) => {
 		if (/target closed|session closed|detached/i.test(String(e))) log(`${msg}: ${e}`)
 		else fail(`${msg}: ${e}`)
@@ -63,7 +65,7 @@ export async function cdpInterceptRpc(
 				mode.kind === "refuse"
 					? session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "ConnectionRefused" })
 					: session.send("Fetch.continueRequest", { requestId: event.requestId, url: `${mode.to}${url.pathname}${url.search}` })
-			reply.catch((e) => fail(`${label}: reply to ${url.pathname} failed: ${e}`))
+			reply.catch((e) => failUnlessGone(`${label}: reply to ${url.pathname} failed`, e))
 		})
 		await session.send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/*`, requestStage: "Request" }] })
 		if (isExtensionWorker(info)) armedServiceWorker = true
@@ -106,7 +108,8 @@ export async function cdpInterceptRpc(
 		await Promise.all(initialArms)
 		// The service worker issues the preflight probe: without interception there the test would
 		// dial the real seed endpoint — possibly another run's node — and prove nothing.
-		if (!armedServiceWorker) throw new Error("rpc-intercept: the extension's service worker target is not armed")
+		// A successor that starts later is auto-attached and held until armed, like any new target.
+		if (!armedServiceWorker && !backgroundDown) throw new Error("rpc-intercept: the extension's service worker target is not armed")
 		if (failures.length) throw new Error(`rpc-intercept: ${failures.join("; ")}`)
 	} catch (e) {
 		await stop()
