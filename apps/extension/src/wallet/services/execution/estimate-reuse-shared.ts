@@ -27,6 +27,13 @@ export function fingerprintBaseFee(min: { feePerDaGas: bigint; feePerL2Gas: bigi
 	return `${min.feePerDaGas.toString()}:${min.feePerL2Gas.toString()}`
 }
 
+/** The fingerprint of the exact fee `txRequest` was built with, never a refetch: every strategy
+ *  commits `maxFeesPerGas` as the node minimum × multiplier, so consume compares the same product. */
+export function fingerprintBuiltFee(txRequest: TxExecutionRequest): string {
+	const builtFees = txRequest.txContext.gasSettings.maxFeesPerGas
+	return fingerprintBaseFee({ feePerDaGas: builtFees.feePerDaGas, feePerL2Gas: builtFees.feePerL2Gas })
+}
+
 /** The raw pair a node reports. The network row's stored chainId is an XOR composite — `(1,4)` and
  *  `(2,7)` collide — so a snapshot compares this pair, never the composite. */
 export type ChainIdentity = { readonly l1ChainId: number; readonly rollupVersion: number }
@@ -105,9 +112,9 @@ export async function fpcIdentityDrift(
 	return drifted ? "fpc identity drift" : undefined
 }
 
-/** The fee multiplier for a known or absent priority. The lookup stays unvalidated, so an unknown
- *  priority keeps its existing failure. */
-export function reuseFeeMultiplier(priority: PriorityLevel | undefined): number {
+/** The fee multiplier for a known or absent priority. The popup RPC boundary refuses an unknown
+ *  priority; the lookup stays unchecked here, so one that bypassed it still fails, never a default. */
+export function feeMultiplierFor(priority: PriorityLevel | undefined): number {
 	return priority ? PRIORITY_MULTIPLIERS[priority] : DEFAULT_FEE_MULTIPLIER
 }
 

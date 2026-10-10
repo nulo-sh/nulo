@@ -12,7 +12,13 @@ import { describe, expect, test, vi } from "vitest"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, JournaledRejection, OperationNotRecordedError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import {
+	JobCancelledError,
+	JournaledRejection,
+	OperationNotRecordedError,
+	RpcTimeoutError,
+	SessionEndedError,
+} from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, TransferType } from "@/wallet/services/transaction/service"
 import type { ProveAndSendContext } from "./execution-coordinator"
@@ -510,6 +516,12 @@ describe("TransferExecutor: the authorizing session", () => {
 })
 
 describe("TransferExecutor.estimateFee", () => {
+	test("a simulation that timed out rejects the estimate with the same object, so its offscreen record is found", async () => {
+		const timeout = new RpcTimeoutError("timed out", { requestId: 7, methodName: "simulateTx" })
+		const { executor } = makeHarness({ buildAndEstimate: vi.fn(async () => Promise.reject(timeout)) })
+		await expect(executor.estimateFee(makeReq())).rejects.toBe(timeout)
+	})
+
 	test("fj: stash written, estimateId returned, fee projected from finalized gas settings", async () => {
 		const { executor, deps } = makeHarness()
 		const result = (await executor.estimateFee(makeReq())) as TransferFeeEstimate

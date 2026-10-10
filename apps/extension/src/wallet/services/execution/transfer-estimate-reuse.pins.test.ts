@@ -273,6 +273,12 @@ describe("the multiplier per priority", () => {
 	})
 })
 
+/** The real fee read against a node that answers `reply`: a null-like answer is refused there. */
+async function realRead(reply: unknown): Promise<GasFees> {
+	const actual = await vi.importActual<typeof import("@nulo/aztec-runtime/fee-juice")>("@nulo/aztec-runtime/fee-juice")
+	return actual.predictedWorstMinFees({ getCurrentMinFees: async () => reply as never })
+}
+
 describe("an unknown priority or a null-like reply misses softly", () => {
 	test.each([
 		["bogus", undefined],
@@ -285,8 +291,8 @@ describe("an unknown priority or a null-like reply misses softly", () => {
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])
 	})
 
-	test.each([undefined, null])("a %s reply misses with a fixed reason", async (reply) => {
-		predicted.mockResolvedValueOnce(reply as never)
+	test.each([undefined, null])("a %s node reply misses with a fixed reason", async (reply) => {
+		predicted.mockImplementationOnce(() => realRead(reply))
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(), request())).toBeUndefined()
 		expect(logDebug.mock.calls).toEqual([[`${REASON}base fee fetch failed`]])

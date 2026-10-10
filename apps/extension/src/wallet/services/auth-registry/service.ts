@@ -38,9 +38,16 @@ import {
 	parseAuthwitStatusRowId,
 } from "./spec"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
+import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 
 export * from "./spec"
+
+/** The popup's fee settings for the two RPCs that send a transaction. */
+const FEE_SETTINGS_OF = {
+	revokeAuthwits: ([, , , feeSettings]) => [feeSettings],
+	setRegistryEnabled: ([, , , feeSettings]) => [feeSettings],
+} satisfies FeeSettingsReaders<Methods>
 
 /** The `(profileId, chainId, account)` scope every authwit read/write is bound to. `profileId` is
  *  never a popup parameter — it is always the active profile, resolved SW-side. */
@@ -90,6 +97,12 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		this.statuses = new EntityStorage<boolean>(AUTH_REGISTRY_ENABLED_STORAGE_ROOT, browserApi.storage.local, (raw) =>
 			AuthwitStatusSchema.parse(raw),
 		)
+	}
+
+	/** An unknown speed level is refused before the method runs; fee math never reads one. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		refuseUnknownPriorities(FEE_SETTINGS_OF, method, params)
+		return super.invoke(method, params)
 	}
 
 	protected async init(services: ServiceCollection) {
