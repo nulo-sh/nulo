@@ -22,7 +22,7 @@
  * closures because those run in the browser and cannot close over module scope.
  */
 import { execSync } from "node:child_process"
-import type { Page } from "puppeteer"
+import type { EvaluateFunc, Page } from "puppeteer"
 import { EXTENSION_SCHEME } from "./browser"
 import { type TickState, TICK_STATE_CAUSE, tickStateBefore } from "./balance-queue-trail"
 
@@ -112,7 +112,11 @@ export async function waitForSendRecord(
  * where `chrome.storage` is undefined — and because the SW survives a wedged
  * playground renderer (F1). Returns a marker string if there's no live SW worker.
  */
-async function swEvaluate<A extends unknown[], R>(page: Page, fn: (...a: A) => R | Promise<R>, ...args: A): Promise<R | string> {
+async function swEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
+	page: Page,
+	fn: F,
+	...args: A
+): Promise<Awaited<ReturnType<F>> | string> {
 	const target = page
 		.browser()
 		.targets()
@@ -136,7 +140,11 @@ async function swEvaluate<A extends unknown[], R>(page: Page, fn: (...a: A) => R
  * popup) -> any other ext-page target -> SW worker (last resort; its own failure is
  * a service-worker-liveness signal, surfaced separately by the sw-liveness probe).
  */
-async function extCtxEvaluate<A extends unknown[], R>(page: Page, fn: (...a: A) => R | Promise<R>, ...args: A): Promise<R | string> {
+async function extCtxEvaluate<A extends unknown[], F extends EvaluateFunc<A>>(
+	page: Page,
+	fn: F,
+	...args: A
+): Promise<Awaited<ReturnType<F>> | string> {
 	const isExtCtx = (p: Page): Promise<boolean> =>
 		p.evaluate(() => typeof chrome !== "undefined" && typeof chrome.storage?.local !== "undefined").catch(() => false)
 	if (await isExtCtx(page)) {

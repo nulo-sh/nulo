@@ -124,10 +124,13 @@ test("a web page can fetch no extension file, the injected content script includ
 	const popup = await openPopup(extension)
 	const { exposed, injected } = await popup.evaluate(() => {
 		const manifest = chrome.runtime.getManifest()
-		return { exposed: manifest.web_accessible_resources, injected: (manifest.content_scripts ?? []).flatMap(({ js }) => js ?? []) }
+		return {
+			exposed: manifest.web_accessible_resources,
+			injected: (manifest.content_scripts ?? []).flatMap(({ js }: { js?: string[] }) => js ?? []),
+		}
 	})
 	expect(exposed ?? []).toEqual([])
-	const files = [...injected, ...(exposed ?? []).flatMap(({ resources }) => resources)]
+	const files = [...injected, ...(exposed ?? []).flatMap(({ resources }: { resources: string[] }) => resources)]
 	const urls = files.map((file) => extensionUrl(extension.extensionId, `/${file}`))
 	expect(urls.length).toBeGreaterThan(0)
 

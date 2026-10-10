@@ -270,14 +270,14 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 			ctx.consoleErrors.push(msg.text())
 		}
 	})
-	page.on("pageerror", (err: Error) => {
+	page.on("pageerror", (err) => {
 		// Mirror the consoleErrors filter above: the benign SW-port-close
 		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
 		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
 		// is in flight during an MV3 service-worker restart. Same known noise,
 		// same filter — everything else still fails the assertion.
-		if (err.message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err)
+		if ((err as Error).message?.includes("Client disconnected")) return
+		ctx.pageErrors.push(err as Error)
 	})
 
 	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
@@ -483,7 +483,7 @@ function dumpAccountAndNetworkRows(popup: Page): Promise<string> {
  *  first two accounts the cap popup exposes. */
 function firstTwoAccountsFixture(label: string, bundle: "transaction" | "transaction-contracts") {
 	// biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires {} destructuring
-	return async ({}: Record<string, never>, use: (v: TwoAccountDapp) => Promise<void>) => {
+	return async ({}: object, use: (v: TwoAccountDapp) => Promise<void>) => {
 		// Captured in the second-account setup step and referenced by the
 		// cap-pick failure message below, so a "<2 accounts exposed" failure
 		// discriminates wrong-chain creation from popup-side filtering.
@@ -1202,14 +1202,14 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 		}
 	})
 
-	page.on("pageerror", (err: Error) => {
+	page.on("pageerror", (err) => {
 		// Mirror the consoleErrors filter above: the benign SW-port-close
 		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
 		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
 		// is in flight during an MV3 service-worker restart. Same known noise,
 		// same filter — everything else still fails the assertion.
-		if (err.message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err)
+		if ((err as Error).message?.includes("Client disconnected")) return
+		ctx.pageErrors.push(err as Error)
 	})
 
 	const popupUrl = extensionUrl(ctx.extensionId, "/src/popup/index.html")

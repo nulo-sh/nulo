@@ -15,6 +15,7 @@ import { basename, join } from "node:path"
 import { type Page, TimeoutError } from "puppeteer"
 import { expect } from "vitest"
 import { defaultProfileName } from "@/utils/profile-name"
+import type { ILogger } from "@nulo/wallet-core/logger"
 import type { VirtualAuthenticator } from "../fixtures/browser"
 import {
 	clickByTestId,
@@ -398,7 +399,8 @@ export async function deriveNuloAccountAddress(masterBase64: string, l1ChainId: 
 	const { createLogger } = await import("@aztec-labs/foundation/log")
 	const master = Fr.fromBuffer(Buffer.from(masterBase64, "base64"))
 	const seed = await deriveAccountSeed(master, l1ChainId, 0, index) // AccountType.Nulo_v1 = 0
-	const account = await NuloAccount.new(seed, createLogger("import-drivers"))
+	// NuloAccount logs only while it registers with a PXE, which address derivation never does.
+	const account = await NuloAccount.new(seed, createLogger("import-drivers") as unknown as ILogger)
 	return account.address.toString()
 }
 

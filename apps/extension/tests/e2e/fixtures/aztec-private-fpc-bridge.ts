@@ -23,7 +23,7 @@ import { FeeJuicePortalAbi } from "@aztec-foundation/l1-artifacts/FeeJuicePortal
 import { computeSecretHash } from "@aztec-labs/stdlib/hash"
 import { poseidon2HashBytes, poseidon2HashWithSeparator } from "@aztec-labs/foundation/crypto/sync"
 import { createLogger } from "@aztec-labs/foundation/log"
-import { getContract } from "@aztec/viem"
+import { type Chain, getContract } from "@aztec/viem"
 
 /**
  * Domain separator for FPC bridge secret derivation — must match the Noir
@@ -47,7 +47,7 @@ export async function bridgeForMint(
 	claimer: AztecAddress,
 	salt: Fr,
 	requestedAmount: bigint,
-	produceL2Block: () => Promise<void>,
+	produceL2Block: () => Promise<unknown>,
 	opts?: {
 		l1RpcUrls?: string[]
 		l1Mnemonic?: string
@@ -65,7 +65,7 @@ export async function bridgeForMint(
 	const l1Client = createExtendedL1Client(l1RpcUrls, opts?.l1Mnemonic ?? DEFAULT_L1_MNEMONIC, {
 		id: nodeInfo.l1ChainId,
 		name: "anvil",
-	})
+	} as Chain)
 
 	const { feeJuicePortalAddress, feeJuiceAddress, feeAssetHandlerAddress } = nodeInfo.l1ContractAddresses
 	const handlerAddress = feeAssetHandlerAddress && !feeAssetHandlerAddress.isZero() ? feeAssetHandlerAddress : undefined

@@ -24,6 +24,9 @@ import { ProtocolContractAddress } from "@aztec-labs/aztec.js/protocol"
 import { createExtendedL1Client } from "@aztec-labs/ethereum/client"
 import { SponsoredFPCContractArtifact } from "@aztec-labs/noir-contracts.js/SponsoredFPC"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
+import type { Logger } from "@aztec-labs/foundation/log"
+import type { ILogger } from "@nulo/wallet-core/logger"
+import type { Chain } from "@aztec/viem"
 
 /**
  * Aztec L2 node URL. Defaults to http://localhost:8080 (the standard sandbox port).
@@ -427,7 +430,8 @@ const ANVIL_MNEMONIC = "test test test test test test test test test test test j
  *  Note: the L1 FeeAssetHandler has a fixed mint amount of 1000 FJ per call. */
 export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClient>, toAddress: string, amount = 1000n * 10n ** 18n) {
 	const nodeInfo = await node.getNodeInfo()
-	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" })
+	const l1Client = createExtendedL1Client([ANVIL_URL], ANVIL_MNEMONIC, { id: nodeInfo.l1ChainId, name: "anvil" } as Chain)
+	// Console stand-ins for the level methods the portal manager calls; it reads nothing else of a Logger.
 	const logger = {
 		info: console.log,
 		debug: console.log,
@@ -435,7 +439,7 @@ export async function bridgeFeeJuice(node: ReturnType<typeof createAztecNodeClie
 		error: console.error,
 		verbose: console.log,
 		trace: () => {},
-	}
+	} as unknown as Logger
 	const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, logger)
 	const claim = await portalManager.bridgeTokensPublic(AztecAddress.fromStringUnsafe(toAddress), amount, true)
 	console.log(`[bridgeFeeJuice] Bridged ${amount} FJ to ${toAddress}, messageHash: ${claim.messageHash}`)
@@ -575,7 +579,8 @@ export async function setupPreFundedAccount(
 
 	// Sanity check the derived address against NuloAccount's path so the fixture
 	// fails fast if the frozen-artifact account below and NuloAccount ever disagree.
-	const nuloAccountContract = await NuloAccount.new(accountSeed, logger)
+	// NuloAccount logs only while it registers with a PXE, which address derivation never does.
+	const nuloAccountContract = await NuloAccount.new(accountSeed, logger as unknown as ILogger)
 	const expectedAddress = nuloAccountContract.address
 	logger.info(`Expected derived address: ${expectedAddress.toString()}`)
 

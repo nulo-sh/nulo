@@ -43,7 +43,7 @@ type SimulationSummary = {
 }
 
 type FeeRoute = "self-pay" | "fpc-credit" | "fpc-fuel" | "external"
-type Ctx = Parameters<Parameters<typeof test>[2]>[0]["dappConnectedExtensionWithFirstTwoAccountsContractsCap"]
+type Ctx = Parameters<NonNullable<Parameters<typeof test>[2]>>[0]["dappConnectedExtensionWithFirstTwoAccountsContractsCap"]
 
 const lower = (s: string) => s.toLowerCase()
 /** A `wait: "NO_WAIT"` send settles at submission with `{ txHash }`. */

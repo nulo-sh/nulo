@@ -28,6 +28,7 @@
 import { expect, inject } from "vitest"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { createAztecNodeClient } from "@aztec-labs/aztec.js/node"
+import type { BlockNumber } from "@aztec-labs/foundation/branded-types"
 import { type AztecTestConfig, mintPublicTokensForAccount } from "../fixtures/aztec"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { setDebugMode, setDeveloperMode } from "../fixtures/helpers"
@@ -76,14 +77,14 @@ async function l1Rpc<T>(method: string, params: unknown[]): Promise<T> {
 
 type Node = ReturnType<typeof createAztecNodeClient>
 
-async function tipHash(node: Node, tip: number): Promise<string | undefined> {
+async function tipHash(node: Node, tip: BlockNumber): Promise<string | undefined> {
 	const data = await node.getBlockData(tip)
 	return data ? (await data.header.hash()).toString() : undefined
 }
 
 /** Reorg L1 past the block that published the node's current tip; the node prunes on its next
  *  L1 poll. Returns the tip it will prune so the caller can wait for that to land. */
-async function reorgPastTip(node: Node, rollupAddress: string): Promise<{ tip: number; hash: string }> {
+async function reorgPastTip(node: Node, rollupAddress: string): Promise<{ tip: BlockNumber; hash: string }> {
 	const tip = await node.getBlockNumber()
 	const hash = await tipHash(node, tip)
 	if (tip < 1 || !hash) throw new Error(`the local network has no L2 block left to prune (tip ${tip})`)
@@ -96,7 +97,7 @@ async function reorgPastTip(node: Node, rollupAddress: string): Promise<{ tip: n
 	return { tip, hash }
 }
 
-async function waitForPrune(node: Node, tip: number, hash: string, timeoutMs: number): Promise<void> {
+async function waitForPrune(node: Node, tip: BlockNumber, hash: string, timeoutMs: number): Promise<void> {
 	const deadline = Date.now() + timeoutMs
 	while (Date.now() < deadline) {
 		if ((await tipHash(node, tip)) !== hash) return
