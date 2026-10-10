@@ -29,8 +29,8 @@ export function holdReads<T>(read: { mockImplementation(impl: () => Promise<T>):
 /**
  * A real `EventHandler` for a service-client mock: `invoke` reaches every handler the component
  * registered, and `add`/`remove` stay spies. A handler that throws fails the test instead of being
- * swallowed, so a dropped row cannot be a crash. Build a bus per test: an unmounted component never
- * removes its handlers.
+ * swallowed, so a dropped row cannot be a crash; the throw leaves on a microtask because `invoke`
+ * also catches its reporter's. Build a bus per test: an unmounted component never removes its handlers.
  */
 export function liveBus<T>(): EventHandler<T> & { add: Mock<EventHandler<T>["add"]>; remove: Mock<EventHandler<T>["remove"]> } {
 	const bus = new EventHandler<T>("liveBus", (error) =>

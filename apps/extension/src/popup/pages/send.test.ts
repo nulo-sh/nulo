@@ -56,7 +56,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokens: mocks.getTokens }
+		return { disconnect: vi.fn(), onTokenAdded: liveBus(), onTokenDeleted: liveBus(), getTokens: mocks.getTokens }
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -73,9 +73,9 @@ vi.mock("@/wallet/services/contact/client", () => ({
 	ContactServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onContactAdded: new EventHandler(),
-			onContactUpdated: new EventHandler(),
-			onContactDeleted: new EventHandler(),
+			onContactAdded: liveBus(),
+			onContactUpdated: liveBus(),
+			onContactDeleted: liveBus(),
 			getContacts: mocks.getContacts,
 		}
 	}),
@@ -130,7 +130,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { TransferType } from "@/wallet/services/transaction/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
-import { held, holdReads } from "../../../tests/helpers/held-read"
+import { held, holdReads, liveBus } from "../../../tests/helpers/held-read"
 import Send from "./send.vue"
 
 const STUBS = {
