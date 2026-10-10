@@ -115,17 +115,45 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 			deliver(OFFSCREEN_READY_MESSAGE)
 			await failed
 			expect(closeDocument).toHaveBeenCalledTimes(1)
-			expect([offscreenEpoch(), retired]).toEqual([start + 1, [start]])
+			expect(retired).toEqual([start])
 
 			const replaced = ensureOffscreenRunning()
 			await vi.advanceTimersByTimeAsync(3_100)
 			deliver(OFFSCREEN_READY_MESSAGE)
 			await replaced
 			expect(closeDocument).toHaveBeenCalledTimes(2)
-			expect([offscreenEpoch(), retired]).toEqual([start + 3, [start, start + 1, start + 2]])
+			expect(retired).toEqual([start, start + 2, start + 3])
+			expect(offscreenEpoch()).toBe(start + 4)
 		} finally {
 			stop()
 			vi.useRealTimers()
+		}
+	})
+
+	test("work sent to a new document on a READY that beats its create is not retired when the create resolves", async () => {
+		const retired: number[] = []
+		const stop = onOffscreenRetired((epoch) => retired.push(epoch))
+		try {
+			let finishCreate: () => void = () => {}
+			createDocument.mockImplementationOnce(
+				() =>
+					new Promise<void>((resolve) => {
+						finishCreate = resolve
+					}),
+			)
+			const before = offscreenEpoch()
+			const ready = ensureOffscreenRunning()
+			await settleMicrotasks()
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await ready
+			const sentUnder = offscreenEpoch()
+			finishCreate()
+			await settleMicrotasks()
+			expect(retired).toEqual([before])
+			expect(sentUnder).toBeGreaterThan(before)
+			expect(offscreenEpoch()).toBe(sentUnder)
+		} finally {
+			stop()
 		}
 	})
 

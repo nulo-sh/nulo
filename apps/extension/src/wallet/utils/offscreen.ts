@@ -137,9 +137,11 @@ function trackedClose(): Promise<void> {
 	return link
 }
 
-/** Counts offscreen documents known to be gone. It moves only on a close that succeeded: a ghost
- *  document can emit READY mid-replacement, a failed close may leave the document running, and
- *  `getContexts` can miss a live ghost, so none of those is proof that a document's work ended. */
+/** Names the document a request is sent to. It moves when a close succeeds and when a create
+ *  starts, since READY can arrive before the create resolves. An epoch is retired only on proof its
+ *  document is gone: a close or a create that succeeded. A ghost document can emit READY
+ *  mid-replacement, a failed close may leave the document running, and `getContexts` can miss a
+ *  live ghost, so none of those proves that a document's work ended. */
 let documentEpoch = 0
 const retiredListeners = new Set<(retiredEpoch: number) => void>()
 
@@ -148,16 +150,21 @@ export function offscreenEpoch(): number {
 	return documentEpoch
 }
 
-/** Calls `listener` with the epoch just retired, after each proven close; returns the unsubscribe. */
+/** Calls `listener` with each retired epoch, every earlier one retired with it; returns the
+ *  unsubscribe. */
 export function onOffscreenRetired(listener: (retiredEpoch: number) => void): () => void {
 	retiredListeners.add(listener)
 	return () => retiredListeners.delete(listener)
 }
 
+function announceRetired(epoch: number): void {
+	for (const listener of [...retiredListeners]) listener(epoch)
+}
+
 function retireDocument(): void {
 	const retired = documentEpoch
 	documentEpoch += 1
-	for (const listener of [...retiredListeners]) listener(retired)
+	announceRetired(retired)
 }
 
 /** Monotonic create-pass fence. Each ensure pass captures `++passSeq`; the
@@ -241,10 +248,13 @@ async function createOffscreenChromium(passId: number) {
 			reasons: ["WORKERS"],
 			justification: "Offscreen document is used for running PXE in it",
 		})
+	// Chromium allows one offscreen document, so a create that succeeds proves the earlier ones gone;
+	// the new document's epoch starts first, so work sent to it on an early READY is not retired.
+	const previous = documentEpoch
+	documentEpoch += 1
 	try {
 		await create()
-		// Chromium allows one offscreen document, so a create that succeeds proves the last one is gone.
-		retireDocument()
+		announceRetired(previous)
 	} catch (err) {
 		// Two transient shapes get one close-and-retry: the ghost bug
 		// ("single offscreen document": getContexts saw none but create says
@@ -267,7 +277,7 @@ async function createOffscreenChromium(passId: number) {
 			// the close window can't be followed by an untracked create.
 			if (passId !== passSeq) throw err
 			await create()
-			retireDocument()
+			announceRetired(previous)
 		} else {
 			throw err
 		}
