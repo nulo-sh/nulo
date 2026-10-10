@@ -667,6 +667,22 @@ describe("AccountService.importAccount — deletion fence", () => {
 		expect(h.dekWiped()).toBe(true)
 	})
 
+	test("the add is announced in the turn its final epoch check passes, never after a deletion that follows", async () => {
+		const h = await makeHarness()
+		const isCurrent = h.deletion.isCurrent.bind(h.deletion)
+		vi.spyOn(h.deletion, "isCurrent").mockImplementation((id, captured) => {
+			queueMicrotask(() => h.deletion.beginDeletion("p1"))
+			return isCurrent(id, captured)
+		})
+		const epochAtEmit: number[] = []
+		h.emit.mockImplementation((event) => {
+			if (event === "onAccountAdded") epochAtEmit.push(h.deletion.capture("p1"))
+		})
+
+		await expect(h.run()).resolves.toMatchObject({ address: "0xI" })
+		expect(epochAtEmit).toEqual([0])
+	})
+
 	test("(iii) a deletion beginning and releasing while the DEK read is parked is still refused", async () => {
 		const dek = gate()
 		const h = await makeHarness({ dekGate: dek.promise })

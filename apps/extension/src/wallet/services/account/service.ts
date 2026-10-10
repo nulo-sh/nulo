@@ -125,12 +125,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		this.importedKeys = new ImportedKeysRepository(browserApi.storage.local)
 	}
 
-	/**
-	 * Checks an RPC's argument tuple before the method runs and refuses a bad one with
-	 * `INVALID_PARAMS`, whose message names only the method. The method gets the original
-	 * arguments, not zod's parsed copies. The framework RPCs (`backup`, `restore`) have no schema
-	 * here and pass through.
-	 */
+	/** The method gets the caller's own argument objects, not zod's parsed copies; the framework
+	 *  RPCs `backup` and `restore` have no schema and pass through. */
 	protected override invoke(method: string, params: unknown[]): unknown {
 		const schema = (AccountMethodSchemas as Record<string, z.ZodType | undefined>)[method]
 		if (schema && !schema.safeParse(params).success) throw InvalidWalletArgumentsError.forMethod(method)
@@ -580,7 +576,6 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 					visible: true,
 				}
 				await this.commitImportedAccount(account, sealed, epoch)
-				this.emit("onAccountAdded", account)
 				return account
 			})
 		} finally {
@@ -595,6 +590,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * same address takes, so neither can land between the other's check and write. Key row first:
 	 * a crash between the two writes leaves an orphan key (swept on init), never an account that
 	 * cannot sign. A failure after the key write removes it; the duplicate refusal writes nothing.
+	 * Emits the add itself: an await between the final epoch check and the emit would let a deletion
+	 * begin unseen.
 	 */
 	private async commitImportedAccount(account: Account, sealed: string, epoch: number): Promise<void> {
 		const { profileId, chainId, address } = account
@@ -611,7 +608,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 				deletion.assertCurrent(profileId, epoch)
 				await this.storage.set(id, account)
 			})
-			// As in createAccountInternal: liveness, then the epoch, then the caller's emit with no await.
+			// As in createAccountInternal: liveness, then the epoch, then the emit with no await.
 			await this.assertStillLive(account)
 			if (!deletion.isCurrent(profileId, epoch)) await this.unwrite(account, profileDeletedError(profileId))
 		} catch (rowErr) {
@@ -619,6 +616,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			if (keyWritten) await this.importedKeys.delete(profileId, chainId, address).catch(() => {})
 			throw rowErr
 		}
+		this.emit("onAccountAdded", account)
 	}
 
 	/**
@@ -973,8 +971,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	/**
 	 * After a full-backup restore, drop any IMPORTED Account row that has no matching key row —
 	 * a hostile epoch-4 backup can carry a type-1 row with the key slice omitted, which would
-	 * otherwise restore as a zombie that fails only at signing. Runs at restore FINALIZE, after
-	 * both the account rows and the key rows have landed.
+	 * otherwise restore as a zombie that fails only at signing. Runs during the restore, after both
+	 * the account rows and the key rows have landed and before the profile's session opens.
 	 *
 	 * Ordering is list → awaited dependent purges → delete: a crash before the purge changes
 	 * nothing; a crash after it leaves a keyless account with no stale dependents, repaired by
@@ -982,7 +980,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * legitimately exist on another chain of this profile and must survive. Returns only the
 	 * scopes actually deleted: the delete pass re-reads each row under its lock, so an account
 	 * whose key appeared during the awaited purge, or a derived row a create wrote over it, is kept
-	 * and not reported.
+	 * and not reported. The purges hold no row lock (a holder awaits storage only), so a create of a
+	 * candidate's address during them would lose its new dependents; none runs, as create needs the
+	 * session.
 	 */
 	public async reconcileImportedAccounts(profileId: string): Promise<AccountScope[]> {
 		await this.ensureInitialized()
