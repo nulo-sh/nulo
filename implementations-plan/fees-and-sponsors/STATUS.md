@@ -9,3 +9,4 @@
 - 2026-10-10 phase 2: final Codex pass: reject (2 blocking); plan v3 revised (#119 as an entry hold, H3 unseen-fee gates); resumed pass running.
 - 2026-10-10 phase 2: resumed final pass: conditional approve; four conditions applied (v3.1). Plan committed, awaiting the orchestrator.
 - 2026-10-10 arc 1: approved by the orchestrator (D-orch-1 to D-orch-5); merged origin/dev 4f34f56; Phase 1.2 started, Phases 1.1/1.3/1.4 wait on #264.
+- 2026-10-10 Phase 1.2 gate: pass (lint, typecheck:all, fee/planner/builder vitest 200, aztec-runtime 372); five comment sites (D14).

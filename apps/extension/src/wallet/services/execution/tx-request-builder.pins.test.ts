@@ -396,34 +396,34 @@ async function rejectionOf(run: Promise<unknown>): Promise<Error> {
 	throw new Error("expected a rejection")
 }
 
+const selectorOf = async () => (await FunctionSelector.fromNameAndParameters(FN.name, FN.parameters)).toString()
+
+function noFromHarness() {
+	const getCurrentMinFees = vi.fn(async () => new GasFees(1, 1))
+	h.deps.networkService.getNode.mockResolvedValue({
+		// The NO_FROM fee fallback divides the limits by the fees, so both are numbers here.
+		getNodeInfo: vi.fn(async () => ({ ...NODE_INFO, txsLimits: { gas: { daGas: 111, l2Gas: 222 } } })),
+		getCurrentMinFees,
+	} as never)
+	return getCurrentMinFees
+}
+
+/** The JSON shape `aztec_sendTx` carries for a NO_FROM call. */
+const wireCall = (fields: Record<string, unknown>) => ({
+	to: CONTRACT,
+	type: FunctionType.PRIVATE,
+	isStatic: false,
+	hideMsgSender: false,
+	args: [],
+	...fields,
+})
+
+const buildNoFrom = (call: unknown, opts: unknown = {}) =>
+	h.builder.buildNoFrom({ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [call] }, opts } as never, FENCE)
+
 describe("selector binding: the dApp's name must be the selector's function", () => {
 	const UNKNOWN_SELECTOR = "0x0badc0de"
-	const selectorOf = async () => (await FunctionSelector.fromNameAndParameters(FN.name, FN.parameters)).toString()
 	const MISMATCH = "Scope violation: call name does not match selector's function"
-
-	function noFromHarness() {
-		const getCurrentMinFees = vi.fn(async () => new GasFees(1, 1))
-		h.deps.networkService.getNode.mockResolvedValue({
-			// The NO_FROM fee fallback divides the limits by the fees, so both are numbers here.
-			getNodeInfo: vi.fn(async () => ({ ...NODE_INFO, txsLimits: { gas: { daGas: 111, l2Gas: 222 } } })),
-			getCurrentMinFees,
-		} as never)
-		return getCurrentMinFees
-	}
-	/** The JSON shape `aztec_sendTx` carries for a NO_FROM call. */
-	const wireCall = (fields: Record<string, unknown>) => ({
-		to: CONTRACT,
-		type: FunctionType.PRIVATE,
-		isStatic: false,
-		hideMsgSender: false,
-		args: [],
-		...fields,
-	})
-	const buildNoFrom = (call: unknown) =>
-		h.builder.buildNoFrom(
-			{ networkId: "net-1", accountAddress: ACCOUNT_ADDR.toString(), exec: { calls: [call] }, opts: {} } as never,
-			FENCE,
-		)
 
 	test("NO_FROM: a matching name builds; an unknown selector, a wrong name and an empty name are refused before any fee read", async () => {
 		const selector = await selectorOf()
@@ -471,5 +471,32 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [] }])
 		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(1)
 		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [] }])
+	})
+})
+
+describe("an app's priority fee on a send", () => {
+	const APP_PRIORITY = { feePerDaGas: 70n, feePerL2Gas: 80n }
+
+	test("standard: the build reads no fee from the operation, so the entrypoint completes the gas settings itself", async () => {
+		await h.builder.buildStandard(
+			{
+				networkId: "net-1",
+				accountAddress: ACCOUNT_ADDR.toString(),
+				actions: [],
+				fee: { maxPriorityFeesPerGas: APP_PRIORITY },
+			} as never,
+			FENCE,
+			{ fake: "feeMethod" } as never,
+		)
+		expect((h.buildArgs[0] as unknown[])[5]).toBeUndefined()
+	})
+
+	test("NO_FROM: the build commits zero priority whatever the app's gas settings carry", async () => {
+		noFromHarness()
+		const built = await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }), {
+			fee: { gasSettings: { maxPriorityFeesPerGas: APP_PRIORITY } },
+		})
+		const { maxPriorityFeesPerGas } = built.txRequest.txContext.gasSettings
+		expect([maxPriorityFeesPerGas.feePerDaGas, maxPriorityFeesPerGas.feePerL2Gas]).toEqual([0n, 0n])
 	})
 })

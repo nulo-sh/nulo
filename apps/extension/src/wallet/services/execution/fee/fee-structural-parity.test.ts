@@ -153,6 +153,21 @@ describe("finalizeGasLimits: exact slot projection", () => {
 		expect([s.feeDa, s.feeL2]).toEqual([991n, 992n])
 	})
 
+	test("customLimits.maxFeesPerGas below the node min is committed as is: no multiplier, no floor", async () => {
+		const tx = makeTxRequest()
+		await finalizeGasLimits(
+			NODE,
+			tx,
+			makeSimulated(31_000, 32_000, 3_500, 3_600),
+			1,
+			undefined,
+			{ maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" } },
+			3,
+		)
+		const s = shape(tx)
+		expect([s.feeDa, s.feeL2]).toEqual([5n, 6n])
+	})
+
 	test("customLimits gas + teardown win over simulated values", async () => {
 		const tx = makeTxRequest()
 		await finalizeGasLimits(NODE, tx, makeSimulated(31_000, 32_000, 3_500, 3_600), 1, undefined, {

@@ -536,7 +536,7 @@ Questions for the orchestrator (a question a person would see goes to OWNER-ASKS
 - **Pass:** every command exits 0. Check once that each never-happens case fails against the base copy of the three services.
 - **Layers:** lint, typecheck, unit.
 
-#### Phase 1.2: pin the cap precedence; correct the budget comments (#188, #118)
+#### Phase 1.2: pin the cap precedence; correct the budget comments (#188, #118) ✓
 
 May start now (tests and comments only). Rebase on send-queue-activity arc 1 before the PR.
 
@@ -919,6 +919,7 @@ Run this section in order. It is the whole procedure; no other document is neede
 | D-orch-3 | **A-3, order against send-queue-activity arc 1 (#264).** Merge `origin/dev` and build Phase 1.2 first; then wait for #264 to land (poll every 2 minutes, up to 90), merge `origin/dev` again and build Phases 1.1, 1.3, 1.4 and 1.5 on top of it. If #264 does not land in time, stop at the phase reached and report blocked. | The orchestrator's answer to A-3; the shared files are #264's. | — |
 | D-orch-4 | **A-2 accepted.** #222 closes with the two extractions and the eight written declines. | The orchestrator's answer to A-2. | — |
 | D-orch-5 | **A-1 accepted as Phase 1.6, `Refs #197`.** A shape check at `predictedWorstMinFees`'s returns with a fixed refusal and the two reply pins; it reuses the existing failed-estimate path and adds no copy. #197 stays open for its external half; the PR says `Refs #197`. | The orchestrator's answer to A-1. | — |
+| D14 | **#118's comment sites are five.** The false upstream-parity claim the plan placed in `account/fee-options.ts` sits in `account/nulo-account.ts` ("byte-for-byte"), with a sibling "(matches upstream)" in `fee-options.ts`; both are corrected. | The tree wins (upstream defaults to `getMinFees(Limit)` × 1.5; Nulo to the current minimum × 1.5). | Correcting only `fee-options.ts` (leaves the false claim where it is). |
 
 ## Audit verdicts
 

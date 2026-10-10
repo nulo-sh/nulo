@@ -396,6 +396,44 @@ describe("committed fees for an explicit multiplier", () => {
 	})
 })
 
+describe("an app's fee settings against the wallet's", () => {
+	function withAppFee(h: ReturnType<typeof harness>, fee: Record<string, unknown>) {
+		const op = h.ctx.op as { fee?: Record<string, unknown> }
+		op.fee = { ...op.fee, ...fee }
+	}
+
+	test.each(["fj", "fjwc"] as PathName[])("%s: the app's cap is committed verbatim, even below the node min", async (path) => {
+		const h = harness(path)
+		h.ctx.feeMultiplier = 3
+		withAppFee(h, { maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" } })
+		const result = await h.strategy.buildAndEstimate(h.ctx)
+		expect(feesOf(result.txRequest as never)).toEqual([5n, 6n])
+	})
+
+	test.each(["fpc two-pass", "fpc fast path"] as PathName[])(
+		"%s: the app's cap is ignored; the cap and the payload's maxFee are the wallet's",
+		async (path) => {
+			const h = harness(path)
+			h.ctx.feeMultiplier = 3
+			withAppFee(h, { maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } })
+			const result = await h.strategy.buildAndEstimate(h.ctx)
+			expect(feesOf(result.txRequest as never)).toEqual([1_665n, 1_998n])
+			const lastPayload = h.fpc.getFeePayload.mock.calls.at(-1) as unknown as [string, { toBigInt(): bigint }]
+			expect(lastPayload[1].toBigInt()).toBe(115_551_000n)
+		},
+	)
+
+	test.each(PATHS)("%s: the app's priority fee never reaches a build; the committed priority is the build's", async (path) => {
+		const h = harness(path)
+		withAppFee(h, { maxPriorityFeesPerGas: { feePerDaGas: "70", feePerL2Gas: "80" } })
+		const result = await h.strategy.buildAndEstimate(h.ctx)
+		expect(h.buildStandard.mock.calls.length).toBeGreaterThan(0)
+		for (const call of h.buildStandard.mock.calls) expect(call[4]).toBeUndefined()
+		const { maxPriorityFeesPerGas } = (result.txRequest as unknown as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
+		expect([maxPriorityFeesPerGas.feePerDaGas, maxPriorityFeesPerGas.feePerL2Gas]).toEqual([7n, 8n])
+	})
+})
+
 describe("account reads at V2 and V3", () => {
 	const ORDER: Record<"fjwc" | "embedded", string[]> = {
 		fjwc: ["built.account", "gasSettings set", "account.address", "simulate"],

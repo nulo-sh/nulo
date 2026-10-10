@@ -283,11 +283,9 @@ export async function finalizeGasLimits(
 		if (customLimits?.maxFeesPerGas) {
 			maxFeesPerGas = new GasFees(BigInt(customLimits.maxFeesPerGas.feePerDaGas), BigInt(customLimits.maxFeesPerGas.feePerL2Gas))
 		} else if (customLimits?.embeddedFeePayment) {
-			// Embedded-FPC payments are pre-capped by `applyEmbeddedFpcGasCap` (to the dApp-supplied fee or
-			// `getCurrentMinFees()`), and the FPC asserts `gasLimits·maxFeesPerGas <= budget`. Refetching +
-			// re-multiplying here would commit a DIFFERENT ceiling than the one the FPC budget was reasoned
-			// against — a post-simulation drift that can push the committed cost past the budgeted amount.
-			// Reuse the already-committed cap verbatim. Non-embedded paths keep the refetch + general default.
+			// `applyEmbeddedFpcGasCap` set this cap before the simulation, and an app's fee contract may
+			// have checked a budget against it there: a refetch would commit a different cap than the one
+			// it simulated under.
 			maxFeesPerGas = txRequest.txContext.gasSettings.maxFeesPerGas
 		} else {
 			// Inclusion-safe basis: the worst predicted min fee across upcoming slots, not the
