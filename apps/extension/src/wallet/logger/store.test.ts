@@ -136,6 +136,22 @@ describe("LoggerStore", () => {
 			store.log("a", LogLevel.Debug, "now captured")
 			expect(store.get(10)).toHaveLength(1)
 		})
+
+		test("level and onLevel follow debugMode, firing once per real change", () => {
+			const config = mockConfig(false)
+			const store = new LoggerStore(config)
+			const fired: LogLevel[] = []
+			store.onLevel.add((level) => fired.push(level))
+			expect(store.level).toBe(LogLevel.Info)
+
+			config.onUpdate.invoke({ key: "debugMode", value: true })
+			config.onUpdate.invoke({ key: "debugMode", value: true })
+			config.onUpdate.invoke({ key: "developerMode", value: true })
+			config.onUpdate.invoke({ key: "debugMode", value: false })
+
+			expect(fired).toEqual([LogLevel.Debug, LogLevel.Info])
+			expect(store.level).toBe(LogLevel.Info)
+		})
 	})
 
 	describe("context field", () => {

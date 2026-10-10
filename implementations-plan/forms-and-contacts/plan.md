@@ -243,7 +243,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 3. Tests per popup, modelled on `NewContactPopup.test.ts`'s `nameWarns`: a saved "Alice" makes "Alice " and " Alice" warn and keep Save disabled; "alice" does not warn (control); an unnamed saved FPC beside a saved "Alice" does not throw, does not warn for "Bob", and does not warn for " " in Edit FPC (as today); `addFpc`/`updateFpc` receive the name as typed (as today).
 - Validation gate: fast layers on the three popup test files and `account-name.test.ts`.
 
-**1.5 #184, the logger gate.**
+**1.5 #184, the logger gate.** ✓
 1. Add `level` and `onLevel` to `LoggerStore`; answer and emit them in `LoggerService`.
 2. Add the client cache and the gate in `documentLogger().log`.
 3. Tests in `client.test.ts` with `PortRegistry` answering `LogLevel.Info`: after the first answer a Debug line is not posted (control); Warn and Error lines are. For answers and events of `Warn`, `Error`, `7` and `"x"`: Warn and Error lines still post, and so do Debug lines (the minimum stays unknown). An `onLevel` Debug event makes the next Debug line post. A remote close resets to sending everything. A real service and client pair (the service over a `LoggerStore` with a mutable config) turns `debugMode` on and the next Debug line reaches the store. `store.test.ts`: `onLevel` fires once per real level change. `client.ports.test.ts` S1-S4 pass unchanged.
