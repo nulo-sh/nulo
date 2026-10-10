@@ -38,3 +38,26 @@ Arc 2 branches from `dev` at c0e1e69 (#252 squash-merged arc 1; D-orch-5).
 - **Review fixes** (Codex round 1, the Opus review; verdicts in plan.md). The manual block: `git grep` exits 1 both on no match and on a path missing from the commit, so the block checks both files with `git cat-file -e` before trusting exit 1; and in zsh `"$MERGE_COMMIT:legal/…"` reads `:l` as the lowercase modifier, so the variable is braced. Exercised in bash and zsh on five commits (0.x, blank, filled, a missing document, a bad sha): it tags only on the filled one. Each new run guard (`SHASUMS256.txt` naming another zip, `readArchive`'s entry-list check, the shared output budget, `__proto__` in a served manifest) is red with its guard removed.
 - `pages-options.test.ts` fails whenever `TMPDIR` sits under a dot-directory (the lane's `~/.cache`): run the suites with the default `TMPDIR`, and point only the live case's scratch there. And never run `typecheck:all` beside `test:ci-gating`: the rescore test writes `*.rescore-*` siblings that `tsc` then reports missing (TS6053).
 - Gate after the fixes, 2026-10-10: `lint` 0, `typecheck:all` 0, `test:ci-gating` 0 (479 pass), `test:release` 0 (301 tests, 291 pass, 10 skip), `lint:actions` 0, `packages/legal` 59 pass + 1 skip.
+
+## 2.4 `hoist = false` (#172): stop rule fired, reverted
+
+- **Baseline (step 1)** at phase 2.3's tip `2f46ecf`, default `TMPDIR`: 13,988 test identities (13,958 pass, 23 skip, 7 todo, 0 fail) across every workspace's vitest json report and the `bun test` junit of `test:release`, `test:ci-gating` and `infra/passkey-rp`.
+- **Fresh install (steps 2-4):** `hoist = false` under `[install]`; all 19 `node_modules` directories deleted; `bun install --frozen-lockfile` exit 0 with the pxe patch applied (patched store dir `+9654951505f092be`, the patch's first added line present in `dest/pxe.js`); `node_modules/.bun/node_modules` absent.
+- **Battery (step 5):** release, ci-gating, the landing build and `phantom-sweep` exit 0. These failed:
+  - `audit:vue` 2: aztec-runtime typecheck, 49 errors.
+  - `test:all` 1.
+  - `build:firefox` 1.
+  - the playground build 1.
+  - `build-storybook` 1.
+
+  Six third-party packages import what they do not declare. The first five:
+  - `@aztec-foundation/aztec-standards` (it declares no dependencies) → `@aztec-labs/aztec.js`.
+  - `@pinia/testing` → `vue`.
+  - `local-pkg`'s `importModule`, for vite-plugin-pages → `@vue/compiler-sfc`.
+  - `storybook` → `@storybook/vue3-vite`.
+  - vite-plugin-node-polyfills rewrites `buffer` in store modules to `vite-plugin-node-polyfills/shims/buffer`. The extension's absolute alias for that specifier never runs on a rewritten one.
+
+  The sixth surfaced only after the first five were hoisted: presto's lazy `import("@aztec-labs/simulator/client")`. In this repository: aztec-runtime uses Node APIs with no `@types/node` declared.
+- **Six entries is past the rule's three**: reverted (`git checkout -- bunfig.toml`, fresh frozen install, fallback directory back, tree equal to `2f46ecf`). The list is commented on #172. Steps 6-7 did not run.
+- **One bounded probe, not committed**, completed the list for #172. With the six in `publicHoistPattern`, `test:all`, `build:firefox`, the playground build and `build-storybook` exit 0; typecheck still needs the aztec-runtime declaration. Smoke and network e2e were never reached, so the list may be incomplete.
+- **Silent hazard:** vite-plugin-pages catches a route-block parse failure, logs it and carries on. With `@vue/compiler-sfc` unreachable the build succeeds (68 logged errors) with every page's `<route>` meta gone, `isAuthRequired` included. `legacy-routes.test.ts` is what fails, and CI runs the unit tests before any build.
