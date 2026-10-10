@@ -981,3 +981,97 @@ describe("RecentActivityView — hydration order", () => {
 		expect(cards()).toEqual([{ stage: "queued", cancellable: true }])
 	})
 })
+
+describe("RecentActivityView — a journal record of another scope runs no side effect", () => {
+	const TOK = { id: 7, contract: "0xtok", symbol: "TOK", decimals: 18 }
+	/** A cancelled transfer of TOK to 0xrcpt: it matches the placeholder and the task below by account and token alone. */
+	const terminal = (over: Record<string, unknown> = {}) => ({
+		id: "op-done",
+		accountAddress: ACCT_A,
+		profileId: "p1",
+		networkId: "net-1",
+		kind: "transfer",
+		tokenId: TOK.id,
+		recipientAddress: "0xrcpt",
+		amountRaw: "1",
+		createdAt: 1,
+		terminalAt: Date.now(),
+		progress: { stage: "cancelled" },
+		...over,
+	})
+	const transferTask = {
+		...uiTransferTask(ACCT_A),
+		content: { kind: H.ContentKind.Transfer, senderAddress: ACCT_A, tokenId: TOK.id, amount: "1" },
+	}
+
+	/** The current scope's placeholder, executing task and pending cancel, all of which a terminal record of TOK clears. */
+	async function mountWithState() {
+		H.getTokens.mockResolvedValue([TOK])
+		H.getTasks.mockResolvedValue([transferTask])
+		const remove = vi.fn()
+		Object.assign(H.store.current, {
+			awaitingTransactions: [{ id: "ph-1", account: ACCT_A, destination: "0xrcpt", contract: TOK.contract }],
+			removeAwaitingTransaction: remove,
+		})
+		const w = mountView()
+		await flushPromises()
+		const vm = vmOf(w)
+		vm.pendingCancelJobIds.add("op-done")
+		return { vm, remove }
+	}
+
+	test.each([
+		["another profile", { profileId: "p2" }],
+		["another network", { networkId: "net-2" }],
+		["another account", { accountAddress: ACCT_FOREIGN }],
+	])("%s, through either event: the placeholder, task and cancel state stay, and nothing is held", async (_label, over) => {
+		for (const event of [H.journalAdded, H.journalUpdated]) {
+			const { vm, remove } = await mountWithState()
+			expect(vm.executingTask).not.toBeNull()
+			event.emit(terminal(over))
+			await flushPromises()
+			expect(remove).not.toHaveBeenCalled()
+			expect(vm.executingTask).not.toBeNull()
+			expect(vm.pendingCancelJobIds.has("op-done")).toBe(true)
+			expect(vm.journalOps).toEqual([])
+		}
+	})
+
+	test("the same record in scope clears them, through either event", async () => {
+		for (const event of [H.journalAdded, H.journalUpdated]) {
+			const { vm, remove } = await mountWithState()
+			expect(vm.executingTask).not.toBeNull()
+			event.emit(terminal())
+			await flushPromises()
+			expect(remove).toHaveBeenCalledWith("ph-1")
+			expect(vm.executingTask).toBeNull()
+			expect(vm.pendingCancelJobIds.has("op-done")).toBe(false)
+			expect(vm.journalOps.map((op: { id: string }) => op.id)).toEqual(["op-done"])
+		}
+	})
+
+	test("a record taken in before a scope switch is gone after it", async () => {
+		const w = mountView()
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A))
+		expect(vmOf(w).journalOps).toHaveLength(1)
+		H.store.current.network = { id: "net-2", chainId: 2 }
+		expect(vmOf(w).journalOps).toEqual([])
+	})
+
+	test("on mount and on reconnect, a recent terminal row of another network leaves the task; an in-scope one clears it", async () => {
+		H.getOperations.mockResolvedValue([terminal({ networkId: "net-2" })])
+		const { vm } = await mountWithState()
+		expect(vm.executingTask).not.toBeNull()
+		H.journalConnected.emit()
+		await flushPromises()
+		expect(vm.executingTask).not.toBeNull()
+		H.getOperations.mockResolvedValue([terminal()])
+		H.journalConnected.emit()
+		await flushPromises()
+		expect(vm.executingTask).toBeNull()
+
+		const remounted = await mountWithState()
+		expect(remounted.vm.executingTask).toBeNull()
+	})
+})

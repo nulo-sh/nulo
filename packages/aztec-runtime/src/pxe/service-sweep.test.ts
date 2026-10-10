@@ -69,6 +69,18 @@ describe("PxeService orphan-store sweep — recheck at commit", () => {
 		expect(removeProfileStoreDirs).not.toHaveBeenCalled()
 	})
 
+	test("a profile whose only incarnations this document erased is not swept", async () => {
+		vi.stubGlobal("indexedDB", { databases: async () => [] })
+		const service = makeSweepService({ connect: async () => {}, getProfiles: async () => [] })
+		await service.provisionChainStoreKey("p1", KEY_B64, "gen-1")
+		await service.clearProfileState("p1", "gen-1")
+		removeProfileStoreDirs.mockClear()
+
+		await sweep(service)
+
+		expect(removeProfileStoreDirs).not.toHaveBeenCalled()
+	})
+
 	test("removal waits for the profile's write barrier — a held read (store-open in flight) delays it", async () => {
 		vi.stubGlobal("indexedDB", { databases: async () => [] })
 		const profiles: IProfileReader = {

@@ -84,6 +84,14 @@ const VERIFIED_ERASE: BlockedDeletePolicy = {
 
 const isLegacyPxeDb = (x: IDBDatabaseInfo) => x.name?.startsWith(PXE_DATA_DIR_ROOT)
 
+/** One profile id's incarnations in this document: see `PxeService.profileLifecycles`. */
+interface ProfileLifecycle {
+	current?: { kind: "live" | "deleting"; gen: string }
+	dead: Set<string>
+	/** The erase in flight, which a same-generation clear joins. */
+	clearing?: { gen: string; done: Promise<void> }
+}
+
 /**
  * Minimal structural shape of profile-service surface this service uses.
  * Extension's `ProfileServiceClient` satisfies this via structural
@@ -168,9 +176,10 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	 *  Dropped on profile delete. */
 	private readonly storeKeys = new Map<string, Uint8Array<ArrayBuffer>>()
 	/**
-	 * Per-profile incarnation lifecycle, keyed by profileId:
-	 * absent = `unseen` → `live(gen)` on provision → `deleting(gen)` marked
-	 * SYNCHRONOUSLY when a clear starts → `deleted(gen)` on successful erase.
+	 * Per-profile incarnation lifecycle, keyed by profileId. Absent = `unseen`; `current` goes
+	 * `live(gen)` on provision and `deleting(gen)` SYNCHRONOUSLY when a clear starts, and a
+	 * successful erase drops it and adds `gen` to `dead`, which only grows. A record exists while a
+	 * profile is live, deleting or has any dead generation.
 	 *
 	 * `gen` is the profile row's persisted 128-bit `pxeGeneration`, minted fresh
 	 * at every row creation (including a same-id re-import) and carried by the
@@ -179,10 +188,10 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	 * with the port and the SW re-validates gen-currency at every SEND — the map
 	 * exists to fence SAME-incarnation resurrection: a key provider that captured
 	 * the profile master before deletion cannot re-provision after the purge
-	 * (its generation is the deleted one), so the missing-key retry can no longer
+	 * (its generation is a dead one), so the missing-key retry can no longer
 	 * recreate a deleted profile's runtime + OPFS store.
 	 */
-	private readonly profileLifecycles = new Map<string, { kind: "live" | "deleting" | "deleted"; gen: string }>()
+	private readonly profileLifecycles = new Map<string, ProfileLifecycle>()
 
 	public constructor(profiles: IProfileReader, logger: ILogger, factory?: PxeFactory, provePhaseSink?: ProvePhaseSink) {
 		super(PXE_SERVICE_NAME, logger)
@@ -747,23 +756,48 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	 */
 	public async clearProfileState(profileId: string, generation: string): Promise<void> {
 		if (!generation) throw new Error("clearProfileState: missing pxe generation")
-		const current = this.profileLifecycles.get(profileId)
-		// A late clear carrying a superseded generation must NEVER erase a live
-		// successor (same-id re-import minted a fresh generation): reject before
-		// touching any state. A same-gen clear after success is an idempotent
-		// no-op — the erase already completed.
+		const existing = this.profileLifecycles.get(profileId)
+		// A second clear of the erase in flight shares its outcome: running its own erase would pass
+		// through a barrier the first one drops on success.
+		if (existing?.clearing?.gen === generation) return existing.clearing.done
+		// A late clear carrying a superseded generation must NEVER erase a live or
+		// being-deleted successor (same-id re-import minted a fresh generation).
+		const current = existing?.current
 		if (current && current.gen !== generation) {
 			throw new Error(
 				`clearProfileState: generation mismatch for ${profileId} — a ${current.kind} incarnation with a different generation exists; refusing to erase`,
 			)
 		}
-		if (current?.kind === "deleted") return
-		// Mark `deleting` SYNCHRONOUSLY (before any await): a provision arriving
-		// while we wait for the write barrier must already see the fence.
-		this.profileLifecycles.set(profileId, { kind: "deleting", gen: generation })
+		if (existing?.dead.has(generation)) return
+		// Mark `deleting` and publish the erase SYNCHRONOUSLY (before any await): a provision
+		// arriving while we wait for the write barrier must already see the fence, and a same-gen
+		// clear must find the erase to join.
+		const record = existing ?? this.newLifecycle(profileId)
+		record.current = { kind: "deleting", gen: generation }
+		const done = this.eraseProfile(profileId, generation, record)
+		record.clearing = { gen: generation, done }
+		try {
+			await done
+		} finally {
+			// A failed erase leaves `deleting(gen)` for the coordinator's retry, which must start a
+			// fresh erase rather than join this rejected one.
+			if (record.clearing?.done === done) record.clearing = undefined
+		}
+	}
+
+	private newLifecycle(profileId: string): ProfileLifecycle {
+		const record: ProfileLifecycle = { dead: new Set() }
+		this.profileLifecycles.set(profileId, record)
+		return record
+	}
+
+	private async eraseProfile(profileId: string, generation: string, record: ProfileLifecycle): Promise<void> {
 		const barrier = this.getProfileBarrier(profileId)
 		await barrier.enterWrite()
 		try {
+			if (record.current?.kind !== "deleting" || record.current.gen !== generation) {
+				throw new Error(`clearProfileState: ${profileId} is no longer being deleted under this generation; refusing to erase`)
+			}
 			await this.registry.disposeProfile(profileId)
 			const guardPrefix = chainRegistryKeyPrefix(profileId)
 			for (const k of Array.from(this.chainGuards.keys())) if (k.startsWith(guardPrefix)) this.chainGuards.delete(k)
@@ -782,12 +816,11 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			// being-deleted entity and a same-gen retry reuses the SAME barrier — deleting it on a
 			// failed erase would let a read slip past the fence before the coordinator retries.
 			this.profileBarriers.delete(profileId)
-			// SUCCESS ONLY: `deleted(gen)` is retained (not removed) so a same-incarnation
-			// stale provision replay of THIS generation is rejected forever; a re-imported
-			// same-id profile provisions with a fresh generation and goes live over it.
-			// On FAILURE the state stays `deleting(gen)` — provisions stay fenced, the
-			// coordinator's same-gen retry is idempotent.
-			this.profileLifecycles.set(profileId, { kind: "deleted", gen: generation })
+			// SUCCESS ONLY: `gen` joins `dead` for the document's lifetime, so a stale provision
+			// replay of ANY erased generation is rejected, however many deletions follow; a
+			// re-imported same-id profile provisions with a fresh generation and goes live.
+			record.current = undefined
+			record.dead.add(generation)
 		} finally {
 			// Always release the write lock — retained-but-unlocked lets the retry re-acquire WRITE
 			// (an unreleased write lock would deadlock the retry, not fence it).
@@ -818,17 +851,17 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		// WRITE barrier here instead would drain readers, stalling an unlock-time
 		// re-provision behind a 30-minute in-flight prove on the same profile.
 		//  - deleting(any):        the purge is in flight — no key may (re)install.
-		//  - deleted(same gen):    a stale replay of the erased incarnation — rejected forever.
+		//  - a dead gen:           a stale replay of an erased incarnation — rejected forever.
 		//  - live(different gen):  a successor key while the predecessor is live — the SW
 		//    must clear first; failing loudly beats silently swapping keys under a runtime.
 		//  - live(same gen, different bytes): a derivation that disagrees with the installed
 		//    key — never swap a key under a running incarnation; the caller's inputs are wrong.
-		//  - unseen / live(same) / deleted(different gen): install (fresh incarnation,
-		//    idempotent re-provision, or a re-imported profile going live over a dead one).
-		const current = this.profileLifecycles.get(profileId)
+		//  - unseen / live(same) / no current with a fresh gen: install (fresh incarnation,
+		//    idempotent re-provision, or a re-imported profile going live over dead ones).
+		const record = this.profileLifecycles.get(profileId)
+		const current = record?.current
 		if (current?.kind === "deleting") refuse(`profile ${profileId} is being deleted — provision rejected`)
-		if (current?.kind === "deleted" && current.gen === generation)
-			refuse(`profile ${profileId} generation was erased — stale provision rejected`)
+		if (record?.dead.has(generation)) refuse(`profile ${profileId} generation was erased — stale provision rejected`)
 		if (current?.kind === "live" && current.gen !== generation)
 			refuse(`profile ${profileId} is live under a different generation — clear it first`)
 		const installed = this.storeKeys.get(profileId)
@@ -843,7 +876,8 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			}
 			return
 		}
-		this.profileLifecycles.set(profileId, { kind: "live", gen: generation })
+		const lifecycle = record ?? this.newLifecycle(profileId)
+		lifecycle.current = { kind: "live", gen: generation }
 		this.storeKeys.set(profileId, key)
 	}
 
@@ -886,23 +920,20 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	 * NOT contain the PXE_STORE_KEY_MISSING marker: re-provisioning cannot
 	 * rescue a stale-generation op, so the client must not retry it.
 	 *
-	 * ONE non-live case passes: `deleted` under a DIFFERENT generation than the
-	 * capture. That op belongs to a same-id re-imported SUCCESSOR booting before
-	 * its first provision — not to the erased incarnation. It must fall through
-	 * to the missing-key path (the predecessor's key was crypto-erased, so the
-	 * runtime bind throws PXE_STORE_KEY_MISSING) and the client's provision —
-	 * which `provisionChainStoreKey` explicitly admits over deleted(other gen) —
-	 * flips the lifecycle live. Hard-rejecting here deadlocked the successor
-	 * forever: the only provision trigger is that retry marker, which this
-	 * error path deliberately suppresses (delete profile → re-import same seed
-	 * → every op rejected until the offscreen document restarted).
+	 * ONE non-live case passes: no current incarnation and a capture that is not a dead
+	 * generation, i.e. a same-id re-imported successor before its first provision. It must
+	 * reach the missing-key path, whose retry marker is its only provision trigger.
 	 */
 	private assertGenerationCurrent(network: NetworkInfo): void {
 		const captured = network.pxeGeneration
 		if (!captured) return
-		const current = this.profileLifecycles.get(network.profileId)
+		const record = this.profileLifecycles.get(network.profileId)
+		if (!record) return
+		if (record.dead.has(captured)) {
+			throw new Error(`pxe op rejected: profile ${network.profileId} generation was erased — the capture is stale`)
+		}
+		const current = record.current
 		if (!current) return
-		if (current.kind === "deleted" && current.gen !== captured) return
 		if (current.kind !== "live" || current.gen !== captured) {
 			throw new Error(
 				`pxe op rejected: profile ${network.profileId} is ${current.kind} (generation ${current.gen === captured ? "matches" : "superseded"}) — the capture is stale`,

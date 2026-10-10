@@ -113,8 +113,7 @@ export class FpcStrategy implements FeeStrategy {
 		if (ctx.feeSettings.paymentMethod.kind !== "fpc") {
 			throw new Error("FpcStrategy called with non-fpc payment method")
 		}
-		const { fpcId } = ctx.feeSettings.paymentMethod
-		const fpc = await this.deps.fpcService.getFpcImpl(fpcId)
+		const fpc = ctx.fpc ?? (await this.deps.fpcService.getFpcImpl(ctx.feeSettings.paymentMethod.fpcId))
 		if (this.isSponsoredFastPathEligible(fpc, ctx)) {
 			return this.buildAndEstimateSponsoredFastPath(ctx, fpc)
 		}

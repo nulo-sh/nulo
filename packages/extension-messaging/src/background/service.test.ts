@@ -145,10 +145,33 @@ describe("envelope validation", () => {
 
 	test("only the service whose name matches accepts the connection", () => {
 		new TestService()
-		// A port named for a different service must not be adopted.
+		// A port named for a different service must not be adopted, and must stay open: every
+		// service sees every connection, so the one it names may still take it.
 		const other = connectServiceClient("some-other-service")
 		other.sendToService(request(1, "echo", ["hi"]))
 		expect(other.captureResponse()).not.toHaveBeenCalled()
+		expect((other.port as { disconnect: () => void }).disconnect).not.toHaveBeenCalled()
+	})
+
+	test("a port from an untrusted sender is closed at once and never served", async () => {
+		const svc = new TestService()
+		const trusted = connectServiceClient(SERVICE)
+		const foreign = connectServiceClient(SERVICE, { id: "another-extension" })
+
+		expect((foreign.port as { disconnect: () => void }).disconnect).toHaveBeenCalledTimes(1)
+		foreign.sendToService(request(1, "echo", ["hi"]))
+		svc.emitPing(1)
+		await flush()
+		expect(foreign.captureResponse()).not.toHaveBeenCalled()
+
+		// The trusted port beside it is untouched: served, sent the event, left open.
+		trusted.sendToService(request(2, "echo", ["hi"]))
+		await flush()
+		expect(trusted.captureResponse().mock.calls.map(([message]) => (message as { type: number }).type)).toEqual([
+			MessageType.Event,
+			MessageType.Response,
+		])
+		expect((trusted.port as { disconnect: () => void }).disconnect).not.toHaveBeenCalled()
 	})
 })
 
