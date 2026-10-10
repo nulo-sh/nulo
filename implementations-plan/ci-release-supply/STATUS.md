@@ -9,3 +9,4 @@
 - 2026-10-10: approved by the orchestrator with D-orch-1 to D-orch-4 (no stack, arc 1 only, probe branch approved, unreviewed fixes reviewed first); arc 1 started.
 - 2026-10-10: phase 1.1 gate passed (lint, typecheck:all, test, test:ci-gating, lint:actions, build-storybook).
 - 2026-10-10: phase 1.2 gate passed (lint, typecheck:all, test, test:ci-gating, lint:actions; red on the base lanes shown).
+- 2026-10-10: phase 1.3 local gate passed (lint, typecheck:all, test, test:ci-gating, lint:actions); waits on the D-orch-4 review before it counts.

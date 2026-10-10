@@ -1,0 +1,124 @@
+# Each PR workflow queues its runs per head commit, so a push leaves the old head's runs going. This
+# cancels the runs of heads the pull request has moved past. The `actions: write` scope it needs sits
+# in one job that runs no action, checks nothing out and interpolates nothing into its script.
+name: Supersede
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions: {}
+
+jobs:
+  cancel-superseded:
+    name: Cancel superseded runs
+    # A fork's or Dependabot's token is read-only, so it could not cancel anything.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+      pull-requests: read
+    concurrency:
+      group: pr-supersede-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Cancel the runs of superseded heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          RETRY_PAUSE: "5"
+        run: |
+          set -euo pipefail
+          WORKFLOWS=(
+            .github/workflows/pr-quick.yml
+            .github/workflows/actionlint.yml
+            .github/workflows/pr-extension-smoke-e2e.yml
+            .github/workflows/pr-extension-smoke-e2e-firefox.yml
+            .github/workflows/pr-extension-network-e2e.yml
+            .github/workflows/pr-extension-network-e2e-firefox.yml
+          )
+          calls=$(mktemp)
+          err=$(mktemp)
+          # One call; a rate limit, a server error or a dropped connection is retried once after a
+          # pause. The body is printed only on success, and the last attempt's error stays in $err.
+          api() {
+            local out attempt
+            out=$(mktemp)
+            for attempt in 1 2; do
+              echo "$*" >>"$calls"
+              if gh api "$@" >"$out" 2>"$err"; then
+                cat "$out"
+                return 0
+              fi
+              cat "$err" >&2
+              if [ "$attempt" = 2 ] || { grep -Eq 'HTTP 4[0-9]{2}' "$err" && ! grep -Eq 'HTTP (403|429)' "$err"; }; then
+                return 1
+              fi
+              sleep "$RETRY_PAUSE"
+            done
+          }
+          live_head() {
+            local pr
+            pr=$(api "repos/$REPO/pulls/$PR") || return 1
+            jq -er '.head.sha | select(test("^[0-9a-f]{40}$"))' <<<"$pr"
+          }
+
+          # List first, read the head second: a newer head whose runs are listed was pushed before
+          # the listing, so the head read returns it or a later one, and its runs are never selected.
+          runs=$(mktemp)
+          for status in queued in_progress pending waiting requested; do
+            if ! api "repos/$REPO/actions/runs" -X GET --paginate -f event=pull_request -f branch="$HEAD_REF" \
+              -f status="$status" -f per_page=100 >>"$runs"; then
+              echo "::error::could not list the branch's $status runs"
+              exit 1
+            fi
+          done
+          if ! live=$(live_head); then
+            echo "::error::could not read pull request #$PR"
+            exit 1
+          fi
+          # The branch name alone could be another pull request's, so a run must name this one.
+          selected=$(mktemp)
+          jq -r --arg live "$live" --argjson pr "$PR" --args '
+            .workflow_runs[]
+            | select(.head_sha != $live and (.path | IN($ARGS.positional[])) and any(.pull_requests[]?; .number == $pr))
+            | "\(.id) \(.head_sha) \(.path)"' "${WORKFLOWS[@]}" <"$runs" | sort -u >"$selected"
+          mapfile -t stale <"$selected"
+
+          failed=0
+          for line in "${stale[@]}"; do
+            read -r id head path <<<"$line"
+            for attempt in 1 2; do
+              # A force-push can rewind the branch to a listed head, so each attempt re-reads it.
+              if ! now=$(live_head); then
+                echo "::error::could not re-read pull request #$PR before cancelling run $id"
+                failed=1
+                break
+              fi
+              if [ "$now" = "$head" ]; then
+                echo "kept run $id ($path): $head is the live head again"
+                break
+              fi
+              echo "-X POST repos/$REPO/actions/runs/$id/cancel" >>"$calls"
+              if gh api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null 2>"$err"; then
+                echo "cancelled run $id ($path) on superseded head $head"
+                break
+              fi
+              cat "$err" >&2
+              if grep -q 'HTTP 409' "$err"; then
+                echo "run $id ($path) had already finished"
+                break
+              fi
+              if [ "$attempt" = 2 ] || { grep -Eq 'HTTP 4[0-9]{2}' "$err" && ! grep -Eq 'HTTP (403|429)' "$err"; }; then
+                echo "::error::could not cancel run $id ($path)"
+                failed=1
+                break
+              fi
+              sleep "$RETRY_PAUSE"
+            done
+          done
+          echo "live head $live at listing; ${#stale[@]} superseded run(s) found; $(wc -l <"$calls") API call(s)"
+          exit "$failed"

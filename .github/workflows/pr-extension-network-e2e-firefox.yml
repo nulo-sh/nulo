@@ -14,11 +14,10 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
 
 concurrency:
-  group: pr-extension-network-e2e-firefox-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # On a PR only a push's first attempt cancels the run in flight. Any other PR event, and any
-  # re-run of one, queues behind it: a run cancelled on its own head leaves a FAILURE aggregator
-  # there (CI.md, "Concurrency").
-  cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: pr-extension-network-e2e-firefox-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read

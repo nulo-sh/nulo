@@ -157,25 +157,63 @@ describe("network suite job names", () => {
 })
 
 describe("PR concurrency", () => {
-	test("each PR workflow groups by pull request number, so same-named branches of two forks never cancel each other", () => {
-		for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
-			expect(wf.concurrency?.group, `${file}: concurrency.group`).toContain("${{ github.event.pull_request.number || github.ref }}")
-			expect(wf.concurrency?.group, `${file}: concurrency.group`).not.toContain("head_ref")
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+	const PR_WORKFLOWS = [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]
+
+	// The number keeps same-named branches of two forks apart; the head commit keeps two heads of one
+	// pull request apart, so a late run of an older push can neither cancel nor replace the current
+	// head's run, whatever order GitHub admits them in.
+	test("each PR workflow queues per pull request and head commit, and only a dispatch cancels", () => {
+		for (const file of PR_WORKFLOWS) {
+			const { group, "cancel-in-progress": cancel } = workflow(file).concurrency ?? {}
+			expect(String(group), `${file}: concurrency.group`).toEndWith(
+				"-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}",
+			)
+			expect(String(group), `${file}: concurrency.group`).not.toContain("head_ref")
+			expect(cancel, `${file}: concurrency.cancel-in-progress`).toBe("${{ github.event_name != 'pull_request' }}")
 		}
 	})
 
-	// A run cancelled on the head it shares with its successor still runs its `always()` aggregator,
-	// which posts FAILURE there under the required name. A push's first attempt is the only event
-	// that moves the head; a re-run keeps its original event, so it must not cancel either.
-	test("only a push's first attempt cancels a run in flight; every other PR event queues", () => {
-		for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
-			expect(wf.concurrency?.["cancel-in-progress"], `${file}: concurrency.cancel-in-progress`).toBe(
-				"${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}",
-			)
+	// The one job in the repository that may cancel runs: it runs nothing it fetched, reads every input
+	// from env, and skips the tokens that could not cancel anyway.
+	test("pr-supersede.yml cancels from one script-only job with exactly the scope it needs", () => {
+		const wf = workflow("pr-supersede.yml")
+		expect(wf.on).toEqual({ pull_request: { types: ["synchronize"] } })
+		expect(wf.permissions).toEqual({})
+		expect(Object.keys(wf.jobs)).toEqual(["cancel-superseded"])
+		const job = wf.jobs["cancel-superseded"]
+		expect(job.permissions).toEqual({ actions: "write", "pull-requests": "read" })
+		expect(job.if).toBe("github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'")
+		expect(job.concurrency).toEqual({ group: "pr-supersede-${{ github.event.pull_request.number }}", "cancel-in-progress": true })
+		expect(job.steps).toHaveLength(1)
+		const [step] = job.steps
+		expect(step.uses).toBeUndefined()
+		expect(step.run).not.toContain("${{")
+		const listed = /WORKFLOWS=\(\n([\s\S]*?)\n\s*\)/.exec(step.run)?.[1]
+		expect(
+			String(listed)
+				.split("\n")
+				.map((line) => line.trim())
+				.sort(),
+		).toEqual(PR_WORKFLOWS.map((file) => `.github/workflows/${file}`).sort())
+	})
+
+	test("no other workflow can cancel or re-run a run", () => {
+		for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((name) => name.endsWith(".yml"))) {
+			if (file === "pr-supersede.yml") continue
+			const wf = workflow(file)
+			const scopes = [wf.permissions, ...Object.values(wf.jobs ?? {}).map((job) => (job as { permissions?: unknown }).permissions)]
+			for (const scope of scopes) {
+				expect(
+					scope === "write-all" ||
+						(typeof scope === "object" &&
+							scope !== null &&
+							"actions" in scope &&
+							(scope as Record<string, unknown>).actions === "write"),
+					file,
+				).toBe(false)
+			}
 		}
 	})
 })
