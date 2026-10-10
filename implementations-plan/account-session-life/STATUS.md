@@ -15,3 +15,5 @@
 - 2026-10-10 — phase 1.3 gate pass: lint 0, typecheck:all 0, unit 227/227, smoke passkey-retry retry-0 Chrome 9/9 + Firefox 9/9; new e2e case red on base (2 creates).
 - 2026-10-10 — phase 1.4 gate pass: lint 0, typecheck:all 0, account unit 121/121; refusal proofs red on base service.ts.
 - 2026-10-10 — phase 1.5 gate pass: lint 0 (after one format fix), typecheck:all 0, ConfirmPopup 8/8, rg gate 0.
+- 2026-10-10 — arc 1 boundary gate on 9c4b9c8: audit:vue 0, test:all 0; smoke retry-0 Chrome 6 files 29/29, Firefox 3 passkey files 15/15.
+- 2026-10-10 — arc 1 review: Codex round 1 CHANGES (3 Medium, fixed a5c3170 dd9bc51 95c6ec7), Opus CHANGES (pin + comments 1a6e040; one rejected), Codex round 2 APPROVE (comment aaa0ac7). R2-1 unreachable on HEAD per both legs.

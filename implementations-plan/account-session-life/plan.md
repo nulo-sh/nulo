@@ -1,7 +1,7 @@
 ---
 plan: account-session-life
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-3); arc 1 in progress
+status: approved by the orchestrator (D-orch-1 to D-orch-3); arc 1 built and reviewed (Codex approve), in delivery
 issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
 driver: claude-code
 claude_model: opus
@@ -632,6 +632,20 @@ The residual is a direct `reconcileImportedAccounts` RPC on a profile that alrea
 Opus's phase 1.1 notes:
 - **Accepted.** Name the reconcile guard's pause point. It parks after the listing (`storage.get()`) and before the key read, the only point where the hazard exists. The test title says so.
 - **Rejected.** "`unwrite` throws a parse error on a row the codec cannot decode." `EntityStorage.get` returns `undefined` for an undecodable or invalid row (`packages/wallet-core/src/storage/entity_storage.ts:98-143`), so `unwrite` reads the row as not its own and deletes nothing.
+
+**Arc 1 review: the Codex fix loop and the Opus final-diff review**, on the arc diff `9574a9d..9c4b9c8`. Each leg was asked R2-1 first again, now against the built code.
+
+- **R2-1 on HEAD.** Codex round 1 (new session `01a123b2-acff-7732-a938-7c3440cdd925`): `UNREACHABLE, high confidence through existing UI/dApp paths`. Opus: `UNREACHABLE, high confidence`; only a direct RPC from a compromised extension page reaches it. The evidence is the same as above, and the plan stands.
+- **Codex round 1: CHANGES.** Three Medium findings, all confirmed in the tree and fixed with a never-happens test that fails on the pre-fix copy:
+  - The import's emit sat one await after its final epoch check, once the check moved into `commitImportedAccount`, so a deletion beginning in that gap saw the add announced after it began. Fixed in a5c3170: the helper emits.
+  - A Cancel or Escape during the confirming assertion turned into a bare `UserRejectedError` in `PasskeyCeremonyDialog`, which dropped the minted credential, so the retry created a second passkey. Fixed in dd9bc51: the cancel is wrapped in `PasskeyUnconfirmedError` and `handleCancelOrUnconfirmed` unwraps it, so it stays silent.
+  - A failed identity check in `activateCreatedProfile` returned quietly, so `handleCreate` cleared its latch, against § UI impact's "it stays on Creating…". Fixed in 95c6ec7: it throws `ActivationSupersededError`.
+  - Three comment findings were applied: reconcile's unfenced purge is now stated, the `invoke` doc is cut to its contract, and the `unlockWait` contract covers both deadline modes and the lock-pending case.
+- **Opus: CHANGES.** It found the same three defects independently (rated Medium, Low and Low) and checked the fixes. Also from Opus:
+  - **Accepted.** A type-level pin that every argument list a method's signature allows fits its schema, because `satisfies` pinned only the key set (1a6e040). It fails typecheck when an optional member is made required.
+  - **Accepted.** Four stale comments: the import's L1-ordering note, `importAccount`'s "omit/empty for plaintext", `createPasskeyProfileWithRetry`'s `@throws`, and a doubled invariant on the emit (1a6e040).
+  - **Rejected.** "Clear the saved credential after an `other`-classed failure." The passkey window keeps an unconfirmed credential for every later failure (`popup/windows/passkey/index.vue` `prompt`). #159's recorded decision is to mirror the window, and the quality bar is that a retry never creates a second passkey. The in-page flow is already narrower than the window: it clears the credential on no-PRF and on a name change.
+- **Codex round 2 (same session): APPROVE**, with high confidence and no new runtime defect. It checked all four fixes, and it rejected an injected optional-argument mismatch through the schema pin. It accepted the Opus rejection: an `other` failure does not show that the credential is unusable. One Comment was applied: `Promise.race` handles the loser's late rejection, so the `unlockWait` doc now names only the live watcher. The loop closed at round 2 of 3.
 
 ## Delivery
 

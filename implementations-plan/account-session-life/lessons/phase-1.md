@@ -44,3 +44,16 @@
 - Deleted `isPasskeyConfirmed`, `handlePasskeyConfirmation`, the passkey `Button` and both `passkeyConfirmation` terms. `isConfirmed` reduces to `!confirmation_text || confirmation_text === term`, with the same truth table once the dead term is gone. `useToast` and `useAppStore` lost their last users in the component and went with them. In the test, the three `managers` stubs and the `app.store` mock are dropped. The toast mock stays, because `snackInset` still calls `useToast`.
 - `confirmProfileOperation` now has no UI caller. It is still a registered profile RPC, used by the passkey recovery coordinator's comment trail and pinned by integration tests. Per the plan's Scope, the close-out files an issue after a dedupe.
 - Gate: lint 0. The first run failed on Biome's formatting of the shortened `computed`, which `biome check --write` fixed. typecheck:all 0; `ConfirmPopup.test.ts` 8/8; `! rg -q "passkeyConfirmation|handlePasskeyConfirmation" apps/extension/src` 0.
+
+## Arc 1 boundary gate and review
+
+- Gate on 9c4b9c8. `audit:vue` 0 (extension: 719 files, 10,806 tests). `test:all` 0 in every workspace. Smoke on an armed build at retry 0. Chrome: `registration`, `passkey-paths`, `passkey-retry`, `accounts`, `account-import-export`, `passkey-backup`, 6 files, 29/29. Firefox: `passkey-paths`, `passkey-retry`, `passkey-backup`, 3 files, 15/15.
+- The network gate waited on the host: the `e2e-harness-gaps` run held `nulo-e2e-*` rows and a live network vitest. Watch out when counting live runs: `pgrep -fa 'vitest.e2e.network'` also matches the agents' own `claude -p` prompts and shell snapshots, which quote that pattern. Drop those lines before counting.
+- Codex round 1 and the Opus review found the same three defects. All three were seams this arc introduced:
+  - Extracting a helper put an await between the epoch check and the emit.
+  - Normalising a cancel dropped the credential it wrapped.
+  - An early `return` in a helper read as success to its caller's latch.
+  The lesson: when the last check before a side effect moves into a helper, the side effect moves with it. A guard that refuses must throw, never return.
+- The red proof for the emit test uses a microtask queued from inside `isCurrent`. The old code's caller resumes one tick after the helper returns, so the queued `beginDeletion` lands first. This is deterministic, with no timers.
+- Opus's signature pin: `expectTypeOf<Refused>().toBeNever()` over `Parameters<Methods[K]> extends z.input<schema[K]>`. Verified red by making `getAccounts`' optional member required. In the extension, run vue-tsc through `bun run --cwd apps/extension typecheck`: `bunx --bun vue-tsc` resolved another config and reported an unrelated stories error.
+- Codex round 2 returned APPROVE, and its one Comment was applied. `Promise.race` attaches a handler to every input, so a late rejection from the loser is handled. Only its watcher stays live. The pre-arc doc had overclaimed this, and the first rewrite repeated the claim.
