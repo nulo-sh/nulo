@@ -54,3 +54,13 @@
 - 2026-10-10 — Codex round 2 (resumed): approve, no new material code finding; it verified D-arc1-3's ordering
   with the extracted methods and a real `Lock`. One Low on plan wording (R5, § Security, § UI impact still
   stated the old rule), applied. Loop converged in two rounds.
+
+## Arc 1 final gates
+
+- 2026-10-10 — after merging `origin/dev` at 4f34f56: lint, typecheck:all, check:plans (0 findings), test:all
+  (extension 10902) pass. Smoke, armed builds, `--retry=0`: Chrome 46 files passed, 1 failed, 3 skipped —
+  `navigation.test.ts` "History's and Settings' titles sit 10px below the header…" timed out in `clickBelowBar`'s
+  5 s opacity wait, with the host's load average at 55-78 (other lanes' network suites). The same file passed in
+  the arc-gate Chrome run on the previous head (47/47 files), and neither this arc nor the merged dev commits
+  touch navigation or the title bar. One rerun of that file at retry 0: 5/5. Firefox: 49 files passed, 1 skipped
+  (200 tests).
