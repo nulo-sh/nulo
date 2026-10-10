@@ -104,7 +104,7 @@ test.skipIf(!aztecConfig)(
 		const pageErrors: string[] = []
 		// "Client disconnected" is the benign port-close cascade the fixtures filter too.
 		page.on("pageerror", (err) => {
-			if (!err.message?.includes("Client disconnected")) pageErrors.push(String(err))
+			if (!(err as Error).message?.includes("Client disconnected")) pageErrors.push(String(err))
 		})
 		const connectWindow = await page.evaluate(async () => (await chrome.windows.getCurrent()).id)
 		await page.waitForFunction(

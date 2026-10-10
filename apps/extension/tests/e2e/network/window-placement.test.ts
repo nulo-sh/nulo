@@ -86,7 +86,7 @@ function lastFocused(control: Page): Promise<{ id: number; type: string }> {
 	})
 }
 
-async function updateWindow(control: Page, id: number, info: chrome.windows.UpdateInfo): Promise<WindowRead> {
+async function updateWindow(control: Page, id: number, info: Parameters<typeof chrome.windows.update>[1]): Promise<WindowRead> {
 	await control.evaluate((windowId, update) => chrome.windows.update(windowId, update), id, info)
 	return settledWindow(control, id)
 }
@@ -111,7 +111,7 @@ async function openPlaygroundWindow(ctx: PlacementContext, bounds: Bounds): Prom
 	const url = playgroundTestPage()
 	const origin = new URL(url).origin
 	const id = await ctx.control.evaluate(
-		async (pageUrl, b) => (await chrome.windows.create({ type: "normal", url: pageUrl, focused: true, ...b })).id,
+		async (pageUrl, b) => (await chrome.windows.create({ type: "normal", url: pageUrl, focused: true, ...b }))!.id,
 		url,
 		bounds,
 	)

@@ -1,0 +1,18 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"moduleDetection": "force",
+		"lib": ["ESNext", "DOM"],
+		"types": ["node", "vite/client", "chrome-types"],
+		"strict": true,
+		"noEmit": true,
+		"resolveJsonModule": true,
+		"allowImportingTsExtensions": true,
+		"isolatedModules": true,
+		"skipLibCheck": true,
+		"paths": { "@/*": ["./src/*"] }
+	},
+	"include": ["tests/e2e/**/*"]
+}

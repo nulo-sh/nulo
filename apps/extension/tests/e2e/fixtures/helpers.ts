@@ -1421,7 +1421,7 @@ export async function waitForToast(
 		text,
 		opts.kind ?? null,
 	)
-	const element = handle.asElement()
+	const element = handle.asElement() as ElementHandle<Element> | null
 	if (!element) throw new Error(`the snack containing "${text}" left between the wait and the read`)
 	return element
 }

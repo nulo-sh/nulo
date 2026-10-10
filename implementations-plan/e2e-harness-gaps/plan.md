@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arc 1a merged (#267); arc 1b in review (#273)
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267) and 1b (#273) merged; arc 2 in review
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -417,6 +417,9 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D19 | #162: the fix ships in `lock.vue` although the un-skipped opt-out test passes without it, and one Chrome-only case opens Lock inside a new worker's boot window (stop the worker, then navigate), red 3/3 on the base. Its Firefox skip is named here: Firefox does not end an event page while an extension page is open, so the window cannot occur there | The opt-out test opens Lock after the boot has finished; a probe showed a read rejected by the port drop strands the page, and only an e2e exercises the real reject-and-reconnect transport the fix relies on. Codex: ship the fix, but no timing-only race (it can pass vacuously). Opus: ship, and add the case sequentially, since the window is the whole boot, not milliseconds. The sequential shape is taken; the case cannot see the rejection itself, so its base-red count is recorded and the unit tests are the exact check | A concurrent stop-and-navigate race; the unit tests alone |
 | D20 | #155: the watchdog's unit test stalls on a fixture that spins while its file is collected, with a 3 s `stallMs`, and asserts the stall report names the file; a second file must not start and global teardown must run. One reporter, no `observe` switch: every run prints its longest silence, and `stallMs` is required | I4 did not hold: vitest 4.1.10 ends a test awaiting a never-settling promise 3 s after `cancelCurrentRun`, so that fixture never reaches the kill. Only a blocked event loop does, and a blocked fork never reports its test, so the file is what can be named. The printed silence is what a later recalibration reads from CI logs | The plan's awaiting fixture naming the test (it passes with the kill removed) |
 | D21 | #155: the heap cap's assertion lives in `network-setup.ts` and runs in every network fork: a limit outside [cap, cap + 512] MiB throws. Teardown reaps browser launches whose owner died | A fork the `execArgv` misses fails where it runs, in every run, not in a test of a copy of the config. A fork the watchdog kills leaves its Firefox, which only the next Firefox launch reaped | A nested-run unit test of the cap |
+| D-orch-6 | After a squash merge an arc branches from `dev`: arc 2 is `e2e-harness-gaps-types` off `origin/dev` at 8c3c671 (#273's squash). D-orch-1 to D-orch-5 stay | The orchestrator's call, as D-orch-3 for arc 1b | Branching from `e2e-harness-gaps-waits` |
+| D-orch-7 | Arc 2 only, exactly as § Arc 2 and Phase 2.1 state: type-only edits in `tests/e2e`, no edit changes what a test does, no `src` edit for the gate, probe counts in `lessons/phase-2.md` before any fix, no added `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error` measured against the merge base with `origin/dev` (not 4a357b7), `unresolved-names.test.ts` deleted only once the gate's file list is shown to contain the scan's, the skill line rewritten; arc 1b's `run-limits.ts` and `stall-watchdog.ts` are covered; nothing of arcs 3 or 4 | The orchestrator's call | — |
+| D-orch-8 | The gate must bite both ways: Phase 2.1 step 4's four probes are run and their outputs recorded in `lessons/phase-2.md`; a gate that passes a probe it should refuse is not done | The orchestrator's call | — |
 
 ## Audit verdicts
 
@@ -582,6 +585,33 @@ Verdict: **approve with fixes**, every claim checked against vitest 4.1.10's dis
 ### Arc 1b implementation, round 2: Codex (same session, resumed), 2026-10-10
 
 Verdict: **approve**, no findings. Teardown's reaper judged safe: it signals only launches whose recorded owner is dead and whose processes carry the record's marker, so a forged record cannot reach a live launch.
+
+### Arc 2 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, high confidence. Checked and found sound: no edit changes runtime behaviour (13 files emit identical JavaScript, reproduced; the fourth `test()` argument is never read; Vite's transform erases every added type import); both declared call forms are documented for Chrome and Firefox and reach neither the `src` nor the scripts program; the gate covers all 233 scanned files and reports every code the scan filtered; the 68 `src` modules it reaches compile cleanly; CI picks it up with no workflow edit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| A1 | Medium. The `pageerror` handlers' `as Error` keeps a pre-existing bug: a primitive payload (`null`, `undefined`) makes the handler throw, and other primitives land in an `Error[]` (`fixtures/extension.ts`, `connect-one-window.test.ts`) | Accepted as an open item, not fixed here: the fix changes runtime behaviour, outside this arc's type-only rule. Filed as #275 |
+| A2 | Low. The skill line's "Node types only" is inexact: the program also loads Vite client, Chrome and DOM declarations | Accepted: "it loads Node's types and no Bun types" |
+| A3 | Low. The `NuloAccount` cast comment overstates the invariant: it also logs while building a transaction | Accepted at all three sites: "Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods" |
+
+### Arc 2 implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run independently), vitest's `base.extend` wrapper forwards three arguments, fixture detection ignores whitespace so Biome's re-wrap cannot change which fixtures a test uses, the augmentation stays out of the other two programs, no `bun-types` reached. It also found the plan's premise inexact: the scan's seven codes never included TS2867/TS2868 ("Cannot find name 'Bun'"), so the scan never made a `Bun` global an error; the gate does.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OA1 | Low. Same as A3 | Accepted (A3) |
+| OA2 | Low. Same as A2 | Accepted (A2) |
+| OA3 | Nit. The portal-manager comment runs past the 100-character soft cap | Accepted: one sentence under the cap |
+| OA4 | Low. File the `pageerror` gap before the plan closes | Accepted: #275 |
+| OA5 | Optional. `extends: ./tsconfig.scripts.json`; `include: tests/e2e/**/*` so a future `.mts`/`.cts` is checked | `extends` rejected: the scripts program runs on Bun and this one on Node, so a Bun-side option must not move the Node program. The wider include accepted: a probe `.mts` and `.cts` with a wrong-typed constant fail under it and pass silently under `**/*.ts`; the file list is unchanged (234) |
+| OA6 | Info. Phase 2.1's validation runs not yet recorded | Accepted: recorded in `lessons/phase-2.md` once run |
+
+### Arc 2 implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
 
 ## Post-implementation
 
