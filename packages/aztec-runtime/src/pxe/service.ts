@@ -819,8 +819,6 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 			// SUCCESS ONLY: `gen` joins `dead` for the document's lifetime, so a stale provision
 			// replay of ANY erased generation is rejected, however many deletions follow; a
 			// re-imported same-id profile provisions with a fresh generation and goes live.
-			// On FAILURE the state stays `deleting(gen)` — provisions stay fenced, the
-			// coordinator's same-gen retry is idempotent.
 			record.current = undefined
 			record.dead.add(generation)
 		} finally {

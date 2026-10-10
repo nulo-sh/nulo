@@ -151,7 +151,7 @@ export abstract class ServiceClient<
 /**
  * Which channel reported the port's close error, if any. Chrome sets `runtime.lastError` only while
  * `onDisconnect` runs and logs "Unchecked runtime.lastError" when no listener reads it; Firefox sets
- * `port.error` instead. Both are read every time; the error's text is never kept.
+ * `port.error` instead. The error's text is never kept.
  */
 function closeReason(port: chrome.runtime.Port): "runtime.lastError" | "port.error" | undefined {
 	const lastError = (chrome.runtime as { lastError?: unknown }).lastError

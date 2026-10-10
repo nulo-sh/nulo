@@ -19,7 +19,7 @@ import {
 import { fromBase64Lenient, Lock } from "@/wallet/utils"
 import { isGeneratedProfileId, ProfileRepository } from "./repository"
 import { EventHandler } from "@nulo/wallet-core/utils"
-import { array_equals, canonicalizeMnemonic, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
+import { array_equals, canonicalizeMnemonic, deferred, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import {
 	asBase64Ciphertext,
 	asImportedKeysDek,
@@ -229,8 +229,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** Lazily injected by the last-started ProfileDeletionCoordinator — the purge
 	 *  executor. Never a topological dependency (would be a cycle). */
 	private deletionDelegate: ProfileDeletionDelegate | null = null
-	/** Settles when the first delegate is injected; this service answers RPCs phases before that. */
-	private readonly deletionDelegateInjected = Promise.withResolvers<void>()
+	/** Settles on the first injection; this service answers RPCs from start phases before the
+	 *  coordinator's. */
+	private readonly deletionDelegateInjected = deferred()
 	/** Lazily injected by the last-started AccountIntegrityCoordinator — the pre-open address
 	 *  verifier. Never a topological dependency (would be a cycle, same as the deletion delegate). */
 	private integrityDelegate: AccountIntegrityDelegate | null = null

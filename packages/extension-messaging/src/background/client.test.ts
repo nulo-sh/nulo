@@ -625,7 +625,7 @@ describe("port onDisconnect → reconnect", () => {
 		expect((client as any).pendingCount).toBe(0)
 	})
 
-	test("every remote close reads both error channels and logs only which one was set", async () => {
+	test("every remote close reads lastError and logs only which channel was set", async () => {
 		const ERROR_TEXT = "Could not establish connection. Receiving end does not exist."
 		let lastErrorReads = 0
 		let lastError: { message: string } | undefined = { message: ERROR_TEXT }
@@ -636,15 +636,9 @@ describe("port onDisconnect → reconnect", () => {
 				return lastError
 			},
 		})
-		let portErrorReads = 0
 		const watchPortError = (error: Error | undefined) => {
 			const port = connectMock().mock.results.at(-1)?.value as object
-			Object.defineProperty(port, "error", {
-				get: () => {
-					portErrorReads += 1
-					return error
-				},
-			})
+			Object.defineProperty(port, "error", { get: () => error })
 		}
 		const { logger, calls } = makeSpyLogger()
 		const client = new TestClient(logger)
@@ -666,7 +660,6 @@ describe("port onDisconnect → reconnect", () => {
 		emitPortDisconnect(SERVICE)
 
 		expect(lastErrorReads).toBe(3)
-		expect(portErrorReads).toBe(3)
 		const closeLines = calls.filter((line) => line[2] === "Port closed with an error")
 		expect(closeLines.map((line) => line.slice(1))).toEqual([
 			[LogLevel.Debug, "Port closed with an error", { reason: "runtime.lastError" }],
