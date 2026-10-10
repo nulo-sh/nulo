@@ -217,7 +217,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 ### Arc 1: logger, config, stack depth, logs viewer, names (decision-free)
 
-**1.1 #212, the logs document.** Lands first in the arc (R3).
+**1.1 #212, the logs document.** ✓ Lands first in the arc (R3).
 1. Add `logsDocument(logs)` to `logs-format.ts`.
 2. Use it for the first `EditorState` and in `updateEditorContent`.
 3. Test in `logs-format.test.ts`: two entries plus one live insert at the end read as three lines, each the `formatSingleLog` of its entry; an empty list gives `""`, and one live insert into it gives one line.

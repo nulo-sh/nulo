@@ -8,3 +8,4 @@
 - 2026-10-10: final pass verdict: Codex (fresh session) reject, 6 findings: 4 accepted (re-check after the sender, lock seal clears import entries, `fieldAddressKey` swap dropped, B branches re-planned before code), 1 partly (FPC saves unchanged; arc 1 waits on the orchestrator's record for #205/#212/#214), 1 rejected with owner tie-break FA-11 (contacts after a failed sender). Confirmation pass started (same session).
 - 2026-10-10: confirmation verdict: Codex conditional approve (FA-11's reporting claim, arc 2's stale clause); both applied. check:plans 0 findings. Plan committed as draft, awaiting orchestrator approval.
 - 2026-10-10: orchestrator approval; D-orch-1 to D-orch-3 recorded; merged origin/dev 643c0c9; arc 1 started.
+- 2026-10-10: gate 1.1 pass: lint, typecheck:all, JsonViewer 42/42; the first-document test fails on the base LogsViewer.vue.
