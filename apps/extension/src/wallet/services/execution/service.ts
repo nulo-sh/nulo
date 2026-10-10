@@ -309,6 +309,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
 			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
 		})
 		this.previewSnapshots = new PreviewSnapshots()
@@ -439,6 +440,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			lane: {
 				deleteController: (journalId) => this.lane.deleteController(journalId),
 				acquireSlot: (networkId, queuedJournalId, fence, onEnqueued, originKey) =>

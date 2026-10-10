@@ -161,6 +161,8 @@ export interface DappSendExecutorDeps {
 	getPXE(network: Network): FeeEstimate["pxe"]
 	getAccountContract(profileId: string, chainId: number, accountAddress: string): Promise<FeeEstimate["account"]>
 	getPendingForAccount(account: string): { hash: string }[]
+	/** The account's send epoch (`SendSequencer.epoch`). */
+	sequenceEpoch(chainId: number, account: string): number
 	/** The probe-free validated pipeline (the service's strategy map). */
 	buildAndEstimateValidated(
 		inputOp: { networkId: string; accountAddress: string; actions: Action[]; fee?: FeeOptions },
@@ -309,6 +311,9 @@ export class DappSendExecutor {
 		// Reuse fingerprints bind the POST-PLANNER, PRE-DISCOVERY action set —
 		// the consume side re-derives the same normalization point.
 		const preDiscoveryActions = [...actions]
+		// Read before the build: a send that reaches the node during it may hold this build's notes.
+		const { chainId } = await this.deps.getNetwork(operation.networkId)
+		const sequenceEpoch = this.deps.sequenceEpoch(chainId, operation.accountAddress)
 
 		// Discover-then-estimate via the decorator (the single owner of that
 		// choreography for dApp sends; stage-boundary cancellation preserved
@@ -332,7 +337,7 @@ export class DappSendExecutor {
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
 		const discoveredHashes = discovered.map((d) => d.messageHash)
-		const estimateId = await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes)
+		const estimateId = await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, sequenceEpoch)
 		// `send_transaction`'s confirm skips discovery, so listing what THIS estimate
 		// found would show authorizations confirm never adds.
 		const bound = operation.kind === "aztec_sendTx"
@@ -442,6 +447,7 @@ export class DappSendExecutor {
 		detectedFee: FeeOptions | undefined,
 		built: FeeEstimate,
 		discoveredHashes: readonly string[],
+		sequenceEpoch: number,
 	): Promise<string | undefined> {
 		const { feeSettings } = identity
 		const kind = feeSettings.paymentMethod.kind
@@ -482,6 +488,7 @@ export class DappSendExecutor {
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
 				pendingHashes: this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash),
+				sequenceEpoch,
 				fpcIdentity: built.fpcIdentity,
 				txRequest: built.txRequest,
 				initializesAccount: built.initializesAccount,

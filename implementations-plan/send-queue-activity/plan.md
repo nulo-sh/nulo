@@ -411,7 +411,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 - Pass: every command exits 0, and removing the gate call makes the never-happens cases fail. Check that once, then restore.
 - Layers: lint, typecheck, unit.
 
-#### Phase 1.3: the dApp estimate reuse checks the epoch
+#### Phase 1.3: the dApp estimate reuse checks the epoch ✓
 
 1. Locate the dApp estimate entry. Stash the epoch there, and reject the reuse when it changes.
 2. Add tests in `operation-estimate-reuse.test.ts`:

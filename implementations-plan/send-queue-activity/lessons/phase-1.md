@@ -16,3 +16,9 @@ Composition (`send-order.composition.test.ts`): composed through `ExecutionServi
 Cold-sponsor control: the executor fakes `getFpcImpl`, so the derivation itself is pinned where it lives (`fpc/service-create.test.ts`: the genuine sponsor resolves as protocol on a cold cache) and the strategy side in `strategies-structural.test.ts` (a pinned protocol sponsor takes the fast path without a row read).
 
 Revert check: deleting the `fpc:<feeSpender>` line from `recordedTxKeys` fails four cases (the keys test, the restart sequencer test, both composition cases); restored.
+
+## Phase 1.3: the dApp estimate reuse checks the epoch
+
+- **Read before the build, as the transfer path does.** `estimateOperationFee` resolves the network and reads `sequenceEpoch(chainId, accountAddress)` before `estimateWithDiscovery.estimate`; a read at stash time (after the build) would miss a send that reached the node during the build. The test bumps the epoch inside both build fakes and asserts the stashed value is the pre-build one.
+- **Ladder position:** right after the pending-set check (both local, synchronous), before the live chain read. The ladder's call-order pins in `operation-estimate-reuse.pins.test.ts` gained the `sequenceEpoch` step; a new pin shows an epoch change stops before the chain read with the fixed reason "a send reached the node since the estimate".
+- **Seam:** `dapp-send-executor.ts` changed in three places only (one dep line, the epoch read in `estimateOperationFee`, one parameter and one entry field in `stashOperationEstimate`), away from `runInSlot` and `markJournal`, which dapp-ingress-grants arc 2 and arc 1b edit.

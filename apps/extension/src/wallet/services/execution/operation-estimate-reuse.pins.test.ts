@@ -31,7 +31,15 @@ const REASON = "operation estimate reuse rejected: "
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 const CALL: Action = { kind: "call", contract: "0xtoken", method: "transfer", args: ["0xme", "0xyou", 5] }
 const FPC = { id: "fpc-1", type: 2, address: "0xfpc", chainId: 7, isProtocol: true } as const
-const FULL_LADDER = ["getNetwork", "getPendingForAccount", "getLiveChainIdentity", "getFpcInfo", "getNode", "predictedWorstMinFees"]
+const FULL_LADDER = [
+	"getNetwork",
+	"getPendingForAccount",
+	"sequenceEpoch",
+	"getLiveChainIdentity",
+	"getFpcInfo",
+	"getNode",
+	"predictedWorstMinFees",
+]
 
 function input(feeSettings: FeeSettings = { paymentMethod: { kind: "fpc", fpcId: "fpc-1" } }): OperationFingerprintInput {
 	return {
@@ -67,6 +75,7 @@ function entry(feeSettings?: FeeSettings, overrides: Partial<OperationEstimateRe
 		txCalls: [] as never,
 		pendingPublicAuthwits: [] as never,
 		discoveredHashes: [],
+		sequenceEpoch: 3,
 		builtAt: Date.now(),
 		...overrides,
 	}
@@ -103,6 +112,10 @@ function harness(
 		getPendingForAccount: vi.fn(() => {
 			calls.push("getPendingForAccount")
 			return [{ hash: "0xpending" }]
+		}),
+		sequenceEpoch: vi.fn(() => {
+			calls.push("sequenceEpoch")
+			return 3
 		}),
 		logDebug,
 		...o.deps,
@@ -215,13 +228,20 @@ describe("the ladder's order and reasons", () => {
 		expect(logDebug.mock.calls).toEqual([[`${REASON}pending tx set changed`]])
 	})
 
+	test("a send that reached the node since the build stops before the chain read", async () => {
+		const { reuse, logDebug } = harness()
+		expect(await consumeOnce(reuse, entry(undefined, { sequenceEpoch: 2 }))).toBeUndefined()
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "sequenceEpoch"])
+		expect(logDebug.mock.calls).toEqual([[`${REASON}a send reached the node since the estimate`]])
+	})
+
 	test.each([
 		["l1ChainId alone", { l1ChainId: 2, rollupVersion: 4 }],
 		["rollupVersion alone", { l1ChainId: 1, rollupVersion: 5 }],
 	])("chain identity: %s misses before the FPC read", async (_label, live) => {
 		const { reuse, logDebug } = harness({ live })
 		expect(await consumeOnce(reuse, entry())).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity"])
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "sequenceEpoch", "getLiveChainIdentity"])
 		expect(logDebug.mock.calls).toEqual([[`${REASON}chain identity drift (exact pair mismatch)`]])
 	})
 
@@ -235,7 +255,7 @@ describe("the ladder's order and reasons", () => {
 			},
 		})
 		expect(await consumeOnce(reuse, entry())).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity"])
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "sequenceEpoch", "getLiveChainIdentity"])
 		expect(logDebug.mock.calls).toEqual([[`${REASON}chain identity drift`]])
 	})
 
@@ -248,7 +268,7 @@ describe("the ladder's order and reasons", () => {
 	])("FPC identity: %s alone misses before the node", async (_label, change) => {
 		const { reuse, logDebug } = harness({ fpc: { ...FPC, ...change } })
 		expect(await consumeOnce(reuse, entry())).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity", "getFpcInfo"])
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "sequenceEpoch", "getLiveChainIdentity", "getFpcInfo"])
 		expect(logDebug.mock.calls).toEqual([[`${REASON}fpc identity drift`]])
 	})
 
@@ -267,14 +287,14 @@ describe("the ladder's order and reasons", () => {
 			},
 		})
 		expect(await consumeOnce(reuse, entry())).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity", "getFpcInfo"])
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "sequenceEpoch", "getLiveChainIdentity", "getFpcInfo"])
 		expect(logDebug.mock.calls).toEqual([[`${REASON}fpc row unavailable`]])
 	})
 
 	test("FPC identity: an fpc entry without a snapshot misses before any row read", async () => {
 		const { reuse, logDebug } = harness()
 		expect(await consumeOnce(reuse, entry(undefined, { fpcIdentity: undefined }))).toBeUndefined()
-		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity"])
+		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "sequenceEpoch", "getLiveChainIdentity"])
 		expect(logDebug.mock.calls).toEqual([[`${REASON}fpc identity missing`]])
 	})
 
@@ -282,7 +302,14 @@ describe("the ladder's order and reasons", () => {
 		const fj: FeeSettings = { paymentMethod: { kind: "fj" } }
 		const { reuse } = harness()
 		expect(await consumeOnce(reuse, entry(fj, { fpcIdentity: undefined }))).toBeDefined()
-		expect(calls).toEqual(["getNetwork", "getPendingForAccount", "getLiveChainIdentity", "getNode", "predictedWorstMinFees"])
+		expect(calls).toEqual([
+			"getNetwork",
+			"getPendingForAccount",
+			"sequenceEpoch",
+			"getLiveChainIdentity",
+			"getNode",
+			"predictedWorstMinFees",
+		])
 	})
 
 	test("base fee drift is the last step", async () => {
@@ -304,7 +331,7 @@ describe("the ladder's order and reasons", () => {
 		})
 		reuse.stash("id-1", entry())
 		await expect(reuse.tryConsume("id-1", input(), FENCE)).rejects.toBe(down)
-		expect(calls).toEqual(FULL_LADDER.slice(0, 5))
+		expect(calls).toEqual(FULL_LADDER.slice(0, 6))
 	})
 })
 

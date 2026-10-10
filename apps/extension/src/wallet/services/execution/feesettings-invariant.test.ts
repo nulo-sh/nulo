@@ -52,6 +52,7 @@ function makeExecutor(): DappSendExecutor {
 		getPXE: unreachable as never,
 		getAccountContract: unreachable as never,
 		getPendingForAccount: unreachable as never,
+		sequenceEpoch: unreachable as never,
 		buildAndEstimateValidated: unreachable as never,
 		addTransaction: unreachable as never,
 		recordPendingAuthwits: unreachable as never,
