@@ -22,7 +22,4 @@
 - 2026-10-10: phase 2.3 local gate passed (lint, typecheck:all, test, test:ci-gating, test:release, lint:actions, live stores); waits on the D-orch-7 review before it counts.
 - 2026-10-10: phase 2.3 gate passed: D-orch-7 answered yes on every item by Codex round 1 and the Opus review; their fixes committed (282d857), gates green again; #260 filed for the pre-existing auto-install exposure.
 - 2026-10-10: phase 2.4 stop rule fired (six third-party undeclared imports > three): `hoist = false` reverted, the list commented on #172, which stays open (D21).
-- 2026-10-10: arc 2 merged into dev as 69eab05 (#261); D-orch-8 and D-orch-9 recorded; arcs 3 and 4 branch from dev as two PRs; each rewrites only its own line below, in place, so the two merge clean in either order.
-- 2026-10-10: arc 3 (#185): phase 3.1 gate passed (lint, typecheck:all, test, test:ci-gating, check-no-local-paths); Codex round 1 one Low and Opus five Low/Nit, all accepted; round 2 clean; PR opened against dev.
-- 2026-10-10: arcs 3 and 4 merge independently; whichever lands second merges dev in.
-- 2026-10-10: arc 4 (#182): pending.
+- 2026-10-10: arc 2 merged into dev as 69eab05 (#261); D-orch-8 and D-orch-9 recorded; arcs 3 and 4 branch from dev as two PRs. Neither edits a line of this file or of plan.md that the other edits: each logs its gates in its own `lessons/phase-N.md` and its review under its own phase in plan.md, so the second to land merges dev in without a conflict.

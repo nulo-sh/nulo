@@ -331,6 +331,19 @@ Validation gate (the battery): `bun run audit:vue` (typecheck, unit, lint, build
 
 Validation gate: Fast; Gating; `scripts/check-no-local-paths.sh`. Pass: all exit 0. Layers: lint, unit.
 
+**Review** (Codex gpt-6.1-sol, high, read-only, beside one Opus review). Round 1: Codex one Low, Opus three Low and two Nit, all accepted; round 2 (resumed) **CLEAN**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 | Low. "Would fail every build" overstates: preview builds run `wrangler versions upload`, which applies no routes | Accepted: "every production deploy", in CLAUDE.md and § Arc 3 |
+| O1 | Low. "Reconciles a custom domain only when `routes` lists one" claims more than `wrangler.jsonc:12-14` | Accepted: the bullet mirrors the comment ("leaves an attached domain alone while `routes` names none") |
+| O2 | Low. A STATUS.md append on either branch would conflict | Accepted; the first fix (each arc rewriting its own pre-placed line) still conflicted, as arc 4's review showed with `git merge-tree`. Final: both branches keep the shared block identical and record at disjoint anchors (§ Arcs 3 and 4) |
+| O3 | Low. D-orch-8 leaves § Post-implementation's `<top arc>` undefined with two side-by-side PRs | Accepted: the final cross-arc pass runs on the close-out branch once both merge |
+| O4 | Nit. The status line and STATUS.md called arc 4 built before its branch existed | Accepted: neutral wording |
+| O5 | Nit. § Arc 3 cited `wrangler.jsonc:11-15`; the comment is lines 12-14 | Accepted |
+
+Not changed: the `wrangler.jsonc` comment's own "every build" (outside the two docs this lane may edit, D-orch-9).
+
 ### Arc 4: plans ignore patterns
 
 **Phase 4.1, four more shapes (#182).**
@@ -622,24 +635,9 @@ On `f1c0618..6d5e7ea`. Every accepted round-1 finding is fixed with no regressio
 
 On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same bytes, same HTTP error text, and a null body yields empty bytes as `arrayBuffer()` did. The test routes the API call to the redirect and the storage call to the body, needs the exact limit error, and the small control proves the routing reaches the write. The loop converged in three rounds.
 
-### Arc 3, Codex round 1 (gpt-6.1-sol, high, read-only)
+### Arcs 3 and 4
 
-On `origin/dev...ci-release-supply-docs`, beside one Opus review (same family, read-only). Codex: one Low finding; Opus: three Low and two Nit. Every finding was verified and accepted; the branch was unpushed, so the shared plan commit was rebuilt in place and stays byte-identical to arc 4's.
-
-| # | Finding | Disposition |
-|---|---|---|
-| C1 | Low. "Would fail every build" overstates: preview builds run `wrangler versions upload`, which applies no routes | Accepted: "every production deploy", in CLAUDE.md and § Arc 3 |
-| O1 | Low. "Reconciles a custom domain only when `routes` lists one" claims more than `wrangler.jsonc:12-14` | Accepted: the bullet mirrors the comment ("leaves an attached domain alone while `routes` names none") |
-| O2 | Low. A STATUS.md append on either branch would conflict | Accepted: each arc rewrites only its own pre-placed line, with an unchanged line between them |
-| O3 | Low. D-orch-8 leaves § Post-implementation's `<top arc>` undefined with two side-by-side PRs | Accepted: the final cross-arc pass runs on the close-out branch once both merge |
-| O4 | Nit. The status line and STATUS.md called arc 4 built before its branch existed | Accepted: neutral wording |
-| O5 | Nit. § Arc 3 cited `wrangler.jsonc:11-15`; the comment is lines 12-14 | Accepted |
-
-Round 2 (resumed) on the rebuilt branch: **CLEAN**. Not changed: the `wrangler.jsonc` comment's own "every build" (outside the two docs this lane may edit, D-orch-9).
-
-### Arc 4, Codex rounds (gpt-6.1-sol, high, read-only)
-
-Pending.
+Built in parallel as two PRs off `dev` (D-orch-8). A block both branches insert merges once only while neither edits inside it, so each arc records its Codex rounds and Opus review, with every finding's disposition, under its own phase in § Phases (3.1, 4.1).
 
 ## Post-implementation
 
