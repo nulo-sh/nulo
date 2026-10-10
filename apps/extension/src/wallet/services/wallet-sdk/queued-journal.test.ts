@@ -99,6 +99,22 @@ describe("tryCreateQueuedJournal", () => {
 		expect(await journal.countOperations({ stage: "queued" })).toBe(0)
 	})
 
+	test.each([
+		["a record with no capability", { grantedAt: 1 }],
+		["a transaction grant with no scope", { capability: { type: "transaction" } }],
+	])("skips at debug, never narrowing to the valid grant beside it, when the stored grants hold %s", async (_name, record) => {
+		const { deps, dappSession, journal } = makeDeps()
+		const log = vi.spyOn(deps.logger, "log")
+		dappSession.tryGetDappSessionByOriginAndChain.mockResolvedValueOnce({
+			accounts: ["aztec:1338:0xabc"],
+			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } }, record],
+		})
+		expect(await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)).toBeUndefined()
+		expect(await journal.countOperations({ stage: "queued" })).toBe(0)
+		expect(log.mock.calls.filter(([, level]) => level !== LogLevel.Debug)).toEqual([])
+		expect(log).toHaveBeenCalledWith("wallet-sdk-bg", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
+	})
+
 	test("skips when networkService can't resolve a Network row for the session's chainId", async () => {
 		const { deps, networkSvc, journal } = makeDeps()
 		networkSvc.getNetworksRaw.mockResolvedValueOnce([])
@@ -231,7 +247,7 @@ describe("tryCreateQueuedJournal — record account", () => {
 			dappSession: {
 				tryGetDappSessionByOriginAndChain: vi.fn(async () => ({
 					accounts: [`aztec:1338:${ADDR_B}`, `aztec:1338:${ADDR_A}`],
-					capabilityGrants: [{ capability: { type: "transaction" } }],
+					capabilityGrants: [{ capability: { type: "transaction", scope: "*" } }],
 					dappMetadata: { name: "Example Dapp" },
 				})),
 			} as never,
@@ -409,7 +425,7 @@ describe("tryCreateQueuedJournal — the sender a request names", () => {
 			dappSession: {
 				tryGetDappSessionByOriginAndChain: vi.fn(async () => ({
 					accounts: [`aztec:1338:${ACC2}`, `aztec:1338:${ACC1}`],
-					capabilityGrants: [{ capability: { type: "transaction" } }],
+					capabilityGrants: [{ capability: { type: "transaction", scope: "*" } }],
 					dappMetadata: { name: "Example Dapp" },
 				})),
 			} as never,

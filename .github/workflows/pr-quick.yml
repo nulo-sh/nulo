@@ -28,11 +28,10 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
 
 concurrency:
-  group: pr-quick-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # On a PR only a push's first attempt cancels the run in flight. Any other PR event, and any
-  # re-run of one, queues behind it: a run cancelled on its own head leaves a FAILURE aggregator
-  # there (CI.md, "Concurrency").
-  cancel-in-progress: ${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}
+  # One queue per head commit, so a late run of an older push can neither cancel nor replace the
+  # current head's run; pr-supersede.yml cancels the runs of heads the pull request moved past.
+  group: pr-quick-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 permissions:
   contents: read
@@ -338,6 +337,42 @@ jobs:
             test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
           done
 
+  # Every story lives under the extension build's filter, so that flag decides this job too.
+  build-storybook:
+    name: Build Storybook
+    needs: changes
+    if: needs.changes.outputs.needs-extension-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - uses: ./.github/actions/setup-bun
+      - name: Build
+        env:
+          STORYBOOK_DISABLE_TELEMETRY: "1"
+        run: bun run --cwd apps/extension build-storybook
+
+  # A stable release at or above 1.0.0 is a launch: a promote or Release PR into main at such a version
+  # must leave no «FILL» in the legal documents, while dev stays open to legal drafts. A retarget
+  # starts no run here, so auto-unstick repeats the check before it creates a stable tag.
+  launch-legal:
+    name: Launch legal check
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/setup-bun
+      - name: Refuse a launch with a blank in the legal documents
+        working-directory: packages/legal
+        env:
+          NULO_LAUNCH_GATE: "1"
+        run: bun run test src/launch.test.ts
+
   # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
   # auto-runs on PRs to main, on changes within the `smoke-surface`
   # filter, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
@@ -345,13 +380,14 @@ jobs:
   status:
     name: quality-status
     if: always()
-    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing]
+    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing, build-storybook, launch-legal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Aggregate results
         env:
           EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
           EXTENSION_BUILD: ${{ needs.changes.outputs.needs-extension-build }}
           LANDING_BUILD: ${{ needs.changes.outputs.needs-landing-build }}
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -361,6 +397,8 @@ jobs:
           BUILD_CHROME_RESULT: ${{ needs.build-chrome.result }}
           BUILD_FIREFOX_RESULT: ${{ needs.build-firefox.result }}
           BUILD_LANDING_RESULT: ${{ needs.build-landing.result }}
+          BUILD_STORYBOOK_RESULT: ${{ needs.build-storybook.result }}
+          LAUNCH_LEGAL_RESULT: ${{ needs.launch-legal.result }}
         run: |
           # An exact state machine, not a denylist: each gate must end as its own `if:` says,
           # `success` where it held and `skipped` where it did not, so a gate that never ran
@@ -383,10 +421,14 @@ jobs:
           bool needs-landing-build "$LANDING_BUILD"
           pull_request=false
           if [ "$EVENT" = pull_request ]; then pull_request=true; fi
+          into_main=false
+          if [ "$pull_request" = true ] && [ "$BASE_REF" = main ]; then into_main=true; fi
           expect commitlint "$COMMITLINT_RESULT" "$(ran "$pull_request")"
           expect lint-and-typecheck "$LINT_AND_TYPECHECK_RESULT" success
           expect unit-tests "$UNIT_TESTS_RESULT" success
           expect build-chrome "$BUILD_CHROME_RESULT" "$(ran "$EXTENSION_BUILD")"
           expect build-firefox "$BUILD_FIREFOX_RESULT" "$(ran "$EXTENSION_BUILD")"
           expect build-landing "$BUILD_LANDING_RESULT" "$(ran "$LANDING_BUILD")"
+          expect build-storybook "$BUILD_STORYBOOK_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect launch-legal "$LAUNCH_LEGAL_RESULT" "$(ran "$into_main")"
           echo "Every gate ended as its condition asks (a build whose filter did not trip is skipped)."

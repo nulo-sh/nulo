@@ -192,12 +192,7 @@ const fullBackupCta = readonly({
 /** Listeners — popup-only full-backup Enter shortcut. */
 const onKeydown = (e) => {
 	if (e.defaultPrevented || !isPopupSubmitKey(e)) return
-	const action = resolveFullBackupEnterAction({
-		selectedBackup: selectedBackup.value,
-		restoreStatus: restoreStatus.value,
-		isRestoreHasErrors: isRestoreHasErrors.value,
-		isRetrying: isRetryingAccountState.value,
-	})
+	const action = resolveFullBackupEnterAction(fullBackupCta)
 	if (action === "decrypt") decryptBackup()
 	else if (action === "restore") restoreBackup()
 	else if (action === "continue") continueImport()

@@ -19,7 +19,8 @@
  *      Once shipped, the footprint is frozen: a crash-resume refuses a
  *      journal whose refs differ from the registered migration's.
  *   5. Keep `up` IDEMPOTENT (guard with `hasProperty`/presence checks) — the
- *      test harness runs it twice and asserts equality.
+ *      test harness runs it twice and asserts equality. Give it a pre-shape
+ *      seed in `registry.test.ts`'s `SEEDS`, which `up` must change.
  *   6. **HOSTILE-INPUT RULE (standing):** `up()` input is UNTRUSTED. The
  *      migration engine also runs over imported backup blobs, whose bytes an
  *      attacker fully controls (a plain-backup checksum is not

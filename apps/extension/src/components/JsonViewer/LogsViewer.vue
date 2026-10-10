@@ -22,7 +22,7 @@ import { useToast } from "@/composables/toast"
 const { openToast } = useToast()
 
 /** Logs helpers */
-import { formatLogs, formatSingleLog } from "./logs-format"
+import { formatLogs, formatSingleLog, logsDocument } from "./logs-format"
 import { buildLogsCsv } from "./logs-csv"
 import { logDecorationsField } from "./logs-decoration"
 import { useLogFilters } from "./useLogFilters"
@@ -107,7 +107,7 @@ function scrollToBottom() {
 
 function updateEditorContent() {
 	if (!view) return
-	const newDoc = `${formatLogs(filteredLogs.value)}\n`
+	const newDoc = logsDocument(filteredLogs.value)
 	const currentDoc = view.state.doc.toString()
 	if (currentDoc === newDoc) return
 
@@ -222,7 +222,7 @@ onMounted(async () => {
 	view = new EditorView({
 		parent: editorRef.value,
 		state: EditorState.create({
-			doc: formatLogs(logs.value),
+			doc: logsDocument(logs.value),
 			extensions: [
 				keymap.of([...defaultKeymap, ...searchKeymap]),
 				...createLoggerTheme(),

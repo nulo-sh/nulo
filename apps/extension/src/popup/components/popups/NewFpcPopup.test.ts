@@ -181,3 +181,30 @@ describe("NewFpcPopup — the processing error note", () => {
 		expect(w.emitted("onClose")).toBeFalsy()
 	})
 })
+
+describe("NewFpcPopup — duplicate names", () => {
+	async function typeName(w: VueWrapper, name: string) {
+		await w.findAll("input")[0].setValue(name)
+		await flushPromises()
+		return {
+			warns: w.text().includes("Already exist"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	test("a saved name with outer spaces added warns and keeps Add disabled; another case or an unnamed FPC does not", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([
+			{ id: "f1", name: "Alice", address: `0x${"1".repeat(64)}` },
+			{ id: "f2", address: `0x${"2".repeat(64)}` },
+		])
+		const w = await mountShown()
+		await w.findAll("input")[1].setValue(VALID_HEX)
+		expect(await typeName(w, "Alice ")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, " Alice")).toEqual({ warns: true, disabled: true })
+		expect(await typeName(w, "alice")).toEqual({ warns: false, disabled: false })
+		expect(await typeName(w, "Bob ")).toEqual({ warns: false, disabled: false })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.addFpc).toHaveBeenCalledWith("net-1", "default_sponsored", VALID_HEX, "Bob ")
+	})
+})

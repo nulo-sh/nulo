@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { bytesToHex, fromBase64, toBase64 } from "./encoding"
+import { bytesToHex, fromBase64, fromHex, toBase64 } from "./encoding"
 
 describe("bytesToHex", () => {
 	test("lowercase zero-padded; parity with the prior map+join idiom", () => {
@@ -8,6 +8,28 @@ describe("bytesToHex", () => {
 		expect(bytesToHex(bytes)).toBe([...bytes].map((b) => b.toString(16).padStart(2, "0")).join(""))
 	})
 	test("empty", () => expect(bytesToHex(new Uint8Array())).toBe(""))
+})
+
+describe("fromHex", () => {
+	test("decodes either case, the empty string, and round-trips bytesToHex", () => {
+		expect([...fromHex("00ff0A1b")]).toEqual([0, 255, 10, 27])
+		expect(fromHex("")).toEqual(new Uint8Array())
+		const bytes = new Uint8Array(256).map((_, i) => i)
+		expect(fromHex(bytesToHex(bytes))).toEqual(bytes)
+	})
+
+	test.each([
+		["an odd length", "abc"],
+		["a non-hex character", "0g"],
+		["leading whitespace", " 0a"],
+		["a trailing newline", "0a\n"],
+	])("refuses %s", (_, hex) => {
+		expect(() => fromHex(hex)).toThrow("invalid hex")
+	})
+
+	test("refuses a non-string whose text would pass", () => {
+		expect(() => fromHex(["0a"] as unknown as string)).toThrow("invalid hex")
+	})
 })
 
 describe("toBase64 / fromBase64", () => {

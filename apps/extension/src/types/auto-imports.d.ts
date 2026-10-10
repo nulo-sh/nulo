@@ -13,6 +13,7 @@ declare global {
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
   const AccessLevel: typeof import('../utils/confirmation-policies').AccessLevel
+  const ActivationSupersededError: typeof import('../composables/unlockWait').ActivationSupersededError
   const AssemblyAbortedError: typeof import('../utils/full-backup-helpers').AssemblyAbortedError
   const BootstrapFailedError: typeof import('../composables/unlockWait').BootstrapFailedError
   const CHAIN_IDS: typeof import('../utils/chain-ids').CHAIN_IDS
@@ -296,6 +297,7 @@ declare global {
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
   const sameContactName: typeof import('../utils/contact-name').sameContactName
+  const sameStoredName: typeof import('../utils/account-name').sameStoredName
   const sanitizeContactName: typeof import('../utils/contact-name').sanitizeContactName
   const sanitizeJournalSubtitle: typeof import('../utils/journal-state').sanitizeJournalSubtitle
   const sanitizePinMap: typeof import('../composables/usePinnedTokens').sanitizePinMap
@@ -320,6 +322,7 @@ declare global {
   const storageLocalGet: typeof import('../utils/storage').storageLocalGet
   const storageLocalRemove: typeof import('../utils/storage').storageLocalRemove
   const storageLocalSet: typeof import('../utils/storage').storageLocalSet
+  const storedNameKey: typeof import('../utils/account-name').storedNameKey
   const stringCompare: typeof import('../utils/string').stringCompare
   const toRaw: typeof import('vue').toRaw
   const toRef: typeof import('vue').toRef
@@ -420,7 +423,7 @@ declare global {
   export type { ImportCompletionDeps, ImportCompletionOutcome } from '../composables/completeImportWithRecovery'
   import('../composables/completeImportWithRecovery')
   // @ts-ignore
-  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, NetworkRestoreClient, AccountRestoreClient, RestoredNetwork, RestoreData, SliceRestoreClient, AccountStateRetryContext } from '../composables/full-backup-restore'
+  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, NetworkRestoreClient, AccountRestoreClient, RestoredNetwork, RestoreData, BackupProfile, SliceRestoreClient, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'
@@ -435,7 +438,7 @@ declare global {
   export type { FooterBox } from '../composables/snackInset'
   import('../composables/snackInset')
   // @ts-ignore
-  export type { UnlockTimeoutError, BootstrapFailedError, ProfileActivationWithFailureSubject } from '../composables/unlockWait'
+  export type { UnlockTimeoutError, BootstrapFailedError, ActivationSupersededError, ProfileActivationWithFailureSubject, ActivationWaitOptions } from '../composables/unlockWait'
   import('../composables/unlockWait')
   // @ts-ignore
   export type { ArrivalToken, ArrivalChip, ArrivalsServiceLike, UseArrivalsOptions, Arrivals } from '../composables/useArrivals'
@@ -626,6 +629,7 @@ declare module 'vue' {
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
     readonly AccessLevel: UnwrapRef<typeof import('../utils/confirmation-policies')['AccessLevel']>
+    readonly ActivationSupersededError: UnwrapRef<typeof import('../composables/unlockWait')['ActivationSupersededError']>
     readonly AssemblyAbortedError: UnwrapRef<typeof import('../utils/full-backup-helpers')['AssemblyAbortedError']>
     readonly BootstrapFailedError: UnwrapRef<typeof import('../composables/unlockWait')['BootstrapFailedError']>
     readonly CHAIN_IDS: UnwrapRef<typeof import('../utils/chain-ids')['CHAIN_IDS']>
@@ -909,6 +913,7 @@ declare module 'vue' {
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>
     readonly sameContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['sameContactAddress']>
     readonly sameContactName: UnwrapRef<typeof import('../utils/contact-name')['sameContactName']>
+    readonly sameStoredName: UnwrapRef<typeof import('../utils/account-name')['sameStoredName']>
     readonly sanitizeContactName: UnwrapRef<typeof import('../utils/contact-name')['sanitizeContactName']>
     readonly sanitizeJournalSubtitle: UnwrapRef<typeof import('../utils/journal-state')['sanitizeJournalSubtitle']>
     readonly sanitizePinMap: UnwrapRef<typeof import('../composables/usePinnedTokens')['sanitizePinMap']>
@@ -933,6 +938,7 @@ declare module 'vue' {
     readonly storageLocalGet: UnwrapRef<typeof import('../utils/storage')['storageLocalGet']>
     readonly storageLocalRemove: UnwrapRef<typeof import('../utils/storage')['storageLocalRemove']>
     readonly storageLocalSet: UnwrapRef<typeof import('../utils/storage')['storageLocalSet']>
+    readonly storedNameKey: UnwrapRef<typeof import('../utils/account-name')['storedNameKey']>
     readonly stringCompare: UnwrapRef<typeof import('../utils/string')['stringCompare']>
     readonly toRaw: UnwrapRef<typeof import('vue')['toRaw']>
     readonly toRef: UnwrapRef<typeof import('vue')['toRef']>

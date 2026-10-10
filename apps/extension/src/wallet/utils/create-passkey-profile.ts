@@ -21,9 +21,16 @@ export interface CreatePasskeyProfileDeps {
 	createPasskeyProfile: (name: string, credData: PasskeyCredentialData) => Promise<ProfileInfo>
 }
 
+/** A credential an earlier attempt minted under `userHandle` (its profile id) but could not confirm. */
+export interface SavedPasskeyCredential {
+	credentialId: string
+	userHandle: string
+}
+
 /**
  * Create a passkey-typed profile with a single retry on
- * `ProfileIdConflictError`.
+ * `ProfileIdConflictError`. With `saved`, the first attempt confirms that credential under its own
+ * id instead of minting another; a conflict on that id falls back to a fresh id and a fresh create.
  *
  * The pre-reserved id can be claimed by another flow during the
  * WebAuthn prompt. On conflict, we re-run the entire ceremony with a
@@ -36,14 +43,27 @@ export interface CreatePasskeyProfileDeps {
  * bootstrap orchestration, routing, etc.
  *
  * @throws ProfileIdConflictError if both attempts hit the conflict.
- * @throws UserRejectedError if the ceremony was cancelled.
+ * @throws UserRejectedError if the ceremony was cancelled before a passkey was created; a later
+ *   cancel arrives as `PasskeyUnconfirmedError` with that cause.
  * @throws Other Error from the service-client.
  */
-export async function createPasskeyProfileWithRetry(name: string, deps: CreatePasskeyProfileDeps): Promise<ProfileInfo> {
+export async function createPasskeyProfileWithRetry(
+	name: string,
+	deps: CreatePasskeyProfileDeps,
+	saved?: SavedPasskeyCredential,
+): Promise<ProfileInfo> {
 	const MAX_RETRIES = 1
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-		const profileId = await deps.generateProfileId()
-		const credData = await deps.runCeremony({ mode: "create", userHandle: profileId, name, step: "create", profileName: name })
+		const pinned = attempt === 0 ? saved : undefined
+		const profileId = pinned?.userHandle ?? (await deps.generateProfileId())
+		const credData = await deps.runCeremony({
+			mode: "create",
+			userHandle: profileId,
+			name,
+			step: "create",
+			profileName: name,
+			credentialId: pinned?.credentialId,
+		})
 		try {
 			return await deps.createPasskeyProfile(name, credData)
 		} catch (e) {

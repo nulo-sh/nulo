@@ -22,6 +22,8 @@ vi.mock("@/utils/browser-surface", () => ({ passkeyNeedsOwnWindow: vi.fn(() => f
 import { managers } from "@/utils/core"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
 import { createPasskeyProfileWithRetry } from "@/wallet/utils/create-passkey-profile"
+import { PasskeyPrfError, PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
+import { ActivationSupersededError, BootstrapFailedError, UnlockTimeoutError } from "./unlockWait"
 import { useProfileCreateFlow, type UseProfileCreateFlowOptions } from "./useProfileCreateFlow"
 
 const profileApi = managers.profile as unknown as Record<string, ReturnType<typeof vi.fn>>
@@ -216,17 +218,64 @@ describe("useProfileCreateFlow", () => {
 		expect(flow.strengthHint.value).toBe("Strong password")
 	})
 
-	test("latch stays set if onCreated throws (matches popup 'Network not set')", async () => {
-		const { flow } = makeFlow({
-			onCreated: vi.fn(async () => {
-				throw new Error("Network not set")
-			}),
+	describe("passkey retry after a created-but-unconfirmed credential", () => {
+		const saved = { credentialId: "Y3JlZA==", userHandle: "saved-id" }
+		const notConfirmed = () =>
+			new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new DOMException("no", "NotAllowedError"))
+		const noPrf = () =>
+			new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new PasskeyPrfError("Passkey PRF not available"))
+
+		async function attempt(flow: ReturnType<typeof makeFlow>["flow"], name: string) {
+			flow.profileName.value = name
+			flow.authMethod.value = "passkey"
+			await flow.handleCreate()
+			return passkeyRetry.mock.calls.at(-1)?.[2]
+		}
+
+		test("a retry after 'not confirmed' confirms the saved credential; a second refusal keeps it", async () => {
+			const { flow } = makeFlow()
+			passkeyRetry.mockRejectedValueOnce(notConfirmed()).mockRejectedValueOnce(notConfirmed())
+			expect(await attempt(flow, "MyProfile")).toBeUndefined()
+			expect(await attempt(flow, "MyProfile")).toEqual(saved)
+			expect(await attempt(flow, "MyProfile")).toEqual(saved)
+			expect(await attempt(flow, "MyProfile")).toBeUndefined()
 		})
+
+		test("a cancel during the confirmation stays silent and keeps the credential for the retry", async () => {
+			const { flow, opts } = makeFlow()
+			passkeyRetry.mockRejectedValueOnce(new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new UserRejectedError()))
+			await attempt(flow, "MyProfile")
+			expect(await attempt(flow, "MyProfile")).toEqual(saved)
+			expect(opts.openToast).not.toHaveBeenCalled()
+			expect(opts.notifyCreateFailed).not.toHaveBeenCalled()
+		})
+
+		test.each([
+			["the authenticator gave no PRF", noPrf, "MyProfile"],
+			["the name changed", notConfirmed, "Renamed"],
+		])("control: a retry after %s runs a fresh create", async (_label, failure, retryName) => {
+			const { flow } = makeFlow()
+			passkeyRetry.mockRejectedValueOnce(failure())
+			await attempt(flow, "MyProfile")
+			expect(await attempt(flow, retryName)).toBeUndefined()
+		})
+	})
+
+	test.each([
+		["a plain error", new Error("Network not set"), "other"],
+		["a start that never came", new UnlockTimeoutError(), "timeout"],
+		["a failed bootstrap", new BootstrapFailedError("boom"), "bootstrap-failed"],
+		["another profile opened", new ActivationSupersededError(), "superseded"],
+	])("an activation that fails with %s keeps the latch and logs only its category", async (_label, error, reason) => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+		const { flow } = makeFlow({ onCreated: vi.fn(async () => Promise.reject(error)) })
 		flow.profileName.value = "MyProfile"
 		flow.password.value = "password123"
 		flow.repeatedPassword.value = "password123"
-		await expect(flow.handleCreate()).rejects.toThrow("Network not set")
+		await expect(flow.handleCreate()).resolves.toBeUndefined()
 		expect(flow.isCreating.value).toBe(true)
+		expect(warn).toHaveBeenCalledWith("profile activation failed", { reason })
+		warn.mockRestore()
 	})
 
 	test("dispose() is callable and the composable registers no onUnmounted", () => {

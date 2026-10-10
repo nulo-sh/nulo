@@ -50,6 +50,9 @@ export type PasskeyRequest = PasskeyDisplay &
 				/** Profile name — slugified into the WebAuthn credential label
 				 *  (`user.name`/`displayName`) at registration. Cosmetic only. */
 				name: string
+				/** A credential an earlier attempt of this create minted but could not confirm: the
+				 *  ceremony confirms it instead of minting another. Set only by the in-page create. */
+				credentialId?: string
 		  }
 		| {
 				mode: "get"

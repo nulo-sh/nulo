@@ -141,7 +141,7 @@ describe("copyFor", () => {
 		expect(copyFor({ kind: "downloading", info: {} }).detail).toContain("one-time download")
 	})
 
-	test("permission-blocked → Presto's title and three steps on onboarding; the compact variant on settings", () => {
+	test("permission-blocked → Nulo's own title and three steps on onboarding; the compact variant on settings", () => {
 		const onboarding = copyFor({ kind: "permission-blocked", info: {} })
 		expect(onboarding.title).toBe("Your browser blocked local access")
 		expect(onboarding.steps).toHaveLength(3)

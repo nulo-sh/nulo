@@ -10,7 +10,7 @@ import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { CONTACT_SERVICE_NAME } from "@/wallet/services/contact/spec"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
-import { ProfileServiceClient, type RestoreSecret } from "@/wallet/services/profile/client"
+import { type ProfileInfo, ProfileServiceClient, type RestoreSecret } from "@/wallet/services/profile/client"
 import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/client"
 import { TOKEN_BALANCE_SERVICE_NAME } from "@/wallet/services/token-balance/spec"
 import { TransactionServiceClient } from "@/wallet/services/transaction/client"
@@ -31,6 +31,7 @@ import { maxBackupSchemaVersion, migrateBackupData } from "@/wallet/services/bac
 import {
 	type AccountStateRetryContext,
 	applyOutcome,
+	type BackupProfile,
 	buildRestoreSecret,
 	type RestoreData,
 	type RestoreIo,
@@ -281,7 +282,7 @@ function buildSliceClients(): Array<{ name: string; client: SliceRestoreClient }
  * commit).
  */
 async function restoreProfileStep(
-	profile: { id: string; name: string; type: "password" | "passkey" },
+	profile: BackupProfile,
 	name: string,
 	restoreSecret: RestoreSecret,
 	credentialData: PasskeyCredentialData | undefined,
@@ -289,7 +290,8 @@ async function restoreProfileStep(
 	io: RestoreIo,
 ): Promise<{ id: string; restoreError?: unknown } | null> {
 	const { profileService, opts } = deps
-	const profileForRestore = { ...profile, name }
+	// The service judges the unchecked fields: the type against the restore secret, the id's shape.
+	const profileForRestore = { ...profile, name } as ProfileInfo
 	const runRestore = () =>
 		profileService.restore(profileForRestore, restoreSecret, opts.password.value, credentialData, opts.allowDuplicate?.value)
 	const newProfile = opts.confirmDuplicate ? await opts.confirmDuplicate(runRestore) : await runRestore()
@@ -320,7 +322,7 @@ async function executeRestore(
 	const { data, backup } = validated
 	const { profileService, networkService, opts } = deps
 	const masterKey = backup["master-key"] as string
-	const profile = data.profile as { id: string; name: string; type: "password" | "passkey" }
+	const profile = data.profile as BackupProfile
 
 	// Before the passkey ceremony, so a name the user must fix never costs a ceremony.
 	const name = await opts.resolveProfileName(sanitizedBackupName(profile.name))

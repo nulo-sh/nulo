@@ -84,7 +84,8 @@ manifest, not the history row's date), so change them together:
 
 Then:
 
-- [ ] `git grep -n "«FILL" -- legal/` prints nothing
+- [ ] `git grep -n "«FILL" -- legal/terms.md legal/privacy.md` prints nothing (`legal/README.md`
+      names the placeholder in prose). The `launch-legal` check refuses the 1.0.0 Release PR until it does
 - [ ] Both listing URLs in `legal/terms.md` § 1 open the live listings (a store serves an item's
       public page only once it has published it)
 - [ ] `bun run --cwd packages/legal test` and `bun run --cwd apps/landing test` are green

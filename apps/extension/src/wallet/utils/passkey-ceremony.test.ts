@@ -33,6 +33,10 @@ describe("buildCreateOptions", () => {
 		expect(toHex(opts.user.id)).toBe(ID)
 	})
 
+	it.each(["a3f29b1", "a3f29b1x", " a3f29b14"])("rejects the malformed handle %j instead of truncating user.id", async (handle) => {
+		await expect(buildCreateOptions(handle, "Alice")).rejects.toThrow("invalid hex")
+	})
+
 	it("keeps the PRF eval input = SHA-256('nulo:profile:v1')", async () => {
 		const opts = await buildCreateOptions(ID, "Alice")
 		const first = opts.extensions?.prf?.eval?.first
@@ -165,6 +169,22 @@ describe("runPasskeyCeremony in create mode", () => {
 		const cause = (await unconfirmed()).cause
 		expect(cause).toBeInstanceOf(PasskeyPrfError)
 		expect((cause as Error).message).toBe("Passkey PRF has no results")
+	})
+
+	it("with a saved credential: no new credential is created, and a refused confirmation keeps the same id", async () => {
+		const dismissed = new DOMException("not allowed", "NotAllowedError")
+		get.mockRejectedValue(dismissed)
+		const err = await runPasskeyCeremony({ ...CREATE_REQUEST, credentialId: b64(RAW_ID) }).catch((e: unknown) => e)
+		expect(create).not.toHaveBeenCalled()
+		expect(err).toBeInstanceOf(PasskeyUnconfirmedError)
+		expect(err).toMatchObject({ credentialId: b64(RAW_ID), userHandle: ID, cause: dismissed })
+	})
+
+	it("with a saved credential: the confirmation returns its PRF under the registration handle", async () => {
+		get.mockResolvedValue(withPrfOnGet())
+		const data = await runPasskeyCeremony({ ...CREATE_REQUEST, credentialId: b64(RAW_ID) })
+		expect(data).toEqual({ id: b64(RAW_ID), prf: b64(PRF_AT_GET), userHandle: ID })
+		expect(create).not.toHaveBeenCalled()
 	})
 
 	it("forwards the abort signal to both ceremonies", async () => {
