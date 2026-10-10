@@ -8,3 +8,5 @@
 - 2026-10-10: confirmation resume: approve (one Low accepted). Panel converged; plan committed on the worktree branch, awaiting the orchestrator.
 - 2026-10-10: approved by the orchestrator (D-orch-1 to D-orch-3: no stack, arc 1 only, D7 asked first); merged dev 6201f8b (#267's host-registry runner, D9 satisfied). Arc 1 phase 1.1 starting.
 - 2026-10-10: phase 1.1 gate (Fast: lint, typecheck:all, test 726 files) pass; guard + 17 unit cases.
+- 2026-10-10: phase 1.2 STOP RULE: whole smoke on Chrome behind the guard fails 10 tests in 6 files; same files pass unguarded and fail with only lb.drpc.live refused in-browser (lessons/phase-1.md). Codex r1 reject (5 findings, Q1/Q2 yes), Opus approve (7 Low, Q1/Q2 yes); fixes in 6de2f34. Panel consulted on the stop rule.
+- 2026-10-10: Firefox whole smoke behind the guard: the same 10 node-bound failures plus 3 in `passkey-toolbar-panel` (passes unguarded). Local 400-stub probe passes Opus's conditions on both browsers (31/32 Firefox, 26/27 Chrome, only the fee picker). Codex, re-consulted with the probe: option 2 plus a seeded-sponsor fixture for the picker (5/5 on both browsers). Decision D23-D25; building option 2.
