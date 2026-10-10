@@ -202,9 +202,9 @@ const withTaskFlags = (tb) => ({
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
 	fetchTokenBalances,
-	markDirty,
-	inActiveScope,
+	onBalanceAdded,
 	onBalanceUpdated,
+	onBalanceDeleted,
 	dispose: disposeBalances,
 } = useTokenBalanceSnapshot({
 	client: tokenBalanceService,
@@ -220,20 +220,6 @@ const {
 tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
-function onBalanceAdded(tb) {
-	if (!inActiveScope(tb)) return
-	markDirty()
-	if (tokenBalances.value.some((_tb) => _tb.id === tb.id)) return
-
-	tokenBalances.value.push(withTaskFlags(tb))
-}
-function onBalanceDeleted(tb) {
-	if (inActiveScope(tb)) markDirty()
-	const idx = tokenBalances.value.findIndex((_tb) => _tb.id === tb.id)
-	if (idx !== -1) {
-		tokenBalances.value.splice(idx, 1)
-	}
-}
 
 const journalService = new OperationJournalServiceClient()
 journalService.onOperationAdded.add(onJournalAdded)

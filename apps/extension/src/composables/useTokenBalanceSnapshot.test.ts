@@ -173,6 +173,48 @@ describe("useTokenBalanceSnapshot", () => {
 		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(4)
 	})
 
+	test("an add for a listed id adds nothing; a new id lands through mapRow", async () => {
+		const s = setup({ mapRow: (r) => ({ ...r, mapped: true }) as never })
+		s.client.getTokenBalances.mockResolvedValue([row(1)])
+		await s.snap.fetchTokenBalances()
+		const settled = s.rows.value[0]
+		s.snap.onBalanceAdded(row(1))
+		expect(s.rows.value).toEqual([settled])
+		s.snap.onBalanceAdded(row(2))
+		expect(s.rows.value).toEqual([settled, { ...row(2), mapped: true }])
+	})
+
+	test("an out-of-scope add lands nothing and leaves a run in flight clean; an in-scope one marks it", async () => {
+		const s = setup()
+		const quiet = held<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(quiet.promise)
+		const p1 = s.snap.fetchTokenBalances()
+		s.snap.onBalanceAdded(row(7, 2))
+		s.snap.onBalanceAdded(row(8, 1, "0xother"))
+		quiet.resolve([row(1)])
+		await p1
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(1)
+		expect(ids(s.rows)).toEqual([1])
+
+		const stale = held<TokenBalanceInfo[]>()
+		s.client.getTokenBalances.mockReturnValueOnce(stale.promise).mockResolvedValueOnce([row(1), row(9)])
+		const p2 = s.snap.fetchTokenBalances()
+		s.snap.onBalanceAdded(row(9))
+		stale.resolve([row(1)])
+		await p2
+		expect(s.client.getTokenBalances).toHaveBeenCalledTimes(3)
+		expect(ids(s.rows)).toEqual([1, 9])
+	})
+
+	test("a delete removes every copy of its id", async () => {
+		const s = setup()
+		s.client.getTokenBalances.mockResolvedValue([row(1), row(2)])
+		await s.snap.fetchTokenBalances()
+		s.rows.value.push(row(1))
+		s.snap.onBalanceDeleted(row(1))
+		expect(ids(s.rows)).toEqual([2])
+	})
+
 	test("dispose drops the run in flight, clears the retry and removes the connect listener", async () => {
 		const s = setup()
 		s.client.getTokenBalances.mockRejectedValueOnce(new Error("port closed"))
