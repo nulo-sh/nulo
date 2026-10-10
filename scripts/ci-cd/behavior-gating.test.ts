@@ -418,6 +418,17 @@ describe("CI behavior-gating guard", () => {
 		expect(build?.env?.STORYBOOK_DISABLE_TELEMETRY).toBe("1")
 	})
 
+	test("every pull request into main runs the launch check with its live assertion switched on", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
+		const job = wf.jobs["launch-legal"]
+		expect(job.if).toBe("github.event_name == 'pull_request' && github.base_ref == 'main'")
+		const check = job.steps.find((step: { run?: string }) => step.run?.includes("launch.test.ts"))
+		expect(check?.["working-directory"]).toBe("packages/legal")
+		expect(check?.env?.NULO_LAUNCH_GATE, "without it the live assertion skips and the job passes").toBe("1")
+		expect(wf.jobs.status.needs).toContain("launch-legal")
+	})
+
 	test("landing build covers the landing graph and the documents it renders, and is wired into the aggregator", () => {
 		assertGraphCovered(quick.landing, "landing", "landing")
 		expect(quick.landing, "a Terms edit must rebuild the pages generated from it").toContain("legal/**")

@@ -354,6 +354,25 @@ jobs:
           STORYBOOK_DISABLE_TELEMETRY: "1"
         run: bun run --cwd apps/extension build-storybook
 
+  # A stable release at or above 1.0.0 is a launch: a promote or Release PR into main at such a version
+  # must leave no «FILL» in the legal documents, while dev stays open to legal drafts. A retarget
+  # starts no run here, so auto-unstick repeats the check before it creates a stable tag.
+  launch-legal:
+    name: Launch legal check
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/setup-bun
+      - name: Refuse a launch with a blank in the legal documents
+        working-directory: packages/legal
+        env:
+          NULO_LAUNCH_GATE: "1"
+        run: bun run test src/launch.test.ts
+
   # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
   # auto-runs on PRs to main, on changes within the `smoke-surface`
   # filter, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
@@ -361,13 +380,14 @@ jobs:
   status:
     name: quality-status
     if: always()
-    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing, build-storybook]
+    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing, build-storybook, launch-legal]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Aggregate results
         env:
           EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
           EXTENSION_BUILD: ${{ needs.changes.outputs.needs-extension-build }}
           LANDING_BUILD: ${{ needs.changes.outputs.needs-landing-build }}
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -378,6 +398,7 @@ jobs:
           BUILD_FIREFOX_RESULT: ${{ needs.build-firefox.result }}
           BUILD_LANDING_RESULT: ${{ needs.build-landing.result }}
           BUILD_STORYBOOK_RESULT: ${{ needs.build-storybook.result }}
+          LAUNCH_LEGAL_RESULT: ${{ needs.launch-legal.result }}
         run: |
           # An exact state machine, not a denylist: each gate must end as its own `if:` says,
           # `success` where it held and `skipped` where it did not, so a gate that never ran
@@ -400,6 +421,8 @@ jobs:
           bool needs-landing-build "$LANDING_BUILD"
           pull_request=false
           if [ "$EVENT" = pull_request ]; then pull_request=true; fi
+          into_main=false
+          if [ "$pull_request" = true ] && [ "$BASE_REF" = main ]; then into_main=true; fi
           expect commitlint "$COMMITLINT_RESULT" "$(ran "$pull_request")"
           expect lint-and-typecheck "$LINT_AND_TYPECHECK_RESULT" success
           expect unit-tests "$UNIT_TESTS_RESULT" success
@@ -407,4 +430,5 @@ jobs:
           expect build-firefox "$BUILD_FIREFOX_RESULT" "$(ran "$EXTENSION_BUILD")"
           expect build-landing "$BUILD_LANDING_RESULT" "$(ran "$LANDING_BUILD")"
           expect build-storybook "$BUILD_STORYBOOK_RESULT" "$(ran "$EXTENSION_BUILD")"
+          expect launch-legal "$LAUNCH_LEGAL_RESULT" "$(ran "$into_main")"
           echo "Every gate ended as its condition asks (a build whose filter did not trip is skipped)."

@@ -1,7 +1,7 @@
 ---
 plan: ci-release-supply
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in progress
+status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 merged (#252), arc 2 in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -280,7 +280,7 @@ Validation gate: Fast; Gating; Release; Actions. Pass: all exit 0; the planted f
 
 ### Arc 2: scripts and installs
 
-**Phase 2.1, the launch gate (#183).**
+**Phase 2.1, the launch gate (#183).** ✓
 1. Add `packages/legal/src/launch.ts` and `launch.test.ts`. Read `legal/<doc>.md` for each document the package's manifest lists; do not glob `legal/`.
 2. Unit cases: `1.0.0` with «FILL» in Terms is refused and names the file and line; `2.1.0` with «FILL» in Privacy is refused. Controls: `0.30.2` with «FILL», `1.0.0-rc.1` with «FILL», and a clean `1.0.0` all pass.
 3. Add the live assertion under `NULO_LAUNCH_GATE=1`.
@@ -448,6 +448,9 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D-orch-2 | Arc 1 only for this run; nothing of arcs 2 to 5 is built. OA-1, OA-2 and OA-3 sit on the owner's decision page 5; none touches arc 1 | The orchestrator's scope call | — |
 | D-orch-3 | A3 approved: the probe pushes the scratch branch `ci-release-supply-probe` to `nulo-sh/nulo` and deletes it once the readings are recorded (`git ls-remote origin ci-release-supply-probe` prints nothing before the arc ends); nothing is pushed to `dev`, `main` or a `v*` tag. A6 accepted: the deterministic battery stands in for the soak in arc 2 | The orchestrator's answers to A3 and A6 | — |
 | D-orch-4 | The final pass's unreviewed arc-1 fixes come first: the first Codex round and the Opus review are asked, explicitly and before anything else, about D2 (list, read, revalidate; the force-push rewind), D3 (no fallback on the live label read; the `true`/`false` refusal) and D5 (rule 1's fresh `status` at the re-run's attempt; the skipped-matrix probe cases). Phase 1.3's gate counts as passed only once their answers are recorded under Audit verdicts | The final Codex pass rejected twice and its last fixes were never re-reviewed | — |
+| D-orch-5 | After a squash merge an arc branches from `dev`: arc 2's `ci-release-supply-scripts` starts at `origin/dev` c0e1e69 (#252), whose tree equals arc 1's last head | The orchestrator's delivery call; arc 1's branch history is not in `dev` after the squash, so branching from it would replay it | Supersedes "later arcs branch from arc 1's branch" in D-orch-1 |
+| D-orch-6 | Arc 2 only for this run, with the owner's asks in their "what ships now" form: OA-1 option B (today's onboarding title kept as Nulo's own string, page 5 P5-05), OA-3 option A (PRs into `main` only, plus the `auto-unstick` preflight, page 5 P5-06). Nothing of arcs 3, 4 or 5 is built | The orchestrator's scope call | — |
+| D-orch-7 | The unreviewed verifier fix comes first: before phase 2.3's gate counts as passed, the first Codex round and the Opus review are each asked, explicitly and first, whether `fetchVerified` as exported keeps every check the publish path makes (digest, `SHASUMS256.txt`, the attestation, the frozen pre-attestation list) for the store-copy caller, with `attach-assets-run.test.ts`'s call-order assertion unchanged; their answers go under Audit verdicts | The planning panel's last Codex round rejected on that fix and it was applied unreviewed | — |
 | D13 | The `live` step runs `scripts/ci-cd/live-labels.sh <label> <alias>` after the checkout, instead of four inline copies before it; its tests live in `behavior-gating.test.ts` (`live labels`) and the `decide` refusal's in `aggregators.test.ts` | One source that shellcheck lints and the shim test runs directly, pinned identical in all four lanes; an obsolete run now pays one checkout before it stops, seconds against a suite's minutes | Implementation deviation from § Arc 1's inline step (arc 1 build). `pr-supersede.yml` stays inline: its job holds `actions: write` and checks nothing out |
 | D14 | `implementations-plan/lessons.md`'s concurrency line is rewritten in arc 1, not at close-out | It states the push-first-attempt rule arc 1 replaces; every task reads that file first, so it must not outlive the merge | Implementation deviation from § Post-implementation step 5 |
 | D15 | The live step also writes the pull request's live `base`; `decide` reads it and refuses an empty one on a pull request | A run admitted late, or re-run, after a retarget would otherwise decide from the event's base | Codex round 1 finding 2 (accepted in part). Rejected: subscribing the lanes to `edited`, because every title or body edit would re-run the suites and an `edited` run that re-decided to skip would post a success copy; a retarget still starts no run, the recovery (close and reopen, or push) is in CI.md. Codex round 2 holds that the retarget gap stays a bypass; it is pre-existing (`pr-quick.yml` documents it for `quality-status`) and is recorded as an accepted residual of arc 1, filed as #251 (`owner-decision`: CI cost against coverage, with a cheaper base-change re-run job as the possible fix) |
