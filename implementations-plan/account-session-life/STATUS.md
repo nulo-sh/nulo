@@ -8,3 +8,6 @@
 - 2026-10-10 — plan revised: #99 per-address row lock; #100 120 s deadline with identity re-checks; #157 split into arc 2 (invisible) and arc 4 (Ready, gated on new OWNER-ASKS OA-4).
 - 2026-10-10 — final fresh Codex pass: reject (7 findings, all verified); plan revised (owned undo and reconcile, start-only activation deadline, OA-4 loader terminal state); confirmation round running.
 - 2026-10-10 — final pass round 2: reject on one finding (reconcile dependent purge), rejected by the planner on evidence (unreachable from the only caller); test relabelled. Panel closed.
+- 2026-10-10 — arc 1 started: merged origin/dev 9574a9d; D-orch-1 to D-orch-3 recorded.
+- 2026-10-10 — R2-1 asked first: Codex and Opus both UNREACHABLE (high); plan kept, evidence in Audit verdicts.
+- 2026-10-10 — phase 1.1 gate pass: lint 0, typecheck:all 0, account unit 113/113; four new proofs red on 643c0c9.

@@ -1,7 +1,7 @@
 ---
 plan: account-session-life
 tier: mid
-status: draft, awaiting the orchestrator's approval
+status: approved by the orchestrator (D-orch-1 to D-orch-3); arc 1 in progress
 issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
 driver: claude-code
 claude_model: opus
@@ -248,7 +248,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 
 ### Arc 1: races and retry
 
-#### Phase 1.1: one critical section per address (#99)
+#### Phase 1.1: one critical section per address (#99) ✓
 
 1. Move create's final check and write, and import's duplicate check and writes, under the row lock as the Architecture section states. Read occupancy with `contains(id)`. Assert the epoch inside the lock with no await before the write.
 2. In create, after the row write in the same hold, delete the replaced imported row's key. On failure, log a fixed category and continue.
@@ -553,6 +553,12 @@ Sign-off: arc 1's one visible change rides the recorded no-ask decision for #159
 - *Outline B (competing, cheapest-first):* re-check the account row after each write and undo a lost race; keep the activation poll and add an id check and a deadline; retry the confirmation inside one `handleCreate` call with no saved state across clicks; register one `onConnect` listener at the worker's module scope that buffers ports and messages until the services exist, with no wire change; leave `deleteProfile` throwing and let callers retry.
 - *Why A:* B's undo is a second racing write. B's poll is the bare poll the lane brief rules out. B's in-call retry changes what the person sees (a second prompt with no click). B's buffering still has to hold messages and leaves `lastError` and refused ports alone. B's caller retry does not help the resume and torn-reap paths, which run after start; those fail on the PXE generation, which arc 2 fixes (Opus corrected the first draft's reason here).
 
+### Orchestrator decisions (on approval, 2026-10-10)
+
+- **D-orch-1. No stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; no `gh stack`. Later arcs branch from arc 1's branch and rebase onto `dev` after it lands. This replaces the Delivery section's `gh stack init` / `gh stack add` / `gh stack submit` steps for arc 1.
+- **D-orch-2. Arc 1 only.** Nothing of arcs 2, 3 or 4 is built now: arc 2 waits on reservation R4 (fees-and-sponsors #91); arc 3 on decision page 7 and hold H2; arc 4 on OA-4, which is now page 7's item P7-08 (OA-1 to OA-3 are P7-05 to P7-07, and each ships its "what ships now" form in arc 1). Nothing a screen shows changes beyond § UI impact; no new words.
+- **D-orch-3. R2-1 is asked first.** Before phase 1.1's gate counts as passed, the first Codex round and the Opus review are each asked, first and explicitly, whether R2-1's schedule is reachable on the merged tree (a create from a second window, a restore that activates the profile early, an import that reconciles later). Reachable: build the fix (the row lock across the purge, or an equivalent that keeps lock order 1) with a never-happens test. Unreachable: record the evidence below and keep the plan. Result: both unreachable (Audit verdicts, "R2-1 asked first").
+
 ### Audit verdicts
 
 **Round 1, Codex** (`gpt-6.1-sol`, high): `reject (with blocking findings: unsafe imported-key cleanup, unfenced activation tail, Ready-to-send race, unsupported session-isolation claim, overlapping erasures)`.
@@ -608,6 +614,24 @@ Sign-off: arc 1's one visible change rides the recorded no-ask decision for #159
 | R2-2 [Medium] | The reconcile "new proof" passes on base | **Accepted.** It is now a guard (it fails only if the key cleanup ships without the reconcile change); the new proof starts from a keyless row and fails on base, whose delete pass deletes the derived row |
 
 The planner closes the panel here. Codex is advisory. Its one open finding is rejected on evidence above, and the orchestrator sees the disagreement in the report.
+
+**R2-1 asked first (arc 1, D-orch-3), on the merged tree (`9574a9d` + the plan).** Both legs were asked only this question first, with three schedules to break: a create from a second window, a restore that activates the profile early, an import that reconciles later.
+
+- **Codex** (`gpt-6.1-sol`, high, new session `01a12394-69f4-7bf3-8f41-121e759cf705`): `UNREACHABLE, high confidence through the existing non-hostile application paths`.
+- **Opus 5.5** (general-purpose, read-only): `UNREACHABLE, high confidence, for any path a person can take through the UI or a dApp`.
+
+Evidence both legs found, each checked by the implementer in the tree:
+- `SessionManager.open` has one call site, inside `openSessionVerified` (`profile/service.ts:1324`). Every unlock, create and import reaches it there, and it refuses a profile whose restore-pending marker matches its generation (`:1286-1289`). Bearer rehydration after a worker restart (`:466-478`) refuses a torn restore too, and passkey sessions never rehydrate. So the planner's "every session open goes through `openSessionVerified`" was overbroad, but the conclusion holds.
+- The marker is written before the row, under the facade lock (`:1432-1439`). If the marker write fails, no row is written. A corrupt marker counts as torn. A stale marker is one whose generation differs from the row's, and a new restore always mints a fresh generation.
+- Neither restore branch opens a session. Restored ids are never a live profile's id (`:2329-2332`, `:2489`).
+- The only caller is `useFullBackupImport.ts:398`, before `finalizeRestore` (`:413`). Retry re-runs only the account-state stage. No boot step, resume or migration reconciles.
+- Create, `ensureDefaultAccount` and `provisionDefaultAccount` need the profile's secret, and import needs its DEK. Both are refused unless that profile holds the session (`session-manager.ts:248-265`).
+
+The residual is a direct `reconcileImportedAccounts` RPC on a profile that already has a session. Only an extension page can send it, never a dApp, and that page can delete those records outright. Both legs agree that holding the row lock across the subscribers would break lock order 1: they take their own service locks (`token-balance/service.ts:571-587`, `auth-registry/service.ts:511-526`). **Disposition: the plan stands; no fix is built.**
+
+Opus's phase 1.1 notes:
+- **Accepted.** Name the reconcile guard's pause point. It parks after the listing (`storage.get()`) and before the key read, the only point where the hazard exists. The test title says so.
+- **Rejected.** "`unwrite` throws a parse error on a row the codec cannot decode." `EntityStorage.get` returns `undefined` for an undecodable or invalid row (`packages/wallet-core/src/storage/entity_storage.ts:98-143`), so `unwrite` reads the row as not its own and deletes nothing.
 
 ## Delivery
 

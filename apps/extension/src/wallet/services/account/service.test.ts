@@ -574,7 +574,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 			dekGate?: Promise<void>
 			l1Gate?: Promise<void>
 			afterSet?: (key: string) => void
-			chainLive?: (call: number) => boolean
+			chainLive?: (call: number) => boolean | Promise<boolean>
 		} = {},
 	) {
 		const api = new FakeBrowserApi()
@@ -681,10 +681,6 @@ describe("AccountService.importAccount — deletion fence", () => {
 	})
 
 	test("a rename parked on the written row cannot resurrect it after the compensation", async () => {
-		const h = await makeHarness()
-		const area = h.api.storage.local
-		const realSet = area.set.bind(area)
-		const realGet = area.get.bind(area)
 		const importGate = gate()
 		const renameGate = gate()
 		let importParked!: () => void
@@ -695,16 +691,19 @@ describe("AccountService.importAccount — deletion fence", () => {
 		const renameReached = new Promise<void>((r) => {
 			renameParked = r
 		})
-		let parkImport = true
+		// The import parks in its post-write liveness read, after both writes and outside the row lock.
+		const h = await makeHarness({
+			chainLive: async (call) => {
+				if (call === 2) {
+					importParked()
+					await importGate.promise
+				}
+				return true
+			},
+		})
+		const area = h.api.storage.local
+		const realGet = area.get.bind(area)
 		let parkRename = false
-		area.set = async (entries) => {
-			await realSet(entries)
-			if (parkImport && accountKey in entries) {
-				parkImport = false
-				importParked()
-				await importGate.promise
-			}
-		}
 		area.get = (async (key: unknown) => {
 			const value = await realGet(key as never)
 			if (parkRename && key === accountKey) {
