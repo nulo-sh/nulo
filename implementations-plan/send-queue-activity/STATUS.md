@@ -10,3 +10,4 @@
 - 2026-10-10 — arc 1 start: orchestrator approved v4; D-orch-1..3 recorded (no stack, no Phase 1.2, holds H3/H7).
 - 2026-10-10 — phase 1.1 gate: pass (lint, typecheck:all, 18 touched test files 343/343; revert of the recordedTxKeys fpc line fails 4 never-happens cases).
 - 2026-10-10 — phase 1.3 gate: pass (lint, typecheck:all, operation-estimate-reuse{,.pins}, dapp-send-executor, feesettings-invariant, service.characterization: all green).
+- 2026-10-10 — phase 1.4 gate: pass (lint, typecheck:all, general/ component tests 248/248; base component fails the 4 never-happens cases).

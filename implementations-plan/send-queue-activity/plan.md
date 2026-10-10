@@ -423,7 +423,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 - Pass: every command exits 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 1.4: foreign journal events (#152)
+#### Phase 1.4: foreign journal events (#152) ✓
 
 1. Run the side effects of `onJournalAdded`, `onJournalUpdated` and the snapshot's terminal match only for in-scope records, and add the invariant comment.
 2. Add tests in `RecentActivityView.test.ts`:
@@ -829,6 +829,14 @@ The orchestrator's calls at arc 1's start (they override § Delivery where they 
 - **D-orch-1 No stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) under the Delivery table's title; no `gh stack`. Later arcs branch from arc 1's branch and rebase onto `dev` after it lands.
 - **D-orch-2 Arc 1 without Phase 1.2.** Arc 1 ships Phases 1.1, 1.3, 1.4 and 1.5; the chain-tip gate waits on the owner (OA-5, page 9 P9-08). Nothing of arcs 1b, 2, 3a, 3b, 4 or 5 is built: OA-1 to OA-5 sit on pages 9 and 10 (P9-06, P9-07, P9-08, P10-14; OA-2 rides P9-04). Phase 1.1's restart ordering ships under the archived concurrent-sends decision; if the owner answers otherwise, the next arc re-points it.
 - **D-orch-3 Holds.** H3 gates arc 4 and H7 gates arc 3a, as § Delivery says.
+
+Arc 1 deviations from the text above (the tree won; detail in `lessons/phase-1.md`):
+
+- **D16 #152 scoped at ingestion.** Journal state takes in only records of the active account, profile and network (events and the snapshot), so every side effect and the snapshot's terminal scan see only those. The token page's token stays a render filter only: another token's terminal record still clears its own placeholder in the shared store.
+- **D17 The pinned row judges reuse.** `TransferEstimateReuse.tryConsume` takes the send's pinned `Fpc` and compares the entry's `fpcIdentity` against it in place of a fresh read, rather than a separate check in the executor; the ladder's order is unchanged.
+- **D18 The dApp epoch is read before the build.** As on the transfer path; the operation ladder checks it right after the pending set, and its order pins gained the step.
+- **D19 Composition through the service root.** `send-order.composition.test.ts` drives a fresh `ExecutionService` (its real lane, sequencer and transfer executor) with the real journal instead of wiring the four classes by hand.
+- **Shared seams touched:** `dapp-send-executor.ts` (one dep, the epoch read in `estimateOperationFee`, the stash's field; not `runInSlot` or `markJournal`), `execution/service.ts` (dep wiring only; the settle handler and estimate admission are untouched without Phase 1.2), `transfer-executor.ts` (FPC resolution and the turn), `RecentActivityView.vue` (the predicate block, two handler guards, the snapshot filter).
 
 ## Audit verdicts
 
