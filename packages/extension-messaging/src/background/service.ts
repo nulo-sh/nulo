@@ -44,6 +44,9 @@ export abstract class Service<TRequests extends MethodsMap, TEvents extends Even
 		// content-script sender).
 		if (!isTrustedInternalSender(client.sender)) {
 			this.logWarn(`Rejected Port from untrusted sender (id=${client.sender?.id ?? "?"})`)
+			// Closing it from this end fires nothing here, and the opener learns at once instead of
+			// holding a port no service will ever answer.
+			client.disconnect()
 			return
 		}
 		client.onDisconnect.addListener(this.onDisconnect)

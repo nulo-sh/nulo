@@ -91,7 +91,9 @@ export abstract class ServiceClient<
 		this.onDisconnected.invoke()
 	}
 
-	private readonly onDisconnect = () => {
+	private readonly onDisconnect = (port: chrome.runtime.Port) => {
+		const reason = closeReason(port)
+		if (reason) this.logDebug("Port closed with an error", { reason })
 		this.disconnect()
 		void this.connect()
 	}
@@ -144,6 +146,19 @@ export abstract class ServiceClient<
 	public async restore(..._args: unknown[]): Promise<unknown> {
 		return this.request("restore" as keyof TRequests, ...(_args as unknown as Parameters<TRequests[keyof TRequests]>))
 	}
+}
+
+/**
+ * Which channel reported the port's close error, if any. Chrome sets `runtime.lastError` only while
+ * `onDisconnect` runs and logs "Unchecked runtime.lastError" when no listener reads it; Firefox sets
+ * `port.error` instead. Both are read every time; the error's text is never kept.
+ */
+function closeReason(port: chrome.runtime.Port): "runtime.lastError" | "port.error" | undefined {
+	const lastError = (chrome.runtime as { lastError?: unknown }).lastError
+	const portError = (port as { error?: unknown }).error
+	if (lastError) return "runtime.lastError"
+	if (portError) return "port.error"
+	return undefined
 }
 
 enum ClientState {
