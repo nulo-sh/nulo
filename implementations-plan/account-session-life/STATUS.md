@@ -22,3 +22,5 @@
 - 2026-10-10 — phase 2.1 gate pass: lint 0, typecheck:all 0, test:all 0; two new proofs red on fd47407.
 - 2026-10-10 — phase 2.2 gate pass: lint 0, typecheck:all 0, profile + profile-deletion unit 370/370; wait and shared-budget proofs red on fd47407.
 - 2026-10-10 — phase 2.3 gate pass: lint 0, typecheck:all 0, test:all 0; four new proofs red on fd47407.
+- 2026-10-10 — arc 2 review: Codex r1 CHANGES (1 Medium fixed 964c9aa), Opus APPROVE (1 Low fixed fbe0f79), Codex r2 APPROVE. Final local gates on cdcdad1 green; network gate waits for the host.
+- 2026-10-10 — arc 2 boundary gate pass: audit:vue 0; final lint/typecheck:all/test:all 0 on cdcdad1; smoke retry-0 Chrome 10/10, Firefox 9/9 (4 files each); network retry-0 Chrome 3/3 + proverless 3/3, Firefox 4/4 (proverless file Chrome-only).

@@ -36,3 +36,9 @@
 - Opus: APPROVE, with one Low: `Promise.withResolvers` was the first ES2024 built-in in production code and would have raised the Chrome floor past the 116 the code states, silently (no polyfill under `esnext`). `deferred()` in `@nulo/wallet-core/utils` already does the job; look for it before reaching for a new built-in.
 - Codex round 2: APPROVE, no findings. Closed at round 2 of 3.
 - zsh does not word-split an unquoted `$VAR`: `bun run test:e2e -- $FILES` passed one argument and vitest found no files. List e2e files inline (or use an array).
+
+## Arc 2 boundary gate
+
+- `audit:vue` 0 on eeb3303, before the review fixes; lint, typecheck:all and test:all 0 again on cdcdad1, after them. Smoke on an armed build, retry 0: Chrome `security-reset`, `passkey-paths`, `duplicate-phrase-import`, `sw-resilience` 4 files, 10 passed, 1 skipped (a permanent `test.skip` in `sw-resilience`); Firefox the same 4 files, 9 passed, 2 skipped (that one and a `skipIf(isFirefox)`).
+- Network, retry 0, each step started only on a free host (the `e2e-harness-gaps` lane held it for about an hour, back to back): Chrome `profile-reimport-matrix` 3/3 and `firefox-background-restart` skipped (Firefox-only); Firefox both files 4/4; proverless Chrome `backup-restore-sw-restart` 3/3; proverless Firefox the same file 3 skipped (`CHROME_ONLY.backgroundKillUnderPage`).
+- Host etiquette in practice: a lane with queued network files re-takes the host within a second of releasing it, so a "free" poll followed by a separate launch loses the race. A runner that polls and launches in one script (detached with `setsid nohup`, so a tool timeout cannot kill a run mid-sandbox) got each step in as the lane's runs paused.

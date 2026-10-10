@@ -390,7 +390,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0. The three new proofs fail against the base copy of `pxe/service.ts`.
 - Layers: lint, typecheck, unit.
 
-#### Arc 2 boundary gate
+#### Arc 2 boundary gate ✓
 
 - Commands:
   - `bun run audit:vue`; `bun run test:all`.
