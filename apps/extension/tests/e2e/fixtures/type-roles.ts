@@ -45,6 +45,8 @@ export type TypeReading = {
 	textTransform: string
 	fontVariantNumeric: string
 	textOverflow: string
+	/** `visible` cannot clip: an inline box or one whose overflow shows past it. */
+	overflowX: string
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
@@ -115,6 +117,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			textTransform: style.textTransform,
 			fontVariantNumeric: style.fontVariantNumeric,
 			textOverflow: style.textOverflow,
+			overflowX: style.overflowX,
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth,
 			visible: isVisible(el),

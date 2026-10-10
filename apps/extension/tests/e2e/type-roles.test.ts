@@ -508,7 +508,11 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				expect(typography.readings.filter((reading) => reading.testid?.startsWith(PROBE))).toHaveLength(typeRoleNames.length)
 				expect(judgeTypography(typography), `${tab}: role values in the panel`).toEqual([])
 				const clipped = typography.readings.filter(
-					(reading) => reading.scrollWidth > reading.clientWidth && reading.textOverflow !== "ellipsis",
+					(reading) =>
+						reading.visible &&
+						reading.overflowX !== "visible" &&
+						reading.scrollWidth > reading.clientWidth &&
+						reading.textOverflow !== "ellipsis",
 				)
 				expect(clipped, `${tab}: role-bearing text clipped without an ellipsis`).toEqual([])
 				const widths = typography.readings
