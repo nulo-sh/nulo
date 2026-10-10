@@ -325,7 +325,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0. The new proofs fail against the base copy of `service.ts`.
 - Layers: lint, typecheck, unit.
 
-#### Phase 1.5: ConfirmPopup's dead branch (#158)
+#### Phase 1.5: ConfirmPopup's dead branch (#158) ✓
 
 1. Delete the branch, the button and the unused imports.
 2. Drop the `confirmProfileOperation` stubs from `ConfirmPopup.test.ts`; keep its existing cases.

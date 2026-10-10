@@ -38,3 +38,9 @@
 - Call-site sweep for runtime breakage, since several popup callers are untyped SFCs: every popup caller passes the tuple its schema expects. `export/account.vue`'s `password` starts as `ref()`, but `handleCreate` returns on an empty one. `handleProtect`'s only failure path already shows "Failed to protect the file", and `export/full.vue` turns any key-export failure into the wrong-password state, so neither visible outcome changes. The restore's `restoreImportedKeys` call is behind `Array.isArray`. In-background callers (`auth-registry`, `incoming-transfer`, `token`, `transaction`, `wallet-sdk`) call the service directly and never reach `invoke`.
 - Red/green: with the base `service.ts` (current `spec.ts`), the four refusal proofs fail and the four guards pass.
 - Gate: lint 0; typecheck:all 0; `vitest run src/wallet/services/account/`: 11 files, 121 tests.
+
+## Phase 1.5: ConfirmPopup's dead branch (#158)
+
+- Deleted `isPasskeyConfirmed`, `handlePasskeyConfirmation`, the passkey `Button` and both `passkeyConfirmation` terms. `isConfirmed` reduces to `!confirmation_text || confirmation_text === term`, with the same truth table once the dead term is gone. `useToast` and `useAppStore` lost their last users in the component and went with them. In the test, the three `managers` stubs and the `app.store` mock are dropped. The toast mock stays, because `snackInset` still calls `useToast`.
+- `confirmProfileOperation` now has no UI caller. It is still a registered profile RPC, used by the passkey recovery coordinator's comment trail and pinned by integration tests. Per the plan's Scope, the close-out files an issue after a dedupe.
+- Gate: lint 0. The first run failed on Biome's formatting of the shortened `computed`, which `biome check --write` fixed. typecheck:all 0; `ConfirmPopup.test.ts` 8/8; `! rg -q "passkeyConfirmation|handlePasskeyConfirmation" apps/extension/src` 0.

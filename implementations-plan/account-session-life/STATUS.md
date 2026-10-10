@@ -14,3 +14,4 @@
 - 2026-10-10 — phase 1.2 gate pass: lint 0, typecheck:all 0, unit 52/52; I1 confirmed; new proofs red on 643c0c9.
 - 2026-10-10 — phase 1.3 gate pass: lint 0, typecheck:all 0, unit 227/227, smoke passkey-retry retry-0 Chrome 9/9 + Firefox 9/9; new e2e case red on base (2 creates).
 - 2026-10-10 — phase 1.4 gate pass: lint 0, typecheck:all 0, account unit 121/121; refusal proofs red on base service.ts.
+- 2026-10-10 — phase 1.5 gate pass: lint 0 (after one format fix), typecheck:all 0, ConfirmPopup 8/8, rg gate 0.
