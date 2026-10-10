@@ -21,6 +21,7 @@ const {
 	stopServiceOnExit,
 	sweepDeadRuns,
 	sweepOrphanDataDirs,
+	vitestRunningIn,
 } = await import("../../tests/e2e/sandbox-ownership")
 type OwnedState = import("../../tests/e2e/lockfile").OwnedState
 
@@ -358,7 +359,8 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 	test("the pattern matches the exact build only, not a neighbour or a path its metacharacters would match", async () => {
 		const base = `/nonexistent/${newMarker()}`
 		const fake = (extension: string) =>
-			spawn("sh", ["-c", "sleep 30", "chrome", `--load-extension=${extension}`, "--no-sandbox"], { stdio: "ignore" })
+			// The trailing `:` keeps a bash `sh` from exec-ing sleep, which would drop these arguments.
+			spawn("sh", ["-c", "sleep 30; :", "chrome", `--load-extension=${extension}`, "--no-sandbox"], { stdio: "ignore" })
 		const exact = fake(`${base}/a.b/dist/chrome`)
 		const others = [fake(`${base}/a.b/dist/chrome-canary`), fake(`${base}/aXb/dist/chrome`)]
 		try {
@@ -367,6 +369,18 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 			expect(matched()).toBe(String(exact.pid))
 		} finally {
 			for (const child of [exact, ...others]) child.kill("SIGKILL")
+		}
+	})
+
+	test("a vitest of the worktree counts as running; one of a neighbouring worktree does not", async () => {
+		const worktree = `/nonexistent/${newMarker()}/wt`
+		const fake = spawn("sh", ["-c", "sleep 30; :", `${worktree}/apps/extension/node_modules/.bin/vitest`, "run"], { stdio: "ignore" })
+		try {
+			expect(await until(() => vitestRunningIn(worktree))).toBe(true)
+			expect(vitestRunningIn(`${worktree}-2`)).toBe(false)
+			expect(vitestRunningIn(`/nonexistent/${newMarker()}/wt`)).toBe(false)
+		} finally {
+			fake.kill("SIGKILL")
 		}
 	})
 

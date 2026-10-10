@@ -536,7 +536,18 @@ Verdict: **approve with fixes**. R2-1 to R2-5 judged closed; the break file per 
 | R3-3 | Medium. The extension path went into a shell string and an unescaped, unanchored pattern: metacharacters or `dist/chrome-canary` could match another build | Accepted: `pkill` through `execFileSync`, the path escaped for ERE and ended at the argument (`chromePattern`). Test with `pgrep`, no signal: only the exact build matches, not `-canary` nor a path its `.` would match (fails with the old pattern) |
 | R3-4 | Low. `reap.ts`'s header claimed every signal needs a marker; setup's comment said no live run holds the worktree though setup holds it | Accepted: both reworded |
 
-The Codex loop stops here at its three-round limit. Round 3's fixes have unit tests and mutation checks but no fourth Codex round.
+The Codex loop stops here at its three-round limit; round 3's fixes went to a same-family verifier instead.
+
+### Arc 1a implementation: round-3 verification, Opus (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**. Sound: the ERE escaping (every metacharacter, `]` and `}` literal under glibc, no GNU backslash escapes can form), `( |$)` against procps' space-joined command line, other worktrees' builds never matched, the ordering inside the reconcile lock in every branch, and both new tests fail on the old code.
+
+| # | Finding | Disposition |
+|---|---|---|
+| V1 | Medium. A smoke run in the same worktree takes no lock and names no owner, so `e2e:reap` kills its Chromes; setup's sweep has always done the same | Accepted for `e2e:reap`: it also keeps Chromes while any vitest of the worktree runs (`vitestRunningIn`, `pgrep` on the worktree's vitest path; unsure counts as running). Test: a fake vitest command line counts for its worktree, not a neighbour's. Setup keeps dev's unconditional sweep, and its comment now says a smoke run in the same worktree loses its Chromes, as the e2e-testing skill's hazard already does. `global-setup-smoke.ts`'s own shell-string `pkill` is unchanged from dev and outside this arc |
+| V2 | Low. Without `/proc`, a bare run that adopted every service writes a lock with no owner and no pids, so its Chromes looked unclaimed | Accepted: covered by V1's vitest check, which works without `/proc` |
+| V3 | Low. Where `sh` is bash, `sh -c 'sleep 30'` execs sleep and drops the fake Chrome arguments | Accepted: `sleep 30; :` |
+| V4 | Nit. `reap.ts`'s step list and the README's reap paragraph predate the Chrome sweep | Accepted: both rewritten |
 
 ## Post-implementation
 

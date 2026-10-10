@@ -172,7 +172,7 @@ Vitest's deterministic SHA-1-of-filename sharder picks the same files locally as
 
 **`~/.agents/ports.md.lock stayed held`** — another registry writer holds the lock, or one died holding it. The other writers break a lock older than 15 s; this client never does. If no writer is running, delete the lock.
 
-**Manual cleanup of stale state.** `bun run e2e:reap` in the worktree. It stops only processes carrying this worktree's markers whose owner is dead, never a process by name, which on a shared host would take down another agent's run.
+**Manual cleanup of stale state.** `bun run e2e:reap` in the worktree. It stops processes carrying this worktree's markers whose owner is dead and, while no run of this worktree is live, the Chromes loading this worktree's build (Chrome shows no environment, so its exact `--load-extension` path stands in). Never a process by name, which on a shared host would take down another agent's run.
 
 ## Terms-acceptance state
 
@@ -243,7 +243,7 @@ The network suite is a required PR gate at retry 0 (`extension-network-e2e-statu
 | Forks, Firefox | Yes | inherit the run marker; a dead run's forks are stopped by `e2e:reap` and the next run's setup, its Firefox launches by the next Firefox launch or `e2e:reap` |
 | Wallet build artifact | Yes | `dist/chrome/` lives inside the worktree |
 | Chrome user-data-dir | Yes | Puppeteer creates a fresh `/tmp` dir per `launch()` |
-| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no live run holds the worktree (Chrome shows no marker) |
+| Chrome orphan cleanup | Yes | `pkill -f "chrome.*--load-extension=$EXTENSION_PATH"`, path-scoped, at every run's setup and teardown, and in `e2e:reap` while no run of the worktree is live (Chrome shows no marker) |
 | `.test-config.json` | Yes | per worktree |
 | `.e2e-state/` lockfile | Yes | per worktree |
 | EmbeddedWallet PXE temp dir | Yes | random `tmpdir()/nulo-e2e-<8hex>` per call |

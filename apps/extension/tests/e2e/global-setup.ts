@@ -344,7 +344,8 @@ async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 
 /** Processes a prior run of this worktree left: a dead agent run's forks by run marker, and every
  *  Chrome loading this build, which no marker can find. Reconciliation has refused any other live
- *  run in this worktree, so these are not a live run's. */
+ *  network run in this worktree; a smoke run here takes no lock and loses its Chromes, which is why
+ *  the two never share a worktree. */
 async function reapDeadRuns(): Promise<void> {
 	const status = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
 	if (status !== "stopped") console.warn(`[e2e-setup] a dead run's processes are ${status}; \`bun run e2e:reap\` retries`)

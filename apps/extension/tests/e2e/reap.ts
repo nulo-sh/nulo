@@ -9,9 +9,9 @@
  *
  *   1. Reap THIS worktree's sandbox (from `.e2e-state/owned.json`) once the run holding it is dead:
  *      stop every process carrying a service's marker whose own owner is dead, then remove the
- *      stamped run dir and clear the lock.
- *   2. Stop every process of a dead agent run of this worktree (forks) by its run marker and, unless
- *      a live run holds the worktree, every Chrome loading its `dist/chrome`: Chrome shows no marker.
+ *      stamped run dir and clear the lock. Then, while no run holds the lock and no vitest of this
+ *      worktree is running, every Chrome loading its `dist/chrome`: Chrome shows no marker.
+ *   2. Stop every process of a dead agent run of this worktree (forks) by its run marker.
  *   3. Release Firefox launches (geckodriver, its Firefox, the profile) whose owning test run is
  *      gone — otherwise they wait for the next Firefox launch on this host to sweep them.
  *   4. Sweep {@link E2E_DATA_ROOT} for `nulo-aztec-<pid>-*` dirs nothing uses any more.
@@ -27,7 +27,14 @@ import { reapOrphanLaunches } from "./fixtures/browser/ownership"
 import path from "node:path"
 import { REPO_ROOT, clearLock, readLock, withReconcileLock } from "./lockfile"
 import { releaseDeadRows } from "./port-registry"
-import { chromesUnclaimed, killChromesLoading, reapPriorRun, sweepDeadRuns, sweepOrphanDataDirs } from "./sandbox-ownership"
+import {
+	chromesUnclaimed,
+	killChromesLoading,
+	reapPriorRun,
+	sweepDeadRuns,
+	sweepOrphanDataDirs,
+	vitestRunningIn,
+} from "./sandbox-ownership"
 
 /** Under the reconcile lock, so no setup in this worktree is admitted mid-reap. */
 async function reapOwnedRun(): Promise<boolean> {
@@ -46,8 +53,8 @@ async function reapOwnedRun(): Promise<boolean> {
 
 const reaped = await withReconcileLock(async () => {
 	const done = await reapOwnedRun()
-	if (chromesUnclaimed(readLock())) killChromesLoading(path.join(REPO_ROOT, "apps/extension/dist/chrome"))
-	else console.log("[e2e:reap] a live run holds this worktree; its Chromes stay")
+	if (chromesUnclaimed(readLock()) && !vitestRunningIn(REPO_ROOT)) killChromesLoading(path.join(REPO_ROOT, "apps/extension/dist/chrome"))
+	else console.log("[e2e:reap] a run in this worktree may be live; its Chromes stay")
 	return done
 })
 const runs = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"

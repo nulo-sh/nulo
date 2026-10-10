@@ -171,11 +171,27 @@ export function sweepDeadRuns(worktree: string, opts: SweepOptions = {}): Promis
 }
 
 const ERE_SPECIAL = /[.*+?^${}()|[\]\\]/g
+const ereLiteral = (text: string) => text.replace(ERE_SPECIAL, "\\$&")
 
 /** The `pkill -f` pattern for a Chrome loading exactly `extensionPath`: the path is a literal, and
  *  ends at the argument's end, so `dist/chrome` never matches `dist/chrome-canary`. */
 export function chromePattern(extensionPath: string): string {
-	return `chrome.*--load-extension=${extensionPath.replace(ERE_SPECIAL, "\\$&")}( |$)`
+	return `chrome.*--load-extension=${ereLiteral(extensionPath)}( |$)`
+}
+
+/**
+ * Whether any vitest of `worktree`'s extension is running: a smoke run takes no lock and names no
+ * owner, so this is all that tells its Chromes from a dead run's. Unsure (no `pgrep`) counts as yes.
+ */
+export function vitestRunningIn(worktree: string): boolean {
+	try {
+		execFileSync("pgrep", ["-f", `${ereLiteral(path.join(worktree, "apps/extension/node_modules/.bin/vitest"))}( |$)`], {
+			stdio: "ignore",
+		})
+		return true
+	} catch (err) {
+		return (err as { status?: number }).status !== 1
+	}
 }
 
 /**
