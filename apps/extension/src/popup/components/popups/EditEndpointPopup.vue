@@ -93,9 +93,9 @@ usePopupEntity(() => props.show, {
 		@submit="handleSave"
 	>
 		<template #title>
-			<Text size="14" weight="600" color="primary">
+			<Text variant="title-page" color="primary">
 				Edit endpoint
-				<Text v-if="network" size="14" weight="600" color="tertiary"> · {{ network.name }}</Text>
+				<Text v-if="network" color="tertiary"> · {{ network.name }}</Text>
 			</Text>
 		</template>
 

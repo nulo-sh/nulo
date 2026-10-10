@@ -29,7 +29,7 @@ defineProps({
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
 					<slot name="title">
-						<Text size="14" weight="600" color="primary">{{ title }}</Text>
+						<Text variant="title-page" color="primary">{{ title }}</Text>
 					</slot>
 				</template>
 				<template v-if="$slots.headerRight" #right>

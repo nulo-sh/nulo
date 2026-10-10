@@ -81,9 +81,9 @@ usePopupEntity(() => props.show, {
 		@submit="handleCreate"
 	>
 		<template #title>
-			<Text size="14" weight="600" color="primary">
+			<Text variant="title-page" color="primary">
 				Add endpoint
-				<Text v-if="network" size="14" weight="600" color="tertiary"> · {{ network.name }}</Text>
+				<Text v-if="network" color="tertiary"> · {{ network.name }}</Text>
 			</Text>
 		</template>
 
@@ -112,7 +112,7 @@ usePopupEntity(() => props.show, {
 		</Input>
 
 		<template #belowSubmit>
-			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 0 20px">
+			<Text variant="body" color="tertiary" height="140" align="center" style="padding: 0 20px">
 				We'll probe the RPC and confirm it matches this chain before saving.
 			</Text>
 		</template>

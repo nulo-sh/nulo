@@ -65,7 +65,7 @@ watch(
 					<h2 :class="$style.title" data-testid="confirm-title">
 						{{ cacheStore.confirm.title ? cacheStore.confirm.title : "Are you sure?" }}
 					</h2>
-					<Text size="13" weight="500" color="body" height="150" align="center" :class="$style.description" data-testid="confirm-description">
+					<Text variant="body" color="body" height="150" align="center" :class="$style.description" data-testid="confirm-description">
 						{{ cacheStore.confirm.description }}
 					</Text>
 				</Flex>
@@ -78,10 +78,10 @@ watch(
 					:class="$style.toggle_row"
 				>
 					<Flex direction="column" gap="2" :class="$style.toggle_text">
-						<Text size="13" weight="600" color="primary">
+						<Text variant="row-title" color="primary" :class="$style.toggle_label_size">
 							{{ cacheStore.confirm.toggle.label }}
 						</Text>
-						<Text v-if="cacheStore.confirm.toggle.description" size="11" weight="500" color="tertiary" height="140">
+						<Text v-if="cacheStore.confirm.toggle.description" variant="caption" color="tertiary" height="140">
 							{{ cacheStore.confirm.toggle.description }}
 						</Text>
 					</Flex>
@@ -151,6 +151,10 @@ watch(
 .toggle_text {
 	min-width: 0;
 	flex: 1;
+}
+
+.toggle_label_size {
+	font-size: 13px;
 }
 
 .title {

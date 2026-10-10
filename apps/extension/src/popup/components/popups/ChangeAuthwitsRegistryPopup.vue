@@ -84,7 +84,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">Change account authwits registry</Text>
+					<Text variant="title-page" color="primary">Change account authwits registry</Text>
 				</template>
 			</PopupHeader>
 
@@ -129,7 +129,7 @@ usePopupEntity(() => props.show, {
 					<Tooltip v-if="isErrorOccurred" side="top">
 						<Flex align="center" gap="6">
 							<Icon name="info" size="12" color="red" />
-							<Text size="12" weight="500" color="secondary">
+							<Text variant="body" color="secondary">
 								An error occurred while executing the transaction
 							</Text>
 						</Flex>

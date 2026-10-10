@@ -634,18 +634,6 @@
 			"liveFrom": 3
 		},
 		{
-			"file": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
-			"expression": "row.key",
-			"branch": "",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "popup:token_metadata",
-			"state": "",
-			"liveFrom": 3,
-			"why": "a capability key name, not an identifier"
-		},
-		{
 			"file": "apps/extension/src/popup/pages/journal/[id].vue",
 			"expression": "recipientLabel",
 			"branch": "op && display && recipientLabel",

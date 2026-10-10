@@ -124,7 +124,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">Edit profile</Text>
+					<Text variant="title-page" color="primary">Edit profile</Text>
 				</template>
 			</PopupHeader>
 
