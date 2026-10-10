@@ -447,6 +447,9 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 **Opus 5.5 review (alongside round 1): approve.** One Low, accepted:
 - A1-O1 [Low] Settings → Lock's auto-lock field kept the typed value after a failed write (as before the arc), so the plan's Lock line held only for the strict toggle, and typing the same value again wrote nothing. The catch now puts the stored timeout back (the dust-threshold field's rule; no new words), and a page test proves the reset and the retry; it fails on the prior `lock.vue`.
 
+**Codex round 2 (same session): conditional approve.** A1-C1 and A1-C2 resolved; one new finding, accepted:
+- A1-C3 [Medium] the A1-O1 reset could overwrite a newer edit: a write that fails after the person typed another timeout put the stored one back and the newer edit was never saved. The reset now runs only while the field still holds the attempted value; Display's dust field (whose catch this arc rewrote) gets the same guard. A held-rejection page test proves the newer edit survives and is written; it fails on the round-1 `lock.vue`.
+
 ## Post-implementation
 
 This section is self-contained: the implementing session follows it from here.

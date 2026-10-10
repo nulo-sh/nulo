@@ -104,6 +104,25 @@ describe("settings/lock", () => {
 		expect(fakes.config.setValue).toHaveBeenCalledTimes(2)
 	})
 
+	test("a failure that lands after a newer edit leaves that edit, which is then written", async () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		let fail: (e: Error) => void = () => {}
+		fakes.config.setValue.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+		const w = await mountLock()
+		await debounced()
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]')
+
+		field().vm.$emit("update:modelValue", "0")
+		await debounced()
+		field().vm.$emit("update:modelValue", "15")
+		fail(new Error("persist failed"))
+		await flushPromises()
+		expect(field().attributes("modelvalue")).toBe("15")
+
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenLastCalledWith("sessionTtl", 900_000)
+	})
+
 	test("unmount disposes the lock after both service clients disconnect", async () => {
 		const w = await mountLock()
 		w.unmount()

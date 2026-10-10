@@ -88,8 +88,8 @@ async function updateDustThreshold(event) {
 		el.value = dustThreshold.value // normalize the display (e.g. "1.50" → "1.5")
 	} catch (err) {
 		// A failed write stores nothing, but the field still holds the typed text, which an unchanged
-		// ref never re-renders: put the stored value back.
-		el.value = dustThreshold.value
+		// ref never re-renders: put the stored value back, unless the field already holds a newer edit.
+		if (el.value.trim() === raw) el.value = dustThreshold.value
 		openToast({ kind: "error", label: "Failed to update setting" })
 	}
 }
