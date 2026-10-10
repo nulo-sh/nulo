@@ -3,23 +3,43 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import fs from "node:fs"
 import http from "node:http"
-import { execSync, spawn, type ChildProcess } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import type { TestProject } from "vitest/node"
 import {
 	type AztecTestConfig,
 	checkNodeHealth,
-	waitForLocalNode,
 	createTestWallet,
 	deployTestToken,
 	getContractClassId,
 	createSponsoredFeeOptions,
 	LOCAL_NODE_URL,
 } from "./fixtures/aztec"
-import { type OwnedState, clearLock, isPidAlive, killOrphanByPid, newAztecDataDir, readLock, writeLock } from "./lockfile"
+import {
+	type OwnedState,
+	REPO_ROOT,
+	SANDBOX_SERVICES,
+	type SandboxService,
+	clearLock,
+	isPidAlive,
+	readLock,
+	withReconcileLock,
+	writeLock,
+} from "./lockfile"
 import { markBootReady, markBootStarted } from "./sentinel"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
 import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
-import { killProcessGroup } from "./process-group"
+import { assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, waitWhileAlive } from "./boot-guard"
+import { identityIsDead, launchEnv, newMarker, ownIdentity, readStartTime } from "./owned-processes"
+import {
+	createRunDir,
+	deletableRunDir,
+	plannedRunDir,
+	reapPriorRun,
+	stopService,
+	killChromesLoading,
+	stopServiceOnExit,
+	sweepDeadRuns,
+} from "./sandbox-ownership"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Resolved here so an unusable selector fails before this file boots anvil, a node and a
@@ -106,13 +126,18 @@ const AZTEC_P2P_PORT = Number(process.env.AZTEC_P2P_PORT ?? 40400)
 const PLAYGROUND_PORT = Number(process.env.PLAYGROUND_PORT ?? 5174)
 const PLAYGROUND_URL = process.env.PLAYGROUND_URL ?? `http://localhost:${PLAYGROUND_PORT}/`
 
-/** Per-run aztec data directory. Mandatory even for in-memory mode because
- *  some aztec subsystems still write to ~/.aztec/data by default — two
- *  agents writing there at the same time will corrupt LMDB. On real disk (see
- *  `newAztecDataDir`/`E2E_DATA_ROOT`), NOT tmpfs. The path is recorded in the
- *  ownership lockfile so a future run — or `e2e:reap` — can clean it up if this
- *  run is killed before teardown. */
-let AZTEC_DATA_DIR = newAztecDataDir()
+/** Per-run aztec run dir; the node's `--data-directory` is its `data` subdir. Mandatory even for
+ *  in-memory mode because some aztec subsystems still write to ~/.aztec/data by default — two
+ *  agents writing there at the same time will corrupt LMDB. On real disk (`E2E_DATA_ROOT`), NOT
+ *  tmpfs. Recorded in the ownership lockfile so a future run — or `e2e:reap` — can clean it up if
+ *  this run is killed before teardown. */
+let AZTEC_RUN_DIR = plannedRunDir()
+
+/** One launch marker per service, in its spawn environment and in the lock: the only identity
+ *  teardown and the orphan reap act on. */
+const MARKERS: Record<SandboxService, string> = { anvil: newMarker(), aztec: newMarker(), playground: newMarker() }
+/** Set when the pack was claimed in the host registry for this run: nothing on it is adopted. */
+const RUN_ID = claimedRunId()
 
 let anvilProcess: ChildProcess | null = null
 /** True only when THIS run wrote `.e2e-state/owned.json` (fresh sandbox or progressive partial
@@ -126,6 +151,9 @@ let nodeProcess: ChildProcess | null = null
 let weStartedNode = false
 let playgroundProcess: ChildProcess | null = null
 let weStartedPlayground = false
+/** Set once the prior lock has been reconciled: until then a live run in this worktree may own
+ *  every Chrome the extension-path sweep would match. */
+let reconciled = false
 
 /** Probe a URL with HEAD/GET; returns true on any 2xx/3xx/4xx response. */
 async function probeHttp(url: string, timeoutMs = 1500): Promise<boolean> {
@@ -142,24 +170,6 @@ async function probeHttp(url: string, timeoutMs = 1500): Promise<boolean> {
 	})
 }
 
-async function waitForHttp(url: string, timeoutMs = 30_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeoutMs) {
-		if (await probeHttp(url)) return
-		await new Promise((r) => setTimeout(r, 500))
-	}
-	throw new Error(`Timed out waiting for ${url} (${timeoutMs}ms)`)
-}
-
-async function waitForAnvil(url: string, timeoutMs = 30_000): Promise<void> {
-	const start = Date.now()
-	while (Date.now() - start < timeoutMs) {
-		if (await probeAnvil(url)) return
-		await new Promise((r) => setTimeout(r, 250))
-	}
-	throw new Error(`Timed out waiting for anvil at ${url} (${timeoutMs}ms)`)
-}
-
 /**
  * Kill orphan Chrome test processes started by THIS extension build only.
  *
@@ -168,9 +178,7 @@ async function waitForAnvil(url: string, timeoutMs = 30_000): Promise<void> {
  * test runs.
  */
 function killOrphanChromes() {
-	try {
-		execSync(`pkill -f "chrome.*--load-extension=${EXTENSION_PATH}" 2>/dev/null || true`, { stdio: "ignore" })
-	} catch {}
+	killChromesLoading(EXTENSION_PATH)
 }
 
 /** Vitest globalSetup contract: with a DEFAULT export present, the named `teardown` export is
@@ -196,14 +204,13 @@ export default async function setupWithTeardown(project: TestProject): Promise<(
 
 /**
  * Boot coordinator. The ORDER here is the contract: orphan reap + build guard run before the
- * boot-failure (exit 86) window opens; the provisional lock is written before the first spawn;
+ * boot-failure (exit 86) window opens; the provisional lock is written under the reconcile lock,
+ * before the first spawn;
  * `markBootStarted()` sits between them and the first spawn so a missing-binary FATAL is still a
  * retryable boot failure; on reuse this run owns nothing (no provisional lock, `weOwnLock` stays
  * false) and skips straight to the shared tail.
  */
 export async function setup(project: TestProject) {
-	killOrphanChromes()
-
 	// Guard: ensure extension is built
 	const manifest = path.join(EXTENSION_PATH, "manifest.json")
 	if (!fs.existsSync(manifest)) {
@@ -215,22 +222,36 @@ export async function setup(project: TestProject) {
 		`[e2e-setup] ports: anvil=:${ANVIL_PORT} aztec=:${AZTEC_PORT} (admin :${AZTEC_ADMIN_PORT}, p2p :${AZTEC_P2P_PORT}) playground=:${PLAYGROUND_PORT}`,
 	)
 
-	if ((await reconcilePriorLock()) === "reused") {
+	// The provisional lock names this run's owner and every service's marker before the first
+	// spawn: from then on no other run's sweep touches what this one starts, and a run killed in
+	// the minutes of boot still leaves the markers the next run reaps by.
+	const prior = await withReconcileLock(async () => {
+		const outcome = await reconcilePriorLock()
+		if (outcome === "fresh") writeProvisionalLock()
+		return outcome
+	})
+	reconciled = true
+	await reapDeadRuns()
+	if (prior === "reused") {
 		await finishBoot(project)
 		return
 	}
-
-	// Provisional lock BEFORE the first spawn, updated after each spawn (recordSpawnedPid): the
-	// agent.sh signal trap and future-run orphan reap read pids from the lock, and the final
-	// post-deploy write used to land only after MINUTES of boot — a cancel in that window left
-	// untracked process groups behind.
-	writeProvisionalLock()
 
 	// Sandbox bring-up begins here — this opens the boot-failure (exit 86)
 	// window. Manifest validation + orphan reap above are deliberately OUTSIDE
 	// it: a failure there is a build/env problem, not an infra-boot flake, so it
 	// must NOT be retried.
 	markBootStarted()
+
+	if (RUN_ID) {
+		await assertPackFree({
+			anvil: ANVIL_PORT,
+			aztec: AZTEC_PORT,
+			aztecAdmin: AZTEC_ADMIN_PORT,
+			aztecP2P: AZTEC_P2P_PORT,
+			playground: PLAYGROUND_PORT,
+		})
+	}
 
 	if ((await ensureAnvil()) === "skip") {
 		provideWithoutSandbox(project)
@@ -281,11 +302,17 @@ async function finishBoot(project: TestProject): Promise<void> {
 // `bun run e2e:agent` always allocates fresh ports, so the prior lock's
 // ports never match the current ones — we fall through to reaping
 // orphans, then a fresh spawn. Direct vitest invocations with stable
-// env can land on the reuse path.
+// env can land on the reuse path. Every throw here sits before the boot
+// window: a usage problem, never retried as exit 86.
 async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 	const priorLock = readLock()
 	if (!priorLock) return "fresh"
-	if (priorPortsMatch(priorLock)) {
+	if (priorLock.owner && !identityIsDead(priorLock.owner)) {
+		throw new Error(
+			`[e2e-setup] another run in this worktree holds the sandbox (owner ${priorLock.owner}, see .e2e-state/owned.json); wait for it to finish`,
+		)
+	}
+	if (!RUN_ID && priorPortsMatch(priorLock)) {
 		console.log("[e2e-setup] prior ownership lock matches current run — probing for reuse")
 		if (await priorPackHealthy(priorLock)) {
 			const identityOk = await verifyIdentity(LOCAL_NODE_URL, priorLock.l1ContractAddresses)
@@ -294,22 +321,35 @@ async function reconcilePriorLock(): Promise<"reused" | "fresh"> {
 				weStartedAnvil = false
 				weStartedNode = false
 				weStartedPlayground = false
-				AZTEC_DATA_DIR = priorLock.aztecDataDir
+				AZTEC_RUN_DIR = priorLock.aztecDataDir
+				// The reused services still name their dead first owner; the lock's owner is what
+				// keeps every sweep off them while this run lives.
+				writeLock({ ...priorLock, owner: ownIdentity() })
 				return "reused"
 			}
 			console.warn("[e2e-setup] prior sandbox identity mismatch — tearing down and starting fresh")
 		} else {
 			console.warn("[e2e-setup] prior sandbox not all healthy — tearing down")
 		}
-		reapPrior(priorLock)
 	} else {
 		// Different ports — fresh agent run after a previous one in the
 		// same worktree. Reap any orphans on the previous ports.
 		console.log("[e2e-setup] prior lock is for different ports — reaping orphans")
-		reapPrior(priorLock)
 	}
+	const outcome = await reapPriorRun(priorLock)
+	if (!outcome.cleared) throw new Error(`[e2e-setup] the prior run's sandbox could not be reaped: ${outcome.reason}`)
 	clearLock()
 	return "fresh"
+}
+
+/** Processes a prior run of this worktree left: a dead agent run's forks by run marker, and every
+ *  Chrome loading this build, which no marker can find. Reconciliation has refused any other live
+ *  network run in this worktree; a smoke run here takes no lock and loses its Chromes, which is why
+ *  the two never share a worktree. */
+async function reapDeadRuns(): Promise<void> {
+	const status = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
+	if (status !== "stopped") console.warn(`[e2e-setup] a dead run's processes are ${status}; \`bun run e2e:reap\` retries`)
+	killOrphanChromes()
 }
 
 function priorPortsMatch(priorLock: OwnedState): boolean {
@@ -325,24 +365,15 @@ function priorPortsMatch(priorLock: OwnedState): boolean {
 
 /** Every recorded process alive AND every endpoint answering, probed in the recorded order. */
 async function priorPackHealthy(priorLock: OwnedState): Promise<boolean> {
-	const allCoreAlive = isPidAlive(priorLock.pids.anvil) && isPidAlive(priorLock.pids.aztec) && isPidAlive(priorLock.pids.playground)
+	const allCoreAlive = SANDBOX_SERVICES.every((service) => isPidAlive(priorLock.pids[service]))
 	return allCoreAlive && (await probeAnvil(ANVIL_URL)) && (await checkNodeHealth(LOCAL_NODE_URL)) && (await probeHttp(PLAYGROUND_URL))
 }
 
-function reapPrior(priorLock: OwnedState): void {
-	killOrphanByPid(priorLock.pids.anvil, "anvil")
-	killOrphanByPid(priorLock.pids.aztec, "aztec")
-	killOrphanByPid(priorLock.pids.playground, "playground")
-	try {
-		fs.rmSync(priorLock.aztecDataDir, { recursive: true, force: true })
-	} catch {}
-}
-
 // ── Anvil (L1) ─────────────────────────────────────────────────────
-/** Probe first: an L1 on chain 31337 already speaking JSON-RPC on our port is adopted, never respawned. */
+/** A bare run probes first: an L1 on chain 31337 already speaking JSON-RPC on its port is adopted,
+ *  trusting it runs with `--slots-in-an-epoch 1`. An agent run adopts nothing. */
 async function ensureAnvil(): Promise<"ready" | "skip"> {
-	const anvilAlreadyRunning = await probeAnvil(ANVIL_URL)
-	if (anvilAlreadyRunning) {
+	if (await mayAdopt(RUN_ID, () => probeAnvil(ANVIL_URL))) {
 		console.log("[e2e-setup] Anvil already speaking JSON-RPC at", ANVIL_URL)
 		weStartedAnvil = false
 		return "ready"
@@ -372,6 +403,7 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 		{
 			stdio: "pipe",
 			detached: true,
+			env: { ...process.env, ...launchEnv(MARKERS.anvil) },
 		},
 	)
 	weStartedAnvil = true
@@ -390,11 +422,18 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 	})
 
 	try {
-		await waitForAnvil(ANVIL_URL, 30_000)
+		await waitWhileAlive(
+			anvilProcess,
+			() => probeAnvil(ANVIL_URL),
+			`anvil at ${ANVIL_URL}`,
+			30_000,
+			250,
+			() => listenerIsOurs(ANVIL_PORT, MARKERS.anvil),
+		)
 		console.log("[e2e-setup] Anvil is ready")
 	} catch (error) {
 		console.error("[e2e-setup] Failed to start anvil:", error)
-		await killProcessGroup(anvilProcess, "anvil", weStartedAnvil)
+		await stopService(anvilProcess, "anvil", weStartedAnvil, MARKERS.anvil)
 		anvilProcess = null
 		// Under the real agent runner a dead sandbox MUST be a loud
 		// failure, not a silent pass-by-skip — a green run where every
@@ -408,12 +447,11 @@ async function ensureAnvil(): Promise<"ready" | "skip"> {
 }
 
 // ── Aztec (L2) ─────────────────────────────────────────────────────
-/** Probe first: a healthy node on our port is adopted. Otherwise the pinned toolchain is checked,
+/** A bare run probes first: a healthy node on its port is adopted. Otherwise the pinned toolchain is checked,
  *  the node is spawned with a per-run data directory, and a node that never becomes healthy is
  *  torn down together with anvil. A missing CLI leaves anvil alive until teardown, as before. */
 async function ensureAztecNode(): Promise<"ready" | "skip"> {
-	const nodeAlreadyRunning = await checkNodeHealth(LOCAL_NODE_URL)
-	if (nodeAlreadyRunning) {
+	if (await mayAdopt(RUN_ID, () => checkNodeHealth(LOCAL_NODE_URL))) {
 		console.log("[e2e-setup] Local Aztec node already running at", LOCAL_NODE_URL)
 		weStartedNode = false
 		return "ready"
@@ -437,18 +475,23 @@ async function ensureAztecNode(): Promise<"ready" | "skip"> {
 	// Mandatory --data-directory per agent: aztec writes to $HOME/.aztec/data
 	// by default for some subsystems, which would corrupt LMDB if two
 	// agents run concurrently with the default path.
-	fs.mkdirSync(AZTEC_DATA_DIR, { recursive: true })
-
-	spawnAztecNode()
+	const node = spawnAztecNode(createRunDir(AZTEC_RUN_DIR, MARKERS.aztec))
 
 	try {
-		await waitForLocalNode(LOCAL_NODE_URL, 90_000)
+		await waitWhileAlive(
+			node,
+			() => checkNodeHealth(LOCAL_NODE_URL),
+			`the local Aztec node at ${LOCAL_NODE_URL}`,
+			90_000,
+			2_000,
+			() => listenerIsOurs(AZTEC_PORT, MARKERS.aztec),
+		)
 		console.log("[e2e-setup] Local Aztec node is ready")
 	} catch (error) {
 		console.error("[e2e-setup] Failed to start local node:", error)
-		await killProcessGroup(nodeProcess, "aztec", weStartedNode)
+		await stopService(nodeProcess, "aztec", weStartedNode, MARKERS.aztec)
 		nodeProcess = null
-		await killProcessGroup(anvilProcess, "anvil", weStartedAnvil)
+		await stopService(anvilProcess, "anvil", weStartedAnvil, MARKERS.anvil)
 		anvilProcess = null
 		// Same loud-failure contract as the anvil path: a node that never
 		// became healthy (e.g. native bb SIGILL) must fail the run, not
@@ -480,8 +523,8 @@ function requirePinnedToolchainOrWarn(): void {
 
 /** Spawn the pinned aztec CLI as its own process group, own it (handle → flag → lock record, in
  *  that order), and pipe its logs. */
-function spawnAztecNode(): void {
-	nodeProcess = spawn(
+function spawnAztecNode(dataDir: string): ChildProcess {
+	const node = spawn(
 		AZTEC_BIN,
 		[
 			"start",
@@ -495,7 +538,7 @@ function spawnAztecNode(): void {
 			"--l1-rpc-urls",
 			ANVIL_URL,
 			"--data-directory",
-			AZTEC_DATA_DIR,
+			dataDir,
 			"--disable-admin-api-key",
 		],
 		{
@@ -503,6 +546,7 @@ function spawnAztecNode(): void {
 			detached: true,
 			env: {
 				...process.env,
+				...launchEnv(MARKERS.aztec),
 				PATH: `${AZTEC_INTERNAL_BIN}${path.delimiter}${process.env.PATH ?? ""}`,
 				SEQ_MIN_TX_PER_BLOCK: "0",
 				ETHEREUM_HOSTS: ANVIL_URL,
@@ -528,28 +572,30 @@ function spawnAztecNode(): void {
 			},
 		},
 	)
+	nodeProcess = node
 	weStartedNode = true
 	recordSpawnedPid()
 	console.log(`[e2e-setup] the aztec CLI (scripts/aztec.sh) also starts an anvil on :${ANVIL_PORT}; its bind error at boot is expected`)
 
-	nodeProcess.stdout?.on("data", (data: Buffer) => {
+	node.stdout?.on("data", (data: Buffer) => {
 		const line = data.toString().trim()
 		if (line.includes("Aztec") || line.includes("ready") || line.includes("error")) {
 			console.log("[aztec-node]", line.slice(0, 200))
 		}
 	})
-	nodeProcess.stderr?.on("data", (data: Buffer) => {
+	node.stderr?.on("data", (data: Buffer) => {
 		const line = data.toString().trim()
 		if (line.includes("error") || line.includes("Error")) {
 			console.error("[aztec-node]", line.slice(0, 200))
 		}
 	})
+	return node
 }
 
 // ── Vite dev server (playground) ─────────────────────────────────
 interface DevServerSpec {
 	/** Log tag + the lower-case name in "Starting … dev server" / "Failed to start …". */
-	label: string
+	label: SandboxService
 	/** The capitalised name in "… already running" / "… is ready". */
 	title: string
 	cwd: string
@@ -561,12 +607,11 @@ interface DevServerSpec {
 	setStarted: (started: boolean) => void
 }
 
-/** Adopt a server already answering on its URL, else spawn `bun run dev`, own it, pipe its logs
- *  and wait up to 30 s. A server that fails to come up is killed and the boot continues — only
- *  the tests that depend on it fail individually. */
+/** A bare run adopts a server already answering on its URL. Otherwise spawn `bun run dev`, own it,
+ *  pipe its logs and wait up to 30 s. A server that fails to come up is killed; under
+ *  `E2E_REQUIRE_SETUP=1` that fails the boot, else only the tests that depend on it fail. */
 async function ensureDevServer(spec: DevServerSpec): Promise<void> {
-	const alreadyRunning = await probeHttp(spec.url, 1500)
-	if (alreadyRunning) {
+	if (await mayAdopt(RUN_ID, () => probeHttp(spec.url, 1500))) {
 		console.log(`[e2e-setup] ${spec.title} already running at`, spec.url)
 		spec.setStarted(false)
 		return
@@ -578,7 +623,7 @@ async function ensureDevServer(spec: DevServerSpec): Promise<void> {
 			cwd: spec.cwd,
 			stdio: "pipe",
 			detached: true,
-			env: { ...process.env, ...spec.env },
+			env: { ...process.env, ...launchEnv(MARKERS[spec.label]), ...spec.env },
 		})
 		spec.setHandle(child)
 		spec.setStarted(true)
@@ -597,13 +642,22 @@ async function ensureDevServer(spec: DevServerSpec): Promise<void> {
 			}
 		})
 
-		await waitForHttp(spec.url, 30_000)
+		await waitWhileAlive(
+			child,
+			() => probeHttp(spec.url),
+			spec.url,
+			30_000,
+			500,
+			() => listenerIsOurs(PLAYGROUND_PORT, MARKERS[spec.label]),
+		)
 		console.log(`[e2e-setup] ${spec.title} is ready`)
 	} catch (error) {
 		console.warn(`[e2e-setup] Failed to start ${spec.label}:`, error)
-		await killProcessGroup(child, spec.label, true)
+		await stopService(child, spec.label, true, MARKERS[spec.label])
 		spec.setHandle(null)
-		// Continue without the server — tests that depend on it will skip / fail individually
+		if (process.env.E2E_REQUIRE_SETUP === "1") {
+			throw new Error(`[e2e-setup] FATAL: ${spec.label} failed to become healthy and E2E_REQUIRE_SETUP=1 is set.`)
+		}
 	}
 }
 
@@ -619,7 +673,7 @@ async function deployContractsAndProvide(project: TestProject): Promise<void> {
 	// default-token seeding spec cannot use; redeploy rather than reuse it.
 	if (existingLock?.deployedConfig?.nodeUrl === LOCAL_NODE_URL && existingLock.deployedConfig.tokenClassId) {
 		fs.writeFileSync(CONFIG_PATH, JSON.stringify(existingLock.deployedConfig, null, 2))
-		project.provide("aztecTestConfig", existingLock.deployedConfig)
+		project.provide("aztecTestConfig", existingLock.deployedConfig as AztecTestConfig)
 		console.log("[e2e-setup] reused deployed contracts from lockfile:", existingLock.deployedConfig)
 		return
 	}
@@ -693,6 +747,7 @@ async function deployContractsAndProvide(project: TestProject): Promise<void> {
 }
 
 function buildOwnedState(extra: Partial<OwnedState> = {}): OwnedState {
+	const pids = currentPids()
 	return {
 		startedAt: new Date().toISOString(),
 		bakedLocalRpcUrl: LOCAL_NODE_URL,
@@ -703,8 +758,11 @@ function buildOwnedState(extra: Partial<OwnedState> = {}): OwnedState {
 			aztecP2P: AZTEC_P2P_PORT,
 			playground: PLAYGROUND_PORT,
 		},
-		pids: currentPids(),
-		aztecDataDir: AZTEC_DATA_DIR,
+		pids,
+		starts: startTimes(pids),
+		aztecDataDir: AZTEC_RUN_DIR,
+		markers: MARKERS,
+		owner: ownIdentity(),
 		...extra,
 	}
 }
@@ -714,8 +772,8 @@ function writeProvisionalLock(): void {
 	weOwnLock = true
 }
 
-/** Update the owned lock's pid map right after a spawn — keeps the agent trap + orphan reap
- *  current through the whole boot instead of only after deployment. */
+/** The lock's pids and start times, right after each spawn: what tells a later sweep that a
+ *  recorded service is still running even once its environ cannot be read. */
 function recordSpawnedPid(): void {
 	if (!weOwnLock) return
 	writeLock(buildOwnedState())
@@ -727,6 +785,20 @@ function currentPids(): OwnedState["pids"] {
 		aztec: weStartedNode ? nodeProcess?.pid : undefined,
 		playground: weStartedPlayground ? playgroundProcess?.pid : undefined,
 	}
+}
+
+function startTimes(pids: OwnedState["pids"]): OwnedState["starts"] {
+	const starts: OwnedState["starts"] = {}
+	for (const service of SANDBOX_SERVICES) {
+		const pid = pids[service]
+		try {
+			const start = pid ? readStartTime(pid) : undefined
+			if (start) starts[service] = start
+		} catch {
+			// Unrecorded, the service is judged by its environ alone.
+		}
+	}
+	return starts
 }
 
 function serializeL1ContractAddresses(addrs: unknown): Record<string, string> {
@@ -775,49 +847,29 @@ export async function teardown() {
 		// ignore
 	}
 
-	const playground = await killProcessGroup(playgroundProcess, "playground", weStartedPlayground)
+	const playground = await stopService(playgroundProcess, "playground", weStartedPlayground, MARKERS.playground)
 	playgroundProcess = null
-	const node = await killProcessGroup(nodeProcess, "aztec", weStartedNode)
+	const node = await stopService(nodeProcess, "aztec", weStartedNode, MARKERS.aztec)
 	nodeProcess = null
-	const anvil = await killProcessGroup(anvilProcess, "anvil", weStartedAnvil)
+	const anvil = await stopService(anvilProcess, "anvil", weStartedAnvil, MARKERS.anvil)
 	anvilProcess = null
 
-	if (weStartedNode && node.stopped) {
-		try {
-			fs.rmSync(AZTEC_DATA_DIR, { recursive: true, force: true })
-		} catch {
-			// ignore
-		}
+	// Kept while any service may survive: the lock is the only record a later reap reads, and a
+	// store deleted under a live node stays pinned as a deleted-but-open file.
+	if (weOwnLock && playground === "stopped" && node === "stopped" && anvil === "stopped") {
+		const dir = weStartedNode ? deletableRunDir(AZTEC_RUN_DIR, MARKERS.aztec) : undefined
+		if (dir) fs.rmSync(dir, { recursive: true, force: true })
+		clearLock()
 	}
-
-	// Kept while a group may survive: the lock is the only record a later best-effort reap reads.
-	if (weOwnLock && playground.stopped && node.stopped && anvil.stopped) clearLock()
-	killOrphanChromes()
-}
-
-/** Best-effort sync kill for the `process.on("exit")` path. Sync-only:
- *  fires SIGTERM and lets the OS finish what it can — async waits aren't
- *  available here. */
-function bestEffortKill(child: ChildProcess | null, weStarted: boolean): void {
-	if (!child?.pid || !weStarted) return
-	try {
-		process.kill(-child.pid, "SIGTERM")
-	} catch {
-		try {
-			child.kill("SIGTERM")
-		} catch {
-			// ignore
-		}
-	}
+	if (reconciled) killOrphanChromes()
 }
 
 const onExit = () => {
-	bestEffortKill(playgroundProcess, weStartedPlayground)
-	bestEffortKill(nodeProcess, weStartedNode)
-	bestEffortKill(anvilProcess, weStartedAnvil)
-	// Deliberately NO clearLock here: these kills are fire-and-forget TERMs. If a TERM-resistant
-	// process survives, the lock is the ONLY record the next run's liveness-checked orphan reap
-	// can find it by - deleting it would orphan the survivor permanently.
+	stopServiceOnExit(playgroundProcess, weStartedPlayground, MARKERS.playground)
+	stopServiceOnExit(nodeProcess, weStartedNode, MARKERS.aztec)
+	stopServiceOnExit(anvilProcess, weStartedAnvil, MARKERS.anvil)
+	// Deliberately NO clearLock here: these are fire-and-forget TERMs. If a TERM-resistant
+	// process survives, the lock is the ONLY record the next run's orphan reap can find it by.
 	// The awaited teardown() (KILL escalation) remains the sole ownership-gated lock clearer.
 }
 process.on("SIGINT", onExit)
