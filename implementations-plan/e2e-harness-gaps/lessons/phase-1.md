@@ -74,7 +74,7 @@ Branched `e2e-harness-gaps-waits` off `origin/dev` 6201f8b (D-orch-3).
 - Fix: the settings hub's pattern (`readLockConfig` with a read generation and an update fence, re-read on every `onConnected` after the first). A later read moves the field only when the stored timeout moved, so an edit in progress stays.
 - `lock.test.ts`: four new cases, each red with its guard removed (no re-read; a read on the first open; no generation check; no fence; an unconditional field write).
 - E2E shape (D19): stop the worker, then navigate to Lock. On the base `lock.vue`: red 3/3, the toggle never rendered in 30 s. With the fix: 2.5 s. The case also passes alone (`-t`), where it opts out of strict mode itself.
-- `display.vue`, `privacy.vue` and `developer/index.vue` have the same hang (`await getProps()` in `onBeforeMount`, no catch, no re-read); out of this arc, filed as an issue.
+- `display.vue`, `privacy.vue` and `developer/index.vue` have the same hang (`await getProps()` in `onBeforeMount`, no catch, no re-read); out of this arc, filed as #268 (read, not run).
 - zsh does not split an unquoted `$B`, so `env $B bun run build:chrome` set one variable holding every flag and built an unarmed dist; every smoke test then failed on the CSP recorder check. The armed build now goes through a bash script.
 - Gate: Fast pass (lint 0, typecheck:all 0, test 725 files / 10,970 tests). Unit `lock.test.ts` 11/11. Smoke `sw-resilience.test.ts` at retry 0: Chrome 3/3 (6 tests each), Firefox 3/3 (4 run, the two Chrome-only cases skipped).
 
@@ -83,3 +83,99 @@ Branched `e2e-harness-gaps-waits` off `origin/dev` 6201f8b (D-orch-3).
 - The 15 s poll became an in-page `MutationObserver` armed before the agree click; the flag is read after both CTAs enable. `full.vue` sets `progress` (`:309`), awaits worker calls, then sets `finished` (`:332`), so the card's insert and removal never share a mutation batch.
 - Mutation check: with the observer's text changed to one the card never shows, the case fails on the observer's message.
 - Local runs at retry 0, `passkey-backup.test.ts`: Chrome 3/3 (export case 14.0, 14.2, 17.0 s), Firefox 3/3 (18.9, 19.0, 23.4 s).
+
+## 1.9 Stall watchdog and heap cap (#155)
+
+- One reporter, two modes: without `stallMs` it only reports the run's longest silence and the events around it (the calibration commit wires it that way); with it, it enforces.
+- I4 did not hold as stated. A nested vitest 4.1.10 run whose test awaits a promise that never settles ends 3 s after `cancelCurrentRun`: the runner marks the test skipped and the run exits 1. Only a fork that cannot answer the cancel (a blocked event loop) needs the kill. The unit test therefore stalls on a spinning fork, which exercises everything the reporter does: the report, the cancel (a second file must not start), the kill of this run's forks only, global teardown still running, and a detached non-fork child surviving.
+- Mutation checks on the nested run: without `cancelCurrentRun` the next file runs; without the kill the run never ends (killed at the 40 s probe limit). Removing `process.exitCode = 1` changes nothing (vitest fails a cancelled run itself), so that line is belt and braces, not pinned.
+- A blocked fork never reports its test's start (the runner throttles task updates through a timer on the fork's own event loop), so the stall report names the file and, when known, the tests. 1 of 7 awaiting runs also named only the file, so the test asserts the file.
+- `vitest/vitest.mjs` is not an exported subpath: resolve `vitest/package.json` and join `vitest.mjs`. A nested run writes vite's cache under its root's `node_modules/.vite` unless `cacheDir` points elsewhere; the fixture config sends it to the run's state dir.
+- Agent-shell slip (no harm done, recorded so it is not repeated): a `pkill -f <pattern>` in the same command as the pattern matched the shell itself and cut the script short; and a `cp` onto a scratch name that turned out to be an existing directory dropped a file inside it, removed again after a byte compare.
+- The measuring commit (1945103) was made in a scratch worktree of this branch outside the repo and pushed from there, so the local 1.8 runs kept reading the tree they were started on.
+
+## 1.8 The anchor sleeps (#161)
+
+- `store-captures` is red at retry 0 before the deleted sleep's site, on the branch and on the base (6201f8b): `fillPrivateSend` expects the privacy strip's `you` to read `hidden` under the sandbox sponsor, and it reads `unknown`, since `publish-facts.ts` gives `hidden` only for a protocol-derived fee contract. With that expectation relaxed in a scratch copy (not committed), the branch's file ran through the send that followed the sleep, History, Security and the approval, and failed only on #170's soft `clearAmountLine` check. Commented on #170; the store frame's reading is a store-art decision, not this arc's. So `store-captures` is held out of 1.8's pass rule, with this evidence in its place.
+- Local runs at retry 0 on 53c167b, Chrome, three each: `fee-methods` + `selfpay-phase` 3/3 (9 tests each), the five pool files that reached a sleep (`profile-switch-sweeps-transfer`, `imported-account-execution`, `account-switch-isolation`, `auto-lock-defers-while-proving`, `in-flight-send-guard`) 3/3, `transfers` 3/3. `store-captures` 0/3, all before or after the sleep's site for the reasons above: runs 1 and 3 on the strip at `:187`; run 2 passed the strip, went through the deleted sleep in `fillPrivateSend` and failed on #170's `clearAmountLine` at `:262`. `apps/extension/store/captures/` was restored after each run (0 files changed).
+- Firefox, once each at retry 0 (gate): every file above but `store-captures` ran green in the Firefox calibration N-full on 1945103, which carries the deletion (below).
+- Every file that reached a sleep also ran in the calibration's full suites at retry 0 (below) and green in the hosted network dispatches 38033195688 (Chrome) and 38033196739 (Firefox), which include the heavy lanes and the canary lane with `transfers`.
+
+## 1.7 hosted half
+
+- Each smoke workflow's concurrency group cancels an in-progress `workflow_dispatch` run on the same ref and sha, so the three dispatches per workflow ran one after another.
+- Every dispatch succeeded and the export case passed on its first attempt, far under the 240 s rule, so the `skipIf(CI)` stays gone:
+
+| Workflow | Run | Commit | Export case |
+|---|---|---|---|
+| `pr-extension-smoke-e2e.yml` | 38032287387 | 53c167b | 12.5 s |
+| `pr-extension-smoke-e2e.yml` | 38032798079 | 53c167b | 14.3 s |
+| `pr-extension-smoke-e2e.yml` | 38033448171 | 1945103 | 13.9 s |
+| `pr-extension-smoke-e2e-firefox.yml` | 38032288361 | 53c167b | 18.7 s |
+| `pr-extension-smoke-e2e-firefox.yml` | 38033108543 | 53c167b | 14.5 s |
+| `pr-extension-smoke-e2e-firefox.yml` | 38033842009 | 1945103 | 16.5 s |
+
+- An unrelated smoke case (`navigation.test.ts`, the compact title bar's opacity wait) passed only on retry in the first two Chrome dispatches; filed as #269.
+
+## 1.9 calibration, hosted
+
+Dispatched on 1945103 (`observe` and the 1 s heap sampler), retry 0 as the workflows run it; every job green.
+
+| Job | Chrome 38033195688: longest silence, file | Firefox 38033196739: longest silence, file | Heap peak C / F (MiB) |
+|---|---|---|---|
+| shard 1/5 | 65.8 s, profile-switch-sweeps-transfer | 66.9 s, profile-switch-sweeps-transfer | 952 / 951 |
+| shard 2/5 | 35.2 s, incoming-arrival | 35.3 s, incoming-arrival | 943 / 953 |
+| shard 3/5 | 65.5 s, connect-deny | 65.4 s, connect-deny | 941 / 958 |
+| shard 4/5 | 157.2 s, failed-send-check | 156.9 s, failed-send-check | 967 / 998 |
+| shard 5/5 | 75.0 s, backup-import-stalled-network | 39.6 s, session-reconnect-flood | 958 / 931 |
+| heavy fee-methods + selfpay | 24.3 s, fee-methods | 30.1 s, fee-methods | 968 / 998 |
+| heavy concurrent-confirm | 47.9 s, same-token-concurrent-sends | 61.8 s, same-token-concurrent-sends | 1009 / 1019 |
+| canary | 32.3 s, delete-after-prove | 34.5 s, delete-after-prove | 917 / 925 |
+
+- Every hosted fork (19-22 per shard) reported a default `heap_size_limit` of 4288 MiB.
+- failed-send-check's 157 s gap is by design: the test samples the record every 5 s for 150 s past its terminal time (`OBSERVE_PAST_TERMINAL_MS`) and logs only once the loop ends. Any future silent observation window longer than `T` would need a progress line.
+
+## 1.9 calibration, local
+
+N-full at retry 0 on 1945103 (`observe` and the sampler), the CI partition: the pool proverless, the four heavy files proverless, the five canary files prover-ON.
+
+| Browser | Lane | Result | Longest silence | Heap peak (MiB) |
+|---|---|---|---|---|
+| Chrome | pool | 103 files passed, 5 skipped (env-gated) | 157.7 s, failed-send-check | 1003 |
+| Chrome | heavy | 4/4 | 53.4 s, same-token-concurrent-sends | 1009 |
+| Chrome | canary | 5/5 | 32.1 s, delete-after-prove | 920 |
+| Firefox | pool | 102 files passed, 6 skipped (Chrome-only and env-gated) | 160.3 s, failed-send-check | 986 |
+| Firefox | heavy | 4/4 | 63.1 s, same-token-concurrent-sends | 1022 |
+| Firefox | canary | 5/5 | 72.1 s, delete-after-prove | 926 |
+
+Every local fork reported the 4288 MiB default. Across hosted and local: longest silence 160.3 s, so `T` = max(10 min, 2 x 160.3 s) = 10 min; highest peak 1022 MiB (local Firefox heavy), so `C` = 2 x 1022 rounded up to 512 = 2048 MiB, 2240 MiB below the default. Both ship (c40b6dc).
+
+## Final head, smoke
+
+Whole smoke suite at retry 0 on 76de434 (armed builds): Chrome 201 passed, 10 skipped (env-gated files). Firefox: 49 files passed with no failure before the scratch wrapper's own 30 min limit stopped the run ahead of the last file; that file, `passkey-toolbar-panel`, then 5/5 alone.
+
+## Final head, network
+
+N-full at retry 0 on 76de434 (`STALL_MS` 10 min enforced, 2048 MiB cap), same partition:
+
+- Chrome: pool 103 files passed, 5 skipped; heavy 4/4; canary 5/5. Longest silences 157.5 s, 53.7 s, 33.9 s; no `stalled` file. No fork tripped the heap-limit check, so the cap reached every fork.
+- Firefox: running at the PR's opening; the result is in the PR body.
+
+## Arc 1b review round 1 (Codex + Opus), on c40b6dc
+
+Both reviewers approved with fixes. Accepted (76de434):
+
+- The watchdog armed at `onTestModuleStart`, which vitest 4.1.10 reports after setup files and import, so a hang while collecting the first file was never timed, and a later file's collection hang was blamed on the previous file (both reviewers). It now arms and sets the file at `onTestModuleQueued` and clears the running set there, so a crashed fork's tests are never named. The spin fixture now spins at import; without the queued hook the nested run hits its 90 s deadline.
+- `test-retried` maps to no reporter hook, so a retry after a long silent attempt had only what remained of `STALL_MS` (Opus). The undeclared `onTaskUpdate` call carries it; the control run adds a fixture silent 2 s per attempt against a 3 s stall, cancelled without the hook.
+- `readdirSync("/proc")` threw from the kill timer on a host without `/proc` (both). The kill step now logs that the blocked fork is left running.
+- A killed Firefox fork left Firefox and geckodriver until the next Firefox launch (Opus). Teardown now runs the owner-gated `reapOrphanLaunches` on Linux.
+- Comments: the watchdog header trimmed and made exact; the observer's doc and the export wait's stale 45-96 s paragraph cut to their invariants.
+
+Rejected:
+
+- Codex: a re-read after a reconnect replaces a pending timeout edit when the stored value moved meanwhile. `onSettingUpdate` already replaces the field the same way when the timeout changes elsewhere; the re-read only stands in for the update event the dropped port missed, so the page keeps one rule.
+- Opus: 1.8's runs were unrecorded. They were still running; recorded under § 1.8.
+
+## Arc 1b review round 2 (Codex), on 76de434
+
+Approve, no findings. Codex checked that teardown's reaper signals only launches whose recorded owner is dead and whose processes carry the record's marker, and withdrew the Lock-page finding: the re-read follows the rule `onSettingUpdate` already sets.

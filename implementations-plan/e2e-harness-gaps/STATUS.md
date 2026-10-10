@@ -19,3 +19,6 @@
 - 2026-10-10 — phase 1.5 gate: pass. N-full at retry 0 on both browsers (Chrome pool 103/156, heavy 4/23, canary prover-ON 5/7; Firefox pool 102/152, heavy 4/23, canary 5/7); scratch worktree removed. PR next.
 - 2026-10-10 — arc 1b: branched e2e-harness-gaps-waits off dev 6201f8b (D-orch-3/4/5 recorded).
 - 2026-10-10 — phase 1.6 gate: pass (fast; lock.test.ts 11/11; sw-resilience retry 0 Chrome 3/3 6 tests, Firefox 3/3 4 tests; new boot-window case red 3/3 on the base).
+- 2026-10-10 — phase 1.7 gate: pass (passkey-backup retry 0 Chrome 3/3, Firefox 3/3; hosted smoke 3 dispatches per browser, export case 12.5-18.7 s on the first attempt; skipIf(CI) gone).
+- 2026-10-10 — phase 1.8 gate: pass (Chrome retry 0 heavy, five pool files and transfers 3/3 each; store-captures red for two causes that predate the arc, one run passing the deleted sleep's site; Firefox once each in the calibration N-full; hosted network green on both browsers).
+- 2026-10-10 — phase 1.9: calibrated (longest silence 160.3 s, peak 1022 MiB, default limit 4288 MiB), so T = 10 min and C = 2048 MiB ship; review: Codex approve with fixes then approve, Opus approve with fixes; head 76de434; final N-full on both browsers running.
