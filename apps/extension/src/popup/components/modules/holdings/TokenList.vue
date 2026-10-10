@@ -147,14 +147,11 @@ const toggleSort = () => {
 }
 
 .sort {
+	composes: type--label from global;
 	height: 20px;
 	padding: 0 8px;
 	background: var(--nulo-surface-high);
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 	cursor: pointer;
 }
@@ -169,6 +166,7 @@ const toggleSort = () => {
 }
 
 .fold {
+	composes: type--label from global;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -180,10 +178,6 @@ const toggleSort = () => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

@@ -172,24 +172,18 @@ onBeforeUnmount(() => {
 }
 
 .summary_amount {
-	font-family: var(--font-headline);
+	composes: type--amount-total from global;
 	font-size: 26px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
 	color: var(--txt-primary);
 }
 
 .summary_meta {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
 .error {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--body from global;
 	color: var(--red);
 }
 </style>

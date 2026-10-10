@@ -69,11 +69,7 @@ const handleReceive = () => {
 }
 
 .label {
-	font-family: var(--font-headline);
-	font-weight: 700;
-	font-size: 14px;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--button from global;
 }
 
 .primary .label {

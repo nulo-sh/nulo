@@ -29,10 +29,14 @@ const shortAddress = computed(() => {
 	return trimAddress(a, 6, 4, "…")
 })
 
+const hasName = computed(() => typeof props.op?.title === "string" && props.op.title.length > 0)
+
 const title = computed(() => {
-	if (typeof props.op?.title === "string" && props.op.title.length > 0) return props.op.title
+	if (hasName.value) return props.op.title
 	return shortAddress.value || "Token"
 })
+
+const titleIsAddress = computed(() => !hasName.value && Boolean(shortAddress.value))
 
 const subtitle = computed(() => {
 	if (isFailed.value) {
@@ -46,7 +50,7 @@ const subtitle = computed(() => {
 <template>
 	<Flex align="center" justify="between" :class="[$style.row, isFailed && $style.failed]" data-testid="token-import-row">
 		<Flex direction="column" gap="2">
-			<span :class="$style.symbol" data-testid="token-import-title">{{ title }}</span>
+			<span :class="titleIsAddress ? $style.address : $style.symbol" data-testid="token-import-title">{{ title }}</span>
 			<span :class="$style.subtitle" data-testid="token-import-subtitle">{{ subtitle }}</span>
 		</Flex>
 
@@ -68,17 +72,18 @@ const subtitle = computed(() => {
 }
 
 .symbol {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 14px;
-	letter-spacing: -0.02em;
+	color: var(--txt-primary);
+}
+
+.address {
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
 .subtitle {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: uppercase;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 }
 </style>
