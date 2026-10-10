@@ -126,9 +126,16 @@ export interface BrowserDriver {
 	waitForNewTab(browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab>
 	/**
 	 * Answer every request the browser makes to `fromOrigin` — whichever of the extension's
-	 * contexts issues it — without touching the network. Resolves once no request can escape.
+	 * contexts issues it — without touching the network. Resolves once no request can escape. With
+	 * `backgroundDown`, a killed background's successor may not run yet; it is armed before it does.
 	 */
-	interceptRpc(browser: Browser, extensionId: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception>
+	interceptRpc(
+		browser: Browser,
+		extensionId: string,
+		fromOrigin: string,
+		mode: RpcInterception,
+		backgroundDown?: boolean,
+	): Promise<ArmedInterception>
 	/**
 	 * Runs before every scripted click. The suite clicks from inside the page, which — unlike a
 	 * person's click — neither focuses the window nor, on every browser, counts as a user gesture.
@@ -232,8 +239,8 @@ export const waitForOpenedUrl = (browser: Browser, url: string, timeout: number)
 	driver.waitForOpenedUrl(browser, url, timeout)
 export const waitForNewTab = (browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab> =>
 	driver.waitForNewTab(browser, open, timeout)
-const standing = standingInterceptions<Browser>((browser, extensionId, fromOrigin, mode) =>
-	driver.interceptRpc(browser, extensionId, fromOrigin, mode),
+const standing = standingInterceptions<Browser>((browser, extensionId, fromOrigin, mode, backgroundDown) =>
+	driver.interceptRpc(browser, extensionId, fromOrigin, mode, backgroundDown),
 )
 /** A spec's interception; on an origin the launch holds, it replaces the launch's until `stop()`. */
 export const interceptRpc = (

@@ -1,17 +1,23 @@
 import type { ArmedInterception, RpcInterception } from "./index"
 
-type Arm<B> = (browser: B, extensionId: string, fromOrigin: string, mode: RpcInterception) => Promise<ArmedInterception>
+type Arm<B> = (
+	browser: B,
+	extensionId: string,
+	fromOrigin: string,
+	mode: RpcInterception,
+	backgroundDown?: boolean,
+) => Promise<ArmedInterception>
 
 interface Standing {
 	origin: string
 	extensionId: string
 	fromOrigin: string
 	mode: RpcInterception
-	/** Undefined while a spec's own interception holds the origin. */
+	/** Undefined while a spec's interception or a background kill has the origin. */
 	current: ArmedInterception | undefined
 	/** Reserved while a spec's interception or a background kill has the origin, until the launch's is re-armed. */
 	overridden: boolean
-	/** What earlier arms counted, kept across a spec's suspension. */
+	/** What earlier arms counted, kept across a suspension. */
 	hits: number
 	failures: string[]
 }
@@ -20,8 +26,9 @@ interface Standing {
  * Interceptions a launch holds for its whole life, one per browser and origin, beside a spec's
  * own. A spec arming an origin the launch holds suspends the launch's until the spec's `stop()`,
  * which re-arms it: two interceptions on one origin would race for each request, and Firefox
- * keeps one per origin. A background kill also suspends them: a session attached to the stopping
- * background keeps its host for the successor, which then never starts clean. The held
+ * keeps one per origin. A background kill also suspends them: on Chrome, a session attached to the
+ * stopping service worker keeps its host for the successor, which then never starts clean; a spec's
+ * own stays armed through a kill, and so carries that hazard. The held
  * interception's `failures` also carry the spec's, a failed re-arm, and a spec's interception still
  * unstopped when they are read. A re-arm that lands after the launch let go is stopped at once, so
  * nothing is left armed unowned.
@@ -49,11 +56,11 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 		}
 	}
 
-	const resume = async (browser: B, standing: Standing): Promise<void> => {
+	const resume = async (browser: B, standing: Standing, backgroundDown = false): Promise<void> => {
 		if (!isHeld(browser, standing) || standing.current) return
 		let rearmed: ArmedInterception
 		try {
-			rearmed = await arm(browser, standing.extensionId, standing.fromOrigin, standing.mode)
+			rearmed = await arm(browser, standing.extensionId, standing.fromOrigin, standing.mode, backgroundDown)
 		} catch (err) {
 			standing.failures.push(`re-arming the launch's interception failed: ${String(err)}`)
 			return
@@ -72,7 +79,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 				return await run()
 			} finally {
 				for (const standing of released) {
-					await resume(browser, standing).finally(() => {
+					await resume(browser, standing, true).finally(() => {
 						standing.overridden = false
 					})
 				}
@@ -92,7 +99,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 				failures: async () => [
 					...standing.failures,
 					...((await standing.current?.failures()) ?? []),
-					...(standing.overridden ? [`a spec's interception on ${origin} was not stopped before this read`] : []),
+					...(standing.overridden ? [`the launch's interception on ${origin} was not re-armed before this read`] : []),
 				],
 				stop: async () => {
 					byOrigin.delete(origin)
@@ -106,7 +113,7 @@ export function standingInterceptions<B extends object>(arm: Arm<B>) {
 		async intercept(browser: B, extensionId: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception> {
 			const standing = held.get(browser)?.get(new URL(fromOrigin).origin)
 			if (!standing) return arm(browser, extensionId, fromOrigin, mode)
-			if (standing.overridden) throw new Error(`rpc-intercept: a spec already intercepts ${standing.origin}`)
+			if (standing.overridden) throw new Error(`rpc-intercept: ${standing.origin} is taken by a spec's interception or a kill`)
 			standing.overridden = true
 			let own: ArmedInterception
 			try {

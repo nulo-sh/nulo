@@ -28,6 +28,7 @@ export async function cdpInterceptRpc(
 	extensionRoot: string,
 	fromOrigin: string,
 	mode: RpcInterception,
+	backgroundDown = false,
 ): Promise<ArmedInterception> {
 	const origin = new URL(fromOrigin).origin
 	const sessions = new Set<CDPSession>()
@@ -107,7 +108,8 @@ export async function cdpInterceptRpc(
 		await Promise.all(initialArms)
 		// The service worker issues the preflight probe: without interception there the test would
 		// dial the real seed endpoint — possibly another run's node — and prove nothing.
-		if (!armedServiceWorker) throw new Error("rpc-intercept: the extension's service worker target is not armed")
+		// A successor that starts later is auto-attached and held until armed, like any new target.
+		if (!armedServiceWorker && !backgroundDown) throw new Error("rpc-intercept: the extension's service worker target is not armed")
 		if (failures.length) throw new Error(`rpc-intercept: ${failures.join("; ")}`)
 	} catch (e) {
 		await stop()

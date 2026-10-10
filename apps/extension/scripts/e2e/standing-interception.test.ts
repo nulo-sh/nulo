@@ -13,7 +13,13 @@ function fakeBrowser() {
 	let arms = 0
 	let failNextArm = false
 	let pause: { entered: () => void; until: Promise<void> } | undefined
-	const arm = async (_browser: object, _id: string, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception> => {
+	const arm = async (
+		_browser: object,
+		_id: string,
+		fromOrigin: string,
+		mode: RpcInterception,
+		backgroundDown = false,
+	): Promise<ArmedInterception> => {
 		const origin = new URL(fromOrigin).origin
 		const name = `${mode.kind} ${origin}`
 		if (pause) {
@@ -29,7 +35,7 @@ function fakeBrowser() {
 		if (armed.has(origin)) throw new Error(`two interceptions on ${name}`)
 		armed.add(origin)
 		const nth = ++arms
-		log.push(`arm ${name}`)
+		log.push(`arm ${name}${backgroundDown ? " (background down)" : ""}`)
 		return {
 			hits: async () => nth,
 			failures: async () => [`arm ${nth} lost one`],
@@ -85,8 +91,8 @@ describe("standing interceptions", () => {
 		const standing = standingInterceptions(arm)
 		const held = await standing.hold(browser, "ext", NODE, REDIRECT)
 		await standing.intercept(browser, "ext", NODE, REFUSE)
-		expect((await held.failures()).at(-1)).toBe("a spec's interception on https://node.test was not stopped before this read")
-		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("a spec already intercepts https://node.test")
+		expect((await held.failures()).at(-1)).toBe("the launch's interception on https://node.test was not re-armed before this read")
+		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("https://node.test is taken")
 	})
 
 	test("a stale stop of an earlier spec's interception leaves the next spec's in place", async () => {
@@ -120,7 +126,7 @@ describe("standing interceptions", () => {
 		const standing = standingInterceptions(arm)
 		await standing.hold(browser, "ext", NODE, REDIRECT)
 		const first = standing.intercept(browser, "ext", NODE, REFUSE)
-		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("a spec already intercepts https://node.test")
+		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("https://node.test is taken")
 		await (await first).stop()
 		expect(log).toEqual([
 			"arm redirect https://node.test",
@@ -139,7 +145,7 @@ describe("standing interceptions", () => {
 		const rearm = pauseArm()
 		const stopped = own.stop()
 		await rearm.started
-		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("a spec already intercepts https://node.test")
+		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("https://node.test is taken")
 		rearm.release()
 		await stopped
 		expect(log.at(-1)).toBe("arm redirect https://node.test")
@@ -180,7 +186,12 @@ describe("standing interceptions", () => {
 			throw new Error("kill failed")
 		})
 		await expect(kill).rejects.toThrow("kill failed")
-		expect(log).toEqual(["arm redirect https://node.test", "stop redirect https://node.test", "kill", "arm redirect https://node.test"])
+		expect(log).toEqual([
+			"arm redirect https://node.test",
+			"stop redirect https://node.test",
+			"kill",
+			"arm redirect https://node.test (background down)",
+		])
 		expect(await held.hits()).toBe(1 + 2)
 		expect(await held.failures()).toEqual(["arm 1 lost one", "arm 2 lost one"])
 	})

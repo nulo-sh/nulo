@@ -258,7 +258,8 @@ export const chromeDriver: BrowserDriver = {
 		const target = await browser.waitForTarget((t) => t.type() === "page" && !before.has(t), { timeout })
 		return { close: async () => (await target.asPage()).close() }
 	},
-	interceptRpc: (browser, extensionId, fromOrigin, mode) => cdpInterceptRpc(browser, `${SCHEME}${extensionId}/`, fromOrigin, mode),
+	interceptRpc: (browser, extensionId, fromOrigin, mode, backgroundDown) =>
+		cdpInterceptRpc(browser, `${SCHEME}${extensionId}/`, fromOrigin, mode, backgroundDown),
 	// Chrome treats evaluated script as a user gesture and has no focused-window precondition.
 	prepareClick: async () => {},
 	// Chrome runs a key's default action on the page the key is sent to, focused or not.
