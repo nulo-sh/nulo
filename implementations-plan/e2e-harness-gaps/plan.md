@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267) and 1b (#273) merged; arc 2 in review
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 4 in progress, arc 3 held (C13)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -420,6 +420,9 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D-orch-6 | After a squash merge an arc branches from `dev`: arc 2 is `e2e-harness-gaps-types` off `origin/dev` at 8c3c671 (#273's squash). D-orch-1 to D-orch-5 stay | The orchestrator's call, as D-orch-3 for arc 1b | Branching from `e2e-harness-gaps-waits` |
 | D-orch-7 | Arc 2 only, exactly as § Arc 2 and Phase 2.1 state: type-only edits in `tests/e2e`, no edit changes what a test does, no `src` edit for the gate, probe counts in `lessons/phase-2.md` before any fix, no added `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error` measured against the merge base with `origin/dev` (not 4a357b7), `unresolved-names.test.ts` deleted only once the gate's file list is shown to contain the scan's, the skill line rewritten; arc 1b's `run-limits.ts` and `stall-watchdog.ts` are covered; nothing of arcs 3 or 4 | The orchestrator's call | — |
 | D-orch-8 | The gate must bite both ways: Phase 2.1 step 4's four probes are run and their outputs recorded in `lessons/phase-2.md`; a gate that passes a probe it should refuse is not done | The orchestrator's call | — |
+| D-orch-9 | After a squash merge an arc branches from `dev`: arc 4 is `e2e-harness-gaps-esm` off `origin/dev` at af4afcc (#278's squash). D-orch-1 to D-orch-8 stay | The orchestrator's call, as D-orch-3 and D-orch-6 | Branching from `e2e-harness-gaps-types` |
+| D-orch-10 | Arc 4 runs before arc 3, which stays held on charter C13; the plan lets the orchestrator reorder when a higher arc's gate opens first. Arc 4 shares no file with arc 3, builds nothing of it and changes nothing a person sees | The orchestrator's call | Waiting for arc 3 (the Delivery table stacks 4 on 3) |
+| D-orch-11 | The proof is the full soak matrix exactly as Phase 4.1 states, at one clean commit after `bun install --frozen-lockfile`: the CJS inventory first, then 30 retry-0 runs per workspace on both engines for every workspace whose config imports the base, an exact-inventory `compare` each, `test:all` five times, a `pr-quick.yml` dispatch bound to that commit (no PR until the soak passes), `build`, `build-storybook`, the armed smoke build, one smoke and one network file, the warning grep at 0 and Biome checking the renamed base. Soak outputs stay outside the repo; the evidence goes in `lessons/phase-4.md`. A failed compare stops the arc; no run count or compare is relaxed | The orchestrator's call | A smaller parity soak |
 
 ## Audit verdicts
 
