@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       extension-network: ${{ steps.override.outputs.full || steps.filter.outputs.extension-network }}
+      label-hit: ${{ steps.live.outputs.label-hit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,6 +46,15 @@ jobs:
           # whenever the merge-base sits beyond the initial depth (structural on
           # long-running branches ~100+ commits from the base).
           fetch-depth: 0
+      - name: Read the live labels and head
+        id: live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci-cd/live-labels.sh e2e:extension-network e2e:network
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -110,8 +120,12 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
           NETWORK: ${{ needs.changes.outputs.extension-network }}
-          LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:extension-network') || contains(github.event.pull_request.labels.*.name, 'e2e:network') }}
+          LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
         run: |
+          case "$LABEL_HIT" in
+            true | false) ;;
+            *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
+          esac
           # The paths filter already answers "does this diff touch the surface?" — gating it on
           # the base branch as well only creates a hole, because a stacked PR's `github.base_ref`
           # is the branch below it. Only the bottom arc of a stack targets `dev`; every arc above

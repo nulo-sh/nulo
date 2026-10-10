@@ -232,7 +232,7 @@ Pass criteria for every gate: each command exits 0; each new test is shown red a
 
 Validation gate: Fast; Gating; Actions; `bun run --cwd apps/extension build-storybook`. Pass: all exit 0, and the new aggregator case fails with the `expect` line removed. Layers: lint, typecheck, unit (pins), build.
 
-**Phase 1.2, live labels and live head (#167).**
+**Phase 1.2, live labels and live head (#167).** ✓
 1. Add the `live` step and the `label-hit` output to each lane's `changes` job.
 2. Bind every `decide` job's `LABEL_HIT` to `needs.changes.outputs.label-hit`, and add the `true`/`false` refusal before the gate.
 3. Update the pins in the same commit: the `aggregators.test.ts` world key and `decided()`; the Firefox `decide` equality still holds.
@@ -447,6 +447,7 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D-orch-2 | Arc 1 only for this run; nothing of arcs 2 to 5 is built. OA-1, OA-2 and OA-3 sit on the owner's decision page 5; none touches arc 1 | The orchestrator's scope call | — |
 | D-orch-3 | A3 approved: the probe pushes the scratch branch `ci-release-supply-probe` to `nulo-sh/nulo` and deletes it once the readings are recorded (`git ls-remote origin ci-release-supply-probe` prints nothing before the arc ends); nothing is pushed to `dev`, `main` or a `v*` tag. A6 accepted: the deterministic battery stands in for the soak in arc 2 | The orchestrator's answers to A3 and A6 | — |
 | D-orch-4 | The final pass's unreviewed arc-1 fixes come first: the first Codex round and the Opus review are asked, explicitly and before anything else, about D2 (list, read, revalidate; the force-push rewind), D3 (no fallback on the live label read; the `true`/`false` refusal) and D5 (rule 1's fresh `status` at the re-run's attempt; the skipped-matrix probe cases). Phase 1.3's gate counts as passed only once their answers are recorded under Audit verdicts | The final Codex pass rejected twice and its last fixes were never re-reviewed | — |
+| D13 | The `live` step runs `scripts/ci-cd/live-labels.sh <label> <alias>` after the checkout, instead of four inline copies before it; its tests live in `behavior-gating.test.ts` (`live labels`) and the `decide` refusal's in `aggregators.test.ts` | One source that shellcheck lints and the shim test runs directly, pinned identical in all four lanes; an obsolete run now pays one checkout before it stops, seconds against a suite's minutes | Implementation deviation from § Arc 1's inline step (arc 1 build). `pr-supersede.yml` stays inline: its job holds `actions: write` and checks nothing out |
 
 ## Audit verdicts
 

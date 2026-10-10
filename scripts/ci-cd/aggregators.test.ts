@@ -339,34 +339,52 @@ test("release runs the network suite in the one job attach-assets and status rea
 // for the suites, and the aggregator must then fail on them skipped. A draft-flag read spelled any
 // other way than the one this world binds has no value here, and throws.
 const E2E_LANES = [
-	{ file: "pr-extension-smoke-e2e.yml", surface: "smoke-surface", label: "smoke" },
-	{ file: "pr-extension-smoke-e2e-firefox.yml", surface: "smoke-surface", label: "smoke" },
-	{ file: "pr-extension-network-e2e.yml", surface: "extension-network", label: "network" },
-	{ file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network", label: "network" },
+	{ file: "pr-extension-smoke-e2e.yml", surface: "smoke-surface" },
+	{ file: "pr-extension-smoke-e2e-firefox.yml", surface: "smoke-surface" },
+	{ file: "pr-extension-network-e2e.yml", surface: "extension-network" },
+	{ file: "pr-extension-network-e2e-firefox.yml", surface: "extension-network" },
 ]
-const labels = (label: string): string =>
-	`contains(github.event.pull_request.labels.*.name, 'e2e:extension-${label}') || contains(github.event.pull_request.labels.*.name, 'e2e:${label}')`
+const LABEL_HIT = "needs.changes.outputs.label-hit"
 
-/** What a lane's `Decide` step writes to `$GITHUB_OUTPUT`. */
-function decided(file: string, world: World): string {
+/** Runs a lane's `Decide` step: its exit code, and what it wrote to `$GITHUB_OUTPUT`. */
+function decide(file: string, world: World): { code: number; output: string } {
 	const step = workflow(file).jobs.decide.steps[0]
 	const dir = mkdtempSync(join(tmpdir(), "decide-"))
 	try {
 		const output = join(dir, "output")
-		expect(exitCode({ file, run: step.run, env: step.env ?? {} }, world, { GITHUB_OUTPUT: output }), `${file}: decide`).toBe(0)
-		return readFileSync(output, "utf8").trim()
+		const code = exitCode({ file, run: step.run, env: step.env ?? {} }, world, { GITHUB_OUTPUT: output })
+		return { code, output: code === 0 ? readFileSync(output, "utf8").trim() : "" }
 	} finally {
 		rmSync(dir, { recursive: true, force: true })
 	}
 }
 
-test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface, label }) => {
+function decided(file: string, world: World): string {
+	const { code, output } = decide(file, world)
+	expect(code, `${file}: decide`).toBe(0)
+	return output
+}
+
+const prWorld = (surface: string, over: World = {}): World => ({
+	"github.event_name": "pull_request",
+	"github.base_ref": "dev",
+	[`needs.changes.outputs.${surface}`]: "false",
+	[LABEL_HIT]: "false",
+	...over,
+})
+
+// The live read always writes true or false; anything else is a wiring fault, and reading it as
+// false would skip a suite the labels ask for.
+test.each(E2E_LANES)("$file decides from the live label and refuses any other value", ({ file, surface }) => {
+	expect(decided(file, prWorld(surface, { [LABEL_HIT]: "true" }))).toBe("run=true")
+	expect(decided(file, prWorld(surface))).toBe("run=false")
+	for (const value of ["", "yes", "True"]) expect(decide(file, prWorld(surface, { [LABEL_HIT]: value })).code, `'${value}'`).not.toBe(0)
+})
+
+test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface }) => {
 	const draft: World = {
-		"github.event_name": "pull_request",
-		"github.base_ref": "dev",
+		...prWorld(surface, { [`needs.changes.outputs.${surface}`]: "true" }),
 		"github.event.pull_request.draft": "true",
-		[`needs.changes.outputs.${surface}`]: "true",
-		[labels(label)]: "false",
 	}
 	expect(decided(file, draft)).toBe("run=true")
 	const agg = aggregator(file)

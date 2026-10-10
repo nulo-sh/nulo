@@ -11,7 +11,8 @@
  * that step this guard would never run on a PR and the whole mechanism would be hollow.
  */
 import { describe, expect, test } from "bun:test"
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..", "..")
@@ -176,6 +177,119 @@ describe("PR concurrency", () => {
 				"${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}",
 			)
 		}
+	})
+})
+
+/**
+ * Each e2e lane decides from the labels the pull request carries when its `changes` job runs. An
+ * event's own label list is a snapshot that a late run of an older event would decide from, so no
+ * workflow or action may read it, and a run whose head the pull request has moved past stops itself.
+ */
+describe("live labels", () => {
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+	const LANES = {
+		"pr-extension-smoke-e2e.yml": ["e2e:extension-smoke", "e2e:smoke"],
+		"pr-extension-smoke-e2e-firefox.yml": ["e2e:extension-smoke", "e2e:smoke"],
+		"pr-extension-network-e2e.yml": ["e2e:extension-network", "e2e:network"],
+		"pr-extension-network-e2e-firefox.yml": ["e2e:extension-network", "e2e:network"],
+	}
+	const SCRIPT = "bash scripts/ci-cd/live-labels.sh"
+	const snapshotReads = (text: string): string[] =>
+		text.split("\n").filter((line) => /github\.event\.(pull_request\.labels|label)\b/.test(line))
+	const ciFiles = (): string[] =>
+		[".github/workflows", ".github/actions"].flatMap((dir) =>
+			(readdirSync(join(ROOT, dir), { recursive: true }) as string[])
+				.filter((name) => /\.ya?ml$/.test(name))
+				.map((name) => join(dir, name)),
+		)
+
+	test("no workflow or action reads an event's label snapshot", () => {
+		const planted = "          LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:smoke') }}"
+		expect(snapshotReads(`run: echo\n${planted}`)).toEqual([planted])
+		const files = ciFiles()
+		expect(files.length).toBeGreaterThan(10)
+		for (const file of files) expect(snapshotReads(readFileSync(join(ROOT, file), "utf8")), file).toEqual([])
+	})
+
+	test("every lane reads its own two labels live and decides from that output alone", () => {
+		for (const [file, labels] of Object.entries(LANES)) {
+			const { changes, decide } = workflow(file).jobs
+			const live = changes.steps.find((step: { id?: string }) => step.id === "live")
+			expect(live?.run, file).toBe(`${SCRIPT} ${labels.join(" ")}`)
+			expect(live?.if, `${file}: runs on every event`).toBeUndefined()
+			expect(live?.["continue-on-error"], file).toBeUndefined()
+			expect(live?.env, file).toEqual({
+				GH_TOKEN: "${{ github.token }}",
+				EVENT: "${{ github.event_name }}",
+				REPO: "${{ github.repository }}",
+				PR: "${{ github.event.pull_request.number }}",
+				HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
+			})
+			expect(changes.outputs["label-hit"], `${file}: no fallback`).toBe("${{ steps.live.outputs.label-hit }}")
+			expect(decide.steps[0].env.LABEL_HIT, file).toBe("${{ needs.changes.outputs.label-hit }}")
+		}
+	})
+
+	/** Runs the live step's script under a `gh` that records its calls and answers from `body`, or fails with `failure`. */
+	function runLive(args: string[], env: Record<string, string>, gh: { body?: unknown; failure?: string }) {
+		const dir = mkdtempSync(join(tmpdir(), "live-labels-"))
+		try {
+			const log = join(dir, "calls")
+			const output = join(dir, "output")
+			writeFileSync(join(dir, "body.json"), JSON.stringify(gh.body ?? {}))
+			writeFileSync(log, "")
+			writeFileSync(output, "")
+			const shim = gh.failure
+				? `echo "$*" >> "${log}"; echo "gh: ${gh.failure}" >&2; exit 1`
+				: `echo "$*" >> "${log}"; cat "${join(dir, "body.json")}"`
+			writeFileSync(join(dir, "gh"), `#!/usr/bin/env bash\n${shim}\n`)
+			chmodSync(join(dir, "gh"), 0o755)
+			const run = Bun.spawnSync(["bash", "scripts/ci-cd/live-labels.sh", ...args], {
+				cwd: ROOT,
+				env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: output, RETRY_PAUSE: "0", ...env },
+			})
+			return {
+				code: run.exitCode,
+				stdout: run.stdout.toString(),
+				output: readFileSync(output, "utf8").trim(),
+				calls: readFileSync(log, "utf8").split("\n").filter(Boolean),
+			}
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	}
+
+	const HEAD = "a".repeat(40)
+	const pr = { EVENT: "pull_request", REPO: "nulo-sh/nulo", PR: "7", HEAD_SHA: HEAD, GH_TOKEN: "t" }
+	const body = (labels: string[], head = HEAD) => ({ head: { sha: head }, labels: labels.map((name) => ({ name })) })
+
+	test.each(Object.entries(LANES))("%s: the live labels decide, read once from the pull request", (_, labels) => {
+		const alias = runLive(labels, pr, { body: body(["docs", labels[1]]) })
+		expect([alias.code, alias.output, alias.calls]).toEqual([0, "label-hit=true", ["api repos/nulo-sh/nulo/pulls/7"]])
+		const unrelated = runLive(labels, pr, { body: body(["docs", "e2e:other"]) })
+		expect([unrelated.code, unrelated.output]).toEqual([0, "label-hit=false"])
+		const dispatch = runLive(labels, { ...pr, EVENT: "workflow_dispatch", PR: "", HEAD_SHA: "" }, { failure: "unused" })
+		expect([dispatch.code, dispatch.output, dispatch.calls]).toEqual([0, "label-hit=false", []])
+	})
+
+	test("a run whose head the pull request moved past stops, whatever its labels", () => {
+		const moved = runLive(LANES["pr-extension-smoke-e2e.yml"], pr, { body: body(["e2e:smoke"], "b".repeat(40)) })
+		expect(moved.code).not.toBe(0)
+		expect(moved.stdout).toContain(`superseded by ${"b".repeat(40)}`)
+		expect(moved.output).toBe("")
+	})
+
+	test("an unreadable pull request fails closed: one retry for a rate limit or server error, none for a refusal", () => {
+		const labels = LANES["pr-extension-network-e2e.yml"]
+		for (const failure of ["API rate limit exceeded (HTTP 403)", "HTTP 502: Bad Gateway", "connection reset by peer"]) {
+			const run = runLive(labels, pr, { failure })
+			expect([run.code === 0, run.output, run.calls.length], failure).toEqual([false, "", 2])
+		}
+		const missing = runLive(labels, pr, { failure: "Not Found (HTTP 404)" })
+		expect([missing.code === 0, missing.output, missing.calls.length]).toEqual([false, "", 1])
+		const malformed = runLive(labels, pr, { body: { head: { sha: HEAD } } })
+		expect([malformed.code === 0, malformed.output]).toEqual([false, ""])
 	})
 })
 
