@@ -11,3 +11,4 @@
 - 2026-10-10: gate 1.1 pass: lint, typecheck:all, JsonViewer 42/42; the first-document test fails on the base LogsViewer.vue.
 - 2026-10-10: gate 1.2 pass: lint, typecheck:all, config+privacy+config service+logger store+session-manager 141/141; the new set and reset tests fail on the base store.ts.
 - 2026-10-10: gate 1.3 pass: lint, typecheck:all, stack pins+PopupCard+popup store+FormPopup+11 form popups 178/178, build-storybook exit 0.
+- 2026-10-10: gate 1.4 pass: lint, typecheck:all, account-name+NewAccount+NewFpc+EditFpc 27/27; the three popup duplicate tests fail on the base popups.

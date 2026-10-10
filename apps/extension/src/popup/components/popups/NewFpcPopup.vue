@@ -2,6 +2,7 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 /** Utils */
+import { sameStoredName } from "@/utils/account-name"
 import { isValidHex } from "@/utils/string"
 
 /** Services */
@@ -32,7 +33,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.replace(/\s/g, "").length) return null
-			if (fpcs.value.some((f) => f.name === v)) return "Already exist"
+			if (fpcs.value.some((f) => sameStoredName(f.name, v))) return "Already exist"
 			return null
 		},
 	},

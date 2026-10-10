@@ -237,7 +237,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 3. Tests: `popup-stack.pins.test.ts` expects form popups to forward the depth to the card and the order to `Popup`; `PopupCard.test.ts` applies `displace` at depth 2 and not at depth 1 or `NaN`; `popup.store.test.ts` adds a BUG PIN for the re-open gap that cites FA-8.
 - Validation gate: fast layers on those three files and each touched popup's test; `bun run --cwd apps/extension build-storybook` exits 0.
 
-**1.4 #214, stored-name key.**
+**1.4 #214, stored-name key.** ✓
 1. Add `storedNameKey`/`sameStoredName` with tests: outer spaces equal; inner spaces and case significant; `undefined` keys as `""`; two empty keys are not the same name.
 2. Switch the three validators.
 3. Tests per popup, modelled on `NewContactPopup.test.ts`'s `nameWarns`: a saved "Alice" makes "Alice " and " Alice" warn and keep Save disabled; "alice" does not warn (control); an unnamed saved FPC beside a saved "Alice" does not throw, does not warn for "Bob", and does not warn for " " in Edit FPC (as today); `addFpc`/`updateFpc` receive the name as typed (as today).

@@ -5,6 +5,7 @@ import { FieldWarning } from "@nulo/design"
 import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
+import { sameStoredName } from "@/utils/account-name"
 import { copyWithToast } from "@/utils/clipboard"
 import { isValidHex } from "@/utils/string"
 
@@ -37,7 +38,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v?.length) return null
-			const conflicting = fpcs.value.find((f) => f.name === v && f.id !== fpcToEdit.value?.id)
+			const conflicting = fpcs.value.find((f) => sameStoredName(f.name, v) && f.id !== fpcToEdit.value?.id)
 			if (conflicting) return "Already exist"
 			return null
 		},

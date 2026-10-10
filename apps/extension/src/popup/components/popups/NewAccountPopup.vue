@@ -3,7 +3,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { AccountType } from "@/wallet/services/account/client"
-import { nextAccountName } from "@/utils/account-name"
+import { nextAccountName, sameStoredName } from "@/utils/account-name"
 import { managers } from "@/utils/core"
 import { storageLocalSet } from "@/utils/storage"
 
@@ -31,7 +31,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.length) return null
-			if (appStore.accounts.find((a) => a.name === v)) return "Already exist"
+			if (appStore.accounts.some((a) => sameStoredName(a.name, v))) return "Already exist"
 			return null
 		},
 	},
