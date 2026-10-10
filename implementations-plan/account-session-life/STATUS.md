@@ -11,3 +11,4 @@
 - 2026-10-10 — arc 1 started: merged origin/dev 9574a9d; D-orch-1 to D-orch-3 recorded.
 - 2026-10-10 — R2-1 asked first: Codex and Opus both UNREACHABLE (high); plan kept, evidence in Audit verdicts.
 - 2026-10-10 — phase 1.1 gate pass: lint 0, typecheck:all 0, account unit 113/113; four new proofs red on 643c0c9.
+- 2026-10-10 — phase 1.2 gate pass: lint 0, typecheck:all 0, unit 52/52; I1 confirmed; new proofs red on 643c0c9.

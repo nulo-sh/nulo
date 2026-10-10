@@ -267,7 +267,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0. The four new proofs fail against `git show 643c0c9:apps/extension/src/wallet/services/account/service.ts` (the base create ignores the row lock, deletes no key, and the base `unwrite` and reconcile delete whatever row they find).
 - Layers: lint, typecheck, unit.
 
-#### Phase 1.2: the activation wait (#100)
+#### Phase 1.2: the activation wait (#100) ✓
 
 1. Confirm I1: list every await in `bootstrapActiveProfile` and `runBootstrapCore` and every failure path, and check that each await is an RPC under the client timeout or a storage call, and that each failure of a current run writes `bootstrapFailure`. Log it in `lessons/phase-1.md`. If one is not, record that path in OA-1 and stop before step 3.
 2. Add `deadlineCovers: "start"` and `ActivationSupersededError` to `awaitProfileActivation`, keeping its one watcher.
