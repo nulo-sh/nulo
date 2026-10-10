@@ -48,9 +48,8 @@ export async function predictedWorstMinFees(node: MinFeeNode): Promise<GasFees> 
 	if (!predicted || predicted.length === 0) return currentMinFees(node)
 	// Component-wise worst across slots (max each fee independently) — a true upper bound even if the DA
 	// and L2 fees peak in different slots, so the committed cap is never under-priced on either axis.
-	const first = predicted[0]
-	if (!first) return currentMinFees(node)
-	let worstDa = checkedFees(first).feePerDaGas
+	const first = checkedFees(predicted[0])
+	let worstDa = first.feePerDaGas
 	let worstL2 = first.feePerL2Gas
 	for (const f of predicted) {
 		const fees = checkedFees(f)

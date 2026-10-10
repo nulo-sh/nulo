@@ -56,14 +56,20 @@ describe("predictedWorstMinFees fallback", () => {
 describe("predictedWorstMinFees reply shape", () => {
 	const MALFORMED = "Malformed fee reply from the node"
 
-	test("a null-like current-min reply is refused with the fixed error", async () => {
-		const n: MinFeeNode = { getCurrentMinFees: async () => undefined as unknown as GasFees }
+	test.each([
+		["null-like", undefined],
+		["L2 component that is not an integer", { feePerDaGas: 1n, feePerL2Gas: "1" }],
+	])("a %s current-min reply is refused with the fixed error", async (_, reply) => {
+		const n: MinFeeNode = { getCurrentMinFees: async () => reply as unknown as GasFees }
 		await expect(predictedWorstMinFees(n)).rejects.toThrow(new Error(MALFORMED))
 	})
 
-	test("a null-like predicted slot is refused with the fixed error", async () => {
+	test.each([
+		["last", [new GasFees(5n, 6n), undefined]],
+		["first", [null, new GasFees(100n, 100n)]],
+	])("a null-like %s predicted slot is refused with the fixed error, never priced from the current min", async (_, slots) => {
 		const n: MinFeeNode = {
-			getPredictedMinFees: async () => [new GasFees(5n, 6n), undefined as unknown as GasFees],
+			getPredictedMinFees: async () => slots as GasFees[],
 			getCurrentMinFees: async () => new GasFees(1n, 1n),
 		}
 		await expect(predictedWorstMinFees(n)).rejects.toThrow(new Error(MALFORMED))
