@@ -25,7 +25,7 @@ import z from "zod"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { toBase64 } from "@nulo/wallet-core/utils"
 import type { ServiceSpec } from "@nulo/wallet-core/base"
-import { ServiceClient } from "@nulo/extension-messaging/offscreen"
+import { type RequestErrorMeta, type ResponseContentLike, ServiceClient, type TerminalRecord } from "@nulo/extension-messaging/offscreen"
 import type { NetworkInfo } from "./chain-runtime"
 import type { IPXE } from "./ipxe"
 import type { Methods, NotesFilter, NoteSchema, PxeEvents } from "./spec"
@@ -99,6 +99,14 @@ const SCOPES_OF: Partial<Record<keyof Methods, (args: unknown[]) => unknown>> = 
 	getPrivateEvents: (args) => (args[2] as { scopes?: unknown } | undefined)?.scopes,
 }
 
+/** A `simulateTx` this client stopped waiting for while the document it was sent to still runs it. */
+interface AbandonedSimulation {
+	readonly epoch: number
+	readonly done: Promise<void>
+	readonly end: () => void
+	readonly expiry: ReturnType<typeof setTimeout>
+}
+
 export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> implements ServiceSpec<Methods, PxeEvents> {
 	/** Prove-phase events from the offscreen prover, already sender-gated by the
 	 *  transport; the payload is still untrusted until the consumer validates it. */
@@ -111,6 +119,13 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	 *  separate from the key provider so op capture doesn't pay an HKDF per call. */
 	private generationProvider?: (profileId: string) => Promise<string | undefined>
 	private scopeRegistrar?: ScopeRegistrar
+	private documentEpoch?: () => number
+	private abandonedLifetimeMs = 0
+	/** The newest epoch proven gone; later epochs may still run what was sent to them. */
+	private retiredThrough = -1
+	private readonly abandoned = new Map<number, AbandonedSimulation>()
+	/** The timeout error this client raised for a `simulateTx`, to its request id. */
+	private readonly simulationTimeouts = new WeakMap<object, number>()
 
 	public constructor(logger: ILogger) {
 		super(PXE_SERVICE_NAME, logger)
@@ -144,6 +159,82 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	 *  out uncaptured and only the provision-time fence applies. */
 	public setGenerationProvider(provider: (profileId: string) => Promise<string | undefined>): void {
 		this.generationProvider = provider
+	}
+
+	/**
+	 * Track `simulateTx` requests that time out after their send, until the offscreen document ends
+	 * them: the offscreen service has no abort, so a timed-out simulation keeps its place in the
+	 * PXE's queue. `epoch` tags each send, and only work sent in an epoch already retired is not
+	 * recorded; each record also ends `lifetimeMs` after it was made, so none outlives that bound.
+	 * Without a provider nothing is tracked.
+	 */
+	public setDocumentEpochProvider(epoch: () => number, lifetimeMs: number): void {
+		this.documentEpoch = epoch
+		this.abandonedLifetimeMs = lifetimeMs
+	}
+
+	/** Pending while the timed-out simulation behind `error` (itself or along its `cause` chain) may
+	 *  still run offscreen; undefined when this client tracks no such simulation. */
+	public offscreenSettled(error: unknown): Promise<void> | undefined {
+		let current: unknown = error
+		for (let depth = 0; depth < 8 && typeof current === "object" && current !== null; depth++) {
+			const requestId = this.simulationTimeouts.get(current)
+			if (requestId !== undefined) return this.abandoned.get(requestId)?.done
+			current = (current as { cause?: unknown }).cause
+		}
+		return undefined
+	}
+
+	/** Every simulation sent at or before `epoch` ended with its document. */
+	public retireEpochsThrough(epoch: number): void {
+		this.retiredThrough = Math.max(this.retiredThrough, epoch)
+		for (const [requestId, record] of this.abandoned) if (record.epoch <= epoch) this.endAbandoned(requestId)
+	}
+
+	protected override requestTag(method: string): unknown {
+		return method === "simulateTx" ? this.documentEpoch?.() : undefined
+	}
+
+	protected override makeTimeoutError(meta: RequestErrorMeta): unknown {
+		const error = super.makeTimeoutError(meta)
+		if (meta.methodName === "simulateTx" && typeof error === "object" && error !== null) {
+			this.simulationTimeouts.set(error, meta.requestId)
+		}
+		return error
+	}
+
+	protected override onTerminal(record: TerminalRecord, tag?: unknown): void {
+		super.onTerminal(record)
+		// A newer epoch proves nothing; only a retired one says the work went with its document.
+		if (record.status !== "timeout" || record.detail !== "timeout_fired" || typeof tag !== "number" || tag <= this.retiredThrough)
+			return
+		let end = () => {}
+		const done = new Promise<void>((resolve) => {
+			end = resolve
+		})
+		const expiry = setTimeout(() => this.endAbandoned(record.requestId), this.abandonedLifetimeMs)
+		this.abandoned.set(record.requestId, { epoch: tag, done, end, expiry })
+	}
+
+	protected override onUnmatchedResponse(content: ResponseContentLike): void {
+		if (this.endAbandoned(content.requestId)) {
+			this.logDebug("Late answer to a timed-out simulation")
+			return
+		}
+		super.onUnmatchedResponse(content)
+	}
+
+	protected override onLateSendFailure(requestId: number): void {
+		this.endAbandoned(requestId)
+	}
+
+	private endAbandoned(requestId: number): boolean {
+		const record = this.abandoned.get(requestId)
+		if (!record) return false
+		this.abandoned.delete(requestId)
+		clearTimeout(record.expiry)
+		record.end()
+		return true
 	}
 
 	/** Register the hook that loads the profile's accounts into the PXE when an op is refused for

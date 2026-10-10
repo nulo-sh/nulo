@@ -354,6 +354,15 @@ describe("proveAndSend: the session checks", () => {
 	})
 })
 
+describe("simulateTxTask", () => {
+	test("a simulation's rejection fails the task and rethrows the same object", async () => {
+		const timeout = new Error("timed out")
+		const pxe = { simulateTx: vi.fn(async () => Promise.reject(timeout)) } as unknown as IPXE
+		await expect(makeCoordinator().simulateTxTask(pxe, {} as never, {} as never)).rejects.toBe(timeout)
+		expect(fakeTask.fail).toHaveBeenCalledWith(timeout)
+	})
+})
+
 describe("sendTxTask — duplicate-initialization classification", () => {
 	const NULLIFIER_REJECTION = new Error("Invalid tx: Existing nullifier")
 

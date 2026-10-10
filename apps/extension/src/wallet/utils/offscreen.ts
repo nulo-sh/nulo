@@ -137,6 +137,38 @@ function trackedClose(): Promise<void> {
 	return link
 }
 
+/** Tags the work sent to the offscreen document. It moves when a close succeeds and when a create
+ *  starts, since READY can arrive before the create resolves, so a newer epoch says nothing about
+ *  which document runs the work. Only a retired epoch does: it and every earlier one went to a
+ *  document proven gone by a close or a create that succeeded. A ghost document can emit READY
+ *  mid-replacement, a failed close may leave the document running, and `getContexts` can miss a
+ *  live ghost, so none of those proves that a document's work ended. */
+let documentEpoch = 0
+const retiredListeners = new Set<(retiredEpoch: number) => void>()
+
+/** The epoch a request sent now carries; only its retirement proves the work it tags has ended. */
+export function offscreenEpoch(): number {
+	return documentEpoch
+}
+
+/** Calls `listener` with each retired epoch, every earlier one retired with it; returns the
+ *  unsubscribe. A late create can announce a lower epoch after a close announced a higher one, so
+ *  a listener keeps the highest. */
+export function onOffscreenRetired(listener: (retiredEpoch: number) => void): () => void {
+	retiredListeners.add(listener)
+	return () => retiredListeners.delete(listener)
+}
+
+function announceRetired(epoch: number): void {
+	for (const listener of [...retiredListeners]) listener(epoch)
+}
+
+function retireDocument(): void {
+	const retired = documentEpoch
+	documentEpoch += 1
+	announceRetired(retired)
+}
+
 /** Monotonic create-pass fence. Each ensure pass captures `++passSeq`; the
  *  timeout handler bumps it to invalidate the running pass. `createOffscreen`
  *  retries ONLY while its pass id is still current — a mutable boolean here
@@ -173,7 +205,8 @@ async function isOffscreenHealthy(): Promise<boolean> {
 }
 
 /**
- * Close the existing offscreen, ignoring errors.
+ * Close the existing offscreen, ignoring errors, and retire its epoch only when the document is
+ * known to be gone.
  *
  * Chromium: `chrome.offscreen.closeDocument()`.
  * Firefox: remove the frame; a removed frame's document is destroyed with it.
@@ -184,11 +217,15 @@ async function closeOffscreen() {
 			await chrome.offscreen.closeDocument()
 		} catch {
 			// Already closed or Chrome cleaned it up
+			return
 		}
+		retireDocument()
 		return
 	}
+	const attached = firefoxOffscreenFrame?.element.isConnected === true
 	firefoxOffscreenFrame?.element.remove()
 	firefoxOffscreenFrame = null
+	if (attached) retireDocument()
 }
 
 /**
@@ -213,8 +250,16 @@ async function createOffscreenChromium(passId: number) {
 			reasons: ["WORKERS"],
 			justification: "Offscreen document is used for running PXE in it",
 		})
-	try {
+	// Chromium allows one offscreen document, so a create that succeeds proves the earlier ones gone.
+	// Each attempt starts its own epoch first, so work sent on a READY that beats it is not retired.
+	const createRetiringEarlier = async () => {
+		const previous = documentEpoch
+		documentEpoch += 1
 		await create()
+		announceRetired(previous)
+	}
+	try {
+		await createRetiringEarlier()
 	} catch (err) {
 		// Two transient shapes get one close-and-retry: the ghost bug
 		// ("single offscreen document": getContexts saw none but create says
@@ -236,7 +281,7 @@ async function createOffscreenChromium(passId: number) {
 			// The close suspends: re-check the fence so a timeout landing in
 			// the close window can't be followed by an untracked create.
 			if (passId !== passSeq) throw err
-			await create()
+			await createRetiringEarlier()
 		} else {
 			throw err
 		}

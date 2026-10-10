@@ -21,7 +21,7 @@ import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
-import { JobCancelledError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import { JobCancelledError, RpcTimeoutError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, type LocalTxOrigin } from "@/wallet/services/transaction/spec"
 import { DappSendExecutor, type DappSendExecutorDeps } from "./dapp-send-executor"
@@ -1530,7 +1530,7 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 				accountService: {},
 				transactionService: {},
 				fpcService: {},
-				pxeService: {},
+				pxeService: { offscreenSettled: () => undefined },
 				resolver: {},
 				logger: {},
 				ensureInitialized: async () => {},
@@ -1567,6 +1567,39 @@ describe("DappSendExecutor — discovered authwits, the preview snapshot and the
 			await self.cancelEstimate("tok-late")
 			expect(self.previewSnapshots.take(result.previewId, identity)).toEqual({ kind: "missing" })
 		})
+
+		test.each(["previewOperationAuthwits", "estimateOperationFee"] as const)(
+			"%s: a simulation that timed out keeps the estimate's place until its offscreen record ends",
+			async (entry) => {
+				const { self, pxe, buildAndEstimateValidated, buildAndEstimateFolded } = rpc()
+				const timeout = new RpcTimeoutError("timed out", { requestId: 7, methodName: "simulateTx" })
+				let end = () => {}
+				const offscreen = new Promise<void>((resolve) => {
+					end = resolve
+				})
+				Object.assign(self, { pxeService: { offscreenSettled: (e: unknown) => (e === timeout ? offscreen : undefined) } })
+				// Discovery simulates on the PXE here; the fee estimate simulates inside its strategy,
+				// whose rethrow of the same object `fee/strategies-lifecycle.test.ts` pins.
+				const simulations =
+					entry === "previewOperationAuthwits" ? [pxe.simulateTx] : [buildAndEstimateValidated, buildAndEstimateFolded]
+				for (const simulate of simulations) simulate.mockRejectedValueOnce(timeout)
+				const call =
+					entry === "previewOperationAuthwits"
+						? self.previewOperationAuthwits("i-1", 0, "tok-slow", "op")
+						: (self as unknown as { estimateOperationFee: (...a: unknown[]) => Promise<unknown> }).estimateOperationFee(
+								"i-1",
+								0,
+								{ paymentMethod: { kind: "embedded" } },
+								"tok-slow",
+								"op",
+							)
+				await expect(call).rejects.toBe(timeout)
+				expect(self.estimateCancel.unsettledCount("p1")).toBe(1)
+				end()
+				await offscreen
+				expect(self.estimateCancel.unsettledCount("p1")).toBe(0)
+			},
+		)
 
 		test("cancelling during discovery aborts the RPC with the structured error and stashes nothing", async () => {
 			collectOffchainEffectsMock.mockReturnValue([effect("n")])

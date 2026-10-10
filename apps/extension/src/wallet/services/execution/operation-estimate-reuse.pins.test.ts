@@ -1,7 +1,7 @@
 /**
  * `OperationEstimateReuse.tryConsume` pins: the ordered collaborator calls and the exact reason at
  * every exit, one guarded field at a time, the multiplier per priority, and the unknown-priority
- * throws (an unvalidated popup input this ladder does not absorb).
+ * throws (the second line behind the popup RPC boundary, which refuses such a level first).
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { GasFees } from "@aztec-labs/stdlib/gas"
@@ -139,6 +139,12 @@ function thrown(f: () => unknown): Error {
 		return error as Error
 	}
 	throw new Error("expected a throw")
+}
+
+/** The real fee read against a node that answers `reply`: a null-like answer is refused there. */
+async function realRead(reply: unknown): Promise<GasFees> {
+	const actual = await vi.importActual<typeof import("@nulo/aztec-runtime/fee-juice")>("@nulo/aztec-runtime/fee-juice")
+	return actual.predictedWorstMinFees({ getCurrentMinFees: async () => reply as never })
 }
 
 /** Today's composition on the same value. Only the module transform's import rewrite is normalized. */
@@ -368,7 +374,7 @@ describe("the multiplier per priority", () => {
 	})
 })
 
-describe("an unknown priority keeps its throw (an owner lead, not absorbed)", () => {
+describe("an unknown priority keeps its throw (the inner second line behind the RPC boundary)", () => {
 	const bogus = { paymentMethod: { kind: "fj" }, priorityLevel: "bogus" } as unknown as FeeSettings
 	const ctor = { paymentMethod: { kind: "fj" }, priorityLevel: "constructor" } as unknown as FeeSettings
 
@@ -399,14 +405,13 @@ describe("an unknown priority keeps its throw (an owner lead, not absorbed)", ()
 		await expect(reuse.tryConsume("id-1", input(bogus), FENCE)).rejects.toBe(blockNotFound)
 	})
 
-	test.each([undefined, null])("a %s reply: the composition's own TypeError text", async (reply) => {
-		const expected = await compositionError(reply, undefined)
-		predicted.mockResolvedValueOnce(reply as never)
+	test.each([undefined, null])("a %s node reply: the read's own refusal, never a TypeError of the composition", async (reply) => {
+		predicted.mockImplementationOnce(() => realRead(reply))
 		const { reuse } = harness()
 		reuse.stash("id-1", entry(bogus, { fpcIdentity: undefined }))
 		const error = await reuse.tryConsume("id-1", input(bogus), FENCE).catch((e: unknown) => e as Error)
-		expect(error).toBeInstanceOf(TypeError)
-		expect(normalized((error as Error).message)).toBe(normalized(expected.message))
+		expect((error as Error).constructor).toBe(Error)
+		expect((error as Error).message).toBe("Malformed fee reply from the node")
 	})
 })
 
@@ -415,8 +420,8 @@ describe("a failed fee read under a known priority misses (a fixed reason, never
 	const FJ_LADDER_TO_THE_READ = FULL_LADDER.filter((step) => step !== "getFpcInfo" && step !== "predictedWorstMinFees")
 	const replies: Array<[string, () => void]> = [
 		["a rejected read", () => predicted.mockRejectedValueOnce(new Error("block not found"))],
-		["an undefined reply", () => predicted.mockResolvedValueOnce(undefined as never)],
-		["a null reply", () => predicted.mockResolvedValueOnce(null as never)],
+		["an undefined node reply", () => predicted.mockImplementationOnce(() => realRead(undefined))],
+		["a null node reply", () => predicted.mockImplementationOnce(() => realRead(null))],
 		["a bare-object reply", () => predicted.mockResolvedValueOnce({ feePerDaGas: 2n, feePerL2Gas: 3n } as never)],
 	]
 	const priorities = [undefined, "normal", "fast", "urgent"] as const

@@ -1,4 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+
 export type FeePaymentMethod = FeeJuicePaymentMethod | FeeJuiceWithClaimPaymentMethod | FpcPaymentMethod | CustomPaymentMethod
 
 export type FeeJuicePaymentMethod = {
@@ -32,6 +34,36 @@ export const PRIORITY_MULTIPLIERS: Record<PriorityLevel, number> = {
 export type FeeSettings = {
 	readonly paymentMethod: FeePaymentMethod
 	readonly priorityLevel?: PriorityLevel
+}
+
+/** True only for a speed level `PRIORITY_MULTIPLIERS` defines itself, never an inherited name. */
+export function isPriorityLevel(value: unknown): value is PriorityLevel {
+	return typeof value === "string" && Object.hasOwn(PRIORITY_MULTIPLIERS, value)
+}
+
+/** Refuses fee settings that name a speed level other than the three; an absent level is the
+ *  default, and a value that is not an object passes so the method's own failure stays the one
+ *  the caller sees. */
+export function refuseUnknownPriority(method: string, feeSettings: unknown): void {
+	if (typeof feeSettings !== "object" || feeSettings === null) return
+	const level = (feeSettings as { priorityLevel?: unknown }).priorityLevel
+	if (level !== undefined && !isPriorityLevel(level)) throw InvalidWalletArgumentsError.forMethod(method)
+}
+
+/** Per RPC, the fee settings its arguments carry. Typed against the method's parameters, so a
+ *  changed signature fails to compile; a reader never throws on a malformed call. */
+export type FeeSettingsReaders<M> = {
+	[K in keyof M]?: M[K] extends (...args: infer A) => unknown ? (args: A) => readonly (FeeSettings | undefined)[] : never
+}
+
+/** Refuses the call before it runs when any fee settings it carries fail `refuseUnknownPriority`. */
+export function refuseUnknownPriorities(
+	readers: { readonly [method: string]: ((args: never) => readonly unknown[]) | undefined },
+	method: string,
+	params: unknown[],
+): void {
+	const read = Object.hasOwn(readers, method) ? (readers[method] as (args: unknown[]) => readonly unknown[]) : undefined
+	for (const feeSettings of read?.(params) ?? []) refuseUnknownPriority(method, feeSettings)
 }
 
 export type GasBalances = {
