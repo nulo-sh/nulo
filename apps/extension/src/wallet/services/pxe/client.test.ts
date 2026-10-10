@@ -14,8 +14,12 @@ import type { NetworkInfo } from "@nulo/aztec-runtime/pxe"
 vi.mock("@/wallet/utils/offscreen", async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
 	ensureOffscreenRunning: vi.fn(async () => undefined),
+	onOffscreenRetired: vi.fn(),
 }))
 
+import { offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
+import { PxeServiceClientBase } from "@nulo/aztec-runtime/pxe"
+import { ESTIMATE_JOB_TTL_MS } from "@/wallet/services/execution/estimate-cancel-registry"
 import { PxeServiceClient, registerPxeGenerationProvider, registerPxeRecoveryGuard } from "./client"
 
 const noopLogger: ILogger = { log: () => {} }
@@ -94,5 +98,17 @@ describe("PxeServiceClient.isAcceptedSender — responses only from the offscree
 		expect(accepts(sender({ id: "nulo" }))).toBe(false)
 		expect(accepts(sender({ id: "other", url: doc }))).toBe(false)
 		expect(accepts(undefined)).toBe(false)
+	})
+})
+
+describe("PxeServiceClient timed-out simulation records", () => {
+	test("last as long as an estimate entry and end when the offscreen document they went to retires", () => {
+		vi.stubGlobal("chrome", { runtime: { onMessage: { addListener: () => {} } } })
+		const provider = vi.spyOn(PxeServiceClientBase.prototype, "setDocumentEpochProvider")
+		const retire = vi.spyOn(PxeServiceClientBase.prototype, "retireEpochsThrough")
+		new PxeServiceClient(noopLogger)
+		expect(provider).toHaveBeenCalledWith(offscreenEpoch, ESTIMATE_JOB_TTL_MS)
+		vi.mocked(onOffscreenRetired).mock.calls.at(-1)?.[0](3)
+		expect(retire).toHaveBeenCalledWith(3)
 	})
 })

@@ -4,7 +4,9 @@ import {
 	OFFSCREEN_PING,
 	OFFSCREEN_PONG,
 	OFFSCREEN_READY_MESSAGE,
+	offscreenEpoch,
 	offscreenUrl,
+	onOffscreenRetired,
 	shouldRespondPong,
 } from "./offscreen"
 
@@ -89,6 +91,39 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 		expect(getContexts).toHaveBeenCalledTimes(1)
 		expect(createDocument).toHaveBeenCalledTimes(1)
 		expect(closeDocument).not.toHaveBeenCalled()
+	})
+
+	test("the document epoch moves only on a close that succeeded: never on READY, a negative probe or a failed close", async () => {
+		const retired: number[] = []
+		const stop = onOffscreenRetired((epoch) => retired.push(epoch))
+		vi.useFakeTimers()
+		try {
+			const start = offscreenEpoch()
+			const cold = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(0)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await cold
+			expect([offscreenEpoch(), retired]).toEqual([start, []])
+
+			// A live document that fails its health check is closed: first the close fails, then it succeeds.
+			getContexts.mockResolvedValue([{}])
+			closeDocument.mockRejectedValueOnce(new Error("No current offscreen document"))
+			const failedClose = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(3_100)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await failedClose
+			expect([offscreenEpoch(), retired]).toEqual([start, []])
+
+			const closed = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(3_100)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await closed
+			expect(closeDocument).toHaveBeenCalledTimes(2)
+			expect([offscreenEpoch(), retired]).toEqual([start + 1, [start]])
+		} finally {
+			stop()
+			vi.useRealTimers()
+		}
 	})
 
 	test('"closed before fully loading" create rejection retries once and recovers', async () => {
@@ -524,6 +559,23 @@ describe("ensureOffscreenRunning — Firefox background-page frame", () => {
 			expect(frames()).toHaveLength(1)
 			expect(liveGeneration()).not.toBe(first)
 			await readyAndAwait(p2)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("removing an attached frame retires its epoch", async () => {
+		vi.useFakeTimers()
+		try {
+			const p1 = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(0)
+			await readyAndAwait(p1)
+			const before = offscreenEpoch()
+
+			const p2 = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(3_100)
+			await readyAndAwait(p2)
+			expect(offscreenEpoch()).toBe(before + 1)
 		} finally {
 			vi.useRealTimers()
 		}

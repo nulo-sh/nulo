@@ -558,7 +558,7 @@ May start now (tests and comments only). Rebase on send-queue-activity arc 1 bef
 - **Pass:** every command exits 0, and `git diff --stat` shows only test files and four comment hunks under `src/`.
 - **Layers:** lint, typecheck, unit.
 
-#### Phase 1.3: a timed-out estimate keeps its place (#119)
+#### Phase 1.3: a timed-out estimate keeps its place (#119) ✓
 
 **Warning.** Start this phase only after send-queue-activity arc 1 has merged. That arc edits the estimate admission in `EX/service.ts`.
 

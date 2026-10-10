@@ -137,6 +137,29 @@ function trackedClose(): Promise<void> {
 	return link
 }
 
+/** Counts offscreen documents known to be gone. It moves only on a close that succeeded: a ghost
+ *  document can emit READY mid-replacement, a failed close may leave the document running, and
+ *  `getContexts` can miss a live ghost, so none of those is proof that a document's work ended. */
+let documentEpoch = 0
+const retiredListeners = new Set<(retiredEpoch: number) => void>()
+
+/** The current document's epoch; a request sent now runs in that document or in none. */
+export function offscreenEpoch(): number {
+	return documentEpoch
+}
+
+/** Calls `listener` with the epoch just retired, after each proven close; returns the unsubscribe. */
+export function onOffscreenRetired(listener: (retiredEpoch: number) => void): () => void {
+	retiredListeners.add(listener)
+	return () => retiredListeners.delete(listener)
+}
+
+function retireDocument(): void {
+	const retired = documentEpoch
+	documentEpoch += 1
+	for (const listener of [...retiredListeners]) listener(retired)
+}
+
 /** Monotonic create-pass fence. Each ensure pass captures `++passSeq`; the
  *  timeout handler bumps it to invalidate the running pass. `createOffscreen`
  *  retries ONLY while its pass id is still current — a mutable boolean here
@@ -173,7 +196,8 @@ async function isOffscreenHealthy(): Promise<boolean> {
 }
 
 /**
- * Close the existing offscreen, ignoring errors.
+ * Close the existing offscreen, ignoring errors, and retire its epoch only when the document is
+ * known to be gone.
  *
  * Chromium: `chrome.offscreen.closeDocument()`.
  * Firefox: remove the frame; a removed frame's document is destroyed with it.
@@ -184,11 +208,15 @@ async function closeOffscreen() {
 			await chrome.offscreen.closeDocument()
 		} catch {
 			// Already closed or Chrome cleaned it up
+			return
 		}
+		retireDocument()
 		return
 	}
+	const attached = firefoxOffscreenFrame?.element.isConnected === true
 	firefoxOffscreenFrame?.element.remove()
 	firefoxOffscreenFrame = null
+	if (attached) retireDocument()
 }
 
 /**

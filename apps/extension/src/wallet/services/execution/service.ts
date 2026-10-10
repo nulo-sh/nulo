@@ -591,6 +591,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 		let admitted = false
 		let estimateId: string | undefined
+		let offscreenWork: Promise<void> | undefined
 		try {
 			// Inside the try: a parked admission rejected by supersede/cancel
 			// throws the internal sentinel too, and it must cross the RPC
@@ -603,12 +604,20 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
 			return result
 		} catch (error) {
+			if (admitted) offscreenWork = this.pxeService.offscreenSettled(error)
 			if (error instanceof JobCancelledSentinel) {
 				throw new JobCancelledError(undefined, { jobId: estimateToken })
 			}
 			throw error
 		} finally {
-			if (admitted) this.estimateCancel.settle(estimateToken, estimateId)
+			// A simulation that timed out still runs in the PXE's queue, so its estimate keeps its
+			// place until that simulation ends offscreen; the client bounds the wait.
+			if (offscreenWork) {
+				this.logDebug("estimate held until its timed-out simulation ends offscreen")
+				void offscreenWork.then(() => this.estimateCancel.settle(estimateToken))
+			} else if (admitted) {
+				this.estimateCancel.settle(estimateToken, estimateId)
+			}
 		}
 	}
 

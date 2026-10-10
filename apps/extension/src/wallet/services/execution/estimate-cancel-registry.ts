@@ -3,14 +3,16 @@
  *
  * Estimates have no journal record, so `ExecutionLane.cancelJob` cannot cover
  * them; this registry is the estimate-side equivalent, keyed by a caller-minted
- * token instead of a journal id. Its contract (see
- * implementations-plan/archive/fee-estimation-speedup/plan.md#estimate-cancellation):
+ * token instead of a journal id. Its contract:
  *
  * - **Admission is atomic against real work, not bookkeeping.** At most
  *   `MAX_ACTIVE_ESTIMATES_PER_PROFILE` UNSETTLED underlying jobs per profile.
  *   A cancelled job does NOT free capacity — the underlying simulation is
  *   non-preemptible and keeps its queue slot until it settles — so admission
- *   counts entries until `settle()`, never until cancel.
+ *   counts entries until `settle()`, never until cancel. A transport timeout
+ *   does not end the work either: the caller settles an entry whose simulation
+ *   timed out only once the offscreen answer arrives, its document is retired,
+ *   or the TTL sweep reaps it.
  * - **Overflow = cancel-oldest + coalesce-newest.** The newcomer parks in a
  *   single latest-wins pending slot per (profile, flowKey) and is admitted
  *   only when a job actually settles. A newer arrival on the same slot
@@ -37,11 +39,9 @@ export const MAX_ACTIVE_ESTIMATES_PER_PROFILE = 4
 export const MAX_PENDING_ESTIMATES_PER_PROFILE = 8
 /** A runner that hasn't settled after this long is presumed dead and reaped.
  *  MUST stay comfortably above the worst-case estimate transport chain
- *  (~5 sequential PXE RPCs × their 90 s timeouts): every RPC rejection
- *  reaches `withEstimateAdmission`'s finally → settle, so by this horizon a
- *  reaped entry's underlying job has provably settled or died at the
- *  transport layer — freeing its slot then cannot over-admit past the cap
- *  while non-preemptible ACVM work still runs. */
+ *  (~5 sequential PXE RPCs × their 90 s timeouts). It is a dead-man bound, not
+ *  a ceiling on the work: a held entry whose simulation still waits offscreen
+ *  behind queued proofs is reaped too, and its place admits the next estimate. */
 export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
 /** How long a settled token can still evict its stash — mirrors the reuse TTL. */
 export const SETTLED_STASH_TTL_MS = 120_000
