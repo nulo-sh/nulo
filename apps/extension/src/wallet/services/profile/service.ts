@@ -1256,15 +1256,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * Waits for init and then for the coordinator's start, both inside one init budget, so a delete
-	 * waits no longer before its first write than any RPC waits for init. Holds no lock.
+	 * waits no longer before its first write than any RPC waits for init. Holds no lock. The budget
+	 * runs on the monotonic clock: a wall-clock change must neither stretch nor cut it.
 	 */
 	private async awaitDeletionDelegate(): Promise<ProfileDeletionDelegate> {
-		const deadline = Date.now() + DEFAULT_INIT_TIMEOUT_MS
+		const deadline = performance.now() + DEFAULT_INIT_TIMEOUT_MS
 		await this.ensureInitialized()
 		if (!this.deletionDelegate) {
 			let timer: ReturnType<typeof setTimeout> | undefined
 			const bound = new Promise<void>((resolve) => {
-				timer = setTimeout(resolve, Math.max(0, deadline - Date.now()))
+				timer = setTimeout(resolve, Math.max(0, deadline - performance.now()))
 			})
 			await Promise.race([this.deletionDelegateInjected.promise, bound])
 			clearTimeout(timer)

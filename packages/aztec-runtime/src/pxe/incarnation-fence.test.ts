@@ -1,8 +1,9 @@
 /**
  * The incarnation-fence matrix: a deleted profile's PXE can never be
  * resurrected in the same offscreen incarnation. The fence is the per-profile
- * lifecycle (unseen → live(gen) → deleting(gen) → deleted(gen)) gating
- * `provisionChainStoreKey`, `clearProfileState`, and generation-carrying ops.
+ * record (a current live(gen) or deleting(gen), plus every generation this
+ * document erased) gating `provisionChainStoreKey`, `clearProfileState`, and
+ * generation-carrying ops.
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"

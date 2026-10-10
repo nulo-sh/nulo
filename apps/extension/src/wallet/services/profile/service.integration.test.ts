@@ -2115,9 +2115,37 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 			await vi.advanceTimersByTimeAsync(9_000)
 			expect(settled).toBe(false)
 			await vi.advanceTimersByTimeAsync(1_000)
+			expect(settled).toBe(true)
 
 			expect(((await deleting) as Error).message).toBe("deletion coordinator not ready")
 			expect(await api.storage.local.get(tombstoneKey(p.id))).toEqual({})
+		})
+
+		test.each([
+			["set back an hour", -3_600_000],
+			["set forward an hour", 3_600_000],
+		])("a wall clock %s mid-wait neither stretches nor cuts the budget", async (_, shift) => {
+			const { service } = await bootWithoutDelegate()
+			const p = await service.createProfile("A", "password123")
+			const svc = service as unknown as { initialized: boolean }
+			vi.useFakeTimers()
+
+			svc.initialized = false
+			let settled = false
+			const deleting = service
+				.deleteProfile(p.id)
+				.catch((e: unknown) => e)
+				.finally(() => {
+					settled = true
+				})
+			await vi.advanceTimersByTimeAsync(20_000)
+			vi.setSystemTime(Date.now() + shift)
+			svc.initialized = true
+			await vi.advanceTimersByTimeAsync(9_000)
+			expect(settled).toBe(false)
+			await vi.advanceTimersByTimeAsync(1_000)
+			expect(settled).toBe(true)
+			expect(((await deleting) as Error).message).toBe("deletion coordinator not ready")
 		})
 	})
 
