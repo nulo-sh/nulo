@@ -460,6 +460,19 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Codex round 3 (same session): approve, no new material findings.** The loop converged.
 
+### Arc 2 post-implementation loop (2026-10-10)
+
+**Codex round 1 (gpt-6.1-sol, high, fresh session): conditional approve**, no production regression. Three Lows, all accepted and verified:
+- A2-C1 [Low] `NewContactPopup.test.ts` never reset the held `getContacts` implementation, which `vi.clearAllMocks` keeps: reset in `beforeEach`.
+- A2-C2 [Low] the Import held-read pin left its wrapper mounted, watching shared cache state: unmounted on test end.
+- A2-C3 [Low] Send's contact pin held `getContacts` itself, so it would pass if contacts were applied on arrival; the race it names is a contacts answer waiting on the token read. The pin now answers contacts at once and holds the token read; a scratch mutation that applies contacts on arrival turns it red. The token-delete pin had the same flaw and now holds the contacts read.
+
+**Opus 5.5 review (alongside round 1): approve.** Five Lows: one the same as A2-C1; four accepted:
+- A2-O1 [Low] `liveBus` swallowed a throwing handler, so a held-read pin could pass on a crash: the bus now reports a throw as an unhandled error, which fails the run (probed).
+- A2-O2 [Low] a pin could resolve a read that was never held, and Select Profile resolved with the default names: every pin asserts its read was held, and Select Profile's answer uses names of its own.
+- A2-O3 [Low] with `full.vue`'s reduced-motion row dropped, nothing checked that the page keeps the shared shake: `a11y-css.test.ts` pins the composition (red on the parent `full.vue`).
+- A2-O4 [Low] comments: the loader pin's header described history; `contactListReducers` said "popup" for a list Send (a page) holds. Both reworded; `holdReads` states that its implementation outlives `vi.clearAllMocks`.
+
 ## Post-implementation
 
 This section is self-contained: the implementing session follows it from here.
