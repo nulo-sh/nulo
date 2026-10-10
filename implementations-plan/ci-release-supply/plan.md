@@ -1,7 +1,7 @@
 ---
 plan: ci-release-supply
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 merged (#252); arc 2 phases 2.1-2.3 built, 2.4 reverted by its stop rule (D21)
+status: approved by the orchestrator (D-orch-1 to D-orch-9); arc 1 merged (#252); arc 2 merged (#261, phase 2.4 reverted by its stop rule, D21); arcs 3 and 4 as two PRs off dev (D-orch-8)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -451,6 +451,8 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D-orch-5 | After a squash merge an arc branches from `dev`: arc 2's `ci-release-supply-scripts` starts at `origin/dev` c0e1e69 (#252), whose tree equals arc 1's last head | The orchestrator's delivery call; arc 1's branch history is not in `dev` after the squash, so branching from it would replay it | Supersedes "later arcs branch from arc 1's branch" in D-orch-1 |
 | D-orch-6 | Arc 2 only for this run, with the owner's asks in their "what ships now" form: OA-1 option B (today's onboarding title kept as Nulo's own string, page 5 P5-05), OA-3 option A (PRs into `main` only, plus the `auto-unstick` preflight, page 5 P5-06). Nothing of arcs 3, 4 or 5 is built | The orchestrator's scope call | — |
 | D-orch-7 | The unreviewed verifier fix comes first: before phase 2.3's gate counts as passed, the first Codex round and the Opus review are each asked, explicitly and first, whether `fetchVerified` as exported keeps every check the publish path makes (digest, `SHASUMS256.txt`, the attestation, the frozen pre-attestation list) for the store-copy caller, with `attach-assets-run.test.ts`'s call-order assertion unchanged; their answers go under Audit verdicts | The planning panel's last Codex round rejected on that fix and it was applied unreviewed | — |
+| D-orch-8 | Arcs 3 and 4 are two PRs, each branched from `origin/dev` after arc 2 merged (69eab05, #261), built in one run: arc 3 on `ci-release-supply-docs`, arc 4 on `ci-release-supply-plans-ignore`, never one on top of the other. Each runs its gate and its Codex round (one round for arc 3's docs paragraph unless it finds something), and opens its PR against `dev` with the Delivery table's title. Whichever lands second merges `origin/dev` in | Both edit CLAUDE.md, in different sections, and merge independently; the shared plan edits (this row, the status lines) are byte-identical on both branches so they merge clean | Supersedes the arc 3 and arc 4 bases in § Delivery ("arc 2, then `dev`", "arc 3, then `dev`") and § Post-implementation's `<top arc>`: with two PRs side by side there is none, so the final cross-arc pass (step 3) runs on the close-out branch once both have merged |
+| D-orch-9 | Nothing of arc 5 is built: it waits on decision page 5 (P5-02) and the owner's ruleset change. Arcs 3 and 4 change nothing a person sees and add no words outside the two docs the plan names (CLAUDE.md; `implementations-plan/README.md`). The blueprint skill's transcript list lives in aa-skills, outside this repository: the arc 4 report flags it and nothing there changes | The orchestrator's scope call | — |
 | D19 | `verify-store-copies.yml`'s job holds `contents: read` and `attestations: read` | The plan grants the second scope only if `gh attestation verify` needs it, as measured; the job token cannot be measured before the workflow reaches `dev` (scheduled and dispatched runs start there), and anonymous `api.github.com` is rate-limited from this host. A read scope on public data costs nothing, while a missing one would red the first run for a permission instead of a store difference | Implementation decision (phase 2.3); put to the arc's Codex round and Opus review |
 | D20 | Chrome's allowlist names the `_metadata/` directory entry beside `_metadata/verified_contents.json` | The re-measure found it in the central directory (627 entries); phase 0 compared unpacked trees, which hide directory entries. It holds no bytes | Implementation deviation from § Arc 2 (#179) step 2, found by its own step 1 |
 | D21 | `hoist = false` is reverted and #172 stays open; the PR title drops "hoist nothing" and says `Refs #172` | The battery on a fresh install found six third-party packages importing what they do not declare (`@aztec-labs/aztec.js` from aztec-standards, `vue` from `@pinia/testing`, `@vue/compiler-sfc` from local-pkg for vite-plugin-pages, `@storybook/vue3-vite` from storybook, the polyfill plugin's rewritten `buffer` shim, `@aztec-labs/simulator` from presto), past the stop rule's three. One bounded probe hoisted them to complete the list for #172, then the key and the probe were reverted; nothing of it is committed | The stop rule pre-registered in § Arc 2 (#172) |
@@ -619,6 +621,14 @@ On `f1c0618..6d5e7ea`. Every accepted round-1 finding is fixed with no regressio
 ### Arc 2, Codex round 3 (resumed), 2026-10-10
 
 On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same bytes, same HTTP error text, and a null body yields empty bytes as `arrayBuffer()` did. The test routes the API call to the redirect and the storage call to the body, needs the exact limit error, and the small control proves the routing reaches the write. The loop converged in three rounds.
+
+### Arc 3, Codex round 1 (gpt-6.1-sol, high, read-only)
+
+Pending.
+
+### Arc 4, Codex rounds (gpt-6.1-sol, high, read-only)
+
+Pending.
 
 ## Post-implementation
 
