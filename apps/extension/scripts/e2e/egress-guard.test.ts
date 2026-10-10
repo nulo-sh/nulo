@@ -3,12 +3,15 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { type Socket, connect } from "node:net"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { afterAll, afterEach, describe, expect, test } from "vitest"
+import { afterAll, afterEach, describe, expect, test, vi } from "vitest"
 import {
+	EGRESS_CANARY_HOST,
+	type EgressAttempt,
 	type EgressCanary,
 	type EgressGuard,
 	MALFORMED,
 	guardArmed,
+	ownGuardedLaunch,
 	proxyTarget,
 	startEgressCanary,
 	startEgressGuard,
@@ -172,20 +175,22 @@ describe("stop", () => {
 
 describe("undeclared", () => {
 	const attempt = (host: string) => ({ host, port: 443, count: 1 })
+	const ownHosts = new Map([["update.googleapis.com", "the component updater"]])
 
-	test("a declared wallet host and the running browser's listed host pass", () => {
-		expect(undeclared([attempt("lb.drpc.live"), attempt("update.googleapis.com")], "chrome")).toEqual([])
+	test("a declared wallet host and a listed browser host pass", () => {
+		expect(undeclared([attempt("lb.drpc.live"), attempt("update.googleapis.com")], ownHosts)).toEqual([])
 	})
 
-	test("an unlisted host under a listed host's domain fails", () => {
-		const hosts = [attempt("firebaseinstallations.googleapis.com"), attempt("evil-update.googleapis.com")]
-		expect(undeclared(hosts, "chrome")).toEqual(["evil-update.googleapis.com:443", "firebaseinstallations.googleapis.com:443"])
-	})
-
-	test("another browser's listed host fails, and so does a malformed request", () => {
-		expect(undeclared([attempt("update.googleapis.com"), { host: MALFORMED, port: 0, count: 1 }], "firefox")).toEqual([
+	test("an unlisted host under a listed host's domain fails, and so does a malformed request", () => {
+		const hosts = [
+			attempt("firebaseinstallations.googleapis.com"),
+			attempt("evil-update.googleapis.com"),
+			{ host: MALFORMED, port: 0, count: 1 },
+		]
+		expect(undeclared(hosts, ownHosts)).toEqual([
 			`${MALFORMED}:0`,
-			"update.googleapis.com:443",
+			"evil-update.googleapis.com:443",
+			"firebaseinstallations.googleapis.com:443",
 		])
 	})
 })
@@ -198,4 +203,113 @@ test("proxyTarget refuses a CONNECT with a path and a request for another scheme
 
 test("only a provided true arms the guard", () => {
 	expect([true, undefined, false, "true", 1].map(guardArmed)).toEqual([true, false, false, false, false])
+})
+
+describe("a guarded launch", () => {
+	const traffic = { browser: "chrome", ownHosts: new Map([["update.googleapis.com", "the component updater"]]) }
+
+	/** A guard and canary that record what the fake browser "sends", and the browser itself. */
+	function rig(opts: { probeSends?: string[]; canaryDirect?: boolean } = {}) {
+		const record: EgressAttempt[] = []
+		const send = (host: string) => record.push({ host, port: 443, count: 1 })
+		const fakeGuard: EgressGuard = { port: 1, attempts: () => record, overflowed: () => false, stop: vi.fn(async () => {}) }
+		let direct = 0
+		const fakeCanary: EgressCanary = { port: 2, connections: () => direct, stop: vi.fn(async () => {}) }
+		const closeBrowser = vi.fn(async () => {})
+		const deps = {
+			label: "spec.test.ts",
+			traffic,
+			startGuard: async () => fakeGuard,
+			startCanary: async () => fakeCanary,
+			launch: vi.fn(async () => ({ value: "browser", close: closeBrowser })),
+			settle: vi.fn(async () => "extension-id"),
+			probeCanary: vi.fn(async () => {
+				if (opts.canaryDirect) direct++
+				for (const host of opts.probeSends ?? [EGRESS_CANARY_HOST]) send(host)
+			}),
+			wrapClose: (close: () => Promise<void>) => ({ close }),
+		}
+		const stopped = () => [vi.mocked(fakeGuard.stop).mock.calls.length > 0, vi.mocked(fakeCanary.stop).mock.calls.length > 0]
+		return { deps, send, closeBrowser, stopped }
+	}
+
+	test("success control: a launch that tried only declared and listed hosts closes cleanly, once", async () => {
+		const { deps, send, closeBrowser, stopped } = rig()
+		const launch = await ownGuardedLaunch(deps)
+		send("lb.drpc.live")
+		send("update.googleapis.com")
+		await launch.close()
+		expect(stopped()).toEqual([true, true])
+		await launch.close()
+		expect(closeBrowser).toHaveBeenCalledTimes(2)
+	})
+
+	test("a launch that rejects stops the guard and the canary and rethrows", async () => {
+		const { deps, stopped } = rig()
+		const cause = new Error("no browser")
+		deps.launch.mockRejectedValueOnce(cause)
+		await expect(ownGuardedLaunch(deps)).rejects.toBe(cause)
+		expect(stopped()).toEqual([true, true])
+	})
+
+	test("a settle that throws closes the browser and stops both", async () => {
+		const { deps, closeBrowser, stopped } = rig()
+		deps.settle.mockRejectedValueOnce(new Error("no liveness"))
+		await expect(ownGuardedLaunch(deps)).rejects.toThrow("no liveness")
+		expect(closeBrowser).toHaveBeenCalled()
+		expect(stopped()).toEqual([true, true])
+	})
+
+	test("an undeclared host fails the close, naming it, and the browser still closes", async () => {
+		const { deps, send, closeBrowser } = rig()
+		const launch = await ownGuardedLaunch(deps)
+		send("firebaseinstallations.googleapis.com")
+		await expect(launch.close()).rejects.toThrow(/spec\.test\.ts: chrome tried 1 host.*firebaseinstallations\.googleapis\.com:443/)
+		expect(closeBrowser).toHaveBeenCalled()
+	})
+
+	test("a close-time check that throws still runs the egress check", async () => {
+		const { deps, send, stopped } = rig()
+		const launch = await ownGuardedLaunch({
+			...deps,
+			wrapClose: () => ({ close: async () => Promise.reject(new Error("2 CSP violation(s)")) }),
+		})
+		send("api.coingecko.com.evil.test")
+		await expect(launch.close()).rejects.toThrow(/api\.coingecko\.com\.evil\.test:443[\s\S]*2 CSP violation/)
+		expect(stopped()).toEqual([true, true])
+	})
+
+	test("an early check of the wrapped close does not skip the egress check", async () => {
+		const { deps, send, closeBrowser } = rig()
+		const wrapClose = (close: () => Promise<void>) => {
+			let consumed = false
+			const check = () => {
+				consumed = true
+			}
+			return { check, close: () => (consumed ? close() : Promise.reject(new Error("unreachable"))) }
+		}
+		const launch = await ownGuardedLaunch({ ...deps, wrapClose })
+		launch.wrapped.check()
+		send("unlisted.test")
+		await expect(launch.close()).rejects.toThrow(/unlisted\.test:443/)
+		expect(closeBrowser).toHaveBeenCalled()
+	})
+
+	test("a browser close that rejects still stops both, and its error is reported", async () => {
+		const { deps, closeBrowser, stopped } = rig()
+		closeBrowser.mockRejectedValueOnce(new Error("browser hung"))
+		const launch = await ownGuardedLaunch(deps)
+		await expect(launch.close()).rejects.toThrow("browser hung")
+		expect(stopped()).toEqual([true, true])
+	})
+
+	test.each([
+		["went direct", { canaryDirect: true }],
+		["never reached the guard", { probeSends: [] }],
+	])("a canary request that %s fails the launch and releases it", async (why, opts) => {
+		const { deps, closeBrowser, stopped } = rig(opts)
+		await expect(ownGuardedLaunch(deps)).rejects.toThrow(`the canary request ${why}`)
+		expect(closeBrowser).toHaveBeenCalled()
+		expect(stopped()).toEqual([true, true])
+	})
 })

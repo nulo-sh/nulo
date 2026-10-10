@@ -11,7 +11,6 @@ import { type Server, type Socket, createServer } from "node:net"
 import { reservePort } from "../../../scripts/e2e/resolve-ports"
 import { REPO_ROOT } from "../lockfile"
 import { PortClaimConflict, claimPorts, registeredPorts, releasePorts } from "../port-registry"
-import type { BrowserKind } from "./browser/selection"
 
 export interface EgressAttempt {
 	host: string
@@ -52,20 +51,6 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[EGRESS_LINK_LOCAL_HOST, "the control spec's link-local probe"],
 ])
 
-/**
- * Hosts a browser reaches on its own, whatever the wallet does. Exact names, never a domain, so a
- * wallet dependency that calls a new host under a vendor's domain still fails the run.
- */
-export const BROWSER_OWN_HOSTS: ReadonlyMap<string, { browser: BrowserKind; why: string }> = new Map([
-	["accounts.google.com", { browser: "chrome", why: "account sign-in state" }],
-	["android.clients.google.com", { browser: "chrome", why: "device check-in" }],
-	["clients2.google.com", { browser: "chrome", why: "extension and component update checks" }],
-	["update.googleapis.com", { browser: "chrome", why: "the component updater" }],
-	["www.google.com", { browser: "chrome", why: "the default search provider's preconnect" }],
-	["content-signature-2.cdn.mozilla.net", { browser: "firefox", why: "remote settings signature checks" }],
-	["firefox.settings.services.mozilla.com", { browser: "firefox", why: "remote settings" }],
-])
-
 const HEAD_LIMIT = 8 * 1024
 const HEAD_DEADLINE_MS = 5_000
 const STOP_DEADLINE_MS = 2_000
@@ -99,10 +84,10 @@ export function proxyTarget(head: string): { host: string; port: number } | unde
 	}
 }
 
-/** Every attempt no list accepts, as `host:port`. A browser's own host passes only for that browser. */
-export function undeclared(attempts: readonly EgressAttempt[], browser: BrowserKind): string[] {
+/** Every attempt that neither the declared refusals nor the running browser's own hosts accept, as `host:port`. */
+export function undeclared(attempts: readonly EgressAttempt[], browserOwnHosts: ReadonlyMap<string, string>): string[] {
 	return attempts
-		.filter(({ host }) => !DECLARED_REFUSALS.has(host) && BROWSER_OWN_HOSTS.get(host)?.browser !== browser)
+		.filter(({ host }) => !DECLARED_REFUSALS.has(host) && !browserOwnHosts.has(host))
 		.map(({ host, port }) => `${host}:${port}`)
 		.sort()
 }
@@ -258,5 +243,119 @@ export async function startEgressCanary(): Promise<EgressCanary> {
 			stopping ??= shutDown(server, sockets).finally(release)
 			return stopping
 		},
+	}
+}
+
+const CANARY_PROBE_BUDGET_MS = 5_000
+
+/** Why a launch's egress record fails it, or undefined when it does not. */
+export function egressFailure(
+	{ attempts, overflowed, canaryConnections }: { attempts: readonly EgressAttempt[]; overflowed: boolean; canaryConnections: number },
+	traffic: { browser: string; ownHosts: ReadonlyMap<string, string> },
+): string | undefined {
+	if (canaryConnections > 0) {
+		return `${canaryConnections} connection(s) reached ${EGRESS_CANARY_HOST} directly: ${traffic.browser}'s proxy routing did not hold`
+	}
+	if (overflowed) return `more than ${MAX_DISTINCT} distinct hosts were tried; the record stopped counting new ones`
+	const hosts = undeclared(attempts, traffic.ownHosts)
+	if (hosts.length === 0) return undefined
+	return [
+		`${traffic.browser} tried ${hosts.length} host(s) outside the machine that no list declares: ${hosts.join(", ")}.`,
+		"A host the wallet or a spec now tries: add it to DECLARED_REFUSALS with why (tests/e2e/fixtures/egress-guard.ts).",
+		`A host the browser reaches on its own: add the exact name to its driver's ownHosts with why (tests/e2e/fixtures/browser/${traffic.browser}.ts).`,
+	].join("\n")
+}
+
+/**
+ * Closes the launch, then stops the guard and the canary, then judges what they saw. Stopping comes
+ * before the snapshot so an unfinished request is classified; the listeners stop however the close
+ * went, and a close that threw is reported beside an egress failure, never instead of it.
+ */
+export async function closeAfterEgressCheck(
+	close: () => Promise<void>,
+	{
+		guard,
+		canary,
+		label,
+		traffic,
+	}: { guard: EgressGuard; canary: EgressCanary; label: string; traffic: Parameters<typeof egressFailure>[1] },
+): Promise<void> {
+	let closeError: unknown
+	try {
+		await close()
+	} catch (err) {
+		closeError = err
+	} finally {
+		await Promise.all([guard.stop(), canary.stop()])
+	}
+	const failure = egressFailure(
+		{ attempts: guard.attempts(), overflowed: guard.overflowed(), canaryConnections: canary.connections() },
+		traffic,
+	)
+	if (failure) {
+		const also = closeError === undefined ? "" : `\nThe close before the check failed too: ${String(closeError)}`
+		throw new Error(`egress guard: ${label}: ${failure}${also}`, { cause: closeError })
+	}
+	if (closeError !== undefined) throw closeError
+}
+
+export interface GuardedLaunchDeps<B, S, L extends { close(): Promise<void> }> {
+	/** Names the launch in a failure: the test file, and the test when there is one. */
+	label: string
+	traffic: Parameters<typeof egressFailure>[1]
+	launch(egress: { guardPort: number }): Promise<{ value: B; close(): Promise<void> }>
+	settle(value: B): Promise<S>
+	/** Fires a request for `url` from an extension page and returns once `recorded()` holds or the budget passes. */
+	probeCanary(value: B, settled: S, url: string, recorded: () => boolean, budgetMs: number): Promise<void>
+	/** Wraps the browser close in the launch's other close-time checks; the egress check runs after them. */
+	wrapClose(closeBrowser: () => Promise<void>, value: B, settled: S): L
+	startGuard?: () => Promise<EgressGuard>
+	startCanary?: () => Promise<EgressCanary>
+}
+
+export interface GuardedLaunch<B, S, L> {
+	value: B
+	settled: S
+	wrapped: L
+	guard: EgressGuard
+	canary: EgressCanary
+	/** The first call closes and checks; a later one is the wrapped close alone. */
+	close(): Promise<void>
+}
+
+/**
+ * Owns the guard, the canary and the browser from start to stop: every path out of a failed launch
+ * stops all three. Once settled, an extension page fires the canary, which must reach the guard and
+ * never the canary itself, so a launch whose routing failed or fell back to direct never runs a test.
+ */
+export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> }>(
+	deps: GuardedLaunchDeps<B, S, L>,
+): Promise<GuardedLaunch<B, S, L>> {
+	const guard = await (deps.startGuard ?? startEgressGuard)()
+	let canary: EgressCanary | undefined
+	let launched: { value: B; close(): Promise<void> } | undefined
+	try {
+		canary = await (deps.startCanary ?? startEgressCanary)()
+		launched = await deps.launch({ guardPort: guard.port })
+		const settled = await deps.settle(launched.value)
+		const recorded = () => guard.attempts().some(({ host }) => host === EGRESS_CANARY_HOST)
+		await deps.probeCanary(launched.value, settled, canaryUrl(canary.port), recorded, CANARY_PROBE_BUDGET_MS)
+		if (canary.connections() > 0 || !recorded()) {
+			const why = canary.connections() > 0 ? "went direct" : `never reached the guard within ${CANARY_PROBE_BUDGET_MS / 1000}s`
+			throw new Error(`egress guard: ${deps.label}: the canary request ${why}, so this launch's routing is not proven`)
+		}
+		const wrapped = deps.wrapClose(launched.close, launched.value, settled)
+		const checked = { guard, canary, label: deps.label, traffic: deps.traffic }
+		let closed = false
+		const close = () => {
+			if (closed) return wrapped.close()
+			closed = true
+			return closeAfterEgressCheck(() => wrapped.close(), checked)
+		}
+		return { value: launched.value, settled, wrapped, guard, canary, close }
+	} catch (err) {
+		await launched?.close().catch(() => {})
+		await Promise.all([guard.stop(), canary?.stop()])
+		throw err
 	}
 }

@@ -13,6 +13,8 @@ export interface LaunchOptions {
 	headless: boolean
 	/** `false` drops the fixed window size a driver launches with; only Chrome's launch has one. */
 	fixedWindowSize?: boolean
+	/** Route every request for an outside host to the egress guard on this loopback port. */
+	egress?: { guardPort: number }
 }
 
 export interface LaunchedBrowser {
@@ -68,6 +70,12 @@ export interface BrowserDriver {
 	 * background kill reads this to know whether its ceremony may move to a fresh popup.
 	 */
 	readonly credentialOutlivesPage: boolean
+	/**
+	 * Hosts this browser reaches on its own on every run, whatever the wallet does, each with why.
+	 * The egress guard refuses them without failing a launch. Exact names, never a domain, so a wallet
+	 * dependency that calls a new host under a vendor's domain still fails the run.
+	 */
+	readonly ownHosts: ReadonlyMap<string, string>
 	launch(opts: LaunchOptions): Promise<LaunchedBrowser>
 	/** `path` starts at the package root: `/src/popup/index.html#/windows/execute`. */
 	extensionUrl(extensionId: string, path: string): string
@@ -188,6 +196,8 @@ export const BROWSER: BrowserKind = driver.kind
 export const EXTENSION_SCHEME = driver.scheme
 export const isFirefox = BROWSER === "firefox"
 export const credentialOutlivesPage = driver.credentialOutlivesPage
+/** What the egress guard checks a launch's record against: whose traffic it is, and which of it is the browser's own. */
+export const browserTraffic = { browser: driver.kind, ownHosts: driver.ownHosts }
 
 /** Why a whole file does not run on Firefox: a capability the browser lacks — never a failing test. */
 export const CHROME_ONLY = {

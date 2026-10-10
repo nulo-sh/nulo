@@ -47,6 +47,8 @@ export async function setup(project: TestProject) {
 		throw new Error(`No ${BROWSER} extension at ${EXTENSION_PATH}\nRun "bun run build" or "bun run dev" first.`)
 	}
 	project.provide("extensionPath", EXTENSION_PATH)
+	// An artifact run keeps its documented live leg, the shipped token list against the live chain.
+	project.provide("egressGuard", process.env.NULO_E2E_ARTIFACT_RUN !== "1")
 }
 
 export async function teardown() {
@@ -56,5 +58,7 @@ export async function teardown() {
 declare module "vitest" {
 	export interface ProvidedContext {
 		extensionPath: string
+		/** Only the smoke setup provides it; elsewhere it is undefined and launches are unguarded. */
+		egressGuard?: boolean
 	}
 }

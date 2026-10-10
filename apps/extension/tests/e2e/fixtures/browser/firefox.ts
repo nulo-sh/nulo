@@ -22,6 +22,7 @@ import {
 	releaseLaunch,
 } from "./ownership"
 import { WebDriverSession } from "./webdriver-classic"
+import { EGRESS_CANARY_HOST } from "../egress-guard"
 
 const SCHEME = "moz-extension://"
 
@@ -80,7 +81,7 @@ export async function abandonSession(
 /** One sweep per process, before the first launch claims ports or writes a record. */
 let sweep: Promise<string[]> | undefined
 
-async function launch({ extensionPath, userDataDir, headless }: LaunchOptions): Promise<LaunchedBrowser> {
+async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOptions): Promise<LaunchedBrowser> {
 	sweep ??= reapOrphanLaunches()
 	const reaped = await sweep
 	if (reaped.length) console.warn(`[firefox] reaped ${reaped.length} orphaned launch(es): ${reaped.join(", ")}`)
@@ -111,7 +112,7 @@ async function launch({ extensionPath, userDataDir, headless }: LaunchOptions): 
 		recordLaunch(record)
 
 		const running = () => gecko.exitCode === null && gecko.signalCode === null
-		const session = await WebDriverSession.open(base, capabilities({ profileDir, headless }), running)
+		const session = await WebDriverSession.open(base, capabilities({ profileDir, headless, egress }), running)
 		try {
 			assertVersion(session.capabilities.browserVersion)
 			// Teardown owns a process by the marker in its environment. A Firefox that did not inherit
@@ -248,16 +249,48 @@ export const FIREFOX_LAUNCH_PREFS = {
 	"security.webauth.webauthn_enable_usbtoken": false,
 }
 
-function capabilities({ profileDir, headless }: { profileDir: string; headless: boolean }): Record<string, unknown> {
+/**
+ * Every request for a host other than loopback goes to the guard, with no `DIRECT` after it and no
+ * fail-over, so a dead guard fails a request rather than sending it out. The canary name resolves to
+ * loopback, which only a direct path would use. Prefs rather than the W3C `proxy` capability because
+ * the canary needs `network.dns.localDomains` beside them, and kept out of `FIREFOX_LAUNCH_PREFS`,
+ * which holds what users run with.
+ */
+export function egressGuardPrefs(guardPort: number): Record<string, string | number | boolean> {
+	const pac = `function FindProxyForURL(url, host) {
+	if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "DIRECT";
+	return "PROXY 127.0.0.1:${guardPort}";
+}`
 	return {
-		...(process.env.NULO_E2E_ARTIFACT_RUN === "1" ? { proxy: { proxyType: "pac", proxyAutoconfigUrl: PRICE_HOST_BLACKHOLE } } : {}),
+		"network.proxy.type": 2,
+		"network.proxy.autoconfig_url": `data:text/javascript,${encodeURIComponent(pac)}`,
+		"network.proxy.failover_direct": false,
+		"network.dns.localDomains": EGRESS_CANARY_HOST,
+	}
+}
+
+/** The capabilities a launch opens its session with; exported so a unit test can hold the routing. */
+export function capabilities({
+	profileDir,
+	headless,
+	egress,
+	artifactRun = process.env.NULO_E2E_ARTIFACT_RUN === "1",
+}: {
+	profileDir: string
+	headless: boolean
+	egress?: LaunchOptions["egress"]
+	artifactRun?: boolean
+}): Record<string, unknown> {
+	if (egress && artifactRun) throw new Error("a launch cannot be both behind the egress guard and an artifact run")
+	return {
+		...(artifactRun ? { proxy: { proxyType: "pac", proxyAutoconfigUrl: PRICE_HOST_BLACKHOLE } } : {}),
 		// Asks geckodriver for a BiDi endpoint on the session it owns, which is what makes one
 		// browser drivable from both channels at once.
 		webSocketUrl: true,
 		"moz:firefoxOptions": {
 			binary: resolveFirefoxBinary(),
 			args: ["-profile", profileDir, ...(headless ? ["-headless"] : [])],
-			prefs: FIREFOX_LAUNCH_PREFS,
+			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort) } : FIREFOX_LAUNCH_PREFS,
 		},
 	}
 }
@@ -704,10 +737,17 @@ export function silentlyClosed(watch: SilentCloseWatch, open: readonly string[],
 	return closed
 }
 
+/** Seen at the egress guard on every launch; Firefox retries each refusal, so these arrive in bursts. */
+export const FIREFOX_OWN_HOSTS: ReadonlyMap<string, string> = new Map([
+	["content-signature-2.cdn.mozilla.net", "remote settings signature checks"],
+	["firefox.settings.services.mozilla.com", "remote settings"],
+])
+
 export const firefoxDriver: BrowserDriver = {
 	kind: "firefox",
 	scheme: SCHEME,
 	credentialOutlivesPage: true,
+	ownHosts: FIREFOX_OWN_HOSTS,
 	launch,
 	extensionUrl: (extensionId, path) => `${SCHEME}${extensionId}${path}`,
 	discoverExtensionId,
