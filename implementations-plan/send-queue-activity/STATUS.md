@@ -11,3 +11,6 @@
 - 2026-10-10 — phase 1.1 gate: pass (lint, typecheck:all, 18 touched test files 343/343; revert of the recordedTxKeys fpc line fails 4 never-happens cases).
 - 2026-10-10 — phase 1.3 gate: pass (lint, typecheck:all, operation-estimate-reuse{,.pins}, dapp-send-executor, feesettings-invariant, service.characterization: all green).
 - 2026-10-10 — phase 1.4 gate: pass (lint, typecheck:all, general/ component tests 248/248; base component fails the 4 never-happens cases).
+- 2026-10-10 — phase 1.5: restart case committed (5fda9aa). Chrome smoke at retry 0: 197 passed, 11 skipped, 1 failed. The failure was `navigation.test.ts`, the Settings title bar under host load; its rerun passed 5/5. lint, typecheck:all and test:all green on the head.
+- 2026-10-10 — arc 1 review: Codex r1 no material regression, Opus no bug; comment and fixture fixes (463a193); Codex r2 no new finding. Loop closed.
+- 2026-10-10 — network gate blocked: the host had another lane's network run live through the whole 120-minute poll (e2e-harness-gaps, then account-session-life). Not pushed; no PR yet.
