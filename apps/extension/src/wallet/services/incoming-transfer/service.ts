@@ -53,15 +53,14 @@ export * from "./spec"
  *  + PXE sync cadence. */
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
-/** One scan's capture for its per-note critical sections: the scope, the
- *  lifecycle epoch taken before any await, and the scan-scoped timestamp cache. */
+/** One scan's capture for its per-note critical sections: the scope and the scan-scoped timestamp
+ *  cache. */
 type NoteScanContext = {
 	profileId: string
 	networkId: string
 	accountAddress: string
 	contract: string
 	chainId: number
-	epochAtStart: number
 	blockTimestampFor: (blockNumber: number) => Promise<number | undefined>
 }
 
@@ -71,9 +70,19 @@ type PublicEventContext = {
 	networkId: string
 	contract: string
 	chainId: number
-	account: string
-	epochAtStart: number
+	accountAddress: string
 }
+
+type ReceiptScope = { profileId: string; networkId: string; chainId: number; accountAddress: string }
+
+/** A receipt section's two synchronous reads. `fenced` admits a write: the lifecycle epoch is the
+ *  scan's, the section still holds the lock, and no deleter the watchdog displaced is still running.
+ *  `isCurrent` alone gates the prompt emits. */
+type ReceiptFence = { fenced: () => boolean; isCurrent: () => boolean }
+
+/** A public commit is `revoked` exactly when a `fenced()` read stopped it before its record write; the
+ *  caller then holds its page. */
+type PublicCommit = "revoked" | "processed"
 
 type TrustScope = { profileId: string; networkId: string; accountAddress: string; contract: string }
 
@@ -95,6 +104,29 @@ function maxBlock(records: { l2BlockNumber: number }[]): number | undefined {
 function maxDefined(a: number | undefined, b: number | undefined): number | undefined {
 	if (a === undefined) return b
 	return b === undefined ? a : Math.max(a, b)
+}
+
+/**
+ * Floors never move down, so every move takes the max with the stored number: two writers read
+ * their tips before the lock and can enter it in either order. Without a tip, or when the epoch
+ * moved since it was read, the floor goes pending and keeps its number, so nothing of the token
+ * plays until a later read resolves it.
+ */
+function nextArrivalFloor(
+	stored: IncomingTrustRecord,
+	move: { tip: number | undefined; lowerBound?: number; epochMoved: boolean },
+): { arrivalFloor: number | undefined; pending: boolean } {
+	const known = maxDefined(stored.arrivalFloor, move.lowerBound)
+	if (move.tip === undefined || move.epochMoved) return { arrivalFloor: known, pending: true }
+	return { arrivalFloor: maxDefined(known, move.tip), pending: false }
+}
+
+function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number | undefined; pending: boolean }): IncomingTrustRecord {
+	const { profileId, networkId, contract } = stored
+	const row: IncomingTrustRecord = { profileId, networkId, contract, state: "trusted", updatedAt: Date.now() }
+	if (floor.arrivalFloor !== undefined) row.arrivalFloor = floor.arrivalFloor
+	if (floor.pending) row.arrivalFloorPending = true
+	return row
 }
 
 /** What an anchored outbox row's task state asks of the drain: terminal-success
@@ -231,6 +263,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  and bail before persisting. Closes the lifecycle-cancel race. */
 	private serviceEpoch = 0
 
+	/** Sections that delete incoming rows and are still running. The watchdog admits a successor
+	 *  without stopping a displaced section, so a displaced deleter keeps deleting while the
+	 *  successor's ticket is current; receipt and acceptance writes stand down while this is not 0. */
+	private deletersRunning = 0
+
 	private readonly pollIntervalMs: number
 	/** Test seam: inject a fake public-event reader (unit tests drive the scan arm without a real
 	 *  PXE transport). Production leaves it undefined and `init` builds the real client-backed one. */
@@ -275,6 +312,28 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  in-flight scanContract whose epochAtStart no longer matches bails. */
 	private bumpServiceEpoch(): void {
 		this.serviceEpoch += 1
+	}
+
+	/** `withServiceLock` for a section that deletes incoming rows, counted in `deletersRunning` from
+	 *  before its first await until it returns or throws. */
+	private withDeleterLock<T>(fn: (isCurrent: () => boolean) => Promise<T>): Promise<T> {
+		return this.withServiceLock(async (isCurrent) => {
+			this.deletersRunning += 1
+			try {
+				return await fn(isCurrent)
+			} finally {
+				this.deletersRunning -= 1
+			}
+		})
+	}
+
+	/** Build it at lock entry, before any await: it reads the deleter count once there. With none
+	 *  running and the ticket current, none can start while the ticket stays current, whereas a read
+	 *  only before the write misses a displaced deleter that finished during the reads. */
+	private receiptFence(epochAtStart: number, isCurrent: () => boolean): ReceiptFence {
+		const clearAtEntry = this.deletersRunning === 0
+		const fenced = () => clearAtEntry && this.serviceEpoch === epochAtStart && isCurrent() && this.deletersRunning === 0
+		return { fenced, isCurrent }
 	}
 
 	protected async init(services: ServiceCollection): Promise<void> {
@@ -427,7 +486,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			return
 		}
 
-		await this.withServiceLock(async () => {
+		await this.withDeleterLock(async () => {
 			for (const network of networks) {
 				await this.purgeDeletedAccountOnNetworkLocked(account, network.id, activeProfile?.id)
 			}
@@ -632,6 +691,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
+	/** All or nothing: every read first, then one storage write carrying the trusted row, its arrival
+	 *  floor and every record it un-hides, so no receipt is left hidden under a trusted contract. A
+	 *  refusal writes nothing; a contract still pending prompts again on the next popup open. With
+	 *  `incomingTransfersVisible` off the records still turn visible but emit nothing. */
 	public async setTrustAllow(profileId: string, networkId: string, contract: string): Promise<boolean> {
 		await this.ensureInitialized()
 		const trustFence = await this.captureTrustFence(profileId)
@@ -639,40 +702,38 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const epochAtTip = this.serviceEpoch
 		const tip = await this.readTip(networkId)
 		return this.withServiceLock(async (isCurrent) => {
-			const { live, kept } = trustFence(isCurrent)
-			// Stale-popup guard: refuse the flip if the contract is no longer
-			// registered. Inside the lock, so the check + writes are atomic.
-			if (!(await this.isTokenStillRegistered(profileId, networkId, contract))) return false
-			if (!(await this._setTrustStateLocked(profileId, networkId, contract, "trusted", live))) return false
-
-			// The records it un-hides are history the person just accepted, on every account of the
-			// profile: the floor covers them before any of them turns visible.
-			const records = await this.repo.listByContract(profileId, networkId, contract)
-			const floor = { tip, lowerBound: maxBlock(records.filter((r) => r.hidden)), epochAtTip, isCurrent: kept }
-			if (!(await this.moveArrivalFloorLocked(profileId, networkId, contract, floor))) return false
-			return this.unhideLocked(records, kept)
+			// Read before any read, as in a receipt section: a displaced deleter that finished during the
+			// reads below could have deleted a record this write would put back.
+			if (this.deletersRunning !== 0) return false
+			const acceptance = await this.readAcceptanceLocked(profileId, networkId, contract, tip, epochAtTip)
+			// Nothing awaits between this read and the dispatch, so no handoff can fall between them.
+			if (!acceptance || !trustFence(isCurrent).live() || this.deletersRunning !== 0) return false
+			await this.repo.commitAcceptance(acceptance.trust, acceptance.unhidden)
+			if (!isCurrent()) return true
+			this.emit("onIncomingTrustChanged", acceptance.trust)
+			if (acceptance.visible) for (const record of acceptance.unhidden) this.emit("onIncomingTransferAdded", record)
+			return true
 		})
 	}
 
-	/** Not atomic: stops at the first write `kept` refuses and resolves false, leaving the records
-	 *  before it visible. With `incomingTransfersVisible` off the records still turn visible (a later
-	 *  toggle-on shows them) but emit nothing. */
-	private async unhideLocked(records: IncomingTransferRecord[], kept: () => boolean): Promise<boolean> {
-		const visibilityEnabled = await this.isVisibilityEnabled()
-		for (const record of records) {
-			if (!record.hidden) continue
-			const stillThere = await this.repo.getRecord(record.id)
-			if (!stillThere) continue
-			// A deleted profile's id can come back through a restore, so each write proves that this
-			// section still holds the lock and that its profile is the incarnation that allowed it.
-			if (!kept()) return false
-			const updated = { ...record, hidden: false }
-			await this.repo.upsertRecord(updated)
-			if (visibilityEnabled) {
-				this.emit("onIncomingTransferAdded", updated)
-			}
-		}
-		return true
+	/** The Allow's reads, or undefined to refuse: for a token no longer registered, or a trust row that
+	 *  is missing or `unknown`. A prompt exists only for a `pending` row, and only a wipe deletes the
+	 *  row or a token delete resets it, so writing `trusted` then would put trust back into a cleared
+	 *  scope. The floor covers the accepted history, on every account of the profile. */
+	private async readAcceptanceLocked(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		tip: number | undefined,
+		epochAtTip: number,
+	): Promise<{ trust: IncomingTrustRecord; unhidden: IncomingTransferRecord[]; visible: boolean } | undefined> {
+		if (!(await this.isTokenStillRegistered(profileId, networkId, contract))) return undefined
+		const stored = await this.repo.getTrust(profileId, networkId, contract)
+		if (!stored || stored.state === "unknown") return undefined
+		const hidden = (await this.repo.listByContract(profileId, networkId, contract)).filter((r) => r.hidden)
+		const visible = await this.isVisibilityEnabled()
+		const floor = nextArrivalFloor(stored, { tip, lowerBound: maxBlock(hidden), epochMoved: this.serviceEpoch !== epochAtTip })
+		return { trust: trustedRow(stored, floor), unhidden: hidden.map((r) => ({ ...r, hidden: false })), visible }
 	}
 
 	public async trustRestoredTokens(profileId: string): Promise<void> {
@@ -726,7 +787,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.ensureInitialized()
 		// The fee cache is keyed by networkId, so a profile's entries cannot be picked out: it is cleared
 		// wholesale. It holds only viewed public receipts, and an entry whose record is gone is unreachable.
-		await this.withServiceLock(() =>
+		await this.withDeleterLock(() =>
 			this.clearScopeLocked(() => ({
 				dropsEpisode: (key) => key.startsWith(`${profileId}|`),
 				evictFees: () => this.feeCache.clear(),
@@ -737,7 +798,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	public async clearChain(profileId: string, networkId: string): Promise<void> {
 		await this.ensureInitialized()
-		await this.withServiceLock(() =>
+		await this.withDeleterLock(() =>
 			this.clearScopeLocked(() => {
 				const episodePrefix = scanEpisodeNetworkPrefix(profileId, networkId)
 				return {
@@ -863,13 +924,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.repo.setArrivalRow(profileId, networkId, accountAddress, { sinceBlock: tip, played: [] })
 	}
 
-	/**
-	 * Floors never move down, so every write takes the max with the stored number: two writers read
-	 * their tips before the lock and can enter it in either order. Without a tip, or when the epoch
-	 * moved since it was read, the floor goes pending and keeps its number, so nothing of the token
-	 * plays until a later read resolves it. A section `isCurrent` refuses writes nothing and resolves
-	 * false.
-	 */
+	/** Resolves false, writing nothing, when `isCurrent` refuses. */
 	private async moveArrivalFloorLocked(
 		profileId: string,
 		networkId: string,
@@ -879,12 +934,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const stored = await this.repo.getTrust(profileId, networkId, contract)
 		if (!move.isCurrent()) return false
 		if (!stored) return true
-		const known = maxDefined(stored.arrivalFloor, move.lowerBound)
-		if (move.tip === undefined || this.serviceEpoch !== move.epochAtTip) {
-			await this.repo.setArrivalFloor(stored, { arrivalFloor: known, pending: true })
-			return true
-		}
-		await this.repo.setArrivalFloor(stored, { arrivalFloor: maxDefined(known, move.tip), pending: false })
+		const epochMoved = this.serviceEpoch !== move.epochAtTip
+		await this.repo.setArrivalFloor(stored, nextArrivalFloor(stored, { tip: move.tip, lowerBound: move.lowerBound, epochMoved }))
 		return true
 	}
 
@@ -1203,7 +1254,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const network = (await this.networkService.getNetworksRaw(profileId, token.chainId))[0]
 		if (!network) return
 
-		await this.withServiceLock(async () => {
+		await this.withDeleterLock(async () => {
 			// Bump the epoch FIRST — before the scheduler teardown / episode eviction / any await — so an
 			// in-flight off-lock scan holding the old epoch can't write rows or a failure episode for the
 			// token we're deleting.
@@ -1289,7 +1340,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const network = await this.resolveNetworkByChainId(tx.chainId)
 		if (!network) return
 
-		await this.withServiceLock(async () => {
+		await this.withDeleterLock(async () => {
 			const matches = await this.repo.listByTxHash(profile.id, network.id, tx.hash)
 			for (const record of matches) {
 				if (record.accountAddress !== tx.account) continue
@@ -1382,12 +1433,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			accountAddress,
 			contract,
 			chainId: network.chainId,
-			epochAtStart,
 			blockTimestampFor,
 		}
 		for (const note of notes) {
 			if (!note.siloedNullifier) continue
-			await this.withServiceLock(() => this.commitScannedNote(ctx, note))
+			await this.withServiceLock((isCurrent) => this.commitScannedNote(ctx, note, this.receiptFence(epochAtStart, isCurrent)))
 		}
 
 		// Tell the test the parked scan's locked commit is done (the late emission,
@@ -1395,86 +1445,83 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (heldTxHash) await this.incomingPollGate?.markCommitted(heldTxHash)
 	}
 
-	/** The per-note locked critical section (hoisted so its branches sit at
-	 *  nesting depth 0; the lock callback invokes it directly). */
-	private async commitScannedNote(ctx: NoteScanContext, note: RawNote): Promise<void> {
-		const { profileId, networkId, accountAddress, contract, chainId, epochAtStart } = ctx
-		// Lifecycle-cancel guard.
-		if (this.serviceEpoch !== epochAtStart) return
-
-		// Live re-reads INSIDE the lock.
+	/** The per-note locked critical section. Its head is the public arm's, read for read: tokens,
+	 *  the record, then the own-send sets, which only ever gate a new record. */
+	private async commitScannedNote(ctx: NoteScanContext, note: RawNote, fence: ReceiptFence): Promise<void> {
+		const { profileId, networkId, contract, chainId } = ctx
+		const { fenced } = fence
+		if (!fenced()) return
 		const tokens = await this.tokenService.getTokensRaw(profileId)
+		if (!fenced()) return
 		const token = findToken(tokens, contract, chainId)
 		if (!token) return // Token removed concurrently.
 
-		// Re-read tx-suppression sets live. The outer-scan-loop
-		// approach would stale these between notes if onTransactionAdded
-		// fires mid-scan.
-		const outgoingTxHashes = await this.collectOutgoingTxHashes(profileId, networkId, chainId, accountAddress)
-		const inflightTxHashes = await this.collectInflightTxHashes(profileId, networkId, accountAddress)
-
-		// Existing-record branch: backfill blockTimestamp if missing.
 		const existing = await this.repo.getRecord(noteRecordId(profileId, networkId, note.siloedNullifier))
+		if (!fenced()) return
 		if (existing) {
-			if (existing.blockTimestamp === undefined) await this.backfillNoteTimestamp(ctx, existing, note)
+			if (existing.blockTimestamp === undefined) await this.backfillNoteTimestamp(ctx, existing, note, fenced)
 			return
 		}
 
-		if (outgoingTxHashes.has(note.txHash)) return
-		if (inflightTxHashes.has(note.txHash)) return
+		if (await this.isOwnSend(ctx, note.txHash)) return
+		if (!fenced()) return
 		const amountRaw = parseNoteAmount(note)
 		if (amountRaw === null) return
 
-		const trustState = await this.resolveReceiptTrust(ctx, token, amountRaw, () => this.serviceEpoch !== epochAtStart)
-		if (trustState === undefined) return
-		if (this.serviceEpoch !== epochAtStart) return
-		await this.commitDiscoveredNote(ctx, note, token, amountRaw, trustState)
+		const trustState = await this.resolveReceiptTrust(ctx, token, amountRaw, fence)
+		if (trustState === undefined || !fenced()) return
+		await this.commitDiscoveredNote(ctx, note, token, amountRaw, trustState, fenced)
 	}
 
-	/** The PXE-bound await here is the CS's park point: a lock watchdog handoff
-	 *  there lets a destructive lifecycle bumper (purge/delete) run to
-	 *  completion — writing after it would resurrect what it wiped. Re-check
-	 *  before the write. */
-	private async backfillNoteTimestamp(ctx: NoteScanContext, existing: IncomingTransferRecord, note: RawNote): Promise<void> {
+	private async backfillNoteTimestamp(
+		ctx: NoteScanContext,
+		existing: IncomingTransferRecord,
+		note: RawNote,
+		fenced: () => boolean,
+	): Promise<void> {
 		const ts = await ctx.blockTimestampFor(note.l2BlockNumber)
-		if (this.serviceEpoch !== ctx.epochAtStart) return
-		if (ts !== undefined) {
-			await this.repo.upsertRecord({ ...existing, blockTimestamp: ts })
-		}
+		if (ts !== undefined && fenced()) await this.repo.upsertRecord({ ...existing, blockTimestamp: ts })
 	}
 
 	/** Trust read inside the lock; a first receipt moves `unknown` to `pending` and prompts behind
-	 *  the visibility gate. The trust write succeeds before its emit. `standDown` is read right after
-	 *  the trust read, before the `unknown` test; the trust write's own await is not fenced. */
+	 *  the visibility gate. Resolves undefined exactly when a `fenced()` read refused, the trust
+	 *  write's own read just before it dispatches included. */
 	private async resolveReceiptTrust(
 		scope: TrustScope,
 		token: Token,
 		amountRaw: string,
-		standDown: () => boolean,
+		fence: ReceiptFence,
 	): Promise<IncomingTrustState | undefined> {
 		const { profileId, networkId, contract } = scope
 		const trustState = (await this.repo.getTrust(profileId, networkId, contract))?.state ?? "unknown"
-		if (standDown()) return undefined
+		if (!fence.fenced()) return undefined
 		if (trustState !== "unknown") return trustState
-		const updated = await this.repo.setTrust(profileId, networkId, contract, "pending")
+		const updated = await this.repo.setTrust(profileId, networkId, contract, "pending", fence.fenced)
+		if (!updated) return undefined
+		// The prompts read the ticket alone. While it is current no deleter can start, and one still
+		// running refused the write above; a bare epoch bump only re-plans the schedulers, and must not
+		// silence the prompt for a row that was written.
+		if (!fence.isCurrent()) return "pending"
 		this.emit("onIncomingTrustChanged", updated)
-		if (await this.isVisibilityEnabled()) this.emit("onIncomingTransferPending", pendingEvent(scope, token, amountRaw))
+		if ((await this.isVisibilityEnabled()) && fence.isCurrent()) {
+			this.emit("onIncomingTransferPending", pendingEvent(scope, token, amountRaw))
+		}
 		return "pending"
 	}
 
 	/** The outbox row is written before the record: a discovered note changed the chain balance
-	 *  whatever its trust or display state. As in `commitPublicRecord`, epoch checks guard the record
-	 *  write and the Added emit; a storage write already in flight is not fenced. */
+	 *  whatever its trust or display state. */
 	private async commitDiscoveredNote(
 		ctx: NoteScanContext,
 		note: RawNote,
 		token: Token,
 		amountRaw: string,
 		trustState: IncomingTrustState,
+		fenced: () => boolean,
 	): Promise<void> {
-		const { profileId, networkId, accountAddress, epochAtStart } = ctx
+		const { profileId, networkId, accountAddress } = ctx
 		const blockTimestamp = await ctx.blockTimestampFor(note.l2BlockNumber)
-		if (this.serviceEpoch !== epochAtStart) return
+		if (!fenced()) return
 		const record = this.buildRecord({
 			note,
 			profileId,
@@ -1486,10 +1533,10 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			blockTimestamp,
 		})
 		await this.markBalanceDirty(profileId, networkId, accountAddress, token.id)
-		if (this.serviceEpoch !== epochAtStart) return
+		if (!fenced()) return
 		await this.repo.upsertRecord(record)
 
-		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && this.serviceEpoch === epochAtStart) {
+		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {
 			this.emit("onIncomingTransferAdded", record)
 		}
 		// pending / blocked: record persisted hidden, no Added emit.
@@ -1807,11 +1854,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 		if (!(await this.persistCursorLocked(profileId, networkId, contract, withPending, epochAtStart))) return "no-progress"
 
-		for (const ev of matching) {
-			const account = recipients.get(ev.to.toLowerCase())
-			if (!account) continue
-			await this.commitPublicEvent(profileId, networkId, contract, chainId, account, ev, epochAtStart)
-		}
+		const target = { profileId, networkId, contract, chainId }
+		if (!(await this.commitAddressedEvents(target, matching, recipients, epochAtStart))) return "no-progress"
 
 		// Advance the cursor + clear `pendingPage` + record the watermark.
 		const committed = await this.persistCursorLocked(
@@ -1969,11 +2013,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 		// Re-insert canonical receipts addressed to us (idempotent; updates a MOVED receipt's block).
 		const recipients = await this.recipientsFor(profileId, chainId)
-		for (const ev of this.indexer.filterToRecipients(result.events, recipients)) {
-			const account = recipients.get(ev.to.toLowerCase())
-			if (!account) continue
-			await this.commitPublicEvent(profileId, networkId, contract, chainId, account, ev, epochAtStart, { reconcile: true })
-		}
+		const target = { profileId, networkId, contract, chainId }
+		const batch = this.indexer.filterToRecipients(result.events, recipients)
+		if (!(await this.commitAddressedEvents(target, batch, recipients, epochAtStart, { reconcile: true }))) return "no-progress"
 
 		// Accumulate `seen` deduped by HEIGHT (one canonical hash per block) — the reconcile window is
 		// pinned to one fork, so height→hash is 1:1, and this bounds the persisted marker to
@@ -2013,7 +2055,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const canonicalByHeight = new Map<number, string>()
 		for (const [height, hash] of seen) canonicalByHeight.set(height, hash)
 
-		await this.withServiceLock(async () => {
+		await this.withDeleterLock(async () => {
 			if (this.serviceEpoch !== epochAtStart) return
 			const records = await this.repo.listByContract(profileId, networkId, contract)
 			for (const record of records) {
@@ -2051,6 +2093,26 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		)
 	}
 
+	/** False at the first `revoked` commit, and the caller keeps its page marker or reconciliation
+	 *  progress for a retry: a ticket or deleter stand-down, unlike an epoch one, does not stop the
+	 *  cursor write, so advancing would skip the receipt for good. */
+	private async commitAddressedEvents(
+		target: { profileId: string; networkId: string; contract: string; chainId: number },
+		events: PublicTransferEvent[],
+		recipients: Map<string, string>,
+		epochAtStart: number,
+		opts?: { reconcile?: boolean },
+	): Promise<boolean> {
+		const { profileId, networkId, contract, chainId } = target
+		for (const ev of events) {
+			const account = recipients.get(ev.to.toLowerCase())
+			if (!account) continue
+			const commit = await this.commitPublicEvent(profileId, networkId, contract, chainId, account, ev, epochAtStart, opts)
+			if (commit === "revoked") return false
+		}
+		return true
+	}
+
 	/**
 	 * Per-event locked commit for a public receipt (mirrors the note arm's critical section). On a
 	 * fresh receipt: 3-source dedupe → trust transition → outbox row (BEFORE the record) → insert.
@@ -2065,58 +2127,65 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		ev: PublicTransferEvent,
 		epochAtStart: number,
 		opts?: { reconcile?: boolean },
-	): Promise<void> {
-		const ctx: PublicEventContext = { profileId, networkId, contract, chainId, account, epochAtStart }
-		await this.withServiceLock(() => this.commitPublicEventLocked(ctx, ev, opts))
+	): Promise<PublicCommit> {
+		const ctx: PublicEventContext = { profileId, networkId, contract, chainId, accountAddress: account }
+		return this.withServiceLock((isCurrent) => this.commitPublicEventLocked(ctx, ev, this.receiptFence(epochAtStart, isCurrent), opts))
 	}
 
 	/** The per-event locked critical section. Every awaited read can park across a watchdog handoff
-	 *  that admits a wipe; the epoch is re-checked after each read block, before any write. */
-	private async commitPublicEventLocked(ctx: PublicEventContext, ev: PublicTransferEvent, opts?: { reconcile?: boolean }): Promise<void> {
-		const { profileId, networkId, contract, chainId, epochAtStart } = ctx
-		if (this.serviceEpoch !== epochAtStart) return
+	 *  that admits a wipe, so `fenced()` is read after each read and immediately before each write. */
+	private async commitPublicEventLocked(
+		ctx: PublicEventContext,
+		ev: PublicTransferEvent,
+		fence: ReceiptFence,
+		opts?: { reconcile?: boolean },
+	): Promise<PublicCommit> {
+		const { profileId, networkId, contract, chainId } = ctx
+		const { fenced } = fence
+		if (!fenced()) return "revoked"
 		const tokens = await this.tokenService.getTokensRaw(profileId)
-		if (this.serviceEpoch !== epochAtStart) return
+		if (!fenced()) return "revoked"
 		const token = findToken(tokens, contract, chainId)
-		if (!token) return // token removed concurrently
+		if (!token) return "processed" // token removed concurrently
 
-		const id = publicRecordId(profileId, networkId, ev.txHash, ev.logIndexWithinTx)
-		const existing = await this.repo.getRecord(id)
-		if (this.serviceEpoch !== epochAtStart) return
+		const existing = await this.repo.getRecord(publicRecordId(profileId, networkId, ev.txHash, ev.logIndexWithinTx))
+		if (!fenced()) return "revoked"
 		if (existing) {
-			// A reorg can re-mine the same tx (same PK) at a NEW block — update the chain fields so
-			// the reconciliation's blockHash comparison keeps it instead of deleting it.
-			if (opts?.reconcile && existing.kind === "public-event" && existing.blockHash !== ev.blockHash) {
-				await this.repo.upsertRecord({
-					...existing,
-					blockHash: ev.blockHash,
-					l2BlockNumber: ev.l2BlockNumber,
-					txIndexInBlock: ev.txIndexWithinBlock,
-					indexInTx: ev.logIndexWithinTx,
-					blockTimestamp: ev.blockTimestamp,
-				})
-			}
-			return
+			if (opts?.reconcile) await this.rewriteMovedRecord(existing, ev)
+			return "processed"
 		}
 
-		if (await this.isDedupedPublicEvent(ctx, ev.txHash)) return
-		const scope = { profileId, networkId, accountAddress: ctx.account, contract }
-		const trustState = await this.resolveReceiptTrust(scope, token, ev.amountRaw, () => this.serviceEpoch !== epochAtStart)
-		if (trustState === undefined) return
-		if (this.serviceEpoch !== epochAtStart) return
-		await this.commitPublicRecord(ctx, ev, token, trustState)
+		if (await this.isOwnSend(ctx, ev.txHash)) return "processed"
+		if (!fenced()) return "revoked"
+		const scope = { profileId, networkId, accountAddress: ctx.accountAddress, contract }
+		const trustState = await this.resolveReceiptTrust(scope, token, ev.amountRaw, fence)
+		if (trustState === undefined || !fenced()) return "revoked"
+		return this.commitPublicRecord(ctx, ev, token, trustState, fenced)
 	}
 
-	/** 3-source dedupe (the existing-record check ran before this): own outgoing
-	 *  tx hashes, then the in-flight journal txHash, then the post-read epoch
-	 *  re-check. True = stand down. */
-	private async isDedupedPublicEvent(ctx: PublicEventContext, txHash: string): Promise<boolean> {
-		const { profileId, networkId, chainId, account } = ctx
-		const outgoing = await this.collectOutgoingTxHashes(profileId, networkId, chainId, account)
+	/** A reorg can re-mine the same tx (same PK) at a NEW block: update the chain fields so the
+	 *  reconciliation's blockHash comparison keeps the record instead of deleting it. The caller read
+	 *  `fenced()` with no await since. */
+	private async rewriteMovedRecord(existing: IncomingTransferRecord, ev: PublicTransferEvent): Promise<void> {
+		if (existing.kind !== "public-event" || existing.blockHash === ev.blockHash) return
+		await this.repo.upsertRecord({
+			...existing,
+			blockHash: ev.blockHash,
+			l2BlockNumber: ev.l2BlockNumber,
+			txIndexInBlock: ev.txIndexWithinBlock,
+			indexInTx: ev.logIndexWithinTx,
+			blockTimestamp: ev.blockTimestamp,
+		})
+	}
+
+	/** Whether `txHash` is the scope's own send: its outgoing transactions first, then the journal's
+	 *  sends, each read live so a send journalled mid-scan suppresses the receipt. */
+	private async isOwnSend(scope: ReceiptScope, txHash: string): Promise<boolean> {
+		const { profileId, networkId, chainId, accountAddress } = scope
+		const outgoing = await this.collectOutgoingTxHashes(profileId, networkId, chainId, accountAddress)
 		if (outgoing.has(txHash)) return true
-		const inflight = await this.collectInflightTxHashes(profileId, networkId, account)
-		if (inflight.has(txHash)) return true
-		return this.serviceEpoch !== ctx.epochAtStart
+		const inflight = await this.collectInflightTxHashes(profileId, networkId, accountAddress)
+		return inflight.has(txHash)
 	}
 
 	/** Write-side: the outbox row is written BEFORE the record (ordering +
@@ -2130,15 +2199,17 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		ev: PublicTransferEvent,
 		token: Token,
 		trustState: IncomingTrustState,
-	): Promise<void> {
-		const { profileId, networkId, account, epochAtStart } = ctx
-		await this.markBalanceDirty(profileId, networkId, account, token.id)
-		if (this.serviceEpoch !== epochAtStart) return
-		const record = this.buildPublicRecord({ ev, profileId, networkId, account, token, trustState })
+		fenced: () => boolean,
+	): Promise<PublicCommit> {
+		const { profileId, networkId, accountAddress } = ctx
+		await this.markBalanceDirty(profileId, networkId, accountAddress, token.id)
+		if (!fenced()) return "revoked"
+		const record = this.buildPublicRecord({ ev, profileId, networkId, account: accountAddress, token, trustState })
 		await this.repo.upsertRecord(record)
-		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && this.serviceEpoch === epochAtStart) {
+		if (trustState === "trusted" && (await this.isVisibilityEnabled()) && fenced()) {
 			this.emit("onIncomingTransferAdded", record)
 		}
+		return "processed"
 	}
 
 	private buildPublicRecord(params: {
