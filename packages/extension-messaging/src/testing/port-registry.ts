@@ -106,12 +106,13 @@ export class PortRegistry {
 		}
 	}
 
-	/** A service-worker restart, as the page sees it: the port closes and its `onDisconnect` fires. */
+	/** A service-worker restart, as the page sees it: the port closes and its `onDisconnect` fires
+	 *  with the port, as the browser's does. */
 	public remoteClose(port: FakePort): void {
 		if (port.closed) return
 		port.closed = true
 		this.live.get(port.name)?.delete(port)
-		for (const listener of [...port.disconnectListeners]) listener()
+		for (const listener of [...port.disconnectListeners]) listener(port)
 	}
 
 	/** Remote-closes the ports live when called. A client reconnects from inside its listener, so
