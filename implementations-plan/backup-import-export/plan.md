@@ -1,7 +1,7 @@
 ---
 plan: backup-import-export
 tier: mid
-status: approved by the orchestrator; arc 1 in progress; arc 1b waits on the orchestrator's A1 call; arcs 2 and 3 wait on decision page 1
+status: approved by the orchestrator; arc 1 merged (#246); arc 1b in progress (A1 answered, D-orch-3); arcs 2 and 3 wait on decision page 1
 issues: "#146, #203, #207, #223, #226 (arc 1); #148 in-repo half (arc 1b, stays open); #147, #191, #221 (arc 2); #98, #189, #192, #230, #231 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -309,7 +309,7 @@ Validation gate:
 
 ### Arc 1b: heal a half-registered account (#148, in-repo half)
 
-#### Phase 1b.1: the PXE patch
+#### Phase 1b.1: the PXE patch ✓
 
 1. Run `bun patch @aztec-labs/pxe@6.0.0-rc.1`. Remove the `return` from the already-registered branch of `registerAccount` in `dest/pxe.js` and add the "Modified by Nulo" comment. Commit with `bun patch --commit`.
 2. Add the modified-file sentence to the pxe `OVERRIDES` note.
@@ -320,7 +320,7 @@ Validation gate:
 UI impact: none.
 
 Validation gate:
-- Commands: `bun install --frozen-lockfile --force`; lint; typecheck; `bun run test:all`; `bun audit --json > ~/.cache/nulo-backlog/backup-import-export/audit.json; code=$?; bun scripts/ci-cd/audit-gate.ts ~/.cache/nulo-backlog/backup-import-export/audit.json --exit-code "$code" --mode enforce`; `bun run build`; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/import-handshake-note.test.ts tests/e2e/network/profile-reimport-matrix.test.ts --retry=0`.
+- Commands: `bun install --frozen-lockfile --force`; lint; typecheck; `bun run test:all`; `bun audit --json > ~/.cache/nulo-backlog/backup-import-export/audit.json; code=$?; bun scripts/ci-cd/audit-gate.ts ~/.cache/nulo-backlog/backup-import-export/audit.json --exit-code "$code" --mode enforce`; `bun run build`; `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/profile-reimport-matrix.test.ts --retry=0`; `NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/import-handshake-note.test.ts --retry=0` (the file is `@requires-proverless`; D-arc1b-3).
 - Pass: all exit 0; the heal test passes on the patched install and fails with the patch reverted (checked once by hand, logged in `lessons/phase-1b.md`); the build's notices step accepts the modified file.
 - Layers: install, lint, typecheck, unit, audit, build, network e2e.
 
@@ -492,6 +492,11 @@ Each row: the chosen design, the alternatives weighed, the panel's views, and wh
 | D-orch-1 | No stack: arc 1 opens its own PR against `dev` (`gh pr create --base dev`), titled per the Delivery table; arc 1b and later arcs branch from arc 1's branch and rebase onto `dev` after it lands | the Delivery section's `gh stack` | orchestrator decision (overrides Delivery) | The orchestrator merges each arc in order; a plain PR per arc keeps that merge independent of the stack tooling. |
 | D-arc1-1 | The synthetic e2e backups carry a generated-shaped profile id (`SYNTHETIC_PROFILE_ID`) | keep `"syn-profile-id"` and relax the same-id leg | found by CI (network `profile-reimport-matrix`); fixed by the orchestrator session | The id rule (#226) is the product behaviour; the fixture, not the leg, was out of shape. |
 | D-orch-2 | Arc 1 only: nothing of 1b, 2 or 3 is built in arc 1's run; OA-6 and OA-9 ship as the plan states (the watchdog with the engine's existing sentence; the profile-id rule with no new words) | build 1b alongside | orchestrator decision | The orchestrator decides A1 (arc 1b's PXE patch) separately; arcs 2 and 3 wait on decision page 1. OA-6 and OA-9 are information with a veto on that page; a strike reaches the next arc through the orchestrator. |
+| D-orch-3 | A1 answered: arc 1b ships the one-line `@aztec-labs/pxe` patch as planned (D7) | drop arc 1b and leave all of #148 to the upstream report | orchestrator decision | Only a patch heals an account already left half-registered; #148 stays open for the upstream report. |
+| D-orch-4 | After a squash merge, an arc branches from `dev`, not from the merged arc's branch: arc 1b is `backup-import-export-arc-1b` off `origin/dev` ed59711 and opens against `dev` | branch from `worktree-backup-import-export` and rebase (D-orch-1) | orchestrator decision | The squash leaves the arc branch's commits off `dev`'s history; branching from `dev` avoids replaying them. D-orch-1 and D-orch-2 stand. |
+| D-arc1b-1 | The pxe patch is also named in `store/listing.md`'s reviewer notes, `store/SOURCE-BUILD.md` and `UPDATE.md` | leave the store docs to a later release PR | found in the tree (not in the change map) | The reviewer notes go to AMO with every version as the exact list of third-party modifications; leaving them at two patches would misstate the next submission. The noir line is reworded to fit AMO's 3,000-code-point cap (2981). |
+| D-arc1b-2 | `@aztec-labs/pxe` gets its own `OVERRIDES` record; the licence fields are one constant shared with the Aztec record | append the sentence to the shared Aztec note | — | The note prints on every package the record names; a shared note would tell eighteen packages that `dest/pxe.js` is modified. One constant keeps one `reviewedVersion` per bump. |
+| D-arc1b-3 | The network gate runs `import-handshake-note` on a proverless build (`NULO_E2E_PROVERLESS=1`) and `profile-reimport-matrix` on the default build | one run of both files, as the gate was written | found by the gate | The handshake file's projection gate is compiled into proverless builds only (`@requires-proverless`); run 1 without the flag timed out waiting for it. `agent.sh`'s marker guard did not refuse that run because `--retry=0` reaches its grep as an option (reported to the orchestrator for the e2e harness lane). |
 
 ### Competing outline (cheapest-first), sent to both audits
 
@@ -599,6 +604,23 @@ None rejected.
 None rejected.
 
 - **Codex round 2 (resumed session): clean.** It re-probed both timeout outcomes (a clean restore reports the "(restored cleanly)" sentence; a failed one keeps the journal and the barrier and says only "interrupted mid-write") and found nothing further in the arc. The loop converged in two rounds.
+
+### Arc 1b implementation review (2026-10-10)
+
+- **Codex round 1 (gpt-6.1-sol, high, read-only; session 01a1233a-8127-7d43-a0df-835364508533): approve with fixes, no High or Medium.** It checked that only the address write is reached by the removed return, that equal registrations converge and a conflicting entry now rejects instead of passing silently, that neither `getRegisteredAccounts` nor the scope guard relies on the early return, that the test runs the installed patched module and the source pin catches a dropped key, the notices split, the store docs and the lockfile.
+- **Opus 5.5 diff review (alongside round 1): approve with fixes, three Lows.**
+
+| # | Source | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| B1-1 | Codex | Low | The fake store treats entries as equal by object identity and the key store returns one object; upstream compares bytes and derives a fresh complete address per call | Accepted: byte comparison, a fresh object per `addAccount`; the both-stored control asserts the same stored entry survives. The suggested conflicting-bytes case is rejected: it would test the fake's throw, not upstream or the patch. |
+| B1-2 | Codex | Low | The test header repeats the test names and the retirement steps the skill holds | Accepted: three lines. |
+| B1-3 | Opus | Low | The reviewer notes' "which alters no JavaScript or WASM" read as attached to the web build, beside a clause where JavaScript is altered | Accepted: "(no JavaScript or WASM changes)" on the noir clause; the pxe clause says the `return` becomes a comment (2981 code points). |
+| B1-4 | Opus | Low | The skill's re-apply step misses the root `node_modules/@aztec-labs/pxe` copy `bun patch` leaves under the isolated linker | Accepted: one clause in the skill line. |
+| B1-5 | Opus | Low | The committed header overstated the fake's fidelity while the fix was uncommitted | Accepted: resolved by B1-1. |
+
+Rejected: only B1-1's extra conflicting-bytes case, with the reason above.
+
+- **Codex round 2 (resumed session): clean.** No new material findings on the fix diff. The loop converged in two rounds.
 
 ## Delivery
 

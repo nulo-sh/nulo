@@ -53,6 +53,7 @@
   },
   "patchedDependencies": {
     "@aztec-foundation/noir-acvm_js@6.0.0-rc.1": "patches/@aztec-foundation%2Fnoir-acvm_js@6.0.0-rc.1.patch",
-    "@aztec-foundation/noir-noirc_abi@6.0.0-rc.1": "patches/@aztec-foundation%2Fnoir-noirc_abi@6.0.0-rc.1.patch"
+    "@aztec-foundation/noir-noirc_abi@6.0.0-rc.1": "patches/@aztec-foundation%2Fnoir-noirc_abi@6.0.0-rc.1.patch",
+    "@aztec-labs/pxe@6.0.0-rc.1": "patches/@aztec-labs%2Fpxe@6.0.0-rc.1.patch"
   }
 }
