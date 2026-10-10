@@ -473,6 +473,12 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 - A2-O3 [Low] with `full.vue`'s reduced-motion row dropped, nothing checked that the page keeps the shared shake: `a11y-css.test.ts` pins the composition (red on the parent `full.vue`).
 - A2-O4 [Low] comments: the loader pin's header described history; `contactListReducers` said "popup" for a list Send (a page) holds. Both reworded; `holdReads` states that its implementation outlives `vi.clearAllMocks`.
 
+**Codex round 2 (same session): conditional approve.** Round 1 resolved; two Lows, both accepted:
+- A2-C4 [Low] Send's own token and contact mocks still used reporter-less `EventHandler`s, so its pins could swallow a throw: they use `liveBus` (69/69, no existing case relied on a swallowed throw).
+- A2-C5 [Low] why `liveBus` throws on a microtask was unstated: `invoke` also catches its reporter's throws; one clause added.
+
+**Codex round 3 (same session): approve, no new material findings.** The loop converged.
+
 ## Post-implementation
 
 This section is self-contained: the implementing session follows it from here.

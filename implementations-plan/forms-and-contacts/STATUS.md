@@ -22,3 +22,4 @@
 - 2026-10-10: gate 2.2 pass: lint, typecheck:all, entity-list + six owners + send.integration 205/205; existing identity and add-always-appends pins unchanged. D-arc2-1..3 recorded (one pre-existing Send token-delete defect pinned).
 - 2026-10-10: gate 2.3 pass: lint, typecheck:all, a11y-css + GlobalLoader + theme-vars 6/6, base.css hash 1/1; the loader pin fails on the parent GlobalLoader.vue. Proof vs af4afcc: Chrome loader 2/2, Chrome shake 10/10, Firefox shake 10/10 pixel-identical, values equal (table in lessons/phase-2.md); Firefox loader cannot be held (source pin).
 - 2026-10-10: Codex arc-2 round 1 conditional approve (3 Lows accepted); Opus approve (4 Lows accepted). Early test:all red on scripts/e2e/owned-processes.test.ts only (zombie-owner race under load; passes 3/3 alone; issue at delivery).
+- 2026-10-10: Codex arc-2 rounds 2-3: two Lows fixed, then approve with no new material findings; loop converged at e77d533.
