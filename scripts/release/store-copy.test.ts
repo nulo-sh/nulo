@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -53,6 +53,14 @@ describe("compareCopies", () => {
 			"an update_url with another value",
 			withManifest({ ...MANIFEST, update_url: "https://example.com/crx" }),
 			'manifest.json: "update_url" differs',
+		],
+		[
+			"a manifest key the release lacks, named __proto__",
+			withManifest({}).map(([n, b]): [string, string] => [
+				n,
+				n === "manifest.json" ? `{"__proto__":{},${JSON.stringify(MANIFEST).slice(1)}` : b,
+			]),
+			'manifest.json: "__proto__" differs',
 		],
 		[
 			"a manifest that is not JSON",
@@ -132,17 +140,19 @@ describe("entryListProblem", () => {
 })
 
 describe.skipIf(!process.env.NULO_STORE_COPY_LIVE)("live stores", () => {
-	const dir = mkdtempSync(join(tmpdir(), "store-copy-live-"))
-	afterAll(() => rmSync(dir, { recursive: true, force: true }))
-
 	test(
 		"each store's public copy is the release zip it names, up to the store's own additions",
 		async () => {
+			const dir = mkdtempSync(join(tmpdir(), "store-copy-live-"))
 			const lines: string[] = []
 			const io = { ...realStoreIO("nulo-sh/nulo", process.env.GH_TOKEN ?? ""), log: (line: string) => lines.push(line) }
-			const exit = await main(["both"], io, dir)
-			console.log(lines.join("\n"))
-			expect(exit).toBe(0)
+			try {
+				const exit = await main(["both"], io, dir)
+				console.log(lines.join("\n"))
+				expect(exit).toBe(0)
+			} finally {
+				rmSync(dir, { recursive: true, force: true })
+			}
 		},
 		{ timeout: 600_000 },
 	)

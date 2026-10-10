@@ -426,6 +426,7 @@ describe("CI behavior-gating guard", () => {
 		const check = job.steps.find((step: { run?: string }) => step.run?.includes("launch.test.ts"))
 		expect(check?.["working-directory"]).toBe("packages/legal")
 		expect(check?.env?.NULO_LAUNCH_GATE, "without it the live assertion skips and the job passes").toBe("1")
+		expect(readFileSync(join(ROOT, "packages/legal/src/launch.test.ts"), "utf8")).toContain("process.env.NULO_LAUNCH_GATE")
 		expect(wf.jobs.status.needs).toContain("launch-legal")
 	})
 
@@ -912,8 +913,6 @@ describe("canary lanes", () => {
 	})
 })
 
-// Bun never re-checks cached files against bun.lock, and its install runs trusted packages'
-// lifecycle scripts: a poisoned cache must reach neither shipped bytes nor a job holding a write token.
 describe("store copies", () => {
 	const file = ".github/workflows/verify-store-copies.yml"
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
@@ -935,10 +934,14 @@ describe("store copies", () => {
 		expect(uses).toEqual(["actions/checkout", "./.github/actions/setup-bun"])
 		expect(job.steps[0].with?.["persist-credentials"]).toBe(false)
 		expect(job.steps[1].with).toEqual({ cache: "false", install: "false" })
-		expect(job.steps[2].run).toBe('bun scripts/release/store-copy-run.ts "$STORE"')
+		expect(job.steps[2].run, "with no node_modules, Bun would fetch a bare import from npm").toBe(
+			'bun --no-install scripts/release/store-copy-run.ts "$STORE"',
+		)
 	})
 })
 
+// Bun never re-checks cached files against bun.lock, and its install runs trusted packages'
+// lifecycle scripts: a poisoned cache must reach neither shipped bytes nor a job holding a write token.
 describe("Bun's install cache", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 	const parse = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, file), "utf8"))

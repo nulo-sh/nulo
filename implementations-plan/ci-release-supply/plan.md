@@ -572,6 +572,41 @@ Verdict: **approve with fixes**. The three answers: D2 holds for ordering but no
 | D5 | A reading whose re-run leg did not pass is void; the probe lacks the lanes' `needs: decide` shape | Accepted: precondition and `gate` job |
 | 6 | Low, out of scope. `complexity-baseline.test.ts` reads `baseline:move-approved` from the event payload | Filed as #250; not arc 1's surface |
 
+### Arc 2, Codex round 1 (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Session 01a123e0-aece-7ed3-9f04-4189a3807f85, on `c0e1e69...f1c0618` (phases 2.1 to 2.3). Verdict: **approve with fixes**. The D-orch-7 question first:
+
+| Check, for the store-copy caller | Answer | Where it checked |
+|---|---|---|
+| (a) GitHub's asset digest against the downloaded bytes | Yes | `attach-assets-run.ts` `fetchVerified`: digest required, download hashed and compared |
+| (b) `SHASUMS256.txt` | Yes | `store-copy-run.ts` fetches it through `fetchVerified` itself, then requires exactly the two zips and the store zip's line |
+| (c) the attestation | Yes | `attested`, then `gh attestation verify --signer-workflow … --source-digest <tagSha> --deny-self-hosted-runners` |
+| (d) the frozen pre-attestation list | Yes | `PRE_ATTESTATION = ["0.30.2"]` is the only digest-only branch |
+| the publish path unchanged | Yes | only types and export visibility changed; `runApply` and `runVerifyPublished` unchanged; `attach-assets-run.test.ts` unedited and green |
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. The manual unstick tagged on empty `git grep` output, so a failing `git grep` (exit 128) tagged a release with blanks | Accepted, and widened: `git grep` also exits 1 on a missing path, so the block now tags only when both files exist (`git cat-file -e`) and `git grep` exits 1. Exercised in bash and zsh on five commits: blanks refused, a 0.x tagged, a filled 1.0.0 tagged, a commit without the files refused, an unknown commit refused. zsh read `$MERGE_COMMIT:l…` as its lowercase modifier; the variable is braced |
+| 2 | Medium. The release downloads inherit `attach-assets-run.ts`'s unbounded `arrayBuffer()` | Rejected: a non-frozen asset is downloaded only after `attested` finds an attestation for its digest, which only this repository's release and nightly workflows can create, so its bytes are this repository's own build; the frozen v0.30.2's are fixed. Every remaining failure (a replaced oversized asset on v0.30.2) ends the run red. A second downloader would duplicate the publish path's redirect handling without changing any conclusion the check can reach |
+| 3 | Low. A served `manifest.json` with a `"__proto__"` key hid a difference against the inherited prototype | Accepted: own keys only (`Object.hasOwn`); case added, red on the old copy |
+| 4 | Low. The "no release" case stopped at the missing tag; malformed AMO fields had no case | Accepted: a tag with zero and with two releases, an AMO file outside addons.mozilla.org and a non-sha256 AMO hash |
+| 5 | Low. The cache-poisoning comment ended up above the store-copy pins | Accepted: moved back above `describe("Bun's install cache")` |
+
+### Arc 2, Opus review (same family, read-only), 2026-10-10
+
+On `c0e1e69...f1c0618`, alongside Codex round 1. Verdict: **approve with fixes**, every finding Low. The D-orch-7 question first: **yes** on (a) the digest (`attach-assets-run.ts` `fetchVerified`, digest refused when absent and compared after the download), (b) `SHASUMS256.txt` (fetched through `fetchVerified`, then exactly the two zips and the store zip's line), (c) the attestation (`attested` before the download, `verifyAttestation` with `tagSha` from `tagCommit` after it), (d) the frozen list (the one digest-only branch; nothing compares before `releaseZip` returns), and the publish path (`runApply`, `runVerifyPublished`, `realIO` untouched; the call-order assertion passes). It ran the release tests, the live-gate test, the presto and pin suites, and the manual block in bash and zsh.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `__proto__` in a served manifest hides a difference | Same as Codex 3; fixed |
+| 2 | `git grep` exits 1 on a missing path, so the manual block tags a commit without the documents | Accepted (merged into Codex 1's fix: `git cat-file -e` on both files first) |
+| 3 | The live case's directory is created at describe scope, so a skipped run leaves an empty temp directory | Accepted: created and removed inside the test; the empty leftovers removed |
+| 4 | Three run guards have no planted case: `SHASUMS256.txt` naming another zip, the entry-list check inside `readArchive`, the shared output budget | Accepted: three cases, each red when its guard is removed |
+| 5 | The import-free pin misses `export … from` | Accepted: the pattern refuses any `from "…"` |
+| 6 | Renaming `NULO_LAUNCH_GATE` in the test would skip the live assertion and pass `launch-legal` | Accepted: the pin also reads the test file for `process.env.NULO_LAUNCH_GATE` |
+| 7 | Docs: the tag-creation ruleset still lets the owner push a tag; a Release PR is opened against `main`, so `--admin` is its realistic bypass | Accepted: CLAUDE.md says the ruleset leaves a hand-pushed tag to the owner alone; the troubleshooting cause names `--admin`; CI.md names both a retarget (a promote PR) and `--admin` |
+| 8 | With no `node_modules`, Bun auto-installs a bare import from npm at run time in every job that installs nothing (moderate confidence) | Verified in Bun's docs (`install.auto` defaults to `"auto"`). Accepted for this arc's workflow: `bun --no-install`, pinned. The pre-existing jobs (`auto-unstick`, `attach-assets`, `sync-main-to-dev`, both store publishers, `publish-nightly`, `preview-comment`) are outside arc 2's change map: filed as #260 |
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before the next arc's branch starts; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.

@@ -87,7 +87,9 @@ function world(version = "1.2.3", over: Partial<World> = {}): World {
 	}
 }
 
-function run(w: World, ...argv: string[]) {
+const run = (w: World, ...argv: string[]) => runWith(w, () => {}, ...argv)
+
+function runWith(w: World, onRead: (path: string, limit: number) => unknown, ...argv: string[]) {
 	const disk = new Map<string, Uint8Array>()
 	const logs: string[] = []
 	const calls: string[] = []
@@ -114,7 +116,8 @@ function run(w: World, ...argv: string[]) {
 		async listEntries(path) {
 			return Object.keys(archiveAt(path))
 		},
-		async readEntry(path, name) {
+		async readEntry(path, name, limit) {
+			onRead(path, limit)
 			return text(archiveAt(path)[name] ?? "")
 		},
 		async releasesFor() {
@@ -191,7 +194,29 @@ describe("store-copy-run", () => {
 			},
 			"HTTP 500",
 		],
-		["a served version with no release", (w) => w.tags.clear(), "v1.2.3 does not exist"],
+		["a served version with no tag", (w) => w.tags.clear(), "v1.2.3 does not exist"],
+		[
+			"a tag with no release",
+			(w) => {
+				w.releases = []
+			},
+			"no single published release",
+		],
+		["a tag with two releases", (w) => w.releases.push({ ...w.releases[0], id: 10 }), "no single published release"],
+		[
+			"an AMO file outside addons.mozilla.org",
+			(w) => {
+				w.amo = { current_version: { file: { url: "https://example.com/nulo.xpi", hash: `sha256:${hex(w.xpi)}` } } }
+			},
+			"AMO lists no current file",
+		],
+		[
+			"an AMO hash that is not a sha256",
+			(w) => {
+				w.amo = { current_version: { file: { url: "https://addons.mozilla.org/f/1/nulo.xpi", hash: `sha1:${"a".repeat(40)}` } } }
+			},
+			"AMO lists no sha256",
+		],
 		[
 			"a draft release",
 			(w) => {
@@ -233,6 +258,18 @@ describe("store-copy-run", () => {
 			"SHASUMS256.txt does not match",
 		],
 		[
+			"a SHASUMS256.txt that names another zip",
+			(w) => shasums(w, `${hex(w.assets.get(1) as Uint8Array)}  nulo-chrome-1.2.3.zip\n${"f".repeat(64)}  nulo-edge-1.2.3.zip\n`),
+			"exactly the two zips",
+		],
+		[
+			"a served entry that climbs out of the archive",
+			(w) => {
+				w.archives["served-firefox"]["../x"] = "x"
+			},
+			"climbs out",
+		],
+		[
 			"a SHASUMS256.txt with a third line",
 			(w) => shasums(w, `${new TextDecoder().decode(w.assets.get(3))}${"e".repeat(64)}  x.zip\n`),
 			"exactly the two zips",
@@ -259,6 +296,16 @@ describe("store-copy-run", () => {
 		const { exit, logs } = run(w, "chrome")
 		expect(await exit).toBe(1)
 		expect(logs.join("\n")).toContain("does not match sha256:")
+	})
+
+	test("every entry of an archive draws on one output budget", async () => {
+		const w = world()
+		const limits: number[] = []
+		const onRead = (path: string, limit: number) => path.endsWith("chrome-store.zip") && limits.push(limit)
+		expect(await runWith(w, onRead, "chrome").exit).toBe(0)
+		const [first] = Object.values(w.archives["served-chrome"])
+		// The first read is the version check's, bounded on its own.
+		expect(limits.slice(1, 3)).toEqual([512 << 20, (512 << 20) - text(first).length])
 	})
 
 	test("refuses anything but one store name", async () => {

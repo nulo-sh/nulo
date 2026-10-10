@@ -245,6 +245,6 @@ describe("runUnstick — no launch with a blank in the legal documents", () => {
 	test("the job installs nothing, so the check is loaded by relative path from a file that imports nothing", () => {
 		const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8")
 		expect(read("auto-unstick-run.ts")).toContain('from "../../packages/legal/src/launch"')
-		expect(read("../../packages/legal/src/launch.ts")).not.toMatch(/^\s*import\b|\brequire\(|\bimport\(/m)
+		expect(read("../../packages/legal/src/launch.ts")).not.toMatch(/^\s*import\b|\brequire\(|\bimport\(|\bfrom\s*["']/m)
 	})
 })

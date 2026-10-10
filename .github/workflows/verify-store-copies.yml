@@ -51,4 +51,5 @@ jobs:
           STORE: ${{ inputs.store || 'both' }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: bun scripts/release/store-copy-run.ts "$STORE"
+        # Nothing is installed, and with no node_modules Bun would fetch a bare import from npm.
+        run: bun --no-install scripts/release/store-copy-run.ts "$STORE"

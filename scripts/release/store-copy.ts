@@ -92,10 +92,12 @@ function manifestFindings(store: Store, release: Uint8Array, served: Uint8Array)
 	let theirs = jsonObject(served)
 	if (!ours || !theirs) return ["manifest.json: not a JSON object on both sides"]
 	const [key, url] = CHROME_UPDATE_URL
-	if (store === "chrome" && !(key in ours) && theirs[key] === url)
+	if (store === "chrome" && !Object.hasOwn(ours, key) && theirs[key] === url)
 		theirs = Object.fromEntries(Object.entries(theirs).filter(([k]) => k !== key))
+	// Own keys only: a `__proto__` key would otherwise compare against the inherited prototype.
+	const value = (o: Record<string, unknown>, k: string) => (Object.hasOwn(o, k) ? canonical(o[k]) : "absent")
 	const keys = new Set([...Object.keys(ours), ...Object.keys(theirs)])
-	return [...keys].filter((k) => canonical(ours[k]) !== canonical(theirs[k])).map((k) => `manifest.json: ${JSON.stringify(k)} differs`)
+	return [...keys].filter((k) => value(ours, k) !== value(theirs, k)).map((k) => `manifest.json: ${JSON.stringify(k)} differs`)
 }
 
 const same = (a: Uint8Array, b: Uint8Array): boolean => Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(b)
