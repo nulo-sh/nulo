@@ -690,6 +690,16 @@ Verdict: **reject**. No path reaches an outside host; two ways the stand-in can 
 | 9 | Low. An uncommitted inventory hook in `egress-guard.ts` | Already local only; never committed |
 | 10 | Gate. No whole-smoke run on the stub build yet | Accepted: the six runs are the phase 1.2 gate, run next |
 
+### Arc 1, round 3, Codex (resumed session), 2026-10-10
+
+Verdict: **reject**, on two races the sequential fixes left open. It confirmed every round-2 fix, ran the Firefox observer scripts in memory to check the token, and accepted the fallback for Opus 1: a blanket check after arming would misread a request in flight before it, and the revised docs state the narrower guarantee. Round 3 is the loop's last; each fix below is proved by a test that fails on the round-2 code.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. A re-arm that completes after the launch let go leaves a redirect armed that nothing owns or reports | Accepted: a re-arm that lands once the origin is no longer held, or already re-armed, is stopped at once. A spec's own interception armed after the launch let go stays the spec's to stop |
+| 2 | Medium. The override slot is taken only after awaits, so two specs' interceptions on one origin can both arm | Accepted: the slot is reserved before the first await and held through draining, arming, stopping and the re-arm; a second request in that window throws |
+| 3 | Low. The picker check accepts any FPC id, not the seeded sponsor's | Accepted: the focused row's id must be the sponsor's seeded id, and the saved pick must name it |
+
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
