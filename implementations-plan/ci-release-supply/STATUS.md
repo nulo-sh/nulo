@@ -13,3 +13,4 @@
 - 2026-10-10: arc 1 review round 1 (Codex reject, Opus approve with fixes); D2/D3/D5 answers recorded (D-orch-4); fixes D15-D17 applied; phase 1.3 gate passed; #250 filed.
 - 2026-10-10: arc 1 review round 2 (Codex resume): reject on the pre-existing retarget gap only (accepted residual, #251); sweep concurrency group removed.
 - 2026-10-10: phase 1.4 probe run 38013958157: no fold (rule 1); branch deleted. Phase 1.5 = CI.md rewrite; gate passed (test:release: 3 zip-missing host failures, no release script touched).
+- 2026-10-10: arc 1 Codex round 3: approve, no new material findings; loop converged.

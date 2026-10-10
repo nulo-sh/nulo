@@ -549,6 +549,10 @@ Verdict: **reject**, on the retarget gap alone; the attempt guard, the live base
 | 1 | High. A retarget starts no run, so a skipped-suite green from `dev` stands on `main` | Rejected as an arc 1 change, recorded as an accepted pre-existing residual and filed as #251 (D15): an `edited` subscription re-runs every suite on each title or body edit |
 | 2 | Low. "Its own sweep takes over" promises an admission order GitHub does not give: an older sweep admitted last cancels the newer one through the job's group | Accepted: the group is removed and pinned absent; wording now says cancellation is best effort |
 
+### Arc 1, Codex round 3 (resume, final arc pass), 2026-10-10
+
+Verdict: **approve, no new material findings**, on `8ab419a..HEAD` and the whole arc. It read the probe's hosted logs for attempts 2 to 5 itself: each targeted leg executed at its new attempt, the dependent `status` at the same attempt, and both matrix results stayed `failure`, so rule 1 is correctly applied to both shapes. Removing the sweep's group fixes the older-sweep cancellation; the attempt guard rejects carried-over skips without blocking suite re-runs; no gate bypass beyond the accepted #251 residual. The loop converged.
+
 ### Arc 1, Opus review (same family, read-only), 2026-10-10
 
 Verdict: **approve with fixes**. The three answers: D2 holds for ordering but not under a stale pull request read; D3 holds for labels, with the retarget and partial re-run gaps Codex also found; D5 holds, with a void-reading precondition and a fidelity gap. (Its red test counts came from the worktree mid-edit; the committed tree passes.)
