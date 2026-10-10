@@ -11,7 +11,8 @@
  * that step this guard would never run on a PR and the whole mechanism would be hollow.
  */
 import { describe, expect, test } from "bun:test"
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 const ROOT = join(import.meta.dir, "..", "..")
@@ -156,25 +157,201 @@ describe("network suite job names", () => {
 })
 
 describe("PR concurrency", () => {
-	test("each PR workflow groups by pull request number, so same-named branches of two forks never cancel each other", () => {
-		for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
-			expect(wf.concurrency?.group, `${file}: concurrency.group`).toContain("${{ github.event.pull_request.number || github.ref }}")
-			expect(wf.concurrency?.group, `${file}: concurrency.group`).not.toContain("head_ref")
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+	const PR_WORKFLOWS = [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]
+
+	// The number keeps same-named branches of two forks apart; the head commit keeps two heads of one
+	// pull request apart, so a late run of an older push can neither cancel nor replace the current
+	// head's run, whatever order GitHub admits them in.
+	test("each PR workflow queues per pull request and head commit, and only a dispatch cancels", () => {
+		for (const file of PR_WORKFLOWS) {
+			const { group, "cancel-in-progress": cancel } = workflow(file).concurrency ?? {}
+			expect(String(group), `${file}: concurrency.group`).toEndWith(
+				"-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}",
+			)
+			expect(String(group), `${file}: concurrency.group`).not.toContain("head_ref")
+			expect(cancel, `${file}: concurrency.cancel-in-progress`).toBe("${{ github.event_name != 'pull_request' }}")
 		}
 	})
 
-	// A run cancelled on the head it shares with its successor still runs its `always()` aggregator,
-	// which posts FAILURE there under the required name. A push's first attempt is the only event
-	// that moves the head; a re-run keeps its original event, so it must not cancel either.
-	test("only a push's first attempt cancels a run in flight; every other PR event queues", () => {
-		for (const file of [...Object.keys(AGGREGATOR_CHECKS), "actionlint.yml"]) {
-			// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
-			const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8")) as any
-			expect(wf.concurrency?.["cancel-in-progress"], `${file}: concurrency.cancel-in-progress`).toBe(
-				"${{ github.event_name != 'pull_request' || (github.event.action == 'synchronize' && github.run_attempt == '1') }}",
-			)
+	// The one job in the repository that may cancel runs: it runs nothing it fetched, reads every input
+	// from env, and skips the tokens that could not cancel anyway.
+	test("pr-supersede.yml cancels from one script-only job with exactly the scope it needs", () => {
+		const wf = workflow("pr-supersede.yml")
+		expect(wf.on).toEqual({ pull_request: { types: ["synchronize"] } })
+		expect(wf.permissions).toEqual({})
+		expect(Object.keys(wf.jobs)).toEqual(["cancel-superseded"])
+		const job = wf.jobs["cancel-superseded"]
+		expect(job.permissions).toEqual({ actions: "write", "pull-requests": "read" })
+		expect(job.if).toBe("github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'")
+		// A shared group would let a late-admitted older sweep cancel the newer one.
+		expect(wf.concurrency).toBeUndefined()
+		expect(job.concurrency).toBeUndefined()
+		expect(job.steps).toHaveLength(1)
+		const [step] = job.steps
+		expect(step.uses).toBeUndefined()
+		expect(step.run).not.toContain("${{")
+		const listed = /WORKFLOWS=\(\n([\s\S]*?)\n\s*\)/.exec(step.run)?.[1]
+		expect(
+			String(listed)
+				.split("\n")
+				.map((line) => line.trim())
+				.sort(),
+		).toEqual(PR_WORKFLOWS.map((file) => `.github/workflows/${file}`).sort())
+	})
+
+	test("no other workflow can cancel or re-run a run", () => {
+		for (const file of readdirSync(join(ROOT, ".github/workflows")).filter((name) => name.endsWith(".yml"))) {
+			if (file === "pr-supersede.yml") continue
+			const wf = workflow(file)
+			const scopes = [wf.permissions, ...Object.values(wf.jobs ?? {}).map((job) => (job as { permissions?: unknown }).permissions)]
+			for (const scope of scopes) {
+				expect(
+					scope === "write-all" ||
+						(typeof scope === "object" &&
+							scope !== null &&
+							"actions" in scope &&
+							(scope as Record<string, unknown>).actions === "write"),
+					file,
+				).toBe(false)
+			}
+		}
+	})
+})
+
+/**
+ * Each e2e lane decides from the labels the pull request carries when its `changes` job runs. An
+ * event's own label list is a snapshot that a late run of an older event would decide from, so no
+ * workflow or action may read it, and a run whose head the pull request has moved past stops itself.
+ */
+describe("live labels", () => {
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const workflow = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", file), "utf8"))
+	const LANES = {
+		"pr-extension-smoke-e2e.yml": ["e2e:extension-smoke", "e2e:smoke"],
+		"pr-extension-smoke-e2e-firefox.yml": ["e2e:extension-smoke", "e2e:smoke"],
+		"pr-extension-network-e2e.yml": ["e2e:extension-network", "e2e:network"],
+		"pr-extension-network-e2e-firefox.yml": ["e2e:extension-network", "e2e:network"],
+	}
+	const SCRIPT = "bash scripts/ci-cd/live-labels.sh"
+	const snapshotReads = (text: string): string[] =>
+		text.split("\n").filter((line) => /github\.event\.(pull_request\.labels|label)\b/.test(line))
+	const ciFiles = (): string[] =>
+		[".github/workflows", ".github/actions"].flatMap((dir) =>
+			(readdirSync(join(ROOT, dir), { recursive: true }) as string[])
+				.filter((name) => /\.ya?ml$/.test(name))
+				.map((name) => join(dir, name)),
+		)
+
+	test("no workflow or action reads an event's label snapshot", () => {
+		const planted = "          LABEL_HIT: ${{ contains(github.event.pull_request.labels.*.name, 'e2e:smoke') }}"
+		expect(snapshotReads(`run: echo\n${planted}`)).toEqual([planted])
+		const files = ciFiles()
+		expect(files.length).toBeGreaterThan(10)
+		for (const file of files) expect(snapshotReads(readFileSync(join(ROOT, file), "utf8")), file).toEqual([])
+	})
+
+	test("every lane reads its own two labels live and decides from that output alone", () => {
+		for (const [file, labels] of Object.entries(LANES)) {
+			const { changes, decide } = workflow(file).jobs
+			const live = changes.steps.find((step: { id?: string }) => step.id === "live")
+			expect(live?.run, file).toBe(`${SCRIPT} ${labels.join(" ")}`)
+			expect(live?.if, `${file}: runs on every event`).toBeUndefined()
+			expect(live?.["continue-on-error"], file).toBeUndefined()
+			expect(live?.env, file).toEqual({
+				GH_TOKEN: "${{ github.token }}",
+				EVENT: "${{ github.event_name }}",
+				REPO: "${{ github.repository }}",
+				PR: "${{ github.event.pull_request.number }}",
+				HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
+			})
+			for (const output of ["label-hit", "base", "read-attempt"]) {
+				expect(changes.outputs[output], `${file}: ${output} has no fallback`).toBe(`\${{ steps.live.outputs.${output} }}`)
+			}
+			expect(decide.steps[0].env.LABEL_HIT, file).toBe("${{ needs.changes.outputs.label-hit }}")
+			expect(decide.steps[0].env.BASE, file).toBe("${{ needs.changes.outputs.base }}")
+		}
+	})
+
+	/**
+	 * Runs the live step's script under a `gh` that records its calls and answers with `bodies` in
+	 * order (the last one repeats), or fails with `failure`.
+	 */
+	function runLive(args: string[], env: Record<string, string>, gh: { bodies?: unknown[]; failure?: string }) {
+		const dir = mkdtempSync(join(tmpdir(), "live-labels-"))
+		try {
+			const log = join(dir, "calls")
+			const output = join(dir, "output")
+			const bodies = gh.bodies ?? [{}]
+			for (const [i, body] of bodies.entries()) writeFileSync(join(dir, `body-${i + 1}.json`), JSON.stringify(body))
+			writeFileSync(log, "")
+			writeFileSync(output, "")
+			const shim = gh.failure
+				? `echo "$*" >> "${log}"; echo "gh: ${gh.failure}" >&2; exit 1`
+				: `echo "$*" >> "${log}"; n=$(wc -l < "${log}"); [ "$n" -gt ${bodies.length} ] && n=${bodies.length}; cat "${dir}/body-$n.json"`
+			writeFileSync(join(dir, "gh"), `#!/usr/bin/env bash\n${shim}\n`)
+			chmodSync(join(dir, "gh"), 0o755)
+			const run = Bun.spawnSync(["bash", "scripts/ci-cd/live-labels.sh", ...args], {
+				cwd: ROOT,
+				env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: output, GITHUB_RUN_ATTEMPT: "2", RETRY_PAUSE: "0", ...env },
+			})
+			return {
+				code: run.exitCode,
+				stdout: run.stdout.toString(),
+				output: readFileSync(output, "utf8").trim(),
+				calls: readFileSync(log, "utf8").split("\n").filter(Boolean),
+			}
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	}
+
+	const HEAD = "a".repeat(40)
+	const pr = { EVENT: "pull_request", REPO: "nulo-sh/nulo", PR: "7", HEAD_SHA: HEAD, GH_TOKEN: "t" }
+	const body = (labels: string[], head = HEAD) => ({
+		head: { sha: head },
+		base: { ref: "main" },
+		labels: labels.map((name) => ({ name })),
+	})
+	const outputs = (hit: boolean, base: string) => `label-hit=${hit}\nbase=${base}\nread-attempt=2`
+
+	test.each(Object.entries(LANES))("%s: the live labels and base decide, read once from the pull request", (_, labels) => {
+		const alias = runLive(labels, pr, { bodies: [body(["docs", labels[1]])] })
+		expect([alias.code, alias.output, alias.calls]).toEqual([0, outputs(true, "main"), ["api repos/nulo-sh/nulo/pulls/7"]])
+		const unrelated = runLive(labels, pr, { bodies: [body(["docs", "e2e:other"])] })
+		expect([unrelated.code, unrelated.output]).toEqual([0, outputs(false, "main")])
+		const dispatch = runLive(labels, { ...pr, EVENT: "workflow_dispatch", PR: "", HEAD_SHA: "" }, { failure: "unused" })
+		expect([dispatch.code, dispatch.output, dispatch.calls]).toEqual([0, outputs(false, ""), []])
+	})
+
+	test("a run whose head the pull request moved past stops, whatever its labels, after one late read", () => {
+		const labels = LANES["pr-extension-smoke-e2e.yml"]
+		const moved = runLive(labels, pr, { bodies: [body(["e2e:smoke"], "b".repeat(40))] })
+		expect([moved.code === 0, moved.output, moved.calls.length]).toEqual([false, "", 2])
+		expect(moved.stdout).toContain(`superseded by ${"b".repeat(40)}`)
+		const lagging = runLive(labels, pr, { bodies: [body([], "c".repeat(40)), body(["e2e:smoke"])] })
+		expect([lagging.code, lagging.output, lagging.calls.length], "an endpoint that trailed the push").toEqual([
+			0,
+			outputs(true, "main"),
+			2,
+		])
+	})
+
+	test("an unreadable pull request fails closed: one retry for a rate limit or server error, none for a refusal", () => {
+		const labels = LANES["pr-extension-network-e2e.yml"]
+		for (const failure of ["API rate limit exceeded (HTTP 403)", "HTTP 502: Bad Gateway", "connection reset by peer"]) {
+			const run = runLive(labels, pr, { failure })
+			expect([run.code === 0, run.output, run.calls.length], failure).toEqual([false, "", 2])
+		}
+		const missing = runLive(labels, pr, { failure: "Not Found (HTTP 404)" })
+		expect([missing.code === 0, missing.output, missing.calls.length]).toEqual([false, "", 1])
+		for (const malformed of [
+			{ head: { sha: HEAD }, base: { ref: "dev" } },
+			{ head: { sha: HEAD }, labels: [] },
+		]) {
+			const run = runLive(labels, pr, { bodies: [malformed] })
+			expect([run.code === 0, run.output], JSON.stringify(malformed)).toEqual([false, ""])
 		}
 	})
 })
@@ -230,6 +407,15 @@ describe("CI behavior-gating guard", () => {
 		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
 		expect(wf.jobs["build-chrome"].if).toBe("needs.changes.outputs.needs-extension-build == 'true'")
 		expect(wf.jobs["build-firefox"].if).toBe(wf.jobs["build-chrome"].if)
+	})
+
+	test("Storybook builds wherever the extension does, and reports nothing to Storybook", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
+		const job = wf.jobs["build-storybook"]
+		expect(job.if).toBe(wf.jobs["build-chrome"].if)
+		const build = job.steps.find((step: { run?: string }) => step.run?.includes("build-storybook"))
+		expect(build?.env?.STORYBOOK_DISABLE_TELEMETRY).toBe("1")
 	})
 
 	test("landing build covers the landing graph and the documents it renders, and is wired into the aggregator", () => {
