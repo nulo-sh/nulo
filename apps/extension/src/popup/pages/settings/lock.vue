@@ -31,9 +31,13 @@ const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.pro
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
+configService.onConnected.add(onConfigConnected)
 
 const profileService = new ProfileServiceClient()
 const isLoading = ref(true)
+let readGeneration = 0
+let readFence = new Set()
+let connections = 0
 
 const defaultConfig = makeDefaultConfig()
 const MAX_SESSION_TTL = 1440
@@ -74,6 +78,7 @@ async function updateSessionTtl(value) {
 }
 
 function onSettingUpdate(setting) {
+	readFence.add(setting.key)
 	if (setting.key === "sessionTtl" && sessionTtl.value !== setting.value) {
 		sessionTtl.value = setting.value
 		sessionTtlMinutes.value = String(setting.value / 1_000 / 60)
@@ -119,6 +124,36 @@ function onStrictToggle(next) {
 	}
 }
 
+// The port's first open serves the mount's own read. A worker restart drops the port, which rejects
+// a read in flight and replays no update sent while it was down, so every later open reads again.
+function onConfigConnected() {
+	connections++
+	if (connections > 1) void readLockConfig()
+}
+
+/** Only the newest read lands, and never over a key an update has set since it started. */
+async function readLockConfig() {
+	const generation = ++readGeneration
+	const fence = new Set()
+	readFence = fence
+	let ttl
+	let strict
+	try {
+		ttl = await configService.getValue("sessionTtl")
+		strict = await configService.getValue("strictSecurityMode")
+	} catch {
+		return
+	}
+	if (generation !== readGeneration) return
+
+	const ttlMoved = ttl !== undefined && !fence.has("sessionTtl") && ttl !== sessionTtl.value
+	if (ttlMoved) sessionTtl.value = ttl
+	// A later read leaves the field alone unless the stored timeout moved, so an edit in progress stays.
+	if (ttlMoved || isLoading.value) sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
+	if (strict !== undefined && !fence.has("strictSecurityMode")) strictSecurityMode.value = strict
+	isLoading.value = false
+}
+
 watch(
 	() => sessionTtlMinutes.value,
 	debounce(() => {
@@ -138,15 +173,8 @@ watch(
 	}, 300),
 )
 
-onBeforeMount(async () => {
-	const ttl = await configService.getValue("sessionTtl")
-	if (ttl !== undefined) sessionTtl.value = ttl
-	sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
-
-	const strict = await configService.getValue("strictSecurityMode")
-	if (strict !== undefined) strictSecurityMode.value = strict
-
-	isLoading.value = false
+onBeforeMount(() => {
+	void readLockConfig()
 })
 
 onBeforeUnmount(() => {
@@ -158,7 +186,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<SettingsPageShell title="Lock" :backTo="'/popup/settings'" gap="32">
-		<!-- Outside the load gate: the config reads can hang after a worker restart. -->
+		<!-- Outside the load gate, so locking never waits on the config reads. -->
 		<ItemsContainer>
 			<SettingItem
 				title="Lock now"

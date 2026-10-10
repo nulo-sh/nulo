@@ -10,7 +10,7 @@ import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extensi
 import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { readSwLogTrail } from "../fixtures/journal"
-import { navigateByHash, PXE_ANCHOR_SYNC_WORKAROUND_MS } from "../fixtures/helpers"
+import { navigateByHash } from "../fixtures/helpers"
 import {
 	createTestWallet,
 	fundPublicFeeJuice,
@@ -377,8 +377,6 @@ test.skipIf(!hasConfig)(
 
 			// ── deployed: A's credit from its (unspent) fuel, minted through the extension ──
 			await claimPrivateFuel(wallet, fuelA)
-			// The mint reads the claim's nullifier at the wallet's anchor block; let the PXE sync it.
-			await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 			{
 				cell("deployed / first / credit mint (PrivateFPC.mint as A)")
 				await setFields(page, mintFields(fuelAIn))

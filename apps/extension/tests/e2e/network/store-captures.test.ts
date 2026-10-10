@@ -36,7 +36,6 @@ import {
 	navigateByHash,
 	navigateToSettings,
 	openNetworkDetail,
-	PXE_ANCHOR_SYNC_WORKAROUND_MS,
 	seedUsdQuoteAndReload,
 	selectFeeMethod,
 	selectSendToken,
@@ -202,7 +201,6 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
  *  both Fee Juice balances stay round. */
 async function sendToContact(page: Page, chain: Chain): Promise<void> {
 	await fillPrivateSend(page, chain, "50", "sponsored")
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 	await submitSend(page, { expect: "send" })
 	await waitForToast(page, "Transaction submitted", 120_000)
 	await waitForSendGone(page)

@@ -46,6 +46,14 @@ files sequential. All three take `reporters: e2eReporters()` from `vite.shared.t
 reporters array suppresses vitest's automatic `github-actions` annotator, so that function re-adds it
 and appends `RetryErrorReporter` (prints the first-attempt errors of a test that passed on retry).
 Never inline a reporters array in a config.
+The network and `all` configs also pass `{ stall: { stallMs: STALL_MS } }`, adding
+`StallWatchdog` (`tests/e2e/stall-watchdog.ts`): after 10 min with no reporter event it writes
+`.e2e-state/stalled` naming the running tests, fails and cancels the run, and 30 s later kills this
+vitest's fork workers (children whose argv is vitest's fork entry, never by name). Every run prints its
+longest silence; `STALL_MS` (`tests/e2e/run-limits.ts`) is twice the longest a green run showed, so
+a test that waits silently for longer needs a progress line. The same two configs cap each fork's V8
+heap at `FORK_HEAP_MIB` (2048 MiB, `execArgv`); `network-setup.ts` fails a fork whose limit does not
+match.
 
 Commands (root `package.json`):
 

@@ -104,13 +104,32 @@ async function importPasskeyFullBackup(page: Page, filePath: string): Promise<vo
 	await submitPasskeyFullBackup(page, filePath)
 }
 
-// Env-gate to local-only. The 11-service backup chain + SHA hash is 5-10×
-// slower on hosted GitHub Actions runners than local (15-22s local, 96-180s+
-// per attempt on hosted under cumulative load — confirmed empirically,
-// repeatedly, even after bumping the inner wait to 180s). Locally
-// the coverage stays full; hosted CI loses this test until we either profile
-// the chain, accept a larger runner (requires an org/enterprise plan), or get a deterministic completion signal we can wait on.
-test.skipIf(process.env.CI === "true")(
+/**
+ * A poll can miss the progress card between two ticks. Each callback reads the live DOM, so a card
+ * inserted and removed within one batch leaves the flag unset: the observer can miss, never pass
+ * falsely. The export awaits worker calls between the two, so they never share a batch.
+ */
+async function armProgressObserver(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const w = window as unknown as { __backupProgressSeen?: boolean }
+		w.__backupProgressSeen = false
+		const observer = new MutationObserver(() => {
+			const card = document.querySelector('[data-testid="backup-status-card"]')
+			const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
+			if (
+				(card?.textContent ?? "").includes("Creating your backup") &&
+				download?.disabled === true &&
+				/Creating Backup/i.test(download.textContent ?? "")
+			) {
+				w.__backupProgressSeen = true
+				observer.disconnect()
+			}
+		})
+		observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true })
+	})
+}
+
+test(
 	"passkey full-backup export: modal appears + status card + CTAs become available",
 	{ timeout: 240_000 },
 	async ({ freshExtensionPerTest }) => {
@@ -130,39 +149,13 @@ test.skipIf(process.env.CI === "true")(
 			// auto-fires `handleBackup` → opens the modal (see `handleAgree`
 			// in export/full.vue:73). No "Create Backup" button for passkey.
 			await page.waitForSelector('[data-testid="agree-continue-btn"]', { visible: true, timeout: 5_000 })
+			// Without the progress state, the CTA-enabled wait below would pass on a body left blank
+			// during the export.
+			await armProgressObserver(page)
 			await clickByTestId(page, "agree-continue-btn")
 
-			// After modal resolves, backupStatus flips to "progress" and the
-			// inline status card mounts. Polling-based assertion catches the
-			// intermediate state — without it, the existing CTA-enabled assert
-			// would still pass if the body regressed to blank during progress.
-			// Assert the card's expected copy ("Creating your backup") too so
-			// a future copy regression is caught at the e2e level.
-			await page.waitForFunction(
-				() => {
-					const card = document.querySelector('[data-testid="backup-status-card"]')
-					return card !== null && (card.textContent ?? "").includes("Creating your backup")
-				},
-				{ timeout: 15_000, polling: 100 },
-			)
-
-			// Bottom CTAs are disabled while the card is visible — codify the
-			// "no action available right now" invariant.
-			const ctaState = await page.evaluate(() => {
-				const download = document.querySelector<HTMLButtonElement>('[data-testid="download-backup-btn"]')
-				return { disabled: download?.disabled ?? false, label: download?.textContent?.trim() ?? "" }
-			})
-			expect(ctaState.disabled).toBe(true)
-			expect(ctaState.label).toMatch(/Creating Backup/i)
-
-			// 11-service backup() loop + SHA hash. Once the status flips to
-			// "finished", the card unmounts and the terminal CTAs become enabled.
-			// 30s suffices locally on a fast machine, but the hosted GitHub
-			// Actions runner regularly takes 45–55s for the full chain — and
-			// occasionally 90-120s under cumulative load (real observation on
-			// a hosted run: 96s/attempt × 3 retries blew past the prior
-			// 90s budget). 180s gives enough headroom for the slow path
-			// without masking a genuine deadlock.
+			// The card unmounts and both CTAs enable once the status reads "finished"; 180 s leaves a
+			// loaded hosted runner room without masking a deadlock.
 			await page.waitForFunction(
 				() => {
 					const protect = document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')
@@ -171,6 +164,10 @@ test.skipIf(process.env.CI === "true")(
 				},
 				{ timeout: 180_000, polling: 250 },
 			)
+			expect(
+				await page.evaluate(() => (window as unknown as { __backupProgressSeen?: boolean }).__backupProgressSeen),
+				"the export never showed its in-progress card with a disabled Creating Backup CTA",
+			).toBe(true)
 			await shotSend(page, "export-full-ready-passkey", "backup-ready-banner")
 
 			// An unencrypted download asks first: Cancel writes nothing, Download anyway writes the

@@ -24,18 +24,6 @@ import { type SendAction, submitSend } from "./send-page"
  * `role="alert"`. Avoid asserting on copy.
  */
 
-/**
- * Pinned workaround for a wallet bug: the simulate→prove pipeline doesn't
- * gate proveTx on PXE's anchor block having caught up to simulate's anchor.
- * Same race appears in dApp send paths (ExecutionService +
- * DappInteractionService). Real fix lives in the wallet — a shared
- * anchor-freshness gate factored as a pure helper. Until that lands, e2e
- * tests sleep here to let PXE catch up so proveTx doesn't fail on a stale
- * anchor. Renamed from a bare `setTimeout(5_000)` so the intent is
- * visible at every call site.
- */
-export const PXE_ANCHOR_SYNC_WORKAROUND_MS = 5_000
-
 // ── Auth ───────────────────────────────────────────────────────────────
 
 /** Lock the wallet via the Header lock button. Navigates to auth page.
@@ -1257,8 +1245,6 @@ export async function fillSendForm(page: Page, opts: { amount: string; destinati
 		console.error("[sendTransfer] submit never became enabled. Snapshot:", JSON.stringify(snapshot, null, 2))
 		throw e
 	}
-
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 }
 
 /** Map a (fromType, toType) pair to the user-visible transfer-type label
