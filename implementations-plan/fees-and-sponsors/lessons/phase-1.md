@@ -41,3 +41,10 @@
 - `dapp-send-executor.test.ts`'s RPC harness stubbed `pxeService` as `{}`; it now carries `offscreenSettled`, which the service calls on every failed estimate.
 - Base-copy check: with `EX/service.ts` at `HEAD`, the transition test's two never-happens fail (the parked fifth runs at the timeout; the TTL case frees its places early) and its two controls pass.
 - Gate: `bun run lint` ✓ (27 warnings, all pre-existing on `dev`), `bun run typecheck:all` ✓, extension-messaging ✓, aztec-runtime ✓, `apps/extension` `execution/` + `pxe/` + `utils/` ✓ (counts in the progress log).
+
+## Phase 1.4: two extractions, eight declines (#222, 2026-10-10)
+
+- Both sites re-read after #264. `fingerprintBuiltFee(txRequest)` lives in `estimate-reuse-shared.ts`; each stash computes it where it read `builtFees` before (the dApp stash before `randomUUID`, the transfer stash before `requireActiveProfile`), so no read moves. The transfer site's "exact built fee, never a refetch" comment became the helper's doc.
+- `reuseFeeMultiplier` is `feeMultiplierFor`; `buildAndEstimateTxRequest` calls it, so a missing priority now passes `DEFAULT_FEE_MULTIPLIER` instead of `undefined`. Traced: `finalizeGasLimits` and both fpc reads use `?? DEFAULT_FEE_MULTIPLIER`, and the multiplier prices only the refetch an embedded payment never reaches, so nothing committed changes. An unknown name maps exactly as before (`PRIORITY_MULTIPLIERS[name]`), behind the RPC boundary's refusal.
+- No test was edited in either commit. The eight declines are in the PR body draft.
+- Gate after each commit: `bun run lint` ✓, `bun run typecheck:all` ✓, `apps/extension` execution suite (1051 passed) ✓.

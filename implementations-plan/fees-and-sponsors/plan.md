@@ -602,7 +602,7 @@ May start now (tests and comments only). Rebase on send-queue-activity arc 1 bef
 - **Pass:** every command exits 0. Check once that the transition test's never-happens case fails against the base copy of `EX/service.ts`.
 - **Layers:** lint, typecheck, unit, integration (the service with the real registry).
 
-#### Phase 1.4: two extractions, eight declines (#222)
+#### Phase 1.4: two extractions, eight declines (#222) ✓
 
 **Warning.** Start this phase only after Phase 1.1's merge of `origin/dev`. Re-read both sites before you edit.
 
