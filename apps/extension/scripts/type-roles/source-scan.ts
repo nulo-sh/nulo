@@ -143,6 +143,32 @@ export function resolveSelector(rule: Rule): string {
 	return resolvedParts(rule).join(", ")
 }
 
+/** The declarations every rule resolving to exactly `selector` makes directly, a later one winning. */
+export function declarationsOf(parsed: ParsedSource, selector: string): Record<string, string> {
+	const out: Record<string, string> = {}
+	for (const sheet of parsed.styles) {
+		sheet.root.walkRules((rule) => {
+			if (resolveSelector(rule) !== selector) return
+			for (const node of rule.nodes) if (node.type === "decl") out[node.prop] = node.value
+		})
+	}
+	return out
+}
+
+/** The element carrying a static `data-testid`, with its ancestors outermost first, or undefined. */
+export function elementByTestid(
+	parsed: ParsedSource,
+	testid: string,
+): { node: TemplateNode; ancestors: readonly TemplateNode[] } | undefined {
+	let found: { node: TemplateNode; ancestors: readonly TemplateNode[] } | undefined
+	if (parsed.template) {
+		walkElements(parsed.template, (node, ancestors) => {
+			if (!found && staticAttr(node, "data-testid") === testid) found = { node, ancestors }
+		})
+	}
+	return found
+}
+
 export function isElement(node: TemplateNode | string | symbol): node is TemplateNode {
 	return typeof node === "object" && node.type === NODE.ELEMENT
 }

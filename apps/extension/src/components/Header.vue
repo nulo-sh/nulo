@@ -232,15 +232,17 @@ onBeforeUnmount(() => {
 				<AccountAvatar :name="appStore.account?.name || 'Primary Account'" :address="appStore.account?.address" :size="32" />
 			</button>
 			<Flex direction="column" gap="2" :class="$style.account_col">
-				<button
-					type="button"
-					@click="handleOpenPopup('accounts')"
-					data-testid="account-selector"
-					aria-label="Switch account"
-					:class="$style.account_label"
-				>
-					{{ appStore.account?.name?.toUpperCase() || "PRIMARY ACCOUNT" }}
-				</button>
+				<div :class="$style.name_slot">
+					<button
+						type="button"
+						@click="handleOpenPopup('accounts')"
+						data-testid="account-selector"
+						aria-label="Switch account"
+						:class="$style.account_label"
+					>
+						{{ appStore.account?.name?.toUpperCase() || "PRIMARY ACCOUNT" }}
+					</button>
+				</div>
 				<button
 					type="button"
 					@click="handleCopyAddress"
@@ -256,7 +258,7 @@ onBeforeUnmount(() => {
 			</Flex>
 		</Flex>
 
-		<Flex align="center" gap="8">
+		<Flex align="center" gap="8" :class="$style.actions">
 			<button
 				v-if="appStore.isLogined && appStore.network?.name"
 				type="button"
@@ -299,14 +301,25 @@ onBeforeUnmount(() => {
 	background: var(--app-bg);
 }
 
+/* The name claims no width of its own, so the group's minimum is the avatar and the address: when
+ * the row runs short, the network chip truncates before the address can slide under it. */
 .account_group {
-	min-width: 0;
-	flex-shrink: 1;
+	flex-grow: 1;
 }
 
 .account_col {
-	min-width: 0;
+	flex-grow: 1;
 	align-items: flex-start;
+}
+
+.name_slot {
+	display: flex;
+	align-self: stretch;
+	contain: inline-size;
+}
+
+.actions {
+	min-width: 0;
 }
 
 .avatar_btn {
