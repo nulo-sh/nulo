@@ -663,6 +663,17 @@ describe("DappInteractionService — a confirmation window never falls back to s
 		expect(h.executeOperations).not.toHaveBeenCalled()
 	})
 
+	test("array-like deltas are refused like a count mismatch, and the row survives for a real approval", async () => {
+		const h = await windowHarness()
+		const window = await h.open()
+		const arrayLike = { 0: { feeSettings: { paymentMethod: { kind: "fj" }, priorityLevel: "bogus" } }, length: 1 }
+		await expect(h.dapp.approveInteraction(window.id, arrayLike as never)).rejects.toThrow("Invalid id")
+		expect(h.executeOperations).not.toHaveBeenCalled()
+		await h.dapp.approveInteraction(window.id, [{}])
+		await expect.poll(() => window.outcome.settled).toBe(true)
+		expect(h.executeOperations).toHaveBeenCalledTimes(1)
+	})
+
 	test("two windows for one row: approving one signs only it, the other stays pending until its own close", async () => {
 		const h = await windowHarness()
 		const first = await h.open()

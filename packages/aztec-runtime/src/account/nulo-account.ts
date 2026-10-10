@@ -148,15 +148,8 @@ export class NuloAccount implements IAccountContract {
 		gasSettingsRPC?: PartialGasSettingsRPC,
 		outMeta?: { initializesAccount?: boolean },
 	): Promise<TxExecutionRequest> {
-		// Use the shared `completeFeeOptions` translator so both the
-		// standard and fast paths produce identical `GasSettings` for
-		// identical inputs. Mirrors upstream
-		// `BaseWallet.completeFeeOptions({forEstimation:true, ...})`
-		// byte-for-byte:
-		//   - `maxFeesPerGas` defaults from `node.getCurrentMinFees() * 1.5`
-		//   - `maxPriorityFeesPerGas` defaults to `GasFees.empty()`
-		// Hardcoded `1e18 / 1e18` constants are not used — drift between
-		// fast and standard paths is eliminated.
+		// The shared translator, so the standard and fast paths complete identical inputs to
+		// identical `GasSettings`.
 		const gasSettings = await completeFeeOptions({
 			node,
 			gasSettings: gasSettingsRPC,

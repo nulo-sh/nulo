@@ -17,8 +17,8 @@
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 
-/** Mirrors upstream's private `minFeePadding` (`base_wallet.ts:32`).
- *  `maxFeesPerGas` defaults to `node.getCurrentMinFees().mul(1 + this)`. */
+/** Upstream's private `minFeePadding`; here `maxFeesPerGas` defaults to
+ *  `node.getCurrentMinFees().mul(1 + this)`, where upstream pads its predicted minimum. */
 export const MIN_FEE_PADDING = 0.5
 
 /**
@@ -48,7 +48,7 @@ export interface CompleteFeeOptionsConfig {
  * - `Gas.from(...)` / `GasFees.from(...)` rebuild the rich types from
  *   their hex-string RPC form.
  * - `maxFeesPerGas` defaults to `node.getCurrentMinFees() * 1.5` when
- *   the dApp didn't supply one (matches upstream).
+ *   the dApp didn't supply one.
  * - `maxPriorityFeesPerGas` defaults to `GasFees.empty()`.
  * - `forEstimation: true` → `GasSettings.forEstimation(...)` (high
  *   gas-limit padding for sim).

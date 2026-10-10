@@ -1,66 +1,11 @@
 /**
- * Embedded-FPC `maxFeesPerGas` cap.
- *
- * ─────────────────────────────────────────────────────────────────
- * WHY THIS HELPER EXISTS (read this before deleting it)
- * ─────────────────────────────────────────────────────────────────
- *
- * Nulo's standard tx pipeline calls `completeFeeOptions({forEstimation:true})`
- * (in `@nulo/aztec-runtime/account/fee-options.ts`) which mirrors upstream
- * `BaseWallet.completeFeeOptions` byte-for-byte: when the dApp doesn't
- * supply `maxFeesPerGas`, the default is `node.getCurrentMinFees().mul(1.5)`
- * — i.e. minFees with a 50% safety padding (upstream's `minFeePadding = 0.5`).
- *
- * That `1.5×` default is correct for the *general* case. It is WRONG for
- * embedded-FPC payments. Here's why:
- *
- * When a dApp uses an embedded FPC (the `feePayer` field on the
- * `ExecutionPayload` points at an FPC contract that pays gas on the user's
- * behalf), the FPC contract carries a budgeted `amount`. The FPC's setup
- * function asserts that `gasLimits * maxFeesPerGas <= budgetedAmount`. If
- * the wallet inflates `maxFeesPerGas` beyond the dApp's budget, the FPC
- * assertion fails and the tx reverts.
- *
- * Upstream-recommended dApp patterns that hit this exactly:
- *   • `FeeJuicePaymentMethodWithClaim` (the L1→L2 bridge fee-claim flow):
- *     dApp derives the budget from `node.getCurrentMinFees()` directly,
- *     no padding — because the underlying bridge claim is sized at minFees.
- *   • Sponsored-FPC contracts with a `claim_and_end_setup` call: the
- *     sponsor-side accounting uses `getCurrentMinFees()` as the cap.
- *
- * Both patterns appear in aztec.js docs as the canonical examples. dApps
- * following them assume the wallet won't pad above `1.0×` for the embedded
- * fee path.
- *
- * ─────────────────────────────────────────────────────────────────
- * WHAT THIS HELPER DOES
- * ─────────────────────────────────────────────────────────────────
- *
- * For txRequests with `fee.embeddedFeePayment` set ("fpc" or "fjwc"):
- *
- *   • If the dApp supplied `fee.maxFeesPerGas` explicitly, use those values
- *     (the dApp knows what its FPC budget is). On code paths where
- *     `gasSettings` isn't yet threaded through `buildStandard` —
- *     `executeAztecProfileTx`, `executeNoFromSendTx`, and the
- *     embedded-strategy `buildAndEstimate` — this branch is the ONLY way
- *     dApp-supplied explicit fees reach `txRequest.txContext.gasSettings`.
- *
- *   • If the dApp did NOT supply explicit fees, override `maxFeesPerGas`
- *     to `node.getCurrentMinFees()` (no padding) so the FPC budget
- *     assertion passes.
- *
- * No-op when `fee.embeddedFeePayment` is undefined (regular non-embedded
- * payment). Other gas-settings fields (`gasLimits`, `teardownGasLimits`,
- * `maxPriorityFeesPerGas`) pass through unchanged.
- *
- * ─────────────────────────────────────────────────────────────────
- * IF YOU'RE THINKING OF DELETING THIS HELPER
- * ─────────────────────────────────────────────────────────────────
- *
- * Dropping the cap lets `completeFeeOptions`'s `1.5×` default through,
- * which silently breaks dApps using the patterns above. Before removing
- * it, verify with a real dApp that hits an embedded fee path. Why:
- * implementations-plan/archive/embedded-fpc-firsttx-cosmetic/plan.md#why
+ * `maxFeesPerGas` for a payment the app's own payload makes (`fee.embeddedFeePayment`): the app's
+ * `fee.maxFeesPerGas` verbatim, else the node's current minimum at 1.0×, where the standard build
+ * defaults to 1.5×. No canonical payment method of the installed Aztec line checks
+ * `gasLimits × maxFeesPerGas` against a budget; the 1.0× default serves an app whose own fee
+ * contract budgets against exactly the current minimum, and an app that wants headroom passes
+ * `maxFeesPerGas`. On the embedded strategy, the NO_FROM build and the profile path this is the
+ * only way the app's explicit cap reaches the gas settings. Other gas-settings fields pass through.
  */
 import { GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"

@@ -15,6 +15,7 @@ import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
 import { AccountService } from "@/wallet/services/account/service"
 import { ContactService } from "@/wallet/services/contact/service"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -37,7 +38,7 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
-import { EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
 	JobCancelledError,
@@ -49,6 +50,7 @@ import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
+import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import {
 	EXECUTION_SERVICE_NAME,
 	type Methods,
@@ -59,7 +61,6 @@ import {
 	type OperationResult,
 	type Action,
 	type FeeSettings,
-	PRIORITY_MULTIPLIERS,
 	type AztecRegisterSenderOperation,
 	type AztecRegisterContractOperation,
 	type AztecCreateAuthWitOperation,
@@ -79,7 +80,7 @@ import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner } from "./operation-planner"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
-import type { ChainIdentity } from "./estimate-reuse-shared"
+import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor } from "./transfer-executor"
@@ -110,8 +111,17 @@ export interface InteractionOperationSource {
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
  *  construction seam (real client vs the composition-test fake) is unit-testable
- *  without spinning up `init()` + a full ServiceCollection. */
-export const DEFAULT_PXE_CLIENT_FACTORY = (logger: ILogger): PxeServiceClient => new PxeServiceClient(logger)
+ *  without spinning up `init()` + a full ServiceCollection.
+ *
+ *  It tracks this service's timed-out simulations so an estimate keeps its admission place while
+ *  one still runs offscreen. A record lives as long as an estimate entry and starts after the entry
+ *  it holds, so it never ends a hold before the registry's TTL would. */
+export const DEFAULT_PXE_CLIENT_FACTORY = (logger: ILogger): PxeServiceClient => {
+	const client = new PxeServiceClient(logger)
+	client.setDocumentEpochProvider(offscreenEpoch, ESTIMATE_JOB_TTL_MS)
+	onOffscreenRetired((epoch) => client.retireEpochsThrough(epoch))
+	return client
+}
 
 /** A popup decodes one approval window at a time; anything past this is not a display request. */
 const MAX_DISPLAY_CALLS = 64
@@ -130,6 +140,17 @@ const FENCED_OPERATION_KINDS: ReadonlySet<Operation["kind"]> = new Set([
 	"register_token",
 	"aztec_createAuthWit",
 ])
+
+/** The popup's fee settings: one per transfer or estimate, one per broadcasting operation. */
+const FEE_SETTINGS_OF = {
+	executeTransfer: ([, , , , , , feeSettings]) => [feeSettings],
+	estimateTransferFee: ([, , , , , , feeSettings]) => [feeSettings],
+	estimateOperationFee: ([, , feeSettings]) => [feeSettings],
+	executeOperations: ([operations]) =>
+		Array.isArray(operations)
+			? operations.flatMap((op) => (op?.kind === "send_transaction" || op?.kind === "aztec_sendTx" ? [op.feeSettings] : []))
+			: [],
+} satisfies FeeSettingsReaders<Methods>
 
 export class ExecutionService extends Service<Methods> implements ServiceSpec<Methods> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
@@ -223,6 +244,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		private readonly pxeClientFactory: (logger: ILogger) => PxeServiceClient = DEFAULT_PXE_CLIENT_FACTORY,
 	) {
 		super(EXECUTION_SERVICE_NAME, logger)
+	}
+
+	/** An unknown speed level is refused before the method runs; fee math never reads one. */
+	protected override invoke(method: string, params: unknown[]): unknown {
+		refuseUnknownPriorities(FEE_SETTINGS_OF, method, params)
+		return super.invoke(method, params)
 	}
 
 	protected async init(services: ServiceCollection) {
@@ -571,26 +598,35 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	): Promise<T> {
 		if (!estimateToken) return run()
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
-		let admitted = false
+		let admission: AbortSignal | undefined
 		let estimateId: string | undefined
+		let offscreenWork: Promise<void> | undefined
 		try {
 			// Inside the try: a parked admission rejected by supersede/cancel
 			// throws the internal sentinel too, and it must cross the RPC
 			// boundary as the structured error like every other cancel.
-			const signal = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
-			admitted = true
-			const result = await run(signal)
+			admission = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
+			const result = await run(admission)
 			// One id evicts every cache: a standard estimate's preview id IS its
 			// estimate id, and a preview-only result has nothing else stashed.
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
 			return result
 		} catch (error) {
+			if (admission) offscreenWork = this.pxeService.offscreenSettled(error)
 			if (error instanceof JobCancelledSentinel) {
 				throw new JobCancelledError(undefined, { jobId: estimateToken })
 			}
 			throw error
 		} finally {
-			if (admitted) this.estimateCancel.settle(estimateToken, estimateId)
+			// A simulation that timed out still runs in the PXE's queue, so its estimate keeps its
+			// place until that simulation ends offscreen; the client bounds the wait.
+			if (admission && offscreenWork) {
+				this.logDebug("estimate held until its timed-out simulation ends offscreen")
+				const held = admission
+				void offscreenWork.then(() => this.estimateCancel.settle(estimateToken, undefined, held))
+			} else if (admission) {
+				this.estimateCancel.settle(estimateToken, estimateId, admission)
+			}
 		}
 	}
 
@@ -1123,7 +1159,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// those mutations back to the caller breaks repeat estimates and
 		// any caller that keeps a reference to the array.
 		const op = { ...inputOp, actions: [...inputOp.actions] }
-		const feeMultiplier = feeSettings.priorityLevel ? PRIORITY_MULTIPLIERS[feeSettings.priorityLevel] : undefined
+		const feeMultiplier = feeMultiplierFor(feeSettings.priorityLevel)
 		const gasPadding = op.fee?.gasPadding ?? 1.05
 		const strategy = this.feeStrategies.get(feeSettings.paymentMethod.kind)
 		if (!strategy) {

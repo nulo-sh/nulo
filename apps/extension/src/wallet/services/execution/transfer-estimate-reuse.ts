@@ -35,7 +35,7 @@ import {
 	pendingHashesChanged,
 	primaryEndpointMoved,
 	type ReuseEntryBase,
-	reuseFeeMultiplier,
+	feeMultiplierFor,
 	SingleShotTtlCache,
 } from "./estimate-reuse-shared"
 import type { TransferRequest } from "./operation-planner"
@@ -203,7 +203,7 @@ export class TransferEstimateReuse {
 		const node = await this.deps.getNode(network.chainId)
 		try {
 			const basis = await predictedWorstMinFees(node)
-			const multiplier = reuseFeeMultiplier(inputs.feeSettings.priorityLevel)
+			const multiplier = feeMultiplierFor(inputs.feeSettings.priorityLevel)
 			// Re-wrap before multiplying: the basis components may arrive as a bare
 			// `{feePerDaGas, feePerL2Gas}` from a minimal node, and the fingerprint
 			// must reproduce the exact `GasFees.mul` product the build finalized.

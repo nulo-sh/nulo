@@ -3,14 +3,18 @@
  *
  * Estimates have no journal record, so `ExecutionLane.cancelJob` cannot cover
  * them; this registry is the estimate-side equivalent, keyed by a caller-minted
- * token instead of a journal id. Its contract (see
- * implementations-plan/archive/fee-estimation-speedup/plan.md#estimate-cancellation):
+ * token instead of a journal id. Its contract:
  *
  * - **Admission is atomic against real work, not bookkeeping.** At most
  *   `MAX_ACTIVE_ESTIMATES_PER_PROFILE` UNSETTLED underlying jobs per profile.
  *   A cancelled job does NOT free capacity — the underlying simulation is
  *   non-preemptible and keeps its queue slot until it settles — so admission
- *   counts entries until `settle()`, never until cancel.
+ *   counts entries until `settle()`, never until cancel. A transport timeout
+ *   does not end the work either: the caller settles an entry whose simulation
+ *   timed out only once that simulation ends offscreen (its late answer, a send
+ *   that failed after all, or its document gone) or its record expires, unless
+ *   the TTL sweep reaps the entry first. Admission stays per profile, so such
+ *   an entry also holds a place against the profile's estimates on other chains.
  * - **Overflow = cancel-oldest + coalesce-newest.** The newcomer parks in a
  *   single latest-wins pending slot per (profile, flowKey) and is admitted
  *   only when a job actually settles. A newer arrival on the same slot
@@ -37,11 +41,9 @@ export const MAX_ACTIVE_ESTIMATES_PER_PROFILE = 4
 export const MAX_PENDING_ESTIMATES_PER_PROFILE = 8
 /** A runner that hasn't settled after this long is presumed dead and reaped.
  *  MUST stay comfortably above the worst-case estimate transport chain
- *  (~5 sequential PXE RPCs × their 90 s timeouts): every RPC rejection
- *  reaches `withEstimateAdmission`'s finally → settle, so by this horizon a
- *  reaped entry's underlying job has provably settled or died at the
- *  transport layer — freeing its slot then cannot over-admit past the cap
- *  while non-preemptible ACVM work still runs. */
+ *  (~5 sequential PXE RPCs × their 90 s timeouts). It is a dead-man bound, not
+ *  a ceiling on the work: a held entry whose simulation still waits offscreen
+ *  behind queued proofs is reaped too, and its place admits the next estimate. */
 export const ESTIMATE_JOB_TTL_MS = 15 * 60 * 1000
 /** How long a settled token can still evict its stash — mirrors the reuse TTL. */
 export const SETTLED_STASH_TTL_MS = 120_000
@@ -168,9 +170,10 @@ export class EstimateCancelRegistry {
 	 * cancellation checkpoint) or already TTL-reaped, in which cases the
 	 * stash is evicted right here.
 	 */
-	public settle(token: string, estimateId?: string): void {
+	public settle(token: string, estimateId?: string, admission?: AbortSignal): void {
 		const entry = this.active.get(token)
-		if (!entry) {
+		// A reaped token can be admitted again, so `admission` names which entry this runner owns.
+		if (!entry || (admission !== undefined && entry.controller.signal !== admission)) {
 			// A TTL-reaped runner completing late: its slot is long gone and no
 			// caller can cancel it anymore, so its stash must not outlive it.
 			if (estimateId) this.deps.evictStash(estimateId)

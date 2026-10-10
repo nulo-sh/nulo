@@ -351,6 +351,25 @@ describe("Task Tree Implementation", () => {
 			expect((await service.getTasks()).length).toBe(0)
 		})
 
+		test("failing a task the switch cleared throws as before, with the failure it recorded as its cause", async () => {
+			const { service, switchToProfile } = await createTestSetup()
+			switchToProfile({ id: "A", name: "A", type: "password" })
+			const task = service.startNewTask(new StepContent("T1"))
+			switchToProfile({ id: "B", name: "B", type: "password" })
+			const timeout = new Error("timed out")
+
+			const thrown = (() => {
+				try {
+					task.fail(timeout)
+				} catch (error) {
+					return error
+				}
+			})()
+			expect(thrown).toEqual(new Error(`Invalid task id: ${task.id}`))
+			expect((thrown as Error).cause).toBe(timeout)
+			expect(Object.keys(thrown as Error)).toEqual([])
+		})
+
 		test("keeps tasks when switching to the same profile", async () => {
 			const { service, switchToProfile } = await createTestSetup()
 
