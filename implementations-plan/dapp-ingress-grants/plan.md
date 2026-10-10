@@ -315,7 +315,7 @@ Plain-language steps. "Gate" means the validation block at the end of the phase.
 - Pass: exit 0; the composition test passes the reviewer checklist in `apps/extension/tests/COMPOSITION-TESTS.md` (no PXE, no bb, one assertion on real state).
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1.3: arc 1 end-to-end gate
+#### Phase 1.3: arc 1 end-to-end gate ✓ (network step met in CI, D-impl-6)
 
 Warning: until #169 merges (gate G1), only one `e2e:agent` run may run on the host. Before each network run, confirm no other lane runs one (`agent-worktree list`, `~/.agents/ports.md`). Never start two in this worktree.
 
@@ -552,6 +552,7 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-impl-2 (withdrawn after Codex round 1, C2).** Tombstoning the own-tab marker of a stamped channel too was tried and reverted: after a stamped channel's check window closes, its page can reuse the id in the same tab for a newer approval, and the stamped channel's revocation would kill it. Revocation tombstones only an unstamped channel's own-tab marker, as planned.
 - **D-impl-3.** The establishment recheck lives in two helpers (`lostApproval`, `settleCapturedMarker`) so `handleSessionEstablished` stays under the cognitive-complexity budget (19 inline, under 15 after); the recheck's log reads "…, so it is not stamped" since the copy dash ban reads `terminateWith` arguments.
 - **D-impl-4 (Codex round 1, C1; Opus O2).** The plan's "retire without terminating" on a replaced marker covered only the second liveness gate. Every exit before the stamp (dead on entry, row gone, row of another profile, row read or hash write failing) now skips termination when the map no longer holds the captured marker; an exit after the stamp (the check window failing) still terminates, since a stamped channel must never stay live unverified.
+- **D-impl-6 (Gate 1.3's network step).** Until #169 merges, the host runs one lane's network e2e at a time, and `e2e-harness-gaps` held it through three waits (more than 4.5 h). The seven network files therefore ran in this PR's required CI lanes on the PR head `45ea5c7`, at `NULO_E2E_RETRY: 0`, on Chrome and on Firefox, as part of the whole network suite. All seven passed on both browsers, and neither run had a failed test. The smoke step ran locally, on the armed source build `_extension-smoke-e2e.yml` makes, because the plain `bun run test:e2e -- --retry=0` loads an unarmed build that fails the fixture-arming contract.
 - **D-impl-5 (Opus O3).** The recheck reads `cancelled`, not `isPendingVerificationDead`: a key exchange that crosses the 90 s staleness line during the two storage awaits used to stamp and still does. Staleness is judged once, on entry; a revocation and a slot given back both tombstone.
 
 ### Plan-space search: the competing outline

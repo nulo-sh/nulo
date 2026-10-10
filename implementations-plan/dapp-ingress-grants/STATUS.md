@@ -10,3 +10,6 @@
 - 2026-10-09: gate 1.2 green (lint, typecheck:all, root test 10736; composition checklist holds). First run red on copy-dash-ban (`bun run test`), fixed by rewording a log reason.
 - 2026-10-10: Codex round 1 reject (C1 High, C2/C3 Med, C4 Low), Opus approve with 3 Lows; fixes applied, C3 recorded as a residual.
 - 2026-10-10: Codex round 2 approve (1 Low fixed), round 3 approve with no findings: loop converged.
+- 2026-10-10: final head 089a541: audit:vue 0 (extension 10742 passed), test:all 0; smoke run 1 void (unarmed build, stopped); smoke run 2 on the armed source build in progress; network waits for a free host.
+- 2026-10-10: merged origin/dev (index.md conflict resolved); merged head 45ea5c7: lint 0, typecheck:all 0, test:all 0. Draft PR #254 opened; network gate not run locally (host held through two 90-min waits by e2e-harness-gaps); CI network lane stands in until the host frees.
+- 2026-10-10: gate 1.3 green: smoke (local, armed build, Chrome, retry 0) 47 files / 198 tests passed on 45ea5c7; network files green in PR #254's required CI lanes on 45ea5c7, Chrome and Firefox, retry 0 (local run held by G1, D-impl-6).
