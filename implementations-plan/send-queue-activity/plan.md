@@ -953,13 +953,15 @@ Accepted, comment and fixture changes only:
 - `payingFpc` is documented as `undefined` without an FPC;
 - `TransferLine` and the `takeTurn` doc are tightened;
 - `resolveStandardBuild`'s ladder enumeration gains the epoch;
-- the composition header is shortened, and its mined row uses `TxStatus.Proposed` and `TxExecutionResult.Success` (a renumbered enum would otherwise give the send the `init` key, and both cases would pass on unfixed code);
+- the composition header is shortened, and its mined row uses `TxStatus.Proposed` and `TxExecutionResult.Success` (a renumbered enum would otherwise give the send the `init` key, and the first case would pass on unfixed code);
 - one narrating e2e doc clause is gone.
 
 Rejected:
 - **Uppercase protocol-sponsor row reads as a spender** (`fpc/service.ts` `decorate`, inherited). It errs toward over-ordering only. The fix belongs to the FPC path that fees-and-sponsors owns.
 - **Two fixture-helper docs in the tests.** They state the scenario each helper models, which the helper's name does not.
 - **A non-protocol PrivateFPC row now throws in `sequence()`, before the journal record exists** (Opus, no fix asked). It fails closed, and the estimate already refuses that row before Send enables.
+
+**Round 2 (resumed Codex session): no new material finding.** It upheld every rejection and corrected one rationale: with a renumbered enum, the second case would still fail on its key assertion. The loop stops here.
 
 ## Seeds
 
