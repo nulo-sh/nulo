@@ -1,10 +1,7 @@
 /**
- * Upstream `PXE.registerAccount` stores the keys and then the complete address in two transactions,
- * and returned early whenever the keys were already stored, so a kill between the two left an
- * account that `getRegisteredAccounts` hides and no later registration could complete. The patch in
- * `patches/@aztec-labs%2Fpxe@<version>.patch` lets every call reach the idempotent address write.
- * These cases run the shipped method on stores that keep upstream's write semantics. Once upstream
- * heals on its own, delete the patch and the source pin below; the behavioural cases stay.
+ * Upstream `PXE.registerAccount` writes the keys and then the complete address in two transactions
+ * and returned early once the keys were stored, so a stop between the two hid the account for good.
+ * These cases run the installed, patched method on stores with upstream's byte-equality semantics.
  */
 import { readFileSync } from "node:fs"
 import { PXE } from "@aztec-labs/pxe/client/bundle"
@@ -14,38 +11,45 @@ import { describe, expect, test, vi } from "vitest"
 
 interface FakeCompleteAddress {
 	address: AztecAddress
+	bytes: string
 	toReadableString(): string
 }
 
+const ADDRESS = `0x${"11".repeat(32)}`
+const readable = () => "account"
+
+/** A fresh object per call, as `keyStore.addAccount` derives one on every registration. */
+const completeAddress = (bytes = "account-bytes"): FakeCompleteAddress => ({
+	address: AztecAddress.fromStringUnsafe(ADDRESS),
+	bytes,
+	toReadableString: readable,
+})
+
 function fakePxe(stored: { keys: boolean; address: boolean }) {
-	const account: FakeCompleteAddress = {
-		address: AztecAddress.fromStringUnsafe(`0x${"11".repeat(32)}`),
-		toReadableString: () => "account",
-	}
-	const keyed = new Set<string>(stored.keys ? [account.address.toString()] : [])
-	const addresses = new Map<string, FakeCompleteAddress>(stored.address ? [[account.address.toString(), account]] : [])
+	const keyed = new Set<string>(stored.keys ? [ADDRESS] : [])
+	const addresses = new Map<string, FakeCompleteAddress>(stored.address ? [[ADDRESS, completeAddress()]] : [])
 	let failNextAddressWrite = false
 
 	const keyStore = {
 		getAccounts: async () => [...keyed].map((address) => AztecAddress.fromStringUnsafe(address)),
 		addAccount: async () => {
-			keyed.add(account.address.toString())
-			return account
+			keyed.add(ADDRESS)
+			return completeAddress()
 		},
 	}
 	const addressStore = {
-		addCompleteAddress: vi.fn(async (completeAddress: FakeCompleteAddress) => {
+		addCompleteAddress: vi.fn(async (candidate: FakeCompleteAddress) => {
 			if (failNextAddressWrite) {
 				failNextAddressWrite = false
 				throw new Error("worker stopped between the two writes")
 			}
-			const key = completeAddress.address.toString()
+			const key = candidate.address.toString()
 			const existing = addresses.get(key)
 			if (existing === undefined) {
-				addresses.set(key, completeAddress)
+				addresses.set(key, candidate)
 				return true
 			}
-			if (existing === completeAddress) return false
+			if (existing.bytes === candidate.bytes) return false
 			throw new Error("a different complete address is already stored")
 		}),
 		getCompleteAddresses: async () => [...addresses.values()],
@@ -54,11 +58,10 @@ function fakePxe(stored: { keys: boolean; address: boolean }) {
 
 	const registerAccount = (): Promise<FakeCompleteAddress> => Reflect.apply(PXE.prototype.registerAccount, self, [{}, {}])
 	const registered = async (): Promise<string[]> => {
-		const accounts: FakeCompleteAddress[] = await Reflect.apply(PXE.prototype.getRegisteredAccounts, self, [])
+		const accounts: Array<{ address: AztecAddress }> = await Reflect.apply(PXE.prototype.getRegisteredAccounts, self, [])
 		return accounts.map((a) => a.address.toString())
 	}
 	return {
-		account,
 		addressStore,
 		addresses,
 		keyed,
@@ -75,20 +78,22 @@ describe("PXE.registerAccount heals an account whose keys were stored without it
 		const pxe = fakePxe({ keys: true, address: false })
 		expect(await pxe.registered()).toEqual([])
 
-		expect(await pxe.registerAccount()).toBe(pxe.account)
+		expect(await pxe.registerAccount()).toEqual(completeAddress())
 
-		expect(pxe.addresses.get(pxe.account.address.toString())).toBe(pxe.account)
-		expect(await pxe.registered()).toEqual([pxe.account.address.toString()])
+		expect(pxe.addresses.get(ADDRESS)).toEqual(completeAddress())
+		expect(await pxe.registered()).toEqual([ADDRESS])
 	})
 
 	test("keys and address both stored: the address store keeps its one entry", async () => {
 		const pxe = fakePxe({ keys: true, address: true })
+		const stored = pxe.addresses.get(ADDRESS)
 
-		expect(await pxe.registerAccount()).toBe(pxe.account)
+		await pxe.registerAccount()
 
 		expect(pxe.addressStore.addCompleteAddress).toHaveResolvedWith(false)
-		expect([...pxe.addresses.values()]).toEqual([pxe.account])
-		expect(await pxe.registered()).toEqual([pxe.account.address.toString()])
+		expect(pxe.addresses.size).toBe(1)
+		expect(pxe.addresses.get(ADDRESS)).toBe(stored)
+		expect(await pxe.registered()).toEqual([ADDRESS])
 	})
 
 	test("nothing stored: both the keys and the address are written", async () => {
@@ -96,8 +101,8 @@ describe("PXE.registerAccount heals an account whose keys were stored without it
 
 		await pxe.registerAccount()
 
-		expect(pxe.keyed.has(pxe.account.address.toString())).toBe(true)
-		expect(await pxe.registered()).toEqual([pxe.account.address.toString()])
+		expect(pxe.keyed.has(ADDRESS)).toBe(true)
+		expect(await pxe.registered()).toEqual([ADDRESS])
 	})
 
 	test("an address write that fails after the keys were stored heals on the next call", async () => {
@@ -105,12 +110,12 @@ describe("PXE.registerAccount heals an account whose keys were stored without it
 		pxe.failNextAddressWrite()
 
 		await expect(pxe.registerAccount()).rejects.toThrow("worker stopped between the two writes")
-		expect(pxe.keyed.has(pxe.account.address.toString())).toBe(true)
+		expect(pxe.keyed.has(ADDRESS)).toBe(true)
 		expect(await pxe.registered()).toEqual([])
 
 		await pxe.registerAccount()
 
-		expect(await pxe.registered()).toEqual([pxe.account.address.toString()])
+		expect(await pxe.registered()).toEqual([ADDRESS])
 	})
 })
 
