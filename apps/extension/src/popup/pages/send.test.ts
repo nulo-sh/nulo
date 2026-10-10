@@ -7,7 +7,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
 const ACCOUNT = "0xacct"
@@ -1088,6 +1088,41 @@ describe("send page — the token card while the tokens load", () => {
 		w.unmount()
 	})
 
+	const tokenDeleted = () => lastClient<{ onTokenDeleted: EventHandler<unknown> }>(TokenServiceClient).onTokenDeleted
+	const listed = (w: W) => (w.vm as unknown as { tokens: { symbol: string }[] }).tokens.map((t) => t.symbol)
+
+	test("(BUG PIN) a token deleted while the load is out stays listed and active; one deleted after it is dropped", async () => {
+		// Today's behaviour, kept until the owner decides: the delete finds no row in the list the load
+		// cleared, and the load's older answer brings the deleted token back.
+		const reads = holdTokenReads()
+		const { w } = await mountSend()
+		tokenDeleted().invoke(TOKEN)
+		reads[0]?.resolve([TOKEN, OTHER])
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST", "OTH"])
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+
+		tokenDeleted().invoke(OTHER)
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST"])
+		w.unmount()
+	})
+
+	test("(BUG PIN) deleting the active token selects no token, not the next one", async () => {
+		// The delete drops the row before it reads the active token, which then no longer resolves, so
+		// the move to the first token never runs.
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore } = await mountSend()
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(TOKEN)
+		await flushPromises()
+		expect(listed(w)).toEqual(["OTH"])
+		expect(cacheStore.activeTokenIdx).toBe(TOKEN.id)
+		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
+		expect(mocks.openToast).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
 	test("after an empty load, a token added for this identity becomes the active token", async () => {
 		mocks.getTokens.mockResolvedValueOnce([]).mockResolvedValue([OTHER])
 		const { w } = await mountSend()
@@ -1121,7 +1156,11 @@ describe("send page — the contact list reducers", () => {
 	const row = (id: string, name: string, c: string): Row => ({ id, name, address: `0x2${c.repeat(63)}` })
 	const contactClient = () => {
 		const results = vi.mocked(ContactServiceClient).mock.results
-		return results[results.length - 1].value as { onContactUpdated: EventHandler<Row>; onContactDeleted: EventHandler<Row> }
+		return results[results.length - 1].value as {
+			onContactAdded: EventHandler<Row>
+			onContactUpdated: EventHandler<Row>
+			onContactDeleted: EventHandler<Row>
+		}
 	}
 	const vmContacts = (w: W) => (w.vm as unknown as { contacts: Row[] }).contacts
 	const candidateNames = (w: W) => (w.findComponent(STUBS.RecipientField).props("candidates") as Row[]).map((c) => c.name)
@@ -1140,6 +1179,25 @@ describe("send page — the contact list reducers", () => {
 		expect(vmContacts(w)).not.toBe(before)
 		expect(vmContacts(w).map((c) => c.name)).toEqual(["Dave"])
 		expect(candidateNames(w)[0]).toBe("Dave")
+		w.unmount()
+	})
+
+	test("(BUG PIN) a contact added while the page's three reads are out is dropped; one added after them is kept", async () => {
+		// Today's behaviour, kept until the owner decides: the contacts answer is applied only once the
+		// token and balance reads answer too, and it replaces the list an add already reached.
+		const reads = holdReads<unknown[]>(mocks.getContacts)
+		onTestFinished(() => {
+			mocks.getContacts.mockReset()
+		})
+		const { w } = await mountSend()
+		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
+		reads[0]?.resolve([row("c1", "Alice", "a")])
+		await flushPromises()
+		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice"])
+
+		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
+		await flushPromises()
+		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice", "Bob"])
 		w.unmount()
 	})
 })

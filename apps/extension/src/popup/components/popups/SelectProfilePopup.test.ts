@@ -6,6 +6,7 @@
  */
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 const H = vi.hoisted(() => {
 	const profiles = [
@@ -27,6 +28,7 @@ const H = vi.hoisted(() => {
 		appStoreState,
 		openToastMock: vi.fn(),
 		setLastActiveProfileIdMock: vi.fn().mockResolvedValue(undefined),
+		client: null as unknown,
 	}
 })
 
@@ -40,11 +42,14 @@ vi.mock("@/utils/string", () => ({ stringCompare: (a: string, b: string) => a.lo
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("@/wallet/services/profile/client", () => ({
 	ProfileServiceClient: class {
-		onProfileAdded = { add: vi.fn() }
-		onProfileUpdated = { add: vi.fn() }
-		onProfileDeleted = { add: vi.fn() }
+		onProfileAdded = liveBus()
+		onProfileUpdated = liveBus()
+		onProfileDeleted = liveBus()
 		disconnect = vi.fn()
 		getProfiles = vi.fn().mockResolvedValue(H.profiles)
+		constructor() {
+			H.client = this
+		}
 	},
 }))
 
@@ -130,5 +135,28 @@ describe("SelectProfilePopup — scope-switch guard", () => {
 		expect(H.openToastMock).toHaveBeenCalledWith(
 			expect.objectContaining({ kind: "error", label: "Finish or cancel your pending transaction first" }),
 		)
+	})
+})
+
+describe("SelectProfilePopup — the list under a held read", () => {
+	test("the read's answer replaces the list: a profile added while it is out is dropped, one added after it is kept", async () => {
+		const w = mount(SelectProfilePopup, { props: { show: false }, global: { stubs: STUBS } })
+		const client = H.client as { getProfiles: ReturnType<typeof vi.fn>; onProfileAdded: ReturnType<typeof liveBus> }
+		const reads = holdReads<unknown[]>(client.getProfiles)
+		const names = () => (w.vm as unknown as { profiles: { name: string }[] }).profiles.map((p) => p.name)
+		await w.setProps({ show: true })
+
+		client.onProfileAdded.invoke({ id: "p3", name: "Gamma" })
+		reads[0]?.resolve([
+			{ id: "p2", name: "Beta" },
+			{ id: "p1", name: "Alpha" },
+		])
+		await flushPromises()
+		expect(names()).toEqual(["Alpha", "Beta"])
+
+		client.onProfileAdded.invoke({ id: "p3", name: "Gamma" })
+		await flushPromises()
+		expect(names()).toEqual(["Alpha", "Beta", "Gamma"])
+		w.unmount()
 	})
 })

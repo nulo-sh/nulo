@@ -7,16 +7,20 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
 const contactServiceMock = {
 	getContacts: vi.fn().mockResolvedValue([]),
 	disconnect: vi.fn(),
-	onContactAdded: { add: vi.fn(), remove: vi.fn() },
-	onContactUpdated: { add: vi.fn(), remove: vi.fn() },
-	onContactDeleted: { add: vi.fn(), remove: vi.fn() },
+	onContactAdded: liveBus(),
+	onContactUpdated: liveBus(),
+	onContactDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () =>
+	Object.assign(contactServiceMock, { onContactAdded: liveBus(), onContactUpdated: liveBus(), onContactDeleted: liveBus() })
 
 const cacheStoreState: {
 	importContacts: unknown[]
@@ -106,7 +110,8 @@ const FILE = [
 ]
 
 async function mountWithStaged(staged: Array<Record<string, unknown>>, saved: unknown[] = []) {
-	contactServiceMock.getContacts.mockResolvedValueOnce(saved)
+	// A copy: the popup adds to the array its read answered, in place.
+	contactServiceMock.getContacts.mockResolvedValueOnce([...saved])
 	cacheStoreState.importContacts = staged.map((r) => ({ ...r }))
 	const w = mount(ImportContactsPopup, { props: { show: false }, global: { stubs: STUBS } })
 	await w.setProps({ show: true })
@@ -145,6 +150,8 @@ const textOf = (w: VueWrapper, ids: string | undefined) =>
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	contactServiceMock.getContacts.mockReset().mockResolvedValue([])
+	freshBuses()
 	appStoreState.network = { id: "net-1", name: "Testnet" }
 	cacheStoreState.importContacts = []
 	cacheStoreState.importPromise = { resolve: vi.fn(), reject: vi.fn() }
@@ -491,3 +498,22 @@ function trim(address: string) {
 function esc(s: string) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
+
+describe("ImportContactsPopup — the book under a held read", () => {
+	test("the read's answer replaces the book: a contact added while it is out still counts its sender, one added after it does not", async () => {
+		const reads = holdReads<unknown[]>(contactServiceMock.getContacts)
+		cacheStoreState.importContacts = [{ name: "Priya Shah", address: ADDR.priya, isSender: true }]
+		const w = mount(ImportContactsPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await w.setProps({ show: true })
+		const priya = { id: "c9", name: "Priya Shah", address: ADDR.priya }
+
+		contactServiceMock.onContactAdded.invoke(priya)
+		reads[0]?.resolve([...SAVED])
+		await flushPromises()
+		expect(w.text()).toContain("sender will be registered on")
+
+		contactServiceMock.onContactAdded.invoke(priya)
+		await nextTick()
+		expect(w.text()).not.toContain("will be registered on")
+	})
+})

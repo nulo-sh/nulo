@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -13,10 +14,13 @@ const contactServiceMock = {
 	getContacts: vi.fn(),
 	addContact: vi.fn(),
 	disconnect: vi.fn(),
-	onContactAdded: { add: vi.fn(), remove: vi.fn() },
-	onContactUpdated: { add: vi.fn(), remove: vi.fn() },
-	onContactDeleted: { add: vi.fn(), remove: vi.fn() },
+	onContactAdded: liveBus(),
+	onContactUpdated: liveBus(),
+	onContactDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () =>
+	Object.assign(contactServiceMock, { onContactAdded: liveBus(), onContactUpdated: liveBus(), onContactDeleted: liveBus() })
 
 const openToastMock = vi.fn()
 
@@ -95,6 +99,7 @@ async function fill(w: ReturnType<typeof mount>, name: string, address: string) 
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	freshBuses()
 })
 afterEach(() => {
 	// Guaranteed net: unmount every tracked wrapper (scope cleanup removes the
@@ -321,5 +326,26 @@ describe("NewContactPopup — contact list reducers and duplicate rules", () => 
 		expect(w.text()).toContain("Already exist")
 		await fill(w, "Bob", addr("b"))
 		expect(w.text()).not.toContain("Already exist")
+	})
+})
+
+describe("NewContactPopup — the list under a held read", () => {
+	const row = (id: string, name: string, c: string) => ({ id, name, address: `0x2${c.repeat(63)}` })
+	const names = (w: ReturnType<typeof mount>) => (w.vm as unknown as { contacts: { name: string }[] }).contacts.map((c) => c.name)
+
+	test("the read's answer replaces the list: an add that lands while it is out is dropped, one after it is kept", async () => {
+		const reads = holdReads<unknown[]>(contactServiceMock.getContacts)
+		const w = mount(NewContactPopup, { props: { show: false }, global: { stubs: STUBS } })
+		trackedWrappers.push(w)
+		await w.setProps({ show: true })
+		contactServiceMock.onContactAdded.invoke(row("c2", "Bob", "b"))
+		expect(names(w)).toEqual(["Bob"])
+
+		reads[0]?.resolve([row("c1", "Alice", "a")])
+		await flushPromises()
+		expect(names(w)).toEqual(["Alice"])
+
+		contactServiceMock.onContactAdded.invoke(row("c2", "Bob", "b"))
+		expect(names(w)).toEqual(["Alice", "Bob"])
 	})
 })
