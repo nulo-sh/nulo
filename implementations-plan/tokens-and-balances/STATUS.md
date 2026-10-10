@@ -1,0 +1,11 @@
+# tokens-and-balances — status
+
+- 2026-10-10 — phase 0: adopted worktree `tokens-and-balances` (origin/dev `fd47407`), read the briefs, nine issues, page 8 (P8-01, P8-02) and charter C9/C12.
+- 2026-10-10 — recon: two Explore agents (sonnet) plus driver read; recon.md written. #105 regrouped out of Arc 1 (every effective pin hides a figure; OA-1). #94 widened to the set point (same release, same harm).
+- 2026-10-10 — draft: plan.md and OWNER-ASKS.md (OA-1, OA-2) written; dual audit next.
+- 2026-10-10 — round 1 dual audit: Codex reject (10 findings), Opus conditional approve (10 findings). #94 redesigned as an attempt loop that resumes under a fresh ticket; #93 incarnation keys rejected with reason (D1); OA-1 corrected; OA-3 (Arc 1 race-path effects) and OA-4 (background log levels) added. Final fresh Codex pass next.
+- 2026-10-10 — final fresh Codex pass, round 1: reject (9 findings, all accepted, two in part). #94 gains R1-R4 (owned issue after the last await, a drain of displaced writes, failure journaled at once, liveness that saw a reservation is false); Arc 1's merge now waits on OA-3; Arc 2 uses one dedicated refusal marker. Round 2 (resumed session) next.
+- 2026-10-10 — final pass round 2: reject (8 findings, all accepted). The hit path journals only; R1 adds the fence before every success; the drain repeats until empty, re-acquires a lapsed ticket and covers every token-row write; one post-set liveness read; OA-3 discloses R4's one success-to-error change. Round 3 next.
+- 2026-10-10 — final pass round 3: reject (3 findings). Accepted: R5 (a displaced restore or deletion refuses with `token lock lost`, disclosed in OA-3) and the gate and pin wording. Rejected for this plan: serializing the lockless chain sweep (a pre-existing race outside the lane's issues), routed to an issue. Round 4 next.
+- 2026-10-10 — final pass round 4: reject on one point (the purge needed R5 too); accepted with the two disclosures and the wording. The reviewer accepted routing the sweep race to an issue. Round 5 next.
+- 2026-10-10 — final pass round 5: conditional approve (two wording conditions, applied). Plan ready for the orchestrator; Arc 1 merges on OA-3, Arc 2 waits on page 8, Arc 3 on OA-1; the chain sweep's id-reuse race is to be filed as an issue.
