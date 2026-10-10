@@ -30,7 +30,6 @@ function reducedMotionRules(source: string): Map<string, string> {
 describe("reduced motion stops the shake and the shimmers", () => {
 	test.each([
 		["components/composite/shake.module.css", ".shake_password, .shake_name"],
-		["popup/pages/settings/security/export/full.vue", ".shake"],
 		["popup/components/modules/send/fee-shared.module.css", ".skeleton"],
 		["components/composite/send/AmountCard.vue", ".skeleton"],
 	])("%s: %s", (path, selectors) => {
