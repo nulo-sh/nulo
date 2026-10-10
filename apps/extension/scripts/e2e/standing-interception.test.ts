@@ -85,7 +85,7 @@ describe("standing interceptions", () => {
 		const standing = standingInterceptions(arm)
 		const held = await standing.hold(browser, "ext", NODE, REDIRECT)
 		await standing.intercept(browser, "ext", NODE, REFUSE)
-		expect((await held.failures()).at(-1)).toBe("a spec's interception on https://node.test was never stopped")
+		expect((await held.failures()).at(-1)).toBe("a spec's interception on https://node.test was not stopped before this read")
 		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("a spec already intercepts https://node.test")
 	})
 
@@ -112,7 +112,7 @@ describe("standing interceptions", () => {
 		const own = await standing.intercept(browser, "ext", NODE, REFUSE)
 		failArm()
 		await own.stop()
-		expect((await held.failures()).at(-1)).toMatch(/^re-arming after a spec's own interception failed: Error: cannot arm redirect/)
+		expect((await held.failures()).at(-1)).toMatch(/^re-arming the launch's interception failed: Error: cannot arm redirect/)
 	})
 
 	test("a second spec's interception asked for while the first is still arming is refused", async () => {
@@ -131,6 +131,32 @@ describe("standing interceptions", () => {
 		])
 	})
 
+	test("a spec's interception asked for while an earlier one's stop is still re-arming is refused", async () => {
+		const { browser, log, arm, pauseArm } = fakeBrowser()
+		const standing = standingInterceptions(arm)
+		await standing.hold(browser, "ext", NODE, REDIRECT)
+		const own = await standing.intercept(browser, "ext", NODE, REFUSE)
+		const rearm = pauseArm()
+		const stopped = own.stop()
+		await rearm.started
+		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("a spec already intercepts https://node.test")
+		rearm.release()
+		await stopped
+		expect(log.at(-1)).toBe("arm redirect https://node.test")
+	})
+
+	test("a launch's interception whose count cannot be read is still stopped when a spec takes the origin", async () => {
+		const { browser, log, arm } = fakeBrowser()
+		const standing = standingInterceptions((b, id, origin, mode) =>
+			arm(b, id, origin, mode).then((armed) =>
+				mode.kind === "redirect" && log.length === 1 ? { ...armed, hits: () => Promise.reject(new Error("browser gone")) } : armed,
+			),
+		)
+		await standing.hold(browser, "ext", NODE, REDIRECT)
+		await expect(standing.intercept(browser, "ext", NODE, REFUSE)).rejects.toThrow("browser gone")
+		expect(log).toEqual(["arm redirect https://node.test", "stop redirect https://node.test", "arm redirect https://node.test"])
+	})
+
 	test("a re-arm that lands after the launch let go is stopped at once", async () => {
 		const { browser, log, arm, pauseArm } = fakeBrowser()
 		const standing = standingInterceptions(arm)
@@ -143,6 +169,33 @@ describe("standing interceptions", () => {
 		rearm.release()
 		await stopped
 		expect(log.slice(-2)).toEqual(["arm redirect https://node.test", "stop redirect https://node.test"])
+	})
+
+	test("a background kill runs with the launch's interception stopped and re-arms it after, even when the kill throws", async () => {
+		const { browser, log, arm } = fakeBrowser()
+		const standing = standingInterceptions(arm)
+		const held = await standing.hold(browser, "ext", NODE, REDIRECT)
+		const kill = standing.whileReleased(browser, async () => {
+			log.push("kill")
+			throw new Error("kill failed")
+		})
+		await expect(kill).rejects.toThrow("kill failed")
+		expect(log).toEqual(["arm redirect https://node.test", "stop redirect https://node.test", "kill", "arm redirect https://node.test"])
+		expect(await held.hits()).toBe(1 + 2)
+		expect(await held.failures()).toEqual(["arm 1 lost one", "arm 2 lost one"])
+	})
+
+	test("success control: a spec's own interception stays armed through a background kill", async () => {
+		const { browser, log, arm } = fakeBrowser()
+		const standing = standingInterceptions(arm)
+		await standing.hold(browser, "ext", NODE, REDIRECT)
+		const own = await standing.intercept(browser, "ext", NODE, REFUSE)
+		await standing.whileReleased(browser, async () => {
+			log.push("kill")
+		})
+		expect(log.slice(-2)).toEqual(["arm refuse https://node.test", "kill"])
+		await own.stop()
+		expect(log.at(-1)).toBe("arm redirect https://node.test")
 	})
 
 	test("a spec that stops after the launch let go re-arms nothing", async () => {

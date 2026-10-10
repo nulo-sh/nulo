@@ -257,7 +257,8 @@ export const virtualAuthenticator = (browser: Browser, anchorPage: Page): Promis
 	driver.virtualAuthenticator(browser, anchorPage)
 export const holdNextCredentialGet = (page: Page): Promise<void> => driver.holdNextCredentialGet(page)
 export const pxeHostState = (page: Page): Promise<PxeHostState> => driver.pxeHostState(page)
-export const stopBackground = (owner: BackgroundOwner): Promise<void> => driver.stopBackground(owner.browser, owner.extensionId)
+export const stopBackground = (owner: BackgroundOwner): Promise<void> =>
+	standing.whileReleased(owner.browser, () => driver.stopBackground(owner.browser, owner.extensionId))
 export const backgroundAlive = (owner: BackgroundOwner): Promise<boolean> => driver.backgroundAlive(owner.browser, owner.extensionId)
 export const evaluateInBackground = <T>(owner: BackgroundOwner, body: string): Promise<T> =>
 	driver.evaluateInBackground<T>(owner.browser, owner.extensionId, body)
