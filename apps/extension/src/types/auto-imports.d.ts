@@ -13,6 +13,7 @@ declare global {
   const ARRIVALS_KEY: typeof import('../composables/useArrivals').ARRIVALS_KEY
   const ARRIVAL_WINDOW_MS: typeof import('../composables/useArrivals').ARRIVAL_WINDOW_MS
   const AccessLevel: typeof import('../utils/confirmation-policies').AccessLevel
+  const ActivationSupersededError: typeof import('../composables/unlockWait').ActivationSupersededError
   const AssemblyAbortedError: typeof import('../utils/full-backup-helpers').AssemblyAbortedError
   const BootstrapFailedError: typeof import('../composables/unlockWait').BootstrapFailedError
   const CHAIN_IDS: typeof import('../utils/chain-ids').CHAIN_IDS
@@ -435,7 +436,7 @@ declare global {
   export type { FooterBox } from '../composables/snackInset'
   import('../composables/snackInset')
   // @ts-ignore
-  export type { UnlockTimeoutError, BootstrapFailedError, ProfileActivationWithFailureSubject } from '../composables/unlockWait'
+  export type { UnlockTimeoutError, BootstrapFailedError, ActivationSupersededError, ProfileActivationWithFailureSubject, ActivationWaitOptions } from '../composables/unlockWait'
   import('../composables/unlockWait')
   // @ts-ignore
   export type { ArrivalToken, ArrivalChip, ArrivalsServiceLike, UseArrivalsOptions, Arrivals } from '../composables/useArrivals'
@@ -626,6 +627,7 @@ declare module 'vue' {
     readonly ARRIVALS_KEY: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVALS_KEY']>
     readonly ARRIVAL_WINDOW_MS: UnwrapRef<typeof import('../composables/useArrivals')['ARRIVAL_WINDOW_MS']>
     readonly AccessLevel: UnwrapRef<typeof import('../utils/confirmation-policies')['AccessLevel']>
+    readonly ActivationSupersededError: UnwrapRef<typeof import('../composables/unlockWait')['ActivationSupersededError']>
     readonly AssemblyAbortedError: UnwrapRef<typeof import('../utils/full-backup-helpers')['AssemblyAbortedError']>
     readonly BootstrapFailedError: UnwrapRef<typeof import('../composables/unlockWait')['BootstrapFailedError']>
     readonly CHAIN_IDS: UnwrapRef<typeof import('../utils/chain-ids')['CHAIN_IDS']>

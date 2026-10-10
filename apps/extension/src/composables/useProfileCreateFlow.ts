@@ -6,8 +6,9 @@ import { useProfileNameDefault } from "@/composables/useProfileNameDefault"
 import { useProfileNameField } from "@/composables/useProfileNameField"
 import { managers } from "@/utils/core"
 import { passkeyNeedsOwnWindow } from "@/utils/browser-surface"
-import { handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
-import { createPasskeyProfileWithRetry } from "@/wallet/utils/create-passkey-profile"
+import { classifyPasskeyFailure, handleCancelOrUnconfirmed } from "@/utils/passkey-copy"
+import { createPasskeyProfileWithRetry, type SavedPasskeyCredential } from "@/wallet/utils/create-passkey-profile"
+import { PasskeyUnconfirmedError } from "@/wallet/utils/passkey-errors"
 import { isNewPasswordValid, newPasswordHint } from "@/utils/password"
 
 /**
@@ -69,16 +70,33 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		() => authMethod.value === "passkey" || isNewPasswordValid(password.value ?? "", repeatedPassword.value ?? ""),
 	)
 
+	// The credential the last in-page attempt minted but could not confirm, and the name it carries
+	// as its label. Page memory only: never persisted or logged.
+	let unconfirmed: { name: string; credential: SavedPasskeyCredential } | null = null
+
 	// Runs the passkey-create ceremony in-page, then creates the profile via the
 	// SW. Retries ONCE on ProfileIdConflictError via the shared helper. In Firefox's
 	// toolbar panel the background picks the id and runs the ceremony in its own window.
 	function createPasskeyProfile(name: string) {
 		if (passkeyNeedsOwnWindow()) return managers.profile.createPasskeyProfile(name)
-		return createPasskeyProfileWithRetry(name, {
-			runCeremony,
-			generateProfileId: () => managers.profile.generateProfileId(),
-			createPasskeyProfile: (n, c) => managers.profile.createPasskeyProfile(n, c),
-		})
+		return createPasskeyProfileWithRetry(
+			name,
+			{
+				runCeremony,
+				generateProfileId: () => managers.profile.generateProfileId(),
+				createPasskeyProfile: (n, c) => managers.profile.createPasskeyProfile(n, c),
+			},
+			unconfirmed?.name === name ? unconfirmed.credential : undefined,
+		)
+	}
+
+	/** A retry confirms the credential a failed attempt minted, as the passkey window's Try again
+	 *  does, unless the name changed (the credential is labelled with the old one) or the
+	 *  authenticator gave no PRF (it can never confirm; a fresh create lets the person pick another). */
+	function rememberUnconfirmed(e: unknown, name: string) {
+		if (!(e instanceof PasskeyUnconfirmedError)) return
+		unconfirmed =
+			classifyPasskeyFailure(e) === "no-prf" ? null : { name, credential: { credentialId: e.credentialId, userHandle: e.userHandle } }
 	}
 
 	function reportCreateFailure(e: unknown) {
@@ -95,8 +113,9 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 		isCreating.value = true
 
 		let profile: unknown
+		let name: string | null = null
 		try {
-			const name = await resolveName()
+			name = await resolveName()
 			if (name === null) {
 				isCreating.value = false
 				return
@@ -106,10 +125,12 @@ export function useProfileCreateFlow(opts: UseProfileCreateFlowOptions) {
 					? await createPasskeyProfile(name)
 					: await managers.profile.createProfile(name, password.value)
 		} catch (e) {
+			if (name !== null) rememberUnconfirmed(e, name)
 			reportCreateFailure(e)
 			isCreating.value = false
 			return
 		}
+		unconfirmed = null
 
 		// Activation + routing live in the shell-injected callback. isCreating
 		// stays true through it (the button reads "Creating…") and resets after.

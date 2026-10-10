@@ -287,7 +287,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 - Pass: exit 0. The new proofs fail against the base copy of `new-profile-helpers.ts`.
 - Layers: lint, typecheck, unit.
 
-#### Phase 1.3: the passkey retry confirms (#159)
+#### Phase 1.3: the passkey retry confirms (#159) ✓
 
 1. Add `credentialId?` to the create variant of `PasskeyRequest`. Teach `runPasskeyCeremony` to confirm it and to wrap a confirm failure as `PasskeyUnconfirmedError`.
 2. Add `saved` to `createPasskeyProfileWithRetry`.
