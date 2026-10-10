@@ -102,14 +102,14 @@ A run killed with `kill -9` leaves its sandbox and browsers running: `bun run e2
 
 ### Verified concurrent run
 
-Two-worktree proof of isolation:
+Two worktrees of one branch, started 4 s apart, each running `networks`, `connect-deny` and `sim-methods` on Chrome at retry 0:
 
-| Worktree | Port pack (anvil, aztec, admin, p2p, pg) | Token contract deployed |
-|---|---|---|
-| worktree A   | `49522, 49523, 49524, 49525, 49526` | `0x0693fd819c9dd798…` |
-| worktree B   | `49527, 49528, 49529, 49530, 49531` | `0x1c477acbeea157c9…` |
+| Worktree | Port pack (anvil, aztec, admin, p2p, pg) | Token contract deployed | Result |
+|---|---|---|---|
+| worktree A | `21158, 31227, 31616, 26260, 13424` | `0x125a8b9b6fdeb6be…` | 8/8 |
+| worktree B | `15368, 30475, 20912, 13758, 15914` | `0x05e5d43a988b2340…` | 8/8 |
 
-Both ran `bun run e2e:agent tests/e2e/network/meta-getChainInfo.test.ts` simultaneously. Both passed `1/1` in ~40s wall. The distinct token-contract addresses prove the runs deployed against independent PXE state.
+Both packs were listed in `~/.agents/ports.md` under their run ids for the whole run and released at its end. Killing worktree B's `agent.sh` and vitest with `kill -9` mid-run left worktree A green; `bun run e2e:reap` in B then stopped B's orphaned sandbox and dropped its rows, leaving no process with B's markers.
 
 ## Single-worktree fast iteration
 

@@ -12,3 +12,8 @@
 - 2026-10-09 — phase 1.2 gate: pass (fast; unit 25/25; networks.test.ts chrome 4/4 with 5 rows during, 0 after; bogus build exit 1, no row).
 - 2026-10-09 — phase 1.3 gate: pass (fast; unit 33/33; smoke navigation chrome+firefox 5/5; network networks chrome+firefox 4/4, I7 trees = marker scans, no leftovers; reuse, reap, fail-loud drills).
 - 2026-10-09 — phase 1.4 gate: pass (fast; unit boot-guard/anvil-probe/classify-exit 14/14; reuse drill still reuses; e2e:reap stops the adopted sandbox once its adopter is dead).
+- 2026-10-09 — arc 1a review round 1: Codex approve with fixes (6) and Opus sound with fixes (11); 16 fixed, 1 rejected as code (O6, reworded in Security).
+- 2026-10-09 — phase 1.5 concurrency proof, first attempt: both boots clean, every Chrome test red on a new run-marker guard; Chrome overwrites its environ, so the extension-path Chrome sweep returns for every run.
+- 2026-10-10 — arc 1a review rounds 2 and 3: Codex approve with fixes (5, then 4), all fixed; the Codex loop stopped at three rounds; a same-family check of round 3 found 4 more, all fixed (head 42c738b).
+- 2026-10-10 — phase 1.5: concurrency and kill proofs pass on 42c738b; whole smoke passes on both browsers at retry 0; test:ci-gating 448 pass; N-full next.
+- 2026-10-10 — phase 1.5 gate: pass. N-full at retry 0 on both browsers (Chrome pool 103/156, heavy 4/23, canary prover-ON 5/7; Firefox pool 102/152, heavy 4/23, canary 5/7); scratch worktree removed. PR next.
