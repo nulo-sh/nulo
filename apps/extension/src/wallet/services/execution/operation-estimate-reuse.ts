@@ -42,7 +42,7 @@ import {
 	pendingHashesChanged,
 	primaryEndpointMoved,
 	type ReuseEntryBase,
-	reuseFeeMultiplier,
+	feeMultiplierFor,
 	SingleShotTtlCache,
 } from "./estimate-reuse-shared"
 import { fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
@@ -135,7 +135,7 @@ export class OperationEstimateReuse {
 		const fpcDrift = await fpcIdentityDrift(entry.feeSettings.paymentMethod, entry.fpcIdentity, (id) => this.deps.getFpcInfo(id))
 		if (fpcDrift) return this.reject(fpcDrift)
 		const node = await this.deps.getNode(network.chainId)
-		const multiplier = reuseFeeMultiplier(entry.feeSettings.priorityLevel)
+		const multiplier = feeMultiplierFor(entry.feeSettings.priorityLevel)
 		let current: GasFees
 		try {
 			current = (await predictedWorstMinFees(node)).mul(multiplier)

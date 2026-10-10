@@ -115,8 +115,7 @@ export type FeeStrategyContext = {
 	/** The authorization every build in the strategy runs under. */
 	fence: ExecutionFence
 	feeSettings: FeeSettings
-	/** Pre-computed from feeSettings.priorityLevel. Undefined if the
-	 *  caller didn't set one (falls back to DEFAULT_FEE_MULTIPLIER). */
+	/** `feeMultiplierFor(feeSettings.priorityLevel)`; unset falls back to `DEFAULT_FEE_MULTIPLIER`. */
 	feeMultiplier?: number
 	/** From op.fee?.gasPadding, defaulted to 1.05 by caller. */
 	gasPadding: number

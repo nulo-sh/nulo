@@ -60,7 +60,6 @@ import {
 	type OperationResult,
 	type Action,
 	type FeeSettings,
-	PRIORITY_MULTIPLIERS,
 	type AztecRegisterSenderOperation,
 	type AztecRegisterContractOperation,
 	type AztecCreateAuthWitOperation,
@@ -80,7 +79,7 @@ import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner } from "./operation-planner"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
-import type { ChainIdentity } from "./estimate-reuse-shared"
+import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { PreviewSnapshots } from "./preview-snapshots"
 import { TransferExecutor } from "./transfer-executor"
@@ -1150,7 +1149,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// those mutations back to the caller breaks repeat estimates and
 		// any caller that keeps a reference to the array.
 		const op = { ...inputOp, actions: [...inputOp.actions] }
-		const feeMultiplier = feeSettings.priorityLevel ? PRIORITY_MULTIPLIERS[feeSettings.priorityLevel] : undefined
+		const feeMultiplier = feeMultiplierFor(feeSettings.priorityLevel)
 		const gasPadding = op.fee?.gasPadding ?? 1.05
 		const strategy = this.feeStrategies.get(feeSettings.paymentMethod.kind)
 		if (!strategy) {
