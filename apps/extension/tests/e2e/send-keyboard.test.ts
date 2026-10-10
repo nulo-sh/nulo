@@ -130,7 +130,9 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
 	const row = await activeTestId(page)
 	expect(row).toMatch(/^send-fee-method-/)
-	const fpcId = await page.evaluate(() => document.activeElement?.closest("[data-dropdown-item]")?.getAttribute("data-fpc-id") ?? null)
+	// With no balance, the seeded sponsor is the only row a pick can land on.
+	const fpcId = await page.evaluate(() => document.activeElement?.closest("[data-dropdown-item]")?.getAttribute("data-fpc-id"))
+	if (!fpcId) throw new Error(`the focused row ${row} is not the seeded sponsor`)
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await page.waitForFunction(
@@ -140,12 +142,12 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	)
 	// The pick may land on the row already showing, so only the saved pick tells Enter from a no-op.
 	await page.waitForFunction(
-		async (key: string, address: string, want: string | null) => {
+		async (key: string, address: string, want: string) => {
 			const saved = (await chrome.storage.local.get(key))[key] as
-				| Record<string, { private?: { fpc?: { id?: string } | null } }>
+				| Record<string, { private?: { type?: string; fpc?: { id?: string } | null } }>
 				| undefined
 			const pick = saved?.[address]?.private
-			return pick !== undefined && (pick.fpc?.id ?? null) === want
+			return pick?.type === "fpc" && pick.fpc?.id === want
 		},
 		{ timeout: 10_000 },
 		UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS,

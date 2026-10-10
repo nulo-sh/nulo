@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto"
 import type { ArmedInterception, RpcInterception } from "./index"
 import type { WebDriverSession } from "./webdriver-classic"
 
 /** Where the armed observers are kept between privileged scripts, one per origin: the browser
- *  window they all run in. */
+ *  window they all run in. Each carries its arm's token, so a stale handle never reads or removes
+ *  a later arm's observer. */
 const SLOT = "__nuloE2eRpcIntercept"
 
 interface Tally {
@@ -26,9 +28,10 @@ export async function observeAndIntercept(
 	mode: RpcInterception,
 ): Promise<ArmedInterception> {
 	const origin = new URL(fromOrigin).origin
+	const token = randomUUID()
 	const armed = await session.chromeScript<string>(
 		`
-		const [slot, origin, to, done] = arguments;
+		const [slot, origin, token, to, done] = arguments;
 		window[slot] ??= {};
 		if (window[slot][origin]) return done("an interception is already armed for " + origin);
 		const tally = { hits: 0, failures: [] };
@@ -46,21 +49,21 @@ export async function observeAndIntercept(
 			},
 		};
 		Services.obs.addObserver(observer, "http-on-modify-request");
-		window[slot][origin] = { tally, observer };
+		window[slot][origin] = { tally, observer, token };
 		done("armed");
 		`,
-		[SLOT, origin, mode.kind === "redirect" ? mode.to : ""],
+		[SLOT, origin, token, mode.kind === "redirect" ? mode.to : ""],
 	)
 	if (armed !== "armed") throw new Error(`rpc-intercept: ${armed}`)
 
 	const tally = () =>
 		session.chromeScript<Tally>(
 			`
-			const [slot, origin, done] = arguments;
+			const [slot, origin, token, done] = arguments;
 			const held = window[slot]?.[origin];
-			done(held ? held.tally : { hits: 0, failures: ["the interception is no longer armed"] });
+			done(held?.token === token ? held.tally : { hits: 0, failures: ["the interception is no longer armed"] });
 			`,
-			[SLOT, origin],
+			[SLOT, origin, token],
 		)
 	return {
 		hits: async () => (await tally()).hits,
@@ -68,13 +71,15 @@ export async function observeAndIntercept(
 		stop: async () => {
 			await session.chromeScript<string>(
 				`
-				const [slot, origin, done] = arguments;
+				const [slot, origin, token, done] = arguments;
 				const held = window[slot]?.[origin];
-				if (held) Services.obs.removeObserver(held.observer, "http-on-modify-request");
-				if (window[slot]) delete window[slot][origin];
+				if (held?.token === token) {
+					Services.obs.removeObserver(held.observer, "http-on-modify-request");
+					delete window[slot][origin];
+				}
 				done("stopped");
 				`,
-				[SLOT, origin],
+				[SLOT, origin, token],
 			)
 		},
 	}

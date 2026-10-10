@@ -331,17 +331,25 @@ describe("a guarded launch", () => {
 		}
 	}
 
-	test("a request the stand-in node lost fails the close: read while the browser is open, stopped after it", async () => {
-		const { deps, closeBrowser } = rig()
+	test("the stand-in node's failures fail the close beside an undeclared host: read while the browser is open, stopped after it", async () => {
+		const { deps, send, closeBrowser } = rig()
 		const order: string[] = []
 		closeBrowser.mockImplementation(async () => {
 			order.push("browser closed")
 		})
 		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode(["a target could not be armed"], order) })
+		send("unlisted.test")
 		await expect(launch.close()).rejects.toThrow(
-			/spec\.test\.ts: the stand-in node lost control of a request: a target could not be armed/,
+			/spec\.test\.ts: chrome tried 1 host.*unlisted\.test:443[\s\S]*the stand-in node's interception reported: a target could not be armed/,
 		)
 		expect(order).toEqual(["node failures read", "browser closed", "node stopped"])
+	})
+
+	test("a stand-in node whose failures cannot be read fails the close", async () => {
+		const { deps } = rig()
+		const node: HeldNode = { requests: () => 0, failures: async () => Promise.reject(new Error("no session")), stop: async () => {} }
+		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => node })
+		await expect(launch.close()).rejects.toThrow(/its interception could not be read: Error: no session/)
 	})
 
 	test("success control: a stand-in node that lost nothing closes cleanly", async () => {

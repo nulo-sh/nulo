@@ -45,7 +45,8 @@ export async function cdpInterceptRpc(
 		log(`FAILURE ${msg}`)
 	}
 	// A target that went away while being armed (Chrome's transient about:blank pages do) issued
-	// no request; only a live target that could not be armed or resumed is a failure.
+	// no request, and one that went away with a request paused never sent it; only a live target
+	// that could not be armed, resumed or answered is a failure.
 	const failUnlessGone = (msg: string, e: unknown) => {
 		if (/target closed|session closed|detached/i.test(String(e))) log(`${msg}: ${e}`)
 		else fail(`${msg}: ${e}`)
@@ -63,7 +64,7 @@ export async function cdpInterceptRpc(
 				mode.kind === "refuse"
 					? session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "ConnectionRefused" })
 					: session.send("Fetch.continueRequest", { requestId: event.requestId, url: `${mode.to}${url.pathname}${url.search}` })
-			reply.catch((e) => fail(`${label}: reply to ${url.pathname} failed: ${e}`))
+			reply.catch((e) => failUnlessGone(`${label}: reply to ${url.pathname} failed`, e))
 		})
 		await session.send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/*`, requestStage: "Request" }] })
 		if (isExtensionWorker(info)) armedServiceWorker = true

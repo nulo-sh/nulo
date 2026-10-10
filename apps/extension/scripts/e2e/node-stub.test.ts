@@ -17,10 +17,8 @@ test("the wallet's node client stops at the stub's first answer instead of retry
 	const stub = await startNodeStub()
 	try {
 		const call = makeFetchWithTimeout(5_000)(stub.url, { jsonrpc: "2.0", id: 1, method: "node_getNodeInfo", params: [] })
-		const started = Date.now()
 		await expect(call).rejects.toThrow(/Error 400 from server/)
-		// The client's first retry waits 1 s, so a rejection inside it was never retried.
-		expect(Date.now() - started).toBeLessThan(900)
+		// The client rejects only once its retries are spent, so one request means none were made.
 		expect(stub.requests()).toBe(1)
 		expect(readFileSync(REGISTRY, "utf8")).toContain(`| ${new URL(stub.url).port} | nulo-e2e-egress-node-stub |`)
 	} finally {

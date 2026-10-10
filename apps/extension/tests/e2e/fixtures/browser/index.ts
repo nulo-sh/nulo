@@ -204,7 +204,7 @@ export const browserTraffic = { browser: driver.kind, ownHosts: driver.ownHosts 
 export const CHROME_ONLY = {
 	backgroundKillUnderPage: "ends the background under an open extension page; Firefox will not end an event page one keeps busy",
 	cdpFetch: "arms CDP Fetch interception on held targets; BiDi has no equivalent",
-	hangingRequest: "stalls a network on a request that hangs, which Firefox's interception cannot make",
+	hangingRequest: "stalls a network on a request a loopback stub never answers; unproven on Firefox, whose interception redirects",
 } as const
 
 /** Why a test does not run on Chrome: a state headless Chrome cannot be driven into — never a failing test. */

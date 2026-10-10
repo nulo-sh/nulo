@@ -268,7 +268,6 @@ export function egressGuardPrefs(guardPort: number): Record<string, string | num
 	}
 }
 
-/** The capabilities a launch opens its session with; exported so a unit test can hold the routing. */
 export function capabilities({
 	profileDir,
 	headless,

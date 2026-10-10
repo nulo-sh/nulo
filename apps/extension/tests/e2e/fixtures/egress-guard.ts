@@ -37,7 +37,8 @@ export interface EgressCanary {
 /** What answers for an outside node in the launch's place, held from settle to close. */
 export interface HeldNode {
 	requests(): number
-	/** Every request the interception failed to control; read while the browser is open. */
+	/** Every arm or reply the interception failed, and a spec's interception left unstopped; read
+	 *  while the browser is open. A request it never saw reaches the guard and is refused unflagged. */
 	failures(): Promise<string[]>
 	/** Safe once the browser is closed. */
 	stop(): Promise<void>
@@ -55,7 +56,7 @@ export const MALFORMED = "<malformed>"
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
 	[
 		"lb.drpc.live",
-		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home; refused only until the launch's stub answers it",
+		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home. The launch's stand-in answers it once settled; what reaches the guard is a request from before that, from a spec's interception swap, or one the interception could not see",
 	],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],
@@ -309,9 +310,12 @@ export async function closeAfterEgressCheck(
 	} finally {
 		await Promise.all([guard.stop(), canary.stop(), node?.stop()])
 	}
-	const failure =
-		egressFailure({ attempts: guard.attempts(), overflowed: guard.overflowed(), canaryConnections: canary.connections() }, traffic) ??
-		(nodeFailures.length ? `the stand-in node lost control of a request: ${nodeFailures.join("; ")}` : undefined)
+	const failure = [
+		egressFailure({ attempts: guard.attempts(), overflowed: guard.overflowed(), canaryConnections: canary.connections() }, traffic),
+		nodeFailures.length ? `the stand-in node's interception reported: ${nodeFailures.join("; ")}` : undefined,
+	]
+		.filter(Boolean)
+		.join("\n")
 	if (failure) {
 		const also = closeError === undefined ? "" : `\nThe close before the check failed too: ${String(closeError)}`
 		throw new Error(`egress guard: ${label}: ${failure}${also}`, { cause: closeError })
