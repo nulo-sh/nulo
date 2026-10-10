@@ -183,7 +183,7 @@ test("withBlockedAccount raises the verification barrier and hands back an unloc
 	expect(ctx.pageErrors).toEqual([])
 })
 
-const OBSERVE = { arc: 2 } as const
+const OBSERVE = { arc: 3 } as const
 const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x${"5e".repeat(32)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */
@@ -300,6 +300,50 @@ const waitForFittedHero = (page: Page) =>
 		sel("balance-amount"),
 	)
 
+type FittedHero = {
+	family: string
+	weight: string
+	fontSize: number
+	letterSpacing: number
+	scale: number
+	symbolLetterSpacing: number | null
+	overflow: number
+}
+
+/**
+ * The visible figure, not its container or the hidden ruler: the em tracking must compute at the
+ * fitted size, and the symbol inherits that length.
+ */
+async function expectFittedHomeHero(page: Page): Promise<void> {
+	const hero = await page.$eval(sel("balance-amount"), (amount): FittedHero | null => {
+		const fit = [...amount.children].find(
+			(el): el is HTMLElement => el instanceof HTMLElement && el.style.getPropertyValue("--hero-scale") !== "",
+		)
+		if (!fit) return null
+		const style = getComputedStyle(fit)
+		const symbol = fit.querySelector("span")
+		return {
+			family: style.fontFamily,
+			weight: style.fontWeight,
+			fontSize: Number.parseFloat(style.fontSize),
+			letterSpacing: Number.parseFloat(style.letterSpacing),
+			scale: Number.parseFloat(fit.style.getPropertyValue("--hero-scale")),
+			symbolLetterSpacing: symbol ? Number.parseFloat(getComputedStyle(symbol).letterSpacing) : null,
+			overflow: amount.scrollWidth - amount.clientWidth,
+		}
+	})
+	console.log(`[type-roles] Home hero: ${JSON.stringify(hero)}`)
+	expect(hero).not.toBeNull()
+	const fitted = hero as FittedHero
+	expect(fitted.scale).toBeGreaterThan(0)
+	expect(fitted.scale).toBeLessThan(1)
+	expect(firstFamily(fitted.family)).toBe("Space Grotesk")
+	expect(fitted.weight).toBe("700")
+	expect(Math.abs(fitted.letterSpacing / fitted.fontSize + 0.04)).toBeLessThanOrEqual(0.002)
+	if (fitted.symbolLetterSpacing !== null) expect(fitted.symbolLetterSpacing).toBeCloseTo(fitted.letterSpacing, 2)
+	expect(fitted.overflow).toBeLessThanOrEqual(0)
+}
+
 async function openAndSweep(page: Page, opener: string, ready: string, label: string, states: readonly SiteState[] = []): Promise<void> {
 	await clickByTestId(page, opener)
 	await page.waitForSelector(sel(ready), VISIBLE)
@@ -319,6 +363,7 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 	try {
 		const page = await openSeededHome(ctx)
 		await waitForFittedHero(page)
+		await expectFittedHomeHero(page)
 		await expectPageClean(page, "Home")
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
@@ -335,6 +380,8 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 		await page.waitForSelector(sel("page-hero-title"), VISIBLE)
 		await expectPageClean(page, "Activity")
 		await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-from-address", "tx detail", [["popup-tx-id", "the seedTransaction row"]])
+		const amounts = (await sweepTypeRoles(page)).readings.filter(({ roles }) => roles.includes("amount-detail"))
+		expect(amounts.map(({ fontSize }) => fontSize)).toEqual(["24px"])
 
 		await navigateByHash(page, "#/popup/general", 10_000)
 		await page.waitForSelector(sel("account-avatar-btn"), VISIBLE)
