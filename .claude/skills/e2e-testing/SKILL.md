@@ -144,6 +144,15 @@ runtime env var can never arm a build-time flag.
   `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`.
   `migration.test.ts` skips without the declaration; `backup-migration.test.ts` throws with the
   remedy.
+- Smoke refuses every outside host. Each launch routes HTTP, HTTPS and WebSocket to a loopback
+  guard that answers 403 and records the host, proves the route with a canary only a direct path
+  reaches, and fails at `close` on any host no list declares (`fixtures/egress-guard.ts`; README §
+  Egress guard). A red "egress guard" naming a wallet or spec host means a new outside call: declare
+  it in `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
+  `ownHosts`. Setup refuses an unarmed dist outside artifact runs, and artifact runs stay unguarded.
+  The Testnet node is answered by a loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`);
+  a smoke spec that needs a value only a node gives seeds it (`helpers/fpc-seeds.ts`), and one that
+  proves the offline case arms its own `interceptRpc` refusal, which replaces the stand-in.
 - A file that depends on the PROVERLESS build carries the `@requires-proverless` marker (the only
   marker `agent.sh` scans) AND a `beforeAll` that greps the loaded bundle for the stamp
   (`account-switch-isolation.test.ts` is the idiom) — the belt for direct vitest invocations. Other

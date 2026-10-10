@@ -66,6 +66,33 @@ Every launch answers for the Content-Security-Policy violations recorded while i
 
 What it hears, probed on both browsers by raising a violation in each context: the background at startup and in a successor after `stopBackground`, the popup, the onboarding page, the setup page, and the offscreen document (on Firefox, the background page's frame). What it does not: a violation raised while a document parses, before its entry module runs (the built pages load only their own scripts and stylesheets then, and Chrome lets an extension's own resources past its page CSP anyway); one in a dedicated worker a library starts (bb.js, the sqlite OPFS proxy); one a document reports as `close` reads; and a write that failed in a background that then stopped, since its successor confirms the flush without knowing. Those fail only through the functional assertions.
 
+### Egress guard (smoke)
+
+A smoke run opens no HTTP, HTTPS or WebSocket connection to a host outside the machine. `global-setup-smoke.ts` arms the guard on every run except an artifact run (`NULO_E2E_ARTIFACT_RUN=1`, which keeps the live leg above), and refuses a dist without `NULO_E2E_TOKEN_SEEDS_BUILD_STAMP`, naming the armed build command. The network setup provides nothing, so network runs and `test:e2e:all` launch unguarded. On a guarded run each `launchExtension` owns, through `ownGuardedLaunch` in `fixtures/egress-guard.ts`, two loopback listeners whose ports are claimed in `~/.agents/ports.md` (`nulo-e2e-egress-*`) for the launch's life:
+
+- **The guard**, which the browser sends every request for an outside host to: Chrome through `--proxy-server`, `--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]` (without `<-loopback>`, Chrome sends link-local addresses direct) and resolver rules that resolve no outside name; Firefox through a `data:` PAC with no `DIRECT` after the proxy and `network.proxy.failover_direct: false`. It answers `403`, records the host and port (never a path, so a provider key in a URL is never stored), and keeps one count per `host:port`: Firefox retries each refusal in bursts.
+- **The canary**, which only a direct path reaches: `egress-canary.test` resolves to loopback for a direct connection only. Once the launch settles, an extension page requests it over HTTPS (HTTPS because the extension's `connect-src` may narrow plain HTTP to loopback); the guard must record it and the canary must count nothing, or the launch fails before any test runs.
+- **The stand-in node** (`fixtures/node-stub.ts`), armed once the canary has proven the routing: the browser's interception (`holdRpcInterception`) sends every request for the Testnet node's origin to a third loopback listener, which answers HTTP 400 with a JSON-RPC error. The node client stops at a 4xx with a readable body; refused, it retries each call for about six seconds, and smoke's resets, profile deletions, settings pages and passkey imports ran out their waits on it. A spec that arms its own `interceptRpc` on that origin, to prove the offline case (`send-fee-privacy`, `contacts-import`), replaces the stand-in until its `stop()`.
+
+`close` reads the stand-in's interception failures, runs the CSP check, closes the browser, stops the listeners and then fails the launch, naming the file, on a canary connection, on any host that no list declares, or on a request the stand-in's interception lost. `tests/e2e/egress-guard.test.ts` proves the routing on each browser: from the background (HTTPS refused, loopback direct, the Testnet node answered by the stand-in's 400) and from an ordinary page the spec serves on loopback (plain HTTP and WebSocket refused, IPv6 loopback direct, link-local refused), then stops the guard and shows that neither falls back to a direct path.
+
+What the smoke build does instead of each outside host:
+
+| Host | Tried by | With the guard |
+|---|---|---|
+| `lb.drpc.live` | the background's node-status read at popup start; the offscreen PXE on Home | answered by the stand-in node's 400 once the launch settles, refused at the guard before; a spec that needs a node-read value seeds it (the fee picker's sponsors: `helpers/fpc-seeds.ts`) |
+| `api.coingecko.com` | the price fetch | refused; a spec that needs a quote seeds one into storage |
+| the browser's own hosts | Chrome's updater and sign-in services, Firefox's remote settings | refused; listed per driver, so not a failure |
+| loopback (`localhost`, `127.0.0.1`, `[::1]`) | the Presto probe, a spec's own server | direct |
+
+**When a launch fails with "egress guard"**, the message lists each host no list declares:
+
+- A host the wallet or a spec now tries: add it to `DECLARED_REFUSALS` in `fixtures/egress-guard.ts` with one line of why, in the change that adds the call.
+- A host the browser reaches on its own: first look for a flag or pref that stops it at its source; failing that, add the exact name to that driver's `ownHosts` (`CHROME_OWN_HOSTS` in `fixtures/browser/chrome.ts`, `FIREFOX_OWN_HOSTS` in `fixtures/browser/firefox.ts`) with why. Never a domain suffix: a wallet dependency that calls a new host under a vendor's domain must stay red.
+- `the canary request went direct` or `never reached the guard`: the browser's routing changed (a flag, a pref, a browser bump); the launch proved nothing, so fix the routing, never the check.
+
+Not covered: UDP and WebRTC, which the wallet does not use. The stand-in answers every node call with an error, so smoke never sees a node that answers: a value only a node gives is seeded, or proven in the network suite. A host on a driver's `ownHosts` that the wallet starts calling is refused but does not fail the run; reviewing a new list entry is what catches that.
+
 ### Store captures (opt-in)
 
 `tests/e2e/network/store-captures.test.ts` is skipped unless `STORE_CAPTURES=1`, and always on
