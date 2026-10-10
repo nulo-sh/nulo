@@ -66,4 +66,5 @@ export function findings(repo: string, rule: RuleId, env: Env = {}): Finding[] {
 	return checkTree({ cwd: repo, env }).filter((f) => f.rule === rule)
 }
 
-export const CANONICAL_GITIGNORE = "audit-*.md\nplan-*.md\n_*.md\neli5.html\n!**/lessons/**\n"
+export const CANONICAL_GITIGNORE =
+	"audit-*.md\nplan-*.md\n_*.md\neli5.html\ndraft-*.md\noutline-*.md\nleg-*.md\neli5-*.html\n!**/lessons/**\n"
