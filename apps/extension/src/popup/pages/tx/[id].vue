@@ -404,9 +404,7 @@ onBeforeUnmount(() => {
 }
 
 .detail_value {
-	font-family: var(--font-body);
-	font-size: 12px;
-	font-weight: 600;
+	composes: type--value from global;
 	color: var(--txt-primary);
 
 	text-align: right;
@@ -414,10 +412,12 @@ onBeforeUnmount(() => {
 }
 
 .detail_value_mono {
+	composes: type--data from global;
 	composes: detail_value_mono from "../detail-page.module.css";
 }
 
 .detail_value_aux {
+	composes: type--meta from global;
 	composes: detail_value_aux from "../detail-page.module.css";
 }
 
@@ -439,18 +439,15 @@ onBeforeUnmount(() => {
 }
 
 .call_method {
-	font-family: var(--font-headline);
+	composes: type--row-title from global;
 	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: 0.01em;
 	color: var(--txt-primary);
 
 	word-break: break-word;
 }
 
 .call_contract {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 

@@ -246,11 +246,9 @@ onBeforeUnmount(() => {
 						:address="fromDisplay.address"
 						:formatter="(addr) => trimAddress(addr, 6, 4)"
 					/>
-					<!-- Non-address senders render through the SAME <Text> primitive (size/weight/color) that
-					     AddressDisplay uses for the "To" account, so both cards' values look identical. -->
-					<Text v-else-if="fromDisplay.kind === 'private'" size="13" weight="600" color="primary" data-testid="from-private">Private</Text>
-					<Text v-else-if="fromDisplay.kind === 'mint'" size="13" weight="600" color="primary" data-testid="from-mint">Mint</Text>
-					<Text v-else size="13" weight="600" color="primary" data-testid="from-redacted">Private</Text>
+					<Text v-else-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
+					<Text v-else-if="fromDisplay.kind === 'mint'" variant="name" color="primary" :class="$style.from_name" data-testid="from-mint">Mint</Text>
+					<Text v-else variant="name" color="primary" :class="$style.from_name" data-testid="from-redacted">Private</Text>
 					<span :class="$style.address_label">From</span>
 				</Flex>
 
@@ -396,6 +394,10 @@ onBeforeUnmount(() => {
 	composes: caption from "../detail-page.module.css";
 }
 
+.from_name {
+	font-size: 13px;
+}
+
 .details_box {
 	composes: details_box from "../detail-page.module.css";
 }
@@ -405,16 +407,17 @@ onBeforeUnmount(() => {
 }
 
 .detail_key_note {
-	font-family: var(--font-mono);
-	font-size: 9px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
 .detail_value_mono {
+	composes: type--data from global;
 	composes: detail_value_mono from "../detail-page.module.css";
 }
 
 .detail_value_aux {
+	composes: type--meta from global;
 	composes: detail_value_aux from "../detail-page.module.css";
 }
 

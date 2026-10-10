@@ -321,16 +321,12 @@ onBeforeUnmount(() => {
 }
 
 .empty_title {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
+	composes: type--title-page from global;
 	color: var(--txt-primary);
 }
 
 .empty_description {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--nulo-secondary);
 }
