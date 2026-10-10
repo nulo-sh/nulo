@@ -65,13 +65,15 @@ describe("PasskeyCeremonyDialog", () => {
 		expect(w.emitted("reject")?.[0]?.[0]).toBe(dismissed)
 	})
 
-	test("an abort inside a created-but-unconfirmed credential stays a silent cancel", async () => {
+	test("an abort inside a created-but-unconfirmed credential is a cancel that keeps the credential", async () => {
 		const aborted = new PasskeyUnconfirmedError("cred-x", "uh", new DOMException("aborted", "AbortError"))
 		runPasskeyCeremonyMock.mockRejectedValueOnce(aborted)
 		const w = mount(PasskeyCeremonyDialog, { props: { request: fakeRequest } })
 		await flushPromises()
 
-		expect(w.emitted("reject")?.[0]?.[0]).toBeInstanceOf(UserRejectedError)
+		const emitted = w.emitted("reject")?.[0]?.[0]
+		expect(emitted).toBeInstanceOf(PasskeyUnconfirmedError)
+		expect(emitted).toMatchObject({ credentialId: "cred-x", userHandle: "uh", cause: expect.any(UserRejectedError) })
 	})
 
 	test("a dismissal inside a created-but-unconfirmed credential is a failure, emitted as is", async () => {

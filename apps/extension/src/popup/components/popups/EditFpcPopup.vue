@@ -5,6 +5,7 @@ import { FieldWarning } from "@nulo/design"
 import { FpcServiceClient, FpcType } from "@/wallet/services/fpc/client"
 
 /** Utils */
+import { sameStoredName } from "@/utils/account-name"
 import { copyWithToast } from "@/utils/clipboard"
 import { isValidHex } from "@/utils/string"
 
@@ -20,7 +21,7 @@ import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_fpc")
+const { order, depth } = usePopupStack("edit_fpc")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -37,7 +38,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v?.length) return null
-			const conflicting = fpcs.value.find((f) => f.name === v && f.id !== fpcToEdit.value?.id)
+			const conflicting = fpcs.value.find((f) => sameStoredName(f.name, v) && f.id !== fpcToEdit.value?.id)
 			if (conflicting) return "Already exist"
 			return null
 		},
@@ -202,6 +203,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit FPC"
 		submitLabel="Update"
 		:submitDisabled="!isAvailableToUpdateFpc || processingError.show"

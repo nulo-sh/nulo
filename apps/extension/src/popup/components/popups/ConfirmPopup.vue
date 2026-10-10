@@ -2,14 +2,10 @@
 <script setup>
 /** Composables */
 import { vSnackFooter } from "@/composables/snackInset"
-import { useToast } from "@/composables/toast"
 import { usePopupStack } from "@/composables/usePopupStack"
-const { openToast } = useToast()
 
 /** Store */
-import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store.ts"
-const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const { order, depth } = usePopupStack("confirm")
 
@@ -34,29 +30,7 @@ const isSingle = computed(() => cacheStore.confirm.single === true)
 
 const confirmationInputEl = useTemplateRef("confirmationInputEl")
 const confirmationTerm = ref()
-const isPasskeyConfirmed = ref(false)
-const isConfirmed = computed(() => {
-	return (
-		(cacheStore.confirm.confirmation_text && cacheStore.confirm.confirmation_text === confirmationTerm.value) ||
-		(cacheStore.confirm.passkeyConfirmation && isPasskeyConfirmed.value) ||
-		(!cacheStore.confirm.confirmation_text && !cacheStore.confirm.passkeyConfirmation)
-	)
-})
-
-async function handlePasskeyConfirmation() {
-	if (isPasskeyConfirmed.value) {
-		openToast({ kind: "success", label: "The operation is already confirmed" })
-		return
-	}
-
-	try {
-		const confirmation = await managers.profile.confirmProfileOperation(appStore.profile.id)
-		if (confirmation) {
-			isPasskeyConfirmed.value = true
-			confirmationTerm.value = cacheStore.confirm.confirmation_text || ""
-		}
-	} catch (error) {}
-}
+const isConfirmed = computed(() => !cacheStore.confirm.confirmation_text || cacheStore.confirm.confirmation_text === confirmationTerm.value)
 
 const handleConfirm = () => {
 	cacheStore.confirm.callback?.()
@@ -68,8 +42,6 @@ watch(
 	async () => {
 		if (!props.show) {
 			confirmationTerm.value = null
-			isPasskeyConfirmed.value = false
-
 			cacheStore.confirm = {}
 		} else {
 			if (cacheStore.confirm.confirmation_text) {
@@ -119,17 +91,13 @@ watch(
 					/>
 				</Flex>
 
-				<Flex v-if="cacheStore.confirm.confirmation_text || cacheStore.confirm.passkeyConfirmation" align="center" justify="between" gap="8" wide>
+				<Flex v-if="cacheStore.confirm.confirmation_text" align="center" justify="between" gap="8" wide>
 					<Input
 						ref="confirmationInputEl"
 						v-model="confirmationTerm"
 						:placeholder="cacheStore.confirm.confirmation_text"
 						wide
 					/>
-
-					<Button v-if="cacheStore.confirm.passkeyConfirmation" @click="handlePasskeyConfirmation" variant="ghost" size="medium">
-						<Icon name="passkey" size="24" :color="isPasskeyConfirmed ? 'primary' : 'tertiary'" />
-					</Button>
 				</Flex>
 
 				<Flex v-snack-footer gap="12">

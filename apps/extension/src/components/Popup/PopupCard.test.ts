@@ -47,6 +47,19 @@ describe("PopupCard", () => {
 		w.unmount()
 	})
 
+	test("sits back only below the top of the stack: depth 2, not depth 1 or a closed key's NaN", () => {
+		stubSetting(false)
+		const displaced = (displaceIdx: number) => {
+			const w = mountCard({ displaceIdx })
+			const out = w.classes().some((c) => c.includes("displace"))
+			w.unmount()
+			return out
+		}
+		expect(displaced(2)).toBe(true)
+		expect(displaced(1)).toBe(false)
+		expect(displaced(Number.NaN)).toBe(false)
+	})
+
 	test("fit: sized to the content whatever the setting says; the handle expands it for this open only", async () => {
 		const setting = stubSetting(true)
 		const w = mountCard({ fit: true })

@@ -9,12 +9,16 @@
  *  - The PR-by-commit and tag lookups run only when the kill switch is on and
  *    this is a push; otherwise the runner makes no API call.
  *  - `decideUnstick` is the single source of truth for whether to act; this
- *    runner only maps its verdict to side effects.
+ *    runner only maps its verdict to side effects, except that it vetoes a
+ *    `create` for a stable 1.0.0 or later whose legal documents, read at the
+ *    merge commit, still hold a «FILL»: no tag, exit non-zero.
  *  - `abort` (tag exists at the WRONG sha) exits non-zero — fail-closed, never
  *    re-points a tag.
  *  - All I/O is injected, so every branch is unit-testable with zero secrets.
  */
 
+// Relative, not `@nulo/legal`: this job installs no dependency, and launch.ts imports nothing.
+import { LAUNCH_DOCUMENTS, launchBlanks } from "../../packages/legal/src/launch"
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL, type AutoUnstickAction, decideUnstick } from "./auto-unstick"
 import { command } from "./workflow-command"
 
@@ -32,6 +36,8 @@ export interface UnstickIO {
 	resolveMergedPr(headSha: string): Promise<MergedPrRef | null>
 	/** The SHA the tag points at, or null if the tag doesn't exist. */
 	resolveTagSha(tag: string): Promise<string | null>
+	/** A file's text at `sha`; throws when the commit or the file is missing. */
+	readFileAt(sha: string, path: string): Promise<string>
 	createTag(tag: string, sha: string, message: string): Promise<void>
 	relabelPr(prNumber: number, add: string, remove: string): Promise<void>
 	log(msg: string): void
@@ -52,7 +58,8 @@ export interface RunUnstickOpts {
 }
 
 export interface RunUnstickResult {
-	action: AutoUnstickAction
+	/** `refused`: a launch whose legal documents still hold a blank; no tag was created. */
+	action: AutoUnstickAction | "refused"
 	reason: string
 	/** true only when the tag was actually created. */
 	performed: boolean
@@ -109,6 +116,15 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 			return { action: "skip", reason: decision.reason, performed: false, continues: true, exitCode: 0 }
 		}
 		case "create": {
+			const documents = await Promise.all(
+				LAUNCH_DOCUMENTS.map(async (path) => ({ path, markdown: await io.readFileAt(decision.tagSha as string, path) })),
+			)
+			const blanks = launchBlanks(opts.version, documents)
+			if (blanks.length > 0) {
+				const reason = `${tag} would launch with blanks in its legal documents:\n${blanks.join("\n")}\nNo tag was created and Release PR #${decision.prNumber} stays '${AUTORELEASE_PENDING_LABEL}'. Fill them on main, then tag the repaired commit by hand (CLAUDE.md, Release runbook, Troubleshooting).`
+				io.log(command("error", `auto-unstick: REFUSED — ${reason}`))
+				return { action: "refused", reason, performed: false, continues: false, exitCode: 1 }
+			}
 			io.log(`auto-unstick: creating ${tag} at ${decision.tagSha} (Release PR #${decision.prNumber})`)
 			await io.createTag(tag, decision.tagSha as string, `Release ${opts.version}`)
 			await io.relabelPr(decision.prNumber as number, AUTORELEASE_TAGGED_LABEL, AUTORELEASE_PENDING_LABEL)
@@ -161,6 +177,9 @@ if (import.meta.main) {
 			const res = await $`git rev-parse --verify --quiet ${ref}`.nothrow().quiet()
 			if (res.exitCode !== 0) return null
 			return res.stdout.toString().trim() || null
+		},
+		async readFileAt(sha, path) {
+			return await $`git show ${`${sha}:${path}`}`.text()
 		},
 		async createTag(tag, sha, message) {
 			// Through the API, so the tag's creator is the token's App and no credential enters .git/config.

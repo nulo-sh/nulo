@@ -2,7 +2,7 @@
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { CapabilityNotGrantedError, ValidationError } from "@nulo/extension-messaging/errors"
-import { coversAnyContract, readConsent } from "@nulo/wallet-bridge"
+import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
@@ -33,16 +33,14 @@ import {
 
 export * from "./spec"
 
-function holdsCanCreateAuthWit(session: DappSession): boolean {
-	return (session.capabilityGrants ?? []).some(
-		(g) => g.capability.type === "accounts" && (g.capability as AccountsCapability).canCreateAuthWit === true,
-	)
+function holdsCanCreateAuthWit(grants: readonly GrantedCapabilityRecord[]): boolean {
+	return grants.some((g) => g.capability.type === "accounts" && (g.capability as AccountsCapability).canCreateAuthWit === true)
 }
 
 /** The consent goes with `canCreateAuthWit`, so a later re-grant starts from asking; every grant
- *  writer applies it after writing. */
+ *  writer applies it after writing, so it reads grants the writer has just projected. */
 function dropConsentWithoutAuthWit(session: DappSession): void {
-	if (!holdsCanCreateAuthWit(session)) session.authorizationsWithoutAsking = undefined
+	if (!holdsCanCreateAuthWit(session.capabilityGrants ?? [])) session.authorizationsWithoutAsking = undefined
 }
 
 /** An object sets the consent, `null` deletes it, `undefined` keeps it; anything unreadable is
@@ -303,9 +301,13 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			throw new ValidationError("setAuthorizationsWithoutAsking takes two booleans")
 		}
 		return await this.patchSession(sessionId, (session) => {
-			if (on && !holdsCanCreateAuthWit(session)) throw new CapabilityNotGrantedError("accounts")
-			const grants = (session.capabilityGrants ?? []).map((g) => g.capability)
-			session.authorizationsWithoutAsking = on ? { broad: shownBroad && coversAnyContract(grants) } : undefined
+			if (!on) {
+				session.authorizationsWithoutAsking = undefined
+				return
+			}
+			const grants = projectStoredGrants(session.capabilityGrants)
+			if (!holdsCanCreateAuthWit(grants)) throw new CapabilityNotGrantedError("accounts")
+			session.authorizationsWithoutAsking = { broad: shownBroad && coversAnyContract(grants.map((g) => g.capability)) }
 		})
 	}
 
@@ -317,7 +319,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 
 	public async setCapabilityGrants(sessionId: string, grants: GrantedCapabilityRecord[]): Promise<DappSession> {
 		return await this.patchSession(sessionId, (session) => {
-			session.capabilityGrants = grants
+			session.capabilityGrants = projectStoredGrants(grants)
 			dropConsentWithoutAuthWit(session)
 		})
 	}
@@ -325,7 +327,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public async getCapabilityGrants(sessionId: string): Promise<GrantedCapabilityRecord[]> {
 		const session = await this.storage.get(sessionId)
 		if (!session) throw new Error("Invalid id")
-		return session.capabilityGrants ?? []
+		return projectStoredGrants(session.capabilityGrants)
 	}
 
 	public async setCapabilityRejections(sessionId: string, rejections: RejectedCapabilityRecord[]): Promise<DappSession> {
@@ -360,9 +362,13 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			if (!session) throw new Error("Invalid id")
 			const now = Date.now()
 
+			// Both sides are projected before any write: a malformed held grant refuses the decision
+			// rather than narrowing, and the records any extension page sends are validated here.
+			const heldGrants = projectStoredGrants(session.capabilityGrants)
+			const newGrants = projectStoredGrants(decision.grantRecords)
 			// A widening adds accounts to a grant the popup was opened against; revoked meanwhile,
 			// the addition would land on a session without the grant — refuse before any write.
-			const held = new Set((session.capabilityGrants ?? []).map((g) => g.capability.type))
+			const held = new Set(heldGrants.map((g) => g.capability.type))
 			const revoked = (decision.requiresGrant ?? []).find((type) => !held.has(type as never))
 			if (revoked !== undefined) throw new CapabilityNotGrantedError(revoked)
 			const consent = consentAfter(session.authorizationsWithoutAsking, decision.authorizations)
@@ -378,10 +384,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 			// existing grant — a denied widening (a re-consent the user declined) must
 			// preserve the older, narrower grant, never revoke it.
 			const replaceSet = new Set(decision.replaceTypes)
-			session.capabilityGrants = [
-				...(session.capabilityGrants ?? []).filter((g) => !replaceSet.has(g.capability.type)),
-				...decision.grantRecords,
-			]
+			session.capabilityGrants = [...heldGrants.filter((g) => !replaceSet.has(g.capability.type)), ...newGrants]
 
 			// Preserve rejections for types this decision didn't touch; an approval
 			// clears its type's prior rejection (only rejectedTypes get re-recorded).

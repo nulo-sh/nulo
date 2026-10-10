@@ -574,7 +574,7 @@ describe("AccountService.importAccount — deletion fence", () => {
 			dekGate?: Promise<void>
 			l1Gate?: Promise<void>
 			afterSet?: (key: string) => void
-			chainLive?: (call: number) => boolean
+			chainLive?: (call: number) => boolean | Promise<boolean>
 		} = {},
 	) {
 		const api = new FakeBrowserApi()
@@ -667,6 +667,22 @@ describe("AccountService.importAccount — deletion fence", () => {
 		expect(h.dekWiped()).toBe(true)
 	})
 
+	test("the add is announced in the turn its final epoch check passes, never after a deletion that follows", async () => {
+		const h = await makeHarness()
+		const isCurrent = h.deletion.isCurrent.bind(h.deletion)
+		vi.spyOn(h.deletion, "isCurrent").mockImplementation((id, captured) => {
+			queueMicrotask(() => h.deletion.beginDeletion("p1"))
+			return isCurrent(id, captured)
+		})
+		const epochAtEmit: number[] = []
+		h.emit.mockImplementation((event) => {
+			if (event === "onAccountAdded") epochAtEmit.push(h.deletion.capture("p1"))
+		})
+
+		await expect(h.run()).resolves.toMatchObject({ address: "0xI" })
+		expect(epochAtEmit).toEqual([0])
+	})
+
 	test("(iii) a deletion beginning and releasing while the DEK read is parked is still refused", async () => {
 		const dek = gate()
 		const h = await makeHarness({ dekGate: dek.promise })
@@ -681,10 +697,6 @@ describe("AccountService.importAccount — deletion fence", () => {
 	})
 
 	test("a rename parked on the written row cannot resurrect it after the compensation", async () => {
-		const h = await makeHarness()
-		const area = h.api.storage.local
-		const realSet = area.set.bind(area)
-		const realGet = area.get.bind(area)
 		const importGate = gate()
 		const renameGate = gate()
 		let importParked!: () => void
@@ -695,16 +707,19 @@ describe("AccountService.importAccount — deletion fence", () => {
 		const renameReached = new Promise<void>((r) => {
 			renameParked = r
 		})
-		let parkImport = true
+		// The import parks in its post-write liveness read, after both writes and outside the row lock.
+		const h = await makeHarness({
+			chainLive: async (call) => {
+				if (call === 2) {
+					importParked()
+					await importGate.promise
+				}
+				return true
+			},
+		})
+		const area = h.api.storage.local
+		const realGet = area.get.bind(area)
 		let parkRename = false
-		area.set = async (entries) => {
-			await realSet(entries)
-			if (parkImport && accountKey in entries) {
-				parkImport = false
-				importParked()
-				await importGate.promise
-			}
-		}
 		area.get = (async (key: unknown) => {
 			const value = await realGet(key as never)
 			if (parkRename && key === accountKey) {
@@ -990,8 +1005,8 @@ describe("AccountService keyed reads bind the row body to the requested address"
 	})
 
 	test("an omitted profile id with no row throws the engine's own TypeError, naming the local `account`", async () => {
-		// RPC arguments are spread unvalidated, so `undefined === undefined` passes the first check
-		// and the second read throws; the text is whatever this engine says for that expression.
+		// In-process calls skip the RPC params check, so `undefined === undefined` passes the first
+		// check and the second read throws; the text is whatever this engine says for that expression.
 		const reference = (() => {
 			// Read through `Reflect.get` so no transpiler folds the local into `(void 0)`.
 			const account = Reflect.get({}, "absent") as { chainId: number }
