@@ -1,7 +1,7 @@
 ---
 plan: account-session-life
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-6); arc 1 merged (#253); arc 2 built, in review
+status: approved by the orchestrator (D-orch-1 to D-orch-6); arc 1 merged (#253); arc 2 built and reviewed (Codex approve), in delivery
 issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
 driver: claude-code
 claude_model: opus
@@ -668,6 +668,17 @@ Opus's phase 1.1 notes:
 | D5 [Codex 1c, Opus 1c] | No start phase before the coordinator awaits the offscreen document, a READY or a PXE RPC; a failed boot leaves every waiter to its bound with nothing written | **Confirmed**; no change |
 | D6 [Opus Q2] | Plan gaps: `DEFAULT_INIT_TIMEOUT_MS` has no package export at fd47407; three more test files read the old `{kind, gen}` map shape; the tick-count pin in `service-idb-delete.test.ts` must hold | **Accepted.** Recorded below as deviations; the pin holds unchanged (2 and 2) |
 | D7 [Codex Q2, Opus Q2] | Phase 2.1 is correct; disconnecting a refused port fires nothing on our side, and foreign extensions reach `onConnectExternal`, which nothing registers | **Confirmed.** Keep the refused-port warn line to the sender id, never `sender.url` |
+
+**Arc 2 review: the Codex fix loop and the Opus final-diff review**, on the arc diff `fd47407..eeb3303`. Each leg was asked the three design questions first again, now against the built code.
+
+- **Codex round 1** (new session `01a12413-2d7f-7bd3-8a94-a662d0da92ea`): `CHANGES`. Q0: lifecycle record HOLDS (high), joined clear HOLDS (high), delegate bound HOLE (high), the Medium below.
+  - **[Medium] Accepted.** The shared budget used `Date.now`, so a wall clock set back mid-wait stretched it by the shift and one set forward cut it. Fixed in 964c9aa: `performance.now()`, with two never-happens tests (clock back, clock forward) that fail on the `Date.now` copy; the normal-clock budget test is the control.
+  - **[Comment] Accepted.** The op fence's successor paragraph is cut to three lines, and the fence test's header describes the record (964c9aa).
+  - Its other checks: the transport matches both browsers' Port semantics; the fake changes weaken no test; the tick pin holds.
+- **Opus 5.5 final-diff review**: `APPROVE`. Q0: all three HOLD (high) on the built code; it found the wall-clock defect independently (fixed by then) and checked by reading that every new proof fails on fd47407.
+  - **[Low] Accepted.** `Promise.withResolvers` was the only ES2024 built-in in production code and would silently raise the Chrome floor above the 116 the code states. Fixed in fbe0f79 with the existing `deferred()` helper from `@nulo/wallet-core/utils`.
+  - **[Comment] Accepted.** Three trims (fbe0f79): the injection field's garbled sentence, `closeReason`'s "both are read every time", and a duplicate of the failed-erase rule in `eraseProfile`. The close test no longer pins `port.error` read counts, which no behaviour depends on.
+- **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked both reviews' fixes in memory (remaining budget, delegate replacement, timer cleanup). The loop closed at round 2 of 3.
 
 **Arc 2 deviations from the plan text** (the tree wins):
 - Phase 2.2: the delegate wait is not a separate 30 s after `ensureInitialized`. One deadline, taken at entry, covers both (D1). `DEFAULT_INIT_TIMEOUT_MS` is exported from `packages/extension-messaging/src/background/index.ts`.
