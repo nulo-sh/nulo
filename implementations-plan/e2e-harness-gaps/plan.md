@@ -327,7 +327,7 @@ Validation gate: Fast; Network (file) `tests/e2e/network/tx-transfer-row.test.ts
 2. Run the soak matrix the archived `vitest-on-bun` plan records, at that one commit after `bun install --frozen-lockfile`: for each of the eleven workspaces whose `vitest.config.ts` imports the base, `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime node --runs 30 --out <scratch>/<ws>-node.json` (the reference) and the same with `--runtime script` (the Bun candidate), then `compare <node.json> <script.json>` (outputs in a scratch directory outside the repo); `bun run test:all` five times; `gh workflow run pr-quick.yml --ref e2e-harness-gaps-esm` bound to that commit (push the branch, no PR).
 3. Build, Storybook and the e2e configs: `bun run --cwd apps/extension build`, `bun run --cwd apps/extension build-storybook`, then the armed smoke build.
 
-Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts`; Network (file) `tests/e2e/network/networks.test.ts`; from `apps/extension`, `bun --bun vitest run > <scratch>/unit.log 2>&1; echo "vitest=$?"`, then `grep -c 'ESM syntax in a file loaded as CommonJS' <scratch>/unit.log`; from the repo root, `bunx biome check vitest.base.mts` prints `Checked 1 file`, so Biome still lints the renamed base. Pass: every soak `compare` passes with an identical inventory, all runs exit 0, the dispatched `pr-quick.yml` run is green at the soaked SHA, `vitest=0`, and the grep prints 0 (its own exit status 1 is expected).
+Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts`; Network (file) `tests/e2e/network/networks.test.ts`; from `apps/extension`, `bun --bun vitest run > <scratch>/unit.log 2>&1; echo "vitest=$?"`, then `grep -c 'ESM syntax in a file loaded as CommonJS' <scratch>/unit.log`; from the repo root, `bunx biome check vitest.base.mts` prints `Checked 1 file`, so Biome still lints the renamed base. Pass: every soak `compare` passes with an identical inventory, all runs exit 0, the dispatched `pr-quick.yml` run is green at the soaked SHA, `vitest=0`, and the grep prints 0 (its own exit status 1 is expected). Per D22, the same logs also hold no `configLoader: 'native'` block, and a Node probe loads every extension config with the native loader.
 
 ## Security & Adversarial Considerations
 
@@ -423,6 +423,7 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D-orch-9 | After a squash merge an arc branches from `dev`: arc 4 is `e2e-harness-gaps-esm` off `origin/dev` at af4afcc (#278's squash). D-orch-1 to D-orch-8 stay | The orchestrator's call, as D-orch-3 and D-orch-6 | Branching from `e2e-harness-gaps-types` |
 | D-orch-10 | Arc 4 runs before arc 3, which stays held on charter C13; the plan lets the orchestrator reorder when a higher arc's gate opens first. Arc 4 shares no file with arc 3, builds nothing of it and changes nothing a person sees | The orchestrator's call | Waiting for arc 3 (the Delivery table stacks 4 on 3) |
 | D-orch-11 | The proof is the full soak matrix exactly as Phase 4.1 states, at one clean commit after `bun install --frozen-lockfile`: the CJS inventory first, then 30 retry-0 runs per workspace on both engines for every workspace whose config imports the base, an exact-inventory `compare` each, `test:all` five times, a `pr-quick.yml` dispatch bound to that commit (no PR until the soak passes), `build`, `build-storybook`, the armed smoke build, one smoke and one network file, the warning grep at 0 and Biome checking the renamed base. Soak outputs stay outside the repo; the evidence goes in `lessons/phase-4.md`. A failed compare stops the arc; no run count or compare is relaxed | The orchestrator's call | A smaller parity soak |
+| D22 | #186: the config graph also becomes loadable by Vite's native config loader: its 26 relative imports name their extension, its three JSON imports carry `with { type: "json" }`, and the stall watchdog's parameter property becomes a field assigned in the constructor. The gate counts Vite's whole native-loader warning block (`configLoader: 'native'`), not only its CommonJS line, and adds a Node probe that loads all eight extension configs with the native loader | With `"type": "module"`, Vite printed the same warning block with the items the CommonJS lines had masked (extensionless imports, unattributed JSON) on every unit, e2e, build and Storybook run, and `--configLoader native` still failed; the plan closes #186 on "no warning" and the issue's impact is a future loader change breaking the configs. Codex and Opus both recommended finishing the graph before the soak; Codex found the parameter property Node's type stripping rejects | Shipping 40b9c22 alone with `Refs #186` and a new issue; patching or deleting `tsconfig.node.json`, which nothing references (tsserver reads that name only through a `references` entry) |
 
 ## Audit verdicts
 
@@ -615,6 +616,42 @@ Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run inde
 ### Arc 2 implementation, round 2: Codex (same session, resumed), 2026-10-10
 
 Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
+
+### Arc 4 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve**, no findings on 40b9c22. Checked and found sound: the CommonJS inventory; Node and Bun reading `apps/extension/package.json`, loading the `.cjs` shim and importing `vitest.base.mts`; Bun's `__dirname` in the ESM-typed scripts; release-please and the preview build preserving `type`; the Mozilla source rebuild; no live reference to `vitest.base.ts`; the explicit `.mts` import. Two limits: zero CommonJS lines do not establish native-loader compatibility (taken up as D22), and soak provenance is captured at start, so the checkout must stay still through it.
+
+### Arc 4 implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| O4-1 | Medium. Vite's native-loader block still prints on every extension run with the items the CommonJS lines masked; the gate's grep cannot see it, and the "0 warnings" status line is wrong | Accepted: D22, the gate counts the block, the status line corrected |
+| O4-2 | Low. `tsconfig.node.json` lacks `allowImportingTsExtensions` once D22 lands | Rejected as code: nothing references it, so no tool loads it (D22) |
+| O4-3 | Low. `vitest.base.mts`'s header does not say why it is `.mts`, so a rename back would bring the warning back silently | Accepted: one clause |
+
+### Arc 4 implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **D22 recommended, with one more fix**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C4-1 | Medium. The proof can pass while the warning block prints | Accepted: D22's gate |
+| C4-2 | Medium. `tests/e2e/stall-watchdog.ts`'s parameter property fails Node's type stripping (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and the watchdog loads with every extension config | Accepted: a field assigned in the constructor |
+| C4-3 | Low. `tsconfig.node.json` would report 23 TS5097 | As O4-2 |
+| Proof | Exercise native loading of the unit, e2e and build configs, not only the absent block | Accepted: a `loadConfigFromFile(…, "native")` probe of all eight configs and a native-loader build compared byte for byte |
+
+### Arc 4 implementation, round 3: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve** D22's code (1518723), no defect; it loaded the eight configs natively itself. Arc delivery blocked by the soak's Node reference: `apps/extension`'s unit suite fails the same 8 tests on Node at this head and at the base af4afcc, with either loader (`lessons/phase-4.md`).
+
+| # | Finding | Disposition |
+|---|---|---|
+| R4-1 | Medium. A failing Node reference cannot pass `compare` | Recorded; D-orch-11 stops the arc on a failed compare, so the matrix runs as written and the result goes to the orchestrator |
+| R4-2 to R4-6 | Medium/low. The 8 failures are tests written for Bun: `port-registry` and `reconcile-lock` launch children with `process.execPath`, which then import raw TypeScript Node cannot strip; `store-icons` calls `Bun.Image`; `LegalAcceptanceSheet` natively `require`s a workspace barrel with an extensionless import; `windows/{json,logger}` pin Bun's TypeError wording; `presto-core-deps` reads an unexported `package.json` subpath | Not fixed here: outside Phase 4.1's change map, and two of the fixes loosen what a test asserts. The smallest fix per file goes to the orchestrator |
+
+The Codex loop stops at its three-round limit with no open finding on the arc's code.
 
 ## Post-implementation
 
