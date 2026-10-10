@@ -72,9 +72,9 @@ export async function handleSessionEstablished(
 	deps: SessionEstablishedDeps,
 ): Promise<boolean> {
 	const chainId = String(chainInfoToChainId(session))
-	// Keyed by the request id, which upstream reuses as the session id, so a concurrent same-tuple
-	// handshake or reconnect cannot consume it. The page chooses that id, so it is read before any
-	// fallible await and every later step checks the map still holds this very object.
+	// Keyed by the request id the page chose, which upstream reuses as the session id: captured before
+	// any await, and termination before the stamp and the final settlement check the map still holds
+	// this very object.
 	const marker = deps.pendingVerification.get(session.sessionId)
 	const isNewConnection = marker !== undefined
 	const reservation = deps.reservations.reservation(session.sessionId)
