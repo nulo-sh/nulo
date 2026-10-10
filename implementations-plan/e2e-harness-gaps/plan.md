@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arc 1a implemented, in review
+status: approved by the orchestrator 2026-10-09; arc 1a merged (#267); arc 1b in review (#273)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -411,6 +411,12 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D18 | Our client never breaks the registry lock; a lock held past 30 s fails the claim closed; release by token | Every path-lock break races, with or without a check afterwards; an abandoned lock is rare (a millisecond critical section) and the other writers break theirs | A token check on break; an inode-and-mtime check on break; copying the other writers' unverified break |
 | D-orch-1 | No stack: arc 1a opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; later arcs branch from 1a's branch and rebase onto `dev` once it lands; the close-out is its own PR after the last arc merges | The orchestrator's call: it merges lanes in order and a stack would tie 1a's merge to later arcs | One `gh stack` per lane (§ Delivery) |
 | D-orch-2 | Arc 1a ships alone and first, as gate G1 for every other lane: no 1b work folds in, and it does not wait on `OWNER-ASKS.md` Ask 1 (which holds arc 3 only) | Every other lane's parallel network e2e waits on it | Folding small 1b fixes into the G1 PR |
+| D-orch-3 | After a squash merge, an arc branches from `dev`: arc 1b is `e2e-harness-gaps-waits` off `origin/dev` at 6201f8b (#267's squash), not off arc 1a's branch | 1a's branch holds nothing `dev` lacks, and merging `dev` into it after a squash is add/add | Branching from `worktree-e2e-harness-gaps` |
+| D-orch-4 | Arc 1b only, every stop rule binding: #162's transport rule, #163's hosted 240 s rule (three dispatches of each smoke workflow), #155's calibration (the watchdog and the cap each ship only on it); nothing of arcs 2-4 is built | The orchestrator's call | — |
+| D-orch-5 | Workflow dispatches on the arc's own branch are allowed (`gh workflow run <file> --ref e2e-harness-gaps-waits`); never a release, nightly or publish workflow, a variable, secret, ruleset, tag or release; every run id and result goes in `lessons/phase-1.md` | The orchestrator's call; the calibrations need hosted numbers | — |
+| D19 | #162: the fix ships in `lock.vue` although the un-skipped opt-out test passes without it, and one Chrome-only case opens Lock inside a new worker's boot window (stop the worker, then navigate), red 3/3 on the base. Its Firefox skip is named here: Firefox does not end an event page while an extension page is open, so the window cannot occur there | The opt-out test opens Lock after the boot has finished; a probe showed a read rejected by the port drop strands the page, and only an e2e exercises the real reject-and-reconnect transport the fix relies on. Codex: ship the fix, but no timing-only race (it can pass vacuously). Opus: ship, and add the case sequentially, since the window is the whole boot, not milliseconds. The sequential shape is taken; the case cannot see the rejection itself, so its base-red count is recorded and the unit tests are the exact check | A concurrent stop-and-navigate race; the unit tests alone |
+| D20 | #155: the watchdog's unit test stalls on a fixture that spins while its file is collected, with a 3 s `stallMs`, and asserts the stall report names the file; a second file must not start and global teardown must run. One reporter, no `observe` switch: every run prints its longest silence, and `stallMs` is required | I4 did not hold: vitest 4.1.10 ends a test awaiting a never-settling promise 3 s after `cancelCurrentRun`, so that fixture never reaches the kill. Only a blocked event loop does, and a blocked fork never reports its test, so the file is what can be named. The printed silence is what a later recalibration reads from CI logs | The plan's awaiting fixture naming the test (it passes with the kill removed) |
+| D21 | #155: the heap cap's assertion lives in `network-setup.ts` and runs in every network fork: a limit outside [cap, cap + 512] MiB throws. Teardown reaps browser launches whose owner died | A fork the `execArgv` misses fails where it runs, in every run, not in a test of a copy of the config. A fork the watchdog kills leaves its Firefox, which only the next Firefox launch reaped | A nested-run unit test of the cap |
 
 ## Audit verdicts
 
@@ -548,6 +554,34 @@ Verdict: **approve with fixes**. Sound: the ERE escaping (every metacharacter, `
 | V2 | Low. Without `/proc`, a bare run that adopted every service writes a lock with no owner and no pids, so its Chromes looked unclaimed | Accepted: covered by V1's vitest check, which works without `/proc` |
 | V3 | Low. Where `sh` is bash, `sh -c 'sleep 30'` execs sleep and drops the fake Chrome arguments | Accepted: `sleep 30; :` |
 | V4 | Nit. `reap.ts`'s step list and the README's reap paragraph predate the Chrome sweep | Accepted: both rewritten |
+
+### Arc 1b implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve with fixes**. Found no path by which the watchdog signals a process that is not this run's fork: discovery and signalling are synchronous, an unreaped child keeps its pid, and another vitest's children fail the parent check. The observer matches its DOM contract; the retry-0 evidence supports removing the sleeps.
+
+| # | Finding | Disposition |
+|---|---|---|
+| CB1 | Medium. A pending timeout edit is replaced when a reconnect read finds the stored value moved (`lock.vue`) | Rejected: `onSettingUpdate` already replaces the field when the timeout changes elsewhere, and the re-read stands in for the update the dropped port missed. Withdrawn in round 2 |
+| CB2 | Medium. The watchdog arms at `onTestModuleStart`, after setup files and import, so a silent first-file collection is never timed | Accepted: it arms at `onTestModuleQueued` (with OB2). Test: the spin fixture spins at import; without the hook the nested run hits its deadline |
+| CB3 | Medium. `readdirSync("/proc")` throws from the kill timer where `/proc` is absent | Accepted (with OB1): the kill step logs that the blocked fork is left running |
+| CB4 | Low. The watchdog header and the observer's doc narrate | Accepted: both cut to their constraints |
+
+### Arc 1b implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, every claim checked against vitest 4.1.10's dist. Sound: the kill scope, the cancel path (the pool queue emptied, a killed fork ends its task, teardown runs before the pool closes), the Lock page's ordering, the observer.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OB1 | Medium (macOS). The kill timer throws without `/proc` and takes vitest down before teardown | Accepted: see CB3 |
+| OB2 | Low-medium. A collection hang of file N is blamed on file N-1; a crashed fork's test stays in the running set | Accepted: the file is set and the running set cleared at `onTestModuleQueued` |
+| OB3 | Low. `test-retried` reaches no reporter hook, so a retry after a long silent attempt has only the rest of `STALL_MS` | Accepted: the undeclared `onTaskUpdate` call counts it. Test: a fixture silent 2 s per attempt against a 3 s stall stays green; cancelled without the hook |
+| OB4 | Low. A killed Firefox fork leaves Firefox and geckodriver until the next Firefox launch | Accepted: teardown runs the owner-gated `reapOrphanLaunches` on Linux |
+| OB5 | Low (process). Phase 1.8's runs are not recorded | Accepted: they were running; recorded in `lessons/phase-1.md` § 1.8 |
+| OB6 | Comments: the watchdog header inexact and narrating; the export wait's 45-96 s paragraph contradicted by the hosted runs | Accepted: rewritten |
+
+### Arc 1b implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve**, no findings. Teardown's reaper judged safe: it signals only launches whose recorded owner is dead and whose processes carry the record's marker, so a forged record cannot reach a live launch.
 
 ## Post-implementation
 

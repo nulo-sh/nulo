@@ -1,3 +1,4 @@
+import type { Page } from "puppeteer"
 import { describe, expect } from "vitest"
 import { isFirefox, stopBackground } from "./fixtures/browser"
 import { TEST_PASSWORD } from "./fixtures/constants"
@@ -10,6 +11,42 @@ import {
 	readLivenessBaseline,
 	waitForWorkerLiveness,
 } from "./fixtures/helpers"
+
+const STRICT_TOGGLE = '[data-testid="strict-security-toggle"]'
+
+/**
+ * Turns strict mode off through Settings → Lock and its confirmation, asserting the flag flipped, then
+ * locks and unlocks so the next session persists its bearer. Hash navigation, not the nav tab:
+ * clicking through the shell races the routing an unlock is still finishing.
+ */
+async function optOutOfStrictMode(page: Page): Promise<void> {
+	await navigateByHash(page, "#/popup/settings/lock")
+	await page.waitForSelector(STRICT_TOGGLE, { visible: true, timeout: 10_000 })
+	await clickByTestId(page, "strict-security-toggle")
+	await acceptConfirmPopup(page)
+	await withTimeoutMessage(
+		page.waitForFunction(
+			() => document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") === "false",
+			{ timeout: 10_000, polling: 200 },
+		),
+		async () => {
+			const seen = await page
+				.evaluate(
+					() =>
+						document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") ?? "<absent>",
+				)
+				.catch(() => "<unreadable>")
+			return `strict-security-toggle never flipped off (still ${seen}) — the opt-out this test depends on did not happen`
+		},
+	)
+	await navigateByHash(page, "#/popup/general")
+
+	await lockWallet(page)
+	await page.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 10_000 })
+	await replaceInputValue(page, '[data-testid="auth-password-input"]', TEST_PASSWORD)
+	await clickByTestId(page, "auth-submit")
+	await waitForHash(page, "#/popup/general", 10_000)
+}
 
 // A background death — Chrome recycling its idle worker, Firefox ending its event page — and the
 // cold respawn on the next event is where storage migrations, service init and cold-boot races
@@ -117,26 +154,7 @@ describe("background death and cold respawn", () => {
 	 * onMessage listener returns false — so the flag never actually changed and this
 	 * test asserted a silent restore that strict mode had never been turned off for.
 	 */
-	// SKIP — three distinct blockers, all measured, none of them "flaky CI":
-	//  1. The original setup was dead. It flipped strictSecurityMode by posting to
-	//     ConfigService over `chrome.runtime.sendMessage`, but wallet services listen
-	//     on PORTS: the SW's only onMessage listener (`src/wallet/index.ts`) returns
-	//     false. A probe confirmed the call resolves with no reply and `nulo:config`
-	//     is never written, so strict mode stayed ON and the silent restore asserted
-	//     here could not occur. The test only ever "passed" because the old kill left
-	//     the worker running, so nothing needed restoring.
-	//  2. Driving the real Settings → Lock toggle instead (below, kept for the
-	//     next attempt) gets further but stalls: the page's `onBeforeMount` awaits two
-	//     `configService.getValue` calls and `isLoading` never clears within 10s in
-	//     this post-unlock, post-restart context, so `strict-security-toggle` never
-	//     renders. That points at the config client's reconnect lifecycle after an
-	//     unlock — its own investigation, not a wait to lengthen.
-	//  3. Reaching settings via the nav tab additionally races the routing the unlock
-	//     is still finishing; hash navigation avoids that but does not fix (2).
-	// The other three tests in this file are un-skipped and green.
-	test.skip("strict mode OFF (opt-out): unlock → toggle off → relock+unlock → kill SW → silent restore", async ({
-		registeredExtension,
-	}) => {
+	test("strict mode OFF (opt-out): unlock → toggle off → relock+unlock → kill SW → silent restore", async ({ registeredExtension }) => {
 		const page = await openPopup(registeredExtension)
 		// These tests share one browser, and the strict-mode test above now leaves the
 		// wallet genuinely LOCKED — which it always should have, but could not while
@@ -145,41 +163,7 @@ describe("background death and cold respawn", () => {
 		await ensureUnlocked(page)
 		await waitForHash(page, "#/popup/general")
 
-		// Turn strict mode off the way a user does: the Settings → Lock toggle,
-		// through its confirmation dialog. Then assert the flag actually flipped —
-		// a setup step that silently no-ops is what made this test vacuous before.
-		// Direct hash navigation, not the nav tab: clicking through the shell races
-		// the routing the unlock above is still finishing, and this test's subject is
-		// the strict-mode contract, not settings navigation.
-		await navigateByHash(page, "#/popup/settings/lock")
-		await page.waitForSelector('[data-testid="strict-security-toggle"]', { visible: true, timeout: 10_000 })
-		await clickByTestId(page, "strict-security-toggle")
-		await acceptConfirmPopup(page)
-		await withTimeoutMessage(
-			page.waitForFunction(
-				() => document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") === "false",
-				{ timeout: 10_000, polling: 200 },
-			),
-			async () => {
-				const seen = await page
-					.evaluate(
-						() =>
-							document.querySelector('[data-testid="strict-security-toggle"]')?.getAttribute("data-toggle-active") ??
-							"<absent>",
-					)
-					.catch(() => "<unreadable>")
-				return `strict-security-toggle never flipped off (still ${seen}) — the opt-out this test depends on did not happen`
-			},
-		)
-		await navigateByHash(page, "#/popup/general")
-
-		// Lock then unlock so the next session is opened under strict OFF — the
-		// new bearer gets persisted via SessionManager.open's gate.
-		await lockWallet(page)
-		await page.waitForSelector('[data-testid="auth-password-input"]', { visible: true, timeout: 10_000 })
-		await replaceInputValue(page, '[data-testid="auth-password-input"]', TEST_PASSWORD)
-		await clickByTestId(page, "auth-submit")
-		await waitForHash(page, "#/popup/general", 10_000)
+		await optOutOfStrictMode(page)
 		await page.close()
 
 		await stopBackground(registeredExtension)
@@ -194,6 +178,33 @@ describe("background death and cold respawn", () => {
 		expect(registeredExtension.pageErrors).toEqual([])
 		await page2.close()
 	}, 120_000)
+
+	// A new worker answers no port until its services register, seconds into its boot, so a page that
+	// mounts in that window has its first reads rejected when their port drops. Strict mode would lock
+	// the popup on reconnect and leave the page, so the session is opted out first. Chrome's alone:
+	// Firefox will not end an event page while an extension page keeps it busy.
+	test.skipIf(isFirefox)(
+		"the Lock page opened while the worker boots reads its settings once the port is back",
+		async ({ registeredExtension }) => {
+			const page = await openPopup(registeredExtension)
+			await ensureUnlocked(page)
+			await waitForHash(page, "#/popup/general")
+			await navigateByHash(page, "#/popup/settings/lock")
+			await page.waitForSelector(STRICT_TOGGLE, { visible: true, timeout: 10_000 })
+			if ((await page.$eval(STRICT_TOGGLE, (el) => el.getAttribute("data-toggle-active"))) === "true") {
+				await optOutOfStrictMode(page)
+			}
+			await navigateByHash(page, "#/popup/general")
+
+			await stopBackground(registeredExtension)
+			await navigateByHash(page, "#/popup/settings/lock")
+			await page.waitForSelector(STRICT_TOGGLE, { visible: true, timeout: 30_000 })
+			expect(await page.$eval(STRICT_TOGGLE, (el) => el.getAttribute("data-toggle-active"))).toBe("false")
+			expect(registeredExtension.pageErrors).toEqual([])
+			await page.close()
+		},
+		120_000,
+	)
 
 	/**
 	 * Regression pin for the setInterval-vs-while-loop liveness gap.

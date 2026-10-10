@@ -26,6 +26,7 @@ import {
 	writeLock,
 } from "./lockfile"
 import { markBootReady, markBootStarted } from "./sentinel"
+import { reapOrphanLaunches } from "./fixtures/browser/ownership"
 import { resolveBrowserKind } from "./fixtures/browser/selection"
 import { ANVIL_CHAIN_ID, probeAnvil } from "./anvil-probe"
 import { assertPackFree, claimedRunId, listenerIsOurs, mayAdopt, waitWhileAlive } from "./boot-guard"
@@ -862,6 +863,15 @@ export async function teardown() {
 		clearLock()
 	}
 	if (reconciled) killOrphanChromes()
+	// A fork killed mid-file (the stall watchdog, an OOM) leaves its Firefox and geckodriver behind;
+	// their records name a dead owner, so this reaps them and nothing a live run holds.
+	if (process.platform === "linux") {
+		const reaped = await reapOrphanLaunches().catch((error: unknown) => {
+			console.warn("[global-setup] orphaned browser launches were not reaped", { error })
+			return []
+		})
+		if (reaped.length) console.warn(`[global-setup] reaped ${reaped.length} orphaned browser launch(es)`)
+	}
 }
 
 const onExit = () => {

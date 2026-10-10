@@ -1,7 +1,6 @@
 import { inject, expect } from "vitest"
 import { test, openPopup, waitForHash, replaceInputValue, clickByTestId } from "../fixtures/extension"
 import {
-	PXE_ANCHOR_SYNC_WORKAROUND_MS,
 	fillSendForm,
 	refreshBalances,
 	sendTransfer,
@@ -124,8 +123,6 @@ test.skipIf(!hasConfig)("transfer with public Fee Juice", { timeout: 300_000 }, 
 		{ timeout: 120_000, polling: 3_000 },
 	)
 
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
-
 	// Submit
 	await page.waitForSelector('[data-testid="send-submit"]', { visible: true })
 	await page.evaluate(() => document.querySelector('[data-testid="send-submit"]')?.scrollIntoView({ block: "center" }))
@@ -188,8 +185,6 @@ test.skipIf(!hasConfig)("transfer with private Fee Juice", { timeout: 300_000 },
 		},
 		{ timeout: 180_000, polling: 3_000 },
 	)
-
-	await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 
 	await page.waitForSelector('[data-testid="send-submit"]', { visible: true })
 	await page.evaluate(() => document.querySelector('[data-testid="send-submit"]')?.scrollIntoView({ block: "center" }))
