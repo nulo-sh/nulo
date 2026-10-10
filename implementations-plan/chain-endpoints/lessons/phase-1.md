@@ -96,6 +96,10 @@ At `a76aa2a` (merged with `dev` at `236a2cd`), armed dists, retry 0, the two bro
 - Durations: against the first guarded runs with the node refused (Chrome 1,505 s, Firefox 2,588 s), the stand-in saves about 270 s and 850 s. Today's CI smoke on `dev`-based PRs, unguarded, spends 1,261 s (Chrome) and 1,617 s (Firefox) summed over three shards on its own runners; this PR's shards are the like-for-like comparison.
 - After the Opus follow-ups on the kill fix (the re-arm tells Chrome the background may be down), `sw-resilience`, `sw-restart-network`, `imported-account-lifecycle` and the control spec pass three times on each browser (Chrome 13/13, Firefox 12/12).
 
+## Phase 1.3 step 8: the negative proof (2026-10-10, local only, reverted)
+
+With only the proxy routing dropped (Chrome's `--proxy-server` and `--proxy-bypass-list`; Firefox's `network.proxy.type`, set to 0, and `network.proxy.autoconfig_url`) and the canary mapping kept, `tests/e2e/egress-guard.test.ts` fails its launch on both browsers with `egress guard: egress-guard.test.ts: the canary request went direct, so this launch's routing is not proven`. With the settings restored (no diff left in `fixtures/browser`), the spec passes 7/7 on Chrome and on Firefox.
+
 ## Phase 1.3 step 10: smoke in a network namespace (2026-10-10)
 
 - `unshare -rn sh -c 'ip link set lo up && …'` does not start on the development host: `unshare: write failed /proc/self/uid_map: Operation not permitted`. A bare `unshare -U` runs, so it is the uid map AppArmor refuses (`kernel.apparmor_restrict_unprivileged_userns = 1`). Lifting that is a root-level host setting, so the namespace run was not made; the canary and the negative proof stand in for it.

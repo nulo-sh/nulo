@@ -375,6 +375,8 @@ Validation gate:
 
 Pass: every command exits 0. Both smoke suites are green at retry 0, with no undeclared host and no canary hit. Steps 8 and 9 behave as written. Layers: lint, typecheck, unit, CI gating, smoke e2e (both browsers, armed and artifact mode), network e2e (two files, both browsers).
 
+Outcome (2026-10-10): the six whole-smoke runs stand as the whole-smoke gate (Chrome 206/206 and Firefox 207/207, three runs each, at retry 0). Step 8 fails "went direct" on both browsers and passes restored. Step 9 passed on both browsers. Step 10 could not run: the host refuses unprivileged user namespaces. `networks` and `default-token-seeding` pass 5/5 on each browser. The build-input diff prints nothing. Details are in `lessons/phase-1.md`.
+
 ### Arc 2a: node URLs, plain HTTP, the token list (#200, #101 item 14, #79) — waits on page 12
 
 Every phase of arcs 2a, 2b and 2c **waits on page 12**. Build none of it before the orchestrator releases the arc. A record answered "Change (with a note)" or struck replaces its phase's text with the note, through the orchestrator. Start each arc from a `dev` that holds arc 1.
