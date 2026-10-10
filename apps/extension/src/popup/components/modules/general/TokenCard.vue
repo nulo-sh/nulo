@@ -76,7 +76,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 				<span :class="$style.symbol" data-testid="token-symbol" :data-symbol="token.symbol">
 					{{ token.symbol }}
 				</span>
-				<span v-if="fiatLabel" data-testid="token-fiat" :class="$style.fiat">{{ fiatLabel }}</span>
+				<span v-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
 				<span v-else :class="$style.fiat">{{ token?.name || "unknown" }}</span>
 			</Flex>
 
@@ -181,6 +181,12 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+}
+
+/* A priced figure wraps rather than hide digits: the row grows only when it does not fit. */
+.fiat_figure {
+	white-space: normal;
+	overflow-wrap: break-word;
 }
 
 .detail {

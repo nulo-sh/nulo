@@ -5,6 +5,7 @@ import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import type { PriceState } from "@/wallet/services/price/spec"
 import TokenCard from "./TokenCard.vue"
+import { boundAttr, declarationsOf, elementByTestid, parseSource, walkElements } from "../../../../../scripts/type-roles/source-scan"
 import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
 
 // TokenCard imports useAppStore but never reads from it. The store body calls
@@ -325,5 +326,20 @@ describe("TokenCard — R5 layout (subtitle left, lock/globe split right)", () =
 		expect(icons.map((i) => i.attributes("data-name"))).toEqual(["lock", "globe"])
 		expect(w.text()).toContain("7")
 		expect(w.text()).toContain("3")
+	})
+})
+
+describe("TokenCard — the subtitle's overflow", () => {
+	const parsed = parseSource("apps/extension/src/popup/components/modules/general/TokenCard.vue")
+
+	test("a priced figure wraps rather than hide digits; a contract-supplied name stays clipped to one line", () => {
+		const fiat = elementByTestid(parsed, "token-fiat")?.node
+		expect(fiat && boundAttr(fiat, "class")).toBe("[$style.fiat, $style.fiat_figure]")
+		expect(declarationsOf(parsed, ".fiat_figure")).toEqual({ "white-space": "normal", "overflow-wrap": "break-word" })
+		expect(declarationsOf(parsed, ".fiat")).toMatchObject({ "max-width": "160px", overflow: "hidden", "white-space": "nowrap" })
+		const subtitles: string[] = []
+		if (parsed.template)
+			walkElements(parsed.template, (node) => void (node.tag === "span" && subtitles.push(boundAttr(node, "class") ?? "")))
+		expect(subtitles.filter((cls) => cls.includes("$style.fiat"))).toEqual(["[$style.fiat, $style.fiat_figure]", "$style.fiat"])
 	})
 })
