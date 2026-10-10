@@ -18,3 +18,4 @@
 - 2026-10-10: hosted proof recorded (supersede cancelled 5 runs of the old head in 16 API calls; label add/remove read live); one smoke flake on the labelled re-run (settings-crud).
 - 2026-10-10: arc 1 merged into dev as c0e1e69 (#252); arc 2 branched from dev (D-orch-5); D-orch-6 and D-orch-7 recorded.
 - 2026-10-10: phase 2.1 gate passed (lint, typecheck:all, test, test:all, test:ci-gating, test:release, lint:actions; reds shown).
+- 2026-10-10: phase 2.2 gate passed (lint, typecheck:all, test, test:all, both builds, onboarding-tab smoke, frozen install, audit gate enforce).

@@ -291,7 +291,7 @@ Validation gate: Fast; Gating; Release; Actions. Pass: all exit 0; the planted f
 
 Validation gate: Fast; `bun run test:all`; Gating; Release; Actions. Pass: all exit 0; the `1.0.0` unit case fails with the version check removed; the auto-unstick refusal case fails with the preflight removed; step 5's run failed as expected. Layers: lint, typecheck, unit.
 
-**Phase 2.2, presto-banners 1.2.0 (#82).**
+**Phase 2.2, presto-banners 1.2.0 (#82).** ✓
 1. Run `bun pm diff @alejoamiras/presto-banners@1.1.0 1.2.0`; summarise it in `lessons/phase-2.md`.
 2. Set the pin to `1.2.0`; run `bun install`; then `bun install --frozen-lockfile`.
 3. Give the onboarding `permission-blocked` arm the literal title; adjust the module header; rename the test.
