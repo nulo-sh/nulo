@@ -19,3 +19,4 @@
 - 2026-10-10 review: Codex r1 changes needed (3), Opus changes needed (3 minor + nits), all fixed or dispositioned; Codex r2 changes needed (1), fixed; Codex r3 changes needed (2), fixed (three-round limit); Opus epoch-model check clean.
 - 2026-10-10 Phase 1.5 network e2e, Chrome, retry 0, at 29f3ba7: 8 files, 16 tests pass; proverless same-token-concurrent-sends: 14 tests pass.
 - 2026-10-10 Phase 1.5 unit gates at 21b3982: lint, typecheck:all, test:all (extension 11056), test:ci-gating 480, check:plans pass.
+- 2026-10-10 Phase 1.5 smoke at 21b3982 code, retry 0: Chrome 47 files / 199 tests pass (11 skipped by design); Firefox 49 files / 200 tests pass (10 skipped). Gate passed; pushing.

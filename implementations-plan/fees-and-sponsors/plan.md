@@ -1,7 +1,7 @@
 ---
 plan: fees-and-sponsors
 tier: mid
-status: approved v3.1 (D-orch-1 to D-orch-5); arc 1 building
+status: approved v3.1 (D-orch-1 to D-orch-5); arc 1 in review
 issues: "#196, #119, #222, #188 pin, #118 comment (arc 1); #91, #107, #113, #114, #115, #188, #118 (arc 2, waits on decision page 6, and on pages 6 and 9 for anything hold H3 covers); #117 (no arc, blocked:external)"
 driver: claude-code
 claude_model: opus
