@@ -5,8 +5,7 @@
  *  - **Orphan cleanup.** When a previous `bun run e2e:agent` run was killed
  *    abnormally (Ctrl-C, OOM, machine sleep), its anvil/aztec/playground
  *    children may still be alive on the previous run's ports. The lockfile
- *    records those PIDs/pgids so the next run can reap them before
- *    allocating new ports.
+ *    records their launch markers so the next run can reap them.
  *  - **Stable-port reuse.** When the user runs `vitest` directly (no agent
  *    wrapper) with the same env vars across runs, setup reuses the prior
  *    sandbox if every check passes:
@@ -19,14 +18,19 @@
  *    `bun run e2e:agent` always allocates fresh ports, so it never hits
  *    the reuse path; orphan cleanup is the value there.
  */
+import { createHash, randomBytes } from "node:crypto"
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, existsSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { IDENTITY_SHAPE, MARKER_SHAPE, identityIsDead, ownIdentity } from "./owned-processes"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const E2E_STATE_DIR = path.resolve(__dirname, "../../.e2e-state")
+/** The checkout this harness runs from: the worktree a run's registry rows and markers name. */
+export const REPO_ROOT = path.resolve(__dirname, "../../../..")
 const LOCK_PATH = path.join(E2E_STATE_DIR, "owned.json")
+const RECONCILE_PATH = path.join(E2E_STATE_DIR, "reconcile.lock")
 
 /**
  * Real-disk root for per-run aztec data dirs. Deliberately NOT tmpdir()/`/tmp` — that is
@@ -39,11 +43,8 @@ const LOCK_PATH = path.join(E2E_STATE_DIR, "owned.json")
  */
 export const E2E_DATA_ROOT = process.env.NULO_E2E_DATA_ROOT ?? path.join(homedir(), ".cache", "nulo-e2e")
 
-/** Per-run aztec data dir path under {@link E2E_DATA_ROOT}. The `<pid>` segment lets `e2e:reap`
- *  sweep orphaned dirs whose owning process is dead. */
-export function newAztecDataDir(): string {
-	return path.join(E2E_DATA_ROOT, `nulo-aztec-${process.pid}-${Date.now()}`)
-}
+export const SANDBOX_SERVICES = ["anvil", "aztec", "playground"] as const
+export type SandboxService = (typeof SANDBOX_SERVICES)[number]
 
 export interface OwnedPorts {
 	anvil: number
@@ -57,25 +58,69 @@ export interface OwnedState {
 	startedAt: string
 	bakedLocalRpcUrl: string
 	ports: OwnedPorts
-	pids: { anvil?: number; aztec?: number; playground?: number }
+	/** For health and log lines only: ownership is the markers, never these numbers. */
+	pids: Partial<Record<SandboxService, number>>
+	/** Each recorded pid's `/proc` start time, which tells the service from a later holder of its pid. */
+	starts?: Partial<Record<SandboxService, string>>
+	/** The node's run dir, stamped with its marker; the node writes under `<dir>/data`. A lock
+	 *  written before markers existed names the data dir itself, unstamped. */
 	aztecDataDir: string
+	/** Each service's launch marker. Absent on a lock written before markers existed, which no
+	 *  sweep ever signals. */
+	markers?: Partial<Record<SandboxService, string>>
+	/** `<pid>:<start time>` of the vitest process that holds the sandbox: the one that started it,
+	 *  or the one that reused it last. No sweep touches the sandbox while it lives. */
+	owner?: string
 	/** Recorded post-deploy. Used as the identity assertion on reuse. */
 	l1ContractAddresses?: Record<string, string>
 	/** Address book emitted to .test-config.json. Persisted so the reuse
-	 *  path can recreate that file (teardown deletes it). */
+	 *  path can recreate that file (teardown deletes it). A lock from before `tokenClassId` lacks it. */
 	deployedConfig?: {
 		nodeUrl: string
 		tokenAddress: string
+		tokenClassId?: string
 		sponsoredFpcAddress: string
 		minterAddress: string
 	}
 }
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
+const isPid = (v: unknown) => Number.isInteger(v) && (v as number) > 0
+const isStringRecord = (v: unknown) => isObject(v) && Object.values(v).every((x) => typeof x === "string")
+
+function hasValidServices(lock: Record<string, unknown>): boolean {
+	const { pids, starts, markers } = lock
+	if (!isObject(pids) || !Object.values(pids).every((pid) => pid === undefined || isPid(pid))) return false
+	if (starts !== undefined && !(isObject(starts) && Object.values(starts).every((t) => typeof t === "string" && /^\d+$/.test(t))))
+		return false
+	if (markers === undefined) return true
+	return (
+		isObject(markers) &&
+		Object.entries(markers).every(
+			([k, m]) => SANDBOX_SERVICES.includes(k as SandboxService) && typeof m === "string" && MARKER_SHAPE.test(m),
+		)
+	)
+}
+
+/** The lock is a file any process on this host can write, and it names processes to stop and a
+ *  directory to delete, so anything not shaped like one is treated as unreadable. */
+export function isOwnedState(value: unknown): value is OwnedState {
+	if (!isObject(value)) return false
+	const { ports, owner, l1ContractAddresses, deployedConfig } = value
+	if (typeof value.startedAt !== "string" || typeof value.bakedLocalRpcUrl !== "string" || typeof value.aztecDataDir !== "string")
+		return false
+	if (!isObject(ports) || !["anvil", "aztec", "aztecAdmin", "aztecP2P", "playground"].every((k) => isPid(ports[k]))) return false
+	if (owner !== undefined && !(typeof owner === "string" && IDENTITY_SHAPE.test(owner))) return false
+	if (l1ContractAddresses !== undefined && !isStringRecord(l1ContractAddresses)) return false
+	if (deployedConfig !== undefined && !isStringRecord(deployedConfig)) return false
+	return hasValidServices(value)
+}
+
 export function readLock(): OwnedState | undefined {
 	try {
 		if (!existsSync(LOCK_PATH)) return undefined
-		const raw = readFileSync(LOCK_PATH, "utf-8")
-		return JSON.parse(raw) as OwnedState
+		const parsed: unknown = JSON.parse(readFileSync(LOCK_PATH, "utf-8"))
+		return isOwnedState(parsed) ? parsed : undefined
 	} catch {
 		return undefined
 	}
@@ -109,17 +154,95 @@ export function isPidAlive(pid: number | undefined): boolean {
 	}
 }
 
-/** Best-effort kill of a PID's process group. Used by orphan cleanup. */
-export function killOrphanByPid(pid: number | undefined, label: string): void {
-	if (!isPidAlive(pid)) return
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export interface ReconcileLockOptions {
+	file?: string
+	waitMs?: number
+	pollMs?: number
+}
+
+/**
+ * Runs `fn` holding this worktree's reconcile lock. Reading `owned.json`, acting on the owner it
+ * names and writing a new owner into it must be one step: two setups, or a setup and `e2e:reap`,
+ * that interleave it can each act on the same dead owner, one reaping the sandbox the other has
+ * just adopted. A dead holder's lock is broken; a live holder is waited for up to `waitMs`.
+ */
+export async function withReconcileLock<T>(fn: () => Promise<T>, opts: ReconcileLockOptions = {}): Promise<T> {
+	const file = opts.file ?? RECONCILE_PATH
+	const holder = `${ownIdentity() ?? process.pid} ${randomBytes(8).toString("hex")}`
+	await acquireReconcileLock(file, holder, opts.waitMs ?? 120_000, opts.pollMs ?? 250)
 	try {
-		process.kill(-(pid as number), "SIGTERM")
-	} catch {
-		try {
-			process.kill(pid as number, "SIGTERM")
-		} catch {
-			// ignore
-		}
+		return await fn()
+	} finally {
+		releaseReconcileLock(file, holder)
 	}
-	console.warn(`[e2e-setup] reaped orphan ${label} pid=${pid}`)
+}
+
+async function acquireReconcileLock(file: string, holder: string, waitMs: number, pollMs: number): Promise<void> {
+	mkdirSync(path.dirname(file), { recursive: true })
+	const deadline = Date.now() + waitMs
+	while (!createExclusive(file, holder)) {
+		const current = readHolder(file)
+		if (current !== undefined && holderIsDead(current) && breakStale(file, current)) continue
+		if (Date.now() >= deadline)
+			throw new Error(
+				`[e2e-setup] another run in this worktree is reconciling its sandbox (${file} held by "${current}"); if none is, delete that file and any ${path.basename(file)}.break-* beside it`,
+			)
+		await sleep(pollMs)
+	}
+}
+
+function createExclusive(file: string, content: string): boolean {
+	try {
+		writeFileSync(file, content, { encoding: "utf8", flag: "wx" })
+		return true
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "EEXIST") return false
+		throw err
+	}
+}
+
+/** `undefined` once the lock is gone; any other read failure throws rather than spin on it. */
+function readHolder(file: string): string | undefined {
+	try {
+		return readFileSync(file, "utf8")
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined
+		throw err
+	}
+}
+
+/**
+ * Unlinks a dead holder's lock. Two waiters can judge one holder dead, and an unlink by the slower
+ * would remove the faster one's fresh lock, so only the waiter that creates the break file for that
+ * holder may unlink, after reading the lock again; it removes the break file only after the unlink,
+ * so a later breaker of the same holder reads a different lock. A breaker that dies holding the
+ * break file leaves that lock to a person.
+ */
+function breakStale(file: string, dead: string): boolean {
+	const token = `${file}.break-${createHash("sha256").update(dead).digest("hex").slice(0, 16)}`
+	if (!createExclusive(token, "")) return false
+	try {
+		if (readHolder(file) === dead) rmSync(file, { force: true })
+		return true
+	} finally {
+		rmSync(token, { force: true })
+	}
+}
+
+function releaseReconcileLock(file: string, holder: string): void {
+	try {
+		if (readFileSync(file, "utf8") === holder) rmSync(file, { force: true })
+	} catch {
+		// Gone, or unreadable: never removed on a guess.
+	}
+}
+
+/** A holder not yet fully written, or not shaped like one, is never dead. Without `/proc` the
+ *  holder is a bare pid, judged by liveness. */
+function holderIsDead(holder: string): boolean {
+	const id = holder.match(/^(\S+) [0-9a-f]{16}$/)?.[1]
+	if (!id) return false
+	return IDENTITY_SHAPE.test(id) ? identityIsDead(id) : /^[1-9]\d*$/.test(id) && !isPidAlive(Number(id))
 }
