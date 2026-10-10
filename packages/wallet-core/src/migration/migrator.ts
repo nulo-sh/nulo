@@ -34,6 +34,15 @@
  * barrier forever. A throw never advances `version`. Durable attempt counters
  * (stored under the engine's own reserved namespace, never inside a footprint)
  * bound both the up() retries and the restore retries across boots.
+ *
+ * An `up()` still unsettled after `upTimeoutMs` fails like an interrupted one: its staging area
+ * is revoked, so it can no longer read the store or have a write committed. The bound covers an
+ * `up()` that awaits forever, not one that never yields, nor a store that stops answering.
+ *
+ * The journal is not authenticated, by decision: no secret exists before unlock, a checksum
+ * detects nothing a forger cannot recompute, and whoever can forge the journal can write the same
+ * keys directly. Resume confines a restore to the registered footprint, inside which a forged
+ * journal can still delete or substitute any key.
  */
 
 import type { Migration, MigrationContext, MigrationResult, MinimalStorageArea, StorageRef } from "./types"
@@ -61,6 +70,34 @@ const LEGACY_VERSION_KEY = "nulo:core:storage-version"
 export const RESERVED_KEYS: readonly string[] = [SCHEMA_VERSION_KEY, SCHEMA_RUNNING_KEY, SCHEMA_BACKUP_KEY, SCHEMA_ATTEMPTS_KEY]
 
 const DEFAULT_MAX_RETRIES = 3
+/** A policy bound, not a measurement: a data transform over extension storage takes seconds. */
+const DEFAULT_UP_TIMEOUT_MS = 60_000
+
+const interruptedMidWrite = (version: number): string => `migration ${version} was interrupted mid-write`
+/** The reason once the footprint is restored; it reaches the recovery screen verbatim. */
+const interruptedReason = (version: number): string => `${interruptedMidWrite(version)} (restored cleanly)`
+
+/** The watchdog's error: reported as `interruptedReason` only after its restore succeeds. */
+class UpTimeoutError extends Error {}
+
+/** Awaits `up()`, or revokes `staging` and throws once `ms` pass first. The abandoned promise
+ *  keeps a no-op handler, so its later rejection is never unhandled. */
+async function runWithWatchdog(up: () => Promise<void>, staging: StagingArea, ms: number, version: number): Promise<void> {
+	const running = up()
+	running.catch(() => {})
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const expired = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			staging.revoke()
+			reject(new UpTimeoutError(interruptedMidWrite(version)))
+		}, ms)
+	})
+	try {
+		await Promise.race([running, expired])
+	} finally {
+		clearTimeout(timer)
+	}
+}
 
 /** `counted` marks a retained journal whose failure has already been recorded
  *  in the attempt counter — the resume path must not count it again. Set
@@ -123,6 +160,8 @@ export interface MigratorOptions {
 	 *  The effective max is `max(baselineVersion, …migration versions)`; fresh
 	 *  installs stamp it and run nothing. Default 0. */
 	baselineVersion?: number
+	/** How long one `up()` may stay unsettled before it fails as interrupted. Default 60 s. */
+	upTimeoutMs?: number
 }
 
 export class Migrator {
@@ -130,10 +169,18 @@ export class Migrator {
 	private readonly migrations: Migration[]
 	private readonly maxRetries: number
 	private readonly maxVersion: number
+	private readonly upTimeoutMs: number
 
-	constructor({ store, migrations, maxRetries = DEFAULT_MAX_RETRIES, baselineVersion = 0 }: MigratorOptions) {
+	constructor({
+		store,
+		migrations,
+		maxRetries = DEFAULT_MAX_RETRIES,
+		baselineVersion = 0,
+		upTimeoutMs = DEFAULT_UP_TIMEOUT_MS,
+	}: MigratorOptions) {
 		this.store = store
 		this.maxRetries = maxRetries
+		this.upTimeoutMs = upTimeoutMs
 		this.migrations = [...migrations].sort((a, b) => a.version - b.version)
 		for (let i = 0; i < this.migrations.length; i++) {
 			const v = this.migrations[i].version
@@ -254,7 +301,7 @@ export class Migrator {
 		let stamped = false
 		try {
 			const staging = new StagingArea(this.store)
-			await m.up({ local: staging } satisfies MigrationContext)
+			await runWithWatchdog(() => m.up({ local: staging } satisfies MigrationContext), staging, this.upTimeoutMs, m.version)
 
 			const { sets, removes } = staging.diff()
 			this.guardCommit(m, Object.keys(sets).concat(removes))
@@ -296,7 +343,7 @@ export class Migrator {
 				kind: "failed",
 				version: m.version,
 				breaking: m.breaking,
-				reason: errorMessageFromUnknown(err),
+				reason: err instanceof UpTimeoutError ? interruptedReason(m.version) : errorMessageFromUnknown(err),
 				attempts,
 				terminal: attempts >= this.maxRetries,
 			}
@@ -393,7 +440,7 @@ export class Migrator {
 			await this.store.remove([SCHEMA_BACKUP_KEY, SCHEMA_RUNNING_KEY])
 			return {
 				kind: "needs-recovery",
-				reason: `migration ${backup.version} was interrupted mid-write (restored cleanly)`,
+				reason: interruptedReason(backup.version),
 				retryable: attempts < this.maxRetries,
 			}
 		}

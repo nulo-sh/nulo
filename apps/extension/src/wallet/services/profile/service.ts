@@ -17,7 +17,7 @@ import {
 	SessionEndedError,
 } from "@nulo/extension-messaging/errors"
 import { fromBase64Lenient, Lock } from "@/wallet/utils"
-import { ProfileRepository } from "./repository"
+import { isGeneratedProfileId, ProfileRepository } from "./repository"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { array_equals, canonicalizeMnemonic, getEntropy, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import {
@@ -2325,7 +2325,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 			scratch.destinationDek = destinationDek
 			const dekSealed = await this.sealDekWithPasshash(sealed.passhash, destinationDek)
 
-			let id = profile.id
+			// The backup's id names this profile's storage keys, so only a generated-shaped one is kept.
+			let id = isGeneratedProfileId(profile.id) ? profile.id : await this.repo.generateUniqueId()
 			while ((await this.repo.contains(id)) || this.deletionState.isReserved(id)) {
 				id = await this.repo.generateUniqueId()
 			}

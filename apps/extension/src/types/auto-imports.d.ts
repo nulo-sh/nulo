@@ -420,7 +420,7 @@ declare global {
   export type { ImportCompletionDeps, ImportCompletionOutcome } from '../composables/completeImportWithRecovery'
   import('../composables/completeImportWithRecovery')
   // @ts-ignore
-  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, NetworkRestoreClient, AccountRestoreClient, RestoredNetwork, RestoreData, SliceRestoreClient, AccountStateRetryContext } from '../composables/full-backup-restore'
+  export type { RestoreIo, StageFail, StageOutcome, RestoreScratch, ProfileRestoreClient, NetworkRestoreClient, AccountRestoreClient, RestoredNetwork, RestoreData, BackupProfile, SliceRestoreClient, AccountStateRetryContext } from '../composables/full-backup-restore'
   import('../composables/full-backup-restore')
   // @ts-ignore
   export type { ImportChainSyncDeps } from '../composables/importChainSync'

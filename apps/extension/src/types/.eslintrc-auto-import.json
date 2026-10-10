@@ -24,6 +24,7 @@
     "AssetPricing": true,
     "AwaitingTx": true,
     "BackupFileType": true,
+    "BackupProfile": true,
     "BackupSelection": true,
     "BackupSource": true,
     "BalanceEntry": true,
