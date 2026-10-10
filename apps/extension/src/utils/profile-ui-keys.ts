@@ -1,6 +1,8 @@
 /**
  * The per-profile UI keys in `chrome.storage.local`. Deleting a profile removes
  * `profileUiKeys(id)`, so a per-profile key defined anywhere else outlives its profile.
+ * Committing a profile row removes them again first, so a key written under an id before
+ * that id is adopted again never reaches the new profile; a write after the adoption does.
  */
 
 const PINNED_TOKENS_PREFIX = "nulo:ui:pinnedTokens@"

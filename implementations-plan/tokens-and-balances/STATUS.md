@@ -12,3 +12,4 @@
 - 2026-10-10 — arc 1 start: merged origin/dev 28d4ffe (no token or balance code); D-orch-1 to D-orch-4 recorded; the sweep race is #262.
 - 2026-10-10 — gate 1.1 pass: lint, typecheck:all, snapshot + modules/general 259/259; the late-add BalanceView test is red on base fd47407's `BalanceView.vue` (expected true to be false).
 - 2026-10-10 — gate 1.2 pass: lint, typecheck:all, token + network + write log 296/296; 15 of the new token tests and both R4 tests red on base fd47407 (lessons/phase-1.md); D-arc1-1, D-arc1-2 recorded.
+- 2026-10-10 — gate 1.3 pass: lint, typecheck:all, profile + profile-deletion + utils + usePinnedTokens 1500/1500; the two #93 order tests red on base fd47407.

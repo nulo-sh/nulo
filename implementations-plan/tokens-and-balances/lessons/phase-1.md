@@ -29,3 +29,13 @@
   (its `deleteNetwork` cascade calls the real `clearChainState`), since the stub `isNetworkLive` cannot show R4.
 - Every existing add, restore and watchdog test stayed green unchanged, including the two-liveness-reads pin and
   the ordering pin. Gate: lint, typecheck:all, token + network + write log 296/296.
+
+## Phase 1.3 (#93)
+
+- 2026-10-10 — one `StorageArea` field replaces the constructor's four builds; `dropUiKeysBeforeAdoption(id)`
+  runs first in `persistNewProfileHoldingLock` and `writeMarkerThenRowHoldingLock`. Base-copy run (fd47407's
+  `profile/service.ts`): all three new tests red (the restore and passkey-import order checks, `expected [ …(2) ]
+  to deeply equal [ …(3) ]` and `expected [ Array(1) ] to deeply equal [ …(2) ]`; the rejected-removal test,
+  which base cannot fail on, resolves). Green on head. The tests live in `service.integration.test.ts`, the
+  profile suite that drives real restore and passkey import. Gate: lint, typecheck:all, profile +
+  profile-deletion + `utils/` + `usePinnedTokens` 1500/1500.
