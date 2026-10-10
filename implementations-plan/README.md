@@ -20,7 +20,7 @@ implementations-plan/<topic>/
 └── STATUS.md          # Live-progress log, deleted after merge.
 ```
 
-Not every plan uses every file. Audit transcripts (`audit-*.md`), competing drafts and revisions (`plan-*.md`), scratch briefs (`_*.md`) and `eli5.html` stay local: [`.gitignore`](.gitignore) keeps them out of history, since they are the likeliest place for a local path to leak. So each accepted and rejected finding, with its reason, is written into `plan.md` before the work closes, and a plan is revised in place.
+Not every plan uses every file. Audit and review-leg transcripts (`audit-*.md`, `leg-*.md`), competing drafts, outlines and revisions (`plan-*.md`, `draft-*.md`, `outline-*.md`), scratch briefs (`_*.md`) and ELI5 pages (`eli5.html`, `eli5-*.html`) stay local: [`.gitignore`](.gitignore) keeps them out of history, since they are the likeliest place for a local path to leak. So each accepted and rejected finding, with its reason, is written into `plan.md` before the work closes, and a plan is revised in place.
 
 ## When to add a plan
 
@@ -45,8 +45,8 @@ New code explains WHY and its invariants inline (see [`CLAUDE.md`](../CLAUDE.md)
 
 The standard, stated so another repository can adopt it unchanged.
 
-1. **Layout.** `index.md` lists active plans only, one line each: `- [name](name/plan.md) — status — hook`. `lessons.md` (≤ 8 KiB) is the curated layer; open work lives in the issue tracker, never in a file here. `archive/<plan>/` holds closed plans and `archive/index.md` lists them. `.gitignore` holds `audit-*.md`, `plan-*.md`, `_*.md`, `eli5.html` and `!**/lessons/**`; `.ignore` holds `/archive/`. No other ignore file sits below the plans directory.
-2. **Committed:** `plan.md` with its audit verdicts inline, `recon.md`, `lessons/phase-N.md`. **Not committed:** transcripts, scratch briefs, competing drafts, revisions, `eli5.html`.
+1. **Layout.** `index.md` lists active plans only, one line each: `- [name](name/plan.md) — status — hook`. `lessons.md` (≤ 8 KiB) is the curated layer; open work lives in the issue tracker, never in a file here. `archive/<plan>/` holds closed plans and `archive/index.md` lists them. `.gitignore` holds `audit-*.md`, `plan-*.md`, `_*.md`, `eli5.html`, `draft-*.md`, `outline-*.md`, `leg-*.md`, `eli5-*.html` and, below them, `!**/lessons/**`; `.ignore` holds `/archive/`. No other ignore file sits below the plans directory.
+2. **Committed:** `plan.md` with its audit verdicts inline, `recon.md`, `lessons/phase-N.md`. **Not committed:** transcripts, scratch briefs, competing drafts, outlines, revisions, ELI5 pages.
 3. **Uncommitted means disposable.** Whatever is worth keeping from a transcript is written into `plan.md` before the plan closes. No committed file links an uncommitted one.
 4. **A link to a file that left the tree is a permalink** at a full commit SHA that is an ancestor of the default branch, never a branch name or a short SHA.
 5. **Closing a plan ships with its delivery**, never as a follow-up PR: the final commits of a single-arc PR, or a docs-only close-out PR on top of a stack. It is an `## Outcome` block directly after the front matter (Date, Status, Shipped, Open items, and a line retiring its `/goal` and `/loop` seeds); its generalizable gotchas promoted to `lessons.md`, one line each, linking the archived detail; its open items each an issue, a private draft advisory for a suspected exploitable weakness, or a `BEFORE-LAUNCH.md` step for a legal or store blank with a release deadline, named on the Outcome's `Open items:` line; and the move: `git mv` into `archive/` in its own commit, the relative links the extra directory level breaks repaired, and its index line moved to `archive/index.md`. The merge that lands the work closes the plan.

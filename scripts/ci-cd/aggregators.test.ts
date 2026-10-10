@@ -83,8 +83,9 @@ const results = (needs: string[], skipped: string[]): World =>
 	Object.fromEntries(needs.map((job) => [`needs.${job}.result`, skipped.includes(job) ? "skipped" : "success"]))
 
 const QUALITY = aggregator("pr-quick.yml")
-const quality = (event: string, extension: string, landing: string, skipped: string[]): World => ({
+const quality = (event: string, extension: string, landing: string, skipped: string[], base = "dev"): World => ({
 	"github.event_name": event,
+	"github.base_ref": event === "pull_request" ? base : "",
 	"needs.changes.outputs.needs-extension-build": extension,
 	"needs.changes.outputs.needs-landing-build": landing,
 	...results(QUALITY.needs, skipped),
@@ -135,15 +136,17 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 		agg: QUALITY,
 		advisory: ["preview-comment"],
 		worlds: {
-			"a PR that builds everything": quality("pull_request", "true", "true", []),
-			"a PR that builds the extension only": quality("pull_request", "true", "false", ["build-landing"]),
+			"a PR that builds everything": quality("pull_request", "true", "true", ["launch-legal"]),
+			"a PR that builds the extension only": quality("pull_request", "true", "false", ["build-landing", "launch-legal"]),
 			"a PR that builds nothing": quality("pull_request", "false", "false", [
 				"build-chrome",
 				"build-firefox",
 				"build-landing",
 				"build-storybook",
+				"launch-legal",
 			]),
-			"a manual dispatch": quality("workflow_dispatch", "true", "true", ["commitlint"]),
+			"a promote or Release PR into main": quality("pull_request", "true", "true", [], "main"),
+			"a manual dispatch": quality("workflow_dispatch", "true", "true", ["commitlint", "launch-legal"]),
 		},
 	},
 	{
@@ -273,10 +276,10 @@ test.each([
 	[
 		"needs.changes.outputs.needs-extension-build",
 		QUALITY,
-		quality("pull_request", "true", "true", []),
+		quality("pull_request", "true", "true", ["launch-legal"]),
 		["build-chrome", "build-firefox", "build-storybook"],
 	],
-	["needs.changes.outputs.needs-landing-build", QUALITY, quality("pull_request", "true", "true", []), ["build-landing"]],
+	["needs.changes.outputs.needs-landing-build", QUALITY, quality("pull_request", "true", "true", ["launch-legal"]), ["build-landing"]],
 	["needs.changes.outputs.workflows", ACTIONLINT, lint("true", "true", []), ["actionlint"]],
 	["needs.changes.outputs.shell", ACTIONLINT, lint("true", "true", []), ["shellcheck"]],
 	["needs.auto-unstick.outputs.unstuck", RELEASE, PUSH_WITHOUT_RELEASE, []],

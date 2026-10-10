@@ -2,6 +2,10 @@ audit-*.md
 plan-*.md
 _*.md
 eli5.html
+draft-*.md
+outline-*.md
+leg-*.md
+eli5-*.html
 narration.mp3
 narration.mp4
 __pycache__/

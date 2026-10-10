@@ -30,7 +30,7 @@
 	},
 	"dependencies": {
 		"@alejoamiras/presto": "6.0.0-rc.1",
-		"@alejoamiras/presto-banners": "1.1.0",
+		"@alejoamiras/presto-banners": "1.2.0",
 		"@alejoamiras/presto-core": "1.2.1",
 		"@aztec-labs/accounts": "6.0.0-rc.1",
 		"@aztec-labs/aztec.js": "6.0.0-rc.1",

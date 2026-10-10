@@ -418,6 +418,18 @@ describe("CI behavior-gating guard", () => {
 		expect(build?.env?.STORYBOOK_DISABLE_TELEMETRY).toBe("1")
 	})
 
+	test("every pull request into main runs the launch check with its live assertion switched on", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
+		const job = wf.jobs["launch-legal"]
+		expect(job.if).toBe("github.event_name == 'pull_request' && github.base_ref == 'main'")
+		const check = job.steps.find((step: { run?: string }) => step.run?.includes("launch.test.ts"))
+		expect(check?.["working-directory"]).toBe("packages/legal")
+		expect(check?.env?.NULO_LAUNCH_GATE, "without it the live assertion skips and the job passes").toBe("1")
+		expect(readFileSync(join(ROOT, "packages/legal/src/launch.test.ts"), "utf8")).toContain("process.env.NULO_LAUNCH_GATE")
+		expect(wf.jobs.status.needs).toContain("launch-legal")
+	})
+
 	test("landing build covers the landing graph and the documents it renders, and is wired into the aggregator", () => {
 		assertGraphCovered(quick.landing, "landing", "landing")
 		expect(quick.landing, "a Terms edit must rebuild the pages generated from it").toContain("legal/**")
@@ -898,6 +910,33 @@ describe("canary lanes", () => {
 			'if [ "$PROVE_SUCCESS" -eq 0 ] && [[ "$SHARD_LABEL" == canary* ]]; then',
 		)
 		expect(existsSync(join(ROOT, "scripts/ci-cd/assert-canary-results.ts"))).toBe(true)
+	})
+})
+
+describe("store copies", () => {
+	const file = ".github/workflows/verify-store-copies.yml"
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const wf = Bun.YAML.parse(readFileSync(join(ROOT, file), "utf8")) as any
+
+	test("runs weekly and on dispatch, never on a pull request or a push", () => {
+		expect(Object.keys(wf.on).sort()).toEqual(["schedule", "workflow_dispatch"])
+		expect(wf.on.schedule).toHaveLength(1)
+	})
+
+	test("one job, read-only, in no environment, with no secret and no installed dependency", () => {
+		expect(wf.permissions).toEqual({ contents: "read" })
+		expect(Object.keys(wf.jobs)).toEqual(["compare"])
+		const job = wf.jobs.compare
+		expect(job.permissions).toEqual({ contents: "read", attestations: "read" })
+		expect(job.environment).toBeUndefined()
+		expect(readFileSync(join(ROOT, file), "utf8")).not.toContain("secrets.")
+		const uses = job.steps.flatMap((step: { uses?: string }) => (step.uses ? [step.uses.split("@")[0]] : []))
+		expect(uses).toEqual(["actions/checkout", "./.github/actions/setup-bun"])
+		expect(job.steps[0].with?.["persist-credentials"]).toBe(false)
+		expect(job.steps[1].with).toEqual({ cache: "false", install: "false" })
+		expect(job.steps[2].run, "with no node_modules, Bun would fetch a bare import from npm").toBe(
+			'bun --no-install scripts/release/store-copy-run.ts "$STORE"',
+		)
 	})
 })
 

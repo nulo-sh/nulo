@@ -22,6 +22,19 @@ describe("tracked-artifact", () => {
 		])
 	})
 
+	test("a tracked draft, outline, review leg or ELI5 variant is ignored and fails; its lessons/ copy stays tracked", () => {
+		const shapes = ["draft-x.md", "outline-a.md", "leg-codex.md", "eli5-v2.html"]
+		const repo = makeRepo({ ...HYGIENE, "implementations-plan/p/plan.md": "p\n" })
+		for (const dir of ["implementations-plan/p", "implementations-plan/p/lessons"]) {
+			writeFiles(repo, Object.fromEntries(shapes.map((shape) => [`${dir}/${shape}`, "t\n"])))
+		}
+		git(repo, "add", "-f", "implementations-plan/p")
+		commitAll(repo)
+		expect(findings(repo, "tracked-artifact").map((f) => f.detail)).toEqual(
+			shapes.map((shape) => `implementations-plan/p/${shape} is tracked although ignored`).sort(),
+		)
+	})
+
 	test("a clean tree passes", () => {
 		expect(findings(makeRepo({ ...HYGIENE, "implementations-plan/p/plan.md": "p\n" }), "tracked-artifact")).toEqual([])
 	})
@@ -33,7 +46,7 @@ describe("hygiene-files", () => {
 	})
 
 	test("missing files fail, one finding per missing line", () => {
-		expect(findings(makeRepo({ "README.md": "r\n" }), "hygiene-files")).toHaveLength(6)
+		expect(findings(makeRepo({ "README.md": "r\n" }), "hygiene-files")).toHaveLength(10)
 	})
 
 	test("an appended `!audit-*.md` reds both hygiene-files and tracked-artifact", () => {
@@ -43,7 +56,7 @@ describe("hygiene-files", () => {
 			"implementations-plan/p/audit-a.md": "a\n",
 		})
 		expect(findings(repo, "hygiene-files").map((f) => `${f.line} ${f.detail}`)).toEqual([
-			"6 `!audit-*.md` re-includes a transcript shape",
+			"10 `!audit-*.md` re-includes a transcript shape",
 		])
 		expect(findings(repo, "tracked-artifact").map((f) => f.file)).toEqual(["implementations-plan/p/audit-a.md"])
 	})
