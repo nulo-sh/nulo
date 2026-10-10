@@ -62,3 +62,24 @@
 - `bun run test:ci-gating`: 448 pass, 0 fail.
 - N-full on `42c738b`, retry 0. Chrome: pool 103 files, 156 tests passed (5 files and 7 tests skipped by their own gates: opt-in probes and captures, Firefox-only), heavy 4 files, 23 tests, canary (prover-ON) 5 files, 7 tests. Firefox: pool 102 files, 152 tests passed (6 files and 11 tests skipped, the Chrome-only files among them), heavy 4 files, 23 tests, canary 5 files, 7 tests.
 - A stopped background task killed `agent.sh` mid-build with SIGKILL, so its `EXIT` trap never ran and its five rows stayed; `bun run e2e:reap` dropped them as dead. The trap covers every ordinary exit; only a reap covers SIGKILL.
+
+# Arc 1b: waits, skips and the stall
+
+Branched `e2e-harness-gaps-waits` off `origin/dev` 6201f8b (D-orch-3).
+
+## 1.6 The Lock page after a worker restart (#162)
+
+- Un-skipped with no product change, the opt-out test passes at retry 0: Chrome 3/3, Firefox 3/3. It opens Lock after the new worker has booted, so it never meets the hang; #162's "navigation is stale" did not hold either.
+- Scratch probe (not committed), Chrome, strict off: from the settings hub, set the hash to the Lock page and stop the worker concurrently, 0-120 ms apart. The page sat on "FETCHING SETTINGS" for 20 s in 8/8, then 3/3. A trace pushed into a window array from `lock.vue` (the console sniffer kept `console.warn` out of Puppeteer's console events) showed `getValue("sessionTtl")` rejected with "Client disconnected", then several disconnect/connect bounces while the worker boots: `ServiceClient.onDisconnect` rejects every pending request and reconnects, and `onBeforeMount` had no catch and no re-read. The transport behaves as designed, so the fix sits in the page and the stop rule does not apply.
+- Fix: the settings hub's pattern (`readLockConfig` with a read generation and an update fence, re-read on every `onConnected` after the first). A later read moves the field only when the stored timeout moved, so an edit in progress stays.
+- `lock.test.ts`: four new cases, each red with its guard removed (no re-read; a read on the first open; no generation check; no fence; an unconditional field write).
+- E2E shape (D19): stop the worker, then navigate to Lock. On the base `lock.vue`: red 3/3, the toggle never rendered in 30 s. With the fix: 2.5 s. The case also passes alone (`-t`), where it opts out of strict mode itself.
+- `display.vue`, `privacy.vue` and `developer/index.vue` have the same hang (`await getProps()` in `onBeforeMount`, no catch, no re-read); out of this arc, filed as an issue.
+- zsh does not split an unquoted `$B`, so `env $B bun run build:chrome` set one variable holding every flag and built an unarmed dist; every smoke test then failed on the CSP recorder check. The armed build now goes through a bash script.
+- Gate: Fast pass (lint 0, typecheck:all 0, test 725 files / 10,970 tests). Unit `lock.test.ts` 11/11. Smoke `sw-resilience.test.ts` at retry 0: Chrome 3/3 (6 tests each), Firefox 3/3 (4 run, the two Chrome-only cases skipped).
+
+## 1.7 The backup export case on every host (#163), local half
+
+- The 15 s poll became an in-page `MutationObserver` armed before the agree click; the flag is read after both CTAs enable. `full.vue` sets `progress` (`:309`), awaits worker calls, then sets `finished` (`:332`), so the card's insert and removal never share a mutation batch.
+- Mutation check: with the observer's text changed to one the card never shows, the case fails on the observer's message.
+- Local runs at retry 0, `passkey-backup.test.ts`: Chrome 3/3 (export case 14.0, 14.2, 17.0 s), Firefox 3/3 (18.9, 19.0, 23.4 s).

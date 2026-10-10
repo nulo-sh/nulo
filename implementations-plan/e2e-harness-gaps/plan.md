@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arc 1a implemented, in review
+status: approved by the orchestrator 2026-10-09; arc 1a merged (#267); arc 1b in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -411,6 +411,10 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D18 | Our client never breaks the registry lock; a lock held past 30 s fails the claim closed; release by token | Every path-lock break races, with or without a check afterwards; an abandoned lock is rare (a millisecond critical section) and the other writers break theirs | A token check on break; an inode-and-mtime check on break; copying the other writers' unverified break |
 | D-orch-1 | No stack: arc 1a opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; later arcs branch from 1a's branch and rebase onto `dev` once it lands; the close-out is its own PR after the last arc merges | The orchestrator's call: it merges lanes in order and a stack would tie 1a's merge to later arcs | One `gh stack` per lane (§ Delivery) |
 | D-orch-2 | Arc 1a ships alone and first, as gate G1 for every other lane: no 1b work folds in, and it does not wait on `OWNER-ASKS.md` Ask 1 (which holds arc 3 only) | Every other lane's parallel network e2e waits on it | Folding small 1b fixes into the G1 PR |
+| D-orch-3 | After a squash merge, an arc branches from `dev`: arc 1b is `e2e-harness-gaps-waits` off `origin/dev` at 6201f8b (#267's squash), not off arc 1a's branch | 1a's branch holds nothing `dev` lacks, and merging `dev` into it after a squash is add/add | Branching from `worktree-e2e-harness-gaps` |
+| D-orch-4 | Arc 1b only, every stop rule binding: #162's transport rule, #163's hosted 240 s rule (three dispatches of each smoke workflow), #155's calibration (the watchdog and the cap each ship only on it); nothing of arcs 2-4 is built | The orchestrator's call | — |
+| D-orch-5 | Workflow dispatches on the arc's own branch are allowed (`gh workflow run <file> --ref e2e-harness-gaps-waits`); never a release, nightly or publish workflow, a variable, secret, ruleset, tag or release; every run id and result goes in `lessons/phase-1.md` | The orchestrator's call; the calibrations need hosted numbers | — |
+| D19 | #162: the fix ships in `lock.vue` although the un-skipped opt-out test passes without it, and one Chrome-only case opens Lock inside a new worker's boot window (stop the worker, then navigate), red 3/3 on the base. Its Firefox skip is named here: Firefox does not end an event page while an extension page is open, so the window cannot occur there | The opt-out test opens Lock after the boot has finished; a probe showed a read rejected by the port drop strands the page, and only an e2e exercises the real reject-and-reconnect transport the fix relies on. Codex: ship the fix, but no timing-only race (it can pass vacuously). Opus: ship, and add the case sequentially, since the window is the whole boot, not milliseconds. The sequential shape is taken; the case cannot see the rejection itself, so its base-red count is recorded and the unit tests are the exact check | A concurrent stop-and-navigate race; the unit tests alone |
 
 ## Audit verdicts
 

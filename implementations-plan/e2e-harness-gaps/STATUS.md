@@ -17,3 +17,5 @@
 - 2026-10-10 — arc 1a review rounds 2 and 3: Codex approve with fixes (5, then 4), all fixed; the Codex loop stopped at three rounds; a same-family check of round 3 found 4 more, all fixed (head 42c738b).
 - 2026-10-10 — phase 1.5: concurrency and kill proofs pass on 42c738b; whole smoke passes on both browsers at retry 0; test:ci-gating 448 pass; N-full next.
 - 2026-10-10 — phase 1.5 gate: pass. N-full at retry 0 on both browsers (Chrome pool 103/156, heavy 4/23, canary prover-ON 5/7; Firefox pool 102/152, heavy 4/23, canary 5/7); scratch worktree removed. PR next.
+- 2026-10-10 — arc 1b: branched e2e-harness-gaps-waits off dev 6201f8b (D-orch-3/4/5 recorded).
+- 2026-10-10 — phase 1.6 gate: pass (fast; lock.test.ts 11/11; sw-resilience retry 0 Chrome 3/3 6 tests, Firefox 3/3 4 tests; new boot-window case red 3/3 on the base).
