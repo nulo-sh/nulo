@@ -266,7 +266,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 3. Wire NewContact, ImportContacts, Send and EditContact onto it.
 - Validation gate: fast layers on the six owners' tests and `entity-list.test.ts`; every existing identity and add-always-appends pin passes unchanged.
 
-**2.3 Shells, proven unchanged.**
+**2.3 Shells, proven unchanged.** ✓ (table: [lessons/phase-2.md](lessons/phase-2.md))
 1. `GlobalLoader.vue` uses `var(--scrim-loader)`.
 2. `full.vue`'s shake composes `shake_password` by relative path; drop its local keyframes and reduced-motion rule and the `a11y-css.test.ts` row.
 3. Proof, against the arc's parent commit (record its SHA in `lessons/phase-2.md`):
@@ -374,6 +374,7 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-arc2-1 (#224, phase 2.2): the held-read pins carry `(BUG PIN)` only where the lost event is reachable in the wallet: New and Edit FPC (`getFpcs` works after its storage read) and Send (its contacts answer waits on two other reads). New, Import and Edit contact and Select Profile are pinned as the list's mechanics (the read's answer replaces the list), since one storage read answers in order there (I2, checked against `contact/service.ts:74-79` and `profile/service.ts:581-585`). No pin names FA-9: comments carry no plan ids (D-arc1-2).
 - D-arc2-2 (phase 2.2, found at the seam): Send's `onTokenDeleted` splices the row before it reads `activeToken`, which then resolves to nothing, so deleting the active token selects no token and the "last token" toast and leave never run (`send.vue:116-131`, present since the first commit). Pinned as a BUG PIN beside the held-read pin; not repaired (D-orch-5); filed as an issue at delivery.
 - D-arc2-3 (phase 2.2): `liveBus` returns a real `EventHandler` whose `add`/`remove` are `vi.fn` wrappers, so the existing `add.mock.calls[0][0]` pins keep working; the module-level mocks build fresh buses per test, since an unmounted component never removes its handlers. `ImportContactsPopup.test.ts`'s mount now hands the popup a copy of its saved book: an earlier test's in-place add was pushing into the shared `SAVED` fixture.
+- D-arc2-4 (#225, phase 2.3): the loader's source pin is a colocated `GlobalLoader.test.ts` (it reads `base.css` through `@nulo/resolve-asset`), not a row in `a11y-css.test.ts`, whose rules are about motion and focus. The Chrome loader capture holds the loader by replacing `chrome.runtime.connect` with a throwing stub before the page loads; the same stub did not take hold on Firefox, so the source pin stays Firefox's proof. The shake proof also compares the wrapper under emulated reduced motion on Chrome (the rule moved to the shared module).
 
 ### Competing outline (cheapest-first), sent to both audits
 

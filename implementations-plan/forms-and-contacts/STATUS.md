@@ -20,3 +20,4 @@
 - 2026-10-10: arc 2 started on forms-and-contacts-arc-2 off origin/dev af4afcc (arc 1 merged as #255); D-orch-4 and D-orch-5 recorded.
 - 2026-10-10: gate 2.1 pass: lint, typecheck:all, send.test.ts 66/66 (base 66/66).
 - 2026-10-10: gate 2.2 pass: lint, typecheck:all, entity-list + six owners + send.integration 205/205; existing identity and add-always-appends pins unchanged. D-arc2-1..3 recorded (one pre-existing Send token-delete defect pinned).
+- 2026-10-10: gate 2.3 pass: lint, typecheck:all, a11y-css + GlobalLoader + theme-vars 6/6, base.css hash 1/1; the loader pin fails on the parent GlobalLoader.vue. Proof vs af4afcc: Chrome loader 2/2, Chrome shake 10/10, Firefox shake 10/10 pixel-identical, values equal (table in lessons/phase-2.md); Firefox loader cannot be held (source pin).
