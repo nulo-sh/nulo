@@ -9,3 +9,4 @@
 - 2026-10-10 — final pass round 3: reject (3 findings). Accepted: R5 (a displaced restore or deletion refuses with `token lock lost`, disclosed in OA-3) and the gate and pin wording. Rejected for this plan: serializing the lockless chain sweep (a pre-existing race outside the lane's issues), routed to an issue. Round 4 next.
 - 2026-10-10 — final pass round 4: reject on one point (the purge needed R5 too); accepted with the two disclosures and the wording. The reviewer accepted routing the sweep race to an issue. Round 5 next.
 - 2026-10-10 — final pass round 5: conditional approve (two wording conditions, applied). Plan ready for the orchestrator; Arc 1 merges on OA-3, Arc 2 waits on page 8, Arc 3 on OA-1; the chain sweep's id-reuse race is to be filed as an issue.
+- 2026-10-10 — arc 1 start: merged origin/dev 28d4ffe (no token or balance code); D-orch-1 to D-orch-4 recorded; the sweep race is #262.

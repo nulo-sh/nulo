@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: draft, audited (round 1: Codex reject, Opus conditional approve; final fresh Codex pass: reject ×4, then conditional approve with wording conditions, applied); nothing approved until the orchestrator says so
+status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in implementation, merges on P8-05 (OA-3); arcs 2 and 3 wait
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -35,7 +35,7 @@ inherits a token service whose lock can be released under a running add.
    under a ticket it owns: it resumes under a fresh one, no contract gets two rows, and no token
    operation reads before a displaced holder's last write landed. A row written meanwhile by a later
    add or a restore survives every displaced add, restore, deletion or purge; the lockless chain
-   sweep's own id-reuse race is not closed here (routed to an issue, § Trade-offs). Each rule has a
+   sweep's own id-reuse race is not closed here (#262, § Trade-offs). Each rule has a
    test that fails on base, paired with a control.
 2. A profile id that comes back (a restore that keeps its id, a passkey import) starts with no pins
    left from before the adoption. A pin a stale page writes after it is accepted residue (D1).
@@ -378,11 +378,11 @@ Built only on OA-1 = A or C; designed here so the answer can be built without a 
   displaces them, and a refusal is
   simpler than a resume. R2 still tracks their writes.
 - **#94, serialize the lockless chain sweep against every token-row writer** (final pass round 3,
-  routed to an issue): the sweep deletes by ids from a snapshot (`token/service.ts:210-214`), so an id
+  routed to #262): the sweep deletes by ids from a snapshot (`token/service.ts:210-214`), so an id
   freed and reused on another chain between its snapshot and its delete loses its row. That race
   needs no watchdog release, predates this plan and is in none of its issues; its fix is a second,
   storage-only lock shared by every token-row writer and the sweep, with its own deadlock analysis
-  against the network lock. The close-out files it as an issue (§ Post-implementation).
+  against the network lock. Filed as #262.
 - **#94, re-enter inside the attempt** (round 1 draft, replaced): the inner acquisition released
   before the outer `catch` journaled, breaking the ordering pin for a resumed failure (Codex round 1).
   The loop gives every attempt its own `try`/`catch` under its own ticket.
@@ -788,6 +788,10 @@ extension view that has not seen a deletion.
 | D8 | Arc 1 is built and its PR opens first; its merge waits on OA-3 | ship with Arc 1 unless routed (R1 revision); hold the build for sign-off | Codex R1 and final pass R1: owner sign-off needed (High). Opus R1: FYI line, lean no gate | CLAUDE.md § UI changes requires the owner's recorded word for any visible change, remediation included, and no reviewer's approval replaces it. Merging is the orchestrator's call anyway, so the gate costs no build time |
 | D9 | Arc 2 matches store refusals with one dedicated marker and `includes`, tested at the real throw sites | match the messages' openings; construct the classes in a test | Codex R1 and Opus R1: a timeout refusal missing, constructed classes cannot detect drift. Final pass R1: `openChainStore:` also opens two other errors | A marker only the three refusals carry changes no other error's text; a dependency-free subpath keeps PXE code out of the popup bundle |
 | D10 | #94: every token-row write and the add's journal writes are tracked; each token-lock admission drains them until empty and re-acquires if its ticket lapsed (R2); liveness that overlapped a reservation is false (R4) | lean on dispatch-order storage (I1); keep the watchdog from firing during terminal writes; track only the add's writes (R2 draft) | Final pass R1: I1 unestablished; journal ordering not protected; a stale liveness read emits for a swept row. Final pass R2: one drain snapshot misses a write issued during it; a drain can outlive its ticket; restore's writes untracked; `isChainLive` has no counter baseline | The drain lives in the one service that issues the writes and needs no `Lock` change; R4 is a counter in the one service that reserves |
+| D-orch-1 | No stack: Arc 1 opens its own PR against `dev` (`gh pr create --base dev --draft`); later arcs branch from `dev` after it lands | `gh stack` per § Delivery | orchestrator, 2026-10-10 | Arcs 2 and 3 wait on owner answers, so a stack would hold nothing above Arc 1 |
+| D-orch-2 | Arc 1 only, opened as a draft and held until the owner answers P8-05 (the plan's OA-3; OA-1 is P8-03, OA-2 P8-04, OA-4 P8-06). The PR body quotes P8-05's table and names `token lock lost` as the one new string | build arcs 2 or 3 | orchestrator, 2026-10-10 | CLAUDE.md § UI changes: the race-path effects are visible |
+| D-orch-3 | The planner's implementer line binds: #94 is R1-R5 as in Architecture § Phase 1.2; every "fails on base" test is shown red on the base copy; tests that count liveness reads or writes stay unchanged; no complexity suppression | a lighter #94 | orchestrator, 2026-10-10 | The design was argued over five audit rounds |
+| D-orch-4 | The lockless chain-sweep delete (`token/service.ts:210-214`) is #262, not fixed in this arc | fix it here | orchestrator, 2026-10-10 | Pre-existing, needs no watchdog release, outside the lane's issues |
 
 ## Audit verdicts
 
@@ -853,12 +857,12 @@ extension view that has not seen a deletion.
 | # | Sev | Finding | Disposition |
 |---|---|---|---|
 | 1 | High | I6 leaves a displaced restore able to overwrite an add's row and a displaced deletion able to delete a replacement; the drain uses ticket time | Accepted: R5, restore and deletion check ownership right before each write, delete and emit and refuse with `token lock lost`; two tests; OA-3 and § UI impact disclose the new message. The purge keeps no check (I6, moderate) |
-| 2 | High | The lockless chain sweep deletes snapshot ids that may be freed and reused on another chain | Rejected for this plan, with reason: the race needs no watchdog release, predates the plan and is in none of its issues, and its fix is a second lock shared by every token-row writer and the sweep, with its own deadlock analysis against the network lock. Routed: the close-out files it as an issue; the final report names it so the orchestrator can file it sooner (§ Trade-offs) |
+| 2 | High | The lockless chain sweep deletes snapshot ids that may be freed and reused on another chain | Rejected for this plan, with reason: the race needs no watchdog release, predates the plan and is in none of its issues, and its fix is a second lock shared by every token-row writer and the sweep, with its own deadlock analysis against the network lock. Routed: filed as #262 (§ Trade-offs) |
 | 3 | Low | "no owner gate" and A3 contradict D8; the pin wording overstates | Accepted: both gate statements say Arc 1 merges on OA-3; the pin invariant, § UI impact and OA-3 say "left from before" and disclose the post-adoption residue |
 
 ### Final pass round 4: Codex (same session, resumed), `reject (with blocking findings: the profile-purge ownership exception is unsafe)`
 
-Routing the chain sweep's id-reuse race to an issue: accepted by the reviewer ("exists on base, needs no watchdog release, and R2/R4/R5 do not establish a newly reachable failure").
+Routing the chain sweep's id-reuse race to an issue (#262): accepted by the reviewer ("exists on base, needs no watchdog release, and R2/R4/R5 do not establish a newly reachable failure").
 
 | # | Sev | Finding | Disposition |
 |---|---|---|---|
@@ -910,7 +914,7 @@ The implementing session runs these steps from this file. `code_review` is `off`
       `lessons.md`; another lane may have landed. Never a union merge.
    2. Write `## Outcome` directly after the front matter: Date, Status, Shipped (PR numbers), Dropped
       with a disposition line each (#80, #104, #106 by name; the #93 orphan keys of D4), Open items
-      (the #93 late-write residue of D1 and the chain sweep's id-reuse race, each filed as an issue),
+      (the #93 late-write residue of D1, filed as an issue at close-out; the chain sweep's id-reuse race, #262),
       and
       "Seeds retired: the /goal and /loop seeds below are no longer live".
    3. File every open item in its home (table below), deduping first with
