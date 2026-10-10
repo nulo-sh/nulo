@@ -736,10 +736,15 @@ export function silentlyClosed(watch: SilentCloseWatch, open: readonly string[],
 	return closed
 }
 
-/** Seen at the egress guard on every launch; Firefox retries each refusal, so these arrive in bursts. */
+/**
+ * Remote settings' startup sync, seen at the egress guard on every launch and retried after each
+ * refusal. Setting `services.settings.server` to a dummy at launch, as the Remote Agent does once it
+ * starts, did not stop it.
+ */
 export const FIREFOX_OWN_HOSTS: ReadonlyMap<string, string> = new Map([
-	["content-signature-2.cdn.mozilla.net", "remote settings signature checks"],
-	["firefox.settings.services.mozilla.com", "remote settings"],
+	["content-signature-2.cdn.mozilla.net", "remote settings: collection signature checks"],
+	["firefox-settings-attachments.cdn.mozilla.net", "remote settings: attachments"],
+	["firefox.settings.services.mozilla.com", "remote settings: the collections"],
 ])
 
 export const firefoxDriver: BrowserDriver = {
