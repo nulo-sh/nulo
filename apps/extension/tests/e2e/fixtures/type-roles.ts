@@ -50,7 +50,7 @@ export type TypeReading = {
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
-	/** The nearest visible clipping ancestor the text reaches past sideways, unless that ancestor ends it in an ellipsis. */
+	/** The nearest visible ancestor that clips the text sideways without an ellipsis. */
 	clippedBy: string | null
 	/** An `AddressDisplay`'s `data-address-shows`: `name` while it shows a contact or account name. */
 	addressShows: string | null
@@ -106,16 +106,24 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		if (scope.kind === "roles") return Array.from(doc.querySelectorAll(ROLE))
 		return Array.from(doc.body.querySelectorAll("*")).filter((el) => hasOwnText(el) && isVisible(el))
 	}
-	const clippedBy = (el: Element): string | null => {
+	const paintedSpan = (el: Element): { left: number; right: number } => {
 		const box = el.getBoundingClientRect()
-		const right = Math.max(box.right, box.left + el.scrollWidth)
+		// Text an element clips itself paints no further than its own box.
+		if (win.getComputedStyle(el).overflowX !== "visible") return { left: box.left, right: box.right }
+		return { left: box.left, right: Math.max(box.right, box.left + el.scrollWidth) }
+	}
+	const clippedBy = (el: Element): string | null => {
+		const span = paintedSpan(el)
 		for (let up = el.parentElement; up && up !== doc.documentElement; up = up.parentElement) {
 			const style = win.getComputedStyle(up)
 			if (style.overflowX === "visible") continue
 			// A box drawn at no size, like the hero's ruler, hides its content on purpose.
-			if (!isVisible(up) || style.textOverflow === "ellipsis") return null
+			if (!isVisible(up)) return null
 			const edge = up.getBoundingClientRect()
-			return box.left < edge.left - 0.5 || right > edge.right + 0.5 ? (up.getAttribute("data-testid") ?? up.tagName) : null
+			const crosses = span.left < edge.left - 0.5 || span.right > edge.right + 0.5
+			if (crosses && style.textOverflow !== "ellipsis") return up.getAttribute("data-testid") ?? up.tagName
+			span.left = Math.max(span.left, edge.left)
+			span.right = Math.min(span.right, edge.right)
 		}
 		return null
 	}
