@@ -93,7 +93,7 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 		expect(closeDocument).not.toHaveBeenCalled()
 	})
 
-	test("the document epoch moves only on proof the document is gone: a close or a create that succeeded", async () => {
+	test("an epoch is retired only on proof its document is gone: a close or a create that succeeded", async () => {
 		const retired: number[] = []
 		const stop = onOffscreenRetired((epoch) => retired.push(epoch))
 		vi.useFakeTimers()

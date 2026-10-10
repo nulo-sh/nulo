@@ -184,7 +184,7 @@ Today's precedence (recon § #188) is pinned where it is not yet pinned. The PR 
 **What ends a hold.** The first of:
 - **the late answer:** `onUnmatchedResponse` for a recorded request logs a fixed debug line instead of today's warn;
 - **a late send failure:** the wire send failed after the timer fired, so the document never received the request;
-- **a retired document:** only a close known to have succeeded. That means a `closeDocument()` that resolved without error, or a Firefox frame that was attached and is now removed. A failed close, or a probe that finds no document (Chromium's `getContexts` can miss a ghost, `offscreen.ts:218`), leaves holds to the TTL;
+- **a retired document:** only proof the document is gone. That means a `closeDocument()` that resolved without error, a Firefox frame that was attached and is now removed, or a Chromium `createDocument()` that succeeded (D15). A failed close, a failed create, or a probe that finds no document (Chromium's `getContexts` can miss a ghost) leaves holds to their lifetime;
 - **the registry's existing 15-minute TTL sweep**, the dead-man bound. It reaps a held entry like a dead runner's.
   - No horizon is a work ceiling. A simulation queued behind long proofs can outlive any bound, so expiry may release a place while that work still waits.
   - Nothing extends the TTL: neither the active TTL nor the parked one.
@@ -196,8 +196,8 @@ Today's precedence (recon § #188) is pinned where it is not yet pinned. The PR 
    - `protected onLateSendFailure(requestId)` fires when a wire send fails for a request that is already terminal (`:166-176`). Its default does nothing.
 2. **`packages/aztec-runtime/src/pxe/client.ts`** (`PxeServiceClientBase`):
    - `setDocumentEpochProvider(fn)` uses the `setGenerationProvider` pattern. Without a provider, nothing is recorded, which is today's behaviour.
-   - `requestTag` returns the current document epoch for `simulateTx`, and `undefined` otherwise.
-   - `onTerminal` calls `super`. A tagged `simulateTx` that ended `timeout`/`timeout_fired` with its epoch still current is recorded as `requestId → deferred`. One from a retired epoch is not recorded, because its work is already gone.
+   - `requestTag` returns the epoch a send carries now for `simulateTx`, and `undefined` otherwise.
+   - `onTerminal` calls `super`. A tagged `simulateTx` that ended `timeout`/`timeout_fired` is recorded as `requestId → deferred` unless its epoch is at or below the newest retired one, whose work is already gone. A newer epoch alone proves nothing (D16).
    - `offscreenSettled(requestId): Promise<void> | undefined` is a pure lookup.
    - `retireEpochsThrough(epoch)` resolves and drops every record sent at or before it.
    - **Every record has a bounded lifetime.** It expires `ESTIMATE_JOB_TTL_MS` after it was made, and expiry deletes it and resolves its promise. The wallet subclass sets that lifetime, and a test pins it equal to the registry's constant.
@@ -205,11 +205,10 @@ Today's precedence (recon § #188) is pinned where it is not yet pinned. The PR 
      - Records that no estimate claims (a send's or a tokenless simulation's) expire the same way, so nothing accumulates across timeout cycles.
    - Each resolution deletes the record first.
 3. **`apps/extension/src/wallet/utils/offscreen.ts`:**
-   - `offscreenEpoch()` is a counter.
-   - `onOffscreenRetired(listener)` fires after the counter moves.
-   - The counter moves only on proof that a document is gone. `closeOffscreen()` reports whether its close succeeded (today it swallows a failed `closeDocument()`, `:181`), and the `trackedClose()` link (`:131-138`) moves the counter only on success.
-   - It never moves on READY (a ghost document can emit READY during a close-and-retry, `:340-347`), on a failed close, or on a negative probe.
-4. **`apps/extension/src/wallet/services/pxe/client.ts`** (the wallet subclass) registers the epoch provider once for every instance, the pattern its store-key and generation providers use (`:11-20`), and subscribes `retireEpochsThrough`.
+   - `offscreenEpoch()` is a counter that tags each send. It moves when a close succeeds and when a create attempt starts (READY can arrive before the create resolves), so it says nothing alone about which document runs the work (D15, D16).
+   - `onOffscreenRetired(listener)` announces an epoch retired, with every earlier one, only on proof its document is gone: a `closeDocument()` that resolved, an attached Firefox frame removed, or a Chromium create that succeeded (one offscreen document exists at a time), which retires the epochs before that attempt's own.
+   - Nothing is retired on READY (a ghost document can emit READY during a close-and-retry), on a failed close, a failed create, or a negative probe.
+4. **`EX/service.ts` `DEFAULT_PXE_CLIENT_FACTORY`** registers the epoch provider on the one client `ExecutionService` builds and subscribes `retireEpochsThrough`; the wallet's other PXE clients track nothing (Opus review O6).
 5. **`EX/service.ts`, `withEstimateAdmission`:**
    - The `catch` looks up `this.pxeService.offscreenSettled(id)` for a matching timeout.
    - The `finally` then settles at once, or defers `settle` to that promise.
@@ -925,6 +924,7 @@ Run this section in order. It is the whole procedure; no other document is neede
 | D-orch-5 | **A-1 accepted as Phase 1.6, `Refs #197`.** A shape check at `predictedWorstMinFees`'s returns with a fixed refusal and the two reply pins; it reuses the existing failed-estimate path and adds no copy. #197 stays open for its external half; the PR says `Refs #197`. | The orchestrator's answer to A-1. | — |
 | D14 | **#118's comment sites are five.** The false upstream-parity claim the plan placed in `account/fee-options.ts` sits in `account/nulo-account.ts` ("byte-for-byte"), with a sibling "(matches upstream)" in `fee-options.ts`; both are corrected. | The tree wins (upstream defaults to `getMinFees(Limit)` × 1.5; Nulo to the current minimum × 1.5). | Correcting only `fee-options.ts` (leaves the false claim where it is). |
 | D15 | **An estimate hold ends on a successful `createDocument` too.** Chromium allows one offscreen document, so a create that succeeds proves the previous one is gone; v3.1 retired an epoch only on a successful close. | Opus review O3: a crash without a proven close otherwise held four places to the TTL. | Leaving crashes to the TTL. |
+| D16 | **A hold is skipped only for an epoch proven retired, and each create attempt starts its own epoch.** The epoch moves when a create starts (READY can beat the create's resolution), so "not the current epoch" no longer proves the work ended. | Codex rounds 2 and 3 (R2-1, R3-1, R3-2). | Moving the epoch only on proof (misses work sent on an early READY). |
 
 ## Audit verdicts
 
@@ -1070,6 +1070,31 @@ The driver closed these conditions without another Codex round. Each is a narrow
 | O4: surviving mutations (`send_transaction` reader, any-status record, `null` level, the L2 component) | nit | **Accepted.** One pin each; each now fails its mutation. The `onTerminal` order is pinned against the caller's first handler, the property the hold needs. |
 | O5: the wallet subclass's record-lifetime comment overstated the bound; the registry header omitted two ends | nit | **Accepted.** Both rewritten. |
 | O6: all nine PXE clients tracked timeouts and silenced warnings; `pxe/client.ts` imported from `execution/` | nit | **Accepted.** The tracking moved into `DEFAULT_PXE_CLIENT_FACTORY`; the wallet subclass is back to `dev`. |
+
+### Arc 1 implementation review, rounds 2 and 3
+
+**Codex round 2 (same session, resumed), on the round-1 fixes.** **VERDICT: changes needed.** The round-1 fixes checked out (admission identity keeps replacement entries and stash eviction; the profile-switch cause reaches neither the wire nor the inspected log serializers; the first slot is refused; production uses the tracking factory; the popup sends an array).
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| R2-1: READY can arrive before `createDocument` resolves; a simulation sent in that window carried the previous epoch and the create's completion retired it while it ran | major | **Accepted.** The new document's epoch starts when the create starts, and a successful create announces only the earlier epochs retired; a pin sends work on a READY that beats the create. |
+
+**Codex round 3 (same session, the last round).** **VERDICT: changes needed.**
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| R3-1: with the epoch moving at create start, "tag differs from the current epoch" no longer proves retirement, so a failed create made a live simulation skip its hold | major | **Accepted.** The PXE client keeps the newest retired epoch and skips a hold only for work sent at or before it; a pin moves the epoch with no retirement and still holds. |
+| R3-2: the ghost retry reused the first attempt's epoch and cutoff, so the ghost's READY work held to its lifetime after a successful replacement | minor | **Accepted.** Each create attempt starts its own epoch and retires the ones before it; a pin drives the ghost retry. |
+
+The three-round limit was reached with the round-3 fixes unreviewed by Codex. They were checked by a pin per scenario (each fails when its fix is reverted) and by a read-only Opus review of the epoch model (below).
+
+**Opus check of the epoch model (read-only, after round 3).** **VERDICT: clean.** It fuzzed the real `offscreen.ts` against the real PXE client over a one-document Chromium model and a Firefox frame model (7,600 seeds, no live simulation released early), and the reverted fixes all go red in the existing tests.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| E1: the plan's Shape section still described "epoch = current document" | minor | **Accepted.** Rewritten; D16. |
+| E2-E4: comments and a test title stated the same inference; announcements can arrive out of order | nit | **Accepted.** Rewritten; the doc says a listener keeps the highest (the client does, with `Math.max`). |
+| E5: a close could retire an epoch started by a create while the close was in flight | nit | **Declined.** It needs the new document to load, send READY and receive work before the close reply reaches the worker; the fuzz never produced it. |
 
 ## Seeds
 

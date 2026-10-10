@@ -137,21 +137,23 @@ function trackedClose(): Promise<void> {
 	return link
 }
 
-/** Names the document a request is sent to. It moves when a close succeeds and when a create
- *  starts, since READY can arrive before the create resolves. An epoch is retired only on proof its
- *  document is gone: a close or a create that succeeded. A ghost document can emit READY
+/** Tags the work sent to the offscreen document. It moves when a close succeeds and when a create
+ *  starts, since READY can arrive before the create resolves, so a newer epoch says nothing about
+ *  which document runs the work. Only a retired epoch does: it and every earlier one went to a
+ *  document proven gone by a close or a create that succeeded. A ghost document can emit READY
  *  mid-replacement, a failed close may leave the document running, and `getContexts` can miss a
  *  live ghost, so none of those proves that a document's work ended. */
 let documentEpoch = 0
 const retiredListeners = new Set<(retiredEpoch: number) => void>()
 
-/** The current document's epoch; a request sent now runs in that document or in none. */
+/** The epoch a request sent now carries; only its retirement proves the work it tags has ended. */
 export function offscreenEpoch(): number {
 	return documentEpoch
 }
 
 /** Calls `listener` with each retired epoch, every earlier one retired with it; returns the
- *  unsubscribe. */
+ *  unsubscribe. A late create can announce a lower epoch after a close announced a higher one, so
+ *  a listener keeps the highest. */
 export function onOffscreenRetired(listener: (retiredEpoch: number) => void): () => void {
 	retiredListeners.add(listener)
 	return () => retiredListeners.delete(listener)

@@ -164,8 +164,9 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	/**
 	 * Track `simulateTx` requests that time out after their send, until the offscreen document ends
 	 * them: the offscreen service has no abort, so a timed-out simulation keeps its place in the
-	 * PXE's queue. `epoch` names the current document; each record also ends `lifetimeMs` after it
-	 * was made, so none outlives that bound. Without a provider nothing is tracked.
+	 * PXE's queue. `epoch` tags each send, and only work sent in an epoch already retired is not
+	 * recorded; each record also ends `lifetimeMs` after it was made, so none outlives that bound.
+	 * Without a provider nothing is tracked.
 	 */
 	public setDocumentEpochProvider(epoch: () => number, lifetimeMs: number): void {
 		this.documentEpoch = epoch
