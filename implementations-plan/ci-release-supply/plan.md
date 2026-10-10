@@ -299,7 +299,7 @@ Validation gate: Fast; `bun run test:all`; Gating; Release; Actions. Pass: all e
 
 Validation gate: Fast; `bun run test:all`; `bun run build:chrome` and `bun run build:firefox` (the notices generator runs inside); `cd apps/extension && bun run test:e2e -- tests/e2e/onboarding-tab.test.ts --retry=0`; `bun audit`. Pass: all exit 0; `presto-ui-state.test.ts:146` and `presto-licence.test.ts` pass with no assertion edited. Layers: lint, typecheck, unit, build, smoke e2e (Chrome).
 
-**Phase 2.3, store copies (#179).**
+**Phase 2.3, store copies (#179).** ✓
 1. Re-measure, as § Arc 2 step 1 says; record it in `lessons/phase-2.md` before writing code.
 2. Export `fetchVerified` and narrow its parameter types (step 3); `attach-assets-run.test.ts` stays green with no edit, its call-order assertion included.
 3. Add `zip-read.ts` and its real-zip test.

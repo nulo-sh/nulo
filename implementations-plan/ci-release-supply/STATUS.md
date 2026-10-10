@@ -20,3 +20,4 @@
 - 2026-10-10: phase 2.1 gate passed (lint, typecheck:all, test, test:all, test:ci-gating, test:release, lint:actions; reds shown).
 - 2026-10-10: phase 2.2 gate passed (lint, typecheck:all, test, test:all, both builds, onboarding-tab smoke, frozen install, audit gate enforce).
 - 2026-10-10: phase 2.3 local gate passed (lint, typecheck:all, test, test:ci-gating, test:release, lint:actions, live stores); waits on the D-orch-7 review before it counts.
+- 2026-10-10: phase 2.3 gate passed: D-orch-7 answered yes on every item by Codex round 1 and the Opus review; their fixes committed (282d857), gates green again; #260 filed for the pre-existing auto-install exposure.
