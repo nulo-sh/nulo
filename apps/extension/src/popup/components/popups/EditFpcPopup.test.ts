@@ -185,3 +185,30 @@ describe("EditFpcPopup — the processing error note", () => {
 		expect(w.emitted("onClose")).toBeFalsy()
 	})
 })
+
+describe("EditFpcPopup — duplicate names", () => {
+	async function nameState(w: VueWrapper, name: string) {
+		await typeName(w, name)
+		return {
+			warns: w.text().includes("Already exist"),
+			disabled: w.find('[data-testid="form-submit"]').attributes("disabled") !== undefined,
+		}
+	}
+
+	test("another saved name with outer spaces added warns and keeps Save disabled; another case, a blank or an unnamed FPC does not", async () => {
+		fpcServiceMock.getFpcs.mockResolvedValue([
+			{ ...FPC },
+			{ ...FPC, id: "fpc-2", name: "Alice", address: `0x${"d".repeat(64)}` },
+			{ ...FPC, id: "fpc-3", name: undefined, address: `0x${"e".repeat(64)}` },
+		])
+		const w = await mountShown()
+		expect(await nameState(w, "Alice ")).toEqual({ warns: true, disabled: true })
+		expect(await nameState(w, " Alice")).toEqual({ warns: true, disabled: true })
+		expect(await nameState(w, "alice")).toEqual({ warns: false, disabled: false })
+		expect((await nameState(w, " ")).warns).toBe(false)
+		expect(await nameState(w, "Bob ")).toEqual({ warns: false, disabled: false })
+		pressEnterOnInput()
+		await flushPromises()
+		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Bob ")
+	})
+})

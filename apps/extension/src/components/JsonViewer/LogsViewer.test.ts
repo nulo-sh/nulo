@@ -64,6 +64,22 @@ afterEach(() => {
 	vi.restoreAllMocks()
 })
 
+describe("LogsViewer first document", () => {
+	test("ends with a newline, so the first live line does not join the last loaded one", async () => {
+		const t = Date.now()
+		H.getLogs.mockResolvedValue([
+			{ id: 1, timestamp: t, source: "a", level: 1, data: ["x"] },
+			{ id: 2, timestamp: t, source: "b", level: 2, data: ["y"] },
+		])
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const doc = (H.editors[0] as { state: { doc: string } }).state.doc
+		expect(doc.split("\n")).toHaveLength(3)
+		expect(doc.endsWith("[b] WARN: y\n")).toBe(true)
+		wrapper.unmount()
+	})
+})
+
 describe("LogsViewer fetch deadline", () => {
 	test("a batch that arrives in time clears its deadline timer", async () => {
 		H.getLogs.mockResolvedValue([])

@@ -1,6 +1,6 @@
 import { createTestingPinia } from "@pinia/testing"
 import { Flex, MaterialIcon, Text } from "@nulo/design"
-import { flushPromises, mount } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const fakes = vi.hoisted(() => ({
@@ -85,6 +85,42 @@ describe("settings/lock", () => {
 		expect(useLockWallet).toHaveBeenCalledExactlyOnceWith(fakes.managerProfile)
 		await w.get('[data-testid="lock-now-btn"]').trigger("click")
 		expect(fakes.lockWallet.lock).toHaveBeenCalledTimes(1)
+	})
+
+	test("a failed auto-lock write shows the stored timeout again, and asking again writes again", async () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		fakes.config.setValue.mockRejectedValueOnce(new Error("persist failed"))
+		const w = await mountLock()
+		await debounced()
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
+
+		field().vm.$emit("update:modelValue", "0")
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 0)
+		expect(field().attributes("modelvalue")).toBe("30")
+
+		field().vm.$emit("update:modelValue", "0")
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenCalledTimes(2)
+	})
+
+	test("a failure that lands after a newer edit leaves that edit, which is then written", async () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		let fail: (e: Error) => void = () => {}
+		fakes.config.setValue.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+		const w = await mountLock()
+		await debounced()
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper
+
+		field().vm.$emit("update:modelValue", "0")
+		await debounced()
+		field().vm.$emit("update:modelValue", "15")
+		fail(new Error("persist failed"))
+		await flushPromises()
+		expect(field().attributes("modelvalue")).toBe("15")
+
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenLastCalledWith("sessionTtl", 900_000)
 	})
 
 	test("unmount disposes the lock after both service clients disconnect", async () => {
