@@ -3,8 +3,7 @@
  * in `@nulo/aztec-runtime/pxe` and is Chrome-agnostic; this subclass
  * adds the MV3 offscreen-document bootstrap via `onReady`.
  */
-import { ensureOffscreenRunning, isOffscreenDocumentSender, offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
-import { ESTIMATE_JOB_TTL_MS } from "@/wallet/services/execution/estimate-cancel-registry"
+import { ensureOffscreenRunning, isOffscreenDocumentSender } from "@/wallet/utils/offscreen"
 import type { ILogger } from "@nulo/wallet-core/logger"
 import { PxeScopeUnregisteredError, RecoveryModeError } from "@nulo/extension-messaging/errors"
 import { type Methods, PxeServiceClientBase, type ScopeRegistrar, type StoreKeyProvision } from "@nulo/aztec-runtime/pxe"
@@ -63,9 +62,6 @@ export class PxeServiceClient extends PxeServiceClientBase {
 			if (!scopeRegistrar) throw new PxeScopeUnregisteredError()
 			await scopeRegistrar(pxe, network, scopes)
 		})
-		// A record never outlives the estimate entry it can hold, which started before it was made.
-		this.setDocumentEpochProvider(offscreenEpoch, ESTIMATE_JOB_TTL_MS)
-		onOffscreenRetired((epoch) => this.retireEpochsThrough(epoch))
 	}
 
 	/**

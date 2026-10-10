@@ -15,6 +15,7 @@ import z from "zod"
 import { NetworkService, networkInfoFrom } from "@/wallet/services/network/service"
 import type { Network } from "@/wallet/services/network/spec"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
+import { offscreenEpoch, onOffscreenRetired } from "@/wallet/utils/offscreen"
 import { AccountService } from "@/wallet/services/account/service"
 import { ContactService } from "@/wallet/services/contact/service"
 import { ProfileService } from "@/wallet/services/profile/service"
@@ -37,7 +38,7 @@ import type { ILogger } from "@/wallet/logger"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { type CancelOrFailResult, classifyOperationCatch } from "./rpc-cancel"
-import { EstimateCancelRegistry } from "./estimate-cancel-registry"
+import { ESTIMATE_JOB_TTL_MS, EstimateCancelRegistry } from "./estimate-cancel-registry"
 import {
 	ContractNotRegisteredError,
 	JobCancelledError,
@@ -110,8 +111,17 @@ export interface InteractionOperationSource {
 
 /** Default PXE-client factory: the real RPC-backed client. Exported so the
  *  construction seam (real client vs the composition-test fake) is unit-testable
- *  without spinning up `init()` + a full ServiceCollection. */
-export const DEFAULT_PXE_CLIENT_FACTORY = (logger: ILogger): PxeServiceClient => new PxeServiceClient(logger)
+ *  without spinning up `init()` + a full ServiceCollection.
+ *
+ *  It tracks this service's timed-out simulations so an estimate keeps its admission place while
+ *  one still runs offscreen. A record lives as long as an estimate entry and starts after the entry
+ *  it holds, so it never ends a hold before the registry's TTL would. */
+export const DEFAULT_PXE_CLIENT_FACTORY = (logger: ILogger): PxeServiceClient => {
+	const client = new PxeServiceClient(logger)
+	client.setDocumentEpochProvider(offscreenEpoch, ESTIMATE_JOB_TTL_MS)
+	onOffscreenRetired((epoch) => client.retireEpochsThrough(epoch))
+	return client
+}
 
 /** A popup decodes one approval window at a time; anything past this is not a display request. */
 const MAX_DISPLAY_CALLS = 64
@@ -588,22 +598,21 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	): Promise<T> {
 		if (!estimateToken) return run()
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
-		let admitted = false
+		let admission: AbortSignal | undefined
 		let estimateId: string | undefined
 		let offscreenWork: Promise<void> | undefined
 		try {
 			// Inside the try: a parked admission rejected by supersede/cancel
 			// throws the internal sentinel too, and it must cross the RPC
 			// boundary as the structured error like every other cancel.
-			const signal = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
-			admitted = true
-			const result = await run(signal)
+			admission = await this.estimateCancel.admit(estimateToken, profile.id, flowKey)
+			const result = await run(admission)
 			// One id evicts every cache: a standard estimate's preview id IS its
 			// estimate id, and a preview-only result has nothing else stashed.
 			if (!("queued" in result)) estimateId = result.previewId ?? result.estimateId
 			return result
 		} catch (error) {
-			if (admitted) offscreenWork = this.pxeService.offscreenSettled(error)
+			if (admission) offscreenWork = this.pxeService.offscreenSettled(error)
 			if (error instanceof JobCancelledSentinel) {
 				throw new JobCancelledError(undefined, { jobId: estimateToken })
 			}
@@ -611,11 +620,12 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		} finally {
 			// A simulation that timed out still runs in the PXE's queue, so its estimate keeps its
 			// place until that simulation ends offscreen; the client bounds the wait.
-			if (offscreenWork) {
+			if (admission && offscreenWork) {
 				this.logDebug("estimate held until its timed-out simulation ends offscreen")
-				void offscreenWork.then(() => this.estimateCancel.settle(estimateToken))
-			} else if (admitted) {
-				this.estimateCancel.settle(estimateToken, estimateId)
+				const held = admission
+				void offscreenWork.then(() => this.estimateCancel.settle(estimateToken, undefined, held))
+			} else if (admission) {
+				this.estimateCancel.settle(estimateToken, estimateId, admission)
 			}
 		}
 	}

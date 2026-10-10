@@ -91,11 +91,13 @@ describe("BaseServiceClient hooks after a request ends", () => {
 		expect(client.terminals.map((t) => t.record.status)).toEqual(["timeout", "send_failed"])
 	})
 
-	test("the tag taken at the send reaches onTerminal beside an unchanged record", async () => {
+	test("the tag taken at the send reaches onTerminal beside an unchanged record, before the caller's handler", async () => {
 		vi.useFakeTimers()
 		const client = new HookedClient()
 		client.tagOf = (method, params) => `${method}:${params[0]}`
-		const rejected = client.ping(7).catch(() => undefined)
+		const rejected = client.ping(7).catch(() => {
+			expect(client.terminals).toHaveLength(1)
+		})
 		await vi.advanceTimersByTimeAsync(500)
 		await rejected
 		const [terminal] = client.terminals

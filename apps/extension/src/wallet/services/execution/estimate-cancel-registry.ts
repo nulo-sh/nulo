@@ -11,8 +11,10 @@
  *   non-preemptible and keeps its queue slot until it settles — so admission
  *   counts entries until `settle()`, never until cancel. A transport timeout
  *   does not end the work either: the caller settles an entry whose simulation
- *   timed out only once the offscreen answer arrives, its document is retired,
- *   or the TTL sweep reaps it.
+ *   timed out only once that simulation ends offscreen (its late answer, a send
+ *   that failed after all, or its document gone) or its record expires, unless
+ *   the TTL sweep reaps the entry first. Admission stays per profile, so such
+ *   an entry also holds a place against the profile's estimates on other chains.
  * - **Overflow = cancel-oldest + coalesce-newest.** The newcomer parks in a
  *   single latest-wins pending slot per (profile, flowKey) and is admitted
  *   only when a job actually settles. A newer arrival on the same slot
@@ -168,9 +170,10 @@ export class EstimateCancelRegistry {
 	 * cancellation checkpoint) or already TTL-reaped, in which cases the
 	 * stash is evicted right here.
 	 */
-	public settle(token: string, estimateId?: string): void {
+	public settle(token: string, estimateId?: string, admission?: AbortSignal): void {
 		const entry = this.active.get(token)
-		if (!entry) {
+		// A reaped token can be admitted again, so `admission` names which entry this runner owns.
+		if (!entry || (admission !== undefined && entry.controller.signal !== admission)) {
 			// A TTL-reaped runner completing late: its slot is long gone and no
 			// caller can cancel it anymore, so its stash must not outlive it.
 			if (estimateId) this.deps.evictStash(estimateId)

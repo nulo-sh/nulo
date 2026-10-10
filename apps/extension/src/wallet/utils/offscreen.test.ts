@@ -93,7 +93,7 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 		expect(closeDocument).not.toHaveBeenCalled()
 	})
 
-	test("the document epoch moves only on a close that succeeded: never on READY, a negative probe or a failed close", async () => {
+	test("the document epoch moves only on proof the document is gone: a close or a create that succeeded", async () => {
 		const retired: number[] = []
 		const stop = onOffscreenRetired((epoch) => retired.push(epoch))
 		vi.useFakeTimers()
@@ -103,23 +103,26 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 			await vi.advanceTimersByTimeAsync(0)
 			deliver(OFFSCREEN_READY_MESSAGE)
 			await cold
-			expect([offscreenEpoch(), retired]).toEqual([start, []])
+			expect([offscreenEpoch(), retired]).toEqual([start + 1, [start]])
 
-			// A live document that fails its health check is closed: first the close fails, then it succeeds.
+			// A live document fails its health check; its close fails and so does the create after it.
+			// A READY from that document still proves nothing.
 			getContexts.mockResolvedValue([{}])
 			closeDocument.mockRejectedValueOnce(new Error("No current offscreen document"))
-			const failedClose = ensureOffscreenRunning()
+			createDocument.mockRejectedValueOnce(new Error("create failed"))
+			const failed = ensureOffscreenRunning().catch(() => undefined)
 			await vi.advanceTimersByTimeAsync(3_100)
 			deliver(OFFSCREEN_READY_MESSAGE)
-			await failedClose
-			expect([offscreenEpoch(), retired]).toEqual([start, []])
-
-			const closed = ensureOffscreenRunning()
-			await vi.advanceTimersByTimeAsync(3_100)
-			deliver(OFFSCREEN_READY_MESSAGE)
-			await closed
-			expect(closeDocument).toHaveBeenCalledTimes(2)
+			await failed
+			expect(closeDocument).toHaveBeenCalledTimes(1)
 			expect([offscreenEpoch(), retired]).toEqual([start + 1, [start]])
+
+			const replaced = ensureOffscreenRunning()
+			await vi.advanceTimersByTimeAsync(3_100)
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await replaced
+			expect(closeDocument).toHaveBeenCalledTimes(2)
+			expect([offscreenEpoch(), retired]).toEqual([start + 3, [start, start + 1, start + 2]])
 		} finally {
 			stop()
 			vi.useRealTimers()

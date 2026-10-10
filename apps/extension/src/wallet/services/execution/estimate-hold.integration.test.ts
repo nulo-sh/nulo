@@ -134,4 +134,18 @@ describe("an estimate whose simulation timed out", () => {
 		await vi.advanceTimersByTimeAsync(SIM_TIMEOUT_MS - 1)
 		expect(h.registry.unsettledCount("p1")).toBe(1)
 	})
+
+	test("a hold that ends after the TTL reaped it leaves a later estimate under the same token running", async () => {
+		const h = harness()
+		void h.estimate("t1")
+		await vi.advanceTimersByTimeAsync(SIM_TIMEOUT_MS)
+		await vi.advanceTimersByTimeAsync(ESTIMATE_JOB_TTL_MS - SIM_TIMEOUT_MS + 1)
+		void h.estimate("t1")
+		await vi.advanceTimersByTimeAsync(0)
+		expect(sent).toHaveLength(2)
+
+		answerLate(1)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(h.registry.unsettledCount("p1")).toBe(1)
+	})
 })

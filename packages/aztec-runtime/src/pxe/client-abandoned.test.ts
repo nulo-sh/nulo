@@ -135,6 +135,23 @@ describe("timed-out simulations", () => {
 		expect(records(c)).toBe(0)
 	})
 
+	test("a simulateTx that ends any other way leaves no record: an error answer, or a send that failed in time", async () => {
+		const c = client()
+		const answered = c.simulateTx(net, {} as never, {} as never).catch((e: unknown) => e)
+		await vi.advanceTimersByTimeAsync(0)
+		const request = sent[0] as Sent
+		for (const l of [...listeners]) {
+			l({ type: MessageType.Response, from: "pxe", to: request.from, content: { requestId: 1, error: "boom" } }, DOCUMENT)
+		}
+		expect(c.offscreenSettled(await answered)).toBeUndefined()
+
+		const unsent = c.simulateTx(net, {} as never, {} as never).catch((e: unknown) => e)
+		await vi.advanceTimersByTimeAsync(0)
+		sent[1]?.fail(new Error("no receiver"))
+		expect(c.offscreenSettled(await unsent)).toBeUndefined()
+		expect(records(c)).toBe(0)
+	})
+
 	test("a response with an id this client never held still warns", async () => {
 		const c = client()
 		await timedOut(c, "getSenders")

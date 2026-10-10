@@ -243,6 +243,8 @@ async function createOffscreenChromium(passId: number) {
 		})
 	try {
 		await create()
+		// Chromium allows one offscreen document, so a create that succeeds proves the last one is gone.
+		retireDocument()
 	} catch (err) {
 		// Two transient shapes get one close-and-retry: the ghost bug
 		// ("single offscreen document": getContexts saw none but create says
@@ -265,6 +267,7 @@ async function createOffscreenChromium(passId: number) {
 			// the close window can't be followed by an untracked create.
 			if (passId !== passSeq) throw err
 			await create()
+			retireDocument()
 		} else {
 			throw err
 		}
