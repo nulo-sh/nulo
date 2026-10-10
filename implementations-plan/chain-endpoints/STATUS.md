@@ -7,3 +7,4 @@
 - 2026-10-10: final fresh Codex pass: reject (arc 2a's connect-src blocks arc 1's http canary), 7 findings, all accepted; plan v4. Confirmation resume running.
 - 2026-10-10: confirmation resume: approve (one Low accepted). Panel converged; plan committed on the worktree branch, awaiting the orchestrator.
 - 2026-10-10: approved by the orchestrator (D-orch-1 to D-orch-3: no stack, arc 1 only, D7 asked first); merged dev 6201f8b (#267's host-registry runner, D9 satisfied). Arc 1 phase 1.1 starting.
+- 2026-10-10: phase 1.1 gate (Fast: lint, typecheck:all, test 726 files) pass; guard + 17 unit cases.
