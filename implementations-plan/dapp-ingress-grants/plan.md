@@ -123,6 +123,7 @@ The dApp-facing boundary of the wallet: which stored grants a reader trusts, how
   4. Unstamped otherwise (no marker: a reconnect or debris; a dead marker; a marker of this profile) → end (unchanged, fail closed).
 - When rule 4 ends a channel whose marker belongs to that channel's own tab, it tombstones the marker (`cancelPendingVerification`) before it terminates; a marker from another tab is left alone, so a colliding id never abandons another tab's approval. Establishment rechecks at its second liveness gate, just before the stamp (`session-established.ts:134`), that the map still holds the very marker object it captured at `:79` and that it is not dead. A reused id that replaced the entry therefore reads as a dead approval, never as the old live one. On that mismatch the old callback retires without touching anything the id now names: it does not terminate (termination and liveness work by id, so it would end the replacement's channel), and its `finally` settles the marker only while the map still holds the captured object (`settlePendingVerification` at `session-established.ts:170` acts on the current entry). The captured reservation object is safe to release: the gate ignores a reservation it no longer holds (`verify-admission.ts`, `released`). A termination that throws (F24) then still cannot be followed by a stamp: an establishment that read the row before the deletion finds its marker dead and terminates instead.
 - Residual, unchanged and recorded: a marker-less reconnect whose termination throws can still be stamped by an establishment already past its row read. It is the same seam today; it is not #228's. If the implementer reproduces it, the close-out files it as an issue.
+- Residual, unchanged and recorded (arc 1 Codex round 1, C3): termination by id runs the worker's id-keyed cleanup (`onSessionTerminated` → `admission.onSessionGone` → the `released` hook tombstones whatever marker holds the id), so ending a channel whose id another tab reused for a newer attempt also ends that attempt. It needs a page to reuse its own request id across two tabs, so it harms only that page; the fix is upstream's request-id collision check (#127). Revocation itself never tombstones another tab's marker. The close-out files it as an issue that references #127.
 - Move `wireSessionTeardown` from `background.ts:631-658` into `session-revocation.ts`, exported, taking the marker map; `background.ts` passes `state.pendingVerification`. The move lets a composition test drive the real wiring.
 - Unchanged: unstamp-before-terminate, the per-match try/catch, the profile-switch teardown (`profile-switch-teardown.ts`), which still ends unstamped channels on a switch.
 - What an app notices: a handshake approved under profile A is no longer cut when profile B's row for the same app is deleted. That disconnect was the bug #228 reports; the lane brief asks for exactly this never-happens test.
@@ -548,8 +549,10 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 ### Implementation deviations (arc 1)
 
 - **D-impl-1.** `projectStoredGrants` is exported through `dispatcher.ts`'s existing `export { … } from "./capability-negotiation"` line, which `index.ts` re-exports; the public surface is the one the plan names.
-- **D-impl-2.** Revocation tombstones the channel's own-tab marker on every channel it ends, not only an unstamped one. A stamped channel with a live marker is still inside `showVerifyWindow`; its success would only spend a marker of an attempt already revoked, and a tombstone makes a retry of that id terminate instead of passing as a reconnect. Strictly fail-closed, and one branch fewer.
-- **D-impl-3.** The establishment recheck lives in two helpers (`lostApproval`, `settleCapturedMarker`) so `handleSessionEstablished` stays under the cognitive-complexity budget (19 inline, under 15 after); the dead-approval log reads "…, so it is terminated" since the copy dash ban reads `terminateWith` arguments.
+- **D-impl-2 (withdrawn after Codex round 1, C2).** Tombstoning the own-tab marker of a stamped channel too was tried and reverted: after a stamped channel's check window closes, its page can reuse the id in the same tab for a newer approval, and the stamped channel's revocation would kill it. Revocation tombstones only an unstamped channel's own-tab marker, as planned.
+- **D-impl-3.** The establishment recheck lives in two helpers (`lostApproval`, `settleCapturedMarker`) so `handleSessionEstablished` stays under the cognitive-complexity budget (19 inline, under 15 after); the recheck's log reads "…, so it is not stamped" since the copy dash ban reads `terminateWith` arguments.
+- **D-impl-4 (Codex round 1, C1; Opus O2).** The plan's "retire without terminating" on a replaced marker covered only the second liveness gate. Every exit before the stamp (dead on entry, row gone, row of another profile, row read or hash write failing) now skips termination when the map no longer holds the captured marker; an exit after the stamp (the check window failing) still terminates, since a stamped channel must never stay live unverified.
+- **D-impl-5 (Opus O3).** The recheck reads `cancelled`, not `isPendingVerificationDead`: a key exchange that crosses the 90 s staleness line during the two storage awaits used to stamp and still does. Staleness is judged once, on entry; a revocation and a slot given back both tombstone.
 
 ### Plan-space search: the competing outline
 
@@ -632,6 +635,13 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 | 2 | Codex gpt-6.1-sol, high, fresh session | reject (with blocking findings: marker ownership remains ambiguous under id reuse; refusal-title plumbing and provenance are incomplete; the expiry E2E exercises cancellation) | 8 findings: 7 accepted, 1 accepted in part (F7); F6 reversed round 1's O9 rejection |
 | 3 | same session, resumed | reject (with blocking findings: #228's identity check still leaves cleanup targeting the replacement attempt) | 3 findings, all accepted |
 | 4 | same session, resumed | **approve** | no new material findings |
+
+### Arc 1 post-implementation
+
+| Round | Reviewer | Verdict | Outcome |
+|---|---|---|---|
+| 1 | Codex gpt-6.1-sol, high (session `01a12317`) | reject (with blocking findings: replacement attempts remain vulnerable to stale callback cleanup and revocation) | C1 High accepted (D-impl-4); C2 Med accepted (D-impl-2 withdrawn); C3 Med pushed back: pre-existing id-keyed cleanup, self-inflicted id reuse, upstream #127; recorded as a residual under #228; C4 Low accepted (marker comment rewritten) |
+| 1 | Opus general-purpose review | approve with fixes (3 Low) | O1 (no test for D-impl-2) superseded by its withdrawal, the stamped row now pins the planned rule; O2 same as C1; O3 accepted (D-impl-5) |
 
 ## Seeds (draft; finalized after approval)
 

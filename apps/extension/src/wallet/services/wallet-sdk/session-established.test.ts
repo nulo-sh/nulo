@@ -9,6 +9,7 @@
  * waiting on it or in a window of its own, and the slot is held until that window is removed.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import { deferred } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
 import type { WindowBounds } from "@nulo/wallet-core/ports"
 import { cancelPendingVerification, PENDING_VERIFICATION_STALE_MS, type PendingVerificationEntry } from "./pending-verification"
@@ -395,29 +396,41 @@ describe("handleSessionEstablished — profile binding", () => {
 	})
 })
 
-describe("handleSessionEstablished — the approval ends while the hash is written", () => {
-	/** A new connection approved under prof-A, paused inside its hash write until `resume`. */
-	function paused() {
-		let resume!: () => void
-		const setVerificationHash = vi.fn(() => new Promise<void>((r) => (resume = r)))
+/** A discovery that reused the harness id after its slot was given back: admitted, then approved. */
+function admitReplacement(gate: VerifyAdmissionGate, markers: Map<string, PendingVerificationEntry>) {
+	let slot: WindowReservation | undefined
+	gate.admit(
+		{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
+		(r) => {
+			slot = r
+		},
+		() => {},
+	)
+	const replacement = marker("prof-A")
+	markers.set("sess-1", replacement)
+	return { replacement, slot }
+}
+
+describe("handleSessionEstablished — the approval ends while establishment waits", () => {
+	const ownRow = { id: "dapp-1", profileId: "prof-A", trustedVerification: false }
+	/** A new connection approved under prof-A whose row read or hash write waits on `step`. */
+	function pausedIn(at: "lookup" | "hash") {
+		const step = deferred<unknown>()
 		const approved = marker("prof-A")
+		const lookup = at === "lookup" ? vi.fn(() => step.promise) : vi.fn().mockResolvedValue(ownRow)
+		const setVerificationHash = at === "hash" ? vi.fn(() => step.promise) : vi.fn().mockResolvedValue(undefined)
 		const h = makeDeps({
 			pendingVerification: new Map([["sess-1", approved]]),
-			dappSessionService: {
-				tryGetDappSessionByOriginAndChain: vi
-					.fn()
-					.mockResolvedValue({ id: "dapp-1", profileId: "prof-A", trustedVerification: false }),
-				setVerificationHash,
-			},
+			dappSessionService: { tryGetDappSessionByOriginAndChain: lookup, setVerificationHash },
 		})
 		const establishing = handleSessionEstablished(makeSession(), h.deps)
-		const written = vi.waitFor(() => expect(setVerificationHash).toHaveBeenCalledTimes(1))
-		return { ...h, approved, establishing, written, resume: () => resume() }
+		const reached = vi.waitFor(() => expect(at === "lookup" ? lookup : setVerificationHash).toHaveBeenCalledTimes(1))
+		return { ...h, approved, establishing, step, reached }
 	}
 
 	test("a revocation for the approving profile whose termination throws: no stamp, the session ends, the marker stays a tombstone", async () => {
-		const h = paused()
-		await h.written
+		const h = pausedIn("hash")
+		await h.reached
 		revokeLiveSessions(
 			{
 				getActiveSessions: () => [{ ...makeSession(), tabId: 7 }],
@@ -430,7 +443,7 @@ describe("handleSessionEstablished — the approval ends while the hash is writt
 			},
 			{ origin: ORIGIN, chainId: "0", profileId: "prof-A" },
 		)
-		h.resume()
+		h.step.resolve(undefined)
 		expect(await h.establishing).toBe(false)
 		expect(h.stamp).not.toHaveBeenCalled()
 		expect(h.terminate).toHaveBeenCalledWith("sess-1")
@@ -439,40 +452,39 @@ describe("handleSessionEstablished — the approval ends while the hash is writt
 	})
 
 	test("control: with no revocation the same establishment stamps and spends the marker", async () => {
-		const h = paused()
-		await h.written
-		h.resume()
+		const h = pausedIn("hash")
+		await h.reached
+		h.step.resolve(undefined)
 		expect(await h.establishing).toBe(true)
 		expect(h.stamp).toHaveBeenCalledWith("sess-1", "prof-A")
 		expect(h.pendingVerification.has("sess-1")).toBe(false)
 	})
 
-	test("a marker another attempt put under the same id is left to it: no stamp, no termination, its marker and slot untouched", async () => {
-		const h = paused()
-		await h.written
-		// The old slot was given back (its hook tombstoned the old marker), then a discovery reusing
-		// the id was admitted and approved.
-		h.reservation.releaseIfUnstarted()
-		let replacementSlot: WindowReservation | undefined
-		h.gate.admit(
-			{ id: "sess-1", origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },
-			(r) => {
-				replacementSlot = r
-			},
-			() => {},
-		)
-		const replacement = marker("prof-A")
-		h.pendingVerification.set("sess-1", replacement)
-		h.resume()
-		expect(await h.establishing).toBe(false)
-		expect(h.stamp).not.toHaveBeenCalled()
-		expect(h.terminate).not.toHaveBeenCalled()
-		expect(h.pendingVerification.get("sess-1")).toBe(replacement)
-		expect(replacement).toEqual(marker("prof-A", { at: replacement.at }))
-		expect(h.gate.reservation("sess-1")).toBe(replacementSlot)
-		expect(replacementSlot?.status).toBe("unstarted")
-		expect(h.gate.windowsHeld(ORIGIN)).toBe(1)
-	})
+	test.each<[string, "lookup" | "hash", (step: ReturnType<typeof deferred<unknown>>) => void]>([
+		["its row is gone", "lookup", (step) => step.resolve(undefined)],
+		["its row is another profile's", "lookup", (step) => step.resolve({ ...ownRow, profileId: "prof-B" })],
+		["its row read fails", "lookup", (step) => step.reject(new Error("storage"))],
+		["its hash write fails", "hash", (step) => step.reject(new Error("QuotaExceededError"))],
+		["its hash write lands", "hash", (step) => step.resolve(undefined)],
+	])(
+		"a discovery that reused the id is left alone when %s: no stamp, no termination, its marker and slot untouched",
+		async (_name, at, settle) => {
+			const h = pausedIn(at)
+			await h.reached
+			// The old slot was given back, which tombstones the old marker, before the id was reused.
+			h.reservation.releaseIfUnstarted()
+			const { replacement, slot } = admitReplacement(h.gate, h.pendingVerification)
+			settle(h.step)
+			expect(await h.establishing).toBe(false)
+			expect(h.stamp).not.toHaveBeenCalled()
+			expect(h.terminate).not.toHaveBeenCalled()
+			expect(h.pendingVerification.get("sess-1")).toBe(replacement)
+			expect(replacement.cancelled).toBeUndefined()
+			expect(h.gate.reservation("sess-1")).toBe(slot)
+			expect(slot?.status).toBe("unstarted")
+			expect(h.gate.windowsHeld(ORIGIN)).toBe(1)
+		},
+	)
 })
 
 describe("handleSessionEstablished — the check in the waiting connect window", () => {
@@ -527,6 +539,18 @@ describe("handleSessionEstablished — the check in the waiting connect window",
 		expect(terminate).toHaveBeenCalledWith("sess-1")
 		expect(gate.windowsHeld(ORIGIN)).toBe(0)
 		expect(pendingVerification.get("sess-1")?.cancelled).toBe(true)
+	})
+
+	test("a stamped channel whose check cannot load still ends after a discovery reused its id", async () => {
+		const { deps, navigate, gate, stamp, terminate, pendingVerification } = standby()
+		navigate.mockImplementationOnce(async () => {
+			gate.windowRemoved(41)
+			admitReplacement(gate, pendingVerification)
+			throw new Error("No tab with id: 314.")
+		})
+		expect(await handleSessionEstablished(makeSession(), deps)).toBe(false)
+		expect(stamp).toHaveBeenCalledWith("sess-1", "prof-A")
+		expect(terminate).toHaveBeenCalledWith("sess-1")
 	})
 
 	test("a failed establishment leaves a tombstone, so a retry on a row since marked trusted terminates", async () => {

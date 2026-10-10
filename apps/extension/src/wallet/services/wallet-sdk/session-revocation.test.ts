@@ -103,6 +103,7 @@ describe("revokeLiveSessions", () => {
 		["stamped to another profile is kept", "p2", undefined, false, undefined],
 		["unstamped, approved under another profile from its own tab, is kept", undefined, approval("p2"), false, undefined],
 		["stamped to this profile ends", "p1", undefined, true, undefined],
+		["stamped to this profile ends, leaving a marker a discovery reusing its id wrote", "p1", approval("p1"), true, undefined],
 		["unstamped, approved under this profile, ends and its marker dies", undefined, approval("p1"), true, true],
 		["unstamped with no approval (a reconnect or debris) ends", undefined, undefined, true, undefined],
 		["unstamped on a stale approval of another profile ends", undefined, approval("p2", stale), true, true],
@@ -121,7 +122,8 @@ describe("revokeLiveSessions", () => {
 
 		expect(terminateSession.mock.calls).toEqual(ended ? [["s1"]] : [])
 		expect(sessionProfiles.has("s1")).toBe(stamp !== undefined && !ended)
-		// Another tab's marker holds an id the page chose and is never abandoned on this channel's behalf.
+		// Only an unstamped channel's own-tab marker is tombstoned: any other marker under the id the page
+		// chose may be another attempt's.
 		expect(pendingVerification.get("s1")?.cancelled).toBe(tombstoned)
 	})
 

@@ -8,3 +8,4 @@
 - 2026-10-09: orchestrator approved the plan with D-orch-1 (no stack, arc 1 PR on `dev`) and D-orch-2 (arc 1 only); arc 1 started.
 - 2026-10-09: gate 1.1 green (lint, typecheck:all, wallet-bridge 663, root test 10724).
 - 2026-10-09: gate 1.2 green (lint, typecheck:all, root test 10736; composition checklist holds). First run red on copy-dash-ban (`bun run test`), fixed by rewording a log reason.
+- 2026-10-10: Codex round 1 reject (C1 High, C2/C3 Med, C4 Low), Opus approve with 3 Lows; fixes applied, C3 recorded as a residual.

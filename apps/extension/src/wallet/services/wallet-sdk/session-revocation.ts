@@ -26,12 +26,14 @@ export function revokeLiveSessions(deps: LiveSessionRevocationDeps, app: { origi
 	const { origin, chainId, profileId } = app
 	for (const session of deps.getActiveSessions()) {
 		if (session.origin !== origin || !isOnChain(session, chainId)) continue
+		const stamp = deps.sessionProfiles.get(session.sessionId)
 		const ownMarker = markerOfOwnTab(deps.pendingVerification, session)
-		if (servedByAnotherProfile(deps.sessionProfiles.get(session.sessionId), ownMarker, profileId)) continue
+		if (servedByAnotherProfile(stamp, ownMarker, profileId)) continue
 		deps.sessionProfiles.delete(session.sessionId)
-		// Dead before the termination, so an establishment past its row read cannot stamp this
-		// channel if the termination throws.
-		if (ownMarker) cancelPendingVerification(deps.pendingVerification, session.sessionId)
+		// Dead before the termination, so an establishment past its row read cannot stamp this channel
+		// if the termination throws. A stamped channel's establishment is past its stamp, and a marker
+		// beside it may be a newer attempt that reused the id.
+		if (stamp === undefined && ownMarker) cancelPendingVerification(deps.pendingVerification, session.sessionId)
 		try {
 			deps.logger.log(
 				"wallet-sdk-bg",

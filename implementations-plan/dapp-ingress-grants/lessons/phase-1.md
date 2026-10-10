@@ -18,3 +18,12 @@
 - Red/green: the eight never-happens cases (revocation table x3, establishment barriers x2, wiring x2, composition x1) fail on the base `session-revocation.ts`, `session-established.ts` and `background.ts`; the controls pass on both.
 - Composition checklist (`apps/extension/tests/COMPOSITION-TESTS.md`): no PXE fake (D1), no simulate or prove (D2), no tx request or derivation (D3, D6), fake state is the handler's live list only (D4), assertions read the real stamp map, the real marker and the rows the real service purged.
 - Gate 1.2: `bun run lint` 0; `bun run typecheck:all` 0; `bun run test` 10736 passed, 4 skipped (first run red on the dash ban, fixed as above).
+
+## Post-implementation, round 1 (2026-10-10)
+
+- Codex (gpt-6.1-sol, high, session `01a12317-f637-7cf2-98f6-641b7dd00df1`): **reject**. C1 High: exits before the stamp still terminated by id after an id reuse. C2 Med: D-impl-2 tombstoned a newer same-tab attempt's marker. C3 Med: termination's id-keyed cleanup ends another tab's attempt. C4 Low: the marker comment overclaimed isolation. Codex reproduced C1-C3 with in-memory probes.
+- Opus review: approve with fixes, three Lows (O1 D-impl-2 untested, O2 = C1, O3 staleness at the recheck).
+- Fixes: `terminate()` skips termination before the stamp when the map no longer holds the captured marker, and always terminates after it; the recheck reads `cancelled`; revocation tombstones only an unstamped channel's own-tab marker; the comment rewritten.
+- Mutations, each red: always terminating (5 replaced-exit cases), never terminating a replaced stamped channel (the post-stamp case), tombstoning stamped channels (the new table row).
+- C3 pushed back in round 2 as pre-existing and upstream (#127); recorded as a residual in plan.md § Arc 1.
+- The first smoke run (`smoke-1`) started on the build before these fixes; smoke reruns on the final head.
