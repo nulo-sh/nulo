@@ -195,9 +195,11 @@ describe("undeclared", () => {
 	})
 })
 
-test("proxyTarget refuses a CONNECT with a path and a request for another scheme", () => {
+test("proxyTarget refuses a CONNECT with a path, another scheme, and a backslash that would name a declared host", () => {
 	expect(proxyTarget("CONNECT a.test:443/x HTTP/1.1")).toBeUndefined()
 	expect(proxyTarget("GET ftp://a.test/ HTTP/1.1")).toBeUndefined()
+	expect(proxyTarget("CONNECT lb.drpc.live\\x.test:443 HTTP/1.1")).toBeUndefined()
+	expect(proxyTarget("GET http://lb.drpc.live\\@x.test/ HTTP/1.1")).toBeUndefined()
 	expect(proxyTarget("CONNECT A.Test:8443 HTTP/1.1")).toEqual({ host: "a.test", port: 8443 })
 })
 
@@ -225,7 +227,7 @@ describe("a guarded launch", () => {
 			settle: vi.fn(async () => "extension-id"),
 			probeCanary: vi.fn(async () => {
 				if (opts.canaryDirect) direct++
-				for (const host of opts.probeSends ?? [EGRESS_CANARY_HOST]) send(host)
+				for (const host of opts.probeSends ?? [EGRESS_CANARY_HOST]) record.push({ host, port: 2, count: 1 })
 			}),
 			wrapClose: (close: () => Promise<void>) => ({ close }),
 		}
@@ -295,6 +297,17 @@ describe("a guarded launch", () => {
 		expect(closeBrowser).toHaveBeenCalled()
 	})
 
+	test("a request that goes direct after the launch was proven fails the close", async () => {
+		const { deps } = rig()
+		let direct = false
+		const launch = await ownGuardedLaunch({
+			...deps,
+			startCanary: async () => ({ port: 2, connections: () => (direct ? 1 : 0), stop: async () => {} }),
+		})
+		direct = true
+		await expect(launch.close()).rejects.toThrow(/1 connection\(s\) reached egress-canary\.test directly/)
+	})
+
 	test("a browser close that rejects still stops both, and its error is reported", async () => {
 		const { deps, closeBrowser, stopped } = rig()
 		closeBrowser.mockRejectedValueOnce(new Error("browser hung"))
@@ -306,6 +319,7 @@ describe("a guarded launch", () => {
 	test.each([
 		["went direct", { canaryDirect: true }],
 		["never reached the guard", { probeSends: [] }],
+		["never reached the guard", { probeSends: ["egress-canary.test.evil"] }],
 	])("a canary request that %s fails the launch and releases it", async (why, opts) => {
 		const { deps, closeBrowser, stopped } = rig(opts)
 		await expect(ownGuardedLaunch(deps)).rejects.toThrow(`the canary request ${why}`)

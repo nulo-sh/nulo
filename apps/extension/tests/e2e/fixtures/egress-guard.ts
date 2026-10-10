@@ -72,11 +72,12 @@ export function proxyTarget(head: string): { host: string; port: number } | unde
 	const [, method, target] = match
 	try {
 		if (method === "CONNECT") {
-			if (!/^[^/?#@\s]+:\d{1,5}$/.test(target)) return undefined
+			if (!/^[^/\\?#@\s]+:\d{1,5}$/.test(target)) return undefined
 			const url = new URL(`https://${target}`)
 			return url.hostname ? { host: url.hostname, port: Number(url.port || 443) } : undefined
 		}
-		if (!/^http:\/\//i.test(target)) return undefined
+		// WHATWG parsing reads `\` as `/`, which would let a target name a declared host it is not.
+		if (!/^http:\/\//i.test(target) || target.includes("\\")) return undefined
 		const url = new URL(target)
 		return url.hostname ? { host: url.hostname, port: Number(url.port || 80) } : undefined
 	} catch {
@@ -111,18 +112,24 @@ const closeServer = (server: Server): Promise<void> => new Promise((resolve) => 
 
 /**
  * Binds a loopback listener on a port drawn as the harness draws its own, then claims it in the host
- * registry for this worker's life. Bound before the claim, so no other run can take the port between
- * the two; a claim conflict means another tool listed it meanwhile, and the draw starts over.
+ * registry until `release`. Bound before the claim, so no other run can take the port between the
+ * two; a claim conflict means another tool listed it meanwhile, and the draw starts over.
  */
-export async function listenClaimed(
-	make: () => Server,
+export async function listenClaimed<T extends Server>(
+	make: () => T,
 	service: string,
-): Promise<{ server: Server; port: number; release: () => Promise<void> }> {
+): Promise<{ server: T; port: number; release: () => Promise<void> }> {
 	const runId = `nulo-e2e-${service}-${process.pid}-${randomBytes(4).toString("hex")}`
 	for (let attempt = 1; ; attempt++) {
 		const reservation = await reservePort(registeredPorts())
 		await reservation.release()
 		const server = make()
+		// A peer accepted while the claim waits would hold a failed claim's close open.
+		const accepted = new Set<Socket>()
+		server.on("connection", (socket: Socket) => {
+			accepted.add(socket)
+			socket.once("close", () => accepted.delete(socket))
+		})
 		try {
 			await listen(server, reservation.port)
 			await claimPorts({ runId, ports: { [service]: reservation.port }, ownerPid: process.pid, worktree: REPO_ROOT })
@@ -134,6 +141,7 @@ export async function listenClaimed(
 				},
 			}
 		} catch (err) {
+			for (const socket of accepted) socket.destroy()
 			if (server.listening) await closeServer(server)
 			const retriable = err instanceof PortClaimConflict || (err as NodeJS.ErrnoException | undefined)?.code === "EADDRINUSE"
 			if (!retriable || attempt >= CLAIM_ATTEMPTS) throw err
@@ -141,7 +149,7 @@ export async function listenClaimed(
 	}
 }
 
-/** Ends every socket, destroying what is still open at the deadline, then closes the server. */
+/** Stops accepting, ends every socket, and destroys what is still open at the deadline. */
 async function shutDown(server: Server, sockets: Map<Socket, () => void>): Promise<void> {
 	const closed = closeServer(server)
 	for (const [socket, settle] of sockets) {
@@ -248,7 +256,6 @@ export async function startEgressCanary(): Promise<EgressCanary> {
 
 const CANARY_PROBE_BUDGET_MS = 5_000
 
-/** Why a launch's egress record fails it, or undefined when it does not. */
 export function egressFailure(
 	{ attempts, overflowed, canaryConnections }: { attempts: readonly EgressAttempt[]; overflowed: boolean; canaryConnections: number },
 	traffic: { browser: string; ownHosts: ReadonlyMap<string, string> },
@@ -338,7 +345,9 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 		canary = await (deps.startCanary ?? startEgressCanary)()
 		launched = await deps.launch({ guardPort: guard.port })
 		const settled = await deps.settle(launched.value)
-		const recorded = () => guard.attempts().some(({ host }) => host === EGRESS_CANARY_HOST)
+		const canaryPort = canary.port
+		// The port as well as the name: another launch's browser can still be sending its own canary here.
+		const recorded = () => guard.attempts().some(({ host, port }) => host === EGRESS_CANARY_HOST && port === canaryPort)
 		await deps.probeCanary(launched.value, settled, canaryUrl(canary.port), recorded, CANARY_PROBE_BUDGET_MS)
 		if (canary.connections() > 0 || !recorded()) {
 			const why = canary.connections() > 0 ? "went direct" : `never reached the guard within ${CANARY_PROBE_BUDGET_MS / 1000}s`

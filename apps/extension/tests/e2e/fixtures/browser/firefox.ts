@@ -252,9 +252,8 @@ export const FIREFOX_LAUNCH_PREFS = {
 /**
  * Every request for a host other than loopback goes to the guard, with no `DIRECT` after it and no
  * fail-over, so a dead guard fails a request rather than sending it out. The canary name resolves to
- * loopback, which only a direct path would use. Prefs rather than the W3C `proxy` capability because
- * the canary needs `network.dns.localDomains` beside them, and kept out of `FIREFOX_LAUNCH_PREFS`,
- * which holds what users run with.
+ * loopback, which only a direct path would use. All prefs, since `failover_direct` and `localDomains`
+ * have no capability form, and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
  */
 export function egressGuardPrefs(guardPort: number): Record<string, string | number | boolean> {
 	const pac = `function FindProxyForURL(url, host) {

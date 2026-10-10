@@ -130,8 +130,6 @@ function cspLatch(
 	}
 }
 
-/** The smoke suite's launch: the browser routes every outside request to a guard this launch owns,
- *  and its close fails on any host no list declares (`fixtures/egress-guard.ts`). */
 async function launchBehindEgressGuard(
 	launch: (egress: { guardPort: number }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
@@ -159,10 +157,11 @@ async function launchBehindEgressGuard(
 	}
 }
 
+/** The file alone: vitest keeps the last test's name through a later hook, and a file-scoped
+ *  fixture outlives the test that first asked for it. */
 function launchLabel(): string {
-	const { testPath, currentTestName } = expect.getState()
-	const file = testPath ? path.basename(testPath) : "an e2e launch"
-	return currentTestName ? `${file} > ${currentTestName}` : file
+	const { testPath } = expect.getState()
+	return testPath ? path.basename(testPath) : "an e2e launch"
 }
 
 /** Starts a request for `url` from an extension page, under the extension's own CSP, and waits for
