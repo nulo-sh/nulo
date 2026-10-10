@@ -16,7 +16,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
-const { order } = usePopupStack("new_network")
+const { order, depth } = usePopupStack("new_network")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -146,6 +146,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New network"
 		submitLabel="Create"
 		:submitDisabled="!isAvailableToCreateNetwork"

@@ -252,6 +252,68 @@ describe("applyCapabilityDecision requiresGrant", () => {
 	})
 })
 
+describe("stored grants are read and written through the projection", () => {
+	const authWit = { capability: { type: "accounts", canGet: true, canCreateAuthWit: true }, grantedAt: 1 }
+	const sendAny = { capability: { type: "transaction", scope: "*", extra: 1 }, grantedAt: 2 }
+	const sendAnyProjected = { capability: { type: "transaction", scope: "*" }, grantedAt: 2 }
+	const noCapability: [string, unknown] = ["a record with no capability", { grantedAt: 1 }]
+	const unprojectable: [string, unknown] = ["a transaction grant with no scope", { capability: { type: "transaction" }, grantedAt: 1 }]
+	const replaceSends = (grantRecords: unknown[]): CapabilityDecision => ({
+		addAccounts: [],
+		aliasPatch: {},
+		grantRecords: grantRecords as GrantedCapabilityRecord[],
+		replaceTypes: ["transaction"],
+		approvedTypes: ["transaction"],
+		rejectedTypes: [],
+	})
+
+	async function holding(grants: unknown[]) {
+		const made = await makeService()
+		const row = { ...rowFor("p1"), capabilityGrants: grants } as DappSession
+		await plantRowSignedBy(made.browserApi, row, "p1")
+		const key = `${ROW_ROOT}@${row.id}`
+		const raw = async () => (await made.browserApi.storage.local.get(key))[key]
+		return { svc: made.service, id: row.id, raw }
+	}
+
+	test.each<[string, unknown]>([["a record that is not an object", "transaction"], noCapability, unprojectable])(
+		"a writer given %s refuses with ValidationError and leaves the row byte-identical",
+		async (_name, record) => {
+			const { svc, id, raw } = await holding([authWit])
+			const before = await raw()
+			await expect(svc.setCapabilityGrants(id, [record as never])).rejects.toBeInstanceOf(ValidationError)
+			await expect(svc.applyCapabilityDecision(id, replaceSends([record]))).rejects.toBeInstanceOf(ValidationError)
+			expect(await raw()).toBe(before)
+		},
+	)
+
+	test("a writer stores the projection of a well-formed record", async () => {
+		const { svc, id } = await holding([authWit])
+		expect((await svc.setCapabilityGrants(id, [sendAny as never])).capabilityGrants).toEqual([sendAnyProjected])
+		expect((await svc.applyCapabilityDecision(id, replaceSends([sendAny]))).capabilityGrants).toEqual([sendAnyProjected])
+	})
+
+	test.each([noCapability, unprojectable])(
+		"a row holding %s refuses every deciding read with ValidationError, and Off still succeeds",
+		async (_name, record) => {
+			const { svc, id, raw } = await holding([authWit, sendAny, record])
+			const before = await raw()
+			await expect(svc.setAuthorizationsWithoutAsking(id, true, true)).rejects.toBeInstanceOf(ValidationError)
+			await expect(svc.applyCapabilityDecision(id, replaceSends([]))).rejects.toBeInstanceOf(ValidationError)
+			await expect(svc.getCapabilityGrants(id)).rejects.toBeInstanceOf(ValidationError)
+			expect(await raw()).toBe(before)
+			await expect(svc.setAuthorizationsWithoutAsking(id, false, false)).resolves.toMatchObject({ id })
+		},
+	)
+
+	test("the same reads succeed on a well-formed row and answer the projection", async () => {
+		const { svc, id } = await holding([authWit, sendAny])
+		expect(await svc.getCapabilityGrants(id)).toEqual([authWit, sendAnyProjected])
+		expect((await svc.setAuthorizationsWithoutAsking(id, true, true)).authorizationsWithoutAsking).toEqual({ broad: true })
+		expect((await svc.applyCapabilityDecision(id, replaceSends([]))).capabilityGrants).toEqual([authWit])
+	})
+})
+
 describe("tryGetDappSessionByOriginAndChain anchoring", () => {
 	test("forProfileId filters to the given profile and bypasses the live-profile read (silently revertible without this pin)", async () => {
 		const { service: svc, profileStub } = await makeService()

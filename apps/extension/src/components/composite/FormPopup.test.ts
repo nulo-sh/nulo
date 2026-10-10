@@ -38,12 +38,13 @@ const STUBS = {
 	// Popup family — minimal stubs that preserve teleport + close-button
 	// semantics so FormPopup's wiring is observable in jsdom.
 	Popup: {
-		template: '<teleport to="#popup"><div v-if="show" data-testid="stub-popup"><slot /></div></teleport>',
+		template:
+			'<teleport to="#popup"><div v-if="show" data-testid="stub-popup" :data-displace="String(displaceIdx)"><slot /></div></teleport>',
 		props: ["show", "displaceIdx"],
 		emits: ["onClose"],
 	},
 	PopupCard: {
-		template: '<div data-testid="stub-popup-card"><slot /></div>',
+		template: '<div data-testid="stub-popup-card" :data-displace="String(displaceIdx)"><slot /></div>',
 		props: ["displaceIdx", "large"],
 	},
 	PopupHeader: {
@@ -69,6 +70,7 @@ const mountFormPopup = (props: Record<string, unknown> = {}, slots: Record<strin
 		props: {
 			show: true,
 			displaceIdx: 1,
+			depth: 1,
 			submitLabel: "Save",
 			...props,
 		},
@@ -98,6 +100,13 @@ describe("composite/FormPopup", () => {
 		mountFormPopup({ show: false }, { default: "<div data-testid='form-body'>Body</div>" })
 		await flushPromises()
 		expect(popupRoot.querySelector("[data-testid='form-body']")).toBeNull()
+	})
+
+	test("hands the order to Popup and the depth to PopupCard", async () => {
+		mountFormPopup({ displaceIdx: 0, depth: 2 })
+		await flushPromises()
+		expect(popupRoot.querySelector("[data-testid='stub-popup']")?.getAttribute("data-displace")).toBe("0")
+		expect(popupRoot.querySelector("[data-testid='stub-popup-card']")?.getAttribute("data-displace")).toBe("2")
 	})
 
 	test("renders the title prop in the header by default", async () => {

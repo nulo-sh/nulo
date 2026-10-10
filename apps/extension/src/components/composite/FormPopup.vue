@@ -8,6 +8,8 @@ const emit = defineEmits(["onClose", "submit"])
 defineProps({
 	show: { type: Boolean, default: false },
 	displaceIdx: { type: Number, required: true },
+	/** The card's place from the top of the stack (1 on top), as `usePopupStack` gives it. */
+	depth: { type: Number, required: true },
 	/** Simple title text. For richer titles (icon + suffix etc.) use the
 	 *  `#title` slot which fully overrides this. */
 	title: { type: String, default: "" },
@@ -23,7 +25,7 @@ defineProps({
 
 <template>
 	<Popup :show="show" @onClose="emit('onClose')" :displaceIdx="displaceIdx">
-		<PopupCard :displaceIdx="displaceIdx">
+		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
 					<slot name="title">

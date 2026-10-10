@@ -297,6 +297,7 @@ declare global {
   const safeFiatOf: typeof import('../utils/token-amount').safeFiatOf
   const sameContactAddress: typeof import('../utils/contact-rules').sameContactAddress
   const sameContactName: typeof import('../utils/contact-name').sameContactName
+  const sameStoredName: typeof import('../utils/account-name').sameStoredName
   const sanitizeContactName: typeof import('../utils/contact-name').sanitizeContactName
   const sanitizeJournalSubtitle: typeof import('../utils/journal-state').sanitizeJournalSubtitle
   const sanitizePinMap: typeof import('../composables/usePinnedTokens').sanitizePinMap
@@ -321,6 +322,7 @@ declare global {
   const storageLocalGet: typeof import('../utils/storage').storageLocalGet
   const storageLocalRemove: typeof import('../utils/storage').storageLocalRemove
   const storageLocalSet: typeof import('../utils/storage').storageLocalSet
+  const storedNameKey: typeof import('../utils/account-name').storedNameKey
   const stringCompare: typeof import('../utils/string').stringCompare
   const toRaw: typeof import('vue').toRaw
   const toRef: typeof import('vue').toRef
@@ -911,6 +913,7 @@ declare module 'vue' {
     readonly safeFiatOf: UnwrapRef<typeof import('../utils/token-amount')['safeFiatOf']>
     readonly sameContactAddress: UnwrapRef<typeof import('../utils/contact-rules')['sameContactAddress']>
     readonly sameContactName: UnwrapRef<typeof import('../utils/contact-name')['sameContactName']>
+    readonly sameStoredName: UnwrapRef<typeof import('../utils/account-name')['sameStoredName']>
     readonly sanitizeContactName: UnwrapRef<typeof import('../utils/contact-name')['sanitizeContactName']>
     readonly sanitizeJournalSubtitle: UnwrapRef<typeof import('../utils/journal-state')['sanitizeJournalSubtitle']>
     readonly sanitizePinMap: UnwrapRef<typeof import('../composables/usePinnedTokens')['sanitizePinMap']>
@@ -935,6 +938,7 @@ declare module 'vue' {
     readonly storageLocalGet: UnwrapRef<typeof import('../utils/storage')['storageLocalGet']>
     readonly storageLocalRemove: UnwrapRef<typeof import('../utils/storage')['storageLocalRemove']>
     readonly storageLocalSet: UnwrapRef<typeof import('../utils/storage')['storageLocalSet']>
+    readonly storedNameKey: UnwrapRef<typeof import('../utils/account-name')['storedNameKey']>
     readonly stringCompare: UnwrapRef<typeof import('../utils/string')['stringCompare']>
     readonly toRaw: UnwrapRef<typeof import('vue')['toRaw']>
     readonly toRef: UnwrapRef<typeof import('vue')['toRef']>

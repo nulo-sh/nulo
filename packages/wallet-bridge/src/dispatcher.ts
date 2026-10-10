@@ -158,7 +158,7 @@ export interface DispatchHooks {
 
 declare const __VERSION__: string
 
-export { dataFieldsCovered, projectKnownCapability, ungrantedAccounts } from "./capability-negotiation"
+export { dataFieldsCovered, projectKnownCapability, projectStoredGrants, ungrantedAccounts } from "./capability-negotiation"
 
 /**
  * Unwrap an `OperationResult`, returning the value or throwing.
@@ -402,7 +402,7 @@ export class WalletSdkDispatcher {
 		// Defensive: grant exists but accounts list is empty. Don't throw 4100
 		// (the dApp may interpret that as "needs requestCapabilities" and loop);
 		// return [] and warn so an engineer notices the bad write.
-		const grants = dappSession.capabilityGrants ?? []
+		const grants = projectStoredGrants(dappSession.capabilityGrants)
 		const hasAccountsGrant = grants.some((g) => g.capability.type === "accounts")
 		if (hasAccountsGrant) {
 			this.logWarn(`Desync: accounts grant exists but session.accounts is empty for session ${describeExternalId(ctx.sessionId)}`)
