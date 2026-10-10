@@ -32,7 +32,7 @@ import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import { type ExecutionCoordinator, fenceChecks } from "./execution-coordinator"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { FeeEstimate } from "./fee/fee-strategy"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
+import { fingerprintBuiltFee } from "./estimate-reuse-shared"
 import { failureKind } from "./mark-failed-unless-cancelled"
 import type { OperationPlanner, TransferRequest } from "./operation-planner"
 import { maybeRethrowAsRpcCancel, throwIfAborted } from "./rpc-cancel"
@@ -584,15 +584,7 @@ export class TransferExecutor {
 			try {
 				const primary = findPrimaryEndpoint(network)
 				if (primary) {
-					// Fingerprint the EXACT fee the txRequest was built with —
-					// not a fresh fetch after the fact. Both FJ and FPC strategies finalize
-					// `maxFeesPerGas = predictedWorstMinFees * multiplier`, so
-					// on consume we compare against the same live product.
-					const builtFees = txRequest.txContext.gasSettings.maxFeesPerGas
-					const baseFeeFingerprint = fingerprintBaseFee({
-						feePerDaGas: builtFees.feePerDaGas,
-						feePerL2Gas: builtFees.feePerL2Gas,
-					})
+					const baseFeeFingerprint = fingerprintBuiltFee(txRequest)
 					const profile = await requireActiveProfile(this.deps, "Wallet locked")
 					const pendingHashes = this.deps.getPendingForAccount(accountAddress).map((tx) => tx.hash)
 					estimateId = crypto.randomUUID()

@@ -46,7 +46,7 @@ import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
+import { fingerprintBuiltFee } from "./estimate-reuse-shared"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
@@ -469,7 +469,7 @@ export class DappSendExecutor {
 			if (!primary) return undefined
 			const profile = await this.deps.getActiveProfile()
 			if (!profile) return undefined
-			const builtFees = built.txRequest.txContext.gasSettings.maxFeesPerGas
+			const baseFeeFingerprint = fingerprintBuiltFee(built.txRequest)
 			const estimateId = crypto.randomUUID()
 			this.deps.operationEstimateReuse.stash(estimateId, {
 				fingerprint,
@@ -481,10 +481,7 @@ export class DappSendExecutor {
 				// an endpoint flip would snapshot a chain this request was not
 				// signed under (consume would then compare live-vs-live).
 				chainIdentity: built.chainIdentity,
-				baseFeeFingerprint: fingerprintBaseFee({
-					feePerDaGas: builtFees.feePerDaGas,
-					feePerL2Gas: builtFees.feePerL2Gas,
-				}),
+				baseFeeFingerprint,
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
 				pendingHashes: this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash),
