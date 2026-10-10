@@ -11,9 +11,17 @@ process.env.NULO_E2E_DATA_ROOT = ROOT
 
 const { LAUNCH_ENV, OWNER_ENV, RUN_ENV, RUN_OWNER_ENV, WORKTREE_ENV, newMarker, ownIdentity, ownedProcesses, readEnviron, readStartTime } =
 	await import("../../tests/e2e/owned-processes")
-const { createRunDir, deletableRunDir, reapPriorRun, stopService, stopServiceOnExit, sweepDeadRuns, sweepOrphanDataDirs } = await import(
-	"../../tests/e2e/sandbox-ownership"
-)
+const {
+	chromePattern,
+	chromesUnclaimed,
+	createRunDir,
+	deletableRunDir,
+	reapPriorRun,
+	stopService,
+	stopServiceOnExit,
+	sweepDeadRuns,
+	sweepOrphanDataDirs,
+} = await import("../../tests/e2e/sandbox-ownership")
 type OwnedState = import("../../tests/e2e/lockfile").OwnedState
 
 /** An owner no live process can be: what a dead run's processes name. */
@@ -342,6 +350,35 @@ describe.skipIf(process.platform !== "linux")("sandbox ownership by marker", { t
 			}
 			expect(spy.sent).toEqual([[member, "SIGTERM"]])
 		})
+	})
+})
+
+describe.skipIf(process.platform !== "linux")("chromes by extension path", { timeout: 10_000 }, () => {
+	// Chrome shows no environment, so its sweep matches the command line; only pgrep reads it here.
+	test("the pattern matches the exact build only, not a neighbour or a path its metacharacters would match", async () => {
+		const base = `/nonexistent/${newMarker()}`
+		const fake = (extension: string) =>
+			spawn("sh", ["-c", "sleep 30", "chrome", `--load-extension=${extension}`, "--no-sandbox"], { stdio: "ignore" })
+		const exact = fake(`${base}/a.b/dist/chrome`)
+		const others = [fake(`${base}/a.b/dist/chrome-canary`), fake(`${base}/aXb/dist/chrome`)]
+		try {
+			const matched = () => spawnSync("pgrep", ["-f", chromePattern(`${base}/a.b/dist/chrome`)], { encoding: "utf8" }).stdout.trim()
+			expect(await until(() => matched() !== "")).toBe(true)
+			expect(matched()).toBe(String(exact.pid))
+		} finally {
+			for (const child of [exact, ...others]) child.kill("SIGKILL")
+		}
+	})
+
+	test("a worktree's Chromes are swept only once no live run holds it", async () => {
+		const owner = await liveOwner()
+		expect(chromesUnclaimed(undefined)).toBe(true)
+		expect(chromesUnclaimed(lock({ owner: owner.identity }))).toBe(false)
+		expect(chromesUnclaimed(lock({ owner: DEAD }))).toBe(true)
+		// A lock naming no owner (no `/proc`) is judged by its recorded services.
+		expect(chromesUnclaimed(lock({ pids: { aztec: owner.pid } }))).toBe(false)
+		expect(chromesUnclaimed(lock({ pids: { aztec: deadPid() } }))).toBe(true)
+		process.kill(owner.pid, "SIGKILL")
 	})
 })
 

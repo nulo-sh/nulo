@@ -52,3 +52,8 @@
 
 - Breaking a stale path lock by re-read-then-unlink is unsafe with two breakers; the registry avoids breaking at all. The reconcile lock is ours alone, so it breaks through a per-holder break file created with `wx` and removed only after the unlink. The race is too narrow for a multi-process test to hit; the deterministic test holds the break file and shows nobody else unlinks.
 - Mutation checks this round: the break file check, the read-error throw, the teardown seed; each red without its fix.
+
+## Review round 3 (Codex), fixes
+
+- A path-scoped `pkill -f` is a regex over the joined command line: escape the path for ERE, end it at the argument (`( |$)`), and pass it through `execFileSync`, never a shell string. `pgrep -f` with the same pattern tests it without signalling anything.
+- Mutation checks this round: the escaped, anchored pattern; the ownerless-lock pid rule; each red without its fix.

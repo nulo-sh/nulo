@@ -1,4 +1,4 @@
-import { type ChildProcess, execSync } from "node:child_process"
+import { type ChildProcess, execFileSync } from "node:child_process"
 import { lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { E2E_DATA_ROOT, type OwnedState, SANDBOX_SERVICES, type SandboxService, isPidAlive } from "./lockfile"
@@ -170,16 +170,32 @@ export function sweepDeadRuns(worktree: string, opts: SweepOptions = {}): Promis
 	return sweep(deadRunIn(worktree), opts)
 }
 
+const ERE_SPECIAL = /[.*+?^${}()|[\]\\]/g
+
+/** The `pkill -f` pattern for a Chrome loading exactly `extensionPath`: the path is a literal, and
+ *  ends at the argument's end, so `dist/chrome` never matches `dist/chrome-canary`. */
+export function chromePattern(extensionPath: string): string {
+	return `chrome.*--load-extension=${extensionPath.replace(ERE_SPECIAL, "\\$&")}( |$)`
+}
+
 /**
  * Chrome rewrites its environ region with its process title, in the browser and every child, so no
  * Chrome shows a marker: a worktree's Chromes are found by the extension path on their command line.
  */
 export function killChromesLoading(extensionPath: string): void {
 	try {
-		execSync(`pkill -f "chrome.*--load-extension=${extensionPath}" 2>/dev/null || true`, { stdio: "ignore" })
+		execFileSync("pkill", ["-f", chromePattern(extensionPath)], { stdio: "ignore" })
 	} catch {
 		// Nothing matched, or pkill is missing.
 	}
+}
+
+/** Whether a lock leaves this worktree's Chromes to a sweep: no lock, a dead owner, or, for a lock
+ *  naming no owner, no recorded service still alive. */
+export function chromesUnclaimed(lock: OwnedState | undefined): boolean {
+	if (!lock) return true
+	if (lock.owner) return identityIsDead(lock.owner)
+	return SANDBOX_SERVICES.every((service) => !isPidAlive(lock.pids[service]))
 }
 
 interface ProcessTable {

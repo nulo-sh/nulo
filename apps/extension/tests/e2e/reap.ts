@@ -20,16 +20,16 @@
  *      must outlast any reap.
  *
  * Ownership-scoped by design: it signals only processes whose own environment names this worktree's
- * markers and a dead owner — never a blanket `pkill -f aztec` that could hit another agent.
+ * markers and a dead owner, and Chromes loading this worktree's build, which show no environment —
+ * never a blanket `pkill -f aztec` that could hit another agent.
  */
 import { reapOrphanLaunches } from "./fixtures/browser/ownership"
 import path from "node:path"
 import { REPO_ROOT, clearLock, readLock, withReconcileLock } from "./lockfile"
-import { identityIsDead } from "./owned-processes"
 import { releaseDeadRows } from "./port-registry"
-import { killChromesLoading, reapPriorRun, sweepDeadRuns, sweepOrphanDataDirs } from "./sandbox-ownership"
+import { chromesUnclaimed, killChromesLoading, reapPriorRun, sweepDeadRuns, sweepOrphanDataDirs } from "./sandbox-ownership"
 
-/** Under the reconcile lock, so a setup in this worktree cannot adopt the sandbox mid-reap. */
+/** Under the reconcile lock, so no setup in this worktree is admitted mid-reap. */
 async function reapOwnedRun(): Promise<boolean> {
 	const lock = readLock()
 	if (!lock) return false
@@ -44,12 +44,14 @@ async function reapOwnedRun(): Promise<boolean> {
 	return true
 }
 
-const reaped = await withReconcileLock(reapOwnedRun)
+const reaped = await withReconcileLock(async () => {
+	const done = await reapOwnedRun()
+	if (chromesUnclaimed(readLock())) killChromesLoading(path.join(REPO_ROOT, "apps/extension/dist/chrome"))
+	else console.log("[e2e:reap] a live run holds this worktree; its Chromes stay")
+	return done
+})
 const runs = process.platform === "linux" ? await sweepDeadRuns(REPO_ROOT) : "stopped"
 if (runs !== "stopped") console.warn(`[e2e:reap] a dead run's processes are ${runs}`)
-const owner = readLock()?.owner
-if (owner === undefined || identityIsDead(owner)) killChromesLoading(path.join(REPO_ROOT, "apps/extension/dist/chrome"))
-else console.log(`[e2e:reap] a live run (${owner}) holds this worktree; its Chromes stay`)
 const launches = process.platform === "linux" ? await reapOrphanLaunches() : []
 const swept = sweepOrphanDataDirs()
 for (const dir of swept) console.log(`[e2e:reap] swept orphan data dir ${dir}`)

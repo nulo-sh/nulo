@@ -525,6 +525,19 @@ Verdict: **approve with fixes**. C2, C3, C4 and C6 judged closed. Checked and fo
 | R2-4 | Low. The stranger test checks a marker no process carries, so a check that only counts marked processes would pass | Accepted: one marker for the child and the check |
 | R2-5 | Low. The sweep's SIGKILL comment predates the zombie rule; "always" about `systemd --user` is host-specific | Accepted: both reworded |
 
+### Arc 1a implementation, round 3: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve with fixes**. R2-1 to R2-5 judged closed; the break file per dead holder judged sound against two breakers, a breaker dying before or after the unlink, and a third acquirer after the unlink. Removing the Chrome environ guard judged justified. The findings all concern the Chrome sweep added to `e2e:reap` after the concurrency proof showed Chrome never carries a marker (`e4c421a`).
+
+| # | Finding | Disposition |
+|---|---|---|
+| R3-1 | High. `e2e:reap` checks the owner and sweeps Chromes outside the reconcile lock, so a setup admitted in between could lose its browser | Accepted: both run inside `withReconcileLock`, after the sandbox reap; the lock's own exclusion is what the reconcile-lock tests prove |
+| R3-2 | Medium. On a host without `/proc` a live run's lock names no owner, and `e2e:reap` would kill its Chromes | Accepted: `chromesUnclaimed` keeps a lock naming no owner while any recorded service is alive. Test (fails without the pid rule) |
+| R3-3 | Medium. The extension path went into a shell string and an unescaped, unanchored pattern: metacharacters or `dist/chrome-canary` could match another build | Accepted: `pkill` through `execFileSync`, the path escaped for ERE and ended at the argument (`chromePattern`). Test with `pgrep`, no signal: only the exact build matches, not `-canary` nor a path its `.` would match (fails with the old pattern) |
+| R3-4 | Low. `reap.ts`'s header claimed every signal needs a marker; setup's comment said no live run holds the worktree though setup holds it | Accepted: both reworded |
+
+The Codex loop stops here at its three-round limit. Round 3's fixes have unit tests and mutation checks but no fourth Codex round.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
