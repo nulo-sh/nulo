@@ -269,9 +269,11 @@ const onCancelInFlight = buildCancelHandler(executionService, (jobId) => pending
 const dappInteractionService = new DappInteractionServiceClient()
 const onFocusInFlight = buildFocusHandler(dappInteractionService)
 
-/** Shared account / network / token scoping for journal-record filters.
- *  Same rules apply to in-flight and recently-terminal surfaces. */
-function journalRecordInScope(op) {
+/** Whether a record belongs to the active account, profile and network.
+ *  Journal state holds only such records, and only they run a journal side effect: the clears
+ *  below match on account and token alone, so another scope's terminal record would remove this
+ *  scope's card. The scope watcher empties the state synchronously on a switch. */
+function journalRecordInActiveScope(op) {
 	if (op.accountAddress !== appStore.account?.address) return false
 	// Profile scoping: two profiles can hold the SAME account address (the same
 	// mnemonic imported twice), so account + network alone would let one
@@ -282,6 +284,13 @@ function journalRecordInScope(op) {
 	// Records before the journal carried `networkId` may have it
 	// undefined — show those everywhere so we don't strand legacy ops.
 	if (op.networkId && appStore.network?.id && op.networkId !== appStore.network.id) return false
+	return true
+}
+
+/** Shared scoping for journal-record filters, the token page's token included.
+ *  Same rules apply to in-flight and recently-terminal surfaces. */
+function journalRecordInScope(op) {
+	if (!journalRecordInActiveScope(op)) return false
 	if (props.token && op.tokenId !== props.token.id) return false
 	return true
 }
@@ -510,12 +519,14 @@ function clearAwaitingTransactionFallback(op) {
 }
 
 function onJournalAdded(op) {
+	if (!journalRecordInActiveScope(op)) return
 	journalOps.value = [op, ...journalOps.value.filter((x) => x.id !== op.id)]
 	clearExecutingTaskIfPendingCancelTerminal(op)
 	clearExecutingTaskIfThisIsTerminalMatch(op)
 	clearAwaitingTransactionFallback(op)
 }
 function onJournalUpdated(op) {
+	if (!journalRecordInActiveScope(op)) return
 	const idx = journalOps.value.findIndex((x) => x.id === op.id)
 	if (idx !== -1) journalOps.value[idx] = op
 	else journalOps.value = [op, ...journalOps.value]
@@ -551,7 +562,8 @@ async function resnapshotJournal(isCurrent = journalFence.begin()) {
 		const captured = appStore.account?.address
 		const ops = await journalService.getOperations({ accountAddress: captured })
 		if (!isCurrent() || captured !== appStore.account?.address) return
-		journalOps.value = ops.sort((a, b) => b.createdAt - a.createdAt)
+		// The read filters by account and profile, not network.
+		journalOps.value = ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
 		// v4 cancel-dupe (snapshot path): catches close-popup-mid-cancel-and-
 		// reopen + SW disconnect mid-cancel. Uses 30s window to avoid
 		// sweeping in old terminals that don't actually correspond to the

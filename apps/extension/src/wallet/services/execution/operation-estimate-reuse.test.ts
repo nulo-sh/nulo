@@ -50,6 +50,7 @@ function makeEntry(overrides: Partial<OperationEstimateReuseEntry> = {}): Operat
 		txCalls: [{ contract: "0xc", method: "m", args: [] }] as never,
 		pendingPublicAuthwits: [{ account: "0xacc", hash: "0xh", content: { kind: "message_hash", messageHash: "0xm" } }] as never,
 		discoveredHashes: [],
+		sequenceEpoch: 0,
 		builtAt: Date.now(),
 		...overrides,
 	}
@@ -69,6 +70,7 @@ function makeReuse(depOverrides: Partial<OperationEstimateReuseDeps> = {}) {
 		getLiveChainIdentity: vi.fn(async () => ({ l1ChainId: 1, rollupVersion: 4 })),
 		getFpcInfo: vi.fn(async () => ({ ...FPC_SNAPSHOT }) as never),
 		getPendingForAccount: vi.fn(() => [{ hash: "0xpending" }]),
+		sequenceEpoch: vi.fn(() => 0),
 		logDebug: vi.fn(),
 		...depOverrides,
 	}
@@ -157,6 +159,18 @@ describe("OperationEstimateReuse.tryConsume — the drift ladder", () => {
 		})
 		reuse.stash("id-2", makeEntry())
 		expect(await reuse.tryConsume("id-2", makeInput(), FENCE)).toBeUndefined()
+	})
+
+	test("a send of the account that reached the node and left the pending set since the estimate misses; an unchanged epoch reuses", async () => {
+		// Same pending set as at the estimate: the send already settled, only the epoch records it.
+		const moved = makeReuse({ sequenceEpoch: vi.fn(() => 1) })
+		moved.reuse.stash("id-1", makeEntry())
+		expect(await moved.reuse.tryConsume("id-1", makeInput(), FENCE)).toBeUndefined()
+		expect(moved.deps.sequenceEpoch).toHaveBeenCalledWith(7, "0xacc")
+		const still = makeReuse({ sequenceEpoch: vi.fn(() => 1) })
+		const entry = makeEntry({ sequenceEpoch: 1 })
+		still.reuse.stash("id-1", entry)
+		expect(await still.reuse.tryConsume("id-1", makeInput(), FENCE)).toBe(entry)
 	})
 
 	test("CHAIN-IDENTITY drift: the composite assert throwing fails closed to a miss", async () => {

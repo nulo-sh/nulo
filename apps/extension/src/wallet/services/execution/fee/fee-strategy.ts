@@ -47,6 +47,7 @@ import { predictedWorstMinFees } from "@nulo/aztec-runtime/fee-juice"
 import type { TxExecutionRequest, TxSimulationResult } from "@aztec-labs/stdlib/tx"
 import type { ILogger } from "@/wallet/logger"
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import type { Fpc } from "@/wallet/services/fpc/fpc"
 import type { FpcService } from "@/wallet/services/fpc/service"
 import type { FpcIdentitySnapshot } from "@/wallet/services/fpc/spec"
 import type { IPXE } from "@/wallet/services/pxe/client"
@@ -131,6 +132,9 @@ export type FeeStrategyContext = {
 	 *  into one sim. Absent on every non-dApp path (transfer, send,
 	 *  embedded), which therefore keep byte-identical sim options. */
 	probe?: DiscoveryProbe
+	/** The validated `fpc` row a caller ordered the send against: the build pays with it, never with a
+	 *  later read an edit may have moved. Absent, the strategy resolves the row itself. */
+	fpc?: Fpc
 }
 
 /** Dependencies injected once at construction. */

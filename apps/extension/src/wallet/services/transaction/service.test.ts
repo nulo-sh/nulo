@@ -29,11 +29,8 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 	let deletionState: ProfileDeletionState
 	let api: FakeBrowserApi
 
-	beforeEach(async () => {
-		vi.useFakeTimers()
-		api = new FakeBrowserApi()
-		api.reset()
-		deletionState = new ProfileDeletionState()
+	/** A service over `api`'s storage, as a worker (re)start builds it. */
+	async function start(): Promise<TransactionService> {
 		const services = new ServiceCollection()
 		services.add(svc(PROFILE_SERVICE_NAME, { getActiveProfile: async () => ({ id: "p1" }), getDeletionState: () => deletionState }))
 		services.add(
@@ -55,16 +52,25 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			}),
 		)
 		services.add(svc(NETWORK_SERVICE_NAME, {}))
-		service = new TransactionService(new LoggerStore(new ConfigStore()), api)
-		services.add(service)
+		const started = new TransactionService(new LoggerStore(new ConfigStore()), api)
+		services.add(started)
 		await services.start()
+		return started
+	}
+
+	beforeEach(async () => {
+		vi.useFakeTimers()
+		api = new FakeBrowserApi()
+		api.reset()
+		deletionState = new ProfileDeletionState()
+		service = await start()
 	})
 
 	afterEach(() => {
 		vi.useRealTimers()
 	})
 
-	const add = (hash: string, fence?: ExecutionFence, networkId?: string) =>
+	const add = (hash: string, fence?: ExecutionFence, networkId?: string, feeSpender?: string) =>
 		service.addTransaction({
 			origin: { type: 0 } as never,
 			chainId: 1,
@@ -76,6 +82,7 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 			submittedEndpointUrl: undefined,
 			estimatedFee: undefined,
 			gasDetails: undefined,
+			feeSpender,
 			fence,
 			networkId,
 		})
@@ -135,6 +142,16 @@ describe("TransactionService.addTransaction — D13 execution fence", () => {
 		// It must not be among the rows a restart would put back into the poller,
 		// which would run against whichever profile is active now.
 		expect(marked.map((tx) => tx.hash)).not.toContain("0xmarked")
+	})
+
+	test("the fee spender is stored and re-armed with its pending row after a restart; a row without one carries none", async () => {
+		const fence = { profileId: "p1", epoch: deletionState.capture("p1"), session: 1 }
+		await add("0xpaid", fence, "net-1", "0xF")
+		await add("0xplain", fence, "net-1")
+		const restarted = await start()
+		const pending = restarted.getPendingForAccount(ACCOUNT)
+		expect(pending.find((tx) => tx.hash === "0xpaid")?.feeSpender).toBe("0xF")
+		expect(pending.find((tx) => tx.hash === "0xplain")).not.toHaveProperty("feeSpender")
 	})
 
 	test("stamps the owning profile and network so history can be scoped", async () => {

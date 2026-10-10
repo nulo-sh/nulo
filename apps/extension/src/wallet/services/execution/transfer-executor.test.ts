@@ -94,7 +94,9 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		estimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn() } as never,
 		coordinator: { proveAndSend } as never,
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 5)), now: () => 0 }),
-		getFpc: vi.fn(async () => ({ type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" }) as never),
+		getFpcImpl: vi.fn(
+			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
+		),
 		getTokenContract: vi.fn(async () => "0xtoken"),
 		// One mined tx: the account is initialized.
 		getTransactions: vi.fn(async () => [{ chainId: 7, status: 2, executionResult: 0, calls: [] }] as never),
@@ -141,6 +143,7 @@ const RECORD_FIELDS = [
 	"gasDetails",
 	"fence",
 	"networkId",
+	"feeSpender",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -447,7 +450,7 @@ describe("TransferExecutor: the authorizing session", () => {
 		const req = makeReq()
 		await executor.execute(req, "est-1", fence)
 
-		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", req, fence)
+		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", req, fence, undefined)
 		expect(deps.getAccountContract).toHaveBeenCalledWith("p-fence", 7, "0xme")
 		expect(order(deps.assertFence)).toBeLessThan(order(deps.getAccountContract))
 	})
@@ -700,6 +703,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-built",
+			feeSpender: undefined,
 		})
 	})
 
@@ -734,6 +738,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-live",
+			feeSpender: undefined,
 		})
 	})
 })
@@ -1153,7 +1158,7 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		const sponsor = makeHarness()
 		expect([...(await sponsor.executor.sequence(fpcReq)).keys]).toEqual([])
 		const privateFpc = makeHarness({
-			getFpc: vi.fn(async () => ({ type: FpcType.PrivateFpc, chainId: 7, address: "0xPRIV" }) as never),
+			getFpcImpl: vi.fn(async () => ({ infoData: { type: FpcType.PrivateFpc, chainId: 7, address: "0xPRIV" } }) as never),
 		})
 		expect([...(await privateFpc.executor.sequence(fpcReq)).keys]).toEqual(["fpc:0xpriv"])
 	})
@@ -1161,5 +1166,125 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 	test("until a tx of the account is mined, every send may initialize it", async () => {
 		const fresh = makeHarness({ getTransactions: vi.fn(async () => []) })
 		expect([...(await fresh.executor.sequence(makeReq({ transferType: TransferType.Public }))).keys]).toEqual(["init"])
+	})
+})
+
+describe("TransferExecutor: the fee contract a send is ordered against", () => {
+	const SCOPE = { chainId: 7, account: "0xme" }
+	/** A public send paid through FPC `f`: on an initialized account its only key is the fee contract's. */
+	const FPC_REQ = makeReq({ transferType: TransferType.Public, feeSettings: { paymentMethod: { kind: "fpc", fpcId: "f" } } as never })
+	const sponsorRow = (address: string) => ({
+		infoData: { id: "f", type: FpcType.DefaultSponsoredFpc, chainId: 7, address, isProtocol: false },
+	})
+	const sequencerAt = (now: () => number) =>
+		new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 0)), now })
+	const buildFpc = (deps: TransferExecutorDeps, call = 0) =>
+		(deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.calls[call][5] as { infoData: { address: string } } | undefined
+
+	/** The sponsor row's address reads `0xA` until the first grant, `0xB` from then on: an edit landing during the wait. */
+	function editedDuringWait(overrides: Partial<TransferExecutorDeps> = {}) {
+		let address = "0xA"
+		const h = makeHarness({ getFpcImpl: vi.fn(async () => sponsorRow(address) as never), ...overrides })
+		const releases: ReturnType<typeof vi.fn>[] = []
+		;(h.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			address = "0xB"
+			const release = vi.fn()
+			releases.push(release)
+			return release
+		})
+		return { ...h, releases }
+	}
+
+	test("the build pays with the row the send was re-checked against, and the row records its address", async () => {
+		const pinned = sponsorRow("0xF")
+		// The first read orders the send; the second, under the slot, is the one the build must use.
+		const getFpcImpl = vi.fn(async () => pinned as never).mockResolvedValueOnce(sponsorRow("0xF") as never)
+		const { executor, deps } = makeHarness({ getFpcImpl })
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		expect(getFpcImpl).toHaveBeenCalledTimes(2)
+		expect(buildFpc(deps)).toBe(pinned)
+		expect(recordedTx(deps).feeSpender).toBe("0xF")
+	})
+
+	test("fee juice and the protocol sponsor record no spender", async () => {
+		const fj = makeHarness()
+		await fj.executor.execute(makeReq({ transferType: TransferType.Public }), undefined, FENCE)
+		expect(fj.deps.getFpcImpl).not.toHaveBeenCalled()
+		expect(recordedTx(fj.deps).feeSpender).toBeUndefined()
+		const sponsor = makeHarness()
+		await sponsor.executor.execute(FPC_REQ, undefined, FENCE)
+		expect(recordedTx(sponsor.deps).feeSpender).toBeUndefined()
+		expect(buildFpc(sponsor.deps)?.infoData).toMatchObject({ isProtocol: true, address: "0xsponsor" })
+	})
+
+	test("a row forged during the wait is refused at the re-check: the slot goes back and nothing builds; a clean re-check keeps it", async () => {
+		const forged = makeHarness({
+			getFpcImpl: vi
+				.fn(async () => Promise.reject(new Error("PrivateFPC row is not the protocol contract")))
+				.mockResolvedValueOnce(sponsorRow("0xF") as never),
+		})
+		const release = vi.fn()
+		;(forged.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockResolvedValue(release)
+		await expect(forged.executor.execute(FPC_REQ, undefined, FENCE)).rejects.toBeInstanceOf(JournaledRejection)
+		expect(release).toHaveBeenCalled()
+		expect(forged.deps.buildAndEstimate).not.toHaveBeenCalled()
+		expect(forged.deps.transitionJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+
+		const clean = makeHarness({ getFpcImpl: vi.fn(async () => sponsorRow("0xF") as never) })
+		const kept = vi.fn()
+		;(clean.deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockResolvedValue(kept)
+		await clean.executor.execute(FPC_REQ, undefined, FENCE)
+		const built = (clean.deps.buildAndEstimate as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]
+		expect(built).toBeLessThan(kept.mock.invocationCallOrder[0])
+	})
+
+	test("an address edited during the wait: the send gives the slot back and waits in line under the new key, never building with the old", async () => {
+		const sequencer = sequencerAt(() => 0)
+		const earlierOnB = sequencer.enter(SCOPE, new Set(["fpc:0xb"]))
+		const { executor, deps, releases } = editedDuringWait({ sequencer })
+		const run = executor.execute(FPC_REQ, undefined, FENCE)
+		await vi.waitFor(() => expect(releases[0]).toHaveBeenCalled())
+		await new Promise((r) => setTimeout(r, 20))
+		expect(releases).toHaveLength(1)
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		earlierOnB.release()
+		await run
+		expect(releases).toHaveLength(2)
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+		expect(buildFpc(deps)?.infoData.address).toBe("0xB")
+		expect(recordedTx(deps).feeSpender).toBe("0xB")
+		expect(sequencer.isBlocked(SCOPE, new Set(["fpc:0xb"]))).toBe(true)
+		expect(sequencer.isBlocked(SCOPE, new Set(["fpc:0xa"]))).toBe(false)
+	})
+
+	test("an unedited row is taken once: one ticket, one grant, one build", async () => {
+		const sequencer = sequencerAt(() => 0)
+		const enter = vi.spyOn(sequencer, "enter")
+		const { executor, deps } = makeHarness({ sequencer, getFpcImpl: vi.fn(async () => sponsorRow("0xA") as never) })
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		expect(enter).toHaveBeenCalledOnce()
+		expect(deps.lane.acquireTransferSlot).toHaveBeenCalledOnce()
+		expect(deps.buildAndEstimate).toHaveBeenCalledOnce()
+	})
+
+	test("a re-entered ticket keeps the first ticket's deadline", async () => {
+		let t = 0
+		const sequencer = sequencerAt(() => t)
+		const enter = vi.spyOn(sequencer, "enter")
+		const { executor, deps } = editedDuringWait({ sequencer })
+		;(deps.lane.endQueuedWait as ReturnType<typeof vi.fn>).mockImplementation(() => {
+			t += 60_000
+		})
+		await executor.execute(FPC_REQ, undefined, FENCE)
+		const deadlines = enter.mock.results.map((r) => (r.value as { deadline: number }).deadline)
+		expect(deadlines).toEqual([MAX_WAIT_MS, MAX_WAIT_MS])
+	})
+
+	test("a reused estimate is judged against the row the send was ordered against", async () => {
+		const pinned = sponsorRow("0xF")
+		const getFpcImpl = vi.fn(async () => pinned as never)
+		const { executor, deps } = makeHarness({ getFpcImpl })
+		await executor.execute(FPC_REQ, "est-1", FENCE)
+		expect(deps.estimateReuse.tryConsume).toHaveBeenCalledWith("est-1", FPC_REQ, FENCE, pinned)
 	})
 })

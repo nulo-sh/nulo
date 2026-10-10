@@ -60,6 +60,8 @@ export type OperationEstimateReuseEntry = ReuseEntryBase & {
 	/** Message hashes of the private authwits discovery signed into `txRequest` —
 	 *  what a reuse hit would sign, checked against the preview at confirm. */
 	readonly discoveredHashes: readonly string[]
+	/** The account's send epoch before the build (`SendSequencer.epoch`). */
+	readonly sequenceEpoch: number
 }
 
 export interface OperationEstimateReuseDeps {
@@ -72,6 +74,7 @@ export interface OperationEstimateReuseDeps {
 	/** Fresh resolved-FPC lookup for identity revalidation. */
 	getFpcInfo(fpcId: string): Promise<FpcInfo>
 	getPendingForAccount(account: string): { hash: string }[]
+	sequenceEpoch(chainId: number, account: string): number
 	logDebug(msg: string): void
 }
 
@@ -121,6 +124,11 @@ export class OperationEstimateReuse {
 		const pendingNow = this.deps.getPendingForAccount(entry.accountAddress).map((tx) => tx.hash)
 		if (pendingHashesChanged(pendingNow, entry.pendingHashes)) {
 			return this.reject("pending tx set changed")
+		}
+		// A send of the account that reached the node since the estimate began may have spent this
+		// request's notes even when it has already left the pending set.
+		if (entry.sequenceEpoch !== this.deps.sequenceEpoch(network.chainId, entry.accountAddress)) {
+			return this.reject("a send reached the node since the estimate")
 		}
 		const chainDrift = await chainIdentityDrift(entry.chainIdentity, () => this.deps.getLiveChainIdentity(network))
 		if (chainDrift) return this.reject(chainDrift)
