@@ -99,6 +99,13 @@ state: a held skeleton, a lost, doubled or ghost token row, or a stale pin.
 **What ships now.** Nothing of Arc 1 merges. It is built and its PR opens, and it waits for this
 answer.
 
+**Addendum (implementation).** Two more race outcomes, each with a message the wallet already shows,
+belong to OA-3's #94 row: an add parked before the token lock while its profile is deleted and
+restored with the same contract shows "profile <id> deleted" instead of succeeding with the restored
+row; and an add whose last network check overlapped a network deletion that then failed keeps the
+token but shows "network deleted" under Submit, and its balance appears only when the profile is
+next unlocked or the background restarts.
+
 ## OA-4. #136: does "debug log only" also lower the background's log lines?
 
 **Surface.** The wallet's log viewer and its CSV export (Settings → Developer → Logs), which a person

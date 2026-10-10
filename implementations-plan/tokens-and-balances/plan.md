@@ -651,6 +651,11 @@ Validation gate:
     rows, and a token the person deleted while the add waited does not come back to the list. One
     outcome changes: an add that races its network's deletion reports success today, for a token the
     deletion already removed; after, it fails with today's "network deleted" message. No new copy.
+    Two more race outcomes use existing messages (added at implementation, D-arc1-4): an add parked
+    before the token lock while its profile is deleted and restored with the same contract fails with
+    "profile <id> deleted" instead of reporting the restored row as its own success; and an add whose
+    post-set liveness read overlapped a network deletion that then failed keeps its row but reports
+    "network deleted"; its balance row appears when the profile is next activated or the background restarts.
   - #93: a restored or re-imported profile whose id was used before opens with no pinned tokens
     left from before. Pins are never backed up, so this is what every restore already shows unless a
     page wrote a pin back during the deletion. A page still showing the deleted profile can pin again
@@ -660,7 +665,8 @@ Validation gate:
     the lock fails with a new raw `token lock lost` message (a restored row records it; a deletion
     rejects; a profile deletion stops, keeps its tombstone and finishes on the next background start,
     as any failed purge does) instead of overwriting or
-    deleting another token's row. A restored row whose network was deleted during that wait stays,
+    deleting another token's row. A deletion whose own remove landed before the lock was lost
+    completes and announces it, as today (D-arc1-3). A restored row whose network was deleted during that wait stays,
     and is listed again if a network for its chain is added back.
 - **Arc 2:** P8-01 and P8-02, quoted in their phases. Anything beyond them is OA-2 and OA-4.
 - **Arc 3:** per OA-1.
@@ -794,6 +800,8 @@ extension view that has not seen a deletion.
 | D-orch-4 | The lockless chain-sweep delete (`token/service.ts:210-214`) is #262, not fixed in this arc | fix it here | orchestrator, 2026-10-10 | Pre-existing, needs no watchdog release, outside the lane's issues |
 | D-arc1-1 | The purge's raw pass is guarded by the storage view the token service passes `purgeMalformedRows` (its `delete` checks `ownsLock()` and is tracked); `purge-rows.ts` is unchanged | an optional guard parameter on `purgeMalformedRows` (file map) | implementer | The tracker needs the same seam, so one adapter serves both and the shared helper's signature stays as it is |
 | D-arc1-2 | A tracked add write that rejects issues `failed` from its own rejection handler, before it leaves the tracker | journal the failure only in the attempt's `catch` | implementer | The `catch` sits three async frames above the set; a successor draining the set could pass the empty check one turn before `failed` was issued (R3's "a successor waits for it") |
+| D-arc1-3 | A deletion announces its removal (`onTokenDeleted`) whenever its own remove landed, owned or not; only the remove itself needs an owned ticket | R5's check before the emit too (plan); a fresh-ticket finalization (Codex) | Codex r1 (Medium): the check left a removed row with live balance rows and no retry path. Opus r1 (Low): keep the check, a successor's same-contract re-add could be wiped | The emit runs in the turn the tracked remove settles, ahead of any successor, which must drain that remove before it reads; so no successor's row can exist yet. A late handler racing a re-add is base behaviour for every deletion |
+| D-arc1-4 | An add whose post-set liveness read overlapped a network deletion that then failed keeps its row and rejects "network deleted" (accepted, disclosed in § UI impact) | re-read `isNetworkLive` when the chain is live (Opus r1) | Opus r1 (Low): needs a failed cascade, acceptable if stated | The reservation may have swept rows before failing, so R4's false is right; a re-read loop risks spinning on a replacement network, and the row is correct data on a live chain |
 
 ## Audit verdicts
 
@@ -880,6 +888,24 @@ Routing the chain sweep's id-reuse race to an issue (#262): accepted by the revi
 | 2 | Low | The #98 note predates R5's signature and body changes | Accepted: § Owner dependencies names R5's changes inside `restore`, the purge and `_deleteTokenByIdHoldingLock` |
 
 Both conditions are wording and are applied; no further round was run. The reviewer: "no further material contradiction or blocking defect in the revised R1–R5 design"; implementation and test execution remain its validation gates.
+
+### Arc 1 implementation, Codex round 1 (gpt-6.1-sol, high, default login), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Medium | A deletion released while its remove applies removes the row, then refuses the emit: balance rows and incoming schedulers outlive the token, and a retry finds no token | Accepted (D-arc1-3): the emit no longer checks the ticket; a test releases during the remove and expects the announcement (red on the pre-fix head) |
+| 2 | Low | The new profile describe sits between the restore suite's contract comment and its describe; two comments narrate their declarations | Accepted: the describe moved above the comment; both comments removed |
+
+### Arc 1 implementation, Opus 5.5 review (general-purpose), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | Same released-deletion emit as Codex 1; keep the check and disclose instead | Rejected for D-arc1-3's fix, with reason: no successor can exist before the emit's turn |
+| 2 | Low | The in-lock `findToken` hit now rejects a deleted-and-restored incarnation's add; § UI impact names only the network race | Accepted: § UI impact and the PR body name it (existing message) |
+| 3 | Low | The byte-for-byte case never asserts the restored bytes equal the add's | Accepted: the case asserts the identity it is named for |
+| 4 | Low | R4 plus a failed network deletion leaves a kept row reporting "network deleted" | Accepted as residue (D-arc1-4), disclosed |
+| 5 | Nit | Comment placement in the profile suite | Accepted (same as Codex 2) |
+| 6 | Nit | "today's idempotent re-add"; "the metadata fetch above" points at a call | Accepted |
 
 ## Post-implementation
 

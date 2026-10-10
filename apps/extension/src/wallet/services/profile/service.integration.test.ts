@@ -1343,21 +1343,9 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
-	/**
-	 * Backup-import: restore() + finalizeRestore() contract.
-	 *
-	 * `restore()` writes the profile only — NO session open, NO
-	 * `onActiveProfileChanged` emit. The session is opened explicitly via
-	 * `finalizeRestore()` after the caller has finished restoring backup data
-	 * (networks / accounts / etc.). This split prevents
-	 * `app.vue:onActiveProfileChanged` from racing the rest of the import
-	 * (it would otherwise call `getOrInitNetworks` + `ensureDefaultAccount`
-	 * against an empty profile, seeding duplicate networks / addresses).
-	 */
 	describe("an adopted id starts with no UI keys", () => {
 		const PIN = JSON.stringify({ 1: ["0xc0ffee"] })
 		const keysOf = async (api: FakeBrowserApi) => Object.keys(await api.storage.local.get(null))
-		/** The writes naming `id`, in order. */
 		const writesFor = (log: string[], id: string) => log.filter((entry) => entry.endsWith(`@${id}`))
 
 		test("a restore that keeps its backup's id removes that id's pins before the marker and the row; another profile's stay", async () => {
@@ -1410,6 +1398,17 @@ describe("ProfileService integration", () => {
 		}, 30_000)
 	})
 
+	/**
+	 * Backup-import: restore() + finalizeRestore() contract.
+	 *
+	 * `restore()` writes the profile only — NO session open, NO
+	 * `onActiveProfileChanged` emit. The session is opened explicitly via
+	 * `finalizeRestore()` after the caller has finished restoring backup data
+	 * (networks / accounts / etc.). This split prevents
+	 * `app.vue:onActiveProfileChanged` from racing the rest of the import
+	 * (it would otherwise call `getOrInitNetworks` + `ensureDefaultAccount`
+	 * against an empty profile, seeding duplicate networks / addresses).
+	 */
 	describe("restore + finalizeRestore", () => {
 		// 32-byte base64 master key used for restore() password-profile path.
 

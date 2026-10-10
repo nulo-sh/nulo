@@ -85,7 +85,6 @@ type AddProgress =
 	| { stage: "done"; info: TokenInfo }
 type ResumableProgress = Exclude<AddProgress, { stage: "done" }>
 
-/** One attempt of a token add, under one ticket. */
 type AddAttempt = {
 	input: PersistTokenInput
 	opId: string
@@ -435,12 +434,12 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		if (progress.stage === "start") await attempt.track(this.journal.transitionOperation(attempt.opId, { stage: "simulating" }))
 		const carried: ResumableProgress = progress.stage === "start" ? { stage: "started" } : progress
 		// A same-contract add or restore that landed while an earlier attempt was released is this
-		// add's result, as is today's idempotent re-add: no write and no emit.
+		// add's result, as is the idempotent re-add: no write and no emit.
 		const existing = await this.findToken(input.profileId, input.tokenInterface.chainId, input.tokenInterface.contract)
 		if (existing) return attempt.ownsLock() ? await this.journalSucceeded(attempt, existing) : carried
 		const metadata = carried.stage === "fetched" ? carried.metadata : await this.addMetadata(attempt)
 		const token = buildToken(input, metadata, await nextNumericId(this.tokens))
-		// Assert authority flush against the write: the metadata fetch above
+		// Assert authority flush against the write: the metadata fetch
 		// can span a profile deletion or the network's purge cascade —
 		// landing the row afterwards creates an orphan the cascade's own
 		// snapshot predates.
@@ -648,9 +647,8 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		}
 		if (!ownsLock()) throw tokenLockLost()
 		await this.track(this.tokens.delete(`${id}`))
-		if (!emit) return getTokenInfo(token)
-		if (!ownsLock()) throw tokenLockLost()
-		this.emit("onTokenDeleted", { ...getTokenInfo(token), profileId: token.profileId })
+		// Owned or not: this runs in the turn the delete lands, before a successor that drains it.
+		if (emit) this.emit("onTokenDeleted", { ...getTokenInfo(token), profileId: token.profileId })
 		return getTokenInfo(token)
 	}
 

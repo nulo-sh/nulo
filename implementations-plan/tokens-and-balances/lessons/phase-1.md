@@ -39,3 +39,15 @@
   which base cannot fail on, resolves). Green on head. The tests live in `service.integration.test.ts`, the
   profile suite that drives real restore and passkey import. Gate: lint, typecheck:all, profile +
   profile-deletion + `utils/` + `usePinnedTokens` 1500/1500.
+
+## Arc 1 review loop
+
+- 2026-10-10 — Codex round 1 (gpt-6.1-sol, high, default login, session `01a12449`): approve with fixes, one
+  Medium and one Low. Opus 5.5 review alongside: approve with fixes, four Lows and two nits. Both found the
+  released deletion that removes its row and then refuses the emit (balance rows outlive the token). They
+  disagreed on the fix; the emit now runs whenever the remove landed (D-arc1-3), because a successor must drain
+  that remove and so cannot act before the emit's turn. Regression test red on the pre-fix head. Opus's two
+  undisclosed race outcomes went into § UI impact and OWNER-ASKS.md (addendum to OA-3), both with messages the
+  wallet already shows.
+- Lesson: R5's "check before every observable step" over-applied to a step that follows a write in the same
+  turn: refusing the announcement of a write that already landed is worse than announcing it.

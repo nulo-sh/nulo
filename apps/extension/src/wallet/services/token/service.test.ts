@@ -737,9 +737,9 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 	})
 
 	test.each([
-		{ name: "another token", replacement: () => mk("0xccc") },
-		{ name: "the same token, byte for byte", replacement: (own: string) => JSON.parse(own) },
-	])("released after its set, it leaves a row a restore wrote at its id on a replaced network: $name", async ({ replacement }) => {
+		{ name: "another token", identical: false, replacement: () => mk("0xccc") },
+		{ name: "the same token, byte for byte", identical: true, replacement: (own: string) => JSON.parse(own) },
+	])("released after its set, it keeps a restore's row at its id on a replaced network: $name", async ({ identical, replacement }) => {
 		const h = await setup()
 		const check = holdNetworkCheck(h, 2)
 		networksOf(h).isChainLive = async () => true
@@ -754,6 +754,7 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 		const [restored] = await h.tokenService.restore([replacement(own as string)])
 		expect(`nulo:core:tokens@${restored.id}`).toBe(key)
 		const written = (await h.api.storage.local.get(key))[key]
+		expect(written === own).toBe(identical)
 		check.release(false)
 
 		expect(await run).toEqual(expect.objectContaining({ message: "network deleted" }))
@@ -924,6 +925,29 @@ describe("TokenService — a token-lock holder the watchdog released", () => {
 
 		expect(await deleting).toEqual(expect.objectContaining({ message: "token lock lost" }))
 		expect(await rows(h)).toEqual({ [`${id}`]: "0xccc" })
+	})
+
+	test("a deletion released while its remove applies still announces the removal", async () => {
+		const h = await setup()
+		const { id } = await add(h, "0xa11")
+		const deleted: number[] = []
+		h.tokenService.onTokenDeleted.add((t) => {
+			deleted.push(t.id)
+		})
+		const removal = gate()
+		const remove = h.api.storage.local.remove.bind(h.api.storage.local)
+		h.api.storage.local.remove = async (keys) => {
+			await removal.promise
+			await remove(keys)
+		}
+		const deleting = h.tokenService.deleteToken(id)
+		await settle()
+		await release()
+		removal.resolve()
+
+		expect((await deleting).id).toBe(id)
+		expect(deleted).toEqual([id])
+		expect(await rows(h)).toEqual({})
 	})
 
 	test("a profile purge released after its snapshot throws instead of deleting another profile's row at a freed id", async () => {
