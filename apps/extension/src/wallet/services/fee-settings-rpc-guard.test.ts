@@ -81,6 +81,7 @@ describe("unknown speed levels at the popup RPC boundary", () => {
 		["an unknown name", "bogus"],
 		["a non-string", 2],
 		["an empty string", ""],
+		["null", null],
 	] as const
 	test.each(
 		(["execution", "dappInteraction", "authRegistry"] as const).flatMap((service) =>
@@ -91,6 +92,13 @@ describe("unknown speed levels at the popup RPC boundary", () => {
 		const { method, args } = firstOf(service)
 		const { reply, ran } = await call(service, method, args(fee(level)))
 		expect(reply?.errorPayload).toMatchObject(refusal(method))
+		expect(ran).toBe(false)
+	})
+
+	test.each([sendTransaction, sendTx])("executeOperations reads the level of every send-like operation (%o)", async (op) => {
+		const { call } = harness()
+		const { reply, ran } = await call("execution", "executeOperations", [[op(fee("bogus"))], { type: 0 }])
+		expect(reply?.errorPayload).toMatchObject(refusal("executeOperations"))
 		expect(ran).toBe(false)
 	})
 

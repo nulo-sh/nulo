@@ -201,7 +201,13 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// Only an execution interaction is approvable through this route; a
 		// capability or discovery id must not be claimable here, and the record
 		// survives so `resolveInteraction` can still settle it. Non-disclosing.
-		if (!interaction || !isExecutionPayload(interaction.payload) || deltas.length !== interaction.payload.params.operations.length) {
+		// `deltas` must be a real array: the port's fee-settings check reads only arrays.
+		if (
+			!interaction ||
+			!isExecutionPayload(interaction.payload) ||
+			!Array.isArray(deltas) ||
+			deltas.length !== interaction.payload.params.operations.length
+		) {
 			throw new Error("Invalid id")
 		}
 		// First service claim wins — service acceptance is the commit point, not
