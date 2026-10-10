@@ -1,0 +1,10 @@
+# fees-and-sponsors status
+
+- 2026-10-10 phase 0: adopted worktree `fees-and-sponsors` (base `fd47407`); tier mid; Phase 0 answers from the orchestrator brief.
+- 2026-10-10 phase 0.4: recon started (3 Explore agents, sonnet).
+- 2026-10-10 phase 0.4: recon done (3 agents); recon.md written.
+- 2026-10-10 phase 1: plan v1 drafted (arc 1 decision-free: #196, #119, #188 pin, #222; arc 2 waits on page 6); OWNER-ASKS OA-1..OA-7.
+- 2026-10-10 phase 2: dual audit started (Codex gpt-6.1-sol high; Opus Plan).
+- 2026-10-10 phase 2: round 1 done (Codex reject, Opus conditional approve); plan v2 and OWNER-ASKS v2 (11 asks) written; final Codex pass next.
+- 2026-10-10 phase 2: final Codex pass: reject (2 blocking); plan v3 revised (#119 as an entry hold, H3 unseen-fee gates); resumed pass running.
+- 2026-10-10 phase 2: resumed final pass: conditional approve; four conditions applied (v3.1). Plan committed, awaiting the orchestrator.
