@@ -19,7 +19,7 @@ import { useFormState } from "@/composables/useFormState"
 import { usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
 const { openToast } = useToast()
-const { order } = usePopupStack("new_contact")
+const { order, depth } = usePopupStack("new_contact")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -160,6 +160,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New contact"
 		submitLabel="Add contact"
 		:submitDisabled="!isAvailableToAddContact || processingError.show"

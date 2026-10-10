@@ -108,6 +108,37 @@ export async function refusePasskeyStep(page: Page, auth: PasskeyAuthSetup, trig
 	await allowAgain()
 }
 
+type WithheldPrfProbe = Window & { __passkeyCreates?: number }
+
+/**
+ * From now on every `create` on `page` runs on the real authenticator, is counted, and reports PRF
+ * as enabled with no output, as an authenticator that gives PRF only on assertion does; the first
+ * `get` after that, the create's confirming assertion, is refused as a dismissed prompt. So the
+ * next create step mints a credential it cannot confirm. Returns a reader of the create count.
+ */
+export async function withholdCreatePrf(page: Page): Promise<() => Promise<number>> {
+	await page.evaluate(() => {
+		const credentials = navigator.credentials
+		const probe = window as WithheldPrfProbe
+		probe.__passkeyCreates = 0
+		const create = credentials.create.bind(credentials)
+		const get = credentials.get.bind(credentials)
+		let refused = false
+		credentials.create = async (options) => {
+			probe.__passkeyCreates = (probe.__passkeyCreates ?? 0) + 1
+			const credential = await create(options)
+			if (credential) Object.defineProperty(credential, "getClientExtensionResults", { value: () => ({ prf: { enabled: true } }) })
+			return credential
+		}
+		credentials.get = async (options) => {
+			if (refused) return get(options)
+			refused = true
+			throw new DOMException("The operation either timed out or was not allowed.", "NotAllowedError")
+		}
+	})
+	return () => page.evaluate(() => (window as WithheldPrfProbe).__passkeyCreates ?? 0)
+}
+
 type HoldProbe = Window & { __releasePasskeyRequest?: () => void }
 
 /** Holds the next passkey request `page` makes until the returned call lets it through, so a test can

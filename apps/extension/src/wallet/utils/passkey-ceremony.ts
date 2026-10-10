@@ -115,11 +115,17 @@ async function runCreate(userHandle: string, name: string, signal?: AbortSignal)
 	}
 
 	// Some authenticators expose PRF only on assertion, so the new credential is confirmed by a
-	// second prompt; when that one fails, the credential exists and only needs confirming again.
+	// second prompt.
+	return await confirmMinted(id, userHandle, signal)
+}
+
+/** Confirms a credential a create already minted; when that fails, the credential still exists
+ *  and only needs confirming again. */
+async function confirmMinted(credentialId: string, userHandle: string, signal?: AbortSignal): Promise<PasskeyCredentialData> {
 	try {
-		return await confirmCreatedCredential(id, userHandle, signal)
+		return await confirmCreatedCredential(credentialId, userHandle, signal)
 	} catch (cause) {
-		throw new PasskeyUnconfirmedError(id, userHandle, cause)
+		throw new PasskeyUnconfirmedError(credentialId, userHandle, cause)
 	}
 }
 
@@ -165,6 +171,7 @@ export async function confirmCreatedCredential(
  */
 export async function runPasskeyCeremony(request: PasskeyRequest, signal?: AbortSignal): Promise<PasskeyCredentialData> {
 	if (request.mode === "create") {
+		if (request.credentialId) return await confirmMinted(request.credentialId, request.userHandle, signal)
 		return await runCreate(request.userHandle, request.name, signal)
 	}
 	return await runGet(request.credentialId, signal)

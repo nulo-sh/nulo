@@ -1,7 +1,8 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import { ServiceClient } from "@nulo/extension-messaging/background"
-import { DummyLogger, type ILogger, type LogLevel, trim } from "@/wallet/logger"
-import { LOGGER_SERVICE_NAME, type Methods } from "./spec"
+import { DummyLogger, type ILogger, LogLevel, trim } from "@/wallet/logger"
+import { EventHandler } from "@nulo/wallet-core/utils"
+import { type Events, LOGGER_SERVICE_NAME, type Methods } from "./spec"
 
 export * from "./spec"
 
@@ -12,9 +13,25 @@ export type DocumentLogContext = "popup" | "onboarding" | "offscreen"
  *  would hold a port nothing closes (`ServiceClient.disconnect()` closes the client's port and
  *  then logs through the logger), one per client for the document's life. We intentionally
  *  don't declare `implements ServiceSpec<Methods>`: `log` here takes the context per call. */
-class LoggerServiceClient extends ServiceClient<Methods> {
+class LoggerServiceClient extends ServiceClient<Methods, Events> {
+	public readonly onLevel = new EventHandler<LogLevel>()
+
+	/** The worker's minimum level as this port last heard it; unknown until the first answer and
+	 *  again after the port drops, and while unknown every line is sent. */
+	private minLevel: LogLevel | undefined
+
 	public constructor() {
 		super(LOGGER_SERVICE_NAME, new DummyLogger())
+		this.onLevel.add(this.adoptLevel)
+		this.onDisconnected.add(() => {
+			this.minLevel = undefined
+		})
+	}
+
+	/** Whether the worker is known to drop a line at `level`. Only Debug or Info is ever adopted as
+	 *  the minimum, so a Warn or Error line is never dropped here, whatever the worker answers. */
+	public drops(level: LogLevel): boolean {
+		return this.minLevel !== undefined && level < this.minLevel
 	}
 
 	public log(context: DocumentLogContext | undefined, source: string, level: LogLevel, ...data: unknown[]) {
@@ -31,7 +48,13 @@ class LoggerServiceClient extends ServiceClient<Methods> {
 		// client, and redacting there would rewrite live `RestoreSecret` params and break profile
 		// restore. The SW re-trims on arrival, which is harmless — trim is stable over its own
 		// output.
-		return this.request("log", context, source, level, ...(trim(data) as unknown[]))
+		const line = this.request("log", context, source, level, ...(trim(data) as unknown[]))
+		line.then(this.adoptLevel, () => {})
+		return line
+	}
+
+	private readonly adoptLevel = (level: unknown) => {
+		this.minLevel = level === LogLevel.Debug || level === LogLevel.Info ? level : undefined
 	}
 }
 
@@ -44,12 +67,14 @@ let shared: LoggerServiceClient | undefined
  * A failed line never becomes an unhandled rejection: the pages' rejection handlers log through
  * this same logger, so on a page whose port cannot open each failure would log the next one, for
  * the life of the page. The request promise itself is returned, so a caller that awaits a line
- * still sees it reject.
+ * still sees it reject. A line below the worker's known minimum never leaves the document and
+ * resolves at once.
  */
 export function documentLogger(context?: DocumentLogContext): ILogger {
 	return {
 		log(source, level, ...data) {
 			shared ??= new LoggerServiceClient()
+			if (shared.drops(level)) return Promise.resolve(undefined)
 			const line = shared.log(context, source, level, ...data)
 			line.catch(() => {})
 			return line

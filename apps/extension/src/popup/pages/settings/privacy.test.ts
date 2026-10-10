@@ -90,21 +90,18 @@ describe("settings/privacy", () => {
 		expect(w.get('[data-testid="explorer-trigger"]').text()).toBe("None")
 	})
 
-	test("(BUG PIN) a failed write leaves the attempted value showing, and asking for it again writes nothing", async () => {
-		// The worker announces a write before it persists it, so the page has applied the value by
-		// the time the write fails; the next request for that value then looks like a no-op.
-		config.setValue.mockImplementationOnce(async (key: string, value: unknown) => {
-			config.onUpdate.invoke({ key, value } as ConfigProp)
-			throw new Error("persist failed")
-		})
+	test("a failed write leaves the stored value showing, and asking for it again writes again", async () => {
+		// The worker persists before it announces, so a failed write announces nothing.
+		config.setValue.mockRejectedValueOnce(new Error("persist failed"))
 		const w = await mountPrivacy()
 		const toggle = w.getComponent(Toggle)
 		toggle.vm.$emit("update:modelValue", false)
 		await flushPromises()
 		expect(fakes.openToast).toHaveBeenCalledWith({ kind: "error", label: "Failed to update setting" })
-		expect(w.get('[data-testid="fiat-values-toggle"]').attributes("data-on")).toBe("false")
+		expect(w.get('[data-testid="fiat-values-toggle"]').attributes("data-on")).toBe("true")
 		toggle.vm.$emit("update:modelValue", false)
 		await flushPromises()
-		expect(config.setValue).toHaveBeenCalledTimes(1)
+		expect(config.setValue).toHaveBeenCalledTimes(2)
+		expect(w.get('[data-testid="fiat-values-toggle"]').attributes("data-on")).toBe("false")
 	})
 })
