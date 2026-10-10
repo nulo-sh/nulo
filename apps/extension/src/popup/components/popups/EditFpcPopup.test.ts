@@ -233,6 +233,7 @@ describe("EditFpcPopup — the list under a held read", () => {
 		}
 
 		fpcServiceMock.onFpcAdded.invoke(alice)
+		expect(reads).toHaveLength(1)
 		reads[0]?.resolve([{ ...FPC }])
 		await flushPromises()
 		expect(await warns()).toBe(false)

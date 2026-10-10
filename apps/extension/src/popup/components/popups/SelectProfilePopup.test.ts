@@ -146,17 +146,18 @@ describe("SelectProfilePopup — the list under a held read", () => {
 		const names = () => (w.vm as unknown as { profiles: { name: string }[] }).profiles.map((p) => p.name)
 		await w.setProps({ show: true })
 
-		client.onProfileAdded.invoke({ id: "p3", name: "Gamma" })
+		client.onProfileAdded.invoke({ id: "p5", name: "Gamma" })
+		expect(reads).toHaveLength(1)
 		reads[0]?.resolve([
-			{ id: "p2", name: "Beta" },
-			{ id: "p1", name: "Alpha" },
+			{ id: "p4", name: "Epsilon" },
+			{ id: "p3", name: "Delta" },
 		])
 		await flushPromises()
-		expect(names()).toEqual(["Alpha", "Beta"])
+		expect(names()).toEqual(["Delta", "Epsilon"])
 
-		client.onProfileAdded.invoke({ id: "p3", name: "Gamma" })
+		client.onProfileAdded.invoke({ id: "p5", name: "Gamma" })
 		await flushPromises()
-		expect(names()).toEqual(["Alpha", "Beta", "Gamma"])
+		expect(names()).toEqual(["Delta", "Epsilon", "Gamma"])
 		w.unmount()
 	})
 })

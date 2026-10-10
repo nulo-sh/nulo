@@ -1,6 +1,6 @@
 /**
  * jsdom resolves no custom property, so the loader's scrim is pinned in its sources: the token it
- * reads must hold the literal it replaced, `rgba(10, 9, 8, 0.85)`, in both themes.
+ * reads must hold `rgba(10, 9, 8, 0.85)` in both themes.
  */
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"

@@ -229,6 +229,7 @@ describe("NewFpcPopup — the list under a held read", () => {
 		}
 
 		fpcServiceMock.onFpcAdded.invoke(alice)
+		expect(reads).toHaveLength(1)
 		reads[0]?.resolve([{ id: "f1", name: "Sponsor", address: `0x${"1".repeat(64)}` }])
 		await flushPromises()
 		expect(await warns()).toBe(false)

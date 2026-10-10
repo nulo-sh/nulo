@@ -1091,13 +1091,18 @@ describe("send page — the token card while the tokens load", () => {
 	const tokenDeleted = () => lastClient<{ onTokenDeleted: EventHandler<unknown> }>(TokenServiceClient).onTokenDeleted
 	const listed = (w: W) => (w.vm as unknown as { tokens: { symbol: string }[] }).tokens.map((t) => t.symbol)
 
-	test("(BUG PIN) a token deleted while the load is out stays listed and active; one deleted after it is dropped", async () => {
+	test("(BUG PIN) a token deleted after the token answer, while the contacts read is out, stays listed and active; one deleted after the load is dropped", async () => {
 		// Today's behaviour, kept until the owner decides: the delete finds no row in the list the load
-		// cleared, and the load's older answer brings the deleted token back.
-		const reads = holdTokenReads()
+		// cleared, and the token answer, applied only once the other reads answer, brings it back.
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const contactReads = holdReads<unknown[]>(mocks.getContacts)
+		onTestFinished(() => {
+			mocks.getContacts.mockReset()
+		})
 		const { w } = await mountSend()
 		tokenDeleted().invoke(TOKEN)
-		reads[0]?.resolve([TOKEN, OTHER])
+		expect(contactReads).toHaveLength(1)
+		contactReads[0]?.resolve([])
 		await flushPromises()
 		expect(listed(w)).toEqual(["TST", "OTH"])
 		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
@@ -1182,16 +1187,15 @@ describe("send page — the contact list reducers", () => {
 		w.unmount()
 	})
 
-	test("(BUG PIN) a contact added while the page's three reads are out is dropped; one added after them is kept", async () => {
+	test("(BUG PIN) a contact added after the contacts answer, while the token read is out, is dropped; one added after the load is kept", async () => {
 		// Today's behaviour, kept until the owner decides: the contacts answer is applied only once the
 		// token and balance reads answer too, and it replaces the list an add already reached.
-		const reads = holdReads<unknown[]>(mocks.getContacts)
-		onTestFinished(() => {
-			mocks.getContacts.mockReset()
-		})
+		mocks.getContacts.mockResolvedValueOnce([row("c1", "Alice", "a")])
+		const tokenReads = holdReads<unknown[]>(mocks.getTokens)
 		const { w } = await mountSend()
 		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
-		reads[0]?.resolve([row("c1", "Alice", "a")])
+		expect(tokenReads).toHaveLength(1)
+		tokenReads[0]?.resolve([TOKEN])
 		await flushPromises()
 		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice"])
 

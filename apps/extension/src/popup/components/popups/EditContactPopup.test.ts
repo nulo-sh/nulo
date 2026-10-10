@@ -424,6 +424,7 @@ describe("EditContactPopup — the list under a held read", () => {
 
 		contactServiceMock.onContactUpdated.invoke({ ...CONTACT, name: "Alicia" })
 		expect(listed()).toEqual(["Alicia"])
+		expect(reads).toHaveLength(1)
 		reads[0]?.resolve([CONTACT])
 		await flushPromises()
 		expect(listed()).toEqual(["Alice"])

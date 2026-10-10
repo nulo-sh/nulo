@@ -6,7 +6,7 @@ export function withoutId<T extends { id: unknown }>(list: T[], item: { id: unkn
 }
 
 /**
- * The contact service's event handlers for a list the popup holds. An add appends, even for a
+ * The contact service's event handlers for a contact list a view holds. An add appends, even for a
  * listed id; an update replaces the first row with its id, or appends; both work in place, so the
  * array keeps its identity. A delete swaps in a new array without any row of its id.
  */

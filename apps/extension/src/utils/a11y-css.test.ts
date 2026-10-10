@@ -35,6 +35,12 @@ describe("reduced motion stops the shake and the shimmers", () => {
 	])("%s: %s", (path, selectors) => {
 		expect(reducedMotionRules(read(path)).get(selectors)).toBe("animation: none;")
 	})
+
+	test("popup/pages/settings/security/export/full.vue: .shake is the shared one, with its stop", () => {
+		expect(read("popup/pages/settings/security/export/full.vue")).toMatch(
+			/\.shake \{\s*composes: shake_password from "(\.\.\/)+components\/composite\/shake\.module\.css";\s*\}/,
+		)
+	})
 })
 
 describe("the toolbar button shows keyboard focus", () => {

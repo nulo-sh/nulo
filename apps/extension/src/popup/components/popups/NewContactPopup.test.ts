@@ -99,6 +99,7 @@ async function fill(w: ReturnType<typeof mount>, name: string, address: string) 
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	contactServiceMock.getContacts.mockReset()
 	freshBuses()
 })
 afterEach(() => {
@@ -341,6 +342,7 @@ describe("NewContactPopup — the list under a held read", () => {
 		contactServiceMock.onContactAdded.invoke(row("c2", "Bob", "b"))
 		expect(names(w)).toEqual(["Bob"])
 
+		expect(reads).toHaveLength(1)
 		reads[0]?.resolve([row("c1", "Alice", "a")])
 		await flushPromises()
 		expect(names(w)).toEqual(["Alice"])

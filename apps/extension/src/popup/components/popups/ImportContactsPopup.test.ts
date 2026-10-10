@@ -4,7 +4,7 @@
  * the counted sender-consent banner. Fixtures are wire-shaped: 0x + 64 hex, valid Aztec addresses.
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { nextTick, reactive } from "vue"
 import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
@@ -504,10 +504,12 @@ describe("ImportContactsPopup — the book under a held read", () => {
 		const reads = holdReads<unknown[]>(contactServiceMock.getContacts)
 		cacheStoreState.importContacts = [{ name: "Priya Shah", address: ADDR.priya, isSender: true }]
 		const w = mount(ImportContactsPopup, { props: { show: false }, global: { stubs: STUBS } })
+		onTestFinished(() => w.unmount())
 		await w.setProps({ show: true })
 		const priya = { id: "c9", name: "Priya Shah", address: ADDR.priya }
 
 		contactServiceMock.onContactAdded.invoke(priya)
+		expect(reads).toHaveLength(1)
 		reads[0]?.resolve([...SAVED])
 		await flushPromises()
 		expect(w.text()).toContain("sender will be registered on")
