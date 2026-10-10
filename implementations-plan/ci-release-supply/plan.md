@@ -223,7 +223,7 @@ Pass criteria for every gate: each command exits 0; each new test is shown red a
 
 ### Arc 1: workflows
 
-**Phase 1.1, Storybook gate (#166).**
+**Phase 1.1, Storybook gate (#166).** ✓
 1. Run `bun run --cwd apps/extension build-storybook` once and record its time.
 2. Add the `build-storybook` job to `pr-quick.yml` as § Arc 1 says.
 3. Add it to `quality-status`: `needs`, `BUILD_STORYBOOK_RESULT`, and an `expect` line like `build-chrome`'s.

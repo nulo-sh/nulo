@@ -338,6 +338,24 @@ jobs:
             test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
           done
 
+  # Every story lives under the extension build's filter, so that flag decides this job too.
+  # Telemetry is off so CI sends nothing to Storybook's servers.
+  build-storybook:
+    name: Build Storybook
+    needs: changes
+    if: needs.changes.outputs.needs-extension-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - uses: ./.github/actions/setup-bun
+      - name: Build
+        env:
+          STORYBOOK_DISABLE_TELEMETRY: "1"
+        run: bun run --cwd apps/extension build-storybook
+
   # Extension smoke e2e lives in its own pr-extension-smoke-e2e.yml workflow:
   # auto-runs on PRs to main, on changes within the `smoke-surface`
   # filter, or via the `e2e:extension-smoke` label. Mirrors pr-extension-network-e2e.yml.
@@ -345,7 +363,7 @@ jobs:
   status:
     name: quality-status
     if: always()
-    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing]
+    needs: [changes, commitlint, lint-and-typecheck, unit-tests, build-chrome, build-firefox, build-landing, build-storybook]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -361,6 +379,7 @@ jobs:
           BUILD_CHROME_RESULT: ${{ needs.build-chrome.result }}
           BUILD_FIREFOX_RESULT: ${{ needs.build-firefox.result }}
           BUILD_LANDING_RESULT: ${{ needs.build-landing.result }}
+          BUILD_STORYBOOK_RESULT: ${{ needs.build-storybook.result }}
         run: |
           # An exact state machine, not a denylist: each gate must end as its own `if:` says,
           # `success` where it held and `skipped` where it did not, so a gate that never ran
@@ -389,4 +408,5 @@ jobs:
           expect build-chrome "$BUILD_CHROME_RESULT" "$(ran "$EXTENSION_BUILD")"
           expect build-firefox "$BUILD_FIREFOX_RESULT" "$(ran "$EXTENSION_BUILD")"
           expect build-landing "$BUILD_LANDING_RESULT" "$(ran "$LANDING_BUILD")"
+          expect build-storybook "$BUILD_STORYBOOK_RESULT" "$(ran "$EXTENSION_BUILD")"
           echo "Every gate ended as its condition asks (a build whose filter did not trip is skipped)."

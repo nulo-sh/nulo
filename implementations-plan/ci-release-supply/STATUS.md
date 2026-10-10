@@ -7,3 +7,4 @@
 - 2026-10-10: final fresh Codex pass: reject (2 High, 6 Medium); all eight verified and accepted as text fixes; #183 gains the auto-unstick preflight.
 - 2026-10-10: resume of the final Codex session: reject (one High: the verifier fix dropped SHASUMS' own attestation check); all six points accepted and applied; the panel did not reach approve; handed to the orchestrator.
 - 2026-10-10: approved by the orchestrator with D-orch-1 to D-orch-4 (no stack, arc 1 only, probe branch approved, unreviewed fixes reviewed first); arc 1 started.
+- 2026-10-10: phase 1.1 gate passed (lint, typecheck:all, test, test:ci-gating, lint:actions, build-storybook).

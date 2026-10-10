@@ -232,6 +232,15 @@ describe("CI behavior-gating guard", () => {
 		expect(wf.jobs["build-firefox"].if).toBe(wf.jobs["build-chrome"].if)
 	})
 
+	test("Storybook builds wherever the extension does, and reports nothing to Storybook", () => {
+		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+		const wf = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows/pr-quick.yml"), "utf8")) as any
+		const job = wf.jobs["build-storybook"]
+		expect(job.if).toBe(wf.jobs["build-chrome"].if)
+		const build = job.steps.find((step: { run?: string }) => step.run?.includes("build-storybook"))
+		expect(build?.env?.STORYBOOK_DISABLE_TELEMETRY).toBe("1")
+	})
+
 	test("landing build covers the landing graph and the documents it renders, and is wired into the aggregator", () => {
 		assertGraphCovered(quick.landing, "landing", "landing")
 		expect(quick.landing, "a Terms edit must rebuild the pages generated from it").toContain("legal/**")

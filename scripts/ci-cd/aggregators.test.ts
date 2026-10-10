@@ -137,7 +137,12 @@ const CASES: { file: string; agg: Aggregator; advisory: string[]; worlds: Record
 		worlds: {
 			"a PR that builds everything": quality("pull_request", "true", "true", []),
 			"a PR that builds the extension only": quality("pull_request", "true", "false", ["build-landing"]),
-			"a PR that builds nothing": quality("pull_request", "false", "false", ["build-chrome", "build-firefox", "build-landing"]),
+			"a PR that builds nothing": quality("pull_request", "false", "false", [
+				"build-chrome",
+				"build-firefox",
+				"build-landing",
+				"build-storybook",
+			]),
 			"a manual dispatch": quality("workflow_dispatch", "true", "true", ["commitlint"]),
 		},
 	},
@@ -266,7 +271,7 @@ test.each([
 		"needs.changes.outputs.needs-extension-build",
 		QUALITY,
 		quality("pull_request", "true", "true", []),
-		["build-chrome", "build-firefox"],
+		["build-chrome", "build-firefox", "build-storybook"],
 	],
 	["needs.changes.outputs.needs-landing-build", QUALITY, quality("pull_request", "true", "true", []), ["build-landing"]],
 	["needs.changes.outputs.workflows", ACTIONLINT, lint("true", "true", []), ["actionlint"]],
