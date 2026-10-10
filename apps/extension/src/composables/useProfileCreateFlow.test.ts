@@ -241,6 +241,15 @@ describe("useProfileCreateFlow", () => {
 			expect(await attempt(flow, "MyProfile")).toBeUndefined()
 		})
 
+		test("a cancel during the confirmation stays silent and keeps the credential for the retry", async () => {
+			const { flow, opts } = makeFlow()
+			passkeyRetry.mockRejectedValueOnce(new PasskeyUnconfirmedError(saved.credentialId, saved.userHandle, new UserRejectedError()))
+			await attempt(flow, "MyProfile")
+			expect(await attempt(flow, "MyProfile")).toEqual(saved)
+			expect(opts.openToast).not.toHaveBeenCalled()
+			expect(opts.notifyCreateFailed).not.toHaveBeenCalled()
+		})
+
 		test.each([
 			["the authenticator gave no PRF", noPrf, "MyProfile"],
 			["the name changed", notConfirmed, "Renamed"],
