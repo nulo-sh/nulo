@@ -64,3 +64,15 @@
   the arc-gate Chrome run on the previous head (47/47 files), and neither this arc nor the merged dev commits
   touch navigation or the title bar. One rerun of that file at retry 0: 5/5. Firefox: 49 files passed, 1 skipped
   (200 tests).
+- 2026-10-10 — dev moved by three commits, among them the harness's host-registry port claims (#267, which
+  closed #169) and the profile deletion's coordinator wait (#266, `profile/service.ts`); merged as d142836 with
+  one index conflict (both lines kept), no code conflict. #266's `profile/service.ts` change does not touch
+  `persistNewProfileHoldingLock` or `writeMarkerThenRowHoldingLock`. On the merged head: lint, typecheck:all,
+  check:plans, test:all (extension 10993) pass; smoke at retry 0, Chrome 47 files passed, 3 skipped (199 tests),
+  Firefox 49 passed, 1 skipped (200 tests). These two smoke runs supersede the earlier navigation rerun.
+- 2026-10-10 — the host rule held network runs back until #169 merged. It merged at 06:03Z and this branch
+  carries the fix, so the network gate ran while other lanes' registry-claiming runs were live (the run claimed
+  its ports as a `nulo-e2e-*` registry row and released them on exit). All at retry 0: Chrome
+  token-add-auto-trust 1/1, default-token-seeding 1/1, pin-to-home 1/1, home-cap 1/1, holdings 1/1,
+  balance-row-reconciliation 1/1, profile-reimport-matrix 3/3; proverless incoming-arrival 7/7; Firefox
+  pin-to-home 1/1, token-add-auto-trust 1/1, profile-reimport-matrix 3/3.

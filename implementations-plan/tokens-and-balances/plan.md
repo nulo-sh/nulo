@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in implementation, merges on P8-05 (OA-3); arcs 2 and 3 wait
+status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in review as a draft PR, merges on P8-05 (OA-3); arcs 2 and 3 wait
 driver: claude-code
 claude_model: opus
 codex_model: sol

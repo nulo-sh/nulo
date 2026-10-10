@@ -16,3 +16,4 @@
 - 2026-10-10 — arc gate: audit:vue pass (extension 10901), test:all pass; Codex r1 approve with fixes (1 Medium, 1 Low), Opus approve with fixes (4 Low, 2 nits); fixes applied (D-arc1-3, D-arc1-4).
 - 2026-10-10 — Codex r2: approve, no new material code finding (one Low on plan wording, applied). Loop converged after two rounds.
 - 2026-10-10 — final gates on the merged head: lint, typecheck:all, check:plans, test:all pass; smoke Chrome 46/47 (navigation.test.ts timed out under host load, rerun 5/5), Firefox 49/49; network waits for the host.
+- 2026-10-10 — arc gate on the merged head d142836: lint, typecheck:all, check:plans, test:all pass; smoke Chrome 47/47 files (199 tests), Firefox 49/49 (200); network Chrome 7 files (9 tests), proverless incoming-arrival 7/7, Firefox 3 files (5 tests); all at retry 0. Arc 1 gate passed.
