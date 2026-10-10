@@ -24,7 +24,7 @@ vi.mock("@/wallet/services/account/client", () => ({
 	}),
 }))
 
-import { BootstrapFailedError, UnlockTimeoutError } from "@/composables/unlockWait"
+import { ActivationSupersededError, BootstrapFailedError, UnlockTimeoutError } from "@/composables/unlockWait"
 import { initTransactionService, managers } from "@/utils/core"
 import { setLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { storageLocalSet } from "@/utils/storage"
@@ -140,7 +140,7 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		expect(router.push).not.toHaveBeenCalled()
 	})
 
-	test("another profile opened while the accounts load: no accounts written, no route", async () => {
+	test("another profile opened while the accounts load: rejects as superseded, no accounts written, no route", async () => {
 		const store = makeAppStore()
 		const accounts = deferred<Array<{ address: string; index: number; visible: boolean }>>()
 		accountInstance.getAccounts.mockReturnValueOnce(accounts.promise)
@@ -153,13 +153,13 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		accounts.resolve([{ address: "0xACC", index: 0, visible: true }])
 		await vi.advanceTimersByTimeAsync(0)
 
-		expect(state.outcome).toBe("resolved")
+		expect(state.outcome).toBeInstanceOf(ActivationSupersededError)
 		expect(store.accounts).toEqual([])
 		expect(storageLocalSet).not.toHaveBeenCalled()
 		expect(router.push).not.toHaveBeenCalled()
 	})
 
-	test("another profile opened while the active account is persisted: no route", async () => {
+	test("another profile opened while the active account is persisted: rejects as superseded, no route", async () => {
 		const store = makeAppStore()
 		const write = deferred<boolean>()
 		vi.mocked(storageLocalSet).mockReturnValueOnce(write.promise)
@@ -172,7 +172,7 @@ describe("activateCreatedProfile (popup manual sequence)", () => {
 		write.resolve(true)
 		await vi.advanceTimersByTimeAsync(0)
 
-		expect(state.outcome).toBe("resolved")
+		expect(state.outcome).toBeInstanceOf(ActivationSupersededError)
 		expect(router.push).not.toHaveBeenCalled()
 	})
 

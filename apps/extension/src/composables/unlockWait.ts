@@ -20,13 +20,9 @@ export interface ProfileActivationWithFailureSubject {
 export class ActivationSupersededError extends Error {}
 
 export interface ActivationWaitOptions {
-	/**
-	 * `"start"`: the deadline covers only the wait for the shell to select the expected profile,
-	 * which its bootstrap does at entry. From then on the bootstrap ends the wait by itself (every
-	 * await in it is a timed RPC or a storage call, and a failure is recorded), so a start-up that is
-	 * slow but healthy still resolves, and the shell selecting another profile rejects with
-	 * `ActivationSupersededError`.
-	 */
+	/** `"start"`: the deadline ends when the shell selects the expected profile, which its bootstrap
+	 *  does at entry; every await in the bootstrap is bounded and a failure is recorded, so a slow
+	 *  but healthy start-up still resolves. */
 	deadlineCovers?: "start"
 }
 
@@ -47,18 +43,14 @@ function activationStep(
 }
 
 /**
- * Bounded, identity-aware, failure-joined activation wait: resolves when the
- * shell finishes bootstrapping the EXPECTED profile (`isLogined` flips last),
- * rejects with `BootstrapFailedError` the moment the shell records a
- * definitive bootstrap failure for that profile (a definitive rejection must
- * release the waiter immediately — never burn the remaining bound), and
- * rejects with `UnlockTimeoutError` at `timeoutMs`.
+ * Resolves when the shell finishes bootstrapping the EXPECTED profile (`isLogined` flips last).
+ * Rejects with `BootstrapFailedError` the moment the shell records that profile's bootstrap
+ * failure, and with `UnlockTimeoutError` at `timeoutMs`. Under `deadlineCovers: "start"` the
+ * deadline ends once the shell selects the profile; from then on the shell selecting another one
+ * rejects with `ActivationSupersededError`, and a lock that clears the profile leaves it pending.
  *
- * One watcher covers all three signals ON PURPOSE: composing
- * `waitForProfileActive` with a separate failure watcher via `Promise.race`
- * leaks the loser's live watcher until its own timeout and then fires an
- * unobserved rejection (unhandled-rejection noise). Errors are TYPED —
- * callers branch on `instanceof`, never message matching.
+ * One watcher covers every signal ON PURPOSE: racing separate watchers leaks the loser's watcher
+ * until its own timeout and then fires an unobserved rejection. Callers branch on `instanceof`.
  */
 export function awaitProfileActivation(
 	store: ProfileActivationWithFailureSubject,

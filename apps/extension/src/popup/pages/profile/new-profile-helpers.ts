@@ -1,5 +1,5 @@
 import type { Router } from "vue-router"
-import { awaitProfileActivation } from "@/composables/unlockWait"
+import { ActivationSupersededError, awaitProfileActivation } from "@/composables/unlockWait"
 import { isPopupSubmitKey } from "@/composables/usePopupEntity"
 import type { useAppStore } from "@/stores/app.store"
 import { initTransactionService, managers } from "@/utils/core"
@@ -26,23 +26,26 @@ export const CREATE_START_WAIT_MS = 30_000
  *
  * Another window can open another profile at any await, so nothing is written or routed unless
  * the created profile is still the active, bootstrapped one right after each await. Rejects with
- * the wait's typed errors.
+ * the wait's typed errors, and with `ActivationSupersededError` when that check fails, so the caller
+ * keeps its latch: the profile exists, and another create would make a second one.
  */
 export async function activateCreatedProfile(profile: { id: string }, deps: { appStore: AppStore; router: Router }): Promise<void> {
 	const { appStore, router } = deps
-	const isActive = () => appStore.isLogined && appStore.profile?.id === profile.id
+	const assertActive = () => {
+		if (!appStore.isLogined || appStore.profile?.id !== profile.id) throw new ActivationSupersededError()
+	}
 	await awaitProfileActivation(appStore, profile.id, CREATE_START_WAIT_MS, { deadlineCovers: "start" })
-	if (!isActive()) return
+	assertActive()
 
 	// Keep an existing client: replacing it abandoned a connected port, and disconnecting it would
 	// reject the calls of any flow still holding it.
 	managers.account ??= new AccountServiceClient()
 
 	await setLastActiveProfileId(profile.id)
-	if (!isActive()) return
+	assertActive()
 	if (!appStore.network) throw new Error("Network not set")
 	const accounts = await managers.account.getAccounts(profile.id, appStore.network.chainId, true)
-	if (!isActive()) return
+	assertActive()
 	appStore.accounts = accounts
 
 	initTransactionService(appStore.onTxAdded, appStore.onTxUpdated)
@@ -50,7 +53,7 @@ export async function activateCreatedProfile(profile: { id: string }, deps: { ap
 	await storageLocalSet({
 		"nulo:ui:activeAccount": appStore.account?.address,
 	})
-	if (!isActive()) return
+	assertActive()
 
 	router.push("/popup/general")
 }
