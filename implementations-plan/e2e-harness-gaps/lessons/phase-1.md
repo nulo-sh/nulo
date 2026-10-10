@@ -159,7 +159,8 @@ Whole smoke suite at retry 0 on 76de434 (armed builds): Chrome 201 passed, 10 sk
 N-full at retry 0 on 76de434 (`STALL_MS` 10 min enforced, 2048 MiB cap), same partition:
 
 - Chrome: pool 103 files passed, 5 skipped; heavy 4/4; canary 5/5. Longest silences 157.5 s, 53.7 s, 33.9 s; no `stalled` file. No fork tripped the heap-limit check, so the cap reached every fork.
-- Firefox: running at the PR's opening; the result is in the PR body.
+- Firefox: pool 101 files passed, 1 failed, 6 skipped; heavy 4/4; canary 5/5. Longest silences 159.5 s, 62.6 s, 72.0 s; no `stalled` file. The failure: `import-handshake-note-matrix`'s passkey row timed out in `importToken`, whose menu click no-ops when the trigger is not mounted yet (#274); this local-only file then passed 3/3 alone on Firefox at retry 0, and in the other three full runs.
+- PR #273's checks on f262316: all green, no test passed on a retry, no stall report, no fork failing the heap check; hosted longest silence 156.9 s (Chrome) and 155.1 s (Firefox), both in `failed-send-check`.
 
 ## Arc 1b review round 1 (Codex + Opus), on c40b6dc
 
