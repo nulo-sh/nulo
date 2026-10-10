@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from "node:fs"
 import { TimeoutError, type Browser, type Page, type ConsoleMessage } from "puppeteer"
 import { test as base, expect, inject } from "vitest"
 import path from "node:path"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import {
 	type LaunchedBrowser,
 	browserTraffic,
@@ -31,7 +32,8 @@ import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
-import { type EgressCanary, type EgressGuard, guardArmed, ownGuardedLaunch } from "./egress-guard"
+import { type EgressCanary, type EgressGuard, type HeldNode, guardArmed, ownGuardedLaunch } from "./egress-guard"
+import { holdNodeStub } from "./node-stub"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -44,8 +46,9 @@ export interface ExtensionContext {
 	/** Check this launch's recorded CSP violations now rather than at `close`. A test calls it
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
-	/** The smoke suite's egress guard and canary for this launch; absent where no guard is armed. */
-	egress?: { guard: EgressGuard; canary: EgressCanary }
+	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
+	 *  no guard is armed. */
+	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }
 
 /**
@@ -144,8 +147,9 @@ async function launchBehindEgressGuard(
 		settle,
 		probeCanary: fireCanary,
 		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
+		holdNode: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
 	})
-	const { value: browser, settled: extensionId, wrapped, guard, canary } = guarded
+	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
 	return {
 		browser,
 		extensionId,
@@ -153,7 +157,7 @@ async function launchBehindEgressGuard(
 		pageErrors: [],
 		close: guarded.close,
 		checkCspViolations: wrapped.checkCspViolations,
-		egress: { guard, canary },
+		egress: { guard, canary, node },
 	}
 }
 

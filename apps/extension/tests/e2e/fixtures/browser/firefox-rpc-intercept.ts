@@ -1,7 +1,8 @@
 import type { ArmedInterception, RpcInterception } from "./index"
 import type { WebDriverSession } from "./webdriver-classic"
 
-/** Where the armed observer is kept between privileged scripts: the browser window they all run in. */
+/** Where the armed observers are kept between privileged scripts, one per origin: the browser
+ *  window they all run in. */
 const SLOT = "__nuloE2eRpcIntercept"
 
 interface Tally {
@@ -15,15 +16,21 @@ interface Tally {
  * it connects, so there is no target to arm and no first request to race. The observer is held by
  * the browser window privileged scripts run in, which outlives every window a test opens.
  *
- * Only `refuse` exists: the one spec that redirects is Chrome-only for other reasons, and a mode
- * nothing runs is a mode nothing proves.
+ * `redirect` keeps the path and query, as the CDP one does. A bare `redirectTo` lacks the CORS
+ * headers Firefox's own `webRequest` adds around a redirect; the extension's host permission for
+ * loopback is what lets the redirected request through, so the target must be loopback.
  */
-export async function observeAndRefuse(session: WebDriverSession, fromOrigin: string, mode: RpcInterception): Promise<ArmedInterception> {
-	if (mode.kind !== "refuse") throw new Error(`rpc-intercept: "${mode.kind}" is not implemented on Firefox`)
+export async function observeAndIntercept(
+	session: WebDriverSession,
+	fromOrigin: string,
+	mode: RpcInterception,
+): Promise<ArmedInterception> {
+	const origin = new URL(fromOrigin).origin
 	const armed = await session.chromeScript<string>(
 		`
-		const [slot, origin, done] = arguments;
-		if (window[slot]) return done("an interception is already armed in this browser");
+		const [slot, origin, to, done] = arguments;
+		window[slot] ??= {};
+		if (window[slot][origin]) return done("an interception is already armed for " + origin);
 		const tally = { hits: 0, failures: [] };
 		const observer = {
 			observe(subject) {
@@ -31,28 +38,29 @@ export async function observeAndRefuse(session: WebDriverSession, fromOrigin: st
 					const channel = subject.QueryInterface(Ci.nsIHttpChannel);
 					if (channel.URI.prePath !== origin) return;
 					tally.hits++;
-					channel.cancel(Cr.NS_ERROR_CONNECTION_REFUSED);
+					if (to) channel.redirectTo(Services.io.newURI(to + channel.URI.pathQueryRef));
+					else channel.cancel(Cr.NS_ERROR_CONNECTION_REFUSED);
 				} catch (err) {
 					tally.failures.push(String(err));
 				}
 			},
 		};
 		Services.obs.addObserver(observer, "http-on-modify-request");
-		window[slot] = { tally, observer };
+		window[slot][origin] = { tally, observer };
 		done("armed");
 		`,
-		[SLOT, new URL(fromOrigin).origin],
+		[SLOT, origin, mode.kind === "redirect" ? mode.to : ""],
 	)
 	if (armed !== "armed") throw new Error(`rpc-intercept: ${armed}`)
 
 	const tally = () =>
 		session.chromeScript<Tally>(
 			`
-			const [slot, done] = arguments;
-			const held = window[slot];
+			const [slot, origin, done] = arguments;
+			const held = window[slot]?.[origin];
 			done(held ? held.tally : { hits: 0, failures: ["the interception is no longer armed"] });
 			`,
-			[SLOT],
+			[SLOT, origin],
 		)
 	return {
 		hits: async () => (await tally()).hits,
@@ -60,13 +68,13 @@ export async function observeAndRefuse(session: WebDriverSession, fromOrigin: st
 		stop: async () => {
 			await session.chromeScript<string>(
 				`
-				const [slot, done] = arguments;
-				const held = window[slot];
+				const [slot, origin, done] = arguments;
+				const held = window[slot]?.[origin];
 				if (held) Services.obs.removeObserver(held.observer, "http-on-modify-request");
-				delete window[slot];
+				if (window[slot]) delete window[slot][origin];
 				done("stopped");
 				`,
-				[SLOT],
+				[SLOT, origin],
 			)
 		},
 	}

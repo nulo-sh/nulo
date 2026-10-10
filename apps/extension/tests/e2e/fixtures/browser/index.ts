@@ -2,6 +2,7 @@ import type { Browser, Page, Target } from "puppeteer"
 import { chromeDriver } from "./chrome"
 import { firefoxDriver } from "./firefox"
 import { type BrowserKind, resolveBrowserKind } from "./selection"
+import { standingInterceptions } from "./standing-interception"
 
 export type { BrowserKind }
 
@@ -231,12 +232,23 @@ export const waitForOpenedUrl = (browser: Browser, url: string, timeout: number)
 	driver.waitForOpenedUrl(browser, url, timeout)
 export const waitForNewTab = (browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab> =>
 	driver.waitForNewTab(browser, open, timeout)
+const standing = standingInterceptions<Browser>((browser, extensionId, fromOrigin, mode) =>
+	driver.interceptRpc(browser, extensionId, fromOrigin, mode),
+)
+/** A spec's interception; on an origin the launch holds, it replaces the launch's until `stop()`. */
 export const interceptRpc = (
 	browser: Browser,
 	extensionId: string,
 	fromOrigin: string,
 	mode: RpcInterception,
-): Promise<ArmedInterception> => driver.interceptRpc(browser, extensionId, fromOrigin, mode)
+): Promise<ArmedInterception> => standing.intercept(browser, extensionId, fromOrigin, mode)
+/** An interception the launch holds for its life; a spec's own on the same origin suspends it. */
+export const holdRpcInterception = (
+	browser: Browser,
+	extensionId: string,
+	fromOrigin: string,
+	mode: RpcInterception,
+): Promise<ArmedInterception> => standing.hold(browser, extensionId, fromOrigin, mode)
 export const openScratchPage = (browser: Browser, extensionId: string): Promise<Page> => driver.openScratchPage(browser, extensionId)
 export const prepareClick = (page: Page): Promise<void> => driver.prepareClick(page)
 export const prepareKeys = (page: Page): Promise<void> => driver.prepareKeys(page)

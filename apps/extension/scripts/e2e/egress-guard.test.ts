@@ -9,6 +9,7 @@ import {
 	type EgressAttempt,
 	type EgressCanary,
 	type EgressGuard,
+	type HeldNode,
 	MALFORMED,
 	guardArmed,
 	ownGuardedLaunch,
@@ -313,6 +314,50 @@ describe("a guarded launch", () => {
 		closeBrowser.mockRejectedValueOnce(new Error("browser hung"))
 		const launch = await ownGuardedLaunch(deps)
 		await expect(launch.close()).rejects.toThrow("browser hung")
+		expect(stopped()).toEqual([true, true])
+	})
+
+	/** A stand-in node whose failures and stop are logged beside the browser's close. */
+	function heldNode(failures: string[], order: string[]): HeldNode {
+		return {
+			requests: () => 0,
+			failures: async () => {
+				order.push("node failures read")
+				return failures
+			},
+			stop: async () => {
+				order.push("node stopped")
+			},
+		}
+	}
+
+	test("a request the stand-in node lost fails the close: read while the browser is open, stopped after it", async () => {
+		const { deps, closeBrowser } = rig()
+		const order: string[] = []
+		closeBrowser.mockImplementation(async () => {
+			order.push("browser closed")
+		})
+		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode(["a target could not be armed"], order) })
+		await expect(launch.close()).rejects.toThrow(
+			/spec\.test\.ts: the stand-in node lost control of a request: a target could not be armed/,
+		)
+		expect(order).toEqual(["node failures read", "browser closed", "node stopped"])
+	})
+
+	test("success control: a stand-in node that lost nothing closes cleanly", async () => {
+		const { deps } = rig()
+		const order: string[] = []
+		const launch = await ownGuardedLaunch({ ...deps, holdNode: async () => heldNode([], order) })
+		await launch.close()
+		expect(order).toEqual(["node failures read", "node stopped"])
+	})
+
+	test("a stand-in node that cannot be held releases the launch", async () => {
+		const { deps, closeBrowser, stopped } = rig()
+		await expect(ownGuardedLaunch({ ...deps, holdNode: async () => Promise.reject(new Error("no worker target")) })).rejects.toThrow(
+			"no worker target",
+		)
+		expect(closeBrowser).toHaveBeenCalled()
 		expect(stopped()).toEqual([true, true])
 	})
 

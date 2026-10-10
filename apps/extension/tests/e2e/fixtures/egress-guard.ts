@@ -34,6 +34,15 @@ export interface EgressCanary {
 	stop(): Promise<void>
 }
 
+/** What answers for an outside node in the launch's place, held from settle to close. */
+export interface HeldNode {
+	requests(): number
+	/** Every request the interception failed to control; read while the browser is open. */
+	failures(): Promise<string[]>
+	/** Safe once the browser is closed. */
+	stop(): Promise<void>
+}
+
 /** Resolves to loopback only for a direct path: neither browser's proxy rule lists it as direct. */
 export const EGRESS_CANARY_HOST = "egress-canary.test"
 export const EGRESS_PROBE_HOST = "egress-probe.test"
@@ -44,7 +53,10 @@ export const MALFORMED = "<malformed>"
 
 /** Wallet and spec hosts the smoke build tries and the guard refuses, each with why it is tried. */
 export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
-	["lb.drpc.live", "the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home"],
+	[
+		"lb.drpc.live",
+		"the default Testnet node: the background reads its status at popup start, the offscreen PXE on Home; refused only until the launch's stub answers it",
+	],
 	["api.coingecko.com", "the price fetch on profile create, unlock, popup open with an incomplete cache, and every 3 min"],
 	[EGRESS_CANARY_HOST, "the per-launch canary, fired from an extension page"],
 	[EGRESS_PROBE_HOST, "the control spec's background probe"],
@@ -283,22 +295,23 @@ export async function closeAfterEgressCheck(
 	{
 		guard,
 		canary,
+		node,
 		label,
 		traffic,
-	}: { guard: EgressGuard; canary: EgressCanary; label: string; traffic: Parameters<typeof egressFailure>[1] },
+	}: { guard: EgressGuard; canary: EgressCanary; node?: HeldNode; label: string; traffic: Parameters<typeof egressFailure>[1] },
 ): Promise<void> {
+	const nodeFailures = node ? await node.failures().catch((err) => [`its interception could not be read: ${String(err)}`]) : []
 	let closeError: unknown
 	try {
 		await close()
 	} catch (err) {
 		closeError = err
 	} finally {
-		await Promise.all([guard.stop(), canary.stop()])
+		await Promise.all([guard.stop(), canary.stop(), node?.stop()])
 	}
-	const failure = egressFailure(
-		{ attempts: guard.attempts(), overflowed: guard.overflowed(), canaryConnections: canary.connections() },
-		traffic,
-	)
+	const failure =
+		egressFailure({ attempts: guard.attempts(), overflowed: guard.overflowed(), canaryConnections: canary.connections() }, traffic) ??
+		(nodeFailures.length ? `the stand-in node lost control of a request: ${nodeFailures.join("; ")}` : undefined)
 	if (failure) {
 		const also = closeError === undefined ? "" : `\nThe close before the check failed too: ${String(closeError)}`
 		throw new Error(`egress guard: ${label}: ${failure}${also}`, { cause: closeError })
@@ -316,6 +329,8 @@ export interface GuardedLaunchDeps<B, S, L extends { close(): Promise<void> }> {
 	probeCanary(value: B, settled: S, url: string, recorded: () => boolean, budgetMs: number): Promise<void>
 	/** Wraps the browser close in the launch's other close-time checks; the egress check runs after them. */
 	wrapClose(closeBrowser: () => Promise<void>, value: B, settled: S): L
+	/** Arms what answers for an outside node, once the canary has proven the routing. */
+	holdNode?(value: B, settled: S): Promise<HeldNode>
 	startGuard?: () => Promise<EgressGuard>
 	startCanary?: () => Promise<EgressCanary>
 }
@@ -326,6 +341,7 @@ export interface GuardedLaunch<B, S, L> {
 	wrapped: L
 	guard: EgressGuard
 	canary: EgressCanary
+	node: HeldNode | undefined
 	/** The first call closes and checks; a later one is the wrapped close alone. */
 	close(): Promise<void>
 }
@@ -340,6 +356,7 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 ): Promise<GuardedLaunch<B, S, L>> {
 	const guard = await (deps.startGuard ?? startEgressGuard)()
 	let canary: EgressCanary | undefined
+	let node: HeldNode | undefined
 	let launched: { value: B; close(): Promise<void> } | undefined
 	try {
 		canary = await (deps.startCanary ?? startEgressCanary)()
@@ -353,18 +370,19 @@ export async function ownGuardedLaunch<B, S, L extends { close(): Promise<void> 
 			const why = canary.connections() > 0 ? "went direct" : `never reached the guard within ${CANARY_PROBE_BUDGET_MS / 1000}s`
 			throw new Error(`egress guard: ${deps.label}: the canary request ${why}, so this launch's routing is not proven`)
 		}
+		node = await deps.holdNode?.(launched.value, settled)
 		const wrapped = deps.wrapClose(launched.close, launched.value, settled)
-		const checked = { guard, canary, label: deps.label, traffic: deps.traffic }
+		const checked = { guard, canary, node, label: deps.label, traffic: deps.traffic }
 		let closed = false
 		const close = () => {
 			if (closed) return wrapped.close()
 			closed = true
 			return closeAfterEgressCheck(() => wrapped.close(), checked)
 		}
-		return { value: launched.value, settled, wrapped, guard, canary, close }
+		return { value: launched.value, settled, wrapped, guard, canary, node, close }
 	} catch (err) {
 		await launched?.close().catch(() => {})
-		await Promise.all([guard.stop(), canary?.stop()])
+		await Promise.all([guard.stop(), canary?.stop(), node?.stop()])
 		throw err
 	}
 }

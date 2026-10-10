@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { type Server, createServer } from "node:http"
 import type { Page } from "puppeteer"
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { evaluateInBackground, newPage, openScratchPage } from "./fixtures/browser"
 import {
 	EGRESS_CANARY_HOST,
@@ -56,15 +57,16 @@ async function startSite(): Promise<Site> {
 /**
  * Starts a request for `url` in the background, under the extension's CSP, and reads its outcome
  * from a scratch page: Firefox's background evaluation cannot await, so the request writes it to
- * `storage.session` itself. A request still pending after the budget fails the case.
+ * `storage.session` itself. The outcome is `rejected` or `resolved`, or with `init` the answer's
+ * status. A request still pending after the budget fails the case.
  */
-async function backgroundFetch(ctx: ExtensionContext, url: string): Promise<string> {
+async function backgroundFetch(ctx: ExtensionContext, url: string, init?: RequestInit): Promise<string> {
 	const key = `nulo:e2e:egress-probe:${randomUUID()}`
 	await evaluateInBackground(
 		ctx,
 		`const key = ${JSON.stringify(key)};
-		fetch(${JSON.stringify(url)}, { mode: "no-cors", cache: "no-store" }).then(
-			() => chrome.storage.session.set({ [key]: "resolved" }),
+		fetch(${JSON.stringify(url)}, { cache: "no-store", ...${JSON.stringify(init ?? { mode: "no-cors" })} }).then(
+			(response) => chrome.storage.session.set({ [key]: ${init ? '"status " + response.status' : '"resolved"'} }),
 			() => chrome.storage.session.set({ [key]: "rejected" }),
 		);
 		return true;`,
@@ -183,6 +185,18 @@ describe.skipIf(!guardArmed(inject("egressGuard")))("the smoke launch's egress g
 		if (!site.ipv6) testCtx.skip()
 		expect(await pageRequests(page, { v6: `http://[::1]:${site.port}/page-ipv6` })).toEqual({ v6: "resolved" })
 		expect(site.hits).toContain("/page-ipv6")
+	})
+
+	test("the background's call to the Testnet node gets the stand-in's terminal 400 and never reaches the guard", async () => {
+		const node = ctx.egress?.node
+		if (!node) throw new Error("the guarded launch holds no stand-in node")
+		const guardBefore = countFor(guard, new URL(TESTNET_RPC_URL).hostname, 443)
+		const stubBefore = node.requests()
+		const call = { jsonrpc: "2.0", id: 1, method: "node_getNodeInfo", params: [] }
+		const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(call) }
+		expect(await backgroundFetch(ctx, TESTNET_RPC_URL, init)).toBe("status 400")
+		expect(node.requests()).toBeGreaterThan(stubBefore)
+		expect(countFor(guard, new URL(TESTNET_RPC_URL).hostname, 443)).toBe(guardBefore)
 	})
 
 	test("a link-local address is sent to the guard, not to the network", async () => {

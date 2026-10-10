@@ -8,7 +8,7 @@ import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
-import { observeAndRefuse } from "./firefox-rpc-intercept"
+import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
 import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
 import {
@@ -762,7 +762,7 @@ export const firefoxDriver: BrowserDriver = {
 	waitForTarget,
 	waitForOpenedUrl,
 	waitForNewTab,
-	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndRefuse(classicSessionFor(browser), fromOrigin, mode),
+	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
 	prepareClick,
 	prepareKeys,
 	pickFile,
