@@ -413,12 +413,12 @@ onBeforeUnmount(() => {
 
 .detail_value_mono {
 	composes: type--data from global;
-	composes: detail_value_mono from "../detail-page.module.css";
+	color: var(--txt-primary);
 }
 
 .detail_value_aux {
 	composes: type--meta from global;
-	composes: detail_value_aux from "../detail-page.module.css";
+	color: var(--nulo-outline);
 }
 
 .calls_box {
