@@ -66,10 +66,10 @@ async function openWallet() {
 		<Flex direction="column" align="center" gap="16" :class="$style.hero">
 			<BrutalistTitle main="You're" sub="In" align="center" />
 			<div :class="$style.hero_bar" />
-			<Text size="15" color="secondary" height="150" align="center" :class="$style.subhead">
+			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">
 				Access the private coordination internet layer.
 			</Text>
-			<Text size="13" color="secondary" height="150" align="center" mono :class="$style.tagline">
+			<Text variant="body" color="secondary" height="150" align="center" :class="$style.tagline">
 				Private by default. Sovereign by design.
 			</Text>
 		</Flex>
@@ -83,9 +83,9 @@ async function openWallet() {
 		>
 			<Flex align="center" gap="8">
 				<MaterialIcon name="extension" :size="16" color="secondary" />
-				<Text size="11" weight="700" color="secondary" :class="$style.tip_label">Pro tip</Text>
+				<Text variant="label-section" color="secondary">Pro tip</Text>
 			</Flex>
-			<Text size="13" color="secondary" height="150">
+			<Text variant="body" color="secondary" height="150">
 				Click the puzzle icon in your Chrome toolbar, then pin Nulo for
 				quick access. That's how you'll open the wallet from now on.
 			</Text>
@@ -123,8 +123,6 @@ async function openWallet() {
 }
 
 .tagline {
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
 	opacity: 0.65;
 }
 
@@ -134,11 +132,5 @@ async function openWallet() {
 	background: var(--nulo-surface);
 	border: 1px solid var(--nulo-border);
 	border-left: 2px solid var(--nulo-outline);
-}
-
-.tip_label {
-	font-family: var(--font-headline);
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
 }
 </style>

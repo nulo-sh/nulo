@@ -139,4 +139,13 @@ export const OVERRIDES: Override[] = [
 		role: "input",
 		why: "a mini field's typed text keeps its 12px",
 	},
+	{
+		file: "apps/extension/src/onboarding/pages/create.vue",
+		selector: ".tab.tabActive",
+		scope: '[data-testid^="onboarding-method-"][aria-selected="true"]',
+		property: "font-weight",
+		value: "700",
+		role: "segment",
+		why: "the selected method tab takes segment's active weight",
+	},
 ]

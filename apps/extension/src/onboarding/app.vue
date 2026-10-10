@@ -139,11 +139,8 @@ onBeforeUnmount(() => {
 }
 
 .wordmark {
-	font-family: var(--font-headline);
+	composes: type--title-hero from global;
 	font-size: 20px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 }
 </style>

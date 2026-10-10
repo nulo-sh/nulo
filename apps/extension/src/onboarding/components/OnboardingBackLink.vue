@@ -14,6 +14,7 @@ const router = useRouter()
 
 <style module>
 .back {
+	composes: type--label from global;
 	align-self: flex-start;
 	display: inline-flex;
 	align-items: center;
@@ -21,10 +22,6 @@ const router = useRouter()
 	background: transparent;
 	border: none;
 	color: var(--txt-secondary);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	cursor: pointer;
 	padding: 4px 8px 4px 0;
 	transition: color 0.15s var(--bezier);

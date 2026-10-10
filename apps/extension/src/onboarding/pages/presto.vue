@@ -74,7 +74,7 @@ onBeforeUnmount(() => {
 		<Flex direction="column" gap="16" :class="$style.hero">
 			<BrutalistTitle main="Speed up" sub="Proving" />
 			<div :class="$style.hero_bar" />
-			<Text size="14" color="secondary" height="150">
+			<Text variant="body" color="secondary" height="150">
 				Proofs in your browser take about 30 seconds. With Presto they take a few.
 				Optional, but strongly recommended.
 			</Text>
@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 				@retry="retry"
 			/>
 		</Flex>
-		<Text v-if="state.kind === 'available'" size="12" color="support" height="150">
+		<Text v-if="state.kind === 'available'" variant="body" color="support" height="150">
 			Presto will ask you to allow Nulo the first time you send.
 		</Text>
 
