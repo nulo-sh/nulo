@@ -100,3 +100,6 @@
   removed. Production code unchanged apart from comments, so the smoke run started on the 18a1111
   build stands for this head.
 - New pin checked: removing the `finally` decrement in `withDeleterLock` fails both failed-wipe rows.
+- 2026-10-10: the network gate waits for the smoke run, because `e2e:agent` rebuilds the `dist/chrome` the smoke loads.
+- 2026-10-10: the boundary gate's network command needs `NULO_E2E_PROVERLESS=1`, as CI's network pool sets it. Without it, `agent.sh` refuses the run (exit 2) because `incoming-arrival` and `account-switch-isolation` carry `@requires-proverless`. The plan's command is corrected.
+- 2026-10-10: the first smoke run, on the 18a1111 armed build, was stopped by the agent harness's 10-minute background limit after 33 of 50 files had passed. It is rerun in full on the final head.

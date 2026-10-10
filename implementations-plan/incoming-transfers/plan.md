@@ -459,7 +459,7 @@ this host. Check `~/.agents/ports.md` first.
 
 - Commands:
   - `bun run lint && bun run typecheck:all && bun run test && bun run test:all`
-  - `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-transfers.test.ts tests/e2e/network/incoming-public-transfers.test.ts tests/e2e/network/incoming-arrival.test.ts tests/e2e/network/token-add-auto-trust.test.ts tests/e2e/network/receive-unregistered.test.ts tests/e2e/network/account-switch-isolation.test.ts`
+  - `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/incoming-transfers.test.ts tests/e2e/network/incoming-public-transfers.test.ts tests/e2e/network/incoming-arrival.test.ts tests/e2e/network/token-add-auto-trust.test.ts tests/e2e/network/receive-unregistered.test.ts tests/e2e/network/account-switch-isolation.test.ts`
   - From `apps/extension`: `bun run test:e2e -- --retry=0` (smoke, Chrome; no smoke file changes, run
     once)
   - `bun run check:plans` after staging plan files
@@ -1055,6 +1055,10 @@ No pin weaker than at `18a1111`; the touched comments exact. One Low:
    during the batch write suppresses them) and said "no longer registered" where a failed lookup
    also refuses. **Accepted**: "when visibility is on and the lock ticket is still current"; "the
    token's registration cannot be verified (deleted …, or the lookup failed)".
+
+### Arc 1 implementation review, round 3: Codex (same session, resumed, on `caee105..11ef717`), `approve`
+
+No findings; the revised TSDoc matches the implementation. The loop converged.
 
 ## Post-implementation
 
