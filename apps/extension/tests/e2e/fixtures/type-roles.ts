@@ -50,6 +50,8 @@ export type TypeReading = {
 	scrollWidth: number
 	clientWidth: number
 	visible: boolean
+	/** The nearest visible clipping ancestor the text reaches past sideways, unless that ancestor ends it in an ellipsis. */
+	clippedBy: string | null
 	/** An `AddressDisplay`'s `data-address-shows`: `name` while it shows a contact or account name. */
 	addressShows: string | null
 	/** The `OVERRIDES` scopes the element matches. */
@@ -104,6 +106,19 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 		if (scope.kind === "roles") return Array.from(doc.querySelectorAll(ROLE))
 		return Array.from(doc.body.querySelectorAll("*")).filter((el) => hasOwnText(el) && isVisible(el))
 	}
+	const clippedBy = (el: Element): string | null => {
+		const box = el.getBoundingClientRect()
+		const right = Math.max(box.right, box.left + el.scrollWidth)
+		for (let up = el.parentElement; up && up !== doc.documentElement; up = up.parentElement) {
+			const style = win.getComputedStyle(up)
+			if (style.overflowX === "visible") continue
+			// A box drawn at no size, like the hero's ruler, hides its content on purpose.
+			if (!isVisible(up) || style.textOverflow === "ellipsis") return null
+			const edge = up.getBoundingClientRect()
+			return box.left < edge.left - 0.5 || right > edge.right + 0.5 ? (up.getAttribute("data-testid") ?? up.tagName) : null
+		}
+		return null
+	}
 	const read = (el: Element): TypeReading => {
 		const style = win.getComputedStyle(el)
 		return {
@@ -121,6 +136,7 @@ function readTypography(win: Window, scope: ReadScope, tokens: readonly string[]
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth,
 			visible: isVisible(el),
+			clippedBy: clippedBy(el),
 			addressShows: el.getAttribute("data-address-shows"),
 			scopes: scopes.filter((selector) => el.matches(selector)),
 		}

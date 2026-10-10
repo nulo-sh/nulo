@@ -312,9 +312,11 @@ type FittedHero = {
 
 /**
  * The visible figure, not its container or the hidden ruler: the em tracking must compute at the
- * fitted size, and the symbol inherits that length.
+ * fitted size. Only a token's page draws the symbol, which must inherit the figure's px tracking, not
+ * recompute it at its half size; that page refreshes on entry and the seed does not survive, so its
+ * figure may stand at full size.
  */
-async function expectFittedHomeHero(page: Page): Promise<void> {
+async function expectHero(page: Page, onTokenPage: boolean): Promise<void> {
 	const hero = await page.$eval(sel("balance-amount"), (amount): FittedHero | null => {
 		const fit = [...amount.children].find(
 			(el): el is HTMLElement => el instanceof HTMLElement && el.style.getPropertyValue("--hero-scale") !== "",
@@ -332,15 +334,17 @@ async function expectFittedHomeHero(page: Page): Promise<void> {
 			overflow: amount.scrollWidth - amount.clientWidth,
 		}
 	})
-	console.log(`[type-roles] Home hero: ${JSON.stringify(hero)}`)
+	console.log(`[type-roles] fitted hero: ${JSON.stringify(hero)}`)
 	expect(hero).not.toBeNull()
 	const fitted = hero as FittedHero
 	expect(fitted.scale).toBeGreaterThan(0)
-	expect(fitted.scale).toBeLessThan(1)
+	if (onTokenPage) expect(fitted.scale).toBeLessThanOrEqual(1)
+	else expect(fitted.scale).toBeLessThan(1)
 	expect(firstFamily(fitted.family)).toBe("Space Grotesk")
 	expect(fitted.weight).toBe("700")
 	expect(Math.abs(fitted.letterSpacing / fitted.fontSize + 0.04)).toBeLessThanOrEqual(0.002)
-	if (fitted.symbolLetterSpacing !== null) expect(fitted.symbolLetterSpacing).toBeCloseTo(fitted.letterSpacing, 2)
+	if (onTokenPage) expect(fitted.symbolLetterSpacing).toBeCloseTo(fitted.letterSpacing, 2)
+	else expect(fitted.symbolLetterSpacing).toBeNull()
 	expect(fitted.overflow).toBeLessThanOrEqual(0)
 }
 
@@ -363,7 +367,7 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 	try {
 		const page = await openSeededHome(ctx)
 		await waitForFittedHero(page)
-		await expectFittedHomeHero(page)
+		await expectHero(page, false)
 		await expectPageClean(page, "Home")
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
@@ -382,6 +386,8 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 		await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-from-address", "tx detail", [["popup-tx-id", "the seedTransaction row"]])
 		const amounts = (await sweepTypeRoles(page)).readings.filter(({ roles }) => roles.includes("amount-detail"))
 		expect(amounts.map(({ fontSize }) => fontSize)).toEqual(["24px"])
+		await navigateByHash(page, "#/popup/tokens/1", 10_000)
+		await vi.waitFor(() => expectHero(page, true), { timeout: 15_000, interval: 500 })
 
 		await navigateByHash(page, "#/popup/general", 10_000)
 		await page.waitForSelector(sel("account-avatar-btn"), VISIBLE)
@@ -510,9 +516,10 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				const clipped = typography.readings.filter(
 					(reading) =>
 						reading.visible &&
-						reading.overflowX !== "visible" &&
-						reading.scrollWidth > reading.clientWidth &&
-						reading.textOverflow !== "ellipsis",
+						(reading.clippedBy !== null ||
+							(reading.overflowX !== "visible" &&
+								reading.scrollWidth > reading.clientWidth &&
+								reading.textOverflow !== "ellipsis")),
 				)
 				expect(clipped, `${tab}: role-bearing text clipped without an ellipsis`).toEqual([])
 				const widths = typography.readings
