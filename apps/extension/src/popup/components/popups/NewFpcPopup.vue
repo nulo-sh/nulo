@@ -2,6 +2,7 @@
 <script setup>
 import { FieldWarning } from "@nulo/design"
 /** Utils */
+import { sameStoredName } from "@/utils/account-name"
 import { isValidHex } from "@/utils/string"
 
 /** Services */
@@ -17,7 +18,7 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("new_fpc")
+const { order, depth } = usePopupStack("new_fpc")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -32,7 +33,7 @@ const form = useFormState({
 		initial: "",
 		validate: (v) => {
 			if (!v.replace(/\s/g, "").length) return null
-			if (fpcs.value.some((f) => f.name === v)) return "Already exist"
+			if (fpcs.value.some((f) => sameStoredName(f.name, v))) return "Already exist"
 			return null
 		},
 	},
@@ -134,6 +135,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New Sponsored FPC"
 		submitLabel="Add FPC"
 		:submitDisabled="!isAvailableToAddFpc || processingError.show"

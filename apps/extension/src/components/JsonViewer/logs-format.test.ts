@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { LogLevel } from "@/wallet/logger"
-import { formatArg, formatLogData, formatLogs, formatSingleLog, getDisplayName, getLogLevelName } from "./logs-format"
+import { formatArg, formatLogData, formatLogs, formatSingleLog, getDisplayName, getLogLevelName, logsDocument } from "./logs-format"
 
 describe("JsonViewer/logs-format", () => {
 	test("getLogLevelName maps LogLevel enum to UPPERCASE strings", () => {
@@ -93,6 +93,20 @@ describe("JsonViewer/logs-format", () => {
 		expect(out.split("\n")).toHaveLength(2)
 		expect(out).toContain("[a] INFO: x")
 		expect(out).toContain("[b] WARN: y")
+	})
+
+	test("logsDocument ends every line, so a live line appended at its end gets a line of its own", () => {
+		const t = Date.now()
+		const loaded = [
+			{ timestamp: t, source: "a", level: LogLevel.Info, data: ["x"] },
+			{ timestamp: t, source: "b", level: LogLevel.Warn, data: ["y"] },
+		]
+		const live = { timestamp: t, source: "c", level: LogLevel.Error, data: ["z"] }
+		const appendLive = (doc: string) => `${doc}${formatSingleLog(live)}\n`
+
+		expect(appendLive(logsDocument(loaded)).split("\n")).toEqual([...loaded, live].map(formatSingleLog).concat(""))
+		expect(logsDocument([])).toBe("")
+		expect(appendLive(logsDocument([]))).toBe(`${formatSingleLog(live)}\n`)
 	})
 
 	test("getDisplayName('source', value) hyphen-splits and Capitalizes each segment", () => {

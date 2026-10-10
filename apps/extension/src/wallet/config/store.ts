@@ -36,7 +36,9 @@ export class ConfigStore implements IConfigStore {
 			return
 		}
 		if (storedConfig && typeof storedConfig === "object") {
-			await this.apply(storedConfig)
+			// Assign before the write-back: these values came from storage, and a failed write-back
+			// must not leave memory (and log retention, which reads `developerMode`) on the defaults.
+			await this.apply(storedConfig, "after-assign")
 		}
 	}
 
@@ -62,41 +64,50 @@ export class ConfigStore implements IConfigStore {
 			if (this.config[key] === validated) {
 				return
 			}
+			// Persist first: a failed write leaves memory and every listener on the stored value,
+			// so the caller sees the error and a retry of the same value writes again.
+			await this.storage.set({ ...this.config, [key]: validated })
 			this.config[key] = validated
 			this.onUpdate.invoke({ key, value: validated } as ConfigProp)
-			await this.storage.set(this.config)
 		})
 	}
 
 	public async reset() {
-		await this.apply(defaultConfig())
+		await this.apply(defaultConfig(), "before-assign")
 	}
 
-	/**
-	 * Merge an incoming/stored config in, validating each prop against the
-	 * schema and KEEPING the current value for any prop that is missing or
-	 * fails its domain — a corrupt/migrated value no longer loads just because
-	 * its primitive `typeof` matched. Emits `onUpdate` only for props that
-	 * validate AND change.
-	 */
-	private async apply(incoming: unknown) {
+	/** Merge an incoming or stored config: a prop that is missing or fails its schema keeps its
+	 *  current value, and `onUpdate` fires only for props that validate and change. */
+	private async apply(incoming: unknown, persist: "before-assign" | "after-assign") {
 		const src = (incoming ?? {}) as Record<string, unknown>
 		// Same lock as `set()`: an unlocked apply (reset/load) interleaving a
 		// concurrent set() during its persist await would clobber the fresher
 		// value in storage while memory kept it — a silent lost update.
 		await this.lock.withLock(async () => {
-			for (const key of Object.keys(this.config) as ConfigKey[]) {
-				// Skip missing AND explicit-undefined props: the per-key schema has a
-				// `.default()`, so `safeParse(undefined)` would reset to default rather
-				// than keep the current value (the prior typeof check skipped these).
-				if (!(key in src) || src[key] === undefined) continue
-				const parsed = ConfigSchema.shape[key].safeParse(src[key])
-				if (parsed.success && this.config[key] !== parsed.data) {
-					;(this.config as Record<string, unknown>)[key] = parsed.data
-					this.onUpdate.invoke({ key, value: this.config[key] } as ConfigProp)
-				}
+			const changes = this.changesFrom(src)
+			if (persist === "before-assign") {
+				await this.storage.set({ ...this.config, ...Object.fromEntries(changes.map((c) => [c.key, c.value])) })
 			}
-			await this.storage.set(this.config)
+			for (const change of changes) {
+				;(this.config as Record<string, unknown>)[change.key] = change.value
+				this.onUpdate.invoke(change)
+			}
+			if (persist === "after-assign") await this.storage.set(this.config)
 		})
+	}
+
+	private changesFrom(src: Record<string, unknown>): ConfigProp[] {
+		const changes: ConfigProp[] = []
+		for (const key of Object.keys(this.config) as ConfigKey[]) {
+			// Skip missing AND explicit-undefined props: the per-key schema has a
+			// `.default()`, so `safeParse(undefined)` would reset to default rather
+			// than keep the current value (the prior typeof check skipped these).
+			if (!(key in src) || src[key] === undefined) continue
+			const parsed = ConfigSchema.shape[key].safeParse(src[key])
+			if (parsed.success && this.config[key] !== parsed.data) {
+				changes.push({ key, value: parsed.data } as ConfigProp)
+			}
+		}
+		return changes
 	}
 }
