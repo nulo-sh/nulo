@@ -10,3 +10,4 @@
 - 2026-10-10: orchestrator approval; D-orch-1 to D-orch-3 recorded; merged origin/dev 643c0c9; arc 1 started.
 - 2026-10-10: gate 1.1 pass: lint, typecheck:all, JsonViewer 42/42; the first-document test fails on the base LogsViewer.vue.
 - 2026-10-10: gate 1.2 pass: lint, typecheck:all, config+privacy+config service+logger store+session-manager 141/141; the new set and reset tests fail on the base store.ts.
+- 2026-10-10: gate 1.3 pass: lint, typecheck:all, stack pins+PopupCard+popup store+FormPopup+11 form popups 178/178, build-storybook exit 0.

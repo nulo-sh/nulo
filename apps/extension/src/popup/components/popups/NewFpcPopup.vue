@@ -17,7 +17,7 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("new_fpc")
+const { order, depth } = usePopupStack("new_fpc")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -134,6 +134,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New Sponsored FPC"
 		submitLabel="Add FPC"
 		:submitDisabled="!isAvailableToAddFpc || processingError.show"

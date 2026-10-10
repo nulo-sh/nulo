@@ -17,7 +17,7 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("new_account")
+const { order, depth } = usePopupStack("new_account")
 
 const emit = defineEmits(["onClose"])
 const props = defineProps({
@@ -110,6 +110,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New account"
 		submitLabel="Create"
 		:submitDisabled="!isAvailableToCreateAccount"

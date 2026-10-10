@@ -20,7 +20,7 @@ import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_fpc")
+const { order, depth } = usePopupStack("edit_fpc")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -202,6 +202,7 @@ watch(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit FPC"
 		submitLabel="Update"
 		:submitDisabled="!isAvailableToUpdateFpc || processingError.show"

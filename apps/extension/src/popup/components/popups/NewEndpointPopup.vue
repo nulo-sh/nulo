@@ -14,7 +14,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("new_endpoint")
+const { order, depth } = usePopupStack("new_endpoint")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -73,6 +73,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		submitLabel="Add endpoint"
 		:submitDisabled="!isAvailableToCreate"
 		:submitLoading="isSubmitting"

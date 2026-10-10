@@ -231,7 +231,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 4. Rewrite the `display.vue:91-93` comment.
 - Validation gate: fast layers on `store.test.ts`, `privacy.test.ts`, `config/service.test.ts`, `session-manager.test.ts`, `logger/store.test.ts`; the new `set` and `reset` tests fail against the base `store.ts`.
 
-**1.3 #210, depth.**
+**1.3 #210, depth.** ✓
 1. Add `depth` to `FormPopup`; pass it to `PopupCard`.
 2. Pass `depth` from the eleven callers.
 3. Tests: `popup-stack.pins.test.ts` expects form popups to forward the depth to the card and the order to `Popup`; `PopupCard.test.ts` applies `displace` at depth 2 and not at depth 1 or `NaN`; `popup.store.test.ts` adds a BUG PIN for the re-open gap that cites FA-8.
@@ -366,6 +366,7 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-orch-2 (orchestrator, 2026-10-10): arc 1 only. Arc 2 waits on `account-session-life` arc 3; arc 3 waits on decision page 11, where FA-1 to FA-11 sit as items P11-06 to P11-17. FA-8 and FA-10 ship as today in arc 1 (today's behaviour pinned, as phases 1.3 and 1.4 say).
 - D-orch-3 (orchestrator, 2026-10-10): arc 1's three visible corrections are no-ask decisions on the #210 precedent (bug fixes restoring intended behaviour with existing words) and ship in full: #205, after a failed config write the toggle shows the stored value again beside the existing "Failed to update setting" toast; #212, each log line on its own line, and after "Clear logs" the list starts on the first line; #214, duplicate checks compare trimmed input, so "Alice " beside a saved "Alice" shows the existing "Already exist" warning with Save disabled, and saved names are not changed. No other visible change and no new words.
 - D-arc1-1 (#205, phase 1.2): `display.vue`'s dust-threshold catch drops its ref rollback and restores the field from the ref (`el.value = dustThreshold.value`). With persist-first a failed write never moves the ref, so the old `prev` rollback was dead, and in a cross-window race it would have shown a stale value instead of the stored one. The plan said only the comment changes; the tree made the rollback line dead.
+- D-arc1-2 (#210, phase 1.3): the re-open BUG PIN in `popup.store.test.ts` says the fix is an owner decision without naming FA-8, since code comments carry no plan ids (CLAUDE.md § Code-comment style). The pins test also gains a closed-key case for the eleven form popups (`undefined|NaN`).
 
 ### Competing outline (cheapest-first), sent to both audits
 
