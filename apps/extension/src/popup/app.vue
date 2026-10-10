@@ -511,7 +511,9 @@ onBeforeUnmount(() => {
 	z-index: 9500;
 }
 
+/* Its own line under the message, however short the message runs. */
 .retry {
+	display: block;
 	align-self: flex-start;
 	margin-top: 8px;
 	padding: 4px 10px;
