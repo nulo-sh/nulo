@@ -5,6 +5,7 @@
 	"description": "A wallet for Aztec: your balance and payments stay private unless you decide otherwise. Your keys stay on your device.",
 	"version": "0.30.2",
 	"license": "Apache-2.0",
+	"type": "module",
 	"scripts": {
 		"check:rp-id": "bun run scripts/check-rp-id.ts",
 		"build:full": "bun run build:chrome && bun run build:firefox",

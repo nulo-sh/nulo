@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from "node:url"
 import { defineConfig } from "vitest/config"
-import { sharedTest } from "../../vitest.base"
+import { sharedTest } from "../../vitest.base.mts"
 
 export default defineConfig({
 	resolve: {
