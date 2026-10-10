@@ -169,6 +169,27 @@ describe("ensureOffscreenRunning (cold-start single-flight)", () => {
 		expect(closeDocument).toHaveBeenCalledTimes(1)
 	})
 
+	test("a ghost's retry retires the first attempt's epoch too: the ghost's READY work ends once the retry's create succeeds", async () => {
+		const retired: number[] = []
+		const stop = onOffscreenRetired((epoch) => retired.push(epoch))
+		try {
+			createDocument
+				.mockRejectedValueOnce(new Error("Only a single offscreen document may be created."))
+				.mockResolvedValueOnce(undefined)
+			closeDocument.mockRejectedValueOnce(new Error("No current offscreen document"))
+			const before = offscreenEpoch()
+			const p = ensureOffscreenRunning()
+			await settleMicrotasks()
+			deliver(OFFSCREEN_READY_MESSAGE)
+			await p
+			expect(createDocument).toHaveBeenCalledTimes(2)
+			expect(retired).toEqual([before + 1])
+			expect(offscreenEpoch()).toBe(before + 2)
+		} finally {
+			stop()
+		}
+	})
+
 	test("READY from a foreign sender or a same-extension POPUP url does not resolve the pass; the offscreen document does", async () => {
 		const p = ensureOffscreenRunning()
 		await settleMicrotasks()

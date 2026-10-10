@@ -116,8 +116,20 @@ describe("timed-out simulations", () => {
 		const call = c.simulateTx(net, {} as never, {} as never).catch((e: unknown) => e)
 		await vi.advanceTimersByTimeAsync(0)
 		epoch = 1
+		c.retireEpochsThrough(0)
 		await vi.advanceTimersByTimeAsync(SIM_TIMEOUT_MS)
 		expect(c.offscreenSettled(await call)).toBeUndefined()
+		expect(records(c)).toBe(0)
+	})
+
+	test("a newer epoch with no proven retirement still holds: a create that started and failed proves nothing", async () => {
+		const c = client()
+		const call = c.simulateTx(net, {} as never, {} as never).catch((e: unknown) => e)
+		await vi.advanceTimersByTimeAsync(0)
+		epoch = 2
+		await vi.advanceTimersByTimeAsync(SIM_TIMEOUT_MS)
+		expect(await isPending(c.offscreenSettled(await call))).toBe(true)
+		c.retireEpochsThrough(0)
 		expect(records(c)).toBe(0)
 	})
 

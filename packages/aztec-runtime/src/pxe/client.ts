@@ -121,6 +121,8 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 	private scopeRegistrar?: ScopeRegistrar
 	private documentEpoch?: () => number
 	private abandonedLifetimeMs = 0
+	/** The newest epoch proven gone; later epochs may still run what was sent to them. */
+	private retiredThrough = -1
 	private readonly abandoned = new Map<number, AbandonedSimulation>()
 	/** The timeout error this client raised for a `simulateTx`, to its request id. */
 	private readonly simulationTimeouts = new WeakMap<object, number>()
@@ -184,6 +186,7 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 
 	/** Every simulation sent at or before `epoch` ended with its document. */
 	public retireEpochsThrough(epoch: number): void {
+		this.retiredThrough = Math.max(this.retiredThrough, epoch)
 		for (const [requestId, record] of this.abandoned) if (record.epoch <= epoch) this.endAbandoned(requestId)
 	}
 
@@ -201,14 +204,15 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 
 	protected override onTerminal(record: TerminalRecord, tag?: unknown): void {
 		super.onTerminal(record)
-		// A tag from an older epoch went to a document already retired: its work is gone.
-		if (record.status !== "timeout" || record.detail !== "timeout_fired" || tag === undefined || tag !== this.documentEpoch?.()) return
+		// A newer epoch proves nothing; only a retired one says the work went with its document.
+		if (record.status !== "timeout" || record.detail !== "timeout_fired" || typeof tag !== "number" || tag <= this.retiredThrough)
+			return
 		let end = () => {}
 		const done = new Promise<void>((resolve) => {
 			end = resolve
 		})
 		const expiry = setTimeout(() => this.endAbandoned(record.requestId), this.abandonedLifetimeMs)
-		this.abandoned.set(record.requestId, { epoch: tag as number, done, end, expiry })
+		this.abandoned.set(record.requestId, { epoch: tag, done, end, expiry })
 	}
 
 	protected override onUnmatchedResponse(content: ResponseContentLike): void {

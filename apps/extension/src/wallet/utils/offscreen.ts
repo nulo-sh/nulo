@@ -248,13 +248,16 @@ async function createOffscreenChromium(passId: number) {
 			reasons: ["WORKERS"],
 			justification: "Offscreen document is used for running PXE in it",
 		})
-	// Chromium allows one offscreen document, so a create that succeeds proves the earlier ones gone;
-	// the new document's epoch starts first, so work sent to it on an early READY is not retired.
-	const previous = documentEpoch
-	documentEpoch += 1
-	try {
+	// Chromium allows one offscreen document, so a create that succeeds proves the earlier ones gone.
+	// Each attempt starts its own epoch first, so work sent on a READY that beats it is not retired.
+	const createRetiringEarlier = async () => {
+		const previous = documentEpoch
+		documentEpoch += 1
 		await create()
 		announceRetired(previous)
+	}
+	try {
+		await createRetiringEarlier()
 	} catch (err) {
 		// Two transient shapes get one close-and-retry: the ghost bug
 		// ("single offscreen document": getContexts saw none but create says
@@ -276,8 +279,7 @@ async function createOffscreenChromium(passId: number) {
 			// The close suspends: re-check the fence so a timeout landing in
 			// the close window can't be followed by an untracked create.
 			if (passId !== passSeq) throw err
-			await create()
-			announceRetired(previous)
+			await createRetiringEarlier()
 		} else {
 			throw err
 		}
