@@ -105,11 +105,9 @@ async function importPasskeyFullBackup(page: Page, filePath: string): Promise<vo
 }
 
 /**
- * Records whether one mutation callback saw the export in progress: the status card reading "Creating
- * your backup" beside a disabled "Creating Backup" CTA. A poll can miss a card that mounts and unmounts
- * between two ticks. Each callback reads the live DOM, so a card inserted and removed within one batch
- * leaves the flag unset: the observer can miss, never pass falsely. The export awaits worker calls
- * between the two, so they never share a batch.
+ * A poll can miss the progress card between two ticks. Each callback reads the live DOM, so a card
+ * inserted and removed within one batch leaves the flag unset: the observer can miss, never pass
+ * falsely. The export awaits worker calls between the two, so they never share a batch.
  */
 async function armProgressObserver(page: Page): Promise<void> {
 	await page.evaluate(() => {
@@ -156,14 +154,8 @@ test(
 			await armProgressObserver(page)
 			await clickByTestId(page, "agree-continue-btn")
 
-			// 11-service backup() loop + SHA hash. Once the status flips to
-			// "finished", the card unmounts and the terminal CTAs become enabled.
-			// 30s suffices locally on a fast machine, but the hosted GitHub
-			// Actions runner regularly takes 45–55s for the full chain — and
-			// occasionally 90-120s under cumulative load (real observation on
-			// a hosted run: 96s/attempt × 3 retries blew past the prior
-			// 90s budget). 180s gives enough headroom for the slow path
-			// without masking a genuine deadlock.
+			// The card unmounts and both CTAs enable once the status reads "finished"; 180 s leaves a
+			// loaded hosted runner room without masking a deadlock.
 			await page.waitForFunction(
 				() => {
 					const protect = document.querySelector<HTMLButtonElement>('[data-testid="protect-password-btn"]')

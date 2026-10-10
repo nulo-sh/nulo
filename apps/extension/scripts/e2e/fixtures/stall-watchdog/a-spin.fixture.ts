@@ -1,6 +1,3 @@
-import { test } from "vitest"
-
-// A blocked event loop cannot answer vitest's cancel, so only the watchdog's kill ends this fork.
-test("spins", () => {
-	for (;;) {}
-})
+// Spins while its file is collected, before any test or hook event: the watchdog must already be
+// armed, and a blocked event loop cannot answer vitest's cancel, so only the kill ends this fork.
+for (;;) {}

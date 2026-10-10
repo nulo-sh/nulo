@@ -94,8 +94,8 @@ describe.skipIf(process.platform !== "linux")("stall watchdog", () => {
 		expect(alive(detached)).toBe(true)
 	})
 
-	test("a run that keeps logging is never cancelled", { timeout: 120_000 }, async () => {
-		const run = await nestedRun("progress.fixture.ts")
+	test("a run that keeps logging or retrying is never cancelled", { timeout: 120_000 }, async () => {
+		const run = await nestedRun("progress.fixture.ts", "retry.fixture.ts")
 		detachedChild(run)
 
 		expect(run.code, run.output).toBe(0)

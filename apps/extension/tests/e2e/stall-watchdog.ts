@@ -1,5 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
+import type { RunnerTaskEventPack } from "vitest"
 import type { Reporter, ReportedHookContext, TestCase, TestModule, Vitest } from "vitest/node"
 import { STATE_DIR } from "./sentinel"
 
@@ -17,15 +18,11 @@ export interface StallWatchdogOptions {
 type Silence = { ms: number; file: string; after: string; until: string }
 
 /**
- * Fails a network run that stops making progress, instead of letting it hold its CI job to the job's
- * timeout. Progress is any reporter event (a file, test or hook starting or ending, or a test's
- * console line) from the first file's start: global setup has its own budget and the boot
- * classifier. After `stallMs` of silence it names the running tests in `.e2e-state/stalled`, fails the
- * run and cancels it so no new file starts. A fork that cannot answer the cancel (a blocked event
- * loop) is killed after `killAfterMs`; global teardown then stops the sandbox as on any red run.
- * Every run ends by printing its longest silence and the events around it, the measure `STALL_MS`
- * is set from.
- * Limit: a test that logs while it hangs is never silent; its own timeout is what stops it.
+ * Fails a network run that goes silent instead of letting it hold its CI job to the job's timeout.
+ * Silence is the time between reporter events from the first file's queueing on; global setup has its
+ * own budget. A fork whose event loop is blocked cannot answer the cancel, so it is killed after
+ * `killAfterMs`, on Linux only (forks are found under /proc). Each run prints its longest silence, the
+ * measure `STALL_MS` is set from. A test that logs while it hangs is never silent; its timeout stops it.
  */
 export default class StallWatchdog implements Reporter {
 	private vitest?: Vitest
@@ -43,8 +40,14 @@ export default class StallWatchdog implements Reporter {
 		this.vitest = vitest
 	}
 
-	onTestModuleStart(testModule: TestModule): void {
+	// Files run one at a time, so a queued file is the only one running; a crashed fork's tests never end.
+	onTestModuleQueued(testModule: TestModule): void {
 		this.file = testModule.moduleId
+		this.running.clear()
+		this.progress("file queued")
+	}
+
+	onTestModuleStart(): void {
 		this.progress("file start")
 	}
 
@@ -72,6 +75,11 @@ export default class StallWatchdog implements Reporter {
 
 	onUserConsoleLog(): void {
 		this.progress("console")
+	}
+
+	// A retry fires no case or hook event of its own; this undeclared hook is where its start shows.
+	onTaskUpdate(_packs: unknown, events: RunnerTaskEventPack[]): void {
+		if (events.some(([, event]) => event === "test-retried")) this.progress("test retried")
 	}
 
 	onTestRunEnd(): void {
@@ -105,7 +113,14 @@ export default class StallWatchdog implements Reporter {
 		// Not awaited: it settles only once the running file ends, which a blocked fork never does.
 		void this.vitest?.cancelCurrentRun("stall" as Parameters<Vitest["cancelCurrentRun"]>[0])
 		this.killTimer = setTimeout(() => {
-			for (const pid of forkWorkers(process.pid)) {
+			let pids: number[]
+			try {
+				pids = forkWorkers(process.pid)
+			} catch {
+				console.error("[stall-watchdog] no /proc on this host, so a blocked fork is left running")
+				return
+			}
+			for (const pid of pids) {
 				console.error(`[stall-watchdog] killing fork ${pid}`)
 				try {
 					process.kill(pid, "SIGKILL")
