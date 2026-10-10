@@ -140,6 +140,9 @@ export type Tx = {
 	estimatedFee?: string
 	/** Gas breakdown from finalized gas settings (set at submission time). */
 	gasDetails?: TxGasDetails
+	/** The fee contract the build paid through when it may spend the sender's notes (any FPC but
+	 *  the protocol sponsor): a later send through it waits for this tx, across a worker restart. */
+	feeSpender?: string
 	/** Error message, if some. */
 	error?: string
 	/**
@@ -192,6 +195,7 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	fee: z.string().optional(),
 	estimatedFee: z.string().optional(),
 	gasDetails: z.custom<TxGasDetails>(tolerantObject).optional(),
+	feeSpender: z.string().optional(),
 	error: z.string().optional(),
 	submittedEndpointUrl: z.string().optional(),
 	origin: z.custom<LocalTxOrigin>(tolerantObject),

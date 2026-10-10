@@ -5,6 +5,8 @@ import { type ILoggerStore, type Log, LogLevel, CircularBufferIterable, print, t
 
 export class LoggerStore implements ILoggerStore {
 	public readonly onLog = new EventHandler<Log>()
+	/** Fires with the new minimum level each time `debugMode` moves it. */
+	public readonly onLevel = new EventHandler<LogLevel>()
 
 	private logLevel: LogLevel
 	private logs: CircularBufferIterable<Log>
@@ -33,6 +35,11 @@ export class LoggerStore implements ILoggerStore {
 		// `applyRetentionPolicy()` is what settles it once the real value is known.
 		this.persistEnabled = config.get("developerMode") === true
 		config.onUpdate.add(this.onConfigUpdate)
+	}
+
+	/** The minimum level a line needs to be kept; anything below it is dropped on arrival. */
+	public get level(): LogLevel {
+		return this.logLevel
 	}
 
 	public get(count: number, fromId?: number): Log[] {
@@ -163,8 +170,11 @@ export class LoggerStore implements ILoggerStore {
 
 	private readonly onConfigUpdate = (prop: ConfigProp) => {
 		if (prop.key === "debugMode") {
-			this.logLevel = prop.value ? LogLevel.Debug : LogLevel.Info
+			const level = prop.value ? LogLevel.Debug : LogLevel.Info
+			const moved = level !== this.logLevel
+			this.logLevel = level
 			this.logs.resize(this.logLevel === LogLevel.Debug ? 10_000 : 1_000)
+			if (moved) this.onLevel.invoke(level)
 		}
 		if (prop.key === "developerMode") {
 			this.persistEnabled = prop.value === true

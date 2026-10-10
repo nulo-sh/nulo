@@ -183,6 +183,7 @@ function makeHarness(
 		getPXE: vi.fn(() => pxe as never),
 		getAccountContract: vi.fn(async () => account as never),
 		getPendingForAccount: vi.fn(() => [] as { hash: string }[]),
+		sequenceEpoch: vi.fn(() => 0),
 		buildAndEstimateValidated,
 		addTransaction: vi.fn(async () => ({}) as never),
 		recordPendingAuthwits: vi.fn(async () => {}),
@@ -916,6 +917,25 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 			txCalls: built.txCalls,
 			pendingPublicAuthwits: built.pendingPublicAuthwits,
 		})
+	})
+
+	test("the stash records the account's send epoch as it was before the build, not after", async () => {
+		let epoch = 4
+		const { executor, deps, built, buildAndEstimateValidated, buildAndEstimateFolded } = makeHarness({
+			sequenceEpoch: vi.fn(() => epoch),
+		})
+		const bumping = async () => {
+			// A send of the account reaches the node while this estimate builds.
+			epoch = 5
+			return built as never
+		}
+		buildAndEstimateValidated.mockImplementation(bumping)
+		buildAndEstimateFolded.mockImplementation(bumping)
+		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		expect(epoch).toBe(5)
+		expect(deps.sequenceEpoch).toHaveBeenCalledWith(7, "0xacct")
+		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect(stash[1]).toMatchObject({ sequenceEpoch: 4 })
 	})
 
 	test("embedded payment method: no stash, estimateId undefined", async () => {
@@ -1848,6 +1868,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 						primaryEndpointId: "ep2",
 						primaryEndpointUrl: "https://primary",
 						pendingHashes: [],
+						sequenceEpoch: 0,
 						fpcIdentity: FPC_ROW,
 						txRequest: built.txRequest,
 						initializesAccount: true,
@@ -2130,6 +2151,7 @@ function realReuseHarness(confirmDiscovered: string[]) {
 		getLiveChainIdentity: async () => ({ l1ChainId: 1, rollupVersion: 6 }),
 		getFpcInfo: async () => row as never,
 		getPendingForAccount: (account) => (deps.current as DappSendExecutorDeps).getPendingForAccount(account),
+		sequenceEpoch: (chainId, account) => (deps.current as DappSendExecutorDeps).sequenceEpoch(chainId, account),
 		logDebug: reuseLog,
 	})
 	const built: { current?: unknown } = {}

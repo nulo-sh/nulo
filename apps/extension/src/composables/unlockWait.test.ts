@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
 import { reactive } from "vue"
-import { awaitProfileActivation, BootstrapFailedError, UnlockTimeoutError } from "./unlockWait"
+import { ActivationSupersededError, awaitProfileActivation, BootstrapFailedError, UnlockTimeoutError } from "./unlockWait"
 
 function makeStore(
 	over: Partial<{ isLogined: boolean; profile?: { id: string }; bootstrapFailure: { profileId: string; message: string } | null }> = {},
@@ -137,5 +137,78 @@ describe("awaitProfileActivation", () => {
 		await flush()
 		expect(outcomes).toHaveLength(1)
 		expect(outcomes[0]).toBeInstanceOf(BootstrapFailedError)
+	})
+})
+
+describe("awaitProfileActivation with a start-only deadline", () => {
+	/** Runs `steps` on a fake clock and returns how the wait settled: "pending", "resolved" or the error. */
+	async function settleWith(
+		opts: Parameters<typeof awaitProfileActivation>[3],
+		steps: (store: ReturnType<typeof makeStore>, advance: (ms: number) => Promise<unknown>) => Promise<void>,
+		initial: Parameters<typeof makeStore>[0] = {},
+	): Promise<unknown> {
+		vi.useFakeTimers()
+		try {
+			const store = makeStore(initial)
+			let outcome: unknown = "pending"
+			awaitProfileActivation(store, "A", 30_000, opts).then(
+				() => {
+					outcome = "resolved"
+				},
+				(e) => {
+					outcome = e
+				},
+			)
+			await steps(store, (ms) => vi.advanceTimersByTimeAsync(ms))
+			return outcome
+		} finally {
+			vi.useRealTimers()
+		}
+	}
+
+	const slowStart = async (store: ReturnType<typeof makeStore>, advance: (ms: number) => Promise<unknown>) => {
+		store.profile = { id: "A" }
+		await advance(5 * 60_000)
+		store.isLogined = true
+		await advance(0)
+	}
+
+	test("once the expected profile is selected the deadline stops: activation 5 minutes later resolves", async () => {
+		expect(await settleWith({ deadlineCovers: "start" }, slowStart)).toBe("resolved")
+	})
+
+	test("a profile selected before the wait began arms no deadline", async () => {
+		const outcome = await settleWith(
+			{ deadlineCovers: "start" },
+			async (store, advance) => {
+				await advance(5 * 60_000)
+				store.isLogined = true
+				await advance(0)
+			},
+			{ profile: { id: "A" } },
+		)
+		expect(outcome).toBe("resolved")
+	})
+
+	test("control: without the option the same schedule rejects at the deadline", async () => {
+		expect(await settleWith({}, slowStart)).toBeInstanceOf(UnlockTimeoutError)
+	})
+
+	test("another profile selected after the start rejects at once with ActivationSupersededError", async () => {
+		const outcome = await settleWith({ deadlineCovers: "start" }, async (store, advance) => {
+			store.profile = { id: "A" }
+			await advance(0)
+			store.profile = { id: "B" }
+			await advance(0)
+		})
+		expect(outcome).toBeInstanceOf(ActivationSupersededError)
+	})
+
+	test("control: another profile selected before the start is no supersede; the deadline ends the wait", async () => {
+		const outcome = await settleWith({ deadlineCovers: "start" }, async (store, advance) => {
+			store.profile = { id: "B" }
+			await advance(30_000)
+		})
+		expect(outcome).toBeInstanceOf(UnlockTimeoutError)
 	})
 })

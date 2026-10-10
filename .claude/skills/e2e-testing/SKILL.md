@@ -54,11 +54,13 @@ cd apps/extension && bun run test:e2e [files]            # smoke — no sandbox
 bun run e2e:agent [files] [--shard=N/M]                  # network — owns a sandbox per run
 NULO_E2E_PROVERLESS=1 bun run e2e:agent [files]          # network, proverless build (CI's shard pool)
 bun run test:e2e:all                                     # smoke + network on one sandbox
-bun run e2e:reap                                         # kill leftover sandboxes by owned pid
+bun run e2e:reap                                         # stop a dead run's sandbox, forks, browsers by marker
 ```
 
 `test:e2e:network` at the root runs the config bare: no port pack, no armed build, `global-setup.ts`
-falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you already own.
+falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you already own: a bare run
+adopts any listener that answers its probe on those ports (an anvil answering as chain 31337 is
+trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never does.
 
 ### Hazards that mass-fail a run
 
@@ -81,7 +83,8 @@ falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you alr
   (`implementations-plan/archive/isolated-linker-store/plan.md#dev-server-dist`).
 - **Reap at session end**, not at the next run: `bun run e2e:reap`. Orphans hold their LMDB store
   open; the data dir is on real disk (`~/.cache/nulo-e2e`, `lockfile.ts` `E2E_DATA_ROOT`), so RAM is
-  not pinned, but ports and CPU are.
+  not pinned, but ports and CPU are. It stops only processes whose own environment names this
+  worktree's markers and a dead owner; a sandbox a live run holds or reused is left alone.
 
 ### The agent runner — `apps/extension/scripts/e2e/agent.sh`
 
@@ -91,8 +94,13 @@ falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you alr
    (`VITE_NULO_E2E_PROVERLESS=1` + `_CONFIRM=1`) and mutually exclusive with
    `VITE_NULO_PRESTO_REQUIRED`.
 2. Claims a fresh port pack (`resolve-ports.ts`: bind-and-release in a static window below the
-   kernel's ephemeral floor, written to the worktree-local `.e2e-state/ports.json`). There is no
-   host-wide registry file; safety is probabilistic plus the bind test.
+   kernel's ephemeral floor, skipping every port the host registry `~/.agents/ports.md` lists) in
+   that registry under a run id, one `nulo-e2e-<service>` row per port with `agent.sh`'s pid as
+   owner, and writes it with the run id and a run marker to `.e2e-state/ports.json`. The rows go
+   when the run ends (an `EXIT` trap, which signals nothing, plus an explicit release before the
+   final `exec`); a SIGKILLed run's rows are dropped by the next claim on the host once their owner
+   is dead. The registry lock is shared with `alejoamiras/unleashed`'s writers (`open(..., "wx")`,
+   which break a lock older than 15 s); this client never breaks it and fails closed after 30 s.
 3. Builds the wallet armed: `VITE_LOCAL_NETWORK_RPC_URL` (this sandbox),
    `VITE_NULO_E2E_PRICE_MAP=1`, `VITE_NULO_E2E_MIGRATION_FIXTURE=1`,
    `VITE_NULO_E2E_TOKEN_SEEDS=1` + `_CONFIRM=1`, `VITE_NULO_E2E_CSP_REPORT=1`, plus the proverless
@@ -107,12 +115,14 @@ falls back to `8545/8080/8880/40400/5174`. Use it only against a sandbox you alr
    boot started, never ready, no test ran → exit 86 (CI retries the agent once on 86 only); anything
    else passes through. A test that ran cannot masquerade as infra.
 
-Reuse never happens under `e2e:agent` (fresh ports every run); `reconcilePriorLock` in
-`global-setup.ts` only reaps the previous pack. A normal run's teardown kills what it spawned and
-clears its lock, so reuse fires only when a prior pack SURVIVED (a `kill -9` of the vitest group
-after deploy) and the next bare `vitest run --config vitest.e2e.network.config.ts` carries the same
-ports: pids alive, endpoints healthy, and the node's `l1ContractAddresses` equal to the lock's (a
-stranger on a reused port fails identity).
+Reuse never happens under `e2e:agent` (fresh ports every run, and a run id forbids it);
+`reconcilePriorLock` in `global-setup.ts` refuses a lock whose `owner` still lives (another run in
+this worktree) and otherwise reaps the previous pack by marker, throwing before the boot window if
+any service is not stopped. A normal run's teardown kills what it spawned and clears its lock, so
+reuse fires only when a prior pack SURVIVED (a `kill -9` of the vitest group after deploy) and the
+next bare `vitest run --config vitest.e2e.network.config.ts` carries the same ports: pids alive,
+endpoints healthy, and the node's `l1ContractAddresses` equal to the lock's (a stranger on a reused
+port fails identity). The reuse rewrites the lock's `owner` to the adopting run.
 
 ### Build-armed tests
 
@@ -783,9 +793,9 @@ the sanctioned response.
 `reconcilePriorLock`, `ensureAnvil`, `ensureAztecNode` + `spawnAztecNode`, `ensureDevServer`,
 `finishBoot`, `provideWithoutSandbox`. Rules from its audits, each guarding a real failure:
 
-- **Probe first, gate second.** Every `ensure*` starts with its health probe; binary and pin gates
-  sit inside the "not already running" branch, or a healthy pre-existing node with an unusable pin
-  throws under `E2E_REQUIRE_SETUP=1`.
+- **Probe first, gate second** (bare runs; an agent run skips the probe). Every `ensure*` starts
+  with its health probe; binary and pin gates sit inside the "not already running" branch, or a
+  healthy pre-existing node with an unusable pin throws under `E2E_REQUIRE_SETUP=1`.
 - **`markBootStarted()` stays between `writeProvisionalLock()` and the first spawn.** Its position
   is the exit-86 contract.
 - **Ownership order after a spawn: handle → `weStarted* = true` → `recordSpawnedPid()`**, before
@@ -798,9 +808,29 @@ the sanctioned response.
 - **Log pipes are per child**; anvil is stderr-only with `address already in use` in its needle set.
 - **The default export's RETURN VALUE is the teardown.** A named `teardown` export beside a default is
   silently ignored by vitest (both setups leaked for the suite's whole life).
-- **No bash signal trap in `agent.sh`**: bash defers INT/TERM until the foreground child exits, so a
-  trap protects nothing and clobbers the classified exit code; `process.on("exit")` in the setup does
-  a synchronous best-effort SIGTERM and never clears the lock (a survivor must stay findable).
+- **No INT/TERM trap in `agent.sh`**: bash defers those until the foreground child exits, so a
+  trap protects nothing and clobbers the classified exit code. Its one trap is on `EXIT`, re-exits
+  with the status it was given and only releases the run's registry rows. `process.on("exit")` in
+  the setup signals a service's group only while its leader is unreaped, else each process still
+  carrying the service's marker, SIGTERM only, and never clears the lock (a survivor must stay findable).
+- **Ownership is the marker, never a pid.** Each service is spawned with `NULO_E2E_LAUNCH=<uuid>` and
+  `NULO_E2E_OWNER=<pid>:<start time>` of the vitest process; an agent run's every process also
+  inherits `NULO_E2E_RUN`, `NULO_E2E_RUN_OWNER` (`agent.sh`'s pid) and `NULO_E2E_WORKTREE`. Chrome
+  overwrites its environ with its process title (browser and children), so it never shows a marker:
+  Chromes are swept by extension path, at every setup and in `e2e:reap`.
+  Teardown stops the group, then every process carrying the marker; an orphan sweep signals a
+  process only when the owner in its own environ is dead, and nothing while the lock's `owner`
+  lives (a reuse rewrites it). `/proc` unreadable, or a claimed process turned unreadable (a
+  zombie counts as gone), is `unknown`: the lock and the run dir stay, and the lock's pid and start
+  time keep every later sweep `unknown` too while that process lives. A lock naming no owner is
+  never signalled. The node's run dir is stamped with its marker and deleted only directly under
+  `E2E_DATA_ROOT`. Setup and `e2e:reap` read, reap or adopt, and rewrite `owned.json` under
+  `.e2e-state/reconcile.lock`, so two of them never act on one dead owner.
+- **An agent run adopts nothing.** With `NULO_E2E_RUN_ID` set, setup bind-tests the claimed pack
+  right after `markBootStarted()` and skips every adopt probe. Every readiness wait fails once the
+  child it spawned exits, a pending probe included, and on Linux accepts only a listener held by a
+  process carrying the service's marker; under `E2E_REQUIRE_SETUP=1` a playground that never comes
+  up fails the boot. All of these are boot failures (exit 86, one CI retry on fresh ports).
 - **Proof for a change here**: the full network suite on CI, the reuse drill (bare vitest on a
   pinned pack, `kill -9` the vitest group after deploy so the pack survives, run again →
   `reusing prior sandbox (identity check passed)`), the reap drill (`e2e:agent` after →

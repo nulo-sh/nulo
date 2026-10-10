@@ -27,16 +27,18 @@ export type SequenceScope = { chainId: number; account: string }
 
 export interface SendSequencerDeps {
 	/** Submitted txs of `account` no receipt has yet placed in a block or dropped. */
-	pendingTxs(account: string): readonly Pick<Tx, "hash" | "chainId" | "account" | "calls" | "createdAt">[]
+	pendingTxs(account: string): readonly Pick<Tx, "hash" | "chainId" | "account" | "calls" | "createdAt" | "feeSpender">[]
 	/** Resolves early when `signal` aborts. */
 	sleep(ms: number, signal: AbortSignal): Promise<void>
 	now(): number
 }
 
 export interface SequenceTicket {
+	/** When the ticket's wait runs out: the earlier of {@link MAX_WAIT_MS} after `enter` and the deadline it was entered with. */
+	readonly deadline: number
 	/** Whether an earlier ticket or estimate, or a pending tx, shares a key right now. */
 	blocked(): boolean
-	/** What is left of the ticket's {@link MAX_WAIT_MS}, counted from `enter`, never below 0. */
+	/** What is left until `deadline`, never below 0. */
 	remainingMs(): number
 	/** `turn` once no earlier ticket or estimate and no pending tx shares a key; `expired` past the deadline. */
 	waitTurn(signal: AbortSignal): Promise<"turn" | "aborted" | "expired">
@@ -70,10 +72,14 @@ export class SendSequencer {
 
 	public constructor(private readonly deps: SendSequencerDeps) {}
 
-	/** Synchronous, so the ticket's place in line is the call order. */
-	public enter(scope: SequenceScope, keys: ReadonlySet<SequenceKey>): SequenceTicket {
-		const holder = this.hold(scope, keys, { estimate: false, external: false })
+	/**
+	 * Synchronous, so the ticket's place in line is the call order. A send that enters again (its keys
+	 * changed while it waited) passes its first ticket's `deadline`, so no re-entry extends its wait.
+	 */
+	public enter(scope: SequenceScope, keys: ReadonlySet<SequenceKey>, deadline?: number): SequenceTicket {
+		const holder = this.hold(scope, keys, { estimate: false, external: false }, deadline)
 		return {
+			deadline: holder.deadline,
 			blocked: () => this.blocked(scope, holder.keys, holder),
 			remainingMs: () => Math.max(0, holder.deadline - this.deps.now()),
 			waitTurn: (signal) => this.waitTurn(scope, holder, signal),
@@ -132,10 +138,16 @@ export class SendSequencer {
 		this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1)
 	}
 
-	private hold(scope: SequenceScope, keys: ReadonlySet<SequenceKey>, kind: { estimate: boolean; external: boolean }): Holder {
+	private hold(
+		scope: SequenceScope,
+		keys: ReadonlySet<SequenceKey>,
+		kind: { estimate: boolean; external: boolean },
+		deadline?: number,
+	): Holder {
 		const now = this.deps.now()
 		this.prune(scopeId(scope), now)
-		const holder: Holder = { seq: this.nextSeq++, ...kind, deadline: now + MAX_WAIT_MS, scope: scopeId(scope), keys, released: false }
+		const limit = Math.min(deadline ?? Number.POSITIVE_INFINITY, now + MAX_WAIT_MS)
+		const holder: Holder = { seq: this.nextSeq++, ...kind, deadline: limit, scope: scopeId(scope), keys, released: false }
 		this.holders.push(holder)
 		return holder
 	}

@@ -102,3 +102,70 @@ describe("ConfigStore — apply/set serialization", () => {
 		expect(JSON.parse(mem["nulo:config"]).theme).toBe("light")
 	})
 })
+
+describe("ConfigStore — persist before announce", () => {
+	/** An in-memory `chrome.storage.local` whose next `failWrites` writes throw. */
+	function failingStorage(stored?: Record<string, unknown>) {
+		const mem: Record<string, string> = {}
+		if (stored) mem["nulo:config"] = JSON.stringify(stored)
+		const io = { failWrites: 0, writes: 0 }
+		;(chrome.storage as { local: unknown }).local = {
+			get: async (key: string) => (key in mem ? { [key]: mem[key] } : {}),
+			set: async (obj: Record<string, string>) => {
+				if (io.failWrites > 0) {
+					io.failWrites--
+					throw new Error("quota exceeded")
+				}
+				io.writes++
+				Object.assign(mem, obj)
+			},
+		}
+		return { io, stored: () => JSON.parse(mem["nulo:config"]) as Record<string, unknown> }
+	}
+
+	test("a set() whose write fails keeps the stored value and announces nothing; the retry writes once", async () => {
+		const { io, stored } = failingStorage({ showFiatValues: true })
+		const store = new ConfigStore()
+		await store.load()
+		const emitted: ConfigProp[] = []
+		store.onUpdate.add((p) => emitted.push(p))
+
+		io.failWrites = 1
+		await expect(store.set("showFiatValues", false)).rejects.toThrow("quota exceeded")
+		expect(store.get("showFiatValues")).toBe(true)
+		expect(emitted).toEqual([])
+
+		await store.set("showFiatValues", false)
+		expect(store.get("showFiatValues")).toBe(false)
+		expect(stored().showFiatValues).toBe(false)
+		expect(emitted).toEqual([{ key: "showFiatValues", value: false }])
+	})
+
+	test("a reset() whose write fails keeps the stored values and announces nothing; the retry writes once", async () => {
+		const { io, stored } = failingStorage({ theme: "dark" })
+		const store = new ConfigStore()
+		await store.load()
+		const emitted: ConfigProp[] = []
+		store.onUpdate.add((p) => emitted.push(p))
+
+		io.failWrites = 1
+		await expect(store.reset()).rejects.toThrow("quota exceeded")
+		expect(store.get("theme")).toBe("dark")
+		expect(emitted).toEqual([])
+
+		await store.reset()
+		expect(store.get("theme")).toBe("system")
+		expect(stored().theme).toBe("system")
+		expect(emitted).toEqual([{ key: "theme", value: "system" }])
+	})
+
+	test("a load() whose write-back fails still holds the stored values", async () => {
+		const { io } = failingStorage({ developerMode: true, theme: "dark" })
+		const store = new ConfigStore()
+		io.failWrites = 1
+		await expect(store.load()).rejects.toThrow("quota exceeded")
+		expect(store.get("developerMode")).toBe(true)
+		expect(store.get("theme")).toBe("dark")
+		expect(io.writes).toBe(0)
+	})
+})

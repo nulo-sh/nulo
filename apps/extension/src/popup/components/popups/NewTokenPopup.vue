@@ -22,7 +22,7 @@ import { useCacheStore } from "@/stores/cache.store"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
 const cacheStore = useCacheStore()
-const { order } = usePopupStack("new_token")
+const { order, depth } = usePopupStack("new_token")
 
 const props = defineProps({
 	show: Boolean,
@@ -295,6 +295,7 @@ usePopupEntity(
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="New token"
 		:submitLabel="submitLabel"
 		:submitDisabled="!isAvailableToCreateToken"

@@ -5,7 +5,7 @@ import { MAX_WAIT_MS, SendSequencer, SUBMITTED_HOLD_MS } from "./send-sequencer"
 const SCOPE = { chainId: 1, account: "0xMe" }
 const K = (...k: string[]) => new Set(k)
 
-type PendingRow = { hash: string; chainId: number; account: string; calls: never[] | object[]; createdAt: number }
+type PendingRow = { hash: string; chainId: number; account: string; calls: never[] | object[]; createdAt: number; feeSpender?: string }
 
 /** A sequencer on a manual clock: every sleep advances it by the requested time. */
 function harness() {
@@ -69,6 +69,22 @@ describe("SendSequencer", () => {
 		expect(sequencer.isBlocked(SCOPE, K("seq:0xt:0xbob"))).toBe(false)
 		clock.now = SUBMITTED_HOLD_MS
 		expect(sequencer.isBlocked(SCOPE, K("seq:0xt:0xme"))).toBe(false)
+	})
+
+	test("after a restart, a pending row that names its fee spender holds a send through that contract only", () => {
+		const { sequencer, pending } = harness()
+		const transfers = [{ type: TransferType.Public, from: "0xme", to: "0xbob" }]
+		pending.push({ hash: "0xp", chainId: 1, account: "0xme", calls: [{ contract: "0xT", transfers }], createdAt: 0, feeSpender: "0xF" })
+		expect(sequencer.enter(SCOPE, K("fpc:0xf")).blocked()).toBe(true)
+		expect(sequencer.enter(SCOPE, K("fpc:0xg")).blocked()).toBe(false)
+	})
+
+	test("a ticket entered with an earlier deadline keeps it; none outlives its cap from enter", () => {
+		const { sequencer, clock } = harness()
+		clock.now = 1_000
+		expect(sequencer.enter(SCOPE, K("init"), 5_000).deadline).toBe(5_000)
+		expect(sequencer.enter(SCOPE, K("init"), 10 * MAX_WAIT_MS).deadline).toBe(1_000 + MAX_WAIT_MS)
+		expect(sequencer.enter(SCOPE, K("init")).deadline).toBe(1_000 + MAX_WAIT_MS)
 	})
 
 	test("an estimate's hold delays later sends, never estimates, and is refused while blocked", async () => {

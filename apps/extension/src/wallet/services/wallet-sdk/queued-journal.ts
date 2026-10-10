@@ -20,7 +20,7 @@ import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
-import { InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, ScopeViolationError, ValidationError } from "@nulo/extension-messaging/errors"
 import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
 import { getErrorMessage, Lock } from "@nulo/wallet-core/utils"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
@@ -28,7 +28,7 @@ import type { ProfileService } from "@/wallet/services/profile/service"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
-import { requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
+import { projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
 import { pickPrimaryMethod } from "@/utils/primary-method"
@@ -103,8 +103,7 @@ export async function tryCreateQueuedJournal(
 
 		// sendTx requires the `transaction` capability (the capability type
 		// scoped to send-like operations). Pre-auth-gate skip when missing.
-		const hasSendTxGrant = (dapp.capabilityGrants ?? []).some((g) => g.capability.type === "transaction")
-		if (!hasSendTxGrant) return undefined
+		if (!holdsTransactionGrant(dapp.capabilityGrants, logger)) return undefined
 
 		// The record must name the account this send will actually go out as, so it
 		// resolves through the SAME rule the dispatcher uses — session-authorized
@@ -193,6 +192,18 @@ export async function tryCreateQueuedJournal(
 	} catch (error) {
 		logger.log("wallet-sdk-bg", LogLevel.Warn, "tryCreateQueuedJournal failed", error)
 		return undefined
+	}
+}
+
+/** A malformed stored grant skips the row as a missing one does, and enforcement refuses the send
+ *  itself; at `debug`, since every message of the session repeats it. */
+function holdsTransactionGrant(records: readonly unknown[] | undefined, logger: ILogger): boolean {
+	try {
+		return projectStoredGrants(records).some((g) => g.capability.type === "transaction")
+	} catch (error) {
+		if (!(error instanceof ValidationError)) throw error
+		logger.log("wallet-sdk-bg", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
+		return false
 	}
 }
 

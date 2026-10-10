@@ -11,7 +11,7 @@ const { openToast } = useToast()
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
 const appStore = useAppStore()
-const { order } = usePopupStack("edit_network")
+const { order, depth } = usePopupStack("edit_network")
 const cacheStore = useCacheStore()
 
 const emit = defineEmits(["onClose"])
@@ -90,6 +90,7 @@ usePopupEntity(() => props.show, {
 		:show="show"
 		@onClose="emit('onClose')"
 		:displaceIdx="order"
+		:depth="depth"
 		title="Edit network"
 		submitLabel="Update"
 		:submitDisabled="!isAvailableToUpdateNetwork || !isStartedEditingName"

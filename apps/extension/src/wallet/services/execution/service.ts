@@ -24,6 +24,7 @@ import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { FpcService, FpcType } from "@/wallet/services/fpc/service"
 import type { FpcInfo } from "@/wallet/services/fpc/spec"
+import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { TransactionService, OriginType, type TransferType, type LocalTxOrigin, TxStatus } from "@/wallet/services/transaction/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
@@ -308,6 +309,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getLiveChainIdentity: (network) => this.liveChainIdentity(network),
 			getFpcInfo: (fpcId) => this.sponsorRow(fpcId),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			logDebug: (msg) => this.logDebug(msg),
 		})
 		this.previewSnapshots = new PreviewSnapshots()
@@ -370,7 +372,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			},
 			sequencer: this.sendSequencer,
 			getTokenContract: async (tokenId) => (await this.tokenService.getTokenRaw(tokenId)).contract,
-			getFpc: (fpcId) => this.fpcService.getFpc(fpcId),
+			getFpcImpl: (fpcId) => this.fpcService.getFpcImpl(fpcId),
 			getTransactions: (account) => this.transactionService.getTransactions(account),
 			getActiveProfile: () => this.profileService.getActiveProfile(),
 			captureExecutionFence: () => this.captureFence(),
@@ -384,8 +386,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
-			buildAndEstimate: (op, feeSettings, fence, parentTask, signal) =>
-				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
+			buildAndEstimate: (op, feeSettings, fence, parentTask, signal, fpc) =>
+				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
 			createJournalOperation: (input) => this.operationJournal.createOperation(input),
 			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
@@ -438,6 +440,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			getPXE: (network) => this.pxeService.getPXE(networkInfoFrom(network)),
 			getAccountContract: (profileId, chainId, address) => this.accountService.getAccountContract(profileId, chainId, address),
 			getPendingForAccount: (account) => this.transactionService.getPendingForAccount(account),
+			sequenceEpoch: (chainId, account) => this.sendSequencer.epoch({ chainId, account }),
 			lane: {
 				deleteController: (journalId) => this.lane.deleteController(journalId),
 				acquireSlot: (networkId, queuedJournalId, fence, onEnqueued, originKey) =>
@@ -1113,6 +1116,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		parentTask?: WrappedTask,
 		signal?: AbortSignal,
 		probe?: DiscoveryProbe,
+		fpc?: Fpc,
 	): Promise<FeeEstimate> {
 		// Clone the op + its actions array. fjwc / fpc branches mutate
 		// `op.actions` (unshift / splice) to prepend fee payloads; leaking
@@ -1134,6 +1138,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			parentTask,
 			signal,
 			probe,
+			fpc,
 		}
 		return strategy.buildAndEstimate(ctx)
 	}

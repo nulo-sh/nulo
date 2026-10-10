@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { AUTORELEASE_PENDING_LABEL, AUTORELEASE_TAGGED_LABEL } from "./auto-unstick"
 import { type MergedPrRef, parseAutoUnstickFlag, type RunUnstickOpts, runUnstick, type UnstickIO } from "./auto-unstick-run"
 
@@ -9,29 +11,50 @@ function releasePr(overrides: Partial<MergedPrRef> = {}): MergedPrRef {
 	return { number: 7, merged: true, baseRef: "main", labels: [AUTORELEASE_PENDING_LABEL], mergeSha: MERGE, ...overrides }
 }
 
+const FILLED = "# Terms\n\n**Version 1.0 — effective 3 June 2027**\n"
+const BLANK = "# Terms\n\n**Version 1.0 — effective «FILL: effective date»**\n"
+
 interface Calls {
+	/** Every IO call by name, in the order the runner made them. */
+	order: string[]
+	readFileAt: Array<{ sha: string; path: string }>
 	resolveMergedPr: string[]
 	resolveTagSha: string[]
 	createTag: Array<{ tag: string; sha: string; message: string }>
 	relabelPr: Array<{ prNumber: number; add: string; remove: string }>
 }
 
-/** A recording fake IO. `pr` / `tagSha` script what resolution returns. */
-function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null } = {}): { io: UnstickIO; calls: Calls } {
-	const calls: Calls = { resolveMergedPr: [], resolveTagSha: [], createTag: [], relabelPr: [] }
+/** A recording fake IO. `pr` / `tagSha` script what resolution returns; `files` what the merge commit holds. */
+function fakeIO(script: { pr?: MergedPrRef | null; tagSha?: string | null; files?: Record<string, string> } = {}): {
+	io: UnstickIO
+	calls: Calls
+} {
+	const calls: Calls = { order: [], readFileAt: [], resolveMergedPr: [], resolveTagSha: [], createTag: [], relabelPr: [] }
+	const files = script.files ?? { "legal/terms.md": FILLED, "legal/privacy.md": FILLED }
 	const io: UnstickIO = {
 		async resolveMergedPr(headSha) {
+			calls.order.push("resolveMergedPr")
 			calls.resolveMergedPr.push(headSha)
 			return script.pr ?? null
 		},
 		async resolveTagSha(tag) {
+			calls.order.push("resolveTagSha")
 			calls.resolveTagSha.push(tag)
 			return script.tagSha ?? null
 		},
+		async readFileAt(sha, path) {
+			calls.order.push("readFileAt")
+			calls.readFileAt.push({ sha, path })
+			const text = files[path]
+			if (text === undefined) throw new Error(`no ${path} at ${sha}`)
+			return text
+		},
 		async createTag(tag, sha, message) {
+			calls.order.push("createTag")
 			calls.createTag.push({ tag, sha, message })
 		},
 		async relabelPr(prNumber, add, remove) {
+			calls.order.push("relabelPr")
 			calls.relabelPr.push({ prNumber, add, remove })
 		},
 		log() {},
@@ -174,5 +197,54 @@ describe("runUnstick — the unstick itself", () => {
 		const r = await runUnstick(opts({ io }))
 		expect(r.action).toBe("noop")
 		expect(calls.createTag).toHaveLength(0)
+	})
+})
+
+describe("runUnstick — no launch with a blank in the legal documents", () => {
+	test("a stable 1.0.0 whose merge commit holds a «FILL» gets no tag, keeps its label and exits red with the recovery", async () => {
+		const { io, calls } = fakeIO({ pr: releasePr(), files: { "legal/terms.md": BLANK, "legal/privacy.md": FILLED } })
+		const r = await runUnstick(opts({ io, version: "1.0.0" }))
+		expect({ action: r.action, performed: r.performed, continues: r.continues, exitCode: r.exitCode }).toEqual({
+			action: "refused",
+			performed: false,
+			continues: false,
+			exitCode: 1,
+		})
+		expect(r.reason).toContain("legal/terms.md:3:")
+		expect(r.reason).toContain("No tag was created")
+		expect(r.reason).toContain("Troubleshooting")
+		expect(calls.createTag).toHaveLength(0)
+		expect(calls.relabelPr).toHaveLength(0)
+	})
+
+	test("it reads both documents at the merge commit before it writes anything", async () => {
+		const { io, calls } = fakeIO({ pr: releasePr() })
+		expect((await runUnstick(opts({ io, version: "1.0.0" }))).action).toBe("create")
+		expect(calls.readFileAt).toEqual([
+			{ sha: MERGE, path: "legal/terms.md" },
+			{ sha: MERGE, path: "legal/privacy.md" },
+		])
+		expect(calls.order).toEqual(["resolveMergedPr", "resolveTagSha", "readFileAt", "readFileAt", "createTag", "relabelPr"])
+	})
+
+	test("a filled 1.0.0 and a 0.x release with a «FILL» are tagged as before", async () => {
+		const filled = fakeIO({ pr: releasePr() })
+		expect((await runUnstick(opts({ io: filled.io, version: "1.0.0" }))).action).toBe("create")
+		expect(filled.calls.createTag).toEqual([{ tag: "v1.0.0", sha: MERGE, message: "Release 1.0.0" }])
+		const early = fakeIO({ pr: releasePr(), files: { "legal/terms.md": BLANK, "legal/privacy.md": BLANK } })
+		expect((await runUnstick(opts({ io: early.io, version: "0.31.0" }))).action).toBe("create")
+		expect(early.calls.createTag).toEqual([{ tag: "v0.31.0", sha: MERGE, message: "Release 0.31.0" }])
+	})
+
+	test("a document missing at the merge commit fails the run before any tag", async () => {
+		const { io, calls } = fakeIO({ pr: releasePr(), files: { "legal/terms.md": FILLED } })
+		await expect(runUnstick(opts({ io, version: "1.0.0" }))).rejects.toThrow(/legal\/privacy\.md/)
+		expect(calls.createTag).toHaveLength(0)
+	})
+
+	test("the job installs nothing, so the check is loaded by relative path from a file that imports nothing", () => {
+		const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8")
+		expect(read("auto-unstick-run.ts")).toContain('from "../../packages/legal/src/launch"')
+		expect(read("../../packages/legal/src/launch.ts")).not.toMatch(/^\s*import\b|\brequire\(|\bimport\(|\bfrom\s*["']/m)
 	})
 })

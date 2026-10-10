@@ -63,7 +63,16 @@ export const CURATED_FILES: readonly string[] = [LESSONS_FILE]
 export const RETIRED_FILES: readonly string[] = [`${PLANS}/follow-ups.md`]
 
 /** Transcript and draft shapes the plans `.gitignore` keeps out of the tree; `lessons/` is exempt. */
-export const CANONICAL_PATTERNS: readonly string[] = ["audit-*.md", "plan-*.md", "_*.md", "eli5.html"]
+export const CANONICAL_PATTERNS: readonly string[] = [
+	"audit-*.md",
+	"plan-*.md",
+	"_*.md",
+	"eli5.html",
+	"draft-*.md",
+	"outline-*.md",
+	"leg-*.md",
+	"eli5-*.html",
+]
 export const LESSONS_REINCLUDE = "!**/lessons/**"
 export const ARCHIVE_IGNORE = "/archive/"
 

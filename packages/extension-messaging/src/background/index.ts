@@ -1,5 +1,6 @@
 export * from "./client"
 export * from "./service"
 export { defineRpcMethods } from "../core/rpc-methods"
+export { DEFAULT_INIT_TIMEOUT_MS } from "../core/initialization"
 export { definePassthroughs, definePassthroughsExhaustive } from "../core/service-client-factory"
 export { isBackgroundSender, isSenderAtUrl, isTrustedInternalSender } from "../core/sender-auth"

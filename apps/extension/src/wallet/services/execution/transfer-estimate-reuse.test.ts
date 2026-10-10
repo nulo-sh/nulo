@@ -306,6 +306,16 @@ describe("tryConsume: the request binds the chain it was signed under and the sp
 		expect(reason(logDebug)).toEqual(["tryConsumeTransferEstimate est-1: chain identity drift"])
 	})
 
+	test("a send's pinned row judges the entry in place of a fresh read: another address misses, the same row hits", async () => {
+		const moved = makeReuse({ entry: FPC_ENTRY })
+		const pinnedElsewhere = { infoData: { ...SPONSOR_ROW, address: "0xedited" } } as never
+		expect(await moved.reuse.tryConsume("est-1", FPC_INPUTS, FENCE, pinnedElsewhere)).toBeUndefined()
+		expect(reason(moved.logDebug)).toEqual(["tryConsumeTransferEstimate est-1: fpc identity drift"])
+		expect(moved.getFpcInfo).not.toHaveBeenCalled()
+		const same = makeReuse({ entry: FPC_ENTRY })
+		expect(await same.reuse.tryConsume("est-1", FPC_INPUTS, FENCE, { infoData: { ...SPONSOR_ROW } } as never)).toBe(same.entry)
+	})
+
 	test("an fj entry reads no sponsor row", async () => {
 		const { reuse, entry, getFpcInfo } = makeReuse()
 		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBe(entry)

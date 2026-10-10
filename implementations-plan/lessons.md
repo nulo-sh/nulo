@@ -20,7 +20,7 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 
 - A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent; a conflicted PR gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/accessibility-1/plan.md)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
-- Never skip required aggregators; cancel only a push's first run. Same-head cancels can leave a failed check beside a green one; an earlier green still satisfies the requirement while an opt-in rerun works (accepted). [Evidence](archive/ci-gates/plan.md#how-github-judges-a-required-check-with-several-runs-of-one-name)
+- Never skip required aggregators. PR workflows queue per head commit and cancel only on dispatch; `pr-supersede.yml` cancels old heads (list runs, read the head, re-read per cancel); a cancelled run still posts FAILURE on its old head. [Evidence](ci-release-supply/plan.md#arc-1-workflows)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/amount-honesty/plan.md#add-add)
 

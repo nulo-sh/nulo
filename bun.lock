@@ -17,7 +17,7 @@
       "version": "0.30.2",
       "dependencies": {
         "@alejoamiras/presto": "6.0.0-rc.1",
-        "@alejoamiras/presto-banners": "1.1.0",
+        "@alejoamiras/presto-banners": "1.2.0",
         "@alejoamiras/presto-core": "1.2.1",
         "@alejoamiras/private-fee-juice": "6.0.0-rc.1",
         "@aztec-foundation/aztec-standards": "6.0.0-rc.1",
@@ -324,7 +324,7 @@
 
     "@alejoamiras/presto": ["@alejoamiras/presto@6.0.0-rc.1", "", { "dependencies": { "@alejoamiras/presto-core": "1.2.1", "@aztec-foundation/noir-acvm_js": "6.0.0-rc.1", "@aztec-foundation/noir-noirc_abi": "6.0.0-rc.1", "@aztec-labs/bb-prover": "6.0.0-rc.1", "@aztec-labs/foundation": "6.0.0-rc.1", "@aztec-labs/stdlib": "6.0.0-rc.1", "@logtape/logtape": "^2.3.2" } }, "sha512-srVdsRGwCG1nm/lbDpe8jsh85Nt1w8Ko3PlmVXsa2kNEdB1E+OmfeegfhDealASWurnJWJJ41Pj1pDcNAHPhNA=="],
 
-    "@alejoamiras/presto-banners": ["@alejoamiras/presto-banners@1.1.0", "", {}, "sha512-YodIKNZMs+4Gu+aJsmDqowkPFxUBEo1Dkmu7feyqTKxskcygfs6RCgtYR13kAAune9zYZOaJmB1GHVOs2lzbTA=="],
+    "@alejoamiras/presto-banners": ["@alejoamiras/presto-banners@1.2.0", "", {}, "sha512-2cRWShMgWAIq6cMCC3rQJazz6jy4TbRx+gLYFQraEZtWh+H8JLa+7zaFpXcyB6uYbLx7w8fXxr9GPgIMWKd9dw=="],
 
     "@alejoamiras/presto-core": ["@alejoamiras/presto-core@1.2.1", "", { "dependencies": { "@logtape/logtape": "^2.3.2", "ms": "^2.1.3" } }, "sha512-AkDFA0gWCi3pztciKgnn+Vzds+WLVuZTuxrNujZmfB5FQOZJK214Tv8dWRHr4FUTTvwYc7ad4p1KRBHWOJ1q5Q=="],
 
