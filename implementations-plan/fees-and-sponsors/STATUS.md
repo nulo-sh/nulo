@@ -13,3 +13,9 @@
 - 2026-10-10 Phase 1.6 gate (#197): pass (lint, aztec-runtime typecheck + 375 tests, execution suite 1026); base copy fails both refusal pins.
 - 2026-10-10 #264 landed (36f7aa1, with #266 45075a3); merged origin/dev 45075a3 (index.md: both lines kept). Phases 1.1, 1.3, 1.4 building on it.
 - 2026-10-10 Phase 1.1 gate (#196): pass (lint, typecheck:all, wallet-bridge 681, execution/dapp-interaction/auth-registry + guard 1187); base copy fails 17 never-happens rows.
+- 2026-10-10 Phase 1.3 gate (#119): pass (lint, typecheck:all, extension-messaging 385, aztec-runtime 385, execution/pxe/utils 1273); base copy fails the two never-happens.
+- 2026-10-10 Phase 1.4 gate (#222): pass after each extraction (lint, typecheck:all, execution 1051); no pin edited.
+- 2026-10-10 merged origin/dev 6201f8b (#267: host port registry, G1 lifted).
+- 2026-10-10 review: Codex r1 changes needed (3), Opus changes needed (3 minor + nits), all fixed or dispositioned; Codex r2 changes needed (1), fixed; Codex r3 changes needed (2), fixed (three-round limit); Opus epoch-model check clean.
+- 2026-10-10 Phase 1.5 network e2e, Chrome, retry 0, at 29f3ba7: 8 files, 16 tests pass; proverless same-token-concurrent-sends: 14 tests pass.
+- 2026-10-10 Phase 1.5 unit gates at 21b3982: lint, typecheck:all, test:all (extension 11056), test:ci-gating 480, check:plans pass.

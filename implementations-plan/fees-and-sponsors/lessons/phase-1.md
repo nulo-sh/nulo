@@ -48,3 +48,11 @@
 - `reuseFeeMultiplier` is `feeMultiplierFor`; `buildAndEstimateTxRequest` calls it, so a missing priority now passes `DEFAULT_FEE_MULTIPLIER` instead of `undefined`. Traced: `finalizeGasLimits` and both fpc reads use `?? DEFAULT_FEE_MULTIPLIER`, and the multiplier prices only the refetch an embedded payment never reaches, so nothing committed changes. An unknown name maps exactly as before (`PRIORITY_MULTIPLIERS[name]`), behind the RPC boundary's refusal.
 - No test was edited in either commit. The eight declines are in the PR body draft.
 - Gate after each commit: `bun run lint` ✓, `bun run typecheck:all` ✓, `apps/extension` execution suite (1051 passed) ✓.
+
+## Phase 1.5: reviews and the arc gate (2026-10-10)
+
+- **The epoch model took three review rounds.** v3.1 moved the epoch only on a proven close, and every hold compared its tag with the current epoch. Two later facts broke that inference: a successful Chromium create also proves the old document gone (added for crashes, D15), and READY can arrive before `createDocument` resolves, so the new document's epoch must start when the create starts. Once the epoch moves without proof, "not the current epoch" proves nothing; holds now compare against the newest *retired* epoch, and each create attempt starts its own (D16). An Opus fuzz of the real `offscreen.ts` against the real PXE client (7,600 seeds) found no early release.
+- **`task.fail` on a cleared registry replaced the error it recorded** (`Invalid task id`, no cause). The fix keeps the failure as the non-enumerable `cause`; errors cross the RPC boundary as message only, so nothing visible changes. Any other code that finds an error by identity behind a `task.fail` rethrow depends on this.
+- **A reaped registry token can be admitted again**, so a deferred `settle` must name its admission (the signal), not only the token.
+- **Accepted trade-off:** admission is per profile, so a held chain-A estimate holds a place against the same profile's chain-B estimates, up to the record lifetime. Chain-scoped admission is a registry redesign.
+- Smoke at 22aef6e (before the round-3 fix): Chrome, retry 0, 47 files and 199 tests pass, 11 tests skipped by design in 5 files. The final-head smoke reran on both browsers (see STATUS).
