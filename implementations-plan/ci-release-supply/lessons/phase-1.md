@@ -21,3 +21,12 @@
 - Red on the base copies of the six workflows (ac259a7): `behavior-gating.test.ts -t "PR concurrency"` 1 pass, 2 fail. A planted `actions: write` in `source-rebuild.yml` fails "no other workflow can cancel or re-run a run".
 - `implementations-plan/lessons.md`'s concurrency line is rewritten in this arc rather than at close-out, because it states the rule this arc replaces (8162 bytes after, budget 8192).
 - Local gate, 2026-10-10: `lint` 0, `typecheck:all` 0 (after typing the parsed step; the first run failed with TS2571 on `supersede.test.ts`), `test` 0 (Tests  10715 passed | 4 skipped | 7 todo (10726)), `test:ci-gating` 0 (469 tests, 0 fail), `lint:actions` 0. The phase gate also waits on the first Codex round and the Opus review (D-orch-4).
+
+## Arc 1 review round 1 (after phase 1.3)
+
+- Codex round 1 rejected; the Opus review approved with fixes. Both found a partial re-run that carries an earlier attempt's skip; Codex evaluated all four aggregator scripts on those carried inputs and got exit 0. Fixed by `read-attempt` (D16), the live base (D15) and the event-head rule for the sweep (D17); verdicts in plan.md § Audit verdicts.
+- The ci-gates evidence matters for the residuals: a red copy of a required name on a head is not hidden by a newer green copy in the rollup, so a cancelled run's FAILURE on a head that becomes current again reads red until that run is re-run.
+- Mutations on the new sweep, each red: head read before the listing (call order), the event-head filter removed (selection count), the per-cancel head check removed (rewind case), the PR filter removed, the old listing order. The four lanes at the pre-fix commit fail the eight new decide and freshness cases.
+- `test.each([...] as const)` makes readonly tuples that `tsc` refuses where a mutable `Scenario` is expected; type the table instead.
+- Out-of-scope finding filed as #250 (the complexity ratchet reads `baseline:move-approved` from the event payload).
+- Gate after the fixes: `lint` 0, `typecheck:all` 0, `test` 0, `test:ci-gating` 0 (474 tests), `lint:actions` 0.

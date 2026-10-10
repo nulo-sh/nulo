@@ -264,28 +264,35 @@ describe("live labels", () => {
 				PR: "${{ github.event.pull_request.number }}",
 				HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
 			})
-			expect(changes.outputs["label-hit"], `${file}: no fallback`).toBe("${{ steps.live.outputs.label-hit }}")
+			for (const output of ["label-hit", "base", "read-attempt"]) {
+				expect(changes.outputs[output], `${file}: ${output} has no fallback`).toBe(`\${{ steps.live.outputs.${output} }}`)
+			}
 			expect(decide.steps[0].env.LABEL_HIT, file).toBe("${{ needs.changes.outputs.label-hit }}")
+			expect(decide.steps[0].env.BASE, file).toBe("${{ needs.changes.outputs.base }}")
 		}
 	})
 
-	/** Runs the live step's script under a `gh` that records its calls and answers from `body`, or fails with `failure`. */
-	function runLive(args: string[], env: Record<string, string>, gh: { body?: unknown; failure?: string }) {
+	/**
+	 * Runs the live step's script under a `gh` that records its calls and answers with `bodies` in
+	 * order (the last one repeats), or fails with `failure`.
+	 */
+	function runLive(args: string[], env: Record<string, string>, gh: { bodies?: unknown[]; failure?: string }) {
 		const dir = mkdtempSync(join(tmpdir(), "live-labels-"))
 		try {
 			const log = join(dir, "calls")
 			const output = join(dir, "output")
-			writeFileSync(join(dir, "body.json"), JSON.stringify(gh.body ?? {}))
+			const bodies = gh.bodies ?? [{}]
+			bodies.forEach((body, i) => writeFileSync(join(dir, `body-${i + 1}.json`), JSON.stringify(body)))
 			writeFileSync(log, "")
 			writeFileSync(output, "")
 			const shim = gh.failure
 				? `echo "$*" >> "${log}"; echo "gh: ${gh.failure}" >&2; exit 1`
-				: `echo "$*" >> "${log}"; cat "${join(dir, "body.json")}"`
+				: `echo "$*" >> "${log}"; n=$(wc -l < "${log}"); [ "$n" -gt ${bodies.length} ] && n=${bodies.length}; cat "${dir}/body-$n.json"`
 			writeFileSync(join(dir, "gh"), `#!/usr/bin/env bash\n${shim}\n`)
 			chmodSync(join(dir, "gh"), 0o755)
 			const run = Bun.spawnSync(["bash", "scripts/ci-cd/live-labels.sh", ...args], {
 				cwd: ROOT,
-				env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: output, RETRY_PAUSE: "0", ...env },
+				env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: output, GITHUB_RUN_ATTEMPT: "2", RETRY_PAUSE: "0", ...env },
 			})
 			return {
 				code: run.exitCode,
@@ -300,22 +307,33 @@ describe("live labels", () => {
 
 	const HEAD = "a".repeat(40)
 	const pr = { EVENT: "pull_request", REPO: "nulo-sh/nulo", PR: "7", HEAD_SHA: HEAD, GH_TOKEN: "t" }
-	const body = (labels: string[], head = HEAD) => ({ head: { sha: head }, labels: labels.map((name) => ({ name })) })
+	const body = (labels: string[], head = HEAD) => ({
+		head: { sha: head },
+		base: { ref: "main" },
+		labels: labels.map((name) => ({ name })),
+	})
+	const outputs = (hit: boolean, base: string) => `label-hit=${hit}\nbase=${base}\nread-attempt=2`
 
-	test.each(Object.entries(LANES))("%s: the live labels decide, read once from the pull request", (_, labels) => {
-		const alias = runLive(labels, pr, { body: body(["docs", labels[1]]) })
-		expect([alias.code, alias.output, alias.calls]).toEqual([0, "label-hit=true", ["api repos/nulo-sh/nulo/pulls/7"]])
-		const unrelated = runLive(labels, pr, { body: body(["docs", "e2e:other"]) })
-		expect([unrelated.code, unrelated.output]).toEqual([0, "label-hit=false"])
+	test.each(Object.entries(LANES))("%s: the live labels and base decide, read once from the pull request", (_, labels) => {
+		const alias = runLive(labels, pr, { bodies: [body(["docs", labels[1]])] })
+		expect([alias.code, alias.output, alias.calls]).toEqual([0, outputs(true, "main"), ["api repos/nulo-sh/nulo/pulls/7"]])
+		const unrelated = runLive(labels, pr, { bodies: [body(["docs", "e2e:other"])] })
+		expect([unrelated.code, unrelated.output]).toEqual([0, outputs(false, "main")])
 		const dispatch = runLive(labels, { ...pr, EVENT: "workflow_dispatch", PR: "", HEAD_SHA: "" }, { failure: "unused" })
-		expect([dispatch.code, dispatch.output, dispatch.calls]).toEqual([0, "label-hit=false", []])
+		expect([dispatch.code, dispatch.output, dispatch.calls]).toEqual([0, outputs(false, ""), []])
 	})
 
-	test("a run whose head the pull request moved past stops, whatever its labels", () => {
-		const moved = runLive(LANES["pr-extension-smoke-e2e.yml"], pr, { body: body(["e2e:smoke"], "b".repeat(40)) })
-		expect(moved.code).not.toBe(0)
+	test("a run whose head the pull request moved past stops, whatever its labels, after one late read", () => {
+		const labels = LANES["pr-extension-smoke-e2e.yml"]
+		const moved = runLive(labels, pr, { bodies: [body(["e2e:smoke"], "b".repeat(40))] })
+		expect([moved.code === 0, moved.output, moved.calls.length]).toEqual([false, "", 2])
 		expect(moved.stdout).toContain(`superseded by ${"b".repeat(40)}`)
-		expect(moved.output).toBe("")
+		const lagging = runLive(labels, pr, { bodies: [body([], "c".repeat(40)), body(["e2e:smoke"])] })
+		expect([lagging.code, lagging.output, lagging.calls.length], "an endpoint that trailed the push").toEqual([
+			0,
+			outputs(true, "main"),
+			2,
+		])
 	})
 
 	test("an unreadable pull request fails closed: one retry for a rate limit or server error, none for a refusal", () => {
@@ -326,8 +344,13 @@ describe("live labels", () => {
 		}
 		const missing = runLive(labels, pr, { failure: "Not Found (HTTP 404)" })
 		expect([missing.code === 0, missing.output, missing.calls.length]).toEqual([false, "", 1])
-		const malformed = runLive(labels, pr, { body: { head: { sha: HEAD } } })
-		expect([malformed.code === 0, malformed.output]).toEqual([false, ""])
+		for (const malformed of [
+			{ head: { sha: HEAD }, base: { ref: "dev" } },
+			{ head: { sha: HEAD }, labels: [] },
+		]) {
+			const run = runLive(labels, pr, { bodies: [malformed] })
+			expect([run.code === 0, run.output], JSON.stringify(malformed)).toEqual([false, ""])
+		}
 	})
 })
 

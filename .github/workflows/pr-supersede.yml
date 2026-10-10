@@ -29,6 +29,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
           RETRY_PAUSE: "5"
         run: |
           set -euo pipefail
@@ -66,42 +67,44 @@ jobs:
             jq -er '.head.sha | select(test("^[0-9a-f]{40}$"))' <<<"$pr"
           }
 
-          # List first, read the head second: a newer head whose runs are listed was pushed before
-          # the listing, so the head read returns it or a later one, and its runs are never selected.
+          # Every head change, a rewind included, fires its own `synchronize`, whose sweep replaces
+          # this one in the group: this sweep acts only while the head is still its event's.
+          failed=0
+          hold_head() {
+            local now
+            if ! now=$(live_head); then
+              echo "::error::could not read pull request #$PR"
+              exit 1
+            fi
+            if [ "$now" != "$EVENT_HEAD" ]; then
+              echo "the head is now $now, not $EVENT_HEAD: its own sweep takes over ($(wc -l <"$calls") API call(s))"
+              exit "$failed"
+            fi
+          }
+
+          # Listed before the head is read, so no run of a push after the listing is selected, and in
+          # lifecycle order, so a run that moves on between two listings shows up in a later one.
           runs=$(mktemp)
-          for status in queued in_progress pending waiting requested; do
+          for status in requested pending waiting queued in_progress; do
             if ! api "repos/$REPO/actions/runs" -X GET --paginate -f event=pull_request -f branch="$HEAD_REF" \
               -f status="$status" -f per_page=100 >>"$runs"; then
               echo "::error::could not list the branch's $status runs"
               exit 1
             fi
           done
-          if ! live=$(live_head); then
-            echo "::error::could not read pull request #$PR"
-            exit 1
-          fi
+          hold_head
           # The branch name alone could be another pull request's, so a run must name this one.
           selected=$(mktemp)
-          jq -r --arg live "$live" --argjson pr "$PR" --args '
+          jq -r --arg head "$EVENT_HEAD" --argjson pr "$PR" --args '
             .workflow_runs[]
-            | select(.head_sha != $live and (.path | IN($ARGS.positional[])) and any(.pull_requests[]?; .number == $pr))
+            | select(.head_sha != $head and (.path | IN($ARGS.positional[])) and any(.pull_requests[]?; .number == $pr))
             | "\(.id) \(.head_sha) \(.path)"' "${WORKFLOWS[@]}" <"$runs" | sort -u >"$selected"
           mapfile -t stale <"$selected"
 
-          failed=0
           for line in "${stale[@]}"; do
             read -r id head path <<<"$line"
             for attempt in 1 2; do
-              # A force-push can rewind the branch to a listed head, so each attempt re-reads it.
-              if ! now=$(live_head); then
-                echo "::error::could not re-read pull request #$PR before cancelling run $id"
-                failed=1
-                break
-              fi
-              if [ "$now" = "$head" ]; then
-                echo "kept run $id ($path): $head is the live head again"
-                break
-              fi
+              hold_head
               echo "-X POST repos/$REPO/actions/runs/$id/cancel" >>"$calls"
               if gh api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null 2>"$err"; then
                 echo "cancelled run $id ($path) on superseded head $head"
@@ -120,5 +123,5 @@ jobs:
               sleep "$RETRY_PAUSE"
             done
           done
-          echo "live head $live at listing; ${#stale[@]} superseded run(s) found; $(wc -l <"$calls") API call(s)"
+          echo "head $EVENT_HEAD; ${#stale[@]} superseded run(s) found; $(wc -l <"$calls") API call(s)"
           exit "$failed"

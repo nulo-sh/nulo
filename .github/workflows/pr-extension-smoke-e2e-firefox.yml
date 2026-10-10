@@ -28,6 +28,8 @@ jobs:
     outputs:
       smoke-surface: ${{ steps.override.outputs.full || steps.filter.outputs.smoke-surface }}
       label-hit: ${{ steps.live.outputs.label-hit }}
+      base: ${{ steps.live.outputs.base }}
+      read-attempt: ${{ steps.live.outputs.read-attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -96,7 +98,7 @@ jobs:
       - id: gate
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
+          BASE: ${{ needs.changes.outputs.base }}
           SMOKE: ${{ needs.changes.outputs.smoke-surface }}
           LABEL_HIT: ${{ needs.changes.outputs.label-hit }}
         run: |
@@ -104,6 +106,10 @@ jobs:
             true | false) ;;
             *) echo "::error::changes.outputs.label-hit is not true/false: '$LABEL_HIT'"; exit 1 ;;
           esac
+          if [ "$EVENT" = pull_request ] && [ -z "$BASE" ]; then
+            echo "::error::changes.outputs.base is empty"
+            exit 1
+          fi
           if [ "$EVENT" = "workflow_dispatch" ] \
              || [ "$BASE" = "main" ] \
              || [ "$LABEL_HIT" = "true" ] \
@@ -152,6 +158,12 @@ jobs:
             false) want="skipped" ;;
             *) echo "::error::decide.outputs.run is not true/false: '$RUN'"; exit 1 ;;
           esac
+          # A partial re-run carries an earlier attempt's gate over, so a skip stands only on labels
+          # read in this attempt.
+          if [ "$RUN" = false ] && [ "${{ needs.changes.outputs.read-attempt }}" != "${{ github.run_attempt }}" ]; then
+            echo "::error::the suites were skipped on labels read at attempt '${{ needs.changes.outputs.read-attempt }}', not this one: re-run all jobs"
+            exit 1
+          fi
           if [ "${{ needs.smoke.result }}" != "$want" ]; then
             echo "::error::gate said run=$RUN, so the smoke suite must be '$want' — got '${{ needs.smoke.result }}'"
             exit 1

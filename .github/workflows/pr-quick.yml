@@ -338,7 +338,6 @@ jobs:
           done
 
   # Every story lives under the extension build's filter, so that flag decides this job too.
-  # Telemetry is off so CI sends nothing to Storybook's servers.
   build-storybook:
     name: Build Storybook
     needs: changes

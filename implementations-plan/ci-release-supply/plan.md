@@ -75,18 +75,18 @@ The CI gates and the release chain are what every merge and every published zip 
 - On `pull_request` it reads `gh api "repos/$REPO/pulls/$PR"` once, with `REPO` and `PR` passed through `env:`. If the PR's live head differs from `github.event.pull_request.head.sha`, the run is obsolete: the step fails with `::error::superseded by <sha>`, which reds this run's aggregator on the old head only and spends no suite minutes. Otherwise it sets `label-hit=true` when either of the lane's two labels is present (`e2e:extension-smoke`/`e2e:smoke`, or `e2e:extension-network`/`e2e:network`).
 - An API failure is retried once after a short pause (403, 429, 5xx), then fails the step: fail closed.
 
-The job exports `label-hit: ${{ steps.live.outputs.label-hit }}` with no fallback. Every `decide` job binds `LABEL_HIT: ${{ needs.changes.outputs.label-hit }}` and, before its gate, refuses any value other than `true` or `false`. The gate block itself is unchanged, so `decide-gate.test.ts` needs no edit. Nothing reads `github.event.pull_request.labels` any more.
+The step also writes the live `base` (round 1: a retarget or a late run must not decide from the event's base) and `read-attempt`, and each lane's aggregator accepts skipped suites only when `read-attempt` equals its own `github.run_attempt` (round 1: a re-run of `decide` or `status` alone carries the earlier attempt's gate over). The job exports `label-hit: ${{ steps.live.outputs.label-hit }}`, `base` and `read-attempt` with no fallback; `decide` reads `BASE` from the live output and refuses an empty one on a pull request. Every `decide` job binds `LABEL_HIT: ${{ needs.changes.outputs.label-hit }}` and, before its gate, refuses any value other than `true` or `false`. The gate block itself is unchanged, so `decide-gate.test.ts` needs no edit. Nothing reads `github.event.pull_request.labels` any more.
 
 **#167, per-head queues.** The six PR workflows (`pr-quick.yml`, `actionlint.yml`, the four e2e lanes) key their concurrency group on the head commit too: `<prefix>-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}`, with `cancel-in-progress: ${{ github.event_name != 'pull_request' }}`. Runs of two heads never share a group, so an older push that enters late cannot cancel or replace the current head's run, whatever order GitHub admits them in. Runs of one head queue: one runs and at most one waits, and a later event of the same head replaces the waiting one, which posts nothing (CI.md:95). That replacement is harmless now: every run reads the PR's live labels, and the survivor's own event is the newer one, so it decides from state at least as current as the replaced run's. `queue: max` was considered and rejected (D12).
 
 **#167, cancelling obsolete heads.** A new workflow, `pr-supersede.yml`:
 - Trigger `pull_request: types: [synchronize]`; workflow `permissions: {}`; one job `cancel-superseded` with `permissions: { actions: write, pull-requests: read }`, `if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'` (forks and Dependabot get read-only tokens), concurrency `pr-supersede-${{ github.event.pull_request.number }}` with `cancel-in-progress: true`, `timeout-minutes: 3`.
-- One `run` step, no checkout and no action. Its inputs come only through `env:` (`REPO`, `PR`, `HEAD_REF`); the script holds no `${{ }}`.
-- **Order matters.** First list the branch's unfinished runs: `gh api repos/$REPO/actions/runs -X GET -f event=pull_request -f branch="$HEAD_REF" -f status=<s> -f per_page=100` for each of `queued`, `in_progress`, `pending`, `waiting`, `requested`. Then read the live head (`gh api repos/$REPO/pulls/$PR --jq .head.sha`). A newer head whose runs appear in the list was pushed before the list call, so the head read returns it or a later one. Reading the head first would let a push between the two calls cancel the current head's fresh runs.
-- Select runs whose `head_sha` is not the live head, whose `path` is one of the six workflow files, and whose `pull_requests[].number` includes this PR (never the branch name alone, which another PR could share). Before each cancel attempt, retries included, read the live head again and skip the run if its `head_sha` is now the live head: a force-push can rewind the branch to a listed head. Cancel with `gh api -X POST repos/$REPO/actions/runs/$ID/cancel`; a 409 (already finished) counts as done; any other error fails the job. Retry each call once on 403, 429 or 5xx. Print each cancelled run and the number of API calls.
-- What remains non-atomic: a rewind that lands between the last head read and its cancel call can still cancel an older run of the head that just became current. That run's head is then served by the runs its own new `synchronize` event starts, which were created after the list and are never selected. The job claims no more than that.
-- A run that starts after the sweep on an obsolete head stops itself in `changes` (the live-head check above). `pr-quick.yml` and `actionlint.yml` have no such check; a late obsolete run there finishes on its old head, wasting minutes but deciding nothing for the current head.
-- A cancelled obsolete run may still post FAILURE under the required names, on the obsolete head only. Branch protection judges the current head.
+- One `run` step, no checkout and no action. Its inputs come only through `env:` (`REPO`, `PR`, `HEAD_REF`, `EVENT_HEAD`); the script holds no `${{ }}`.
+- **Order matters.** First list the branch's unfinished runs: `gh api repos/$REPO/actions/runs -X GET --paginate -f event=pull_request -f branch="$HEAD_REF" -f status=<s> -f per_page=100` for each of `requested`, `pending`, `waiting`, `queued`, `in_progress` (lifecycle order, so a run that moves on between two listings shows up in a later one). Then read the live head. No run of a push that lands after the listing is ever selected.
+- **The sweep acts only for its own event's head** (round 1, D2). Every head change, a force-push rewind included, fires its own `synchronize`, whose sweep replaces this one in the group. So when a head read (the first, or the one before each cancel attempt, retries included) differs from `EVENT_HEAD`, the sweep stops without cancelling more; this also covers a pull request read that is staler than the event.
+- Select runs whose `head_sha` is not `EVENT_HEAD`, whose `path` is one of the six workflow files, and whose `pull_requests[].number` includes this PR (never the branch name alone, which another PR could share). Cancel with `gh api -X POST repos/$REPO/actions/runs/$ID/cancel`; a 409 (already finished) counts as done; any other error fails the job after the rest are tried. Retry each call once unless it is a 4xx other than 403 or 429. Print each cancelled run and the number of API calls.
+- Residuals: a head change that lands between a head read and its cancel call can cancel a run of the head that becomes current; a pull request endpoint that trails the run list while answering the event's head can let a later push's listed runs be cancelled. A cancelled run still posts FAILURE under its required names; on an obsolete head that is harmless, but on a head that becomes current again the rollup reads that FAILURE beside the new runs' results until the cancelled run is re-run (`archive/ci-gates/plan.md`, "How GitHub judges a required check").
+- A run that starts after the sweep on an obsolete head stops itself in `changes` (the live-head check above, after one late read since the endpoint can trail a push). `pr-quick.yml` and `actionlint.yml` have no such check; a late obsolete run there finishes on its old head, wasting minutes but deciding nothing for the current head.
 
 **#168, folded shards: probe first, then the per-shard fix.** The probe (phase 1.4) is a throwaway workflow pair on a scratch branch `ci-release-supply-probe`, triggered by `push` to that branch only, never merged:
 
@@ -94,9 +94,10 @@ The job exports `label-hit: ${{ steps.live.outputs.label-hit }}` with no fallbac
 - `rm`: the same matrix, each leg calling a local reusable workflow, as the lanes do.
 - `ja`, `jb`, `jc`: the same three behaviours as separate plain jobs.
 - `rja`, `rjb`, `rjc`: the same as separate jobs that each call the reusable workflow, which is the shape unrolling would produce.
-- `sk` and `rsk`: a plain matrix and a reusable-call matrix whose `if` is false, as a lane's matrix is when its gate says not to run.
-- `status`: `if: always()`, needs all of them, `permissions: { actions: read }`; prints `GITHUB_RUN_ATTEMPT`, every `needs.<job>.result`, and the run's job list from `actions/runs/$RUN/jobs?filter=latest` and `?filter=all` (name, `run_attempt`, conclusion).
-- Procedure: push; after attempt 1, re-run only `m (a)` with `gh run rerun <run> --job <id>`; read `status`. Then the same for `rm`'s leg `a`, for `ja`, and for `rja`. A reading counts only from a `status` log whose `GITHUB_RUN_ATTEMPT` is the re-run's attempt; if GitHub did not re-run `status`, re-run `status` alone in a further attempt and read that. Record what the job lists show for `sk` and `rsk` (one skipped job, or skipped legs). Delete the branch afterwards.
+- `gate`: a job writing `run=true` and `skip=false`; every job above needs it and runs on `needs.gate.outputs.run == 'true'`, the lanes' `needs: decide` shape (round 1).
+- `sk` and `rsk`: a plain matrix and a reusable-call matrix that need `gate` and run on `needs.gate.outputs.skip == 'true'`, so they skip as a lane's matrix does when its gate says not to run.
+- `status`: `if: always()`, needs all of them, `permissions: { actions: read }`, `set -euo pipefail`; prints `GITHUB_RUN_ATTEMPT`, every `needs.<job>.result`, and the run's job list from `actions/runs/$RUN/jobs?filter=latest` and `?filter=all` (name, `run_attempt`, conclusion).
+- Procedure: push; after attempt 1, re-run only `m (a)` with `gh run rerun <run> --job <id>`; read `status`. Then the same for `rm`'s leg `a`, for `ja`, and for `rja`. Each attempt runs to completion before the next re-run. A reading counts only from the `status` that GitHub re-ran as the re-run job's dependent, whose log shows the re-run's `GITHUB_RUN_ATTEMPT` (GitHub documents that re-running a job re-runs its dependents); its job list (`filter=latest`) must show the re-run leg `success` at that attempt, or the reading is void, and the untouched `b` legs still `failure`. A `status` re-run on its own is diagnostic only and never satisfies rule 1; if the dependent `status` did not run, that reading is inconclusive and the re-run is repeated. A `success` at any reading establishes the fold; a later `failure` never erases it. Record what the job lists show for `sk` and `rsk` (one skipped job, or skipped legs). Delete the branch afterwards.
 
 Pre-registered decision rule:
 
@@ -242,7 +243,7 @@ Validation gate: Fast; Gating; Actions; `bun run --cwd apps/extension build-stor
 
 Validation gate: Fast; Gating; Actions. Pass: all exit 0; each new case shown red on the base copy. Layers: lint, unit (pins).
 
-**Phase 1.3, per-head queues and the supersede workflow (#167).**
+**Phase 1.3, per-head queues and the supersede workflow (#167).** ✓
 1. Rewrite the six workflows' `concurrency` blocks as § Arc 1 says.
 2. Rewrite the two concurrency pins: the group holds the PR-number and the head-SHA expressions and not `head_ref`; `cancel-in-progress` is exactly `${{ github.event_name != 'pull_request' }}`.
 3. Add `pr-supersede.yml`.
@@ -449,6 +450,9 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D-orch-4 | The final pass's unreviewed arc-1 fixes come first: the first Codex round and the Opus review are asked, explicitly and before anything else, about D2 (list, read, revalidate; the force-push rewind), D3 (no fallback on the live label read; the `true`/`false` refusal) and D5 (rule 1's fresh `status` at the re-run's attempt; the skipped-matrix probe cases). Phase 1.3's gate counts as passed only once their answers are recorded under Audit verdicts | The final Codex pass rejected twice and its last fixes were never re-reviewed | — |
 | D13 | The `live` step runs `scripts/ci-cd/live-labels.sh <label> <alias>` after the checkout, instead of four inline copies before it; its tests live in `behavior-gating.test.ts` (`live labels`) and the `decide` refusal's in `aggregators.test.ts` | One source that shellcheck lints and the shim test runs directly, pinned identical in all four lanes; an obsolete run now pays one checkout before it stops, seconds against a suite's minutes | Implementation deviation from § Arc 1's inline step (arc 1 build). `pr-supersede.yml` stays inline: its job holds `actions: write` and checks nothing out |
 | D14 | `implementations-plan/lessons.md`'s concurrency line is rewritten in arc 1, not at close-out | It states the push-first-attempt rule arc 1 replaces; every task reads that file first, so it must not outlive the merge | Implementation deviation from § Post-implementation step 5 |
+| D15 | The live step also writes the pull request's live `base`; `decide` reads it and refuses an empty one on a pull request | A run admitted late, or re-run, after a retarget would otherwise decide from the event's base | Codex round 1 finding 2 (accepted in part). Rejected: subscribing the lanes to `edited`, because every title or body edit would re-run the suites and an `edited` run that re-decided to skip would post a success copy; a retarget still starts no run, the recovery (close and reopen, or push) is in CI.md, and arc 2's `auto-unstick` preflight covers the launch case |
+| D16 | Each lane's aggregator accepts skipped suites only when `changes` read the labels in its own attempt (`read-attempt` == `github.run_attempt`); otherwise it fails with "re-run all jobs" | A re-run of `status` or `decide` alone carries the earlier attempt's `run=false` over, so a skip decided before a label was added could post green | Codex round 1 finding 1 (High, accepted; Codex evaluated all four scripts green on the carried inputs). A re-run of failed suites keeps its ran gate and passes |
+| D17 | `pr-supersede.yml` acts only for its event's head: it never selects `EVENT_HEAD`'s runs and stops, cancelling nothing more, when any head read differs from it; runs are listed in lifecycle order; `live-labels.sh` reads once more after a pause before calling a run superseded | Every head change, a rewind included, fires its own sweep, which replaces this one, so stopping is always safe, and it also covers a pull request read staler than the event | Opus round 1 finding 1 (Medium, accepted) supersedes the skip-if-current re-read of D2; findings 2 and 3 (Low, accepted). Codex round 1 finding 3: the claims are best effort, residuals restated in CI.md and § Arc 1 |
 
 ## Audit verdicts
 
@@ -516,6 +520,38 @@ Verdict: **reject** (with blocking findings: launch-gate bypass and incomplete s
 | — | Phase 2.1's gate omitted `test:release`, which runs the new auto-unstick cases | Accepted |
 
 No finding disputes the plan's structure or reopens an owner or orchestrator decision. The panel did not reach `approve`; the orchestrator decides whether a further pass is wanted before approval.
+
+### Arc 1, Codex round 1 (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Session 01a1235e-8b86-7611-87c3-e1a83f2a979b, on the arc diff through phase 1.3 and the draft probe. Run on the `alejo-icloud` roster account, where the environment's `CODEX_ACCOUNT=best` routed it. Verdict: **reject** (a stale gate can still produce a green e2e aggregator). The three unreviewed fixes first (D-orch-4):
+
+| Fix | Answer | Disposition |
+|---|---|---|
+| D2, list, read, revalidate; the rewind | Does not hold as an absolute claim: a rewind after a cancel, asynchronous cancellation and unguaranteed API consistency sit outside the stated window | Accepted: claims restated as best effort, residuals widened (CI.md § Concurrency, § Arc 1); the mechanism itself changed per Opus (D17) |
+| D3, no fallback, `true`/`false` refusal | Holds whenever `changes` runs; does not hold for partial re-runs, which reuse an earlier attempt's gate | Accepted: D16 |
+| D5, fresh `status`, skipped matrices | Holds for attempt identification and `sk`/`rsk`; a status-only re-run is diagnostic, not evidence; a later failure must not erase an earlier fold | Accepted: procedure tightened (§ Arc 1, #168); `set -euo pipefail` in the probe's `status` |
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | High. Re-running `status` alone in an older run of the same head reuses its `run=false` and skipped suites and posts green | Accepted, verified on the scripts: D16, four regression cases with a success control |
+| 2 | High. `BASE` comes from the event; a retarget starts no run | Accepted in part: D15 (live base); `edited` rejected with its reason |
+| 3 | Medium. Cancellation docs overstate the invariant | Accepted: CI.md and § Arc 1 rewritten |
+| 4 | Medium. Rule 1 needs direct dependent observations | Accepted: § Arc 1 procedure |
+| — | Comments: `supersede.test.ts` header overclaims; the Storybook telemetry comment restates its env line | Accepted: both rewritten or removed |
+
+### Arc 1, Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**. The three answers: D2 holds for ordering but not under a stale pull request read; D3 holds for labels, with the retarget and partial re-run gaps Codex also found; D5 holds, with a void-reading precondition and a fidelity gap. (Its red test counts came from the worktree mid-edit; the committed tree passes.)
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. A pulls read staler than the run list cancels the current head's runs | Accepted: D17, with shim cases for a newer push, a rewind and a stale read |
+| 2 | Low. The same staleness fails the current head's `changes` as superseded | Accepted: one late read (D17), shim case |
+| 3 | Low. Listing order misses a run that moves on between listings | Accepted: lifecycle order, pinned |
+| 4 | Low. CI.md: a cancelled run's FAILURE stays on a head that becomes current; "listing first keeps the head safe" is wrong | Accepted: rewritten |
+| 5 | Low. Tests: a wrong comment, a misnamed case, an unbound env value passing as a literal | Accepted: comment replaced, a failing-read case added, unbound `${{ }}` throws |
+| D5 | A reading whose re-run leg did not pass is void; the probe lacks the lanes' `needs: decide` shape | Accepted: precondition and `gate` job |
+| 6 | Low, out of scope. `complexity-baseline.test.ts` reads `baseline:move-approved` from the event payload | Filed as #250; not arc 1's surface |
 
 ## Post-implementation
 

@@ -237,8 +237,11 @@ function expectEveryOtherResultFails(agg: Aggregator, world: World): void {
 // `cancelled`. These scripts read their results inline.
 const SMOKE = aggregator("pr-extension-smoke-e2e.yml")
 const SMOKE_FIREFOX = aggregator("pr-extension-smoke-e2e-firefox.yml")
+const READ_ATTEMPT = "needs.changes.outputs.read-attempt"
 const smoke = (run: string, skipped: string[]): World => ({
 	"needs.decide.outputs.run": run,
+	[READ_ATTEMPT]: "1",
+	"github.run_attempt": "1",
 	...results(SMOKE.needs, skipped),
 })
 const SMOKE_WORLDS: Record<string, World> = {
@@ -367,7 +370,7 @@ function decided(file: string, world: World): string {
 
 const prWorld = (surface: string, over: World = {}): World => ({
 	"github.event_name": "pull_request",
-	"github.base_ref": "dev",
+	"needs.changes.outputs.base": "dev",
 	[`needs.changes.outputs.${surface}`]: "false",
 	[LABEL_HIT]: "false",
 	...over,
@@ -375,10 +378,12 @@ const prWorld = (surface: string, over: World = {}): World => ({
 
 // The live read always writes true or false; anything else is a wiring fault, and reading it as
 // false would skip a suite the labels ask for.
-test.each(E2E_LANES)("$file decides from the live label and refuses any other value", ({ file, surface }) => {
+test.each(E2E_LANES)("$file decides from the live label and base, and refuses a malformed one", ({ file, surface }) => {
 	expect(decided(file, prWorld(surface, { [LABEL_HIT]: "true" }))).toBe("run=true")
 	expect(decided(file, prWorld(surface))).toBe("run=false")
 	for (const value of ["", "yes", "True"]) expect(decide(file, prWorld(surface, { [LABEL_HIT]: value })).code, `'${value}'`).not.toBe(0)
+	expect(decided(file, prWorld(surface, { "needs.changes.outputs.base": "main" })), "the live base forces main's run").toBe("run=true")
+	expect(decide(file, prWorld(surface, { "needs.changes.outputs.base": "" })).code, "an empty base").not.toBe(0)
 })
 
 test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on them skipped", ({ file, surface }) => {
@@ -389,7 +394,20 @@ test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on t
 	expect(decided(file, draft)).toBe("run=true")
 	const agg = aggregator(file)
 	const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
-	const ran = { "needs.decide.outputs.run": "true", ...results(agg.needs, []) }
+	const ran = { "needs.decide.outputs.run": "true", [READ_ATTEMPT]: "1", "github.run_attempt": "1", ...results(agg.needs, []) }
 	expect(exitCode(agg, ran)).toBe(0)
 	expect(exitCode(agg, { ...ran, ...results(suites, suites) })).not.toBe(0)
+})
+
+// A re-run of `status` or `decide` alone carries the earlier attempt's gate inputs, so a skip decided
+// on labels read before a label was added could pass; a re-run of failed suites keeps its ran gate.
+test.each(E2E_LANES)("$file accepts skipped suites only on labels read in this attempt", ({ file }) => {
+	const agg = aggregator(file)
+	const suites = agg.needs.filter((job) => job !== "changes" && job !== "decide")
+	const skip = { "needs.decide.outputs.run": "false", ...results(agg.needs, suites) }
+	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "2", "github.run_attempt": "2" })).toBe(0)
+	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "1", "github.run_attempt": "2" })).not.toBe(0)
+	expect(exitCode(agg, { ...skip, [READ_ATTEMPT]: "", "github.run_attempt": "1" })).not.toBe(0)
+	const rerunSuites = { "needs.decide.outputs.run": "true", ...results(agg.needs, []), [READ_ATTEMPT]: "1", "github.run_attempt": "2" }
+	expect(exitCode(agg, rerunSuites)).toBe(0)
 })

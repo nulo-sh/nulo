@@ -1,10 +1,8 @@
 /**
- * Behavioral pin for pr-supersede.yml's one step, the only script that holds `actions: write`.
- *
- * It runs the step's own script under a `gh` that serves a scripted pull request: the head it
- * reports, the runs the branch lists per status, and how each cancel call answers, recording every
- * call in order. A push can land between any two calls, so the cases that matter are orderings: the
- * current head's runs must never be cancelled, whichever way the reads and the push interleave.
+ * Behavioral pin for pr-supersede.yml's one step, the only script that holds `actions: write`. It
+ * runs the step's script under a `gh` that serves a scripted pull request (its head, the branch's
+ * runs per status, each cancel's answer) and records every call in order, including a push that
+ * lands between the two reads.
  *
  * Wired into CI via the root `test:ci-gating` script in `_unit-tests.yml`.
  */
@@ -20,7 +18,7 @@ const STEP: { run: string; env: Record<string, string> } = WORKFLOW.jobs["cancel
 
 const PR = 7
 const [H1, H2, H3] = ["1", "2", "3"].map((digit) => digit.repeat(40))
-const LISTED = ["queued", "in_progress", "pending", "waiting", "requested"]
+const LISTED = ["requested", "pending", "waiting", "queued", "in_progress"]
 
 interface Run {
 	id: number
@@ -31,8 +29,12 @@ interface Run {
 }
 
 interface Scenario {
+	/** The head the sweep's `synchronize` event carries (H2 unless set). */
+	eventHead?: string
 	/** What each pull request read returns, in order; the last one repeats. */
 	heads: string[]
+	/** Every pull request read fails with this message. */
+	pullsFail?: string
 	/** A push that lands with the first run listing: the head every later read returns. */
 	pushOnList?: string
 	runs: Run[]
@@ -46,6 +48,7 @@ dir=$(dirname "$0")
 echo "$*" >>"$dir/calls"
 case "$*" in
 */pulls/*)
+	if [ -f "$dir/pulls-fail" ]; then echo "gh: $(cat "$dir/pulls-fail")" >&2; exit 1; fi
 	head=$(head -n1 "$dir/heads")
 	if [ "$(wc -l <"$dir/heads")" -gt 1 ]; then sed -i 1d "$dir/heads"; fi
 	printf '{"head":{"sha":"%s"}}' "$head"
@@ -71,6 +74,7 @@ function sweep(scenario: Scenario): { code: number; stdout: string; calls: strin
 		writeFileSync(join(dir, "calls"), "")
 		writeFileSync(join(dir, "heads"), `${scenario.heads.join("\n")}\n`)
 		if (scenario.pushOnList) writeFileSync(join(dir, "push"), `${scenario.pushOnList}\n`)
+		if (scenario.pullsFail) writeFileSync(join(dir, "pulls-fail"), scenario.pullsFail)
 		for (const status of LISTED) {
 			const workflow_runs = scenario.runs
 				.filter((run) => (run.status ?? "in_progress") === status)
@@ -89,8 +93,12 @@ function sweep(scenario: Scenario): { code: number; stdout: string; calls: strin
 			"${{ github.repository }}": "nulo-sh/nulo",
 			"${{ github.event.pull_request.number }}": String(PR),
 			"${{ github.event.pull_request.head.ref }}": "feature",
+			"${{ github.event.pull_request.head.sha }}": scenario.eventHead ?? H2,
 		}
-		for (const [key, value] of Object.entries(STEP.env)) env[key] = bound[value] ?? value
+		for (const [key, value] of Object.entries(STEP.env)) {
+			if (value.includes("${{") && !(value in bound)) throw new Error(`no test value for ${key}: ${value}`)
+			env[key] = bound[value] ?? value
+		}
 		env.RETRY_PAUSE = "0"
 		const run = Bun.spawnSync(["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", STEP.run], { env })
 		const calls = readFileSync(join(dir, "calls"), "utf8").split("\n").filter(Boolean)
@@ -107,7 +115,7 @@ function sweep(scenario: Scenario): { code: number; stdout: string; calls: strin
 const kind = (call: string): string => (call.includes("/pulls/") ? "head" : call.includes("/cancel") ? "cancel" : "list")
 
 describe("pr-supersede.yml", () => {
-	test("lists the branch's unfinished runs before it reads the head, and cancels only the old heads' runs", () => {
+	test("lists the branch's unfinished runs in lifecycle order before it reads the head, and cancels only old heads' runs", () => {
 		const result = sweep({
 			heads: [H2],
 			runs: [
@@ -122,26 +130,10 @@ describe("pr-supersede.yml", () => {
 			expect(call).toContain("repos/nulo-sh/nulo/actions/runs -X GET --paginate -f event=pull_request -f branch=feature")
 		}
 		expect(result.cancelled).toEqual([1])
-		expect(result.stdout).toContain("API call(s)")
+		expect(result.stdout).toContain("1 superseded run(s) found")
 	})
 
-	// The push that matters lands between the two reads: a sweep that read the head first would see the
-	// event's head, then list the newer head's fresh runs and cancel them.
-	test("a head pushed while it sweeps keeps its runs", () => {
-		const result = sweep({
-			heads: [H2],
-			pushOnList: H3,
-			runs: [
-				{ id: 1, head_sha: H1 },
-				{ id: 2, head_sha: H2 },
-				{ id: 3, head_sha: H3, status: "queued" },
-			],
-		})
-		expect(result.code).toBe(0)
-		expect(result.cancelled.sort()).toEqual([1, 2])
-	})
-
-	test("never cancels another workflow's run, another pull request's run on the same branch name, or a current one", () => {
+	test("never cancels another workflow's run, another pull request's run on the same branch name, or the event head's", () => {
 		const result = sweep({
 			heads: [H2],
 			runs: [
@@ -155,15 +147,26 @@ describe("pr-supersede.yml", () => {
 		})
 		expect(result.code).toBe(0)
 		expect(result.cancelled.sort()).toEqual([1, 6])
-		expect(result.stdout, "the current head's run is never selected").toContain("2 superseded run(s) found")
+		expect(result.stdout, "the event head's run is never selected").toContain("2 superseded run(s) found")
 	})
 
-	// A force-push can move the branch back to a listed head after the listing.
-	test("re-reads the head before each cancel and keeps a run whose head became current again", () => {
-		const result = sweep({ heads: [H2, H1], runs: [{ id: 1, head_sha: H1 }] })
+	// Every head change fires its own sweep, so a sweep that sees any other head, newer, rewound or
+	// read stale, cancels nothing more and leaves the rest to that sweep.
+	test.each<[string, Pick<Scenario, "heads" | "pushOnList">]>([
+		["a push lands with the listing", { heads: [H2], pushOnList: H3 }],
+		["a force-push rewinds the branch before the first cancel", { heads: [H2, H1] }],
+		["the pull request read is older than the event", { heads: [H1] }],
+	])("stops without cancelling when %s", (_, heads) => {
+		const result = sweep({
+			...heads,
+			runs: [
+				{ id: 1, head_sha: H1 },
+				{ id: 3, head_sha: H3, status: "queued" },
+			],
+		})
 		expect(result.code).toBe(0)
 		expect(result.cancelled).toEqual([])
-		expect(result.stdout).toContain(`kept run 1 (.github/workflows/pr-quick.yml): ${H1} is the live head again`)
+		expect(result.stdout).toContain("its own sweep takes over")
 	})
 
 	test("a run that already finished counts as done", () => {
@@ -186,16 +189,21 @@ describe("pr-supersede.yml", () => {
 			cancelFails: { 1: "HTTP 502: Bad Gateway" },
 		})
 		expect(retried.code).not.toBe(0)
-		expect(retried.calls.slice(6).map(kind)).toEqual(["head", "cancel", "head", "cancel", "head", "cancel"])
+		expect(retried.calls.slice(5).map(kind)).toEqual(["head", "head", "cancel", "head", "cancel", "head", "cancel"])
 		expect(retried.cancelled, "the other run is still cancelled").toEqual([2])
 		const refused = sweep({ heads: [H2], runs: [{ id: 1, head_sha: H1 }], cancelFails: { 1: "Not Found (HTTP 404)" } })
 		expect(refused.code).not.toBe(0)
 		expect(refused.calls.filter((call) => call.includes("/cancel"))).toHaveLength(1)
 	})
 
-	test("a sweep that cannot read the pull request cancels nothing and fails", () => {
-		const result = sweep({ heads: [""], runs: [{ id: 1, head_sha: H1 }] })
-		expect(result.code).not.toBe(0)
-		expect(result.cancelled).toEqual([])
+	test("a pull request it cannot read, or whose head is no commit, fails the sweep and cancels nothing", () => {
+		const unreadable = sweep({ heads: [H2], pullsFail: "HTTP 502: Bad Gateway", runs: [{ id: 1, head_sha: H1 }] })
+		expect([unreadable.code === 0, unreadable.cancelled, unreadable.calls.filter((call) => kind(call) === "head").length]).toEqual([
+			false,
+			[],
+			2,
+		])
+		const malformed = sweep({ heads: [""], runs: [{ id: 1, head_sha: H1 }] })
+		expect([malformed.code === 0, malformed.cancelled]).toEqual([false, []])
 	})
 })
