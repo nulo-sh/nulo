@@ -1047,6 +1047,15 @@ change.
    `RECEIPT_HEAD` directly; the composition lock case repeats the scenarios' (Phase 1.3 step 8 asked
    for the displaced case or, failing that, the lock case).
 
+### Arc 1 implementation review, round 2: Codex (same session, resumed, on `18a1111..caee105`), `approve`
+
+No pin weaker than at `18a1111`; the touched comments exact. One Low:
+
+1. Low, the `setTrustAllow` TSDoc promised the Added emits whenever visibility is on (a handoff
+   during the batch write suppresses them) and said "no longer registered" where a failed lookup
+   also refuses. **Accepted**: "when visibility is on and the lock ticket is still current"; "the
+   token's registration cannot be verified (deleted …, or the lookup failed)".
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no
