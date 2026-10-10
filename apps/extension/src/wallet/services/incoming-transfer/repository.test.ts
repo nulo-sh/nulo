@@ -118,14 +118,12 @@ describe("IncomingTransferRepository — arrival floors and rows", () => {
 		expect(await repo.listRecords()).toEqual(expect.arrayContaining(accepted))
 	})
 
-	test("a rejected commitAcceptance propagates and writes no row", async () => {
+	test("a rejected commitAcceptance propagates", async () => {
 		const { api, repo } = freshRepo()
 		vi.spyOn(api.storage.local, "set").mockRejectedValueOnce(new Error("quota"))
 		const row = { profileId: "p1", networkId: "n1", contract: "0xtok", state: "trusted" as const, updatedAt: 1 }
 
 		await expect(repo.commitAcceptance(row, [pubRec("p1", "n1", "0xa")])).rejects.toThrow("quota")
-		expect(await repo.getTrust("p1", "n1", "0xtok")).toBeUndefined()
-		expect(await repo.listRecords()).toEqual([])
 	})
 
 	test("a trust state change keeps the stored arrival floor and its pending mark", async () => {

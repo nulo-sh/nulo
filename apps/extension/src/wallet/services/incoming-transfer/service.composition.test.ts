@@ -67,19 +67,16 @@ async function makeHarness() {
 	const api = new FakeBrowserApi()
 	api.reset()
 	const deletion = new ProfileDeletionState()
-	let session: number | undefined = 1
+	const session = 1
 	const visibility = { gate: undefined as Promise<void> | undefined, reached: false }
 
 	const collection = new ServiceCollection()
 	collection.add(
 		svc(ProfileService.name, {
 			onActiveProfileChanged: new EventHandler<void>(),
-			getActiveProfile: async () => (session === undefined ? undefined : { id: "p1" }),
+			getActiveProfile: async () => ({ id: "p1" }),
 			getProfiles: async () => [{ id: "p1" }],
-			captureExecutionFence: async (): Promise<ExecutionFence> => {
-				if (session === undefined) throw new Error("Wallet locked")
-				return { profileId: "p1", epoch: deletion.capture("p1"), session }
-			},
+			captureExecutionFence: async (): Promise<ExecutionFence> => ({ profileId: "p1", epoch: deletion.capture("p1"), session }),
 			isFenceLive: (fence: ExecutionFence) => fence.session === session && deletion.isCurrent(fence.profileId, fence.epoch),
 			getDeletionState: () => deletion,
 		}),
@@ -133,9 +130,6 @@ async function makeHarness() {
 		service,
 		repo,
 		receipts,
-		lock: () => {
-			session = undefined
-		},
 		/** Parks the next visibility read, the Allow's last read before its write, until `release`. */
 		parkVisibility: () => {
 			let release!: () => void
@@ -167,20 +161,6 @@ describe("IncomingTransferService composition — the Allow, in-process", () => 
 		expect(stored?.arrivalFloorPending).toBeUndefined()
 		for (const r of receipts) expect((await repo.getRecord(r.id))?.hidden).toBe(false)
 		expect(added.sort()).toEqual(receipts.map((r) => r.id).sort())
-	})
-
-	test("a lock before the Allow's write leaves the contract pending and every receipt hidden", async () => {
-		const { service, repo, receipts, lock, parkVisibility } = await makeHarness()
-		const { release, held } = parkVisibility()
-		const call = service.setTrustAllow("p1", "n1", CONTRACT)
-		await vi.waitFor(() => expect(held.reached).toBe(true))
-
-		lock()
-		release()
-
-		expect(await call).toBe(false)
-		expect((await repo.getTrust("p1", "n1", CONTRACT))?.state).toBe("pending")
-		for (const r of receipts) expect((await repo.getRecord(r.id))?.hidden).toBe(true)
 	})
 
 	test("an Allow the watchdog displaced writes nothing, so the contract stays pending over hidden receipts", async () => {

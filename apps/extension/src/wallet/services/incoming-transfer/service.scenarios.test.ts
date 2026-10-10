@@ -5275,7 +5275,7 @@ describe("IncomingTransferService — a trust write lands only in its session an
 		},
 	)
 
-	test("an Allow displaced in its record read leaves a successor Reject's block and the receipts hidden", async () => {
+	test("an Allow displaced in its visibility read leaves a successor Reject's block and the receipts hidden", async () => {
 		const f = await bootArrivals(100)
 		seedPending()
 		const receipts = [receipt(1, 40, { hidden: true }), receipt(2, 41, { hidden: true })]
@@ -5394,22 +5394,6 @@ describe("IncomingTransferService — a trust write lands only in its session an
 
 		expect(await allow(f)).toBe(false)
 		expect(trust.get(key())).toEqual(before)
-		expect(hiddenOf(receipts)).toEqual([true])
-	})
-
-	test("an Allow entering while a displaced deleter still runs writes nothing", async () => {
-		const f = await bootArrivals(100)
-		seedPending()
-		const receipts = [receipt(1, 40, { hidden: true })]
-		vi.useFakeTimers()
-		try {
-			const deleter = await displacedDeleter(f, "0xunrelated")
-			expect(await allow(f)).toBe(false)
-			await deleter.finish()
-		} finally {
-			vi.useRealTimers()
-		}
-		expect(trust.get(key())?.state).toBe("pending")
 		expect(hiddenOf(receipts)).toEqual([true])
 	})
 
@@ -5731,10 +5715,9 @@ function receiptFlags(log: string[], recordId: string, fixture: string): string 
 
 /** Both arms' locked head: one order, pinned for both by the matrices below. */
 const RECEIPT_HEAD = ["tokens", "getRecord", "outgoing", "inflight"]
-const NOTE_HEAD = RECEIPT_HEAD
 const NOTE_PROMOTION = ["getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending"]
-const NOTE_UNKNOWN = ["notes", ...NOTE_HEAD, ...NOTE_PROMOTION, "timestamp", "setOutbox", "upsert"]
-const NOTE_TRUSTED = ["notes", ...NOTE_HEAD, "getTrust", "timestamp", "setOutbox", "upsert", "visibility", "added"]
+const NOTE_UNKNOWN = ["notes", ...RECEIPT_HEAD, ...NOTE_PROMOTION, "timestamp", "setOutbox", "upsert"]
+const NOTE_TRUSTED = ["notes", ...RECEIPT_HEAD, "getTrust", "timestamp", "setOutbox", "upsert", "visibility", "added"]
 /** `log` with `marker` after the first `label` and everything past `stop` dropped. */
 const bumpedAfter = (log: string[], label: string, stop = log[log.length - 1], marker = "BUMP") => {
 	const end = log.indexOf(stop) + 1
@@ -5880,9 +5863,8 @@ function commitPublic(service: unknown, opts?: { reconcile?: boolean }, ev: Publ
 	return svc.commitPublicEvent("p1", "n1", tokenA.contract, 1, "0xa", ev, svc.serviceEpoch, opts)
 }
 
-const PUB_HEAD = RECEIPT_HEAD
-const PUB_UNKNOWN = [...PUB_HEAD, "getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
-const PUB_TRUSTED = [...PUB_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
+const PUB_UNKNOWN = [...RECEIPT_HEAD, "getTrust", "setTrust", "trustRead", "trustChanged", "visibility", "pending", "setOutbox", "upsert"]
+const PUB_TRUSTED = [...RECEIPT_HEAD, "getTrust", "setOutbox", "upsert", "visibility", "added"]
 
 describe("IncomingTransferService — public receipt epoch re-check matrix", () => {
 	test.each<[string, PublicFixture, string, string[], string]>([
@@ -5958,18 +5940,6 @@ describe("IncomingTransferService — public receipt epoch re-check matrix", () 
 		await commitPublic(f.service)
 		expect(inst.log).toEqual(["tokens", "getRecord", "outgoing"])
 	})
-})
-
-test("both arms' unknown-trust receipts read the same head in the same order", async () => {
-	const noteArm = await bootNoteReceipt("unknown")
-	const noteLog = instrumentReceipt(noteArm).log
-	await scan(noteArm.service)
-	const publicArm = await bootPublicReceipt("unknown")
-	const publicLog = instrumentReceipt(publicArm).log
-	await commitPublic(publicArm.service)
-
-	expect(noteLog.slice(1, 1 + RECEIPT_HEAD.length)).toEqual(RECEIPT_HEAD)
-	expect(publicLog.slice(0, RECEIPT_HEAD.length)).toEqual(RECEIPT_HEAD)
 })
 
 // ── Receipt sections beside a watchdog handoff or a displaced deleter ─────────
@@ -6316,6 +6286,12 @@ describe("IncomingTransferService — scope clears", () => {
 			await expect(call).rejects.toThrow("wipe failed")
 			expect(log.filter((e) => !e.startsWith("health"))).toEqual(["evict:1", "wipe:1", "evict:1"])
 			expect(svc.serviceEpoch - start).toBe(1)
+
+			// The failed wipe no longer counts as a running deleter: a receipt after it lands.
+			f.token.getTokensRaw.mockResolvedValue([tokenA])
+			trustedRow()
+			expect(await commitPublic(f.service)).toBe("processed")
+			expect(records.has(PUB_ID)).toBe(true)
 		},
 	)
 

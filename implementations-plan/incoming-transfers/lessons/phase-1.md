@@ -91,3 +91,12 @@
 - Gate: incoming-transfer units 373/373, `bun run test` 10746 passed (716 files), `bun run
   test:all` exit 0 (every workspace), `bun run lint` 0, `bun run typecheck:all` 0 (one test-table
   typing fix after the first run).
+
+## Post-implementation loop
+
+- Round 1 (fresh Codex session on `ac259a7..18a1111`, gpt-6.1-sol high, default login): `approve`,
+  three Low. Opus final-diff review in parallel: holds, seven Low. All accepted (plan.md § Audit
+  verdicts); fixes are comments, test names, one new recovery assertion and three duplicate tests
+  removed. Production code unchanged apart from comments, so the smoke run started on the 18a1111
+  build stands for this head.
+- New pin checked: removing the `finally` decrement in `withDeleterLock` fails both failed-wipe rows.

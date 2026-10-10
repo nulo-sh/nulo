@@ -1008,6 +1008,45 @@ displaced-deleter race for both receipt sections; no new race; four Low findings
 
 Phase 1.2's gate counts as passed with these answers recorded.
 
+### Arc 1 implementation review, round 1: Codex (gpt-6.1-sol, high, read-only, default login, fresh session on `ac259a7..18a1111`), `approve`
+
+Asked first (D-orch-3), on the final code: the entry read plus the per-write `fenced()` read
+**holds** for (a) a deleter starting after entry, (b) a thrown section (the decrement runs once on
+every exit) and (c) an Allow whose reads span a handoff (`live()` fails; `commitAcceptance` reaches
+the adapter's one `set` with no await) — each "high confidence". It also confirmed the one-batch
+claim (I10) against the Chromium and Firefox storage backends.
+
+1. Low, the `setTrustAllow` comment promised every refusal leaves the contract pending. **Accepted**:
+   "a refusal writes nothing; a contract still pending prompts again on the next popup open".
+2. Low, the failed-wipe tests did not prove receipts recover after a deleter throws. **Accepted**:
+   the failed-wipe case now commits a receipt afterwards and expects it stored; with the `finally`
+   decrement removed, both rows fail.
+3. Low, comments restating declarations (`ReceiptScope`, `trustedRow`, `moveArrivalFloorLocked`) and
+   a paragraph on `commitAddressedEvents`. **Accepted**: the first two deleted, the third reduced to
+   its refusal contract, the paragraph cut to one sentence that keeps the why.
+
+### Arc 1 implementation review: Opus (general-purpose agent, final diff), `holds; no High or Medium; seven Low`
+
+(a) to (c) **hold** on the final code; (c) traced through `ChromeStorageAreaAdapter.set`, which
+calls `chrome.storage.local.set(entries)` before its first await (the one production adapter). A
+deleter that never returns surfaces, after ten minutes, as the existing stalled line; accurate, no
+change.
+
+1. Low, the `setTrustAllow` TSDoc in `spec.ts` was out of date. **Accepted**: lists every `false`
+   case and the visibility gate on the emits.
+2. Low, "leaves the contract pending" is wrong for some refusals. **Accepted** (same fix as Codex 1).
+3. Low, the `receiptFence` comment stated a caller's rule as a fact and "or resume" said nothing.
+   **Accepted**: "Build it at lock entry, before any await"; "or resume" dropped.
+4. Low, two comments add little (`NoteScanContext`'s second sentence, `trustedRow`). **Accepted**.
+5. Low, half of the rejected-commit repository test checked only the mock. **Accepted**: renamed "a
+   rejected commitAcceptance propagates", row checks dropped (the batch guarantee is I10's).
+6. Low, a test named "record read" parks on the visibility read. **Accepted**: renamed.
+7. Low, three duplicate tests. **Accepted**, deviating from the plan's lists: the Allow "deleter at
+   entry" refusal is the late-delete boundary test's precondition and adds no failure mode of its
+   own; the "both arms read the same head" test repeats the two matrices, which now spell
+   `RECEIPT_HEAD` directly; the composition lock case repeats the scenarios' (Phase 1.3 step 8 asked
+   for the displaced case or, failing that, the lock case).
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no

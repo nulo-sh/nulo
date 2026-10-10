@@ -13,3 +13,4 @@
 - 2026-10-09 — Phase 1.2 built; mechanical gate green (units 360/360, lint, typecheck:all; three revert checks fail as required). Entry-read consult (Codex + Opus) running; gate open until recorded (D-orch-3).
 - 2026-10-09 — Entry-read consult: Codex `fence holds (high confidence); prompt liveness gap`, Opus `holds, no new race, four Low`. Recorded under Audit verdicts (D12, D13). Phase 1.2 gate passed.
 - 2026-10-09 — Phase 1.3 gate passed: units 373/373, test 10746 passed, test:all 0, lint 0, typecheck:all 0; composition test passes the checklist.
+- 2026-10-10 — Arc 1 review round 1: Codex `approve` (3 Low), Opus holds (7 Low); all accepted and fixed.

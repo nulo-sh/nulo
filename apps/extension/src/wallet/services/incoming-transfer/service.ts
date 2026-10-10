@@ -54,7 +54,7 @@ export * from "./spec"
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
 /** One scan's capture for its per-note critical sections: the scope and the scan-scoped timestamp
- *  cache. The lifecycle epoch taken before any await lives in each section's `ReceiptFence`. */
+ *  cache. */
 type NoteScanContext = {
 	profileId: string
 	networkId: string
@@ -73,7 +73,6 @@ type PublicEventContext = {
 	accountAddress: string
 }
 
-/** The scope both receipt arms dedupe against. */
 type ReceiptScope = { profileId: string; networkId: string; chainId: number; accountAddress: string }
 
 /** A receipt section's two synchronous reads. `fenced` admits a write: the lifecycle epoch is the
@@ -122,7 +121,6 @@ function nextArrivalFloor(
 	return { arrivalFloor: maxDefined(known, move.tip), pending: false }
 }
 
-/** `stored` accepted: state `trusted` with the moved floor. */
 function trustedRow(stored: IncomingTrustRecord, floor: { arrivalFloor: number | undefined; pending: boolean }): IncomingTrustRecord {
 	const { profileId, networkId, contract } = stored
 	const row: IncomingTrustRecord = { profileId, networkId, contract, state: "trusted", updatedAt: Date.now() }
@@ -329,9 +327,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		})
 	}
 
-	/** Built synchronously at lock entry, where it reads the deleter count once, before any read: with
-	 *  none running and the ticket current, none can start or resume while the ticket stays current,
-	 *  whereas a read only before the write misses a displaced deleter that finished during the reads. */
+	/** Build it at lock entry, before any await: it reads the deleter count once there. With none
+	 *  running and the ticket current, none can start while the ticket stays current, whereas a read
+	 *  only before the write misses a displaced deleter that finished during the reads. */
 	private receiptFence(epochAtStart: number, isCurrent: () => boolean): ReceiptFence {
 		const clearAtEntry = this.deletersRunning === 0
 		const fenced = () => clearAtEntry && this.serviceEpoch === epochAtStart && isCurrent() && this.deletersRunning === 0
@@ -695,8 +693,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	/** All or nothing: every read first, then one storage write carrying the trusted row, its arrival
 	 *  floor and every record it un-hides, so no receipt is left hidden under a trusted contract. A
-	 *  refusal writes nothing and leaves the contract pending, and the next popup open prompts again.
-	 *  With `incomingTransfersVisible` off the records still turn visible but emit nothing. */
+	 *  refusal writes nothing; a contract still pending prompts again on the next popup open. With
+	 *  `incomingTransfersVisible` off the records still turn visible but emit nothing. */
 	public async setTrustAllow(profileId: string, networkId: string, contract: string): Promise<boolean> {
 		await this.ensureInitialized()
 		const trustFence = await this.captureTrustFence(profileId)
@@ -926,8 +924,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		await this.repo.setArrivalRow(profileId, networkId, accountAddress, { sinceBlock: tip, played: [] })
 	}
 
-	/** Moves a stored floor by `nextArrivalFloor`. A section `isCurrent` refuses writes nothing and
-	 *  resolves false. */
+	/** Resolves false, writing nothing, when `isCurrent` refuses. */
 	private async moveArrivalFloorLocked(
 		profileId: string,
 		networkId: string,
@@ -2096,10 +2093,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		)
 	}
 
-	/** Commits each event addressed to one of `recipients`, in order. False at the first commit a fence
-	 *  refused: the caller then leaves its page marker or reconciliation progress where it was, so the
-	 *  next tick re-reads them. Advancing would skip the receipt for good, since a ticket or deleter
-	 *  stand-down, unlike an epoch one, does not stop the cursor write. */
+	/** False at the first `revoked` commit, and the caller keeps its page marker or reconciliation
+	 *  progress for a retry: a ticket or deleter stand-down, unlike an epoch one, does not stop the
+	 *  cursor write, so advancing would skip the receipt for good. */
 	private async commitAddressedEvents(
 		target: { profileId: string; networkId: string; contract: string; chainId: number },
 		events: PublicTransferEvent[],

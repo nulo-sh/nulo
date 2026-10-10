@@ -336,13 +336,13 @@ export type Methods = {
 	getIncomingSyncHealth(networkId: string): IncomingSyncHealth
 	/** Let the network's backed-off scans run now and wait for them. Never resets a failure streak. */
 	retryIncomingScan(networkId: string): void
-	/** User accepted the first-receive prompt: `pending → trusted`. Flips
-	 *  all hidden records for this contract to visible; emits
-	 *  `onIncomingTransferAdded` for each. Returns `false` when the contract
-	 *  no longer has a token registration (stale-popup race: user deleted
-	 *  the token between Pending emit and Allow click), or a lock, a profile
-	 *  switch or the profile's deletion overtook the write — caller should
-	 *  suppress the success toast in that case. */
+	/** User accepted the first-receive prompt: `pending → trusted`. Flips all hidden records for this
+	 *  contract to visible in the same storage write, and emits `onIncomingTransferAdded` for each when
+	 *  visibility is on. Returns `false`, writing nothing, when the token is no longer registered
+	 *  (deleted between the prompt and the click), the trust row is missing or `unknown` (a wipe or
+	 *  token delete reset it), a row delete is still running, or a lock, a profile switch, the
+	 *  profile's deletion or a lock handoff overtook the write — caller should suppress the success
+	 *  toast in that case. */
 	setTrustAllow(profileId: string, networkId: string, contract: string): boolean
 	/** User rejected the first-receive prompt: `pending → blocked`. Same
 	 *  `false`-on-stale-token contract as `setTrustAllow`. */
