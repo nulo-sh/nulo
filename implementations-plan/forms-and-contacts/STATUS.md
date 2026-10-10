@@ -14,3 +14,4 @@
 - 2026-10-10: gate 1.4 pass: lint, typecheck:all, account-name+NewAccount+NewFpc+EditFpc 27/27; the three popup duplicate tests fail on the base popups.
 - 2026-10-10: gate 1.5 pass: lint, typecheck:all, test (extension 10780 passed), test:all exit 0; the Info control fails on the base client; the real-pair test fails with the onLevel emit removed.
 - 2026-10-10: arc gate: smoke Chrome (armed build at 7ac5d04) 47 files passed, 3 skipped, 198 tests passed, retry 0. Codex loop converged in 3 rounds (approve; approve 2 Lows; Medium fixed; clean); Opus approve, 1 Low fixed.
+- 2026-10-10: final gates at bb46d81: lint, typecheck:all, test:all (extension 10782 passed) exit 0 (run 1 red on a pre-existing balances fuzz seed, reproduced on origin/dev; run 2 green); check:plans 0; smoke Chrome 47 files passed, 3 skipped, 198 tests; smoke Firefox 49 files passed, 1 skipped, 199 tests; both armed builds, retry 0.
