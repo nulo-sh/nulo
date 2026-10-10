@@ -914,6 +914,31 @@ describe("canary lanes", () => {
 
 // Bun never re-checks cached files against bun.lock, and its install runs trusted packages'
 // lifecycle scripts: a poisoned cache must reach neither shipped bytes nor a job holding a write token.
+describe("store copies", () => {
+	const file = ".github/workflows/verify-store-copies.yml"
+	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
+	const wf = Bun.YAML.parse(readFileSync(join(ROOT, file), "utf8")) as any
+
+	test("runs weekly and on dispatch, never on a pull request or a push", () => {
+		expect(Object.keys(wf.on).sort()).toEqual(["schedule", "workflow_dispatch"])
+		expect(wf.on.schedule).toHaveLength(1)
+	})
+
+	test("one job, read-only, in no environment, with no secret and no installed dependency", () => {
+		expect(wf.permissions).toEqual({ contents: "read" })
+		expect(Object.keys(wf.jobs)).toEqual(["compare"])
+		const job = wf.jobs.compare
+		expect(job.permissions).toEqual({ contents: "read", attestations: "read" })
+		expect(job.environment).toBeUndefined()
+		expect(readFileSync(join(ROOT, file), "utf8")).not.toContain("secrets.")
+		const uses = job.steps.flatMap((step: { uses?: string }) => (step.uses ? [step.uses.split("@")[0]] : []))
+		expect(uses).toEqual(["actions/checkout", "./.github/actions/setup-bun"])
+		expect(job.steps[0].with?.["persist-credentials"]).toBe(false)
+		expect(job.steps[1].with).toEqual({ cache: "false", install: "false" })
+		expect(job.steps[2].run).toBe('bun scripts/release/store-copy-run.ts "$STORE"')
+	})
+})
+
 describe("Bun's install cache", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 	const parse = (file: string): any => Bun.YAML.parse(readFileSync(join(ROOT, file), "utf8"))

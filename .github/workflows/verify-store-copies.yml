@@ -1,0 +1,54 @@
+name: Verify store copies
+run-name: "verify-store-copies → ${{ inputs.store || 'both' }}"
+
+# Downloads the copy each store serves to the public and compares it, file for file, with the
+# release zip it claims to be; the release side runs the publish path's own digest, SHASUMS256.txt
+# and attestation checks. Each store may add only what scripts/release/store-copy.ts lists. Public
+# endpoints and a read-only token: no environment, no secret. Run it after a store publish goes live.
+#
+# `gh workflow run verify-store-copies.yml -f store=chrome|firefox|both`
+
+on:
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      store:
+        description: "Which store's copy to compare"
+        type: choice
+        default: both
+        options:
+          - both
+          - chrome
+          - firefox
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-store-copies
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: Compare store copies with their release zips
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # attestations: read lets the job token list the release's attestations for `gh attestation verify`.
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+      - name: Compare
+        env:
+          STORE: ${{ inputs.store || 'both' }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bun scripts/release/store-copy-run.ts "$STORE"

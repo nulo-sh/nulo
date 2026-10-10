@@ -19,3 +19,4 @@
 - 2026-10-10: arc 1 merged into dev as c0e1e69 (#252); arc 2 branched from dev (D-orch-5); D-orch-6 and D-orch-7 recorded.
 - 2026-10-10: phase 2.1 gate passed (lint, typecheck:all, test, test:all, test:ci-gating, test:release, lint:actions; reds shown).
 - 2026-10-10: phase 2.2 gate passed (lint, typecheck:all, test, test:all, both builds, onboarding-tab smoke, frozen install, audit gate enforce).
+- 2026-10-10: phase 2.3 local gate passed (lint, typecheck:all, test, test:ci-gating, test:release, lint:actions, live stores); waits on the D-orch-7 review before it counts.

@@ -24,18 +24,12 @@ export interface ReleaseRecord {
 	assets: RemoteAsset[]
 }
 
-export interface AttachIO {
+/** The reads that verify a published release; nothing here can write to one. */
+export interface PublishedReadIO {
 	/** Every release whose tag_name is `tag`, drafts included. */
 	releasesFor(tag: string): Promise<ReleaseRecord[]>
-	release(id: number): Promise<ReleaseRecord>
 	/** The commit `refs/tags/<tag>` names, an annotated tag dereferenced; null when the ref does not exist. */
 	tagCommit(tag: string): Promise<string | null>
-	/** Creates `refs/tags/<tag>` at `sha`; false when the ref already exists. */
-	createTagRef(tag: string, sha: string): Promise<boolean>
-	createDraft(tag: string, prerelease: boolean): Promise<number>
-	deleteAsset(id: number): Promise<void>
-	uploadAsset(releaseId: number, name: string, path: string): Promise<void>
-	editRelease(id: number, patch: { body?: string; draft?: boolean }): Promise<void>
 	/** Whether GitHub holds any attestation for this digest in the repository. */
 	attested(sha256: string): Promise<boolean>
 	/** `gh attestation verify` with the identity the release notes print. */
@@ -43,9 +37,19 @@ export interface AttachIO {
 	downloadAsset(id: number, path: string): Promise<void>
 	sha256(path: string): Promise<string>
 	readText(path: string): Promise<string>
+	log(message: string): void
+}
+
+export interface AttachIO extends PublishedReadIO {
+	release(id: number): Promise<ReleaseRecord>
+	/** Creates `refs/tags/<tag>` at `sha`; false when the ref already exists. */
+	createTagRef(tag: string, sha: string): Promise<boolean>
+	createDraft(tag: string, prerelease: boolean): Promise<number>
+	deleteAsset(id: number): Promise<void>
+	uploadAsset(releaseId: number, name: string, path: string): Promise<void>
+	editRelease(id: number, patch: { body?: string; draft?: boolean }): Promise<void>
 	wait(ms: number): Promise<void>
 	output(key: string, value: string): void
-	log(message: string): void
 }
 
 export interface RunInput {
@@ -173,7 +177,13 @@ export async function runVerifyPublished(io: AttachIO, input: RunInput, notes: s
 }
 
 /** Downloads one published asset and checks it against GitHub's digest and its attestation. */
-async function fetchVerified(io: AttachIO, input: RunInput, assets: RemoteAsset[], name: string, path: string): Promise<string | null> {
+export async function fetchVerified(
+	io: PublishedReadIO,
+	input: Pick<RunInput, "tag" | "tagSha">,
+	assets: RemoteAsset[],
+	name: string,
+	path: string,
+): Promise<string | null> {
 	const asset = assets.find((a) => a.name === name)
 	if (!asset?.digest) return `${input.tag}: ${name} has no digest`
 	if (!(await io.attested(asset.digest.replace(/^sha256:/, "")))) {
