@@ -6,7 +6,7 @@ import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
 import type { IConfig } from "@/wallet/config"
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
-import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
+import { DEFAULT_INIT_TIMEOUT_MS, Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import {
 	AccountAddressInconsistencyError,
 	DuplicateWalletError,
@@ -229,6 +229,8 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	/** Lazily injected by the last-started ProfileDeletionCoordinator — the purge
 	 *  executor. Never a topological dependency (would be a cycle). */
 	private deletionDelegate: ProfileDeletionDelegate | null = null
+	/** Settles when the first delegate is injected; this service answers RPCs phases before that. */
+	private readonly deletionDelegateInjected = Promise.withResolvers<void>()
 	/** Lazily injected by the last-started AccountIntegrityCoordinator — the pre-open address
 	 *  verifier. Never a topological dependency (would be a cycle, same as the deletion delegate). */
 	private integrityDelegate: AccountIntegrityDelegate | null = null
@@ -1246,9 +1248,30 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		}
 	}
 
-	/** Injected by the last-started ProfileDeletionCoordinator (finding D). */
+	/** Injected by the last-started ProfileDeletionCoordinator. */
 	public setDeletionDelegate(delegate: ProfileDeletionDelegate): void {
 		this.deletionDelegate = delegate
+		this.deletionDelegateInjected.resolve()
+	}
+
+	/**
+	 * Waits for init and then for the coordinator's start, both inside one init budget, so a delete
+	 * waits no longer before its first write than any RPC waits for init. Holds no lock.
+	 */
+	private async awaitDeletionDelegate(): Promise<ProfileDeletionDelegate> {
+		const deadline = Date.now() + DEFAULT_INIT_TIMEOUT_MS
+		await this.ensureInitialized()
+		if (!this.deletionDelegate) {
+			let timer: ReturnType<typeof setTimeout> | undefined
+			const bound = new Promise<void>((resolve) => {
+				timer = setTimeout(resolve, Math.max(0, deadline - Date.now()))
+			})
+			await Promise.race([this.deletionDelegateInjected.promise, bound])
+			clearTimeout(timer)
+		}
+		const delegate = this.deletionDelegate
+		if (!delegate) throw new Error("deletion coordinator not ready")
+		return delegate
 	}
 
 	/** Injected by the last-started AccountIntegrityCoordinator. */
@@ -1452,9 +1475,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * generation + marker tuple are unchanged — see `assertTornGuardUnchangedHoldingLock`.
 	 */
 	public async deleteProfile(id: string, tornGuard?: { pxeGeneration: string; markerAt: number }): Promise<ProfileInfo> {
-		await this.ensureInitialized()
-		const delegate = this.deletionDelegate
-		if (!delegate) throw new Error("deletion coordinator not ready")
+		const delegate = await this.awaitDeletionDelegate()
 
 		const { profile, epoch, snapshot } = await this.runExclusive(async () => {
 			this.sweepStalePendingRestore(Date.now())
