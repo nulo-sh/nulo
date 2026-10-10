@@ -924,6 +924,7 @@ Run this section in order. It is the whole procedure; no other document is neede
 | D-orch-4 | **A-2 accepted.** #222 closes with the two extractions and the eight written declines. | The orchestrator's answer to A-2. | — |
 | D-orch-5 | **A-1 accepted as Phase 1.6, `Refs #197`.** A shape check at `predictedWorstMinFees`'s returns with a fixed refusal and the two reply pins; it reuses the existing failed-estimate path and adds no copy. #197 stays open for its external half; the PR says `Refs #197`. | The orchestrator's answer to A-1. | — |
 | D14 | **#118's comment sites are five.** The false upstream-parity claim the plan placed in `account/fee-options.ts` sits in `account/nulo-account.ts` ("byte-for-byte"), with a sibling "(matches upstream)" in `fee-options.ts`; both are corrected. | The tree wins (upstream defaults to `getMinFees(Limit)` × 1.5; Nulo to the current minimum × 1.5). | Correcting only `fee-options.ts` (leaves the false claim where it is). |
+| D15 | **An estimate hold ends on a successful `createDocument` too.** Chromium allows one offscreen document, so a create that succeeds proves the previous one is gone; v3.1 retired an epoch only on a successful close. | Opus review O3: a crash without a proven close otherwise held four places to the TTL. | Leaving crashes to the TTL. |
 
 ## Audit verdicts
 
@@ -1048,6 +1049,27 @@ All four conditions are **accepted and applied** in v3.1:
 | Note on 5: run the ownership check after any wait inside the storage facade | Added (`utils/storage.ts:78`'s `unless` callback). |
 
 The driver closed these conditions without another Codex round. Each is a narrowing that the condition named, and no new mechanism was added.
+
+### Arc 1 implementation review, round 1
+
+**Codex (gpt-6.1-sol, high, read-only), session `01a12479`, on the arc's commits.** **VERDICT: changes needed.**
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| C1: a deferred `settle` after a TTL reap ends a later admission that reused the token | major | **Accepted.** `settle` takes the admission's signal and ends only the entry that signal names; an integration test reuses the token after the reap. |
+| C2: a profile switch clears the task registry, `task.fail` throws `Invalid task id` with no cause, and the hold is lost | major | **Accepted.** `WrappedTask.fail` keeps the recorded failure as the non-enumerable `cause` of the error it throws; the message, the class and the wire (message only) are unchanged. |
+| C3: a null-like first predicted slot falls back to the current minimum and skips later slots | minor | **Accepted.** The first slot is checked like the rest; pinned at both positions. |
+
+**Opus review (general-purpose), on the same diff, with 27 mutation runs.** **VERDICT: changes needed** (no blocker or major).
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| O1: the first predicted slot | minor | **Accepted** (C3). |
+| O2: an array-like `deltas` passes the port's speed-level check and executes | minor | **Accepted.** `approveInteraction` refuses a non-array like a count mismatch; a test with an array-like carrying an unknown level. |
+| O3: the cap is per profile, so held chain-A estimates hold places against chain-B estimates; a crashed document without a proven close holds them to the TTL | minor | **Accepted in part.** A successful `createDocument` now retires the previous epoch (Chromium allows one offscreen document), which ends holds after a crash. The per-profile count stays: chain-scoped admission is a registry redesign outside arc 1. The registry header says so, and the PR body names it. |
+| O4: surviving mutations (`send_transaction` reader, any-status record, `null` level, the L2 component) | nit | **Accepted.** One pin each; each now fails its mutation. The `onTerminal` order is pinned against the caller's first handler, the property the hold needs. |
+| O5: the wallet subclass's record-lifetime comment overstated the bound; the registry header omitted two ends | nit | **Accepted.** Both rewritten. |
+| O6: all nine PXE clients tracked timeouts and silenced warnings; `pxe/client.ts` imported from `execution/` | nit | **Accepted.** The tracking moved into `DEFAULT_PXE_CLIENT_FACTORY`; the wallet subclass is back to `dev`. |
 
 ## Seeds
 
