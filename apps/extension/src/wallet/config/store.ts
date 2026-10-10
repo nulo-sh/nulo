@@ -76,13 +76,8 @@ export class ConfigStore implements IConfigStore {
 		await this.apply(defaultConfig(), "before-assign")
 	}
 
-	/**
-	 * Merge an incoming/stored config in, validating each prop against the
-	 * schema and KEEPING the current value for any prop that is missing or
-	 * fails its domain — a corrupt/migrated value no longer loads just because
-	 * its primitive `typeof` matched. Emits `onUpdate` only for props that
-	 * validate AND change. `persist` says whether storage is written before memory changes.
-	 */
+	/** Merge an incoming or stored config: a prop that is missing or fails its schema keeps its
+	 *  current value, and `onUpdate` fires only for props that validate and change. */
 	private async apply(incoming: unknown, persist: "before-assign" | "after-assign") {
 		const src = (incoming ?? {}) as Record<string, unknown>
 		// Same lock as `set()`: an unlocked apply (reset/load) interleaving a

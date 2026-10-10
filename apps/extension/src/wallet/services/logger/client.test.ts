@@ -179,57 +179,57 @@ describe("documentLogger — the worker's level gate", () => {
 
 describe("documentLogger — against a real LoggerService", () => {
 	/** Joins the page's ports to the service's, delivering each message in a task of its own and
-	 *  through a structured clone, as Chrome does. */
+	 *  through a structured clone, as Chrome does. Returns what reached each end, once handled. */
 	function joinPorts() {
+		const reached = { worker: [] as unknown[], page: [] as unknown[] }
 		let onConnect: (port: unknown) => void = () => {}
 		;(chrome.runtime.onConnect.addListener as ReturnType<typeof vi.fn>).mockImplementation((listener: (port: unknown) => void) => {
 			onConnect = listener
 		})
-		const end = () => {
+		const end = (log: unknown[]) => {
 			const message = new Set<(...args: unknown[]) => void>()
 			return {
-				message,
 				onMessage: {
 					addListener: (l: (...args: unknown[]) => void) => message.add(l),
 					removeListener: (l: (...args: unknown[]) => void) => message.delete(l),
 				},
 				onDisconnect: { addListener: () => {}, removeListener: () => {} },
 				disconnect: () => {},
+				receive: (m: unknown, from: unknown) =>
+					setTimeout(() => {
+						const copy = structuredClone(m)
+						for (const l of [...message]) l(copy, from)
+						log.push(copy)
+					}, 0),
 			}
 		}
 		;(chrome.runtime.connect as ReturnType<typeof vi.fn>).mockImplementation((_id: unknown, { name }: { name: string }) => {
-			const page = { name, ...end(), postMessage: (() => {}) as (m: unknown) => void }
-			const worker = { name, sender: {}, ...end(), postMessage: (() => {}) as (m: unknown) => void }
-			const deliver = (to: typeof page, from: unknown, m: unknown) =>
-				setTimeout(() => {
-					for (const l of [...to.message]) l(structuredClone(m), from)
-				}, 0)
-			page.postMessage = (m) => deliver(worker, worker, m)
-			worker.postMessage = (m) => deliver(page, page, m)
+			const page = { name, ...end(reached.page), postMessage: (() => {}) as (m: unknown) => void }
+			const worker = { name, sender: {}, ...end(reached.worker), postMessage: (() => {}) as (m: unknown) => void }
+			page.postMessage = (m) => worker.receive(m, worker)
+			worker.postMessage = (m) => page.receive(m, page)
 			onConnect(worker)
 			return page
 		})
+		return reached
 	}
 
-	test("turning debugMode on lets the next Debug line reach the store", async () => {
-		joinPorts()
+	test("the page stops sending Debug lines at Info, and turning debugMode on sends them again", async () => {
+		const reached = joinPorts()
 		const config = { onUpdate: new EventHandler<ConfigProp>(), get: (() => false) as IConfig["get"] }
 		const store = new LoggerStore(config)
 		new LoggerService(store)
-		const settle = () => new Promise((resolve) => setTimeout(resolve, 5))
-		const stored = () => store.get(10).map((log) => log.data[0])
-		const logger = documentLogger("popup")
+		const line = (level: LogLevel, text: string) => documentLogger("popup").log("ui", level, text) as unknown as Promise<unknown>
+		const sentToWorker = () => JSON.stringify(reached.worker)
 
-		logger.log("ui", LogLevel.Info, "known")
-		await settle()
-		logger.log("ui", LogLevel.Debug, "below the minimum")
-		await settle()
-		expect(stored()).toEqual(["known"])
+		expect(await line(LogLevel.Info, "known")).toBe(LogLevel.Info)
+		await line(LogLevel.Debug, "below the minimum")
+		expect(sentToWorker()).not.toContain("below the minimum")
 
 		config.onUpdate.invoke({ key: "debugMode", value: true })
-		await settle()
-		logger.log("ui", LogLevel.Debug, "kept")
-		await settle()
-		expect(stored()).toEqual(["known", "kept"])
+		await vi.waitFor(() => expect(JSON.stringify(reached.page)).toContain("onLevel"))
+		await line(LogLevel.Debug, "kept")
+		expect(sentToWorker()).toContain("kept")
+		expect(store.get(10).map((log) => log.data[0])).toEqual(["known", "kept"])
 	})
 })

@@ -438,6 +438,15 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 - F-7 [Medium] FA-11 said the snack always reports a failed sender and that an interrupted import leaves no such row: a contact error or a later stop replaces the sender count (`useContactImportExport.ts:185, 335-345`), and an earlier row's failed sender stays saved. FA-11 and the F-1 disposition now say so.
 - F-8 [Low] arc 2's summary still named the address-key swap: removed.
 
+### Arc 1 post-implementation loop (2026-10-10)
+
+**Codex round 1 (gpt-6.1-sol, high, fresh session): approve**, no production defect. Two Lows, both accepted:
+- A1-C1 [Low] the real service and client test could pass with both level paths broken (the worker drops the first Debug line anyway). Accepted and verified: the cold first round trip took 7 ms against the test's 5 ms settle, so its first half proved nothing. The test now awaits the first answer, asserts the Debug line never reached the worker, waits for the `onLevel` event to land, and asserts the next Debug line reached both the worker and the store; it fails with the answer removed and with the event removed.
+- A1-C2 [Low] `ConfigStore.apply`'s docblock carried history and restated its parameter: cut to one sentence.
+
+**Opus 5.5 review (alongside round 1): approve.** One Low, accepted:
+- A1-O1 [Low] Settings → Lock's auto-lock field kept the typed value after a failed write (as before the arc), so the plan's Lock line held only for the strict toggle, and typing the same value again wrote nothing. The catch now puts the stored timeout back (the dust-threshold field's rule; no new words), and a page test proves the reset and the retry; it fails on the prior `lock.vue`.
+
 ## Post-implementation
 
 This section is self-contained: the implementing session follows it from here.

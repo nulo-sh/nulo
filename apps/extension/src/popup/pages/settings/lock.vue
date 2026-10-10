@@ -66,6 +66,8 @@ async function updateSessionTtl(value) {
 		await profileService.refreshSession()
 		openToast({ kind: "success", label: "Auto-lock timeout updated" })
 	} catch (err) {
+		// A failed write stores nothing: show the stored timeout again, so typing the same value retries.
+		sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
 		openToast({ kind: "error", label: "Failed to update setting" })
 	}
 }

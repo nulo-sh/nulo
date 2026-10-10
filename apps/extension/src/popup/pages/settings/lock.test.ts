@@ -87,6 +87,23 @@ describe("settings/lock", () => {
 		expect(fakes.lockWallet.lock).toHaveBeenCalledTimes(1)
 	})
 
+	test("a failed auto-lock write shows the stored timeout again, and asking again writes again", async () => {
+		const debounced = () => new Promise((resolve) => setTimeout(resolve, 350)).then(flushPromises)
+		fakes.config.setValue.mockRejectedValueOnce(new Error("persist failed"))
+		const w = await mountLock()
+		await debounced()
+		const field = () => w.findComponent('[data-testid="auto-lock-input"]')
+
+		field().vm.$emit("update:modelValue", "0")
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenCalledExactlyOnceWith("sessionTtl", 0)
+		expect(field().attributes("modelvalue")).toBe("30")
+
+		field().vm.$emit("update:modelValue", "0")
+		await debounced()
+		expect(fakes.config.setValue).toHaveBeenCalledTimes(2)
+	})
+
 	test("unmount disposes the lock after both service clients disconnect", async () => {
 		const w = await mountLock()
 		w.unmount()
