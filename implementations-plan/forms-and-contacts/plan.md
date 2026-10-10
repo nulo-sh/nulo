@@ -224,7 +224,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 4. Test in `LogsViewer.test.ts`: the editor's first document (`H.editors[0].state.doc`) ends with `"\n"` for two entries.
 - Validation gate: fast layers on the two test files; the document test fails against the base copy of `LogsViewer.vue`.
 
-**1.2 #205, persist first.**
+**1.2 #205, persist first.** ✓
 1. Reorder `ConfigStore.set` and the `reset` path of `apply`; `load` keeps its order.
 2. In `store.test.ts`: a `set` whose persist throws leaves `get(key)` on the old value and announces nothing; a retry of the same value writes and announces once (control). The same pair for `reset()`. A `load()` whose write-back throws keeps the stored values in memory.
 3. Rewrite `privacy.test.ts`'s BUG PIN as the page pin of the new contract: the fake `setValue` throws without announcing; the toggle shows the stored value; a second press calls `setValue` again. (The red/green proof is `store.test.ts`; this case also passes on the base page code.)
@@ -365,6 +365,7 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-orch-1 (orchestrator, 2026-10-10): no stack. Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; later arcs branch from `worktree-forms-and-contacts` and rebase onto `dev` after arc 1 lands.
 - D-orch-2 (orchestrator, 2026-10-10): arc 1 only. Arc 2 waits on `account-session-life` arc 3; arc 3 waits on decision page 11, where FA-1 to FA-11 sit as items P11-06 to P11-17. FA-8 and FA-10 ship as today in arc 1 (today's behaviour pinned, as phases 1.3 and 1.4 say).
 - D-orch-3 (orchestrator, 2026-10-10): arc 1's three visible corrections are no-ask decisions on the #210 precedent (bug fixes restoring intended behaviour with existing words) and ship in full: #205, after a failed config write the toggle shows the stored value again beside the existing "Failed to update setting" toast; #212, each log line on its own line, and after "Clear logs" the list starts on the first line; #214, duplicate checks compare trimmed input, so "Alice " beside a saved "Alice" shows the existing "Already exist" warning with Save disabled, and saved names are not changed. No other visible change and no new words.
+- D-arc1-1 (#205, phase 1.2): `display.vue`'s dust-threshold catch drops its ref rollback and restores the field from the ref (`el.value = dustThreshold.value`). With persist-first a failed write never moves the ref, so the old `prev` rollback was dead, and in a cross-window race it would have shown a stale value instead of the stored one. The plan said only the comment changes; the tree made the rollback line dead.
 
 ### Competing outline (cheapest-first), sent to both audits
 
