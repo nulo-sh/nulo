@@ -169,7 +169,7 @@ function fitField() {
 	fieldScale.value = typing ? 1 : fitHero(1, (_, scale) => rulerWidth(form, scale), inputRoom(input)).scale
 }
 
-/** The derived token line's type as a fraction of its 10 px: the largest that keeps it on one line
+/** The derived token line's type as a fraction of its 11 px: the largest that keeps it on one line
  *  beside the balance and Max. */
 const derivedScale = ref(1)
 function fitDerived() {
@@ -464,7 +464,7 @@ const handleFiatBalanceAction = (divisor) => {
 							<span :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 								derivedTokenLabel
 							}}</span>
-							<!-- Inside the meta line, so it measures in the line's own mono 10 px. -->
+							<!-- Inside the meta line, so it measures in the line's own mono 11 px. -->
 							<span aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 						</template>
 					</template>
@@ -514,6 +514,7 @@ const handleFiatBalanceAction = (divisor) => {
 /* The line keeps the full size's height and baseline while the amount's type shrinks, so nothing
  * below it moves. */
 .field_line {
+	composes: type--amount-hero from global;
 	position: relative;
 	flex: 1;
 	min-width: 0;
@@ -521,9 +522,9 @@ const handleFiatBalanceAction = (divisor) => {
 	white-space: nowrap;
 }
 
-/* A zero-width strut in the full type, with the input's vertical padding. The unit toggle holds
+/* A zero-width strut at the full size, with the input's vertical padding. The unit toggle holds
  * one too, so its label sits on the amount's baseline and its box, the press target, still fills
- * the row. */
+ * the row. Face and weight come from the two hosts' roles. */
 .field_line::after,
 .unit_pair::before {
 	content: "\200b";
@@ -531,9 +532,7 @@ const handleFiatBalanceAction = (divisor) => {
 	width: 0;
 	padding-block: 1px;
 
-	font-family: var(--font-headline);
 	font-size: 40px;
-	font-weight: 700;
 }
 
 .input_field {
@@ -549,10 +548,8 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .field_type {
-	font-family: var(--font-headline);
+	composes: type--amount-hero from global;
 	font-size: calc(40px * var(--hero-scale, 1));
-	font-weight: 700;
-	letter-spacing: -0.04em;
 }
 
 .ruler {
@@ -569,13 +566,10 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .unit_pair {
+	composes: type--label from global;
 	flex: none;
-	font: inherit;
+	line-height: inherit;
 	background: none;
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
 	color: var(--txt-tertiary);
 	cursor: pointer;
 	user-select: none;
@@ -592,14 +586,12 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .balance_corner {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
 .conversion {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
@@ -610,7 +602,7 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .derived_type {
-	font-size: calc(10px * var(--hero-scale, 1));
+	font-size: calc(11px * var(--hero-scale, 1));
 	white-space: nowrap;
 }
 
@@ -639,20 +631,15 @@ const handleFiatBalanceAction = (divisor) => {
 }
 
 .clamp_hint {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 	padding-top: 4px;
 }
 
 .action_link {
-	font: inherit;
+	composes: type--label from global;
+	line-height: inherit;
 	background: none;
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
 	color: var(--nulo-accent);
 	cursor: pointer;
 

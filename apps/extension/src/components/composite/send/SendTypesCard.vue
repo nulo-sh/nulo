@@ -30,16 +30,36 @@ const handleSwitchReceiverType = () => {
 		<div :class="$style.col">
 			<span :class="$style.sub_label">From Origin</span>
 			<div @click="handleSwitchSendType" data-testid="send-from-type" :class="$style.toggle_pair">
-				<span :class="[$style.toggle_btn, selectedSendType === 'private' && $style.toggle_active]">PRIVATE</span>
-				<span :class="[$style.toggle_btn, selectedSendType === 'public' && $style.toggle_active]">PUBLIC</span>
+				<span
+					:class="[$style.toggle_btn, selectedSendType === 'private' && $style.toggle_active]"
+					:data-selected="selectedSendType === 'private' || undefined"
+				>
+					PRIVATE
+				</span>
+				<span
+					:class="[$style.toggle_btn, selectedSendType === 'public' && $style.toggle_active]"
+					:data-selected="selectedSendType === 'public' || undefined"
+				>
+					PUBLIC
+				</span>
 			</div>
 		</div>
 
 		<div :class="$style.col">
 			<span :class="$style.sub_label">To Destination</span>
 			<div @click="handleSwitchReceiverType" data-testid="send-to-type" :class="$style.toggle_pair">
-				<span :class="[$style.toggle_btn, selectedReceiverType === 'private' && $style.toggle_active]">PRIVATE</span>
-				<span :class="[$style.toggle_btn, selectedReceiverType === 'public' && $style.toggle_active]">PUBLIC</span>
+				<span
+					:class="[$style.toggle_btn, selectedReceiverType === 'private' && $style.toggle_active]"
+					:data-selected="selectedReceiverType === 'private' || undefined"
+				>
+					PRIVATE
+				</span>
+				<span
+					:class="[$style.toggle_btn, selectedReceiverType === 'public' && $style.toggle_active]"
+					:data-selected="selectedReceiverType === 'public' || undefined"
+				>
+					PUBLIC
+				</span>
 			</div>
 		</div>
 	</div>
@@ -60,9 +80,7 @@ const handleSwitchReceiverType = () => {
 }
 
 .sub_label {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
@@ -73,13 +91,10 @@ const handleSwitchReceiverType = () => {
 }
 
 .toggle_btn {
+	composes: type--segment from global;
 	flex: 1;
 	padding: 8px 0;
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 500;
-	text-transform: uppercase;
 	text-align: center;
 	color: var(--nulo-secondary);
 
@@ -93,6 +108,9 @@ const handleSwitchReceiverType = () => {
 .toggle_active {
 	background: var(--nulo-accent);
 	color: var(--txt-inverse);
+}
+
+.toggle_btn.toggle_active {
 	font-weight: 700;
 }
 </style>

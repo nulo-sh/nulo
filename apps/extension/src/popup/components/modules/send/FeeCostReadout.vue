@@ -36,7 +36,7 @@ const sponsoredSentence = computed(() => {
 		<span :class="$style.fee_label" :aria-hidden="payer === 'sponsor' ? 'true' : undefined">You pay</span>
 		<span v-if="payer === 'sponsor'" :class="$style.fee_value">
 			<span aria-hidden="true">
-				<span :class="$style.nothing">Nothing</span> <s :class="$style.fee_usd">~{{ estimate.amount }} FJ<span v-if="estimate.usd" title="At today's AZTEC price" data-testid="fee-estimate-usd"> ({{ estimate.usd }})</span></s>
+				<span>Nothing</span> <s :class="$style.fee_usd">~{{ estimate.amount }} FJ<span v-if="estimate.usd" title="At today's AZTEC price" data-testid="fee-estimate-usd"> ({{ estimate.usd }})</span></s>
 			</span>
 			<span :class="$style.visually_hidden">{{ sponsoredSentence }}</span>
 		</span>
@@ -52,7 +52,7 @@ const sponsoredSentence = computed(() => {
 	</Flex>
 	<Flex v-else align="center" gap="4" :class="$style.detail_row">
 		<Icon name="info" size="12" color="tertiary" />
-		<Text size="11" weight="500" color="tertiary">Fee estimated after simulation</Text>
+		<Text variant="caption" color="tertiary">Fee estimated after simulation</Text>
 	</Flex>
 </template>
 
@@ -66,23 +66,18 @@ const sponsoredSentence = computed(() => {
 }
 
 .fee_value {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
 .fee_usd {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--fiat from global;
+	font-size: 11px;
 	color: var(--nulo-secondary);
 }
 
-.nothing {
-	font-weight: 600;
-}
-
 .queued {
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--nulo-secondary);
 }
 

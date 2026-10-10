@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
 			<Transition name="fade">
 				<Flex v-if="showInvalidHint" align="center" gap="6" data-testid="recipient-invalid-hint">
 					<Icon name="warning" size="12" color="red" />
-					<Text size="12" weight="600" color="primary">Invalid address</Text>
+					<Text variant="body" color="primary">Invalid address</Text>
 				</Flex>
 			</Transition>
 		</Flex>
@@ -262,8 +262,8 @@ onBeforeUnmount(() => {
 							<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
 
 							<Flex direction="column" gap="4" wide>
-								<Text size="14" weight="600" color="primary" :class="$style.title">{{ c.name }}</Text>
-								<Text size="12" weight="500" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
+								<Text variant="name" color="primary" :class="[$style.title, $style.name_size]">{{ c.name }}</Text>
+								<Text variant="data" color="tertiary" data-testid="recipient-suggestion-address" :class="$style.description">
 									{{ trimAddress(c.address) }}
 								</Text>
 							</Flex>
@@ -284,11 +284,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -351,5 +347,9 @@ onBeforeUnmount(() => {
 			white-space: nowrap;
 		}
 	}
+}
+
+.name_size {
+	font-size: 14px;
 }
 </style>

@@ -110,11 +110,11 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 				<Flex direction="column" gap="14" :class="$style.body">
 					<div ref="summary" :class="$style.summary">
 						<span :class="$style.amount" :style="{ '--hero-scale': amountScale }" data-testid="send-review-amount">
-							<span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol">{{ symbol }}</small>
+							<span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small>
 						</span>
 						<!-- The fit's ruler: it holds what the line holds, in the line's classes, or the two widths part. -->
 						<span aria-hidden="true" :class="$style.amount_ruler">
-							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol">{{ symbol }}</small></span>
+							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol" class="type--meta">{{ symbol }}</small></span>
 						</span>
 						<span :class="$style.to" data-testid="send-review-recipient">{{ toLine }}</span>
 					</div>
@@ -152,7 +152,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
-						<b v-if="paid">{{ paid }}</b>
+						<b v-if="paid" class="type--data">{{ paid }}</b>
 					</div>
 
 					<Button
@@ -175,11 +175,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 <style module>
 .title {
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.2em;
-	text-transform: uppercase;
+	composes: type--title-page from global;
 	color: var(--txt-primary);
 }
 
@@ -203,10 +199,8 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .amount {
-	font-family: var(--font-headline);
+	composes: type--amount-hero from global;
 	font-size: calc(30px * var(--hero-scale, 1));
-	font-weight: 700;
-	letter-spacing: -0.02em;
 	line-height: 1;
 	color: var(--txt-primary);
 	/* Wraps only when even 60% is too wide for one line. */
@@ -236,16 +230,11 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 .amount small {
 	display: inline-block;
 
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 400;
-	letter-spacing: 0;
 	color: var(--nulo-secondary);
 }
 
 .to {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 
@@ -257,14 +246,10 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .rows_head {
+	composes: type--label from global;
 	padding: 6px 10px;
 	border-bottom: 1px solid var(--nulo-border);
 
-	font-family: var(--font-headline);
-	font-size: 9px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -300,51 +285,40 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .row_top {
+	composes: type--value from global;
 	display: flex;
 	justify-content: space-between;
 	gap: 8px;
 
-	font-size: 11.5px;
-	font-weight: 600;
 	color: var(--txt-primary);
 }
 
 .row_word {
-	font-family: var(--font-mono);
-	font-size: 9.5px;
-	font-weight: 500;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	composes: type--tag from global;
 }
 
 .why {
-	font-size: 11px;
-	font-weight: 500;
+	composes: type--caption from global;
 	line-height: 1.4;
 	color: var(--txt-tertiary);
 }
 
 .remedy {
+	composes: type--label from global;
 	align-self: flex-start;
 	margin-top: 2px;
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
 	color: var(--orange);
 	text-decoration: underline;
 	text-underline-offset: 4px;
 }
 
 .fee {
+	composes: type--data from global;
 	display: flex;
 	justify-content: space-between;
 	gap: 8px;
 
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--nulo-secondary);
 }
 
@@ -353,7 +327,6 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 }
 
 .fee b {
-	font-weight: 500;
 	color: var(--txt-primary);
 }
 </style>
