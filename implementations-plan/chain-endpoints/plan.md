@@ -1,7 +1,7 @@
 ---
 plan: chain-endpoints
 tier: mid
-status: draft, panel converged (final pass approved on confirmation), awaiting the orchestrator's approval; arc 1 is decision-free; arc 2 waits on decision page 12 and reservations R2, R3, R5
+status: approved by the orchestrator (D-orch-1 to D-orch-3); arc 1 in build; arc 2 waits on decision page 12 and reservations R2, R3, R5
 issues: "#171 (arc 1); #200, #101, #116, #79 (arc 2, waits on page 12); #77, #197 (no arc, blocked:external)"
 driver: claude-code
 claude_model: opus
@@ -523,6 +523,9 @@ Validation gate: Fast; `bun run test:all`; the armed smoke builds; `tests/e2e/fi
 | D16 | #79 closes by comment | P12-05 builds nothing | A code change |
 | D17 | One `gh stack`, never more than one unmerged arc layer: the next arc is added only after the one below it merges (the close-out sits on the last arc) | The orchestrator merges in order (G2); an unmerged upper branch would sit between a released arc and `dev` | One PR for all arcs; out-of-order layers on one stack (round-2 draft); one stack per arc (no shared base to rebase) |
 | D18 | Browser traffic is matched by an exact, reviewed host list; flags and prefs first | Browsers reach vendor hosts whatever the flags (F16, F19); an exact list keeps a new wallet host under a vendor's domain detectable | A vendor-domain rule (round-2 draft: hollows out detection); attribution through CDP and a Firefox observer (a second mechanism per browser) |
+| D-orch-1 | No stack: arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; later arcs branch from `dev` after it lands | The orchestrator's call (2026-10-10); it merges lanes in order, so a stack adds a sync step and no safety | One `gh stack` for the lane (D17, superseded for arc 1) |
+| D-orch-2 | Arc 1 only: arcs 2a, 2b and 2c wait on decision page 12 (P12-01 to P12-05, and OA-1 to OA-7 as P12-06 to P12-12) and nothing of them is built. Arc 1 changes no file that feeds a build, the PR body states the check that proves the release build is byte-identical, and it adds no user-facing words | The orchestrator's call (2026-10-10) | Planning arc 2 work into arc 1 |
+| D-orch-3 | The last panel blocker first: before phase 1.2's gate counts as passed, the first Codex round and the Opus review are each asked, explicitly and first, whether D7's split holds on the merged tree with the host-registry runner (the canary can never pass vacuously; a direct path is caught on both browsers), and whether F18 and F19 still hold (Chrome's `<-loopback>` bypass list with the two IP excludes; Firefox's per-host retry bursts; the exact browser-host list turns smoke red on a new host until it is listed). Answers go under Audit verdicts | The orchestrator's call (2026-10-10): the final Codex pass rejected on exactly this seam | Treating the confirmation round as enough |
 
 ## Audit verdicts
 
@@ -614,6 +617,8 @@ Verdict: **approve**. All seven final-pass findings closed. One Low: `isAllowedR
 ## Delivery
 
 One `gh stack`, base `dev`, one PR per arc, each opened only after its arc gate passes and its Codex loop converges.
+
+**Arc 1 ships without a stack (D-orch-1):** its PR is `gh pr create --base dev` from `worktree-chain-endpoints`; the `gh stack` lines below apply to no layer until the orchestrator says otherwise, and arcs 2a-2c branch from `dev` once arc 1 has merged.
 
 | Layer | Branch | Phases | Waits on | PR title (≤ 93 chars) | Closes | code_review |
 |---|---|---|---|---|---|---|
