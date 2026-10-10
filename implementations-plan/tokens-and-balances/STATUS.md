@@ -11,3 +11,4 @@
 - 2026-10-10 — final pass round 5: conditional approve (two wording conditions, applied). Plan ready for the orchestrator; Arc 1 merges on OA-3, Arc 2 waits on page 8, Arc 3 on OA-1; the chain sweep's id-reuse race is to be filed as an issue.
 - 2026-10-10 — arc 1 start: merged origin/dev 28d4ffe (no token or balance code); D-orch-1 to D-orch-4 recorded; the sweep race is #262.
 - 2026-10-10 — gate 1.1 pass: lint, typecheck:all, snapshot + modules/general 259/259; the late-add BalanceView test is red on base fd47407's `BalanceView.vue` (expected true to be false).
+- 2026-10-10 — gate 1.2 pass: lint, typecheck:all, token + network + write log 296/296; 15 of the new token tests and both R4 tests red on base fd47407 (lessons/phase-1.md); D-arc1-1, D-arc1-2 recorded.

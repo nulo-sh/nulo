@@ -792,6 +792,8 @@ extension view that has not seen a deletion.
 | D-orch-2 | Arc 1 only, opened as a draft and held until the owner answers P8-05 (the plan's OA-3; OA-1 is P8-03, OA-2 P8-04, OA-4 P8-06). The PR body quotes P8-05's table and names `token lock lost` as the one new string | build arcs 2 or 3 | orchestrator, 2026-10-10 | CLAUDE.md § UI changes: the race-path effects are visible |
 | D-orch-3 | The planner's implementer line binds: #94 is R1-R5 as in Architecture § Phase 1.2; every "fails on base" test is shown red on the base copy; tests that count liveness reads or writes stay unchanged; no complexity suppression | a lighter #94 | orchestrator, 2026-10-10 | The design was argued over five audit rounds |
 | D-orch-4 | The lockless chain-sweep delete (`token/service.ts:210-214`) is #262, not fixed in this arc | fix it here | orchestrator, 2026-10-10 | Pre-existing, needs no watchdog release, outside the lane's issues |
+| D-arc1-1 | The purge's raw pass is guarded by the storage view the token service passes `purgeMalformedRows` (its `delete` checks `ownsLock()` and is tracked); `purge-rows.ts` is unchanged | an optional guard parameter on `purgeMalformedRows` (file map) | implementer | The tracker needs the same seam, so one adapter serves both and the shared helper's signature stays as it is |
+| D-arc1-2 | A tracked add write that rejects issues `failed` from its own rejection handler, before it leaves the tracker | journal the failure only in the attempt's `catch` | implementer | The `catch` sits three async frames above the set; a successor draining the set could pass the empty check one turn before `failed` was issued (R3's "a successor waits for it") |
 
 ## Audit verdicts
 
