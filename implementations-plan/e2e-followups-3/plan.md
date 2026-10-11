@@ -375,6 +375,7 @@ Validation gate: Fast; `bun run check:plans` on the staged plan files; `bun run 
 | D7 | Two exclusive terminal branches (A1) | Codex C5, Opus O9 | added |
 | D8 | Settlement precedence: a product or Firefox result wins; a mechanism shown for one departure action never stands in for another; the archived instance is attributed only by reproduction or by an ordering invariant that excludes the alternatives; stage timing only excludes | Opus R2-1, R2-5; Codex R2-2, R3-1 | added; tightened in round 3 |
 | D9 | Probe validity: import-start markers with per-document nonces, posted synchronously to a sibling page over a channel proved to survive a departure; holds scheduled without the classic channel and applied after navigation, a once-per-tab chunk hold, in-place instrumentation for shard runs, timestamped stderr | Codex R2-3, R2-4; Opus R2-4 | added |
+| D10 | Phase 2 settled **H1**: P2a reproduced the archived instance in probe round 3 (run 23): on `page2`, `TypeError: error loading dynamically imported module: …/assets/auth-*.js` raised 1 ms into the lock helper's reload (Firefox time, after its `navigationStarted`, before its `navigationCommitted`), listing hash unchanged, the archived assertion failing. Rule 2 met for the same action in round 1. No product or Firefox cause; no issue. Fixed by D3; its forced probe passes 5/5 against the fix. Evidence: `lessons/phase-2.md` | P2a rounds 1-3; panel after rounds 1 and 2 (rounds 2 and 3 designed with both legs); Codex confirmed run 23 element by element | settled |
 
 ## Audit verdicts
 
