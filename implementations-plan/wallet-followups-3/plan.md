@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-3
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-5); arc 1 in implementation
+status: approved by the orchestrator (D-orch-1 to D-orch-5); arc 1 implemented, in delivery
 issues: "#297, #295 (arc 1); #281, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -177,7 +177,7 @@ None. Surfaces touched: the fee card in app windows and authwit popups (`FeeSett
 
 ## Phases
 
-### Phase 0: baseline evidence on base
+### Phase 0: baseline evidence on base ✓
 
 1. Confirm the worktree is at the plan's base: `git log --oneline -1` prints 0643a14, or the `origin/dev` head merged in before work starts.
 2. Run the Firefox network call A on base, writing all output to a log:
@@ -191,7 +191,7 @@ None. Surfaces touched: the fee card in app windows and authwit popups (`FeeSett
 - Pass criteria: the summed count is at least 1 and is written down, and neither `grep` exited 2. A red test on base is recorded, not fixed here.
 - Layers: e2e-live-network (Firefox).
 
-### Phase 1: #297, a plain record and a refusing boundary
+### Phase 1: #297, a plain record and a refusing boundary ✓
 
 Write the tests first and see them red on base sources, then change the code.
 
@@ -226,7 +226,7 @@ Write the tests first and see them red on base sources, then change the code.
 - Pass criteria: every command exits 0. The red output of steps 7 and 8 and the green rerun of step 7 are in `lessons/phase-1.md`. No existing test was loosened or skipped. Existing sponsor-pick tests that turned red on base under the cloning fake are green again with no edit beyond the fake.
 - Layers: typecheck/lint, unit, component, e2e-live-network (Firefox, the red half).
 
-### Phase 2: #295, error objects in five log lines
+### Phase 2: #295, error objects in five log lines ✓
 
 1. Make the three test builders return the `LoggerStore` they construct (`coordinator.test.ts`, `runtime-mismatch.test.ts`) or reach the one `service.test.ts` uses.
 2. Add the log assertions (D6). Each finds the entry whose `data[0]` is the line's message and expects `data[1]` to equal `{ error: { name: "Error", message: "<thrown message>" } }`:
@@ -242,7 +242,7 @@ Write the tests first and see them red on base sources, then change the code.
 - Pass criteria: every command exits 0; the red and green runs are in `lessons/phase-2.md`; existing fail-closed assertions are unchanged.
 - Layers: typecheck/lint, unit.
 
-### Phase 3: final validation on the arc head
+### Phase 3: final validation on the arc head ✓
 
 Warning: smoke loads whatever `dist/<browser>` holds, and `e2e:agent` rebuilds it with other flags. Build right before each smoke run, and never run two e2e runs in this worktree at once.
 
@@ -324,6 +324,9 @@ Run these steps in order after the Phase 3 gate passes. `code_review` is `off`, 
   - Accepted: the snapshot test (Phase 1 step 6); F12 rewritten and A2 added; I1 reworded (supports attribution, proves persistence in the pinned flow); Phase 1 step 7 split into bug pins, the projection guard and the success control; the re-run test first proves the re-run started; the e2e readback reads through `execPopup` and keys on the fixture's `accountAddress`; recon's `jsonSanitize` line corrected; `bun run lint:actions` added to Phase 3.
   - Confirmed: the e2e readback's sequence and the FPC row lookup; all five Phase 2 failure paths reachable in the existing harnesses; `LoggerStore`'s buffer shape; D10's disposition; rejecting outline B and `recordOf`+`previewForPick`.
   - Both conditions are met in this version, so the gate's Codex verdict is satisfied without another round.
+- **Post-implementation Codex fix loop, round 1** (gpt-6.1-sol, high, read-only, over `git diff 403623d..HEAD` at dccf80f): approve. Two Low comment findings, both accepted: `storageLocalSet`'s TSDoc spent seven lines (now two sentences, keeping the call-time clone, the refusal on every engine even on a skip, and `unless`); the two `loggedAfter` comments narrated their filter (deleted, and since the same filter was written three times, it is one helper in `apps/extension/tests/helpers/logged.ts`).
+- **Opus 5.5 diff review, alongside round 1:** approve. The same two Lows, and one marked no-action: `syncedRef.js`'s unawaited write would raise an unhandled `DataCloneError` on every engine for a future object value. Rejected, as in the plan audit: its one user writes a number or null, and a catch for a value no caller produces is speculative. It also confirmed every `storageLocalSet` caller plain, every reader of the saved record served by the projection, and the e2e readback able to tell the fix from base only on Firefox (Chrome serialises a Proxy), as D11 intends.
+- **Codex, round 2** (resumed session, over the whole diff at 203b3cb): no new material findings; approve. Agreed `syncedRef` stays out. The loop converged at round 2.
 
 ## Seeds
 
