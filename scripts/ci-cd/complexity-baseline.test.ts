@@ -456,7 +456,7 @@ describe("move approval", () => {
 	test.each([
 		["unset", undefined],
 		["malformed", "yes"],
-	])("refuses a %s live answer under Actions", (_, value) => {
+	])("refuses a live answer that is %s, under Actions", (_, value) => {
 		expect(() => movesApproved({ GITHUB_ACTIONS: "true", BASELINE_MOVE_APPROVED: value })).toThrow("BASELINE_MOVE_APPROVED")
 	})
 
