@@ -117,7 +117,7 @@ export interface DappSendExecutorLane {
 		calls?: { method?: string }[],
 		fence?: ExecutionFence,
 	): Promise<string | undefined>
-	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null): Promise<void>
+	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
 	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
 }
 

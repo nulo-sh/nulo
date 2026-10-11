@@ -43,9 +43,10 @@ declare -A REQUIRED_JOBS=(
 )
 
 # The exact network suite job set: 5 sharded jobs + 2 heavies + the prover-ON
-# canary. Checking names rather than a count means a missing shard cannot be
-# offset by an extra job elsewhere. behavior-gating.test.ts derives this list
-# from the workflows, so a renamed job fails a test instead of this check.
+# canary + the two fixed chaos seeds. Checking names rather than a count means a
+# missing shard cannot be offset by an extra job elsewhere. behavior-gating.test.ts
+# derives this list from the workflows, so a renamed job or a rotated seed fails a
+# test instead of this check.
 EXPECTED_NETWORK_JOBS=(
 	"Run / shard 1/5 / network suite (shard 1/5)"
 	"Run / shard 2/5 / network suite (shard 2/5)"
@@ -55,6 +56,8 @@ EXPECTED_NETWORK_JOBS=(
 	"Run / heavy / fee-methods + selfpay-phase / network suite"
 	"Run / heavy / concurrent-confirm / network suite"
 	"Run / canary / real-proving / network suite"
+	"Run / chaos / seed 1095865833 / network suite"
+	"Run / chaos / seed 1960252198 / network suite"
 )
 
 die() {

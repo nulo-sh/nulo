@@ -200,7 +200,8 @@ runtime env var can never arm a build-time flag.
 - PR gates run `retry: 0` (`pr-extension-network-e2e.yml` passes it on every lane; smoke's config keeps 2).
   A masked flake in a required gate is worse than a visible one.
 - Nightly omits the input, so the config default (2) plus the exit-86 boot retry applies: absorb,
-  then ship.
+  then ship. The exception is `send-chaos`, which pins its own retry 0: a retry replays the burst
+  against balances the first attempt moved.
 - Per-test `retry: 0` is mandatory for DESTRUCTIVE scenarios (a password change, a MAC tamper, a
   profile delete mid-file): a retry re-enters against mutated state and buries the real failure
   (`imported-account-lifecycle`, `frozen-account-canary`, `transfers` say why at the top).
@@ -217,18 +218,21 @@ runtime env var can never arm a build-time flag.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e.yml`. Filter `extension-network`, label
   `e2e:extension-network`. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
-  the 9 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
+  the 10 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, proverless); the **canary** lane prover-ON with the SHA-256-pinned
   `presto-server` and `VITE_NULO_PRESTO_REQUIRED=1` (`transfers`, `tx-sendTx-default`,
   `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`) — a canary run with zero `Proving succeeded` lines fails; the
   `disable_presto` dispatch input (or the `NULO_E2E_DISABLE_PRESTO` variable) is the
-  rollback to WASM. Exit 86 retries the agent once. After every run the built bundle is grepped for
+  rollback to WASM. The **chaos** lane replays two fixed `send-chaos` seeds (one matrix leg each, proverless,
+  retry 0); a red seed is fixed or proven a flake by replaying it (a re-run of the leg does), never given
+  a test retry or rotated away (rotation: CI.md).
+  Exit 86 retries the agent once. After every run the built bundle is grepped for
   `(PROBE|nulo:probe:|VITE_E2E_PROBE)` and any hit fails the workflow (`_extension-network-e2e.yml` skips the
   grep only when its `probe` input is `"1"`, a caller-set investigation mode, not a dispatch option):
   string constants shipped in `dist/` must not contain `PROBE`.
   `scripts/ci-cd/behavior-gating.test.ts` pins the filters and the exclude list against the lanes.
-- **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes with config-default
-  retries and publishes a prerelease on full green. **Soak** (`extension-network-e2e-soak.yml`) is manual,
+- **Nightly** (`nightly.yml`, scheduled daily) mirrors the lanes on both browsers with config-default
+  retries, plus the seeded `send-chaos` run on each, and publishes a prerelease only when every one is green. **Soak** (`extension-network-e2e-soak.yml`) is manual,
   N iterations at retry 0.
 - A red required gate is a flake → rerun once, or breakage → fix. Never advisory, never
   `continue-on-error`, never removed from the required set (CLAUDE.md § Quality gates).

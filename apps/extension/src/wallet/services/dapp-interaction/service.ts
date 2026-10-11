@@ -79,6 +79,10 @@ function isDiscoveryPayload(payload: DappInteraction["payload"]): payload is Dis
 	return !("session" in payload) && !isNoticePayload(payload)
 }
 
+function windowUrl(type: string, id: string): string {
+	return chrome.runtime.getURL(`src/popup/index.html#/windows/${type}?requestId=${id}`)
+}
+
 /** The confirmation gate keys off the strongest level in a batch; a kind missing here is a
  *  compile error, never a silent AccessLevel.None. */
 const OPERATION_ACCESS_LEVEL: Record<OperationKind, AccessLevel> = {
@@ -249,7 +253,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		// with settle if it arrives first.
 		this.windowManager.detach(interactionRequest.handleId)
 		if (isDiscoveryPayload(interactionRequest.payload)) {
-			this.settleDiscovery(interactionRequest.handleId, result)
+			this.settleDiscovery(interactionRequest.handleId, id, result)
 			return
 		}
 		this.windowManager.settle(interactionRequest.handleId, result)
@@ -257,9 +261,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 
 	/** An approved connect window stays open to show the emoji check, and its id comes from the
 	 *  handle, never the page. Any other answer is a denial and closes the window. */
-	private settleDiscovery(handleId: string, result: unknown): void {
+	private settleDiscovery(handleId: string, id: string, result: unknown): void {
 		if ((result as Partial<DiscoveryResult> | null | undefined)?.approved === true) {
-			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId }))
+			const expiredUrl = `${windowUrl("discover", id)}&expired=1`
+			this.windowManager.handOver(handleId, (windowId): DiscoveryOutcome => ({ approved: true, windowId, expiredUrl }))
 			return
 		}
 		this.windowManager.settle<DiscoveryOutcome>(handleId, { approved: false })
@@ -501,7 +506,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 			const id = randomIdNotIn((candidate) => this.storage.has(candidate), 16)
 
 			const handle = this.windowManager.openAndAwait<ExecutionResult | CapabilityResult | DiscoveryResult>({
-				url: chrome.runtime.getURL(`src/popup/index.html#/windows/${type}?requestId=${id}`),
+				url: windowUrl(type, id),
 				width: 400,
 				height: 800,
 				timeoutMs: INTERACTION_TIMEOUT_MS,
@@ -614,7 +619,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	/**
 	 * A Terms refusal at execution's entry throws before anything claims the record this path just
 	 * advanced to `pending`, and the ingress safety net only closes `queued` ones. Stage-guarded, so a
-	 * record execution did claim (refused later, at the broadcast line) is left to its owner.
+	 * record execution did claim (refused later, at the broadcast line) is left to its owner. Retitled
+	 * "Transaction" like every refusal no selector resolution reached.
 	 */
 	private async settleUnclaimedAfterTermsRefusal(error: unknown, journalId: string | undefined): Promise<void> {
 		if (!journalId || !(error instanceof TermsAcceptanceRequiredError)) return
@@ -623,7 +629,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				journalId,
 				["pending"],
 				{ stage: "failed" },
-				{ kind: "popup_bound", message: error.message, normalizedRaw: null },
+				{ kind: "terms_refused", message: error.message, normalizedRaw: null },
+				{ failedTitle: "Transaction" },
 			)
 			.catch((err) => this.logDebug("could not settle a pending record after a terms refusal", err))
 	}

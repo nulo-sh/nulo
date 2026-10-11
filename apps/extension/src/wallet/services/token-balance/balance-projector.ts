@@ -157,7 +157,7 @@ export class BalanceProjector {
 			// The stale-anchor class survives the offscreen port (typed payload), so this is the
 			// one failure the queue may retry: the offscreen already resynced and retried once.
 			const transient = err instanceof PxeStaleAnchorError
-			this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, `Failed to sync chunk: ${errorMessage}`)
+			this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, "Failed to sync chunk", { error: err })
 			return balances.map((b) => ({ kind: "error" as const, id: b.id, error: errorMessage, transient }))
 		}
 	}

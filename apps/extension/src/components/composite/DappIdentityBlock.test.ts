@@ -78,4 +78,9 @@ describe("composite/DappIdentityBlock", () => {
 		const w = factory({ hostname: "x", dapp: { name: "MyDapp" }, nameTestId: "discover-dapp-name" })
 		expect(w.find('[data-testid="discover-dapp-name"]').exists()).toBe(true)
 	})
+
+	test("actionTestId prop is forwarded to the action line", () => {
+		const w = factory({ hostname: "x", actionLabel: "wants to connect on Testnet", actionTestId: "discover-action" })
+		expect(w.find('[data-testid="discover-action"]').text()).toBe("wants to connect on Testnet")
+	})
 })

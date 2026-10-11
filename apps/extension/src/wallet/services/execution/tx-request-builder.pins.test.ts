@@ -448,6 +448,24 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(built.txRequest.functionSelector.toString()).toBe(selector)
 	})
 
+	test("NO_FROM: a call whose selector is a public function is refused before any fee read; a private one builds", async () => {
+		const PUBLIC_FN = { ...FN, name: "transfer_public_to_public", functionType: FunctionType.PUBLIC }
+		const artifact = { functions: [FN], nonDispatchPublicFunctions: [PUBLIC_FN] }
+		h.deps.resolver.resolveArtifacts.mockResolvedValue(new Map([["0xclass1", artifact]]) as never)
+		const getCurrentMinFees = noFromHarness()
+		const publicSelector = (await FunctionSelector.fromNameAndParameters(PUBLIC_FN.name, PUBLIC_FN.parameters)).toString()
+
+		const refused = await rejectionOf(
+			buildNoFrom(wireCall({ name: PUBLIC_FN.name, selector: publicSelector, type: FunctionType.PUBLIC })),
+		)
+		expect(refused.constructor).toBe(Error)
+		expect(refused.message).toBe("DefaultEntrypoint only supports private functions")
+		expect(getCurrentMinFees).not.toHaveBeenCalled()
+
+		const built = await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }))
+		expect(built.txRequest.functionSelector.toString()).toBe(await selectorOf())
+	})
+
 	test("NO_FROM: an absent name never reaches the binding: the call schema refuses it", async () => {
 		const selector = await selectorOf()
 		const getCurrentMinFees = noFromHarness()

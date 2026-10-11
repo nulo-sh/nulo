@@ -305,7 +305,10 @@ function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort })
 		decryptLocks: new KeyedLock({ maxHoldMs: null }),
 		admission: new VerifyAdmissionGate(ports.clock, {
 			closeWindow,
-			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
+			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
+			// A marker still waiting when its slot is given back, or when its reservation expires with the
+			// window kept open, is tombstoned: that id can no longer establish.
+			expired: (id) => cancelPendingVerification(pendingVerification, id),
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
@@ -507,12 +510,9 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	)
 
 	// Queued journal is created on arrival (concurrent across siblings),
-	// gated on establishment. Only top-level `sendTx` gets a pre-allocated
-	// record — `batch` is excluded by design: the recursive dispatch in
-	// WalletSdkDispatcher.handleBatch can't safely route hooks per-leg, so
-	// we'd end up with a batch-level record no inner leg knows to claim.
-	// TODO(queued-visibility-for-batch): batched sendTx legs currently
-	// bypass the queued-record creation path.
+	// gated on establishment. Only a top-level `sendTx` gets one: the
+	// dispatcher refuses a batch holding a `sendTx` leg before any leg runs,
+	// so no batched send ever waits to be shown.
 	const queuedJournalIdPromise: Promise<string | undefined> =
 		message.type === "sendTx"
 			? establishedPromise.then((ok) => createQueuedJournalIfStamped(ok, message, session, deps, state))
@@ -987,7 +987,7 @@ async function runDiscoveryPopup(
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, pendingDiscoveryPromises, logger } = deps
-	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery) }
+	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery), chainId }
 
 	// Store a promise that resolves when the popup completes so duplicate
 	// discoveries can await it.
@@ -1019,7 +1019,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow)) {
+			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
@@ -1240,7 +1240,13 @@ export async function handleWalletMessage(
 			// pre-created queued record here too, or it sits at "Queued..."
 			// until the reaper's stuck sweep.
 			if (hooks?.queuedJournalId) {
-				await failQueuedIfUnclaimed(operationJournal, hooks.queuedJournalId, "Session no longer valid — reconnect", logger)
+				await failQueuedIfUnclaimed(
+					operationJournal,
+					hooks.queuedJournalId,
+					"Session no longer valid — reconnect",
+					logger,
+					"wallet_refused",
+				)
 			}
 			return
 		}

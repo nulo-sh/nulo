@@ -37,6 +37,7 @@
 import {
 	ContractNotRegisteredError,
 	DuplicateInitializationError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeScopeUnregisteredError,
 	PxeStaleAnchorError,
@@ -99,7 +100,8 @@ export function classifyOperationCatch(error: unknown, task: CancellableTask, er
 		error instanceof ContractNotRegisteredError ||
 		error instanceof SessionEndedError ||
 		error instanceof TermsAcceptanceRequiredError ||
-		error instanceof ScopeViolationError
+		error instanceof ScopeViolationError ||
+		error instanceof InvalidWalletArgumentsError
 	return {
 		status: "failed",
 		error: errorMessage(error),

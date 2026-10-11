@@ -60,6 +60,7 @@ import {
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
 import { ProfileDeletionState, type ExecutionFence } from "./profile-deletion-state"
+import { WalletLockedError } from "./wallet-locked-error"
 import type { ProfileDeletionDelegate } from "../profile-deletion/types"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "../account-integrity/blocked-repository"
 import type { AccountIntegrityBlocked, AccountIntegrityDelegate } from "../account-integrity/types"
@@ -512,9 +513,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
 			const session = await this.sessionManager.getActive()
-			if (!session || this.deletionState.isReserved(session.profile.id)) {
-				throw new Error("Wallet locked")
-			}
+			if (!session) throw new WalletLockedError()
+			// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
+			if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
 			return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
 		})
 	}

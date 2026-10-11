@@ -14,7 +14,8 @@ import { tokenColor } from "../helpers/pointer-probes"
  * A new connection's emoji check shows in the connect window itself: Allow keeps that window, the
  * check replaces the connect page, and no other window opens until the dApp asks for permissions.
  * The swap is announced in the wallet's own words, and a held Enter at Allow does not carry through
- * the check.
+ * the check. The line under the app names the network the app asked for, before Allow and while it
+ * connects.
  */
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -26,6 +27,8 @@ const GRID = '[data-testid="verify-emoji-grid"]'
 const STEP_BAR = '[data-testid="connect-step-bar"]'
 const TRUST = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
 const REPEATS_KEY = "e2e:enter-repeats"
+const ACTION = '[data-testid="discover-action"]'
+const ACTION_KEY = "e2e:action-lines"
 const ANNOUNCE = '[data-testid="verify-announce"][role="status"][aria-live="polite"]'
 const ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
@@ -56,6 +59,24 @@ async function recordEnterRepeats(page: Page): Promise<void> {
 			true,
 		)
 	}, REPEATS_KEY)
+}
+
+/** Each distinct text the line under the app shows from now on, kept like the Enter repeats: the
+ *  line after Allow lasts only until the check replaces the page. */
+async function recordActionLines(page: Page): Promise<void> {
+	await page.evaluate(
+		(key, sel) => {
+			const read = () => document.querySelector(sel)?.textContent?.trim() ?? ""
+			sessionStorage.setItem(key, JSON.stringify([read()]))
+			new MutationObserver(() => {
+				const text = read()
+				const seen = JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[]
+				if (text && seen.at(-1) !== text) sessionStorage.setItem(key, JSON.stringify([...seen, text]))
+			}).observe(document.body, { subtree: true, childList: true, characterData: true })
+		},
+		ACTION_KEY,
+		ACTION,
+	)
 }
 
 async function showsCheck(page: Page): Promise<boolean> {
@@ -121,6 +142,7 @@ test.skipIf(!aztecConfig)(
 		expect(emptyHalf, "step 1's empty half").toBe(await tokenColor(page, "--nulo-track"))
 
 		await recordEnterRepeats(page)
+		await recordActionLines(page)
 		await page.evaluate(() => {
 			;(window as unknown as { __connectDocument?: boolean }).__connectDocument = true
 		})
@@ -130,6 +152,8 @@ test.skipIf(!aztecConfig)(
 
 		const repeats = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]") as boolean[], REPEATS_KEY)
 		expect(repeats, "the driver sent no repeat, so the held Enter proved nothing").toContain(true)
+		const actionLines = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[], ACTION_KEY)
+		expect(actionLines).toEqual(["wants to connect on Local Network", "Connecting on Local Network"])
 		const sameDocument = await page.evaluate(() => (window as unknown as { __connectDocument?: boolean }).__connectDocument === true)
 		console.log(`[connect-one-window] ${BROWSER}: the check loaded ${sameDocument ? "in the same document" : "by a reload"}`)
 
