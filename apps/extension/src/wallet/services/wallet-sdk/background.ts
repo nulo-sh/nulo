@@ -510,12 +510,9 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	)
 
 	// Queued journal is created on arrival (concurrent across siblings),
-	// gated on establishment. Only top-level `sendTx` gets a pre-allocated
-	// record — `batch` is excluded by design: the recursive dispatch in
-	// WalletSdkDispatcher.handleBatch can't safely route hooks per-leg, so
-	// we'd end up with a batch-level record no inner leg knows to claim.
-	// TODO(queued-visibility-for-batch): batched sendTx legs currently
-	// bypass the queued-record creation path.
+	// gated on establishment. Only a top-level `sendTx` gets one: the
+	// dispatcher refuses a batch holding a `sendTx` leg before any leg runs,
+	// so no batched send ever waits to be shown.
 	const queuedJournalIdPromise: Promise<string | undefined> =
 		message.type === "sendTx"
 			? establishedPromise.then((ok) => createQueuedJournalIfStamped(ok, message, session, deps, state))

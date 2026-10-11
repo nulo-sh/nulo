@@ -548,6 +548,23 @@ describe("establishment shows the check in the connect window", () => {
 		expect(terminated()).toEqual([])
 	})
 
+	test("a batch holding a sendTx leg is refused before any leg runs and files no queued record, unlike a lone sendTx", async () => {
+		const h = boot()
+		dispatch.mockResolvedValueOnce(undefined)
+		await sendTxWhileNavigating(h, (navigation) => navigation.resolve())
+		await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1))
+		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
+
+		const session = { sessionId: "f1", origin: ORIGIN, tabId: 7, ...chain(1) }
+		captured?.onWalletMessage(session, { type: "batch", args: [[{ name: "sendTx", args: [] }]], messageId: "m2" })
+		await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
+
+		await expect(dispatch.mock.results[1].value).rejects.toThrow(
+			'Method "sendTx" cannot be used inside batch — it requires a confirmation popup',
+		)
+		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
+	})
+
 	test("a sendTx arriving while the navigation fails is never dispatched and never journaled", async () => {
 		const h = boot()
 		await sendTxWhileNavigating(h, (navigation) => navigation.reject(new Error("No tab with id: 314.")))
