@@ -249,7 +249,7 @@ Validation gate:
 - Pass: exit 0; `settings/index.test.ts` and `lock.test.ts` change only in their fakes and helpers, and pass; each of the three defect pins fails against the base copy of its page; three green e2e runs; each kept new row is red in three base runs.
 - Layers: lint, typecheck, unit, component, smoke e2e.
 
-### Phase 5: arc gate
+### Phase 5: arc gate ✓
 
 1. Run the full gate below on the final head.
 2. Take the before and after screenshots of #256 and #257's forms (Delivery).
@@ -400,6 +400,33 @@ Verdict: **conditional approve**: correct I1's reachability claim, and carry the
 | 4 | Low. I3 points at phase 4 step 9, now steps 10-11 | Accepted |
 
 The remaining condition is folded as Codex worded it; no further round was run, since the four fixes are wording, not design.
+
+### Post-implementation round 1, Codex (gpt-6.1-sol, high, read-only), 2026-10-11
+
+Diff `af4afcc..e78a4af` (phases 1-4). Verdict: **approve with fixes**, three low findings, no runtime defect. All verified against the tree.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. A store regression that bumps `retryVersion` and clears debt on a failed retry would pass the new C1 | Accepted: a fourth C1 control settles the owed retry as a failure and asserts debt and `retryVersion` unchanged, and C1 rejects |
+| 2 | Low. `droppedPrefixLength`'s doc states the subsequence invariant, which alone does not justify the greedy match | Accepted: its TSDoc now says equal text means equal source and level, so a dropped entry the document lacks was filtered out, and so was every later twin |
+| 3 | Low. `LogsViewer.test.ts`: `mountOn`'s comment misstates the fixture (two batches, not one); the header recounts the algorithm; the stub's `dispatch` comment can go | Accepted in part: the `mountOn` comment is gone and the header is two sentences; the `dispatch` comment stays, since `scrollIntoView` is stubbed to `{}`, which a real `state.update` refuses |
+
+Codex found sound: I1 and I2 (no request opens a config port before the composable subscribes, on all five pages), the update fence against held rereads, disposal and cleanup order, CRLF and bare-CR trimming, one change set with original offsets, every name case against D-orch-3 and D-orch-4, and no new visible change or log line.
+
+### Post-implementation round 1, Opus (same family, general-purpose, read-only), 2026-10-11
+
+Same diff. Verdict: **no real defect**; three low findings and a bookkeeping note, all verified.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. Lock disposed its config read between its two service disconnects (CLAUDE.md § Cleanup order) | Accepted: `lockRead.dispose()` moved after `profileService.disconnect()` |
+| 2 | Low. Display, where a reread through `applySetting` would close the window, had no no-side-effect test | Accepted: a reread that flips `sidePanel` shows it with no `window.close` and no `sidePanel.open`; mutation-checked (with `land` calling `applySetting` the test fails) |
+| 3 | Low. `useConfigRead` drops a failed read silently; add a `console.debug` | Rejected: § Security commits to no new log lines; the hub and Lock already dropped a failed read silently, and the next reconnect retries |
+| 4 | Bookkeeping. The regenerated auto-import types and the phase 4 record were uncommitted | Already committed when the review returned (`b7410c9`) |
+
+### Post-implementation rounds 2 and 3, Codex (same session, resumed), 2026-10-11
+
+Round 2, on the round-1 fixes (`e78a4af..b7410c9`): **clean**, no new material finding. Round 3, on the Opus folds (`b7410c9..c9baef8`): **clean**. The loop converged after three rounds, the last two clean.
 
 ## Delivery
 

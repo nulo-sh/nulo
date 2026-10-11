@@ -11,3 +11,4 @@
 - 2026-10-11: phase 2 gate pass: lint, typecheck:all, popup tests (11), smoke accounts.test.ts Chrome retry 0 (8/8); 5 pins red on base.
 - 2026-10-11: phase 3 gate pass (shipped under D-orch-2): lint, typecheck:all, logs-format + LogsViewer tests (29); both trim tests red on base.
 - 2026-10-11: phase 4 gate pass: lint, typecheck:all, 44 unit/component, sw-resilience Chrome retry 0 ×3 on head (9/9 each); the three new rows red 3/3 on a base build (Lock green).
+- 2026-10-11: phase 5 arc gate pass: lint, typecheck:all, test:all (pre- and post-merge); smoke Chrome retry 0 210 + known flake #269 (rerun 5/5); smoke Firefox retry 0 208/0; network fee-sponsor-funding Chrome retry 0 2/2. Codex loop converged (3 rounds, last two clean).
