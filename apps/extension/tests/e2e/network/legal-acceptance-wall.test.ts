@@ -71,8 +71,8 @@ test.skipIf(!hasConfig)(
 		const refusedRow = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed")
 		expect({
 			kind: await readErrorKind(wallet, refusedRow.id),
-			detail: await readJournalDetail(wallet, refusedRow.id),
-			card: await readTerminalCard(wallet, "#/popup/activity"),
+			detail: await readJournalDetail(wallet, refusedRow.id, "refused-terms-detail"),
+			card: await readTerminalCard(wallet, "#/popup/activity", "refused-terms-card"),
 		}).toEqual({
 			kind: "terms_refused",
 			detail: {
