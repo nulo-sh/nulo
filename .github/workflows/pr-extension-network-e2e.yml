@@ -186,10 +186,10 @@ jobs:
       # agent's exit-86 sentinel (one infra-retry in _extension-network-e2e.yml).
       retry: "0"
       # Proverless shard pool (fast, Presto OFF). Exclude every file a dedicated
-      # job below runs: the two heavy jobs' files (proverless too) and the five
-      # prover-ON files, which run with REAL proving in network-e2e-canary. The
-      # partition is pinned by scripts/ci-cd/behavior-gating.test.ts.
-      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+      # job below runs: the two heavy jobs' files (proverless too), the five
+      # prover-ON files, which run with REAL proving in network-e2e-canary, and
+      # the chaos file. The partition is pinned by scripts/ci-cd/behavior-gating.test.ts.
+      exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
       proverless: true
 
   network-e2e-heavy:
@@ -268,10 +268,33 @@ jobs:
       # Real proving — Presto ON unless the emergency kill switch is set.
       disable_presto: ${{ github.event.inputs.disable_presto == 'true' || vars.NULO_E2E_DISABLE_PRESTO == '1' }}
 
+  network-e2e-chaos:
+    name: Run / chaos / seed ${{ matrix.seed }}
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    # Two fixed send-chaos seeds replayed at retry 0, while the nightly hunts with new ones. A seed
+    # fixes the actions, not their timing: a red seed is fixed, or proven a flake by its replay, never
+    # retried or rotated away. A seed is replaced only by a PR naming the nightly it comes from.
+    strategy:
+      fail-fast: false
+      matrix:
+        seed:
+          - "1095865833" # nightly run 37607270016 (2026-10-07), its Firefox chaos job
+          - "1960252198" # nightly run 37765624647 (2026-10-08), its Chrome chaos job
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      shard_label: chaos-${{ matrix.seed }}
+      retry: "0"
+      test_files: "tests/e2e/network/send-chaos.test.ts"
+      proverless: true
+      chaos: true
+      chaos_seed: ${{ matrix.seed }}
+
   status:
     name: extension-network-e2e-status
     if: always()
-    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-canary]
+    needs: [changes, decide, network-e2e, network-e2e-heavy, network-e2e-heavy-concurrent, network-e2e-canary, network-e2e-chaos]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -306,6 +329,7 @@ jobs:
             "${{ needs.network-e2e-heavy.result }}" \
             "${{ needs.network-e2e-heavy-concurrent.result }}" \
             "${{ needs.network-e2e-canary.result }}" \
+            "${{ needs.network-e2e-chaos.result }}" \
           ; do
             if [ "$r" != "$want" ]; then
               echo "::error::gate said run=$RUN, so every suite job must be '$want' — got '$r'"

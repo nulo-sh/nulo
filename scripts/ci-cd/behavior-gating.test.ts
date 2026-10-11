@@ -134,16 +134,23 @@ describe("network suite job names", () => {
 	})
 
 	test("verify-cert-run.sh expects exactly the jobs the PR lane's network workflow produces", () => {
-		type Caller = { name?: string; uses?: string; with?: { shard?: string }; strategy?: { matrix?: { shard?: { id: string }[] } } }
+		type Caller = { name?: string; uses?: string; with?: { shard?: string }; strategy?: { matrix?: Record<string, unknown[]> } }
+		/** A job's legs, one per value of its one-key matrix (one without a matrix), each binding
+		 *  `${{ matrix.<key>[.<field>] }}` to that leg's value. */
+		const legs = (job: Caller): ((text: unknown) => string)[] => {
+			const axes = Object.values(job.strategy?.matrix ?? {})
+			expect(axes.length, `${job.name}: at most one matrix key`).toBeLessThanOrEqual(1)
+			return (axes[0] ?? [undefined]).map(
+				(value) => (text: unknown) =>
+					String(text ?? "").replace(/\$\{\{ matrix\.[\w-]+(?:\.(\w+))? \}\}/g, (_match, field?: string) =>
+						String(field ? (value as Record<string, unknown>)[field] : value),
+					),
+			)
+		}
 		const lane = workflow(PR_LANE)
 		const produced = (Object.values(lane.jobs) as Caller[])
 			.filter((job) => String(job.uses).endsWith(`/${SUITE}`))
-			.flatMap((job) =>
-				(job.strategy?.matrix?.shard?.map((shard) => shard.id) ?? [""]).map((id) => {
-					const bind = (value: unknown) => String(value ?? "").replace("${{ matrix.shard.id }}", id)
-					return `${bind(job.name)} / ${leaf(bind(job.with?.shard))}`
-				}),
-			)
+			.flatMap((job) => legs(job).map((bind) => `${bind(job.name)} / ${leaf(bind(job.with?.shard))}`))
 		const script = readFileSync(join(ROOT, "scripts/ci-cd/verify-cert-run.sh"), "utf8")
 		const block = /^EXPECTED_NETWORK_JOBS=\(\n([\s\S]*?)\n\)$/m.exec(script)?.[1]
 		expect(block, "verify-cert-run.sh declares EXPECTED_NETWORK_JOBS").toBeDefined()
@@ -605,6 +612,7 @@ describe("Firefox lanes", () => {
 			"network-e2e-heavy",
 			"network-e2e-heavy-concurrent",
 			"network-e2e-canary",
+			"network-e2e-chaos",
 		])
 	})
 
@@ -769,10 +777,14 @@ describe("canary lanes", () => {
 		strategy?: { "fail-fast"?: unknown; matrix?: Record<string, unknown> }
 	}
 
-	// Nightly keeps its own retry policy and adds the chaos job, but splits the suite as the PR lane
-	// does: a file moved between jobs on one side only runs under another job's conditions on the other.
+	// Nightly keeps its own retry policy and seeds its chaos job its own way, but splits the suite as the
+	// PR lane does: a file moved between jobs on one side only runs under another job's conditions on
+	// the other.
 	test("nightly runs the PR lane's jobs, file for file, on both browsers", () => {
-		const pr = Object.fromEntries(laneJobs(PR_LANE, "chrome")) as Record<string, CopiedJob>
+		const pr = Object.fromEntries(laneJobs(PR_LANE, "chrome").filter(([, job]) => job.with?.chaos !== true)) as Record<
+			string,
+			CopiedJob
+		>
 		for (const browser of ["chrome", "firefox"]) {
 			const nightly = Object.fromEntries(
 				laneJobs("nightly.yml", browser)
@@ -807,12 +819,26 @@ describe("canary lanes", () => {
 		})
 		const byName = (a: Call, b: Call) => a.name.localeCompare(b.name)
 
-		const pr: Call[] = (laneJobs(PR_LANE, "chrome") as [string, CopiedJob][]).flatMap(([, job]) => {
+		// Release replays no chaos seed: its pool still lists the chaos file, which skips itself there, so
+		// the PR lane is compared without its chaos job and without that one file in its exclusions.
+		const chaos = "tests/e2e/network/send-chaos.test.ts"
+		const withoutChaos = (inputs: Record<string, unknown>) =>
+			inputs.exclude_files === undefined
+				? inputs
+				: {
+						...inputs,
+						exclude_files: words(inputs.exclude_files)
+							.filter((file) => file !== chaos)
+							.join(" "),
+					}
+		const prJobs = (laneJobs(PR_LANE, "chrome") as [string, CopiedJob][]).filter(([, job]) => job.with?.chaos !== true)
+		const pr: Call[] = prJobs.flatMap(([, job]) => {
+			const inputs = withoutChaos(job.with ?? {})
 			const shards = job.strategy?.matrix?.shard as { id: string; label: string }[] | undefined
-			if (!shards) return [{ name: String(job.name), inputs: job.with ?? {} }]
+			if (!shards) return [{ name: String(job.name), inputs }]
 			return shards.map((shard) => ({
 				name: String(job.name).replace("${{ matrix.shard.id }}", shard.id),
-				inputs: { ...job.with, shard: shard.id, shard_label: shard.label },
+				inputs: { ...inputs, shard: shard.id, shard_label: shard.label },
 			}))
 		})
 
@@ -841,10 +867,9 @@ describe("canary lanes", () => {
 		)
 	})
 
-	// The same-token matrix holds the node's block production, which a shard's files share. A chaos
-	// run left unseeded takes the run's id, which "Re-run failed jobs" keeps: a fresh random draw would
-	// let a re-run of a red night publish on a scenario the night never tested.
-	test("the same-token matrix runs proverless in a dedicated job, and the chaos run only in nightly, seeded by the run", () => {
+	// The same-token matrix holds the node's block production, which a shard's files share. The chaos
+	// file runs in one job per lane, armed by its `chaos` input; anywhere else it skips itself.
+	test("the same-token matrix runs proverless in a dedicated job, and the chaos file only in its one chaos job", () => {
 		const matrix = "tests/e2e/network/same-token-concurrent-sends.test.ts"
 		const chaos = "tests/e2e/network/send-chaos.test.ts"
 		for (const { file, browser } of LANES) {
@@ -854,19 +879,39 @@ describe("canary lanes", () => {
 				carriers.map(([, job]) => job.with?.proverless),
 				`${file} ${browser}: ${matrix}`,
 			).toEqual([true])
-			const chaosJobs = jobs.filter(([, job]) => job.with?.chaos === true)
+			const chaosJobs = jobs.filter(([, job]) => job.with?.chaos === true || words(job.with?.test_files).includes(chaos))
 			expect(
-				chaosJobs.map(([, job]) => words(job.with?.test_files)),
+				chaosJobs.map(([, job]) => [words(job.with?.test_files), job.with?.chaos, job.with?.proverless]),
 				`${file} ${browser}: chaos`,
-			).toEqual(file === "nightly.yml" ? [[chaos]] : [])
+			).toEqual([[[chaos], true, true]])
 		}
+	})
+
+	/** The one job of a lane that runs the chaos file. */
+	const chaosJob = (file: string, browser: string): CopiedJob =>
+		(laneJobs(file, browser) as [string, CopiedJob][]).filter(([, job]) => job.with?.chaos === true)[0][1]
+
+	// Unseeded at night, chaos takes the run's id, which "Re-run failed jobs" keeps: a fresh random draw
+	// would let a re-run of a red night publish on a scenario the night never tested. A PR replays fixed
+	// seeds instead, at the lane's retry 0, each leg with its own seed and logs artifact.
+	test("nightly seeds chaos from the run, and both PR lanes replay the same two fixed seeds", () => {
 		for (const browser of ["chrome", "firefox"]) {
-			const chaosJobs = laneJobs("nightly.yml", browser).filter(([, job]) => job.with?.chaos === true)
-			expect(
-				chaosJobs.map(([, job]) => job.with?.chaos_seed),
-				`nightly.yml ${browser}: chaos seed`,
-			).toEqual(["${{ github.event.inputs.chaos_seed || github.run_id }}"])
+			expect(chaosJob("nightly.yml", browser).with?.chaos_seed, `nightly.yml ${browser}: chaos seed`).toBe(
+				"${{ github.event.inputs.chaos_seed || github.run_id }}",
+			)
 		}
+		const [chrome, firefox] = LANES.filter(({ file }) => file !== "nightly.yml").map(({ file, browser }) => {
+			const job = chaosJob(file, browser)
+			expect(job.strategy?.["fail-fast"], `${file}: a red seed never cancels the other`).toBe(false)
+			expect(Object.keys(job.strategy?.matrix ?? {}), `${file}: one matrix key, no include or exclude`).toEqual(["seed"])
+			expect(job.with, file).toMatchObject({ chaos_seed: "${{ matrix.seed }}", shard_label: "chaos-${{ matrix.seed }}", retry: "0" })
+			const seeds = job.strategy?.matrix?.seed as unknown[]
+			expect(seeds, `${file}: two seeds`).toHaveLength(2)
+			expect(new Set(seeds).size, `${file}: distinct seeds`).toBe(2)
+			for (const seed of seeds) expect(seed, `${file}: a quoted decimal seed`).toEqual(expect.stringMatching(/^\d{1,10}$/))
+			return seeds
+		})
+		expect(firefox, "the Firefox lane replays the Chrome lane's seeds").toEqual(chrome)
 	})
 
 	// The reusable workflow folds newlines before `read -ra`; a block-scalar list is refused here as well,
@@ -907,21 +952,21 @@ describe("canary lanes", () => {
 
 	// Pinned whole, not by fragment: a narrower condition, a `continue-on-error` or a commented-out call
 	// would each keep the fragment while disarming the step.
-	test("the reusable workflow asserts canary results on every canary* label, like its zero-proofs check", () => {
+	test("the reusable workflow asserts the results of every chaos job and every canary* label", () => {
 		type Step = { name?: string; if?: string; run?: string; env?: Record<string, string>; "continue-on-error"?: unknown }
 		const job = workflow(SUITE).jobs["network-e2e"]
 		expect(job["continue-on-error"], "the suite job fails when a step does").toBeUndefined()
 		const steps = job.steps as Step[]
 		const results = steps.find((step) => step.name === "Assert canary results")
 		expect(results, "the results step exists").toBeDefined()
-		expect(results?.if).toBe("${{ always() && !cancelled() && startsWith(inputs.shard_label, 'canary') }}")
+		expect(results?.if).toBe("${{ always() && !cancelled() && (inputs.chaos || startsWith(inputs.shard_label, 'canary')) }}")
 		expect(results?.["continue-on-error"], "a red assertion is a red job").toBeUndefined()
 		expect(commandLines(results?.run)).toContain(
 			'bun scripts/ci-cd/assert-canary-results.ts "${RUNNER_TEMP}/canary-results.json" "${TEST_FILE_LIST[@]}"',
 		)
 		const run = steps.find((step) => step.name === "Run network e2e via agent")
-		expect(run?.env?.NULO_E2E_RESULTS_FILE, "a canary* run writes the report").toBe(
-			"${{ startsWith(inputs.shard_label, 'canary') && format('{0}/canary-results.json', runner.temp) || '' }}",
+		expect(run?.env?.NULO_E2E_RESULTS_FILE, "a chaos or canary* run writes the report").toBe(
+			"${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary')) && format('{0}/canary-results.json', runner.temp) || '' }}",
 		)
 		expect(run?.["continue-on-error"]).toBeUndefined()
 		const presto = steps.find((step) => String(step.name).startsWith("Assert presto activity"))
