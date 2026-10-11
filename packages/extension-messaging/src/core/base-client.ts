@@ -80,7 +80,7 @@ export interface ResponseContentLike {
 export abstract class BaseServiceClient<TRequests extends MethodsMap, TEvents extends EventsMap = Record<string, never>> {
 	protected readonly service: string
 	protected readonly logger: ILogger
-	private readonly clientName: string
+	protected readonly clientName: string
 	private readonly defaultTimeoutMs: number
 	private readonly warnAfterMs?: number
 

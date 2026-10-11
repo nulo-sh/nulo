@@ -32,7 +32,7 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { BalanceUpdateContent, type TaskService } from "@/wallet/services/task/service"
 import type { BalanceProjector, ProjectedBalance } from "./balance-projector"
 import type { BalanceRepository } from "./balance-repository"
-import { BALANCE_BATCH_SIZE, boundSyncFailureMessage, type TokenBalanceRaw } from "./spec"
+import { BALANCE_BATCH_SIZE, boundSyncFailureMessage, TOKEN_BALANCE_SERVICE_NAME, type TokenBalanceRaw } from "./spec"
 
 const TICK_INTERVAL_MS = 1000
 /** A transient projection failure is retried this many times, each after the delay, before it is
@@ -90,7 +90,6 @@ export class BalanceJobQueue {
 		private readonly tasks: TaskService,
 		private readonly callbacks: BalanceJobQueueCallbacks,
 		private readonly logger?: ILogger,
-		private readonly logSource: string = "balance-job-queue",
 	) {}
 
 	/** Subscribe to the ticker. First tick fires after `intervalMs`,
@@ -169,7 +168,7 @@ export class BalanceJobQueue {
 	public async tick(): Promise<void> {
 		this.enqueueDueRetries()
 		if (this.queue.length === 0) return
-		this.logger?.log(this.logSource, LogLevel.Debug, `Syncing ${this.queue.length} token balances`)
+		this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Debug, `Syncing ${this.queue.length} token balances`)
 		const start = Date.now()
 		try {
 			while (this.queue.length) {
@@ -181,10 +180,10 @@ export class BalanceJobQueue {
 				await this.syncBatch(batch)
 			}
 		} catch (err) {
-			this.logger?.log(this.logSource, LogLevel.Error, "Failed to sync token balances", err)
+			this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, "Failed to sync token balances", err)
 		}
 		const end = Date.now()
-		this.logger?.log(this.logSource, LogLevel.Debug, `Token balances synced in ${end - start}ms`)
+		this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Debug, `Token balances synced in ${end - start}ms`)
 	}
 
 	/** Move due retries into the queue. An entry from another profile generation, or for a row
@@ -334,7 +333,7 @@ export class BalanceJobQueue {
 		}
 		this.retryDue.set(result.id, { at: now + TRANSIENT_RETRY_DELAY_MS, balance, gen })
 		this.logger?.log(
-			this.logSource,
+			TOKEN_BALANCE_SERVICE_NAME,
 			LogLevel.Info,
 			`Balance #${result.id}: transient failure, retry ${spent + 1}/${MAX_TRANSIENT_RETRIES} in ${TRANSIENT_RETRY_DELAY_MS}ms`,
 		)

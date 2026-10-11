@@ -54,7 +54,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 			// The ONE shared formula (NULO-ACCOUNT-KDF v2), reading the row-carried l1ChainId —
 			// self-contained, so this pre-session-open path needs no network lookup.
 			const secret = await deriveAccountSeed(master, account.l1ChainId, account.type, account.index)
-			return (await NuloAccount.new(secret, logger)).address.toString()
+			return (await NuloAccount.new(secret, logger, ACCOUNT_INTEGRITY_COORDINATOR_NAME)).address.toString()
 		},
 	) {
 		const storage = (browserApi?.storage.local ?? chrome.storage.local) as StorageArea

@@ -39,7 +39,7 @@ describe("frozen instantiation descriptor", () => {
 	})
 
 	test("derived instance carries every fixed descriptor field", async () => {
-		const account = await NuloAccount.new(seed, nullLogger)
+		const account = await NuloAccount.new(seed, nullLogger, "account")
 		const instance = instanceOf(account)
 		expect(instance.salt.equals(FROZEN_INSTANTIATION_DESCRIPTOR.salt)).toBe(true)
 		expect(instance.deployer.equals(FROZEN_INSTANTIATION_DESCRIPTOR.deployer)).toBe(true)
@@ -47,7 +47,7 @@ describe("frozen instantiation descriptor", () => {
 	})
 
 	test("emitted ctor call reproduces the initialization hash the address derivation used", async () => {
-		const account = await NuloAccount.new(seed, nullLogger)
+		const account = await NuloAccount.new(seed, nullLogger, "account")
 		const instance = instanceOf(account)
 		const { signingKey } = await import("@nulo/wallet-crypto").then((m) => m.deriveNuloAccountKeys(seed))
 		const { Schnorr } = await import("@aztec-labs/foundation/crypto/schnorr")
@@ -79,7 +79,7 @@ describe("frozen instantiation descriptor", () => {
 			...FrozenSchnorrAccountArtifact,
 			functions: FrozenSchnorrAccountArtifact.functions.filter((f) => f.name !== "constructor"),
 		}
-		const account = await NuloAccount.new(seed, nullLogger)
+		const account = await NuloAccount.new(seed, nullLogger, "account")
 		const { Schnorr } = await import("@aztec-labs/foundation/crypto/schnorr")
 		const { signingKey } = await import("@nulo/wallet-crypto").then((m) => m.deriveNuloAccountKeys(seed))
 		const signingPublicKey = await new Schnorr().computePublicKey(signingKey)

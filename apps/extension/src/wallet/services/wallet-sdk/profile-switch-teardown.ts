@@ -125,7 +125,7 @@ export function wireProfileSwitchTeardown(deps: ProfileSwitchTeardownDeps): void
 			const stamped = deps.sessionProfiles.get(session.sessionId)
 			if (stamped === profile.id) continue
 			deps.logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Info,
 				`Profile switch: terminating session ${describeExternalId(session.sessionId)} bound to ${stamped ?? "no"} profile`,
 			)
@@ -135,7 +135,7 @@ export function wireProfileSwitchTeardown(deps: ProfileSwitchTeardownDeps): void
 				// One failing teardown must not shield the remaining foreign
 				// sessions; the dispatch guard fail-closes whatever survives.
 				deps.logger.log(
-					"wallet-sdk-bg",
+					"wallet-sdk",
 					LogLevel.Warn,
 					`Profile switch: failed to terminate ${describeExternalId(session.sessionId)}`,
 					err,

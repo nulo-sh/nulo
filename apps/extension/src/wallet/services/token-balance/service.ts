@@ -109,7 +109,7 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 	public constructor(
 		logger: ILogger,
 		browserApi: BrowserApi,
-		private readonly ticker: BackgroundTickerPort = new ClockTickerAdapter(new SystemClock(), logger),
+		private readonly ticker: BackgroundTickerPort = new ClockTickerAdapter(new SystemClock(), logger, TOKEN_BALANCE_SERVICE_NAME),
 		private readonly projectionGate?: ProjectionGate,
 	) {
 		super(TOKEN_BALANCE_SERVICE_NAME, logger)
@@ -133,7 +133,6 @@ export class TokenBalanceService extends Service<Methods, Events> implements Ser
 			this.accountService,
 			new PxeServiceClient(this.logger),
 			this.logger,
-			undefined,
 			this.projectionGate,
 		)
 		this.queue = new BalanceJobQueue(

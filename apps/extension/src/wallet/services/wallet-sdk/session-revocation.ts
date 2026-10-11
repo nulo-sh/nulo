@@ -36,13 +36,13 @@ export function revokeLiveSessions(deps: LiveSessionRevocationDeps, app: { origi
 		if (stamp === undefined && ownMarker) cancelPendingVerification(deps.pendingVerification, session.sessionId)
 		try {
 			deps.logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Info,
 				`Terminating live session ${describeExternalId(session.sessionId)} on chain ${chainId}: dApp access revoked`,
 			)
 			deps.terminateSession(session.sessionId)
 		} catch (err) {
-			deps.logger.log("wallet-sdk-bg", LogLevel.Warn, `Failed to terminate session ${describeExternalId(session.sessionId)}`, err)
+			deps.logger.log("wallet-sdk", LogLevel.Warn, `Failed to terminate session ${describeExternalId(session.sessionId)}`, err)
 		}
 	}
 }
@@ -96,7 +96,7 @@ export function wireSessionTeardown(
 		const { chainId, profileId } = deleted
 		if (!origin || !chainId || !profileId) {
 			logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Warn,
 				`DappSession deleted with missing origin/chainId/profileId — cannot match active sessions; skipping teardown`,
 			)

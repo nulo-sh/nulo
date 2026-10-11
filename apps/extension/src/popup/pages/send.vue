@@ -116,12 +116,11 @@ const onReadFailed = (error) => console.debug("send page read failed", { error }
 function onTokenDeleted(token) {
 	const idx = tokens.value.findIndex((t) => t.id === token.id)
 	if (idx === -1) return
-
+	const wasActive = activeToken.value?.id === token.id
 	tokens.value.splice(idx, 1)
+	if (!wasActive) return
 
-	if (activeToken.value?.id !== token.id) return
-
-	if (tokens.value?.length) {
+	if (tokens.value.length) {
 		cacheStore.activeTokenIdx = tokens.value[0].id
 		return
 	}
