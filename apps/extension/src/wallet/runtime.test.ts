@@ -24,7 +24,8 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { BrowserApi, ClockPort } from "@nulo/wallet-core/ports"
-import type { LoggerStore } from "@/wallet/logger"
+import { LogLevel, type LoggerStore } from "@/wallet/logger"
+import { SCHEMA_BLOCKED_KEY, SCHEMA_DEGRADED_KEY } from "@/wallet/storage/migrations"
 
 let bbImpl: () => Promise<unknown>
 vi.mock("@aztec-foundation/bb.js", () => ({
@@ -193,5 +194,44 @@ describe("runtime.start() single-flight contract", () => {
 		await expect(runtime2.start()).rejects.toThrow("storage migration blocked")
 		await expect(runtime2.start()).rejects.toThrow("storage migration blocked")
 		expect(migratorRuns).toBe(1)
+	})
+})
+
+describe("runtime migration log lines", () => {
+	// A migration's reason can quote a malformed stored row: it is shown and persisted, never logged.
+	const REASON = 'Unexpected token in JSON at position 9: {"label":"row-sentinel"'
+
+	function recordingDeps() {
+		const { deps } = makeDeps()
+		const logged: unknown[][] = []
+		const logger = { log: (...args: unknown[]) => logged.push(args), applyRetentionPolicy: async () => {} } as unknown as LoggerStore
+		return { deps: { ...deps, logger }, logged }
+	}
+
+	test("a blocked boot logs its kind, never the reason", async () => {
+		migratorImpl = async () => ({ kind: "failed", version: 1, breaking: true, reason: REASON, attempts: 1, terminal: false })
+		const { deps, logged } = recordingDeps()
+		await expect(createWalletRuntime(deps).start()).rejects.toThrow("storage migration blocked")
+		expect(logged).toContainEqual(["wallet", LogLevel.Error, "Storage migration blocked boot", { kind: "failed" }])
+		expect(JSON.stringify(logged)).not.toContain("row-sentinel")
+		const stored = await deps.browserApi.storage.local.get(SCHEMA_BLOCKED_KEY)
+		expect(stored[SCHEMA_BLOCKED_KEY]).toMatchObject({ detail: REASON })
+	})
+
+	test("a degraded boot logs the failed version, never the reason", async () => {
+		migratorImpl = async () => ({ kind: "failed", version: 3, breaking: false, reason: REASON, attempts: 1, terminal: false })
+		// Stops the boot right after the degraded outcome, before any service is constructed.
+		bbImpl = () => Promise.reject(new Error("bb down"))
+		const { deps, logged } = recordingDeps()
+		await expect(createWalletRuntime(deps).start()).rejects.toThrow("bb down")
+		expect(logged).toContainEqual([
+			"wallet",
+			LogLevel.Warn,
+			"Storage migration failed on an additive migration; booting degraded",
+			{ version: 3 },
+		])
+		expect(JSON.stringify(logged)).not.toContain("row-sentinel")
+		const stored = await deps.browserApi.storage.local.get(SCHEMA_DEGRADED_KEY)
+		expect(stored[SCHEMA_DEGRADED_KEY]).toEqual({ version: 3, error: REASON })
 	})
 })

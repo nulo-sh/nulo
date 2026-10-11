@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267) and 1b (#273) merged; arc 2 in review
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (ready since C13 = A; its wallet fix merged on its own as #285); arc 4 waits on #279
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -347,7 +347,7 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 
 - **Arc 1a, arc 2:** none.
 - **Arc 1b:** Settings → Lock stops hanging on "FETCHING SETTINGS" after a worker restart and shows its toggles, as it does on any other open. No layout, copy, row or format changes. Recorded in `OWNER-ASKS.md` as information, with no decision asked.
-- **Arc 3:** the playground (a test dApp, not the wallet) gains a select and a button. No wallet surface changes. Whether the playground needs a sign-off is `OWNER-ASKS.md` Ask 1. Arc 3's PR carries a screenshot of the new controls and stays unmerged until the owner signs off or exempts the playground; the PR body quotes that message.
+- **Arc 3:** the playground (a test dApp, not the wallet) gains a select and a button. No wallet surface changes. Whether the playground needs a sign-off was `OWNER-ASKS.md` Ask 1; the owner exempted it (C13 = A, D-orch-14), and the PR body quotes that decision. Arc 3's PR carries a screenshot of the new controls.
 
 ## Assumptions
 
@@ -369,8 +369,8 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 
 ### Inferences
 
-- I1. `sponsor_unconditionally` as the only NO_FROM call yields a valid transaction on the local network, and two such transactions do not collide. Verified parts: the function reads no sender and only sets the fee payer and ends setup (the artifact's source), and `TxExecutionRequest` defaults its salt to `Fr.random()`, so two requests hash apart. Unverified: the wallet's NO_FROM path accepts it end to end. Phase 3.2 tests this first.
-- I2. The local network at 6.0.0-rc.1 seeds `PublicChecks`, so the delegated-authwit file runs without the testnet (`@aztec-labs/standard-contracts` doc). Phase 3.3 tests this first.
+- I1. `sponsor_unconditionally` as the only NO_FROM call yields a valid transaction on the local network, and two such transactions do not collide. Verified parts: the function reads no sender and only sets the fee payer and ends setup (the artifact's source), and `TxExecutionRequest` defaults its salt to `Fr.random()`, so two requests hash apart. Unverified: the wallet's NO_FROM path accepts it end to end. Phase 3.2 tests this first. **Result: held only after a wallet fix** (an account with no standard build had no registered instance for discovery to stub; D23).
+- I2. The local network at 6.0.0-rc.1 seeds `PublicChecks`, so the delegated-authwit file runs without the testnet (`@aztec-labs/standard-contracts` doc). Phase 3.3 tests this first. **Result: did not hold.** The 6.0.0-rc.1 local network publishes only AuthRegistry at boot; PublicChecks is preloaded only under the archiver's opt-in `TEST_PRELOAD_STANDARD_CONTRACTS`, which the harness does not set (`lessons/phase-3.md` § 3.3). Per A3 the gate stays and the PR says `Refs #165`.
 - I3. The Lock page's hang is the port-reconnect pattern of `lessons.md`; Phase 1.6 confirms or refutes it before any fix.
 - I4. A stalled fork stops only when killed: `cancelCurrentRun` (vitest 4.1.10, `cli-api` chunk) runs the cancel listeners and then awaits the running promise, so a test stuck on an await keeps it pending. The reporter therefore calls it without awaiting (no new file starts) and kills its own forks after the grace period; the unit test in Phase 1.9 proves the run then ends.
 - I5. A V8 heap cap at twice the sampled peak leaves headroom a green run should not exhaust (sampling can miss the true peak, so the final full suites under the cap are the check), and limits something only if it sits below the default limit; WASM and Chrome memory are outside it. The default on this host is 4288 MiB, so Phase 1.9 measures the hosted default before shipping a cap.
@@ -420,6 +420,12 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D-orch-6 | After a squash merge an arc branches from `dev`: arc 2 is `e2e-harness-gaps-types` off `origin/dev` at 8c3c671 (#273's squash). D-orch-1 to D-orch-5 stay | The orchestrator's call, as D-orch-3 for arc 1b | Branching from `e2e-harness-gaps-waits` |
 | D-orch-7 | Arc 2 only, exactly as § Arc 2 and Phase 2.1 state: type-only edits in `tests/e2e`, no edit changes what a test does, no `src` edit for the gate, probe counts in `lessons/phase-2.md` before any fix, no added `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error` measured against the merge base with `origin/dev` (not 4a357b7), `unresolved-names.test.ts` deleted only once the gate's file list is shown to contain the scan's, the skill line rewritten; arc 1b's `run-limits.ts` and `stall-watchdog.ts` are covered; nothing of arcs 3 or 4 | The orchestrator's call | — |
 | D-orch-8 | The gate must bite both ways: Phase 2.1 step 4's four probes are run and their outputs recorded in `lessons/phase-2.md`; a gate that passes a probe it should refuse is not done | The orchestrator's call | — |
+| D-orch-12 | Arc 3 runs now, as `e2e-harness-gaps-coverage` off `origin/dev` at af4afcc, before arc 4 lands (D-orch-9 to D-orch-11 are recorded on arc 4's branch). Its PR opens as a draft and stays one: charter C13 (does a playground change need the owner's sign-off?) is unanswered, and § UI impact holds the merge until the owner signs off or exempts the playground. The PR body carries a screenshot of the new playground controls (`pg-btn-sendTx-noFrom-sponsored`, `pg-select-transferFn`) and quotes nothing as a sign-off; the orchestrator marks it ready once C13 is answered. Everything of arc 3 is built now | The orchestrator's call: arc 4 shares no file with arc 3 and its PR waits on #279 | Waiting for arc 4 |
+| D23 | #153: I1 did not hold. A sponsored NO_FROM send from an account with no standard build in its PXE store (the e2e's fresh profile; also a restore or a purged store) failed at simulation: `buildNoFrom` registered the account's keys but not its contract instance, and authorization discovery stubs the account by that instance (`stubAccountAddresses: no contract instance registered`). `buildNoFrom` now registers the instance next to the keys, after the drift check; a pins case orders it and the drift pin asserts it never runs on a drifted node | The test found a wallet defect on the path #153 is about, and the cause is one missing call the standard build already makes. Codex (high): A, the fix belongs with the regression that proves it, `buildNoFrom` is the right layer (both the window's preview and the confirm go through it; the PXE stub path cannot rebuild the frozen instance from an address); no new privilege, the transaction is unchanged, the only new observable is the instance's local metadata a standard estimate already registers. Opus (high): A, same layer, no other NO_FROM entry reaches the stub unregistered | B (leave it out, #153 stays open): leaves a demonstrated defect broken; C (send a standard transaction first in the e2e): papers over the cause |
+| D24 | The wallet fix ships twice-reachable: as its own `fix(execution)` commit (cc844c1) on arc 3's branch, and cherry-picked alone onto `e2e-harness-gaps-nofrom-fix` off `dev` with its own ready PR (`Refs #153`), so a user-facing fix waits on neither C13 nor the arc 3 draft, and a release note can name it. Arc 3's draft PR carries the same commit until that PR lands; merging `dev` then adds nothing | Opus: a separate `fix:` PR, since arc 3 stays a draft on an unrelated sign-off and a `test(e2e)` squash subject hides the fix from release-please. Codex: one PR with the deviation recorded. Opus's argument is the stronger: the hold is about the playground, not the wallet | Bundling the fix in arc 3's draft only |
+| D25 | #153's serialization evidence: after the second window closes (its approval is in), the journal must keep one send at `proving` (the held first) and the other `queued` for 3 s, every read before `enteredProveAt + PROOF_GATE_HOLD_MS`. One snapshot is not enough: a dApp request's record reads `queued` from its arrival, before its approval reaches the mutex | Codex: a single snapshot can catch the second send before acquisition even with the mutex bypassed; hold the pair over an interval inside the gate window. The once-only bypass run is red on it | The single snapshot § Arc 3 described |
+| D-orch-13 | Nothing a wallet user sees changes. The playground is the only surface that gains a control; every existing playground control keeps its behaviour and testid; the wallet's own screens are untouched. The `tx-request-builder.pins.test.ts` case, the three row cases and the serialization evidence are built exactly as § Arc 3 states; the once-only scratch bypass of the execution mutex is reverted and its red run recorded in `lessons/phase-3.md` | The orchestrator's call | — |
+| D-orch-14 | `OWNER-ASKS.md` Ask 1 is answered. The owner, 2026-10-11, decision page 0 (Program charter), C13 = **A**: "No. The playground is test infrastructure nobody ships; its controls need no sign-off. It must stay generic (reach the wallet only through @aztec-labs/wallet-sdk, never special-case Nulo)." Arc 3's PR (#293) leaves draft after `origin/dev` (27af8d7) is merged and `tx-sendTx-multicall`, `tx-sendTx-noFrom` and `tx-transfer-row` pass again at retry 0 on both browsers; its body quotes the decision in place of the held-for-sign-off note | The owner's call; #298 changed `waitForTxMined`, which two of those files call, so the merged head is re-proven before the PR is marked ready | Merging the held draft without re-running the files #298 touched |
 
 ## Audit verdicts
 
@@ -613,6 +619,33 @@ Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run inde
 
 Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
 
+### Arc 3 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-11
+
+Verdict: **clean**, no finding, over `git diff af4afcc...HEAD` at 422d6f6 (the multicall nonce, the `buildNoFrom` registration fix and its pins, the sponsored NO_FROM control and file, the transfer-function select and the three private-kind row cases).
+
+### Arc 3 implementation: Opus review (same family, read-only), 2026-10-11
+
+Verdict: **approve with fixes**, no correctness finding. Sound: the wallet fix lets a dApp do or see nothing a standard send does not already cause (a standard send's fee estimate or a dApp `simulateTx` registers the same instance at the same point, before approval; it runs after the fence and the chain-identity check; the built request is unchanged); the multicall balance check is exact; the refusal case's exact match proves the dApp gets only the constant; the concurrent case's held pair cannot pass with the second send short of its claim; a select that silently kept its default would read "Transfer (public)", which no new label check accepts.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OB1 | Low. `tx-transfer-row.test.ts`'s titles promise "From, To and Amount" but no case reads the To row, which has no testid | Accepted: both titles now name what is read (the named sender and the amount). Adding a To assertion was rejected: `AddressDisplay` renders a name or a trimmed address with no full-address hook, so it needs a new wallet-side attribute for a mapping `call-surface.real.test.ts` already pins over the real Token artifact |
+| OB2 | Medium. `tests/e2e/README.md` omits `tx-sendTx-noFrom` from the proof-gate list and still says multicall and noFrom stop at `proving` (through a helper renamed since) | Accepted: noFrom joins the list; the slow-prove paragraph names `waitForDappExecuteWorked()` and says the two files wait for the outcome |
+| OB3 | Low. The playground README says every other send button builds `transfer_public_to_public`, false for the sponsored and delegated buttons | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
+| OB4 | Low. No file time recorded for `tx-sendTx-noFrom.test.ts` against the 3-minute rule | Accepted: recorded in `lessons/phase-3.md` § 3.2 (Chrome 56-72 s, Firefox 74 s); the concurrent case stays in the pool |
+
+### Arc 3 implementation, round 2: Codex (same session, resumed), 2026-10-11
+
+Verdict: **one low finding**, high confidence otherwise. Checked the four fixes, the recipient's decode and rendering, the registration's boundaries, the multicall assertions and the proof-gate ordering; OB1's rejection judged sound, OB2 and OB4 complete.
+
+| # | Finding | Disposition |
+|---|---|---|
+| R3-1 | Low. `lessons/phase-3.md` § 3.3 repeats OB3's wrong claim ("every other button keeps building `transfer_public_to_public`") | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
+
+### Arc 3 implementation, round 3: Codex (same session, resumed), 2026-10-11
+
+Verdict: **clean**, high confidence: R3-1's fix confirmed, nothing material left in the arc diff. The loop converged.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
@@ -659,7 +692,7 @@ Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `de
 | close-out | `e2e-harness-gaps-close-out` | — | 4 | off | `docs(plans): close e2e-harness-gaps` | — |
 
 - Arc 1a's PR is the lane's first and is gate G1. It carries this plan's commit.
-- Arc 3's PR stays unmerged until `OWNER-ASKS.md` Ask 1 has an explicit answer; nothing below it waits.
+- Arc 3's PR stayed a draft until `OWNER-ASKS.md` Ask 1 had an explicit answer; answered 2026-10-11 (D-orch-14).
 - Each PR body: what changed and why, the validation runs with outcomes, the `Closes` lines.
 - Mechanics: `gh stack add <branch>` at each boundary; `gh stack submit --auto`, then `gh pr edit` bodies; `gh stack sync` after `dev` moves. Merging (`gh stack merge --squash`) is the orchestrator's.
 - Commits: conventional, lower-case subjects, signed; afterwards `git log --format='%h %G?' -3` shows no `N`.

@@ -322,11 +322,18 @@ describe("discover popup — isReady race fix", () => {
 		// isReady true → Allow enabled
 		expect(isDisabled(allow(w))).toBe(false)
 		// Trigger the error path via direct handler call (avoid stub click issues).
-		resolveInteractionMock.mockRejectedValueOnce(new Error("boom"))
-		const vm = w.vm as unknown as { approve: () => Promise<void> }
-		await vm.approve()
-		await flushPromises()
-		await w.vm.$nextTick()
+		const boom = new Error("boom")
+		resolveInteractionMock.mockRejectedValueOnce(boom)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			const vm = w.vm as unknown as { approve: () => Promise<void> }
+			await vm.approve()
+			await flushPromises()
+			await w.vm.$nextTick()
+			expect(logged.mock.calls).toEqual([["Discover approve failed", { error: boom }]])
+		} finally {
+			logged.mockRestore()
+		}
 		// After the catch sets processingError, Allow should be disabled
 		expect(isDisabled(allow(w))).toBe(true)
 	})
@@ -336,8 +343,15 @@ describe("discover popup — isReady race fix", () => {
 		await flushPromises()
 		getActiveProfilePromiseResolve?.({ id: "p1" })
 		await flushPromises()
-		loadPromiseReject?.(new Error("payload-fetch-failed"))
-		await flushPromises()
+		const failure = new Error("payload-fetch-failed")
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			loadPromiseReject?.(failure)
+			await flushPromises()
+			expect(logged.mock.calls).toEqual([["Discover window init failed", { error: failure }]])
+		} finally {
+			logged.mockRestore()
+		}
 		// Allow must stay disabled even though requestId was never set
 		expect(isDisabled(allow(w))).toBe(true)
 		// Defensive: approve() should still throw

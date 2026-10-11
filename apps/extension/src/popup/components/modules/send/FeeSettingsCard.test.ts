@@ -1013,12 +1013,15 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 
 	test("an init that throws stops the rows loading, gives today's answers, and never claims a retry", async () => {
 		vi.useFakeTimers()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
 		try {
 			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
 			const local = (globalThis as any).chrome.storage.local
-			local.get = vi.fn().mockRejectedValue(new Error("storage unavailable"))
+			const refusal = new Error("storage unavailable")
+			local.get = vi.fn().mockRejectedValue(refusal)
 			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
 			await vi.advanceTimersByTimeAsync(0)
+			expect(logged.mock.calls.filter(([message]) => message === "Failed to init")).toEqual([["Failed to init", { error: refusal }]])
 
 			expect(rowState(w)).toEqual([
 				{ type: "fj", fpc: null, checking: false, spend: "— FJ" },
@@ -1033,6 +1036,7 @@ describe("FeeSettingsCard — rows while the read is in flight", () => {
 			expect(w.find('[data-testid="fee-init-degraded"]').text()).toBe("Couldn't load fee data. Close and reopen to try again.")
 			w.unmount()
 		} finally {
+			logged.mockRestore()
 			vi.useRealTimers()
 		}
 	})
@@ -1714,6 +1718,35 @@ describe("FeeSettingsCard — init failure resilience (degraded settings + silen
 		}
 	})
 
+	test("a recovery recommit whose storage read fails is logged under a named key", async () => {
+		vi.useFakeTimers()
+		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+		const chromeAny = (globalThis as any).chrome
+		const origGet = chromeAny.storage.local.get
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			mocks.getGasBalances.mockRejectedValueOnce(new Error("boom"))
+			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1000000000000000000", privateFeeJuice: null })
+			mocks.getFpcs.mockResolvedValue([{ id: "s1", type: 1, name: "Sponsor" }])
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.find('[data-testid="fee-init-degraded"]').exists()).toBe(true)
+
+			const refusal = new Error("storage unavailable")
+			chromeAny.storage.local.get = vi.fn().mockRejectedValue(refusal)
+			// Retry recovers → recovery watch → recommit's read rejects.
+			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0] + 50)
+			expect(logged.mock.calls.filter(([message]) => message === "Fee recovery recommit failed")).toEqual([
+				["Fee recovery recommit failed", { error: refusal }],
+			])
+			w.unmount()
+		} finally {
+			logged.mockRestore()
+			chromeAny.storage.local.get = origGet
+			vi.useRealTimers()
+		}
+	})
+
 	test("a superseded run's late storage read never re-applies the saved pre-fill", async () => {
 		// Run 1's storage read resolves AFTER run 2 committed and the user
 		// picked a method — its pre-fill must not clobber that pick.
@@ -2137,6 +2170,26 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(lastEmittedSettings(again)).toEqual({ paymentMethod: { kind: "fj" } })
 			await again.setProps({ originPrivacy: "public" })
 			expect(lastEmittedSettings(again)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		})
+
+		test("a pick whose save fails is logged under a named key", async () => {
+			allPayers()
+			const w = mountSend()
+			await flushPromises()
+			const refusal = new Error("QUOTA_BYTES quota exceeded")
+			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+			vi.spyOn((globalThis as any).chrome.storage.local, "set").mockRejectedValueOnce(refusal)
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+			try {
+				await w.find('[data-testid="pick-fj"]').trigger("click")
+				await flushPromises()
+				expect(logged.mock.calls.filter(([message]) => message === "Failed to save the send fee selection")).toEqual([
+					["Failed to save the send fee selection", { error: refusal }],
+				])
+			} finally {
+				logged.mockRestore()
+			}
+			w.unmount()
 		})
 
 		test("a legacy-key pick does not govern Send", async () => {

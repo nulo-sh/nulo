@@ -410,7 +410,7 @@ async function downloadBackup(isEncrypted) {
 		openToast({ kind: "success", label: "Backup downloaded successfully" })
 	} catch (err) {
 		if (gen !== generation) return
-		console.error("Download failed:", err.message || err)
+		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download backup" })
 	} finally {
 		if (gen === generation) isDownloading.value = false

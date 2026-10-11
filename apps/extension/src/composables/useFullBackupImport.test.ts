@@ -1542,7 +1542,8 @@ describe("useFullBackupImport — token-balance (chainId,contract) key (P3)", ()
 describe("useFullBackupImport — completeImport + client hygiene (P7)", () => {
 	it("a rejected completeImport keeps status 'finished' and does NOT roll back", async () => {
 		const opts = makeOpts()
-		opts.completeImport = vi.fn().mockRejectedValue(new Error("handshake failed"))
+		const handshake = new Error("handshake failed")
+		opts.completeImport = vi.fn().mockRejectedValue(handshake)
 		const c = useFullBackupImport(opts)
 		const backup = await buildBackup()
 		c.selectedBackup.value = { name: "x.json", backup, type: "plain", profileType: "password" }
@@ -1551,7 +1552,14 @@ describe("useFullBackupImport — completeImport + client hygiene (P7)", () => {
 		networkClient.seedDefaultsForProfile.mockResolvedValue([{ id: "new-net-1", name: "Testnet", rpcUrl: "https://t/", chainId: 1 }])
 		accountClient.restore.mockResolvedValue([{ address: "0xaaaa" }])
 
-		await c.restoreBackup()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await c.restoreBackup()
+			const message = "completeImport failed after a successful restore:"
+			expect(logged.mock.calls.filter(([m]) => m === message)).toEqual([[message, { error: handshake }]])
+		} finally {
+			logged.mockRestore()
+		}
 
 		// The import genuinely succeeded — a failed handshake must not undo it.
 		expect(c.restoreStatus.value).toBe("finished")

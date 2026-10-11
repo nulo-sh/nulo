@@ -10,7 +10,6 @@ import DappApprovalFooter from "@/components/composite/DappApprovalFooter.vue"
 import ConnectStepBar from "../ConnectStepBar.vue"
 
 /** Utils */
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { resolveDappChain } from "../capabilities/chain-mismatch"
 
@@ -102,7 +101,7 @@ const init = async () => {
 		// Every value `approve()` reads must be committed; an error path leaves Allow closed.
 		if (profile.value && requestId.value && dapp.value) isReady.value = true
 	} catch (error) {
-		console.error(getErrorData(error))
+		console.error("Discover window init failed", { error })
 		setError("Something went wrong")
 	}
 }
@@ -129,7 +128,7 @@ const approve = async () => {
 			// the refusal IS the cancelled state — overlay, not an error banner.
 			isInteractionCancelled.value = true
 		} else {
-			console.error(getErrorData(error))
+			console.error("Discover approve failed", { error })
 			setError("Something went wrong")
 		}
 	}
