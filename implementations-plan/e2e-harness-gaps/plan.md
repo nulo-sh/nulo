@@ -618,6 +618,21 @@ Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run inde
 
 Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
 
+### Arc 3 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-11
+
+Verdict: **clean**, no finding, over `git diff af4afcc...HEAD` at 422d6f6 (the multicall nonce, the `buildNoFrom` registration fix and its pins, the sponsored NO_FROM control and file, the transfer-function select and the three private-kind row cases).
+
+### Arc 3 implementation: Opus review (same family, read-only), 2026-10-11
+
+Verdict: **approve with fixes**, no correctness finding. Sound: the wallet fix lets a dApp do or see nothing a standard send does not already cause (a standard send's fee estimate or a dApp `simulateTx` registers the same instance at the same point, before approval; it runs after the fence and the chain-identity check; the built request is unchanged); the multicall balance check is exact; the refusal case's exact match proves the dApp gets only the constant; the concurrent case's held pair cannot pass with the second send short of its claim; a select that silently kept its default would read "Transfer (public)", which no new label check accepts.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OB1 | Low. `tx-transfer-row.test.ts`'s titles promise "From, To and Amount" but no case reads the To row, which has no testid | Accepted: both titles now name what is read (the named sender and the amount). Adding a To assertion was rejected: `AddressDisplay` renders a name or a trimmed address with no full-address hook, so it needs a new wallet-side attribute for a mapping `call-surface.real.test.ts` already pins over the real Token artifact |
+| OB2 | Medium. `tests/e2e/README.md` omits `tx-sendTx-noFrom` from the proof-gate list and still says multicall and noFrom stop at `proving` (through a helper renamed since) | Accepted: noFrom joins the list; the slow-prove paragraph names `waitForDappExecuteWorked()` and says the two files wait for the outcome |
+| OB3 | Low. The playground README says every other send button builds `transfer_public_to_public`, false for the sponsored and delegated buttons | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
+| OB4 | Low. No file time recorded for `tx-sendTx-noFrom.test.ts` against the 3-minute rule | Accepted: recorded in `lessons/phase-3.md` § 3.2 (Chrome 56-72 s, Firefox 74 s); the concurrent case stays in the pool |
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.

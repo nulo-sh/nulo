@@ -44,7 +44,7 @@ async function openWindow(ctx: ExtensionContext, page: Page, button: string): Pr
 }
 
 test.skipIf(!hasConfig)(
-	"tx-transfer-row — a standard Token transfer reads as From, To and Amount in TST, sent or authorized",
+	"tx-transfer-row — a standard Token transfer reads with its named sender and the Amount in TST, sent or authorized",
 	{ timeout: 360_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
@@ -94,7 +94,7 @@ const PRIVATE_KINDS = [
 ]
 
 test.skipIf(!hasConfig).for(PRIVATE_KINDS)(
-	"tx-transfer-row — $fn reads as its own transfer row, From, To and Amount in TST",
+	"tx-transfer-row — $fn reads as its own transfer row, with its named sender and the Amount in TST",
 	{ timeout: 360_000 },
 	async ({ fn, label }, { dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
