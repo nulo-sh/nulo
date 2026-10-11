@@ -25,3 +25,11 @@ Opus diff review (Agent tool, read-only): **approve**. It verified byte-identity
 | O5 | `reopenAndRecoverAfterImport` no longer reopens | nit | accepted in part: no rename (six callers); the doc names the user's reopen it models and says it runs in one document |
 
 Comment and doc changes only; lint and `typecheck:all` exit 0.
+
+## Quality loop, round 2
+
+The same Codex session resumed with `15f69a6` and the dispositions above, asked whether any fix claims what the code, the logs or the measurements do not support: **"no new material finding"**. The loop converged after two rounds.
+
+## Pre-push gate (PASS)
+
+On `15f69a6`: `bun run lint`, `lint:actions`, `check:plans` and `test` exit 0 (740 files passed, 3 skipped; 11,252 tests passed). Comment and doc changes since Phase 3's gate only, so no e2e rerun.
