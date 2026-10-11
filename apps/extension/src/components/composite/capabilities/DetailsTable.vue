@@ -91,7 +91,7 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 						<span :id="`${uid}-${entry.key}`" hidden>{{ spokenName(entry) }}</span>
 						<span v-if="entry.named" :class="$style.name">{{ entry.row.name }}</span>
 						<span v-else :class="$style.address">
-							<span data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
+							<span :class="$style.address_text" data-testid="capability-address">{{ shownAddress(entry.row.address) }}</span>
 							<RowAction
 								label="Copy address"
 								tabindex="-1"
@@ -196,12 +196,15 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .address {
-	composes: type--data from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 
 	color: var(--txt-primary);
+}
+
+.address_text {
+	composes: type--data from global;
 }
 
 /* The 24px box centres a 12px glyph: pulled in by the difference, the glyph sits 6px from the text. */

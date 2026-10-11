@@ -81,6 +81,12 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 			"a connect request (network)",
 			"a connect request with an account to choose (network)",
 		])
+		await clickByTestId(win, "cap-detail-toggle")
+		await win.waitForSelector(sel("capability-address"), { visible: true, timeout: 10_000 })
+		const [details] = await sweepWindow(win, "windows-capabilities", ["a contract scope with its details open (network)"])
+		expect(details!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
+			sel("capability-address"),
+		)
 	} finally {
 		await dismiss(win, rejectCapabilities)
 	}
@@ -193,6 +199,12 @@ test.skipIf(!hasConfig)(
 			const [observation] = await sweepWindow(win, "windows-execute", ["a send with a discovered authwit (network)"])
 			const asserted = observation!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)
 			expect(asserted).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
+			await clickByTestId(win, "execute-discovered-authwit-toggle")
+			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
+			const [open] = await sweepWindow(win, "windows-execute", ["a discovered authwit with its details open (network)"])
+			expect(open!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
+				sel("execute-discovered-inner-hash"),
+			)
 		} finally {
 			await dismiss(win, rejectExecute)
 		}
