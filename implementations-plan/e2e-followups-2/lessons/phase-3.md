@@ -64,4 +64,33 @@ Started on c0be903; the fallback changed under it (ed05853, 5a89d52), so it coun
 
 Chrome, proverless, retry 0: 1/1 file, 3/3 tests. Firefox runs it in N-full's pool.
 
+## Smoke (full), Firefox, run 3, and Chrome
+
+On 39f3dda (the final relay code, `origin/dev` 0643a14 merged), retry 0. Firefox: 51 passed, 1 skipped of 52 files (210 passed, 12 skipped of 222 tests), 30 min, no launch's close check failed, nothing newly recorded. Its stderr: the control's own ×6, `Client disconnected` ×23, `NS_ERROR_NOT_INITIALIZED` ×16, and `uncaught exception: Object` ×98, all in `migration.test.ts`'s four launches (24 from Firefox's own `AsyncShutdown.sys.mjs`, 74 with no file); a run of that file logging every recorded entry recorded none. Chrome, alone: 49 passed, 3 skipped of 52 files (213 passed, 9 skipped of 222 tests), 21 min.
+
+## N-full, Firefox
+
+On 39f3dda, retry 0, CI's partition. Pool 1/5: 19 passed, 3 skipped of 22 files; 2/5: 22/22; 3/5: 21 passed, 1 skipped of 22; 4/5: 22/22; **5/5: 2 failed**, 18 passed, 1 skipped of 21; heavy 2/2; heavy-concurrent 2/2; canary (prover-ON) 5/5. No launch's close check failed. Two newly recorded errors:
+
+- **`popup-escape-layered.test.ts`** › "an Enter on another control never sends…": `Error: DataCloneError: Proxy object could not be cloned.` in `pageErrors`, raised by the step that presses Enter on a fee method. **Product cause.** `FeeSettingsCard`'s `handleMethodPicked` calls `void persistSelection(m)`, which writes the picked row into `storage.local.set`; a sponsor row's `fpc` is an element of `registeredFpcs`, a deep `ref`, so a reactive Proxy. Probe in a Firefox popup page: a plain value stores, a `new Proxy(…)` rejects with that exact message, and an unawaited one is recorded as exactly this page error. Chrome stores it. The same line printed 10 times in 8 files of the run (`authwit-lifecycle` ×3, `concurrent-sendtx-confirm` ×2, `concurrent-sendtx-approve`, `same-token-concurrent-sends`, `selfpay-phase`, `tx-sendTx-sponsoredFpc`, this one), where no assertion reads the page that raised it. Issue #297.
+- **`account-balance-orphans.test.ts`**: `TypeError: error loading dynamically imported module: …/assets/auth-*.js`, early in the fresh second launch. Alone on Firefox it passed twice, every `openPopup` on its fast path, and printed no such line. Most likely the fallback closing a popup still booting under the full run's load, against the probe that found a close raises nothing; unproven, and part of what a re-land must settle.
+
+Firefox's stderr also printed `Invalid window ID: N` ×6 (`undefined, line 0`, an extension API's rejection) in `cap-request-reject`, `cap-window`, `connect-unserved-chain`, `connect-deny`, `connect-one-window` and `snack-placement`; none was recorded and none is triaged.
+
+## Stop
+
+The first finding is a product error, so the stop rule applies as D-orch-5 fixes it: issue #297 opened (no duplicate under `DataCloneError`, `Proxy object could not be cloned`, `fee method firefox`, `storage.local.set firefox proxy`), every Phase 3 commit reverted in 9094cf9 except d9249ad's two #280 edits, #284 and #280 ship with `Refs #281`, and #281 carries the measurements. The relay, its tests, its docs and the `openPopup` fallback change left with the revert; their record is this file.
+
 ## Gates
+
+Phase 3 stopped, so its own gate does not apply; the shipped tree (9094cf9: Phases 1 and 2 on `origin/dev` 0643a14) ran these, retry 0, every network run through `agent.sh`:
+
+| Run | Files | Tests | Result |
+|---|---|---|---|
+| `bun run lint`, `typecheck:all`, `test`, `test:all`, `test:ci-gating`, `lint:actions` | | | all exit 0 |
+| `waitForTxMined` callers, Chrome, proverless (the nine of Phase 2's gate) | 9/9 | 14/14 | pass |
+| the same, Chrome, prover-ON (`frozen-account-canary`, `passkey-execution-canary`) | 2/2 | 4/4 | pass |
+| the same, Firefox, proverless | 9/9 | 14/14 | pass |
+| the same, Firefox, prover-ON | 2/2 | 4/4 | pass |
+
+The merge of `origin/dev` brought no new caller (`git grep -l 'waitForTxMined(' -- apps/extension/tests/e2e/network`: the same eleven files). No Codex pass ran over the revert: it adds no code, and the tree it leaves is the part of the arc rounds 1-5 reviewed.

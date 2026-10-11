@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-2
 tier: mid
-status: approved (3134636, D-orch-2..6); arc 1 in implementation
+status: approved (3134636, D-orch-2..6); arc 1 in delivery, Phase 3 stopped under its stop rule (#297)
 issues: "#284, #280, #281 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -235,7 +235,9 @@ Validation gate: Fast; Unit (file) `scripts/e2e/owned-processes.test.ts scripts/
 
 Validation gate: Fast; Network (file) for the new file and every caller, Chrome and Firefox. Pass: all exit 0 at retry 0; the revert case red on the old helper and green on the new; the success and dropped cases green on both. Layers: lint, typecheck, unit, e2e-live-network.
 
-### Phase 3: Firefox sees extension-page errors (#281)
+### Phase 3: Firefox sees extension-page errors (#281), stopped
+
+Stopped under the stop rule (D17): the Firefox network run recorded a product error, a sponsor pick in the fee card that Firefox refuses to store (#297). Phase 3's commits are reverted in 9094cf9; #281 stays open with the measurements. Record: [`lessons/phase-3.md`](lessons/phase-3.md).
 
 1. Write `tests/e2e/page-error-capture.test.ts` per § Architecture. Run it on Firefox before any driver change and expect it red (both arrays empty). Run it on Chrome and expect it green. Record both in `lessons/phase-3.md`.
 2. Write `fixtures/browser/firefox-page-errors.ts`.
@@ -283,6 +285,7 @@ Per § Post-implementation, Close-out.
 | D14 | #281 triage: `openPopup`'s fallback closes the tab it gives up on, still recorded, waits for its `close` event and loads the popup in a fresh tab; navigating it away instead makes Firefox reject its in-flight imports from it, which Chrome does not report (`lessons/phase-3.md`, Smoke run 1; review rounds 2 and 3) | stop rule, harness cause | fixed in-lane |
 | D15 | The quality loop's first round ran during Phase 3's first full smoke, before N-full, so N-full runs on the code the loop converges on; Phase 3's gate is still logged before Phase 4 starts | implementer | deviation, order only |
 | D16 | The Codex loop ran past its three rounds: round 3 still had two material findings, both narrow consequences of round 2's fallback fix (5a89d52); a fourth pass scoped to that commit found one more (09659e9), and a fifth scoped pass approved. Surfaced to the orchestrator, not counted as convergence within the cap | implementer | deviation, surfaced |
+| D17 | Phase 3 stopped: N-full on Firefox recorded `DataCloneError` from `FeeSettingsCard`'s `persistSelection`, which stores a reactive sponsor row (product, #297). Per D-orch-5 every Phase 3 commit is reverted (9094cf9), except d9249ad's two #280 edits (the `waitForTxMined` doc line, the test's exact-wording assertions); D10-D14 and D16 left with the code they record. #284 and #280 ship, `Refs #281` | stop rule | applied |
 
 ## Audit verdicts
 
