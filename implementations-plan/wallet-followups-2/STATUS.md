@@ -9,3 +9,4 @@
 - 2026-10-11: final fresh Codex pass: reject, then reject on resume, then approve after D9 moved to the tx-settle observer set; lessons 7,926 B; panel approved.
 - 2026-10-11: arc-1 started; orchestrator decisions D-orch-2 to D-orch-4 recorded. Phase 0 gate: pass (7,926 B, link diff empty, 10 lines changed, check:plans exit 0).
 - 2026-10-11: Phase 1 gate: pass (send.test.ts 71/71, lint 0, typecheck:all 0; both selected-token cases red on the base send.vue, the control green on it).
+- 2026-10-11: Phase 2 gate: pass (JsonViewer 53/53, lint 0, typecheck:all 0; on the base list the pin failed naming exactly the ten rows).

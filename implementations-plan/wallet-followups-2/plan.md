@@ -242,7 +242,7 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 - Pass criteria: all three exit 0. Proof of red: run the active-delete case, the last-token case and the control against the base `send.vue` (`git show origin/dev:apps/extension/src/popup/pages/send.vue`, restored after) and see both selected-token cases fail (after the splice `activeToken` is undefined, so the base handler returns before selecting, toasting or leaving, `send.vue:120-122`) and the control pass.
 - Layers: lint, typecheck, unit.
 
-### Phase 2: #288, every registered service in the source filter ✗
+### Phase 2: #288, every registered service in the source filter ✓
 
 1. Add the ten rows to `LOG_SOURCES` in `useLogFilters.ts` (§ Architecture). Keep `LogsToolbar.vue` unchanged.
 2. Add `useLogFilters.scan.test.ts` as described in § Architecture, with its success control.
