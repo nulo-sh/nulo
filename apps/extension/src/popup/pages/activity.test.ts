@@ -88,6 +88,20 @@ const record = (siloedNullifier: string, discoveredAt: number) => ({
 	discoveredAt,
 })
 
+let heroCallback: IntersectionObserverCallback | undefined
+
+/** One observer delivery carrying a hero entry per value, oldest first, as a fast scroll batches them. */
+async function deliverHero(...intersecting: boolean[]) {
+	heroCallback?.(
+		intersecting.map((isIntersecting) => ({ isIntersecting }) as IntersectionObserverEntry),
+		{} as IntersectionObserver,
+	)
+	await flushPromises()
+}
+
+const barShown = (w: { get: (selector: string) => { element: Element } }) =>
+	(w.get('[data-testid="page-title-bar"]').element.parentElement?.className ?? "").includes("page_title_bar_visible")
+
 beforeEach(() => {
 	H.getIncomingTransfers.mockReset().mockResolvedValue([])
 	H.getOperations.mockReset().mockResolvedValue([])
@@ -98,6 +112,9 @@ beforeEach(() => {
 	vi.stubGlobal(
 		"IntersectionObserver",
 		class {
+			constructor(callback: IntersectionObserverCallback) {
+				heroCallback = callback
+			}
 			observe() {}
 			disconnect() {}
 		},
@@ -292,5 +309,23 @@ describe("pages/activity — the title", () => {
 		await flushPromises()
 		expect(w.get('[data-testid="page-title-bar"]').element.parentElement?.getAttribute("aria-hidden")).toBe("true")
 		expect(w.get('[data-testid="page-hero-title"]').element.closest('[aria-hidden="true"]')).toBeNull()
+	})
+
+	const mountTitled = async () => {
+		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		await flushPromises()
+		return w
+	}
+
+	test("the compact bar shows when a batched delivery ends with the hero gone", async () => {
+		const w = await mountTitled()
+		await deliverHero(true, false)
+		expect(barShown(w)).toBe(true)
+	})
+
+	test("the compact bar hides when a batched delivery ends with the hero back", async () => {
+		const w = await mountTitled()
+		await deliverHero(false, true)
+		expect(barShown(w)).toBe(false)
 	})
 })

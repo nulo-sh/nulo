@@ -27,3 +27,9 @@
 - `backup-import-stalled-network.test.ts` unwrapped (whitespace-only beyond the wrapper and two imports), `hangingRequest` removed from `CHROME_ONLY`; `git grep -n hangingRequest -- ':!implementations-plan'` prints nothing. The four prose sites (`CLAUDE.md`, `CI.md`, `FIREFOX.md`, the skill) now say two Chrome-only files.
 - Flake-ledger rows 49 (#269, open until Phase 1.5) and 50 (#274, fixed) added; the skill's state-attributes rule and the e2e README's helper table name `openDropdown`.
 - Gate: lint 0; typecheck:all 0; ci-gating 480 pass; check:plans 0 findings; network, proverless, retry 0: Chrome 2/2; Firefox 2/2 in each of 3 runs (main test 115-119 s).
+
+## 1.5 (#269), 2026-10-11 (OA-1 = A, D-orch-2)
+
+- Both observers read `entries.at(-1).isIntersecting`. The page unit tests now keep the stubbed observer's callback and deliver `[true, false]` (bar shown) and `[false, true]` (bar hidden); all four fail on af4afcc's pages and pass at head.
+- Gate: `bun run audit:vue` 0 (736 files, 11136 passed; build ok). The phase-0 diagnostic on the armed Chrome build, three launches of 12 iterations: `failures=0` each, 0 of 36 stuck (4 of 12 at base); the logged callback tails still held twelve `[true, false]` two-entry deliveries, so the race occurred and the page now reads it right. Smoke `navigation.test.ts` at retry 0: Chrome 6/6, Firefox 6/6. The diagnostic and the screenshot specs were untracked and deleted after.
+- Screenshots of the bar shown after a Tab walk and a scroll, Settings and History, Chrome armed build: kept in the lane's scratch directory for the PR (the CLI cannot upload images to a PR body).

@@ -130,9 +130,10 @@ watch(activityRows, (rows) => arrivals?.present(rows.filter((row) => row.type ==
 /** Lifecycle hooks */
 onMounted(async () => {
 	if (heroRef.value) {
+		// One delivery batches every change since the last, oldest first: only the newest is current.
 		heroObserver = new IntersectionObserver(
-			([entry]) => {
-				heroVisible.value = entry.isIntersecting
+			(entries) => {
+				heroVisible.value = entries.at(-1).isIntersecting
 			},
 			{ threshold: 0 },
 		)
