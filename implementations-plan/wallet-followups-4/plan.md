@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-4
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved (orchestrator, at 6462113); arc 1 in implementation
 issues: "#299 (arc 1); #294, #290, #281, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -145,6 +145,12 @@ Each line: the decision, both legs' views, the outcome and why.
 - **D12. The red runs.** Opus (Medium): reverting a line after `getErrorData` is deleted makes a non-TypeScript SFC fail with a TypeError, not the assertion's diff. Codex: agree. **Outcome: every red run happens before the helper is deleted (Phase 2 step 2).**
 - **D13. Phase 3's unit commands.** Draft: `bun run test` and `bun run test:all`, claiming the first adds coverage. Codex: wrong; `test:all` includes `@nulo/extension`, so it already runs the extension's jsdom configuration, and CI's unit job runs `test:all` (`.github/workflows/_unit-tests.yml:25`). **Outcome: Phase 3 runs `test:all` only.**
 - **D14. The commit trailer.** Opus (Low): take it from the implementing session's reminder. **Outcome: kept as the orchestrator's common brief names it (`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`); the brief governs.**
+- **D-orch-1. No stack** (the orchestrator's standing call): one branch, one PR against `dev`; the close-out lands as that PR's final commits.
+- **D-orch-2. The widened scope stands** (orchestrator, approving the plan): 28 lines, `getErrorData` deleted and banned (D2, D3). The red run must list exactly the 21 offenders named here, and every one of the 28 lines is in the PR body's table with its before and after.
+- **D-orch-3. D10 and D11 as settled** (orchestrator): the two migration lines log a fixed category with `{ kind }` / `{ version }` and never the reason; `opfs-store.ts:216-220` stays out. Its residual is a disposition line in the Outcome unless it names actionable work, in which case it joins the D7 close-out issue.
+- **D-orch-4. The CLAUDE.md change is one sentence** (orchestrator) in § Logging policy, stating the rule the scanner enforces; no other CLAUDE.md edit, the routing table untouched.
+- **D-orch-5. D12 and the two-commit order are binding** (orchestrator): every red run before the helper's deletion; the sites in one commit and the scanner file in the next, so the scanner commit can be run alone against the sites commit.
+- **D-orch-6. Merge `origin/dev` before delivery** (orchestrator): e2e-followups-3 may land first and edits `index.md` and `lessons.md`; read what changed, never a union merge, and rerun Phase 3's gates on the merged head.
 
 ## Security & Adversarial Considerations
 
@@ -161,7 +167,9 @@ None. No screen, copy, row or format changes; the recovery screen keeps its reas
 
 ## Phases
 
-### Phase 1: the scanner refuses the two spellings
+### Phase 1: the scanner refuses the two spellings ✓
+
+Done: five red self-tests, then exactly the 21 expected offenders ([lessons/phase-1.md](lessons/phase-1.md)).
 
 Write the self-tests first and see them red, then change the scanner.
 
@@ -181,7 +189,9 @@ Write the self-tests first and see them red, then change the scanner.
 - Pass criteria: step 2 shows the five red cases and the four green controls; step 4 shows every self-test green and exactly the 21 expected offenders. Both outputs are in `lessons/phase-1.md`. Phase 1 is not committed on its own: its whole-tree test is red until Phase 2.
 - Layers: unit (the scanner).
 
-### Phase 2: the pins, the sites, the helper
+### Phase 2: the pins, the sites, the helper ✓
+
+Done: 22 pins red then green, 6 lines without reach listed, the gate green ([lessons/phase-2.md](lessons/phase-2.md)). Commits `fix(logging): log caught errors under a named key` and ``test(logging): refuse `getErrorData` and error message reads at log calls``.
 
 Warning: keep `getErrorData` in `errors.ts` until step 4. A line reverted after the deletion fails with a `TypeError`, not with the assertion's diff.
 
