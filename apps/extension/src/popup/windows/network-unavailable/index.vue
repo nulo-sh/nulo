@@ -12,9 +12,6 @@ import { onMounted, onUnmounted } from "vue"
 import DappStatusStrip from "@/components/composite/DappStatusStrip.vue"
 import DappIdentityBlock from "@/components/composite/DappIdentityBlock.vue"
 
-/** Utils */
-import { getErrorData } from "@nulo/wallet-core/utils"
-
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
 import { type NetworkUnavailablePayload, DappInteractionServiceClient } from "@/wallet/services/dapp-interaction/client"
@@ -79,7 +76,7 @@ const init = async () => {
 		profile.value = await profileService.getActiveProfile()
 		await loadInteractionPayload()
 	} catch (error) {
-		console.error(getErrorData(error))
+		console.error("Network-unavailable window init failed", { error })
 	}
 }
 

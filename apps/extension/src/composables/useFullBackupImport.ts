@@ -455,7 +455,7 @@ async function completeAfterRestore(opts: UseFullBackupImportOptions, profile: u
 	try {
 		await opts.completeImport(profile)
 	} catch (err) {
-		console.error("completeImport failed after a successful restore:", (err as Error)?.message || err)
+		console.error("completeImport failed after a successful restore:", { error: err })
 	}
 }
 
@@ -506,7 +506,7 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 		// A closed chooser keeps the chosen backup, its name and its Retry.
 		if (err instanceof FilePickCanceledError) return
 		opts.fillError("full_backup", "Failed to read the backup file")
-		console.error("Failed to read backup file:", (err as Error)?.message || err)
+		console.error("Failed to read backup file:", { error: err })
 	}
 }
 

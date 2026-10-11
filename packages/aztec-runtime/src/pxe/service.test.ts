@@ -345,14 +345,17 @@ describe("PxeService op-failure log classification", () => {
 	})
 
 	test("any OTHER op failure still logs at ERROR (the downgrade is marker-scoped)", async () => {
+		const exploded = new Error("store exploded")
 		const factory: PxeFactory = {
 			createChainRuntime: async () => {
-				throw new Error("store exploded")
+				throw exploded
 			},
 		}
 		const { service, calls } = makeSpyLoggerService(factory)
 		await expect(service.getContractInstance(network, address)).rejects.toThrow("store exploded")
 		expect(errorCalls(calls).length).toBeGreaterThan(0)
+		const opFailure = errorCalls(calls).filter((c) => / failed after \d+ms$/.test(String(c[2])))
+		expect(opFailure.map((c) => c.slice(3))).toEqual([[{ error: exploded }]])
 	})
 })
 

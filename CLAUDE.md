@@ -176,7 +176,10 @@ to log something sensitive.
   arrays/`Map`/`Set`, and projects errors. It redacts **by key name**, so `{ password }` is safe
   and `{ value: password }` is not — the walker reads a benign key and passes the string through.
   **A finished string is opaque to it** — `` `k=${x}` ``
-  can never be redacted — and neither can `"k=" + x` or a bare `x` string argument. This is
+  can never be redacted — and neither can `"k=" + x` or a bare `x` string argument. A caught
+  error is passed the same way, under a named key (`{ error }`, which `trim` projects to a capped
+  `{ name, message }` with no stack), never flattened first by a helper or a `.message` /
+  `.stack` read. This is
   enforced by `apps/extension/src/utils/log-payload-ban.test.ts`, which scans the extension app
   plus every `packages/*/src` (enumerated at runtime, so a new package is covered the day it
   exists — the transport layer logs the most dangerous payloads there is), and fails CI listing

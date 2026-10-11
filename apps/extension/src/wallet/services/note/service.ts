@@ -129,7 +129,7 @@ export class NoteService extends Service<Methods> implements ServiceSpec<Methods
 				})
 			} catch (error) {
 				const message = getErrorMessage(error)
-				this.logError("Failed to parse note", message)
+				this.logError("Failed to parse note", { error })
 				res.push({
 					contract: safeString(() => note.contractAddress),
 					storageSlot: safeString(() => note.storageSlot),

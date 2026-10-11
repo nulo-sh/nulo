@@ -14,8 +14,6 @@ export function errorMessageFromUnknown(raw: unknown): string {
 	return String(raw)
 }
 
-export const getErrorData = (error: unknown) => (error as Error)?.stack ?? getErrorMessage(error)
-
 /**
  * Lenient RPC-wire / popup variant — DELIBERATELY NOT routed through
  * {@link errorMessageFromUnknown}. Its raw semantics are OBSERVABLE at
