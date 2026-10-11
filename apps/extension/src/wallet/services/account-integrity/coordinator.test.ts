@@ -14,6 +14,7 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountService, AccountType, type Account } from "@/wallet/services/account/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { AccountIntegrityCoordinator, type DeriveAddress } from "./coordinator"
@@ -41,6 +42,8 @@ async function build(opts: {
 	activeProfileId?: string
 	/** Simulates a delete that completed during the off-lock verify: the guarded writer skips it. */
 	deletedProfileId?: string
+	/** The guarded block writer rejects with this. */
+	persistError?: Error
 	api?: FakeBrowserApi
 }) {
 	const api = opts.api ?? new FakeBrowserApi()
@@ -58,6 +61,7 @@ async function build(opts: {
 			// writer. `opts.deletedProfileId` simulates a delete that completed during verify — the
 			// write is then SKIPPED (no orphan block for a gone profile).
 			persistIntegrityBlockIfLive: async (record: Parameters<typeof repo.set>[0]) => {
+				if (opts.persistError) throw opts.persistError
 				if (record.profileId === opts.deletedProfileId) return
 				await repo.set(record)
 			},
@@ -66,12 +70,13 @@ async function build(opts: {
 		}),
 	)
 	services.add(svc(AccountService.name, { getAccountsRaw: async () => opts.rows }))
-	const coordinator = new AccountIntegrityCoordinator(new LoggerStore(new ConfigStore()), api, opts.derive)
+	const logger = new LoggerStore(new ConfigStore())
+	const coordinator = new AccountIntegrityCoordinator(logger, api, opts.derive)
 	services.add(coordinator)
 	await services.start()
 	await coordinator.bootVerification
 	const stamps = new AccountIntegrityVerifiedStampRepository(api.storage.local)
-	return { coordinator, repo, stamps, locks, api }
+	return { coordinator, repo, stamps, locks, api, logger }
 }
 
 describe("AccountIntegrityCoordinator", () => {
@@ -158,6 +163,32 @@ describe("AccountIntegrityCoordinator", () => {
 		})
 		expect(await repo.isBlocked("p1")).toBe(false)
 		// The close is still attempted (harmless no-op for a gone profile).
+		expect(locks).toEqual(["p1"])
+	})
+
+	test("boot verify: a derivation that throws is logged as the error's projection, not its string", async () => {
+		const { logger, locks } = await build({
+			rows: [row()],
+			derive: async () => {
+				throw new Error("bb wasm unavailable")
+			},
+			activeProfileId: "p1",
+		})
+		expect(loggedAfter(logger, "boot integrity verification failed")).toEqual([
+			{ error: { name: "Error", message: "bb wasm unavailable" } },
+		])
+		expect(locks).toEqual([])
+	})
+
+	test("boot verify: a block persist that throws is logged as the error's projection, and the session still closes", async () => {
+		const { repo, locks, logger } = await build({
+			rows: [row({ address: "0xDRIFTED" })],
+			derive: async () => "0xreal",
+			activeProfileId: "p1",
+			persistError: new Error("storage full"),
+		})
+		expect(loggedAfter(logger, "integrity block persist failed")).toEqual([{ error: { name: "Error", message: "storage full" } }])
+		expect(await repo.isBlocked("p1")).toBe(false)
 		expect(locks).toEqual(["p1"])
 	})
 

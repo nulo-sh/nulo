@@ -30,6 +30,7 @@ import {
 	isLiveFeeScope,
 	liveFeeScope,
 	resolveSavedSelection,
+	savedSelectionOf,
 	settingsForMethod,
 } from "./fee-helpers"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
@@ -361,7 +362,7 @@ watch(
  */
 const persistSelection = async (method) => {
 	const fpms = await readSavedFeeMethods()
-	fpms[props.account.address] = method
+	fpms[props.account.address] = savedSelectionOf(method)
 	await storageLocalSet({ [FEE_METHOD_LS_KEY]: fpms })
 
 	if (method.type === "fpc" || method.type === "private_fpc") {
@@ -398,7 +399,7 @@ const handleMethodPicked = (m) => {
 	pickSeq++
 	chosenUnasked = false
 	useEmbeddedFee.value = false
-	void persistSelection(m)
+	persistSelection(m).catch((error) => console.error("Failed to save the fee method", { error }))
 }
 
 const handleUseOwnMethod = () => {

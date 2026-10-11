@@ -142,7 +142,8 @@ const baseProps = (over: Record<string, unknown> = {}) => ({
 let storageBacking: Record<string, unknown>
 
 /** Stub `chrome.storage.local`. The global setup at tests/vitest.setup.ts:88
- *  only stubs `chrome.runtime`; storage requires per-suite shimming. */
+ *  only stubs `chrome.runtime`; storage requires per-suite shimming. Values cross it as clones, as
+ *  in a browser: a write refuses what Firefox refuses, and no caller holds the backing's objects. */
 function stubChromeStorage() {
 	const local = {
 		QUOTA_BYTES: 10485760,
@@ -156,10 +157,10 @@ function stubChromeStorage() {
 			} else if (Array.isArray(keys)) {
 				for (const k of keys) if (k in storageBacking) result[k] = storageBacking[k]
 			}
-			return result
+			return structuredClone(result)
 		},
 		set: async (items: Record<string, unknown>) => {
-			for (const [k, v] of Object.entries(items)) storageBacking[k] = v
+			for (const [k, v] of Object.entries(structuredClone(items))) storageBacking[k] = v
 		},
 		remove: async (keys: string | string[]) => {
 			const list = Array.isArray(keys) ? keys : [keys]
@@ -565,6 +566,125 @@ describe("FeeSettingsCard — user actions", () => {
 			paymentMethod: { kind: "fpc", fpcId: "s1" },
 			priorityLevel: "fast",
 		})
+	})
+})
+
+describe("FeeSettingsCard — the saved pick, outside Send", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true }
+	const HAND_ADDED = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false }
+	const HELD = { publicFeeJuice: "1000000000000000000", privateFeeJuice: null }
+	const pickSponsor = (w: ReturnType<typeof mount>, id: string) =>
+		w.find(`[data-testid="pick-fpc"][data-fpc-id="${id}"]`).trigger("click")
+	const savedFor = (address: string) => (storageBacking[FEE_METHOD_LS_KEY] as Record<string, unknown> | undefined)?.[address]
+	const selector = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-method-selector"]')
+	const lastPayer = (w: ReturnType<typeof mount>) => w.emitted<unknown[]>("update:payer")?.at(-1)?.[0]
+
+	test("a hand-added sponsor's pick is saved as plain data and is what the next card opens on", async () => {
+		const { useCacheStore } = await import("@/stores/cache.store")
+		mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
+		mocks.getGasBalances.mockResolvedValue(HELD)
+		const first = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await pickSponsor(first, "s2")
+		await flushPromises()
+
+		expect(savedFor(account.address)).toEqual({
+			type: "fpc",
+			title: "Dev sponsor",
+			subtitle: "sponsored",
+			fpc: { id: "s2", isProtocol: false },
+		})
+		expect((useCacheStore().feePaymentMethods as Array<{ fpc?: { id?: string } }>).map((m) => m.fpc?.id)).toEqual(["s2"])
+		first.unmount()
+
+		// A fresh store has no FPC list to answer early, so only the saved record can name the sponsor.
+		config.global.plugins = [createPinia()]
+		const fpcs = deferred<unknown>()
+		mocks.getFpcs.mockReturnValueOnce(fpcs.promise)
+		const next = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(selector(next).attributes("data-active-title")).toBe("Dev sponsor")
+
+		fpcs.resolve([NULO, HAND_ADDED])
+		await flushPromises()
+		expect(selector(next).attributes("data-active-type")).toBe("fpc")
+		expect(lastEmittedSettings(next)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		next.unmount()
+	})
+
+	test.each([
+		{ fpc: NULO, payer: "sponsor" },
+		{ fpc: HAND_ADDED, payer: "unvouched" },
+	])(
+		"a same-identity re-run pays through the saved $fpc.name as the pick did, before and after its reads land",
+		async ({ fpc, payer }) => {
+			mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
+			mocks.getGasBalances.mockResolvedValue(HELD)
+			const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+			await flushPromises()
+			await pickSponsor(w, fpc.id)
+			await flushPromises()
+
+			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+			const savedReads = vi.spyOn((globalThis as any).chrome.storage.local, "get")
+			const before = {
+				gas: mocks.getGasBalances.mock.calls.length,
+				fpcs: mocks.getFpcs.mock.calls.length,
+				payers: w.emitted("update:payer")?.length ?? 0,
+			}
+			const gas = deferred<unknown>()
+			const fpcs = deferred<unknown>()
+			mocks.getGasBalances.mockReturnValueOnce(gas.promise)
+			mocks.getFpcs.mockReturnValueOnce(fpcs.promise)
+			await w.setProps({ profile: { ...profile } })
+			await flushPromises()
+			expect(savedReads.mock.calls.filter(([keys]) => keys === FEE_METHOD_LS_KEY)).toHaveLength(1)
+			expect(mocks.getGasBalances.mock.calls.length).toBe(before.gas + 1)
+			expect(mocks.getFpcs.mock.calls.length).toBe(before.fpcs + 1)
+			expect(w.emitted("update:payer")?.length ?? 0).toBeGreaterThan(before.payers)
+
+			const paysThroughSponsor = () => {
+				expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: fpc.id } })
+				expect(lastPayer(w)).toEqual({ type: "fpc", fpcId: fpc.id, isProtocol: fpc.isProtocol })
+				expect(w.find('[data-testid="fee-cost-readout"]').attributes("data-payer")).toBe(payer)
+			}
+			paysThroughSponsor()
+
+			gas.resolve(HELD)
+			fpcs.resolve([NULO, HAND_ADDED])
+			await flushPromises()
+			paysThroughSponsor()
+			w.unmount()
+		},
+	)
+
+	test("a failed save is logged once under a named key and leaves the pick, the saved map and the cache as they were", async () => {
+		const { useCacheStore } = await import("@/stores/cache.store")
+		const otherAccount = { "0xother": { type: "fj", title: "Public Fee Juice", subtitle: "public" } }
+		storageBacking[FEE_METHOD_LS_KEY] = structuredClone(otherAccount)
+		mocks.getFpcs.mockResolvedValue([NULO, HAND_ADDED])
+		mocks.getGasBalances.mockResolvedValue(HELD)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+
+		const refusal = new Error("QUOTA_BYTES quota exceeded")
+		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
+		vi.spyOn((globalThis as any).chrome.storage.local, "set").mockRejectedValueOnce(refusal)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await pickSponsor(w, "s2")
+			await flushPromises()
+			expect(logged.mock.calls.filter(([message]) => message === "Failed to save the fee method")).toEqual([
+				["Failed to save the fee method", { error: refusal }],
+			])
+		} finally {
+			logged.mockRestore()
+		}
+		expect(storageBacking[FEE_METHOD_LS_KEY]).toEqual(otherAccount)
+		expect(useCacheStore().feePaymentMethods).toEqual([])
+		expect(selector(w).attributes("data-active-title")).toBe("Dev sponsor")
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		w.unmount()
 	})
 })
 
