@@ -476,7 +476,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.claimOrCreateJournal(networkId, accountAddress, origin, calls, hooks, reuseController, fence),
 				beginJournal: (networkId, accountAddress, origin, calls, fence) =>
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
-				markJournal: (journalId, progress, error) => this.lane.markJournal(journalId, progress, error),
+				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
 			},
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>

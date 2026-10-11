@@ -1,7 +1,8 @@
 /**
  * The Terms wall against a real node. With the accepted version behind the current one, a dApp's
  * read and a dApp's send are both refused with the typed code before any window opens, and no
- * transaction row is written; accepting through the real sheet lets the same two calls through.
+ * transaction row is written; the refused send's journal row says the Terms were not accepted.
+ * Accepting through the real sheet lets the same two calls through.
  *
  * The wallet's own send is proved refused at its surface (banner, disabled submit) because the UI
  * cannot submit while blocked; the broadcast line itself is pinned by the execution-coordinator and
@@ -14,6 +15,8 @@ import { LEGAL_MANIFEST } from "@nulo/legal"
 import { reloadExtensionPage } from "../fixtures/browser"
 import { clickByTestId, openPopup, seedLegalAcceptance, test, waitForHash } from "../fixtures/extension"
 import { navigateByHash } from "../fixtures/helpers"
+import { waitForSendRecord } from "../fixtures/journal"
+import { readErrorKind, readJournalDetail, readTerminalCard } from "../fixtures/journal-page"
 import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { mintPublicTokensForAccount, type AztecTestConfig } from "../fixtures/aztec"
@@ -63,6 +66,25 @@ test.skipIf(!hasConfig)(
 			expect(JSON.stringify(refused.errorJson)).toContain(TERMS_CODE)
 		}
 		expect(await txRows()).toBe(rowsBefore)
+
+		// The refused send's row names the cause and is titled by no claimed name.
+		const refusedRow = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed")
+		expect({
+			kind: await readErrorKind(wallet, refusedRow.id),
+			detail: await readJournalDetail(wallet, refusedRow.id),
+			card: await readTerminalCard(wallet, "#/popup/activity"),
+		}).toEqual({
+			kind: "terms_refused",
+			detail: {
+				"journal-detail-category": "Terms not accepted",
+				"journal-detail-context": "Accept Nulo's Terms to let apps send. Nothing was sent.",
+				"journal-detail-state": "Failed",
+				"journal-detail-method": "Transaction",
+				"journal-detail-error-message": null,
+			},
+			card: { title: "Transaction", subtitle: "Terms not accepted" },
+		})
+		await navigateByHash(wallet, "#/popup/general", 15_000)
 
 		// ── The wallet's own Send says why, and cannot submit. ─────────────
 		await reloadExtensionPage(wallet)

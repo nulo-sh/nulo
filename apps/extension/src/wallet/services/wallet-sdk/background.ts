@@ -1240,7 +1240,13 @@ export async function handleWalletMessage(
 			// pre-created queued record here too, or it sits at "Queued..."
 			// until the reaper's stuck sweep.
 			if (hooks?.queuedJournalId) {
-				await failQueuedIfUnclaimed(operationJournal, hooks.queuedJournalId, "Session no longer valid — reconnect", logger)
+				await failQueuedIfUnclaimed(
+					operationJournal,
+					hooks.queuedJournalId,
+					"Session no longer valid — reconnect",
+					logger,
+					"wallet_refused",
+				)
 			}
 			return
 		}

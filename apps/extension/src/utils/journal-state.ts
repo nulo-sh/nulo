@@ -253,6 +253,16 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
+		case "terms_refused":
+			return { label: "Terms not accepted", context: "Accept Nulo's Terms to let apps send. Nothing was sent." }
+		case "wallet_refused":
+			return {
+				label: "Refused before sending",
+				context: "The wallet refused this request before anything was signed. Nothing was sent.",
+			}
+		case "session_ended":
+			// Never "Nothing was sent": a lock that lands during execution files this kind too.
+			return { label: "Stopped when the wallet locked", context: "The wallet locked while this was in progress." }
 		case "simulation":
 		case "prover":
 		case "stuck_proving":
@@ -301,6 +311,10 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
+		case "terms_refused":
+			return "Terms not accepted"
+		case "wallet_refused":
+			return "Refused before sending"
 		// popup_bound, transfer, dapp_execute, unknown, and any other / future
 		// kind all fall through to the generic copy. The kind is still preserved
 		// in the journal record's error.kind field for debugging / future

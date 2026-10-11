@@ -1123,6 +1123,37 @@ describe("ExecutionService composition — a refused operation logs at the level
 	})
 })
 
+describe("ExecutionService composition — a refused dApp call is titled by what it really runs", () => {
+	test("a call-binding refusal after the claim persists the resolved function as the record's title", async () => {
+		const h = await makeHarness()
+		const fence = await h.captureExecutionFence()
+		const queued = await h.journal.createOperation({
+			kind: "dapp_execute",
+			origin: "dapp",
+			profileId: "p1",
+			sessionId: "sess-1",
+			title: "balance_of_public",
+			initialStage: { stage: "queued" },
+		})
+		const planner = (h.service as unknown as { planner: OperationPlanner }).planner
+		vi.spyOn(planner, "processAztecJsPayload").mockImplementationOnce(async () => {
+			assertSelectorBinding({ name: "transfer_public_to_public" } as never, { name: "balance_of_public" }, CALL_BINDING)
+			throw new Error("expected a refusal")
+		})
+		const send = { ...(dappSend() as object), opts: { from: ACCOUNT } } as never
+
+		const [result] = await h.service.executeOperations([send], DAPP_ORIGIN, undefined, { queuedJournalId: queued.id }, undefined, fence)
+
+		const record = await h.journal.getOperation(queued.id)
+		expect({ status: result.status, stage: record?.progress.stage, kind: record?.error?.kind, title: record?.title }).toEqual({
+			status: "failed",
+			stage: "failed",
+			kind: "scope_refused",
+			title: "transfer_public_to_public",
+		})
+	}, 15_000)
+})
+
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {
 	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
 		const h = await makeHarness()

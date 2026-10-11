@@ -51,7 +51,7 @@
 // Imports use relative paths because this file IS part of wallet-bridge — the
 // package-name import (`@nulo/wallet-bridge`) would resolve at runtime but
 // wires an unnecessary self-reference through the barrel.
-import { isNoFromRequest, requestedSenderOf, resolveAuthorizedSessionAccount } from "./account-resolution"
+import { isNoFromRequest, NoUsableAccountError, requestedSenderOf, resolveAuthorizedSessionAccount } from "./account-resolution"
 import { formatCaipAccount, formatCaipChain, parseCaipAccount } from "./caip"
 import type { AccountsCapability, GrantedCapabilityRecord } from "./capabilities"
 import { getRequiredCapability, isCapabilityExempt } from "./capability-map"
@@ -1144,7 +1144,7 @@ export class WalletSdkDispatcher {
 		const network = await this.resolveNetwork(ctx)
 		const allAccounts = await this.accountService.getAccounts(ctx.profileId, network.chainId)
 		if (allAccounts.length === 0) {
-			throw new Error(`No accounts found for profile ${ctx.profileId} on chainId ${ctx.chainId}`)
+			throw new NoUsableAccountError(`No accounts found for profile ${ctx.profileId} on chainId ${ctx.chainId}`)
 		}
 
 		if (dappSession?.accounts && dappSession.accounts.length > 0) {
@@ -1158,10 +1158,10 @@ export class WalletSdkDispatcher {
 			if (resolved.reason === "not-authorized") {
 				throw scopeViolation("Scope violation: requested account not authorized for this dApp session")
 			}
-			throw new Error("No authorized accounts found for this dApp session")
+			throw new NoUsableAccountError("No authorized accounts found for this dApp session")
 		}
 
 		// No session or no accounts on session — require account authorization
-		throw new Error("No accounts authorized. The dApp must call requestCapabilities() with accounts type first.")
+		throw new NoUsableAccountError("No accounts authorized. The dApp must call requestCapabilities() with accounts type first.")
 	}
 }

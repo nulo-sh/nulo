@@ -543,12 +543,14 @@ describe("DappInteractionService when the Terms acceptance lapses after the requ
 		)
 
 		expect(transitionOperation).toHaveBeenCalledWith("journal-1", { stage: "pending" })
-		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle.
+		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle. Filed as
+		// the Terms refusal it is and titled "Transaction": nothing resolved the call's selector.
 		expect(transitionIfStage).toHaveBeenCalledWith(
 			"journal-1",
 			["pending"],
 			{ stage: "failed" },
-			expect.objectContaining({ message: TermsAcceptanceRequiredError.MESSAGE }),
+			{ kind: "terms_refused", message: TermsAcceptanceRequiredError.MESSAGE, normalizedRaw: null },
+			{ failedTitle: "Transaction" },
 		)
 	})
 

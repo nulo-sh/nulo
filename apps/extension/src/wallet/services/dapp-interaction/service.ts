@@ -614,7 +614,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	/**
 	 * A Terms refusal at execution's entry throws before anything claims the record this path just
 	 * advanced to `pending`, and the ingress safety net only closes `queued` ones. Stage-guarded, so a
-	 * record execution did claim (refused later, at the broadcast line) is left to its owner.
+	 * record execution did claim (refused later, at the broadcast line) is left to its owner. Retitled
+	 * "Transaction" like every refusal no selector resolution reached.
 	 */
 	private async settleUnclaimedAfterTermsRefusal(error: unknown, journalId: string | undefined): Promise<void> {
 		if (!journalId || !(error instanceof TermsAcceptanceRequiredError)) return
@@ -623,7 +624,8 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 				journalId,
 				["pending"],
 				{ stage: "failed" },
-				{ kind: "popup_bound", message: error.message, normalizedRaw: null },
+				{ kind: "terms_refused", message: error.message, normalizedRaw: null },
+				{ failedTitle: "Transaction" },
 			)
 			.catch((err) => this.logDebug("could not settle a pending record after a terms refusal", err))
 	}

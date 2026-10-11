@@ -77,3 +77,15 @@ export function resolveAuthorizedSessionAccount<T extends ResolvableAccount>({
 	const fallback = walletAccounts.find((account) => sessionAddresses.has(account.address))
 	return fallback ? { ok: true, account: fallback } : { ok: false, reason: "no-session-account" }
 }
+
+/**
+ * A request found no account it may act as: the wallet has none on the session's chain, or none
+ * the session authorizes. In-process only, never a `WalletError`: a dApp still receives the
+ * unclassified constant, and only the wallet's own journal reads the class.
+ */
+export class NoUsableAccountError extends Error {
+	public constructor(message: string) {
+		super(message)
+		this.name = "NoUsableAccountError"
+	}
+}
