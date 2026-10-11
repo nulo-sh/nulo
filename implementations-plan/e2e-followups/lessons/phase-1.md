@@ -21,3 +21,9 @@
 - The smoke test's barrier: a main-realm wrap of `Document.prototype.querySelector` and `querySelectorAll` records the first query naming `tokens-menu-trigger` and only then schedules the hash change to Home. Chrome and Firefox both observed `firstFoundNothing: true` and resolved after the navigation.
 - Red on base: `openDropdown`'s body replaced by the old bare click plus the 2 s item wait failed with `TimeoutError: Waiting failed: 2000ms exceeded` on Chrome. Restored.
 - Gate: smoke `navigation.test.ts` + `appearance.test.ts` at retry 0: Chrome 8 passed, 1 skipped; Firefox 8 passed, 1 skipped (the #269 title-bar case passed on both). Network, proverless, retry 0, `tokens`, `import-handshake-note-matrix`, `in-flight-send-guard`: Chrome 4/4, Firefox 4/4.
+
+## 1.4 (#272), 2026-10-11
+
+- `backup-import-stalled-network.test.ts` unwrapped (whitespace-only beyond the wrapper and two imports), `hangingRequest` removed from `CHROME_ONLY`; `git grep -n hangingRequest -- ':!implementations-plan'` prints nothing. The four prose sites (`CLAUDE.md`, `CI.md`, `FIREFOX.md`, the skill) now say two Chrome-only files.
+- Flake-ledger rows 49 (#269, open until Phase 1.5) and 50 (#274, fixed) added; the skill's state-attributes rule and the e2e README's helper table name `openDropdown`.
+- Gate: lint 0; typecheck:all 0; ci-gating 480 pass; check:plans 0 findings; network, proverless, retry 0: Chrome 2/2; Firefox 2/2 in each of 3 runs (main test 115-119 s).
