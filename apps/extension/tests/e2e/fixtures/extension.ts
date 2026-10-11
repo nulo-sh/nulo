@@ -1238,13 +1238,12 @@ async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 /** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
 async function closeConfirmed(page: Page): Promise<void> {
 	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
-	await page.close()
 	let timer: ReturnType<typeof setTimeout> | undefined
 	const refused = new Promise<never>((_, reject) => {
 		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
 	})
 	try {
-		await Promise.race([closed, refused])
+		await Promise.race([page.close().then(() => closed), refused])
 	} finally {
 		clearTimeout(timer)
 	}
