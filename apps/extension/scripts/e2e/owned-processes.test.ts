@@ -9,8 +9,19 @@ import { afterAll, describe, expect, test, vi } from "vitest"
 const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-owned-processes-test-"))
 process.env.NULO_E2E_DATA_ROOT = ROOT
 
-const { LAUNCH_ENV, OWNER_ENV, RUN_ENV, RUN_OWNER_ENV, WORKTREE_ENV, newMarker, ownIdentity, ownedProcesses, readEnviron, readStartTime } =
-	await import("../../tests/e2e/owned-processes")
+const {
+	LAUNCH_ENV,
+	OWNER_ENV,
+	RUN_ENV,
+	RUN_OWNER_ENV,
+	WORKTREE_ENV,
+	identityIsDead,
+	newMarker,
+	ownIdentity,
+	ownedProcesses,
+	readEnviron,
+	readStartTime,
+} = await import("../../tests/e2e/owned-processes")
 const {
 	chromePattern,
 	chromesUnclaimed,
@@ -404,6 +415,23 @@ describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000
 		try {
 			expect(await until(() => readFileSync(`/proc/${zombie}/stat`, "utf8").includes(") Z "))).toBe(true)
 			expect(readEnviron(zombie)).toBe("gone")
+		} finally {
+			parent.kill("SIGKILL")
+		}
+	})
+
+	// The parent never waits, so the child stays a zombie until the test kills the parent.
+	test("a zombie owner is dead to the identity check and to the reap", async () => {
+		const parent = spawn("sh", ["-c", "sleep 120 & echo $!; exec sleep 120"], { stdio: ["ignore", "pipe", "ignore"] })
+		const pid = Number(await new Promise<string>((resolve) => parent.stdout?.once("data", (d: Buffer) => resolve(d.toString()))))
+		try {
+			const identity = `${pid}:${readStartTime(pid)}`
+			expect(identityIsDead(identity)).toBe(false)
+			process.kill(pid, "SIGKILL")
+			expect(await until(() => readFileSync(`/proc/${pid}/stat`, "utf8").includes(") Z "))).toBe(true)
+			expect(readStartTime(pid)).toBeUndefined()
+			expect(identityIsDead(identity)).toBe(true)
+			expect(await reapPriorRun(lock({ markers: { anvil: marker() }, owner: identity }), fast)).toEqual({ cleared: true })
 		} finally {
 			parent.kill("SIGKILL")
 		}
