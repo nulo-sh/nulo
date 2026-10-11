@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups
 tier: mid
-status: implementing arc 1 (plan v5 approved by the orchestrator with OA-1 = A)
+status: completed (delivered in #292)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,7 +14,17 @@ trunk: dev
 issues: [249, 269, 272, 274, 275]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults and probes: [lessons/phase-0.md](lessons/phase-0.md).
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#292](https://github.com/nulo-sh/nulo/pull/292) (arc 1, phases 1.1-1.6), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:** #249 (the proverless guard asks `vitest list --filesOnly --json` which files a run selects, refuses an unarmed watch run by vitest's `parseCLI`, and refuses on any tool error or an empty listing file), #275 (`pageErrorOf`, one normaliser for the three `pageerror` handlers), #274 (`openDropdown`, used by `importToken`, `refreshBalances` and `setTheme`), #272 (the stalled-network import spec runs on Firefox; `CHROME_ONLY.hangingRequest` gone), #269 (Settings and History read the newest observer entry; OA-1 = A, D-orch-2).
+- **Orchestrator records:** D-orch-2 (OA-1 = A, Phase 1.5 joins arc 1), D-orch-3 (`CODEX_ACCOUNT=best` kept; each consult names its account).
+- **Dropped, rejected, superseded:** the Firefox `pageerror` capture was left out of #275 (D15): Firefox's BiDi sends no log events for extension pages, a separate capability tracked as #281. The plan's inline `node -e` watch read was superseded by `watch-mode.ts` (D14). The Opus audit's `--no-json` pass-through was closed in this PR. No lesson promoted to `implementations-plan/lessons.md`: it sits 28 bytes under its 8 KiB budget and this arc supersedes none of its entries; the two candidates live at the code that needs them (`watch-mode.ts`'s comment on Bun's `node` shim, the observer comment in both pages) and in the e2e skill's ledger rows 49 and 50.
+- **Open items:** #281 (Firefox extension pages emit no `pageerror` or `console` events, so those assertions are vacuous there).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults and probes: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Tier and budget
 
