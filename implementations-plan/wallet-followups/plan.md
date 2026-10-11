@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups
 tier: mid
-status: approved (orchestrator, 2026-10-11); arc 1 in progress
+status: completed (delivered in #287)
 issues: "#256, #257, #258, #259, #268 (arc 1); #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -12,6 +12,16 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 1 explorer (sonnet) plus the planner's own seed replay; dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); final fresh Codex pass
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#287](https://github.com/nulo-sh/nulo/pull/287) (arc 1, phases 1-5), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:** #257 (New account counts a name of only spaces as empty), #256 (Edit account: New account's duplicate check against every other account, the existing "Already exist" warning, a blank name counts as empty, a trimmed save), #258 (the logs window drops from its document exactly the entries its list drops, in one change set with the append), #259 (the balances fuzz oracle owes a recovery past the gas `retryVersion` at the owe; the store is unchanged; the shrunk tape is pinned), #268 (`useConfigRead`: Display, Privacy and Developer reread after a worker restart, and the hub and Lock moved onto it; the restart e2e case is a four-row table).
+- **Orchestrator records:** D-orch-2 (OA-2 A, the trim ships), D-orch-3 (OA-3 A, a blank Edit name counts as empty), D-orch-4 (OA-1 B, the #256 record as worded). OA-1 open on page 11; B shipped.
+- **Dropped, rejected, superseded:** #262 and #277 had no arc (each waits on a rewrite of its deletion path: #271 and decision page 7's P7-09); they stay open, untouched here. The store change for #259 was rejected (D1: the store recovered; the oracle misread it). A debug log line in `useConfigRead`'s failed read was rejected (§ Security: no new log lines). The fuzz-oracle lesson was not promoted to `lessons.md` (at its 8 KiB budget; the rule lives in C1's own doc comment); the dropped-port lesson now names `useConfigRead`.
+- **Open items:** the `LOG_SOURCES` gap (#288); the Clear-logs listener not re-added on a failed clear (#289); import accepting a duplicate account name (#290, `owner-decision`); the fee card's retrying notice after a debt-free tx-settle failure when the two fee cards share a key (#291). OA-1 is not an issue: the orchestrator carries it on decision page 11.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # Wallet follow-ups: account name checks, the logs window trim, settings reads after a restart, the balances fuzz oracle
 
