@@ -229,7 +229,7 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 - Pass criteria: on the base file the result is 7,926 bytes (a lane that landed entries first adds their bytes); the link `diff` prints nothing; the stat shows 10 lines changed; `check:plans` exits 0.
 - Layers: plans gate.
 
-### Phase 1: #283, Send keeps a selection after a delete ✗
+### Phase 1: #283, Send keeps a selection after a delete ✓
 
 1. Change `onTokenDeleted` in `apps/extension/src/popup/pages/send.vue` as in § Architecture.
 2. In `send.test.ts`, replace `(BUG PIN) deleting the active token selects no token, not the next one` with `deleting the active token selects the first remaining token`: mount on `[TOKEN, OTHER]`, delete `TOKEN`, expect `listed` `["OTH"]`, `cacheStore.activeTokenIdx` `OTHER.id`, the card on `OTH`, no toast, no `routerBack`/`routerReplace`.

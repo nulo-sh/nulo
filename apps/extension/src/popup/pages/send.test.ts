@@ -1113,18 +1113,46 @@ describe("send page — the token card while the tokens load", () => {
 		w.unmount()
 	})
 
-	test("(BUG PIN) deleting the active token selects no token, not the next one", async () => {
-		// The delete drops the row before it reads the active token, which then no longer resolves, so
-		// the move to the first token never runs.
+	const navigations = () => mocks.routerBack.mock.calls.length + mocks.routerReplace.mock.calls.length
+
+	test("deleting the active token selects the first remaining token", async () => {
 		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
 		const { w, cacheStore } = await mountSend()
 		expect(card(w).symbol).toBe("TST")
 		tokenDeleted().invoke(TOKEN)
 		await flushPromises()
 		expect(listed(w)).toEqual(["OTH"])
-		expect(cacheStore.activeTokenIdx).toBe(TOKEN.id)
-		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
+		expect(cacheStore.activeTokenIdx).toBe(OTHER.id)
+		expect(card(w)).toEqual({ loading: "false", symbol: "OTH" })
 		expect(mocks.openToast).not.toHaveBeenCalled()
+		expect(navigations()).toBe(0)
+		w.unmount()
+	})
+
+	test("deleting the last token toasts once and leaves Send", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN])
+		const { w } = await mountSend()
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(TOKEN)
+		await flushPromises()
+		expect(listed(w)).toEqual([])
+		expect(mocks.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "success", label: "The last token has just been deleted" })
+		expect(navigations()).toBe(1)
+		w.unmount()
+	})
+
+	test("deleting another token keeps the selection", async () => {
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore } = await mountSend()
+		const selected = cacheStore.activeTokenIdx
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(OTHER)
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST"])
+		expect(cacheStore.activeTokenIdx).toBe(selected)
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+		expect(mocks.openToast).not.toHaveBeenCalled()
+		expect(navigations()).toBe(0)
 		w.unmount()
 	})
 
