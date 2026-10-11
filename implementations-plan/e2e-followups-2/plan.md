@@ -223,7 +223,7 @@ None. Every change is under `apps/extension/tests/e2e/**`, `apps/extension/scrip
 
 Validation gate: Fast; Unit (file) `scripts/e2e/owned-processes.test.ts scripts/e2e/webdriver-ownership.test.ts scripts/e2e/reconcile-lock.test.ts`, three runs; `bun run test:all` once; `bun run test:ci-gating`. Pass: all exit 0; the new case red before step 3 and green after; the #284 case green in all three runs. Layers: lint, typecheck, unit.
 
-### Phase 2: a reverted transaction fails the mined wait (#280)
+### Phase 2: a reverted transaction fails the mined wait (#280) ✓
 
 1. Merge `origin/dev` into the branch. Read what changed under `tests/e2e/network/` and `fixtures/`.
 2. Write `tests/e2e/network/wait-for-tx-mined.test.ts` per § Architecture.
@@ -275,6 +275,7 @@ Per § Post-implementation, Close-out.
 | D-orch-4 | D1 and D6 accepted as the best solution, on two conditions: the arming and the close verdict are fail-closed (no try/catch-and-continue, no warn-and-proceed, no flag that disables the relay); `FIREFOX.md` and the e2e-testing skill name the Firefox version the relay was proved on and say a bump whose arming check fails is a hold on the bump, never a `skipIf`, soft-fail or removed assertion | orchestrator | accepted |
 | D-orch-5 | The stop rule is final and binary: on any of its three causes, revert Phase 3's commits (no half relay, no relay behind a flag), ship #284 and #280 with `Refs #281`, and comment the measurements and issue numbers on #281 | orchestrator | accepted |
 | D-orch-6 | D7 stands: one PR, order #284, #280, #281; each phase's gate is logged before the next starts | orchestrator | accepted |
+| D9 | #280's test: the PXE sync and the pre-simulation-free send live on the fixture wallet as `sendUnsimulated`, because `BaseWallet.pxe` is `protected`; behaviour as D4 | implementer (the tree) | deviation, placement only |
 
 ## Audit verdicts
 
