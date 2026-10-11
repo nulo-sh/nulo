@@ -807,7 +807,7 @@ describe("canary lanes", () => {
 
 	// One matrix job, so attach-assets and status read the whole opt-in suite as one result; its legs
 	// are the PR lane's calls, so every pin on that lane above holds for the release's run too.
-	test("release's opt-in network run is the PR lane: one leg per PR job and shard, with its inputs", () => {
+	test("release's opt-in network run is the PR lane: one leg per PR job, shard and seed, with its inputs", () => {
 		const defaults = workflow(SUITE).on.workflow_call.inputs as Record<string, { default?: unknown }>
 		type Call = { name: string; inputs: Record<string, unknown> }
 		/** Inputs left at the suite's default dropped, file lists split; `ref` and the kill switch are pinned below. */
@@ -821,27 +821,26 @@ describe("canary lanes", () => {
 		})
 		const byName = (a: Call, b: Call) => a.name.localeCompare(b.name)
 
-		// Release replays no chaos seed: its pool still lists the chaos file, which skips itself there, so
-		// the PR lane is compared without its chaos job and without that one file in its exclusions.
-		const chaos = "tests/e2e/network/send-chaos.test.ts"
-		const withoutChaos = (inputs: Record<string, unknown>) =>
-			inputs.exclude_files === undefined
-				? inputs
-				: {
-						...inputs,
-						exclude_files: words(inputs.exclude_files)
-							.filter((file) => file !== chaos)
-							.join(" "),
-					}
-		const prJobs = (laneJobs(PR_LANE, "chrome") as [string, CopiedJob][]).filter(([, job]) => job.with?.chaos !== true)
-		const pr: Call[] = prJobs.flatMap(([, job]) => {
-			const inputs = withoutChaos(job.with ?? {})
+		const pr: Call[] = (laneJobs(PR_LANE, "chrome") as [string, CopiedJob][]).flatMap(([, job]) => {
+			const inputs = job.with ?? {}
 			const shards = job.strategy?.matrix?.shard as { id: string; label: string }[] | undefined
-			if (!shards) return [{ name: String(job.name), inputs }]
-			return shards.map((shard) => ({
-				name: String(job.name).replace("${{ matrix.shard.id }}", shard.id),
-				inputs: { ...inputs, shard: shard.id, shard_label: shard.label },
-			}))
+			const seeds = job.strategy?.matrix?.seed as string[] | undefined
+			if (shards)
+				return shards.map((shard) => ({
+					name: String(job.name).replace("${{ matrix.shard.id }}", shard.id),
+					inputs: { ...inputs, shard: shard.id, shard_label: shard.label },
+				}))
+			if (seeds)
+				return seeds.map((seed) => ({
+					name: String(job.name).replace("${{ matrix.seed }}", seed),
+					inputs: Object.fromEntries(
+						Object.entries(inputs).map(([key, value]) => [
+							key,
+							typeof value === "string" ? value.replace("${{ matrix.seed }}", seed) : value,
+						]),
+					),
+				}))
+			return [{ name: String(job.name), inputs }]
 		})
 
 		const job: CopiedJob = workflow("release.yml").jobs["network-e2e"]
