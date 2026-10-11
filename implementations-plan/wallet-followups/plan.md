@@ -180,7 +180,7 @@ All paths are under `apps/extension` unless they start with the repo root. "Fast
 2. Run: `env -u EXTENSION_PATH NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- <files> --retry=0`, with `NULO_E2E_BROWSER=firefox` for Firefox.
 3. A run against a base copy rebuilds from that copy the same way, and the next head run rebuilds again.
 
-### Phase 1: #259, the fuzz oracle
+### Phase 1: #259, the fuzz oracle ✓
 
 1. Change `expectGasRecovery` to a map from key to `retryVersion` at the owe.
 2. Change C1 as § Architecture says. Keep its two other assertions.
