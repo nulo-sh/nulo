@@ -9,13 +9,15 @@ import { join } from "node:path"
 import { randomBytes } from "node:crypto"
 import { rmSync } from "node:fs"
 
-import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node"
-import { TxHash } from "@aztec-labs/stdlib/tx"
+import { createAztecNodeClient, waitForNode, waitForTx } from "@aztec-labs/aztec.js/node"
+import { type ExecutionPayload, TxHash, TxStatus } from "@aztec-labs/stdlib/tx"
+import { TimeoutError } from "@aztec-labs/foundation/error"
 import { GasFees } from "@aztec-labs/stdlib/gas"
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { Fr } from "@aztec-labs/aztec.js/fields"
-import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { NO_WAIT, type NoWait, getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { EmbeddedWallet } from "@aztec-labs/wallets/embedded"
+import { BaseWallet } from "@aztec-labs/wallet-sdk/base-wallet"
 import { registerInitialLocalNetworkAccountsInWallet } from "@aztec-labs/wallets/testing"
 import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
 import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum"
@@ -113,6 +115,16 @@ class FrozenArtifactWallet extends EmbeddedWallet {
 			createStubAccount: (a, t) => accountContracts.createStubAccount(a, t),
 		}
 		super(pxe, node, walletDB, frozen, log)
+	}
+
+	/** Proves and sends with no pre-simulation, as a wallet without one would, so the node includes a
+	 *  call the simulation refuses. Syncs first as `EmbeddedWallet.sendTx` does: auto-sync is off, so
+	 *  the proof would otherwise anchor wherever an earlier call left the PXE. */
+	async sendUnsimulated(payload: ExecutionPayload, from: AztecAddress): Promise<TxHash> {
+		await this.pxe.sync()
+		const send = BaseWallet.prototype.sendTx<NoWait>
+		const { txHash } = await send.call(this, payload, { from, fee: { gasSettings: E2E_FEE_GAS }, wait: NO_WAIT })
+		return txHash
 	}
 }
 
@@ -809,29 +821,22 @@ export async function deployDelegatedPullRig(
 	}
 }
 
-/** Poll the node until a tx (by hash string, as returned to the dApp) is
- *  MINED successfully. Needed when a flow's NEXT step reads on-chain state
- *  the tx wrote (e.g. a public-authwit grant's `set_authorized` must be
- *  mined before a consume's public simulation can see it) — the wallet's
- *  `send_transaction` path resolves the dApp promise at SUBMIT, not at
- *  mine. Throws on revert/drop so failures attribute to the right tx. */
+/** Wait until the node reports `txHash` proven or finalized with a successful execution: a flow's
+ *  next step may read state the tx wrote, and the wallet resolves a dApp's send at submission.
+ *  Rejects when the node reports it dropped, when its public execution reverted, when a receipt read
+ *  fails, or after `timeoutMs`. */
 export async function waitForTxMined(aztecConfig: AztecTestConfig, txHash: string, timeoutMs = 120_000): Promise<void> {
 	const node = createAztecNodeClient(aztecConfig.nodeUrl)
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const receipt = await node.getTxReceipt(TxHash.fromString(txHash)).catch(() => undefined)
-		const status = receipt ? String(receipt.status) : undefined
-		// Aztec terminal-success statuses: "success" (mined) and "finalized"
-		// / "proven" (block settled). Any of them means the tx's public
-		// effects (e.g. a set_authorized write) are live and readable.
-		if (status === "success" || status === "finalized" || status === "proven") return
-		if (status === "app_logic_reverted" || status === "teardown_reverted" || status === "dropped" || status === "reverted") {
-			throw new Error(`waitForTxMined: tx ${txHash} terminal as "${status}"`)
-		}
-		if (Date.now() > deadline) {
-			throw new Error(`waitForTxMined: timeout waiting for ${txHash} (last status: ${status ?? "pending"})`)
-		}
-		await new Promise((r) => setTimeout(r, 1_000))
+	const hash = TxHash.fromString(txHash)
+	try {
+		await waitForTx(node, hash, { waitForStatus: TxStatus.PROVEN, timeout: timeoutMs / 1000, ignoreDroppedReceiptsFor: 0 })
+	} catch (err) {
+		if (!(err instanceof TimeoutError)) throw err
+		const status = await node.getTxReceipt(hash).then(
+			(receipt) => receipt.status,
+			() => "unavailable",
+		)
+		throw new Error(`waitForTxMined: tx ${txHash} not proven within ${timeoutMs}ms (status ${status})`, { cause: err })
 	}
 }
 

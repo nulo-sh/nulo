@@ -843,7 +843,8 @@ the sanctioned response.
   Chromes are swept by extension path, at every setup and in `e2e:reap`.
   Teardown stops the group, then every process carrying the marker; an orphan sweep signals a
   process only when the owner in its own environ is dead, and nothing while the lock's `owner`
-  lives (a reuse rewrites it). `/proc` unreadable, or a claimed process turned unreadable (a
+  lives (a reuse rewrites it). A zombie has exited, so `readStartTime` gives it no start time and
+  every identity check (`identityIsDead`, `ownerLives`, a recorded pid) calls a zombie owner dead. `/proc` unreadable, or a claimed process turned unreadable (a
   zombie counts as gone), is `unknown`: the lock and the run dir stay, and the lock's pid and start
   time keep every later sweep `unknown` too while that process lives. A lock naming no owner is
   never signalled. The node's run dir is stamped with its marker and deleted only directly under
