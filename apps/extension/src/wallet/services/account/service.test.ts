@@ -14,6 +14,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { PROFILE_SERVICE_NAME } from "@/wallet/services/profile/spec"
 import { ERR_UNATTENDED_LIVE_CHECK, NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { recordWrites } from "../storage-write-log"
 import { AccountService } from "./service"
@@ -502,11 +503,9 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 			throw new Error("storage unavailable")
 		}
 		const logger = await boot(api)
-		const logged = logger
-			.get(1000)
-			.filter((line) => line.data[0] === "imported-key orphan sweep failed")
-			.map((line) => line.data[1])
-		expect(logged).toEqual([{ error: { name: "Error", message: "storage unavailable" } }])
+		expect(loggedAfter(logger, "imported-key orphan sweep failed")).toEqual([
+			{ error: { name: "Error", message: "storage unavailable" } },
+		])
 	})
 
 	test("a non-string-VALUED account row keeps its imported-key row alive (the getKeys discriminator)", async () => {

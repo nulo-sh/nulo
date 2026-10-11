@@ -13,6 +13,7 @@ import { LoggerStore } from "@/wallet/logger"
 import { AccountIntegrityBlockedRepository } from "@/wallet/services/account-integrity/blocked-repository"
 import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 
@@ -58,13 +59,6 @@ async function build(opts: { failBlockWrite?: boolean; closeError?: Error } = {}
 	) => Promise<never>
 	return { raise, repo, locked, logger }
 }
-
-/** What each line logged under `message` passed after it. */
-const loggedAfter = (logger: LoggerStore, message: string) =>
-	logger
-		.get(1000)
-		.filter((line) => line.data[0] === message)
-		.map((line) => line.data[1])
 
 describe("AccountService runtime mismatch (raiseRuntimeMismatch)", () => {
 	test("persists the durable block, closes the mismatching profile, and throws the typed error", async () => {

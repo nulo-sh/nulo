@@ -14,6 +14,7 @@ import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountService, AccountType, type Account } from "@/wallet/services/account/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { AccountIntegrityCoordinator, type DeriveAddress } from "./coordinator"
@@ -77,13 +78,6 @@ async function build(opts: {
 	const stamps = new AccountIntegrityVerifiedStampRepository(api.storage.local)
 	return { coordinator, repo, stamps, locks, api, logger }
 }
-
-/** What each line logged under `message` passed after it. */
-const loggedAfter = (logger: LoggerStore, message: string) =>
-	logger
-		.get(1000)
-		.filter((line) => line.data[0] === message)
-		.map((line) => line.data[1])
 
 describe("AccountIntegrityCoordinator", () => {
 	test("green verify passes, and heals a stale blocking record", async () => {

@@ -71,13 +71,11 @@ export async function storageLocalGet(keys?: string | string[] | null): Promise<
 }
 
 /**
- * Writes `items` once no migration is running. `items` must be structured-cloneable even when
- * `unless` skips the write: it is cloned at the call, so a Vue reactive Proxy or a function rejects
- * on every engine, not only on Firefox, whose storage refuses what Chrome's serialises, and a change
- * to `items` during the wait is not written. `unless` is consulted after that wait,
- * immediately before the write, so a caller whose reason to write can lapse during the wait (a
- * lock, a profile switch) hands in the check instead of running it too early; `false` means the
- * write was skipped.
+ * Writes a clone of `items`, taken at the call, once no migration is running: a value that cannot be
+ * structured-cloned (a Vue reactive Proxy, which Firefox's storage refuses and Chrome's serialises)
+ * rejects on every engine, even when the write is skipped. `unless` is consulted after the wait,
+ * right before the write, for a reason to write that can lapse during it (a lock, a profile
+ * switch); `false` means it skipped the write.
  */
 export async function storageLocalSet(items: Record<string, unknown>, options?: { unless?: () => boolean }): Promise<boolean> {
 	const snapshot = structuredClone(items)
