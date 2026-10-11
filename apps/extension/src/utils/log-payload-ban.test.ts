@@ -342,7 +342,7 @@ function blankComparisonLiterals(body: string): string {
 
 /**
  * A member read of an error's text — `err.message`, `e?.stack` — which is never an object key, so
- * always a hazard. The lookbehind keeps a spread (`...message`) out.
+ * a hazard unless it is an arity read. The lookbehind keeps a spread (`...message`) out.
  */
 const ERROR_TEXT_READ = /(?<!\.)\.\s*(message|stack)\b/g
 
@@ -404,7 +404,7 @@ function isObjectKey(code: string, index: number, name: string): boolean {
  * This is the idiom the logging policy actively recommends in place of the payload, so flagging it
  * would push people back toward logging the thing itself. The measurement is not the value.
  */
-const ARITY_READ = /^\.(?:length|size|byteLength)\b/
+const ARITY_READ = /^\s*\??\.\s*(?:length|size|byteLength)\b/
 
 function isArityRead(code: string, index: number, name: string): boolean {
 	return ARITY_READ.test(code.slice(index + name.length))
@@ -537,6 +537,7 @@ describe("log-payload ban (static)", () => {
 			{ path: "apps/extension/src/popup/pages/b.ts", content: 'console.error("x", { error: err }, { message: "fixed" })' },
 			{ path: "apps/extension/src/popup/pages/c.ts", content: 'console.warn("x", { ...message })' },
 			{ path: "apps/extension/src/wallet/services/d.ts", content: "this.logDebug(`len ${err.message.length}`)" },
+			{ path: "apps/extension/src/wallet/services/e.ts", content: "this.logDebug(`len ${err?.message?.length}`)" },
 		])
 		expect(offenders).toEqual([])
 	})
