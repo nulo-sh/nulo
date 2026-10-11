@@ -217,6 +217,7 @@ describe("holdings page — the total fits beside its meta line", () => {
 	test.each([
 		["at the page's width", 312],
 		["4 px clear of the meta line at its narrowest", 117 + 42 + 4],
+		["when the measured room rounds a hair short of it", 117 + 42 - 0.02],
 	])("a total beside a partial meta line keeps 26 px %s", async (_, width) => {
 		installChromeStorage()
 		room = width

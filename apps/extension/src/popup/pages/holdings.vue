@@ -127,6 +127,9 @@ const totalScale = ref(1)
 /** The space, in px, a shrunk total keeps before the meta line: `.summary_amount_shrunk`'s margin,
  *  which makes the meta line wrap clear of it. A total that fits at full size has none. */
 const TOTAL_GAP = 8
+/** Measured widths are rounded to layout units (1/60 px in Firefox), so a total the line lays out
+ *  exactly beside the meta can measure a hair over the room the two leave it. */
+const LAYOUT_ROUNDING = 0.05
 // jsdom has no ResizeObserver; there the fit still runs on each render.
 const summaryResizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fitTotal)
 const summaryLine = () => summary.value?.$el as HTMLElement | undefined
@@ -136,7 +139,7 @@ function fitTotal() {
 	const meta = metaRuler.value
 	if (!line || !form || !meta) return
 	const room = heroRoom(line) - meta.getBoundingClientRect().width
-	if (rulerWidth(form, 1) <= room) {
+	if (rulerWidth(form, 1) <= room + LAYOUT_ROUNDING) {
 		totalScale.value = 1
 		return
 	}
