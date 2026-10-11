@@ -65,7 +65,7 @@ describe("NULO-ACCOUNT-KDF v2 — full chain vs the reference vectors", () => {
 
 		test(`seed ${vector.seed.slice(0, 10)}… NuloAccount derives the reference address`, async () => {
 			if (!v6) throw new Error(`reference/nulo-v6 has no signing-chain row for seed ${vector.seed}`)
-			const account = await NuloAccount.new(seed, nullLogger)
+			const account = await NuloAccount.new(seed, nullLogger, "account")
 			expect(account.address.toString()).toBe(v6.address)
 			const complete = await account.getCompleteAddress()
 			expect(complete.address.toString()).toBe(v6.completeAddress.address)

@@ -250,6 +250,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [vue-shell-composites](vue-shell-composites/plan.md) — completed — the duplicated Vue shell pieces that survive review extracted, and the rest recorded
 - [wallet-error-resilience](wallet-error-resilience/plan.md) — completed — resync and retry once on stale anchors, then fail with a named error
 - [wallet-followups](wallet-followups/plan.md) — completed — account name checks, the logs window trim, settings reads after a worker restart, the balances fuzz oracle
+- [wallet-followups-2](wallet-followups-2/plan.md) — completed — Send keeps a token after a delete, every service and every line in the logs filter, a failed clear keeps logs live, the fee card's gas retry runs
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set

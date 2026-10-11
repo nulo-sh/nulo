@@ -230,7 +230,7 @@ describe("continuation — a failed attempt retries by itself", () => {
 		const logged = vi.spyOn(logger, "log")
 		await writeMarker({ [KEY]: { attempts: 1, nextAttemptAt: Date.now() - 1 } })
 		await seeder.run()
-		expect(logged).toHaveBeenCalledWith("TokenSeeder", LogLevel.Warn, "seed pass threw", { category: "unknown" })
+		expect(logged).toHaveBeenCalledWith("token", LogLevel.Warn, "seed pass threw", { category: "unknown" })
 
 		await vi.advanceTimersByTimeAsync(59_000)
 		expect(isTokenPresent).toHaveBeenCalledTimes(1)

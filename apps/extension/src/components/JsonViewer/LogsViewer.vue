@@ -147,17 +147,20 @@ async function exportLogsToCSV() {
 }
 
 async function handleClearLogs() {
+	logViewerService.onLog.remove(onLogAdded)
 	try {
-		logViewerService.onLog.remove(onLogAdded)
 		await logViewerService.clearLogs()
-		logViewerService.onLog.add(onLogAdded)
-		logs.value = []
-		await nextTick()
-		updateEditorContent()
 	} catch (err) {
 		openToast({ kind: "error", label: "Failed to clear logs" })
 		console.error(err)
+		return
+	} finally {
+		// Back before the list is emptied, so a line that lands during the redraw tick is kept.
+		logViewerService.onLog.add(onLogAdded)
 	}
+	logs.value = []
+	await nextTick()
+	updateEditorContent()
 }
 
 async function getLogs() {

@@ -197,7 +197,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		super(PXE_SERVICE_NAME, logger)
 		this.profiles = profiles
 		this.guardLogger = logger
-		this.artifacts = new ArtifactRegistry(loadProductionKnownArtifacts, { logger, logSource: PXE_SERVICE_NAME })
+		this.artifacts = new ArtifactRegistry(loadProductionKnownArtifacts, { logger })
 		this.registry = new ChainRuntimeRegistry(factory ?? new ProductionPxeFactory())
 		// A dead SW loses the event (the transport swallows the rejection); the
 		// journal only ever goes stale, never wrong, so no retry.
@@ -220,7 +220,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		const k = this.chainKey(profileId, chainId)
 		let g = this.chainGuards.get(k)
 		if (!g) {
-			g = new ReadWriteGuard(`pxe[${k}]`, this.guardLogger)
+			g = new ReadWriteGuard(PXE_SERVICE_NAME, this.guardLogger)
 			this.chainGuards.set(k, g)
 		}
 		return g
@@ -229,7 +229,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 	private getProfileBarrier(profileId: string): ReadWriteGuard {
 		let g = this.profileBarriers.get(profileId)
 		if (!g) {
-			g = new ReadWriteGuard(`pxe-barrier[${profileId}]`, this.guardLogger)
+			g = new ReadWriteGuard(PXE_SERVICE_NAME, this.guardLogger)
 			this.profileBarriers.set(profileId, g)
 		}
 		return g

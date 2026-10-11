@@ -27,7 +27,7 @@ import { PxeStaleAnchorError } from "@nulo/extension-messaging/errors"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { buildViewCall, type ViewFn } from "@/wallet/utils/fn"
 import { rowMatchesToken } from "./balance-identity"
-import { BALANCE_BATCH_SIZE, type TokenBalanceRaw } from "./spec"
+import { BALANCE_BATCH_SIZE, TOKEN_BALANCE_SERVICE_NAME, type TokenBalanceRaw } from "./spec"
 
 /** Per-balance projection outcome. `transient` marks a failure the chain state itself may
  *  clear shortly (the PXE's anchor lagging a reorg) — the queue retries those, bounded. */
@@ -58,7 +58,6 @@ export class BalanceProjector {
 		private readonly accounts: AccountService,
 		private readonly pxeService: PxeServiceClient,
 		private readonly logger?: ILogger,
-		private readonly logSource: string = "balance-projector",
 		private readonly projectionGate: ProjectionGate = NOOP_PROJECTION_GATE,
 	) {}
 
@@ -79,7 +78,7 @@ export class BalanceProjector {
 			// Identity guard, not just resolution: a dead incarnation's row at a reused
 			// id must not trigger PXE/network work against the id-holder's contract.
 			if (!token || !rowMatchesToken(balance, token)) {
-				this.logger?.log(this.logSource, LogLevel.Error, `Unknown token #${balance.token}`)
+				this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, `Unknown token #${balance.token}`)
 				results.push({ kind: "error", id: balance.id, error: `Unknown token #${balance.token}`, transient: false })
 				continue
 			}
@@ -158,7 +157,7 @@ export class BalanceProjector {
 			// The stale-anchor class survives the offscreen port (typed payload), so this is the
 			// one failure the queue may retry: the offscreen already resynced and retried once.
 			const transient = err instanceof PxeStaleAnchorError
-			this.logger?.log(this.logSource, LogLevel.Error, `Failed to sync chunk: ${errorMessage}`)
+			this.logger?.log(TOKEN_BALANCE_SERVICE_NAME, LogLevel.Error, `Failed to sync chunk: ${errorMessage}`)
 			return balances.map((b) => ({ kind: "error" as const, id: b.id, error: errorMessage, transient }))
 		}
 	}

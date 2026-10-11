@@ -130,7 +130,7 @@ export class NoopTelemetrySink implements TelemetrySink {
 export class LoggingTelemetrySink implements TelemetrySink {
 	public constructor(
 		private readonly logger: ILogger,
-		private readonly logSource: string = "offscreen-telemetry",
+		private readonly logSource: string,
 	) {}
 
 	public recordTerminal(record: RequestTelemetry): void {

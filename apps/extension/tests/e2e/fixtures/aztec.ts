@@ -592,7 +592,7 @@ export async function setupPreFundedAccount(
 	// Sanity check the derived address against NuloAccount's path so the fixture
 	// fails fast if the frozen-artifact account below and NuloAccount ever disagree.
 	// Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods.
-	const nuloAccountContract = await NuloAccount.new(accountSeed, logger as unknown as ILogger)
+	const nuloAccountContract = await NuloAccount.new(accountSeed, logger as unknown as ILogger, "account")
 	const expectedAddress = nuloAccountContract.address
 	logger.info(`Expected derived address: ${expectedAddress.toString()}`)
 

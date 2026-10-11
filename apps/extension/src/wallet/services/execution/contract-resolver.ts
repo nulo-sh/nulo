@@ -34,8 +34,9 @@ import { type ILogger, LogLevel } from "@/wallet/logger"
 import type { IPXE } from "@nulo/aztec-runtime/pxe"
 import { ContractNotRegisteredError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import type { Action, AddPrivateAuthwitAction, AddPublicAuthwitAction, CallAuthwitContent, EncodedCallAuthwitContent } from "./spec"
+import { EXECUTION_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "ContractResolver"
+const LOG_SOURCE = EXECUTION_SERVICE_NAME
 
 /** Guard ladder over pre-resolved maps; the error strings are frozen by their call sites. */
 export function requireArtifact(

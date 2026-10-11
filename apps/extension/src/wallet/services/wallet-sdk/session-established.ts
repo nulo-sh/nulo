@@ -88,7 +88,7 @@ export async function handleSessionEstablished(
 		return false
 	}
 	const terminateWith = (message: string): false => {
-		deps.logger.log("wallet-sdk-bg", LogLevel.Warn, message)
+		deps.logger.log("wallet-sdk", LogLevel.Warn, message)
 		return terminate()
 	}
 	let established = false
@@ -125,7 +125,7 @@ export async function handleSessionEstablished(
 		// dispatch guard fails closed on the leftover stamp.
 		if (!deps.isSessionLive(session.sessionId)) {
 			deps.logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Warn,
 				`Session ${describeExternalId(session.sessionId)} terminated during validation — skipping establishment`,
 			)
@@ -140,7 +140,7 @@ export async function handleSessionEstablished(
 		// self-compensates; see `stampSessionProfileGuarded`.)
 		if (!deps.isSessionLive(session.sessionId)) {
 			deps.logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Warn,
 				`Session ${describeExternalId(session.sessionId)} terminated during establishment — not stamping`,
 			)
@@ -172,7 +172,7 @@ export async function handleSessionEstablished(
 		// Fail closed: a session whose hash couldn't be persisted or whose check couldn't be shown
 		// must not stay live accepting messages.
 		deps.logger.log(
-			"wallet-sdk-bg",
+			"wallet-sdk",
 			LogLevel.Warn,
 			`onSessionEstablished failed for session ${describeExternalId(session.sessionId)} on chain ${chainId} — terminating`,
 			err,
@@ -265,7 +265,7 @@ async function openVerifyWindow(
 			},
 			() => deps.isSessionLive(sessionId),
 			deps.logger,
-			"wallet-sdk-bg",
+			"wallet-sdk",
 		)
 		windowId = win?.id
 	} catch {

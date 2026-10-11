@@ -5,6 +5,7 @@
 import type { EditorState, TransactionSpec } from "@codemirror/state"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { type LogEntry, logsDocument } from "./logs-format"
 
 interface StubView {
@@ -14,14 +15,18 @@ interface StubView {
 
 const H = vi.hoisted(() => ({
 	getLogs: vi.fn(),
+	clearLogs: vi.fn(),
+	openToast: vi.fn(),
 	editors: [] as unknown[],
-	onLog: { add: vi.fn(), remove: vi.fn() },
+	// A real handler, so a removed listener stops receiving; set per test.
+	onLog: undefined as unknown as EventHandler<LogEntry>,
+	onLogAdd: undefined as unknown as ReturnType<typeof vi.fn>,
 	onUpdate: { add: vi.fn(), remove: vi.fn() },
 }))
 
 vi.mock("@/wallet/services/log-viewer/client", () => ({
 	LogViewerServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onLog: H.onLog, getLogs: H.getLogs, clearLogs: vi.fn() }
+		return { disconnect: vi.fn(), onLog: H.onLog, getLogs: H.getLogs, clearLogs: H.clearLogs }
 	}),
 }))
 vi.mock("@/wallet/services/config/client", () => ({
@@ -31,7 +36,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 vi.mock("@/wallet/config", () => ({ defaultConfig: () => ({ debugMode: false }) }))
 vi.mock("@/utils", () => ({ downloadFile: vi.fn() }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: H.openToast }) }))
 vi.mock("./logs-decoration", () => ({ logDecorationsField: [] }))
 vi.mock("./creator.js", () => ({ createLoggerTheme: () => [] }))
 vi.mock("@codemirror/view", () => ({ keymap: { of: () => [] }, highlightActiveLine: () => [] }))
@@ -67,7 +72,10 @@ function mountViewer() {
 beforeEach(() => {
 	vi.useFakeTimers()
 	H.getLogs.mockReset()
-	H.onLog.add.mockClear()
+	H.clearLogs.mockReset()
+	H.openToast.mockReset()
+	H.onLog = new EventHandler<LogEntry>()
+	H.onLogAdd = vi.spyOn(H.onLog, "add") as unknown as ReturnType<typeof vi.fn>
 	H.editors.length = 0
 })
 
@@ -134,7 +142,7 @@ describe("LogsViewer live log past the cap", () => {
 		await vi.advanceTimersByTimeAsync(0)
 		const view = H.editors[0] as StubView
 		view.dispatch.mockClear()
-		const onLog = H.onLog.add.mock.calls[0][0] as (entry: LogEntry) => void
+		const onLog = H.onLogAdd.mock.calls[0][0] as (entry: LogEntry) => void
 		return { wrapper, view, onLog, changeDispatches: () => view.dispatch.mock.calls.filter(([spec]) => spec.changes).length }
 	}
 
@@ -166,6 +174,47 @@ describe("LogsViewer live log past the cap", () => {
 		const live = log(FULL)
 		onLog(live)
 		expect(view.state.doc.toString()).toBe(view.state.toText(logsDocument([...loaded, live])).toString())
+		wrapper.unmount()
+	})
+})
+
+describe("LogsViewer Clear logs", () => {
+	const t = Date.now()
+	const log = (id: number): LogEntry => ({ id, timestamp: t, source: "ui", level: 1, data: [`log ${id}`] })
+
+	async function mountCleared(clearLogs: () => Promise<void>) {
+		H.getLogs.mockResolvedValueOnce([log(1)]).mockResolvedValue([])
+		H.clearLogs.mockImplementation(clearLogs)
+		const wrapper = mountViewer()
+		await vi.advanceTimersByTimeAsync(0)
+		const view = H.editors[0] as StubView
+		wrapper.findComponent({ name: "LogsToolbar" }).vm.$emit("clearLogs")
+		await vi.advanceTimersByTimeAsync(0)
+		return {
+			wrapper,
+			doc: () => view.state.doc.toString(),
+			docOf: (entries: LogEntry[]) => view.state.toText(logsDocument(entries)).toString(),
+		}
+	}
+
+	test("a failed clear keeps the window live", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {})
+		const { wrapper, doc, docOf } = await mountCleared(() => Promise.reject(new Error("port closed")))
+		expect(H.openToast).toHaveBeenCalledExactlyOnceWith({ kind: "error", label: "Failed to clear logs" })
+		H.onLog.invoke(log(2))
+		expect(doc()).toBe(docOf([log(1), log(2)]))
+		wrapper.unmount()
+	})
+
+	test("a log that lands while a clear finishes is kept", async () => {
+		// Delivered two microtasks after the clear answers: after the listener is back, during the redraw's tick.
+		const { wrapper, doc, docOf } = await mountCleared(() => {
+			const cleared = Promise.resolve()
+			cleared.then(() => {}).then(() => H.onLog.invoke(log(2)))
+			return cleared
+		})
+		expect(H.openToast).not.toHaveBeenCalled()
+		expect(doc()).toBe(docOf([log(2)]))
 		wrapper.unmount()
 	})
 })
