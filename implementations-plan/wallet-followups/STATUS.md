@@ -9,3 +9,4 @@
 - 2026-10-11: orchestrator approved the plan at c9c07a3: OA-2 A (trim ships), OA-3 A (blank counts as empty), OA-1 B (record as worded; owner page 11). Recorded as D-orch-2..4. Arc 1 started.
 - 2026-10-11: phase 1 gate pass: lint, typecheck:all, store + co-mount + fuzz tests (39), seed -2034686224, 2000 runs; red/green proof in lessons/phase-1.md.
 - 2026-10-11: phase 2 gate pass: lint, typecheck:all, popup tests (11), smoke accounts.test.ts Chrome retry 0 (8/8); 5 pins red on base.
+- 2026-10-11: phase 3 gate pass (shipped under D-orch-2): lint, typecheck:all, logs-format + LogsViewer tests (29); both trim tests red on base.

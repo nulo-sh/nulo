@@ -212,7 +212,7 @@ Validation gate:
 - Pass: exit 0. Each defect pin fails against the base copy of its component; the preservation control passes there.
 - Layers: lint, typecheck, component, smoke e2e.
 
-### Phase 3: #258, the logs window
+### Phase 3: #258, the logs window ✓
 
 Only under OA-2. Without its approval line, skip this phase, comment on #258 that its fix waits on the visible-change record, and leave it open.
 
