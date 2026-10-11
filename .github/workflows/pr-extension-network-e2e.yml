@@ -272,9 +272,8 @@ jobs:
     name: Run / chaos / seed ${{ matrix.seed }}
     needs: decide
     if: needs.decide.outputs.run == 'true'
-    # Two fixed send-chaos seeds replayed at retry 0, while the nightly hunts with new ones. A seed
-    # fixes the actions, not their timing: a red seed is fixed, or proven a flake by its replay, never
-    # retried or rotated away. A seed is replaced only by a PR naming the nightly it comes from.
+    # Fixed send-chaos seeds, each beside the nightly run it comes from; the red-seed and rotation
+    # rules are in CI.md, § pr-extension-network-e2e.yml.
     strategy:
       fail-fast: false
       matrix:

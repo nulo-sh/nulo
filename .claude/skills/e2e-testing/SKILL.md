@@ -222,7 +222,8 @@ runtime env var can never arm a build-time flag.
   `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`) — a canary run with zero `Proving succeeded` lines fails; the
   `disable_presto` dispatch input (or the `NULO_E2E_DISABLE_PRESTO` variable) is the
   rollback to WASM. The **chaos** lane replays two fixed `send-chaos` seeds (one matrix leg each, proverless,
-  retry 0); a red seed is fixed or proven a flake by its replay, never rotated away (rotation: CI.md).
+  retry 0); a red seed is fixed or proven a flake by replaying it (a re-run of the leg does), never given
+  a test retry or rotated away (rotation: CI.md).
   Exit 86 retries the agent once. After every run the built bundle is grepped for
   `(PROBE|nulo:probe:|VITE_E2E_PROBE)` and any hit fails the workflow (`_extension-network-e2e.yml` skips the
   grep only when its `probe` input is `"1"`, a caller-set investigation mode, not a dispatch option):

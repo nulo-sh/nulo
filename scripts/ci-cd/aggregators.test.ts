@@ -457,6 +457,13 @@ test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on t
 	expect(exitCode(agg, { ...ran, ...results(suites, suites) })).not.toBe(0)
 })
 
+// The parity pins compare only the suite jobs, and the loop pin holds when a job leaves `needs` and the
+// loop together, so a suite dropped from a network lane's `status` would stop gating unnoticed.
+test.each(E2E_LANES.filter(({ file }) => file.includes("network")))("$file's aggregator waits on every job", ({ file }) => {
+	const agg = aggregator(file)
+	expect([...agg.needs].sort()).toEqual([...agg.jobs].sort())
+})
+
 // A re-run of `status` or `decide` alone carries the earlier attempt's gate inputs, so a skip decided
 // on labels read before a label was added could pass; a re-run of failed suites keeps its ran gate.
 test.each(E2E_LANES)("$file accepts skipped suites only on labels read in this attempt", ({ file }) => {

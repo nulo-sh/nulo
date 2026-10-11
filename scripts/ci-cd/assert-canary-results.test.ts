@@ -72,7 +72,7 @@ describe("assert-canary-results", () => {
 		file.assertionResults = file.assertionResults.filter((test) => test.title !== PASSKEY_TITLE)
 		expect(file.assertionResults.map((test) => [test.title, test.status])).toEqual([[CONTRACT_TEST, "passed"]])
 		expect(canaryProblems(clean, CANARY_JOB_FILES, expectations)).toEqual([
-			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the canary is gone`,
+			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`,
 		])
 	})
 
@@ -84,7 +84,7 @@ describe("assert-canary-results", () => {
 		if (!file) throw new Error("the clean report carries the passkey canary")
 		file.assertionResults = []
 		expect(canaryProblems(clean, [PASSKEY], expectations)).toEqual([
-			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the canary is gone`,
+			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`,
 			`${PASSKEY}: reported no tests`,
 		])
 	})

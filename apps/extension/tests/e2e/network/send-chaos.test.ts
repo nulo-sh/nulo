@@ -5,10 +5,9 @@
  * the same account. Whatever the interleaving, every confirmed send succeeds, no estimate fails,
  * and the balance rows reconcile with the sends.
  *
- * Runs only with `NULO_E2E_CHAOS=1`: the nightly lanes draw a new seed each night to hunt for
- * orderings `same-token-concurrent-sends.test.ts` does not name, and each PR network lane replays
- * two fixed seeds. A seed fixes the actions, not their timing. The seed is `NULO_E2E_CHAOS_SEED`
- * when set, else random, and is always logged so a failure replays.
+ * Runs only with `NULO_E2E_CHAOS=1`: a seed fixes the actions, not their timing, so a new seed hunts
+ * for orderings `same-token-concurrent-sends.test.ts` does not name and a fixed one replays them. The
+ * seed is `NULO_E2E_CHAOS_SEED` when set, else random, and is always logged so a failure replays.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"

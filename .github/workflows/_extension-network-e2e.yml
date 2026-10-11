@@ -261,7 +261,6 @@ jobs:
           EXCLUDE_FILES: ${{ inputs.exclude_files }}
           TEST_FILES: ${{ inputs.test_files }}
           SHARD: ${{ inputs.shard }}
-          # A canary or chaos lane writes vitest's json report for the results assertion below.
           NULO_E2E_RESULTS_FILE: ${{ (inputs.chaos || startsWith(inputs.shard_label, 'canary')) && format('{0}/canary-results.json', runner.temp) || '' }}
         run: |
           # Use bash arrays + read -ra so word-splitting is explicit + scoped

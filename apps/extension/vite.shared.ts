@@ -77,7 +77,7 @@ export const noirAliases: Record<string, string> = {
  * resolved list is empty), so it must be re-added by hand on CI or PR
  * annotations silently disappear. RetryErrorReporter surfaces the retained
  * first-attempt errors of retried passes. `NULO_E2E_RESULTS_FILE` adds the `json`
- * report a canary lane is asserted on (`scripts/ci-cd/assert-canary-results.ts`).
+ * report a canary or chaos lane is asserted on (`scripts/ci-cd/assert-canary-results.ts`).
  */
 export function e2eReporters(
 	options: { stall?: StallWatchdogOptions } = {},

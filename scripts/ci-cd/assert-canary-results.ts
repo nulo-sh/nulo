@@ -5,10 +5,9 @@
  * The job's exit code and its file count cannot see a skipped `describe`, a missing sandbox
  * config or a deleted test: every canary file also carries a setup-contract test that keeps
  * passing on its own, and the chaos file skips its one test unless armed, so "the file passed"
- * says nothing about the test in it. This reads
- * vitest's `json` report and requires every file the job was given to be present, every test in
- * it `passed` (nothing skipped or todo), and each title `canary-expectations.json` names for that
- * file among them.
+ * says nothing about the test in it. This reads vitest's `json` report and requires every file the
+ * job was given to be present, every test in it `passed` (nothing skipped or todo), and each title
+ * `canary-expectations.json` names for that file among them.
  *
  *   assert-canary-results.ts <vitest json report> <test file…>
  */
@@ -39,7 +38,7 @@ function fileProblems(file: string, result: FileResult, expected: readonly strin
 		.map((test) => `${file}: "${test.title}" ${test.status}`)
 	const reported = new Set(result.assertionResults.map((test) => test.title))
 	for (const title of expected) {
-		if (!reported.has(title)) problems.push(`${file}: "${title}" not reported — the canary is gone`)
+		if (!reported.has(title)) problems.push(`${file}: "${title}" not reported — the expected test is gone`)
 	}
 	if (result.assertionResults.length === 0) problems.push(`${file}: reported no tests`)
 	return problems

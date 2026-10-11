@@ -136,13 +136,15 @@ describe("network suite job names", () => {
 	test("verify-cert-run.sh expects exactly the jobs the PR lane's network workflow produces", () => {
 		type Caller = { name?: string; uses?: string; with?: { shard?: string }; strategy?: { matrix?: Record<string, unknown[]> } }
 		/** A job's legs, one per value of its one-key matrix (one without a matrix), each binding
-		 *  `${{ matrix.<key>[.<field>] }}` to that leg's value. */
+		 *  `${{ matrix.<key>[.<field>] }}` of that key to the leg's value; any other key stays unbound. */
 		const legs = (job: Caller): ((text: unknown) => string)[] => {
-			const axes = Object.values(job.strategy?.matrix ?? {})
+			const axes = Object.entries(job.strategy?.matrix ?? {})
 			expect(axes.length, `${job.name}: at most one matrix key`).toBeLessThanOrEqual(1)
-			return (axes[0] ?? [undefined]).map(
+			const [key, values] = axes[0] ?? ["", [undefined]]
+			const expression = new RegExp(`\\$\\{\\{ matrix\\.${key}(?:\\.(\\w+))? \\}\\}`, "g")
+			return values.map(
 				(value) => (text: unknown) =>
-					String(text ?? "").replace(/\$\{\{ matrix\.[\w-]+(?:\.(\w+))? \}\}/g, (_match, field?: string) =>
+					String(text ?? "").replace(expression, (_match, field?: string) =>
 						String(field ? (value as Record<string, unknown>)[field] : value),
 					),
 			)
@@ -887,7 +889,6 @@ describe("canary lanes", () => {
 		}
 	})
 
-	/** The one job of a lane that runs the chaos file. */
 	const chaosJob = (file: string, browser: string): CopiedJob =>
 		(laneJobs(file, browser) as [string, CopiedJob][]).filter(([, job]) => job.with?.chaos === true)[0][1]
 
