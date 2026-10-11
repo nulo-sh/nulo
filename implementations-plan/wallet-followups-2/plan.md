@@ -266,7 +266,7 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 - Pass criteria: all exit 0. Proof of red: the failed-clear case fails against the base `LogsViewer.vue`; the success control fails against a `finally` around the whole handler and passes on the base file.
 - Layers: lint, typecheck, unit (component).
 
-### Phase 4: #291, the gas retry runs when the notice says so ✗
+### Phase 4: #291, the gas retry runs when the notice says so ✓
 
 1. Write the co-mount case first, in `fee-cards.comount.test.ts`: `a failed tx-settle refresh under the fee card retries gas, and the notice clears when it lands`. Sequence: `getFpcs` rejects once, then resolves; `mountBoth()`; the notice shows (the FPC retry is armed); `getGasBalances` rejects from now on; fire `onTransactionUpdated` with `Proven`; advance 5,050 ms (the FPC retry lands, the notice re-commits on gas). Then expect a gas read issued by the retry, make `getGasBalances` resolve `FJ(43n)`, advance one more backoff step, and expect the notice gone and the gas card on `43 FJ`, undimmed. Run it on the base store: it fails (no gas read; the notice stays after 70 s).
 2. Add `adoptForRetrySubscribers` and the `.then` call in `balances.store.ts` as in § Architecture. Update the comment on `adoptGasRetryDebt` to name both observers in one sentence.
@@ -369,6 +369,7 @@ The PR body carries before/after screenshots of Send after a delete and of the l
 | D-orch-2 | OA-2 | (a): the store retries. The gas card's refresh dot over the dimmed figure and its un-dim when a read lands are states the card already has, inside the #291 record | (b), the card-only fallback: not built | orchestrator, 2026-10-11 |
 | D-orch-3 | OA-1 | Its option (a) ships in arc-1 for the lines only: each line from a source that is not a registered service is filed under the service that owns it (Phase 2b), inside the #288 record (every line visible under existing rows, no new row or label). The five rows that match nothing stay; their removal is the owner's call, carried by the `owner-decision` issue opened at delivery | (b) new rows and (c) always-shown sources: new labels or a filter that cannot hide; (d) as today: lines keep vanishing | orchestrator, 2026-10-11 |
 | D-orch-4 | Phase 0 result | The lossless 7,926 B with no retirement stands; the 7 KiB target is withdrawn | Retiring a reachable dead end to make room | orchestrator, 2026-10-11 |
+| D9a | Fuzz model: when a tx-settle owes `ready` | Only when the key has a store entry at the settle, besides a live `txRefresh` subscriber and retry cover: the store's forced read returns at once on a fenced key, so nothing fails and nothing is owed | The plan's rule without the entry condition: its first fuzz run owed `ready` for a key a fence had cleared (lessons/phase-4.md) | implementation |
 
 ## Audit verdicts
 
