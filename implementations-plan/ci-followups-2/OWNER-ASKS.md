@@ -1,8 +1,10 @@
 # Owner asks: ci-followups-2
 
-Two entries. Neither blocks the arc. The arc ships what you asked on 2026-10-11: nightly's Firefox jobs and both send-chaos runs gate the nightly release. No wallet screen changes.
+Two entries. Neither blocks the arc. The arc ships what you asked on 2026-10-11: nightly's Firefox jobs and both send-chaos runs gate the nightly release, and (OA-1) two fixed chaos seeds gate every network PR. No wallet screen changes.
 
-## OA-1: run send-chaos on every PR? (measured)
+## OA-1: run send-chaos on every PR? (measured) (closed)
+
+**Answered: A, N = 2** (the owner, in chat, 2026-10-11: "a fixed-seed chaos replay becomes a required PR job if one replay measures under ten minutes"; measured 3.5-5.1 minutes). Built in plan.md Phase 3 (D-orch-2, D7-D14). The entry below is the question as it was asked.
 
 **Surface.** The required PR network lanes (`extension-network-e2e-status` and its Firefox twin): what a network PR waits for before it can merge. No wallet screen changes.
 

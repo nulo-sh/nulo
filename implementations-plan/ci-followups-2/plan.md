@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-2
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved (orchestrator, 2026-10-11); arc 1 in implementation
 issues: "#220 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -9,7 +9,7 @@ codex_model: sol
 code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
-budget: recon 1 Explore agent (sonnet); one Codex audit (gpt-6.1-sol, high) with one Opus 5.5 Plan lens beside it (the panel); two resumed Codex re-reviews of the revised plan
+budget: recon 1 Explore agent (sonnet); one Codex audit (gpt-6.1-sol, high) with one Opus 5.5 Plan lens beside it (the panel); two resumed Codex re-reviews of the revised plan; one Codex consult and one Opus lens on Phase 3's design
 post_implementation_hardening: not scheduled
 base: origin/dev at 27af8d7
 trunk: dev
@@ -17,7 +17,7 @@ trunk: dev
 
 # ci-followups-2: nightly's Firefox jobs and send-chaos gate the nightly release
 
-The owner made two CI calls on 2026-10-11 (decision page 0, the C6 note). Nightly's Firefox jobs become required, and the seeded send-chaos run gates the nightly like the rest of the network suite. Today `nightly.yml` publishes a nightly prerelease, Firefox zip included, even when every Firefox suite and both chaos runs are red. This plan puts the seven jobs in `publish-nightly`'s and `status`'s needs, replaces the two pins that hold the advisory shape with pins that run the gates' own logic, and rewrites every doc that says these jobs gate nothing. It closes #220. It also measures what chaos would cost on every PR and asks the owner (OWNER-ASKS OA-1), and it prepares the `main` Firefox-network flip without running it (OA-2).
+The owner made two CI calls on 2026-10-11 (decision page 0, the C6 note). Nightly's Firefox jobs become required, and the seeded send-chaos run gates the nightly like the rest of the network suite. Today `nightly.yml` publishes a nightly prerelease, Firefox zip included, even when every Firefox suite and both chaos runs are red. This plan puts the seven jobs in `publish-nightly`'s and `status`'s needs, replaces the two pins that hold the advisory shape with pins that run the gates' own logic, and rewrites every doc that says these jobs gate nothing. It closes #220. It measured what chaos would cost on every PR and asked the owner (OA-1); the owner answered A, so Phase 3 replays two fixed chaos seeds as a required job of each PR network lane. It prepares the `main` Firefox-network flip without running it (OA-2).
 
 One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). Nothing a person sees in the wallet changes. Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
@@ -28,7 +28,7 @@ One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). Nothing a
 - **"record it in CLAUDE.md § nightly.yml".** CLAUDE.md has no such section. Its place is the `nightly.yml` bullet of § Quality gates → In CI (`CLAUDE.md:539`); `CI.md` § `nightly.yml` (`:121-133`) carries the longer statement.
 - **Option A "deterministic, so retry-0 honest".** Retry-0 honest holds: the chaos test pins `retry: 0` itself (`send-chaos.test.ts:134`). Deterministic holds only for the actions: a seed fixes the actions, not their timing (`send-chaos.test.ts:8-10`, `nightly.yml:245-247`), so one seed can interleave differently on two runs. OA-1 says so.
 - **#220 "Where" (`nightly.yml:256-267, :381-393`).** The lines drifted. The chaos jobs are at `:248-259` and `:369-381`. The finding holds.
-- **#220 Pickup (lane `send-queue-activity`, arc 4).** The owner's call supersedes C6's "stay advisory" and moves #220 here. `send-queue-activity/plan.md` Phase 4.2 (`:647-649`) still plans a "30 green nightlies" row for the chaos jobs; the orchestrator removes #220 from that plan and relabels the issue. This lane edits no other lane's plan.
+- **#220 Pickup (lane `send-queue-activity`, arc 4).** The owner's call supersedes C6's "stay advisory" and moves #220 here. `send-queue-activity/plan.md` Phase 4.2 still planned a "30 green nightlies" row for the chaos jobs. By the orchestrator's D-orch-4 this PR relabels the issue and replaces that claim with one line pointing here.
 
 ## Outcome & Quality Bar
 
@@ -38,16 +38,17 @@ One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). Nothing a
 - A red or cancelled Firefox suite, Firefox smoke of the shipped zip, or chaos run on either browser publishes no nightly, and `status` is red. Tests run `status`'s own script and read `publish-nightly`'s whole condition, so an edit that silences either fails CI. A new job added to `nightly.yml` gates the publish unless it is named advisory beside `dup-trend` and `rp-host-live`.
 - "Re-run failed jobs" on a red chaos night replays the same action sequence, so a re-run cannot clear a red night by drawing a different scenario.
 - Every doc that describes nightly gating names the same gates, and only `dup-trend` and `rp-host-live` are called advisory there.
+- Every network PR replays two fixed chaos seeds on both browsers at retry 0, inside the required aggregators; a chaos job whose test skipped or never ran is red, on a PR and at night.
 
 **Good enough.** The proof is the pins and actionlint. No agent dispatches `nightly.yml` (a dispatch publishes); the orchestrator watches the first real night after the merge. The nightly's retry policy does not change; chaos keeps its own retry 0. A seed fixes actions, not timing, so a timing-dependent chaos failure can still pass on a re-run; the rule for that is written down (a red seed is a bug, filed with its seed), not enforced by code.
 
 ## Scope
 
-- **In (arc 1):** the seven jobs into the nightly gates; #220 (the chaos criterion, recorded and enforced); the pins; the docs.
-- **Asks, not built:** chaos on every PR (OA-1; ships option B, nightly only); the `main` Firefox-network flip (OA-2; an owner runbook, nothing runs).
+- **In (arc 1):** the seven jobs into the nightly gates; #220 (the chaos criterion, recorded and enforced); the pins; the docs; two fixed chaos seeds as a required job of each PR network lane (OA-1, answered A; Phase 3); the one-line notes D-orch-4 and D-orch-5 ask for in two sibling plans.
+- **Asks, not built:** the `main` Firefox-network flip (OA-2; an owner runbook, nothing runs).
 - **Out, by the brief:** #251 and #195 (`owner-decision`, page 5); anything in `release.yml`, `publish-*.yml`, branch protection or a ruleset.
 - **Out, noted:** a non-numeric `chaos_seed` dispatch input becomes `NaN`, which the PRNG turns into seed 0 while the log prints `seed=NaN` (`send-chaos.test.ts:37, :135-137`). Pre-existing, maintainer-only input; the close-out files it as an issue.
-- **UI impact:** none. No wallet surface, copy or layout changes; only `.github/workflows/nightly.yml`, two test files and docs. The orchestrator's no-ask budget for this lane is the brief's "Nothing a person sees in the wallet changes. The nightly release's gating changes exactly as the owner asked"; this plan spends nothing beyond it.
+- **UI impact:** none. No wallet surface, copy or layout changes; only workflows, CI scripts and their tests, one e2e file's header comment, and docs. The orchestrator's no-ask budget for this lane is the brief's "Nothing a person sees in the wallet changes. The nightly release's gating changes exactly as the owner asked"; this plan spends nothing beyond it.
 
 ## Architecture & Implementation
 
@@ -86,7 +87,21 @@ One arc, one PR against `dev` (the orchestrator's D-orch-1: no stack). Nothing a
 | D3 | Both chaos jobs fall back to `github.run_id` when no `chaos_seed` is given | GitHub keeps `run_id` across "Re-run failed jobs" (GitHub Docs, Contexts reference). Today a re-run of a scheduled night draws a new random seed, so re-running a red chaos night could publish on a different scenario. Narrowed claim (both legs): the re-run replays the action sequence, not the timing, and the next night or a seedless dispatch still draws a new seed; the rule that a red seed is a bug filed with its seed covers those. Both browsers share one sequence per night (one sequence explored instead of two), which also separates a browser difference from a sequence one | Codex: keep `run_id`; an 11-digit id converts exactly and `seed >>> 0` reduces it modulo 2³² on purpose. Opus: real cause, right-sized, belongs in this arc; a SHA seed is not worth a new output |
 | D4 | No retry, timeout or watchdog change anywhere | Owner's standing instruction. The job's 30 minutes include 1.5-2.5 minutes of setup, so the test's own 30-minute timeout cannot fire first; a hang ends as a job timeout, which is not `success`, and the seed is logged before the actions (`send-chaos.test.ts:137`) | Both: retain; a note, not an issue |
 | D5 | OA-1 measured from the five nightly runs, no local run | The nightly logs are the CI runner class the PR lane would use; a local run on a host shared with four leads times the host | Codex: cost model plausible, but "a PR waits no longer" holds only with free runners (CI.md:89 documents queueing); accepted |
-| D6 | No arc for chaos-on-PR or the `main` flip; OA-1 recommends B now and A after 30 consecutive green chaos nights on both browsers | Ten green runs are little evidence: under a simple model (independent runs, one failure rate) they bound the per-run failure rate only below about 26 % (95 %), and runs across changing commits do not even fit that model. The repository's own promotion bar is "ship advisory, observe, promote" and 30 green nightlies (CLAUDE.md § Staged-rollout switches), a policy bar, not a proven reliability threshold. The count is read from the chaos jobs' own run records, not from published nightlies (a missing nightly can be any red gate or a quiet day) | Opus: B now (accepted). Codex: A with N = 2 "a reasonable conditional recommendation". The stronger argument is the repository's own bar; A stays the owner's choice at any time |
+| D6 | *Superseded by D-orch-2.* No arc for chaos-on-PR or the `main` flip; OA-1 recommends B now and A after 30 consecutive green chaos nights on both browsers | Ten green runs are little evidence: under a simple model (independent runs, one failure rate) they bound the per-run failure rate only below about 26 % (95 %), and runs across changing commits do not even fit that model. The repository's own promotion bar is "ship advisory, observe, promote" and 30 green nightlies (CLAUDE.md § Staged-rollout switches), a policy bar, not a proven reliability threshold. The count is read from the chaos jobs' own run records, not from published nightlies (a missing nightly can be any red gate or a quiet day) | Opus: B now (accepted). Codex: A with N = 2 "a reasonable conditional recommendation". The stronger argument is the repository's own bar; A stays the owner's choice at any time |
+| D-orch-1 | One arc, one PR against `dev`; no stack | The orchestrator's call at approval | — |
+| D-orch-2 | OA-1 is answered A: two fixed chaos seeds per browser as a matrix job inside both PR network lanes, in each lane's aggregator `needs`, so `extension-network-e2e-status` and `extension-network-e2e-firefox-status` gate them; no protection or ruleset change. A red seed job on a PR is a real failure: fixed, or proven a flake with that seed's replay; never retried, skipped or rotated to pass | The owner, in chat on 2026-10-11, accepted the orchestrator's recommendation: "a fixed-seed chaos replay becomes a required PR job if one replay measures under ten minutes". The measurement (recon.md § Measurements): 3.5-5.1 min per chaos job on Chrome (median 3.9), 4.0-5.1 on Firefox (median 4.3), from the five nightlies 2026-10-07 to 10-11. Built as Phase 3 (D7-D14) | Orchestrator's decision on the owner's answer; Phase 3's design argued with both legs |
+| D-orch-3 | OA-2 stays prepared, not run | No agent edits branch protection; the runbook stays in OWNER-ASKS.md and in the report | — |
+| D-orch-4 | #220's lane is this one | The PR relabels #220 (`lane:send-queue-activity` → `lane:ci-followups-2`) and replaces `send-queue-activity/plan.md` Phase 4.2's claim on it with one line pointing here | — |
+| D-orch-5 | `ci-release-supply/plan.md`'s "no advisory job enters any gate" lines get a one-line "superseded 2026-10-11 by ci-followups-2" note; its arc 5 is untouched | Those lines described the advisory shape this arc removes | — |
+| D-orch-6 | Never dispatch `nightly.yml`, `release*.yml` or `publish-*.yml`. The gating change is proven by the pins (red on base and six mutations), `lint:actions` and `test:ci-gating`; the orchestrator watches the first real night. The non-numeric `chaos_seed` issue is filed at close-out | A dispatch publishes | — |
+| D7 | Each PR lane gets one matrix job `network-e2e-chaos` after its canary job: `strategy: { fail-fast: false, matrix: { seed: [two block-list entries] } }`, `name: Run / chaos / seed ${{ matrix.seed }}`, `shard_label: chaos-${{ matrix.seed }}`, `test_files: send-chaos.test.ts`, `proverless: true`, `chaos: true`, `chaos_seed: ${{ matrix.seed }}`, `retry: "0"` | One job, so the aggregator reads one result for both legs, as for the shard pool. The logs artifact is named by `shard_label`, so each leg needs its own; the seed already is an artifact-safe one. The seed in the check name tells the reader of a red check what replays it | Codex and Opus: one two-leg matrix, `chaos-${{ matrix.seed }}`; a `{seed,label}` matrix adds nothing |
+| D8 | The seeds are 1095865833 (nightly run 37607270016, 2026-10-07, its Firefox chaos job) and 1960252198 (nightly run 37765624647, 2026-10-08, its Chrome chaos job), the only two fully green nights since chaos landed | Chosen for coverage: together all four TST transfer types, an ALT send, an abandoned estimate, five dApp sends and all three fee methods. Each was green on one browser only; this PR's first-attempt run of all four seed/browser pairs is the evidence (its body says so). A seed maps to its actions only under the current `plan()`, `ACTIONS`, `DAPP_SHARE` and burst-fixture amounts: a change to any re-maps both, and CI.md says to re-read the logged actions then | Codex: sound (moderate). Opus: sound; prefer later seeds from nights after Phase 1, when both browsers share one |
+| D9 | "Literals in one place" (the orchestrator's D-orch-2 spec) is read as one authored list: the Chrome lane's matrix, with each seed's provenance beside it. The Firefox lane's copy is held equal by the whole-shape parity pin, and `verify-cert-run.sh`'s two expected job names by its derived-name pin; no other pin and no doc restates a value | The codebase keeps twin data as literal copies held equal by pins (the shard pool's exclude list is spelled out in every lane and every release leg, held equal that way). A data file read by a control job and fed to a `fromJSON` matrix is a new mechanism for one caller | Codex: two lists are two places; a small data file exposed through the control jobs' outputs, or an explicit exception. Opus: one authored list plus copies the tests hold equal. Opus's argument holds by the owner's rule (no new mechanism for one caller); flagged to the orchestrator |
+| D10 | The PR chaos job passes `retry: "0"` | Every job of the PR lane states the lane's retry 0; leaving it out would read as an exception. Nightly's convention is to omit retry, which is why O5 rejected it there | Opus: pass it. Codex: omit it, the test pins `retry: 0`. Opus's argument: the input states the lane's policy, not the file's |
+| D11 | A chaos job is asserted like a canary job: the vitest json report and the "Assert canary results" step arm on `inputs.chaos` as well as a `canary*` label, and `canary-expectations.json` names send-chaos's one test | `send-chaos` is `test.skipIf(!enabled)`: a broken `chaos` → env wiring, a changed `enabled` or a missing sandbox config would leave a required job green with nothing run. The repository already guards that hole for canaries; arming it on the input that arms the file needs no naming convention. This closes the same hole in Phase 1's nightly gate | Both: close it now with the existing check (option iii). Codex: arm on a `chaos*` label; Opus: arm on `inputs.chaos`. The pin that the job carrying send-chaos passes `chaos: true` catches a dropped input statically, so the input is the cleaner key. Opus corrected a fact: the zero-proofs check never runs on a proverless job |
+| D12 | The chaos pin asserts the two PR lanes' seed lists equal, in one line | The orchestrator asked for it; the parity pin holds it too | Codex: keep it. Opus: two pins of one fact. Kept, as asked |
+| D13 | `release.yml` is untouched; its pin compares release's legs with the PR lane minus its chaos replay: the one job carrying send-chaos is dropped and exactly send-chaos leaves the PR pool's exclude list before the comparison | The lane brief puts `release.yml` out of scope, and ci-release-supply plans to rewrite its network legs. Release's opt-in run therefore has no chaos replay, and its pool still lists the chaos file, which skips itself there. Since vitest applies `--exclude` before its SHA-1 sharding, release's five legs now split the pool's files differently from the PR shards; every file still runs in one leg. Filed at close-out as an issue for `release.yml` | Codex: acceptable if narrow (drop the exact job, remove only send-chaos). Opus: acceptable; better an exception to edit five strings in `release.yml`, else an issue. No exception exists in this lane's brief |
+| D14 | `verify-cert-run.sh` expects the two chaos jobs by name, and its pin binds a one-key matrix of any key | The pin derived names from `matrix.shard` only, so the chaos job would yield a literal `${{ matrix.seed }}`. The header comment names the chaos legs | Both found it |
 
 ## Audit verdicts
 
@@ -148,13 +163,13 @@ Both legs approved D1 as complete, D3's `run_id` source and D4 unchanged, and th
 - I3. ci-release-supply's arc 5 `prune-nightlies` (needs `publish-nightly`, joins `status`) passes the D2 pins unchanged: it is a non-advisory job in `status`'s needs and a dependent of `publish-nightly`.
 
 **Asks.**
-- A1. Chaos on every PR: OWNER-ASKS OA-1. Working assumption: option B (nightly only) ships.
+- A1. Chaos on every PR: OWNER-ASKS OA-1. Answered A, N = 2 (D-orch-2); Phase 3 builds it.
 - A2. The `main` Firefox-network flip: OWNER-ASKS OA-2, a prepared runbook. Working assumption: `main` stays as it is.
 
 ## Security & Adversarial Considerations
 
 - **Threat model.** The nightly is a public install channel: a GitHub prerelease with a Chrome zip and a Firefox zip, attested. Today the Firefox zip publishes without any Firefox suite passing, so a Firefox-only regression reaches nightly users. After the change it cannot. No trigger, input, permission or token changes, so an attacker gains nothing new.
-- **Gate integrity.** The risk this plan adds is a gate that is defeated without anyone noticing. Each path and its guard: a red job left out of `status` or the publish (D1; the exact set in D2); a future job added ungated (D2's exact set: it must be a need or be named advisory); an edit that silences the loop or loosens the publish condition (D2 runs the script and reads the whole condition); a re-run that draws a different chaos scenario (D3, pinned). Residual: a timing-dependent chaos failure can pass on a re-run of the same seed; a dispatch with a chosen seed publishes on that seed's result (a maintainer action); `status` passes `skipped` by design.
+- **Gate integrity.** The risk this plan adds is a gate that is defeated without anyone noticing. Each path and its guard: a red job left out of `status` or the publish (D1; the exact set in D2); a future job added ungated (D2's exact set: it must be a need or be named advisory); an edit that silences the loop or loosens the publish condition (D2 runs the script and reads the whole condition); a re-run that draws a different chaos scenario (D3, pinned). A required chaos job that ran nothing (a broken `chaos` → env wiring, a changed `enabled`, no sandbox config): the json report is read back against `canary-expectations.json` (D11). A seed rotated to pass a red PR: the rotation rule in CI.md and D-orch-2's red-seed rule; a rotation is a reviewed PR naming its nightly. Residual: a timing-dependent chaos failure can pass on a re-run of the same seed; a dispatch with a chosen seed publishes on that seed's result (a maintainer action); `status` passes `skipped` by design; release's opt-in network run has no chaos replay (D13).
 - **Least privilege.** `publish-nightly` keeps its exact `contents: write`, `id-token: write`, `attestations: write` (`release-integrity.test.ts` pins them); the gating jobs stay `contents: read` (workflow default). No secret reaches a new job.
 - **Supply chain.** No new action or dependency; geckodriver and Puppeteer stay pinned as today.
 - **Availability.** More gates mean more nights may publish nothing. That is the owner's call and the intended trade. The response to a red night is a fixed cause or a replayed seed, never a retry or a skip.
@@ -164,7 +179,7 @@ Both legs approved D1 as complete, D3's `run_id` source and D4 unchanged, and th
 
 Every phase lists its assumptions; every command runs from the worktree root.
 
-### Phase 1: gate the nightly on the seven jobs, with the pins (#220, owner call 1)
+### Phase 1: gate the nightly on the seven jobs, with the pins (#220, owner call 1) ✓
 
 Assumptions: F1-F7, D1-D4.
 
@@ -187,7 +202,7 @@ Assumptions: F1-F7, D1-D4.
 - Pass criteria: every command exits 0 on the committed tree. Step 5 fails on the base workflow and the output lists the seven jobs. Each step-6 mutation fails the test named for that guard; other tests may fail too. The restored tree passes again.
 - Layers: lint, typecheck, unit (the CI-gating pins, which run the gate scripts), workflow lint.
 
-### Phase 2: rewrite the docs to the new truth
+### Phase 2: rewrite the docs to the new truth ✓
 
 Assumptions: Phase 1 green; recon.md § Docs.
 
@@ -200,13 +215,38 @@ Assumptions: Phase 1 green; recon.md § Docs.
 - Pass criteria: the search prints nothing; every other command exits 0.
 - Layers: lint, unit, docs gate.
 
-No e2e run: nothing under `apps/` or `packages/` changes code, and no fixture changes. `nightly.yml` is in neither PR e2e path filter, so the PR runs `quality-status` and `actionlint.yml`; no label is added.
+### Phase 3: two fixed chaos seeds gate every network PR (OA-1 answered A)
+
+Assumptions: D-orch-2, D7-D14; Phases 1-2 green.
+
+**Change map.**
+
+| File | Change |
+|---|---|
+| `.github/workflows/pr-extension-network-e2e.yml` | New job `network-e2e-chaos` after `network-e2e-canary` (D7), its seed list carrying each seed's run, browser and date (D8, D9); the pool's `exclude_files` gains `send-chaos.test.ts`; `status` gains the job in `needs` and in its suite loop |
+| `.github/workflows/pr-extension-network-e2e-firefox.yml` | The same job with `browser: firefox` and the same list (held by the parity pin); the same pool and `status` edits; its header names the chaos replay |
+| `.github/workflows/_extension-network-e2e.yml` | `NULO_E2E_RESULTS_FILE` and the "Assert canary results" step arm on `inputs.chaos \|\| startsWith(inputs.shard_label, 'canary')` (D11); their comments say a canary or chaos job |
+| `scripts/ci-cd/canary-expectations.json` | `send-chaos.test.ts` → its one test's title |
+| `scripts/ci-cd/assert-canary-results.ts` / `.test.ts` | The header says a canary or chaos job; the coverage test's job selector takes chaos jobs too |
+| `scripts/ci-cd/verify-cert-run.sh` | `EXPECTED_NETWORK_JOBS` gains the two chaos names; the header counts them (D14) |
+| `scripts/ci-cd/behavior-gating.test.ts` | Exact-needs list gains `network-e2e-chaos`. The chaos test: in each PR lane exactly one job carries send-chaos, with `chaos: true`, `proverless: true`, `retry: "0"`, matrix keys exactly `["seed"]`, `fail-fast: false`, two distinct decimal seeds, each leg's `chaos_seed` and `shard_label` bound to `matrix.seed`; the Firefox list equals the Chrome one (D12); nightly keeps one chaos job per browser with the run-id fallback. "Nightly runs the PR lane's jobs" filters chaos on both sides. The release pin compares against the PR lane minus its chaos replay (D13). The cert-name derivation binds a one-key matrix (D14). The step pin reads the new arming condition (D11) |
+| `apps/extension/tests/e2e/network/send-chaos.test.ts` | Header: the nightly hunts with new seeds; each PR network lane replays two fixed ones |
+| `CI.md`, `CLAUDE.md`, `.github/WORKFLOWS.md`, `apps/extension/tests/e2e/FIREFOX.md`, `apps/extension/tests/e2e/README.md`, `.claude/skills/e2e-testing/SKILL.md` | The PR network lane runs the two seeds; the red-seed rule; the rotation rule (a seed is replaced only by a PR that names the nightly it comes from; a change to `plan()`, `ACTIONS`, `DAPP_SHARE` or the burst amounts re-maps both seeds); the job counts (the Firefox lanes now start nineteen more jobs, thirteen suites; the pool excludes ten files) |
+
+**Steps.**
+1. Edit the files above. Commit workflows, scripts and pins together: `ci(e2e): replay two fixed send-chaos seeds in each pr network lane`; docs in `docs(ci): the pr network lanes replay two chaos seeds`.
+2. Prove the new pins red: (a) the base PR lanes (`git show c638bd7:<lane>` over each) fail the chaos test and the exact-needs test; (b) drop one seed from the Firefox list only: the parity pin and the seed-equality line fail; (c) drop `network-e2e-chaos` from one lane's `status` loop only: the result-loop pin fails; (d) revert the arming condition to `startsWith(inputs.shard_label, 'canary')` only: the step pin fails; (e) set the chaos job's `chaos: false`: the chaos test fails. Restore after each; log the outputs in `lessons/phase-3.md`.
+
+**Validation gate.**
+- Commands: `bun run lint:actions`; `bun test scripts/ci-cd/aggregators.test.ts scripts/ci-cd/behavior-gating.test.ts scripts/ci-cd/assert-canary-results.test.ts`; `bun run test:ci-gating`; `bun run test:release`; `bun run lint`; `bun run typecheck:all`; `bun run test:all`.
+- Pass criteria: every command exits 0 on the committed tree; each step-2 proof fails the test named for its guard.
+- E2e: no local run (a host shared with four leads times the host, D5). The PR edits both lane files, which sit in their own path filters, so both network lanes run on the PR, retry 0: all four seed/browser legs green on their first attempt is this phase's e2e evidence, quoted in the PR body. A red leg is read honestly: fixed, or proven a flake by its seed's replay.
 
 ## Post-implementation
 
 Single-arc plan: steps 1-3 run once over the whole diff after Phase 2 is green. `code_review` is `off`, so there is no `/code-review` step.
 
-1. **Codex audit.** Write the prompt to `implementations-plan/ci-followups-2/_codex-impl.md` and run `~/.claude/skills/codex/scripts/run-codex.sh implementations-plan/ci-followups-2/_codex-impl.md <worktree> high read-only gpt-6.1-sol`. Send: the net diff from 27af8d7, this plan with its ledger, and an adversarial ask (can any red job of `nightly.yml` other than the two advisory reports still publish, or leave `status` green; can a re-run or a dispatch change what was tested; does any permission widen). Include these two rules verbatim:
+1. **Codex audit.** Write the prompt to `implementations-plan/ci-followups-2/_codex-impl.md` and run `~/.claude/skills/codex/scripts/run-codex.sh implementations-plan/ci-followups-2/_codex-impl.md <worktree> high read-only gpt-6.1-sol`. Send: the net diff from 27af8d7, this plan with its ledger, and an adversarial ask (can any red job of `nightly.yml` other than the two advisory reports still publish, or leave `status` green; can a re-run or a dispatch change what was tested; can a PR chaos job pass without running its test, or a red seed pass the required check; does any permission widen). One Opus 5.5 review of the same diff (`Agent`, `general-purpose`) runs beside the first round. Include these two rules verbatim:
    - *"Report bugs and small, targeted improvements only. Do not propose speculative abstractions, extra configuration surface, new layers, or rewrites — the smallest change that fixes each real problem. If code works and is clear, leave it alone."*
    - *"Audit the comments for value per character. Flag any comment that narrates what the code visibly does, restates its line, references implementation plans / phases / reviews, or spends a paragraph where a sentence works — and flag places where a non-obvious invariant or constraint deserves a comment it doesn't have. Comments are permanent context every future reader, human or LLM, pays to re-read: they must be few, dense, and exact."*
 2. **Fix loop.** Verify each finding against the tree first. Apply the accepted fixes, commit them, and log the round (consult, verdict, accepted and rejected findings with reasons) in `lessons/phase-1.md`. Resume the same session with `resume-codex.sh` and the fix diff, with the same two rules. Stop when a round has no new material finding. Still finding material issues after 3 rounds: stop and report it; that is a scope problem.
@@ -229,7 +269,8 @@ Single-arc plan: steps 1-3 run once over the whole diff after Phase 2 is green. 
      | A legal or store blank with a release deadline | `BEFORE-LAUNCH.md` |
      | Accepted code work that blocks launch | the `v1.0.0` milestone, pointed at once from `BEFORE-LAUNCH.md` |
 
-     Open one issue for the `NaN` seed (§ Scope), label `ci`; dedupe first with `gh issue list --state all --search "chaos_seed"`. The body has five sections: What happens, Where, Impact, Possible fix, Record. OA-1 and OA-2 live on the orchestrator's owner page; if the owner has chosen OA-1 option A by close-out and no arc builds it, open an issue for it too (dedupe: `gh issue list --state all --search "chaos PR lane"`).
+     Open one issue for the `NaN` seed (§ Scope), label `ci`; dedupe first with `gh issue list --state all --search "chaos_seed"`. Open one for `release.yml`'s opt-in network run, which has no chaos replay and whose pool exclusions now differ from the PR lane's (D13); dedupe with `gh issue list --state all --search "release opt-in network"`. Each body has five sections: What happens, Where, Impact, Possible fix, Record. OA-2 lives on the orchestrator's owner page.
+   - D-orch-4 and D-orch-5: relabel #220 (`gh issue edit 220 --repo nulo-sh/nulo --remove-label lane:send-queue-activity --add-label lane:ci-followups-2`, creating the label if missing); replace `send-queue-activity/plan.md` Phase 4.2's claim on #220 with one line pointing here; add the one-line supersession note at `ci-release-supply/plan.md`'s two lines.
    - Delete `STATUS.md`. Then, in its own commit, `git mv implementations-plan/ci-followups-2 implementations-plan/archive/ci-followups-2`, repair the links the extra directory level breaks (`git grep -n 'ci-followups-2'`), and move the index line to `implementations-plan/archive/index.md`.
    - Run `bun run check:plans` on the staged files, push, and report. Merging is the orchestrator's call.
 6. **Teardown after the merge.** Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/ci-followups-2/plan.md` succeeds, run `agent-worktree done ci-followups-2 --merged` (this session adopted the worktree and never entered it through `EnterWorktree`, so there is nothing to exit). It refuses rather than forces: relay a refusal and stop. A `/loop` session checks this on every firing; a `/goal` session arms one background wait after its wrap-up report (`until <the check>; do sleep 300; done`, at the maximum timeout) and otherwise runs it at the start of its next turn. This step is standing authorization.
@@ -238,11 +279,11 @@ Single-arc plan: steps 1-3 run once over the whole diff after Phase 2 is green. 
 
 | Arc | Phases | Stacks on | `/code-review` | PR title (characters) | Closes |
 |---|---|---|---|---|---|
-| arc-1 | 1, 2, close-out | `dev` | off | `ci(nightly): gate the nightly release on its firefox and send-chaos jobs` (72) | #220 |
+| arc-1 | 1, 2, 3, close-out | `dev` | off | `ci: gate the nightly on firefox and send-chaos, and network prs on two chaos seeds` (82) | #220 |
 
 - Single arc, one branch (`worktree-ci-followups-2`), plain `gh pr create --base dev`; no `gh stack`. The close-out lands as the PR's final commits.
-- Open the PR without labels. No e2e label is needed: no suite's code or fixtures change.
-- PR body: what changed and why (the owner's two calls of 2026-10-11 on page 0's C6 note; the decision on #220 supersedes C6's "stay advisory"), the validation run with outcomes, the red-on-base and mutation proofs, `Closes #220`, and a pointer to OWNER-ASKS OA-1 and OA-2. End it with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- Open the PR without labels. No e2e label is needed: the PR edits both network lane files and an `apps/extension` file, so the network lanes and smoke run by their path filters.
+- PR body: what changed and why (the owner's two calls of 2026-10-11 on page 0's C6 note and the answer to OA-1; the decision on #220 supersedes C6's "stay advisory"), the validation run with outcomes, the red-on-base and mutation proofs, the first-attempt result of the four seed/browser legs, `Closes #220`, and the OA-2 runbook pointer. End it with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - Commits are signed and end with the co-author trailer the program's common brief names. If a commit hangs, rerun it as `env -u SSH_AUTH_SOCK git …` and check that `git log --format='%h %G?' -3` shows no `N`.
 - After the merge the orchestrator watches the first real night: every Firefox and chaos job appears in `publish-nightly`'s needs on the run graph, and a green night publishes.
 
