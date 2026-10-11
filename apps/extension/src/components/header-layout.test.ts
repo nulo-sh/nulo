@@ -14,6 +14,8 @@ test("the name sits in a slot with no intrinsic width, and the account group kee
 	expect(declarationsOf(parsed, ".name_slot")).toMatchObject({ contain: "inline-size", "align-self": "stretch" })
 	expect(declarationsOf(parsed, ".account_group")["min-width"]).toBeUndefined()
 	expect(declarationsOf(parsed, ".account_col")["min-width"]).toBeUndefined()
+	// The copy icon spans 6 to 18px past the address: this padding and the row's 12px gap hold it.
+	expect(declarationsOf(parsed, ".account_address").padding).toBe("0 6px 0 0")
 })
 
 test("the network chip's row may shrink below its content", () => {

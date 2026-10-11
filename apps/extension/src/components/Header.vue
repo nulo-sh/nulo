@@ -366,7 +366,8 @@ onBeforeUnmount(() => {
 }
 
 .account_address {
-	padding: 0;
+	/* Room for the copy icon revealed past the address, so it never lands on the chip. */
+	padding: 0 6px 0 0;
 	background: transparent;
 	border: none;
 	cursor: pointer;
