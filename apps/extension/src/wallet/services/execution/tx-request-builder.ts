@@ -400,6 +400,9 @@ export class TxRequestBuilder {
 
 			// Register account in PXE (needed for scopes)
 			await account.ensureRegistered(pxe)
+			// Discovery stubs this account, and the run executes it to check any authorization, both by
+			// its registered instance, which otherwise only a standard build registers.
+			await account.ensureContractRegistered(pxe)
 			this.log("buildNoFrom: account registered in PXE")
 
 			// Register contracts referenced in the payload (same pattern as buildStandard)

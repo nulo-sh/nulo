@@ -352,6 +352,7 @@ declare global {
   const useAuthRegistryStatus: typeof import('../composables/useAuthRegistryStatus').useAuthRegistryStatus
   const useBalancesStore: typeof import('../stores/balances.store').useBalancesStore
   const useCacheStore: typeof import('../stores/cache.store').useCacheStore
+  const useConfigRead: typeof import('../composables/useConfigRead').useConfigRead
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
   const useDappApprovalWindow: typeof import('../composables/useDappApprovalWindow').useDappApprovalWindow
@@ -969,6 +970,7 @@ declare module 'vue' {
     readonly useAuthRegistryStatus: UnwrapRef<typeof import('../composables/useAuthRegistryStatus')['useAuthRegistryStatus']>
     readonly useBalancesStore: UnwrapRef<typeof import('../stores/balances.store')['useBalancesStore']>
     readonly useCacheStore: UnwrapRef<typeof import('../stores/cache.store')['useCacheStore']>
+    readonly useConfigRead: UnwrapRef<typeof import('../composables/useConfigRead')['useConfigRead']>
     readonly useCssModule: UnwrapRef<typeof import('vue')['useCssModule']>
     readonly useCssVars: UnwrapRef<typeof import('vue')['useCssVars']>
     readonly useDappApprovalWindow: UnwrapRef<typeof import('../composables/useDappApprovalWindow')['useDappApprovalWindow']>

@@ -18,10 +18,12 @@ import { BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfigRead } from "@/composables/useConfigRead"
 const { openToast } = useToast()
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
+const privacyRead = useConfigRead(configService, () => configService.getProps(), landPrivacyConfig)
 
 const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
@@ -79,19 +81,24 @@ function onSettingUpdate(setting) {
 	}
 }
 
-onMounted(async () => {
-	const _settings = await configService.getProps()
+// Copies the values only: `applySetting` would toast on a reread.
+function landPrivacyConfig(_settings, updatedSince) {
 	_settings.forEach((s) => {
-		if (settings[s.key]) {
+		if (settings[s.key] && !updatedSince(s.key)) {
 			settings[s.key].model.value = s.value
 		}
 	})
 
 	isLoading.value = false
+}
+
+onMounted(() => {
+	void privacyRead.read()
 })
 
 onBeforeUnmount(() => {
 	configService.disconnect()
+	privacyRead.dispose()
 })
 </script>
 
