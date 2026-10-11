@@ -216,12 +216,14 @@ runtime env var can never arm a build-time flag.
   Required check `extension-smoke-e2e-status` on both branches.
 - **Network** — `pr-extension-network-e2e.yml` → `_extension-network-e2e.yml`. Filter `extension-network`, label
   `e2e:extension-network`. Lanes: 5 vitest shards (`--shard=N/5`, SHA-1 of the file path, proverless, retry 0,
-  the 9 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
+  the 10 dedicated files excluded); two heavy lanes (`fee-methods` + `selfpay-phase`, and
   `concurrent-sendtx-confirm` + `same-token-concurrent-sends`, proverless); the **canary** lane prover-ON with the SHA-256-pinned
   `presto-server` and `VITE_NULO_PRESTO_REQUIRED=1` (`transfers`, `tx-sendTx-default`,
   `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove`) — a canary run with zero `Proving succeeded` lines fails; the
   `disable_presto` dispatch input (or the `NULO_E2E_DISABLE_PRESTO` variable) is the
-  rollback to WASM. Exit 86 retries the agent once. After every run the built bundle is grepped for
+  rollback to WASM. The **chaos** lane replays two fixed `send-chaos` seeds (one matrix leg each, proverless,
+  retry 0); a red seed is fixed or proven a flake by its replay, never rotated away (rotation: CI.md).
+  Exit 86 retries the agent once. After every run the built bundle is grepped for
   `(PROBE|nulo:probe:|VITE_E2E_PROBE)` and any hit fails the workflow (`_extension-network-e2e.yml` skips the
   grep only when its `probe` input is `"1"`, a caller-set investigation mode, not a dispatch option):
   string constants shipped in `dist/` must not contain `PROBE`.

@@ -224,7 +224,7 @@ Assumptions: D-orch-2, D7-D14; Phases 1-2 green.
 | File | Change |
 |---|---|
 | `.github/workflows/pr-extension-network-e2e.yml` | New job `network-e2e-chaos` after `network-e2e-canary` (D7), its seed list carrying each seed's run, browser and date (D8, D9); the pool's `exclude_files` gains `send-chaos.test.ts`; `status` gains the job in `needs` and in its suite loop |
-| `.github/workflows/pr-extension-network-e2e-firefox.yml` | The same job with `browser: firefox` and the same list (held by the parity pin); the same pool and `status` edits; its header names the chaos replay |
+| `.github/workflows/pr-extension-network-e2e-firefox.yml` | The same job with `browser: firefox` and the same list (held by the parity pin); the same pool and `status` edits |
 | `.github/workflows/_extension-network-e2e.yml` | `NULO_E2E_RESULTS_FILE` and the "Assert canary results" step arm on `inputs.chaos \|\| startsWith(inputs.shard_label, 'canary')` (D11); their comments say a canary or chaos job |
 | `scripts/ci-cd/canary-expectations.json` | `send-chaos.test.ts` → its one test's title |
 | `scripts/ci-cd/assert-canary-results.ts` / `.test.ts` | The header says a canary or chaos job; the coverage test's job selector takes chaos jobs too |
