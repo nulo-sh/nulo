@@ -12,6 +12,12 @@
 # implementations-plan/archive/isolated-linker-store/plan.md#global-store.
 linker = "isolated"
 
+# With no node_modules (a job that installs nothing), Bun's default fetches a bare import from npm
+# at run time, past bun.lock's hashes and the age gate below. Bun reads this file from its working
+# directory only, so a job that runs Bun elsewhere, or another revision's code, passes --no-install;
+# scripts/ci-cd/release-integrity.test.ts pins both.
+auto = "disable"
+
 # Supply-chain defense: block packages published in the last 7 days.
 # Recent npm token-compromise attacks (axios, chalk/debug)
 # were detected and pulled within hours-to-days; a 7-day window catches

@@ -8,15 +8,25 @@
  * Wired into CI via the root `test:ci-gating` script.
  */
 import { describe, expect, test } from "bun:test"
-import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
 import { SOURCE_COMMIT } from "../release/attach-assets-run"
 
 const ROOT = join(import.meta.dir, "..", "..")
 
-type Step = { id?: string; uses?: string; with?: Record<string, unknown>; run?: string; if?: unknown }
-type Job = { uses?: string; permissions?: unknown; env?: Record<string, unknown>; steps?: Step[]; needs?: unknown; if?: unknown }
-type Workflow = { permissions?: unknown; env?: Record<string, unknown>; jobs: Record<string, Job> }
+type Step = { id?: string; uses?: string; with?: Record<string, unknown>; run?: string; if?: unknown; "working-directory"?: string }
+type Defaults = { run?: { "working-directory"?: string } }
+type Job = {
+	uses?: string
+	permissions?: unknown
+	env?: Record<string, unknown>
+	defaults?: Defaults
+	steps?: Step[]
+	needs?: unknown
+	if?: unknown
+}
+type Workflow = { permissions?: unknown; env?: Record<string, unknown>; defaults?: Defaults; jobs: Record<string, Job> }
 type Action = { runs: { steps?: Step[] } }
 /** Every workflow by file name, and every local composite action by its `uses:` path. */
 type Tree = { workflows: Record<string, Workflow>; actions: Record<string, Action> }
@@ -46,9 +56,12 @@ function* jobs(tree: Tree): Generator<{ where: string; wf: Workflow; job: Job }>
 	}
 }
 
-/** A job's steps with each local composite action's own steps after the step that runs it. */
-function expanded(tree: Tree, job: Job): Step[] {
-	return (job.steps ?? []).flatMap((step) => [step, ...(step.uses?.startsWith("./") ? (tree.actions[step.uses]?.runs.steps ?? []) : [])])
+/** A job's steps with each local composite action's own steps, but `skip`'s, after the step that runs it. */
+function expanded(tree: Tree, job: Job, skip?: string): Step[] {
+	return (job.steps ?? []).flatMap((step) => [
+		step,
+		...(step.uses?.startsWith("./") && step.uses !== skip ? (tree.actions[step.uses]?.runs.steps ?? []) : []),
+	])
 }
 
 const thirdParty = (steps: Step[]): string[] =>
@@ -179,6 +192,102 @@ function cleanFindings(tree: Tree): string[] {
 	return findings
 }
 
+/**
+ * The jobs that set up Bun and install nothing. With no node_modules, Bun fetches a bare import from
+ * npm at run time, past bun.lock and the age gate, unless the call passes `--no-install` or the
+ * bunfig.toml in its working directory (Bun reads no other) sets `install.auto = "disable"`. A job
+ * that checks out another revision reads that revision's file, which may predate the setting.
+ * Blind spot: a Bun process that a script starts itself is not read (source-rebuild.sh's, after its
+ * own install).
+ */
+const NO_INSTALL = [
+	"_release-pr-lockfile.yml#lock-version",
+	"nightly.yml#publish-nightly",
+	"pr-quick.yml#changes",
+	"pr-quick.yml#preview-comment",
+	"release.yml#attach-assets",
+	"release.yml#auto-unstick",
+	"release.yml#publish-chrome-store",
+	"release.yml#publish-firefox-amo",
+	"release.yml#sync-main-to-dev",
+	"source-rebuild.yml#rebuild-arm64",
+	"source-rebuild.yml#rebuild-x64",
+	"store-check.yml#chrome",
+	"store-check.yml#firefox",
+	"verify-store-copies.yml#compare",
+]
+const BUN_CALL = /(?<=^|[\s;&|(])bun(?=\s|$)/m
+const CHANGES_DIRECTORY = /(^|[\s;&|(])(cd|pushd)\s/m
+const flagged = (args: string[], flags: string): boolean => args.some((arg) => new RegExp(`^(${flags})(=|$)`).test(arg))
+
+function installsNothing(job: Job): boolean {
+	const steps = job.steps ?? []
+	const bunAlone = steps.some(
+		(s) => (s.uses === SETUP_BUN && String(s.with?.install) === "false") || s.uses?.startsWith("oven-sh/setup-bun@"),
+	)
+	return bunAlone && !steps.some((s) => INSTALLS.test(s.run ?? ""))
+}
+
+/** Every checkout is this workflow's revision, at the root, with the root's bunfig.toml in it (cone mode keeps root files). */
+function readsOwnBunfig(job: Job): boolean {
+	const checkouts = (job.steps ?? []).filter((s) => s.uses?.startsWith("actions/checkout@"))
+	return (
+		checkouts.length > 0 &&
+		checkouts.every(({ with: options = {} }) => {
+			if (["ref", "path", "repository"].some((key) => options[key] !== undefined)) return false
+			if (options["sparse-checkout"] === undefined || String(options["sparse-checkout-cone-mode"]) !== "false") return true
+			return String(options["sparse-checkout"])
+				.split("\n")
+				.map((line) => line.trim())
+				.includes("/bunfig.toml")
+		})
+	)
+}
+
+/** Why the Bun call at `index` of `run` may auto-install, if it may. */
+function bunCallFinding(run: string, index: number, own: boolean, moved: boolean): string | undefined {
+	const args = run
+		.slice(index + "bun".length)
+		.split(/&&|[;|\n]/)[0]
+		.trim()
+		.split(/\s+/)
+	if (args[0] === "--no-install") return flagged(args, "--install|-i") ? "overrides --no-install" : undefined
+	if (!own) return "runs Bun without --no-install where its own revision's bunfig.toml may be missing"
+	if (moved) return "runs Bun outside the checkout root"
+	if (flagged(args, "--cwd") || CHANGES_DIRECTORY.test(run.slice(0, index))) return "runs Bun after changing directory"
+	if (flagged(args, "--config|-c|--install|-i")) return "overrides Bun's configuration"
+	return undefined
+}
+
+function autoInstallFindings(tree: Tree, bunfig: string, listed: readonly string[] = NO_INSTALL): string[] {
+	const install = (Bun.TOML.parse(bunfig) as { install?: { auto?: unknown } }).install
+	const findings = install?.auto === "disable" ? [] : ["bunfig.toml: Bun may auto-install a missing import"]
+	const selected = [...jobs(tree)].filter(({ job }) => installsNothing(job))
+	for (const { where, wf, job } of selected) {
+		const own = readsOwnBunfig(job)
+		for (const step of expanded(tree, job, SETUP_BUN)) {
+			const run = step.run ?? ""
+			const moved =
+				(step["working-directory"] ?? job.defaults?.run?.["working-directory"] ?? wf.defaults?.run?.["working-directory"]) !==
+				undefined
+			for (const call of run.matchAll(new RegExp(BUN_CALL, "gm"))) {
+				const reason = bunCallFinding(run, call.index, own, moved)
+				if (reason) findings.push(`${where}: ${reason}`)
+			}
+		}
+	}
+	const names = selected.map(({ where }) => where)
+	findings.push(
+		...names.filter((where) => !listed.includes(where)).map((where) => `${where}: installs nothing, and NO_INSTALL does not list it`),
+	)
+	findings.push(
+		...listed
+			.filter((where) => !names.includes(where))
+			.map((where) => `${where}: listed in NO_INSTALL, but not a job that installs nothing`),
+	)
+	return [...new Set(findings)]
+}
+
 const writes = (permissions: unknown): boolean =>
 	permissions === "write-all" || (typeof permissions === "object" && permissions !== null && Object.values(permissions).includes("write"))
 const needsOf = (job: Job | undefined): string[] => [job?.needs ?? []].flat() as string[]
@@ -302,6 +411,8 @@ function cliffFindings(toml: string): string[] {
 }
 
 const CLIFF = readFileSync(join(ROOT, "cliff.toml"), "utf8")
+const BUNFIG = readFileSync(join(ROOT, "bunfig.toml"), "utf8")
+const AUTO_LINE = /^auto = "disable"\n/m
 
 /** A copy of the tree with one edit applied. */
 function mutated(edit: (tree: Tree) => void): Tree {
@@ -415,6 +526,166 @@ describe("jobs that tag or publish", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(cleanFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("jobs that install nothing", () => {
+	test("reach every Bun call with --no-install or the root bunfig.toml's auto-install refusal", () => {
+		expect(autoInstallFindings(TREE, BUNFIG)).toEqual([])
+	})
+	const runStep = (t: Tree, where: string, pattern: RegExp): Step => {
+		const [file, name] = where.split("#")
+		const found = t.workflows[file].jobs[name].steps?.find((s) => pattern.test(s.run ?? ""))
+		if (!found) throw new Error(`${where}: no step runs ${pattern}`)
+		return found
+	}
+	const onTree = (edit: (t: Tree) => void) => () => autoInstallFindings(mutated(edit), BUNFIG)
+	const STORE_PUBLISH =
+		"release.yml#publish-chrome-store: runs Bun without --no-install where its own revision's bunfig.toml may be missing"
+	test.each([
+		[
+			"a bunfig.toml without the refusal",
+			() => autoInstallFindings(TREE, BUNFIG.replace(AUTO_LINE, "")),
+			"bunfig.toml: Bun may auto-install a missing import",
+		],
+		[
+			"a store publisher without --no-install",
+			onTree((t) => {
+				const s = runStep(t, "release.yml#publish-chrome-store", /publish-chrome-store-run/)
+				s.run = s.run?.replace("bun --no-install ", "bun ")
+			}),
+			STORE_PUBLISH,
+		],
+		[
+			"the preview comment's script without --no-install",
+			onTree((t) => {
+				const s = runStep(t, "pr-quick.yml#preview-comment", /preview-comment\.ts/)
+				s.run = s.run?.replace("bun --no-install scripts/", "bun scripts/")
+			}),
+			"pr-quick.yml#preview-comment: runs Bun without --no-install where its own revision's bunfig.toml may be missing",
+		],
+		[
+			"a Bun call after cd",
+			onTree((t) => {
+				const s = runStep(t, "release.yml#attach-assets", /cd dist\/release/)
+				s.run = `${s.run}bun scripts/release/zip-reproducible.ts a b\n`
+			}),
+			"release.yml#attach-assets: runs Bun after changing directory",
+		],
+		[
+			"a Bun step in another directory",
+			onTree((t) => Object.assign(runStep(t, "release.yml#auto-unstick", BUN_CALL), { "working-directory": "dist" })),
+			"release.yml#auto-unstick: runs Bun outside the checkout root",
+		],
+		[
+			"a Bun call with --cwd",
+			onTree((t) => {
+				const s = runStep(t, "release.yml#sync-main-to-dev", BUN_CALL)
+				s.run = s.run?.replace(BUN_CALL, "bun --cwd dist")
+			}),
+			"release.yml#sync-main-to-dev: runs Bun after changing directory",
+		],
+		[
+			"a checkout into a subdirectory",
+			onTree((t) => Object.assign(step(t, "_release-pr-lockfile.yml#lock-version", "actions/checkout@").with ?? {}, { path: "src" })),
+			"_release-pr-lockfile.yml#lock-version: runs Bun without --no-install where its own revision's bunfig.toml may be missing",
+		],
+		[
+			"a non-cone sparse checkout without bunfig.toml",
+			onTree((t) =>
+				Object.assign(step(t, "store-check.yml#chrome", "actions/checkout@").with ?? {}, {
+					"sparse-checkout": "/scripts/release/\n",
+					"sparse-checkout-cone-mode": false,
+				}),
+			),
+			"store-check.yml#chrome: runs Bun without --no-install where its own revision's bunfig.toml may be missing",
+		],
+		[
+			"a job-wide working directory",
+			onTree((t) =>
+				Object.assign(t.workflows["nightly.yml"].jobs["publish-nightly"], { defaults: { run: { "working-directory": "dist" } } }),
+			),
+			"nightly.yml#publish-nightly: runs Bun outside the checkout root",
+		],
+		[
+			"a Bun call with another configuration",
+			onTree((t) => {
+				const s = runStep(t, "release.yml#auto-unstick", BUN_CALL)
+				s.run = s.run?.replace(BUN_CALL, "bun --config other.toml")
+			}),
+			"release.yml#auto-unstick: overrides Bun's configuration",
+		],
+		[
+			"--no-install undone by --install",
+			onTree((t) => {
+				const s = runStep(t, "release.yml#publish-firefox-amo", /publish-firefox-amo-run/)
+				s.run = s.run?.replace("bun --no-install ", "bun --no-install --install=force ")
+			}),
+			"release.yml#publish-firefox-amo: overrides --no-install",
+		],
+		[
+			"a no-install job NO_INSTALL does not list",
+			() =>
+				autoInstallFindings(
+					TREE,
+					BUNFIG,
+					NO_INSTALL.filter((where) => where !== "release.yml#attach-assets"),
+				),
+			"release.yml#attach-assets: installs nothing, and NO_INSTALL does not list it",
+		],
+	])("finds %s", (_, findings, expected) => {
+		expect(findings()).toEqual([expected])
+	})
+
+	// Counts registry requests: Bun's error text is the same for a refused install and a failed one.
+	async function registryRequests(bunfig: string): Promise<{ exit: number; requests: string[] }> {
+		const requests: string[] = []
+		const server = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(req) {
+				requests.push(new URL(req.url).pathname)
+				return new Response("not found", { status: 404 })
+			},
+		})
+		const dir = mkdtempSync(join(tmpdir(), "nulo-auto-install-"))
+		let proc: ReturnType<typeof Bun.spawn> | undefined
+		try {
+			for (let d = dir; d !== dirname(d); d = dirname(d)) expect(existsSync(join(d, "node_modules"))).toBe(false)
+			writeFileSync(join(dir, "s.ts"), 'import pad from "left-pad-nulo-probe-zz"\nconsole.log(pad)\n')
+			writeFileSync(join(dir, "bunfig.toml"), bunfig)
+			proc = Bun.spawn([process.execPath, "s.ts"], {
+				cwd: dir,
+				// No user-level .bunfig.toml or .npmrc, and the only registry is the server above.
+				env: {
+					PATH: process.env.PATH,
+					HOME: dir,
+					TMPDIR: dir,
+					BUN_INSTALL_CACHE_DIR: join(dir, "cache"),
+					BUN_CONFIG_REGISTRY: `http://127.0.0.1:${server.port}/`,
+				},
+				stdout: "ignore",
+				stderr: "ignore",
+			})
+			return { exit: await proc.exited, requests }
+		} finally {
+			if (proc?.exitCode === null) proc.kill()
+			server.stop(true)
+			rmSync(dir, { recursive: true, force: true })
+		}
+	}
+
+	test("Bun refuses a bare import under the committed bunfig.toml without asking the registry", async () => {
+		const { exit, requests } = await registryRequests(BUNFIG)
+		expect(exit).not.toBe(0)
+		expect(requests).toEqual([])
+	})
+
+	test("Bun asks the registry for it once the refusal is removed", async () => {
+		const allowing = BUNFIG.replace(AUTO_LINE, "")
+		expect(allowing).not.toBe(BUNFIG)
+		const { requests } = await registryRequests(allowing)
+		expect(requests).toContainEqual(expect.stringContaining("left-pad-nulo-probe-zz"))
 	})
 })
 
