@@ -1,7 +1,7 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: approved; arc 1 merged (#255); arc 2 in progress; arc 3 waits on page 11
+status: approved; arc 1 merged (#255); arc 2 in review (#282); arc 3 waits on page 11
 issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #211, #215, #216, #229 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -372,9 +372,10 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-orch-4 (orchestrator, 2026-10-10): arc 2 runs now, before `account-session-life` arc 3. The "base must contain account-session-life arc 3" condition is lifted: that arc is held on decision page 7 with no date, and the two arcs meet only in `export/full.vue`. Arc 2 lands first and that arc rebases onto it; the `full.vue` edit is the shake only (keyframes, reduced-motion rule, class composition). Arc 2's branch is `forms-and-contacts-arc-2` off `origin/dev` (af4afcc, arc 1 merged as #255), PR against `dev`, no stack (D-orch-1).
 - D-orch-5 (orchestrator, 2026-10-10): arc 2 builds exactly its plan and no repair. FA-9's race repair, the import's `fieldAddressKey` swap and FA-8's re-open gap stay unbuilt (today's behaviour pinned); the snack card stays local. Phase 2.3's proof runs in full against the arc's parent commit; a difference fails that shell (SR2): it goes to `OWNER-ASKS.md` and that shell's change is left out.
 - D-arc2-1 (#224, phase 2.2): the held-read pins carry `(BUG PIN)` only where the lost event is reachable in the wallet: New and Edit FPC (`getFpcs` works after its storage read) and Send (its contacts answer waits on two other reads). New, Import and Edit contact and Select Profile are pinned as the list's mechanics (the read's answer replaces the list), since one storage read answers in order there (I2, checked against `contact/service.ts:74-79` and `profile/service.ts:581-585`). No pin names FA-9: comments carry no plan ids (D-arc1-2).
-- D-arc2-2 (phase 2.2, found at the seam): Send's `onTokenDeleted` splices the row before it reads `activeToken`, which then resolves to nothing, so deleting the active token selects no token and the "last token" toast and leave never run (`send.vue:116-131`, present since the first commit). Pinned as a BUG PIN beside the held-read pin; not repaired (D-orch-5); filed as an issue at delivery.
+- D-arc2-2 (phase 2.2, found at the seam): Send's `onTokenDeleted` splices the row before it reads `activeToken`, which then resolves to nothing, so deleting the active token selects no token and the "last token" toast and leave never run (`send.vue:116-131`, present since the first commit). Pinned as a BUG PIN beside the held-read pin; not repaired (D-orch-5); filed as #283.
 - D-arc2-3 (phase 2.2): `liveBus` returns a real `EventHandler` whose `add`/`remove` are `vi.fn` wrappers, so the existing `add.mock.calls[0][0]` pins keep working; the module-level mocks build fresh buses per test, since an unmounted component never removes its handlers. `ImportContactsPopup.test.ts`'s mount now hands the popup a copy of its saved book: an earlier test's in-place add was pushing into the shared `SAVED` fixture.
 - D-arc2-4 (#225, phase 2.3): the loader's source pin is a colocated `GlobalLoader.test.ts` (it reads `base.css` through `@nulo/resolve-asset`), not a row in `a11y-css.test.ts`, whose rules are about motion and focus. The Chrome loader capture holds the loader by replacing `chrome.runtime.connect` with a throwing stub before the page loads; the same stub did not take hold on Firefox, so the source pin stays Firefox's proof. The shake proof also compares the wrapper under emulated reduced motion on Chrome (the rule moved to the shared module).
+- D-arc2-5 (delivery): arc 2 is PR #282 against `dev` (D-orch-1). Filed with it: #283 (Send's active-token delete, D-arc2-2) and #284 (a zombie-owner race in `scripts/e2e/owned-processes.test.ts` that reddened one local `test:all` under host load; outside this lane).
 
 ### Competing outline (cheapest-first), sent to both audits
 
