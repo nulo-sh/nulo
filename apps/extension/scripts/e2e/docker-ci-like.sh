@@ -17,8 +17,8 @@
 # GitHub-hosted ubuntu-latest runner profile (4 vCPU, 16GB; we leave 4GB headroom
 # for the macOS host's hypervisor). `--shm-size` matters for Chrome (default 64MB
 # is way too small for headless puppeteer + multiple tabs). `NULO_E2E_PROVERLESS=1`
-# mirrors CI's proverless pool: every shard holds proverless-gated files, which
-# e2e:agent refuses to run unarmed.
+# mirrors CI's proverless pool: e2e:agent judges the whole selection before
+# sharding, so an unarmed shard run is refused.
 #
 # Named volumes:
 #   nulo-bun-cache    — preserves bun's npm cache across runs (~few minutes saved)
