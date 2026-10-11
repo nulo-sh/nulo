@@ -82,19 +82,21 @@ const EXTRA_NAMES = [
 const SENSITIVE_NAMES = [...REDACTED_KEYS, ...URL_KEYS, ...EXTRA_NAMES]
 
 /**
- * Log-call openers.
+ * Log-call openers, every one on a line.
  *
  * Receiver-agnostic on purpose: the dominant idiom in the packages is `this.logger.log(...)`, and
  * services also reach it as `deps.logger.log` / `this.deps.logError`. Anchoring on the METHOD name
- * catches every receiver; `Math.log` is the one collision worth excluding.
+ * catches every receiver; `Math.log` is the one collision worth excluding. The level methods
+ * cover `console.<level>(`, Aztec's `Logger` (one method per level, no `.log`) and the forwarding
+ * loggers handed to helpers as `logger?.<level>(`; `silent` emits nothing.
  *
- * The third alternative covers a logging PORT called bare — `log?.("warn", …)`, the shape the PXE
+ * The second alternative covers a logging PORT called bare — `log?.("warn", …)`, the shape the PXE
  * layer's `PublicEventLogger`/`ClassIdVerifyLogger` use at their emission points. That is not
  * helper indirection: the callee is typed and named as a logger, and what it is handed is what
  * gets logged.
  */
 const LOG_CALL =
-	/(?<!\bMath)\s*\??\.\s*(?:log|logDebug|logInfo|logWarn|logError)\s*\(|\bconsole\s*\??\.\s*(?:log|warn|error|info|debug|trace)\s*\(|(?<![.\w$])log(?:Debug|Info|Warn|Error)?\s*\??\.?\s*\(/
+	/(?<!\bMath)\s*\??\.\s*(?:log|logDebug|logInfo|logWarn|logError|debug|info|warn|error|trace|verbose|fatal)\s*(?:\?\.\s*)?\(|(?<![.\w$])log(?:Debug|Info|Warn|Error)?\s*\??\.?\s*\(/g
 
 /** Files allowed to name these identifiers near a log call. */
 const ALLOWLIST: RegExp[] = [
@@ -192,9 +194,9 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 				continue
 			}
 			if (ch === "\\") {
-				// A nested string inside an interpolation is kept, so bracket keys stay readable;
-				// a plain string's contents are blanked.
-				out += interp.length > 0 ? line.slice(i, i + 2) : "  "
+				// A nested string inside an interpolation is kept, so bracket keys stay readable, but
+				// its parens are text and would end a call's window early; a plain string is blanked.
+				out += interp.length > 0 ? line.slice(i, i + 2).replace(/[()]/g, " ") : "  "
 				i++
 				continue
 			}
@@ -203,7 +205,7 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 				out += ch
 				continue
 			}
-			out += interp.length > 0 ? ch : " "
+			out += interp.length > 0 ? ch.replace(/[()]/, " ") : " "
 			continue
 		}
 		// Comments and regex literals are code-context constructs, so they must be recognised the
@@ -299,31 +301,33 @@ function skipRegex(line: string, start: number): number {
 }
 
 /**
- * Lines belonging to the log call opened at `start`, up to its balanced closing paren.
+ * Where the log call whose `(` sits at `code[start][from]` closes: its balancing paren's line and
+ * column.
  *
  * Ten real multi-line log calls already exist under `wallet/services/**`, and their payloads sit
  * on continuation lines — a line-at-a-time scan sees the opener without a `${…}` and the argument
  * without a call, so it reports nothing.
  *
- * There is deliberately NO line cap. A cap large enough to look safe still truncates a
- * Biome-formatted call with a long metadata object, silently dropping every argument past it —
- * and a truncated window fails CLOSED-eyed, which is the one direction this test cannot afford.
- * Running to EOF on unbalanced input is the acceptable opposite: it over-scans loudly, and
- * unbalanced source fails typecheck and lint long before it reaches here.
+ * The window ends AT that paren, not at its line's end: code after a call is not its argument, and
+ * a second call on the line gets its own window. That cut is sound only because `stripNoise` has
+ * already blanked every paren that is not code. There is deliberately NO line cap: a cap large
+ * enough to look safe still truncates a Biome-formatted call with a long metadata object. Running
+ * to EOF on unbalanced input is the acceptable opposite: it over-scans loudly, and unbalanced
+ * source fails typecheck and lint long before it reaches here.
  */
-function callWindow(code: string[], start: number, from: number): number {
+function callWindow(code: string[], start: number, from: number): { line: number; column: number } {
 	let depth = 0
 	for (let i = start; i < code.length; i++) {
 		// Only the log call's OWN parens count. Anything to its left on the opener line belongs to
 		// whatever produced the receiver — `getLogger({…}).log(` closes a paren before the call
 		// even starts, which used to cancel the opener and collapse the window to one line.
-		for (const ch of i === start ? code[i].slice(from) : code[i]) {
-			if (ch === "(") depth++
-			else if (ch === ")") depth--
+		for (let j = i === start ? from : 0; j < code[i].length; j++) {
+			if (code[i][j] === "(") depth++
+			else if (code[i][j] === ")" && --depth === 0) return { line: i, column: j }
 		}
-		if (depth <= 0) return i
 	}
-	return code.length - 1
+	const last = code.length - 1
+	return { line: last, column: code[last].length }
 }
 
 /**
@@ -426,43 +430,54 @@ function hazards(window: string): Array<{ name: string; index: number }> {
 	return occurrences(cleaned).filter(({ name, index }) => !isObjectKey(cleaned, index, name) && !isArityRead(cleaned, index, name))
 }
 
-/** Returns `file:line` for every log call flattening a sensitive identifier into its message. */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 17 — one scan preserves per-file lexical state, source offsets, call windows and deduplication
-function findLoggedSecrets(files: Array<{ path: string; content: string }>): string[] {
-	const offenders: string[] = []
-	for (const { path, content } of files) {
-		if (ALLOWLIST.some((re) => re.test(path))) continue
-		const raw = scannableLines(path, content)
-		const code: string[] = []
-		let state = FRESH_LEX
-		for (const line of raw) {
-			const stripped = stripNoise(line, state)
-			state = stripped.state
-			code.push(stripped.code)
-		}
-		const reported = new Set<string>()
-		for (let i = 0; i < code.length; i++) {
-			const opener = LOG_CALL.exec(code[i])
-			if (!opener) continue
+/** The file's scannable lines, noise-stripped with the lexer state carried from line to line. */
+function lexedLines(path: string, content: string): string[] {
+	const code: string[] = []
+	let state = FRESH_LEX
+	for (const line of scannableLines(path, content)) {
+		const stripped = stripNoise(line, state)
+		state = stripped.state
+		code.push(stripped.code)
+	}
+	return code
+}
+
+/** Every log call in `code`: its window's text and the index of the line its opener sits on. */
+function callWindows(code: string[]): Array<{ start: number; text: string }> {
+	const windows: Array<{ start: number; text: string }> = []
+	for (let i = 0; i < code.length; i++) {
+		for (const opener of code[i].matchAll(LOG_CALL)) {
 			// Index of the call's own `(` — the last character of the matched opener.
 			const from = opener.index + opener[0].length - 1
 			const end = callWindow(code, i, from)
 			// Blank the opener line's prefix rather than slicing it off, so every offset in the
 			// joined window still maps to the same column of the same real line.
-			const lines = code.slice(i, end + 1)
+			const lines = code.slice(i, end.line + 1)
+			lines[lines.length - 1] = lines[lines.length - 1].slice(0, end.column + 1)
 			lines[0] = " ".repeat(from) + lines[0].slice(from)
-			const window = lines.join("\n")
-			for (const { name, index } of hazards(window)) {
-				const line = i + window.slice(0, index).split("\n").length
-				const offense = `${path}:${line} → ${name} flattened into a log string`
-				if (!reported.has(offense)) {
-					reported.add(offense)
-					offenders.push(offense)
-				}
+			windows.push({ start: i, text: lines.join("\n") })
+		}
+	}
+	return windows
+}
+
+function flattened(at: string, name: string): string {
+	return `${at} → ${name} flattened into a log string`
+}
+
+/** Returns `file:line` for every log call flattening a sensitive identifier into its message. */
+function findLoggedSecrets(files: Array<{ path: string; content: string }>): string[] {
+	// One report per `file:line → name`, however many calls' windows reach it.
+	const offenders = new Set<string>()
+	for (const { path, content } of files) {
+		if (ALLOWLIST.some((re) => re.test(path))) continue
+		for (const { start, text } of callWindows(lexedLines(path, content))) {
+			for (const { name, index } of hazards(text)) {
+				offenders.add(flattened(`${path}:${start + text.slice(0, index).split("\n").length}`, name))
 			}
 		}
 	}
-	return offenders
+	return [...offenders]
 }
 
 describe("log-payload ban (static)", () => {
@@ -648,6 +663,56 @@ describe("log-payload ban (static)", () => {
 			{ path: "packages/aztec-runtime/src/pxe/x.ts", content: 'log("warn", "failed", { value: password })' },
 		])
 		expect(offenders).toHaveLength(1)
+	})
+
+	test("catches every level method of a logger, on any receiver and through an optional call", () => {
+		// Aztec's `Logger` has one method per level and no `.log`; the extension's forwarding loggers
+		// are reached as `logger?.<level>(`.
+		const levels = ["debug", "info", "warn", "error", "trace", "verbose", "fatal"]
+		const files = [
+			...levels.map((m) => ({ path: `packages/aztec-runtime/src/pxe/${m}.ts`, content: `log.${m}(\`k=\${password}\`)` })),
+			...levels.map((m) => ({ path: `apps/extension/src/wallet/services/${m}.ts`, content: `logger?.${m}("x", password)` })),
+			{ path: "packages/wallet-core/src/deep.ts", content: "this.deps.l.warn?.(`k=${password}`)" },
+		]
+		expect(findLoggedSecrets(files)).toEqual(files.map(({ path }) => flattened(`${path}:1`, "password")))
+	})
+
+	test("code after a log call on its line is not the call's argument", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "apps/extension/src/popup/pages/x.ts", content: 'console.error("x", { error }); setError(err.message)' },
+		])
+		expect(offenders).toEqual([])
+	})
+
+	test("every log call on a line is read, each to its own closing paren", () => {
+		const offenders = findLoggedSecrets([
+			{
+				path: "packages/wallet-core/src/x.ts",
+				content: ['promise.catch((error) => console.warn("x", { error })); this.logWarn(', "\tpassword,", ")"].join("\n"),
+			},
+		])
+		expect(offenders).toEqual([flattened("packages/wallet-core/src/x.ts:2", "password")])
+	})
+
+	test("ending a window at its call never drops a second call on the same line", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "packages/wallet-core/src/x.ts", content: 'console.warn("ok", { error }); this.logWarn(`k=${password}`)' },
+		])
+		expect(offenders).toEqual([flattened("packages/wallet-core/src/x.ts:1", "password")])
+	})
+
+	test("a `)` kept inside an interpolation's string never ends a window", () => {
+		const rest = ["\tpassword,", ")"]
+		const offenders = findLoggedSecrets([
+			{ path: "packages/wallet-core/src/a.ts", content: 'console.warn(`${")"}${password}`)' },
+			{ path: "packages/wallet-core/src/b.ts", content: ['this.logWarn(`${")"}`,', ...rest].join("\n") },
+			{ path: "packages/wallet-core/src/c.ts", content: ["this.logWarn(`${`a)${b}`}`,", ...rest].join("\n") },
+		])
+		expect(offenders).toEqual([
+			flattened("packages/wallet-core/src/a.ts:1", "password"),
+			flattened("packages/wallet-core/src/b.ts:2", "password"),
+			flattened("packages/wallet-core/src/c.ts:2", "password"),
+		])
 	})
 
 	test("a long call is not truncated — the window has no line cap", () => {

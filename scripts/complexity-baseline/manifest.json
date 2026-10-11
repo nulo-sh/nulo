@@ -1,11 +1,11 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-09-24",
+	"generated": "2026-10-11",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
 			"apps/extension/src/utils/amount.ts": 1,
-			"apps/extension/src/utils/log-payload-ban.test.ts": 2,
+			"apps/extension/src/utils/log-payload-ban.test.ts": 1,
 			"apps/extension/src/wallet/logger/utils.ts": 1,
 			"apps/extension/src/wallet/services/backup/footprint-coverage.test.ts": 1,
 			"apps/extension/src/wallet/services/backup/row-map-migration.ts": 3,
@@ -38,13 +38,6 @@
 			"anchor": "export const formatBaseUnits = (units: bigint | string | null | undefined, decimals: number, opts: FormatBaseUnitsOpts = {}): string => {",
 			"accepted": 22,
 			"sentence": "sign, truncation, padding, zero trimming and separators ARE the integer-formatting algorithm"
-		},
-		{
-			"file": "apps/extension/src/utils/log-payload-ban.test.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "function findLoggedSecrets(files: Array<{ path: string; content: string }>): string[] {",
-			"accepted": 17,
-			"sentence": "one scan preserves per-file lexical state, source offsets, call windows and deduplication"
 		},
 		{
 			"file": "apps/extension/src/utils/log-payload-ban.test.ts",

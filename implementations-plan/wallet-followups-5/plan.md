@@ -200,7 +200,7 @@ The constraint that makes it a no_ask: only the gone-window case (a remove that 
 
 ## Phases
 
-### Phase 1: the scanner reads every logger call (#302)
+### Phase 1: the scanner reads every logger call (#302) ✓
 
 1. Add the five self-tests of D8. Run the file and see (a), (b), (c) and (e) fail on the base scanner, and (d) pass.
 2. Blank the kept parens in `stripNoise` (D11). Do not change its declaration line.
