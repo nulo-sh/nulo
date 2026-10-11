@@ -234,7 +234,7 @@ This phase runs under the orchestrator's no_ask record (D-orch-2, quoted in § U
 - Pass criteria: every command exits 0. The step 3 red run is quoted in `lessons/phase-2.md` (case 1 collects one `Invalid window ID: 7` rejection). Every page test passes unchanged, the lastError `TypeError` pins included.
 - Layers: lint, typecheck, unit.
 
-### Phase 3: final validation on the arc head
+### Phase 3: final validation on the arc head ✓
 
 1. Do the head runs of D12 on Firefox: the same N runs, each to `ff-after-<n>.log`.
 2. Run the six files once on Chrome at retry 0.
@@ -324,7 +324,7 @@ Run these steps in order after the Phase 3 gate passes. `code_review` is `off`, 
 - **Codex, implementation round 2** (same session): reject (with blocking findings: property calls misread as control heads; incomplete regex classification across multiline and for-await heads). Also: parenthesized, non-null-asserted and generic call spellings lost after another call on the line. All verified; the cause named as the column cut itself (D13), so no further lexer patch.
 - **Opus 5.5, round 2 re-probe:** conditional approve (with conditions: give `endsControlHead` the property lookbehind). Its 60,000-call division fuzz found 823 shapes the head lost against base, all from `endsControlHead` on a method named like a keyword.
 - **Codex, implementation round 3** (same session, the design question X / Y / Y2): conditional approve (with conditions: choose X; restore whole-line depth checking; use a non-whitespace delimiter mask; explicitly adjudicate the removed false-positive artifacts). All four applied verbatim (D13). Hard stop reached: no fourth Codex round; the conditions are pinned by tests that pass on base and fail on the cut.
-- **Opus 5.5, round 3:** X, on its probes nothing the base reports is lost (553-call injection, opener diff, 40,000-call and 60,000-call fuzzes). Re-run on the implemented head: see `lessons/phase-3.md`.
+- **Opus 5.5, round 3:** X, on its probes nothing the base reports is lost (553-call injection, opener diff, 40,000-call and 60,000-call fuzzes). Re-run on the implemented head (35c6d62): approve; nothing lost against base on any probe, and the `"\0"` mask is inert for every reader of the stripped text (a space mask loses 48 bracket-key shapes).
 
 ## Seeds
 

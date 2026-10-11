@@ -41,3 +41,13 @@ Asked both legs: X (drop the cut, keep every-opener, the widened openers and the
 - Codex: conditional approve (with conditions: choose X; restore whole-line depth checking; use a non-whitespace delimiter mask; explicitly adjudicate the removed false-positive artifacts). A space mask turned `${row["password(.length)"]}` into an arity read; `"\0"` fixes it.
 
 Applied verbatim (D13): `callWindow` is the base's; the mask is `"\0"`; `endsControlHead` and the `.in` lookbehind reverted; D8(b) and D8(d) dropped; three tests pin every review shape. Spliced onto the base scanner, the three pins pass and only the three intended improvements fail; spliced onto 454716e, the three pins fail. Gates: scanner and window tests 65/65, `baseline:rescore` exact (23), `bun run lint` exit 0, `bun run typecheck:all` exit 0, the tree reports no offender.
+
+## Opus round 3 on the implemented head (35c6d62)
+
+Approve. Against base 04137a0: the 553-call injection, the opener diff (11 new openers, all loggers), the 40,000-call fuzz and the 60,000-call division fuzz lose nothing; every round-1 and round-2 shape the base reports is reported. 83 bracket-key shapes with each delimiter before an arity word: nothing lost with `"\0"`, 48 lost with a space mask; `"\0"` also catches `row["{password}"]`, which the base read as an object key. The mask is inert for `LOG_CALL`, `occurrences`, `isObjectKey`, `enclosingBracket`, `blankComparisonLiterals` and `startsRegex` (it appears only in string text). A literal space inside a bracket key (`row["password .length"]`) reads as an arity read on base and head alike: pre-existing, not a regression.
+
+## Gate on the final head (35c6d62)
+
+- Firefox, the six files, retry 0: exit 0, 12 passed and 1 skipped; `Invalid window ID|No window with id` lines: 0 (base 4, N = 1, K = 29). The earlier head run at 46c4dd4 also printed 0.
+- Chrome, the six files, retry 0, at 454716e: exit 0, 13 passed. 35c6d62 changes only a test file and plan documents, so the built extension is the one that ran.
+- `bun run lint` 0, `bun run typecheck:all` 0, `bun run test:all` 0 (`@nulo/extension` 742 files, 11,326 tests), `bun run test:ci-gating` 0 (526), `bun run test:release` 0 (294). Pass.
