@@ -1,7 +1,7 @@
 ---
 plan: ci-followups
 tier: mid
-status: v2.1 approved by the final Codex pass; awaiting orchestrator approval
+status: v2.1 approved by the orchestrator (8751330); arc 1 phases 1-3 implemented, Codex fix loop next
 issues: "#260, #250, #239 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -220,7 +220,7 @@ All three phases form arc 1. Phase gates are cumulative.
 3. Restore with `git checkout HEAD -- <path>`, check that `git status --short` shows nothing, and run the test file again: green.
 Never change a test for this.
 
-### Phase 1: no auto-install in no-install jobs (#260)
+### Phase 1: no auto-install in no-install jobs (#260) ✓
 
 Steps:
 1. Add `auto = "disable"` under `[install]` in `bunfig.toml`, with its comment.
@@ -239,7 +239,7 @@ Steps:
 
 Validation gate: Fast; Gating; Actions; Units. Pass: every command exits 0; step 7 shows both new tests red on the base copies and green after the restore; step 8 records zero requests with the committed file and one without its `auto` line; step 10 passes as written. Layers: lint, typecheck, unit (pins and the behaviour test).
 
-### Phase 2: the live move-approval label (#250)
+### Phase 2: the live move-approval label (#250) ✓
 
 Steps:
 1. Add the `live` step and the ci-gating step's env to `_unit-tests.yml`.
@@ -255,7 +255,7 @@ Steps:
 
 Validation gate: Fast; Gating; Actions; Units. Pass: every command exits 0; steps 6 and 7 record each red on its own assertion and green after the restore; `bun test scripts/ci-cd/complexity-baseline.test.ts` passes locally with `GITHUB_ACTIONS` unset. Hosted proof waits for the PR (§ Delivery). Layers: lint, typecheck, unit.
 
-### Phase 3: the Docker Bun pins in the runbook (#239)
+### Phase 3: the Docker Bun pins in the runbook (#239) ✓
 
 Steps:
 1. Edit CLAUDE.md's Bun-bump bullet as § #239 says.
@@ -337,6 +337,9 @@ Run this section in order. It is the whole procedure; no other document is neede
 | D7 | No `labeled`/`unlabeled` trigger; a removed label takes effect at the job's next run | A label event would re-run the whole quality battery for every label | Round 1: Codex (finding 5, Medium) held the revocation semantics are the owner's call. Accepted: OWNER-ASKS OA-1, option A (today's semantics, made live) ships now. Opus judged D7 fine |
 | D8 | #239 is a docs change only; no test reads CLAUDE.md | The named pin test exists; a test of runbook prose would pin wording, not behaviour | Both agreed |
 | D9 | One arc, one PR | D-orch-1; small changes in CI files, reviewable in one sitting | — |
+| D-orch-2 | OA-1 ships as option A: applying or removing `baseline:move-approved` takes effect at the unit-tests job's next run. No issue is filed for OA-1 | The orchestrator carries OA-1 to the owner's decision page (page 5); the Outcome records it open there | Orchestrator, 2026-10-11 |
+| D-orch-3 | The two `release.yml` lines (`--no-install` on the store publishers' Bun lines) are this lane's, and nothing else in that file. The PR runs the audit gate in enforce mode, the full builds and both e2e suites on both browsers; an unacknowledged advisory stops the arc | `ci-release-supply` holds no open PR, and its arc 5 waits on page 5 | Orchestrator, 2026-10-11 |
+| D10 | Implementation deviations from D2, each stricter than the plan: the own-revision check also refuses a checkout's `with.repository`; the composite's `install` input is compared as a string, so an unquoted YAML `false` still selects the job; the Bun-call matcher is a non-global constant, and each step is scanned with a fresh global copy | `repository` is the same class as `ref` and `path` (another tree's `bunfig.toml`, or none at the root). A shared `g` regex carries `lastIndex` between `test()` and `matchAll` (lessons/phase-1.md) | Implementer, 2026-10-11 |
 
 ## Audit verdicts
 

@@ -8,3 +8,6 @@
 - 2026-10-10 phase 2: round 1 done (Codex conditional approve, Opus conditional approve); plan v2 written (D1 split by revision, D2 per-call pin, hermetic D3, guarded live step, OA-1).
 - 2026-10-10 phase 2: final fresh Codex pass: conditional approve; six conditions verified and applied (v2.1); rule prototyped against the tree.
 - 2026-10-11 phase 2: resumed final Codex pass: approve; two documentation corrections applied. Plan committed, awaiting the orchestrator.
+- 2026-10-11 arc 1 phase 1 gate: pass (lint, typecheck:all, test:ci-gating 495/0, test:release 293/0, lint:actions, test, test:all; red on base shown; job probe 0 vs 1 request; audit:dup cold exit 0; audit gate enforce 41 acked 0 unacked).
+- 2026-10-11 arc 1 phase 2 gate: pass (lint, typecheck:all, test:ci-gating 501/0, test:release 293/0, lint:actions, test, test:all; reds shown against the old rule and the base workflow; local wiring check).
+- 2026-10-11 arc 1 phase 3 gate: pass (lint, typecheck:all, test:ci-gating, test:release, check-no-local-paths with CLAUDE.md staged).
