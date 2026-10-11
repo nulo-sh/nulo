@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-3
 tier: light
-status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 implemented, phases 1-4 green; Codex fix loop next
+status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 implemented, phases 1-4 green; Codex fix loop converged (round 2 approve)
 issues: "#309, #305, #306 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -310,6 +310,12 @@ Single arc: steps 1-2 run once over the whole diff after Phase 4 is green; then 
 Unresolved disagreements: none. The one contested call, D2, was settled for two writes by both legs after round 1.
 
 Facts confirmed by both legs: F1-F3, F5-F10; F4 softened (C-Facts).
+
+### Implementation: the Codex fix loop and the Opus review (2026-10-11)
+
+- **Codex round 1** (gpt-6.1-sol, high, read-only, the diff `origin/dev...HEAD` at c11ec77): **approve**, no findings. It confirmed that no tagless release PATCH remains in `scripts/` or `.github/`, that restating an existing tag moves no ref, that the two chaos legs add exactly two runners with typed boolean inputs and leave `attach-assets`' needs, the aggregation, the conditions, the store jobs and the publish order unchanged, and that the seed refusal cannot become the exit-86 retry. It restated the accepted race the quality bar names.
+- **Opus review** (general-purpose, in parallel): **approve**, three nits, all accepted: a `verify-published` tag assertion the fake could never fail (deleted; the exact-patch assertion is the contract), two seed-test rows mislabelled (`-5`, `1.5` are numbers that are no nonnegative integer), and `chaosSeed`'s TSDoc now says "unset or empty".
+- **Codex round 2** (resumed, the fix diff 92124e1): **approve**, "Findings: none"; removing the assertion "loses no meaningful coverage". The loop converged in two rounds. Details: [lessons/phase-4.md](lessons/phase-4.md).
 
 ## Seeds (draft; finalized after the orchestrator's approval)
 

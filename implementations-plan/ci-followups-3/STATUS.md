@@ -11,3 +11,4 @@
 - 2026-10-11: phase 4 gate pass at 11b5ab4: lint, typecheck:all, test:all, test:ci-gating, test:release, lint:actions exit 0; diff inside the change map.
 - 2026-10-11: Codex fix loop round 1: approve, no findings.
 - 2026-10-11: Opus review: approve, 3 nits applied (vacuous tag assertion removed, two seed-test labels, TSDoc 'unset or empty').
+- 2026-10-11: Codex fix loop round 2 (resume): approve, no findings; converged.
