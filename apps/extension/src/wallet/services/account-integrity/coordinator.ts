@@ -80,7 +80,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 		// verdict still lands mid-flight (mismatch → durable record + session close), so the exposed
 		// window stays bounded to the verify's own duration.
 		this.bootVerification = this.verifyRestoredSessionOnce().catch((error) => {
-			this.logger.log(this.name, LogLevel.Error, "boot integrity verification failed", String(error))
+			this.logger.log(this.name, LogLevel.Error, "boot integrity verification failed", { error })
 		})
 	}
 
@@ -173,7 +173,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 				try {
 					await persistBlock(record)
 				} catch (writeError) {
-					this.logger.log(this.name, LogLevel.Error, "integrity block persist failed", String(writeError))
+					this.logger.log(this.name, LogLevel.Error, "integrity block persist failed", { error: writeError })
 				}
 				throw new AccountAddressInconsistencyError(undefined, {
 					profileId,

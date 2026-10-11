@@ -1,7 +1,5 @@
 # Lessons
 
-Read before every task: one line per gotcha, with its evidence, under 8 KiB; dedupe, retire, date tool versions.
-
 ## Bun & deps
 
 - An incremental `bun install` leaves a removed dependency on disk, so a leftover import passes locally and fails on CI: prove removals fresh (1.4.2). [Evidence](archive/vitest-vite8-dedupe/plan.md#fresh-install)
@@ -39,6 +37,7 @@ Read before every task: one line per gotcha, with its evidence, under 8 KiB; ded
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
 - A page under `pages/` beats a same-path redirect (vite-plugin-pages 0.33.3). [Evidence](archive/settings-by-task/plan.md#route-moves)
 - A balances fuzz model owes what the store's observers adopt, and only where it holds an entry: owe rules keyed on failure commits over- and under-owed. [Evidence](archive/wallet-followups-2/lessons/phase-4.md)
+- Firefox's `storage.local.set` refuses a Vue reactive Proxy Chrome serialises; only stderr shows it: store plain data. [Evidence](archive/wallet-followups-3/plan.md)
 
 ## Aztec
 
