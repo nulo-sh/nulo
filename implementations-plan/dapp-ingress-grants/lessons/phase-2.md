@@ -55,3 +55,22 @@
 - Commit-msg hook refused `executeUtility` in a subject (subject-case); the follow-up `git add` then landed both staged sets in one commit, split again locally before any push.
 - Mutation: removing the guard turns both refusal cases red.
 - Gate 2.6: `bun run lint` 0; `bun run typecheck:all` 0; `bun run test` 11282 passed, 4 skipped. Commits a1a9593 (fix) and 4d56391 (opt-in shots of the refused-send card and detail).
+
+## Gate 2.7, first runs (2026-10-11)
+
+- Chrome, the six network files, retry 0 (`net-chrome-2`): 10 of 11 tests passed. `connect-one-window` logged "the check loaded in the same document"; `session-tabClose` logged "the expired page loaded in the same document". The one failure was the test's own read: the overlay's `textContent` joins the message and the OK label ("Connection request expiredOK"). The message now has its own testid (`dapp-cancelled-message`).
+- The first Chrome attempt found no test files: zsh does not word-split an unquoted `$F`, so the six paths reached vitest as one argument.
+- Firefox, the six files, retry 0 (`net-firefox-1`, built after the testid change): `session-tabClose` 3 of 3 passed, the expired page also loads in the same document on Firefox, and OK closes the window. Both browsers therefore keep the connect page under the overlay (OWNER-ASKS item 3, option A).
+
+## Post-implementation, round 1 (2026-10-11)
+
+- Codex (gpt-6.1-sol, high, session `01a12bb1-387b-7bf1-9394-b75df215c658`): **reject**, 2 Med + 1 Low.
+  - C1 Med, accepted: a lock routes every popup page to the auth screen (`popup/locked-state.ts` `land`), which unmounted the expired page and its timer while the window, holding its verification slot in `closing` (where `cancel()` does nothing), stayed open. Fix: leaving the expired page closes the window, through one `leaveExpired` called when the route's flag drops and on unmount (the flag's watcher runs before the unmount, so the unmount alone would find the timer already cleared). Two page tests; mutation (clearing the timer without closing) turns both red.
+  - C2 Med, accepted: `setTimeout(loop, 0)` did not prove the stall began before Allow (a background tab's timers can be throttled). The loop now runs inside the evaluation, which logs a mark first; the test waits for that console message (10 s cap, fail-closed) before clicking Allow.
+  - C3 Low, accepted: three narrating comments deleted (`EXPIRED_CLOSE_MS`, `isApproved`, `windowUrl`).
+- Commit d80e1c8.
+- Opus general-purpose review (against d80e1c8): **approve with fixes**.
+  - O1 High, rejected on evidence: it predicted the stall's console mark would reach Puppeteer only after the loop on Chrome (Blink queueing protocol notifications). The Chrome rerun on d80e1c8 (`net-chrome-3`, retry 0) passed all three `session-tabClose` cases; the mark arrived during the loop.
+  - O2 Med, accepted: `failQueuedForError` retitled every still-queued row, including one the person rejected or closed in the approval window (`popup_bound`), whose title they had seen. P2-04 and ask 2 cover refusals before the person sees anything. Fix: only a classified kind retitles; four `popup_bound` rows (rejection, close, unclassified, a bare "Wallet locked") keep the claimed title. Mutation (always retitle) turns those four red. Commit 593fe65.
+  - O3 Low, pushed back: the post-window Terms settle retitling an approved-but-never-sent record is what plan § Arc 2 #86 lists; "approved and sent rows" do not include it, and its claimed name was never bound to its selector.
+  - O4 Low, accepted as a PR-body note: "wants to connect on this network" before the request loads (D-impl-12).

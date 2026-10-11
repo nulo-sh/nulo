@@ -574,6 +574,8 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-impl-12.** Before the request loads, the connect window's line reads "wants to connect on this network": the permission window's own fallback in the same expression, so no new word.
 - **D-impl-13.** The interaction service returns `expiredUrl` (its own discover URL marked `expired=1`, built from the handle's request id) beside the window id, and the gate only navigates to it. The plan had the gate append the flag to a URL it stored.
 - **D-impl-14.** The expiry is proven end to end instead of by a manual check: a busy loop scheduled on the playground's main thread before Allow stalls its half of the handshake on both browsers, so `session-tabClose.test.ts` carries the cancellation control and the expiry itself (overlay, OK closes it, a log line naming same-document or reload).
+- **D-impl-16 (Opus O2).** `failQueuedIfUnclaimed` retitles only a classified refusal. A `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps its title: the person saw it in the approval window, and P2-04 covers refusals before the person sees anything.
+- **D-impl-17 (Codex round 1, C1).** Leaving the expired page closes its window: a lock routes every popup page to the auth screen, and without this the window, and the slot it holds, outlived its timer.
 - **D-impl-15.** The #128 probe (`sim-methods.test.ts` #25) now asserts the `-32602` envelope instead of "ok or error". On the base build it answered the unclassified constant; the wallet-side throw was PXE's own type check (`Cannot run public function as utility`, moderate confidence: the worker log was not captured).
 
 ### Plan-space search: the competing outline
