@@ -12,6 +12,7 @@ import ConnectStepBar from "../ConnectStepBar.vue"
 /** Utils */
 import { getErrorData } from "@nulo/wallet-core/utils"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
+import { resolveDappChain } from "../capabilities/chain-mismatch"
 
 /** Services */
 import { type ProfileInfo, ProfileServiceClient } from "@/wallet/services/profile/client"
@@ -35,11 +36,14 @@ const isLoading = ref(false)
 // so no one approves a session whose hostname, logo and name they have not seen. Deny needs only the
 // request id: an early reject is harmless.
 const isReady = ref(false)
+// Set once the service accepted Allow; the window then waits for the connection to establish.
+const isApproved = ref(false)
 
 const interactionService = new DappInteractionServiceClient()
 
 const {
 	requestId,
+	payload,
 	dapp,
 	isCancelled: isInteractionCancelled,
 	load: loadInteractionPayload,
@@ -51,6 +55,13 @@ const {
 })
 
 const { hostname: dappHostname, isSuspicious: hostnameHasNonAscii } = useDappHostname(dapp)
+
+// The app's chain, not the wallet's: the strip above names the wallet's network, and an approval
+// connects the app on the chain it asked for, whatever the wallet shows.
+const chainName = computed(() =>
+	payload.value ? resolveDappChain(payload.value.params.chainId, appStore.networks, appStore.network?.chainId).name : "this network",
+)
+const actionLabel = computed(() => (isApproved.value ? `Connecting on ${chainName.value}` : `wants to connect on ${chainName.value}`))
 
 // init/reject/services are referenced lazily (thunks): they are declared below
 // and only invoked by start()/dispose()/the guard at runtime.
@@ -101,6 +112,7 @@ const approve = async () => {
 	try {
 		isLoading.value = true
 		await interactionService.resolveInteraction(requestId.value, { approved: true })
+		isApproved.value = true
 		// The window waits here for this connection's emoji check, still loading. Its id comes only
 		// from the service's handle, and nothing this page does on unmount touches the reservation
 		// that now holds it.
@@ -146,9 +158,10 @@ onUnmounted(disposeWindow)
 				:dapp="dapp"
 				:hostname="dappHostname"
 				:hostnameSuspicious="hostnameHasNonAscii"
-				actionLabel="wants to connect to your wallet"
+				:actionLabel="actionLabel"
 				hostnameTestId="discover-hostname"
 				nameTestId="discover-dapp-name"
+				actionTestId="discover-action"
 			/>
 
 			<Flex direction="column" gap="8" :class="$style.body">

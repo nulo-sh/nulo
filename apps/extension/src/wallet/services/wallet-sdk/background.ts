@@ -987,7 +987,7 @@ async function runDiscoveryPopup(
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, pendingDiscoveryPromises, logger } = deps
-	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery) }
+	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery), chainId }
 
 	// Store a promise that resolves when the popup completes so duplicate
 	// discoveries can await it.

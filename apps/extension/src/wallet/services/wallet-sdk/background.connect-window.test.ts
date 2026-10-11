@@ -66,6 +66,7 @@ vi.mock("./discovery-approval", async (importOriginal) => {
 import { initWalletSdkHandler } from "./background"
 import { approveOrRollbackDiscoverySession } from "./discovery-approval"
 import type { PendingVerificationEntry } from "./pending-verification"
+import { chainInfoToChainId } from "./session-established"
 import { RESERVATION_GRACE_MS, VerifyAdmissionGate } from "./verify-admission"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN as ORIGIN, FAKE_SENDER, fakeSdkServices } from "./test-services"
@@ -145,10 +146,14 @@ const chain = (n: number) => ({ chainInfo: { chainId: String(n), version: "0" } 
 function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	const windows = fakeWindows()
 	const popups = new Map<string, (answer: { approved: boolean; windowId?: number }) => void>()
+	const asked = new Map<string, unknown>()
 	const journal = { countOperations: vi.fn(async () => 0), createOperation: vi.fn(async () => ({ id: "queued-1" })) }
 	let activeProfile: { id: string } | undefined = { id: "p1" }
 	const { services, rows, onDappSessionDeleted } = fakeSdkServices({
-		popup: (_params, requestId) => new Promise((resolve) => popups.set(requestId, resolve)),
+		popup: (params, requestId) => {
+			asked.set(requestId, params)
+			return new Promise((resolve) => popups.set(requestId, resolve))
+		},
 		activeProfile: async () => activeProfile,
 		setCapabilityGrants: opts.setCapabilityGrants,
 		operationJournal: journal,
@@ -184,7 +189,7 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	}
 	/** A row of the app on chain 1 under `profileId` went away. */
 	const rowDeleted = (profileId: string) => onDappSessionDeleted.invoke({ dappMetadata: { url: ORIGIN }, chainId: "1", profileId })
-	return { discover, allow, establish, closeTab, setProfile, rowDeleted, windows, rows, journal }
+	return { discover, allow, establish, closeTab, setProfile, rowDeleted, windows, rows, journal, asked }
 }
 
 /** Settle the handler's pending microtasks without moving the clock. */
@@ -227,6 +232,17 @@ beforeEach(() => {
 	;(globalThis as any).__VERSION__ = "test"
 })
 afterEach(() => vi.useRealTimers())
+
+describe("the connect window before Allow", () => {
+	test("is told the chain the discovery named, as the wallet decoded it", async () => {
+		const h = boot()
+		h.discover("f1", chain(5))
+		await flush()
+
+		expect(h.asked.get("f1")).toMatchObject({ chainId: String(chainInfoToChainId(chain(5))) })
+		expect(String(chainInfoToChainId(chain(5)))).not.toBe(String(chainInfoToChainId(chain(1))))
+	})
+})
 
 describe("the connect window after Allow", () => {
 	test("an approved connection keeps its connect window as the check's standby window and creates none", async () => {

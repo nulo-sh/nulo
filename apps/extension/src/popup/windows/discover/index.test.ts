@@ -35,6 +35,9 @@ import { ref } from "vue"
 
 let requestIdMock = ref<string | undefined>(undefined)
 let dappMock = ref<{ name: string; url: string } | null>(null)
+let payloadMock = ref<unknown>(null)
+// The chain the discovery named, decimal as the background decodes it.
+let payloadChainId = "77"
 let isCancelledMock = ref(false)
 let loadPromiseResolve: (() => void) | undefined
 let loadPromiseReject: ((err: Error) => void) | undefined
@@ -47,6 +50,7 @@ const loadInteractionPayloadMock = vi.fn(() => {
 			// Simulate that loadInteractionPayload commits requestId + dapp BEFORE resolving
 			requestIdMock.value = "req-123"
 			dappMock.value = { name: "Test DApp", url: "https://example.com" }
+			payloadMock.value = { params: { dappMetadata: dappMock.value, chainId: payloadChainId } }
 			resolve()
 		}
 		loadPromiseReject = reject
@@ -75,7 +79,7 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 	useDappInteractionPayload: vi.fn(() => ({
 		requestId: requestIdMock,
 		dapp: dappMock,
-		payload: ref(null),
+		payload: payloadMock,
 		isCancelled: isCancelledMock,
 		load: loadInteractionPayloadMock,
 		reject: rejectViaInteractionServiceMock,
@@ -118,7 +122,11 @@ vi.mock("@/stores/app.store", () => ({
 		isSessionChecked: true,
 		isLogined: true,
 		account: { name: "TestAccount" },
-		network: { name: "TestNet" },
+		network: { name: "TestNet", chainId: 1 },
+		networks: [
+			{ name: "TestNet", chainId: 1 },
+			{ name: "Devnet", chainId: 77 },
+		],
 		pageAwaitingAuth: "",
 	}),
 }))
@@ -137,6 +145,8 @@ beforeEach(() => {
 afterEach(() => {
 	requestIdMock = ref<string | undefined>(undefined)
 	dappMock = ref<{ name: string; url: string } | null>(null)
+	payloadMock = ref<unknown>(null)
+	payloadChainId = "77"
 	isCancelledMock = ref(false)
 	loadPromiseResolve = undefined
 	loadPromiseReject = undefined
@@ -168,11 +178,11 @@ const STUBS = {
 		`,
 	},
 	DappStatusStrip: {
-		template: '<div data-testid="status-strip" :data-status="status" />',
+		template: '<div data-testid="status-strip" :data-status="status" :data-network="networkName" />',
 		props: ["accountName", "networkName", "status"],
 	},
 	DappIdentityBlock: {
-		template: '<div data-testid="identity-block" />',
+		template: '<div data-testid="identity-block" :data-action="actionLabel" />',
 		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
 	DappCancelledOverlay: { template: '<div data-testid="cancelled-overlay" />' },
@@ -376,6 +386,53 @@ describe("discover popup — isReady race fix", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="cancelled-overlay"]').exists()).toBe(true)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
+	})
+})
+
+describe("discover popup — the line under the app names the app's network", () => {
+	const ready = async () => {
+		const w = factory()
+		await flushPromises()
+		getActiveProfilePromiseResolve?.({ id: "p1" })
+		await flushPromises()
+		loadPromiseResolve?.()
+		await flushPromises()
+		return w
+	}
+	const approve = (w: ReturnType<typeof factory>) => (w.vm as unknown as { approve: () => Promise<void> }).approve()
+	const actionLine = (w: ReturnType<typeof factory>) => w.get('[data-testid="identity-block"]').attributes("data-action")
+
+	test("before Allow it names the app's chain while the strip keeps the wallet's network", async () => {
+		const w = await ready()
+		expect(actionLine(w)).toBe("wants to connect on Devnet")
+		expect(w.get('[data-testid="status-strip"]').attributes("data-network")).toBe("TestNet")
+	})
+
+	test("an accepted Allow reads as connecting on the app's chain", async () => {
+		const w = await ready()
+		await approve(w)
+		await flushPromises()
+		expect(actionLine(w)).toBe("Connecting on Devnet")
+	})
+
+	test("a failed Allow keeps the request line", async () => {
+		resolveInteractionMock.mockRejectedValueOnce(new Error("boom"))
+		const w = await ready()
+		await approve(w)
+		await flushPromises()
+		expect(actionLine(w)).toBe("wants to connect on Devnet")
+	})
+
+	test("a chain with no wallet network reads by its id", async () => {
+		payloadChainId = "99"
+		const w = await ready()
+		expect(actionLine(w)).toBe("wants to connect on Aztec:99")
+	})
+
+	test("before the request loads it names no network", async () => {
+		const w = factory()
+		await flushPromises()
+		expect(actionLine(w)).toBe("wants to connect on this network")
 	})
 })
 

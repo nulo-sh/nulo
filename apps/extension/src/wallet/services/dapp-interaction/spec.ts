@@ -97,6 +97,8 @@ export type DiscoveryPayload = {
 
 export type DiscoveryParams = {
 	dappMetadata: DappMetadata
+	/** The chain the dApp asked to connect on, as the wallet decoded it from the discovery. */
+	chainId: string
 }
 
 export type DiscoveryResult = {

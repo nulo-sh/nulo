@@ -801,7 +801,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("an approved discovery resolves with the handle's window id, never the page's, and the window stays open", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999 } as DiscoveryResult)
 
@@ -815,7 +815,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("a discovery answer other than approved: true is a denial and closes the window", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: "yes", windowId: 999 } as unknown as DiscoveryResult)
 
@@ -825,7 +825,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("a denied discovery settles and closes the window", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: false })
 
