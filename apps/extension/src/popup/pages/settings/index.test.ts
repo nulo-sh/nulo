@@ -68,6 +68,20 @@ const props = (over: Partial<Record<string, unknown>> = {}): ConfigProp[] =>
 	}).map(([key, value]) => ({ key, value }) as ConfigProp)
 
 let config: ReturnType<typeof fakeConfig>
+
+let heroCallback: IntersectionObserverCallback | undefined
+
+/** One observer delivery carrying a hero entry per value, oldest first, as a fast scroll batches them. */
+async function deliverHero(...intersecting: boolean[]) {
+	heroCallback?.(
+		intersecting.map((isIntersecting) => ({ isIntersecting }) as IntersectionObserverEntry),
+		{} as IntersectionObserver,
+	)
+	await flushPromises()
+}
+
+const barShown = (w: { get: (selector: string) => { element: Element } }) =>
+	(w.get('[data-testid="page-title-bar"]').element.parentElement?.className ?? "").includes("page_title_bar_visible")
 let execution: { getLastProveOutcome: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }
 
 beforeEach(() => {
@@ -83,6 +97,9 @@ beforeEach(() => {
 	vi.stubGlobal(
 		"IntersectionObserver",
 		class {
+			constructor(callback: IntersectionObserverCallback) {
+				heroCallback = callback
+			}
 			observe() {}
 			disconnect() {}
 		},
@@ -279,5 +296,19 @@ describe("settings hub — reconnects", () => {
 		config.reads[0].resolve(props({ theme: "light", developerMode: false }))
 		await flushPromises()
 		expect(shownValues(w)).toMatchObject({ "setting-nav-display": "Dark", "setting-nav-developer": "On" })
+	})
+})
+
+describe("the compact title bar", () => {
+	test("shows when a batched delivery ends with the hero gone", async () => {
+		const w = await mountHub()
+		await deliverHero(true, false)
+		expect(barShown(w)).toBe(true)
+	})
+
+	test("hides when a batched delivery ends with the hero back", async () => {
+		const w = await mountHub()
+		await deliverHero(false, true)
+		expect(barShown(w)).toBe(false)
 	})
 })
