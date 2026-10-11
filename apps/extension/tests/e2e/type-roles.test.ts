@@ -3,8 +3,8 @@
  * judges the element it should, the faces they ask for load, History's hero title takes
  * `title-hero` through its composed module rule, every page the smoke suite sweeps holds its roles
  * and its identifier sites, as do the native fields and each `Button` variant and size in today's
- * box, no figure on any of them ends in an ellipsis, and in Firefox's real toolbar panel the
- * role-bearing text neither clips nor moves the layout.
+ * box, no figure on any of them loses a digit to a clip or an ellipsis, and in Firefox's real
+ * toolbar panel the role-bearing text neither clips nor moves the layout.
  */
 import { typeRoleNames, typeRoles } from "@nulo/design/tokens"
 import type { Page } from "puppeteer"
@@ -195,28 +195,37 @@ const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a
 type SiteState = readonly [surface: string, state: string]
 
 /**
- * A person reads these to the digit: an ellipsis, which suits a name, hides a value on one. An
- * unpriced token row shows its contract-supplied name in the fiat line's place, clipped on purpose.
+ * A person reads these to the digit, so none may lose one: not to its own clip or ellipsis, nor to
+ * an ancestor's. An unpriced token row shows its contract-supplied name in the fiat line's place,
+ * clipped on purpose.
  */
 const FIGURE_ROLES = new Set(["amount-hero", "amount-total", "amount-row", "amount-detail", "fiat"])
 
-const ellipsizedFigures = (readings: readonly TypeReading[]) =>
+const cutFigures = (readings: readonly TypeReading[]) =>
 	readings
 		.filter(
 			(reading) =>
 				reading.visible &&
 				reading.roles.some((role) => FIGURE_ROLES.has(role)) &&
 				reading.testid !== "token-name" &&
-				(reading.ellipsizedBy !== null ||
-					(reading.overflowX !== "visible" && reading.textOverflow === "ellipsis" && reading.scrollWidth > reading.clientWidth)),
+				(reading.clippedBy !== null ||
+					reading.ellipsizedBy !== null ||
+					(reading.overflowX !== "visible" && reading.scrollWidth > reading.clientWidth)),
 		)
-		.map(({ testid, text, scrollWidth, clientWidth, ellipsizedBy }) => ({ testid, text, scrollWidth, clientWidth, ellipsizedBy }))
+		.map(({ testid, text, scrollWidth, clientWidth, clippedBy, ellipsizedBy }) => ({
+			testid,
+			text,
+			scrollWidth,
+			clientWidth,
+			clippedBy,
+			ellipsizedBy,
+		}))
 
 /** Sweep steps 1 and 2 over the page as it stands, then the identifier sites of each state it renders. */
 async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = []): Promise<void> {
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
-	expect(ellipsizedFigures(sweep.readings), `${label}: figures behind an ellipsis`).toEqual([])
+	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
 	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state, OBSERVE))
 }
 
@@ -543,7 +552,7 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 								reading.textOverflow !== "ellipsis")),
 				)
 				expect(clipped, `${tab}: role-bearing text clipped without an ellipsis`).toEqual([])
-				expect(ellipsizedFigures(typography.readings), `${tab}: figures behind an ellipsis in the panel`).toEqual([])
+				expect(cutFigures(typography.readings), `${tab}: figures cut in the panel`).toEqual([])
 				const widths = typography.readings
 					.filter((reading) => !reading.testid?.startsWith(PROBE))
 					.map((r) => `${r.testid}:${r.scrollWidth}/${r.clientWidth}`)
