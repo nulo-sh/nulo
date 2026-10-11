@@ -10,9 +10,11 @@ import {
 	CapabilityNotGrantedError,
 	ChainNotSupportedError,
 	InvalidWalletArgumentsError,
+	JobCancelledError,
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
+	UserRejectedError,
 } from "@nulo/extension-messaging/errors"
 import { NoUsableAccountError } from "@nulo/wallet-bridge"
 import { LogLevel } from "@/wallet/logger"
@@ -358,19 +360,28 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "drip_to_public" })
 	})
 
+	// A refusal before the person saw anything is retitled; a popup_bound row keeps the title the
+	// person saw in the approval window.
 	test.each([
-		["a Terms refusal", "terms_refused", new TermsAcceptanceRequiredError()],
-		["a scope refusal", "scope_refused", refusal],
-		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction")],
-		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx")],
-		["an ended session", "session_ended", new SessionEndedError()],
-		["a lock when its turn came", "session_ended", new WalletLockedError()],
-		["a chain the wallet does not serve", "wallet_refused", new ChainNotSupportedError()],
-		["no account the dApp may use", "wallet_refused", new NoUsableAccountError("No authorized accounts found for this dApp session")],
-		["any other failure", "popup_bound", new Error("session gone")],
+		["a Terms refusal", "terms_refused", new TermsAcceptanceRequiredError(), "Transaction"],
+		["a scope refusal", "scope_refused", refusal, "Transaction"],
+		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],
+		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx"), "Transaction"],
+		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],
+		["a lock when its turn came", "session_ended", new WalletLockedError(), "Transaction"],
+		["a chain the wallet does not serve", "wallet_refused", new ChainNotSupportedError(), "Transaction"],
+		[
+			"no account the dApp may use",
+			"wallet_refused",
+			new NoUsableAccountError("No authorized accounts found for this dApp session"),
+			"Transaction",
+		],
+		["the person rejecting the approval", "popup_bound", new UserRejectedError(), "drip_to_public"],
+		["the approval window closing", "popup_bound", new JobCancelledError(), "drip_to_public"],
+		["any other failure", "popup_bound", new Error("session gone"), "drip_to_public"],
 		// Classified by class, never by text: a bare error carrying the lock's words stays unclassified.
-		["a bare error reading like a lock", "popup_bound", new Error("Wallet locked")],
-	])("a still-queued record failed by %s gets the %s kind, the error's message and the title Transaction", async (_name, kind, error) => {
+		["a bare error reading like a lock", "popup_bound", new Error("Wallet locked"), "drip_to_public"],
+	])("a still-queued record failed by %s gets the %s kind, the error's message and the title %s", async (_name, kind, error, title) => {
 		const { deps, journal } = makeDeps()
 		const id = await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)
 		await failQueuedForError(journal, id as string, error, deps.logger)
@@ -379,7 +390,7 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 			stage: "failed",
 			kind,
 			message: error.message,
-			title: "Transaction",
+			title,
 		})
 	})
 

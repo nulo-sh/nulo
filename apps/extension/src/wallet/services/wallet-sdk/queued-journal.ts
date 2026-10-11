@@ -239,8 +239,10 @@ export function extractPrimaryMethodFromSendTx(message: WalletMessage): string |
  * transition legally turned a mid-flight `queued → pending` claim into
  * `pending → failed`, failing an op the user had just approved.
  *
- * The refused record is retitled "Transaction" in that same write: nothing has resolved its
- * selector yet, so the name the dApp claimed is the only other title, and it is unverified.
+ * A classified refusal is retitled "Transaction" in that same write: nothing has resolved its
+ * selector yet, so the name the dApp claimed is the only other title, and it is unverified. A
+ * `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps
+ * its title.
  */
 export async function failQueuedIfUnclaimed(
 	operationJournal: OperationJournalService,
@@ -255,7 +257,7 @@ export async function failQueuedIfUnclaimed(
 			["queued"],
 			{ stage: "failed" },
 			{ kind, message, normalizedRaw: null },
-			{ failedTitle: "Transaction" },
+			kind === "popup_bound" ? undefined : { failedTitle: "Transaction" },
 		)
 	} catch (transitionError) {
 		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)
