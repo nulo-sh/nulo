@@ -67,7 +67,13 @@ describe("handleWalletMessage — Terms admission", () => {
 		await h.run("sendTx", [{}, {}], "journal-1")
 
 		expect(h.dispatch).not.toHaveBeenCalled()
-		expect(h.transitionIfStage).toHaveBeenCalledWith("journal-1", ["queued"], { stage: "failed" }, expect.anything())
+		expect(h.transitionIfStage).toHaveBeenCalledWith(
+			"journal-1",
+			["queued"],
+			{ stage: "failed" },
+			{ kind: "terms_refused", message: "Open Nulo and accept the Terms to continue.", normalizedRaw: null },
+			{ failedTitle: "Transaction" },
+		)
 	})
 
 	test("a batch costs one acceptance read, however many legs it carries", async () => {

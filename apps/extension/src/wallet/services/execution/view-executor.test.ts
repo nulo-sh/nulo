@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, test, vi } from "vitest"
-import { ScopeViolationError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
 import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
@@ -478,6 +478,25 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 			expect(refused.message).toBe("Scope violation: call name does not match selector's function")
 		}
 		expect(pxe.executeUtility).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["a public", FunctionType.PUBLIC],
+		["a private", FunctionType.PRIVATE],
+	])("%s function bound to its name is refused as invalid arguments before PXE runs anything", async (_label, functionType) => {
+		const { executor, pxe } = harness()
+		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce({ name: "symbol", functionType, isStatic: false })
+		const refused = await rejectionOf(executor.executeAztecExecuteUtility(op("symbol")))
+		expect(refused).toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(refused.message).toBe("Invalid arguments for wallet method: executeUtility")
+		expect(pxe.executeUtility).not.toHaveBeenCalled()
+	})
+
+	test("a utility function bound to its name runs", async () => {
+		const { executor, pxe } = harness()
+		contractResolverMocks.findFunctionBySelector.mockResolvedValueOnce(SYMBOL)
+		await executor.executeAztecExecuteUtility(op("symbol"))
+		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
 	})
 
 	test("an absent name (a direct call; the wire schema requires one) runs the selector's function", async () => {

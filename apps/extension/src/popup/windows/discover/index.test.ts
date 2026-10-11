@@ -28,13 +28,16 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
-import { flushPromises, mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 
 // ── Mock state (closure refs so tests can flip values mid-test) ──────
 
 let requestIdMock = ref<string | undefined>(undefined)
 let dappMock = ref<{ name: string; url: string } | null>(null)
+let payloadMock = ref<unknown>(null)
+// The chain the discovery named, decimal as the background decodes it.
+let payloadChainId = "77"
 let isCancelledMock = ref(false)
 let loadPromiseResolve: (() => void) | undefined
 let loadPromiseReject: ((err: Error) => void) | undefined
@@ -47,6 +50,7 @@ const loadInteractionPayloadMock = vi.fn(() => {
 			// Simulate that loadInteractionPayload commits requestId + dapp BEFORE resolving
 			requestIdMock.value = "req-123"
 			dappMock.value = { name: "Test DApp", url: "https://example.com" }
+			payloadMock.value = { params: { dappMetadata: dappMock.value, chainId: payloadChainId } }
 			resolve()
 		}
 		loadPromiseReject = reject
@@ -75,7 +79,7 @@ vi.mock("@/composables/useDappInteractionPayload", () => ({
 	useDappInteractionPayload: vi.fn(() => ({
 		requestId: requestIdMock,
 		dapp: dappMock,
-		payload: ref(null),
+		payload: payloadMock,
 		isCancelled: isCancelledMock,
 		load: loadInteractionPayloadMock,
 		reject: rejectViaInteractionServiceMock,
@@ -118,10 +122,22 @@ vi.mock("@/stores/app.store", () => ({
 		isSessionChecked: true,
 		isLogined: true,
 		account: { name: "TestAccount" },
-		network: { name: "TestNet" },
+		network: { name: "TestNet", chainId: 1 },
+		networks: [
+			{ name: "TestNet", chainId: 1 },
+			{ name: "Devnet", chainId: 77 },
+		],
 		pageAwaitingAuth: "",
 	}),
 }))
+
+// The page reads its request id through the mocked payload composable; the route carries only the
+// expired flag the worker sets.
+const routeMock = ref<{ query: Record<string, string> }>({ query: { requestId: "req-123" } })
+vi.mock("vue-router", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("vue-router")>()
+	return { ...actual, useRouter: () => ({ currentRoute: routeMock, push: vi.fn() }) }
+})
 
 // chrome.windows mock so closeWindow() doesn't throw
 beforeEach(() => {
@@ -137,6 +153,9 @@ beforeEach(() => {
 afterEach(() => {
 	requestIdMock = ref<string | undefined>(undefined)
 	dappMock = ref<{ name: string; url: string } | null>(null)
+	payloadMock = ref<unknown>(null)
+	payloadChainId = "77"
+	routeMock.value = { query: { requestId: "req-123" } }
 	isCancelledMock = ref(false)
 	loadPromiseResolve = undefined
 	loadPromiseReject = undefined
@@ -168,18 +187,25 @@ const STUBS = {
 		`,
 	},
 	DappStatusStrip: {
-		template: '<div data-testid="status-strip" :data-status="status" />',
+		template: '<div data-testid="status-strip" :data-status="status" :data-network="networkName" />',
 		props: ["accountName", "networkName", "status"],
 	},
 	DappIdentityBlock: {
-		template: '<div data-testid="identity-block" />',
+		template: '<div data-testid="identity-block" :data-action="actionLabel" />',
 		props: ["dapp", "hostname", "hostnameSuspicious", "actionLabel", "hostnameTestId", "nameTestId"],
 	},
-	DappCancelledOverlay: { template: '<div data-testid="cancelled-overlay" />' },
+	DappCancelledOverlay: {
+		props: ["message"],
+		emits: ["dismiss"],
+		template: `<div data-testid="cancelled-overlay" :data-message="message"><button data-testid="overlay-ok" @click="$emit('dismiss')" /></div>`,
+	},
 }
 
 // Lazy import after vi.mock hoist
 import Discover from "./index.vue"
+
+// Every mount reads the one shared route: a page left mounted would react to the next test's flag.
+enableAutoUnmount(afterEach)
 
 const factory = () => mount(Discover, { global: { stubs: STUBS } })
 
@@ -390,6 +416,142 @@ describe("discover popup — isReady race fix", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="cancelled-overlay"]').exists()).toBe(true)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
+	})
+})
+
+describe("discover popup — the line under the app names the app's network", () => {
+	const ready = async () => {
+		const w = factory()
+		await flushPromises()
+		getActiveProfilePromiseResolve?.({ id: "p1" })
+		await flushPromises()
+		loadPromiseResolve?.()
+		await flushPromises()
+		return w
+	}
+	const approve = (w: ReturnType<typeof factory>) => (w.vm as unknown as { approve: () => Promise<void> }).approve()
+	const actionLine = (w: ReturnType<typeof factory>) => w.get('[data-testid="identity-block"]').attributes("data-action")
+
+	test("before Allow it names the app's chain while the strip keeps the wallet's network", async () => {
+		const w = await ready()
+		expect(actionLine(w)).toBe("wants to connect on Devnet")
+		expect(w.get('[data-testid="status-strip"]').attributes("data-network")).toBe("TestNet")
+	})
+
+	test("an accepted Allow reads as connecting on the app's chain", async () => {
+		const w = await ready()
+		await approve(w)
+		await flushPromises()
+		expect(actionLine(w)).toBe("Connecting on Devnet")
+	})
+
+	test("a failed Allow keeps the request line", async () => {
+		resolveInteractionMock.mockRejectedValueOnce(new Error("boom"))
+		const w = await ready()
+		await approve(w)
+		await flushPromises()
+		expect(actionLine(w)).toBe("wants to connect on Devnet")
+	})
+
+	test("a chain with no wallet network reads by its id", async () => {
+		payloadChainId = "99"
+		const w = await ready()
+		expect(actionLine(w)).toBe("wants to connect on Aztec:99")
+	})
+
+	test("before the request loads it names no network", async () => {
+		const w = factory()
+		await flushPromises()
+		expect(actionLine(w)).toBe("wants to connect on this network")
+	})
+})
+
+describe("discover popup — a connection request that expired", () => {
+	const EXPIRED = { requestId: "req-123", expired: "1" }
+	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
+	const windowsRemove = () => (globalThis as any).chrome.windows.remove as ReturnType<typeof vi.fn>
+	const overlays = (w: ReturnType<typeof factory>) => w.findAll('[data-testid="cancelled-overlay"]')
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("shows the cancelled overlay with its own line, and OK closes the window", async () => {
+		routeMock.value = { query: EXPIRED }
+		const w = factory()
+		await flushPromises()
+		expect(overlays(w).map((o) => o.attributes("data-message"))).toEqual(["Connection request expired"])
+		await w.get('[data-testid="overlay-ok"]').trigger("click")
+		expect(windowsRemove()).toHaveBeenCalledWith(42)
+	})
+
+	test("closes the window by itself after 30 seconds, not before", async () => {
+		vi.useFakeTimers()
+		routeMock.value = { query: EXPIRED }
+		factory()
+		await vi.advanceTimersByTimeAsync(29_999)
+		expect(windowsRemove()).not.toHaveBeenCalled()
+		await vi.advanceTimersByTimeAsync(1)
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+	})
+
+	test("leaving the expired page (a lock routes the window away) closes the window at once, and the timer never fires", async () => {
+		vi.useFakeTimers()
+		routeMock.value = { query: EXPIRED }
+		factory()
+		await flushPromises()
+		routeMock.value = { query: {} }
+		await flushPromises()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+		await vi.advanceTimersByTimeAsync(30_000)
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+	})
+
+	test("unmounting the expired page closes the window; unmounting a live one does not", async () => {
+		routeMock.value = { query: EXPIRED }
+		factory().unmount()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+		routeMock.value = { query: { requestId: "req-123" } }
+		factory().unmount()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+	})
+
+	test("a page loaded already expired starts no live request", async () => {
+		routeMock.value = { query: EXPIRED }
+		factory()
+		await flushPromises()
+		expect(profileServiceConnectMock).not.toHaveBeenCalled()
+		expect(getActiveProfileMock).not.toHaveBeenCalled()
+		expect(loadInteractionPayloadMock).not.toHaveBeenCalled()
+	})
+
+	test("a page waiting after Allow shows the overlay over itself when the flag arrives, and starts the close", async () => {
+		vi.useFakeTimers()
+		const w = factory()
+		await flushPromises()
+		getActiveProfilePromiseResolve?.({ id: "p1" })
+		await flushPromises()
+		loadPromiseResolve?.()
+		await flushPromises()
+		await (w.vm as unknown as { approve: () => Promise<void> }).approve()
+		await flushPromises()
+		expect(overlays(w)).toHaveLength(0)
+
+		routeMock.value = { query: EXPIRED }
+		await flushPromises()
+		expect(overlays(w).map((o) => o.attributes("data-message"))).toEqual(["Connection request expired"])
+		expect(w.find('[data-testid="discover-allow-btn"]').exists()).toBe(true)
+		expect(loadInteractionPayloadMock).toHaveBeenCalledTimes(1)
+		await vi.advanceTimersByTimeAsync(30_000)
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+	})
+
+	test("a cancelled request on the expired page shows only the expired line", async () => {
+		routeMock.value = { query: EXPIRED }
+		isCancelledMock.value = true
+		const w = factory()
+		await flushPromises()
+		expect(overlays(w).map((o) => o.attributes("data-message"))).toEqual(["Connection request expired"])
 	})
 })
 

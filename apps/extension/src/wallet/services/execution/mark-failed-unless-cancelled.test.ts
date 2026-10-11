@@ -11,12 +11,26 @@
 import { describe, expect, test, vi } from "vitest"
 import { type JobError, type JobProgress, JobCancelledSentinel, normalizeError } from "@nulo/wallet-core/jobs"
 import { DuplicateInitializationError, ScopeViolationError, SessionEndedError } from "@nulo/extension-messaging/errors"
+import type { FunctionAbi } from "@aztec-labs/stdlib/abi"
+import { assertSelectorBinding, AUTHWIT_CALL_BINDING, CALL_BINDING } from "./contract-resolver"
 import { failureKind, markFailedUnlessCancelled } from "./mark-failed-unless-cancelled"
 
 function fakeLane() {
 	return {
-		markJournal: vi.fn(async (_journalId: string | undefined, _progress: JobProgress, _error?: JobError | null) => {}),
+		markJournal: vi.fn(
+			async (_journalId: string | undefined, _progress: JobProgress, _error?: JobError | null, _failedTitle?: string) => {},
+		),
 	}
+}
+
+/** What `assertSelectorBinding` throws for `fn` under `policy`, or `undefined` when it binds. */
+function bindingThrow(fn: FunctionAbi | undefined, name: string, policy: typeof CALL_BINDING): unknown {
+	try {
+		assertSelectorBinding(fn, { name }, policy)
+	} catch (error) {
+		return error
+	}
+	return undefined
 }
 
 describe("markFailedUnlessCancelled", () => {
@@ -51,7 +65,7 @@ describe("markFailedUnlessCancelled", () => {
 	test("passes an undefined journalId straight through (hoisted-but-unset case)", async () => {
 		const lane = fakeLane()
 		await markFailedUnlessCancelled(new Error("x"), undefined, lane)
-		expect(lane.markJournal).toHaveBeenCalledWith(undefined, { stage: "failed" }, expect.anything())
+		expect(lane.markJournal).toHaveBeenCalledWith(undefined, { stage: "failed" }, expect.anything(), undefined)
 	})
 
 	test("a DuplicateInitializationError carries its own journal kind — never the dapp_execute catch-all", async () => {
@@ -67,14 +81,30 @@ describe("markFailedUnlessCancelled", () => {
 		const lane = { markJournal: vi.fn(() => marker) }
 		const error = new SessionEndedError()
 		expect(markFailedUnlessCancelled(error, "j1", lane)).toBe(marker)
-		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "session_ended"))
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "session_ended"), undefined)
 	})
 
 	test("a ScopeViolationError on a dApp send records scope_refused", async () => {
 		const lane = fakeLane()
 		const error = new ScopeViolationError("Scope violation: call name does not match selector's function")
 		await markFailedUnlessCancelled(error, "j1", lane)
-		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "scope_refused"))
+		expect(lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, normalizeError(error, "scope_refused"), undefined)
+	})
+
+	test("a call-binding refusal retitles the record in its failing write; an inner call or a plain failure never does", async () => {
+		const transfer = { name: "transfer_public_to_public" } as FunctionAbi
+		const cases: Array<[label: string, error: unknown, title: string | undefined]> = [
+			["a renamed call", bindingThrow(transfer, "balance_of_public", CALL_BINDING), "transfer_public_to_public"],
+			["an unresolvable selector", bindingThrow(undefined, "balance_of_public", CALL_BINDING), "Transaction"],
+			["a renamed authwit inner call", bindingThrow(transfer, "balance_of_public", AUTHWIT_CALL_BINDING), undefined],
+			["an inner lookup's own Method not found", new Error("Method not found"), undefined],
+			["a plain failure", new Error("boom"), undefined],
+		]
+		for (const [label, error, title] of cases) {
+			const lane = fakeLane()
+			await markFailedUnlessCancelled(error, "j1", lane)
+			expect({ label, title: lane.markJournal.mock.calls[0]?.[3] }).toEqual({ label, title })
+		}
 	})
 
 	test("the shared failureKind never labels a first-party Send's failure as a scope refusal", () => {

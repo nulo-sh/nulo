@@ -42,7 +42,7 @@ import { TransactionService, TransferType } from "@/wallet/services/transaction/
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
@@ -1094,6 +1094,7 @@ describe("ExecutionService composition — a refused operation logs at the level
 	test.each([
 		["a selector-binding refusal", bindingRefusal, "refused: outside its grant"],
 		["a Terms refusal", () => new TermsAcceptanceRequiredError(), "refused: terms not accepted"],
+		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
 		["an unclassified failure", () => new Error("boom"), undefined],
 	])("%s", async (_label, makeError, debugReason) => {
 		const h = await makeHarness()
@@ -1121,6 +1122,37 @@ describe("ExecutionService composition — a refused operation logs at the level
 			expect(outcomeLines(logError)).toEqual([])
 		}
 	})
+})
+
+describe("ExecutionService composition — a refused dApp call is titled by what it really runs", () => {
+	test("a call-binding refusal after the claim persists the resolved function as the record's title", async () => {
+		const h = await makeHarness()
+		const fence = await h.captureExecutionFence()
+		const queued = await h.journal.createOperation({
+			kind: "dapp_execute",
+			origin: "dapp",
+			profileId: "p1",
+			sessionId: "sess-1",
+			title: "balance_of_public",
+			initialStage: { stage: "queued" },
+		})
+		const planner = (h.service as unknown as { planner: OperationPlanner }).planner
+		vi.spyOn(planner, "processAztecJsPayload").mockImplementationOnce(async () => {
+			assertSelectorBinding({ name: "transfer_public_to_public" } as never, { name: "balance_of_public" }, CALL_BINDING)
+			throw new Error("expected a refusal")
+		})
+		const send = { ...(dappSend() as object), opts: { from: ACCOUNT } } as never
+
+		const [result] = await h.service.executeOperations([send], DAPP_ORIGIN, undefined, { queuedJournalId: queued.id }, undefined, fence)
+
+		const record = await h.journal.getOperation(queued.id)
+		expect({ status: result.status, stage: record?.progress.stage, kind: record?.error?.kind, title: record?.title }).toEqual({
+			status: "failed",
+			stage: "failed",
+			kind: "scope_refused",
+			title: "transfer_public_to_public",
+		})
+	}, 15_000)
 })
 
 describe("ExecutionService composition — a send whose answer was lost is checked on the network", () => {

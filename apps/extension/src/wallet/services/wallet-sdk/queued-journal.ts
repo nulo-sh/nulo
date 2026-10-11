@@ -20,15 +20,24 @@ import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
-import { InvalidWalletArgumentsError, ScopeViolationError, ValidationError } from "@nulo/extension-messaging/errors"
+import {
+	CapabilityNotGrantedError,
+	ChainNotSupportedError,
+	InvalidWalletArgumentsError,
+	ScopeViolationError,
+	SessionEndedError,
+	TermsAcceptanceRequiredError,
+	ValidationError,
+} from "@nulo/extension-messaging/errors"
 import type { KnownJobErrorKind } from "@nulo/wallet-core/jobs"
 import { getErrorMessage, Lock } from "@nulo/wallet-core/utils"
 import type { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import type { ProfileService } from "@/wallet/services/profile/service"
+import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
 import type { DappSessionService } from "@/wallet/services/dapp-session/service"
 import type { NetworkService } from "@/wallet/services/network/service"
 import type { AccountService } from "@/wallet/services/account/service"
-import { projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
+import { NoUsableAccountError, projectStoredGrants, requestedSenderOf, resolveAuthorizedSessionAccount } from "@nulo/wallet-bridge"
 import { parseCaipAccount } from "@/wallet/utils/caip"
 import type { CaipAccount } from "@/wallet/services/dapp-interaction/spec"
 import { pickPrimaryMethod } from "@/utils/primary-method"
@@ -229,24 +238,41 @@ export function extractPrimaryMethodFromSendTx(message: WalletMessage): string |
  * ride `transitionIfStage`'s lock-held re-read — a separate read-then-
  * transition legally turned a mid-flight `queued → pending` claim into
  * `pending → failed`, failing an op the user had just approved.
+ *
+ * A classified refusal is retitled "Transaction" in that same write: nothing has resolved its
+ * selector yet, so the name the dApp claimed is the only other title, and it is unverified. A
+ * `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps
+ * its title.
  */
 export async function failQueuedIfUnclaimed(
 	operationJournal: OperationJournalService,
 	journalId: string,
 	message: string,
 	logger: ILogger,
-	kind: Extract<KnownJobErrorKind, "popup_bound" | "scope_refused" | "malformed_request"> = "popup_bound",
+	kind: QueuedFailureKind = "popup_bound",
 ): Promise<void> {
 	try {
-		await operationJournal.transitionIfStage(journalId, ["queued"], { stage: "failed" }, { kind, message, normalizedRaw: null })
+		await operationJournal.transitionIfStage(
+			journalId,
+			["queued"],
+			{ stage: "failed" },
+			{ kind, message, normalizedRaw: null },
+			kind === "popup_bound" ? undefined : { failedTitle: "Transaction" },
+		)
 	} catch (transitionError) {
 		logger.log("wallet-sdk", LogLevel.Warn, `Failed to mark queued record ${journalId} as failed`, transitionError)
 	}
 }
 
-/** Fails a still-queued row with the error that ended its message before any claim: `scope_refused`
- *  for a grant-check refusal and `malformed_request` for a schema refusal, both fixed text, and
- *  `popup_bound` for anything else. */
+/** The kinds a row failed before any claim can carry. */
+export type QueuedFailureKind = Extract<
+	KnownJobErrorKind,
+	"popup_bound" | "scope_refused" | "malformed_request" | "terms_refused" | "session_ended" | "wallet_refused"
+>
+
+/** Fails a still-queued row with the error that ended its message before any claim, classified by
+ *  the error's class, never its text: a Terms, grant, schema, session or lock refusal gets its own
+ *  kind, a chain or account the wallet cannot serve `wallet_refused`, anything else `popup_bound`. */
 export async function failQueuedForError(
 	operationJournal: OperationJournalService,
 	journalId: string,
@@ -256,8 +282,11 @@ export async function failQueuedForError(
 	await failQueuedIfUnclaimed(operationJournal, journalId, getErrorMessage(error), logger, queuedFailureKind(error))
 }
 
-function queuedFailureKind(error: unknown): "scope_refused" | "malformed_request" | "popup_bound" {
-	if (error instanceof ScopeViolationError) return "scope_refused"
+function queuedFailureKind(error: unknown): QueuedFailureKind {
+	if (error instanceof TermsAcceptanceRequiredError) return "terms_refused"
+	if (error instanceof ScopeViolationError || error instanceof CapabilityNotGrantedError) return "scope_refused"
 	if (error instanceof InvalidWalletArgumentsError) return "malformed_request"
+	if (error instanceof SessionEndedError || error instanceof WalletLockedError) return "session_ended"
+	if (error instanceof ChainNotSupportedError || error instanceof NoUsableAccountError) return "wallet_refused"
 	return "popup_bound"
 }

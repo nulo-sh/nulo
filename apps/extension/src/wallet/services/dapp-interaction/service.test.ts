@@ -543,12 +543,14 @@ describe("DappInteractionService when the Terms acceptance lapses after the requ
 		)
 
 		expect(transitionOperation).toHaveBeenCalledWith("journal-1", { stage: "pending" })
-		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle.
+		// Stage-guarded to `pending`: a record execution did claim is its owner's to settle. Filed as
+		// the Terms refusal it is and titled "Transaction": nothing resolved the call's selector.
 		expect(transitionIfStage).toHaveBeenCalledWith(
 			"journal-1",
 			["pending"],
 			{ stage: "failed" },
-			expect.objectContaining({ message: TermsAcceptanceRequiredError.MESSAGE }),
+			{ kind: "terms_refused", message: TermsAcceptanceRequiredError.MESSAGE, normalizedRaw: null },
+			{ failedTitle: "Transaction" },
 		)
 	})
 
@@ -780,6 +782,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 	function handOverHarness() {
 		const api = new FakeBrowserApi()
 		api.reset()
+		vi.mocked(chrome.runtime.getURL).mockImplementation((path) => `chrome-extension://nulo/${path}`)
 		const clock = new MockClock()
 		const dapp = new DappInteractionService(noopLogger, new WindowManager(api.windows, clock, noopLogger))
 		const creates = vi.spyOn(api.windows, "create")
@@ -791,19 +794,21 @@ describe("DappInteractionService — an approved connect window is handed to the
 			await expect.poll(() => creates.mock.results.length).toBe(1)
 			const created = (await creates.mock.results[0]?.value) as { id: number }
 			await flush()
-			return { pending, windowId: created.id, id: [...storage.keys()][0] as string }
+			const url = creates.mock.calls[0]?.[0].url as string
+			return { pending, windowId: created.id, url, id: [...storage.keys()][0] as string }
 		}
 		const closeByUser = (windowId: number) => (api.windows as unknown as { closeByUser: (id: number) => void }).closeByUser(windowId)
 		return { dapp, clock, removes, open, interaction, closeByUser }
 	}
 
-	test("an approved discovery resolves with the handle's window id, never the page's, and the window stays open", async () => {
+	test("an approved discovery resolves with the handle's window id and its own page marked expired, never the page's values, and the window stays open", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
-		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999 } as DiscoveryResult)
+		await h.dapp.resolveInteraction(w.id, { approved: true, windowId: 999, expiredUrl: "https://evil.example" } as DiscoveryResult)
 
-		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId })
+		expect(w.url).toContain(`#/windows/discover?requestId=${w.id}`)
+		await expect(w.pending).resolves.toEqual({ approved: true, windowId: w.windowId, expiredUrl: `${w.url}&expired=1` })
 		expect(w.windowId).not.toBe(999)
 		// Nothing watches the window now: its later close and the old timeout settle nothing.
 		h.closeByUser(w.windowId)
@@ -813,7 +818,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("a discovery answer other than approved: true is a denial and closes the window", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: "yes", windowId: 999 } as unknown as DiscoveryResult)
 
@@ -823,7 +828,7 @@ describe("DappInteractionService — an approved connect window is handed to the
 
 	test("a denied discovery settles and closes the window", async () => {
 		const h = handOverHarness()
-		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA }))
+		const w = await h.open(() => h.dapp.discover({ dappMetadata: METADATA, chainId: "1" }))
 
 		await h.dapp.resolveInteraction(w.id, { approved: false })
 

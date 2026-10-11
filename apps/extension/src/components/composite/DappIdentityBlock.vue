@@ -21,6 +21,7 @@ const props = defineProps({
 	 *  per window (e.g. "discover-hostname", "capabilities-hostname"). */
 	hostnameTestId: { type: String, default: undefined },
 	nameTestId: { type: String, default: undefined },
+	actionTestId: { type: String, default: undefined },
 })
 
 const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(props.dapp.name, 64) : ""))
@@ -43,7 +44,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 				<span :class="$style.warning_text">{{ HOSTNAME_WARNING }}</span>
 			</Flex>
 			<span v-if="sanitizedName" :data-testid="nameTestId" :class="$style.dapp_name">{{ sanitizedName }}</span>
-			<span :class="$style.dapp_action">{{ actionLabel }}</span>
+			<span :data-testid="actionTestId" :class="$style.dapp_action">{{ actionLabel }}</span>
 		</Flex>
 	</Flex>
 </template>

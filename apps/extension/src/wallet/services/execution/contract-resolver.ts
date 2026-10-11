@@ -75,16 +75,33 @@ export async function findFunctionBySelector(artifact: ContractArtifact, selecto
 	return undefined
 }
 
-/** How a site words a name/selector mismatch, and whether it lets a call without a name through.
- *  Only `undefined` is absent: `""` is a name, and a mismatched one. */
+/** How a site words a name/selector mismatch, whether it lets a call without a name through, and
+ *  whether its refusal retitles the record it fails (the outer call's does; an authwit's inner call
+ *  never names the row). Only `undefined` is absent: `""` is a name, and a mismatched one. */
 export type SelectorBindingPolicy = {
 	readonly label: "call name" | "authwit call name"
 	readonly absentName: "allowed" | "refused"
+	readonly titlesRow: boolean
 }
-export const CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "allowed" }
-export const AUTHWIT_CALL_BINDING: SelectorBindingPolicy = { label: "authwit call name", absentName: "allowed" }
+export const CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "allowed", titlesRow: true }
+export const AUTHWIT_CALL_BINDING: SelectorBindingPolicy = { label: "authwit call name", absentName: "allowed", titlesRow: false }
 /** For the fast path, whose scope check authorized the call by its name alone. */
-export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "refused" }
+export const NAMED_CALL_BINDING: SelectorBindingPolicy = { label: "call name", absentName: "refused", titlesRow: true }
+
+/** Kept beside the error, never on it, so no payload, log projection or serialization can carry
+ *  the resolved name out of the process. */
+const refusalTitles = new WeakMap<Error, string>()
+
+/** The title a binding refusal gives the record it fails: the function the selector resolved to,
+ *  or "Transaction" when it resolved to none. `undefined` for any other error. */
+export function refusalTitleOf(error: unknown): string | undefined {
+	return error instanceof Error ? refusalTitles.get(error) : undefined
+}
+
+function titled<E extends Error>(error: E, policy: SelectorBindingPolicy, title: string): E {
+	if (policy.titlesRow) refusalTitles.set(error, title)
+	return error
+}
 
 /** The refusal names the policy only: the claimed name, the resolved function and the target are
  *  request values, and the message reaches records and log lines that no redactor can scrub. */
@@ -100,11 +117,11 @@ export function assertSelectorBinding(
 	policy: SelectorBindingPolicy,
 ): FunctionAbi {
 	if (!fn) {
-		throw new Error("Method not found")
+		throw titled(new Error("Method not found"), policy, "Transaction")
 	}
 	const absentAllowed = policy.absentName === "allowed" && claim.name === undefined
 	if (!absentAllowed && claim.name !== fn.name) {
-		throw selectorBindingRefusal(policy)
+		throw titled(selectorBindingRefusal(policy), policy, fn.name)
 	}
 	return fn
 }

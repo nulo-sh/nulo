@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest"
 import {
 	ContractNotRegisteredError,
 	DuplicateInitializationError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeStaleAnchorError,
 	ScopeViolationError,
@@ -11,7 +12,7 @@ import {
 	walletErrorFromPayload,
 } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { SCOPE_VIOLATION_MESSAGE, toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { INVALID_PARAMS_MESSAGE, SCOPE_VIOLATION_MESSAGE, toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import { classifyOperationCatch, maybeRethrowAsRpcCancel } from "./rpc-cancel"
 
@@ -126,6 +127,23 @@ describe("classifyOperationCatch", () => {
 			code: 4100,
 			message: SCOPE_VIOLATION_MESSAGE,
 			data: { walletErrorCode: ScopeViolationError.CODE },
+		})
+	})
+
+	test("an argument refusal keeps its code across the port and answers -32602 with the fixed message", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(InvalidWalletArgumentsError.forMethod("executeUtility"), task, errorMessage) as {
+			code: string
+			error: string
+		}
+		expect(result).toMatchObject({ status: "failed", code: InvalidWalletArgumentsError.CODE })
+		const rebuilt = walletErrorFromPayload({ code: result.code, message: result.error })
+		expect(rebuilt).toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(rebuilt.message).toBe("Invalid arguments for wallet method: executeUtility")
+		expect(toWalletResponseError(rebuilt)).toEqual({
+			code: -32602,
+			message: INVALID_PARAMS_MESSAGE,
+			data: { walletErrorCode: InvalidWalletArgumentsError.CODE },
 		})
 	})
 

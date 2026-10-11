@@ -331,7 +331,7 @@ export const OperationJournalMethodSchemas = {
 	 * other stages it MUST be `null` (or omitted). The service throws on mismatch.
 	 */
 	transitionOperation: {
-		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional()]),
+		params: z.tuple([z.string().min(1), JobProgressSchema, JobErrorSchema.nullable().optional(), z.string().optional()]),
 		result: OperationRecordSchema,
 	},
 	/**

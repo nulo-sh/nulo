@@ -11,6 +11,7 @@ import {
 	ValidationError,
 } from "@nulo/extension-messaging/errors"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { NoUsableAccountError } from "./account-resolution"
 import { dataFieldsCovered, projectKnownCapability, ungrantedAccounts, unwrapOperationResult, WalletSdkDispatcher } from "./dispatcher"
 import type { Capability, DataCapability, GrantedCapabilityRecord, RejectedCapabilityRecord } from "./capabilities"
 import type { CapabilityParams, CapabilityResult } from "./dapp-interaction-protocol"
@@ -1520,16 +1521,19 @@ describe("dispatcher — registerToken reachability + routing", () => {
 			accounts: ["aztec:0:0x0000000000000000000000000000000000000000000000000000000000000acc"],
 		})
 		const d1 = new WalletSdkDispatcher(network, emptyWallet, execution, interaction, makeSessionWriter(s1).writer, noopLogger)
-		await expect(
-			d1.dispatch(
+		const noWalletAccount = await d1
+			.dispatch(
 				"registerToken",
 				[
 					"0x0000000000000000000000000000000000000000000000000000000000000acc",
 					"0x000000000000000000000000000000000000000000000000000000000000dead",
 				],
 				ctx,
-			),
-		).rejects.toThrow(/No accounts found for profile/)
+			)
+			.catch((e: unknown) => e)
+		// Typed so the wallet's journal can tell it from a fault; its message is unchanged.
+		expect(noWalletAccount).toBeInstanceOf(NoUsableAccountError)
+		expect((noWalletAccount as Error).message).toMatch(/No accounts found for profile/)
 
 		// Branch 2: wallet has accounts but the session's authorized set is EMPTY.
 		const walletAccounts: AccountFake = {
@@ -1540,16 +1544,18 @@ describe("dispatcher — registerToken reachability + routing", () => {
 		}
 		const s2 = makeSession({ capabilityGrants: grants, accounts: [] })
 		const d2 = new WalletSdkDispatcher(network, walletAccounts, execution, interaction, makeSessionWriter(s2).writer, noopLogger)
-		await expect(
-			d2.dispatch(
+		const noSessionAccount = await d2
+			.dispatch(
 				"registerToken",
 				[
 					"0x0000000000000000000000000000000000000000000000000000000000000acc",
 					"0x000000000000000000000000000000000000000000000000000000000000dead",
 				],
 				ctx,
-			),
-		).rejects.toThrow(/must call requestCapabilities/)
+			)
+			.catch((e: unknown) => e)
+		expect(noSessionAccount).toBeInstanceOf(NoUsableAccountError)
+		expect((noSessionAccount as Error).message).toMatch(/must call requestCapabilities/)
 	})
 
 	test("grantPublicAuthwit routes through the same shared resolver (unauthorized `from` refused)", async () => {
