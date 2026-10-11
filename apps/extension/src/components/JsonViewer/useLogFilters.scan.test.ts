@@ -176,8 +176,8 @@ describe("log source filter: every registered service is listed", () => {
 	})
 })
 
-/** A logger call, on any receiver named `logger`: a class's own `log` helper or the logger client's `shared.log` is not one. */
-const LOGGER_CALL = /\blogger\??\.log\(/g
+/** A logger call, on a receiver named `logger` or `_logger`: a class's own `log` helper or the logger client's `shared.log` is not one. */
+const LOGGER_CALL = /\b_?logger\??\.log\(/g
 const SERVICE_LOG_CALL = /\bthis\.log(?:Debug|Info|Warn|Error)\(/
 const UPPER_IDENTIFIER = /^[A-Z][A-Z0-9_]*$/
 
@@ -288,7 +288,7 @@ function fileSources(file: string, text: string): Resolution {
 
 const owner = (path: string) => `apps/extension/src/wallet/services/${path}`
 
-/** Each helper that logged under a name of its own, filed under the service that owns it. */
+/** A row in the filter does not prove ownership: each file here logs under its owner alone. */
 const OWNED: [string, string][] = [
 	[owner("price/service.ts"), "price"],
 	[owner("operation-journal/send-check.ts"), "operation-journal"],
@@ -328,8 +328,10 @@ describe("log source filter: every logger call's source is listed", () => {
 
 	test("a source the resolver cannot read is refused, not skipped", () => {
 		const read = (text: string) => fileSources("inline.ts", text)
-		expect(read('logger.log("fpc", level, "m"); new Lock("network", this.logger); new Lock()')).toEqual({
-			sources: ["fpc", "network"],
+		expect(
+			read('logger.log("fpc", level, "m"); this._logger.log("pxe", level, "m"); new Lock("network", this.logger); new Lock()'),
+		).toEqual({
+			sources: ["fpc", "pxe", "network"],
 			refused: [],
 		})
 		expect(read(`logger.log(\`fpc-\${id}\`, level, 'm')`).refused).toHaveLength(1)

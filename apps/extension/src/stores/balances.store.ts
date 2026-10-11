@@ -575,14 +575,9 @@ class BalancesCore {
 		return { scope, epoch, gas: { verified: entry.gas.verified }, fpc: { data: entry.fpc.data }, degraded }
 	}
 
-	/** Debt follows the OBSERVING cause, not the flight's: a forced failure
-	 *  creates no debt by itself, but an ensure that joined it, or a
-	 *  retry-capable subscriber holding the key when a tx-settle read fails,
-	 *  has a stake in the outcome. Without this, the degraded card would
-	 *  paint its retrying notice while no loop runs and retryVersion never
-	 *  bumps to wake its recovery watch. Gas-only: the fpc leg has no forced
-	 *  cause, so every degraded fpc already carries its debt from the
-	 *  failure commit. */
+	/** Debt follows the observer, not the flight: a forced failure owes nothing by itself, but an
+	 *  ensure that joined it, or a retry-capable subscriber when a tx-settle read fails, does: without
+	 *  it the card paints a retrying notice no loop serves. Gas-only: a degraded fpc always owes. */
 	private adoptGasRetryDebt(key: string, entry: BalanceEntry, legs: BalanceLeg[]): void {
 		if (legs.includes("gas") && entry.gas.status === "degraded" && !entry.gas.retryDebt) {
 			this.commitEntry(key, { ...entry, gas: { ...entry.gas, retryDebt: true } })
@@ -663,8 +658,8 @@ class BalancesCore {
 		}
 	}
 
-	/** The tx-settle path's observer: a retry-capable subscriber on the key when the forced read
-	 *  settles has a stake in its failure. */
+	/** Reads the subscribers when the forced read settles, not when it fires: one released in
+	 *  flight leaves nothing owed. */
 	private adoptForRetrySubscribers(key: string, scope: BalanceScope, epoch: number): void {
 		if (this.epochOf(scope.profileId) !== epoch) return
 		const union = this.capsUnion(key)

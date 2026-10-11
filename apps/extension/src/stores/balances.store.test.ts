@@ -415,12 +415,14 @@ describe("balances store — tx-settle forced refresh + cause-specific signals",
 	})
 
 	describe("a retry-capable subscriber that changes while the tx-refresh is in flight", () => {
-		async function failingRefreshUnder(change: (store: ReturnType<typeof useBalancesStore>) => void) {
+		type Store = ReturnType<typeof useBalancesStore>
+		async function failingRefreshUnder(change: (store: Store) => void, atTrigger?: (store: Store) => void) {
 			vi.useFakeTimers()
 			const store = useBalancesStore()
 			const subCard = store.subscribe(SCOPE_A, CAPS_CARD)
 			mocks.getFpcs.mockResolvedValue([])
 			await store.ensure(SCOPE_A, { legs: ["gas"] })
+			atTrigger?.(store)
 			let rejectRaw!: (e: unknown) => void
 			mocks.getGasBalances.mockImplementationOnce(() => new Promise((_r, rej) => (rejectRaw = rej))).mockResolvedValue(BAL)
 			fireSettled("0xacct")
@@ -444,10 +446,14 @@ describe("balances store — tx-settle forced refresh + cause-specific signals",
 			subCard.release()
 		})
 
-		it("released, it leaves nothing owed", async () => {
-			const { store, subCard, readsAfterFailure } = await failingRefreshUnder((s) => {
-				s.subscribe(SCOPE_A, CAPS_FEE).release()
-			})
+		it("released, it leaves nothing owed though it held the key at the trigger", async () => {
+			let subFee!: { release: () => void }
+			const { store, subCard, readsAfterFailure } = await failingRefreshUnder(
+				() => subFee.release(),
+				(s) => {
+					subFee = s.subscribe(SCOPE_A, CAPS_FEE)
+				},
+			)
 			expect(store.entry(SCOPE_A)?.gas).toMatchObject({ status: "degraded", retryDebt: false })
 			await vi.advanceTimersByTimeAsync(35_000)
 			expect(mocks.getGasBalances.mock.calls.length).toBe(readsAfterFailure)

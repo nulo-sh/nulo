@@ -481,6 +481,16 @@ Codex found sound: `adoptForRetrySubscribers` under epochs, outranked runs, an a
 
 Codex verdict: approve the ownership mapping with changes to PXE diagnostics and the scanner. Opus verdict: the rule is right; change the mechanism for the price helper, telemetry, NuloAccount and the registry default; build the general pin after the dynamic defaults are gone. Both: directory ownership for shared helpers, Token Balance for the ticker, Pxe Client for telemetry (with `clientName` protected, not re-derived), an explicit required source for NuloAccount (a rebinding logger rejected as a monkey-patch), no change to `Lock`, drop the unused queue/projector parameters and the registry option, keep `"wallet-sdk"` a literal. Split: the guard label (D13) and the general pin (D14); the price helper (D15). Opus found the second NuloAccount constructor (`account-integrity/coordinator.ts:57`) and the four tests that assert old sources; Codex found that `.log(` is not always `ILogger.log` (the receiver rule in § OA-1 (a)).
 
+### Post-implementation round 1 (Codex gpt-6.1-sol high read-only, session 01a1294d-99ff-7a42-85bf-fccd8b6c43d1; Opus general-purpose review in parallel)
+
+Codex verdict: approve with changes, three low findings, no runtime defect. Opus verdict: approve with changes, no correctness bug in what shipped.
+
+- Accepted (both): the "released" in-flight control subscribed and released inside the flight, so a variant that read the subscribers at the trigger passed it. The fee lease is now held at the trigger and released in flight; both in-flight cases fail on that variant and pass on the fix.
+- Accepted (both): the `adoptGasRetryDebt` doc condensed from eight lines to three; the `adoptForRetrySubscribers` doc cut to the fact the other one does not state (subscribers are read at settle, not at fire); the `OWNED` doc no longer narrates history; the telemetry test's comment that restated its assertions deleted.
+- Accepted (Opus): the scan's logger-call pattern missed `this._logger.log(` (one call, `execution-coordinator.ts`, already under `"execution"`). Widened to `_?logger`, pinned in the self-test, which fails on the old pattern.
+- Rejected (Opus, unverified): Send leaves with "The last token has just been deleted" if a token added elsewhere is still being re-read when the only, selected token is deleted. The window is one `getTokens` round trip after two actions on other surfaces; the outcome is recoverable (reopen Send); and a pending re-read does not imply a token for this identity (`onTokenAdded` fires for every profile and chain), so the fix needs in-flight tracking plus a second leave path, machinery out of proportion to the race.
+- Informational (Opus): the scan sees only literal `services.add(` registrations and inline `KeyedLock` options, and refuses (fails closed on) a literal containing a quote or backtick. None has an instance today; the scan's header already names its false negatives.
+
 ## Delivery
 
 One arc, one branch (`worktree-wallet-followups-2`), one PR against `dev`, opened only after Phase 5 passes and the Codex fix loop converges. No stack (`gh stack` is not used: the orchestrator's standing D-orch-1).

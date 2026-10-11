@@ -472,8 +472,6 @@ describe("ServiceClient telemetry + send-failure", () => {
 		emitMessage(makeResponse(requestId, fromUid, "echo:hi"))
 		await expect(promise).resolves.toBe("echo:hi")
 
-		// LoggingTelemetrySink should have logged the success terminal at Debug level, under the
-		// client's own source.
 		const telemetryCall = calls.find(([src, , data]) => src === "test-client" && (data as RequestTelemetry)?.method === "echo")
 		expect(telemetryCall).toBeDefined()
 		expect(telemetryCall![1]).toBe(LogLevel.Debug) // success → Debug
