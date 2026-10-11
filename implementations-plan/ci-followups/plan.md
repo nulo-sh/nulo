@@ -1,7 +1,7 @@
 ---
 plan: ci-followups
 tier: mid
-status: v2.1 approved by the orchestrator (8751330); arc 1 phases 1-3 implemented, Codex fix loop next
+status: completed
 issues: "#260, #250, #239 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,23 @@ base: origin/dev at af4afcc
 trunk: dev
 ---
 
+## Outcome
+
+- **Date**: 2026-10-11.
+- **Status**: completed. One PR against `dev` (D-orch-1: no stack), #286, with this close-out as its final commits; merging is the orchestrator's call.
+- **Shipped** (#286, closing #260, #250 and #239):
+  - #260: `bunfig.toml` sets `install.auto = "disable"`. The two store publishers and the preview comment, which run another revision's code, pass `bun --no-install`. `release-integrity.test.ts` pins that every Bun call in the fourteen jobs that install nothing is reached by one of the two (the selection equals `NO_INSTALL` exactly; 23 exact-finding mutations). It counts `bunx`, `bun x` and `bun create` as installs, and proves against a loopback registry that Bun refuses under the committed file. SECURITY.md § Dependency policy says so.
+  - #250: the unit-tests job reads `baseline:move-approved` live through `live-labels.sh`, directly before the ratchet, on `pull_request` runs. The ratchet reads `BASELINE_MOVE_APPROVED` and fails on a missing or malformed answer. `behavior-gating.test.ts` pins the step. `pr-quick.yml`'s trigger comment and CLAUDE.md § Complexity budgets say how to apply the label.
+  - #239: CLAUDE.md's Bun-bump bullet names `docker-ci-like.sh`'s `BUN_VERSION` and the pins file's Bun line.
+- **Open items**: none. OA-1 (how removing the label revokes an approval) is open on the orchestrator's owner page 5; option A shipped (D-orch-2), so no issue was filed.
+- **Dropped, rejected or superseded**:
+  - Outline B (`--no-install` on every run line) and v1 (`bunfig.toml` alone): rejected (D1).
+  - The wrapper-script allowlist (round 1 of planning): rejected (D2). The static check's two blind spots are named over `NO_INSTALL`: a Bun process a script starts itself, and a command the shell assembles at run time.
+  - The step that opens an `owner-decision` issue for OA-1: superseded by D-orch-2.
+  - The `lessons.md` candidate ("Bun reads `bunfig.toml` from its working directory only; with no `node_modules` it auto-installs a bare import unless `auto = "disable"` there or `--no-install`"): not promoted. The file stands at 8162 of 8192 bytes and no merge with the `bunx` entry fits. The fact is stated where it bites (`bunfig.toml`'s comment, SECURITY.md) and enforced by `release-integrity.test.ts`, whose findings name the fix.
+  - A fourth Codex round: not run. Round 3, the hard stop, found one Medium, which was fixed and is the only change no Codex pass has read.
+- **Seeds retired**: the `/goal` and `/loop` seeds under § Seeds are retired. This record is evidence, never instructions.
+
 # CI follow-ups: no auto-install, a live move label, the Docker Bun pins
 
 Three CI follow-ups in one arc and one PR against `dev`. None of them changes a screen, makes a gate advisory, removes a required check or adds a bypass.
@@ -23,7 +40,7 @@ Three CI follow-ups in one arc and one PR against `dev`. None of them changes a 
 - **#250.** The complexity ratchet reads the `baseline:move-approved` label from the event's snapshot. The fix reads the pull request's live labels in the job that runs the ratchet, through the existing `live-labels.sh`, and passes the answer in.
 - **#239.** CLAUDE.md's Bun-bump list gains the Docker runner's two pins. The test that catches a missed site already exists.
 
-Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (one, non-blocking). Consults and the probe: [lessons/phase-0.md](lessons/phase-0.md). Live progress: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (one, non-blocking). Consults and the probe: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Claims that did not hold, or hold narrower
 
