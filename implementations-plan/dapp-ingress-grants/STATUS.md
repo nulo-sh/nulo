@@ -19,3 +19,5 @@
 - 2026-10-11: gate 2.4 green (lint, typecheck:all, root test 11276). Commit 579006b.
 - 2026-10-11: gate 2.5 green (lint, root test 11277). Commit 5909783.
 - 2026-10-11: gate 2.6 green (lint, typecheck:all, root test 11282). Commits a1a9593, 4d56391. Gate 2.7 Chrome network run started.
+- 2026-10-11: gate 2.7 green on both browsers (the six network files, retry 0: Chrome 11/11, Firefox 11/11). Review loop converged: Codex round 1 reject (three accepted, d80e1c8), Opus approve with fixes (one accepted, 593fe65), Codex round 2 approve.
+- 2026-10-11: `origin/dev` 79838db merged (a52b002). Final gates on 3a8db7c: audit:vue, test:all, test:ci-gating, check:plans; network six files retry 0 Chrome 11/11, Firefox 11/11; smoke retry 0 Chrome 212 passed, Firefox 209 passed. After-shots committed. PR opened.

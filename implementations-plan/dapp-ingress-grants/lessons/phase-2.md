@@ -79,3 +79,10 @@
 
 - Codex, same session resumed, on 75602de..1c35615: **approve**. C1 and C2 resolved, no new findings. The loop converged in two rounds.
 - The session-tabClose shots' header reads "Testnet" while the line reads "Connecting on Local Network": that test's fixture never switches the wallet off the e2e build's seeded Testnet, and the line names the app's network. It shows the premise of #123, not a defect.
+
+## Final gates (2026-10-11)
+
+- `origin/dev` 79838db merged cleanly (a52b002, no union merge). dev's #301 touches the discover page's two `console.error` lines and its tests, in hunks apart from arc 2's; its new rule (a caught error under `{ error }`) finds nothing in arc 2's one new log line, a fixed string.
+- On 3a8db7c: `bun run audit:vue` 0 (extension 11299 passed); `bun run test:all` 0; `bun run test:ci-gating` 0 (517); `bun run check:plans` 0 findings.
+- The first Chrome run of the six files on the merged head went red in five tests, all at `page.screenshot`: `NULO_E2E_SHOT_DIR` named a folder that did not exist (my invocation). Rerun without it, retry 0: 6 of 6 files, 11 of 11 tests. Firefox, retry 0: 6 of 6, 11 of 11. Both browsers again load the expired page and the check in the same document.
+- Smoke, the armed source build, retry 0, on 3a8db7c: Chrome 48 files passed, 3 skipped by their own gates, 212 tests passed, 10 skipped; Firefox 50 passed, 1 skipped, 209 passed, 13 skipped.
