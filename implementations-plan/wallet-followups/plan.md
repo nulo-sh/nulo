@@ -193,7 +193,7 @@ Validation gate:
 - Pass: every command exits 0; the store and co-mount test files are unchanged and green; the red/green proof is in `lessons/phase-1.md`.
 - Layers: lint, typecheck, unit.
 
-### Phase 2: #257 and #256, account names
+### Phase 2: #257 and #256, account names ✓
 
 1. Apply the New account change.
 2. Add one test: a name of spaces leaves Create disabled, and Enter creates nothing.
