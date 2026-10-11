@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-3
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-5); arc 1 implemented, in delivery
+status: completed (delivered in #300)
 issues: "#297, #295 (arc 1); #281, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -15,6 +15,25 @@ base: origin/dev at 0643a14, merged up to ca79036 before Phase 0
 trunk: dev
 ---
 
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#300](https://github.com/nulo-sh/nulo/pull/300) (arc 1: phases 0 to 3), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #297: the fee card saves a plain record (`savedSelectionOf`) and logs a failed save; `storageLocalSet` clones its items at the call, so a value that cannot be structured-cloned rejects on every engine, even on a skipped write. Firefox network, the seven files that raised the error: `DataCloneError` 10 on base, 0 on the fix, 21/21 tests on both; `tx-sendTx-sponsoredFpc`'s readback red on Firefox base, green on Firefox and Chrome with the fix.
+  - #295: five error-level lines log the error under a named key (the issue named two).
+  - `lessons.md`: one lesson promoted; its header line, a restatement of the README's rule 8, retired to stay under 8 KiB.
+- **Orchestrator records:** D-orch-1 to D-orch-5 (§ Decision ledger): one PR, no migration, the readback in scope, the boundary's contract in its TSDoc and a unit case, the error-flattening issue filed at close-out.
+- **Dropped, rejected, superseded:**
+  - D4, the `String(…)` scanner rule: dropped; the reason is on #295.
+  - D9, `cacheStore.feePaymentMethods` (no reader): kept, as the no-ask record names it.
+  - D10, the legacy key's pre-fill trusting its stored record: recorded in § Security, not changed (no lower-privilege write path).
+  - `syncedRef.js`'s unawaited write: left out (its one user writes a number), as the plan audit and the Opus review recorded.
+  - #297's claims that did not hold (`BalanceView.vue` is no caller; `syncedRef.js` is one) and the e2e row lookup (D14): stated on #297.
+  - #281, #294, #290, #262, #277: no arc here, for the reasons in § Issue map.
+- **Open items:** #299 (`privacy`): error-level log lines still flattened by `getErrorData` or a direct `message` extraction.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
 # Wallet follow-ups 3: a Firefox fee pick that saves, error objects in integrity logs
 
 Two wallet issues found by the program's own leads. One arc, one PR against `dev`.
@@ -22,7 +41,7 @@ Two wallet issues found by the program's own leads. One arc, one PR against `dev
 - **#297.** On Firefox a sponsor pick in the fee card of an app window or an authwit popup is not saved. The card writes the picked menu row, whose `fpc` is a Vue reactive Proxy, and Firefox's `storage.local.set` refuses a Proxy. The fix: the card saves a plain record, the storage boundary refuses on every engine any value that cannot be structured-cloned, and the write's failure is handled.
 - **#295.** Five account-integrity and account-service log lines pass `String(error)`, so the redactor's error projection never runs. The fix passes the error under a named key. The issue named two of the five lines.
 
-Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md). Live progress: [STATUS.md](STATUS.md).
+Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (none). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Issue map (the arc that closes each issue)
 
