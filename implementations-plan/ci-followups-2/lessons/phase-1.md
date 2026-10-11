@@ -40,3 +40,11 @@
   - fails: canary lanes > the same-token matrix runs proverless in a dedicated job, and the chaos run only in nightly, seeded by the run
 
 Mutation 1 also throws in the script runs (the loop reads a result no world binds), which is why the status tests fail beside the exact-set one.
+
+## Implementation audit, round 1 (2026-10-11)
+
+- Codex gpt-6.1-sol high read-only, session 01a12baa…: approve, three Low findings. Opus 5.5 general-purpose review in parallel: conditional approve, one Medium (the Firefox network lane's `status` could drop the chaos job from `needs` and loop together under every pin), three Low. Dispositions: plan.md § Audit verdicts, I1-I6, all accepted; fixes in b3b92ec.
+- New guards proven red, one at a time, tree restored after each:
+  - `matrix.seeed` in the Chrome chaos job's name: fails "verify-cert-run.sh expects exactly the jobs the PR lane's network workflow produces".
+  - `network-e2e-chaos` removed from the Firefox `status` needs and loop together: fails "pr-extension-network-e2e-firefox.yml's aggregator waits on every job".
+- Pins after the fixes: 144 pass; `lint:actions` and `lint` exit 0.

@@ -143,6 +143,19 @@ Both legs approved D1 as complete, D3's `run_id` source and D4 unchanged, and th
 
 - **Codex: approve.** All three round-2 conditions met; no new material finding. The scoped Phase 2 search returns exactly the eight edit sites on the base tree and no plan file.
 
+### Implementation round 1 (2026-10-11): Codex gpt-6.1-sol high and Opus 5.5 review, in parallel, on 27af8d7..8e9777b
+
+- **Codex: approve** (three Low findings). **Opus: conditional approve** (one Medium, three Low). All eight verified against the tree and accepted; fixes in b3b92ec, two new guards proven red (lessons/phase-1.md).
+
+| # | Leg | Severity | Finding | Disposition |
+|---|---|---|---|---|
+| I1 | Opus | Medium | No pin made the Firefox network lane's `status` wait on its chaos job: dropping it from `needs` and the loop together left every pin green (parity compares suite jobs only; the exact-needs pin covers Chrome only) | Accepted: `aggregators.test.ts` holds each network lane's `status` to every job, as the smoke lanes already were; proven red by removing the job from the Firefox `needs` and loop |
+| I2 | Codex | Low | The cert-name binder filled any `matrix.<key>`, so a misspelled key still produced the expected names | Accepted: it binds only the declared key; proven red with `matrix.seeed` |
+| I3 | Codex | Low | CI.md and CLAUDE.md said the tests run `publish-nightly`'s condition; they pin it whole | Accepted: reworded |
+| I4 | Opus | Low | "Never retried" contradicted the flake rule: re-running the red leg is how a seed is replayed in CI | Accepted: "never given a test retry"; re-running the leg named as the replay (workflow comment, CI.md, CLAUDE.md, skill) |
+| I5 | Codex, Opus | Low | Comments: the `chaosJob` doc and the report-env comment restated code; send-chaos's header named its CI callers; the workflow comment repeated CI.md's policy | Accepted: deleted or cut to a pointer at CI.md; the seed provenance comments stay |
+| I6 | Opus | Low | FIREFOX.md "exactly two gates" named four jobs; WORKFLOWS.md's row read as if the seeds were among the canary's five files; `vite.shared.ts` still said only a canary lane is asserted; the assertion's header wrapped raggedly and its message said "the canary is gone" for any file | Accepted: reworded; the message says "the expected test is gone" (its two test strings follow) |
+
 ## Assumptions
 
 **Facts (verified at 27af8d7).**
