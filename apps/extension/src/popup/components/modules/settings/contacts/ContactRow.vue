@@ -76,9 +76,8 @@ const target = ref(null)
 }
 
 .avatar_text {
-	font-family: var(--font-mono);
 	font-size: 10px;
-	font-weight: 700;
+	font-weight: 600;
 	color: var(--txt-primary);
 	line-height: 1;
 }
@@ -97,6 +96,7 @@ const target = ref(null)
 }
 
 .sender_chip {
+	composes: type--tag from global;
 	position: relative;
 	z-index: 1;
 	flex-shrink: 0;
@@ -108,12 +108,7 @@ const target = ref(null)
 	min-width: 14px;
 	padding: 1px 4px;
 
-	font-family: var(--font-mono);
-	font-size: 9px;
-	font-weight: 700;
-	letter-spacing: 0.04em;
 	line-height: 1.2;
-	text-transform: uppercase;
 
 	color: var(--txt-primary);
 	background: rgba(74, 70, 63, 0.25);

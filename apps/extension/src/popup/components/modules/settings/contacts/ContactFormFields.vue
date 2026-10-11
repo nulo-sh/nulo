@@ -35,7 +35,7 @@ const addressModel = defineModel("address", { type: String, default: "" })
 			<Transition name="fade">
 				<Flex v-if="nameExists" align="center" gap="6" data-testid="contact-name-exists">
 					<Icon name="warning" size="12" color="primary" />
-					<Text size="12" weight="600" color="primary"> Already exist </Text>
+					<Text variant="body" color="primary"> Already exist </Text>
 				</Flex>
 			</Transition>
 		</template>
@@ -52,11 +52,11 @@ const addressModel = defineModel("address", { type: String, default: "" })
 			<Transition name="fade">
 				<Flex v-if="!addressValid && addressModel" align="center" gap="6">
 					<Icon name="warning" size="12" color="primary" />
-					<Text size="12" weight="600" color="primary"> Invalid address </Text>
+					<Text variant="body" color="primary"> Invalid address </Text>
 				</Flex>
 				<Flex v-else-if="addressExists && addressModel" align="center" gap="6">
 					<Icon name="warning" size="12" color="primary" />
-					<Text size="12" weight="600" color="primary"> Already exist </Text>
+					<Text variant="body" color="primary"> Already exist </Text>
 				</Flex>
 			</Transition>
 		</template>
