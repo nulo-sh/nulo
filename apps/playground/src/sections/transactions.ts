@@ -1,6 +1,7 @@
 /**
- * `sendTx` variants: default, `NoFrom` (a public call, which the wallet refuses), `NoFrom`
- * sponsored, `feePayer`, multicall, chunked, delegated.
+ * `sendTx` variants: default (its transfer function picked by `pg-select-transferFn`), `NoFrom`
+ * (a public call, which the wallet refuses), `NoFrom` sponsored, `feePayer`, multicall, chunked,
+ * delegated.
  *
  * Each variant constructs an `ExecutionPayload` and calls
  * `wallet.sendTx()`. `sendTx` ALWAYS opens `/windows/execute`
@@ -14,6 +15,22 @@ import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
 
+const TRANSFER_FNS = [
+	"transfer_public_to_public",
+	"transfer_private_to_private",
+	"transfer_private_to_public",
+	"transfer_public_to_private",
+] as const
+type TransferFn = (typeof TRANSFER_FNS)[number]
+
+function selectedTransferFn(): TransferFn {
+	const value = getInput("transferFn")
+	if (value === "") return TRANSFER_FNS[0]
+	const fn = TRANSFER_FNS.find((f) => f === value)
+	if (!fn) throw new Error(`transferFn must be one of ${TRANSFER_FNS.join(", ")}`)
+	return fn
+}
+
 export function renderTransactions(): string {
 	const s = getState()
 	const dis = s.status === "connected" ? "" : "disabled"
@@ -24,6 +41,9 @@ export function renderTransactions(): string {
 				<label>Recipient: <input data-testid="pg-input-recipient" name="recipient" type="text" placeholder="0x..." /></label>
 				<label>Amount: <input data-testid="pg-input-amount" name="amount" type="number" placeholder="100" /></label>
 				<label>FeePayer (FPC addr): <input data-testid="pg-input-feePayer" name="feePayer" type="text" placeholder="0x... (defaults to recipient)" /></label>
+				<label>Default transfer: <select data-testid="pg-select-transferFn" name="transferFn">
+					${TRANSFER_FNS.map((fn) => `<option value="${fn}">${fn}</option>`).join("")}
+				</select></label>
 			</div>
 			<div class="pg-row">
 				<button data-testid="pg-btn-sendTx-default" type="button" ${dis}>sendTx default</button>
@@ -43,7 +63,7 @@ export function renderTransactions(): string {
 	`
 }
 
-async function buildTransferExec(callCount = 1) {
+async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_public_to_public") {
 	const tokenAddress = getInput("tokenAddress")
 	const recipient = getInput("recipient")
 	const amount = getInput("amount") || "1"
@@ -65,7 +85,7 @@ async function buildTransferExec(callCount = 1) {
 	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
-		const exec = await token.methods.transfer_public_to_public(fromAddr, toAddr, BigInt(amount), 0n).request()
+		const exec = await token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n).request()
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }
@@ -98,7 +118,7 @@ export function bindTransactions(root: HTMLElement): void {
 		"click",
 		safe("sendTx", async () => {
 			const wallet = getWallet()!
-			const { exec, fromAddr } = await buildTransferExec(1)
+			const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
 			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
 		}),
