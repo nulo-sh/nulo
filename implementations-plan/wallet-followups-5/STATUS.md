@@ -11,3 +11,4 @@
 - 2026-10-11 — Phase 1 gate pass: scanner vitest 58/58 (red on base: 4 of the 5 D8 tests), lint, typecheck:all, baseline:rescore (23 exact), test:ci-gating (526 pass); match table 11/11, 0 offenders.
 - 2026-10-11 — Phase 2 gate pass: base Firefox run (N=1, K=29) printed 4 `Invalid window ID` lines; new unit test red on base (case 1), green after the fix; 40 files / 495 tests, lint, typecheck:all.
 - 2026-10-11 — Phase 3: Firefox head run exit 0, 0 window-ID lines (base 4); test:all exit 0. Codex impl round 1 reject (2 High, 1 Medium), Opus approve; all fixed, unit + lint + typecheck green.
+- 2026-10-11 — Codex impl round 2 reject; cause named as the column cut. Round 3 (design): both legs chose X (drop the cut); Codex conditions applied verbatim. Chrome run on 454716e: 13/13.
