@@ -158,7 +158,7 @@ function credentialedFindings(tree: Tree): string[] {
 
 /** The jobs that tag or publish: Bun built-ins only, from the workflow's own revision. */
 const CLEAN = ["release.yml#auto-unstick", "release.yml#attach-assets", "release.yml#sync-main-to-dev", "nightly.yml#publish-nightly"]
-const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(x|create)\s|\bnpx\b/
+const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b/
 /** A step's shell text with line continuations joined, so a command reads the same however it wraps. */
 const script = (step: Step): string => (step.run ?? "").replace(/\\\n/g, " ")
 
@@ -540,6 +540,14 @@ describe("jobs that tag or publish", () => {
 		[
 			"a package run with bun x",
 			(t: Tree) => t.workflows["release.yml"].jobs["auto-unstick"].steps?.push({ run: "bun x some-linter@latest --check" }),
+		],
+		[
+			"a package run with bun x after a global option",
+			(t: Tree) => t.workflows["release.yml"].jobs["sync-main-to-dev"].steps?.push({ run: "bun --silent x some-linter@latest" }),
+		],
+		[
+			"a template fetched with bun create after a global option",
+			(t: Tree) => t.workflows["release.yml"].jobs["sync-main-to-dev"].steps?.push({ run: "bun --silent create some-template" }),
 		],
 		[
 			"bun create on a continuation line",
