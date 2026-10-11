@@ -22,6 +22,7 @@ import {
 	encodeArguments,
 	FunctionCall,
 	FunctionSelector,
+	FunctionType,
 	getFunctionReturnType,
 } from "@aztec-labs/stdlib/abi"
 import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
@@ -29,6 +30,7 @@ import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import type { ContractInstanceWithAddress } from "@aztec-labs/stdlib/contract"
 import type { TxProfileResult, TxSimulationResult, UtilityExecutionResult } from "@aztec-labs/stdlib/tx"
 import { liveChainInfo } from "@nulo/aztec-runtime/utils"
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import z from "zod"
 import type { AccountService } from "@/wallet/services/account/service"
 import type { ContactService } from "@/wallet/services/contact/service"
@@ -355,6 +357,8 @@ export class ViewExecutor {
 		const [, instance] = await this.deps.resolver.resolveInstance(pxe, op.call.to.toString())
 		const [, artifact] = await this.deps.resolver.resolveArtifact(pxe, instance.currentContractClassId.toString())
 		const fn = assertSelectorBinding(await findFunctionBySelector(artifact, op.call.selector.toString()), op.call, CALL_BINDING)
+		// PXE would run a private or public function's bytecode as a utility and fail opaquely.
+		if (fn.functionType !== FunctionType.UTILITY) throw InvalidWalletArgumentsError.forMethod("executeUtility")
 		const boundCall = new FunctionCall(
 			fn.name,
 			op.call.to,
