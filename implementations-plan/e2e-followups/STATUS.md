@@ -16,3 +16,5 @@
 - 2026-10-11: Phase 1.3 gate pass: smoke navigation + appearance Chrome 8/8 and Firefox 8/8 at retry 0 (new test red on base); network tokens, handshake matrix, in-flight guard Chrome 4/4 and Firefox 4/4 at retry 0.
 - 2026-10-11: Phase 1.4 gate pass: lint, typecheck, ci-gating, check:plans; stalled-network spec Chrome 2/2, Firefox 3 runs of 2/2 at retry 0; no `hangingRequest` left.
 - 2026-10-11: Phase 1.5 gate pass: audit:vue; unit tests red on base (4) and green at head; diagnostic 0 of 36 stuck (4 of 12 at base); smoke navigation Chrome 6/6, Firefox 6/6 at retry 0.
+- 2026-10-11: Phase 1.6 static gates pass on the dev merge (3b93a85). Audit round 1: Codex approve (1 Low), Opus approve (6 Low); all accepted; `--no-json` guard pass reproduced and closed; Phase 1.1 gate rerun green.
+- 2026-10-11: Phase 1.6 gate pass: smoke Chrome 48 files/209 tests, Firefox 50 files/209 tests; network 5 files Chrome 9/9, Firefox 9/9; all at retry 0. Codex round 2 and 3 approve; loop converged.

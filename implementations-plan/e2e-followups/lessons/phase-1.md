@@ -33,3 +33,11 @@
 - Both observers read `entries.at(-1).isIntersecting`. The page unit tests now keep the stubbed observer's callback and deliver `[true, false]` (bar shown) and `[false, true]` (bar hidden); all four fail on af4afcc's pages and pass at head.
 - Gate: `bun run audit:vue` 0 (736 files, 11136 passed; build ok). The phase-0 diagnostic on the armed Chrome build, three launches of 12 iterations: `failures=0` each, 0 of 36 stuck (4 of 12 at base); the logged callback tails still held twelve `[true, false]` two-entry deliveries, so the race occurred and the page now reads it right. Smoke `navigation.test.ts` at retry 0: Chrome 6/6, Firefox 6/6. The diagnostic and the screenshot specs were untracked and deleted after.
 - Screenshots of the bar shown after a Tab walk and a scroll, Settings and History, Chrome armed build: kept in the lane's scratch directory for the PR (the CLI cannot upload images to a PR body).
+
+## 1.6 arc gate, 2026-10-11
+
+- Merged `origin/dev` (2fef16a, forms-and-contacts arc 2: no file in common) as 3b93a85. Static gates on the merge: lint, typecheck:all, test (11149 passed), test:all (every workspace), test:ci-gating (480), check:plans, lint:actions: all exit 0.
+- Smoke, whole suite, armed builds, retry 0: Chrome at 3b93a85, 48 files passed and 3 skipped (the opt-in probe, `passkey-toolbar-panel` and `action-popup-layout`, both Firefox-only), 209 tests passed; Firefox at b77baa3, 50 passed and 1 skipped (the probe), 209 tests passed. The only code change between the two heads touching a smoke path is comment-only (`helpers.ts`).
+- Audit round 1 ran on 3b93a85 alongside the smoke (Codex approve with one Low, Opus approve with six Low); the fixes (4ddb01a) reran Phase 1.1's gate; round 2 (resumed Codex) approved with one Low wording fix (b77baa3).
+- Network gate, proverless, retry 0, at b77baa3: `connect-one-window`, `account-balance-orphans`, `imported-account-execution`, `backup-import-stalled-network`, `tokens`: Chrome 9/9, Firefox 9/9.
+- Audit round 2 (resumed Codex): approve, one Low wording fix (b77baa3). Round 3 (resumed, after the gate): approve, nothing material. Converged.

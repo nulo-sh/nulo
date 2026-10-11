@@ -247,7 +247,7 @@ Every gate runs from the repo root unless it says `apps/extension`. Retry 0 ever
 - Pass: green. The two new unit tests fail on `af4afcc`'s pages. The diagnostic loop: 0 of 36 iterations stuck (4 of 12 at base).
 - Layers: typecheck, unit, lint, build, smoke on both browsers.
 
-### Phase 1.6: arc gate (fixtures changed: the whole smoke suite and the handlers' network files)
+### Phase 1.6: arc gate (fixtures changed: the whole smoke suite and the handlers' network files) ✓
 
 1. Merge `origin/dev` into the branch; read what changed in the touched files, `implementations-plan/index.md` and `lessons.md`. Never a union merge.
 2. Run the gate.
@@ -427,6 +427,20 @@ The planner also removed a stray file the Opus leg's probe wrote outside the wor
 | O4 | Low | The test comment says each case starts Node | **Accepted:** reworded. |
 | O5 | Low | `openDropdown`'s TSDoc tautology; `agent.sh` repeats the guard's header | **Accepted:** both trimmed. |
 | O6 | Low | Ledger row 49 cites an active plan path that the archive move breaks; § Architecture step 2 still describes `node -e` | **Accepted:** the step matches D14 now; the row's path moves with the archive commit. |
+
+
+### Implementation audit, round 2 (resumed Codex session on the fix diff 3b93a85..4ddb01a)
+
+**Codex** (session `01a1288f-55f5-7d41-b881-ecd9750e6635`, account alejo-gmail): `approve`; "No material finding remains on the whole arc."
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| C2 | Low | `docker-ci-like.sh`'s new comment says every shard holds proverless-gated files; the refusal comes from judging the selection before sharding | **Accepted:** reworded (b77baa3). |
+
+
+### Implementation audit, round 3 (resumed Codex session, after the arc gate)
+
+**Codex** (session `01a1288f-55f5-7d41-b881-ecd9750e6635`, account alejo-gmail): `approve`; "No material findings remain on the whole arc." The loop converged in three rounds (rounds 2 and 3 found nothing material).
 
 ## Seeds
 
