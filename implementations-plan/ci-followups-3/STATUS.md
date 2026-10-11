@@ -8,3 +8,4 @@
 - 2026-10-11: phase 1 gate pass: attach-assets-run tests green; base copy red (apply happy path 'belongs to untagged-100', verify-published edit lacks tag, realIO body lacks tag_name); test:release, test:ci-gating, lint, typecheck:all exit 0.
 - 2026-10-11: phase 2 gate pass: chaos-seed unit 15/15; e2e:agent seed=abc red at load with the refusal, exit 1, no seed line; seed=1095865833 green on Chrome and Firefox, actions equal PR run 38162383273 after destination relabelling; lint, typecheck:all, test exit 0.
 - 2026-10-11: phase 3 gate pass: lint:actions 0; behavior-gating + aggregators green (aggregators unchanged); both base proofs and the three release.yml mutations red on the leg-for-job pin only; test:ci-gating 526/526.
+- 2026-10-11: phase 4 gate pass at 11b5ab4: lint, typecheck:all, test:all, test:ci-gating, test:release, lint:actions exit 0; diff inside the change map.

@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-3
 tier: light
-status: Codex approve (round 4); Opus lens conditional approve, its conditions applied; awaiting orchestrator approval
+status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 implemented, phases 1-4 green; Codex fix loop next
 issues: "#309, #305, #306 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -119,6 +119,17 @@ Of the brief's three candidates: `target_commitish: <sha>` on the draft does not
 | D5 | Parse at module scope when enabled | A refused seed fails before the burst fixture runs; unarmed runs never read the variable | Both legs: the failure shape holds (the boot sentinel passes vitest's exit 1 through once the sandbox is ready, so no exit-86 retry; the results assertion reds on "reported no tests") |
 | D6 | Release chaos as two legs of the one matrix job, seeds copied and held equal by the leg-for-job pin | The release gates read one result; the codebase keeps twin data as literal copies held equal by pins (ci-followups-2 D9) | Both legs: sound; `chaos: ${{ matrix.leg.chaos }}` binds a boolean as `proverless` already does (`release.yml:330`); removing the chaos normalization keeps every guarantee. Opus: the matrix comment names the seed legs (accepted) |
 | D7 | The fix is confirmed by the next scheduled nightly that reaches publish, watched by the orchestrator | Agents never dispatch a publishing workflow | given by the brief |
+| D-orch-1 | One arc, one PR against `dev`, no stack | A single decision-free arc | the orchestrator |
+| D-orch-2 | OA-1 (release 407837006 and the stray `untagged-…` tag) stays the owner's past this arc; the arc touches neither. Unanswered at close-out → one `owner-decision` issue, named on `Open items:` | Only the owner may edit or delete a release or a tag; the decision must outlive #309. The orchestrator recommends A to the owner | the orchestrator |
+| D-orch-3 | OA-2 is a warning, not an ask: the PR body carries it under "Do not re-run a draft-flow publish from before this merge"; CLAUDE.md § Release runbook gains at most one sentence where the fix changes what it describes, with no run number or finding id | The release flow's order is unchanged, so the runbook describes nothing the fix changes | the orchestrator |
+| D-orch-4 | Never dispatch or re-run `nightly.yml`, `release*.yml` or `publish-*.yml`; never write a tag, a release or an asset; `gh api` GETs only. #309 is proven by the unit tests (red on the base copy), `lint:actions` and `test:ci-gating`, and confirmed by the next scheduled nightly | The hard rules; D7 | the orchestrator |
+| D-orch-5 | #308 (the nightly smoke failure on `send-keyboard.test.ts`) is not this lane's: its file and fixtures stay untouched, and a gate that hits it is reported, never worked around | The e2e pool owns it | the orchestrator |
+| D-orch-6 | Phase 2's three local runs go through `agent.sh` with `NULO_E2E_PROVERLESS=1`, retry 0 and the stall watchdog untouched, beside another lead's network e2e on the host | Parallel-safe by registry; the PR leg's environment | the orchestrator |
+| D-orch-7 | `lessons.md` stays at or under 8 KiB: the close-out's one promotion merges with or retires an entry, never a wholesale reformat, reconciled against `origin/dev` before the final gates | The curated layer's budget | the orchestrator |
+
+**Deviations recorded during implementation.**
+- Commits carry `Co-Authored-By: Claude Opus 5.5`, the model that implemented the arc, where § Delivery says Fable 5.1.
+- Phase 1's base proof ran the test file against a copy of the `2a41b1d` file and restored the fix by copy, rather than commit-then-`git checkout HEAD --`; the same bytes run either way ([lessons/phase-1.md](lessons/phase-1.md)).
 
 ## Assumptions
 
@@ -157,7 +168,7 @@ Of the brief's three candidates: `target_commitish: <sha>` on the draft does not
 
 All in arc 1. Each phase commits its tests with its code.
 
-### Phase 1: #309, the tag rides every release edit
+### Phase 1: #309, the tag rides every release edit ✓
 
 Steps:
 1. Change `editRelease`'s patch type to require `tag`, send it as `tag_name` in `realIO`, and pass `input.tag` at the three callers (`runApply`'s notes and publish, `runVerifyPublished`'s notes).
@@ -171,7 +182,7 @@ Steps:
 - Pass criteria: green with the fix. On the base copy, the `apply` happy-path test fails at its exit assertion with a message containing `belongs to untagged-`, the `verify-published` happy-path test fails on its edit's missing `tag`, and the `realIO` test fails on the missing `tag_name`; the other tests' outcomes are recorded. This proves the tests catch an omitted tag; GitHub's behaviour itself is F12 and D7. Every suite exits 0 after the restore.
 - Layers: unit, lint, typecheck.
 
-### Phase 2: #305, a seed the test cannot run exactly is refused
+### Phase 2: #305, a seed the test cannot run exactly is refused ✓
 
 Steps:
 1. Add `chaos-seed.ts` with `chaosSeed` as specified.
@@ -192,7 +203,7 @@ Steps:
 - Pass criteria: the unit file green. The `abc` run is red with `NULO_E2E_CHAOS_SEED="abc" is not a decimal integer seed`, logs no `[send-chaos] seed=` line, and exits non-zero without the exit-86 infra retry. The `1095865833` runs are green on both browsers, and their `[send-chaos] seed=1095865833 … actions=` line equals the one in the latest green PR chaos leg's log for that seed (`gh run view --log`, read-only) once each distinct `"destination"` is relabelled by the order of its first appearance (`d1`, `d2`): one recipient, `burst.other`, is a `randomAztecAddress()` drawn per run (`fixtures/burst-account.ts:103`), so its address differs while the choice of recipient per send must not. Two PR runs of this seed (38162383273, 38154473420) differ only in that address.
 - Layers: unit, lint, typecheck, network e2e (Chrome and Firefox).
 
-### Phase 3: #306, release's opt-in run is the PR lane leg for job
+### Phase 3: #306, release's opt-in run is the PR lane leg for job ✓
 
 Steps:
 1. Edit `release.yml` `network-e2e` as specified, the matrix comment included.
@@ -204,7 +215,7 @@ Steps:
 - Pass criteria: green as changed. Red in both base proofs and in each mutation, each failure naming the leg-for-job comparison. `aggregators.test.ts` green and unchanged.
 - Layers: workflow lint, CI pins.
 
-### Phase 4: arc gate
+### Phase 4: arc gate ✓
 
 - Commands: `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`, `bun run test:release`, `bun run lint:actions`, and `git diff origin/dev --stat` read against the change map.
 - Pass criteria: every command exits 0; no file changed outside the change map, this plan directory and `implementations-plan/index.md` (this plan's line). The close-out later adds `implementations-plan/lessons.md`, `implementations-plan/archive/index.md` and the archive move.
