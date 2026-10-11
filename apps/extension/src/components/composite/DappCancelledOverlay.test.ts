@@ -42,9 +42,10 @@ describe("composite/DappCancelledOverlay", () => {
 		expect(w.emitted("dismiss")).toHaveLength(1)
 	})
 
-	test("exposes stable testids for the overlay root and the OK button", () => {
-		const w = factory()
+	test("exposes stable testids for the overlay root, its message and the OK button", () => {
+		const w = factory({ message: "Connection request expired" })
 		expect(w.find('[data-testid="dapp-cancelled-overlay"]').exists()).toBe(true)
+		expect(w.get('[data-testid="dapp-cancelled-message"]').text()).toBe("Connection request expired")
 		expect(w.find('[data-testid="dapp-cancelled-ok-btn"]').exists()).toBe(true)
 	})
 })

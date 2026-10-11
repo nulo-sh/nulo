@@ -481,12 +481,25 @@ describe("discover popup — a connection request that expired", () => {
 		expect(windowsRemove()).toHaveBeenCalledTimes(1)
 	})
 
-	test("an unmounted expired page closes nothing later", async () => {
+	test("leaving the expired page (a lock routes the window away) closes the window at once, and the timer never fires", async () => {
 		vi.useFakeTimers()
 		routeMock.value = { query: EXPIRED }
-		factory().unmount()
+		factory()
+		await flushPromises()
+		routeMock.value = { query: {} }
+		await flushPromises()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
 		await vi.advanceTimersByTimeAsync(30_000)
-		expect(windowsRemove()).not.toHaveBeenCalled()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+	})
+
+	test("unmounting the expired page closes the window; unmounting a live one does not", async () => {
+		routeMock.value = { query: EXPIRED }
+		factory().unmount()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
+		routeMock.value = { query: { requestId: "req-123" } }
+		factory().unmount()
+		expect(windowsRemove()).toHaveBeenCalledTimes(1)
 	})
 
 	test("a page loaded already expired starts no live request", async () => {

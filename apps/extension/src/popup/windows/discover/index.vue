@@ -29,7 +29,6 @@ import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 const router = useRouter()
 
-/** How long the expired overlay stays before the window closes itself. */
 const EXPIRED_CLOSE_MS = 30_000
 
 const profile = ref<ProfileInfo>()
@@ -39,7 +38,6 @@ const isLoading = ref(false)
 // so no one approves a session whose hostname, logo and name they have not seen. Deny needs only the
 // request id: an early reject is harmless.
 const isReady = ref(false)
-// Set once the service accepted Allow; the window then waits for the connection to establish.
 const isApproved = ref(false)
 // The worker sends this window to its own page marked expired when the connection never
 // established: the request is gone, so there is nothing left to load or answer.
@@ -146,25 +144,35 @@ const reject = async () => {
 const profileService = new ProfileServiceClient()
 profileService.onActiveProfileChanged.add(onActiveProfileChanged)
 
+// The window holds a verification slot until it closes, so leaving the expired page (a lock routes
+// the window to the auth screen) ends the window, not just its timer.
+const leaveExpired = () => {
+	if (expiredClose === undefined) return
+	clearTimeout(expiredClose)
+	expiredClose = undefined
+	closeWindow()
+}
+
 // Immediate, not on mount alone: the flag usually arrives by a hash change on a mounted page.
 watch(
 	isExpired,
 	(expired) => {
+		if (!expired) return leaveExpired()
 		clearTimeout(expiredClose)
-		expiredClose = expired ? setTimeout(() => closeWindow(), EXPIRED_CLOSE_MS) : undefined
+		expiredClose = setTimeout(() => closeWindow(), EXPIRED_CLOSE_MS)
 	},
 	{ immediate: true },
 )
 
-// A page loaded already expired skips the live-request start: its auth redirect would unmount the
-// overlay and its timer.
+// A page loaded already expired has no request left to load, and starting it would send a locked
+// wallet's window to the auth screen instead of the overlay.
 onMounted(() => {
 	if (!isExpired.value) void startWindow()
 })
 
 onUnmounted(() => {
 	disposeWindow()
-	clearTimeout(expiredClose)
+	leaveExpired()
 })
 </script>
 

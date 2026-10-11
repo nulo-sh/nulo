@@ -1,4 +1,4 @@
-import type { Page } from "puppeteer"
+import type { ConsoleMessage, Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { BROWSER } from "../fixtures/browser"
 import { clickByTestId, type ExtensionContext, test } from "../fixtures/extension"
@@ -67,17 +67,40 @@ const ALLOW = '[data-testid="discover-allow-btn"]'
 const ACTION = '[data-testid="discover-action"]'
 const OVERLAY = '[data-testid="dapp-cancelled-overlay"]'
 
-/** Blocks `page`'s main thread for `ms` from its next task, so its half of the wallet handshake
- *  cannot run. Scheduled before this returns: a wallet message sent afterwards waits behind it. */
+const STALL_MARK = "e2e:playground-stalled"
+
+/** Blocks `page`'s main thread for `ms`, so its half of the wallet handshake cannot run. Resolves
+ *  once the page logs that the loop has begun: a wallet message sent afterwards waits behind it. */
 async function stallPage(page: Page, ms: number): Promise<void> {
-	await page.evaluate((stallMs: number) => {
-		setTimeout(() => {
-			const until = Date.now() + stallMs
-			let spins = 0
-			while (Date.now() < until) spins++
-			return spins
-		}, 0)
-	}, ms)
+	let onConsole: ((message: ConsoleMessage) => void) | undefined
+	const started = new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error("the playground never reported its stall")), 10_000)
+		onConsole = (message) => {
+			if (message.text() !== STALL_MARK) return
+			clearTimeout(timer)
+			resolve()
+		}
+		page.on("console", onConsole)
+	})
+	// Not awaited: the evaluation returns only when the loop ends, or rejects when the page closes.
+	void page
+		.evaluate(
+			(mark: string, stallMs: number) => {
+				console.debug(mark)
+				const until = Date.now() + stallMs
+				let spins = 0
+				while (Date.now() < until) spins++
+				return spins
+			},
+			STALL_MARK,
+			ms,
+		)
+		.catch(() => undefined)
+	try {
+		await started
+	} finally {
+		if (onConsole) page.off("console", onConsole)
+	}
 }
 
 /** A fresh playground tab asks to connect, and Allow is clicked while the tab is stalled for
@@ -139,15 +162,16 @@ test.skipIf(!hasConfig)(
 		await shotSend(page, "connect-connecting", "discover-action")
 
 		await page.waitForSelector(OVERLAY, { visible: true, timeout: 100_000 })
-		const shown = await page.evaluate((sel: string) => {
-			return {
-				line: document.querySelector(sel)?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-				sameDocument: (window as unknown as { __connectDocument?: boolean }).__connectDocument === true,
-				expiredRoute: new URLSearchParams(location.hash.split("?")[1] ?? "").get("expired"),
-			}
-		}, OVERLAY)
+		const shown = await page.evaluate(() => ({
+			message: document.querySelector('[data-testid="dapp-cancelled-message"]')?.textContent?.trim() ?? null,
+			sameDocument: (window as unknown as { __connectDocument?: boolean }).__connectDocument === true,
+			expiredRoute: new URLSearchParams(location.hash.split("?")[1] ?? "").get("expired"),
+		}))
 		console.log(`[session-tabClose] ${BROWSER}: the expired page loaded ${shown.sameDocument ? "in the same document" : "by a reload"}`)
-		expect({ line: shown.line, expiredRoute: shown.expiredRoute }).toEqual({ line: "Connection request expired OK", expiredRoute: "1" })
+		expect({ message: shown.message, expiredRoute: shown.expiredRoute }).toEqual({
+			message: "Connection request expired",
+			expiredRoute: "1",
+		})
 		await shotSend(page, "connect-expired", "dapp-cancelled-overlay")
 
 		await clickByTestId(page, "dapp-cancelled-ok-btn")

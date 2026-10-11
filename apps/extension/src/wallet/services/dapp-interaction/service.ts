@@ -79,7 +79,6 @@ function isDiscoveryPayload(payload: DappInteraction["payload"]): payload is Dis
 	return !("session" in payload) && !isNoticePayload(payload)
 }
 
-/** The page a window of `type` loads for request `id`. */
 function windowUrl(type: string, id: string): string {
 	return chrome.runtime.getURL(`src/popup/index.html#/windows/${type}?requestId=${id}`)
 }
