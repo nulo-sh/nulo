@@ -37,8 +37,9 @@ esac
 
 listing=$(mktemp)
 trap 'rm -f "$listing"' EXIT
-# The JSON names absolute paths, which neither `--root` nor a project name can change.
-if ! bun run vitest list --filesOnly --json="$listing" --config "$config" "$@" >/dev/null; then
+# The JSON names absolute paths, which neither `--root` nor a project name can change. An empty
+# selection still writes `[]`, so an empty file means the listing went elsewhere (`--no-json`).
+if ! bun run vitest list --filesOnly --json="$listing" --config "$config" "$@" >/dev/null || [ ! -s "$listing" ]; then
   refuse "FATAL: vitest could not list this run's files"
 fi
 if ! selected=$(jq -r '.[].file' "$listing"); then

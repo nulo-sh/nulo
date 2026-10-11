@@ -15,8 +15,7 @@ cd "$(dirname "$0")/../.."
 
 NETWORK_CONFIG=vitest.e2e.network.config.ts
 
-# Refuses an unarmed run of a `@requires-proverless` file before a single port or build cycle is
-# spent.
+# Before the port claim and the build: the guard exists to spare both.
 bash scripts/e2e/proverless-guard.sh "$NETWORK_CONFIG" "$@"
 
 PORTS_JSON=".e2e-state/ports.json"

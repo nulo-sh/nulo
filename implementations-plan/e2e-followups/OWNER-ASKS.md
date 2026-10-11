@@ -4,6 +4,8 @@ Questions only the owner can answer, for the orchestrator to put on a page. Each
 
 ## OA-1 — The Settings and History compact title bar can stay hidden after a fast scroll (#269)
 
+**Answered: A** (the orchestrator, 2026-10-11, recorded as D-orch-2 in plan.md: a no-ask on the #210 precedent, since reading the newest report restores the approved design with the same bar, fade and scroll positions, and nothing new appears). Phase 1.5 ships in arc 1.
+
 **Surface.** The compact title bar ("SETTINGS", "HISTORY") that fades in at the top of the Settings and History pages once the large title scrolls away (`apps/extension/src/popup/pages/settings/index.vue`, `apps/extension/src/popup/pages/activity.vue`).
 
 **What happens today.** The page decides whether to show the bar from the browser's visibility reports for the large title. When the user scrolls fast, the browser can deliver two reports at once, oldest first. The page reads the oldest one, so it can believe the large title is still on screen while it is not. The bar then stays hidden until the user scrolls back to the top and down again. A scripted fast scroll on Chrome left the bar hidden in 4 of 12 tries, with the large title 300 to 1100 px above the view. This is the smoke-test failure in #269; the test is right.

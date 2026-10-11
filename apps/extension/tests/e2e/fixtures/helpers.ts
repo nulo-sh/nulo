@@ -921,9 +921,9 @@ export async function deleteContact(page: Page, name: string): Promise<void> {
 
 /**
  * Opens the dropdown whose trigger carries `triggerTestId` and resolves once the dropdown's own
- * state (`data-dropdown-open`) reads open. It waits for a visible trigger, never clicking one that
- * is not mounted yet, and clicks at most once: `DropdownRoot` toggles on every trigger click, so a
- * second click would close the menu, and a menu already open is left open.
+ * state (`data-dropdown-open`) reads open. It waits for a visible trigger and clicks at most once:
+ * `DropdownRoot` toggles on every trigger click, so a second click would close the menu, and a menu
+ * already open is left open.
  */
 export async function openDropdown(page: Page, triggerTestId: string): Promise<void> {
 	await prepareClick(page)
@@ -935,11 +935,7 @@ export async function openDropdown(page: Page, triggerTestId: string): Promise<v
 	)
 }
 
-/**
- * Page side. Picks the last visible, enabled `id` match (`clickByTestId`'s rule) for both the read
- * and the click; with `click`, clicks it when closed and resolves once it was found, else resolves
- * once it reads open.
- */
+/** Page side: the state read and the click pick one trigger by `clickByTestId`'s rule, so they never disagree. */
 function openTrigger(id: string, click: boolean): boolean {
 	const trigger = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)]
 		.filter((el) => {

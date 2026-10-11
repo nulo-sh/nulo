@@ -28,7 +28,7 @@ Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-AS
 | #275 | 1 | 1.2 | nothing | arc 1 merges |
 | #274 | 1 | 1.3 | nothing | arc 1 merges |
 | #272 | 1 | 1.4 | nothing | arc 1 merges |
-| #269 | 1, only on OA-1 = A before arc 1 merges | 1.5 | OA-1 | arc 1 merges with Phase 1.5 in it; otherwise **no arc**: the cause is in the page (recon § #269) and the fix changes when the title bar shows, so it waits for the owner. Arc 1 ships the flake-ledger row naming its cause (Phase 1.4, no sanctioned rerun), and the issue stays open with a comment naming the cause, the fix and its tests. |
+| #269 | 1 (OA-1 = A, D-orch-2) | 1.5 | OA-1 (answered A) | arc 1 merges with Phase 1.5 in it; otherwise **no arc**: the cause is in the page (recon § #269) and the fix changes when the title bar shows, so it waits for the owner. Arc 1 ships the flake-ledger row naming its cause (Phase 1.4, no sanctioned rerun), and the issue stays open with a comment naming the cause, the fix and its tests. |
 
 ## Outcome & Quality Bar
 
@@ -53,8 +53,8 @@ In: the five issues, as the issue map says. Out: `apps/playground`, `apps/extens
 - **Cause.** `agent.sh:27` hands vitest's arguments to `grep` as files. GNU grep parses `--retry=0`, `--exclude <path>` and `-t <name>` as its own options; a vitest name filter is no path. `2>/dev/null || true` turns every error into "no marked file".
 - **Fix.** `agent.sh` names the network config once (`NETWORK_CONFIG=vitest.e2e.network.config.ts`) and passes it to the guard and to the run. A new script, `apps/extension/scripts/e2e/proverless-guard.sh <config> [vitest args…]`, replaces the inline block at the same place, before the port claim. The script:
   1. exits 0 when `NULO_E2E_PROVERLESS=1`;
-  2. asks vitest's own parser whether the arguments start a watch run: `node --input-type=module -e "$read_mode" -- "$@"`, where the inline module prints `watch` when `Boolean(parseCLI(["vitest", "run", ...args]).options.watch)` and `run` otherwise. `parseCLI` is a public `vitest/node` export, the parser `vitest run` itself applies, on Node, the runtime `bun run vitest` uses; the truthiness test is the run's own rule (`run()` sets `options.run = !options.watch`), so a dotted `--watch.enabled=…` object counts as watch, as it does in the run. `watch` refuses with `[e2e:agent] FATAL: an unarmed run cannot watch (a watch run later runs whatever file changes)` and the remedy, exit 2; a non-zero exit or any other output refuses with `FATAL: vitest could not read this run's arguments`, exit 2. `vitest list` cannot answer this: it forces non-watch mode, and `vitest run -w` stays in watch mode (planner probe);
-  3. creates a temporary file (removed by an EXIT trap) and runs `bun run vitest list --filesOnly --json="$listing" --config "$config" "$@"` from `apps/extension`, with stdout discarded and stderr shown. The JSON holds absolute module paths (`formatFilesAsJSON`), so a `--root` or a named project cannot change the paths the scan reads. A non-zero exit refuses with `[e2e:agent] FATAL: vitest could not list this run's files` and exit 2;
+  2. asks vitest's own parser whether the arguments start a watch run: `bun run scripts/e2e/watch-mode.ts "$@"` prints `watch` when `Boolean(parseCLI(["vitest", "run", ...args]).options.watch)` and `run` otherwise (a file, not an inline `node -e`: D14). `parseCLI` is a public `vitest/node` export, the parser `vitest run` itself applies; the truthiness test is the run's own rule (`run()` sets `options.run = !options.watch`), so a dotted `--watch.enabled=…` object counts as watch, as it does in the run. `watch` refuses with `[e2e:agent] FATAL: an unarmed run cannot watch (a watch run later runs whatever file changes)` and the remedy, exit 2; a non-zero exit or any other output refuses with `FATAL: vitest could not read this run's arguments`, exit 2. `vitest list` cannot answer this: it forces non-watch mode, and `vitest run -w` stays in watch mode (planner probe);
+  3. creates a temporary file (removed by an EXIT trap) and runs `bun run vitest list --filesOnly --json="$listing" --config "$config" "$@"` from `apps/extension`, with stdout discarded and stderr shown. The JSON holds absolute module paths (`formatFilesAsJSON`), so a `--root` or a named project cannot change the paths the scan reads. A non-zero exit, or an empty file (the caller's `--no-json` sends the listing to stdout; an empty selection still writes `[]`), refuses with `[e2e:agent] FATAL: vitest could not list this run's files` and exit 2;
   4. reads the paths with `jq -r '.[].file'` inside an `if !` branch (a jq failure refuses the same way); an empty selection exits 0 without calling grep;
   5. runs `rc=0; marked=$(grep -l -- "@requires-proverless" "${files[@]}") || rc=$?`, then a `case` on `rc`: 0 refuses with today's FATAL lines (paths shown relative to `apps/extension`) and exit 2; 1 exits 0; anything else refuses with `FATAL: could not scan the selected files` and exit 2.
 - **Why vitest list.** `list` and `run` select files through the same `getRelevantTestSpecifications` with the same config and arguments, so the guard and the run cannot disagree about the selection. `list --filesOnly` loads the config only: no global setup, about 0.7 s, nothing written to `.e2e-state`.
@@ -135,7 +135,7 @@ Rejected (D1, D3, D4, D5); both reviewers agreed. B's #249 still reads a flag's 
 
 - **Threat model.** Test harness and runner only; nothing here ships, except #269's one line per page (gated). The inputs are a developer's own command line, the repo's own test files and config, and page-controlled `pageerror` payloads.
 - **Command line.** The guard passes the arguments to vitest and to the parse step as an array (`"$@"`; the parse step reads them from `process.argv`, never from its source text), never through `eval` or an unquoted expansion; the listed paths go to `grep` after `--`, so a path cannot become an option. `vitest list` loads the same config the run executes next: listing is not a sandbox, and the repo's config and test files stay trusted code, as they are for the run.
-- **A flag only `list` accepts.** `--json=<path>` passed by the caller would make the guard's listing write elsewhere and the guard pass; `vitest run` then rejects the flag before any test file loads, after the build. No marked file runs.
+- **A flag only `list` reads.** A caller's `--json=<path>` gives `list` a second value and it exits 1, so the guard refuses. A caller's `--no-json` sends the listing to stdout and left the guard's file empty, which passed until the guard refused an empty file (Opus audit, round 1); `vitest run` would have rejected the flag only after the build.
 - **Page payloads.** `pageErrorOf` never reads a property of a non-`Error` payload, and the cascade filter applies to `Error` payloads only, so a primitive listener payload (CDP's) is never dropped for the disconnect text. On Firefox, BiDi turns every page error into an `Error` built from the log text, so a primitive's origin is lost there, and a page could already hide any `Error` behind that text before this change; the filter is unchanged, and #275 does not claim more.
 - **Fail closed.** The guard refuses on a vitest, jq or grep error, and on watch mode, instead of passing.
 - **Least privilege, crypto, supply chain.** No new dependency, token, permission or workflow. No secret is read or logged.
@@ -154,7 +154,7 @@ Rejected (D1, D3, D4, D5); both reviewers agreed. B's #249 still reads a flag's 
 - F2. Under `bash`, GNU grep 3.11 exits 2 on `--retry=0` and `-t`, and reads `--exclude <path>` as its own option; `|| true` hides each (planner run, recon § #249).
 - F3. `vitest list --filesOnly` (vitest 4.1.10) returns the selection `run` would start from, before sharding and pre-parsing: it applies flags, `--exclude`, name filters and the config's include, ignores `--shard` and `--experimental.preParse`, lists every file for `-t` alone, forces non-watch mode, and exits 1 on an unknown flag. Its JSON gives absolute paths; its plain output is root-relative and prefixes named projects (planner probe; `cli-api` `formatFilesAsJSON`/`formatFilesAsString`).
 - F10. `vitest run -w` and `vitest run --watch` stay in watch mode. `vitest run` decides watch mode by truthiness: `run()` sets `options.run = !options.watch` (vitest's `cac` chunk). On Node 24, `parseCLI` from `vitest/node` returns `true` for `-w`, `--watch`, `--watch=true`, `-w=true`, `--watch=0` and `--watch=no`, `false` for `--watch=false`, `--no-watch` and `-w=false`, an object for `--watch.enabled=<any value>` (truthy, so watch), nothing without a watch flag, and throws "Expected a single value" for `--watch --watch=false`; it does not reject an unknown flag (`vitest list` does). Puppeteer's `waitForFunction` runs in the page's main realm (`api/Frame.js:584`, both drivers) (planner probes; lessons/phase-0.md).
-- F4. Every PR, nightly and canary prover-ON caller passes plain file paths; every other lane sets `NULO_E2E_PROVERLESS=1`. The prover-ON `extension-network-e2e-soak.yml` dispatch in `shard` mode passes `--shard` and no files: the old guard let it through, the new one refuses it (recon; Opus finding).
+- F4. Every PR, nightly and canary prover-ON caller passes plain file paths; every other lane sets `NULO_E2E_PROVERLESS=1`. The prover-ON `extension-network-e2e-soak.yml` dispatch in `shard` mode passes `--shard` and no files: the old guard let it through, the new one refuses it (recon; Opus finding). So does `apps/extension/scripts/e2e/docker-ci-like.sh`'s default shard mode; its usage block now passes `-e NULO_E2E_PROVERLESS=1`, as CI's pool runs (Opus audit, round 1).
 - F5. Puppeteer 25.8.0 emits a CDP page's primitive throw or rejection value as is (`cdp/utils.js:94-105`, `cdp/Page.js:711`) and always an `Error` on BiDi (`bidi/Frame.js:227-242`).
 - F6. `importToken` and `refreshBalances` click the trigger through `querySelector(...)?.click()`; `DropdownRoot` toggles per click and exposes `data-dropdown-open`; a click during Home's mount does nothing, 6 of 6 times (planner probe).
 - F7. `backup-import-stalled-network.test.ts` passed 2/2 on Firefox at retry 0 with its skip removed (unarmed prover-ON build, planner run).
@@ -174,7 +174,7 @@ Rejected (D1, D3, D4, D5); both reviewers agreed. B's #249 still reads a flag's 
 
 Every gate runs from the repo root unless it says `apps/extension`. Retry 0 everywhere: smoke `--retry=0`, network `NULO_E2E_RETRY=0`. Network runs go through `agent.sh` (ports claimed in `~/.agents/ports.md`), one at a time in this worktree; the stall watchdog stays as it is. Smoke needs the armed build: `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:<browser>`, run with `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`. A red/green proof takes the old code from `af4afcc`, never from `HEAD`.
 
-### Phase 1.1: the proverless guard reads vitest's selection (#249)
+### Phase 1.1: the proverless guard reads vitest's selection (#249) ✓
 
 1. Create `proverless-guard.sh` as § Architecture says. Keep the FATAL wording and exit code 2.
 2. In `agent.sh`, add `NETWORK_CONFIG`, replace lines 16-34 with `bash scripts/e2e/proverless-guard.sh "$NETWORK_CONFIG" "$@"`, and use `"$NETWORK_CONFIG"` on the run line. Keep the call before the port claim.
@@ -194,7 +194,7 @@ Every gate runs from the repo root unless it says `apps/extension`. Retry 0 ever
 - Pass: each exits 0, except the last, which exits 2 with the FATAL lines and no `[e2e:agent] resolving ports` line. With the guard body replaced by `af4afcc`'s inline block, the first two test cases fail.
 - Layers: lint, typecheck, unit, ci-gating, shellcheck, the runner itself.
 
-### Phase 1.2: one normaliser for page errors (#275)
+### Phase 1.2: one normaliser for page errors (#275) ✓
 
 1. Add `fixtures/page-errors.ts` with `pageErrorOf`.
 2. Use it in the three handlers. Delete the duplicated comment in `extension.ts`.
@@ -210,7 +210,7 @@ Every gate runs from the repo root unless it says `apps/extension`. Retry 0 ever
 - Pass: green on both browsers. With `af4afcc`'s handlers, the Chrome probe run fails (the listener throws on `undefined`). The full smoke and network runs are in Phase 1.6.
 - Layers: lint, typecheck, unit, smoke probe on both browsers.
 
-### Phase 1.3: the tokens menu opens through the dropdown's state (#274)
+### Phase 1.3: the tokens menu opens through the dropdown's state (#274) ✓
 
 1. Add `openDropdown` to `helpers.ts`, replacing `setTheme`'s open block.
 2. Rewrite `setTheme`, `importToken` and `refreshBalances` on it. Click the items with `clickByTestId(page, item, 2_000)`. Wrap each wait in `withTimeoutMessage` with the diagnostic function.
@@ -225,7 +225,7 @@ Every gate runs from the repo root unless it says `apps/extension`. Retry 0 ever
 - Pass: every file green at retry 0 on both browsers. The new smoke test fails with `af4afcc`'s inline open (Phase 1.3 step 3, red on base).
 - Layers: lint, typecheck, smoke and network e2e on both browsers.
 
-### Phase 1.4: the stalled-network spec runs on Firefox (#272), and the ledger rows
+### Phase 1.4: the stalled-network spec runs on Firefox (#272), and the ledger rows ✓
 
 1. Unwrap the `describe.skipIf`, drop the unused imports, remove `hangingRequest`.
 2. Edit the four prose sites to two Chrome-only files.
@@ -236,7 +236,7 @@ Every gate runs from the repo root unless it says `apps/extension`. Retry 0 ever
 - Pass: green; Firefox 3 of 3; the `git grep` prints nothing.
 - Layers: lint, typecheck, ci-gating, network e2e on both browsers.
 
-### Phase 1.5: the hero observer reads the newest entry (#269; only on OA-1 = A)
+### Phase 1.5: the hero observer reads the newest entry (#269; only on OA-1 = A) ✓
 
 1. Change both callbacks as § Architecture says.
 2. In both page unit tests, let the stub keep its callback; add one test each: `[true, false]` shows the bar (its class list carries the visible class), and `[false, true]` hides it (control).
@@ -407,6 +407,26 @@ The planner also removed a stray file the Opus leg's probe wrote outside the wor
 ### Round 5: resumed final pass on plan v5
 
 **Codex** (resumed session `01a12843-d06d-76c2-87b7-cd18dfdce700`): `approve`. No new or unresolved material finding, including the round-4 questions it was asked to finish (Node for the parse step, the #274 DOM-method barrier on both drivers).
+
+
+### Implementation audit, round 1 (Codex + Opus on `git diff origin/dev...HEAD` at 3b93a85)
+
+**Codex** (gpt-6.1-sol, high, session `01a1288f-55f5-7d41-b881-ecd9750e6635`, account alejo-gmail via `CODEX_ACCOUNT=best`): `approve`.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| C1 | Low | `openTrigger`'s docblock narrates its branches | **Accepted:** one sentence on why the read and the click share one rule. |
+
+**Opus** (general-purpose agent, opus): `approve`.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| O1 | Low | `docker-ci-like.sh`'s default shard mode is now always refused (F4 missed it) | **Accepted:** the refusal is right (an unarmed shard holds marked files, D2); its usage block passes `-e NULO_E2E_PROVERLESS=1`, as CI's pool runs, and F4 names it. |
+| O2 | Low | `--no-json` leaves the listing file empty and the guard passes; the Security bullet describes `--json=<path>`, which `list` refuses | **Accepted, reproduced** (exit 0 with a marked file): the guard refuses an empty listing file; one test case; the Security bullet corrected. |
+| O3 | Low | The skill says tool errors exit "with the remedy" | **Accepted:** reworded. |
+| O4 | Low | The test comment says each case starts Node | **Accepted:** reworded. |
+| O5 | Low | `openDropdown`'s TSDoc tautology; `agent.sh` repeats the guard's header | **Accepted:** both trimmed. |
+| O6 | Low | Ledger row 49 cites an active plan path that the archive move breaks; § Architecture step 2 still describes `node -e` | **Accepted:** the step matches D14 now; the row's path moves with the archive commit. |
 
 ## Seeds
 

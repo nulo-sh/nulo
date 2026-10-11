@@ -11,7 +11,7 @@ const NETWORK_CONFIG = "vitest.e2e.network.config.ts"
 const MARKED = "tests/e2e/network/import-handshake-note.test.ts"
 const MARKED_MATRIX = "tests/e2e/network/import-handshake-note-matrix.test.ts"
 const UNMARKED = "tests/e2e/network/tokens.test.ts"
-// Each case starts Node and a vitest listing; a cold runner needs the headroom.
+// Each case spawns a vitest listing; a cold runner needs the headroom.
 const CASE_TIMEOUT_MS = 60_000
 
 type Guard = { code: number | null; stderr: string }
@@ -72,6 +72,12 @@ describe.concurrent("proverless guard", { timeout: CASE_TIMEOUT_MS }, () => {
 
 	test("refuses arguments vitest cannot list", async () => {
 		const run = await guard(["--no-such-flag"])
+		expect(run.code, run.stderr).toBe(2)
+		expect(run.stderr).toContain("FATAL: vitest could not list this run's files")
+	})
+
+	test("refuses a listing that never reached its file", async () => {
+		const run = await guard(["--no-json", MARKED])
 		expect(run.code, run.stderr).toBe(2)
 		expect(run.stderr).toContain("FATAL: vitest could not list this run's files")
 	})
