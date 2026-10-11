@@ -641,6 +641,10 @@ Verdict: **one low finding**, high confidence otherwise. Checked the four fixes,
 |---|---|---|
 | R3-1 | Low. `lessons/phase-3.md` § 3.3 repeats OB3's wrong claim ("every other button keeps building `transfer_public_to_public`") | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
 
+### Arc 3 implementation, round 3: Codex (same session, resumed), 2026-10-11
+
+Verdict: **clean**, high confidence: R3-1's fix confirmed, nothing material left in the arc diff. The loop converged.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
