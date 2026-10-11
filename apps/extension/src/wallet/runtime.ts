@@ -391,7 +391,7 @@ async function persistBlockedOutcome(
 	deps: WalletRuntimeDeps,
 ): Promise<never> {
 	const { browserApi, clock, logger, manifestVersion } = deps
-	logger.log("wallet", LogLevel.Error, `Storage migration blocked boot (${migration.kind}): ${migration.reason}`)
+	logger.log("wallet", LogLevel.Error, "Storage migration blocked boot", { kind: migration.kind })
 	// A `spentAttempt: false` result recorded NOTHING on the durable
 	// counter (the engine's outer catch — a free transient failure), so
 	// charging the episode's retry allowance for it would park a healthy
@@ -430,7 +430,9 @@ async function persistBlockedOutcome(
  *  then arrive instantly terminal with zero gestures. */
 async function persistDegradedOutcome(migration: Extract<MigrationResult, { kind: "failed" }>, deps: WalletRuntimeDeps): Promise<void> {
 	const { browserApi, logger } = deps
-	logger.log("wallet", LogLevel.Warn, `Storage migration failed on an additive migration; booting degraded: ${migration.reason}`)
+	logger.log("wallet", LogLevel.Warn, "Storage migration failed on an additive migration; booting degraded", {
+		version: migration.version,
+	})
 	const degraded: MigrationDegradedStatus = { version: migration.version, error: migration.reason }
 	await browserApi.storage.local.set({ [SCHEMA_DEGRADED_KEY]: degraded })
 	await browserApi.storage.local.remove([SCHEMA_BLOCKED_KEY, SCHEMA_ATTEMPTS_KEY])

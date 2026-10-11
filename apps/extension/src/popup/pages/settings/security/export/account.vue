@@ -189,7 +189,7 @@ const handleDownload = async () => {
 		openToast({ kind: "success", label: "Account file downloaded" })
 	} catch (err) {
 		if (gen !== generation) return
-		console.error("Download failed:", err?.message || err)
+		console.error("Download failed:", { error: err })
 		openToast({ kind: "error", label: "Failed to download the file" })
 	} finally {
 		if (gen === generation) isDownloading.value = false

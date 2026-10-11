@@ -21,7 +21,6 @@ import { createWalletRuntime } from "./runtime"
 import { registerContentMessageRelay } from "./services/wallet-sdk/content-message-relay"
 import { PRICE_REFRESH_ALARM_NAME, PriceService } from "./services/price/service"
 import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/extension-messaging/errors"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
 import { armPopupReturn, registerToolbarPopupMessage } from "./utils/toolbar-popup"
 import { recordCspViolationsInBackground } from "@/e2e/csp-report"
@@ -70,7 +69,7 @@ for (const [method, level] of consoleMethods) {
 self.onunhandledrejection = (e: PromiseRejectionEvent) => {
 	const expected = isClientDisconnectRejection(e.reason) || isReceiverGoneRejection(e.reason)
 	if (expected) e.preventDefault()
-	logger.log("wallet", expected ? LogLevel.Debug : LogLevel.Error, getErrorData(e.reason))
+	logger.log("wallet", expected ? LogLevel.Debug : LogLevel.Error, "unhandled rejection", { error: e.reason })
 }
 
 logger.log("wallet", LogLevel.Info, "Runtime configured")
@@ -97,7 +96,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 		.start()
 		.then(() => (runtime.services.get(PriceService.name) as PriceService).onAlarmTick())
 		.catch((error) => {
-			logger.log("wallet", LogLevel.Error, "price alarm dispatch failed", getErrorData(error))
+			logger.log("wallet", LogLevel.Error, "price alarm dispatch failed", { error })
 		})
 })
 
@@ -109,6 +108,6 @@ logger
 	.then(() => {
 		logger.log("wallet", LogLevel.Info, "Service worker started")
 		runtime.start().catch((error) => {
-			logger.log("wallet", LogLevel.Error, "Runtime start failed", getErrorData(error))
+			logger.log("wallet", LogLevel.Error, "Runtime start failed", { error })
 		})
 	})

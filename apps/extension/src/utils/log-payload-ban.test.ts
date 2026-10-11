@@ -18,6 +18,9 @@ import { REDACTED_KEYS, SECRET_KEY_SUFFIX, URL_KEYS } from "@/wallet/logger/util
  *
  * KNOWN FALSE-NEGATIVE, stated up front (same class as `storage-facade-ban.test.ts`): this is
  * textual. Aliasing (`const p = password`), destructuring, and helper indirection all defeat it.
+ * So do the ways of flattening a caught error that name neither a flattener nor `.message` /
+ * `.stack` inside the call: a flattener's result bound to a local first, `String(err)`, `${err}`,
+ * `err.toString()` and computed access (`err["message"]`).
  * It catches the direct mistake, which is the one people actually make.
  */
 
@@ -56,8 +59,17 @@ const SCANNED_EXT = /\.(ts|js|vue)$/
  * Deliberately excludes `secret` and `token`: both are ambiguous in this codebase (ciphertext on
  * `Profile`, a token contract nearly everywhere) and would fire constantly on safe lines.
  */
-// The two flatteners turn an Error into a string the walker cannot scrub — pass the Error.
-const EXTRA_NAMES = ["masterSecret", "rawContent", "privateBalance", "publicBalance", "getErrorMessage", "errorMessageFromUnknown"]
+// The three flatteners hand the walker a string (an uncapped message, or a stack) in place of the
+// Error it would project — pass the Error.
+const EXTRA_NAMES = [
+	"masterSecret",
+	"rawContent",
+	"privateBalance",
+	"publicBalance",
+	"getErrorMessage",
+	"errorMessageFromUnknown",
+	"getErrorData",
+]
 
 /**
  * Every denied name, taken FROM the runtime denylists rather than restated beside them.
@@ -87,7 +99,7 @@ const LOG_CALL =
 /** Files allowed to name these identifiers near a log call. */
 const ALLOWLIST: RegExp[] = [
 	// The redactor and its denylist — it must name what it redacts.
-	/^apps\/extension\/src\/wallet\/logger\//,
+	/^apps\/extension\/src\/wallet\/logger\/utils\.ts$/,
 	// This test and its siblings.
 	/\.test\.(ts|js)$/,
 	// Build-time-excluded e2e instrumentation.
@@ -328,23 +340,23 @@ function blankComparisonLiterals(body: string): string {
 	})
 }
 
-/** Every occurrence of a denied name in `code`, as `{ name, index }`. */
+/**
+ * A member read of an error's text — `err.message`, `e?.stack` — which is never an object key, so
+ * a hazard unless it is an arity read. The lookbehind keeps a spread (`...message`) out.
+ */
+const ERROR_TEXT_READ = /(?<!\.)\.\s*(message|stack)\b/g
+
+/** Every occurrence of a denied name or an error-text read in `code`, as `{ name, index }`. */
 function occurrences(code: string): Array<{ name: string; index: number }> {
 	const out: Array<{ name: string; index: number }> = []
 	for (const id of SENSITIVE_NAMES) {
 		const re = new RegExp(`\\b${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g")
-		let m = re.exec(code)
-		while (m) {
-			out.push({ name: id, index: m.index })
-			m = re.exec(code)
-		}
+		for (const m of code.matchAll(re)) out.push({ name: id, index: m.index })
 	}
 	const suffix = new RegExp(`\\b[\\w$-]*${SECRET_KEY_SUFFIX.source.replace(/\$$/, "")}\\b`, "gi")
-	let m = suffix.exec(code)
-	while (m) {
-		out.push({ name: m[0], index: m.index })
-		m = suffix.exec(code)
-	}
+	for (const m of code.matchAll(suffix)) out.push({ name: m[0], index: m.index })
+	// Indexed at the member name, so the arity filter reads what follows it.
+	for (const m of code.matchAll(ERROR_TEXT_READ)) out.push({ name: m[1], index: m.index + m[0].length - m[1].length })
 	return out
 }
 
@@ -392,7 +404,7 @@ function isObjectKey(code: string, index: number, name: string): boolean {
  * This is the idiom the logging policy actively recommends in place of the payload, so flagging it
  * would push people back toward logging the thing itself. The measurement is not the value.
  */
-const ARITY_READ = /^\.(?:length|size|byteLength)\b/
+const ARITY_READ = /^\s*\??\.\s*(?:length|size|byteLength)\b/
 
 function isArityRead(code: string, index: number, name: string): boolean {
 	return ARITY_READ.test(code.slice(index + name.length))
@@ -486,6 +498,48 @@ describe("log-payload ban (static)", () => {
 		expect(offenders).toHaveLength(2)
 		expect(offenders[0]).toContain("getErrorMessage")
 		expect(offenders[1]).toContain("errorMessageFromUnknown")
+	})
+
+	test("catches an error flattened by getErrorData, which hands over its stack", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "apps/extension/src/popup/windows/x.ts", content: 'console.error("x", getErrorData(e))' },
+		])
+		expect(offenders).toHaveLength(1)
+		expect(offenders[0]).toContain("getErrorData")
+	})
+
+	test("catches an error's message read through an optional chain", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "apps/extension/src/popup/pages/x.ts", content: 'console.error("Download failed:", err?.message || err)' },
+		])
+		expect(offenders).toHaveLength(1)
+		expect(offenders[0]).toContain("message")
+	})
+
+	test("catches an error's stack interpolated into the message", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "apps/extension/src/wallet/services/x.ts", content: "this.logWarn(`failed: ${err.stack}`)" },
+		])
+		expect(offenders).toHaveLength(1)
+		expect(offenders[0]).toContain("stack")
+	})
+
+	test("an error's message under a benign key is still flattened — trim() never caps it", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "apps/extension/src/popup/pages/x.ts", content: 'console.warn("x", { msg: err.message })' },
+		])
+		expect(offenders).toHaveLength(1)
+	})
+
+	test("an error passed under a key, a spread, a fixed message and an arity read are not flattening", () => {
+		const offenders = findLoggedSecrets([
+			{ path: "apps/extension/src/popup/pages/a.ts", content: 'console.error("x", { error })' },
+			{ path: "apps/extension/src/popup/pages/b.ts", content: 'console.error("x", { error: err }, { message: "fixed" })' },
+			{ path: "apps/extension/src/popup/pages/c.ts", content: 'console.warn("x", { ...message })' },
+			{ path: "apps/extension/src/wallet/services/d.ts", content: "this.logDebug(`len ${err.message.length}`)" },
+			{ path: "apps/extension/src/wallet/services/e.ts", content: "this.logDebug(`len ${err?.message?.length}`)" },
+		])
+		expect(offenders).toEqual([])
 	})
 
 	test("catches the dominant package idiom, `this.logger.log` on any receiver", () => {
@@ -855,5 +909,16 @@ describe("log-payload ban (static)", () => {
 	test("the allowlist admits the redactor, which must name what it redacts", () => {
 		const offenders = findLoggedSecrets([{ path: "apps/extension/src/wallet/logger/utils.ts", content: "acc[k] = `[${masterKey}]`" }])
 		expect(offenders).toEqual([])
+	})
+
+	test("the allowlist admits only the redactor, not the rest of the logger directory", () => {
+		const offenders = findLoggedSecrets([
+			{
+				path: "apps/extension/src/wallet/logger/console-forwarding.ts",
+				content: 'logger.log("ui", LogLevel.Error, getErrorData(e.reason))',
+			},
+		])
+		expect(offenders).toHaveLength(1)
+		expect(offenders[0]).toContain("console-forwarding.ts:1")
 	})
 })

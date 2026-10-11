@@ -178,7 +178,7 @@ async function settleDecompressed(
 			reject(err)
 			return
 		}
-		console.warn(`Failed to decompress ${file.name}:`, err instanceof Error ? err.message : err)
+		console.warn(`Failed to decompress ${file.name}:`, { error: err })
 		resolve(file)
 	}
 }

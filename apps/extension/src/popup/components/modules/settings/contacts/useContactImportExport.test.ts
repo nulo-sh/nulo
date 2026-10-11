@@ -322,8 +322,15 @@ describe("useContactImportExport — export", () => {
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "success", label: "Contacts exported successfully" })
 
 		openToastMock.mockClear()
-		vi.mocked(downloadFile).mockRejectedValueOnce(new Error("Download canceled by the user"))
-		await api.exportContacts()
+		const canceled = new Error("Download canceled by the user")
+		vi.mocked(downloadFile).mockRejectedValueOnce(canceled)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await api.exportContacts()
+			expect(logged.mock.calls).toEqual([["Export failed:", { error: canceled }]])
+		} finally {
+			logged.mockRestore()
+		}
 		expect(openToastMock.mock.calls).toEqual([[{ kind: "error", label: "Failed to export contacts" }]])
 	})
 

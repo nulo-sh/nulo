@@ -758,7 +758,7 @@ export async function runRestoreFailurePath(
 			io.setStage("rollback-failed")
 			io.setStatus("failed")
 			io.fillError("full_backup", "Import incomplete", CLEANUP_PENDING_MESSAGE)
-			console.error((err as Error)?.message || err)
+			console.error("[full-backup] restore failed; rollback incomplete:", { error: err })
 			return
 		}
 	} else {
@@ -766,5 +766,5 @@ export async function runRestoreFailurePath(
 	}
 	io.setStatus("")
 	io.fillError("full_backup", "Import failed", String((err as Error)?.message ?? err))
-	console.error((err as Error)?.message || err)
+	console.error("[full-backup] restore failed:", { error: err })
 }

@@ -383,7 +383,7 @@ async function prefetchTokenMetadata(
 				} catch (err) {
 					const msg = getErrorMessage(err)
 					refs.errors.value.set(op.address, msg)
-					console.warn(`[Execute] previewTokenMetadata failed for ${op.address}: ${msg}`)
+					console.warn(`[Execute] previewTokenMetadata failed for ${op.address}`, { error: err })
 				}
 			}),
 		)
