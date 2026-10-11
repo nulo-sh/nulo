@@ -39,9 +39,9 @@ In:
 - #283, #288 (every registered service listed, with a fail-closed drift pin), #289, #291.
 
 Out, each with its reason:
-- The sources that are not registered service names (`"PriceService"`, `wallet-sdk-bg`, `SendCheck`, `JournalGC`, ... in recon § #288): filing their lines under the owning service changes the CSV export's source column and what the window keeps, and giving them rows adds labels; both go past the orchestrator's record. OA-1 asks the owner; they keep today's behaviour; the implementer opens one issue for them at delivery.
+- ~~The sources that are not registered service names~~: moved into the arc as Phase 2b by the orchestrator's D-orch-3 (OA-1 option (a), lines only).
 - Coordinator log lines that pass `String(error)` (`account-integrity/coordinator.ts:83,176`), a form the logging policy's redactor cannot see into: an existing line, already in the window at open and in the CSV export; the fix (pass `{ error }`) is a logging-policy change outside these issues. The implementer opens one issue for it at delivery (dedupe first).
-- The dead filter rows (`faucet`, `rpc`, `wallet-sdk-client`): removing a row is a visible change nobody asked for. OA-1 asks it as a second question.
+- The dead filter rows (`faucet`, `rpc`, `wallet-sdk-client`): removing a row is a visible change nobody asked for. The `owner-decision` issue opened at delivery carries only that question (D-orch-3).
 - The other `(BUG PIN)` in `send.test.ts` (a delete during the identity fetch's contacts read, `:1094`): a different defect, outside this lane's issues.
 - `IMPORTED_KEYS_SERVICE_NAME`'s misleading name: it is a backup slice key, and the backup code belongs to the backup-import-export lane.
 
@@ -104,6 +104,41 @@ The drift pin, `apps/extension/src/components/JsonViewer/useLogFilters.scan.test
 - **Success control.** In each registration file, the number of `services.add(` openers (a plain substring count) equals the number the scan resolved or refused (25 in `runtime.ts`, among them identifier arguments and the multiline `IncomingTransferService`; 1 in `entry.ts`), so a call the parser skips fails instead of passing. The refusal branch has no real instance, so one inline source string with an unsupported argument goes through the same resolver and must fail.
 
 A new `services.add` of an unlisted service fails CI; a renamed service fails it until its row follows; an unusual registration shape fails loudly until the scan learns it.
+
+### OA-1 (a): every line under the service that owns it (Phase 2b)
+
+The cause is the one #288 has: a source is a free string nothing ties to the row list. Recon found it wider than the five services, and the 2b inventory (an Explore sweep, re-checked by both auditors) found 20 sources that reach the logger with no row. The rule, in three clauses:
+
+1. Code in a service's directory logs under that service's exported name constant (`*_SERVICE_NAME`), whoever calls it.
+2. A generic primitive outside any service directory logs under a source its constructor's caller must pass; no primitive keeps a default source.
+3. Code only the composition root builds logs under `wallet`; the dApp handler's code under `wallet-sdk`.
+
+| Source today | Lines (sites) | Files under | Mechanism |
+|---|---|---|---|
+| `PriceService` | 4 | Price | the private `log()` helper and its constant go; the service calls the base's `logWarn`/`logDebug` (CLAUDE.md § Logging policy: services call `this.log*`) |
+| `SendCheck`, `JournalGC`, `JournalReaper` | 12 | Operation Journal | `const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME` |
+| `operation-journal:transition` (Lock) | Lock lines | Operation Journal | the Lock is named `OPERATION_JOURNAL_SERVICE_NAME` |
+| `ContractResolver`, `TxRequestBuilder`, `batched-view-simulation` | 13 (+19 via a helper) | Execution | `LOG_SOURCE = EXECUTION_SERVICE_NAME` (directory owner; Token and Token Balance also call two of them) |
+| `SessionManager`, `session-artifacts` (Lock) | 28 + Lock lines | Profile | `LOG_SOURCE = PROFILE_SERVICE_NAME`; the Lock takes `LOG_SOURCE` |
+| `TokenSeeder` | 6 | Token | `LOG_SOURCE = TOKEN_SERVICE_NAME` |
+| `balance-job-queue`, `balance-projector` | 6 | Token Balance | the unused `logSource` parameter goes; module constant `TOKEN_BALANCE_SERVICE_NAME` |
+| `background-ticker` | 1 | Token Balance | `ClockTickerAdapter` takes a required logger and source; `TokenBalanceService` passes `TOKEN_BALANCE_SERVICE_NAME` (a constant: the default parameter runs before `super()`) |
+| `wallet-sdk-bg` | 18 | Wallet Sdk | the literal `"wallet-sdk"`, as its 41 sibling sites already log |
+| `window-manager` | 5 | Wallet | the literal `"wallet"`; `createPlaced` keeps its source parameter (two callers, two sources) |
+| `offscreen-telemetry` | 1 | Pxe Client | `LoggingTelemetrySink` takes a required source; `BaseServiceClient.clientName` becomes `protected` and the client base passes it |
+| `nulo-v1` | 3 | Account | `NuloAccount.new`/`fromSigningKey` (and the private `fromKeys` and constructor) take a required `logSource` after the logger; the logging-only `name` field goes; `AccountService` passes `this.name`, the integrity coordinator its own constant |
+| `pxe[<profile>:<chain>]`, `pxe-barrier[<profile>]` (guards) | 1 | Pxe | both guards are named `PXE_SERVICE_NAME` |
+| `artifact-registry` (dead default) | 0 in prod | Pxe | the `logSource` option goes; the registry logs under `PXE_SERVICE_NAME` |
+
+Silent and left alone: `new Lock("wallet-sdk-bg:queued-creation")` and `new Lock("token-balance", undefined, null)` pass no logger; both `KeyedLock`s pass neither name nor logger. What a person sees: no new row, no new label; the lines of these sources stay in the window through every rebuild and append live under the rows above; the CSV source column carries the owner's name (accepted with OA-1 (a)). Two labels leave the record: the Lock labels `session-artifacts` and `:transition` (each owner has one logging Lock) and the guard key on one Error line written after a reader is stuck 90 minutes (D13).
+
+**The pin.** `useLogFilters.scan.test.ts` gains a source scan over the same roots (`.ts` and `.vue`, tests excluded):
+- Every `logger.log(` / `logger?.log(` call (receiver ending in `logger`, so a class's private `log` helper or the logger client's `shared.log` is not read as one), and every `this.log{Debug,Info,Warn,Error}(` in a file that declares a `static name`, resolves its source: a string literal; an identifier through a same-file `const` to a literal or to an exported constant (`constantValue`); `this.name` through the file's `static name` constant; a base class's own name (`BaseService`'s `this.name`, `BaseServiceClient`'s `this.clientName`), which the registration pin proves; or one of the primitives' parameters (`Lock`, `KeyedLock`, `ReadWriteGuard`, `createPlaced`, `LoggingTelemetrySink`, `ClockTickerAdapter`, `NuloAccount`), resolved at every site that supplies it, in the supplying file. A site that passes no logger never logs and is skipped; a site that passes a logger and no source, a template literal, or any other shape is refused with its `file:line`.
+- **A.** Every resolved source is a `LOG_SOURCES` row and nothing is refused.
+- **B.** One row per mapped source class (`test.each`): the file that writes it (or supplies its source) resolves to exactly `{owner}`. Each row is red on base.
+- **C.** The resolver refuses a template-literal source, an unknown identifier and a logger-passing site with no source.
+- Behavioural pins, updated in place and red on base: `queued-journal.test.ts` (`wallet-sdk`), `seeder.status.test.ts` (`token`), `offscreen/client.test.ts` (the default sink logs under the client's own name).
+- What it cannot see: aliasing (`logger.log.bind`, `logger["log"]`, a logger stored under another name), sources from files outside the roots, and whether a future helper's row is the RIGHT owner (A proves "a row", B pins today's owners).
 
 ### #289: Clear logs keeps the window live on failure
 
@@ -169,6 +204,8 @@ The shared key stays (D4). `FeeSettingsCard.vue:465-470` asks that no subscriber
 | `apps/extension/src/popup/pages/send.test.ts` | the active-token `(BUG PIN)` becomes the fixed behaviour; one last-token case |
 | `apps/extension/src/components/JsonViewer/useLogFilters.ts` | ten new `LOG_SOURCES` rows |
 | `apps/extension/src/components/JsonViewer/useLogFilters.scan.test.ts` | new: the drift pin |
+| Phase 2b: `price/service.ts`, `operation-journal/{send-check,gc,reaper,service}.ts`, `execution/{contract-resolver,tx-request-builder}.ts`, `execution/helpers/batched-view-simulation.ts`, `profile/session-manager.ts`, `token/seeder.ts`, `token-balance/{balance-job-queue,balance-projector,service}.ts`, `core/adapters/clock-ticker-adapter.ts`, `wallet-sdk/{background,session-established,session-revocation,profile-switch-teardown,queued-journal}.ts`, `window-manager/window-manager.ts`, `account/service.ts`, `account-integrity/coordinator.ts` (all under `apps/extension/src/wallet/services/` but the adapter); `packages/extension-messaging/src/{core/base-client,offscreen/client,offscreen/telemetry}.ts`; `packages/aztec-runtime/src/account/nulo-account.ts`, `packages/aztec-runtime/src/pxe/{service,artifact-registry}.ts` | the per-source mechanisms in § OA-1 (a) |
+| Phase 2b tests: `useLogFilters.scan.test.ts` (source scan A, B, C); `queued-journal.test.ts`, `seeder.status.test.ts`, `offscreen/client.test.ts` (sources flipped); every `NuloAccount.new`/`fromSigningKey`, `ClockTickerAdapter`, `LoggingTelemetrySink` and `BalanceProjector` construction in tests and e2e fixtures (the new argument, or the dropped one) | as left |
 | `apps/extension/src/components/JsonViewer/LogsViewer.vue` | `handleClearLogs` re-adds in a `finally` |
 | `apps/extension/src/components/JsonViewer/LogsViewer.test.ts` | a Clear-logs describe on a real `EventHandler` |
 | `apps/extension/src/stores/balances.store.ts` | `adoptForRetrySubscribers` after the tx-settle forced fetch; `adoptGasRetryDebt`'s comment |
@@ -253,6 +290,19 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 - Pass criteria: all exit 0. Proof of red: with the base `useLogFilters.ts`, the scan test fails and names `price`, `price-client`, `incoming-transfer`, `incoming-transfer-client`, `operation-journal`, `operation-journal-client`, `legal-acceptance`, `legal-acceptance-client`, `account-integrity-coordinator` and `profile-deletion-coordinator`, and nothing else.
 - Layers: lint, typecheck, unit.
 
+### Phase 2b: OA-1 (a), every line under the service that owns it ✗
+
+Added by the orchestrator's D-orch-3 after Phase 2; built after Phases 3 and 4, while its inventory ran (the phases are independent).
+
+1. Write the source scan (A, B, C) in `useLogFilters.scan.test.ts` and run it on the tree before any source change: A and every B row must fail, C must pass.
+2. Apply the per-source mechanisms in § OA-1 (a); update the three behavioural pins and every construction the signatures change.
+3. Commit: `fix(logs): file every log line under the service that owns it`.
+
+**Validation gate.**
+- Commands: `cd apps/extension && bun --bun vitest run src/components/JsonViewer src/wallet/services/wallet-sdk/queued-journal.test.ts src/wallet/services/token src/wallet/services/token-balance src/wallet/services/price src/wallet/services/operation-journal src/wallet/services/profile src/core/adapters`; `bun run test:all` (it runs `packages/aztec-runtime`'s account freeze suites and `packages/extension-messaging`'s client tests with the new arguments); `bun run lint`; `bun run typecheck:all`.
+- Pass criteria: all exit 0; A and each B row seen red on the tree before step 2; the three behavioural pins seen red against the base sources; the account KAT and freeze tests green with no vector or pin edit.
+- Layers: lint, typecheck, unit, scan.
+
 ### Phase 3: #289, Clear logs keeps the window live ✓
 
 1. Change `handleClearLogs` in `LogsViewer.vue` as in § Architecture.
@@ -306,7 +356,7 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 The orchestrator's no-ask records, quoted, are the whole visible budget:
 
 - **Send, after the selected token is deleted elsewhere** (#283). Record: "the handler does what it was written to do, read whether the deleted token was active before the splice, then select the next token, or with none left run the existing last-token path (its toast and leave); the `(BUG PIN)` in `send.test.ts` flips to the fixed behaviour. No new words." Before: an empty token card. After: the first remaining token is selected; with none left, the existing toast "The last token has just been deleted" and Send closes.
-- **Logs window, source filter and rows** (#288). Record: "the window shows every service's lines and the source filter lists every service, as it does for the others today; derive the list from the registered service names (the panel's call on the exact mechanism) so it cannot drift again, with the test the issue names. No new words beyond the service names the filter already uses as labels." Before: 48 rows; Price, Incoming Transfer, Operation Journal, Legal Acceptance and the two coordinators' lines vanish at the first rebuild. After: the 48 rows keep their order; Price, Price Client, Incoming Transfer, Incoming Transfer Client, Operation Journal, Operation Journal Client, Legal Acceptance and Legal Acceptance Client follow Passkey Client, then Account Integrity Coordinator and Profile Deletion Coordinator, then Wallet and Ui as today. Their lines stay. Lines written under a source that is not a registered service name (the price service's own `"PriceService"` helper, `SendCheck`, …) keep today's behaviour until the owner answers OA-1.
+- **Logs window, source filter and rows** (#288). Record: "the window shows every service's lines and the source filter lists every service, as it does for the others today; derive the list from the registered service names (the panel's call on the exact mechanism) so it cannot drift again, with the test the issue names. No new words beyond the service names the filter already uses as labels." Before: 48 rows; Price, Incoming Transfer, Operation Journal, Legal Acceptance and the two coordinators' lines vanish at the first rebuild. After: the 48 rows keep their order; Price, Price Client, Incoming Transfer, Incoming Transfer Client, Operation Journal, Operation Journal Client, Legal Acceptance and Legal Acceptance Client follow Passkey Client, then Account Integrity Coordinator and Profile Deletion Coordinator, then Wallet and Ui as today. Their lines stay. Lines written under a source that is not a registered service name (the price service's own `"PriceService"` helper, `SendCheck`, …) are filed under the service that owns them (Phase 2b, D-orch-3): no new row or label, and they stay through every rebuild.
 - **Logs window, Clear logs** (#289). Record: re-add the listener in a `finally`. Before: after a failed clear the window stops updating. After: it keeps updating; the toast is unchanged.
 - **Fee card notice beside a gas card on one key** (#291). Record: "the notice stops claiming a retry that is not running; the existing states and words only, nothing new." No production surface mounts both today (I2). Before: "Couldn't load fee data. Retrying in the background." with no retry running, until another fetch succeeds. After: the same words, backed by a running gas retry; the notice clears when it lands. The gas card's existing refresh dot and un-dim follow the retry; OA-2 asks the owner to confirm they sit inside the record, and names the fallback that ships if not.
 - `lessons.md`: no UI.
@@ -322,7 +372,8 @@ The PR body carries before/after screenshots of Send after a delete and of the l
 - **Gating.** A degraded gas slice keeps `verified` empty, so self-paid methods stay closed until a read succeeds (`FeeSettingsCard.vue:559`); the fix changes when a fresh figure arrives, not how the gate reads it.
 - **Send.** The new selection is the first token in storage order, which a dApp can influence through `registerToken` (a lookalike token added first). The mount path already picks the same token when the saved one is gone (`send.vue:604-606`), nothing is sent by a selection change, the amount clears and the review sheet closes on it (`send.vue:488-496`), and the card names the token.
 - **Least privilege, supply chain, cryptography.** No dependency, workflow, permission or key changes. No new package. Frozen lockfile untouched.
-- **Static scans in tests.** The drift pin reads source files from the repository; it writes nothing and runs no code it reads.
+- **Static scans in tests.** The drift pin and the source scan read source files from the repository; they write nothing and run no code they read.
+- **Phase 2b and the logging policy.** No log line gains a field and no message changes; only the source string moves to the owner's name, which is not sensitive. The guards' old source carried a profile id and a chain id; the new one carries neither. Lines that were already in the CSV export and in the window at open now also survive a rebuild, so nothing new leaves the device.
 
 ## Assumptions
 
@@ -370,6 +421,10 @@ The PR body carries before/after screenshots of Send after a delete and of the l
 | D-orch-3 | OA-1 | Its option (a) ships in arc-1 for the lines only: each line from a source that is not a registered service is filed under the service that owns it (Phase 2b), inside the #288 record (every line visible under existing rows, no new row or label). The five rows that match nothing stay; their removal is the owner's call, carried by the `owner-decision` issue opened at delivery | (b) new rows and (c) always-shown sources: new labels or a filter that cannot hide; (d) as today: lines keep vanishing | orchestrator, 2026-10-11 |
 | D-orch-4 | Phase 0 result | The lossless 7,926 B with no retirement stands; the 7 KiB target is withdrawn | Retiring a reachable dead end to make room | orchestrator, 2026-10-11 |
 | D9a | Fuzz model: when a tx-settle owes `ready` | Only when the key has a store entry at the settle, besides a live `txRefresh` subscriber and retry cover: the store's forced read returns at once on a fenced key, so nothing fails and nothing is owed | The plan's rule without the entry condition: its first fuzz run owed `ready` for a key a fence had cleared (lessons/phase-4.md) | implementation |
+| D12 | Phase 2b ownership rule | A file in a service's directory logs under that service's constant; a primitive outside one takes a required source from its caller; composition-root code logs under `wallet`, the dApp handler under `wallet-sdk`. Ticker → Token Balance and telemetry → Pxe Client deviate from the owner's mapping ("worker-level → Wallet", "the offscreen one → Pxe"): the tree shows Token Balance builds the ticker and the sink lives in the client in the worker. NuloAccount, unmapped by the owner, → Account | Inject the caller's name into shared helpers (`ContractResolver`, `batched-view-simulation`): a source parameter on each and per-call-site resolution, for lines that already name their operation | Codex and Opus, 2b consult |
+| D13 | PXE guard labels | Both guards named `PXE_SERVICE_NAME`; the profile/chain key leaves one Error line written after a reader is stuck 90 minutes (the barrier and chain guards nest and fire together). If the owner wants the key back, the change is `ReadWriteGuard` alone: a separate source, the label moved into the message | Codex: keep the label as a third constructor argument in the message (rarity makes it more valuable). Rejected: a new option for one caller, for a line whose surrounding lines already place the prove; the old source also put profile ids in the source column | Opus, 2b consult; Codex dissent recorded |
+| D14 | Phase 2b pin | A general source scan (A) plus one row per mapped class (B) and a resolver self-test (C), with the primitives' parameters resolved at their sites; behavioural pins where a test already asserts a source | Per-class rows only (Codex: the general scan's resolver costs more than membership): B needs the same resolver for injection sites, so A adds only the refusal path, and A is what stops the next free-string source | Opus, 2b consult; Codex dissent recorded |
+| D15 | Price service's helper | Deleted; the service calls the base's `logWarn`/`logDebug` | `this.name` inside the helper (Codex): keeps a second logging path in a service, which CLAUDE.md § Logging policy routes through `this.log*` | Opus, 2b consult |
 
 ## Audit verdicts
 
@@ -421,6 +476,10 @@ Re-check in the same session: reject (with blocking findings: D9 still owes a re
 Second re-check in the same session: **approve**. No fixed-store counterexample to the revised D9; the first pinned tape still fails the base store (op `581260` adds scope 0 to `expectGasReady` under tx-refresh and retry cover, and the later failed forced refresh leaves it degraded); the narrower oracle is acceptable with the arrival-mid-flight store case.
 
 Codex found sound: `adoptForRetrySubscribers` under epochs, outranked runs, an armed timer, a retry in flight and a mid-flight release; the store fix over the card-only change; literal rows checked against a registration-derived set as a faithful reading of the #288 record; the scoped `finally` and its control; OA-2 surfaced.
+
+### Phase 2b consult (Codex gpt-6.1-sol high read-only, session 01a12933-4185-7142-8206-643b74099b63; Opus Plan agent in parallel)
+
+Codex verdict: approve the ownership mapping with changes to PXE diagnostics and the scanner. Opus verdict: the rule is right; change the mechanism for the price helper, telemetry, NuloAccount and the registry default; build the general pin after the dynamic defaults are gone. Both: directory ownership for shared helpers, Token Balance for the ticker, Pxe Client for telemetry (with `clientName` protected, not re-derived), an explicit required source for NuloAccount (a rebinding logger rejected as a monkey-patch), no change to `Lock`, drop the unused queue/projector parameters and the registry option, keep `"wallet-sdk"` a literal. Split: the guard label (D13) and the general pin (D14); the price helper (D15). Opus found the second NuloAccount constructor (`account-integrity/coordinator.ts:57`) and the four tests that assert old sources; Codex found that `.log(` is not always `ILogger.log` (the receiver rule in § OA-1 (a)).
 
 ## Delivery
 

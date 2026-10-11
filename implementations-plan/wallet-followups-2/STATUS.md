@@ -12,3 +12,4 @@
 - 2026-10-11: Phase 2 gate: pass (JsonViewer 53/53, lint 0, typecheck:all 0; on the base list the pin failed naming exactly the ten rows).
 - 2026-10-11: Phase 3 gate: pass (JsonViewer 55/55, lint 0, typecheck:all 0; failed-clear case red on the base LogsViewer.vue, success control red under a whole-handler finally and green on base). Built before Phase 2b while 2b's source inventory ran; the phases are independent.
 - 2026-10-11: Phase 4 gate: pass (stores + popup modules 893/893, fuzz at 2,000 runs 5/5, lint 0, typecheck:all 0; co-mount case, both new store cases, the pinned tape and the rewritten control red on the base store; release control green on both). D9a recorded.
+- 2026-10-11: Phase 2b designed and argued (Codex + Opus); plan § OA-1 (a), Phase 2b, D12 to D15 written before building.

@@ -42,3 +42,10 @@ Applied to `origin/dev`'s `lessons.md` (unchanged since 29d9e49), the ten edits 
 10. Puppeteer mobile emulation: the same check stated once.
 
 No retirement (D1, D-orch-4): every dead end is still reachable. The orchestrator accepted the lossless 7,926 B and withdrew the 7 KiB target.
+
+## 2026-10-11: Phase 2b design consult (added by D-orch-3)
+
+- Inventory: one Explore agent (sonnet), 20 sources with no row; two candidates refuted (`artifact-registry` dead in prod, `wallet-sdk-bg:queued-creation` never logs).
+- Codex gpt-6.1-sol high read-only, session 01a12933-4185-7142-8206-643b74099b63: approve the mapping with changes (guard label kept, per-class pins only, `clientName` protected, required sources, registry option dropped).
+- Opus Plan agent: the rule is right; price helper deleted for the base methods; guards named for PXE; a general table-driven pin once the defaults are gone; found the coordinator's NuloAccount and the four tests asserting old sources.
+- Decided: D12 to D15 in plan.md. Split calls: D13 (guard label, Opus) and D14 (general pin, Opus), each with the Codex dissent.
