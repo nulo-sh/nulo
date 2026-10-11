@@ -30,3 +30,4 @@
 - 2026-10-10 — phase 3.1 gate: pass (red on base: nonce refused at simulating; green retry 0 Chrome 2/2, Firefox 2/2; lint, typecheck:all, test 11,113).
 - 2026-10-11 — phase 3.2 gate: pass (sponsored NO_FROM red until the buildNoFrom fix cc844c1, D23-D25; noFrom retry 0 Chrome 3 runs 3/3, Firefox 3/3; mutex-bypass red recorded; lint, typecheck:all, test 11,114).
 - 2026-10-11 — phase 3.3 rows: pass (pg-select-transferFn; tx-transfer-row retry 0 Chrome 4/4, Firefox 4/4; delegated file red locally: PublicChecks not deployed, I2 refuted, gate kept, Refs #165; #280 filed; lint, typecheck:all, test 11,114). N-full next, after the review loop.
+- 2026-10-11 — phase 3.3 gate: pass (N-full retry 0, Chrome pool 103/5 skipped, heavy 4, canary 5; Firefox pool 102/6 skipped, heavy 4, canary 5); review loop converged in 3 Codex rounds plus Opus; #285 (the wallet fix alone) green.
