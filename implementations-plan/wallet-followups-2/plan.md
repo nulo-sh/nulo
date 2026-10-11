@@ -253,7 +253,7 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 - Pass criteria: all exit 0. Proof of red: with the base `useLogFilters.ts`, the scan test fails and names `price`, `price-client`, `incoming-transfer`, `incoming-transfer-client`, `operation-journal`, `operation-journal-client`, `legal-acceptance`, `legal-acceptance-client`, `account-integrity-coordinator` and `profile-deletion-coordinator`, and nothing else.
 - Layers: lint, typecheck, unit.
 
-### Phase 3: #289, Clear logs keeps the window live ✗
+### Phase 3: #289, Clear logs keeps the window live ✓
 
 1. Change `handleClearLogs` in `LogsViewer.vue` as in § Architecture.
 2. In `LogsViewer.test.ts`, give the log-viewer client stub a real `EventHandler` for `onLog`, spied with `vi.spyOn(handler, "add")` so `mountOn` still reads the callback, and a `clearLogs` handle in `H`.
