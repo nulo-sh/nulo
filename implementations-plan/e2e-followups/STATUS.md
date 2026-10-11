@@ -12,3 +12,4 @@
 - 2026-10-11: round 5 (resumed Codex): approve; plan v5 final, committed on the worktree branch, awaiting orchestrator approval.
 - 2026-10-11: implementer started arc 1 at 8d963db (orchestrator: OA-1 = A, Phase 1.5 joins arc 1; D-orch-2, D-orch-3 recorded).
 - 2026-10-11: Phase 1.1 gate pass: lint, typecheck:all, guard test 13/13 (red on base 9/13), test 11125, ci-gating 480, shellcheck, runner refuses before ports. Deviation D14 (watch read as a file: Bun's node shim drops `-w`).
+- 2026-10-11: Phase 1.2 gate: lint, typecheck, unit 7/7, test 11132, probe Chrome pass (red on base); probe Firefox red at base and head (Firefox BiDi skips extension contexts, Bug 1755014): D15, issue #281, panel agreed.

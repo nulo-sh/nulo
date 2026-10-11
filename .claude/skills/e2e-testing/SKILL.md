@@ -439,7 +439,8 @@ assertion; drive the rest of the flow with the ordinary helpers.
 - **`consoleErrors` is structurally blind to app `console.*`.** The console sniffer, first script in
   every extension page, reroutes the sniffed `console.*` methods to the worker's LoggerService, so
   `page.on("console")` sees only browser-emitted entries and the sniffer's saved originals
-  (`console._log`). `pageerror` is reliable for uncaught throws and rejections. `readSwLogTrail`
+  (`console._log`). `pageerror` is reliable for uncaught throws and rejections on Chrome; on Firefox
+  an extension page emits neither `pageerror` nor `console` (#281, FIREFOX.md). `readSwLogTrail`
   (`fixtures/journal.ts`, `nulo:logs`, 2s flush debounce, bounded) reads the worker's log ring — but
   that flush is gated on `developerMode`, which e2e profiles do not enable, so it returns an empty
   trail unless the test turned Developer Mode on first (the toggles on `#/popup/settings/developer`,
@@ -693,8 +694,8 @@ worker that refused to die.
 
 ### Evidence channels
 
-- `pageerror` (uncaught throws, unhandled rejections) and `readSwLogTrail` (poll past the 2s
-  debounce; empty means not retained, not nothing happened).
+- `pageerror` (uncaught throws, unhandled rejections; Chrome only for an extension page, #281) and
+  `readSwLogTrail` (poll past the 2s debounce; empty means not retained, not nothing happened).
 - Do not rely on console output from a passing test reaching you. Probe by writing uniquely-keyed
   records to `chrome.storage` from inside the extension and dumping them to a real-disk JSONL with
   `appendFileSync`; test the dump path with one no-op probe first. Probe files are
@@ -778,7 +779,7 @@ the sanctioned response.
 | 20 | `"Client disconnected"` from `deleteProfile` ~800ms after a real mid-restore kill | messaging client flipped to connected on a doomed port; the gap-issued call was rejected client-side | rollback gated on the worker's liveness advancing | fixed, `e2e-deflake` |
 | 21 | `pxe op rejected: profile <id> is deleted (generation superseded)` after delete + same-id re-import | offscreen lifecycle map conflated the erased incarnation with its successor | fall-through for `deleted(different-gen)`; `profile-reimport-matrix` pins it | fixed upstream |
 | 22 | `importFullBackup` 300s lapse (`backup-restore-sw-restart` designed retry) | one undifferentiated wait spanning restore + activation | labelled stage trajectory on lapse; no stage warranted an early-fail window (30 imports measured) | closed, `import-stage-deadlines` |
-| 23 | `consoleErrors` empty on a visibly logged app error | console sniffer (§2) | permanent by design; use `pageerror` + `readSwLogTrail` | closed |
+| 23 | `consoleErrors` empty on a visibly logged app error | console sniffer (§2) | permanent by design; use `pageerror` (Chrome; #281 on Firefox) + `readSwLogTrail` | closed |
 | 24 | deterministic 5 migration reds at ~90s locally, green in CI | unarmed dist (`VITE_NULO_E2E_*` flags) | markers + stamp preflight + `agent.sh` assertions | fixed |
 | 25 | `foundryup` HTTP 502 in CI setup | unpinned, unconsumed toolchain step | step deleted; bundled toolchain asserted in `setup-aztec` | fixed, `e2e-deflake` |
 | 26 | random early-stage timeouts in unrelated tooling after many local runs | sandbox datadir on tmpfs pinned RAM via deleted-but-open LMDB files | datadir on real disk + `e2e:reap` | fixed |

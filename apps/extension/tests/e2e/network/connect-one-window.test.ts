@@ -4,6 +4,7 @@ import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
+import { pageErrorOf } from "../fixtures/page-errors"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveVerify, rejectCapabilities, waitForPopup } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
@@ -102,9 +103,9 @@ test.skipIf(!aztecConfig)(
 		await clickByTestId(dapp, "pg-btn-connect")
 		const page = await discoverP
 		const pageErrors: string[] = []
-		// "Client disconnected" is the benign port-close cascade the fixtures filter too.
-		page.on("pageerror", (err) => {
-			if (!(err as Error).message?.includes("Client disconnected")) pageErrors.push(String(err))
+		page.on("pageerror", (payload) => {
+			const err = pageErrorOf(payload)
+			if (err) pageErrors.push(String(err))
 		})
 		const connectWindow = await page.evaluate(async () => (await chrome.windows.getCurrent()).id)
 		await page.waitForFunction(
