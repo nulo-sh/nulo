@@ -26,3 +26,9 @@
 - 2026-10-10 — phase 2.1: probe 461 errors (all tests/e2e, 0 src), fixed type-only to 0 (13/14 files emit-identical, 1 drops a dead test() arg); gate wired into typecheck; probes a-e bite; scan deleted (d3da6fa).
 - 2026-10-10 — phase 2.1 gate: pass (lint, typecheck:all, audit:vue 11,061, ci-gating 480, test:all; smoke retry 0 Chrome 201/10 skipped, Firefox 201/10; N-full Chrome pool 103 files/156 tests, heavy 4/24; Firefox network 4 files/8 tests). Codex r1 approve with fixes, r2 approve; Opus approve with fixes; #275 filed. Head 4bd309e + docs.
 - 2026-10-10 — merged origin/dev f60125e (#276); gate 239 files clean; fast gates and the edited smoke files green on the merged head; PR next.
+- 2026-10-10 — arc 3: branched e2e-harness-gaps-coverage off dev af4afcc (D-orch-12/13 recorded); arc 4 waits on #279.
+- 2026-10-10 — phase 3.1 gate: pass (red on base: nonce refused at simulating; green retry 0 Chrome 2/2, Firefox 2/2; lint, typecheck:all, test 11,113).
+- 2026-10-11 — phase 3.2 gate: pass (sponsored NO_FROM red until the buildNoFrom fix cc844c1, D23-D25; noFrom retry 0 Chrome 3 runs 3/3, Firefox 3/3; mutex-bypass red recorded; lint, typecheck:all, test 11,114).
+- 2026-10-11 — phase 3.3 rows: pass (pg-select-transferFn; tx-transfer-row retry 0 Chrome 4/4, Firefox 4/4; delegated file red locally: PublicChecks not deployed, I2 refuted, gate kept, Refs #165; #280 filed; lint, typecheck:all, test 11,114). N-full next, after the review loop.
+- 2026-10-11 — phase 3.3 gate: pass (N-full retry 0, Chrome pool 103/5 skipped, heavy 4, canary 5; Firefox pool 102/6 skipped, heavy 4, canary 5); review loop converged in 3 Codex rounds plus Opus; #285 (the wallet fix alone) green.
+- 2026-10-11 — C13 = A (D-orch-14): merged origin/dev 27af8d7 clean as 11dae90; fast gates exit 0 (lint, typecheck:all, test:all, test:ci-gating 517, check:plans, lint:actions); retry 0 Chrome and Firefox: noFrom 3/3, multicall 2/2, transfer-row 4/4 each; #293 leaves draft.
