@@ -168,7 +168,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		try {
 			await this.sweepOrphanImportedKeys()
 		} catch (err) {
-			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "imported-key orphan sweep failed", String(err))
+			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "imported-key orphan sweep failed", { error: err })
 		}
 	}
 
@@ -649,12 +649,12 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		try {
 			await this.profileService.persistIntegrityBlockIfLive(record)
 		} catch (writeError) {
-			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "integrity block persist failed", String(writeError))
+			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "integrity block persist failed", { error: writeError })
 		}
 		try {
 			await this.profileService.lockProfileIfActive(profileId)
 		} catch (closeError) {
-			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "integrity session close failed", String(closeError))
+			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "integrity session close failed", { error: closeError })
 		}
 		throw new AccountAddressInconsistencyError(undefined, { profileId, chainId, accountIndex })
 	}

@@ -465,8 +465,10 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 				getL1ChainIdStored: async () => 1,
 			}),
 		)
-		services.add(new AccountService(new LoggerStore(new ConfigStore()), api))
+		const logger = new LoggerStore(new ConfigStore())
+		services.add(new AccountService(logger, api))
 		await services.start()
+		return logger
 	}
 
 	test("a TRUE orphan key row (no account key at all) is reaped — proves the sweep ran", async () => {
@@ -490,6 +492,21 @@ describe("AccountService.sweepOrphanImportedKeys", () => {
 		const raw = await api.storage.local.get(null)
 		expect(raw[IMPORTED_KEY("0xhidden")]).toBeDefined() // survived
 		expect(raw[IMPORTED_KEY("0xorphan")]).toBeUndefined() // control reaped
+	})
+
+	test("a sweep that throws is logged as the error's projection, and service start still completes", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		await api.storage.local.set({ [IMPORTED_KEY("0xorphan")]: JSON.stringify({ sealed: "AAAA" }) })
+		api.storage.local.remove = async () => {
+			throw new Error("storage unavailable")
+		}
+		const logger = await boot(api)
+		const logged = logger
+			.get(1000)
+			.filter((line) => line.data[0] === "imported-key orphan sweep failed")
+			.map((line) => line.data[1])
+		expect(logged).toEqual([{ error: { name: "Error", message: "storage unavailable" } }])
 	})
 
 	test("a non-string-VALUED account row keeps its imported-key row alive (the getKeys discriminator)", async () => {

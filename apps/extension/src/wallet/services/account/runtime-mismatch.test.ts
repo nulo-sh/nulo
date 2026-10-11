@@ -16,7 +16,7 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { svc } from "../composition-harness"
 import { AccountService } from "./service"
 
-async function build(opts: { failBlockWrite?: boolean } = {}) {
+async function build(opts: { failBlockWrite?: boolean; closeError?: Error } = {}) {
 	const api = new FakeBrowserApi()
 	api.reset()
 	if (opts.failBlockWrite) {
@@ -35,13 +35,17 @@ async function build(opts: { failBlockWrite?: boolean } = {}) {
 	const services = new ServiceCollection()
 	services.add(
 		svc(ProfileService.name, {
-			lockProfileIfActive: async (id: string) => void locked.push(id),
+			lockProfileIfActive: async (id: string) => {
+				locked.push(id)
+				if (opts.closeError) throw opts.closeError
+			},
 			// Stands in for the real locked, still-exists-guarded writer (the profile is "live" here).
 			persistIntegrityBlockIfLive: async (record: Parameters<typeof repo.set>[0]) => repo.set(record),
 		}),
 	)
 	services.add(svc(NetworkService.name, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
-	const accounts = new AccountService(new LoggerStore(new ConfigStore()), api)
+	const logger = new LoggerStore(new ConfigStore())
+	const accounts = new AccountService(logger, api)
 	services.add(accounts)
 	await services.start()
 	// biome-ignore lint/suspicious/noExplicitAny: reach the extracted private handler under test
@@ -52,8 +56,15 @@ async function build(opts: { failBlockWrite?: boolean } = {}) {
 		s: string,
 		d: string,
 	) => Promise<never>
-	return { raise, repo, locked }
+	return { raise, repo, locked, logger }
 }
+
+/** What each line logged under `message` passed after it. */
+const loggedAfter = (logger: LoggerStore, message: string) =>
+	logger
+		.get(1000)
+		.filter((line) => line.data[0] === message)
+		.map((line) => line.data[1])
 
 describe("AccountService runtime mismatch (raiseRuntimeMismatch)", () => {
 	test("persists the durable block, closes the mismatching profile, and throws the typed error", async () => {
@@ -71,10 +82,21 @@ describe("AccountService runtime mismatch (raiseRuntimeMismatch)", () => {
 	})
 
 	test("fail-closed: even when the block PERSIST fails, the throw + session close still happen", async () => {
-		const { raise, locked } = await build({ failBlockWrite: true })
+		const { raise, locked, logger } = await build({ failBlockWrite: true })
 		await expect(raise("p9", 0, 0, "0xa", "0xb")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
 		// The persist failure is logged and swallowed, but the session close still runs and the
 		// typed error still propagates — the caller can never end up with a usable mismatched session.
 		expect(locked).toEqual(["p9"])
+		expect(loggedAfter(logger, "integrity block persist failed")).toEqual([{ error: { name: "Error", message: "storage full" } }])
+	})
+
+	test("fail-closed: a session close that throws is logged as the error's projection, and the typed error still propagates", async () => {
+		const { raise, repo, locked, logger } = await build({ closeError: new Error("session store unavailable") })
+		await expect(raise("p9", 0, 0, "0xa", "0xb")).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+		expect(await repo.isBlocked("p9")).toBe(true)
+		expect(locked).toEqual(["p9"])
+		expect(loggedAfter(logger, "integrity session close failed")).toEqual([
+			{ error: { name: "Error", message: "session store unavailable" } },
+		])
 	})
 })
