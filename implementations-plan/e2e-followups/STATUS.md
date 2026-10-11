@@ -18,3 +18,4 @@
 - 2026-10-11: Phase 1.5 gate pass: audit:vue; unit tests red on base (4) and green at head; diagnostic 0 of 36 stuck (4 of 12 at base); smoke navigation Chrome 6/6, Firefox 6/6 at retry 0.
 - 2026-10-11: Phase 1.6 static gates pass on the dev merge (3b93a85). Audit round 1: Codex approve (1 Low), Opus approve (6 Low); all accepted; `--no-json` guard pass reproduced and closed; Phase 1.1 gate rerun green.
 - 2026-10-11: Phase 1.6 gate pass: smoke Chrome 48 files/209 tests, Firefox 50 files/209 tests; network 5 files Chrome 9/9, Firefox 9/9; all at retry 0. Codex round 2 and 3 approve; loop converged.
+- 2026-10-11: second dev merge (d868181: #285-#287; overlap settings/index.vue, CLAUDE.md, no conflict). Static gates, build, diagnostic 0/36, navigation Chrome 6/6 and Firefox 6/6 at retry 0; Codex post-merge check approve.

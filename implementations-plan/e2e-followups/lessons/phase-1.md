@@ -41,3 +41,4 @@
 - Audit round 1 ran on 3b93a85 alongside the smoke (Codex approve with one Low, Opus approve with six Low); the fixes (4ddb01a) reran Phase 1.1's gate; round 2 (resumed Codex) approved with one Low wording fix (b77baa3).
 - Network gate, proverless, retry 0, at b77baa3: `connect-one-window`, `account-balance-orphans`, `imported-account-execution`, `backup-import-stalled-network`, `tokens`: Chrome 9/9, Firefox 9/9.
 - Audit round 2 (resumed Codex): approve, one Low wording fix (b77baa3). Round 3 (resumed, after the gate): approve, nothing material. Converged.
+- Second `dev` merge (d868181): `settings/index.vue` merged cleanly (dev's `useConfigRead` change sits apart from the observer). Reran on the merge: lint, typecheck:all, test (11186), test:all, test:ci-gating (517), check:plans, lint:actions, build, the diagnostic (0 of 36), navigation smoke Chrome 6/6 and Firefox 6/6. Codex post-merge check: approve.

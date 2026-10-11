@@ -442,6 +442,11 @@ The planner also removed a stray file the Opus leg's probe wrote outside the wor
 
 **Codex** (session `01a1288f-55f5-7d41-b881-ecd9750e6635`, account alejo-gmail): `approve`; "No material findings remain on the whole arc." The loop converged in three rounds (rounds 2 and 3 found nothing material).
 
+
+### Post-convergence check after the second `dev` merge (d868181)
+
+`dev` moved (#285, #286, #287); the merge overlapped this arc in `settings/index.vue` (the hub's reads moved to `useConfigRead`, the observer line untouched) and `CLAUDE.md` (other paragraphs). Phase 1.5's gate and the static gates reran green on the merge. **Codex** (resumed session `01a1288f-55f5-7d41-b881-ecd9750e6635`): `approve`, "No new material finding; the prior verdict stands."
+
 ## Seeds
 
 Draft until the orchestrator approves; no ELI5 is produced (orchestrator-owned).
