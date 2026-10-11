@@ -29,7 +29,6 @@ Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`)
 - **A Chrome-only file is a capability statement, not a quarantine.** The set is two files: `backup-restore-sw-restart` kills the background under an open extension page (Firefox leaves an event page running while one is open), and `import-dead-rpc` redirects over CDP Fetch. The two execution canaries run on both browsers — the passkey one moves its post-kill ceremony to a fresh popup where the driver's `credentialOutlivesPage` says the credential survives the anchor page. Adding a Chrome-only file is the owner's call.
 - **`bun run typecheck` checks the e2e tree** (`apps/extension/tsconfig.e2e.json`): it loads Node's types and no Bun types, so a `Bun` global is an error, as it would be at run time. A call form chrome-types leaves out goes in `tests/e2e/chrome-api.d.ts`, never under a `@ts-` directive. Types prove no timing: a spec still has to run.
 - **Red on Firefox only?** Read `document.visibilityState` and `document.hasFocus()` in the page before touching a fixture.
-- **Extension-page errors reach `pageErrors` and `consoleErrors` on Firefox through the driver's relay** (`fixtures/browser/firefox-page-errors.ts`, FIREFOX.md), proved on Firefox 153.0.4 by `page-error-capture.test.ts`. It calls two Firefox internals and fails the launch when either is gone. **A Firefox bump whose arming check or capture test fails is a hold on the bump**, never a `skipIf`, a soft-fail or a removed assertion. An error Firefox now records is a real failure: read its stack URL and text, never filter it.
 - **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call made in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`passkey-toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
 
 ## 1. Run it
@@ -441,8 +440,8 @@ assertion; drive the rest of the flow with the ordinary helpers.
 - **`consoleErrors` is structurally blind to app `console.*`.** The console sniffer, first script in
   every extension page, reroutes the sniffed `console.*` methods to the worker's LoggerService, so
   `page.on("console")` sees only browser-emitted entries and the sniffer's saved originals
-  (`console._log`). `pageerror` is reliable for uncaught throws and rejections on both browsers; on
-  Firefox the driver relays them and native console errors (FIREFOX.md). `readSwLogTrail`
+  (`console._log`). `pageerror` is reliable for uncaught throws and rejections on Chrome; on Firefox
+  an extension page emits neither `pageerror` nor `console` (#281, FIREFOX.md). `readSwLogTrail`
   (`fixtures/journal.ts`, `nulo:logs`, 2s flush debounce, bounded) reads the worker's log ring — but
   that flush is gated on `developerMode`, which e2e profiles do not enable, so it returns an empty
   trail unless the test turned Developer Mode on first (the toggles on `#/popup/settings/developer`,
@@ -696,7 +695,7 @@ worker that refused to die.
 
 ### Evidence channels
 
-- `pageerror` (uncaught throws, unhandled rejections; on Firefox through the driver's relay) and
+- `pageerror` (uncaught throws, unhandled rejections; Chrome only for an extension page, #281) and
   `readSwLogTrail` (poll past the 2s debounce; empty means not retained, not nothing happened).
 - Do not rely on console output from a passing test reaching you. Probe by writing uniquely-keyed
   records to `chrome.storage` from inside the extension and dumping them to a real-disk JSONL with
@@ -781,7 +780,7 @@ the sanctioned response.
 | 20 | `"Client disconnected"` from `deleteProfile` ~800ms after a real mid-restore kill | messaging client flipped to connected on a doomed port; the gap-issued call was rejected client-side | rollback gated on the worker's liveness advancing | fixed, `e2e-deflake` |
 | 21 | `pxe op rejected: profile <id> is deleted (generation superseded)` after delete + same-id re-import | offscreen lifecycle map conflated the erased incarnation with its successor | fall-through for `deleted(different-gen)`; `profile-reimport-matrix` pins it | fixed upstream |
 | 22 | `importFullBackup` 300s lapse (`backup-restore-sw-restart` designed retry) | one undifferentiated wait spanning restore + activation | labelled stage trajectory on lapse; no stage warranted an early-fail window (30 imports measured) | closed, `import-stage-deadlines` |
-| 23 | `consoleErrors` empty on a visibly logged app error | console sniffer (§2) | permanent by design; use `pageerror` + `readSwLogTrail` | closed |
+| 23 | `consoleErrors` empty on a visibly logged app error | console sniffer (§2) | permanent by design; use `pageerror` (Chrome; #281 on Firefox) + `readSwLogTrail` | closed |
 | 24 | deterministic 5 migration reds at ~90s locally, green in CI | unarmed dist (`VITE_NULO_E2E_*` flags) | markers + stamp preflight + `agent.sh` assertions | fixed |
 | 25 | `foundryup` HTTP 502 in CI setup | unpinned, unconsumed toolchain step | step deleted; bundled toolchain asserted in `setup-aztec` | fixed, `e2e-deflake` |
 | 26 | random early-stage timeouts in unrelated tooling after many local runs | sandbox datadir on tmpfs pinned RAM via deleted-but-open LMDB files | datadir on real disk + `e2e:reap` | fixed |

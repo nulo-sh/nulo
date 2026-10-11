@@ -8,7 +8,6 @@ import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
-import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
 import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
@@ -120,7 +119,6 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 			// it would outlive every release unnoticed, so that is a launch failure, not a later leak.
 			if (ownedProcesses(marker).length < 2)
 				throw new Error("Firefox did not inherit the launch marker, so teardown could not own it")
-			await armPageErrorRelay(session, extensionPath)
 		} catch (err) {
 			await abandonSession(session, record, err)
 		}
@@ -129,27 +127,18 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 		const { browser } = attachment
 		contexts.set(browser, { session, profileDir, addonId })
 		const stopWatching = watchForSilentCloses(session, attachment)
-		let closing: Promise<void> | undefined
 		return {
 			browser,
-			// Once: the relay's state is readable only while the session is open, and a second close
-			// is the same teardown, so it answers with the first one's outcome.
-			close: () => {
-				closing ??= (async () => {
-					stopWatching()
-					let relay: string | undefined
-					try {
-						relay = await checkPageErrorRelay(session)
-						// Disconnect first: the BiDi transport is a client of a session the classic channel
-						// owns, and ending the session under it produces a socket error on the way out.
-						await browser.disconnect().catch(() => {})
-						await session.close().catch(() => {})
-					} finally {
-						await releaseLaunch(record)
-					}
-					if (relay) throw new Error(`Firefox page-error relay: ${relay}`)
-				})()
-				return closing
+			close: async () => {
+				stopWatching()
+				try {
+					// Disconnect first: the BiDi transport is a client of a session the classic channel
+					// owns, and ending the session under it produces a socket error on the way out.
+					await browser.disconnect().catch(() => {})
+					await session.close().catch(() => {})
+				} finally {
+					await releaseLaunch(record)
+				}
 			},
 		}
 	} catch (err) {
