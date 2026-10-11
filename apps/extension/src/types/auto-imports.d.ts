@@ -108,6 +108,7 @@ declare global {
   const computeMaxFee: typeof import('../utils/fee-estimation').computeMaxFee
   const computed: typeof import('vue').computed
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
+  const contactListReducers: typeof import('../utils/entity-list').contactListReducers
   const contactNameKey: typeof import('../utils/contact-name').contactNameKey
   const copyFor: typeof import('../utils/presto-ui-state').copyFor
   const copyToClipboard: typeof import('../utils/clipboard').copyToClipboard
@@ -725,6 +726,7 @@ declare module 'vue' {
     readonly computeMaxFee: UnwrapRef<typeof import('../utils/fee-estimation')['computeMaxFee']>
     readonly computed: UnwrapRef<typeof import('vue')['computed']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
+    readonly contactListReducers: UnwrapRef<typeof import('../utils/entity-list')['contactListReducers']>
     readonly contactNameKey: UnwrapRef<typeof import('../utils/contact-name')['contactNameKey']>
     readonly copyFor: UnwrapRef<typeof import('../utils/presto-ui-state')['copyFor']>
     readonly copyToClipboard: UnwrapRef<typeof import('../utils/clipboard')['copyToClipboard']>

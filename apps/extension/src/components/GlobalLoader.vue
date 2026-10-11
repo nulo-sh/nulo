@@ -31,7 +31,7 @@ const message = computed(() =>
 	justify-content: center;
 	align-items: center;
 
-	background-color: rgba(10, 9, 8, 0.85);
+	background-color: var(--scrim-loader);
 	z-index: 9999;
 }
 
