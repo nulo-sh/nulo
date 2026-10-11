@@ -25,3 +25,20 @@ Every consult and its verdict, in order. Failed consults are logged too.
 - Resume 1: reject (the per-op `fetching` → `degraded` rule owes before an ensure's observer adopts; a stranded-debt shape fails C1 on the fixed store). Accepted; D9 became the tx-settle `expectGasReady` set, status only.
 - Resume 2: approve. No fixed-store counterexample; the pinned tape still fails the base store.
 - Lesson for later planners: a fuzz owe rule must model the store's observers, not its failure commits; three tries at a failure-shaped rule each over- or under-owed.
+
+## 2026-10-11: implementation, curation applied
+
+Applied to `origin/dev`'s `lessons.md` (unchanged since 29d9e49), the ten edits of plan § Phase 0, nothing else. 8,164 → 7,926 B; every link kept (the link diff prints nothing); 10 lines changed.
+
+1. `bun run --parallel` leg: "so `audit:vue` can exit 130" → "(exit 130)". The exit code stays; `audit:vue` is named in the evidence.
+2. `bun run lint` cap: dropped ", so a new error can hide". It follows from "only the first 20".
+3. `vue-tsc`: "(149 of the extension's 205)" → "(most of the extension's)". The count was stale (150 of 207 at 29d9e49) and would go stale again.
+4. Never skip required aggregators: "(list runs, read the head, re-read per cancel)" → ", re-reading the head before each cancel". The re-read rule stays; the listing order is in the evidence and `CI.md` § Concurrency.
+5. `PopupManager`: the same two rules (gate setup on `show` or `v-if`; reset held secrets on a profile-id change) in fewer words.
+6. `EventHandler.invoke`: dropped "event-chained cleanup is fire-and-forget", which is what a dropped promise means.
+7. Error message text: dropped ", never the message"; "log a fixed category" is the instead.
+8. MAC binding: the three rules (key on the storage key, refuse never self-heal, check an artifact against the original class id) in one sentence.
+9. `pgrep -f`: "so a teardown can kill itself" folded into "own"; the `$$`/`$PPID` and `signalCode` rules stay.
+10. Puppeteer mobile emulation: the same check stated once.
+
+No retirement (D1, D-orch-4): every dead end is still reachable. The orchestrator accepted the lossless 7,926 B and withdrew the 7 KiB target.

@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-2
 tier: mid
-status: planned, panel approved; awaiting orchestrator approval
+status: arc-1 in progress (orchestrator approved the plan at 79217e4)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -203,7 +203,7 @@ Why the main plan wins: the outline lists a row for a source nothing writes, lea
 
 Every phase commits on `worktree-wallet-followups-2`, signed, with a conventional lower-case subject and the trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Run commands from the worktree root unless a step says otherwise.
 
-### Phase 0: lessons curation ✗
+### Phase 0: lessons curation ✓
 
 Warning: another lane may land lessons first. Before the edit, run `git fetch origin dev` and apply the table to `origin/dev`'s `lessons.md`; carry any new entry over unchanged.
 
@@ -366,6 +366,9 @@ The PR body carries before/after screenshots of Send after a delete and of the l
 | D8 | Price service's `"PriceService"` helper | Left to OA-1 | `this.name` in the arc: changes the CSV source column, past the record (Codex round 1) | Codex round 1 |
 | D9 | Fuzz model of the new observer | A tx-settle under retry cover adds the key to `expectGasReady`, which must end the drain `ready`; C1 reads status | Ensure-only (no random-tape requirement after a tx-only failure, Codex round 1); owe on a failed read keyed on `forceRefresh` (retry reads pass it too), on mock rejections (owes for a late rejection, misses timeouts) or on a `fetching` → `degraded` transition (owes before an ensure's observer adopts, final Codex pass) | Codex and Opus round 1; final Codex pass, two rounds |
 | D10 | Coordinator lines passing `String(error)` | Out of the arc; an issue at delivery | Fix in the arc (a logging-policy change outside these issues) | Codex round 1 |
+| D-orch-2 | OA-2 | (a): the store retries. The gas card's refresh dot over the dimmed figure and its un-dim when a read lands are states the card already has, inside the #291 record | (b), the card-only fallback: not built | orchestrator, 2026-10-11 |
+| D-orch-3 | OA-1 | Its option (a) ships in arc-1 for the lines only: each line from a source that is not a registered service is filed under the service that owns it (Phase 2b), inside the #288 record (every line visible under existing rows, no new row or label). The five rows that match nothing stay; their removal is the owner's call, carried by the `owner-decision` issue opened at delivery | (b) new rows and (c) always-shown sources: new labels or a filter that cannot hide; (d) as today: lines keep vanishing | orchestrator, 2026-10-11 |
+| D-orch-4 | Phase 0 result | The lossless 7,926 B with no retirement stands; the 7 KiB target is withdrawn | Retiring a reachable dead end to make room | orchestrator, 2026-10-11 |
 
 ## Audit verdicts
 
