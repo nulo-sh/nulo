@@ -337,7 +337,7 @@ Added by the orchestrator's D-orch-3 after Phase 2; built after Phases 3 and 4, 
 - Pass criteria: all exit 0; the fuzz run at 2,000 runs finds no counterexample; the co-mount case, the two new store cases and the pinned tape under the new set were each seen red on the base store; the release control passes on both.
 - Layers: lint, typecheck, unit, component, property.
 
-### Phase 5: final gate ✗
+### Phase 5: final gate ✓
 
 1. Merge `origin/dev` into the branch if it moved, and read what changed in `implementations-plan/index.md` and `lessons.md`.
 2. Run every command below on the final head.
