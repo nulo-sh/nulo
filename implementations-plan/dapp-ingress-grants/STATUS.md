@@ -13,3 +13,9 @@
 - 2026-10-10: final head 089a541: audit:vue 0 (extension 10742 passed), test:all 0; smoke run 1 void (unarmed build, stopped); smoke run 2 on the armed source build in progress; network waits for a free host.
 - 2026-10-10: merged origin/dev (index.md conflict resolved); merged head 45ea5c7: lint 0, typecheck:all 0, test:all 0. Draft PR #254 opened; network gate not run locally (host held through two 90-min waits by e2e-harness-gaps); CI network lane stands in until the host frees.
 - 2026-10-10: gate 1.3 green: smoke (local, armed build, Chrome, retry 0) 47 files / 198 tests passed on 45ea5c7; network files green in PR #254's required CI lanes on 45ea5c7, Chrome and Firefox, retry 0 (local run held by G1, D-impl-6).
+- 2026-10-11: arc 2 started on `dapp-ingress-grants-arc2` off `origin/dev` 27af8d7; Codex design consult on page 2's four answers: change before building (capacity keeps its row, an explicit lock error, the page owns the 30 s close, the session_ended cause goes to OWNER-ASKS).
+- 2026-10-11: gates 2.1 and 2.2 green (lint, typecheck:all, wallet-core 278, extension-messaging 385, wallet-bridge 681, root test 11258); first root run red on 13 stale pins, moved with the behaviour. Commit 625e083.
+- 2026-10-11: gate 2.3 green (lint, typecheck:all, root test 11265). Commit 3f59b27.
+- 2026-10-11: gate 2.4 green (lint, typecheck:all, root test 11276). Commit 579006b.
+- 2026-10-11: gate 2.5 green (lint, root test 11277). Commit 5909783.
+- 2026-10-11: gate 2.6 green (lint, typecheck:all, root test 11282). Commits a1a9593, 4d56391. Gate 2.7 Chrome network run started.

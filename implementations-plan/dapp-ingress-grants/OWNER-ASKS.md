@@ -24,6 +24,8 @@ Two of them qualify a signed proposal rather than add to it: item 3 (P2-06) and 
 
 **What ships now.** A. Arc 2 then says `Refs #83` and the close-out moves these five to a new `owner-decision` issue.
 
+**Answer (page 2, 2026-10-11): C.** Built in arc 2 for four of the five: the lock files as `session_ended`; the profile-binding refusal, the unserved network and the missing account file as `wallet_refused` and read "Refused before sending" / "The wallet refused this request before anything was signed. Nothing was sent." The fifth, too many sends waiting, cannot carry that line truthfully: item 9.
+
 ## 2. #86: refused calls the wallet does not resolve read "Transaction" (arc 2)
 
 **Surface.** History card title, journal title and Method row of a refused app call.
@@ -38,6 +40,8 @@ Two of them qualify a signed proposal rather than add to it: item 3 (P2-06) and 
 
 **What ships now.** A.
 
+**Answer (page 2, 2026-10-11): A** (confirm list). Built in arc 2.
+
 ## 3. #124: what sits under the "Connection request expired" overlay (arc 2)
 
 **Surface.** The connect window after Allow, when its wait expires.
@@ -51,6 +55,8 @@ Two of them qualify a signed proposal rather than add to it: item 3 (P2-06) and 
 **Recommendation.** A. Before #124 merges, a manual check on Chrome and on Firefox (the app page paused in DevTools right after Allow, so its key exchange never starts and the request expires) records whether the page stays loaded, what sits under the overlay, and that OK closes the window. The automated tests prove the wallet's expiry logic, not what the browser does with the navigation.
 
 **What ships now.** A where it holds. B, on a browser that reloads, is beyond the signed proposal: #124's phase merges with it only if this answer says B is acceptable; otherwise that phase is held until a fix that keeps A.
+
+**Answer (page 2, 2026-10-11): approving #124 covers both.** The check is now automated on both browsers (`session-tabClose.test.ts`, the stalled-handshake case), which logs whether the page stayed loaded. A page that loads already expired skips the live-request start, so it never reaches "Something went wrong": the overlay sits over the connect page without the app's name or network (over nothing while the wallet is locked).
 
 ## 4. #199: a non-canonical chainInfo at discovery gets no answer, not INVALID_PARAMS (arc 3)
 
@@ -111,6 +117,8 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 
 **What ships now.** A.
 
+**Answer (page 2, 2026-10-11): B**, "the overlay also closes by itself after a fixed time (for example 30 seconds)". Built in arc 2 with 30 seconds.
+
 ## 8. P2-03: the journal detail of a refusal filed as `session_ended` (arc 2)
 
 **Surface.** Journal detail of an app send refused because its session had ended.
@@ -122,5 +130,35 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 - **B.** Give the detail the card's words, for example "Stopped when the wallet locked" / "The wallet locked while this was in progress." (copy to approve). It may not say "Nothing was sent": the same kind also files a lock that lands during execution, which can follow a sent request (H7).
 
 **Recommendation.** B.
+
+**What ships now.** A.
+
+**Answer (page 2, 2026-10-11): B**, with the copy as written. Built in arc 2; item 10 records a cause the copy can misname.
+
+## 9. #83: a send refused because too many are already waiting (arc 2)
+
+**Surface.** History card and journal detail of an app send refused by the waiting-sends cap (`TooManyPendingError`).
+
+**Context.** Item 1's answer gives this cause the shared line "The wallet refused this request before anything was signed. Nothing was sent." The cap is checked only after the approval window, and that window's fee estimate builds and caches a signed request, which can create an authorization witness, so "before anything was signed" can be false. "Nothing was sent" holds. Today the row reads "Transaction failed" / "Reported by app" / "The connected app reported an error.", and the title is the call the person approved.
+
+**Options.**
+- **A.** Keep today's row.
+- **B.** The shared label with a line that drops the signing claim, for example "Refused before sending" / "Too many sends were already waiting. Nothing was sent." (copy to approve).
+
+**Recommendation.** B.
+
+**What ships now.** A.
+
+## 10. P2-03 and item 8: "Stopped when the wallet locked" names a lock that did not happen (arc 2)
+
+**Surface.** History card and journal detail of a send filed as `session_ended`.
+
+**Context.** `session_ended` also files a send stopped by a profile switch, or by unlocking the same profile again, while it ran. The card already read "Stopped when the wallet locked" for those; item 8's answer gives the detail the same words, so both now name a lock in those cases.
+
+**Options.**
+- **A.** Keep the signed copy for every `session_ended` row.
+- **B.** A separate kind for a profile switch, with its own copy (copy to approve).
+
+**Recommendation.** A until a profile switch during a send is common enough to matter.
 
 **What ships now.** A.

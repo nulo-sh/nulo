@@ -1,7 +1,7 @@
 ---
 plan: dapp-ingress-grants
 tier: mid
-status: approved (orchestrator, D-orch-1 and D-orch-2); arc 1 in progress
+status: approved (orchestrator, D-orch-1 to D-orch-5); arc 1 delivered (#254); arc 2 in progress
 issues: "#15, #83, #84, #86, #87, #88, #89, #123, #124, #125, #126, #127, #128, #199, #201, #228"
 driver: claude-code
 claude_model: opus
@@ -257,6 +257,11 @@ Built only through its own deep-tier blueprint, after P2-09 is approved and H1 l
   - Connect window in standby when its reservation expires (P2-06): "Instead of closing at once, the window shows the existing cancelled overlay with its own line, \"Connection request expired\", and OK closes it. A request that expired while still queued never had a window and shows nothing."
   - Home and History while a batched leg waits (P2-08): "A sendTx leg inside a batch gets the same queued row on Home and History that a single sendTx already gets while it waits, with the same copy. No new string." Premise: no such leg can wait today, so nothing renders differently.
   - Playground: none (#128 changes only the error the probe receives).
+  - Page 2's answers to OWNER-ASKS, word for word:
+    - Ask 1 (#83): "**option C**. B, and give the other four one shared label, for example \"Refused before sending\" / \"The wallet refused this request before anything was signed. Nothing was sent.\"" Built for three of the four; the waiting-sends cap keeps today's row (OWNER-ASKS item 9).
+    - Ask 2 (#86): "Under P2-04, a call refused at arrival (…) is never resolved, so its row reads \"Transaction\" even when the app's claimed name was honest; a refusal after the wallet resolved the call shows the resolved name."
+    - Ask 7 (#124): "**option B**. A, and the overlay also closes by itself after a fixed time (for example 30 seconds)." Built with 30 seconds.
+    - Ask 8 (P2-03): "**option B**. Give the detail the card's words: \"Stopped when the wallet locked\" / \"The wallet locked while this was in progress.\" It may not say \"Nothing was sent\"". OWNER-ASKS item 10 records a cause it can misname.
 - **Arc 3**: no wallet screen. P2-07: "No wallet window or notification opens (the Terms sheet may not cover a window route)." The connect window's existing rows show a contract-classes widening (P3-01).
 - **Arc 4**: the verify window and the app-side wait; screens return for sign-off in its own plan.
 - Anything beyond these quotes is in `OWNER-ASKS.md`.
@@ -335,7 +340,7 @@ Warning: until #169 merges (gate G1), only one `e2e:agent` run may run on the ho
 
 Before the first step: read the page 2 answers in each issue's `## Decision` block. Build each item as answered. Skip and record any item answered "as is" (SR3) or "Change".
 
-#### Phase 2.1: a kind per refusal (#83)
+#### Phase 2.1: a kind per refusal (#83) ✓
 
 1. Add `terms_refused` to the union, the runtime table and the doc in `packages/wallet-core/src/jobs/types.ts`.
 2. Map `TermsAcceptanceRequiredError`, `CapabilityNotGrantedError` and `SessionEndedError` in `queuedFailureKind`.
@@ -350,7 +355,7 @@ Before the first step: read the page 2 answers in each issue's `## Decision` blo
 
 **Gate 2.1**: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd packages/wallet-core test`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 2.2: title a refused call by what it calls (#86)
+#### Phase 2.2: title a refused call by what it calls (#86) ✓
 
 1. Add `titlesRow` to `SelectorBindingPolicy`: true for `CALL_BINDING` and `NAMED_CALL_BINDING`, false for `AUTHWIT_CALL_BINDING`.
 2. Under a titling policy, attach the in-process `refusalTitle` to both throws of `assertSelectorBinding` (resolved name on a mismatch, "Transaction" on an unresolvable selector); keep it out of `toPayload()`.
@@ -368,7 +373,7 @@ Before the first step: read the page 2 answers in each issue's `## Decision` blo
 
 **Gate 2.2**: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run --cwd packages/extension-messaging test`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 2.3: name the app's network in the connect window (#123 items 1-2)
+#### Phase 2.3: name the app's network in the connect window (#123 items 1-2) ✓
 
 1. Add `chainId` to `DiscoveryParams` and pass it from `handleDiscovery`.
 2. Resolve the name with `resolveDappChain` in `discover/index.vue`.
@@ -378,7 +383,7 @@ Before the first step: read the page 2 answers in each issue's `## Decision` blo
 
 **Gate 2.3**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, unit, component.
 
-#### Phase 2.4: say why the standby window ends (#124)
+#### Phase 2.4: say why the standby window ends (#124) ✓
 
 1. Inject the window port's `navigate` into `VerifyAdmissionGate` beside `closeWindow`.
 2. On expiry, navigate the standby window to its own discover URL plus `&expired=1`.
@@ -391,14 +396,14 @@ Before the first step: read the page 2 answers in each issue's `## Decision` blo
 
 **Gate 2.4**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, unit, component.
 
-#### Phase 2.5: the batched-send premise (#126)
+#### Phase 2.5: the batched-send premise (#126) ✓
 
 1. Rewrite the comment at `background.ts:508-514`; delete the TODO.
 2. Add a background-level test: a batch holding a `sendTx` leg creates no queued record and answers the batch refusal. No e2e case: the characterization pins already cover the refusal on the wire.
 
 **Gate 2.5**: `bun run lint`; `bun run test`. Pass: exit 0. Layers: lint, unit.
 
-#### Phase 2.6: refuse a non-utility function (#128)
+#### Phase 2.6: refuse a non-utility function (#128) ✓
 
 1. On the base commit, record which throw the probe hits today: grant a simulation utility scope, click the probe, read the error. Log it in `lessons/phase-2.md`.
 2. Refuse a non-utility function in `executeAztecExecuteUtility` before `pxe.executeUtility`.
@@ -546,6 +551,10 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-orch-1, no stack.** Arc 1 opens its own PR against `dev` (`gh pr create --base dev`) with the Delivery table's title; no `gh stack init` or `adopt`. Arcs 2 and 3 branch from arc 1's branch and rebase onto `dev` after it lands (the accessibility-1 precedent the Delivery section already allows).
 - **D-orch-2, arc 1 only.** Nothing of arcs 2, 3 or 4 is built: they wait on decision pages 2 and 3, charter C11, holds H1 and H5 and the OWNER-ASKS answers (all eight asks are on pages 2 and 3). Arc 1's two behaviour changes for rows no writer can produce (a fixed `ValidationError("Malformed capability")` instead of a `TypeError`; a `debug` line instead of `warn` when a malformed grant skips the queued row) are accepted as stated; nothing a screen shows, a string, or an app-facing error for a producible row changes.
 
+- **D-orch-3, #123's split holds.** Items 1-2 are built in arc 2 only if accessibility-1's arc 3 has merged; it has (#241, archived), so they are built.
+- **D-orch-4, no new words beyond the page.** A surface that needs a word page 2 did not sign goes to OWNER-ASKS in "what ships now" form.
+- **D-orch-5, merge before the final gates.** `origin/dev` is merged into the arc's branch before its final gates, never with a union merge.
+
 ### Implementation deviations (arc 1)
 
 - **D-impl-1.** `projectStoredGrants` is exported through `dispatcher.ts`'s existing `export { … } from "./capability-negotiation"` line, which `index.ts` re-exports; the public surface is the one the plan names.
@@ -554,6 +563,18 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-impl-4 (Codex round 1, C1; Opus O2).** The plan's "retire without terminating" on a replaced marker covered only the second liveness gate. Every exit before the stamp (dead on entry, row gone, row of another profile, row read or hash write failing) now skips termination when the map no longer holds the captured marker; an exit after the stamp (the check window failing) still terminates, since a stamped channel must never stay live unverified.
 - **D-impl-6 (Gate 1.3's network step).** Until #169 merges, the host runs one lane's network e2e at a time, and `e2e-harness-gaps` held it through three waits (more than 4.5 h). The seven network files therefore ran in this PR's required CI lanes on the PR head `45ea5c7`, at `NULO_E2E_RETRY: 0`, on Chrome and on Firefox, as part of the whole network suite. All seven passed on both browsers, and neither run had a failed test. The smoke step ran locally, on the armed source build `_extension-smoke-e2e.yml` makes, because the plain `bun run test:e2e -- --retry=0` loads an unarmed build that fails the fixture-arming contract.
 - **D-impl-5 (Opus O3).** The recheck reads `cancelled`, not `isPendingVerificationDead`: a key exchange that crosses the 90 s staleness line during the two storage awaits used to stamp and still does. Staleness is judged once, on entry; a revocation and a slot given back both tombstone.
+
+### Implementation deviations (arc 2)
+
+- **D-impl-7.** The refusal title rides beside the error in a module `WeakMap` (`contract-resolver.ts`), not as a `refusalTitle` field on `ScopeViolationError`: an entry there cannot reach `toPayload()`, a JSON round trip or `normalizeError`, and it also titles the plain `Error("Method not found")`. `packages/extension-messaging/src/errors.ts` is unchanged, and the never-happens pins the plan put in `errors.test.ts` and `jobs/error.test.ts` live in `contract-resolver.test.ts`.
+- **D-impl-8 (Codex design consult, D2).** The lock is classified by an explicit `WalletLockedError` thrown only when no session exists, never by message text: a profile reserved for deletion throws the same "Wallet locked" and is not a lock, so it keeps `popup_bound` (no decision covers it). The message is unchanged for every caller.
+- **D-impl-9.** The three no-account throws in `resolveNetworkAndAccount` become an in-process `NoUsableAccountError` (same messages, never a `WalletError`), so the queued row can name the cause while the app still receives the unclassified constant.
+- **D-impl-10 (Codex design consult, D1).** The waiting-sends cap keeps today's row: it is checked after the approval window, whose estimate can already have signed, so ask 1's shared line would be false for it. OWNER-ASKS item 9 asks for its copy.
+- **D-impl-11 (Codex design consult, D4).** `session_ended` also files a profile switch or a same-profile re-unlock during a send. The signed copy ships as written on the detail; OWNER-ASKS item 10 records the case.
+- **D-impl-12.** Before the request loads, the connect window's line reads "wants to connect on this network": the permission window's own fallback in the same expression, so no new word.
+- **D-impl-13.** The interaction service returns `expiredUrl` (its own discover URL marked `expired=1`, built from the handle's request id) beside the window id, and the gate only navigates to it. The plan had the gate append the flag to a URL it stored.
+- **D-impl-14.** The expiry is proven end to end instead of by a manual check: a busy loop scheduled on the playground's main thread before Allow stalls its half of the handshake on both browsers, so `session-tabClose.test.ts` carries the cancellation control and the expiry itself (overlay, OK closes it, a log line naming same-document or reload).
+- **D-impl-15.** The #128 probe (`sim-methods.test.ts` #25) now asserts the `-32602` envelope instead of "ok or error". On the base build it answered the unclassified constant; the wallet-side throw was PXE's own type check (`Cannot run public function as utility`, moderate confidence: the worker log was not captured).
 
 ### Plan-space search: the competing outline
 
