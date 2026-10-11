@@ -17,7 +17,8 @@ import { REDACTED_KEYS, SECRET_KEY_SUFFIX, URL_KEYS } from "@/wallet/logger/util
  * cannot help: no rule inspects call arguments for identifier content.
  *
  * KNOWN FALSE-NEGATIVE, stated up front (same class as `storage-facade-ban.test.ts`): this is
- * textual. Aliasing (`const p = password`), destructuring, and helper indirection all defeat it.
+ * textual. Aliasing (`const p = password`), destructuring, and helper indirection all defeat it, as
+ * does a logger method it cannot see by name: computed (`log["warn"](`) or destructured (`warn(`).
  * So do the ways of flattening a caught error that name neither a flattener nor `.message` /
  * `.stack` inside the call: a flattener's result bound to a local first, `String(err)`, `${err}`,
  * `err.toString()` and computed access (`err["message"]`).
@@ -82,7 +83,7 @@ const EXTRA_NAMES = [
 const SENSITIVE_NAMES = [...REDACTED_KEYS, ...URL_KEYS, ...EXTRA_NAMES]
 
 /**
- * Log-call openers, every one on a line.
+ * Log-call openers; global, so every call on a line is read.
  *
  * Receiver-agnostic on purpose: the dominant idiom in the packages is `this.logger.log(...)`, and
  * services also reach it as `deps.logger.log` / `this.deps.logError`. Anchoring on the METHOD name
@@ -195,8 +196,9 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 			}
 			if (ch === "\\") {
 				// A nested string inside an interpolation is kept, so bracket keys stay readable, but
-				// its parens are text and would end a call's window early; a plain string is blanked.
-				out += interp.length > 0 ? line.slice(i, i + 2).replace(/[()]/g, " ") : "  "
+				// its delimiters are text: counted, they end a window early or fake an object around
+				// an argument. A plain string is blanked.
+				out += interp.length > 0 ? line.slice(i, i + 2).replace(/[()[\]{}]/g, " ") : "  "
 				i++
 				continue
 			}
@@ -205,7 +207,7 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 				out += ch
 				continue
 			}
-			out += interp.length > 0 ? ch.replace(/[()]/, " ") : " "
+			out += interp.length > 0 ? ch.replace(/[()[\]{}]/, " ") : " "
 			continue
 		}
 		// Comments and regex literals are code-context constructs, so they must be recognised the
@@ -255,8 +257,18 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 	return { code: out, state: { inBlockComment: inBlock, quote, interp } }
 }
 
-/** Keywords after which a `/` can only begin a regex literal, never divide. */
-const REGEX_PRECEDING_KEYWORDS = /\b(?:return|throw|typeof|instanceof|in|of|case|do|else|yield|await|new|delete|void)$/
+/** Keywords after which a `/` can only begin a regex literal, never divide; after a `.` they are property names. */
+const REGEX_PRECEDING_KEYWORDS = /(?<![.$]\s*)\b(?:return|throw|typeof|instanceof|in|of|case|do|else|yield|await|new|delete|void)$/
+
+/** Whether `code` ends with the `)` closing an `if`/`while`/`for`/`with` head, which a regex may follow. */
+function endsControlHead(code: string): boolean {
+	let depth = 0
+	for (let i = code.length - 1; i >= 0; i--) {
+		if (code[i] === ")") depth++
+		else if (code[i] === "(" && --depth === 0) return /\b(?:if|while|for|with)\s*$/.test(code.slice(0, i))
+	}
+	return false
+}
 
 /**
  * A trailing `!` that is TypeScript's postfix non-null assertion rather than logical NOT.
@@ -273,7 +285,7 @@ const POSTFIX_NON_NULL = /[\w$)\]"'`]!$/
  * and the hazard scan: reading a regex as division lets its `)` close the window early, and
  * reading a division as a regex blanks the span up to the next `/`, which can erase the payload.
  * So both halves are modelled — the operator/punctuation set, the keywords that can only precede a
- * regex, and the postfix `++`/`--` that can only precede a division.
+ * regex, a control-flow head's `)`, and the postfix `++`/`--` that can only precede a division.
  */
 function startsRegex(preceding: string): boolean {
 	const trimmed = preceding.replace(/\s+$/, "")
@@ -281,6 +293,7 @@ function startsRegex(preceding: string): boolean {
 	if (trimmed.endsWith("++") || trimmed.endsWith("--")) return false
 	if (POSTFIX_NON_NULL.test(trimmed)) return false
 	if (REGEX_PRECEDING_KEYWORDS.test(trimmed)) return true
+	if (trimmed.endsWith(")")) return endsControlHead(trimmed)
 	return "(,=:[!&|?{};+-*%~^<>".includes(trimmed.slice(-1))
 }
 
@@ -304,16 +317,15 @@ function skipRegex(line: string, start: number): number {
  * Where the log call whose `(` sits at `code[start][from]` closes: its balancing paren's line and
  * column.
  *
- * Ten real multi-line log calls already exist under `wallet/services/**`, and their payloads sit
- * on continuation lines — a line-at-a-time scan sees the opener without a `${…}` and the argument
- * without a call, so it reports nothing.
+ * Multi-line log calls carry their payloads on continuation lines — a line-at-a-time scan sees the
+ * opener without a `${…}` and the argument without a call, so it reports nothing.
  *
  * The window ends AT that paren, not at its line's end: code after a call is not its argument, and
- * a second call on the line gets its own window. That cut is sound only because `stripNoise` has
- * already blanked every paren that is not code. There is deliberately NO line cap: a cap large
- * enough to look safe still truncates a Biome-formatted call with a long metadata object. Running
- * to EOF on unbalanced input is the acceptable opposite: it over-scans loudly, and unbalanced
- * source fails typecheck and lint long before it reaches here.
+ * a second call on the line gets its own window. The cut trusts `stripNoise` to blank every paren
+ * that is not code; one it misreads ends the window on its own line too. There is deliberately NO
+ * line cap: a cap large enough to look safe still truncates a Biome-formatted call with a long
+ * metadata object. Running to EOF on unbalanced input is the acceptable opposite: it over-scans
+ * loudly, and unbalanced source fails typecheck and lint long before it reaches here.
  */
 function callWindow(code: string[], start: number, from: number): { line: number; column: number } {
 	let depth = 0
@@ -712,6 +724,22 @@ describe("log-payload ban (static)", () => {
 			flattened("packages/wallet-core/src/a.ts:1", "password"),
 			flattened("packages/wallet-core/src/b.ts:2", "password"),
 			flattened("packages/wallet-core/src/c.ts:2", "password"),
+		])
+	})
+
+	test("a paren or bracket that is not code never ends a window or fakes an object", () => {
+		const offenders = findLoggedSecrets([
+			{
+				path: "packages/wallet-core/src/a.ts",
+				content: "console.warn(`${(() => { if (ok) /[))]/.test(x); return password })()}`, password)",
+			},
+			{ path: "packages/wallet-core/src/b.ts", content: 'console.warn(x.in / 2, y.replace(/\\)/, ""), password)' },
+			{ path: "packages/wallet-core/src/c.ts", content: 'console.warn(`${row["{{{)"]}`, password, "done")' },
+		])
+		expect(offenders).toEqual([
+			flattened("packages/wallet-core/src/a.ts:1", "password"),
+			flattened("packages/wallet-core/src/b.ts:1", "password"),
+			flattened("packages/wallet-core/src/c.ts:1", "password"),
 		])
 	})
 

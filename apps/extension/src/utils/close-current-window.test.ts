@@ -4,16 +4,17 @@ import { closeCurrentWindow } from "./close-current-window"
 
 type ListFailure = "reject" | "throw" | null
 
-/** A `chrome.windows` for window 7 whose `remove` rejects, as both browsers' does, for a window that
- *  is not open. No handler is attached to any promise it returns, so only the code under test can
+/** A `chrome.windows` for window 7 whose `remove` rejects for a window that is not open, as it does in
+ *  both browsers. No handler is attached to any promise it returns, so only the code under test can
  *  keep a rejection from being collected. */
-function stubWindows(open: number[], fail: { remove?: boolean; list?: ListFailure } = {}) {
+function stubWindows(open: number[], fail: { remove?: "reject" | "throw"; list?: ListFailure } = {}) {
 	const live = new Set(open)
 	const refused: Error[] = []
 	vi.stubGlobal("chrome", {
 		windows: {
 			getCurrent: (_query: unknown, callback: (window: { id: number }) => void) => callback({ id: 7 }),
 			remove: (id: number) => {
+				if (fail.remove === "throw") throw new Error("Extension context invalidated.")
 				if (fail.remove || !live.has(id)) {
 					refused.push(new Error(`Invalid window ID: ${id}`))
 					return Promise.reject(refused.at(-1))
@@ -46,10 +47,12 @@ describe("closeCurrentWindow", () => {
 		expect(error).not.toHaveBeenCalled()
 	})
 
-	test("an open window is removed once", async () => {
+	test("an open window is removed once, inside the callback", async () => {
 		const windows = stubWindows([7])
-		const seen = await collectUnhandledRejections(async () => closeCurrentWindow())
-		expect(windows.live.size).toBe(0)
+		const seen = await collectUnhandledRejections(async () => {
+			closeCurrentWindow()
+			expect(windows.live.size).toBe(0)
+		})
 		expect(windows.refused).toEqual([])
 		expect(seen).toEqual([])
 	})
@@ -60,11 +63,19 @@ describe("closeCurrentWindow", () => {
 		["the listing throws", "throw"],
 	] as const)("a remove that fails unconfirmed still rejects with the browser's error: %s", async (_, list) => {
 		const error = vi.spyOn(console, "error")
-		const windows = stubWindows([7], { remove: true, list })
+		const windows = stubWindows([7], { remove: "reject", list })
 		const seen = await collectUnhandledRejections(async () => closeCurrentWindow())
 		expect(windows.refused).toHaveLength(1)
 		expect(seen).toHaveLength(1)
 		expect(seen[0]).toBe(windows.refused[0])
 		expect(error).not.toHaveBeenCalled()
+	})
+
+	test("a remove that throws synchronously still throws from the callback", async () => {
+		stubWindows([7], { remove: "throw" })
+		const seen = await collectUnhandledRejections(async () => {
+			expect(() => closeCurrentWindow()).toThrow("Extension context invalidated.")
+		})
+		expect(seen).toEqual([])
 	})
 })

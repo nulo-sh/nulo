@@ -1,15 +1,15 @@
 /** Closes the browser window this page runs in; a window reported without an id is left open. */
 export function closeCurrentWindow(): void {
 	chrome.windows.getCurrent(undefined, (window) => {
-		if (window.id) void removeWindow(window.id)
+		if (window.id) void quietIfGone(chrome.windows.remove(window.id), window.id)
 	})
 }
 
 /** The window manager or the user may close this window first: a failed remove still rejects unless a
  *  window listing confirms the window is gone. */
-async function removeWindow(windowId: number): Promise<void> {
+async function quietIfGone(removal: Promise<void>, windowId: number): Promise<void> {
 	try {
-		await chrome.windows.remove(windowId)
+		await removal
 	} catch (error) {
 		if (await isConfirmedGone(windowId)) return
 		throw error

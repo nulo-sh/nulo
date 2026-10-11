@@ -83,21 +83,21 @@ None open. OA-1 in `OWNER-ASKS.md` is resolved by the orchestrator's no_ask reco
 
 ### Proposed architecture
 
-**#312.** Window removal is idempotent: the background, the page and the user may each close the same window, and "already gone" is the outcome each wants. The background's removers encode that with a handler; `closeCurrentWindow` does not. The fix stays inside the one shared util, so no caller changes. The callback stays synchronous (F5's pinned `TypeError`); it hands the remove to a private async function that is silent only when a successful window listing confirms the window is gone, not by parsing the browser's error text (which differs per browser). Any other failure rethrows the remove's own error, so it stays an unhandled rejection with today's reason and today's log row (D-orch-2):
+**#312.** Window removal is idempotent: the background, the page and the user may each close the same window, and "already gone" is the outcome each wants. The background's removers encode that with a handler; `closeCurrentWindow` does not. The fix stays inside the one shared util, so no caller changes. The callback stays synchronous (F5's pinned `TypeError`); it calls `remove` there, so a synchronous throw stays synchronous (implementation round 1), and hands the returned promise to a private async function that is silent only when a successful window listing confirms the window is gone, not by parsing the browser's error text (which differs per browser). Any other failure rethrows the remove's own error, so it stays an unhandled rejection with today's reason and today's log row (D-orch-2):
 
 ```ts
 /** Closes the browser window this page runs in; a window reported without an id is left open. */
 export function closeCurrentWindow(): void {
 	chrome.windows.getCurrent(undefined, (window) => {
-		if (window.id) void removeWindow(window.id)
+		if (window.id) void quietIfGone(chrome.windows.remove(window.id), window.id)
 	})
 }
 
 /** The window manager or the user may close this window first: a failed remove still rejects unless a
  *  window listing confirms the window is gone. */
-async function removeWindow(windowId: number): Promise<void> {
+async function quietIfGone(removal: Promise<void>, windowId: number): Promise<void> {
 	try {
-		await chrome.windows.remove(windowId)
+		await removal
 	} catch (error) {
 		if (await isConfirmedGone(windowId)) return
 		throw error
@@ -314,6 +314,10 @@ Run these steps in order after the Phase 3 gate passes. `code_review` is `off`, 
   - Its positions: D11 is the better fix (its probes passed ordinary and escaped parens, nested templates, bracket keys holding `)`, denied bracket keys, comparison literals and safe objects; `blankComparisonLiterals` is insufficient); the synchronous callback with the private async remover is right; the D12 measurement and D9's tracking are sound; the D8 set is the smallest useful one.
   - Complexity wording: Codex notes CLAUDE.md § Complexity budgets says both that an acceptance "stays until its function is rewritten on merit" and that a touched accepted function is refactored under budget. D11 edits `stripNoise`'s body without changing its score, branches or declaration; the lexer stays the accepted design its adjudication records, and `baseline:rescore` proves the stamp. Refactoring a 41-point lexer state machine to fix two characters is the rewrite the owner's rule forbids.
 - **Codex, round 1 resumed again** (same session, on revision 3): conditional approve (with conditions: catch synchronous failures of the getAll invocation). Applied in this version: `isConfirmedGone` holds the listing in its own `try` and D3 case 3 adds a synchronous-throw setup; the owner's own answer to OA-1, not the orchestrator's approval, gates Phase 2, and the PR body quotes it. Codex found no other material finding; with its one condition applied verbatim, the gate's Codex verdict is satisfied without another round.
+
+- **Codex, implementation round 1** (gpt-6.1-sol, high, read-only, session `01a12d3f`): reject (with blocking findings: column-cut privacy regression; retained-string delimiter privacy regression).
+  - Accepted: (1, High) a regex after a control-flow head, and a keyword-named property before a division, now misread on the opener's line where the base's line-end window still caught the payload; fixed in `startsRegex` (property names are not keywords; `endsControlHead`), `stripNoise`'s stamp unchanged. (2, High) a brace kept in a nested string faked an object around a positional argument; every delimiter in a kept nested string is now blanked. (3, Medium) a synchronous throw from `remove` became a rejection; `remove` now runs inside the callback. The collector's doc nit.
+- **Opus 5.5 diff review, round 1:** approve. Accepted: the sync-throw (same as Codex 3); the same-line computed and destructured logger calls named in the scanner's header as blind spots (none on the tree); case 2 pins the synchronous remove; comment nits. Filed, not fixed (pre-existing): `auth-guard.test.ts`'s abandoned-request test cannot fail on its line.
 
 ## Seeds
 
