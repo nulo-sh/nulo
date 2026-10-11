@@ -13,6 +13,7 @@ import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
+import { chaosSeed } from "../fixtures/chaos-seed"
 import { clickByTestId, connectPlayground, grantCapBundle } from "../fixtures/extension"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResults } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -27,6 +28,8 @@ import {
 } from "../fixtures/send-burst"
 
 const enabled = aztecConfig !== undefined && process.env.NULO_E2E_CHAOS === "1"
+/** Read at load, so a value that is not a seed fails the file before the burst fixture funds anything. */
+const seed = enabled ? chaosSeed(process.env.NULO_E2E_CHAOS_SEED) : 0
 const ACTIONS = 8
 /** The share of actions that are dApp sends rather than Send-page sends. */
 const DAPP_SHARE = 0.2
@@ -132,7 +135,6 @@ async function runSend(burst: Burst, send: BurstSend, abandon: boolean): Promise
 }
 
 test.skipIf(!enabled)("a seeded burst of sends keeps every invariant", { timeout: 1_800_000, retry: 0 }, async ({ burst }) => {
-	const seed = process.env.NULO_E2E_CHAOS_SEED ? Number(process.env.NULO_E2E_CHAOS_SEED) : Math.floor(Math.random() * 2 ** 31)
 	const actions = plan(seed, burst)
 	console.log(`[send-chaos] seed=${seed} (replay: NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=${seed}) actions=${JSON.stringify(actions)}`)
 	const playground = await connectAccount(burst)

@@ -267,58 +267,91 @@ jobs:
       fail-fast: false
       matrix:
         # The PR lane's jobs (pr-extension-network-e2e.yml) as legs of ONE matrix job, its shard
-        # pool spelled out per shard: attach-assets and status read the whole suite as this job's
-        # single result, which is `success` only when every leg succeeded. A leg's inputs are the
-        # PR job's; scripts/ci-cd/behavior-gating.test.ts pins the two, leg for job.
+        # pool spelled out per shard and its chaos job per seed: attach-assets and status read the
+        # whole suite as this job's single result, which is `success` only when every leg succeeded.
+        # A leg's inputs are the PR job's; scripts/ci-cd/behavior-gating.test.ts pins the two, leg
+        # for job.
         leg:
           - name: shard 1/5
             shard: "1/5"
             shard_label: 1-of-5
             test_files: ""
-            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: shard 2/5
             shard: "2/5"
             shard_label: 2-of-5
             test_files: ""
-            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: shard 3/5
             shard: "3/5"
             shard_label: 3-of-5
             test_files: ""
-            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: shard 4/5
             shard: "4/5"
             shard_label: 4-of-5
             test_files: ""
-            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: shard 5/5
             shard: "5/5"
             shard_label: 5-of-5
             test_files: ""
-            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
+            exclude_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts tests/e2e/network/send-chaos.test.ts"
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: heavy / fee-methods + selfpay-phase
             shard: ""
             shard_label: heavy
             test_files: "tests/e2e/network/fee-methods.test.ts tests/e2e/network/selfpay-phase.test.ts"
             exclude_files: ""
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: heavy / concurrent-confirm
             shard: ""
             shard_label: heavy-concurrent
             test_files: "tests/e2e/network/concurrent-sendtx-confirm.test.ts tests/e2e/network/same-token-concurrent-sends.test.ts"
             exclude_files: ""
             proverless: true
+            chaos: false
+            chaos_seed: ""
           - name: canary / real-proving
             shard: ""
             shard_label: canary
             test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
             exclude_files: ""
             proverless: false
+            chaos: false
+            chaos_seed: ""
+          - name: chaos / seed 1095865833
+            shard: ""
+            shard_label: chaos-1095865833
+            test_files: "tests/e2e/network/send-chaos.test.ts"
+            exclude_files: ""
+            proverless: true
+            chaos: true
+            chaos_seed: "1095865833"
+          - name: chaos / seed 1960252198
+            shard: ""
+            shard_label: chaos-1960252198
+            test_files: "tests/e2e/network/send-chaos.test.ts"
+            exclude_files: ""
+            proverless: true
+            chaos: true
+            chaos_seed: "1960252198"
     uses: ./.github/workflows/_extension-network-e2e.yml
     with:
       ref: ${{ needs.resolve.outputs.sha }}
@@ -328,6 +361,8 @@ jobs:
       test_files: ${{ matrix.leg.test_files }}
       exclude_files: ${{ matrix.leg.exclude_files }}
       proverless: ${{ matrix.leg.proverless }}
+      chaos: ${{ matrix.leg.chaos }}
+      chaos_seed: ${{ matrix.leg.chaos_seed }}
       # The PR lane's kill switch, minus its dispatch input; it only reaches the prover-ON leg.
       disable_presto: ${{ !matrix.leg.proverless && vars.NULO_E2E_DISABLE_PRESTO == '1' }}
 

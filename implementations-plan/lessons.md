@@ -21,6 +21,7 @@
 - Never skip required aggregators. PR workflows queue per head commit and cancel only on dispatch; `pr-supersede.yml` cancels old heads, re-reading the head before each cancel; a cancelled run still posts FAILURE on its old head. [Evidence](ci-release-supply/plan.md#arc-1-workflows)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/amount-honesty/plan.md#add-add)
+- Editing a draft release without `tag_name` untags it: send it (2026-10). [Evidence](archive/ci-followups-3/plan.md#the-cause-of-309)
 
 ## Extension runtime
 
@@ -35,7 +36,6 @@
 - A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row) and refuse on failure, never self-heal; an address binds its original class id, not `currentContractClassId`: check an artifact against it. [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md)
 - On Chrome, `bun run dev` runs the popup under Chrome's baseline policy, not the manifest CSP: check CSP on a production build. [Evidence](archive/code-followups-2/lessons/phase-2.md)
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
-- A page under `pages/` beats a same-path redirect (vite-plugin-pages 0.33.3). [Evidence](archive/settings-by-task/plan.md#route-moves)
 - A balances fuzz model owes what the store's observers adopt, and only where it holds an entry: owe rules keyed on failure commits over- and under-owed. [Evidence](archive/wallet-followups-2/lessons/phase-4.md)
 - Firefox's `storage.local.set` refuses a Vue reactive Proxy Chrome serialises; only stderr shows it: store plain data. [Evidence](archive/wallet-followups-3/plan.md)
 
