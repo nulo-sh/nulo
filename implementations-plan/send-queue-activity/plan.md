@@ -646,9 +646,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 #### Phase 4.2: record the chaos rule (#220)
 
-1. Add the CLAUDE.md row, the `CI.md` pointer and the `nightly.yml` comments for the chosen C6 option.
-
-**Validation gate.** Commands: `bun run test:ci-gating`; `bun run lint:actions`; `bun run check:plans`; network Chrome `same-token-concurrent-sends.test.ts` (proverless, as Phase 1.5). Pass: all exit 0. Layers: CI gating, network e2e.
+Moved 2026-10-11 to [ci-followups-2](../archive/ci-followups-2/plan.md) by the owner's call: the chaos jobs gate the nightly and two fixed seeds gate every network PR; nothing remains here.
 
 ### Arc 5: keyboard reach (after P9-05 and arc 2)
 
