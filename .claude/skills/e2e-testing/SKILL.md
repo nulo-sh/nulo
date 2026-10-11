@@ -96,9 +96,11 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
 
 ### The agent runner — `apps/extension/scripts/e2e/agent.sh`
 
-1. Scans the file paths passed as arguments (or all of `tests/e2e/network` when none) for
-   `@requires-proverless`; any hit without `NULO_E2E_PROVERLESS=1` exits 2 with the remedy. A vitest
-   name filter is not a path — pass the file. Prover-ON is the default; the proverless build is a double opt-in
+1. Asks vitest which files the arguments select (`scripts/e2e/proverless-guard.sh`: `vitest list
+   --filesOnly --json` with the run's config and arguments, so flags, their values and name filters
+   select exactly as the run does, before `--shard` narrows it) and scans them for
+   `@requires-proverless`; any hit without `NULO_E2E_PROVERLESS=1` exits 2 with the remedy, and so
+   does an unarmed watch run and any vitest, `jq` or `grep` error. Prover-ON is the default; the proverless build is a double opt-in
    (`VITE_NULO_E2E_PROVERLESS=1` + `_CONFIRM=1`) and mutually exclusive with
    `VITE_NULO_PRESTO_REQUIRED`.
 2. Claims a fresh port pack (`resolve-ports.ts`: bind-and-release in a static window below the

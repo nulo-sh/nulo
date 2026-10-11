@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups
 tier: mid
-status: planned v5, panel converged (Codex approve in round 5), awaiting orchestrator approval
+status: implementing arc 1 (plan v5 approved by the orchestrator with OA-1 = A)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -333,6 +333,9 @@ Each entry: the choice, the alternatives rejected, the reason, and the panel's v
 - **D11 (#249).** `agent.sh` names the network config once and passes it to the guard (Opus round 1 corrected the plan's belief that a sibling branch renames it; one name is still the right shape for two readers).
 - **D12 (#249).** The guard refuses an unarmed watch run by asking vitest's own `parseCLI` (public `vitest/node` export, on Node, the run's runtime) whether the parsed `watch` is truthy, the run's own rule (Codex round 2 finding 1, round 3 finding 1, round 4 finding 1). Rejected: v4's `=== true` (a dotted `--watch.enabled=true` parses to an object and passed it: round 4 finding 1, reproduced); v3's `--watch=false` placed before the caller's arguments in the listing (cac's alias reconciliation lets `-w` overwrite it, so `-w` passed, and an explicit `--watch=false` was refused: round 3 finding 1, reproduced); matching `--watch`/`-w` in bash (a second copy of vitest's grammar); appending `--watch=false` to the run line (refuses only after the build).
 - **D13 (#269).** The `(open)` ledger row records the cause and sanctions no rerun (Codex final pass, finding 2, over the Opus round-1 suggestion of a sanctioned rerun): a known product defect is breakage, not a flake (CLAUDE.md § Quality gates), so a red is reported as #269 and the orchestrator decides.
+- **D-orch-2 (OA-1 = A).** The orchestrator put Phase 1.5 into arc 1 as a no-ask, on the #210 precedent: the Settings and History pages reading the newest visibility report restores the approved design ("the compact bar shows once the hero leaves") with the same bar, fade and scroll positions; nothing new appears and no words change. Each page gets its one-line fix and its unit test. With the fix in, a retry-0 red of the smoke navigation title-bar case (Phase 1.6) is a real failure to diagnose, never #269 and never rerun to green.
+- **D-orch-3 (Codex account).** The shell carries `CODEX_ACCOUNT=best` and keeps it (both roster accounts have headroom); each consult records the account it ran on.
+- **D14 (#249, implementation).** The watch read is a file, `scripts/e2e/watch-mode.ts`, run with `bun run` like the runner's other helpers, not the plan's inline `node --input-type=module -e … -- "$@"`. Reason: under a `bun --bun` parent (the unit tests; any Bun-run caller) `node` is Bun's shim, which drops `--` and `-w` from `-e`'s argv, so the inline step answered `run` for `-w` and `--watch`: a fail-open (the guard's own unit test caught it). As a file, `parseCLI` gives the same answer on Bun, the shim and Node 24 for every F10 case (implementer probe, lessons/phase-1.md). The remedy line (`NULO_E2E_PROVERLESS=1`) follows the two selection refusals (marked file, watch run) only; a tool error prints its FATAL alone, since arming the build is no answer to a broken tool.
 
 ## Audit verdicts
 
