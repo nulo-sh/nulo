@@ -1200,8 +1200,8 @@ async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
 	}
 }
 
-/** Records `page`'s errors into the launch's arrays until the returned function is called. */
-function recordPageErrors(ctx: ExtensionContext, page: Page): () => void {
+/** Records `page`'s errors into the launch's arrays. */
+function recordPageErrors(ctx: ExtensionContext, page: Page): void {
 	const onConsole = (msg: ConsoleMessage) => {
 		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
 		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).
@@ -1220,14 +1220,10 @@ function recordPageErrors(ctx: ExtensionContext, page: Page): () => void {
 	}
 	page.on("console", onConsole)
 	page.on("pageerror", onPageError)
-	return () => {
-		page.off("console", onConsole)
-		page.off("pageerror", onPageError)
-	}
 }
 
 /** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
-async function loadPopup(ctx: ExtensionContext, page: Page): Promise<() => void> {
+async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	patchPagePolling(page)
 	await page.setViewport({ width: 360, height: 600 })
 	// Bring the new page to the front so the tab is "focused" — defense in
@@ -1235,9 +1231,23 @@ async function loadPopup(ctx: ExtensionContext, page: Page): Promise<() => void>
 	// backgrounding` it prevents Chrome from suspending the offscreen
 	// renderer.
 	await page.bringToFront()
-	const stopRecording = recordPageErrors(ctx, page)
+	recordPageErrors(ctx, page)
 	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
-	return stopRecording
+}
+
+/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
+async function closeConfirmed(page: Page): Promise<void> {
+	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
+	await page.close()
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const refused = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
+	})
+	try {
+		await Promise.race([closed, refused])
+	} finally {
+		clearTimeout(timer)
+	}
 }
 
 const popupReady = (page: Page, timeout: number, polling: number) =>
@@ -1284,7 +1294,7 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	// counting fallback occurrences in CI artifacts).
 	const FAST_PATH_BUDGET_MS = 2_000
 	const t0 = Date.now()
-	const stopRecording = await loadPopup(ctx, page)
+	await loadPopup(ctx, page)
 	try {
 		await popupReady(page, FAST_PATH_BUDGET_MS, 100)
 		if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fast totalMs=${Date.now() - t0}`)
@@ -1292,10 +1302,9 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	} catch (err) {
 		if (!(err instanceof TimeoutError)) throw err
 	}
-	// A closed tab reports nothing more on either browser, while a navigation would make Firefox
-	// reject the left document's in-flight imports from it. What the first tab raised stays recorded.
-	stopRecording()
-	await page.close()
+	// Closing a tab raises nothing from it, imports in flight included, while a navigation would make
+	// Firefox reject the left document's in-flight imports from it; the tab stays recorded until gone.
+	await closeConfirmed(page)
 	const fresh = await newPage(ctx.browser)
 	try {
 		await loadPopup(ctx, fresh)
