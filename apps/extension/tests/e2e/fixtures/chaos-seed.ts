@@ -1,5 +1,6 @@
 /**
- * The send-chaos seed from `NULO_E2E_CHAOS_SEED`: a random draw when unset, else the value itself.
+ * The send-chaos seed from `NULO_E2E_CHAOS_SEED`: a random draw when unset or empty, else the
+ * value itself.
  *
  * Only a nonnegative decimal safe integer is a seed, since anything else would replay some other
  * seed while the log named this one. No 32-bit bound: the nightly passes its run id, which the

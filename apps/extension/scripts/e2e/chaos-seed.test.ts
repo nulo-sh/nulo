@@ -9,8 +9,8 @@ describe("the send-chaos seed", () => {
 		["not a number", "NaN"],
 		["another spelling of a number", "0x1f"],
 		["another spelling of a number", "1e3"],
-		["another spelling of a number", "-5"],
-		["another spelling of a number", "1.5"],
+		["a number that is no nonnegative integer", "-5"],
+		["a number that is no nonnegative integer", "1.5"],
 		["another spelling of a number", " 12"],
 		["past the safe integers", "9007199254740992"],
 	])("refuses %s: %j", (_, raw) => {

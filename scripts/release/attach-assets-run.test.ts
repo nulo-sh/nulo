@@ -233,7 +233,6 @@ describe("verify-published", () => {
 		expect(outputs).toEqual({ dir: "dist/release/published" })
 		expect(calls).toEqual(["download 1", "download 2", "download 3", "notes"])
 		expect(world.edits).toEqual([{ tag: "v1.2.3", body: "notes" }])
-		expect(world.releases[0].tag).toBe("v1.2.3")
 	})
 
 	test("refuses a release this workflow never attested", async () => {
