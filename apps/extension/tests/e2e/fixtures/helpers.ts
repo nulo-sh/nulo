@@ -26,16 +26,14 @@ import { type SendAction, submitSend } from "./send-page"
 
 // ── Auth ───────────────────────────────────────────────────────────────
 
-/** Lock the wallet via the Header lock button. Navigates to auth page.
+/** Lock the wallet via the Header lock button, then wait for the lock screen.
  *
  *  Only for a wallet with no approved send running: with one running, the
  *  button asks first, and the test drives that dialog itself.
  *
- *  The handler awaits one journal read, then sets `appStore.isLogined = false`
- *  and fires `managers.profile.lockActiveProfile()` without awaiting it; an
- *  app.vue watcher reacts to the isLogined change and pushes the router.
- *  Under vitest worker pressure the SW round-trip can take 5-10s before
- *  the navigation lands. */
+ *  The chip awaits the session handle and a read of the running sends, marks the popup locked and
+ *  sends the lock without awaiting it; the background's lock event then routes the popup to
+ *  `/popup/auth`. */
 export async function lockWallet(page: Page): Promise<void> {
 	// Wait for the lock control to be mounted BEFORE clicking — a bare
 	// `querySelector(...)?.click()` silently no-ops if the header hasn't
@@ -71,15 +69,10 @@ export async function lockThroughConfirmDialog(page: Page): Promise<ConfirmDialo
 
 /** Wait for a lock, however it was triggered, to land: the session record gone, then the popup on `/popup/auth`. */
 export async function waitForLockScreen(page: Page, timeoutMs = 60_000): Promise<void> {
-	// Assert the AUTHORITATIVE lock — the session record removed from
-	// chrome.storage.session (frozen key SESSION_STORAGE_ROOT) — not the UI
-	// auto-redirect. The redirect is event-driven (onActiveProfileChanged(undefined)
-	// → app.vue → router.push("/popup/auth")) and can be bounced by the route
-	// guard when a stale post-password-change `bootstrapActiveProfile` flips
-	// `isLogined` back to true AFTER the lock. That's a real product race (the
-	// session IS cleared, only the UI redirect loses the race), to be fixed in the auth/session
-	// code; do NOT paper over it in product code from here. Waiting on storage is strictly
-	// stronger than the redirect check.
+	// The session record leaving chrome.storage.session is the authoritative lock; the popup lands
+	// after it, routed by the lock event or, on a page opened after the lock, by its boot.
+	// Observed, never forced: a reload would abandon that route's load in flight, which Firefox
+	// rejects, and would pass a redirect that never lands.
 	await page.waitForFunction(
 		async () => {
 			const r = await chrome.storage.session.get("nulo:core:session")
@@ -87,11 +80,6 @@ export async function waitForLockScreen(page: Page, timeoutMs = 60_000): Promise
 		},
 		{ timeout: timeoutMs },
 	)
-	// If the redirect lost the race, reload: a fresh popup derives the locked
-	// state from storage and routes to /popup/auth (the real reopen path).
-	if (!(await page.evaluate(() => window.location.hash.includes("/popup/auth")))) {
-		await reloadExtensionPage(page)
-	}
 	await page.waitForFunction(() => window.location.hash.includes("/popup/auth"), { timeout: 15_000 })
 }
 
@@ -144,8 +132,8 @@ export async function ensureUnlocked(
 	// from a lone DOM marker — each of those lies in one direction. `app.vue`
 	// pushes `/popup/auth` BEFORE `initNetworks()`/`initAccount()` finish and
 	// `openPopup` returns inside that window, so an UNLOCKED wallet transiently
-	// renders the password field; `header-lock` tracks `isLogined`, which
-	// lockWallet documents as stale-TRUE after an authoritative lock.
+	// renders the password field; `header-lock` tracks `isLogined`, which the
+	// lock chip clears before the background drops the session.
 	//
 	// The record's mere PRESENCE is not enough either: `SessionManager.restore`
 	// deliberately leaves it in place for a passkey profile (WebAuthn needs a
@@ -312,17 +300,15 @@ export async function ensureUnlocked(
 }
 
 /**
- * Model the realistic post-import recovery. The P0-proven wedge: an MV3 service
- * worker restart mid-import drops the in-memory master secret, so in strict mode
- * (the default) the just-imported profile is locked until the user reopens and
- * unlocks. This reproduces that recovery deterministically:
+ * Model the realistic post-import recovery: an MV3 service worker restart mid-import
+ * drops the in-memory master secret, so in strict mode (the default) the just-imported
+ * profile is locked until the user reopens and unlocks. This reproduces that recovery
+ * deterministically, in one document:
  *
- *   lock  — drops the session record from chrome.storage.session, exactly as a
- *           worker restart drops the in-memory master;
- *   reopen via the auth route (lockWallet reloads a fresh popup that derives the
- *           locked state from storage — the real reopen path);
- *   unlock — re-derives the master, which re-provisions the encrypted per-chain
- *           PXE store key and boots the chain runtime.
+ *   lock   — drops the session record from chrome.storage.session, exactly as a
+ *            worker restart drops the in-memory master;
+ *   unlock — on the auth screen the lock lands on: re-derives the master, which
+ *            re-provisions the encrypted per-chain PXE store key and boots the chain runtime.
  *
  * Asserts the wallet lands back on /popup/general. Callers then do a
  * store-dependent read (account address / on-chain balance) to prove the
