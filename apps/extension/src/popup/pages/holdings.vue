@@ -121,13 +121,15 @@ const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
 /** The total's type as a fraction of its 26 px: full size while it fits beside the meta line, then
  *  the largest that does, with no floor, so no digit is ever hidden. */
 const totalScale = ref(1)
+/** The least space, in px, a fitted total leaves before the meta line. */
+const TOTAL_GAP = 8
 let summaryResizes: ResizeObserver | undefined
 function fitTotal() {
 	const line = summary.value?.$el as HTMLElement | undefined
 	const form = totalRuler.value
 	const meta = summaryMeta.value
 	if (!line || !form || !meta) return
-	const room = heroRoom(line) - meta.getBoundingClientRect().width
+	const room = heroRoom(line) - meta.getBoundingClientRect().width - TOTAL_GAP
 	totalScale.value = fitHero(1, (_, scale) => rulerWidth(form, scale), room).scale
 }
 

@@ -199,8 +199,8 @@ describe("holdings page — the total fits beside its meta line", () => {
 	// "$1,250.00" in the stand-in font: 7 digits and signs, 2 separators, 117 px at 26 px.
 	test.each([
 		["keeps 26 px when it fits", 10_000, "1"],
-		["shrinks to the largest scale that fits", 90, "0.76"],
-		["has no floor, so no digit is ever hidden", 20, "0.17"],
+		["shrinks to the largest scale that fits, 8 px clear of the meta line", 90, "0.7"],
+		["has no floor, so no digit is ever hidden", 20, "0.1"],
 	])("the total %s", async (_, width, scale) => {
 		installChromeStorage()
 		room = width
