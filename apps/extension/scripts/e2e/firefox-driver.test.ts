@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm"
 import { describe, expect, test, vi } from "vitest"
 import {
 	type BackgroundStopper,
@@ -11,6 +12,8 @@ import {
 	stopBackgroundWith,
 	uuidFromPrefs,
 } from "../../tests/e2e/fixtures/browser/firefox"
+import { RELAY_HELPERS, checkPageErrorRelay, kindOf, relayVerdict } from "../../tests/e2e/fixtures/browser/firefox-page-errors"
+import type { WebDriverSession } from "../../tests/e2e/fixtures/browser/webdriver-classic"
 
 /** The PXE host is placed where Firefox's timer throttling cannot reach it; the suite must run under
  *  that throttling, as its users do, so a regression shows as a slow send rather than staying hidden. */
@@ -295,5 +298,100 @@ describe("stopping the background", () => {
 		await expect(stopBackgroundWith(stopper({ terminate, identity: async () => undefined }))).rejects.toThrow(/runs no background page/)
 		expect(terminate).not.toHaveBeenCalled()
 		await expect(stopBackgroundWith(stopper({ terminate }))).rejects.toThrow(/did not terminate the background page \(no-extension\)/)
+	})
+})
+
+/** Serialised source as Firefox receives it, run alone: a dependency left behind throws here. The
+ *  value crosses as JSON, as the relay's entry crosses the BiDi socket. */
+function runSerialised(source: string, call: string, bindings: Record<string, unknown>): unknown {
+	return JSON.parse(JSON.stringify(runInNewContext(`${source}\n${call}`, bindings) ?? null))
+}
+
+describe("the page-error relay", () => {
+	test("an exception is a page error and any other error-level message a console error, as on Chrome", () => {
+		const kind = (hasException: boolean) => runSerialised(String(kindOf), "kindOf(message)", { message: { hasException } })
+		expect(kind(true)).toBe("javascript")
+		expect(kind(false)).toBe("console")
+	})
+
+	describe("the entry relayed for a record", () => {
+		const frame = { url: "moz-extension://uuid/assets/popup.js", functionName: "boot", lineNumber: 0, columnNumber: 4 }
+		const record = { kind: "javascript", topId: 7, text: "Error: boom", args: [], timeStamp: 1700, callFrames: [frame] }
+		const entryFor = (r: unknown, context = "ctx-1") =>
+			runSerialised(RELAY_HELPERS, "logEntryFor(record, context)", { record: r, context })
+		const common = { level: "error", source: { realm: "", context: "ctx-1" }, timestamp: 1700, stackTrace: { callFrames: [frame] } }
+
+		test("a page error is a javascript entry of its page's context", () => {
+			expect(entryFor(record)).toEqual({ type: "javascript", text: "Error: boom", ...common })
+		})
+
+		test("a console error carries the method and its arguments as string values", () => {
+			expect(entryFor({ ...record, kind: "console", text: "a b", args: ["a", "b"] })).toEqual({
+				type: "console",
+				method: "error",
+				args: [
+					{ type: "string", value: "a" },
+					{ type: "string", value: "b" },
+				],
+				text: "a b",
+				...common,
+			})
+		})
+
+		test.each([
+			["a record that is no object", null, "ctx-1"],
+			["kind", { ...record, kind: "warning" }, "ctx-1"],
+			["topId", { ...record, topId: "7" }, "ctx-1"],
+			["timeStamp", { ...record, timeStamp: undefined }, "ctx-1"],
+			["text", { ...record, text: 42 }, "ctx-1"],
+			["args", { ...record, args: [1] }, "ctx-1"],
+			["callFrames", { ...record, callFrames: [{ ...frame, lineNumber: "0" }] }, "ctx-1"],
+			["context", record, ""],
+		])("is refused for a malformed %s", (_field, malformed, context) => {
+			expect(entryFor(malformed, context)).toBeNull()
+		})
+	})
+
+	describe("the close verdict", () => {
+		const extension = (childId: number) => ({ childId, remoteType: "extension" })
+		const web = (childId: number) => ({ childId, remoteType: "web" })
+		const parent = { childId: 0, remoteType: null }
+		const read = (state: object, live: object[]) => ({ state: JSON.stringify({ faultCount: 0, faults: [], ...state }), live })
+
+		test("is clean when nothing faulted and the live extension process reported ready", () => {
+			expect(relayVerdict(read({ ready: [extension(3), web(4)] }, [parent, extension(3), web(4)]))).toBeUndefined()
+		})
+
+		test("stays clean once a ready extension process has exited", () => {
+			expect(relayVerdict(read({ ready: [extension(3)] }, [parent, web(4)]))).toBeUndefined()
+		})
+
+		test("fails on a fault, with its reason", () => {
+			expect(relayVerdict(read({ faultCount: 1, faults: ["relay: boom"], ready: [extension(3)] }, [extension(3)]))).toBe(
+				"it faulted 1 time(s): relay: boom",
+			)
+		})
+
+		test("fails on a live extension process that never reported ready", () => {
+			expect(relayVerdict(read({ ready: [extension(3)] }, [extension(3), extension(5)]))).toBe(
+				"extension process(es) 5 ran without the listener",
+			)
+		})
+
+		test("fails when no extension process ever reported ready, even with none live", () => {
+			expect(relayVerdict(read({ ready: [web(4)] }, [parent, web(4)]))).toBe("no extension process reported the listener ready")
+		})
+
+		test("fails on a read that came back malformed", () => {
+			const badReady = JSON.stringify({ faultCount: 0, faults: [], ready: [{ childId: "3", remoteType: "extension" }] })
+			for (const bad of [undefined, { state: null, live: [] }, { state: "{", live: [] }, { state: badReady, live: [] }]) {
+				expect(relayVerdict(bad)).toMatch(/^its state could not be read/)
+			}
+		})
+
+		test("fails, without rejecting, on a read that failed", async () => {
+			const session = { chromeScript: () => Promise.reject(new Error("no such window")) } as unknown as WebDriverSession
+			await expect(checkPageErrorRelay(session)).resolves.toBe("its state could not be read (no such window)")
+		})
 	})
 })
