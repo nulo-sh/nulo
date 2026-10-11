@@ -104,10 +104,12 @@ function listenerSource(addonId: string): string {
 	${kindOf}
 	const send = (record) => Services.cpmm.sendAsyncMessage(CHANNEL, record);
 	const fault = (err) => send({ kind: "fault", reason: String(err) });
-	// A window already gone has no page left to hear its message, here or on Chrome.
+	// Only a window its tab still shows, active as Firefox's extension code judges it: a gone or
+	// replaced window is no page's, and Chrome never reports one.
 	const ownTop = (innerWindowId) => {
 		const global = innerWindowId ? WindowGlobalChild.getByInnerWindowId(innerWindowId) : null;
-		const document = global?.browsingContext?.window?.document;
+		if (!global?.isCurrentGlobal || global.windowContext.isInBFCache) return undefined;
+		const document = global.browsingContext.window?.document;
 		if (!document || document.nodePrincipal.addonId !== ADDON_ID) return undefined;
 		return global.browsingContext.top.id;
 	};

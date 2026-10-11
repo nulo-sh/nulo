@@ -314,36 +314,7 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
 
-	page.on("console", (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign SW-port-close cascade — pending
-		// background-port RPCs reject en-masse when the SW restarts (e.g. during
-		// account switch). Prod already treats it as benign (the shared
-		// `isClientDisconnectRejection`); filter it here too so the `consoleErrors`
-		// assertions only catch UNEXPECTED errors, not this known noise.
-		// STRUCTURAL BLIND SPOT — root-caused + probe-verified (permanent by
-		// design; see implementations-plan/archive/e2e-deflake/plan.md, Console errors): the console-sniffer
-		// (`utils/console-sniffer.ts`, first module script in the popup/
-		// onboarding/offscreen entry pages — the setup page carries no sniffer)
-		// reroutes app `console.*` over LoggerService RPC to the SW realm;
-		// the native page console never fires on the success path, so CDP's
-		// consoleAPICalled never emits and this listener structurally cannot see
-		// app console output. Browser-emitted entries (e.g. "Unchecked
-		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
-		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
-		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections on both browsers, Firefox's through the
-		// driver's relay (FIREFOX.md) — an error the app
-		// catches and merely logs is invisible to BOTH fixture arrays
-		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
-		// prefer DOM/storage/stage evidence for app-level failures.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	})
-	page.on("pageerror", (payload) => {
-		const err = pageErrorOf(payload)
-		if (err) ctx.pageErrors.push(err)
-	})
+	recordPageErrors(ctx, page)
 
 	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
 	await gotoExtensionPage(page, url)
@@ -1229,19 +1200,9 @@ async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
 	}
 }
 
-async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
-	patchPagePolling(page)
-	await page.setViewport({ width: 360, height: 600 })
-	// Bring the new page to the front so the tab is "focused" — defense in
-	// depth against rAF throttling. Combined with `--disable-renderer-
-	// backgrounding` it prevents Chrome from suspending the offscreen
-	// renderer.
-	await page.bringToFront()
-
-	ctx.consoleErrors = []
-	ctx.pageErrors = []
-
-	page.on("console", (msg: ConsoleMessage) => {
+/** Records `page`'s errors into the launch's arrays until the returned function is called. */
+function recordPageErrors(ctx: ExtensionContext, page: Page): () => void {
+	const onConsole = (msg: ConsoleMessage) => {
 		// "Client disconnected" is the benign SW-port-close cascade — pending
 		// background-port RPCs reject en-masse when the SW restarts (e.g. during
 		// account switch). Prod already treats it as benign (the shared
@@ -1255,7 +1216,7 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 		// the native page console never fires on the success path, so CDP's
 		// consoleAPICalled never emits and this listener structurally cannot see
 		// app console output. Browser-emitted entries (e.g. "Unchecked
-		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
+		// runtime.lastError") bypass the patch and DO arrive on Chrome. App-log evidence
 		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
 		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
 		// throws + unhandled rejections on both browsers, Firefox's through the
@@ -1266,12 +1227,32 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
 			ctx.consoleErrors.push(msg.text())
 		}
-	})
-
-	page.on("pageerror", (payload) => {
+	}
+	const onPageError = (payload: unknown) => {
 		const err = pageErrorOf(payload)
 		if (err) ctx.pageErrors.push(err)
-	})
+	}
+	page.on("console", onConsole)
+	page.on("pageerror", onPageError)
+	return () => {
+		page.off("console", onConsole)
+		page.off("pageerror", onPageError)
+	}
+}
+
+async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
+	patchPagePolling(page)
+	await page.setViewport({ width: 360, height: 600 })
+	// Bring the new page to the front so the tab is "focused" — defense in
+	// depth against rAF throttling. Combined with `--disable-renderer-
+	// backgrounding` it prevents Chrome from suspending the offscreen
+	// renderer.
+	await page.bringToFront()
+
+	ctx.consoleErrors = []
+	ctx.pageErrors = []
+
+	const stopRecording = recordPageErrors(ctx, page)
 
 	const popupUrl = extensionUrl(ctx.extensionId, "/src/popup/index.html")
 	// Fast-path-then-fallback for the SW-handshake workaround.
@@ -1318,7 +1299,11 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	} catch (err) {
 		if (!(err instanceof TimeoutError)) throw err
 		path = "fallback"
+		// A navigation away makes Firefox reject the document's in-flight imports and report them from it;
+		// Chrome reports none. What the abandoned document raised before this point stays recorded.
+		stopRecording()
 		await page.goto("about:blank")
+		recordPageErrors(ctx, page)
 		await gotoExtensionPage(page, popupUrl)
 		await page.waitForFunction(
 			() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
