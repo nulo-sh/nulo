@@ -33,7 +33,7 @@ function canaryJobFiles(workflow: string): [job: string, file: string][] {
 	const { jobs } = Bun.YAML.parse(readFileSync(join(ROOT, ".github/workflows", workflow), "utf8")) as any
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 	return (Object.entries(jobs) as [string, any][])
-		.filter(([, job]) => String(job.with?.shard_label ?? "").startsWith("canary"))
+		.filter(([, job]) => job.with?.chaos === true || String(job.with?.shard_label ?? "").startsWith("canary"))
 		.flatMap(([name, job]) =>
 			String(job.with.test_files)
 				.split(/\s+/)
@@ -72,7 +72,7 @@ describe("assert-canary-results", () => {
 		file.assertionResults = file.assertionResults.filter((test) => test.title !== PASSKEY_TITLE)
 		expect(file.assertionResults.map((test) => [test.title, test.status])).toEqual([[CONTRACT_TEST, "passed"]])
 		expect(canaryProblems(clean, CANARY_JOB_FILES, expectations)).toEqual([
-			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the canary is gone`,
+			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`,
 		])
 	})
 
@@ -84,7 +84,7 @@ describe("assert-canary-results", () => {
 		if (!file) throw new Error("the clean report carries the passkey canary")
 		file.assertionResults = []
 		expect(canaryProblems(clean, [PASSKEY], expectations)).toEqual([
-			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the canary is gone`,
+			`${PASSKEY}: "${PASSKEY_TITLE}" not reported — the expected test is gone`,
 			`${PASSKEY}: reported no tests`,
 		])
 	})
@@ -110,7 +110,7 @@ describe("canary-expectations.json", () => {
 		}
 	})
 
-	test("every canary on disk, and every file in a canary job's list, has an entry", () => {
+	test("every canary on disk, and every file in a canary or chaos job's list, has an entry", () => {
 		const onDisk = readdirSync(join(ROOT, "apps/extension/tests/e2e/network"))
 			.filter((name) => name.endsWith("-canary.test.ts"))
 			.map((name) => `tests/e2e/network/${name}`)
