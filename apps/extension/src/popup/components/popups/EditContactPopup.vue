@@ -4,7 +4,7 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
 import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
-import { withoutId } from "@/utils/entity-list"
+import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
 import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
@@ -30,39 +30,27 @@ const props = defineProps({
 	show: Boolean,
 })
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
-
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		// External update to the contact being edited (another window, an
-		// import): refresh the draft + the dirty baseline so a later submit
-		// doesn't overwrite the external change with stale fields. (This
-		// branch was dead in the original — it compared against the ref
-		// object instead of its value.)
-		if (cacheStore.contactToEditIdx && contact.id === contactToEdit.value?.id) {
-			contactToEdit.value = contact
-			nameTerm.value = storedNameOf(contact)
-			contactAddressTerm.value = contact.address
-			return
-		}
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
-
 const contactToEdit = ref(null)
 const contacts = ref([])
+
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(onContactUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
+
+function onContactUpdated(contact) {
+	// An outside update to the listed contact being edited (another window, an import) refreshes
+	// the draft and the dirty baseline, so a later submit cannot overwrite it with stale fields.
+	const listed = contacts.value.some((c) => c.id === contact.id)
+	if (listed && cacheStore.contactToEditIdx && contact.id === contactToEdit.value?.id) {
+		contactToEdit.value = contact
+		nameTerm.value = storedNameOf(contact)
+		contactAddressTerm.value = contact.address
+		return
+	}
+	contactList.onUpdated(contact)
+}
 
 /** The saved contact this form edits: its own row, or the one an import row would write. Its own
  *  name and address are never duplicates. */

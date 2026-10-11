@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -13,10 +14,13 @@ const contactServiceMock = {
 	getContacts: vi.fn(),
 	updateContact: vi.fn(),
 	disconnect: vi.fn(),
-	onContactAdded: { add: vi.fn(), remove: vi.fn() },
-	onContactUpdated: { add: vi.fn(), remove: vi.fn() },
-	onContactDeleted: { add: vi.fn(), remove: vi.fn() },
+	onContactAdded: liveBus(),
+	onContactUpdated: liveBus(),
+	onContactDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () =>
+	Object.assign(contactServiceMock, { onContactAdded: liveBus(), onContactUpdated: liveBus(), onContactDeleted: liveBus() })
 
 const openToastMock = vi.fn()
 
@@ -102,6 +106,8 @@ async function mountAndOpen(contacts = [CONTACT], editId = "c1") {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	contactServiceMock.getContacts.mockReset()
+	freshBuses()
 	cacheStoreState.contactToEditIdx = ""
 	cacheStoreState.importContact = null
 })
@@ -403,5 +409,29 @@ describe("EditContactPopup — contact delete reducer and duplicate rules", () =
 		await w.find('[data-testid="form-submit"]').trigger("click")
 		await flushPromises()
 		expect((cacheStoreState.importContact as { address: string }).address).toBe(addr("d"))
+	})
+})
+
+describe("EditContactPopup — the list under a held read", () => {
+	test("the read's answer replaces the list and the draft: an outside edit that lands while it is out is dropped, one after it is kept", async () => {
+		const reads = holdReads<unknown[]>(contactServiceMock.getContacts)
+		cacheStoreState.contactToEditIdx = "c1"
+		const w = mount(EditContactPopup, { props: { show: false }, global: { stubs: STUBS } })
+		trackedWrappers.push(w)
+		await w.setProps({ show: true })
+		const shownName = () => (w.find('[data-testid="name-input"]').element as HTMLInputElement).value
+		const listed = () => (w.vm as unknown as { contacts: { name: string }[] }).contacts.map((c) => c.name)
+
+		contactServiceMock.onContactUpdated.invoke({ ...CONTACT, name: "Alicia" })
+		expect(listed()).toEqual(["Alicia"])
+		expect(reads).toHaveLength(1)
+		reads[0]?.resolve([CONTACT])
+		await flushPromises()
+		expect(listed()).toEqual(["Alice"])
+		expect(shownName()).toBe("Alice")
+
+		contactServiceMock.onContactUpdated.invoke({ ...CONTACT, name: "Alicia" })
+		await flushPromises()
+		expect(shownName()).toBe("Alicia")
 	})
 })

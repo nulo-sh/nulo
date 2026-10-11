@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
+import { holdReads, liveBus } from "../../../../tests/helpers/held-read"
 
 const fpcServiceMock = {
 	getFpc: vi.fn(),
@@ -17,10 +18,12 @@ const fpcServiceMock = {
 	updateFpc: vi.fn(),
 	updateFpcAddress: vi.fn(),
 	disconnect: vi.fn(),
-	onFpcAdded: { add: vi.fn(), remove: vi.fn() },
-	onFpcUpdated: { add: vi.fn(), remove: vi.fn() },
-	onFpcDeleted: { add: vi.fn(), remove: vi.fn() },
+	onFpcAdded: liveBus(),
+	onFpcUpdated: liveBus(),
+	onFpcDeleted: liveBus(),
 }
+/** A component never removes its handlers, so each test gets buses no earlier mount registered on. */
+const freshBuses = () => Object.assign(fpcServiceMock, { onFpcAdded: liveBus(), onFpcUpdated: liveBus(), onFpcDeleted: liveBus() })
 const openToastMock = vi.fn()
 
 const FPC = { id: "fpc-1", name: "Sponsor", address: `0x${"c".repeat(64)}`, isProtocol: false, type: "default_sponsored" }
@@ -95,6 +98,7 @@ async function typeName(w: VueWrapper, name: string) {
 }
 
 beforeEach(() => {
+	freshBuses()
 	fpcServiceMock.getFpc.mockResolvedValue({ ...FPC })
 	fpcServiceMock.getFpcs.mockResolvedValue([{ ...FPC }])
 	fpcServiceMock.updateFpc.mockResolvedValue(undefined)
@@ -210,5 +214,31 @@ describe("EditFpcPopup — duplicate names", () => {
 		pressEnterOnInput()
 		await flushPromises()
 		expect(fpcServiceMock.updateFpc).toHaveBeenCalledWith("fpc-1", "Bob ")
+	})
+})
+
+describe("EditFpcPopup — the list under a held read", () => {
+	test("(BUG PIN) an FPC added while the read is out is dropped, so its name does not warn; one added after it does", async () => {
+		// Today's behaviour, kept until the owner decides: getFpcs answers after work that follows its
+		// storage read, so an FPC added during that work is missing until the popup reopens.
+		const reads = holdReads<unknown[]>(fpcServiceMock.getFpcs)
+		const w = mount(EditFpcPopup, { props: { show: false }, global: { stubs: STUBS, components: { ProcessingErrorNote } } })
+		wrappers.push(w)
+		await w.setProps({ show: true })
+		await flushPromises()
+		const alice = { ...FPC, id: "fpc-2", name: "Alice", address: `0x${"d".repeat(64)}` }
+		const warns = async () => {
+			await typeName(w, "Alice")
+			return w.text().includes("Already exist")
+		}
+
+		fpcServiceMock.onFpcAdded.invoke(alice)
+		expect(reads).toHaveLength(1)
+		reads[0]?.resolve([{ ...FPC }])
+		await flushPromises()
+		expect(await warns()).toBe(false)
+
+		fpcServiceMock.onFpcAdded.invoke(alice)
+		expect(await warns()).toBe(true)
 	})
 })

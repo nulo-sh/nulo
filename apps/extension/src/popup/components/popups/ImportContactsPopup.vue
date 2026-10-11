@@ -4,7 +4,7 @@
 import { ContactServiceClient } from "@/wallet/services/contact/client"
 import { trimAddress } from "@/utils/string"
 import { addressChangeText, classifyImportRow, indexSavedContacts, planImportWrites } from "@/utils/contact-import-rows"
-import { withoutId } from "@/utils/entity-list"
+import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
 import RowTarget from "@/components/ui/RowTarget.vue"
@@ -30,25 +30,13 @@ const props = defineProps({
 	show: Boolean,
 })
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
+const contacts = ref([])
 
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(contactList.onUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
 
 const SECTIONS = [
 	{ key: "address", label: "Address changes", kinds: ["address-change"], warn: true },
@@ -61,7 +49,6 @@ const REASONS = { invalid: "Invalid address", conflict: "Matches two saved conta
 const REFUSALS = { invalid: "To select, correct the address first", conflict: "This contact matches two saved contacts" }
 
 const uid = useId()
-const contacts = ref([])
 const importContacts = ref([])
 /** The saved contacts as they are now: an edited row is judged against them, and so is the banner,
  *  so it never counts a sender the apply step would refuse. Rows already shown keep their decision. */
