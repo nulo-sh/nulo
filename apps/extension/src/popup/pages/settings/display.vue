@@ -173,8 +173,8 @@ onBeforeUnmount(() => {
 		<Flex v-if="!isLoading" direction="column" gap="24" :class="$style.content">
 			<Flex justify="between">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary"> Theme </Text>
-					<Text size="12" weight="500" color="tertiary"> Application theme </Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary"> Theme </Text>
+					<Text variant="caption" color="tertiary"> Application theme </Text>
 				</Flex>
 
 				<Dropdown>
@@ -189,8 +189,8 @@ onBeforeUnmount(() => {
 								size="14"
 								color="primary"
 							/>
-							<Text size="13" weight="600" color="primary" style="text-transform: capitalize">
-								{{ theme }}
+							<Text variant="value" color="primary">
+								<span style="text-transform: capitalize">{{ theme }}</span>
 							</Text>
 						</DropdownTrigger>
 					</template>
@@ -220,8 +220,8 @@ onBeforeUnmount(() => {
 
 			<Flex v-for="sk in Object.keys(settings).filter(sk => sk !== 'theme' && sk !== 'incomingTransfersVisible')" justify="between">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary"> {{ settings[sk].title }} </Text>
-					<Text size="12" weight="500" color="tertiary"> {{ settings[sk].description }} </Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings[sk].title }} </Text>
+					<Text variant="caption" color="tertiary"> {{ settings[sk].description }} </Text>
 				</Flex>
 
 				<Toggle
@@ -235,8 +235,8 @@ onBeforeUnmount(() => {
 
 			<Flex justify="between">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
-					<Text size="12" weight="500" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary"> {{ settings.incomingTransfersVisible.title }} </Text>
+					<Text variant="caption" color="tertiary"> {{ settings.incomingTransfersVisible.description }} </Text>
 				</Flex>
 
 				<Toggle
@@ -248,8 +248,8 @@ onBeforeUnmount(() => {
 			<!-- One dust threshold for the wallet: the activity feed's receipts AND the Holdings fold. -->
 			<Flex justify="between" align="center" gap="12">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary"> Hide dust </Text>
-					<Text size="12" weight="500" color="tertiary">Hide receipts and holdings below this value. 0 turns it off.</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary"> Hide dust </Text>
+					<Text variant="caption" color="tertiary">Hide receipts and holdings below this value. 0 turns it off.</Text>
 				</Flex>
 
 				<!-- type="text" (not number) so there are no spinner arrows widening the field; the $ prefix
@@ -327,18 +327,16 @@ onBeforeUnmount(() => {
 }
 
 .dust_prefix {
-	font-family: var(--font-mono);
-	font-size: 13px;
+	composes: type--input-data from global;
 	color: var(--nulo-secondary);
 }
 
 .dust_input {
+	composes: type--input-data from global;
 	width: 100%;
 	min-width: 0;
 	text-align: right;
 
-	font-family: var(--font-mono);
-	font-size: 13px;
 	color: var(--txt-primary);
 
 	background: transparent;
@@ -348,5 +346,9 @@ onBeforeUnmount(() => {
 	&:focus {
 		outline: none;
 	}
+}
+
+.title_size {
+	font-size: 13px;
 }
 </style>

@@ -253,7 +253,7 @@ watch(network, (n) => {
 			>
 				Delete chain
 			</Button>
-			<Text size="11" weight="500" color="tertiary" height="140">
+			<Text variant="body" color="tertiary" height="140">
 				Deleting wipes all accounts, balances, tokens and PXE state for this chain.
 			</Text>
 		</Flex>
