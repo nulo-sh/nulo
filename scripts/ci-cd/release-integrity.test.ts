@@ -219,7 +219,8 @@ const NO_INSTALL = [
 ]
 const BUN_CALL = /(?<=^|[\s;&|(`])bun(?=\s|$)/m
 const CHANGES_DIRECTORY = /(^|[\s;&|(])(cd|pushd)\s/m
-const SWITCHES_REVISION = /\bgit\s+((-[cC]\s+\S+|--?[\w-]+(=\S+)?)\s+)*(checkout|switch|reset|restore|worktree)\b/
+// An option is `-c`/`-C` with a value not led by `-`, or one dash-led word: disjoint, so the repetition cannot backtrack.
+const SWITCHES_REVISION = /\bgit\s+((-[cC]\s+[^-\s]\S*|-\S*)\s+)*(checkout|switch|reset|restore|worktree)\b/
 const flagged = (args: string[], flags: string): boolean => args.some((arg) => new RegExp(`^(${flags})(=|$)`).test(arg))
 
 /**

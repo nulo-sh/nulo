@@ -442,6 +442,10 @@ The comment over `NO_INSTALL` now names the check's second blind spot, a command
 
 Verdict: **approve with fixes** (one new Medium). `bun --silent x <pkg>` and `bun --silent create <t>` fetch under `auto = "disable"` and escaped `INSTALLS`, whose round-1 pattern expected the subcommand right after `bun`. Accepted: option words may precede `x`/`create`; two mutations, red on the previous pattern. A value-taking option before the subcommand (`--cwd dir x`) still escapes `INSTALLS`, but in a job that installs nothing the per-call check refuses `--cwd` and `-c` by itself. The hard stop is three rounds, so this last fix had no fourth Codex pass; the round's other areas (composite recursion, sparse exclusions, quoting, the conflict rename, comments) drew no finding.
 
+### CodeQL on the PR, 2026-10-11
+
+Two high "inefficient regular expression" alerts on round 2's revision-switch matcher (overlapping option alternatives under a repetition). Accepted: rewritten so the alternatives are disjoint; lessons/phase-3.md has the measurement.
+
 ## Seeds
 
 Recommended: `/goal`. Use exactly one per session.
