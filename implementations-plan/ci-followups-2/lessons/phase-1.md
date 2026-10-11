@@ -48,3 +48,4 @@ Mutation 1 also throws in the script runs (the loop reads a result no world bind
   - `matrix.seeed` in the Chrome chaos job's name: fails "verify-cert-run.sh expects exactly the jobs the PR lane's network workflow produces".
   - `network-e2e-chaos` removed from the Firefox `status` needs and loop together: fails "pr-extension-network-e2e-firefox.yml's aggregator waits on every job".
 - Pins after the fixes: 144 pass; `lint:actions` and `lint` exit 0.
+- Implementation audit, round 2 (Codex resumed): approve, no new material findings. Converged.

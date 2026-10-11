@@ -156,6 +156,10 @@ Both legs approved D1 as complete, D3's `run_id` source and D4 unchanged, and th
 | I5 | Codex, Opus | Low | Comments: the `chaosJob` doc and the report-env comment restated code; send-chaos's header named its CI callers; the workflow comment repeated CI.md's policy | Accepted: deleted or cut to a pointer at CI.md; the seed provenance comments stay |
 | I6 | Opus | Low | FIREFOX.md "exactly two gates" named four jobs; WORKFLOWS.md's row read as if the seeds were among the canary's five files; `vite.shared.ts` still said only a canary lane is asserted; the assertion's header wrapped raggedly and its message said "the canary is gone" for any file | Accepted: reworded; the message says "the expected test is gone" (its two test strings follow) |
 
+### Implementation round 2 (2026-10-11): Codex, resumed session, on b3b92ec
+
+- **Codex: approve, no new material findings.** I1-I6 close their findings without loosening a gate; the network-lane `status` pin covers both browsers; the binder rejects a wrong key, and an empty seed list fails the cert names; the red-seed rule is consistent with CLAUDE.md's flake rule. The loop converged in two rounds.
+
 ## Assumptions
 
 **Facts (verified at 27af8d7).**
