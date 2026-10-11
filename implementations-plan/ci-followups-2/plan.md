@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-2
 tier: light
-status: approved (orchestrator, 2026-10-11); arc 1 in implementation
+status: completed (delivered in #304)
 issues: "#220 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,27 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 27af8d7
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#304](https://github.com/nulo-sh/nulo/pull/304) (arc 1: phases 1 to 3), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #220 and the owner's two calls: the four Firefox network jobs, the Firefox smoke of the shipped zip and both chaos runs gate `publish-nightly` and `status`; an unseeded chaos run takes `github.run_id`, so a re-run replays the night's actions.
+  - OA-1, answered A: `network-e2e-chaos` in both PR network lanes replays seeds 1095865833 and 1960252198 at retry 0 inside the required aggregators; a chaos job's json report is read back against `canary-expectations.json`, at night and on a PR.
+  - Pins that run the gates: nightly's `status` script and exact needs, `publish-nightly`'s whole condition, each network lane's `status` against every job, the chaos jobs' shape and seeds, the cert-run job names. Red on base and every mutation proven (lessons/).
+  - Docs: CLAUDE.md, CI.md (the red-seed and rotation rules), WORKFLOWS.md, FIREFOX.md, the e2e README and the e2e-testing skill.
+  - Sibling plans: send-queue-activity's Phase 4.2 points here (D-orch-4); ci-release-supply's two "no advisory job" lines carry a supersession note (D-orch-5). #220 relabelled `lane:ci-followups-2`.
+  - `lessons.md`: nothing promoted. It is at its 8 KiB budget, and the arc's gotchas (a re-run redraws a random seed; a self-skipping test passes a required job) are each held by a pin.
+- **Orchestrator records:** D-orch-1 to D-orch-6 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - D6 (option B now, A after 30 green nights): superseded by the owner's answer A (D-orch-2).
+  - A seed data file read by a control job (Codex, D9): rejected as a new mechanism for one caller; the Chrome lane's list is the authored one and its copies are pinned equal.
+  - O5, a caller `retry: "0"` on nightly's chaos jobs: rejected (round 1 of the plan audit); the PR chaos job passes it as the PR lane's convention (D10).
+  - OA-2, the `main` Firefox-network flip: prepared, not run (D-orch-3); its criterion and runbook stay in CLAUDE.md § Staged-rollout switches and OWNER-ASKS.md, an owner action with no repository work.
+  - The commit trailer names the model that wrote the commits (Claude Opus 5.5) rather than the brief's literal one.
+- **Open items:** #305 (`ci`): a non-numeric `chaos_seed` dispatch runs seed 0 and logs `NaN`. #306 (`ci`): `release.yml`'s opt-in network run lacks the PR lanes' chaos replay and pool exclusion (D13).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # ci-followups-2: nightly's Firefox jobs and send-chaos gate the nightly release
 
