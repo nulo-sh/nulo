@@ -14,6 +14,7 @@ import { describe, expect, test } from "bun:test"
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { MOVE_APPROVED_LABEL } from "../complexity-baseline/scan"
 
 const ROOT = join(import.meta.dir, "..", "..")
 // apps/ vs packages/ split (FLAT layout): deployable leaves live under apps/, libs under packages/.
@@ -221,8 +222,8 @@ describe("PR concurrency", () => {
 })
 
 /**
- * Each e2e lane decides from the labels the pull request carries when its `changes` job runs. An
- * event's own label list is a snapshot that a late run of an older event would decide from, so no
+ * Each e2e lane decides from the labels the pull request carries when its `changes` job runs, and
+ * the complexity ratchet from those it carries when the unit-tests job runs. An event's own label list is a snapshot that a late run of an older event would decide from, so no
  * workflow or action may read it, and a run whose head the pull request has moved past stops itself.
  */
 describe("live labels", () => {
@@ -272,6 +273,37 @@ describe("live labels", () => {
 			expect(decide.steps[0].env.LABEL_HIT, file).toBe("${{ needs.changes.outputs.label-hit }}")
 			expect(decide.steps[0].env.BASE, file).toBe("${{ needs.changes.outputs.base }}")
 		}
+	})
+
+	test("the unit-tests job reads the move-approval label live, directly before the ratchet runs", () => {
+		const { steps } = workflow("_unit-tests.yml").jobs["unit-tests"]
+		const at = steps.findIndex((step: { id?: string }) => step.id === "live")
+		const live = steps[at]
+		expect(live?.run).toBe(
+			[
+				"if [ -f scripts/ci-cd/live-labels.sh ]; then",
+				`  ${SCRIPT} ${MOVE_APPROVED_LABEL}`,
+				"else",
+				'  echo "scripts/ci-cd/live-labels.sh not present on this ref — skipping."',
+				"fi",
+				"",
+			].join("\n"),
+		)
+		expect(live.if).toBe("github.event_name == 'pull_request'")
+		expect(live["continue-on-error"]).toBeUndefined()
+		expect(live.env).toEqual({
+			GH_TOKEN: "${{ github.token }}",
+			EVENT: "${{ github.event_name }}",
+			REPO: "${{ github.repository }}",
+			PR: "${{ github.event.pull_request.number }}",
+			HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
+		})
+		const ratchet = steps[at + 1]
+		expect(ratchet.run).toContain("bun run test:ci-gating")
+		expect(ratchet.env).toEqual({ BASELINE_MOVE_APPROVED: "${{ steps.live.outputs.label-hit }}" })
+		const quick = workflow("pr-quick.yml")
+		expect(quick.jobs["unit-tests"].uses).toBe("./.github/workflows/_unit-tests.yml")
+		expect((quick.jobs["unit-tests"].permissions ?? quick.permissions)["pull-requests"]).toBe("read")
 	})
 
 	/**
