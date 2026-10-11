@@ -234,17 +234,12 @@ onBeforeUnmount(() => {
 }
 
 .empty_label {
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	composes: type--title-page from global;
 	color: var(--nulo-secondary);
 }
 
 .empty_hint {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--nulo-outline);
 }
 

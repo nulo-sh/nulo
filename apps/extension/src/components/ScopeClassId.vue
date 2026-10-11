@@ -64,8 +64,7 @@ function onKey(e: KeyboardEvent) {
 }
 
 .id {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 </style>

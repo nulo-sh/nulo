@@ -95,13 +95,12 @@ function onKey(e: KeyboardEvent) {
 }
 
 .addr {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 
 .contact {
-	font-family: var(--font-mono);
+	composes: type--name from global;
 	font-size: 11px;
 	color: var(--nulo-secondary);
 }
