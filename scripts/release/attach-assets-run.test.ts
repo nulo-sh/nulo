@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, spyOn, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -31,6 +31,7 @@ interface World {
 	/** The release body as the notes job wrote it; each publish records the body it set. */
 	notes?: string
 	bodies?: string[]
+	edits?: { tag?: string; body?: string; draft?: boolean }[]
 }
 
 /** A recording fake of GitHub and the runner's disk; `calls` lists every write in order. */
@@ -82,10 +83,14 @@ function fake(world: World) {
 			if (world.retarget) release.tag = world.retarget
 			stale = world.lag === true
 		},
-		async editRelease(id, patch) {
+		/** GitHub's rule, as far as it is demonstrated: an edit of a draft that names no tag detaches it. */
+		async editRelease(id, patch: { tag?: string; body?: string; draft?: boolean }) {
 			calls.push(patch.draft === false ? "publish" : "notes")
+			world.edits?.push(patch)
 			if (patch.body !== undefined) world.bodies?.push(patch.body)
-			Object.assign(find(id), patch.draft === undefined ? {} : { draft: patch.draft })
+			const release = find(id)
+			if (patch.tag !== undefined || release.draft) release.tag = patch.tag ?? `untagged-${id}`
+			if (patch.draft !== undefined) release.draft = patch.draft
 			stale = world.lag === true && patch.draft === false
 		},
 		attested: async () => world.attested ?? true,
@@ -134,10 +139,10 @@ describe("plan", () => {
 describe("apply", () => {
 	test("pins the tag, then creates, uploads, checks, writes the notes, publishes and checks again", async () => {
 		const world: World = { releases: [], tags: new Map([["v1.2.3", SHA]]) }
-		const { exit, calls } = run(world, "apply", "--expect", "publish")
-		expect(await exit).toBe(0)
+		const { exit, calls, logs } = run(world, "apply", "--expect", "publish")
+		expect(await exit, logs.join("\n")).toBe(0)
 		expect(calls).toEqual(["create", ...NAMES.map((n) => `upload ${n}`), "notes", "publish"])
-		expect(world.releases[0].draft).toBe(false)
+		expect(world.releases[0]).toMatchObject({ tag: "v1.2.3", draft: false })
 	})
 
 	test("writes the tagged commit into the notes' attestation check", async () => {
@@ -222,10 +227,13 @@ describe("verify-published", () => {
 	const published = (over: Partial<World> = {}): World => ({ releases: [complete()], tags: new Map([["v1.2.3", SHA]]), ...over })
 
 	test("ships the published bytes once their digests, attestations and SHASUMS check out", async () => {
-		const { exit, outputs, calls } = run(published(), "verify-published")
+		const world = published({ edits: [] })
+		const { exit, outputs, calls } = run(world, "verify-published")
 		expect(await exit).toBe(0)
 		expect(outputs).toEqual({ dir: "dist/release/published" })
 		expect(calls).toEqual(["download 1", "download 2", "download 3", "notes"])
+		expect(world.edits).toEqual([{ tag: "v1.2.3", body: "notes" }])
+		expect(world.releases[0].tag).toBe("v1.2.3")
 	})
 
 	test("refuses a release this workflow never attested", async () => {
@@ -285,6 +293,18 @@ describe("inputs", () => {
 
 	test("refuses an unknown command", async () => {
 		expect(await run({ releases: [], tags: new Map() }, "apply", "--expect", "use-published").exit).toBe(1)
+	})
+
+	test("an edit sends the release's tag as tag_name", async () => {
+		const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({})) as unknown as typeof fetch)
+		try {
+			await realIO("o/r", "").editRelease(7, { tag: "v1.2.3", draft: false })
+			expect(fetchSpy.mock.calls.map(([url, init]) => [String(url), init?.method, JSON.parse(String(init?.body))])).toEqual([
+				["https://api.github.com/repos/o/r/releases/7", "PATCH", { tag_name: "v1.2.3", draft: false }],
+			])
+		} finally {
+			fetchSpy.mockRestore()
+		}
 	})
 })
 
