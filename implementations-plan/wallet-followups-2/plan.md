@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-2
 tier: mid
-status: arc-1 in progress (orchestrator approved the plan at 79217e4)
+status: completed (delivered in #296)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,7 +14,32 @@ trunk: dev
 issues: [283, 288, 289, 291]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#296](https://github.com/nulo-sh/nulo/pull/296) (arc 1: phases 0 to 5 with 2b), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #283: Send selects the first remaining token when the selected one is deleted, and leaves with one toast when the last one is; the `(BUG PIN)` is flipped.
+  - #288: every registered service and its client has a row in the logs source filter, pinned by a registration scan.
+  - Phase 2b: every log line is filed under the service that owns it. Required sources were added on `ClockTickerAdapter`, `LoggingTelemetrySink` and `NuloAccount`, pinned by a source scan with one row per moved file.
+  - #289: a failed Clear logs keeps the window live.
+  - #291: a failed tx-settle gas refresh under a retry-capable subscriber takes the retry debt and arms the retry.
+  - Phase 0: `lessons.md` curated losslessly from 8,164 to 7,926 B, and one lesson promoted.
+- **Orchestrator records:**
+  - D-orch-2: OA-2 (a), the store retries.
+  - D-orch-3: OA-1 (a), lines only. That became Phase 2b, which carries the D12 deviations: the ticker files under Token Balance, telemetry under Pxe Client, and NuloAccount under Account.
+  - D-orch-4: the lossless 7,926 B stands, and the 7 KiB target is withdrawn.
+- **Dropped, rejected, superseded:**
+  - Rejected: the Send add/delete race inside one token re-read. The window is one round trip, the outcome is recoverable, and the fix needs in-flight tracking plus a second leave path (§ Audit verdicts, round 1).
+  - Not taken: Codex's per-class-only pin and its guard-label preference (D13, D14). Its dissent is recorded.
+  - Not counted: the first round-2 Codex verdict, which ran on the wrong model; the rerun on `gpt-6.1-sol` is the verdict.
+  - Dropped from the tree: the PR screenshots, which the PR links by commit.
+- **Open items:**
+  - #294 (`owner-decision`): remove the five filter rows that match no source.
+  - #295: two account-integrity log lines pass `String(error)`.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Tier and budget
 

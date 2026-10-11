@@ -1,6 +1,6 @@
 # wallet-followups-2: owner asks
 
-The orchestrator's no-ask records (quoted in `plan.md` § UI impact) cover what arc-1 ships. OA-1 goes past them; OA-2 asks the owner to confirm a reading of one. Arc-1 ships without either answer.
+The orchestrator's no-ask records (quoted in `plan.md` § UI impact) cover what arc-1 ships. OA-1 went past them; OA-2 asked the owner to confirm a reading of one. The orchestrator answered both before the arc was built (D-orch-2, D-orch-3).
 
 ## OA-1: log lines from sources that are not registered services
 
@@ -21,6 +21,8 @@ A second, independent question: remove the five rows that match nothing (Faucet,
 
 **What ships now.** Arc-1 lists every registered service and keeps its lines (the #288 record). The sources above keep today's behaviour, and the five rows stay. The implementer opens one GitHub issue for this ask at delivery (dedupe first), labelled `owner-decision`, and names it in the PR body.
 
+**Decided (D-orch-3).** (a), for the lines only: Phase 2b files every line under the service that owns it, with the ticker under Token Balance and telemetry under Pxe Client (D12). The five rows stay; their removal is #294 (`owner-decision`).
+
 ## OA-2: what the gas card shows while the fee card's gas retry runs
 
 **Surface.** A balances key shared by the fee card (a `retry` subscriber) and the Home gas card (a `txRefresh` subscriber). No production surface mounts both today (`plan.md` I2); the shared-key composition test does, and the fix keeps the store right for any surface that will.
@@ -35,3 +37,5 @@ A second, independent question: remove the five rows that match nothing (Faucet,
 **Recommendation.** (a): it fixes the store's cause, and both auditors chose it over (b).
 
 **What ships now.** (a), which the plan reads as inside the #291 record ("the existing states and words only"). If the orchestrator reads the refresh dot or the un-dim as past the record, it says so before the arc starts and the arc ships (b) instead.
+
+**Decided (D-orch-2).** (a), the store retries; shipped in #296.
