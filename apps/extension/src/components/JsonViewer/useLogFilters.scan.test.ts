@@ -334,7 +334,10 @@ describe("log source filter: every logger call's source is listed", () => {
 			sources: ["fpc", "pxe", "network"],
 			refused: [],
 		})
-		expect(read(`logger.log(\`fpc-\${id}\`, level, 'm')`).refused).toHaveLength(1)
+		expect(read('logger.log(`fpc`, level, "m"); logger.log("fpc-" + id, level, "m")').refused).toEqual([
+			"inline.ts:1: unsupported source `fpc`",
+			'inline.ts:1: unsupported source "fpc-" + id',
+		])
 		expect(read("this.logger.log(source, level, 'm')").refused).toEqual(["inline.ts:1: unsupported source source"])
 		expect(read("new ClockTickerAdapter(clock, logger)").refused).toEqual(["inline.ts:1: a logger with no source"])
 	})

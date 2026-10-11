@@ -13,3 +13,7 @@
 - First attempt: `resume-codex.sh` given an empty codex-dir has no model record, so it fell back to its default model (`gpt-6-astra`), not the session's `gpt-6.1-sol`. Its verdict (approve) is not counted. Pass the round-1 codex-dir, or name the model as the fifth argument.
 - Rerun on `gpt-6.1-sol`, same session, on `309b60a..56ed621`: approve, no new material finding; 93 focused tests passed. It accepted the Send add/delete race rejection as a defensible scope exclusion.
 - Loop converged after one fix round.
+
+## After delivery: CodeQL on the pull request (2026-10-11)
+
+- Every required check on #296 passed. The advisory `CodeQL` check failed with one high alert, "Useless regular-expression character escape", on the source scan's self-test fixture `` `logger.log(\`fpc-\${id}\`, …)` ``. Inside a template literal `\$` keeps `${` literal, so the escape is needed and the alert is a false positive in principle. The resolver refuses every source that is not a double-quoted literal through one branch, so the fixture now pins that refusal with a template literal and a concatenation and no escape. The alert is cleared by the change, not dismissed.
