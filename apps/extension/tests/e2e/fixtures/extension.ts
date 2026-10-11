@@ -34,6 +34,7 @@ import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
 import { type EgressCanary, type EgressGuard, type HeldNode, guardArmed, ownGuardedLaunch } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
+import { pageErrorOf } from "./page-errors"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -330,7 +331,8 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
 		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
 		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections (probe-verified) — an error the app
+		// throws + unhandled rejections on Chrome (probe-verified); Firefox emits
+		// neither event for an extension page (FIREFOX.md) — an error the app
 		// catches and merely logs is invisible to BOTH fixture arrays
 		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
 		// prefer DOM/storage/stage evidence for app-level failures.
@@ -338,14 +340,9 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 			ctx.consoleErrors.push(msg.text())
 		}
 	})
-	page.on("pageerror", (err) => {
-		// Mirror the consoleErrors filter above: the benign SW-port-close
-		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
-		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
-		// is in flight during an MV3 service-worker restart. Same known noise,
-		// same filter — everything else still fails the assertion.
-		if ((err as Error).message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err as Error)
+	page.on("pageerror", (payload) => {
+		const err = pageErrorOf(payload)
+		if (err) ctx.pageErrors.push(err)
 	})
 
 	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
@@ -1261,7 +1258,8 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
 		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
 		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections (probe-verified) — an error the app
+		// throws + unhandled rejections on Chrome (probe-verified); Firefox emits
+		// neither event for an extension page (FIREFOX.md) — an error the app
 		// catches and merely logs is invisible to BOTH fixture arrays
 		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
 		// prefer DOM/storage/stage evidence for app-level failures.
@@ -1270,14 +1268,9 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 		}
 	})
 
-	page.on("pageerror", (err) => {
-		// Mirror the consoleErrors filter above: the benign SW-port-close
-		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
-		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
-		// is in flight during an MV3 service-worker restart. Same known noise,
-		// same filter — everything else still fails the assertion.
-		if ((err as Error).message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err as Error)
+	page.on("pageerror", (payload) => {
+		const err = pageErrorOf(payload)
+		if (err) ctx.pageErrors.push(err)
 	})
 
 	const popupUrl = extensionUrl(ctx.extensionId, "/src/popup/index.html")

@@ -17,10 +17,12 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfigRead } from "@/composables/useConfigRead"
 const { openToast } = useToast()
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
+const displayRead = useConfigRead(configService, () => configService.getProps(), landDisplayConfig)
 
 const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
@@ -138,9 +140,10 @@ function onSettingUpdate(setting) {
 	}
 }
 
-onMounted(async () => {
-	const _settings = await configService.getProps()
+// Copies the values only: `applySetting` would open the side panel and close the window on a reread.
+function landDisplayConfig(_settings, updatedSince) {
 	_settings.forEach((s) => {
+		if (updatedSince(s.key)) return
 		if (s.key === "incomingDustUsdThreshold") {
 			dustThreshold.value = String(s.value)
 			return
@@ -151,10 +154,15 @@ onMounted(async () => {
 	})
 
 	isLoading.value = false
+}
+
+onMounted(() => {
+	void displayRead.read()
 })
 
 onBeforeUnmount(() => {
 	configService.disconnect()
+	displayRead.dispose()
 })
 </script>
 

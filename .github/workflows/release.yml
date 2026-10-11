@@ -702,7 +702,7 @@ jobs:
           CWS_ITEM_ID: ${{ vars.CWS_ITEM_ID }}
           CWS_PUBLISH_TYPE: ${{ vars.CWS_PUBLISH_TYPE }}
           ZIP_PATH: dist/release/nulo-chrome-${{ needs.resolve.outputs.version }}.zip
-        run: bun scripts/release/publish-chrome-store-run.ts
+        run: bun --no-install scripts/release/publish-chrome-store-run.ts
 
   # Firefox Add-ons: same gate, one stored key pair. The `firefox-add-ons` environment holds
   # AMO_JWT_ISSUER + AMO_JWT_SECRET; they reach exactly one step, after every third-party action
@@ -761,7 +761,7 @@ jobs:
           ZIP_PATH: dist/release/nulo-firefox-${{ needs.resolve.outputs.version }}.zip
           SOURCE_PATH: dist/source/nulo-${{ needs.resolve.outputs.version }}-source.zip
           LISTING_PATH: apps/extension/store/listing.md
-        run: bun scripts/release/publish-firefox-amo-run.ts
+        run: bun --no-install scripts/release/publish-firefox-amo-run.ts
 
   status:
     name: status

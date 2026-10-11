@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (draft; its wallet fix also in #285); arc 4 waits on #279
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (draft; its wallet fix merged on its own as #285); arc 4 waits on #279
 driver: claude-code
 claude_model: opus
 codex_model: sol

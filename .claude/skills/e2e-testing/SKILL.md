@@ -26,7 +26,7 @@ Every suite runs on Chrome (default) and on Firefox (`NULO_E2E_BROWSER=firefox`)
 
 - **A browser difference goes on `BrowserDriver`** (`fixtures/browser/index.ts`), with a Chrome implementation next to the Firefox one. `scripts/e2e/browser-seam.test.ts` rejects a scheme literal, a direct `browser.close()` / `newPage()` / `waitForTarget()`, and any `isFirefox`/`BROWSER` branch under `fixtures/**` or `helpers/**`. A test file may use `isFirefox` to skip itself whole (`describe.skipIf(isFirefox)(CHROME_ONLY.<reason>, …)`), to keep a test headless Chrome cannot set up off Chrome (`describe.skipIf(!isFirefox)(FIREFOX_ONLY.<reason>, …)`), or to state a real difference in an expectation.
 - **Open, navigate, reload and click through the helpers**: `newPage`, `gotoExtensionPage`, `reloadExtensionPage`, `clickByTestId`/`clickSelector`, `pickFileByTestId`. Each hides a Firefox failure mode that does not look like its cause (a page in a window the wallet opened, a stranded context, a missing user gesture, an unfocused window).
-- **A Chrome-only file is a capability statement, not a quarantine.** The set is three files: `backup-restore-sw-restart` kills the background under an open extension page (Firefox leaves an event page running while one is open), `import-dead-rpc` redirects over CDP Fetch, and `backup-import-stalled-network` stalls a network on a request that hangs, not yet proven on Firefox now that its interception redirects (#272). The two execution canaries run on both browsers — the passkey one moves its post-kill ceremony to a fresh popup where the driver's `credentialOutlivesPage` says the credential survives the anchor page. Adding a Chrome-only file is the owner's call.
+- **A Chrome-only file is a capability statement, not a quarantine.** The set is two files: `backup-restore-sw-restart` kills the background under an open extension page (Firefox leaves an event page running while one is open), and `import-dead-rpc` redirects over CDP Fetch. The two execution canaries run on both browsers — the passkey one moves its post-kill ceremony to a fresh popup where the driver's `credentialOutlivesPage` says the credential survives the anchor page. Adding a Chrome-only file is the owner's call.
 - **`bun run typecheck` checks the e2e tree** (`apps/extension/tsconfig.e2e.json`): it loads Node's types and no Bun types, so a `Bun` global is an error, as it would be at run time. A call form chrome-types leaves out goes in `tests/e2e/chrome-api.d.ts`, never under a `@ts-` directive. Types prove no timing: a spec still has to run.
 - **Red on Firefox only?** Read `document.visibilityState` and `document.hasFocus()` in the page before touching a fixture.
 - **The toolbar panel is drivable on Firefox only** (`fixtures/browser/firefox-action-popup.ts`): `openActionPopup` opens the real panel, `evaluateInActionPopup` reads and clicks in it, and `armPanelDeath` makes it die as a Mac's does when anything else takes focus, recording any WebAuthn call made in it. Each panel call is privileged and focuses a browser window, which refuses a passkey prompt starting in another window at that moment: while a passkey window is up, read the outcome from a control page opened beforehand (`passkey-toolbar-panel.test.ts`). A passkey-window step that succeeds reopens the panel by itself on the window it started from (`armPopupReturn`), so a spec reads that panel rather than opening one; to count panels without moving focus, ask another extension page for `chrome.extension.getViews({ type: "popup" })`, which lists a preloading document too: the panel is open once that document has focus.
@@ -96,9 +96,11 @@ trusted to run with `--slots-in-an-epoch 1`), which an `e2e:agent` run never doe
 
 ### The agent runner — `apps/extension/scripts/e2e/agent.sh`
 
-1. Scans the file paths passed as arguments (or all of `tests/e2e/network` when none) for
-   `@requires-proverless`; any hit without `NULO_E2E_PROVERLESS=1` exits 2 with the remedy. A vitest
-   name filter is not a path — pass the file. Prover-ON is the default; the proverless build is a double opt-in
+1. Asks vitest which files the arguments select (`scripts/e2e/proverless-guard.sh`: `vitest list
+   --filesOnly --json` with the run's config and arguments, so flags, their values and name filters
+   select exactly as the run does, before `--shard` narrows it) and scans them for
+   `@requires-proverless`; any hit without `NULO_E2E_PROVERLESS=1` exits 2 with the remedy, as does
+   an unarmed watch run; any vitest, `jq` or `grep` error exits 2 on its own FATAL line. Prover-ON is the default; the proverless build is a double opt-in
    (`VITE_NULO_E2E_PROVERLESS=1` + `_CONFIRM=1`) and mutually exclusive with
    `VITE_NULO_PRESTO_REQUIRED`.
 2. Claims a fresh port pack (`resolve-ports.ts`: bind-and-release in a static window below the
@@ -358,8 +360,9 @@ assertion; drive the rest of the flow with the ordinary helpers.
   proves nothing either — wait for that signal (or observe for a bounded window), then read zero;
   pair it with a MutationObserver if a flash matters.
 - **State attributes, not visibility.** `offsetParent` and bounding rects are paint artefacts; a
-  leaving `<Transition>` is visible while `isOpen` is already false. Gate on `data-dropdown-open`,
-  `data-toggle-active`, `data-restore-stage`, `data-boot-outcome`; add one if it is missing.
+  leaving `<Transition>` is visible while `isOpen` is already false. Gate on `data-dropdown-open`
+  (open a menu through `openDropdown`, which clicks only a closed one), `data-toggle-active`,
+  `data-restore-stage`, `data-boot-outcome`; add one if it is missing.
 - **Freshness-gated balances.** An imported backup already carries the expected value. Capture
   `captureBalanceBaseline` first and require `updatedAt` newer AND the exact raw value AND the
   token-scoped render (`waitForFreshBalanceRow`, `waitForTokenCardAmount`); body-text scans
@@ -437,7 +440,8 @@ assertion; drive the rest of the flow with the ordinary helpers.
 - **`consoleErrors` is structurally blind to app `console.*`.** The console sniffer, first script in
   every extension page, reroutes the sniffed `console.*` methods to the worker's LoggerService, so
   `page.on("console")` sees only browser-emitted entries and the sniffer's saved originals
-  (`console._log`). `pageerror` is reliable for uncaught throws and rejections. `readSwLogTrail`
+  (`console._log`). `pageerror` is reliable for uncaught throws and rejections on Chrome; on Firefox
+  an extension page emits neither `pageerror` nor `console` (#281, FIREFOX.md). `readSwLogTrail`
   (`fixtures/journal.ts`, `nulo:logs`, 2s flush debounce, bounded) reads the worker's log ring — but
   that flush is gated on `developerMode`, which e2e profiles do not enable, so it returns an empty
   trail unless the test turned Developer Mode on first (the toggles on `#/popup/settings/developer`,
@@ -691,8 +695,8 @@ worker that refused to die.
 
 ### Evidence channels
 
-- `pageerror` (uncaught throws, unhandled rejections) and `readSwLogTrail` (poll past the 2s
-  debounce; empty means not retained, not nothing happened).
+- `pageerror` (uncaught throws, unhandled rejections; Chrome only for an extension page, #281) and
+  `readSwLogTrail` (poll past the 2s debounce; empty means not retained, not nothing happened).
 - Do not rely on console output from a passing test reaching you. Probe by writing uniquely-keyed
   records to `chrome.storage` from inside the extension and dumping them to a real-disk JSONL with
   `appendFileSync`; test the dump path with one no-op probe first. Probe files are
@@ -776,7 +780,7 @@ the sanctioned response.
 | 20 | `"Client disconnected"` from `deleteProfile` ~800ms after a real mid-restore kill | messaging client flipped to connected on a doomed port; the gap-issued call was rejected client-side | rollback gated on the worker's liveness advancing | fixed, `e2e-deflake` |
 | 21 | `pxe op rejected: profile <id> is deleted (generation superseded)` after delete + same-id re-import | offscreen lifecycle map conflated the erased incarnation with its successor | fall-through for `deleted(different-gen)`; `profile-reimport-matrix` pins it | fixed upstream |
 | 22 | `importFullBackup` 300s lapse (`backup-restore-sw-restart` designed retry) | one undifferentiated wait spanning restore + activation | labelled stage trajectory on lapse; no stage warranted an early-fail window (30 imports measured) | closed, `import-stage-deadlines` |
-| 23 | `consoleErrors` empty on a visibly logged app error | console sniffer (§2) | permanent by design; use `pageerror` + `readSwLogTrail` | closed |
+| 23 | `consoleErrors` empty on a visibly logged app error | console sniffer (§2) | permanent by design; use `pageerror` (Chrome; #281 on Firefox) + `readSwLogTrail` | closed |
 | 24 | deterministic 5 migration reds at ~90s locally, green in CI | unarmed dist (`VITE_NULO_E2E_*` flags) | markers + stamp preflight + `agent.sh` assertions | fixed |
 | 25 | `foundryup` HTTP 502 in CI setup | unpinned, unconsumed toolchain step | step deleted; bundled toolchain asserted in `setup-aztec` | fixed, `e2e-deflake` |
 | 26 | random early-stage timeouts in unrelated tooling after many local runs | sandbox datadir on tmpfs pinned RAM via deleted-but-open LMDB files | datadir on real disk + `e2e:reap` | fixed |
@@ -802,6 +806,8 @@ the sanctioned response.
 | 46 | `TimeoutError: Waiting failed: 1000ms exceeded` in `waitForToastGone` at `passkey-retry.test.ts`'s closing check that the "not confirmed" toast is absent, local smoke with three or four browsers running at once (once on Chrome, once on Firefox); the file passed alone every time (8 of 8, 2 of 2) | the check's 1 s budget also covers its first poll's protocol round trip, which a loaded host can exceed while the toast is already gone. The error toast stays until closed, so a real return would fail at any budget | none: rerun the file alone. CI's smoke runs files one at a time and has not shown it | open |
 | 47 | `expected null to be 'queued'` in `same-token-concurrent-sends.test.ts` (heavy concurrent-confirm job, run 37790178426, the one rerun in 100 network-lane runs), then a cascade | on a popup reopen the executing-task snapshot lands before the journal's, so for 3 to 14 ms Home draws one stage-less awaiting card with no cancel control; the old helper waited for any card and read the first | `waitForAwaitingCard(page, stage)` returns only when exactly one `tx-awaiting-card` sits at `stage` with its cancel control, and names every card on a timeout; `RecentActivityView.test.ts` "hydration order" pins the orphan card. A live probe saw the stage-less card first on 12 of 12 reopens (`implementations-plan/archive/code-followups-1/plan.md`, `lessons/phase-2.md`) | fixed, `code-followups-1` |
 | 48 | `Test timed out in 120000ms` in `network/price-fixture.test.ts` on a loaded host | the `feeJuiceImportedExtension` fixture's L1 bridge runs inside the test's budget: 105.8 s on Chrome, 88.6 s on Firefox | `{ timeout: 300_000 }`, the budget `fee-methods.test.ts` already gives the same fixture (`implementations-plan/archive/code-followups-1/plan.md`, `lessons/phase-4.md`) | fixed, `code-followups-1` |
+| 49 | `TimeoutError: Waiting failed: 5000ms exceeded` in `navigation.test.ts`'s `clickBelowBar`, the wait for the compact title bar's opacity to reach 1 after the scroll (the History and Settings titles case), at retry 0 on Chrome: hosted smoke and local runs (#269) | the page's own defect, not the harness's: the Settings and History hero `IntersectionObserver` callbacks read the first of the entries queued since the last delivery; after a fast Tab walk and scroll two arrive together, `[true, false]`, and the page keeps "hero visible" while the hero sits 300 to 1100 px above the scrollport, so the bar stays hidden (4 of 12 diagnostic iterations, `implementations-plan/archive/e2e-followups/lessons/phase-0.md`) | the pages read the newest entry (`entries.at(-1)`): a delivery batches every change since the last, oldest first. Both pages' unit tests deliver `[true, false]` and `[false, true]`, red on the old read; the diagnostic loop then stuck 0 of 36 iterations, with twelve two-entry deliveries among them. The test, its wait and its budget did not change. Rule: an observer callback's newest entry is the current state | fixed, `e2e-followups` |
+| 50 | `TimeoutError: Waiting failed: 2000ms exceeded` waiting for `tokens-menu-import` in `importToken` (`fixtures/helpers.ts`), `network/import-handshake-note-matrix` on Firefox at retry 0, after `switchToLocalNetwork` (#274) | the helper clicked the tokens trigger with `querySelector(...)?.click()`, which does nothing while Home is still mounting (6 of 6 in a probe: a hash change to Home, then the click), then waited 2 s for the item. `DropdownRoot` toggles on every click, so a blind second click closes an open menu | `openDropdown` (`fixtures/helpers.ts`): `prepareClick`, one page-side read-and-click of the last visible trigger that clicks only a closed menu, then a wait on `data-dropdown-open`, each stage naming the page's state on a timeout; `importToken`, `refreshBalances` and `setTheme` open through it. `navigation.test.ts` releases the navigation to Home on the opener's own first look: red with the old click, green with the opener on both browsers. Rule: wait for a trigger before clicking it, and gate a toggle on its own state, never on a second click | fixed, `e2e-followups` |
 
 ## 6. Editing the harness
 

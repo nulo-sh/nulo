@@ -385,6 +385,21 @@ lockfile entries inside the window. **On Bun 1.4 that bug is fixed** — a
 Widening to 14 days is viable; it is a deliberate policy change to make
 on its own PR, not a side effect of a toolchain bump.
 
+**No install at run time.** With no `node_modules`, Bun's default fetches a
+bare import from npm while a script runs, past `bun.lock`'s hashes and the
+age gate; the CI jobs that hold a release credential install nothing, so a
+stray import in one of their scripts would run unpinned code beside it.
+`bunfig.toml` sets `install.auto = "disable"`, and Bun reads that file only
+from its working directory, so it covers every Bun call made from the root
+of the workflow's own revision. The jobs that run another revision's code
+(the two store publishers, the preview comment) pass `bun --no-install`.
+`scripts/ci-cd/release-integrity.test.ts` pins that every Bun call in a job
+that installs nothing is reached by one of the two, and proves Bun refuses
+under the committed file. `bunx`, `bun x` and `bun create` fetch whatever
+the file says, so that test counts them as installs, and the jobs that tag
+or publish refuse them. A fresh clone refuses the same way until
+`bun install`.
+
 **Dependabot** updates the GitHub Actions that the workflows and composite
 actions use: one grouped pull request a week, after a 7-day cooldown
 (`.github/dependabot.yml`). It cannot read Bun's lockfile, so npm

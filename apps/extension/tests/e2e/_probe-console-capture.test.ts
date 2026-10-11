@@ -12,7 +12,9 @@
  *      polled past LoggerStore's 2s persistence debounce);
  *   2. an UNCAUGHT throw and an UNHANDLED rejection each DO reach
  *      `page.on("pageerror")` — the native uncaught path survives the
- *      entry-point handlers;
+ *      entry-point handlers — and a primitive rejection value, which CDP
+ *      delivers as is, reaches `pageErrors` as an Error (Chrome only: Firefox
+ *      emits no `pageerror` for an extension page, FIREFOX.md);
  *   3. the BUILT popup HTML preserves sniffer-before-entry script order
  *      (module order is spec-guaranteed; this eliminates the build-reorder
  *      residual).
@@ -71,6 +73,8 @@ test.skipIf(!PROBE_ENABLED)("uncaught throw and unhandled rejection each reach p
 	const page = await openPopup(ctx)
 	const throwNonce = `NULO-PROBE-THROW-${Date.now()}`
 	const rejectNonce = `NULO-PROBE-REJECT-${Date.now()}`
+	const primitiveNonce = `NULO-PROBE-PRIMITIVE-${Date.now()}`
+	const before = ctx.pageErrors.length
 
 	await page.evaluate((n: string) => {
 		setTimeout(() => {
@@ -82,9 +86,18 @@ test.skipIf(!PROBE_ENABLED)("uncaught throw and unhandled rejection each reach p
 			void Promise.reject(new Error(n))
 		}, 0)
 	}, rejectNonce)
+	// Page script, not a function `evaluate` defines: Chrome drops the thrown value of the latter, and
+	// CDP hands a page script's primitive rejection value to the listener as is, `undefined` included.
+	await page.evaluate(`setTimeout(() => { void Promise.reject(${JSON.stringify(primitiveNonce)}); void Promise.reject(undefined) }, 0)`)
 
 	await sleep(1_500)
-	const messages = ctx.pageErrors.map((e) => e.message)
+	const recorded = ctx.pageErrors.slice(before)
+	expect(recorded, `the four probes, and only they, reach pageErrors — got: ${JSON.stringify(recorded.map(String))}`).toHaveLength(4)
+	for (const err of recorded) expect(err).toBeInstanceOf(Error)
+	const messages = recorded.map((e) => e.message)
+	expect(messages, "each primitive rejection reaches pageErrors as an Error of its value").toEqual(
+		expect.arrayContaining([primitiveNonce, "undefined"]),
+	)
 	expect(
 		messages.some((m) => m.includes(throwNonce)),
 		`uncaught throw should reach pageerror — got: ${JSON.stringify(messages)}`,

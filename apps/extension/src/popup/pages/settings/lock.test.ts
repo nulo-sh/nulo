@@ -1,7 +1,9 @@
 import { createTestingPinia } from "@pinia/testing"
 import { Flex, MaterialIcon, Text } from "@nulo/design"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import type { ConfigProp } from "@/wallet/config"
 
 const fakes = vi.hoisted(() => ({
 	managerProfile: { name: "managers.profile" },
@@ -9,8 +11,8 @@ const fakes = vi.hoisted(() => ({
 	config: {
 		getValue: vi.fn(),
 		setValue: vi.fn(),
-		onUpdate: { add: vi.fn() },
-		onConnected: { add: vi.fn() },
+		onUpdate: undefined as unknown as EventHandler<ConfigProp>,
+		onConnected: undefined as unknown as EventHandler<void>,
 		disconnect: vi.fn(),
 	},
 	profile: { refreshSession: vi.fn(), disconnect: vi.fn() },
@@ -36,6 +38,8 @@ import LockPage from "./lock.vue"
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	fakes.config.onUpdate = new EventHandler<ConfigProp>()
+	fakes.config.onConnected = new EventHandler<void>()
 	fakes.config.getValue.mockImplementation(async (key: string) => (key === "sessionTtl" ? 1_800_000 : true))
 	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
 	if (c) {
@@ -130,8 +134,8 @@ describe("settings/lock", () => {
 	})
 
 	describe("a port that drops under the mounted page", () => {
-		const connect = () => fakes.config.onConnected.add.mock.calls[0][0]()
-		const update = (key: string, value: unknown) => fakes.config.onUpdate.add.mock.calls[0][0]({ key, value })
+		const connect = () => fakes.config.onConnected.invoke()
+		const update = (key: string, value: unknown) => fakes.config.onUpdate.invoke({ key, value } as ConfigProp)
 		const strict = (w: VueWrapper) => w.findComponent('[data-testid="strict-security-toggle"]').attributes("modelvalue")
 		const minutes = (w: VueWrapper) => w.findComponent('[data-testid="auto-lock-input"]').attributes("modelvalue")
 

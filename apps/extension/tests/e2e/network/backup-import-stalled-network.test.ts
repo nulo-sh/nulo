@@ -17,12 +17,12 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Page } from "puppeteer"
-import { describe, expect, inject } from "vitest"
+import { expect, inject } from "vitest"
 import { CHAIN_IDS, TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { ACCOUNT_STATE_SKIP_DEADLINE } from "@/wallet/services/account-state/normalize"
 import type { AztecTestConfig } from "../fixtures/aztec"
-import { type ArmedInterception, CHROME_ONLY, interceptRpc, isFirefox } from "../fixtures/browser"
+import { type ArmedInterception, interceptRpc } from "../fixtures/browser"
 import {
 	clickByTestId,
 	type ExtensionContext,
@@ -151,81 +151,78 @@ async function retryOnce(page: Page): Promise<RunningRetry> {
 	return seen
 }
 
-describe.skipIf(isFirefox)(CHROME_ONLY.hangingRequest, () => {
-	test("agent-runner contract: a live sandbox must be configured (no false skip)", () => {
-		expect(hasConfig).toBe(true)
-	})
-
-	test.skipIf(!hasConfig)(
-		"a stalled Testnet costs only its own row while the local network restores, and a Retry keeps that one row",
-		{ timeout: 900_000 },
-		async ({ tokenReadyExtension }) => {
-			const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
-			const sender = (await AztecAddress.random()).toString()
-			const funded = tokenReadyExtension.accountAddress
-			const tokenAddress = aztecConfig!.tokenAddress
-			const filePath = stalledTestnetBackup(await exportBackupContent(tokenReadyExtension), funded, tokenAddress, sender)
-
-			const stub = await startStub((method) =>
-				method === "aztec_getNodeInfo" ? nodeInfoResult(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION) : undefined,
-			)
-			const profileDir = mkdtempSync(join(tmpdir(), "nulo-stalled-network-"))
-			let ctx2: ExtensionContext | undefined
-			let armed: ArmedInterception | undefined
-			try {
-				ctx2 = await launchExtension({ userDataDir: profileDir })
-				armed = await interceptRpc(ctx2.browser, ctx2.extensionId, PUBLIC_RPC_ORIGIN, { kind: "redirect", to: stub.url })
-				const page = await gotoPopupImport(ctx2)
-				await submitFullBackupImport(page, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
-				// The restore of a real export, then the tail's 45 s bound.
-				await withTimeoutMessage(
-					page.waitForSelector('[data-testid="import-full-backup-continue-btn"]', { visible: true, timeout: 240_000 }),
-					async () =>
-						`no errors screen (hash ${await page.evaluate(() => window.location.hash)}, stage ${await readStage(page)})`,
-				)
-				const testnetId = await networkIdOfChain(page, CHAIN_IDS.TESTNET)
-				const firstLog = await readViewedErrorLog(page)
-				// Soft, so wrong error rows still report whether the local network restored.
-				expect.soft(await localNetworkListsSender(ctx2, sender), "the local network's restored sender, before Continue").toBe(true)
-				expectOnlyStalledDeadline(firstLog, testnetId)
-				await page.bringToFront()
-
-				// Testnet still hangs, so the Retry runs out of time again and leaves the same one row.
-				expect(await retryOnce(page)).toEqual({ label: "Retrying…", continueDisabled: true, viewErrorsDisabled: true })
-				expectOnlyStalledDeadline(await readViewedErrorLog(page), testnetId)
-
-				await clickByTestId(page, "import-full-backup-continue-btn")
-				await waitForHash(page, POPUP_IMPORT_SHELL.successHash, 60_000)
-
-				const home = await openPopup(ctx2)
-				await waitForHash(home, "#/popup/general", 30_000)
-				await switchToLocalNetwork(home)
-				const baseline = await captureBalanceBaseline(home, funded, tokenAddress)
-				await waitForFreshBalanceRow(home, {
-					account: funded,
-					tokenContract: tokenAddress,
-					expectedPublicRaw: FUNDED_PUBLIC_RAW,
-					baselineUpdatedAt: baseline,
-					timeoutMs: 150_000,
-				})
-
-				// Testnet reached registration: its PXE boot dialed the node after the answered probe.
-				const firstProbe = stub.methods.indexOf("aztec_getNodeInfo")
-				const seen = `stub saw: [${stub.methods.join(", ")}]`
-				expect(firstProbe, seen).toBeGreaterThanOrEqual(0)
-				expect(stub.methods.indexOf("aztec_getL1ContractAddresses"), seen).toBeGreaterThan(firstProbe)
-				expect(await armed.failures(), "rpc interception failures").toEqual([])
-			} finally {
-				try {
-					await armed?.stop()
-					await ctx2?.close()
-				} finally {
-					await stub.close()
-					rmSync(profileDir, { recursive: true, force: true })
-					// The doctored file embeds the wallet's real (local-chain test) master key.
-					rmSync(dirname(filePath), { recursive: true, force: true })
-				}
-			}
-		},
-	)
+test("agent-runner contract: a live sandbox must be configured (no false skip)", () => {
+	expect(hasConfig).toBe(true)
 })
+
+test.skipIf(!hasConfig)(
+	"a stalled Testnet costs only its own row while the local network restores, and a Retry keeps that one row",
+	{ timeout: 900_000 },
+	async ({ tokenReadyExtension }) => {
+		const { AztecAddress } = await import("@aztec-labs/aztec.js/addresses")
+		const sender = (await AztecAddress.random()).toString()
+		const funded = tokenReadyExtension.accountAddress
+		const tokenAddress = aztecConfig!.tokenAddress
+		const filePath = stalledTestnetBackup(await exportBackupContent(tokenReadyExtension), funded, tokenAddress, sender)
+
+		const stub = await startStub((method) =>
+			method === "aztec_getNodeInfo" ? nodeInfoResult(TESTNET_L1_CHAIN_ID, TESTNET_ROLLUP_VERSION) : undefined,
+		)
+		const profileDir = mkdtempSync(join(tmpdir(), "nulo-stalled-network-"))
+		let ctx2: ExtensionContext | undefined
+		let armed: ArmedInterception | undefined
+		try {
+			ctx2 = await launchExtension({ userDataDir: profileDir })
+			armed = await interceptRpc(ctx2.browser, ctx2.extensionId, PUBLIC_RPC_ORIGIN, { kind: "redirect", to: stub.url })
+			const page = await gotoPopupImport(ctx2)
+			await submitFullBackupImport(page, filePath, TEST_PASSWORD, POPUP_IMPORT_SHELL)
+			// The restore of a real export, then the tail's 45 s bound.
+			await withTimeoutMessage(
+				page.waitForSelector('[data-testid="import-full-backup-continue-btn"]', { visible: true, timeout: 240_000 }),
+				async () => `no errors screen (hash ${await page.evaluate(() => window.location.hash)}, stage ${await readStage(page)})`,
+			)
+			const testnetId = await networkIdOfChain(page, CHAIN_IDS.TESTNET)
+			const firstLog = await readViewedErrorLog(page)
+			// Soft, so wrong error rows still report whether the local network restored.
+			expect.soft(await localNetworkListsSender(ctx2, sender), "the local network's restored sender, before Continue").toBe(true)
+			expectOnlyStalledDeadline(firstLog, testnetId)
+			await page.bringToFront()
+
+			// Testnet still hangs, so the Retry runs out of time again and leaves the same one row.
+			expect(await retryOnce(page)).toEqual({ label: "Retrying…", continueDisabled: true, viewErrorsDisabled: true })
+			expectOnlyStalledDeadline(await readViewedErrorLog(page), testnetId)
+
+			await clickByTestId(page, "import-full-backup-continue-btn")
+			await waitForHash(page, POPUP_IMPORT_SHELL.successHash, 60_000)
+
+			const home = await openPopup(ctx2)
+			await waitForHash(home, "#/popup/general", 30_000)
+			await switchToLocalNetwork(home)
+			const baseline = await captureBalanceBaseline(home, funded, tokenAddress)
+			await waitForFreshBalanceRow(home, {
+				account: funded,
+				tokenContract: tokenAddress,
+				expectedPublicRaw: FUNDED_PUBLIC_RAW,
+				baselineUpdatedAt: baseline,
+				timeoutMs: 150_000,
+			})
+
+			// Testnet reached registration: its PXE boot dialed the node after the answered probe.
+			const firstProbe = stub.methods.indexOf("aztec_getNodeInfo")
+			const seen = `stub saw: [${stub.methods.join(", ")}]`
+			expect(firstProbe, seen).toBeGreaterThanOrEqual(0)
+			expect(stub.methods.indexOf("aztec_getL1ContractAddresses"), seen).toBeGreaterThan(firstProbe)
+			expect(await armed.failures(), "rpc interception failures").toEqual([])
+		} finally {
+			try {
+				await armed?.stop()
+				await ctx2?.close()
+			} finally {
+				await stub.close()
+				rmSync(profileDir, { recursive: true, force: true })
+				// The doctored file embeds the wallet's real (local-chain test) master key.
+				rmSync(dirname(filePath), { recursive: true, force: true })
+			}
+		}
+	},
+)

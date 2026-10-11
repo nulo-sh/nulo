@@ -7,7 +7,7 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { JobCancelledError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from "vitest"
 import { nextTick, reactive } from "vue"
 
 const ACCOUNT = "0xacct"
@@ -56,7 +56,7 @@ vi.mock("@/wallet/services/execution/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: new EventHandler(), onTokenDeleted: new EventHandler(), getTokens: mocks.getTokens }
+		return { disconnect: vi.fn(), onTokenAdded: liveBus(), onTokenDeleted: liveBus(), getTokens: mocks.getTokens }
 	}),
 }))
 vi.mock("@/wallet/services/token-balance/client", () => ({
@@ -73,9 +73,9 @@ vi.mock("@/wallet/services/contact/client", () => ({
 	ContactServiceClient: vi.fn(function () {
 		return {
 			disconnect: vi.fn(),
-			onContactAdded: new EventHandler(),
-			onContactUpdated: new EventHandler(),
-			onContactDeleted: new EventHandler(),
+			onContactAdded: liveBus(),
+			onContactUpdated: liveBus(),
+			onContactDeleted: liveBus(),
 			getContacts: mocks.getContacts,
 		}
 	}),
@@ -130,6 +130,7 @@ import { TokenBalanceServiceClient } from "@/wallet/services/token-balance/clien
 import { TokenServiceClient } from "@/wallet/services/token/client"
 import { TransferType } from "@/wallet/services/transaction/client"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
+import { held, holdReads, liveBus } from "../../../tests/helpers/held-read"
 import Send from "./send.vue"
 
 const STUBS = {
@@ -803,26 +804,7 @@ describe("send page — the token card while the tokens load", () => {
 	/** Another chain's token that carries the id the page keeps selected. */
 	const FOREIGN = { ...TOKEN, chainId: 999, contract: `0x${"f".repeat(64)}`, symbol: "FRN" }
 
-	type Held = { promise: Promise<unknown[]>; resolve: (tokens: unknown[]) => void; reject: (error: unknown) => void }
-	function held(): Held {
-		let resolve!: Held["resolve"]
-		let reject!: Held["reject"]
-		const promise = new Promise<unknown[]>((res, rej) => {
-			resolve = res
-			reject = rej
-		})
-		return { promise, resolve, reject }
-	}
-	/** Every getTokens call waits for the test: `reads[n]` settles the n-th. */
-	function holdTokenReads(): Held[] {
-		const reads: Held[] = []
-		mocks.getTokens.mockImplementation(() => {
-			const read = held()
-			reads.push(read)
-			return read.promise
-		})
-		return reads
-	}
+	const holdTokenReads = () => holdReads<unknown[]>(mocks.getTokens)
 	const lastClient = <T>(ctor: unknown) => (ctor as { mock: { results: { value: T }[] } }).mock.results.at(-1)?.value as T
 	const tokenAdded = () => lastClient<{ onTokenAdded: EventHandler<unknown> }>(TokenServiceClient).onTokenAdded
 	const balanceAdded = () => lastClient<{ onTokenBalanceAdded: EventHandler<unknown> }>(TokenBalanceServiceClient).onTokenBalanceAdded
@@ -1092,7 +1074,7 @@ describe("send page — the token card while the tokens load", () => {
 	})
 
 	test("a token added for this identity during the load is in the loaded list", async () => {
-		const first = held()
+		const first = held<unknown[]>()
 		mocks.getTokens.mockReturnValueOnce(first.promise).mockResolvedValue([TOKEN, OTHER])
 		const { w, cacheStore } = await mountSend()
 		tokenAdded().invoke(OTHER)
@@ -1103,6 +1085,46 @@ describe("send page — the token card while the tokens load", () => {
 		cacheStore.activeTokenIdx = OTHER.id
 		await nextTick()
 		expect(card(w)).toEqual({ loading: "false", symbol: "OTH" })
+		w.unmount()
+	})
+
+	const tokenDeleted = () => lastClient<{ onTokenDeleted: EventHandler<unknown> }>(TokenServiceClient).onTokenDeleted
+	const listed = (w: W) => (w.vm as unknown as { tokens: { symbol: string }[] }).tokens.map((t) => t.symbol)
+
+	test("(BUG PIN) a token deleted after the token answer, while the contacts read is out, stays listed and active; one deleted after the load is dropped", async () => {
+		// Today's behaviour, kept until the owner decides: the delete finds no row in the list the load
+		// cleared, and the token answer, applied only once the other reads answer, brings it back.
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const contactReads = holdReads<unknown[]>(mocks.getContacts)
+		onTestFinished(() => {
+			mocks.getContacts.mockReset()
+		})
+		const { w } = await mountSend()
+		tokenDeleted().invoke(TOKEN)
+		expect(contactReads).toHaveLength(1)
+		contactReads[0]?.resolve([])
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST", "OTH"])
+		expect(card(w)).toEqual({ loading: "false", symbol: "TST" })
+
+		tokenDeleted().invoke(OTHER)
+		await flushPromises()
+		expect(listed(w)).toEqual(["TST"])
+		w.unmount()
+	})
+
+	test("(BUG PIN) deleting the active token selects no token, not the next one", async () => {
+		// The delete drops the row before it reads the active token, which then no longer resolves, so
+		// the move to the first token never runs.
+		mocks.getTokens.mockResolvedValue([TOKEN, OTHER])
+		const { w, cacheStore } = await mountSend()
+		expect(card(w).symbol).toBe("TST")
+		tokenDeleted().invoke(TOKEN)
+		await flushPromises()
+		expect(listed(w)).toEqual(["OTH"])
+		expect(cacheStore.activeTokenIdx).toBe(TOKEN.id)
+		expect(card(w)).toEqual({ loading: "false", symbol: undefined })
+		expect(mocks.openToast).not.toHaveBeenCalled()
 		w.unmount()
 	})
 
@@ -1139,7 +1161,11 @@ describe("send page — the contact list reducers", () => {
 	const row = (id: string, name: string, c: string): Row => ({ id, name, address: `0x2${c.repeat(63)}` })
 	const contactClient = () => {
 		const results = vi.mocked(ContactServiceClient).mock.results
-		return results[results.length - 1].value as { onContactUpdated: EventHandler<Row>; onContactDeleted: EventHandler<Row> }
+		return results[results.length - 1].value as {
+			onContactAdded: EventHandler<Row>
+			onContactUpdated: EventHandler<Row>
+			onContactDeleted: EventHandler<Row>
+		}
 	}
 	const vmContacts = (w: W) => (w.vm as unknown as { contacts: Row[] }).contacts
 	const candidateNames = (w: W) => (w.findComponent(STUBS.RecipientField).props("candidates") as Row[]).map((c) => c.name)
@@ -1158,6 +1184,24 @@ describe("send page — the contact list reducers", () => {
 		expect(vmContacts(w)).not.toBe(before)
 		expect(vmContacts(w).map((c) => c.name)).toEqual(["Dave"])
 		expect(candidateNames(w)[0]).toBe("Dave")
+		w.unmount()
+	})
+
+	test("(BUG PIN) a contact added after the contacts answer, while the token read is out, is dropped; one added after the load is kept", async () => {
+		// Today's behaviour, kept until the owner decides: the contacts answer is applied only once the
+		// token and balance reads answer too, and it replaces the list an add already reached.
+		mocks.getContacts.mockResolvedValueOnce([row("c1", "Alice", "a")])
+		const tokenReads = holdReads<unknown[]>(mocks.getTokens)
+		const { w } = await mountSend()
+		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
+		expect(tokenReads).toHaveLength(1)
+		tokenReads[0]?.resolve([TOKEN])
+		await flushPromises()
+		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice"])
+
+		contactClient().onContactAdded.invoke(row("c2", "Bob", "b"))
+		await flushPromises()
+		expect(vmContacts(w).map((c) => c.name)).toEqual(["Alice", "Bob"])
 		w.unmount()
 	})
 })

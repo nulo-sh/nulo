@@ -3,7 +3,7 @@ import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { ElementHandle, Page } from "puppeteer"
 import { defaultProfileName } from "@/utils/profile-name"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { reloadExtensionPage } from "./browser"
+import { prepareClick, reloadExtensionPage } from "./browser"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, expectNameFieldPrefill, replaceInputValue, waitForHash, withTimeoutMessage } from "./extension"
 import { type SendAction, submitSend } from "./send-page"
@@ -917,23 +917,61 @@ export async function deleteContact(page: Page, name: string): Promise<void> {
 	await page.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: 5_000 }, rowSelector)
 }
 
+// ── Dropdown ───────────────────────────────────────────────────────────
+
+/**
+ * Opens the dropdown whose trigger carries `triggerTestId` and resolves once the dropdown's own
+ * state (`data-dropdown-open`) reads open. It waits for a visible trigger and clicks at most once:
+ * `DropdownRoot` toggles on every trigger click, so a second click would close the menu, and a menu
+ * already open is left open.
+ */
+export async function openDropdown(page: Page, triggerTestId: string): Promise<void> {
+	await prepareClick(page)
+	await withTimeoutMessage(page.waitForFunction(openTrigger, { timeout: 10_000 }, triggerTestId, true), () =>
+		dropdownDiagnostic(page, triggerTestId, "no visible trigger"),
+	)
+	await withTimeoutMessage(page.waitForFunction(openTrigger, { timeout: 5_000 }, triggerTestId, false), () =>
+		dropdownDiagnostic(page, triggerTestId, "the menu never read open"),
+	)
+}
+
+/** Page side: the state read and the click pick one trigger by `clickByTestId`'s rule, so they never disagree. */
+function openTrigger(id: string, click: boolean): boolean {
+	const trigger = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)]
+		.filter((el) => {
+			if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return false
+			const style = window.getComputedStyle(el)
+			if (style.display === "none" || style.visibility === "hidden") return false
+			const rect = el.getBoundingClientRect()
+			return rect.width > 0 && rect.height > 0
+		})
+		.at(-1)
+	if (!trigger) return false
+	const open = trigger.closest("[data-dropdown-open]")?.getAttribute("data-dropdown-open") === "true"
+	if (click && !open) trigger.click()
+	return click || open
+}
+
+/** The page's state at a dropdown wait's timeout, so a red names which stage stalled and why. */
+async function dropdownDiagnostic(page: Page, triggerTestId: string, stage: string): Promise<string> {
+	const state = await page.evaluate((id: string) => {
+		const triggers = [...document.querySelectorAll(`[data-testid="${id}"]`)]
+		return {
+			triggers: triggers.length,
+			open: triggers.map((el) => el.closest("[data-dropdown-open]")?.getAttribute("data-dropdown-open") ?? null),
+			hash: window.location.hash,
+			visibility: document.visibilityState,
+			focused: document.hasFocus(),
+		}
+	}, triggerTestId)
+	return `${triggerTestId}: ${stage}: ${JSON.stringify(state)}`
+}
+
 // ── Token ──────────────────────────────────────────────────────────────
 
 /** Import a token by contract address via the NewTokenPopup. */
 export async function importToken(page: Page, contractAddress: string): Promise<void> {
-	// Open tokens dropdown menu
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-trigger"]') as HTMLElement)?.click()
-	})
-	// The "Import token" item teleports into the dropdown layer after the
-	// menu opens; wait for it before clicking so we don't no-op on an
-	// unmounted target.
-	await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
-
-	// Click "Import token"
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-import"]') as HTMLElement)?.click()
-	})
+	await clickTokensMenuItem(page, "tokens-menu-import")
 
 	// Enter contract address
 	await page.waitForSelector('[data-testid="token-address-input"]', { visible: true, timeout: 5_000 })
@@ -972,13 +1010,15 @@ export async function importToken(page: Page, contractAddress: string): Promise<
  *  (e.g. the fixture loops in extension.ts and the input-enabled wait inside
  *  sendTransfer), so we don't add a defensive trailing sleep here. */
 export async function refreshBalances(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-trigger"]') as HTMLElement)?.click()
-	})
-	await page.waitForSelector('[data-testid="tokens-menu-refresh"]', { visible: true, timeout: 2_000 })
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-refresh"]') as HTMLElement)?.click()
-	})
+	await clickTokensMenuItem(page, "tokens-menu-refresh")
+}
+
+/** Opens Home's tokens menu and clicks `item`, which teleports into the dropdown layer once open. */
+async function clickTokensMenuItem(page: Page, item: string): Promise<void> {
+	await openDropdown(page, "tokens-menu-trigger")
+	await withTimeoutMessage(clickByTestId(page, item, 2_000), () =>
+		dropdownDiagnostic(page, "tokens-menu-trigger", `${item} never showed`),
+	)
 }
 
 /** Read the displayed balance text from BalanceView. */
@@ -1496,25 +1536,7 @@ export async function setInputAndBlur(page: Page, selector: string, value: strin
  *  and then waits on an option that is about to disappear. Gate on the
  *  dropdown's OWN state (`data-dropdown-open`, synchronous with `isOpen`). */
 export async function setTheme(page: Page, mode: "system" | "light" | "dark"): Promise<void> {
-	const readOpen = () =>
-		page.evaluate(
-			() =>
-				document
-					.querySelector('[data-testid="theme-trigger"]')
-					?.closest("[data-dropdown-open]")
-					?.getAttribute("data-dropdown-open") === "true",
-		)
-	if (!(await readOpen())) {
-		await clickByTestId(page, "theme-trigger")
-		await page.waitForFunction(
-			() =>
-				document
-					.querySelector('[data-testid="theme-trigger"]')
-					?.closest("[data-dropdown-open]")
-					?.getAttribute("data-dropdown-open") === "true",
-			{ timeout: 5_000 },
-		)
-	}
+	await openDropdown(page, "theme-trigger")
 	await clickByTestId(page, `theme-${mode}-btn`)
 	if (mode === "system") {
 		// system mode resolves to either "dark" or "light" via prefers-color-scheme
