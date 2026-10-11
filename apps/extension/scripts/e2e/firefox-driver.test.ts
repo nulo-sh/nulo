@@ -356,7 +356,10 @@ describe("the page-error relay", () => {
 		const extension = (childId: number) => ({ childId, remoteType: "extension" })
 		const web = (childId: number) => ({ childId, remoteType: "web" })
 		const parent = { childId: 0, remoteType: null }
-		const read = (state: object, live: object[]) => ({ state: JSON.stringify({ faultCount: 0, faults: [], ...state }), live })
+		const read = (state: object, live: object[]) => ({
+			state: JSON.stringify({ faultCount: 0, faults: [], extensionProcesses: [3], ...state }),
+			live,
+		})
 
 		test("is clean when nothing faulted and the live extension process reported ready", () => {
 			expect(relayVerdict(read({ ready: [extension(3), web(4)] }, [parent, extension(3), web(4)]))).toBeUndefined()
@@ -378,13 +381,29 @@ describe("the page-error relay", () => {
 			)
 		})
 
+		test("fails on an extension process that exited without reporting ready", () => {
+			expect(relayVerdict(read({ ready: [extension(3)], extensionProcesses: [3, 5] }, [parent, extension(3)]))).toBe(
+				"extension process(es) 5 ran without the listener",
+			)
+		})
+
 		test("fails when no extension process ever reported ready, even with none live", () => {
-			expect(relayVerdict(read({ ready: [web(4)] }, [parent, web(4)]))).toBe("no extension process reported the listener ready")
+			expect(relayVerdict(read({ ready: [web(4)], extensionProcesses: [] }, [parent, web(4)]))).toBe(
+				"no extension process reported the listener ready",
+			)
 		})
 
 		test("fails on a read that came back malformed", () => {
-			const badReady = JSON.stringify({ faultCount: 0, faults: [], ready: [{ childId: "3", remoteType: "extension" }] })
-			for (const bad of [undefined, { state: null, live: [] }, { state: "{", live: [] }, { state: badReady, live: [] }]) {
+			const state = { faultCount: 0, faults: [], ready: [extension(3)], extensionProcesses: [3] }
+			const badReady = JSON.stringify({ ...state, ready: [{ childId: "3", remoteType: "extension" }] })
+			const badSeen = JSON.stringify({ ...state, extensionProcesses: ["3"] })
+			const unseen = JSON.stringify({ faultCount: 0, faults: [], ready: [extension(3)] })
+			for (const bad of [
+				undefined,
+				{ state: null, live: [] },
+				{ state: "{", live: [] },
+				...[badReady, badSeen, unseen].map((s) => ({ state: s, live: [] })),
+			]) {
 				expect(relayVerdict(bad)).toMatch(/^its state could not be read/)
 			}
 		})

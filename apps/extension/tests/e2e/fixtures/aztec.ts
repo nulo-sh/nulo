@@ -823,7 +823,8 @@ export async function deployDelegatedPullRig(
 
 /** Wait until the node reports `txHash` proven or finalized with a successful execution: a flow's
  *  next step may read state the tx wrote, and the wallet resolves a dApp's send at submission.
- *  Rejects when the node reports it dropped, when its public execution reverted, or after `timeoutMs`. */
+ *  Rejects when the node reports it dropped, when its public execution reverted, when a receipt read
+ *  fails, or after `timeoutMs`. */
 export async function waitForTxMined(aztecConfig: AztecTestConfig, txHash: string, timeoutMs = 120_000): Promise<void> {
 	const node = createAztecNodeClient(aztecConfig.nodeUrl)
 	const hash = TxHash.fromString(txHash)

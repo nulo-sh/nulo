@@ -47,12 +47,15 @@ function expectExactly(texts: readonly string[], nonces: readonly string[], what
 	expect(texts, `${what}: nothing else, got ${seen}`).toHaveLength(nonces.length)
 }
 
-/** What `page`'s own `pageerror` listener hears, as the fixtures record it. */
-function hear(page: Page): string[] {
-	const heard: string[] = []
+/** What `page`'s own listeners hear: its page errors as the fixtures read them, and its console errors. */
+function hear(page: Page): { errors: string[]; console: string[] } {
+	const heard = { errors: [] as string[], console: [] as string[] }
 	page.on("pageerror", (payload) => {
 		const err = pageErrorOf(payload)
-		if (err) heard.push(err.message)
+		if (err) heard.errors.push(err.message)
+	})
+	page.on("console", (msg) => {
+		if (msg.type() === "error") heard.console.push(msg.text())
 	})
 	return heard
 }
@@ -79,13 +82,12 @@ test("an extension page's errors reach the launch's arrays once, and no other co
 	expect(count(pageTexts(), n.aThrow), "a throw the page reported before answering is in the array when the call returns").toBe(1)
 
 	await a.evaluate(raiseThenSettle(nativeConsoleError(n.aConsole)))
+	expect(count(ctx.consoleErrors, n.aConsole), "and so is a console error").toBe(1)
+
 	await b.evaluate(raiseThenSettle(rejecting(n.bReject)))
 	await b.evaluate(raiseThenSettle(rejectingPrimitive(n.bPrimitive)))
 	// A rejection is reported once the browser finds it unhandled, after the task that dropped it.
-	await until(
-		() => count(ctx.consoleErrors, n.aConsole) > 0 && count(pageTexts(), n.bReject) > 0 && count(pageTexts(), n.bPrimitive) > 0,
-		"the native console error and both rejections arrived",
-	)
+	await until(() => count(pageTexts(), n.bReject) > 0 && count(pageTexts(), n.bPrimitive) > 0, "both rejections arrived")
 
 	await reloadExtensionPage(a)
 	await a.evaluate(raiseThenSettle(throwing(n.aAfterReload)))
@@ -95,7 +97,7 @@ test("an extension page's errors reach the launch's arrays once, and no other co
 	await gotoExtensionPage(c, extensionUrl(ctx.extensionId, "/src/popup/index.html#/popup/general"))
 	const heardC = hear(c)
 	await c.evaluate(`setTimeout(() => { window.close(); ${throwing(n.cSelfClose)} }, 0)`)
-	await until(() => heardC.length > 0, "a page that throws in the task that closes it was heard")
+	await until(() => heardC.errors.length > 0, "a page that throws in the task that closes it was heard")
 
 	const thrownKey = `nulo:e2e:page-error-capture:${randomUUID()}`
 	await evaluateInBackground(
@@ -111,7 +113,7 @@ test("an extension page's errors reach the launch's arrays once, and no other co
 	await w.goto("about:blank")
 	const heardW = hear(w)
 	await w.evaluate(raiseThenSettle(throwing(n.web)))
-	await until(() => heardW.length > 0, "the web page's throw was heard")
+	await until(() => heardW.errors.length > 0, "the web page's throw was heard")
 
 	// Each producer delivers a page's errors in order, so a duplicate made on either path, or a
 	// background error routed to a page, arrives before that path's sentinel does.
@@ -133,9 +135,11 @@ test("an extension page's errors reach the launch's arrays once, and no other co
 	expect(count([...pageTexts(), ...ctx.consoleErrors], n.background), "the background's error reached a page's array").toBe(0)
 	expectExactly(pageTexts(), [n.aThrow, n.bReject, n.bPrimitive, n.aAfterReload, s.aThrow, s.bThrow], "pageErrors")
 	expectExactly(ctx.consoleErrors, [n.aConsole, s.aConsole, s.bConsole], "consoleErrors")
-	expectExactly(heardA, [n.aThrow, n.aAfterReload, s.aThrow], "page A's own listener")
-	expectExactly(heardB, [n.bReject, n.bPrimitive, s.bThrow], "page B's own listener")
-	expectExactly(heardC, [n.cSelfClose], "the self-closing page's own listener")
-	expectExactly(heardW, [n.web], "the web page's own listener")
+	expectExactly(heardA.errors, [n.aThrow, n.aAfterReload, s.aThrow], "page A's own pageerror listener")
+	expectExactly(heardA.console, [n.aConsole, s.aConsole], "page A's own console listener")
+	expectExactly(heardB.errors, [n.bReject, n.bPrimitive, s.bThrow], "page B's own pageerror listener")
+	expectExactly(heardB.console, [s.bConsole], "page B's own console listener")
+	expectExactly(heardC.errors, [n.cSelfClose], "the self-closing page's own listener")
+	expectExactly(heardW.errors, [n.web], "the web page's own listener")
 	await w.close()
 })

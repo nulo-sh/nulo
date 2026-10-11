@@ -5,11 +5,9 @@ import type { WebDriverSession } from "./webdriver-classic"
 /**
  * Firefox's WebDriver BiDi sends no `log.entryAdded` for a frame whose own principal is an add-on's
  * (Bug 1755014), so Puppeteer never fires `pageerror` or `console` for the wallet's pages. This
- * supplies those events. A listener in every content process sends each error-level message of
- * the add-on's own frames, tagged with its top-level browsing context, to the parent; a relay there
- * emits it on the BiDi session geckodriver opened, the socket Puppeteer reads, as the entry Firefox
- * builds for a web page. Both are armed before the add-on is installed, and live as long as the
- * Firefox the launch owns.
+ * supplies those events: a listener in every content process sends the add-on's frames' error-level
+ * messages to a relay in the parent, which emits each on the BiDi session Puppeteer reads, as the
+ * entry Firefox builds for a web page.
  *
  * The relay calls two Firefox internals, `_onMessageHandlerProtocolEvent` on the BiDi session and
  * `NavigableManager.getIdForBrowsingContext`. Arming fails the launch when either is gone, and the
@@ -161,8 +159,9 @@ function listenerSource(addonId: string): string {
 /**
  * Evaluated in a system sandbox of its own, so it outlives every browser window. A record whose top
  * context has no BiDi id is dropped: the background page and its PXE frame, which no page listener
- * hears on Chrome either, or a page that has closed. The emit is synchronous in the message handler,
- * which is what puts an error a page reported before answering a command ahead of that answer.
+ * hears on Chrome either, or a page that has closed. The emit is synchronous in the message handler;
+ * that an error a page reported before answering a command arrives ahead of the answer is measured,
+ * not derived, and the smoke control's barrier holds it.
  */
 const RELAY_SOURCE = `"use strict";
 const { RemoteAgent } = ChromeUtils.importESModule("chrome://remote/content/components/RemoteAgent.sys.mjs");
@@ -173,11 +172,30 @@ if (typeof session?._onMessageHandlerProtocolEvent !== "function") throw new Err
 if (typeof NavigableManager.getIdForBrowsingContext !== "function") throw new Error("NavigableManager has no getIdForBrowsingContext");
 if (typeof BrowsingContext?.get !== "function") throw new Error("NavigableManager's global has no BrowsingContext");
 ${RELAY_HELPERS}
-const state = { faultCount: 0, faults: [], ready: [] };
+const state = { faultCount: 0, faults: [], ready: [], extensionProcesses: [] };
 const fault = (reason) => {
 	state.faultCount++;
 	if (state.faults.length < ${FAULTS_KEPT}) state.faults.push(reason);
 };
+// Every extension process of the launch, so the close check also judges one that has exited.
+const sawExtensionProcess = (childId) => {
+	if (!state.extensionProcesses.includes(childId)) state.extensionProcesses.push(childId);
+};
+for (const process of ChromeUtils.getAllDOMProcesses()) {
+	if (process.remoteType === ${JSON.stringify(EXTENSION_PROCESS)}) sawExtensionProcess(process.childID);
+}
+const processObserver = {
+	observe(subject, topic, data) {
+		try {
+			const process = subject.QueryInterface(Components.interfaces.nsIDOMProcessParent);
+			if (process.remoteType === ${JSON.stringify(EXTENSION_PROCESS)}) sawExtensionProcess(Number(data));
+		} catch (err) {
+			fault(topic + ": " + err);
+		}
+	},
+};
+Services.obs.addObserver(processObserver, "ipc:content-created");
+Services.obs.addObserver(processObserver, "process-type-set");
 const contextOf = (topId) => {
 	const top = BrowsingContext.get(topId);
 	return top ? NavigableManager.getIdForBrowsingContext(top) : null;
@@ -223,7 +241,6 @@ const READ = `
 		live: ChromeUtils.getAllDOMProcesses().map((process) => ({ childId: process.childID, remoteType: process.remoteType ?? null })),
 	});`
 
-/** The add-on's id as its manifest names it: the principal every one of its pages carries. */
 function addonIdOf(extensionPath: string): string {
 	const manifest = JSON.parse(readFileSync(path.join(extensionPath, "manifest.json"), "utf8")) as {
 		browser_specific_settings?: { gecko?: { id?: unknown } }
@@ -249,6 +266,7 @@ interface RelayState {
 	faultCount: number
 	faults: string[]
 	ready: RelayProcess[]
+	extensionProcesses: number[]
 }
 
 const isProcess = (value: unknown): value is RelayProcess => {
@@ -271,13 +289,14 @@ function parseState(raw: unknown): RelayState | undefined {
 	const state = parseJson(raw) as Partial<RelayState> | null | undefined
 	if (typeof state !== "object" || state === null || !Number.isInteger(state.faultCount)) return undefined
 	if (!Array.isArray(state.faults) || !isProcessList(state.ready)) return undefined
+	if (!Array.isArray(state.extensionProcesses) || !state.extensionProcesses.every(Number.isInteger)) return undefined
 	return state as RelayState
 }
 
 /**
  * `undefined` when the relay ran clean: no fault, at least one extension process of this launch
- * reported the listener ready, and every extension process still live is one that did. Otherwise
- * why it did not. `read` is what the close-time read returned.
+ * reported the listener ready, and every extension process it saw or that is still live is one that
+ * did. Otherwise why it did not. `read` is what the close-time read returned.
  */
 export function relayVerdict(read: unknown): string | undefined {
 	const { state: raw, live } = (typeof read === "object" && read !== null ? read : {}) as { state?: unknown; live?: unknown }
@@ -285,8 +304,9 @@ export function relayVerdict(read: unknown): string | undefined {
 	if (!state || !isProcessList(live)) return `its state could not be read (${JSON.stringify(read)})`
 	if (state.faultCount > 0) return `it faulted ${state.faultCount} time(s): ${state.faults.join("; ")}`
 	const ready = new Set(state.ready.map((process) => process.childId))
-	const unready = live.filter((process) => process.remoteType === EXTENSION_PROCESS && !ready.has(process.childId))
-	if (unready.length > 0) return `extension process(es) ${unready.map((p) => p.childId).join(", ")} ran without the listener`
+	const liveExtension = live.filter((process) => process.remoteType === EXTENSION_PROCESS).map((process) => process.childId)
+	const unready = [...new Set([...state.extensionProcesses, ...liveExtension])].filter((childId) => !ready.has(childId))
+	if (unready.length > 0) return `extension process(es) ${unready.join(", ")} ran without the listener`
 	if (!state.ready.some((process) => process.remoteType === EXTENSION_PROCESS)) return "no extension process reported the listener ready"
 	return undefined
 }

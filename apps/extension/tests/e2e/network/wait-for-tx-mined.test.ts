@@ -1,7 +1,3 @@
-/**
- * `waitForTxMined` against receipts the live node produced: a successful public mint resolves, and
- * a transaction whose public execution reverted, or that the node never received, rejects.
- */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 import { TokenContract } from "@aztec-foundation/aztec-standards/artifacts/src/artifacts/Token.js"
@@ -44,10 +40,11 @@ describe.skipIf(!aztecConfig)("waitForTxMined", { timeout: 240_000 }, () => {
 			.transfer_public_to_public(minter, AztecAddress.fromStringUnsafe(await randomAztecAddress()), 10n ** 30n, 0)
 			.request({ fee: { paymentMethod: fee.paymentMethod } })
 		const hash = await script.wallet.sendUnsimulated(payload, minter)
-		await expect(waitForTxMined(config, hash.toString())).rejects.toThrow(/reverted/)
+		await expect(waitForTxMined(config, hash.toString())).rejects.toThrow(`Transaction ${hash} reverted: `)
 	})
 
 	test("rejects a hash the node never received as dropped", async () => {
-		await expect(waitForTxMined(config, TxHash.random().toString())).rejects.toThrow(/dropped/)
+		const hash = TxHash.random().toString()
+		await expect(waitForTxMined(config, hash)).rejects.toThrow(`Transaction ${hash} was dropped`)
 	})
 })
