@@ -212,6 +212,31 @@ describe("holdings page — the total fits beside its meta line", () => {
 		expect((figures[0].element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
 	})
 
+	// "2 tokens · priced assets only" in a 7 px stand-in: 203 px on one line, 42 px at its narrowest
+	// ("tokens", "priced", "assets"), which only the hidden ruler is laid out at.
+	test.each([
+		["at the page's width", 312],
+		["4 px clear of the meta line at its narrowest", 117 + 42 + 4],
+	])("a total beside a partial meta line keeps 26 px %s", async (_, width) => {
+		installChromeStorage()
+		room = width
+		const metaWidth = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			const words = (this.textContent ?? "").trim().split(/\s+/)
+			const narrowest = this.closest("[aria-hidden]") !== null
+			return { width: 7 * (narrowest ? Math.max(...words.map((w) => w.length)) : words.join(" ").length) } as DOMRect
+		})
+		try {
+			mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+			seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC), row("b2", "BBB", CHAIN_IDS.TESTNET)]
+			const w = await mountPage()
+			expect(w.find('[data-testid="holdings-summary"]').text()).toContain("2 tokens · priced assets only")
+			const figure = w.get('[data-testid="holdings-summary"] span[style]').element as HTMLElement
+			expect(figure.style.getPropertyValue("--hero-scale")).toBe("1")
+		} finally {
+			metaWidth.mockRestore()
+		}
+	})
+
 	test("a summary that renders after the page mounts is still watched for resizes", async () => {
 		installChromeStorage()
 		const observed: Element[] = []
