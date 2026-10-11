@@ -19,7 +19,7 @@ trunk: dev
 
 - **Date**: 2026-10-11.
 - **Status**: completed. One PR against `dev` (D-orch-1: no stack), #286, with this close-out as its final commits; merging is the orchestrator's call.
-- **Shipped** (#286, closing #260, #250 and #239):
+- **Shipped**: #286, closing #260, #250 and #239.
   - #260: `bunfig.toml` sets `install.auto = "disable"`. The two store publishers and the preview comment, which run another revision's code, pass `bun --no-install`. `release-integrity.test.ts` pins that every Bun call in the fourteen jobs that install nothing is reached by one of the two (the selection equals `NO_INSTALL` exactly; 23 exact-finding mutations). It counts `bunx`, `bun x` and `bun create` as installs, and proves against a loopback registry that Bun refuses under the committed file. SECURITY.md § Dependency policy says so.
   - #250: the unit-tests job reads `baseline:move-approved` live through `live-labels.sh`, directly before the ratchet, on `pull_request` runs. The ratchet reads `BASELINE_MOVE_APPROVED` and fails on a missing or malformed answer. `behavior-gating.test.ts` pins the step. `pr-quick.yml`'s trigger comment and CLAUDE.md § Complexity budgets say how to apply the label.
   - #239: CLAUDE.md's Bun-bump bullet names `docker-ci-like.sh`'s `BUN_VERSION` and the pins file's Bun line.
