@@ -194,7 +194,10 @@ const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a
 
 type SiteState = readonly [surface: string, state: string]
 
-/** A person reads these to the digit: an ellipsis, which suits a name, hides a value on one. */
+/**
+ * A person reads these to the digit: an ellipsis, which suits a name, hides a value on one. An
+ * unpriced token row shows its contract-supplied name in the fiat line's place, clipped on purpose.
+ */
 const FIGURE_ROLES = new Set(["amount-hero", "amount-total", "amount-row", "amount-detail", "fiat"])
 
 const ellipsizedFigures = (readings: readonly TypeReading[]) =>
@@ -203,11 +206,11 @@ const ellipsizedFigures = (readings: readonly TypeReading[]) =>
 			(reading) =>
 				reading.visible &&
 				reading.roles.some((role) => FIGURE_ROLES.has(role)) &&
-				reading.overflowX !== "visible" &&
-				reading.textOverflow === "ellipsis" &&
-				reading.scrollWidth > reading.clientWidth,
+				reading.testid !== "token-name" &&
+				(reading.ellipsizedBy !== null ||
+					(reading.overflowX !== "visible" && reading.textOverflow === "ellipsis" && reading.scrollWidth > reading.clientWidth)),
 		)
-		.map(({ testid, text, scrollWidth, clientWidth }) => ({ testid, text, scrollWidth, clientWidth }))
+		.map(({ testid, text, scrollWidth, clientWidth, ellipsizedBy }) => ({ testid, text, scrollWidth, clientWidth, ellipsizedBy }))
 
 /** Sweep steps 1 and 2 over the page as it stands, then the identifier sites of each state it renders. */
 async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = []): Promise<void> {

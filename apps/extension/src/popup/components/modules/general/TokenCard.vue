@@ -77,7 +77,7 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 					{{ token.symbol }}
 				</span>
 				<span v-if="fiatLabel" data-testid="token-fiat" :class="[$style.fiat, $style.fiat_figure]">{{ fiatLabel }}</span>
-				<span v-else :class="$style.fiat">{{ token?.name || "unknown" }}</span>
+				<span v-else data-testid="token-name" :class="$style.fiat">{{ token?.name || "unknown" }}</span>
 			</Flex>
 
 			<Flex
@@ -149,8 +149,8 @@ const syncFailed = computed(() => !!props.tokenBalance?.syncFailure && !props.to
 	pointer-events: none;
 }
 
-/* Symbol and subtitle are contract-supplied: clipped so a hostile string cannot push the
-   balance off the row. */
+/* The symbol and an unpriced row's name are contract-supplied: clipped so a hostile string cannot
+   push the balance off the row. */
 .symbol {
 	composes: type--row-title from global;
 	font-size: 14px;
