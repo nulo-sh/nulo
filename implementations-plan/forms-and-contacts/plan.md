@@ -1,7 +1,7 @@
 ---
 plan: forms-and-contacts
 tier: mid
-status: approved; arc 1 in progress (arcs 2 and 3 wait on their gates)
+status: approved; arc 1 merged (#255); arc 2 in review (#282); arc 3 waits on page 11
 issues: "#184, #205, #210, #212, #214 (arc 1); #224, #225 (arc 2); #151, #211, #215, #216, #229 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -253,20 +253,20 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 **Arc 1 gate.** `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all` exit 0. The full smoke suite, both browsers (no `<files>`), every file passing; one rerun of a known flake, named in `lessons/phase-1.md`. PR screenshots: a form popup under the delete confirm, dark and light. Filed with the PR: the issues for `EditAccountPopup`'s missing duplicate check, the spaces-only account name, and the logs viewer's dead trim branch (dedupe first).
 
-### Arc 2: harness-gated refactors (decision-free; base must contain `account-session-life` arc 3)
+### Arc 2: harness-gated refactors (decision-free; the sibling gate lifted by D-orch-4)
 
-**2.1 The held-read helper.**
+**2.1 The held-read helper.** ✓
 1. Add `tests/helpers/held-read.ts` (`held`, `liveBus`).
 2. Move `send.test.ts`'s `held()`/`holdTokenReads()` onto it.
 - Validation gate: fast layers; `send.test.ts` passes with the same test count.
 
-**2.2 The six owners at the seam.**
+**2.2 The six owners at the seam.** ✓
 1. One held-read test per owner, pinning today's result; a lost row is a BUG PIN citing FA-9.
 2. Add `contactListReducers` to `entity-list.ts` with unit tests (in-place add and update keep the array identity; add appends even for a listed id; delete goes through `withoutId`).
 3. Wire NewContact, ImportContacts, Send and EditContact onto it.
 - Validation gate: fast layers on the six owners' tests and `entity-list.test.ts`; every existing identity and add-always-appends pin passes unchanged.
 
-**2.3 Shells, proven unchanged.**
+**2.3 Shells, proven unchanged.** ✓ (table: [lessons/phase-2.md](lessons/phase-2.md))
 1. `GlobalLoader.vue` uses `var(--scrim-loader)`.
 2. `full.vue`'s shake composes `shake_password` by relative path; drop its local keyframes and reduced-motion rule and the `a11y-css.test.ts` row.
 3. Proof, against the arc's parent commit (record its SHA in `lessons/phase-2.md`):
@@ -369,6 +369,13 @@ Each entry: the choice, the rejected alternatives and why. "C" is Codex, "O" the
 - D-arc1-2 (#210, phase 1.3): the re-open BUG PIN in `popup.store.test.ts` says the fix is an owner decision without naming FA-8, since code comments carry no plan ids (CLAUDE.md § Code-comment style). The pins test also gains a closed-key case for the eleven form popups (`undefined|NaN`).
 - D-arc1-3 (#205, review): Settings → Lock's auto-lock field and Display's dust field put the stored value back after a failed write only while the field still holds the attempted value (A1-O1, A1-C3). Within the plan's Lock and Display `UI impact` line and D-orch-3; no new words.
 - D-arc1-4 (delivery): arc 1 is PR #255 against `dev` (D-orch-1). Filed with it: #256 (Edit account duplicate or outer-spaced name), #257 (spaces-only New account name), #258 (logs viewer trim branch), and #259 (a balances store fuzz seed that fails on `dev` too, found by the final `test:all`). PR screenshots were committed in one commit and dropped in the next (the repo's earlier practice); the PR links them by that commit's SHA.
+- D-orch-4 (orchestrator, 2026-10-10): arc 2 runs now, before `account-session-life` arc 3. The "base must contain account-session-life arc 3" condition is lifted: that arc is held on decision page 7 with no date, and the two arcs meet only in `export/full.vue`. Arc 2 lands first and that arc rebases onto it; the `full.vue` edit is the shake only (keyframes, reduced-motion rule, class composition). Arc 2's branch is `forms-and-contacts-arc-2` off `origin/dev` (af4afcc, arc 1 merged as #255), PR against `dev`, no stack (D-orch-1).
+- D-orch-5 (orchestrator, 2026-10-10): arc 2 builds exactly its plan and no repair. FA-9's race repair, the import's `fieldAddressKey` swap and FA-8's re-open gap stay unbuilt (today's behaviour pinned); the snack card stays local. Phase 2.3's proof runs in full against the arc's parent commit; a difference fails that shell (SR2): it goes to `OWNER-ASKS.md` and that shell's change is left out.
+- D-arc2-1 (#224, phase 2.2): the held-read pins carry `(BUG PIN)` only where the lost event is reachable in the wallet: New and Edit FPC (`getFpcs` works after its storage read) and Send (its contacts answer waits on two other reads). New, Import and Edit contact and Select Profile are pinned as the list's mechanics (the read's answer replaces the list), since one storage read answers in order there (I2, checked against `contact/service.ts:74-79` and `profile/service.ts:581-585`). No pin names FA-9: comments carry no plan ids (D-arc1-2).
+- D-arc2-2 (phase 2.2, found at the seam): Send's `onTokenDeleted` splices the row before it reads `activeToken`, which then resolves to nothing, so deleting the active token selects no token and the "last token" toast and leave never run (`send.vue:116-131`, present since the first commit). Pinned as a BUG PIN beside the held-read pin; not repaired (D-orch-5); filed as #283.
+- D-arc2-3 (phase 2.2): `liveBus` returns a real `EventHandler` whose `add`/`remove` are `vi.fn` wrappers, so the existing `add.mock.calls[0][0]` pins keep working; the module-level mocks build fresh buses per test, since an unmounted component never removes its handlers. `ImportContactsPopup.test.ts`'s mount now hands the popup a copy of its saved book: an earlier test's in-place add was pushing into the shared `SAVED` fixture.
+- D-arc2-4 (#225, phase 2.3): the loader's source pin is a colocated `GlobalLoader.test.ts` (it reads `base.css` through `@nulo/resolve-asset`), not a row in `a11y-css.test.ts`, whose rules are about motion and focus. The Chrome loader capture holds the loader by replacing `chrome.runtime.connect` with a throwing stub before the page loads; the same stub did not take hold on Firefox, so the source pin stays Firefox's proof. The shake proof also compares the wrapper under emulated reduced motion on Chrome (the rule moved to the shared module).
+- D-arc2-5 (delivery): arc 2 is PR #282 against `dev` (D-orch-1). Filed with it: #283 (Send's active-token delete, D-arc2-2) and #284 (a zombie-owner race in `scripts/e2e/owned-processes.test.ts` that reddened one local `test:all` under host load; outside this lane).
 
 ### Competing outline (cheapest-first), sent to both audits
 
@@ -451,6 +458,25 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Codex round 2 (same session): conditional approve.** A1-C1 and A1-C2 resolved; one new finding, accepted:
 - A1-C3 [Medium] the A1-O1 reset could overwrite a newer edit: a write that fails after the person typed another timeout put the stored one back and the newer edit was never saved. The reset now runs only while the field still holds the attempted value; Display's dust field (whose catch this arc rewrote) gets the same guard. A held-rejection page test proves the newer edit survives and is written; it fails on the round-1 `lock.vue`.
+
+**Codex round 3 (same session): approve, no new material findings.** The loop converged.
+
+### Arc 2 post-implementation loop (2026-10-10)
+
+**Codex round 1 (gpt-6.1-sol, high, fresh session): conditional approve**, no production regression. Three Lows, all accepted and verified:
+- A2-C1 [Low] `NewContactPopup.test.ts` never reset the held `getContacts` implementation, which `vi.clearAllMocks` keeps: reset in `beforeEach`.
+- A2-C2 [Low] the Import held-read pin left its wrapper mounted, watching shared cache state: unmounted on test end.
+- A2-C3 [Low] Send's contact pin held `getContacts` itself, so it would pass if contacts were applied on arrival; the race it names is a contacts answer waiting on the token read. The pin now answers contacts at once and holds the token read; a scratch mutation that applies contacts on arrival turns it red. The token-delete pin had the same flaw and now holds the contacts read.
+
+**Opus 5.5 review (alongside round 1): approve.** Five Lows: one the same as A2-C1; four accepted:
+- A2-O1 [Low] `liveBus` swallowed a throwing handler, so a held-read pin could pass on a crash: the bus now reports a throw as an unhandled error, which fails the run (probed).
+- A2-O2 [Low] a pin could resolve a read that was never held, and Select Profile resolved with the default names: every pin asserts its read was held, and Select Profile's answer uses names of its own.
+- A2-O3 [Low] with `full.vue`'s reduced-motion row dropped, nothing checked that the page keeps the shared shake: `a11y-css.test.ts` pins the composition (red on the parent `full.vue`).
+- A2-O4 [Low] comments: the loader pin's header described history; `contactListReducers` said "popup" for a list Send (a page) holds. Both reworded; `holdReads` states that its implementation outlives `vi.clearAllMocks`.
+
+**Codex round 2 (same session): conditional approve.** Round 1 resolved; two Lows, both accepted:
+- A2-C4 [Low] Send's own token and contact mocks still used reporter-less `EventHandler`s, so its pins could swallow a throw: they use `liveBus` (69/69, no existing case relied on a swallowed throw).
+- A2-C5 [Low] why `liveBus` throws on a microtask was unstated: `invoke` also catches its reporter's throws; one clause added.
 
 **Codex round 3 (same session): approve, no new material findings.** The loop converged.
 
