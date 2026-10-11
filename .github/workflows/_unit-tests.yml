@@ -40,7 +40,28 @@ jobs:
             echo "scripts/release/ not present on this ref — skipping."
           fi
 
+      # The ratchet's move approval: read live here, so a re-run of this job sees the label as it is
+      # then. Guarded as the steps around it are: a head without the script predates the ratchet
+      # that reads its answer.
+      - name: Read the live move-approval label
+        id: live
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -f scripts/ci-cd/live-labels.sh ]; then
+            bash scripts/ci-cd/live-labels.sh baseline:move-approved
+          else
+            echo "scripts/ci-cd/live-labels.sh not present on this ref — skipping."
+          fi
+
       - name: Run CI-gating guard test
+        env:
+          BASELINE_MOVE_APPROVED: ${{ steps.live.outputs.label-hit }}
         # scripts/ci-cd/ isn't a @nulo/* workspace, so `test:all` skips it. This is
         # the anti-drift guard for the paths-filter gates (derived from the dependency
         # graph) — it MUST run on PRs or a new ungated @nulo/* dep / a re-introduced `!`

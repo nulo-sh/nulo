@@ -13,11 +13,13 @@ on:
     # here reads the draft flag, so the head normally has a result already; the
     # fresh run can replace one that failed, was cancelled or never started.
     #
-    # NO `labeled`/`unlabeled`: nothing in this workflow reads labels, so for a
-    # SHA this workflow has already covered a label event would only queue a
-    # second identical run. It could incidentally recover a head with no run of
-    # its own, which is why the gap below matters. The label-gated suites keep
-    # both types: their gates read labels.
+    # NO `labeled`/`unlabeled`: the one label read here, `baseline:move-approved`,
+    # is read live by the unit-tests job on each of its runs, so for a SHA this
+    # workflow has already covered a label event would only queue a second
+    # identical run: apply the label, then re-run the failed job. It could
+    # incidentally recover a head with no run of its own, which is why the gap
+    # below matters. The label-gated suites keep both types: their gates read
+    # labels.
     #
     # Gap: a PR RETARGETED to dev/main fires `edited`, not listed here, so a head
     # that never got a run can sit at required `quality-status: Expected`
@@ -308,10 +310,11 @@ jobs:
           CHROME_URL: ${{ needs.build-chrome.outputs.chrome_artifact_url }}
           FIREFOX_RESULT: ${{ needs.build-firefox.result }}
           FIREFOX_URL: ${{ needs.build-firefox.outputs.firefox_artifact_url }}
+        # The head's bunfig.toml is not checked out, and may predate its auto-install refusal anyway.
         run: |
-          PREVIEW_VERSION="$(bun -e "console.log(require('./apps/extension/package.json').version)")-pr.${PR_NUMBER}"
+          PREVIEW_VERSION="$(bun --no-install -e "console.log(require('./apps/extension/package.json').version)")-pr.${PR_NUMBER}"
           export PREVIEW_VERSION
-          bun scripts/ci-cd/preview-comment.ts
+          bun --no-install scripts/ci-cd/preview-comment.ts
 
   # The landing deploys from Cloudflare's own Git integration, so without this job the first
   # build of a change is the production one. `bun run build` is the production build: `prebuild`
