@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (draft; its wallet fix merged on its own as #285); arc 4 waits on #279
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (ready since C13 = A; its wallet fix merged on its own as #285); arc 4 waits on #279
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -347,7 +347,7 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 
 - **Arc 1a, arc 2:** none.
 - **Arc 1b:** Settings → Lock stops hanging on "FETCHING SETTINGS" after a worker restart and shows its toggles, as it does on any other open. No layout, copy, row or format changes. Recorded in `OWNER-ASKS.md` as information, with no decision asked.
-- **Arc 3:** the playground (a test dApp, not the wallet) gains a select and a button. No wallet surface changes. Whether the playground needs a sign-off is `OWNER-ASKS.md` Ask 1. Arc 3's PR carries a screenshot of the new controls and stays unmerged until the owner signs off or exempts the playground; the PR body quotes that message.
+- **Arc 3:** the playground (a test dApp, not the wallet) gains a select and a button. No wallet surface changes. Whether the playground needs a sign-off was `OWNER-ASKS.md` Ask 1; the owner exempted it (C13 = A, D-orch-14), and the PR body quotes that decision. Arc 3's PR carries a screenshot of the new controls.
 
 ## Assumptions
 
@@ -425,6 +425,7 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D24 | The wallet fix ships twice-reachable: as its own `fix(execution)` commit (cc844c1) on arc 3's branch, and cherry-picked alone onto `e2e-harness-gaps-nofrom-fix` off `dev` with its own ready PR (`Refs #153`), so a user-facing fix waits on neither C13 nor the arc 3 draft, and a release note can name it. Arc 3's draft PR carries the same commit until that PR lands; merging `dev` then adds nothing | Opus: a separate `fix:` PR, since arc 3 stays a draft on an unrelated sign-off and a `test(e2e)` squash subject hides the fix from release-please. Codex: one PR with the deviation recorded. Opus's argument is the stronger: the hold is about the playground, not the wallet | Bundling the fix in arc 3's draft only |
 | D25 | #153's serialization evidence: after the second window closes (its approval is in), the journal must keep one send at `proving` (the held first) and the other `queued` for 3 s, every read before `enteredProveAt + PROOF_GATE_HOLD_MS`. One snapshot is not enough: a dApp request's record reads `queued` from its arrival, before its approval reaches the mutex | Codex: a single snapshot can catch the second send before acquisition even with the mutex bypassed; hold the pair over an interval inside the gate window. The once-only bypass run is red on it | The single snapshot § Arc 3 described |
 | D-orch-13 | Nothing a wallet user sees changes. The playground is the only surface that gains a control; every existing playground control keeps its behaviour and testid; the wallet's own screens are untouched. The `tx-request-builder.pins.test.ts` case, the three row cases and the serialization evidence are built exactly as § Arc 3 states; the once-only scratch bypass of the execution mutex is reverted and its red run recorded in `lessons/phase-3.md` | The orchestrator's call | — |
+| D-orch-14 | `OWNER-ASKS.md` Ask 1 is answered. The owner, 2026-10-11, decision page 0 (Program charter), C13 = **A**: "No. The playground is test infrastructure nobody ships; its controls need no sign-off. It must stay generic (reach the wallet only through @aztec-labs/wallet-sdk, never special-case Nulo)." Arc 3's PR (#293) leaves draft after `origin/dev` (27af8d7) is merged and `tx-sendTx-multicall`, `tx-sendTx-noFrom` and `tx-transfer-row` pass again at retry 0 on both browsers; its body quotes the decision in place of the held-for-sign-off note | The owner's call; #298 changed `waitForTxMined`, which two of those files call, so the merged head is re-proven before the PR is marked ready | Merging the held draft without re-running the files #298 touched |
 
 ## Audit verdicts
 
@@ -691,7 +692,7 @@ Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `de
 | close-out | `e2e-harness-gaps-close-out` | — | 4 | off | `docs(plans): close e2e-harness-gaps` | — |
 
 - Arc 1a's PR is the lane's first and is gate G1. It carries this plan's commit.
-- Arc 3's PR stays unmerged until `OWNER-ASKS.md` Ask 1 has an explicit answer; nothing below it waits.
+- Arc 3's PR stayed a draft until `OWNER-ASKS.md` Ask 1 had an explicit answer; answered 2026-10-11 (D-orch-14).
 - Each PR body: what changed and why, the validation runs with outcomes, the `Closes` lines.
 - Mechanics: `gh stack add <branch>` at each boundary; `gh stack submit --auto`, then `gh pr edit` bodies; `gh stack sync` after `dev` moves. Merging (`gh stack merge --squash`) is the orchestrator's.
 - Commits: conventional, lower-case subjects, signed; afterwards `git log --format='%h %G?' -3` shows no `N`.

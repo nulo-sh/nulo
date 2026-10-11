@@ -1,8 +1,10 @@
 # Owner asks: e2e-harness-gaps
 
-One ask; arc 3's merge waits on it. Nothing else here needs a decision: no wallet screen, copy, row or format changes.
+One ask, now answered. Nothing else here needs a decision: no wallet screen, copy, row or format changes.
 
 ## Ask 1: do the playground's new controls need your sign-off?
+
+**Answered 2026-10-11, decision page 0 (Program charter), C13 = A:** "No. The playground is test infrastructure nobody ships; its controls need no sign-off. It must stay generic (reach the wallet only through @aztec-labs/wallet-sdk, never special-case Nulo)." Recorded as D-orch-14; arc 3's PR leaves draft.
 
 Arc 3 adds a transfer-function select (defaulting to today's call) and a "NO_FROM (sponsored)" button to `apps/playground`, the generic test dApp the e2e suite drives. It is never shipped to anyone. The lane brief treats this as test-dApp behaviour, so no sign-off is planned. One auditor reads CLAUDE.md § "UI changes need explicit owner sign-off" ("any change to what a user sees") as covering the playground too.
 
