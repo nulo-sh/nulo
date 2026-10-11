@@ -9,3 +9,4 @@
 - 2026-10-11 — panel round 3: Codex conditional approve (R3-1 stage timing never attributes; R3-2 reopen carve-out keeps pre-reopen assertions, callers classified and frozen first). Both applied. Opus re-check running.
 - 2026-10-11 — Opus re-check (round 3): conditional approve; the reopen carve-out deleted, D3 made unconditional, P2a polls `page.url()` (BiDi `framenavigated` misses pushState), markers posted to a sibling page over a proved channel. Codex round 4: approve. Panel converged; plan committed, awaiting orchestrator approval.
 - 2026-10-11 — orchestrator approved 765adbe (D-orch-2 to D-orch-6 recorded). Phase 0 gate PASS: #297 closed by #300 on dev; origin/dev 27af8d7 merged clean; lint, typecheck:all, test exit 0.
+- 2026-10-11 — Phase 1 gate PASS: re-land 7339312 byte-identical to 39f3dda on the eight files; lint, typecheck:all, test, relay units 96/96; page-error-capture green on Chrome and Firefox (retry 0).
