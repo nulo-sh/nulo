@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-2
 tier: mid
-status: planned, awaiting orchestrator approval (one arc, decision-free)
+status: approved (3134636, D-orch-2..6); arc 1 in implementation
 issues: "#284, #280, #281 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -211,7 +211,7 @@ None. Every change is under `apps/extension/tests/e2e/**`, `apps/extension/scrip
 - **Pass, for every command:** exit 0 at retry 0, and vitest's summary shows every targeted test ran (no skip the plan does not name). One rerun is allowed for a failure the e2e-testing skill lists as a known flake; log it in the phase's lessons file. The stall watchdog's 10-minute limit stays as it is.
 - **Host etiquette.** Never run two `e2e:agent` runs in one worktree at once. Every network run goes through `agent.sh`.
 
-### Phase 1: a zombie owner is dead (#284)
+### Phase 1: a zombie owner is dead (#284) ✓
 
 1. Add a case beside the existing zombie case in `scripts/e2e/owned-processes.test.ts`'s "process reads" describe (`:399-410`), in its shape. The child must live until the test kills it: `sh -c 'sleep 120 & echo $!; exec sleep 120'`, not the existing `sleep 0.1`, so a loaded host cannot turn it into a zombie before the control is read. While it runs, record its identity and assert `identityIsDead(identity)` is false (the control). SIGKILL the child, leaving the parent alive. Once its `/proc` state reads `Z` (the existing condition), assert:
    - `readStartTime(pid)` is `undefined`;
@@ -270,6 +270,11 @@ Per § Post-implementation, Close-out.
 | D6 | #281's channel: emit on the BiDi session from the parent; order measured and gated, not promised | Opus O5, Probes 7-8; final pass F1, R3 | revised (was: file tailed by Node) |
 | D7 | one arc, order #284 → #280 → #281, #281 droppable | lane brief, planner | accepted (both audits) |
 | D8 | Chrome's split: exceptions to `pageerror`, other errors to `console`, in the unit-tested `kindOf` | Opus O2, Probe 7; final pass R2 | added |
+| D-orch-2 | Ask A1 answered: no product fix in this lane. Every in-lane change under `apps/extension/src` is pre-declined; a real product error Phase 3 surfaces becomes an issue (dedupe, five sections, `Record` link) and triggers the stop rule as written | orchestrator | accepted |
+| D-orch-3 | Ask A2: this arc most likely lands before e2e-harness-gaps arc 3 (a draft held on an unsigned owner page). Right before the final gates, merge `origin/dev`; if `dev` moved, re-run Phase 2's full `waitForTxMined` caller list against the merged tree and record the counts | orchestrator | accepted |
+| D-orch-4 | D1 and D6 accepted as the best solution, on two conditions: the arming and the close verdict are fail-closed (no try/catch-and-continue, no warn-and-proceed, no flag that disables the relay); `FIREFOX.md` and the e2e-testing skill name the Firefox version the relay was proved on and say a bump whose arming check fails is a hold on the bump, never a `skipIf`, soft-fail or removed assertion | orchestrator | accepted |
+| D-orch-5 | The stop rule is final and binary: on any of its three causes, revert Phase 3's commits (no half relay, no relay behind a flag), ship #284 and #280 with `Refs #281`, and comment the measurements and issue numbers on #281 | orchestrator | accepted |
+| D-orch-6 | D7 stands: one PR, order #284, #280, #281; each phase's gate is logged before the next starts | orchestrator | accepted |
 
 ## Audit verdicts
 
