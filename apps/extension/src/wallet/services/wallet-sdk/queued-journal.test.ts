@@ -112,7 +112,7 @@ describe("tryCreateQueuedJournal", () => {
 		expect(await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)).toBeUndefined()
 		expect(await journal.countOperations({ stage: "queued" })).toBe(0)
 		expect(log.mock.calls.filter(([, level]) => level !== LogLevel.Debug)).toEqual([])
-		expect(log).toHaveBeenCalledWith("wallet-sdk-bg", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
+		expect(log).toHaveBeenCalledWith("wallet-sdk", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
 	})
 
 	test("skips when networkService can't resolve a Network row for the session's chainId", async () => {
@@ -383,7 +383,7 @@ describe("tryCreateQueuedJournal — the session's chain id", () => {
 		const id = await tryCreateQueuedJournal(makeSendTxMessage(), sessionOn({ chainId: "zz", version: "0x1" }), deps)
 		expect(id).toBeUndefined()
 		expect(dappSession.tryGetDappSessionByOriginAndChain).not.toHaveBeenCalled()
-		expect(log).toHaveBeenCalledWith("wallet-sdk-bg", LogLevel.Warn, "tryCreateQueuedJournal failed", expect.any(SyntaxError))
+		expect(log).toHaveBeenCalledWith("wallet-sdk", LogLevel.Warn, "tryCreateQueuedJournal failed", expect.any(SyntaxError))
 	})
 })
 

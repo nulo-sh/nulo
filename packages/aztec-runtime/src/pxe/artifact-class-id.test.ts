@@ -17,7 +17,7 @@ type WireArtifact = { functions: WireFunction[] }
 
 /** The genuine pair in the JSON form a backup file carries. */
 async function genuinePair(): Promise<{ instance: Record<string, unknown>; artifact: WireArtifact }> {
-	const account = await NuloAccount.new(seed, { log: () => {} })
+	const account = await NuloAccount.new(seed, { log: () => {} }, "account")
 	const instance = (account as unknown as { instance: ContractInstanceWithAddress }).instance
 	return { instance: JSON.parse(jsonStringify(instance)), artifact: JSON.parse(jsonStringify(FrozenSchnorrAccountArtifact)) }
 }

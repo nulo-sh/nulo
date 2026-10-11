@@ -12,7 +12,7 @@ import { fakeBrowser } from "@webext-core/fake-browser"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ServiceCollection } from "@/wallet/base"
-import { LoggerStore, LogLevel } from "@/wallet/logger"
+import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
 import { CONFIG_SERVICE_NAME } from "@/wallet/services/config/spec"
 import { PROFILE_SERVICE_NAME, type ProfileInfo } from "@/wallet/services/profile/spec"
@@ -274,11 +274,11 @@ describe("PriceService — kill switch (showFiatValues)", () => {
 		const { service, state, fakeConfig, fetchFn, browserApi } = await harness()
 		await service.refreshIfStale()
 		// biome-ignore lint/suspicious/noExplicitAny: spying on the protected BaseService log seam
-		const log = vi.spyOn(service as any, "log")
+		const log = vi.spyOn(service as any, "logWarn")
 		const remove = vi.spyOn(browserApi.storage.local, "remove").mockRejectedValueOnce(new Error("quota"))
 		state.enabled = false
 		fakeConfig.onUpdate.invoke({ key: "showFiatValues", value: false })
-		await vi.waitFor(() => expect(log).toHaveBeenCalledWith(LogLevel.Warn, "config-change handling failed", expect.any(Error)))
+		await vi.waitFor(() => expect(log).toHaveBeenCalledWith("config-change handling failed", expect.any(Error)))
 		expect(remove).toHaveBeenCalledTimes(1)
 
 		fetchFn.mockClear()

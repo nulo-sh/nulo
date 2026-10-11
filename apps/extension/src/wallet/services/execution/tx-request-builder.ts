@@ -73,8 +73,9 @@ import {
 } from "./contract-resolver"
 import { fenceChecks } from "./execution-coordinator"
 import type { Action, AuthwitContent, AztecSendTxOperation } from "./spec"
+import { EXECUTION_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "TxRequestBuilder"
+const LOG_SOURCE = EXECUTION_SERVICE_NAME
 
 export interface BuiltStandardTx {
 	txRequest: TxExecutionRequest

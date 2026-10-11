@@ -15,8 +15,8 @@ import { LogLevel } from "@/wallet/logger"
 export class ClockTickerAdapter implements BackgroundTickerPort {
 	public constructor(
 		private readonly clock: ClockPort,
-		private readonly logger?: ILogger,
-		private readonly logSource: string = "background-ticker",
+		private readonly logger: ILogger,
+		private readonly logSource: string,
 	) {}
 
 	public subscribe(intervalMs: number, onTick: () => void | Promise<void>): TickerHandle {
@@ -35,7 +35,7 @@ export class ClockTickerAdapter implements BackgroundTickerPort {
 			try {
 				await onTick()
 			} catch (err) {
-				this.logger?.log(this.logSource, LogLevel.Error, "Ticker error", err)
+				this.logger.log(this.logSource, LogLevel.Error, "Ticker error", err)
 			} finally {
 				running = false
 				if (pending && !cancelled) {

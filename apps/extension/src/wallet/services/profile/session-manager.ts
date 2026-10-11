@@ -66,8 +66,9 @@ import {
 } from "@nulo/wallet-crypto"
 import { macEnvelopeV3 } from "./profile-row"
 import { type ActiveSession, type Profile, type ProfileInfo, type Session, toProfileInfo } from "./spec"
+import { PROFILE_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "SessionManager"
+const LOG_SOURCE = PROFILE_SERVICE_NAME
 
 /** Frozen storage root for the session record. */
 export const SESSION_STORAGE_ROOT = "nulo:core:session"
@@ -194,7 +195,7 @@ export class SessionManager {
 		// Pass-through default keeps the lock-agnostic contract for callers
 		// that don't wire the alarm (legacy SW path / unit tests).
 		this.runExclusive = runExclusive ?? ((fn) => fn())
-		this.artifactLock = new Lock("session-artifacts", logger, null)
+		this.artifactLock = new Lock(LOG_SOURCE, logger, null)
 		// SessionManager has no dispose method (SW-lifetime singleton);
 		// we don't store the unsubscribe handle. If a future teardown
 		// path emerges, capture this return value.

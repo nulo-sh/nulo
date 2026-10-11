@@ -195,6 +195,42 @@ describe("fee cards co-mounted on one key", () => {
 		fee.unmount()
 	})
 
+	test("a failed tx-settle refresh under the fee card retries gas, and the notice clears when it lands", async () => {
+		const notice = (fee: Awaited<ReturnType<typeof mountBoth>>["fee"]) => fee.find('[data-testid="fee-init-degraded"]')
+		const dimmed = (gas: Awaited<ReturnType<typeof mountBoth>>["gas"]) =>
+			gas
+				.find('[data-testid="gas-balance-public"]')
+				.classes()
+				.some((c) => c.includes("amount_stale"))
+		mocks.getFpcs.mockRejectedValueOnce(new Error("SW unreachable"))
+		const { gas, fee } = await mountBoth()
+		expect(notice(fee).text()).toContain("Retrying in the background.")
+
+		// The settle's forced gas read fails while the fee card's FPC retry is armed.
+		mocks.getGasBalances.mockRejectedValue(new Error("SW unreachable"))
+		txHandlerFor("onTransactionUpdated")({ account: "0xacct", status: "Proven" })
+		await vi.advanceTimersByTimeAsync(0)
+		await flushPromises()
+		const readsAfterSettle = mocks.getGasBalances.mock.calls.length
+
+		// The first backoff tick retries both legs: the FPC read lands, the gas read fails again.
+		await vi.advanceTimersByTimeAsync(5_050)
+		await flushPromises()
+		expect(mocks.getGasBalances.mock.calls.length).toBe(readsAfterSettle + 1)
+		expect(notice(fee).text()).toContain("Retrying in the background.")
+		expect(dimmed(gas)).toBe(true)
+
+		// The next tick's gas read lands: the notice clears and the gas card shows the fresh figure.
+		mocks.getGasBalances.mockResolvedValue(FJ(43n))
+		await vi.advanceTimersByTimeAsync(10_050)
+		await flushPromises()
+		expect(notice(fee).exists()).toBe(false)
+		expect(gas.find('[data-testid="gas-balance-public"]').text()).toBe("43 FJ")
+		expect(dimmed(gas)).toBe(false)
+		gas.unmount()
+		fee.unmount()
+	})
+
 	test("a forced success resets the gas overlay without re-entering the fee card's snapshot", async () => {
 		const { AccountFeePaymentMethodOptions } = await import("@aztec-labs/entrypoints/account")
 		const { gas, fee } = await mountBoth()

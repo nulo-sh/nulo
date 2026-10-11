@@ -149,7 +149,7 @@ export async function tryCreateQueuedJournal(
 			})
 			if (sessionQueuedCount >= MAX_QUEUED_PER_SESSION) {
 				logger.log(
-					"wallet-sdk-bg",
+					"wallet-sdk",
 					LogLevel.Debug,
 					`Per-session queued cap reached for ${session.sessionId}; skipping queued visibility`,
 				)
@@ -157,7 +157,7 @@ export async function tryCreateQueuedJournal(
 			}
 			const globalQueuedCount = await journal.countOperations({ stage: "queued" })
 			if (globalQueuedCount >= MAX_QUEUED_GLOBAL) {
-				logger.log("wallet-sdk-bg", LogLevel.Warn, `Global queued cap reached (${MAX_QUEUED_GLOBAL}); skipping queued visibility`)
+				logger.log("wallet-sdk", LogLevel.Warn, `Global queued cap reached (${MAX_QUEUED_GLOBAL}); skipping queued visibility`)
 				return undefined
 			}
 
@@ -190,7 +190,7 @@ export async function tryCreateQueuedJournal(
 			return record.id
 		})
 	} catch (error) {
-		logger.log("wallet-sdk-bg", LogLevel.Warn, "tryCreateQueuedJournal failed", error)
+		logger.log("wallet-sdk", LogLevel.Warn, "tryCreateQueuedJournal failed", error)
 		return undefined
 	}
 }
@@ -202,7 +202,7 @@ function holdsTransactionGrant(records: readonly unknown[] | undefined, logger: 
 		return projectStoredGrants(records).some((g) => g.capability.type === "transaction")
 	} catch (error) {
 		if (!(error instanceof ValidationError)) throw error
-		logger.log("wallet-sdk-bg", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
+		logger.log("wallet-sdk", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
 		return false
 	}
 }

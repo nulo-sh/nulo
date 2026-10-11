@@ -94,7 +94,7 @@ export class WindowManager {
 		this.handles.set(handleId, handle as Handle<unknown>)
 
 		const timeoutHandle = this.clock.setTimeout(() => {
-			this.logger.log("window-manager", LogLevel.Warn, `[${opts.kind}/${handleId}] timed out`)
+			this.logger.log("wallet", LogLevel.Warn, `[${opts.kind}/${handleId}] timed out`)
 			this._settle(handleId, undefined, "Timed out waiting for window")
 		}, opts.timeoutMs)
 
@@ -127,7 +127,7 @@ export class WindowManager {
 
 				const unsub = this.windows.onRemoved((closedId) => {
 					if (closedId !== handle.windowId) return
-					this.logger.log("window-manager", LogLevel.Info, `[${opts.kind}/${handleId}] closed by user`)
+					this.logger.log("wallet", LogLevel.Info, `[${opts.kind}/${handleId}] closed by user`)
 					handle.unsubOnRemoved?.()
 					handle.unsubOnRemoved = null
 					this._settleUserClose(handleId)
@@ -144,7 +144,7 @@ export class WindowManager {
 			.catch(() => {
 				// The browser's error is dropped: it can carry the window URL, which holds request ids.
 				if (this.handles.get(handleId) !== handle) return
-				this.logger.log("window-manager", LogLevel.Error, `[${opts.kind}/${handleId}] window could not be opened`)
+				this.logger.log("wallet", LogLevel.Error, `[${opts.kind}/${handleId}] window could not be opened`)
 				this._settle(handleId, undefined, "Failed to open window.")
 			})
 
@@ -206,7 +206,7 @@ export class WindowManager {
 		const options = { type: "popup" as const, url: opts.url, width: opts.width, height: opts.height }
 		if (opts.placement === "center") return this.windows.create({ ...options, ...centerOn(anchor, opts.width, opts.height) })
 		const placed = { ...options, ...topRightOf(anchor, opts.width, opts.height) }
-		return createPlaced(this.windows, placed, stillWanted, this.logger, "window-manager")
+		return createPlaced(this.windows, placed, stillWanted, this.logger, "wallet")
 	}
 
 	private stopWatching(handle: Handle<unknown>): void {
@@ -237,7 +237,7 @@ export class WindowManager {
 		const handle = this.handles.get(handleId)
 		if (!handle) return
 		if (handle.settled) {
-			this.logger.log("window-manager", LogLevel.Debug, `[${handleId}] settle/cancel after already settled — ignored`)
+			this.logger.log("wallet", LogLevel.Debug, `[${handleId}] settle/cancel after already settled — ignored`)
 			return
 		}
 

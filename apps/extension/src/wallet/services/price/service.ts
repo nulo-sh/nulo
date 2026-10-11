@@ -6,7 +6,6 @@ import { ConfigService } from "@/wallet/services/config/service"
 import { ProfileService, type ProfileInfo } from "@/wallet/services/profile/service"
 import { ValueStorage } from "@/wallet/storage"
 import { AlarmDispatcher, EventHandler, createSerialQueue } from "@nulo/wallet-core/utils"
-import { LogLevel } from "@nulo/wallet-core/logger"
 import { allCoingeckoIds, getSanityBand } from "./price-map"
 import {
 	MAX_CLOCK_SKEW_MS,
@@ -35,8 +34,6 @@ const API_BASE = "https://api.coingecko.com/api/v3"
  *  behind one NAT doesn't retry in lockstep. */
 const BACKOFF_BASE_MS = 30_000
 const BACKOFF_CAP_MS = QUOTE_TTL_MS
-
-const LOG_SOURCE = "PriceService"
 
 type FetchLike = (
 	input: string,
@@ -102,7 +99,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	 *  (the last flip's work would otherwise race the prior flip's). The generation
 	 *  bump stays synchronous at flip time; only the storage/emit tail is chained. */
 	private readonly configTransitions = createSerialQueue({
-		onError: (err) => this.log(LogLevel.Warn, "config-change handling failed", err),
+		onError: (err) => this.logWarn("config-change handling failed", err),
 	})
 
 	public constructor(logger: ILogger, browserApi?: BrowserApi, opts?: { fetchFn?: FetchLike; now?: () => number }) {
@@ -209,7 +206,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			} else {
 				await this.dispatcher.clear()
 			}
-		})().catch((err) => this.log(LogLevel.Warn, "profile-change handling failed", err))
+		})().catch((err) => this.logWarn("profile-change handling failed", err))
 	}
 
 	private readonly onConfigUpdated = (prop: { key: string; value: unknown }): void => {
@@ -315,7 +312,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 	private async doRefresh(gen: number): Promise<PriceState> {
 		const now = this.now()
 		if (now < this.nextAllowedFetchAt) {
-			this.log(LogLevel.Debug, "refresh suppressed by backoff window")
+			this.logDebug("refresh suppressed by backoff window")
 			return this.readUsable()
 		}
 
@@ -371,7 +368,7 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			const backoff = Math.min(BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1), BACKOFF_CAP_MS)
 			const jitter = 0.75 + Math.random() * 0.5
 			this.nextAllowedFetchAt = this.now() + Math.round(backoff * jitter)
-			this.log(LogLevel.Warn, `refresh failed (attempt ${this.consecutiveFailures})`, error)
+			this.logWarn(`refresh failed (attempt ${this.consecutiveFailures})`, error)
 			return this.readUsable()
 		} finally {
 			clearTimeout(timeout)
@@ -422,10 +419,6 @@ export class PriceService extends Service<Methods, Events> implements ServiceSpe
 			merged[id] = quote
 		}
 		return merged
-	}
-
-	private log(level: LogLevel, ...args: unknown[]): void {
-		this.logger.log(LOG_SOURCE, level, ...args)
 	}
 }
 

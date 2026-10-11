@@ -41,11 +41,13 @@ function statFields(pid: number): string[] {
 	return stat.slice(stat.lastIndexOf(")") + 2).split(" ")
 }
 
-/** `undefined` when the pid is gone: a dead process has no start time to compare. Any other read
- *  failure throws: a `/proc` that cannot answer is no evidence of death. */
+/** `undefined` once the process has exited, reaped or still a zombie: a dead process has no start
+ *  time to compare, and a zombie's pid cannot be reissued until it is reaped. Any other read failure
+ *  throws: a `/proc` that cannot answer is no evidence of death. */
 export function readStartTime(pid: number): string | undefined {
 	try {
-		return statFields(pid)[19]
+		const fields = statFields(pid)
+		return fields[0] === "Z" ? undefined : fields[19]
 	} catch (err) {
 		if (isGone(err)) return undefined
 		throw err
