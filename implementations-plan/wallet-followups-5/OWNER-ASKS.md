@@ -1,8 +1,10 @@
 # Owner asks: wallet-followups-5
 
-No screen layout, copy or format changes, and every window closes on the same step as today. One effect a person could notice goes to the owner; its answer gates #312's delivery only.
+No screen layout, copy or format changes, and every window closes on the same step as today. One effect a person could notice went to the owner; the orchestrator resolved it.
 
 ## OA-1. The log viewer stops gaining a spurious "unhandled rejection" row
+
+**Status: resolved by the orchestrator's no_ask record (D-orch-2); nothing for the owner.** The fix ships with no new log text: the confirmed-gone case is silent, and every other failure keeps today's "unhandled rejection" row.
 
 - **Surface:** Settings → Developer → Logs (the log viewer window) and its CSV export. The rows appear there for a user who opens the viewer; the buffer is kept for every user (CLAUDE.md § Logging policy).
 - **Today:** when a page closes a window that the background or the user already closed, the page's unhandled rejection reaches `console-forwarding.ts`, which logs an Error row, "unhandled rejection", carrying `Invalid window ID: N` (Firefox) or `No window with id: N.` (Chrome), when the closing page still processes it.

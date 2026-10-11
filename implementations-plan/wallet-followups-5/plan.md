@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-5
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved by the orchestrator (cecabc2); arc 1 in progress
 issues: "#312, #302 (arc 1); #308, #310, #294, #290, #281, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -19,17 +19,17 @@ trunk: dev
 
 Two issues the program's own leads filed. One arc, one PR against `dev`.
 
-- **#312.** A page closes its own window with `closeCurrentWindow()`, a `chrome.windows.remove` with no rejection handler. When the background's `WindowManager`, or the user, removed that window a moment earlier, the remove rejects (`Invalid window ID: N` on Firefox) and nothing handles it. The fix makes the page's remove treat a gone window as closed, as every background remover already does, and keeps a real failure visible. Its delivery waits on the owner's answer to OA-1, relayed by the orchestrator (the log viewer loses a spurious row); #302 ships either way.
+- **#312.** A page closes its own window with `closeCurrentWindow()`, a `chrome.windows.remove` with no rejection handler. When the background's `WindowManager`, or the user, removed that window a moment earlier, the remove rejects (`Invalid window ID: N` on Firefox) and nothing handles it. The fix makes the page's remove treat a gone window as closed, as every background remover already does, and leaves every other failure on today's path. It ships under the orchestrator's no_ask record (D-orch-2): no new log text.
 - **#302.** `log-payload-ban.test.ts` does not read a logger's level methods (`log.warn(`, `logger?.debug(`), reads one log call per line, and scans to the end of the line. The fix reads every level method on any receiver and every call on a line, ends each call's window at its closing paren, and stops a paren inside an interpolation's string literal from ending a window early.
 
-Recon: [recon.md](recon.md). Owner question: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, the log viewer loses a spurious row; it gates #312's delivery only). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+Recon: [recon.md](recon.md). Owner question: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-1, resolved by the orchestrator's no_ask record, D-orch-2). Consults: [lessons/phase-0.md](lessons/phase-0.md).
 
 ## Issue map (the arc that closes each issue)
 
 | Issue | Arc | Reason |
 |---|---|---|
 | #302 | arc 1 (Phases 1 and 3) | closes when arc 1 merges |
-| #312 | arc 1 (Phases 2 and 3), if OA-1 is answered "ship" | closes when arc 1 merges; otherwise stays open with a comment naming OA-1 |
+| #312 | arc 1 (Phases 2 and 3) | closes when arc 1 merges (D-orch-2) |
 | #308 | no arc | the e2e pool, after the e2e-followups-3 lane |
 | #310 | no arc | `owner-decision` |
 | #294 | no arc | `owner-decision` |
@@ -44,7 +44,7 @@ Recon: [recon.md](recon.md). Owner question: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-
 
 **What excellent looks like.**
 
-1. A window that is already gone when its page closes it leaves no unhandled rejection: no stderr line on Firefox, no "unhandled rejection" row in the log. Every window still closes on the same step as before, on both browsers. A remove that fails while the window stays open still reaches the log.
+1. A window that is already gone when its page closes it leaves no unhandled rejection: no stderr line on Firefox, no "unhandled rejection" row in the log. Every window still closes on the same step as before, on both browsers. A remove that fails while the window stays open rejects unhandled, exactly as today, so the existing "unhandled rejection" row still reports it.
 2. A sensitive name or an error's `.message` flattened into `log.warn(…)`, `logger?.error(…)` or any other logger level method fails `log-payload-ban.test.ts` with its `file:line`. Two log calls on one line are both read, code after a call is never read as its argument, and nothing the base scanner refuses is lost.
 
 **What good enough looks like.** No change to any screen, to any window's close timing, or to the scanner's denylist. Spellings the scanner cannot read stay named in its header, not guarded.
@@ -77,13 +77,13 @@ Recon: [recon.md](recon.md). Owner question: [OWNER-ASKS.md](OWNER-ASKS.md) (OA-
 
 ### Asks
 
-None open for the panel. OA-1 in `OWNER-ASKS.md` asks the owner about one effect a person could notice (the log viewer). Its answer gates Phase 2 and #312's delivery only (§ Delivery).
+None open. OA-1 in `OWNER-ASKS.md` is resolved by the orchestrator's no_ask record (D-orch-2).
 
 ## Architecture & Implementation
 
 ### Proposed architecture
 
-**#312.** Window removal is idempotent: the background, the page and the user may each close the same window, and "already gone" is the outcome each wants. The background's removers encode that with a handler; `closeCurrentWindow` does not. The fix stays inside the one shared util, so no caller changes. The callback stays synchronous (F5's pinned `TypeError`); it hands the remove to a private async function that is silent only when a successful window listing confirms the window is gone, not by parsing the browser's error text (which differs per browser):
+**#312.** Window removal is idempotent: the background, the page and the user may each close the same window, and "already gone" is the outcome each wants. The background's removers encode that with a handler; `closeCurrentWindow` does not. The fix stays inside the one shared util, so no caller changes. The callback stays synchronous (F5's pinned `TypeError`); it hands the remove to a private async function that is silent only when a successful window listing confirms the window is gone, not by parsing the browser's error text (which differs per browser). Any other failure rethrows the remove's own error, so it stays an unhandled rejection with today's reason and today's log row (D-orch-2):
 
 ```ts
 /** Closes the browser window this page runs in; a window reported without an id is left open. */
@@ -93,14 +93,14 @@ export function closeCurrentWindow(): void {
 	})
 }
 
-/** The window manager or the user may close this window first: a failed remove is an error unless a
+/** The window manager or the user may close this window first: a failed remove still rejects unless a
  *  window listing confirms the window is gone. */
 async function removeWindow(windowId: number): Promise<void> {
 	try {
 		await chrome.windows.remove(windowId)
 	} catch (error) {
 		if (await isConfirmedGone(windowId)) return
-		console.error("This window could not be closed", { error })
+		throw error
 	}
 }
 
@@ -163,9 +163,16 @@ See the decision ledger: no ownership change and no `window.close()` (D1); no `a
 
 Both legs' views are in § Audit verdicts; each line here is the decision and its reason.
 
+- **D-orch-1. No stack.** One branch, one PR against `dev`; the close-out lands as its final commits.
+- **D-orch-2. OA-1 is resolved by the orchestrator, not the owner: #312 ships in this arc under a no_ask record, with no new words.** The record is quoted in § UI impact. Only the confirmed-gone case is silent; every other outcome keeps today's path (the remove's error rethrown, so the existing "unhandled rejection" row reports it). The planned "This window could not be closed" row and its `error` payload are dropped. The rest of D2 stands: the synchronous `getCurrent` callback, the private async remover, the `getAll` listing in its own `try`. Phases 2 and 3 wait on nothing.
+- **D-orch-3. D9 is filed at close-out** as an issue (dedupe first; five sections; `privacy` label; `Record` link to the archived plan), not fixed here.
+- **D-orch-4. #308 is not this lane's.** The `send-keyboard` smoke failure belongs to the e2e pool; its file and fixtures are not touched, and a gate that hits it is reported, never worked around.
+- **D-orch-5. No release-class dispatch.** `nightly.yml`, `release*.yml` and `publish-*.yml` are never dispatched. Every e2e run goes through `agent.sh` (ports from `~/.agents/ports.md`), retry 0, the stall watchdog untouched; parallel runs with e2e-followups-3 (PR #313) on this host are allowed.
+- **D-orch-6. `lessons.md` is at 8190 bytes.** Promote nothing unless a retirement pays for it; no wholesale reformat; reconcile against `origin/dev` right before the final gates (#313's close-out edits `index.md` and `lessons.md`), never a union merge.
+- **D-orch-7. The complexity manifest shrinks only.** Deleting `findLoggedSecrets`'s acceptance means `bun run baseline:complexity` in the same PR and the CLAUDE.md counts (24→23, 14→13) in the same commit; the `stripNoise` stamp stays exactly what `baseline:rescore` reports.
 - **D1. #312: the page's remove handles a gone window; the ownership stays as it is.** Both legs agree. The issue offers a second fix: stop the pages WindowManager settles from closing themselves. Rejected: the page's close is the only one that keeps today's close step on most paths (F3), so each page would have to know which background path removes its window (`settle` and `cancel` do, `detach` and `handOver` do not), tying the UI to WindowManager's internals; a page-only design loses the background's timeout and cancel cleanup; and the user is a closer no ownership scheme removes (F4). `window.close()` was also considered: it cannot reject, but in a tab it closes only the tab where `remove` closes the browser window, and whether every window that pushed router history may still close itself through it is unverified on both browsers.
-- **D2. #312: a synchronous callback and a private async remover that is silent only when the window is gone.** An `async` callback (the first draft) breaks F5's pinned synchronous `TypeError` and turns it into an unhandled rejection (Opus). `.catch(() => undefined)` on the remove works but needs eleven page-test stubs rewritten to return a promise, for no behaviour, in files other lanes edit (Opus names the private remover as the fallback). A blanket catch exceeds "already gone" (Codex): after `closeWindow(true)` the unload rejection is detached, so a remove that fails while the window stays open must stay visible. A failed `chrome.windows.get` would only show that the lookup failed (Codex, resumed), so absence is confirmed by a successful `chrome.windows.getAll()` that does not list the window; a failed listing logs the original error. Matching error text would not work on both browsers (Chrome's "No window with id", Firefox's "Invalid window ID"). The listing sits inside its own `try`, because a dying page's extension call can throw synchronously ("Extension context invalidated" in Chromium's bindings; Codex, resumed), and a throw there must still log the remove's error. The one log line is a fixed message with the error under a named key (CLAUDE.md § Logging policy), at Error, the level today's unhandled-rejection row has.
-- **D3. #312's test.** New `close-current-window.test.ts` with a `chrome.windows` stub holding a live set {7}: `getCurrent` calls back with `{ id: 7 }`; `remove(id)` resolves and drops a live id, or rejects with `Error("Invalid window ID: 7")` and records the id in a `refused` list; `getAll()` resolves with the live windows, rejects while a `failList` flag is `"reject"`, or throws synchronously while it is `"throw"`; a `failRemove` flag makes `remove` reject while 7 stays live. Case 1, the probe's order: 7 is already removed; after `closeCurrentWindow()` and a macrotask, `refused` is `[7]`, nothing was collected, and `console.error` was not called. Case 2, the success control: 7 is live; it is removed once, `refused` is empty, nothing collected. Case 3, an unconfirmed failure, in three setups: `failRemove` alone (7 still listed), then with `failList` `"reject"`, then with `failList` `"throw"`; in each, `console.error` was called once with `("This window could not be closed", { error })` carrying the remove's error, and nothing was collected. Cases 1 and 3 are red on base. No handler is attached to the stub's promises, so a collected rejection is never hidden by the test itself (both legs).
+- **D2. #312: a synchronous callback and a private async remover that is silent only when the window is gone.** An `async` callback (the first draft) breaks F5's pinned synchronous `TypeError` and turns it into an unhandled rejection (Opus). `.catch(() => undefined)` on the remove works but needs eleven page-test stubs rewritten to return a promise, for no behaviour, in files other lanes edit (Opus names the private remover as the fallback). A blanket catch exceeds "already gone" (Codex): after `closeWindow(true)` the unload rejection is detached, so a remove that fails while the window stays open must stay visible; it does, as today's unhandled rejection (the remove's error rethrown, D-orch-2). A failed `chrome.windows.get` would only show that the lookup failed (Codex, resumed), so absence is confirmed by a successful `chrome.windows.getAll()` that does not list the window; a failed listing rethrows the original error. Matching error text would not work on both browsers (Chrome's "No window with id", Firefox's "Invalid window ID"). The listing sits inside its own `try`, because a dying page's extension call can throw synchronously ("Extension context invalidated" in Chromium's bindings; Codex, resumed), and a throw there must still surface the remove's error. The planned "This window could not be closed" line is dropped (D-orch-2): no new string reaches the log.
+- **D3. #312's test.** New `close-current-window.test.ts` with a `chrome.windows` stub holding a live set {7}: `getCurrent` calls back with `{ id: 7 }`; `remove(id)` resolves and drops a live id, or rejects with `Error("Invalid window ID: 7")` and records the id in a `refused` list; `getAll()` resolves with the live windows, rejects while a `failList` flag is `"reject"`, or throws synchronously while it is `"throw"`; a `failRemove` flag makes `remove` reject while 7 stays live. Case 1, the probe's order: 7 is already removed; after `closeCurrentWindow()` and a macrotask, `refused` is `[7]`, nothing was collected, and `console.error` was not called. Case 2, the success control: 7 is live; it is removed once, `refused` is empty, nothing collected. Case 3, an unconfirmed failure keeps today's path, in three setups: `failRemove` alone (7 still listed), then with `failList` `"reject"`, then with `failList` `"throw"`; in each, exactly one rejection was collected and it is the remove's own error, and `console.error` was not called (D-orch-2). Case 1 is red on base; case 3 passes on base by design, since it pins that the fix leaves this path as it was. No handler is attached to the stub's promises, so a collected rejection is never hidden by the test itself (both legs).
 - **D4. The collector moves to `apps/extension/tests/helpers/unhandled-rejections.ts`.** It would otherwise exist three times (F6). Both legs agree.
 - **D5. #302: level methods on any receiver, with an optional call.** The scanner is receiver-agnostic on purpose (its own comment). The tree has no same-name non-logger method (F11); a future one fails safe with a refusal naming its `file:line`. A receiver allowlist would miss `this.deps.l.warn(`. `logger.warn?.(` is read too (Opus).
 - **D6. #302: `silent` is not an opener.** It emits nothing.
@@ -174,18 +181,22 @@ Both legs' views are in § Audit verdicts; each line here is the decision and it
 - **D9. #302: `opfs-store.ts:220` keeps its line here.** The widened scanner reads it, and `{ detail: mismatch }` names no denied identifier. On a parse failure `mismatch` carries the parser's message, bound from `errorMessageFromUnknown` before the call: a flattened error by the letter of CLAUDE.md § Logging policy, through the local binding the scanner's header names as a false negative (Codex: do not call it safe; Opus: file it). It is not an offender the widening surfaces, so the lane brief's fix rule does not reach it; the close-out files it as an issue (after `gh issue list --state all --search "opfs-store"`).
 - **D10. #312's callers.** Every caller in F1 is covered by the util; none changes. Swept and unaffected: `passkey/index.vue`, `own-window.ts`, `settings/display.vue`, `onboarding/*` close with `window.close()`, which returns nothing; `core/adapters/chrome-browser-api.ts:196` is `WindowPort.remove`, whose callers all handle the rejection (F2).
 - **D11. #302: the kept-paren cause is fixed in `stripNoise`.** Both legs found that the column cut loses `console.warn(\`${")"}${password}\`)`; the base already loses the multi-line form (F12). Opus proposed counting parens over `blankComparisonLiterals(line)`, which leaves `stripNoise` alone but still counts a paren in a nested template literal or a bracket key. Chosen: blank the paren where `stripNoise` keeps it, which fixes the window count and `enclosingBracket` together. The probe shows its score unchanged at 41 and its declaration line untouched, so the manifest holds; `bun run baseline:rescore` is the proof.
-- **D12. The Firefox measurement corroborates; the unit test proves.** It runs only with Phase 2. A dying page prints a lost race only sometimes (4 of 20 in the probe), so a zero alone proves little (both legs). The check: list each step in the six files that closes a window through `closeCurrentWindow` (`file:line`, K per run); run the six files N times at base, each run to its own log, with N the smallest count that gives N×K ≥ 20 and at least 3 lines matching `Invalid window ID|No window with id` in total (add runs until both hold); run them the same N times on the head; the head total must be 0, and any head line is traced to its source, never rerun away.
+- **D12. The Firefox measurement corroborates; the unit test proves.** A dying page prints a lost race only sometimes (4 of 20 in the probe), so a zero alone proves little (both legs). The check: list each step in the six files that closes a window through `closeCurrentWindow` (`file:line`, K per run); run the six files N times at base, each run to its own log, with N the smallest count that gives N×K ≥ 20 and at least 3 lines matching `Invalid window ID|No window with id` in total (add runs until both hold); run them the same N times on the head; the head total must be 0, and any head line is traced to its source, never rerun away.
 
 ## Security & Adversarial Considerations
 
-- **Threat model.** #312: none new. The page removes its window after it has sent its decision (approve, reject, refuse) or with none to send; the change moves no message, no `beforeunload` registration and nothing in `useDappApprovalWindow`'s order. A remove the browser does not confirm is logged instead of thrown; the window stays visibly open, as it does today. The change leaves no approval pending that is not pending today: a decision RPC that is sent but fails, together with a failed remove, already leaves one until WindowManager's timeout. A dApp cannot reach `closeCurrentWindow`. #302: the scanner is a privacy guard over log output a user may export (CLAUDE.md § Logging policy). Its risk is a false negative. The widening and the multi-opener read remove false negatives; the paren fix (D11) removes the early window end; the cut removes a false positive, and D8(d) and D8(e) pin that it drops nothing the base reads.
+- **Threat model.** #312: none new. The page removes its window after it has sent its decision (approve, reject, refuse) or with none to send; the change moves no message, no `beforeunload` registration and nothing in `useDappApprovalWindow`'s order. A remove the browser does not confirm gone still rejects unhandled with the browser's error, as today; the window stays visibly open, as it does today. The change leaves no approval pending that is not pending today: a decision RPC that is sent but fails, together with a failed remove, already leaves one until WindowManager's timeout. A dApp cannot reach `closeCurrentWindow`. #302: the scanner is a privacy guard over log output a user may export (CLAUDE.md § Logging policy). Its risk is a false negative. The widening and the multi-opener read remove false negatives; the paren fix (D11) removes the early window end; the cut removes a false positive, and D8(d) and D8(e) pin that it drops nothing the base reads.
 - **Least privilege, cryptography, supply chain.** No permission, key, dependency or workflow changes. `chrome.windows.getAll` needs no permission.
 - **Input validation.** The scanner reads repository source, not user input. A malformed file still fails typecheck and lint first; an unbalanced call still runs its window to EOF.
-- **Log redaction.** The one new log line passes the error under `error`, which `trim` projects to a capped, URL-scrubbed `{ name, message }` (CLAUDE.md § Logging policy). The browser's message is not proven to hold only a window id; the projection is what bounds it.
+- **Log redaction.** No new log line (D-orch-2). A real failure reaches the log through `console-forwarding.ts`'s existing unhandled-rejection row, unchanged.
 
 ## UI impact
 
-No screen changes. The lane brief's owner boundary is the whole visible budget: "Nothing a person sees changes: a window closes when it closes today, and the scanner is a test." Every window keeps its close step (I2). One effect a person could notice goes to the owner as OA-1: the log viewer (Settings → Developer → Logs) and its CSV export no longer gain an "unhandled rejection" Error row when a window was already gone (F7), and an unconfirmed failed close is logged as "This window could not be closed". Panel approval is not sign-off (CLAUDE.md § UI changes), so #312 ships only on the owner's answer, relayed by the orchestrator and recorded in `STATUS.md` (§ Delivery).
+No screen changes. The lane brief's owner boundary is the whole visible budget: "Nothing a person sees changes: a window closes when it closes today, and the scanner is a test." Every window keeps its close step (I2). One effect a person could notice went to the owner as OA-1: the log viewer (Settings → Developer → Logs) and its CSV export no longer gain an "unhandled rejection" Error row when a window was already gone (F7). The orchestrator resolved it (D-orch-2):
+
+> Orchestrator no_ask record, 2026-10-11, precedent #205 / #210 / #214: a bug fix that restores intended behaviour with existing words. The log viewer stops gaining an Error row for a window that was already closed; no new log text is added.
+
+The constraint that makes it a no_ask: only the gone-window case (a remove that rejects and a successful `windows.getAll()` that confirms the window absent) is silent; every other outcome keeps today's path exactly, so its rejection propagates as it does now and the existing "unhandled rejection" row is what a real failure shows.
 
 ## Phases
 
@@ -208,30 +219,30 @@ No screen changes. The lane brief's owner boundary is the whole visible budget: 
 
 ### Phase 2: a gone window closes quietly (#312)
 
-**Warning:** start this phase only after the owner's answer to OA-1 is recorded in `STATUS.md`: the owner's own message naming the surface, relayed by the orchestrator. An orchestrator's approval of this plan is not that answer (CLAUDE.md § UI changes). If the answer is "hold", or none is recorded when Phase 1 is green, skip this phase and follow § Delivery's #302-only path.
+This phase runs under the orchestrator's no_ask record (D-orch-2, quoted in § UI impact and `STATUS.md`); it waits on nothing.
 
 1. List each step in the six network files that closes a window through `closeCurrentWindow`, with `file:line`, in `lessons/phase-2.md`. Its count is K.
 2. Before any #312 code edit, do the base runs of D12 on Firefox. Phase 1 changed only a test, the manifest and CLAUDE.md, so the built extension equals the base's. Write each run to `~/.cache/nulo-backlog/wallet-followups-5/ff-before-<n>.log`. Record N, K and the line total in `lessons/phase-2.md`.
-3. Write `close-current-window.test.ts` (D3) and move the collector (D4). Run the new file and see cases 1 and 3 fail on the base util.
+3. Write `close-current-window.test.ts` (D3) and move the collector (D4). Run the new file and see case 1 fail on the base util (case 3 passes there by design, D3).
 4. Change `close-current-window.ts` as § Proposed architecture shows. Run the new file again: all three cases pass.
 5. Commit: ``fix(windows): treat an already-closed window as closed in `closeCurrentWindow` ``.
 
 **Validation gate.**
 
 - Commands: `cd apps/extension && bun --bun vitest run src/utils/close-current-window.test.ts src/wallet/services/account/serialize-per-tuple.test.ts src/popup/auth-guard.test.ts src/composables/useDappApprovalWindow.test.ts src/popup/windows`; then, from the worktree root, `bun run lint` and `bun run typecheck:all`.
-- Pass criteria: every command exits 0. The step 3 red run is quoted in `lessons/phase-2.md` (case 1 collects one `Invalid window ID: 7` rejection; case 3 collects one per setup and logs nothing). Every page test passes unchanged, the lastError `TypeError` pins included.
+- Pass criteria: every command exits 0. The step 3 red run is quoted in `lessons/phase-2.md` (case 1 collects one `Invalid window ID: 7` rejection). Every page test passes unchanged, the lastError `TypeError` pins included.
 - Layers: lint, typecheck, unit.
 
 ### Phase 3: final validation on the arc head
 
-1. If Phase 2 ran, do the head runs of D12 on Firefox: the same N runs, each to `ff-after-<n>.log`. If it did not, run the six files once on Firefox at retry 0 as a smoke of the head.
+1. Do the head runs of D12 on Firefox: the same N runs, each to `ff-after-<n>.log`.
 2. Run the six files once on Chrome at retry 0.
 3. Run the full local gates.
 
 **Validation gate.**
 
 - Commands, all from the worktree root. Each Firefox run: `NODE_OPTIONS=--dns-result-order=ipv4first NULO_E2E_BROWSER=firefox bun run e2e:agent tests/e2e/network/cap-request-reject.test.ts tests/e2e/network/connect-deny.test.ts tests/e2e/network/connect-unserved-chain.test.ts tests/e2e/network/connect-one-window.test.ts tests/e2e/network/snack-placement.test.ts tests/e2e/network/cap-window.test.ts --retry=0 > ~/.cache/nulo-backlog/wallet-followups-5/ff-after-<n>.log 2>&1; echo "exit=$?"` (a redirect, not a pipe: the agent shell reports a pipe's last stage). Then `cat ~/.cache/nulo-backlog/wallet-followups-5/ff-after-*.log | grep -cE "Invalid window ID|No window with id"`: it prints the total and exits 1 when the total is 0, which is the expected status here. The Chrome run is the same command without `NULO_E2E_BROWSER`, to `chrome-after.log`. Then `bun run lint`, `bun run typecheck:all`, `bun run test:all`, `bun run test:ci-gating`, `bun run test:release`.
-- Pass criteria: every e2e run exits 0 at retry 0 (one rerun only for a known flake fingerprint in the `e2e-testing` skill's ledger; that run's log is kept too). If Phase 2 ran, the head total is 0 over N runs, against the base total of at least 3 (D12); both totals, N and K are in `lessons/phase-3.md`. Every other command exits 0. Never run two `e2e:agent` runs in this worktree at once.
+- Pass criteria: every e2e run exits 0 at retry 0 (one rerun only for a known flake fingerprint in the `e2e-testing` skill's ledger; that run's log is kept too). The head total is 0 over N runs, against the base total of at least 3 (D12); both totals, N and K are in `lessons/phase-3.md`. Every other command exits 0. Never run two `e2e:agent` runs in this worktree at once.
 - Layers: lint, typecheck, unit, CI gating, release, network e2e on both browsers.
 
 ## Delivery
@@ -240,20 +251,20 @@ Single-arc plan, the orchestrator's standing D-orch-1: one branch (`worktree-wal
 
 | Arc | Phases | Stacks on | `/code-review` |
 |---|---|---|---|
-| arc 1 | 1, 2 (only on OA-1 "ship"), 3 | `dev` | off |
+| arc 1 | 1, 2, 3 | `dev` | off |
 
-- **Two paths, fixed by OA-1.** With the owner's "ship" recorded in `STATUS.md` before Phase 2, the PR carries both issues and its body quotes that message (`STATUS.md` is deleted at close-out). Without it when Phase 1 is green, Phase 2 is skipped: the PR carries #302 only, and the close-out comments on #312 that its fix waits on OA-1 (`OWNER-ASKS.md`), leaving it open.
-- **PR title**, both issues (84 characters): `fix(windows): close an already-gone window quietly; log scan reads every logger call`. #302 only (79 characters): `test(logging): read every logger call in the payload scan, end each at its call`.
-- **PR body:** what changed and why; the panel's decisions on the kept paren (D11) and, with #312, on its owner (D1, D2) and OA-1's recorded answer; the Firefox totals; the Phase 1 red list and the match table; the claims that did not hold (below); `Closes #302`, and `Closes #312` on the two-issue path.
+- **One path (D-orch-2).** The PR carries both issues and its body quotes the orchestrator's no_ask record (`STATUS.md` is deleted at close-out).
+- **PR title** (84 characters): `fix(windows): close an already-gone window quietly; log scan reads every logger call`.
+- **PR body:** what changed and why; the panel's decisions on the kept paren (D11) and on #312's owner (D1, D2); the no_ask record; the Firefox totals; the Phase 1 red list and the match table; the claims that did not hold (below); `Closes #302` and `Closes #312`.
 - **Open it** with `gh pr create --base dev` only after the Phase 3 gate passes and the Codex fix loop converges. Open it without labels, then read the run list: add `e2e:extension-network` only if the path filter skipped the network suite.
-- **Commits:** conventional, lower-case subject, signed (`git log --format='%h %G?' -3` shows no `N`); if a commit hangs, rerun it as `env -u SSH_AUTH_SOCK git commit …`. Each ends with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- **Commits:** conventional, lower-case subject, signed (`git log --format='%h %G?' -3` shows no `N`); if a commit hangs, rerun it as `env -u SSH_AUTH_SOCK git commit …`. Each ends with a `Co-Authored-By:` line naming the model that wrote it. The PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - **Do not merge.** The orchestrator merges.
 
 ### Claims that did not hold
 
 - #312, "Choosing between them is a product call": no. Neither fix changes a screen; the lane brief gives the choice to the panel (D1).
 - #312, "the window is removed twice" when a request is answered: on every Reject, the network-unavailable dismiss and capabilities Approve, and on execute Approve when the execution ends first. Not on discover Allow (the window is handed over). Verify's double removes come from a user's own close or a background failure path.
-- #312, "None visible to a person": a lost race can add an "unhandled rejection" Error row to the log viewer (F7, OA-1).
+- #312, "None visible to a person": a lost race can add an "unhandled rejection" Error row to the log viewer (F7, OA-1, resolved by D-orch-2).
 - #302, "`deps.logger?.debug(`, `?.info(`, `?.error(`": nine of the ten calls are on a destructured `logger?.`, one on `deps.logger?.`; the logger is the extension's forwarding type, not Aztec's.
 - #302 left one blind spot unnamed: a `)` inside a string inside `${…}` already ended a multi-line window early (F12, D11).
 
@@ -270,7 +281,7 @@ Run these steps in order after the Phase 3 gate passes. `code_review` is `off`, 
    - Write an `## Outcome` block directly after the front matter: date, status, what shipped with the PR number, the dispositions (D1's rejected alternatives, D2's rejected forms, D11's rejected alternative), an `Open items:` line, and a line retiring this plan's `/goal` and `/loop` seeds.
    - `lessons.md` is at its 8 KiB budget: promote nothing unless a retirement pays for it.
    - File D9 as an issue (five sections, `privacy` label, `Record` linking the archived plan), after `gh issue list --state all --search "opfs-store"` and `--search "errorMessageFromUnknown"`; name it on the `Open items:` line.
-   - Comment on #302 (and #312) with the claims that did not hold. On the #302-only path, comment on #312 that its fix waits on OA-1 and name it on the `Open items:` line.
+   - Comment on #302 and #312 with the claims that did not hold.
    - Delete `STATUS.md`.
    - In its own commit: `git mv implementations-plan/wallet-followups-5 implementations-plan/archive/wallet-followups-5`, repair any relative link the extra level breaks (`git grep -n wallet-followups-5`), and move the index line into `implementations-plan/archive/index.md` marked completed.
    - Run `bun run check:plans` on the staged files before each close-out commit.
@@ -309,7 +320,7 @@ Run these steps in order after the Phase 3 gate passes. `code_review` is `off`, 
 Recommended: `/goal`. Use exactly one per session; they do not compose.
 
 ```
-/goal All phases marked ✓ in implementations-plan/wallet-followups-5/plan.md (Phase 2 may instead be marked `skipped (OA-1)` when STATUS.md records no "ship" answer by the time Phase 1 is green), each ✓ backed by its phase's validation gate reported passing in the transcript; for each phase the agent has printed `LESSONS_FILE=implementations-plan/wallet-followups-5/lessons/phase-N.md`; the Phase 1 red run, and the Phase 2 red run if Phase 2 ran, are quoted in the transcript; if Phase 2 ran (OA-1 answered "ship" in STATUS.md), the Firefox count over the same N runs is at least 3 on base and 0 on the head, quoted with N and K; `/code-review` was NOT run (code_review: off); the Codex fix loop on gpt-6.1-sol at high converged over the whole diff, evidenced by a resumed pass reporting no new material findings, quoted in the transcript; one PR against dev exists, opened only after the loop converged (`gh pr view` output in the transcript), carrying `Closes #302` (and `Closes #312` only if Phase 2 ran) and the close-out commits, including the archive move (`git show --stat` of that commit in the transcript); `bun run test:all` and `bun run lint` both report exit 0 in the transcript.
+/goal All phases marked ✓ in implementations-plan/wallet-followups-5/plan.md (Phase 2 runs under the no_ask record, D-orch-2), each ✓ backed by its phase's validation gate reported passing in the transcript; for each phase the agent has printed `LESSONS_FILE=implementations-plan/wallet-followups-5/lessons/phase-N.md`; the Phase 1 red run and the Phase 2 red run are quoted in the transcript; the Firefox count over the same N runs is at least 3 on base and 0 on the head, quoted with N and K; `/code-review` was NOT run (code_review: off); the Codex fix loop on gpt-6.1-sol at high converged over the whole diff, evidenced by a resumed pass reporting no new material findings, quoted in the transcript; one PR against dev exists, opened only after the loop converged (`gh pr view` output in the transcript), carrying `Closes #302` and `Closes #312` and the close-out commits, including the archive move (`git show --stat` of that commit in the transcript); `bun run test:all` and `bun run lint` both report exit 0 in the transcript.
 ```
 
 ```
