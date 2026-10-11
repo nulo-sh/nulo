@@ -138,14 +138,15 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const pg = ctx.playgroundPage
-		const shown = new Set<string | null>()
+		const shown = new Set<string>()
 		for (const request of requests(aztecConfig!)) {
 			const seq = await snapshotResultSeq(pg)
 			const win = await openExecute(ctx, request)
 			try {
 				const observations = await sweepWindow(win, "windows-execute", request.states)
 				const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))
-				for (const { readings } of asserted) for (const { addressShows } of readings) shown.add(addressShows)
+				// Only an `AddressDisplay` states what it shows; every other site reads `null`.
+				for (const { readings } of asserted) for (const { addressShows } of readings) if (addressShows) shown.add(addressShows)
 			} finally {
 				await dismiss(win, rejectExecute)
 			}
