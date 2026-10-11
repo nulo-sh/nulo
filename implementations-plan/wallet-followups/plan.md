@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups
 tier: mid
-status: draft; awaiting orchestrator approval
+status: approved (orchestrator, 2026-10-11); arc 1 in progress
 issues: "#256, #257, #258, #259, #268 (arc 1); #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -326,6 +326,9 @@ A working assumption is not an owner record. Each ask below needs a line in the 
 | D7 | Restart e2e | a four-row table; a new row kept only if red in three base runs; a green row is fixed, not dropped | no e2e; a new spec file; one base run | the issue's pages were never run; the Lock case is the proven harness; one run cannot tell red from flaky |
 | D8 | #259 owe condition | unchanged (`degraded` under retry coverage) | owe only when `retryDebt` is set (Opus 4) | a store that failed to take the debt would then owe nothing and escape C1 |
 | D9 | #268 reread side effects | `land` copies values, never calls `applySetting` | reuse `applySetting` | a reread would close the window, toast or write config (Opus 9) |
+| D-orch-2 | OA-2, the logs window trim | A: the trim ships (phase 3 built, `Closes #258`, the full title) | B: as is | Orchestrator no-ask on the #210 precedent: the window holding the entries its list holds, dropping the oldest past the cap as the list and the CSV export already do, is the cap's intended behaviour with no new words |
+| D-orch-3 | OA-3, a blank name in Edit account | A: a name of only spaces counts as empty, so "Update account" stays disabled as for an empty field | B: as today | Orchestrator, the #257 record read with the #256 record; no new words |
+| D-orch-4 | OA-1, Edit account opened on an already-duplicated name | B: "Already exist" shows as the form opens and "Update account" stays disabled until another name is typed | A: an own-name exception | Orchestrator: the #256 record as worded ships; OA-1 goes to the owner's decision page (page 11), no issue filed |
 
 ## Audit verdicts
 
