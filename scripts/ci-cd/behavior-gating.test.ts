@@ -517,10 +517,10 @@ describe("CI behavior-gating guard", () => {
 
 /**
  * The Firefox lanes are twins of the Chrome ones (PR aggregators required on dev, the smoke one on
- * main too, nightly jobs advisory), and the release's smoke of the shipped Firefox zip gates its
- * assets. Two ways that can rot silently: a twin drifts from the lane it mirrors (a file stops
- * running on Firefox and nothing says so), or a Firefox job slips into, or out of, the needs of an
- * aggregator or publish step.
+ * main too), and the release's smoke of the shipped Firefox zip gates its assets. Two ways that can
+ * rot silently: a twin drifts from the lane it mirrors (a file stops running on Firefox and nothing
+ * says so), or a Firefox job slips into, or out of, the needs of an aggregator or publish step.
+ * Nightly's gates are pinned by running them, in aggregators.test.ts.
  */
 describe("Firefox lanes", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
@@ -608,7 +608,7 @@ describe("Firefox lanes", () => {
 		])
 	})
 
-	test("only the release's assets and status wait on a Firefox job: the smoke of the shipped zip", () => {
+	test("only release.yml's assets and status wait on a Firefox job there: the smoke of the shipped zip", () => {
 		// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.
 		const waitsOnFirefox = (jobs: Record<string, any>) => {
 			const firefoxJobs = Object.keys(jobs).filter((name) => jobs[name].with?.browser === "firefox")
@@ -618,11 +618,6 @@ describe("Firefox lanes", () => {
 			])
 			return { firefoxJobs, waiting: Object.fromEntries(waiting.filter(([, needs]) => needs.length > 0)) }
 		}
-		const nightly = waitsOnFirefox(workflow("nightly.yml").jobs)
-		expect(nightly.firefoxJobs, "nightly.yml runs Firefox").toContain("smoke-firefox-against-artifact")
-		expect(nightly.waiting, "nightly.yml: nothing waits on a Firefox job").toEqual({})
-		for (const gate of ["status", "publish-nightly"]) expect(workflow("nightly.yml").jobs[gate], `nightly.yml → ${gate}`).toBeDefined()
-
 		const { jobs } = workflow("release.yml")
 		const release = waitsOnFirefox(jobs)
 		expect(release.firefoxJobs).toEqual(["smoke-firefox-against-artifact"])
@@ -846,9 +841,10 @@ describe("canary lanes", () => {
 		)
 	})
 
-	// The same-token matrix holds the node's block production, which a shard's files share; the chaos
-	// run is a nightly lead whose seed fixes its actions, not their timing.
-	test("the same-token matrix runs proverless in a dedicated job, and the chaos run only in nightly's advisory jobs", () => {
+	// The same-token matrix holds the node's block production, which a shard's files share. A chaos
+	// run left unseeded takes the run's id, which "Re-run failed jobs" keeps: a fresh random draw would
+	// let a re-run of a red night publish on a scenario the night never tested.
+	test("the same-token matrix runs proverless in a dedicated job, and the chaos run only in nightly, seeded by the run", () => {
 		const matrix = "tests/e2e/network/same-token-concurrent-sends.test.ts"
 		const chaos = "tests/e2e/network/send-chaos.test.ts"
 		for (const { file, browser } of LANES) {
@@ -864,13 +860,12 @@ describe("canary lanes", () => {
 				`${file} ${browser}: chaos`,
 			).toEqual(file === "nightly.yml" ? [[chaos]] : [])
 		}
-		const { jobs } = workflow("nightly.yml")
-		for (const gate of ["publish-nightly", "status"]) {
-			const needs = [jobs[gate].needs ?? []].flat()
+		for (const browser of ["chrome", "firefox"]) {
+			const chaosJobs = laneJobs("nightly.yml", browser).filter(([, job]) => job.with?.chaos === true)
 			expect(
-				needs.filter((need: string) => need.includes("chaos")),
-				`nightly.yml → ${gate}`,
-			).toEqual([])
+				chaosJobs.map(([, job]) => job.with?.chaos_seed),
+				`nightly.yml ${browser}: chaos seed`,
+			).toEqual(["${{ github.event.inputs.chaos_seed || github.run_id }}"])
 		}
 	})
 
@@ -903,18 +898,10 @@ describe("canary lanes", () => {
 		for (const [file, aggregator] of [
 			["pr-extension-network-e2e.yml", "status"],
 			["pr-extension-network-e2e-firefox.yml", "status"],
-			["nightly.yml", "status"],
 		] as const) {
 			const job = workflow(file).jobs[aggregator]
 			const script = (job.steps as { run?: string }[]).map((step) => step.run ?? "").join("\n")
 			expect(resultsTested(script), `${file} → ${aggregator} tests exactly its needs`).toEqual([...[job.needs ?? []].flat()].sort())
-		}
-		// The publish gate enumerates success: `!= 'failure'` would let a skipped or cancelled gate publish.
-		const publish = workflow("nightly.yml").jobs["publish-nightly"]
-		for (const need of [publish.needs ?? []].flat()) {
-			expect(String(publish.if), `nightly.yml → publish-nightly requires needs.${need}.result == 'success'`).toContain(
-				`needs.${need}.result == 'success'`,
-			)
 		}
 	})
 
