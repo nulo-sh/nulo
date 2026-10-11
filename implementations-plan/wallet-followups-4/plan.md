@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-4
 tier: light
-status: approved (orchestrator, at 6462113); arc 1 in implementation
+status: completed (delivered in #301)
 issues: "#299 (arc 1); #294, #290, #281, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,26 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 27af8d7
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#301](https://github.com/nulo-sh/nulo/pull/301) (arc 1: phases 1 to 3), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #299: 28 log lines pass a caught error under a named key (13 `getErrorData` calls, 8 `.message` extractions, 5 locals bound from a flattener); the two storage-migration lines log a fixed message with `{ kind }` / `{ version }`, never the reason. No level and no screen changed.
+  - `getErrorData` deleted; `log-payload-ban.test.ts` bans it by name, refuses a `.message` / `.stack` member read at a log call (arity reads allowed, optional chain included) and scans `wallet/logger/` except the redactor. On the plan base it reports exactly the 21 expected lines; on the head, none.
+  - 22 of the 28 lines pinned (red on the old line, green on the new); the six no test reaches are listed in `lessons/phase-2.md`. Chrome smoke at retry 0: 48 files passed, 3 skipped.
+  - CLAUDE.md § Logging policy: one sentence.
+  - `lessons.md`: nothing promoted (at its budget, and no retirement pays for an entry).
+- **Orchestrator records:** D-orch-1 to D-orch-6 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - D9, bounding every value under `error` in the redactor: rejected (no producer of a non-`Error` value found; changes every existing `{ error }` line; `trim`'s accepted stamp).
+  - D11, `aztec-runtime/src/pxe/opfs-store.ts:216-220`: left out. Residual: a malformed PXE version stamp's parse excerpt reaches a warn line through Aztec's `Logger`, uncapped; the stamp holds only a schema version and a public rollup address. Its unread opener is part of #302.
+  - D14, the commit trailer: kept as the orchestrator's brief names it.
+  - Fix-loop findings rejected: code on a `<script>` tag's own line is not scanned (no file on the tree has it); `version` on the blocked migration line (D-orch-3). The window over-reach moved into #302.
+  - #294, #290, #281, #262, #277: no arc here, for the reasons in § Issue map.
+- **Open items:** #302 (`privacy`): the log-payload scanner's unread openers (`log.warn(`, `logger?.<level>(`) and its one-opener-per-line, whole-line call windows.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # Wallet follow-ups 4: errors reach the log as objects, and the scanner refuses the flatteners
 
