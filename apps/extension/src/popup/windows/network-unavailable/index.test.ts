@@ -118,6 +118,18 @@ describe("network-unavailable window", () => {
 		expect(text(w, "network-unavailable-close-btn")).toBe("Close")
 	})
 
+	test("an init that fails is logged under a named key", async () => {
+		const failure = new Error("payload unavailable")
+		loadMock.mockRejectedValueOnce(failure)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			await factory()
+			expect(logged.mock.calls).toEqual([["Network-unavailable window init failed", { error: failure }]])
+		} finally {
+			logged.mockRestore()
+		}
+	})
+
 	test("names the app with the connect window's identity block and its own testids", async () => {
 		const w = await factory()
 		const identity = w.find('[data-testid="identity-block"]')

@@ -1,8 +1,10 @@
 # Owner asks: e2e-harness-gaps
 
-One ask; arc 3's merge waits on it. Nothing else here needs a decision: no wallet screen, copy, row or format changes.
+One ask, now answered. Nothing else here needs a decision: no wallet screen, copy, row or format changes.
 
 ## Ask 1: do the playground's new controls need your sign-off?
+
+**Answered 2026-10-11, decision page 0 (Program charter), C13 = A:** "No. The playground is test infrastructure nobody ships; its controls need no sign-off. It must stay generic (reach the wallet only through @aztec-labs/wallet-sdk, never special-case Nulo)." Recorded as D-orch-14; arc 3's PR leaves draft.
 
 Arc 3 adds a transfer-function select (defaulting to today's call) and a "NO_FROM (sponsored)" button to `apps/playground`, the generic test dApp the e2e suite drives. It is never shipped to anyone. The lane brief treats this as test-dApp behaviour, so no sign-off is planned. One auditor reads CLAUDE.md § "UI changes need explicit owner sign-off" ("any change to what a user sees") as covering the playground too.
 
@@ -12,3 +14,4 @@ Arc 3 adds a transfer-function select (defaulting to today's call) and a "NO_FRO
 ## For information only (no decision asked)
 
 - **Settings → Lock after a worker restart (#162, arc 1b).** Today the page can sit on "FETCHING SETTINGS" after the background worker restarts, because its two config reads never answer. The fix makes the page read again when its connection comes back, so it shows the same toggles it shows on any other open. What ships now: the fix, with no change to the page's layout or copy. If the investigation finds the cause somewhere larger, the fix is held and the issue stays open; nothing visible changes either way.
+- **A dApp's NO_FROM send from a new account (#153, arc 3).** Today a NO_FROM send (an app paying its own fee, no account as the caller) fails with "The wallet could not process the request." from any account that has not yet made a standard send in this wallet's local store: a new account, a restored one, or one after a store purge. The fix registers the account's contract with the wallet's local prover before the send, as a standard send already does, so the same send now goes through. No screen, copy or approval step changes. It ships in its own PR so it does not wait on Ask 1.

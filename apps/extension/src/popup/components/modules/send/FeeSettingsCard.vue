@@ -8,7 +8,6 @@ import FeeMethodSelector from "./FeeMethodSelector.vue"
 
 /** Vendor */
 import { getRandomHex } from "@/wallet/utils"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
 
@@ -380,7 +379,7 @@ const pickForSend = (m) => {
 	const record = recordOf(m)
 	sendPicks[address] = { ...sendPicks[address], [origin]: record }
 	mutateSendSelections((raw) => withSendSlot(raw, address, origin, record)).catch((e) =>
-		console.error("Failed to save the send fee selection", getErrorData(e)),
+		console.error("Failed to save the send fee selection", { error: e }),
 	)
 }
 
@@ -702,7 +701,7 @@ const runInit = async () => {
 		// for. The state is degraded-with-notice, never silently frozen — the
 		// identity/useOwnMethod watchers are the re-entry paths. A superseded
 		// run's failure belongs to an identity no longer on screen.
-		console.error("Failed to init", getErrorData(e))
+		console.error("Failed to init", { error: e })
 		if (myRun !== runSeq || !isMounted) return
 		error.value = FEE_INIT_FAILED
 	} finally {
@@ -728,7 +727,7 @@ watch(
 	},
 	(next, prev) => {
 		if (next === null || prev === null || next === prev) return
-		recommit().catch((e) => console.error("Fee recovery recommit failed", getErrorData(e)))
+		recommit().catch((e) => console.error("Fee recovery recommit failed", { error: e }))
 	},
 )
 

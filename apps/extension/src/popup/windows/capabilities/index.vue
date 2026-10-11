@@ -21,7 +21,6 @@ import AccountSelectRow from "./AccountSelectRow.vue"
 import PermissionGroup from "./PermissionGroup.vue"
 
 /** Utils */
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { JobCancelledError } from "@nulo/extension-messaging/errors"
 import { formatCaipAccount } from "@/wallet/utils/caip"
 import { requireNetwork } from "@/utils/core"
@@ -175,7 +174,7 @@ const init = async () => {
 		// or the popup is cancelled mid-flight, the approve gate stays closed.
 		initComplete.value = true
 	} catch (error) {
-		console.error(getErrorData(error))
+		console.error("Capabilities window init failed", { error })
 		setError("Something went wrong")
 	}
 }
@@ -330,7 +329,7 @@ const approve = async () => {
 			// the refusal IS the cancelled state — overlay, not an error banner.
 			isInteractionCancelled.value = true
 		} else {
-			console.error(getErrorData(error))
+			console.error("Capabilities approve failed", { error })
 			setError("Something went wrong")
 		}
 	} finally {

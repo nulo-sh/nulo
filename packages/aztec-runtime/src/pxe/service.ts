@@ -1003,7 +1003,7 @@ export class PxeService extends Service<Methods, PxeEvents> implements ServiceSp
 		} else if (err instanceof PxeScopeUnregisteredError) {
 			this.logDebug(`[${kind}] ${label} refused an unregistered scope (client registers + retries)`)
 		} else {
-			this.logError(`[${kind}] ${label} failed after ${Date.now() - start}ms`, message)
+			this.logError(`[${kind}] ${label} failed after ${Date.now() - start}ms`, { error: err })
 		}
 	}
 

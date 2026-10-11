@@ -81,6 +81,6 @@ describe("pickFile — settlement order", () => {
 		const { picked, fire } = pick(file)
 		fire()
 		expect(await picked).toBe(file)
-		expect(warn).toHaveBeenCalledWith(expect.stringContaining("Failed to decompress broken.json.gz"), expect.anything())
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining("Failed to decompress broken.json.gz"), { error: expect.any(Error) })
 	})
 })
