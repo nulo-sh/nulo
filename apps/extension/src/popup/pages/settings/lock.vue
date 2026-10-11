@@ -161,8 +161,8 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
 	configService.disconnect()
-	lockRead.dispose()
 	profileService.disconnect()
+	lockRead.dispose()
 	disposeLockWallet()
 })
 </script>

@@ -1,6 +1,6 @@
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp } from "@/wallet/config"
 
 const fakes = vi.hoisted(() => ({ config: undefined as unknown }))
@@ -34,6 +34,7 @@ beforeEach(() => {
 	}
 	fakes.config = config
 })
+afterEach(() => vi.restoreAllMocks())
 
 async function mountDisplay() {
 	const wrapper = mount(DisplayPage, {
@@ -67,5 +68,25 @@ describe("settings/display", () => {
 		await flushPromises()
 		expect(config.getProps).toHaveBeenCalledTimes(2)
 		expect(w.get('[data-testid="theme-trigger"]').text()).toBe("dark")
+	})
+
+	test("a reread that finds the side panel setting changed shows it and closes nothing", async () => {
+		// The side panel row exists only where the browser has the API, and applying it closes the window.
+		const sidePanel = { open: vi.fn() }
+		Object.assign(chrome, { sidePanel, windows: { getCurrent: vi.fn(async () => ({ id: 1 })) } })
+		const close = vi.spyOn(window, "close").mockImplementation(() => {})
+		config.getProps.mockImplementationOnce(async () => {
+			config.onConnected.invoke()
+			return [{ key: "sidePanel", value: false }] as ConfigProp[]
+		})
+		const w = await mountDisplay()
+		const sidePanelToggle = () => w.findAll("toggle-stub")[0]
+		expect(sidePanelToggle().attributes("modelvalue")).toBe("false")
+		config.getProps.mockResolvedValueOnce([{ key: "sidePanel", value: true }] as ConfigProp[])
+		config.onConnected.invoke()
+		await flushPromises()
+		expect(sidePanelToggle().attributes("modelvalue")).toBe("true")
+		expect(close).not.toHaveBeenCalled()
+		expect(sidePanel.open).not.toHaveBeenCalled()
 	})
 })
