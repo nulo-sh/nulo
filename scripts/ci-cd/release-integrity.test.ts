@@ -159,13 +159,15 @@ function credentialedFindings(tree: Tree): string[] {
 /** The jobs that tag or publish: Bun built-ins only, from the workflow's own revision. */
 const CLEAN = ["release.yml#auto-unstick", "release.yml#attach-assets", "release.yml#sync-main-to-dev", "nightly.yml#publish-nightly"]
 const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(x|create)\s|\bnpx\b/
+/** A step's shell text with line continuations joined, so a command reads the same however it wraps. */
+const script = (step: Step): string => (step.run ?? "").replace(/\\\n/g, " ")
 
 function cleanStepFindings(where: string, step: Step): string[] {
 	const findings: string[] = []
 	if (step.uses?.startsWith("./") && (step.uses !== SETUP_BUN || step.with?.install !== "false")) {
 		findings.push(`${where}: ${step.uses} may install dependencies`)
 	}
-	if (INSTALLS.test(step.run ?? "")) findings.push(`${where}: installs dependencies`)
+	if (INSTALLS.test(script(step))) findings.push(`${where}: installs dependencies`)
 	if (step.uses?.startsWith("actions/checkout@") && step.with?.ref !== undefined) findings.push(`${where}: checks out another revision`)
 	return findings
 }
@@ -173,7 +175,7 @@ function cleanStepFindings(where: string, step: Step): string[] {
 function cleanFindings(tree: Tree): string[] {
 	const composite = tree.actions[SETUP_BUN]?.runs.steps ?? []
 	const findings = composite
-		.filter((s) => INSTALLS.test(s.run ?? "") && s.if !== "inputs.install == 'true'")
+		.filter((s) => INSTALLS.test(script(s)) && s.if !== "inputs.install == 'true'")
 		.map(() => `${SETUP_BUN}: installs whatever its install input says`)
 	if (composite.some((s) => s.uses?.startsWith("oven-sh/setup-bun@") && s.with?.token !== ""))
 		findings.push(`${SETUP_BUN}: hands Bun's setup the job's token`)
@@ -196,8 +198,8 @@ function cleanFindings(tree: Tree): string[] {
  * npm at run time, past bun.lock and the age gate, unless the call passes `--no-install` or the
  * bunfig.toml in its working directory (Bun reads no other) sets `install.auto = "disable"`. A job
  * that checks out another revision reads that revision's file, which may predate the setting.
- * Blind spot: a Bun process that a script starts itself is not read (source-rebuild.sh's, after its
- * own install).
+ * Blind spots: a Bun process that a script starts itself (source-rebuild.sh's, after its own
+ * install), and a command the shell assembles at run time (from a variable, through `eval`).
  */
 const NO_INSTALL = [
 	"_release-pr-lockfile.yml#lock-version",
@@ -217,7 +219,7 @@ const NO_INSTALL = [
 ]
 const BUN_CALL = /(?<=^|[\s;&|(`])bun(?=\s|$)/m
 const CHANGES_DIRECTORY = /(^|[\s;&|(])(cd|pushd)\s/m
-const SWITCHES_REVISION = /\bgit\s+(checkout|switch|reset|restore|worktree)\b/
+const SWITCHES_REVISION = /\bgit\s+((-[cC]\s+\S+|--?[\w-]+(=\S+)?)\s+)*(checkout|switch|reset|restore|worktree)\b/
 const flagged = (args: string[], flags: string): boolean => args.some((arg) => new RegExp(`^(${flags})(=|$)`).test(arg))
 
 /**
@@ -229,7 +231,7 @@ function installsNothing(job: Job): boolean {
 	const bunAlone = steps.some(
 		(s) => (s.uses === SETUP_BUN && String(s.with?.install) === "false") || s.uses?.startsWith("oven-sh/setup-bun@"),
 	)
-	return bunAlone && !steps.some((s) => INSTALLS.test(s.run ?? ""))
+	return bunAlone && !steps.some((s) => INSTALLS.test(script(s)))
 }
 
 /**
@@ -240,7 +242,7 @@ function readsOwnBunfig(steps: Step[]): boolean {
 	const checkouts = steps.filter((s) => s.uses?.startsWith("actions/checkout@"))
 	return (
 		checkouts.length > 0 &&
-		!steps.some((s) => SWITCHES_REVISION.test(s.run ?? "")) &&
+		!steps.some((s) => SWITCHES_REVISION.test(script(s))) &&
 		checkouts.every(({ with: options = {} }) => {
 			if (["ref", "path", "repository"].some((key) => options[key] !== undefined)) return false
 			if (options["sparse-checkout"] === undefined || String(options["sparse-checkout-cone-mode"]) !== "false") return true
@@ -252,12 +254,14 @@ function readsOwnBunfig(steps: Step[]): boolean {
 	)
 }
 
-/** The Bun call's arguments: continuations joined, quoted text blanked so its `;` or `|` ends nothing. */
+/** The Bun call's arguments: a quoted word unquoted, quoted code blanked so its `;` or `|` ends nothing. */
 const callArgs = (run: string, index: number): string[] =>
 	run
 		.slice(index + "bun".length)
-		.replace(/\\\n/g, " ")
-		.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
+		.replace(/'([^']*)'|"((?:[^"\\]|\\.)*)"/g, (_, single = "", double = "") => {
+			const quoted = single || double
+			return /^[^\s;&|]+$/.test(quoted) ? quoted : "''"
+		})
 		.split(/&&|[;|\n]/)[0]
 		.trim()
 		.split(/\s+/)
@@ -282,7 +286,7 @@ function autoInstallFindings(tree: Tree, bunfig: string, listed: readonly string
 		const steps = expanded(tree, job).filter((s) => !guarded.has(s))
 		const own = readsOwnBunfig(steps)
 		for (const step of steps) {
-			const run = step.run ?? ""
+			const run = script(step)
 			const moved =
 				(step["working-directory"] ?? job.defaults?.run?.["working-directory"] ?? wf.defaults?.run?.["working-directory"]) !==
 				undefined
@@ -538,6 +542,10 @@ describe("jobs that tag or publish", () => {
 			(t: Tree) => t.workflows["release.yml"].jobs["auto-unstick"].steps?.push({ run: "bun x some-linter@latest --check" }),
 		],
 		[
+			"bun create on a continuation line",
+			(t: Tree) => t.workflows["release.yml"].jobs["attach-assets"].steps?.push({ run: "bun \\\n  create some-template" }),
+		],
+		[
 			"a third-party action",
 			(t: Tree) =>
 				t.workflows["release.yml"].jobs["attach-assets"].steps?.push({
@@ -661,15 +669,29 @@ describe("jobs that install nothing", () => {
 			"release.yml#sync-main-to-dev: overrides Bun's configuration",
 		],
 		[
+			"a quoted override",
+			onTree((t) => t.workflows["release.yml"].jobs["sync-main-to-dev"].steps?.push({ run: `bun "--install=force" -e 'x; y'` })),
+			"release.yml#sync-main-to-dev: overrides Bun's configuration",
+		],
+		[
+			"bun x on a continuation line",
+			onTree((t) => t.workflows["release.yml"].jobs["auto-unstick"].steps?.push({ run: "bun \\\n  x some-pkg" })),
+			"release.yml#auto-unstick: listed in NO_INSTALL, but not a job that installs nothing",
+		],
+		[
 			"a Bun call in backticks in a job that runs another revision",
 			onTree((t) => t.workflows["release.yml"].jobs["publish-chrome-store"].steps?.push({ run: 'V=`bun -e "1"`' })),
 			STORE_PUBLISH,
 		],
-		[
-			"a revision switched after the checkout",
-			onTree((t) => t.workflows["release.yml"].jobs["attach-assets"].steps?.unshift({ run: 'git checkout "$TAG"' })),
+		...[
+			'git checkout "$TAG"',
+			'git -c advice.detachedHead=false checkout "$TAG"',
+			'git -C "$GITHUB_WORKSPACE" switch --detach "$TAG"',
+		].map((command) => [
+			`a revision switched after the checkout (${command})`,
+			onTree((t) => t.workflows["release.yml"].jobs["attach-assets"].steps?.unshift({ run: command })),
 			"release.yml#attach-assets: runs Bun without --no-install where its own revision's bunfig.toml may be missing",
-		],
+		]),
 		[
 			"a non-cone sparse checkout that excludes bunfig.toml again",
 			onTree((t) =>
@@ -711,8 +733,18 @@ describe("jobs that install nothing", () => {
 				),
 			"release.yml#attach-assets: installs nothing, and NO_INSTALL does not list it",
 		],
-	])("finds %s", (_, findings, expected) => {
+	] as [string, () => string[], string | string[]][])("finds %s", (_, findings, expected) => {
 		expect(findings().sort()).toEqual([expected].flat().sort())
+	})
+	test("reads a quoted --no-install as the flag", () => {
+		const edit = (t: Tree) => {
+			const s = runStep(t, "release.yml#publish-chrome-store", /publish-chrome-store-run/)
+			s.run = s.run?.replace("bun --no-install ", 'bun "--no-install" ')
+		}
+		expect(
+			mutated(edit).workflows["release.yml"].jobs["publish-chrome-store"].steps?.some((s) => s.run?.includes('"--no-install"')),
+		).toBe(true)
+		expect(autoInstallFindings(mutated(edit), BUNFIG)).toEqual([])
 	})
 
 	// Counts registry requests: Bun's error text is the same for a refused install and a failed one.
