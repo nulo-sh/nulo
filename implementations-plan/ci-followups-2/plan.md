@@ -215,7 +215,7 @@ Assumptions: Phase 1 green; recon.md § Docs.
 - Pass criteria: the search prints nothing; every other command exits 0.
 - Layers: lint, unit, docs gate.
 
-### Phase 3: two fixed chaos seeds gate every network PR (OA-1 answered A)
+### Phase 3: two fixed chaos seeds gate every network PR (OA-1 answered A) ✓
 
 Assumptions: D-orch-2, D7-D14; Phases 1-2 green.
 
