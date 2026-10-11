@@ -573,10 +573,10 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-impl-11 (Codex design consult, D4).** `session_ended` also files a profile switch or a same-profile re-unlock during a send. The signed copy ships as written on the detail; OWNER-ASKS item 10 records the case.
 - **D-impl-12.** Before the request loads, the connect window's line reads "wants to connect on this network": the permission window's own fallback in the same expression, so no new word.
 - **D-impl-13.** The interaction service returns `expiredUrl` (its own discover URL marked `expired=1`, built from the handle's request id) beside the window id, and the gate only navigates to it. The plan had the gate append the flag to a URL it stored.
-- **D-impl-14.** The expiry is proven end to end instead of by a manual check: a busy loop scheduled on the playground's main thread before Allow stalls its half of the handshake on both browsers, so `session-tabClose.test.ts` carries the cancellation control and the expiry itself (overlay, OK closes it, a log line naming same-document or reload).
+- **D-impl-14.** The expiry is proven end to end instead of by a manual check: a busy loop on the playground's main thread, which logs a mark the test waits for before clicking Allow, stalls its half of the handshake on both browsers, so `session-tabClose.test.ts` carries the cancellation control and the expiry itself (overlay, OK closes it, a log line naming same-document or reload).
+- **D-impl-15.** The #128 probe (`sim-methods.test.ts` #25) now asserts the `-32602` envelope instead of "ok or error". On the base build it answered the unclassified constant; the wallet-side throw was PXE's own type check (`Cannot run public function as utility`, moderate confidence: the worker log was not captured).
 - **D-impl-16 (Opus O2).** `failQueuedIfUnclaimed` retitles only a classified refusal. A `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps its title: the person saw it in the approval window, and P2-04 covers refusals before the person sees anything.
 - **D-impl-17 (Codex round 1, C1).** Leaving the expired page closes its window: a lock routes every popup page to the auth screen, and without this the window, and the slot it holds, outlived its timer.
-- **D-impl-15.** The #128 probe (`sim-methods.test.ts` #25) now asserts the `-32602` envelope instead of "ok or error". On the base build it answered the unclassified constant; the wallet-side throw was PXE's own type check (`Cannot run public function as utility`, moderate confidence: the worker log was not captured).
 
 ### Plan-space search: the competing outline
 
@@ -668,6 +668,14 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 | 1 | Opus general-purpose review | approve with fixes (3 Low) | O1 (no test for D-impl-2) superseded by its withdrawal, the stamped row now pins the planned rule; O2 same as C1; O3 accepted (D-impl-5) |
 | 2 | Codex, same session resumed | approve | 1 Low: the marker comment still overclaimed; rewritten. C3 confirmed non-blocking (no new cross-origin disclosure or cross-profile bypass; the residual tied to #127 is appropriate) |
 | 3 | Codex, same session resumed | **approve** | no findings; the loop converged |
+
+### Arc 2 post-implementation
+
+| Round | Reviewer | Verdict | Outcome |
+|---|---|---|---|
+| 1 | Codex gpt-6.1-sol, high (session `01a12bb1`) | reject (with blocking findings: a lock after the expired page loads unmounts it and its timer while the window keeps its verification slot) | C1 Med accepted (D-impl-17); C2 Med accepted: the stall's start is acknowledged by a console mark before Allow; C3 Low accepted (three narrating comments deleted) |
+| 1 | Opus general-purpose review | approve with fixes | O1 High rejected on evidence (it predicted the stall mark would arrive only after the loop on Chrome; the retry-0 rerun passed 3/3); O2 Med accepted (D-impl-16); O3 Low pushed back (the post-window Terms settle is the refusal plan § Arc 2 #86 lists; its claimed name was never bound to its selector); O4 Low accepted as a PR-body note (D-impl-12's "this network") |
+| 2 | Codex, same session resumed | **approve** | C1 and C2 confirmed resolved; no new findings; the loop converged |
 
 ## Seeds (draft; finalized after approval)
 

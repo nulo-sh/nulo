@@ -74,3 +74,8 @@
   - O2 Med, accepted: `failQueuedForError` retitled every still-queued row, including one the person rejected or closed in the approval window (`popup_bound`), whose title they had seen. P2-04 and ask 2 cover refusals before the person sees anything. Fix: only a classified kind retitles; four `popup_bound` rows (rejection, close, unclassified, a bare "Wallet locked") keep the claimed title. Mutation (always retitle) turns those four red. Commit 593fe65.
   - O3 Low, pushed back: the post-window Terms settle retitling an approved-but-never-sent record is what plan § Arc 2 #86 lists; "approved and sent rows" do not include it, and its claimed name was never bound to its selector.
   - O4 Low, accepted as a PR-body note: "wants to connect on this network" before the request loads (D-impl-12).
+
+## Post-implementation, round 2 (2026-10-11)
+
+- Codex, same session resumed, on 75602de..1c35615: **approve**. C1 and C2 resolved, no new findings. The loop converged in two rounds.
+- The session-tabClose shots' header reads "Testnet" while the line reads "Connecting on Local Network": that test's fixture never switches the wallet off the e2e build's seeded Testnet, and the line names the app's network. It shows the premise of #123, not a defect.
