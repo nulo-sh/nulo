@@ -125,8 +125,8 @@ onUnmounted(() => {
 			/>
 
 			<Flex direction="column" gap="8" :class="$style.body">
-				<Text data-testid="network-unavailable-title" size="13" weight="600" color="primary">Network not available</Text>
-				<Text data-testid="network-unavailable-body" size="12" color="secondary" :style="{ lineHeight: '1.5' }">
+				<Text data-testid="network-unavailable-title" variant="row-title" color="primary" :class="$style.title_size">Network not available</Text>
+				<Text data-testid="network-unavailable-body" variant="body" color="secondary" :style="{ lineHeight: '1.5' }">
 					This app asks for a network your wallet doesn't have. The app and your wallet need to be on the same network.
 				</Text>
 			</Flex>
@@ -141,7 +141,7 @@ onUnmounted(() => {
 				variant="primary"
 				size="medium"
 			>
-				<Text size="13" color="inverse">Close</Text>
+				<Text color="inverse">Close</Text>
 			</Button>
 		</Flex>
 	</Flex>
@@ -158,6 +158,10 @@ onUnmounted(() => {
 
 .body {
 	padding: 16px;
+}
+
+.title_size {
+	font-size: 13px;
 }
 
 .footer {

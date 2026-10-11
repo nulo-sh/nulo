@@ -151,13 +151,9 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .head {
+	composes: type--label from global;
 	padding-bottom: 6px;
 
-	font-family: var(--font-mono);
-	font-size: 8.5px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--nulo-outline);
 }
 
@@ -166,14 +162,10 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .sub {
+	composes: type--label from global;
 	padding: 10px 0 5px;
 	border-bottom: 1px solid var(--hairline-soft);
 
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
@@ -194,22 +186,21 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .name {
+	composes: type--name from global;
 	overflow: hidden;
 
 	font-size: 12px;
-	font-weight: 600;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	color: var(--txt-primary);
 }
 
 .address {
+	composes: type--data from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--txt-primary);
 }
 
@@ -260,22 +251,18 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .fn {
+	composes: type--data from global;
 	display: grid;
 	grid-template-columns: 58px minmax(0, 1fr);
 	gap: 8px;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
 	line-height: 1.5;
 }
 
 .fn_label {
+	composes: type--label from global;
 	padding-top: 1px;
 
-	font-size: 8.5px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--nulo-outline);
 }
 
@@ -285,9 +272,9 @@ const spokenName = (entry: { row: Row; named: boolean }) => {
 }
 
 .foot {
+	composes: type--body from global;
 	margin-top: 10px;
 
-	font-size: 11px;
 	line-height: 1.45;
 	color: var(--txt-tertiary);
 }

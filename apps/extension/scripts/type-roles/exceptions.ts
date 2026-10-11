@@ -123,6 +123,13 @@ export const CARVE_OUTS: CarveOut[] = [
 		why: "sizes an icon glyph, not text",
 	},
 	{
+		file: "apps/extension/src/components/composite/general/EmojiGrid.vue",
+		rule: "faceless",
+		text: "font-size: 24px",
+		selector: ".cell",
+		why: "the verification emoji's size, a glyph a person compares, which no role carries",
+	},
+	{
 		file: CONTACT_ROW,
 		rule: "faceless",
 		text: "font-size: 10px",
@@ -187,5 +194,14 @@ export const OVERRIDES: Override[] = [
 		value: "700",
 		role: "segment",
 		why: "the selected new-profile method tab takes segment's active weight",
+	},
+	{
+		file: "apps/extension/src/components/composite/IdentityStrip.vue",
+		selector: ".identity_network.identity_warn",
+		scope: '[data-testid="identity-network"][data-warn]',
+		property: "font-weight",
+		value: "700",
+		role: "meta",
+		why: "a warned network keeps its bold over meta's 400",
 	},
 ]

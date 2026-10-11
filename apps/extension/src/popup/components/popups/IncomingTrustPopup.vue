@@ -139,7 +139,7 @@ watch(
 					<Icon name="download" size="20" color="primary" />
 					<span :class="$style.pre_title">First receive</span>
 					<h2 :class="$style.title">Allow {{ tokenSymbol }}?</h2>
-					<Text size="13" weight="500" color="body" height="150" align="center">
+					<Text variant="body" color="body" height="150" align="center">
 						You received <strong>{{ tokenSymbol }}</strong> from a contract you haven't seen before.
 					</Text>
 				</Flex>
@@ -184,7 +184,7 @@ watch(
 					</div>
 				</Flex>
 
-				<Text size="11" color="tertiary" height="150" align="center" :class="$style.warning">
+				<Text variant="body" color="tertiary" height="150" align="center" :class="$style.warning">
 					A contract you don't recognize could be a scam token with a familiar-looking symbol. Verify the contract address before allowing.
 				</Text>
 
@@ -234,15 +234,11 @@ watch(
 	background: var(--nulo-surface-low);
 }
 .contract_label {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	font-weight: 600;
-	letter-spacing: 0.14em;
+	composes: type--label from global;
 	color: var(--txt-tertiary);
 }
 .contract_value {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--txt-primary);
 	word-break: break-all;
 }
@@ -269,9 +265,8 @@ watch(
 	border-top: 1px solid var(--nulo-border);
 }
 .contract_full {
+	composes: type--data from global;
 	flex: 1;
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--txt-primary);
 	word-break: break-all;
 	line-height: 1.5;
