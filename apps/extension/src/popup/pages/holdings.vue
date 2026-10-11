@@ -123,9 +123,11 @@ const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
 const totalScale = ref(1)
 /** The least space, in px, a fitted total leaves before the meta line. */
 const TOTAL_GAP = 8
-let summaryResizes: ResizeObserver | undefined
+// jsdom has no ResizeObserver; there the fit still runs on each render.
+const summaryResizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fitTotal)
+const summaryLine = () => summary.value?.$el as HTMLElement | undefined
 function fitTotal() {
-	const line = summary.value?.$el as HTMLElement | undefined
+	const line = summaryLine()
 	const form = totalRuler.value
 	const meta = summaryMeta.value
 	if (!line || !form || !meta) return
@@ -133,6 +135,15 @@ function fitTotal() {
 	totalScale.value = fitHero(1, (_, scale) => rulerWidth(form, scale), room).scale
 }
 
+// The summary renders only while logged in, which may begin after the page mounts.
+watch(
+	summaryLine,
+	(line, previous) => {
+		if (previous) summaryResizes?.unobserve(previous)
+		if (line) summaryResizes?.observe(line)
+	},
+	{ flush: "post", immediate: true },
+)
 // After the render, so the ruler holds the figure the line shows.
 watch([summary, aggregateDisplay, showFiatValues, () => rows.value.length, () => aggregate.value.partial], fitTotal, {
 	flush: "post",
@@ -148,10 +159,6 @@ watch(
 
 onMounted(() => {
 	fitTotal()
-	// jsdom has neither; there the fit still runs on each render.
-	summaryResizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fitTotal)
-	const line = summary.value?.$el as HTMLElement | undefined
-	if (line) summaryResizes?.observe(line)
 	document.fonts?.addEventListener("loadingdone", fitTotal)
 })
 

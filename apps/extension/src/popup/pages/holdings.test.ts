@@ -211,4 +211,31 @@ describe("holdings page — the total fits beside its meta line", () => {
 		expect(figures.map((figure) => figure.text())).toEqual(["$1,250.00"])
 		expect((figures[0].element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
 	})
+
+	test("a summary that renders after the page mounts is still watched for resizes", async () => {
+		installChromeStorage()
+		const observed: Element[] = []
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				observe = (el: Element) => observed.push(el)
+				unobserve = vi.fn()
+				disconnect = vi.fn()
+			},
+		)
+		try {
+			const pinia = createTestingPinia({ stubActions: false })
+			const appStore = useAppStore(pinia)
+			appStore.network = { id: "n1", chainId: CHAIN_IDS.TESTNET } as never
+			appStore.account = { address: "0xacct" } as never
+			const w = mount(Holdings, { global: { plugins: [pinia], stubs: STUBS } })
+			await flushPromises()
+			expect(observed).toEqual([])
+			appStore.isLogined = true
+			await flushPromises()
+			expect(observed).toEqual([w.get('[data-testid="holdings-summary"]').element])
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
 })
