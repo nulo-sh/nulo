@@ -8,11 +8,11 @@ defineProps<{ action: Action }>()
 </script>
 
 <template>
-	<Text data-testid="execute-op-payload-row" size="12" color="primary">
+	<Text data-testid="execute-op-payload-row" variant="body" color="primary">
 		<!-- Unreachable from today's window producers (the one request carrying actions is a grant); rendered so a
 			future producer can never hide a call target behind an opaque label. -->
 		<template v-if="action.kind === 'call' || action.kind === 'encoded_call'">
-			<Text weight="600">
+			<Text variant="data">
 				{{ humanizeMethodName(safeWire(action.kind === "call" ? action.method : (action.name ?? action.selector), 64)) }}
 			</Text>
 			<Text color="secondary"> on </Text>
@@ -21,12 +21,12 @@ defineProps<{ action: Action }>()
 		<!-- A public authwit is a persisted on-chain spend authorization: the spender, method, contract and args
 			must be visible, never a generic label. -->
 		<template v-else-if="action.kind === 'add_public_authwit'">
-			<Text weight="600">Authorize public spend</Text>
+			<Text variant="value">Authorize public spend</Text>
 			<template v-if="action.content.kind === 'call'">
 				<Text color="secondary"> — spender </Text>
 				<AddressDisplay data-testid="execute-authwit-spender" :address="action.content.caller" />
 				<Text color="secondary"> for </Text>
-				<Text weight="600">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
+				<Text variant="data">{{ humanizeMethodName(safeWire(action.content.method, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-contract" :address="action.content.contract" />
 				<template v-if="action.content.args?.length">
@@ -40,7 +40,7 @@ defineProps<{ action: Action }>()
 				<Text color="secondary"> — spender </Text>
 				<AddressDisplay data-testid="execute-authwit-spender" :address="action.content.caller" />
 				<Text color="secondary"> for </Text>
-				<Text weight="600">{{ humanizeMethodName(safeWire(action.content.name ?? action.content.selector, 64)) }}</Text>
+				<Text variant="data">{{ humanizeMethodName(safeWire(action.content.name ?? action.content.selector, 64)) }}</Text>
 				<Text color="secondary"> on </Text>
 				<AddressDisplay data-testid="execute-authwit-to" :address="action.content.to" />
 			</template>
@@ -50,7 +50,7 @@ defineProps<{ action: Action }>()
 			</template>
 			<template v-else>
 				<Text color="secondary"> — message hash </Text>
-				<Text data-testid="execute-authwit-spender">{{ action.content.messageHash }}</Text>
+				<Text data-testid="execute-authwit-spender" variant="data">{{ action.content.messageHash }}</Text>
 			</template>
 		</template>
 		<template v-else>

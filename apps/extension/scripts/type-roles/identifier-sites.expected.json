@@ -998,6 +998,30 @@
 			"liveFrom": 4
 		},
 		{
+			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
+			"expression": "valueTitle(nonce)",
+			"branch": "(surface.kind === 'transfer' || surface.kind === 'mint') && nonce",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "windows-execute",
+			"state": "",
+			"liveFrom": 4,
+			"why": "the value's native title tooltip, which no type role styles; the element's text is its own site"
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
+			"expression": "valueTitle(p.value)",
+			"branch": "surface.kind === 'decoded' && !(p.value.kind === 'address')",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "windows-execute",
+			"state": "",
+			"liveFrom": 4,
+			"why": "the value's native title tooltip, which no type role styles; the element's text is its own site"
+		},
+		{
 			"file": "apps/extension/src/popup/windows/execute/OperationActionRow.vue",
 			"expression": "action.kind === 'call' ? action.contract : action.to",
 			"branch": "(action.kind === 'call' || action.kind === 'encoded_call')",
@@ -1334,6 +1358,18 @@
 			"surface": "windows-execute",
 			"state": "an aztec_createAuthWit request for an intent (network)",
 			"liveFrom": 4
+		},
+		{
+			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
+			"expression": "s.innerHash",
+			"branch": "!(isSendTx(op)) && op.kind === 'aztec_createAuthWit' && !(s.kind === 'call')",
+			"ordinal": 0,
+			"role": "none",
+			"selector": "",
+			"surface": "windows-execute",
+			"state": "",
+			"liveFrom": 4,
+			"why": "the hash's native title tooltip, which no type role styles; the element's text is its own site"
 		}
 	]
 }
