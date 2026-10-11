@@ -331,8 +331,8 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
 		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
 		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections on Chrome (probe-verified); Firefox emits
-		// neither event for an extension page (FIREFOX.md) — an error the app
+		// throws + unhandled rejections on both browsers, Firefox's through the
+		// driver's relay (FIREFOX.md) — an error the app
 		// catches and merely logs is invisible to BOTH fixture arrays
 		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
 		// prefer DOM/storage/stage evidence for app-level failures.
@@ -1258,8 +1258,8 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
 		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
 		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections on Chrome (probe-verified); Firefox emits
-		// neither event for an extension page (FIREFOX.md) — an error the app
+		// throws + unhandled rejections on both browsers, Firefox's through the
+		// driver's relay (FIREFOX.md) — an error the app
 		// catches and merely logs is invisible to BOTH fixture arrays
 		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
 		// prefer DOM/storage/stage evidence for app-level failures.
