@@ -14,6 +14,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { ExecutionServiceClient } from "@/wallet/services/execution/client"
 
 /** Composables */
+import { useConfigRead } from "@/composables/useConfigRead"
 import { usePrestoCheck } from "@/composables/usePrestoCheck"
 
 /** Utils */
@@ -41,45 +42,26 @@ const executionService = new ExecutionServiceClient()
 const HUB_KEYS = new Set(["sessionTtl", "showFiatValues", "theme", "developerMode"])
 const hubConfig = reactive({})
 const values = computed(() => hubValues(hubConfig))
-let readGeneration = 0
-let readFence = new Set()
-let connections = 0
 
 configService.onUpdate.add(onHubUpdate)
-configService.onConnected.add(onHubConnected)
+const hubRead = useConfigRead(
+	configService,
+	() => configService.getProps(),
+	(props, updatedSince) => {
+		for (const { key, value } of props) {
+			if (HUB_KEYS.has(key) && !updatedSince(key)) hubConfig[key] = value
+		}
+	},
+)
 
 function onHubUpdate({ key, value }) {
 	if (!HUB_KEYS.has(key)) return
 	hubConfig[key] = value
-	readFence.add(key)
-}
-
-// The port's first open serves the mount's own read. A reconnect keeps the hub mounted, and nothing
-// replays the updates sent while the port was down.
-function onHubConnected() {
-	connections++
-	if (connections > 1) void readHubConfig()
-}
-
-async function readHubConfig() {
-	const generation = ++readGeneration
-	const fence = new Set()
-	readFence = fence
-	let props
-	try {
-		props = await configService.getProps()
-	} catch {
-		return
-	}
-	if (generation !== readGeneration) return
-	for (const { key, value } of props) {
-		if (HUB_KEYS.has(key) && !fence.has(key)) hubConfig[key] = value
-	}
 }
 
 onBeforeMount(async () => {
 	void startPresto()
-	void readHubConfig()
+	void hubRead.read()
 	try {
 		lastProve.value = await executionService.getLastProveOutcome()
 	} catch {
@@ -108,6 +90,7 @@ onBeforeUnmount(() => {
 	heroObserver?.disconnect()
 	executionService.disconnect()
 	configService.disconnect()
+	hubRead.dispose()
 	disposePresto()
 })
 </script>
