@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-3
 tier: light
-status: approved (orchestrator, 765adbe); implementing arc 1
+status: completed (delivered in #313)
 issues: "#281 (arc 1)"
 depends_on: "#297 closed with its fix on origin/dev (lane wallet-followups-3, arc 1)"
 driver: claude-code
@@ -15,6 +15,19 @@ base: origin/dev at ca79036
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#313](https://github.com/nulo-sh/nulo/pull/313) (arc 1, Phases 0-4), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:** #281. The Firefox page-error relay is re-landed (`7339312`, identical to `39f3dda` in its eight files): an uncaught error or rejection on a Firefox extension page reaches `ctx.pageErrors` and `ctx.consoleErrors` as on Chrome, armed before `installAddon`, with a fail-closed close check. `waitForLockScreen` observes the popup's own redirect and never reloads (D3). FIREFOX.md and the e2e-testing skill carry the no-reload rule and ledger rows 51 and 52.
+- **Phase 2 verdict:** settled H1 by reproduction in probe round 3 (P2a run 23): the archived `auth-*.js` rejection was the lock helper's own reload leaving a document mid-route, and Codex confirmed it ([`lessons/phase-2.md`](lessons/phase-2.md)). No issue was opened for it.
+- **Orchestrator records:** D-orch-1 to D-orch-6 applied: no stack, the helper is observational, Phase 2 settled in its third and last round, `Invalid window ID` filed and not fixed, and the stop rule never fired.
+- **Dropped, rejected, superseded:** A1's failure branch did not run, since nothing new was recorded on either browser. Codex's C3 was rejected (a pre-existing archived-plan path in `_probe-console-capture.test.ts`), and Opus's O5 accepted in part (no rename); reasons in [`lessons/phase-4.md`](lessons/phase-4.md). No line is promoted to `implementations-plan/lessons.md`: it sat 2 bytes under its 8 KiB budget, and the gotchas are e2e-domain, so they live in their owning skill (the no-reload line, rows 51 and 52) and FIREFOX.md's dynamic-import row. The one clause this arc supersedes, "only stderr shows it" on the Firefox `storage.local.set` line, is removed: the relay now records such a rejection.
+- **Open items:** #312 (an approval page's `closeCurrentWindow` removes its window with no handler after `WindowManager._settle` removed it; Firefox prints `Invalid window ID`).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
 
 # e2e-followups-3: the Firefox page-error relay, re-landed
 
