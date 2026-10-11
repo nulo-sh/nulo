@@ -48,10 +48,12 @@ Bundles are a playground-only convenience: the wallet itself models capabilities
 | Meta | `getChainInfo`, `getAccounts`, `getAddressBook` |
 | Contracts | `registerContract`, `registerSender`, `getContractMetadata`, `getContractClassMetadata` |
 | Simulation | `simulateTx`, `profileTx`, `executeUtility` |
-| Transactions | `sendTx` (default / NoFrom / feePayer / multicall / chunked) |
+| Transactions | `sendTx` (default / NoFrom / NoFrom sponsored / feePayer / multicall / chunked / delegated) |
 | AuthWit | `createAuthWit` (callIntent / innerHash) |
 | Data | `getPrivateEvents` |
 | Batch | meta-only / mixed / partial-failure |
+
+The NoFrom button sends a public transfer, which the wallet refuses: the default entrypoint runs only a private call. NoFrom sponsored sends the one private call that can stand alone, the canonical SponsoredFPC's `sponsor_unconditionally`, after registering the sponsor, so it needs the `transaction-contracts` bundle.
 
 `registerToken` is the only Nulo-custom RPC surfaced on top of the canonical wallet-sdk schema — see `packages/wallet-bridge/README.md` for the schema-patch contract. `getCompleteAddress` and `simulateViews` were retired (both dApp-facing AND, in the case of `simulateViews`, the internal op kind too) and are not coming back; use the granted-accounts capability response and `simulateUtility` / `BatchCall.simulate()` respectively.
 

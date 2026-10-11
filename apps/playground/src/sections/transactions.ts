@@ -1,6 +1,6 @@
 /**
- * `sendTx` variants: default, `NoFrom`, `feePayer`, multicall, chunked,
- * reject, sponsored.
+ * `sendTx` variants: default, `NoFrom` (a public call, which the wallet refuses), `NoFrom`
+ * sponsored, `feePayer`, multicall, chunked, delegated.
  *
  * Each variant constructs an `ExecutionPayload` and calls
  * `wallet.sendTx()`. `sendTx` ALWAYS opens `/windows/execute`
@@ -8,6 +8,8 @@
  * `approveExecute()` / `rejectExecute()`.
  */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { Fr } from "@aztec-labs/aztec.js/fields"
 import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
@@ -26,6 +28,7 @@ export function renderTransactions(): string {
 			<div class="pg-row">
 				<button data-testid="pg-btn-sendTx-default" type="button" ${dis}>sendTx default</button>
 				<button data-testid="pg-btn-sendTx-noFrom" type="button" ${dis}>sendTx NoFrom</button>
+				<button data-testid="pg-btn-sendTx-noFrom-sponsored" type="button" ${dis}>sendTx NoFrom (sponsored)</button>
 				<button data-testid="pg-btn-sendTx-feePayer" type="button" ${dis}>sendTx feePayer</button>
 				<button data-testid="pg-btn-sendTx-multicall" type="button" ${dis}>sendTx multicall</button>
 				<button data-testid="pg-btn-sendTx-multicall-chunked" type="button" ${dis}>sendTx multicall &gt;5</button>
@@ -109,6 +112,21 @@ export function bindTransactions(root: HTMLElement): void {
 			// The wallet sends `from: "NO_FROM"` through the default entrypoint, not the account contract.
 			// biome-ignore lint/suspicious/noExplicitAny: NO_FROM is a sentinel string the SDK doesn't type
 			return wallet.sendTx(exec as any, { from: "NO_FROM", wait: "NO_WAIT" } as any)
+		}),
+	)
+
+	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-noFrom-sponsored"]')?.addEventListener(
+		"click",
+		safe("sendTx", async () => {
+			// The default entrypoint runs one private call with no caller, which must pay its own fee:
+			// the canonical sponsor's `sponsor_unconditionally` reads no sender and makes itself the payer.
+			const wallet = getWallet()!
+			const { SponsoredFPCContract } = await import("@aztec-labs/noir-contracts.js/SponsoredFPC")
+			const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, { salt: new Fr(0n) })
+			await wallet.registerContract(instance, SponsoredFPCContract.artifact)
+			const sponsor = SponsoredFPCContract.at(instance.address, wallet)
+			const exec = await sponsor.methods.sponsor_unconditionally().request()
+			return wallet.sendTx(exec, { from: "NO_FROM", wait: "NO_WAIT" })
 		}),
 	)
 

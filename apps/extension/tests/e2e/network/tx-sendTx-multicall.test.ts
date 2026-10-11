@@ -71,7 +71,7 @@ for (const c of cases) {
 			await waitForSendRecord(walletPopup, (r) => r.kind === "dapp_execute" && r.stage === "succeeded")
 			expect((await readSendRecords(walletPopup)).map((r) => r.stage)).toEqual(["succeeded"])
 
-			// Throws on a public revert, which is where a refused nonce surfaces.
+			// The receipt says only that the transaction is in a block; the balance says every call ran.
 			await waitForTxMined(aztecConfig!, txHash as string)
 			expect(await readPublicTokenBalance(aztecConfig!, tokenAddress, minterAddress)).toBe(recipientBefore + BigInt(c.calls))
 		},

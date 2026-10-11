@@ -28,3 +28,4 @@
 - 2026-10-10 — merged origin/dev f60125e (#276); gate 239 files clean; fast gates and the edited smoke files green on the merged head; PR next.
 - 2026-10-10 — arc 3: branched e2e-harness-gaps-coverage off dev af4afcc (D-orch-12/13 recorded); arc 4 waits on #279.
 - 2026-10-10 — phase 3.1 gate: pass (red on base: nonce refused at simulating; green retry 0 Chrome 2/2, Firefox 2/2; lint, typecheck:all, test 11,113).
+- 2026-10-11 — phase 3.2 gate: pass (sponsored NO_FROM red until the buildNoFrom fix cc844c1, D23-D25; noFrom retry 0 Chrome 3 runs 3/3, Firefox 3/3; mutex-bypass red recorded; lint, typecheck:all, test 11,114).
