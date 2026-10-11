@@ -36,3 +36,10 @@ The panel rounds and their dispositions are in `plan.md` § Audit verdicts. This
 
 - Puppeteer 25.8.0 over BiDi emits `framenavigated` only for fragment navigations and DOMContentLoaded (`bidi/Frame.js`). vue-router's hash history commits through `pushState`, which arrives as `browsingContext.historyUpdated` and only updates `page.url()` (`bidi/core/BrowsingContext.js`). So a Firefox route timeline polls `page.url()`.
 - `reopenAndRecoverAfterImport` (`fixtures/helpers.ts`) documents its reopen as `lockWallet`'s reload, which ran only when the redirect lagged; 6 test files call it. `lockWallet`'s comment credits an `isLogined` watcher with the push, which `locked-state.ts` does not do.
+
+## Implementation: the dependency gate (2026-10-11)
+
+- `gh issue view 297 --json state,closedByPullRequestsReferences`: `CLOSED`, closed by #300 (`fix: save a firefox fee pick as plain data, log integrity errors as objects`), merged into `dev` at 27af8d7.
+- #300 covers every caller #297 lists: `persistSelection` saves a plain record, and `storageLocalSet` structured-clones its items at the call, so any caller handing it reactive state now rejects on every engine. Its Firefox run of the seven files that printed the error printed `DataCloneError` 0 times (10 on base).
+- `git merge origin/dev` (signed, 2cabd2b): clean. It touched no relay file, nothing under `tests/e2e/fixtures/`, FIREFOX.md or the e2e-testing skill; its one e2e change is `network/tx-sendTx-sponsoredFpc.test.ts` (a readback of the saved pick). `index.md` unchanged; `lessons.md` gained one line (Firefox `storage.local.set` refuses a reactive Proxy) and lost its header sentence.
+- Fast: `bun run lint` 0, `bun run typecheck:all` 0, `bun run test` 0 (740 files passed, 3 skipped; 11233 tests passed).

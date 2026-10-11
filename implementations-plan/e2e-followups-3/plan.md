@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-3
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved (orchestrator, 765adbe); implementing arc 1
 issues: "#281 (arc 1)"
 depends_on: "#297 closed with its fix on origin/dev (lane wallet-followups-3, arc 1)"
 driver: claude-code
@@ -86,7 +86,7 @@ The relay's design is settled and panel-converged in the archived plan (D1, D5, 
 
 ### Asks (each with the working assumption the plan proceeds on)
 
-- **A1. The two terminal branches.** No product fix ships in this lane (D-orch-2 carried). The arc ends on exactly one of two branches:
+- **A1. The two terminal branches.** No product fix ships in this lane (EF2-orch-2 carried; D-orch-2 to D-orch-6). The arc ends on exactly one of two branches:
   - **Success:** Phases 0-3 green. Then the quality loop, Delivery and Close-out (§ Post-implementation).
   - **Failure:** the stop rule fired, or Phase 2 stayed unsettled after three probe rounds, or a gate failed three times on one step.
     1. Revert every implementation commit on the branch: the re-land and any harness fix. Keep the plan and lessons commits.
@@ -110,7 +110,7 @@ What comes back, unchanged:
 - per-page recording, and the `openPopup` fallback that closes a slow tab and loads a fresh one (`extension.ts`);
 - the unit cases (`firefox-driver.test.ts`);
 - the smoke control (`page-error-capture.test.ts`), and the removal of the probe case it replaced (`_probe-console-capture.test.ts`);
-- the FIREFOX.md rows and the e2e-testing skill lines, with the 153.0.4 proof and the hold-the-bump rule (D-orch-4), and the two comment clauses in `fixtures/extension.ts`.
+- the FIREFOX.md rows and the e2e-testing skill lines, with the 153.0.4 proof and the hold-the-bump rule (EF2-orch-4, D-orch-6), and the two comment clauses in `fixtures/extension.ts`.
 
 ### Settling `auth-*.js` (Phase 2)
 
@@ -230,7 +230,7 @@ None. Every change is under `apps/extension/tests/e2e/**`, `apps/extension/scrip
 
 ## Security & Adversarial Considerations
 
-- **Threat model.** The adversary is a regression that makes a check pass without checking. Three examples: a Firefox lane whose page-error arrays are empty by construction; a harness that turns a real error into noise; a helper that reloads its way past a product failure. The relay closes the first. The stop rule and the ban on filters close the second. D3 closes the third: the lock helper observes and never recovers. A faulted or unstarted relay fails its launch (D-orch-4).
+- **Threat model.** The adversary is a regression that makes a check pass without checking. Three examples: a Firefox lane whose page-error arrays are empty by construction; a harness that turns a real error into noise; a helper that reloads its way past a product failure. The relay closes the first. The stop rule and the ban on filters close the second. D3 closes the third: the lock helper observes and never recovers. A faulted or unstarted relay fails its launch (EF2-orch-4, D-orch-6).
 - **Least privilege.** The relay adds no capability. The Firefox session already runs with geckodriver's `--allow-system-access`. The listener reads only the add-on under test's own frames, by principal, never through a waived Xray. The parent emits only fields `logEntryFor` validated, onto the BiDi socket the test owns. P3a's wrappers run only in a scratch-labelled run and never ship.
 - **Internal Firefox APIs.** `_onMessageHandlerProtocolEvent` and `NavigableManager.getIdForBrowsingContext` are checked at arming. A Firefox bump that removes either, or that fails `page-error-capture.test.ts`, holds the bump; it never earns a `skipIf`, a soft-fail or a removed assertion.
 - **Scratch builds.** P2b's modified dists live under `~/.cache/nulo-backlog/e2e-followups-3/`, load only through `EXTENSION_PATH` in a probe, and are deleted after the phase. They never reach `dist/`, a release or a commit.
@@ -330,7 +330,7 @@ Assumes: Facts 10-12, I2, I4; A2; D5.
 7. Count `DataCloneError` lines in the Firefox stderr; expect 0 (I2).
 8. Run P3a. File or fix it as § Architecture says, and log the disposition.
 
-**Stop rule** (D-orch-5, binary). Each error the runs newly record is a real failure; never filter it. For each one:
+**Stop rule** (EF2-orch-5 and D-orch-6, binary). Each error the runs newly record is a real failure; never filter it. For each one:
 - **Harness cause, the relay included:** fix it, and rerun every file that recorded it on the browser that recorded it.
 - **Product cause:** A1's failure branch. Nothing of this lane ships.
 - **The relay proves unreliable:** A1's failure branch. Unreliable means the control red in a full smoke run, a launch's close check failing, or an entry whose stack URL names another page.
@@ -346,7 +346,7 @@ Layers: lint, typecheck, unit, e2e, e2e-live-network.
 
 ### Phase 4: docs and close-out
 
-Assumes: Fact 13, D-orch-4.
+Assumes: Fact 13, EF2-orch-4, D-orch-6.
 
 1. Reread the restored FIREFOX.md rows and skill lines against what Phases 1-3 measured. Fix any that no longer hold: the revision, the dynamic-import row, the flake ledger.
 2. Run the Post-implementation quality loop, then Delivery, then the Close-out below.
@@ -358,9 +358,14 @@ Validation gate: Fast; `bun run check:plans` on the staged plan files; `bun run 
 | # | Decision | Source | Status |
 |---|---|---|---|
 | D-orch-1 | One PR against `dev`, no stack | orchestrator standing record | carried |
-| D-orch-2 | No product fix in this lane; a product error is an issue plus the failure branch | e2e-followups-2 orchestrator record, carried by the lane brief | carried |
-| D-orch-4 | Arming and the close verdict stay fail-closed; no flag disables the relay; the docs name the proved Firefox revision and say a bump that fails them is held | e2e-followups-2 orchestrator record | carried |
-| D-orch-5 | The stop rule is binary | e2e-followups-2 orchestrator record | carried |
+| EF2-orch-2 | No product fix in this lane; a product error is an issue plus the failure branch | e2e-followups-2 orchestrator record, carried by the lane brief | carried |
+| EF2-orch-4 | Arming and the close verdict stay fail-closed; no flag disables the relay; the docs name the proved Firefox revision and say a bump that fails them is held | e2e-followups-2 orchestrator record | carried |
+| EF2-orch-5 | The stop rule is binary | e2e-followups-2 orchestrator record | carried |
+| D-orch-2 | D1 accepted: re-land by reverting `9094cf9`, byte for byte; no cherry-pick, no re-design. The relay's unit files and the smoke control are green on both browsers before Phase 2 starts | orchestrator approval of 765adbe | binding |
+| D-orch-3 | D3 accepted: `waitForLockScreen` is observational whatever H1's verdict; it waits within its existing budget and never reloads or reopens. A redirect that does not land is a product failure: dedupe, file the issue (five sections, `Record` link), then A1's failure branch; never a reload, a retry, a longer budget or a browser-specific branch | orchestrator approval of 765adbe | binding |
+| D-orch-4 | Phase 2 is bounded: attribution only from a P2a reproduction or an excluding ordering invariant; at most three probe rounds, every trial logged in `lessons/phase-2.md`; then `ARC_FAILED` with the evidence commented on #281. A product cause is an issue and the revert applies (the lane ships nothing) | orchestrator approval of 765adbe | binding |
+| D-orch-5 | `Invalid window ID` is filed, not fixed: a product attribution by P3a becomes an issue (dedupe first), labelled `bug`, with the six files and the probe's evidence; it never blocks the arc, and nothing under `apps/extension/src` changes | orchestrator approval of 765adbe | binding |
+| D-orch-6 | The stop rule is binary and the arming stays fail-closed (as EF2-orch-4 and EF2-orch-5): no flag that disables the relay, no try/catch-and-continue at arming or close; `FIREFOX.md` and the e2e-testing skill name the proved Firefox version and say a bump whose arming check fails is a hold on the bump, never a `skipIf` or a soft-fail | orchestrator approval of 765adbe | binding |
 | D1 | Re-land by reverting `9094cf9`, not by replaying seven cherry-picks | planner (Facts 1-2); Codex verified Fact 2 | accepted (both legs) |
 | D2 | Phase 2: instrumented reproduction, then one forced probe per open hypothesis with explicit synchronization, then the load-phase text probe; historical attribution stays an inference unless reproduced | planner; Codex C2, Opus O3, O6, O7 | revised after round 1 |
 | D3 | `waitForLockScreen` becomes observational whatever H1's verdict: it waits within its existing 15 s and never reloads. No lock helper reopens; a test's own reopen comes after the lock lands, keeping every earlier assertion. A timeout is product (A1) | Codex C1, R2-1, R3-2; Opus O-R3-1, O-R3-2 | revised three times; the wait-then-reload form and the reopen carve-out rejected |
