@@ -11,3 +11,6 @@
 - 2026-10-11 arc 1 phase 1 gate: pass (lint, typecheck:all, test:ci-gating 495/0, test:release 293/0, lint:actions, test, test:all; red on base shown; job probe 0 vs 1 request; audit:dup cold exit 0; audit gate enforce 41 acked 0 unacked).
 - 2026-10-11 arc 1 phase 2 gate: pass (lint, typecheck:all, test:ci-gating 501/0, test:release 293/0, lint:actions, test, test:all; reds shown against the old rule and the base workflow; local wiring check).
 - 2026-10-11 arc 1 phase 3 gate: pass (lint, typecheck:all, test:ci-gating, test:release, check-no-local-paths with CLAUDE.md staged).
+- 2026-10-11 arc 1 fix loop round 1: Codex approve-with-fixes (3M 2L), Opus approve-after-1 (1M 4L); all 10 accepted, fixed in 748d26a; ci-gating 509/0.
+- 2026-10-11 arc 1 fix loop round 2: Codex approve-with-fixes (3 Medium), all accepted, fixed in 4dd761a; ci-gating 515/0. Round 3 running.
+- 2026-10-11 arc 1 fix loop round 3 (last): Codex approve-with-fixes (1 Medium: bun --silent x), accepted, fixed in 89faf22; loop closed at the hard stop.

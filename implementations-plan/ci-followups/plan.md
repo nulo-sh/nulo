@@ -393,6 +393,38 @@ Also: recon.md's "edits none" collision line was stale; corrected to the two sto
 
 **Resumed final pass (same session), 2026-10-11.** Verdict: **approve**. All six conditions met; `NO_INSTALL` checks the dynamic selection rather than replacing it, the flag path needs a real leading flag, cone handling is correct, mutations 10-12 cover the new controls, and Phase 2's red keeps its imports. Two Low documentation corrections, both applied: Phase 1 step 4 said "nine mutations" (now twelve), and the prototype log said 19 file-path calls (it is fifteen; 20 calls in all).
 
+### Fix loop round 1, Codex (gpt-6.1-sol, high, read-only) and Opus (general-purpose), 2026-10-11
+
+Codex session `01a1285a-fdc6-72c2-806e-162c15c0b13d`. Codex: **approve with fixes** (3 Medium, 2 Low). Opus: **approve once its finding 1 is fixed** (1 Medium, 4 Low). All ten verified against the tree or by probe (lessons/phase-3.md) and accepted; fixed in one commit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| Opus 1 | Medium. `bun x` and `bun create` fetch under `auto = "disable"` and escape both `INSTALLS` and the per-call check; § Security's "`CLEAN` already refuses them" was false for `bun x` | Accepted: `INSTALLS` counts them as installs, so a listed job that gains one fails the selection control and the tagging jobs refuse it; a `CLEAN` mutation; SECURITY.md says so |
+| Codex 1 | Medium. Argument parsing stopped at a `;` inside quoted `-e` code and at a line continuation | Accepted: continuations joined, quoted text blanked before cutting; two mutations |
+| Codex 2 | Medium. setup-bun's steps were skipped wholesale; composites were read one level deep | Accepted: `expanded()` recurses; only setup-bun's input-guarded install step is dropped; two mutations |
+| Codex 3 | Medium. A non-cone list with `/bunfig.toml` then `!/bunfig.toml` passed | Accepted: a `!` pattern fails the own-revision rule; one mutation |
+| Codex 4, Opus 3 | Low. "overrides --no-install" is false on Bun 1.4.2 (`--no-install` wins in either order) | Accepted: refusal kept as strictness, renamed "conflicting auto-install flags" |
+| Codex 5 | Low. A tautological comment; selection's reason unstated | Accepted |
+| Opus 2 | Low. A Bun call in backticks was not matched | Accepted; one mutation |
+| Opus 4 | Low. A `git checkout`/`switch` in a step moves the revision, as `with.ref` does | Accepted: any such step fails the own-revision rule (none today); one mutation |
+| Opus 5 | Low. A docblock line left at 176 characters | Accepted |
+
+### Fix loop round 2, Codex (same session), 2026-10-11
+
+Verdict: **approve with fixes** (three new Medium). All verified and accepted; fixed in one commit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Medium. Round 1's blanking erased quoted flags (`bun "--install=force" -e '…'` passed and fetches; a quoted `"--no-install"` became a false positive) | Accepted: a quoted word without whitespace or a separator is unquoted, quoted code stays blanked; a mutation and a success control |
+| 2 | Medium. `INSTALLS` read raw text, so `bun \`-newline-`x pkg` escaped selection and `CLEAN` | Accepted: one `script(step)` joins continuations for every check; two mutations |
+| 3 | Medium. `git -c … checkout` and `git -C dir checkout` escaped the revision-switch rule | Accepted: options before the subcommand are skipped; two mutations |
+
+The comment over `NO_INSTALL` now names the check's second blind spot, a command the shell assembles at run time (a variable, `eval`); the threat is an accidental import or call, not an evasive author (§ Security).
+
+### Fix loop round 3, Codex (same session), 2026-10-11, the last
+
+Verdict: **approve with fixes** (one new Medium). `bun --silent x <pkg>` and `bun --silent create <t>` fetch under `auto = "disable"` and escaped `INSTALLS`, whose round-1 pattern expected the subcommand right after `bun`. Accepted: option words may precede `x`/`create`; two mutations, red on the previous pattern. A value-taking option before the subcommand (`--cwd dir x`) still escapes `INSTALLS`, but in a job that installs nothing the per-call check refuses `--cwd` and `-c` by itself. The hard stop is three rounds, so this last fix had no fourth Codex pass; the round's other areas (composite recursion, sparse exclusions, quoting, the conflict rename, comments) drew no finding.
+
 ## Seeds
 
 Recommended: `/goal`. Use exactly one per session.
