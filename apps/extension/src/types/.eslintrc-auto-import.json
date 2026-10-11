@@ -527,6 +527,7 @@
     "useAuthRegistryStatus": true,
     "useBalancesStore": true,
     "useCacheStore": true,
+    "useConfigRead": true,
     "useCssModule": true,
     "useCssVars": true,
     "useDappApprovalWindow": true,

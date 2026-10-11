@@ -228,7 +228,7 @@ Validation gate:
 - Pass: exit 0. Both trim tests fail against the base copy of `LogsViewer.vue`; the control passes there. The three existing tests pass unchanged in their assertions.
 - Layers: lint, typecheck, component.
 
-### Phase 4: #268, reads that survive a restart
+### Phase 4: #268, reads that survive a restart ✓
 
 1. Add `useConfigRead` and at least 10 cases: first open reads once; another request on the same client opens the port first, in the same mount step, and the mount read still runs once; a later open reads again; a rejected read lands nothing and the next open lands; an older read answering last is ignored; an update during the read is reported for its key only; an update before the read is not; a synchronous throw from `fetch` ends the read; a read in flight at `dispose` never lands; after `dispose` no open reads and no update is recorded; `dispose` twice is safe.
 2. Move the hub onto it.
