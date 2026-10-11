@@ -3,7 +3,7 @@
 import { FieldWarning } from "@nulo/design"
 /** Utils */
 import { AccountType } from "@/wallet/services/account/client"
-import { nextAccountName, sameStoredName } from "@/utils/account-name"
+import { nextAccountName, sameStoredName, storedNameKey } from "@/utils/account-name"
 import { managers } from "@/utils/core"
 import { storageLocalSet } from "@/utils/storage"
 
@@ -46,7 +46,7 @@ const isAvailableToCreateAccount = computed(() => {
 	// is synchronous against a post-await push, so two concurrent invocations
 	// could otherwise both pass it and create two same-named accounts.
 	if (isCreatingAccount.value) return false
-	if (!name.value.length) return false
+	if (!storedNameKey(name.value)) return false
 	if (form.fields.name.error.value) return false
 	return true
 })

@@ -178,10 +178,11 @@ interface FuzzWorld {
 	store: Store
 	subs: ModelSub[]
 	txHandler: TxHandler | undefined
-	/** Keys whose ensure resolved DEGRADED while a retry-capable covering subscriber was live —
-	 *  the store armed (or re-armed) a backoff loop, so a clean drain must recover them. Dropped
-	 *  when the key's retry capability dies (loop dies with it) or a fence clears the entry. */
-	expectGasRecovery: Set<string>
+	/** Keys whose ensure resolved DEGRADED while a retry-capable covering subscriber was live,
+	 *  each with its gas `retryVersion` at that moment — the store armed (or re-armed) a backoff
+	 *  loop, so a retry success must commit past that version. Dropped when the key's retry
+	 *  capability dies (loop dies with it) or a fence clears the entry. */
+	expectGasRecovery: Map<string, number>
 }
 
 const scopeKey = (s: BalanceScope) => JSON.stringify([s.profileId, s.networkId, s.chainId, s.accountAddress])
@@ -208,7 +209,7 @@ function createFuzzWorld(): FuzzWorld {
 		store: null as unknown as Store,
 		subs: [],
 		txHandler: undefined,
-		expectGasRecovery: new Set<string>(),
+		expectGasRecovery: new Map<string, number>(),
 	}
 	installGasMock(world)
 	installFpcMock(world)
@@ -350,8 +351,9 @@ function opEnsure(world: FuzzWorld, p1: number, p2: number): void {
 			// coverage means the store owes a recovery (checked at
 			// the slice, not the combined flag — an fpc-only
 			// degradation owes nothing for gas).
-			if (legs.includes("gas") && world.store.entry(scope)?.gas.status === "degraded" && retryCoves(world, scope, "gas")) {
-				world.expectGasRecovery.add(scopeKey(scope))
+			const gas = world.store.entry(scope)?.gas
+			if (legs.includes("gas") && gas?.status === "degraded" && retryCoves(world, scope, "gas")) {
+				world.expectGasRecovery.set(scopeKey(scope), gas.retryVersion)
 			}
 		})
 		.catch(() => {})
@@ -448,15 +450,17 @@ async function drainToQuiescence(world: FuzzWorld): Promise<void> {
 }
 
 /** C1 — owed recoveries happened: every key whose ensure resolved gas-degraded under live retry
- *  coverage must have recovered through the all-success drain (debt cleared, slice ready). */
+ *  coverage must have committed a retry-path success since — the only commit that both bumps
+ *  `retryVersion` and clears debt. Status is not read: a tx-settle refresh that fails after the
+ *  recovery re-degrades the key without debt, by design. */
 function assertOwedRecoveries(world: FuzzWorld): void {
-	for (const key of world.expectGasRecovery) {
+	for (const [key, owedAt] of world.expectGasRecovery) {
 		const entry = world.store.entries[key]
 		expect(entry, `recovery-owed entry ${key} vanished before recovering`).toBeDefined()
 		expect(entry?.gas.retryDebt, `recovery-owed key ${key} still carries retry debt after a clean drain`).toBe(false)
-		expect(entry?.gas.status, `recovery-owed key ${key} never recovered`).toBe("ready")
+		expect(entry?.gas.retryVersion, `recovery-owed key ${key} never recovered through a retry`).toBeGreaterThan(owedAt)
 	}
-	world.trace.event("c1", { owed: [...world.expectGasRecovery].sort() })
+	world.trace.event("c1", { owed: [...world.expectGasRecovery.keys()].sort() })
 }
 
 /** C2 — post-drain silence: every retry resolved successfully, so no timer may produce further
@@ -565,7 +569,7 @@ async function runTape(tape: number[]): Promise<void> {
 			next: world.nextCallId,
 			fences: { ...world.fences },
 			subs: world.subs.map((s) => [scopeKey(s.scope), s.caps, s.released]),
-			owed: [...world.expectGasRecovery].sort(),
+			owed: [...world.expectGasRecovery.keys()].sort(),
 			entries: snapshotEntries(world.store),
 		})
 	}
@@ -578,12 +582,85 @@ async function runTape(tape: number[]): Promise<void> {
 	world.trace.finish(tape)
 }
 
+/** Shrunk counterexamples fast-check replays before its generated tapes, whatever the seed. */
+const PINNED_TAPES: number[][] = [
+	// An owed recovery commits, then a failed tx-settle refresh re-degrades the key without debt.
+	[
+		0, 189635, 0, 0, 0, 452578, 1, 175280, 0, 242678, 516898, 834298, 22098, 92002, 801978, 175278, 159301, 177004, 892801, 323760, 1,
+		673435, 452378, 0, 216535, 1, 1, 0, 169678, 401719, 581260, 0, 0, 1, 816895, 0, 0, 0, 0, 0, 0, 0,
+	],
+]
+
+function settleAll(world: FuzzWorld, ok: boolean): void {
+	for (const call of world.pending.splice(0)) call.settle(ok)
+}
+
+/** SCOPES[0] under one retry- and txRefresh-capable subscriber, its first gas read failed: the
+ *  store holds debt and C1 owes a recovery past `retryVersion` 0. */
+async function worldOwingRecovery(): Promise<FuzzWorld> {
+	const world = createFuzzWorld()
+	opSubscribe(world, 1, 0, 0)
+	opEnsure(world, 0, 0)
+	await flush()
+	settleAll(world, false)
+	await flush()
+	expect(world.expectGasRecovery.get(scopeKey(SCOPES[0]))).toBe(0)
+	return world
+}
+
 describe("balances store — randomized interleavings (fuzz)", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 	})
 	afterEach(() => {
+		vi.clearAllTimers()
+		txAdd.mockClear()
 		vi.useRealTimers()
+	})
+
+	describe("C1 oracle", () => {
+		it("fails an owed recovery that never happens", async () => {
+			const world = await worldOwingRecovery()
+			expect(() => assertOwedRecoveries(world)).toThrow(/still carries retry debt/)
+		})
+
+		it("fails an owed recovery whose retry failed: the failure keeps debt and retryVersion", async () => {
+			const world = await worldOwingRecovery()
+			await vi.advanceTimersByTimeAsync(5_000)
+			settleAll(world, false)
+			await flush()
+			expect(world.store.entries[scopeKey(SCOPES[0])].gas).toMatchObject({ status: "degraded", retryVersion: 0, retryDebt: true })
+			expect(() => assertOwedRecoveries(world)).toThrow(/still carries retry debt/)
+		})
+
+		it("fails debt cleared without a retry success", async () => {
+			const world = await worldOwingRecovery()
+			const key = scopeKey(SCOPES[0])
+			opEnsure(world, 0, 0)
+			await flush()
+			settleAll(world, true)
+			await flush()
+			// A store that cleared debt on a plain ensure success: ready, debt-free, no retry commit.
+			const entry = world.store.entries[key]
+			world.store.entries[key] = { ...entry, gas: { ...entry.gas, retryDebt: false } }
+			expect(world.store.entries[key].gas.status).toBe("ready")
+			expect(() => assertOwedRecoveries(world)).toThrow(/never recovered through a retry/)
+		})
+
+		it("passes a retry success that a failed tx-settle refresh then re-degrades", async () => {
+			const world = await worldOwingRecovery()
+			const key = scopeKey(SCOPES[0])
+			await vi.advanceTimersByTimeAsync(5_000)
+			settleAll(world, true)
+			await flush()
+			expect(world.store.entries[key].gas).toMatchObject({ status: "ready", retryVersion: 1, retryDebt: false })
+			opTxSettled(world, 0)
+			await flush()
+			settleAll(world, false)
+			await flush()
+			expect(world.store.entries[key].gas).toMatchObject({ status: "degraded", retryDebt: false })
+			expect(() => assertOwedRecoveries(world)).not.toThrow()
+		})
 	})
 
 	it("invariants hold under arbitrary operation/settlement schedules", async () => {
@@ -601,7 +678,7 @@ describe("balances store — randomized interleavings (fuzz)", () => {
 					txAdd.mockClear()
 				}
 			}),
-			{ numRuns, ...(seed !== undefined ? { seed } : {}) },
+			{ numRuns, examples: PINNED_TAPES.map((tape) => [tape]), ...(seed !== undefined ? { seed } : {}) },
 		)
 	}, 120_000)
 })

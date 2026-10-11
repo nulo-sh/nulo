@@ -17,6 +17,7 @@ import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfigRead } from "@/composables/useConfigRead"
 const { openToast } = useToast()
 
 /** Store */
@@ -27,6 +28,7 @@ const cacheStore = useCacheStore()
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
+const developerRead = useConfigRead(configService, () => configService.getProps(), landDeveloperConfig)
 
 const openLogs = async () => {
 	if (appStore.loggerWindowId) {
@@ -125,19 +127,24 @@ function onSettingUpdate(setting) {
 	}
 }
 
-onBeforeMount(async () => {
-	const _settings = await configService.getProps()
+// Copies the values only: `applySetting` would write `indicateFailures` and `debugMode` on a reread.
+function landDeveloperConfig(_settings, updatedSince) {
 	_settings.forEach((s) => {
-		if (settings[s.key]) {
+		if (settings[s.key] && !updatedSince(s.key)) {
 			settings[s.key].model.value = s.value
 		}
 	})
 
 	isLoading.value = false
+}
+
+onBeforeMount(() => {
+	void developerRead.read()
 })
 
 onBeforeUnmount(() => {
 	configService.disconnect()
+	developerRead.dispose()
 })
 </script>
 
