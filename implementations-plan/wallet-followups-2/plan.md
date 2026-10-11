@@ -491,6 +491,10 @@ Codex verdict: approve with changes, three low findings, no runtime defect. Opus
 - Rejected (Opus, unverified): Send leaves with "The last token has just been deleted" if a token added elsewhere is still being re-read when the only, selected token is deleted. The window is one `getTokens` round trip after two actions on other surfaces; the outcome is recoverable (reopen Send); and a pending re-read does not imply a token for this identity (`onTokenAdded` fires for every profile and chain), so the fix needs in-flight tracking plus a second leave path, machinery out of proportion to the race.
 - Informational (Opus): the scan sees only literal `services.add(` registrations and inline `KeyedLock` options, and refuses (fails closed on) a literal containing a quote or backtick. None has an instance today; the scan's header already names its false negatives.
 
+### Post-implementation round 2 (Codex gpt-6.1-sol high read-only, same session, resumed on `309b60a..56ed621`)
+
+Verdict: approve, no new material finding. It confirmed the three fixes and the `_logger` scan change, and accepted the Send add/delete race rejection as a defensible scope exclusion. The loop converged after one fix round.
+
 ## Delivery
 
 One arc, one branch (`worktree-wallet-followups-2`), one PR against `dev`, opened only after Phase 5 passes and the Codex fix loop converges. No stack (`gh stack` is not used: the orchestrator's standing D-orch-1).
