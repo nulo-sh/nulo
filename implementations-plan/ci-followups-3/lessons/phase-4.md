@@ -19,3 +19,11 @@ Verdict: **approve**, three nits, all accepted and applied:
 ## Codex fix loop, round 2 (resumed; the fix diff 92124e1)
 
 Verdict: **approve**, "Findings: none". Removing the assertion "loses no meaningful coverage. An omitted or incorrect tag still fails the retained exact-patch assertion." The loop converged.
+
+## Final-head gates (445ea36)
+
+`bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating`, `test:release`, `lint:actions` and `check:plans`: each exit 0. `send-chaos.test.ts` with seed 1095865833 (proverless, retry 0): green on Chrome and on Firefox, its actions equal to PR run 38162383273's after relabelling destinations.
+
+## Close-out consult: the lessons promotion (Codex, resumed)
+
+`lessons.md` sat at 8191 of 8192 bytes and every entry still held, so no merge alone fit (folding the rule and the base-SHA entry into the success-control entry still came to 8250). Options put to Codex: retire the vite-plugin-pages redirect entry, which `apps/extension/src/popup/legacy-routes.test.ts` now holds (it asserts each old path is claimed by its redirect record alone over the real generated route tree), and add a 135-byte § Git & GitHub line; or promote nothing, as ci-followups-2 did. Codex: option 1, "the real-route test preserves the retired lesson's local protection, while the GitHub API quirk deserves durable visibility because it applies beyond this repository's guarded release runner." Applied.

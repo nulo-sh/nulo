@@ -24,7 +24,7 @@ gh api repos/nulo-sh/nulo/git/ref/tags/untagged-29f161d8864377d68cb4            
 
 **Recommendation: A.** The release holds exactly what the run built and attested for `61060c0`; only its tag binding was lost, and re-attaching restores what the pipeline meant to publish. The stray tag names nothing the pipeline uses.
 
-**What ships now:** nothing touches release 407837006 or the stray tag. The arc changes only how future runs edit a release; it reads no `untagged-…` release or tag and needs none of the three options to land or to be confirmed. If this is still open when the arc closes, its close-out opens one `owner-decision` issue for it, so the decision outlives #309.
+**What ships now:** nothing touches release 407837006 or the stray tag. The arc changes only how future runs edit a release; it reads no `untagged-…` release or tag and needs none of the three options to land or to be confirmed. If this is still open when the arc closes, its close-out opens one `owner-decision` issue for it, so the decision outlives #309. Unanswered at close-out: tracked in #310.
 
 ## OA-2. No re-run of a publish from before the fix; the first stable needs the fix on `main`
 

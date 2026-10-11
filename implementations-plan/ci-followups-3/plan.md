@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-3
 tier: light
-status: approved by the orchestrator (D-orch-1 to D-orch-7); arc 1 implemented, phases 1-4 green; Codex fix loop converged (round 2 approve)
+status: completed (delivered in #311)
 issues: "#309, #305, #306 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,29 @@ base: origin/dev at 2a41b1d
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#311](https://github.com/nulo-sh/nulo/pull/311) (arc 1: phases 1 to 4), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #309: `AttachIO.editRelease` requires the tag and sends it as `tag_name`; the notes write and the publish in `apply`, and the notes write in `verify-published`, all name the run's tag. The publish order, both read-backs, the tag-commit and attestation checks and the `release tags` ruleset are unchanged. The fake models the draft detachment, so seven tests are red on the base copy.
+  - #305: `chaosSeed` (`tests/e2e/fixtures/chaos-seed.ts`) refuses a seed that is not a nonnegative decimal safe integer, read at load in `send-chaos.test.ts`; proven red on `abc` and green on seed 1095865833 on Chrome and Firefox, its actions equal to a PR run's.
+  - #306: `release.yml`'s opt-in network run carries the PR lane's two chaos legs and pool exclusion inside its one matrix job; the release-vs-PR pin expands the PR chaos job by seed; CI.md says so. `aggregators.test.ts` is unchanged.
+  - `lessons.md`: the draft-release `tag_name` rule promoted to § Git & GitHub; the vite-plugin-pages redirect entry retired, since `legacy-routes.test.ts` now holds it (a Codex consult picked this over promoting nothing).
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decisions).
+- **Confirmation:** the next scheduled nightly that reaches publish (D7), watched by the orchestrator; when that is depends on #308.
+- **Dropped, rejected, superseded:**
+  - #305's 2^32 bound: replaced by D3 (run-id seeds exceed it).
+  - `target_commitish: <sha>` on the draft and a stricter pre-publish read-back: not used; neither addresses the cause (§ The cause of #309).
+  - One publishing write carrying the notes: rejected (D2).
+  - A `chaos_seed` check in `nightly.yml` and a separate release chaos job: rejected (D4; § Trade-offs).
+  - CLAUDE.md § Release runbook: no sentence, since the release flow's order is unchanged (D-orch-3).
+  - OA-2: carried as the PR body's warning (D-orch-3); no repository work.
+  - The `verify-published` tag assertion of Phase 1 step 4: dropped as unable to fail (Opus review); the exact-patch assertion is the contract.
+  - The commit trailer names the model that wrote the commits (Claude Opus 5.5) rather than § Delivery's literal one.
+- **Open items:** #310 (`owner-decision`, `ci`): the detached release 407837006 and its stray `untagged-…` tag (OA-1).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # ci-followups-3: keep a draft release's tag through its edits; refuse a malformed chaos seed; release's chaos legs
 
