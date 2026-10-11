@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-3
 tier: mid
-status: final v2.1 (final fresh Codex pass folded in); awaiting orchestrator approval
+status: approved by the orchestrator (D-orch-1 to D-orch-5); arc 1 in implementation
 issues: "#297, #295 (arc 1); #281, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -11,7 +11,7 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 2 Explore agents (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent), one Codex resume to settle disputes; one final fresh Codex pass
 post_implementation_hardening: not scheduled
-base: origin/dev at 0643a14
+base: origin/dev at 0643a14, merged up to ca79036 before Phase 0
 trunk: dev
 ---
 
@@ -75,7 +75,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (no
 ### Asks
 
 - None open. A1 (resolved by evidence, F10): the Firefox network runs use `NULO_E2E_PROVERLESS=1` for all seven files, in two calls, matching CI. The error comes from a UI write and does not depend on proving. Both audit legs agreed.
-- A2 (resolved by the ruleset, flagged to the orchestrator): F12 rests on CLAUDE.md's pre-production statement. The code ships to the stores, but the ruleset says flipping to production is a deliberate owner decision recorded in that section, and it has not been flipped. If the owner has flipped it, this record change needs a numbered migration before it ships.
+- A2 (resolved by the orchestrator, D-orch-2: no migration): F12 rests on CLAUDE.md's pre-production statement. The code ships to the stores, but the ruleset says flipping to production is a deliberate owner decision recorded in that section, and it has not been flipped.
 
 ## Architecture & Implementation
 
@@ -154,6 +154,12 @@ Each line: the decision, both legs' views, the outcome and why.
 - **D10. The legacy key's pre-fill trusts an unvalidated stored record** (raised by both legs). On a same-identity re-run, a tampered record could show any title, name a dangling `fpc.id`, or carry `isProtocol: true` so the readout says "Nothing" until the commit. Opus: file an issue. Codex, resumed: a disposition only; no lower-privilege path into the key exists (its writers are the card and the FPC settings page's delete, and it is in no backup slice). **Outcome: disposition in the Security section and the Outcome; no issue. Hardening the reader would change what the pre-fill shows, which is an owner question with no evidence behind it.**
 - **D11. Positive Firefox evidence** (Opus, Medium). Once the `.catch` lands, a broken projection would be caught and logged through the console sniffer, not printed to stderr, so a 0 count alone cannot tell a working fix from a caught failure. Codex, resumed: necessary and in scope; require the exact sponsor id and an empty record before the pick. **Outcome: `tx-sendTx-sponsoredFpc.test.ts` reads the saved record back (Phase 1 step 5), and that file runs on Chrome and Firefox.**
 - **D12. The Phase 1 pin** (Opus, blocking; Codex agreed). The fixture's protocol sponsor is the card's default, so "reconciles to it" passes on base, and the by-reference `get` let a failed write still change the backing. **Outcome: the fake clones on `get` and `set`; the test seeds a protocol sponsor and a hand-added one and picks the hand-added one; the remount runs in a fresh Pinia with a deferred FPC read; the same-identity re-run test runs for both sponsor kinds, since a dropped `isProtocol` reads as "unvouched" just as a hand-added one does.**
+- **D-orch-1. Delivery.** Single arc: one branch, one PR against `dev`, no stack; the close-out lands as that PR's final commits.
+- **D-orch-2. Ask A2: no migration.** CLAUDE.md § Persisted-storage shape changes still records the repository as pre-production, and the owner has not flipped it. The narrowed record is a launch-baseline change: no numbered migration, no compatibility read of the old shape beyond what this plan specifies.
+- **D-orch-3. D11 stands.** The readback in `tx-sendTx-sponsoredFpc.test.ts` is in scope; the report gives the readback result and the stderr count, base and fix, per browser.
+- **D-orch-4. D1a's contract is written where it binds:** a TSDoc sentence on `storageLocalSet` (cloneability is an unconditional input requirement; the snapshot is taken at the call; `unless` unchanged) and a unit case that feeds a Proxy to a storage that accepts it, as Chrome's does, and expects the refusal.
+- **D-orch-5. D8's issue is filed at close-out**, deduped first (`gh issue list --state all --search "getErrorData log"`), labelled `privacy`, five sections, with the plan's inventory and the scanner fix that fits its mechanism.
+- **D13. The same-identity re-run test is red on base on its own assertion** (implementation finding, Phase 1 step 7). The plan expected it red only through the unhandled rejection. On base nothing is saved, so the re-run has no record to pre-fill and emits no new payer: the "re-run started" check (a new payer emission) fails, after its read counts pass. Kept as written: the pre-fill landing is the path the guard checks, and with the fix every assertion holds. Evidence in [lessons/phase-1.md](lessons/phase-1.md).
 
 ## Security & Adversarial Considerations
 
