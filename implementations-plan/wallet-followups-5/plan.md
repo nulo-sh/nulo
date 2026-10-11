@@ -217,7 +217,7 @@ The constraint that makes it a no_ask: only the gone-window case (a remove that 
 - Pass criteria: every command exits 0. The step 1 red run (four failing tests) and the step 7 list (11 windows, 0 offenders) are quoted in `lessons/phase-1.md`. The manifest holds 23 entries with `stripNoise` still at 41.
 - Layers: lint, typecheck, unit, CI gating.
 
-### Phase 2: a gone window closes quietly (#312)
+### Phase 2: a gone window closes quietly (#312) ✓
 
 This phase runs under the orchestrator's no_ask record (D-orch-2, quoted in § UI impact and `STATUS.md`); it waits on nothing.
 
