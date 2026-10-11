@@ -395,7 +395,9 @@ of the workflow's own revision. The jobs that run another revision's code
 (the two store publishers, the preview comment) pass `bun --no-install`.
 `scripts/ci-cd/release-integrity.test.ts` pins that every Bun call in a job
 that installs nothing is reached by one of the two, and proves Bun refuses
-under the committed file. A fresh clone refuses the same way until
+under the committed file. `bunx`, `bun x` and `bun create` fetch whatever
+the file says, so that test counts them as installs, and the jobs that tag
+or publish refuse them. A fresh clone refuses the same way until
 `bun install`.
 
 **Dependabot** updates the GitHub Actions that the workflows and composite

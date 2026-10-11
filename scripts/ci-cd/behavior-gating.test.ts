@@ -223,8 +223,9 @@ describe("PR concurrency", () => {
 
 /**
  * Each e2e lane decides from the labels the pull request carries when its `changes` job runs, and
- * the complexity ratchet from those it carries when the unit-tests job runs. An event's own label list is a snapshot that a late run of an older event would decide from, so no
- * workflow or action may read it, and a run whose head the pull request has moved past stops itself.
+ * the complexity ratchet from those it carries when the unit-tests job runs. An event's own label
+ * list is a snapshot that a late run of an older event would decide from, so no workflow or action
+ * may read it, and a run whose head the pull request has moved past stops itself.
  */
 describe("live labels", () => {
 	// biome-ignore lint/suspicious/noExplicitAny: parsed-YAML shape is dynamic.

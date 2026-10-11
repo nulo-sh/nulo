@@ -56,12 +56,11 @@ function* jobs(tree: Tree): Generator<{ where: string; wf: Workflow; job: Job }>
 	}
 }
 
-/** A job's steps with each local composite action's own steps, but `skip`'s, after the step that runs it. */
-function expanded(tree: Tree, job: Job, skip?: string): Step[] {
-	return (job.steps ?? []).flatMap((step) => [
-		step,
-		...(step.uses?.startsWith("./") && step.uses !== skip ? (tree.actions[step.uses]?.runs.steps ?? []) : []),
-	])
+/** A job's steps with each local composite action's own steps, nested ones included, after the step that runs it. */
+function expanded(tree: Tree, job: Job): Step[] {
+	const expand = (steps: Step[] = []): Step[] =>
+		steps.flatMap((step) => [step, ...(step.uses?.startsWith("./") ? expand(tree.actions[step.uses]?.runs.steps) : [])])
+	return expand(job.steps)
 }
 
 const thirdParty = (steps: Step[]): string[] =>
@@ -159,7 +158,7 @@ function credentialedFindings(tree: Tree): string[] {
 
 /** The jobs that tag or publish: Bun built-ins only, from the workflow's own revision. */
 const CLEAN = ["release.yml#auto-unstick", "release.yml#attach-assets", "release.yml#sync-main-to-dev", "nightly.yml#publish-nightly"]
-const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bnpx\b/
+const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(x|create)\s|\bnpx\b/
 
 function cleanStepFindings(where: string, step: Step): string[] {
 	const findings: string[] = []
@@ -216,10 +215,15 @@ const NO_INSTALL = [
 	"store-check.yml#firefox",
 	"verify-store-copies.yml#compare",
 ]
-const BUN_CALL = /(?<=^|[\s;&|(])bun(?=\s|$)/m
+const BUN_CALL = /(?<=^|[\s;&|(`])bun(?=\s|$)/m
 const CHANGES_DIRECTORY = /(^|[\s;&|(])(cd|pushd)\s/m
+const SWITCHES_REVISION = /\bgit\s+(checkout|switch|reset|restore|worktree)\b/
 const flagged = (args: string[], flags: string): boolean => args.some((arg) => new RegExp(`^(${flags})(=|$)`).test(arg))
 
+/**
+ * Reads the job's own steps only: setup-bun's install step is guarded by its input, so counting it
+ * would drop every `install: "false"` caller.
+ */
 function installsNothing(job: Job): boolean {
 	const steps = job.steps ?? []
 	const bunAlone = steps.some(
@@ -228,30 +232,39 @@ function installsNothing(job: Job): boolean {
 	return bunAlone && !steps.some((s) => INSTALLS.test(s.run ?? ""))
 }
 
-/** Every checkout is this workflow's revision, at the root, with the root's bunfig.toml in it (cone mode keeps root files). */
-function readsOwnBunfig(job: Job): boolean {
-	const checkouts = (job.steps ?? []).filter((s) => s.uses?.startsWith("actions/checkout@"))
+/**
+ * Every checkout is this workflow's revision at the root, with the root's bunfig.toml in it (cone
+ * mode keeps root files), and no step moves it.
+ */
+function readsOwnBunfig(steps: Step[]): boolean {
+	const checkouts = steps.filter((s) => s.uses?.startsWith("actions/checkout@"))
 	return (
 		checkouts.length > 0 &&
+		!steps.some((s) => SWITCHES_REVISION.test(s.run ?? "")) &&
 		checkouts.every(({ with: options = {} }) => {
 			if (["ref", "path", "repository"].some((key) => options[key] !== undefined)) return false
 			if (options["sparse-checkout"] === undefined || String(options["sparse-checkout-cone-mode"]) !== "false") return true
-			return String(options["sparse-checkout"])
+			const patterns = String(options["sparse-checkout"])
 				.split("\n")
 				.map((line) => line.trim())
-				.includes("/bunfig.toml")
+			return patterns.includes("/bunfig.toml") && !patterns.some((line) => line.startsWith("!"))
 		})
 	)
 }
 
-/** Why the Bun call at `index` of `run` may auto-install, if it may. */
-function bunCallFinding(run: string, index: number, own: boolean, moved: boolean): string | undefined {
-	const args = run
+/** The Bun call's arguments: continuations joined, quoted text blanked so its `;` or `|` ends nothing. */
+const callArgs = (run: string, index: number): string[] =>
+	run
 		.slice(index + "bun".length)
+		.replace(/\\\n/g, " ")
+		.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
 		.split(/&&|[;|\n]/)[0]
 		.trim()
 		.split(/\s+/)
-	if (args[0] === "--no-install") return flagged(args, "--install|-i") ? "overrides --no-install" : undefined
+
+function bunCallFinding(run: string, index: number, own: boolean, moved: boolean): string | undefined {
+	const args = callArgs(run, index)
+	if (args[0] === "--no-install") return flagged(args, "--install|-i") ? "passes conflicting auto-install flags" : undefined
 	if (!own) return "runs Bun without --no-install where its own revision's bunfig.toml may be missing"
 	if (moved) return "runs Bun outside the checkout root"
 	if (flagged(args, "--cwd") || CHANGES_DIRECTORY.test(run.slice(0, index))) return "runs Bun after changing directory"
@@ -263,9 +276,12 @@ function autoInstallFindings(tree: Tree, bunfig: string, listed: readonly string
 	const install = (Bun.TOML.parse(bunfig) as { install?: { auto?: unknown } }).install
 	const findings = install?.auto === "disable" ? [] : ["bunfig.toml: Bun may auto-install a missing import"]
 	const selected = [...jobs(tree)].filter(({ job }) => installsNothing(job))
+	// The composite's install step runs only on `install: "true"`, a guard cleanFindings pins.
+	const guarded = new Set((tree.actions[SETUP_BUN]?.runs.steps ?? []).filter((s) => s.if === "inputs.install == 'true'"))
 	for (const { where, wf, job } of selected) {
-		const own = readsOwnBunfig(job)
-		for (const step of expanded(tree, job, SETUP_BUN)) {
+		const steps = expanded(tree, job).filter((s) => !guarded.has(s))
+		const own = readsOwnBunfig(steps)
+		for (const step of steps) {
 			const run = step.run ?? ""
 			const moved =
 				(step["working-directory"] ?? job.defaults?.run?.["working-directory"] ?? wf.defaults?.run?.["working-directory"]) !==
@@ -518,6 +534,10 @@ describe("jobs that tag or publish", () => {
 			(t: Tree) => Object.assign(step(t, "release.yml#auto-unstick", "actions/checkout@").with ?? {}, { ref: "v1.2.3" }),
 		],
 		[
+			"a package run with bun x",
+			(t: Tree) => t.workflows["release.yml"].jobs["auto-unstick"].steps?.push({ run: "bun x some-linter@latest --check" }),
+		],
+		[
 			"a third-party action",
 			(t: Tree) =>
 				t.workflows["release.yml"].jobs["attach-assets"].steps?.push({
@@ -616,12 +636,70 @@ describe("jobs that install nothing", () => {
 			"release.yml#auto-unstick: overrides Bun's configuration",
 		],
 		[
-			"--no-install undone by --install",
+			"conflicting auto-install flags",
 			onTree((t) => {
 				const s = runStep(t, "release.yml#publish-firefox-amo", /publish-firefox-amo-run/)
 				s.run = s.run?.replace("bun --no-install ", "bun --no-install --install=force ")
 			}),
-			"release.yml#publish-firefox-amo: overrides --no-install",
+			"release.yml#publish-firefox-amo: passes conflicting auto-install flags",
+		],
+		[
+			"an override on a continuation line",
+			onTree((t) => {
+				const s = runStep(t, "release.yml#auto-unstick", BUN_CALL)
+				s.run = s.run?.replace(BUN_CALL, "bun \\\n  --install=force")
+			}),
+			"release.yml#auto-unstick: overrides Bun's configuration",
+		],
+		[
+			"an override after quoted code with a semicolon",
+			onTree((t) =>
+				t.workflows["release.yml"].jobs["sync-main-to-dev"].steps?.push({
+					run: "bun -e 'console.log(1); process.exit(0)' --install=force",
+				}),
+			),
+			"release.yml#sync-main-to-dev: overrides Bun's configuration",
+		],
+		[
+			"a Bun call in backticks in a job that runs another revision",
+			onTree((t) => t.workflows["release.yml"].jobs["publish-chrome-store"].steps?.push({ run: 'V=`bun -e "1"`' })),
+			STORE_PUBLISH,
+		],
+		[
+			"a revision switched after the checkout",
+			onTree((t) => t.workflows["release.yml"].jobs["attach-assets"].steps?.unshift({ run: 'git checkout "$TAG"' })),
+			"release.yml#attach-assets: runs Bun without --no-install where its own revision's bunfig.toml may be missing",
+		],
+		[
+			"a non-cone sparse checkout that excludes bunfig.toml again",
+			onTree((t) =>
+				Object.assign(step(t, "store-check.yml#firefox", "actions/checkout@").with ?? {}, {
+					"sparse-checkout": "/bunfig.toml\n!/bunfig.toml\n/scripts/release/\n",
+					"sparse-checkout-cone-mode": false,
+				}),
+			),
+			"store-check.yml#firefox: runs Bun without --no-install where its own revision's bunfig.toml may be missing",
+		],
+		[
+			"a Bun call in a nested composite",
+			onTree((t) => {
+				t.actions["./.github/actions/outer"] = { runs: { steps: [{ uses: "./.github/actions/inner" }] } }
+				t.actions["./.github/actions/inner"] = { runs: { steps: [{ run: "cd dist && bun y.ts" }] } }
+				t.workflows["_release-pr-lockfile.yml"].jobs["lock-version"].steps?.push({ uses: "./.github/actions/outer" })
+			}),
+			"_release-pr-lockfile.yml#lock-version: runs Bun after changing directory",
+		],
+		[
+			"a Bun call setup-bun runs in every caller",
+			onTree((t) => t.actions[SETUP_BUN].runs.steps?.push({ run: "bun --cwd /tmp -e 1" })),
+			[
+				"nightly.yml#publish-nightly",
+				"pr-quick.yml#changes",
+				"release.yml#attach-assets",
+				"release.yml#auto-unstick",
+				"release.yml#sync-main-to-dev",
+				"verify-store-copies.yml#compare",
+			].map((where) => `${where}: runs Bun after changing directory`),
 		],
 		[
 			"a no-install job NO_INSTALL does not list",
@@ -634,7 +712,7 @@ describe("jobs that install nothing", () => {
 			"release.yml#attach-assets: installs nothing, and NO_INSTALL does not list it",
 		],
 	])("finds %s", (_, findings, expected) => {
-		expect(findings()).toEqual([expected])
+		expect(findings().sort()).toEqual([expected].flat().sort())
 	})
 
 	// Counts registry requests: Bun's error text is the same for a refused install and a failed one.
