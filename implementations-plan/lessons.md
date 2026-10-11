@@ -37,7 +37,7 @@
 - On Chrome, `bun run dev` runs the popup under Chrome's baseline policy, not the manifest CSP: check CSP on a production build. [Evidence](archive/code-followups-2/lessons/phase-2.md)
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
 - A balances fuzz model owes what the store's observers adopt, and only where it holds an entry: owe rules keyed on failure commits over- and under-owed. [Evidence](archive/wallet-followups-2/lessons/phase-4.md)
-- Firefox's `storage.local.set` refuses a Vue reactive Proxy Chrome serialises; only stderr shows it: store plain data. [Evidence](archive/wallet-followups-3/plan.md)
+- Firefox's `storage.local.set` refuses a Vue reactive Proxy Chrome serialises: store plain data. [Evidence](archive/wallet-followups-3/plan.md)
 
 ## Aztec
 
