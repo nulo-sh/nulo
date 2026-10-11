@@ -54,6 +54,9 @@ function makeHarness() {
 		ensureRegistered: vi.fn(async () => {
 			calls.push("ensureRegistered")
 		}),
+		ensureContractRegistered: vi.fn(async () => {
+			calls.push("ensureContractRegistered")
+		}),
 		createAuthWit: vi.fn(async (h: Fr) => new AuthWitness(h, [Fr.fromString("0x77")])),
 		buildTxExecutionRequest: vi.fn(async (...args: unknown[]) => {
 			calls.push("buildTxExecutionRequest")
@@ -368,6 +371,7 @@ describe("buildNoFrom pins", () => {
 		await expect(h.builder.buildNoFrom(op as never, FENCE)).rejects.toThrowError(/Chain identity mismatch/)
 		expect(h.calls).toEqual(["getNetwork", "getNodeInfo"])
 		expect(h.account.ensureRegistered).not.toHaveBeenCalled()
+		expect(h.account.ensureContractRegistered).not.toHaveBeenCalled()
 		expect(h.deps.resolver.resolveInstances).not.toHaveBeenCalled()
 	})
 
@@ -471,6 +475,15 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [] }])
 		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(1)
 		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [] }])
+	})
+})
+
+describe("NO_FROM account registration", () => {
+	// Authorization discovery stubs the account by its registered instance.
+	test("the account's contract is registered with its keys, before any resolver work", async () => {
+		noFromHarness()
+		await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }))
+		expect(h.calls).toEqual(["getNetwork", "ensureRegistered", "ensureContractRegistered", "resolveInstances"])
 	})
 })
 
