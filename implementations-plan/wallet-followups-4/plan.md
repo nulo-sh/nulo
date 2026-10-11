@@ -214,7 +214,9 @@ Warning: keep `getErrorData` in `errors.ts` until step 4. A line reverted after 
 - Layers: typecheck/lint, unit, component.
 - Commits: two signed conventional commits. First: the sites, the pins, the helper's deletion and the CLAUDE.md clause (`fix(logging): log caught errors under a named key`). Second: only `log-payload-ban.test.ts` (``test(logging): refuse `getErrorData` and error message reads at log calls``; commitlint does not case-check a backticked identifier). Nothing imports the scanner file, and the old scanner refuses a subset of what the new one refuses, so the first commit's tree is green whenever the head is. Write that reasoning in `lessons/phase-2.md`.
 
-### Phase 3: final validation on the arc head
+### Phase 3: final validation on the arc head ✓
+
+Done: `test:all`, `test:ci-gating`, `lint:actions` exit 0; Chrome smoke at retry 0, 48 files passed and 3 skipped, 212 tests passed and 10 skipped; the fix loop converged at Codex round 2 ([lessons/phase-3.md](lessons/phase-3.md)).
 
 Warning: smoke loads whatever `dist/chrome` holds. Build right before the run, and never run two e2e runs in this worktree at once.
 
@@ -285,6 +287,17 @@ Run these steps in order after the Phase 3 gate passes. `code_review` is `off`, 
   - Rejected: leaving `runtime.ts` out (D10; its own F9 finding made the fixed category the house rule); taking the commit trailer from the session (D14; the orchestrator's brief names it); "the other assertions are optional" (the lane brief asks for one per reachable line).
   - Independently reproduced: exactly 21 offenders, with the real scanner functions over 1,686 files.
 - **Codex, round 1 resumed:** conditional approve (with conditions: correct the non-`Error` widening description, the OPFS exclusion rationale, and the Phase 3 coverage rationale). All three are in this version (I3, § Security, D11, D13), so the gate's Codex verdict is satisfied without another round.
+
+### Post-implementation (the arc's diff, `27af8d7...HEAD`)
+
+- **Codex, fix-loop round 1** (gpt-6.1-sol, high, read-only, session `01a12b75`): approve with changes (three Low scanner edge cases). Reproduced 21 base offenders and 0 on HEAD over 1,686 files; all 28 sites and 22 pins judged sound.
+  - Accepted: the arity exemption refused `err.message?.length`; `ARITY_READ` now allows an optional chain and whitespace before the member, with an `${err?.message?.length}` control (`2e4e8d9`).
+  - Rejected for this arc: the window runs to the end of the call's closing line, so a member read after the call on that line is refused. The scanner reads one opener per line, so truncating at the balancing paren would drop a second log call on the same line (a false negative) unless every opener is read, which restructures the accepted-complexity `findLoggedSecrets` (stamp 17, which the ratchet will not raise). It fails safe and no line on the tree hits it; it joins the D7 close-out issue.
+  - Rejected: code on a `<script>` tag's own line is not scanned. No `.vue` file on the tree has it; it is a pre-existing, scanner-wide blind spot, not error-specific.
+- **Opus 5.5 diff review** (beside round 1): approve (four Low).
+  - Accepted: the `ERROR_TEXT_READ` comment said "always a hazard" though arity reads are exempt; CLAUDE.md's clause implied any value under `error` is projected (`2e4e8d9`).
+  - Rejected: the window over-reach (the same finding as Codex's, same disposition); adding `version` to the blocked migration line (D-orch-3 settled `{ kind }`).
+- **Codex, fix-loop round 2** (same session, resumed on `2e4e8d9` and the two rejections): approve, no new material findings. Verified the widened `ARITY_READ` exempts only the measurement (`password?.length || password`, concatenation and extra arguments still fail); agreed both rejections hold for this arc, withdrawing its truncation suggestion as incomplete without reading every opener. The loop converged at round 2.
 
 ## Seeds
 
