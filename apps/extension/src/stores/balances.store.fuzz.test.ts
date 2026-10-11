@@ -624,6 +624,15 @@ describe("balances store — randomized interleavings (fuzz)", () => {
 			expect(() => assertOwedRecoveries(world)).toThrow(/still carries retry debt/)
 		})
 
+		it("fails an owed recovery whose retry failed: the failure keeps debt and retryVersion", async () => {
+			const world = await worldOwingRecovery()
+			await vi.advanceTimersByTimeAsync(5_000)
+			settleAll(world, false)
+			await flush()
+			expect(world.store.entries[scopeKey(SCOPES[0])].gas).toMatchObject({ status: "degraded", retryVersion: 0, retryDebt: true })
+			expect(() => assertOwedRecoveries(world)).toThrow(/still carries retry debt/)
+		})
+
 		it("fails debt cleared without a retry success", async () => {
 			const world = await worldOwingRecovery()
 			const key = scopeKey(SCOPES[0])

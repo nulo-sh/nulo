@@ -84,7 +84,9 @@ export function logsDocument(logs: LogEntry[]): string {
 }
 
 /** How many characters at the document's start belong to `dropped`. The document lists a
- *  subsequence of the logs in their order, so what it holds of a dropped head sits at its start. */
+ *  subsequence of the logs in their order, so what it holds of a dropped head sits at its start.
+ *  The greedy match never takes a retained entry's text: equal text means equal source and level,
+ *  so a dropped entry the document lacks was filtered out, and so was every later twin of it. */
 export function droppedPrefixLength(state: EditorState, dropped: LogEntry[]): number {
 	let end = 0
 	for (const log of dropped) {

@@ -1,7 +1,6 @@
 /**
- * Narrow test of the log viewer: its fetch deadline (each batch read races a 500 ms timer, a win
- * clears that timer, and a lost race retries with a quarter of the batch) and how a live log keeps
- * the document in step with the capped list. The view is a stub over a real `EditorState`.
+ * The log viewer's fetch deadline and its capped document. The view is a stub over a real
+ * `EditorState`, so the document keeps CodeMirror's line-break normalization.
  */
 import type { EditorState, TransactionSpec } from "@codemirror/state"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
@@ -129,7 +128,6 @@ describe("LogsViewer live log past the cap", () => {
 	const t = Date.now()
 	const log = (id: number, source = "ui", data = `log ${id}`): LogEntry => ({ id, timestamp: t, source, level: 1, data: [data] })
 
-	/** Mounts on `loaded` (served in one short batch) and hands back the view and the live-log handler. */
 	async function mountOn(loaded: LogEntry[]) {
 		H.getLogs.mockResolvedValueOnce(loaded.slice(0, 1024)).mockResolvedValue(loaded.slice(1024))
 		const wrapper = mountViewer()
