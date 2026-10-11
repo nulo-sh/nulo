@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-2
 tier: mid
-status: approved (3134636, D-orch-2..6); arc 1 in delivery, Phase 3 stopped under its stop rule (#297)
+status: completed (delivered in #298; Phase 3 stopped under its stop rule, #297)
 issues: "#284, #280, #281 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,18 @@ base: origin/dev at 29d9e49
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-11.
+- **Status:** delivered in one PR against `dev`, [#298](https://github.com/nulo-sh/nulo/pull/298) (arc 1: Phases 1, 2 and 4; Phase 3 stopped under its stop rule), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:** #284 (`readStartTime` gives a zombie no start time, so every identity check and the prior-run reap call a zombie owner dead; a deterministic zombie case beside the flaky one), #280 (`waitForTxMined` is the SDK's `waitForTx` at `PROVEN`, a dropped receipt terminal at once, the hash and last status on a timeout; `FrozenArtifactWallet.sendUnsimulated`; `network/wait-for-tx-mined.test.ts`, red on the old helper).
+- **Orchestrator records:** D-orch-2 to D-orch-6; D-orch-5 applied as D17.
+- **Dropped, rejected, superseded:** #281's relay (D1, D5, D6, D8, D10-D13) was built and passed its smoke control and the full Firefox smoke, then was reverted (9094cf9) when the Firefox network run recorded a product error, #297 (D17); its commits stay in #298's history and the measurements are on #281. The `openPopup` fallback change (D14) left with it. D16, the Codex loop past its three-round cap, is surfaced to the orchestrator; its rounds concerned the relay. Rejected findings: Codex round 1's unbounded receipt read (the test timeout bounds it), round 2's parent-side re-check, pass 4's two declined items (reasons in [`lessons/phase-3.md`](lessons/phase-3.md)). No lesson promoted to `implementations-plan/lessons.md`: it sits 54 bytes under its 8 KiB budget and this arc supersedes none of its entries. The zombie rule lives in the e2e-testing skill's ownership paragraph, the pre-simulation skip in `sendUnsimulated`'s TSDoc, the Firefox findings on #281 and in the lessons files; Firefox's `DataCloneError` on a reactive value is #297's, for its fix to promote.
+- **Open items:** #281 (the relay; re-land after #297), #297 (Firefox refuses to store a sponsor pick).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Probes: [lessons/phase-0.md](lessons/phase-0.md).
 
 # e2e-followups-2: reverted txs fail the mined wait, zombie owners are dead, Firefox sees extension-page errors
 
@@ -256,7 +268,7 @@ Stopped under the stop rule (D17): the Firefox network run recorded a product er
 
 Validation gate: Fast; Unit (file) `scripts/e2e/firefox-driver.test.ts scripts/e2e/browser-seam.test.ts scripts/e2e/page-errors.test.ts`; `bun run test:ci-gating`; Smoke (file) `tests/e2e/page-error-capture.test.ts` on Chrome and Firefox; Smoke (full) on Firefox; N-full on Firefox. Pass: all exit 0 at retry 0. The new smoke file is red on Firefox before step 2 and green after on both browsers. It is green in every full run, and no launch's close check fails. Every newly recorded entry is triaged under the stop rule, with its disposition logged. Layers: lint, typecheck, unit, e2e, e2e-live-network.
 
-### Phase 4: close-out (the PR's final commits)
+### Phase 4: close-out (the PR's final commits) ✓
 
 Per § Post-implementation, Close-out.
 
