@@ -316,7 +316,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// are checked against in-code constants, custom rows against a live probe (fail-closed).
 		const l1ChainId = await this.networkService.resolveVerifiedL1ChainId(profileId, chainId, opts)
 		const secret = await deriveAccountSeed(master, l1ChainId, type, index)
-		const address = (await NuloAccount.new(secret, this.logger)).address.toString()
+		const address = (await NuloAccount.new(secret, this.logger, this.name)).address.toString()
 		const account: Account = {
 			profileId,
 			chainId,
@@ -443,7 +443,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// a different address and fails closed below). `deriveAccountSeed` rejects non-canonical
 		// values — never a silent default.
 		const secret = await this.deriveAccountSecret(profileId, account.l1ChainId, account.type, account.index)
-		const accountContract: IAccountContract = await NuloAccount.new(secret, this.logger)
+		const accountContract: IAccountContract = await NuloAccount.new(secret, this.logger, this.name)
 		if (accountContract.address.toString() !== address) {
 			await this.raiseRuntimeMismatch(profileId, chainId, account.index, address, accountContract.address.toString())
 		}
@@ -470,7 +470,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		if (!dek) throw new ImportedAccountUnusableError(account.address, "imported keys unavailable — unlock again")
 		try {
 			const signingKey = await unsealImportedScalar(dek, account.chainId, account.address, keyRow.encryptedSigningKey)
-			const contract = await NuloAccount.fromSigningKey(signingKey, this.logger)
+			const contract = await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)
 			if (contract.address.toString() !== requestedAddress) {
 				throw new ImportedAccountUnusableError(account.address, "address mismatch")
 			}
@@ -827,7 +827,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		const { signingKey, claimedAddress } = parseAccountExport(json)
 		// The address is a pure function of the signing key — recompute and require it to match the
 		// file's self-claim (catches a plaintext file whose address was edited without the key).
-		const address = (await NuloAccount.fromSigningKey(signingKey, this.logger)).address.toString()
+		const address = (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString()
 		if (address !== claimedAddress) throw new Error("Account export address does not match its signing key")
 		return { signingKey, address }
 	}

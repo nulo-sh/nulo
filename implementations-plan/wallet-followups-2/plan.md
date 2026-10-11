@@ -290,7 +290,7 @@ Warning: another lane may land lessons first. Before the edit, run `git fetch or
 - Pass criteria: all exit 0. Proof of red: with the base `useLogFilters.ts`, the scan test fails and names `price`, `price-client`, `incoming-transfer`, `incoming-transfer-client`, `operation-journal`, `operation-journal-client`, `legal-acceptance`, `legal-acceptance-client`, `account-integrity-coordinator` and `profile-deletion-coordinator`, and nothing else.
 - Layers: lint, typecheck, unit.
 
-### Phase 2b: OA-1 (a), every line under the service that owns it ✗
+### Phase 2b: OA-1 (a), every line under the service that owns it ✓
 
 Added by the orchestrator's D-orch-3 after Phase 2; built after Phases 3 and 4, while its inventory ran (the phases are independent).
 

@@ -34,6 +34,7 @@ import { AlarmDispatcher } from "@nulo/wallet-core/utils"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { ILogger } from "@/wallet/logger"
 import type { OperationJournalService } from "./service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
 
 export const JOURNAL_GC_ALARM_NAME = "nulo:journal:gc"
 
@@ -46,7 +47,7 @@ export const JOURNAL_GC_PERIOD_MINUTES = 60
  *  session storage. */
 export const DEFAULT_TERMINAL_CAP_PER_SCOPE = 50
 
-const LOG_SOURCE = "JournalGC"
+const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 
 /** Synthetic key for the "no account address" bucket. */
 const NO_ACCOUNT = "<no-account>"

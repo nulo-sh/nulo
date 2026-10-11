@@ -111,7 +111,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// logger reference is guaranteed to be the same instance the base
 		// Service stores on `this`. See class field comment above for the
 		// mutex contract.
-		this.transitionLock = new Lock("operation-journal:transition", logger)
+		this.transitionLock = new Lock(OPERATION_JOURNAL_SERVICE_NAME, logger)
 	}
 
 	/**

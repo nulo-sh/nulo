@@ -390,7 +390,7 @@ function admitContentMessage(
 		// through, so this remains an upstream coordination item.
 		if (NULO_ALLOW_IFRAME_DAPPS !== true && isSubframeSender(sender)) {
 			logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Debug,
 				// The tab and sender URLs are the user's browsing history, and any subframe on any
 				// page can trigger this line. The frame identity is what diagnoses the rejection.
@@ -407,7 +407,7 @@ function admitContentMessage(
 		// malformed envelopes early with a structured debug log.
 		const verdict = validateContentScriptMessage(message)
 		if (verdict.kind === "invalid") {
-			logger.log("wallet-sdk-bg", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
+			logger.log("wallet-sdk", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
 			return undefined
 		}
 		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
@@ -427,7 +427,7 @@ function replyIfStale(envelope: ContentScriptMessageEnvelope, tabId: number | un
 	if (stale === "forward") return false
 	// A connected page repeats this every heartbeat until it reconnects; debug keeps it out of
 	// every user's log buffer.
-	deps.logger.log("wallet-sdk-bg", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
+	deps.logger.log("wallet-sdk", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
 		type: envelope.type,
 		session: describeExternalId(stale.sessionId),
 	})
@@ -577,7 +577,7 @@ async function runEstablishedMessage(
 	// its journal. Same promise as the journal gate, so it resolves once.
 	if (!(await establishedPromise)) {
 		deps.logger.log(
-			"wallet-sdk-bg",
+			"wallet-sdk",
 			LogLevel.Warn,
 			`Dropping message for session ${describeExternalId(session.sessionId)}: failed/lost establishment validation`,
 		)
