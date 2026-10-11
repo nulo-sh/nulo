@@ -633,6 +633,14 @@ Verdict: **approve with fixes**, no correctness finding. Sound: the wallet fix l
 | OB3 | Low. The playground README says every other send button builds `transfer_public_to_public`, false for the sponsored and delegated buttons | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
 | OB4 | Low. No file time recorded for `tx-sendTx-noFrom.test.ts` against the 3-minute rule | Accepted: recorded in `lessons/phase-3.md` § 3.2 (Chrome 56-72 s, Firefox 74 s); the concurrent case stays in the pool |
 
+### Arc 3 implementation, round 2: Codex (same session, resumed), 2026-10-11
+
+Verdict: **one low finding**, high confidence otherwise. Checked the four fixes, the recipient's decode and rendering, the registration's boundaries, the multicall assertions and the proof-gate ordering; OB1's rejection judged sound, OB2 and OB4 complete.
+
+| # | Finding | Disposition |
+|---|---|---|
+| R3-1 | Low. `lessons/phase-3.md` § 3.3 repeats OB3's wrong claim ("every other button keeps building `transfer_public_to_public`") | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
