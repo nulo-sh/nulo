@@ -8,6 +8,9 @@
 </route>
 
 <script setup lang="ts">
+/** Vendor */
+import type { ComponentPublicInstance } from "vue"
+
 /** Components */
 import TokenList from "../components/modules/holdings/TokenList.vue"
 
@@ -21,6 +24,8 @@ import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { forChain } from "@/utils/token-order"
+import { fitHero } from "@/utils/hero-fit"
+import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
 import { useEntityCrud } from "@/composables/useEntityCrud"
@@ -110,6 +115,27 @@ const openAddToken = (address: string) => {
 	popupStore.open("new_token")
 }
 
+const summary = useTemplateRef<ComponentPublicInstance>("summary")
+const summaryMeta = useTemplateRef<HTMLElement>("summaryMeta")
+const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
+/** The total's type as a fraction of its 26 px: full size while it fits beside the meta line, then
+ *  the largest that does, with no floor, so no digit is ever hidden. */
+const totalScale = ref(1)
+let summaryResizes: ResizeObserver | undefined
+function fitTotal() {
+	const line = summary.value?.$el as HTMLElement | undefined
+	const form = totalRuler.value
+	const meta = summaryMeta.value
+	if (!line || !form || !meta) return
+	const room = heroRoom(line) - meta.getBoundingClientRect().width
+	totalScale.value = fitHero(1, (_, scale) => rulerWidth(form, scale), room).scale
+}
+
+// After the render, so the ruler holds the figure the line shows.
+watch([summary, aggregateDisplay, showFiatValues, () => rows.value.length, () => aggregate.value.partial], fitTotal, {
+	flush: "post",
+})
+
 watch(
 	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],
 	() => {
@@ -118,7 +144,18 @@ watch(
 	},
 )
 
+onMounted(() => {
+	fitTotal()
+	// jsdom has neither; there the fit still runs on each render.
+	summaryResizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fitTotal)
+	const line = summary.value?.$el as HTMLElement | undefined
+	if (line) summaryResizes?.observe(line)
+	document.fonts?.addEventListener("loadingdone", fitTotal)
+})
+
 onBeforeUnmount(() => {
+	summaryResizes?.disconnect()
+	document.fonts?.removeEventListener("loadingdone", fitTotal)
 	tokenBalanceService.onConnected.remove(onReconnected)
 	disposeCrud()
 	tokenBalanceService.disconnect()
@@ -133,10 +170,16 @@ onBeforeUnmount(() => {
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="holdings-page">
 		<Flex direction="column" gap="16" :class="$style.content">
-			<Flex align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
-				<span v-if="showFiatValues" :class="$style.summary_amount">{{ aggregateDisplay }}</span>
-				<span :class="$style.summary_meta">
+			<Flex ref="summary" align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
+				<span v-if="showFiatValues" :class="$style.summary_amount">
+					<span :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }">{{ aggregateDisplay }}</span>
+				</span>
+				<span ref="summaryMeta" :class="$style.summary_meta">
 					{{ rows.length }} tokens<template v-if="showFiatValues && aggregate.partial"> · priced assets only</template>
+				</span>
+				<!-- The fit's ruler: the total in the line's classes at full size, clipped to nothing, never drawn. -->
+				<span v-if="showFiatValues" aria-hidden="true" :class="$style.summary_ruler">
+					<span :class="$style.summary_amount"><span ref="totalRuler" :class="$style.summary_fit">{{ aggregateDisplay }}</span></span>
 				</span>
 			</Flex>
 
@@ -177,9 +220,33 @@ onBeforeUnmount(() => {
 	color: var(--txt-primary);
 }
 
+/* The figure scales down from the total's size, while its line keeps the full size's height; the
+   role composes here too, so its em tracking computes at the fitted size. */
+.summary_fit {
+	composes: type--amount-total from global;
+	font-size: calc(1em * var(--hero-scale, 1));
+}
+
+.summary_ruler {
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.summary_ruler > span {
+	position: absolute;
+	white-space: nowrap;
+}
+
+/* One line, never squeezed: the total gives way instead. */
 .summary_meta {
 	composes: type--meta from global;
 	color: var(--nulo-secondary);
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 
 .error {

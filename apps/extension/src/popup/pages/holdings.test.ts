@@ -53,6 +53,15 @@ vi.mock("@/wallet/services/config/client", () => ({
 	}),
 }))
 
+// jsdom has no layout: a stand-in font measures the total at its full 26 px (digits and signs
+// 15 px, separators 6 px), and `room` is the summary line's width.
+let room = 10_000
+const standInWidth = (text: string) => [...text].reduce((w, c) => w + (c === "," || c === "." ? 6 : 15), 0)
+vi.mock("@/utils/hero-ruler", () => ({
+	heroRoom: () => room,
+	rulerWidth: (el: Element, scale: number) => standInWidth(el.textContent ?? "") * scale,
+}))
+
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -179,5 +188,27 @@ describe("holdings page", () => {
 
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(true)
 		expect(w.find('[data-testid="holdings-search"]').exists()).toBe(false)
+	})
+})
+
+describe("holdings page — the total fits beside its meta line", () => {
+	afterEach(() => {
+		room = 10_000
+	})
+
+	// "$1,250.00" in the stand-in font: 7 digits and signs, 2 separators, 117 px at 26 px.
+	test.each([
+		["keeps 26 px when it fits", 10_000, "1"],
+		["shrinks to the largest scale that fits", 90, "0.76"],
+		["has no floor, so no digit is ever hidden", 20, "0.17"],
+	])("the total %s", async (_, width, scale) => {
+		installChromeStorage()
+		room = width
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		const w = await mountPage()
+		const figures = w.findAll('[data-testid="holdings-summary"] span[style]')
+		expect(figures.map((figure) => figure.text())).toEqual(["$1,250.00"])
+		expect((figures[0].element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
 	})
 })
