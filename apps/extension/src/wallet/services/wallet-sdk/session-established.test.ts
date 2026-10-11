@@ -42,7 +42,12 @@ function reserved(
 	id = "sess-1",
 	markers = new Map<string, PendingVerificationEntry>(),
 ): { gate: VerifyAdmissionGate; reservation: WindowReservation } {
-	const gate = new VerifyAdmissionGate(clock, { closeWindow: () => {}, released: (rid) => cancelPendingVerification(markers, rid) })
+	const gate = new VerifyAdmissionGate(clock, {
+		closeWindow: () => {},
+		navigateWindow: async () => {},
+		expired: (rid) => cancelPendingVerification(markers, rid),
+		released: (rid) => cancelPendingVerification(markers, rid),
+	})
 	let reservation: WindowReservation | undefined
 	gate.admit(
 		{ id, origin: ORIGIN, deadline: Date.now() + 55_000, needsWindow: true, consumesToken: false },

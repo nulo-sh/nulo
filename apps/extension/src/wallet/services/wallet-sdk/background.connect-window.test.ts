@@ -145,7 +145,7 @@ const chain = (n: number) => ({ chainInfo: { chainId: String(n), version: "0" } 
 
 function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	const windows = fakeWindows()
-	const popups = new Map<string, (answer: { approved: boolean; windowId?: number }) => void>()
+	const popups = new Map<string, (answer: { approved: boolean; windowId?: number; expiredUrl?: string }) => void>()
 	const asked = new Map<string, unknown>()
 	const journal = { countOperations: vi.fn(async () => 0), createOperation: vi.fn(async () => ({ id: "queued-1" })) }
 	let activeProfile: { id: string } | undefined = { id: "p1" }
@@ -168,7 +168,7 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	/** The person clicks Allow in `requestId`'s connect window, which the browser knows as `windowId`. */
 	const allow = (requestId: string, windowId: number) => {
 		windows.open.add(windowId)
-		popups.get(requestId)?.({ approved: true, windowId })
+		popups.get(requestId)?.({ approved: true, windowId, expiredUrl: `EXPIRED-${requestId}` })
 	}
 	/** The SDK finished key exchange for `requestId`; its hash is `HASH-<requestId>` unless given. */
 	const establish = async (requestId: string, over: Record<string, unknown> = {}) => {
@@ -404,6 +404,31 @@ describe("an Allow while the origin's two verification slots are held", () => {
 	})
 })
 
+describe("an approved connection whose key exchange never completes", () => {
+	test("keeps its window on the expired page and its slot, tombstones at once, and opens no window when it establishes late", async () => {
+		const h = boot()
+		h.discover("f1")
+		await flush()
+		h.allow("f1", 41)
+		await flush()
+
+		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + RESERVATION_GRACE_MS + 1)
+		expect(h.windows.navigated).toEqual([{ windowId: 41, url: "EXPIRED-f1" }])
+		expect(h.windows.removed).toEqual([])
+		expect(markers().get("f1")?.cancelled).toBe(true)
+		expect(gate().windowsHeld(ORIGIN)).toBe(1)
+
+		await h.establish("f1")
+		expect(terminated()).toEqual(["f1"])
+		expect(h.windows.created).toEqual([])
+		expect(h.windows.navigated).toHaveLength(1)
+
+		h.windows.closeByUser(41)
+		await flush()
+		expect(gate().windowsHeld(ORIGIN)).toBe(0)
+	})
+})
+
 describe("a deleted row while an approved handshake is not stamped yet", () => {
 	test.each([
 		["another profile's row keeps the handshake", "p2", []],
@@ -533,13 +558,15 @@ describe("establishment shows the check in the connect window", () => {
 		expect(h.windows.removed).toEqual([41])
 	})
 
-	const abandonments: Array<[string, (h: ReturnType<typeof boot>) => Promise<void>]> = [
+	// An expired slot keeps its window open on the expired page; a lock closed the window itself.
+	const abandonments: Array<[string, (h: ReturnType<typeof boot>) => Promise<void>, boolean]> = [
 		[
 			"its slot expired",
 			async () => {
 				await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + RESERVATION_GRACE_MS + 1)
 				await flush()
 			},
+			true,
 		],
 		[
 			"a lock closed its window",
@@ -547,37 +574,42 @@ describe("establishment shows the check in the connect window", () => {
 				h.windows.closeByUser(41)
 				await flush()
 			},
+			false,
 		],
 	]
 
-	test.each(abandonments)("an attempt abandoned because %s never establishes, even once a sibling trusts the row", async (_, abandon) => {
-		const h = boot()
-		await approvedIn(h, "f1", 41)
-		await abandon(h)
-		expect(markers().get("f1")?.cancelled).toBe(true)
-		expect(h.windows.open.has(41)).toBe(false)
+	test.each(abandonments)(
+		"an attempt abandoned because %s never establishes, even once a sibling trusts the row",
+		async (_, abandon, kept) => {
+			const h = boot()
+			await approvedIn(h, "f1", 41)
+			await abandon(h)
+			expect(markers().get("f1")?.cancelled).toBe(true)
+			expect(h.windows.open.has(41)).toBe(kept)
 
-		// A new discovery from the origin is a reconnect: its own window, since the row is untrusted.
-		h.discover("r2")
-		await flush()
-		await h.establish("r2")
-		expect(h.windows.created).toHaveLength(1)
-		expect(h.windows.created[0].url).toContain("verificationHash=HASH-r2&isReconnect=true")
+			// A new discovery from the origin is a reconnect: its own window, since the row is untrusted.
+			h.discover("r2")
+			await flush()
+			await h.establish("r2")
+			expect(h.windows.created).toHaveLength(1)
+			expect(h.windows.created[0].url).toContain("verificationHash=HASH-r2&isReconnect=true")
 
-		// A sibling's check set "Skip this check next time" on the row the abandoned attempt wrote.
-		const row = [...h.rows.values()][0]
-		row.trustedVerification = true
-		await h.establish("f1")
-		await h.establish("f1")
-		expect(terminated()).toEqual(["f1", "f1"])
-		expect(h.windows.navigated).toEqual([])
-		expect(h.windows.created).toHaveLength(1)
+			// A sibling's check set "Skip this check next time" on the row the abandoned attempt wrote.
+			const row = [...h.rows.values()][0]
+			row.trustedVerification = true
+			await h.establish("f1")
+			await h.establish("f1")
+			expect(terminated()).toEqual(["f1", "f1"])
+			// No check is ever loaded for f1: the only navigation is the expired page.
+			expect(h.windows.navigated).toEqual(kept ? [{ windowId: 41, url: "EXPIRED-f1" }] : [])
+			expect(h.windows.created).toHaveLength(1)
 
-		// The trusted skip is unchanged for a new request id.
-		h.discover("r3")
-		await flush()
-		await h.establish("r3")
-		expect(terminated()).toEqual(["f1", "f1"])
-		expect(h.windows.created).toHaveLength(1)
-	})
+			// The trusted skip is unchanged for a new request id.
+			h.discover("r3")
+			await flush()
+			await h.establish("r3")
+			expect(terminated()).toEqual(["f1", "f1"])
+			expect(h.windows.created).toHaveLength(1)
+		},
+	)
 })

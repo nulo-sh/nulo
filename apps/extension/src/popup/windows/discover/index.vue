@@ -29,6 +29,9 @@ import { useDappApprovalWindow } from "@/composables/useDappApprovalWindow"
 
 const router = useRouter()
 
+/** How long the expired overlay stays before the window closes itself. */
+const EXPIRED_CLOSE_MS = 30_000
+
 const profile = ref<ProfileInfo>()
 const isLoading = ref(false)
 
@@ -38,6 +41,10 @@ const isLoading = ref(false)
 const isReady = ref(false)
 // Set once the service accepted Allow; the window then waits for the connection to establish.
 const isApproved = ref(false)
+// The worker sends this window to its own page marked expired when the connection never
+// established: the request is gone, so there is nothing left to load or answer.
+const isExpired = computed(() => router.currentRoute.value.query.expired === "1")
+let expiredClose: ReturnType<typeof setTimeout> | undefined
 
 const interactionService = new DappInteractionServiceClient()
 
@@ -139,9 +146,26 @@ const reject = async () => {
 const profileService = new ProfileServiceClient()
 profileService.onActiveProfileChanged.add(onActiveProfileChanged)
 
-onMounted(startWindow)
+// Immediate, not on mount alone: the flag usually arrives by a hash change on a mounted page.
+watch(
+	isExpired,
+	(expired) => {
+		clearTimeout(expiredClose)
+		expiredClose = expired ? setTimeout(() => closeWindow(), EXPIRED_CLOSE_MS) : undefined
+	},
+	{ immediate: true },
+)
 
-onUnmounted(disposeWindow)
+// A page loaded already expired skips the live-request start: its auth redirect would unmount the
+// overlay and its timer.
+onMounted(() => {
+	if (!isExpired.value) void startWindow()
+})
+
+onUnmounted(() => {
+	disposeWindow()
+	clearTimeout(expiredClose)
+})
 </script>
 
 <template>
@@ -185,8 +209,9 @@ onUnmounted(disposeWindow)
 			@approve="approve"
 		/>
 
-		<DappCancelledOverlay v-if="isInteractionCancelled" @dismiss="closeWindow()" />
+		<DappCancelledOverlay v-if="isInteractionCancelled && !isExpired" @dismiss="closeWindow()" />
 	</Flex>
+	<DappCancelledOverlay v-if="isExpired" message="Connection request expired" @dismiss="closeWindow()" />
 </template>
 
 <style module>

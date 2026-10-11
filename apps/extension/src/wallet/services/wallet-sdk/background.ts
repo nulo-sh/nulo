@@ -305,7 +305,10 @@ function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort })
 		decryptLocks: new KeyedLock({ maxHoldMs: null }),
 		admission: new VerifyAdmissionGate(ports.clock, {
 			closeWindow,
-			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
+			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
+			// A marker still waiting when its slot is given back, or when its reservation expires with the
+			// window kept open, is tombstoned: that id can no longer establish.
+			expired: (id) => cancelPendingVerification(pendingVerification, id),
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
@@ -1019,7 +1022,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow)) {
+			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
