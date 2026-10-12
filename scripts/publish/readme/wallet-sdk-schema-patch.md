@@ -6,7 +6,7 @@ Adds the [Nulo wallet](https://github.com/nulo-sh/nulo)'s custom RPC methods to 
 |---|---|
 | `registerToken` | `(AztecAddress, AztecAddress) => void` |
 | `isTokenRegistered` | `(AztecAddress) => boolean` |
-| `grantPublicAuthwit` | `(AztecAddress, { caller, contract, method, args }) => string` |
+| `grantPublicAuthwit` | `(AztecAddress, { caller: AztecAddress, contract: AztecAddress, method, args }) => string` |
 | `getWalletFeatures` | `() => string[]` |
 
 Wallets that do not implement them reject the call, so treat every one as optional and fall back when it fails.
@@ -26,6 +26,10 @@ import "@nulo-sh/wallet-sdk-schema-patch/register"
 - ESM only.
 - `@aztec-labs/aztec.js` and `@aztec-labs/stdlib` are exact **peer dependencies**. The patch must mutate the same `WalletSchema` and compare against the same `schemas.AztecAddress` your app loads, so a duplicate copy of either package silently defeats it.
 - `zod` is a dependency.
+
+## Changes
+
+- **0.2.0**: `grantPublicAuthwit` parses `caller` and `contract` with the `AztecAddress` schema, so a wallet using the patch refuses a call that sends a non-address there with INVALID_PARAMS. An existing `grantPublicAuthwit` entry that takes either one with another schema now throws the signature-drift error.
 
 ## Provenance
 

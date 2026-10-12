@@ -35,8 +35,8 @@ const PATCHED_SCHEMA = z.function({ input: z.tuple([schemas.AztecAddress, schema
 const REGISTERED_QUERY_SCHEMA = z.function({ input: z.tuple([schemas.AztecAddress]), output: z.boolean() })
 
 const GRANT_CONTENT_SCHEMA = z.object({
-	caller: z.string(),
-	contract: z.string(),
+	caller: schemas.AztecAddress,
+	contract: schemas.AztecAddress,
 	method: z.string(),
 	args: z.array(z.unknown()),
 })
@@ -108,16 +108,20 @@ function isWalletFeaturesShape(existing: SchemaEntry): boolean {
 
 const GRANT_CONTENT_KEYS = Object.keys(GRANT_CONTENT_SCHEMA.shape)
 
-/** The content object must declare every key the handler reads, or a same-arity upstream entry
- *  could pass content the wallet's parse never checked. */
+/** The content object must declare every key the handler reads, and its two addresses by the
+ *  address schema itself: an existing entry is kept as it is, so a looser one would let content
+ *  through that this patch refuses. */
 function isGrantAuthwitShape(existing: SchemaEntry): boolean {
 	const items = existing?.def?.input?.def?.items
 	const content = items?.[1]?.def
+	const shape = content?.shape ?? {}
 	return (
 		items?.length === 2 &&
 		items[0] === schemas.AztecAddress &&
 		content?.type === "object" &&
-		GRANT_CONTENT_KEYS.every((key) => Object.hasOwn(content.shape ?? {}, key)) &&
+		GRANT_CONTENT_KEYS.every((key) => Object.hasOwn(shape, key)) &&
+		shape.caller === schemas.AztecAddress &&
+		shape.contract === schemas.AztecAddress &&
 		existing?.def?.output?.def?.type === "string"
 	)
 }

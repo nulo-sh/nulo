@@ -32,15 +32,30 @@ const CALL_INTENT = MessageHashOrIntentSchema.options[1]
 export async function assertWalletSchemaArgs(method: MethodName, args: readonly unknown[]): Promise<void> {
 	if (NOT_PARSED[method] !== undefined) return
 	try {
+		const parameters = getSchemaParameters(SCHEMA[method])
+		const parsed = args.slice(0, parameters.def.items.length)
+		assertNoOwnToString(parsed)
 		if (method === "requestCapabilities") {
-			await parseCapabilityRequest(args[0])
+			await parseCapabilityRequest(parsed[0])
 			return
 		}
-		const parameters = getSchemaParameters(SCHEMA[method])
-		await parseWithOptionals(args.slice(0, parameters.def.items.length), parameters)
-		if (method === "createAuthWit") await parseCallIntentKeys(args[1])
+		await parseWithOptionals(parsed, parameters)
+		if (method === "createAuthWit") await parseCallIntentKeys(parsed[1])
 	} catch {
 		throw InvalidWalletArgumentsError.forMethod(method)
+	}
+}
+
+/** Wire args come from `JSON.parse`, so an own `toString` is data, never a function, and makes
+ *  `String()` or a template literal over its object throw. An own `valueOf` alone falls back to the
+ *  inherited `toString` and cannot. Iterative, since a hostile tree can be deeper than the stack. */
+function assertNoOwnToString(root: unknown): void {
+	const pending: unknown[] = [root]
+	while (pending.length > 0) {
+		const value = pending.pop()
+		if (typeof value !== "object" || value === null) continue
+		if (Object.hasOwn(value, "toString")) throw new Error("an argument with an own toString")
+		for (const child of Object.values(value)) pending.push(child)
 	}
 }
 

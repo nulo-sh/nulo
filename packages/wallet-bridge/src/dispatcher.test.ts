@@ -3420,6 +3420,14 @@ describe("dispatcher — the schema parse", () => {
 		).rejects.toBeInstanceOf(ScopeViolationError)
 	})
 
+	test("an account the address schema admits but String() cannot convert is refused by the parse", async () => {
+		const h = harness()
+		const bufferShaped = JSON.parse(JSON.stringify({ type: "Buffer", data: Array(32).fill(10), toString: "x" }))
+		expect(() => String(bufferShaped)).toThrow(TypeError)
+		await expect(h.dispatch("registerToken", [bufferShaped, TOKEN])).rejects.toThrow(invalid("registerToken"))
+		expect(h.sent).toHaveLength(0)
+	})
+
 	test("registerToken naming no token is refused by the parse, and its handler never runs", async () => {
 		const h = harness()
 		await expect(h.dispatch("registerToken", [ACCOUNT, null])).rejects.toThrow(invalid("registerToken"))
