@@ -17,3 +17,4 @@
 - 2026-10-10 — Codex r2: approve, no new material code finding (one Low on plan wording, applied). Loop converged after two rounds.
 - 2026-10-10 — final gates on the merged head: lint, typecheck:all, check:plans, test:all pass; smoke Chrome 46/47 (navigation.test.ts timed out under host load, rerun 5/5), Firefox 49/49; network waits for the host.
 - 2026-10-10 — arc gate on the merged head d142836: lint, typecheck:all, check:plans, test:all pass; smoke Chrome 47/47 files (199 tests), Firefox 49/49 (200); network Chrome 7 files (9 tests), proverless incoming-arrival 7/7, Firefox 3 files (5 tests); all at retry 0. Arc 1 gate passed.
+- 2026-10-12 — arc 2 start: page 8 signed (D-orch-6); branch `tokens-and-balances-holdings` off origin/dev 8d01f9b (arc 1 merged as #271, D-orch-5); D-orch-5 to D-orch-8 and D-arc2-1 (no store-refusal marker under OA-2 = A), D-arc2-2 (the add row's primitive) recorded.
