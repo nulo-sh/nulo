@@ -247,6 +247,22 @@ describe("a guarded launch", () => {
 		expect(closeBrowser).toHaveBeenCalledTimes(2)
 	})
 
+	test("a live launch routes its live host direct, and fails its close if the guard records that host", async () => {
+		const { deps, send, closeBrowser } = rig()
+		const launch = await ownGuardedLaunch({ ...deps, liveHost: "lb.drpc.live" })
+		expect(deps.launch).toHaveBeenCalledWith({ guardPort: 1, liveHost: "lb.drpc.live" })
+		send("lb.drpc.live")
+		await expect(launch.close()).rejects.toThrow(/spec\.test\.ts: chrome sent lb\.drpc\.live to the guard/)
+		expect(closeBrowser).toHaveBeenCalled()
+	})
+
+	test("success control: a live launch whose live host never reached the guard closes cleanly", async () => {
+		const { deps, send } = rig()
+		const launch = await ownGuardedLaunch({ ...deps, liveHost: "lb.drpc.live" })
+		send("api.coingecko.com")
+		await launch.close()
+	})
+
 	test("a launch that rejects stops the guard and the canary and rethrows", async () => {
 		const { deps, stopped } = rig()
 		const cause = new Error("no browser")

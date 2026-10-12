@@ -47,9 +47,9 @@ const TOKEN_LOADING = [
 	`${sel("token-seed-row")}:not([data-status="failed"]):not([data-status="rejected"])`,
 ].join(", ")
 
-/** A release artifact seeds the default tokens from the live network, and a node that fails holds
- *  them through the seeder's two retry waits (15 s, then 60 s) and three attempts. The tests that
- *  open Home add it to their own timeouts. */
+/** A release artifact seeds the default tokens against the launch's stand-in node, which fails them
+ *  only after the seeder's two retry waits (15 s, then 60 s) and three attempts. The tests that open
+ *  Home add it to their own timeouts. */
 const TOKENS_LAND_MS = 150_000
 
 /** Home's token card settles after the activity row shows and then pushes the row down: a point
@@ -79,7 +79,7 @@ async function waitForSettledTokens(page: Page, timeout = 15_000): Promise<void>
 }
 
 /** A priced 1.5 Test USDC transfer: the price map quotes it as USDC. Returns once the token card
- *  has settled, which in a release build waits for its default tokens to land. */
+ *  has settled, which in a release build waits for its default tokens to stop. */
 async function openHomeWithRow(ctx: ExtensionContext): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")

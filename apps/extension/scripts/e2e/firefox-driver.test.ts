@@ -5,7 +5,6 @@ import {
 	FIREFOX_LAUNCH_PREFS,
 	type SilentCloseWatch,
 	abandonSession,
-	capabilities,
 	egressGuardPrefs,
 	firefoxDirFor,
 	silentlyClosed,
@@ -24,9 +23,12 @@ describe("launch prefs", () => {
 })
 
 describe("egress guard prefs", () => {
+	const findProxyOf = (prefs: ReturnType<typeof egressGuardPrefs>) => {
+		const pac = decodeURIComponent(String(prefs["network.proxy.autoconfig_url"]).replace(/^data:text\/javascript,/, ""))
+		return new Function(`${pac}; return FindProxyForURL`)() as (url: string, host: string) => string
+	}
 	const prefs = egressGuardPrefs(4321)
-	const pac = decodeURIComponent(String(prefs["network.proxy.autoconfig_url"]).replace(/^data:text\/javascript,/, ""))
-	const findProxy = new Function(`${pac}; return FindProxyForURL`)() as (url: string, host: string) => string
+	const findProxy = findProxyOf(prefs)
 
 	test("route by PAC with no fail-over to direct, and resolve only the canary name locally", () => {
 		expect(prefs).toEqual({
@@ -48,10 +50,15 @@ describe("egress guard prefs", () => {
 		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => key.startsWith("network."))).toEqual([])
 	})
 
-	test("cannot be combined with an artifact run's price-host block", () => {
-		expect(() => capabilities({ profileDir: "/p", headless: true, egress: { guardPort: 1 }, artifactRun: true })).toThrow(
-			/both behind the egress guard and an artifact run/,
-		)
+	test("a live host, alone of the outside names, goes direct", () => {
+		const live = egressGuardPrefs(4321, "lb.drpc.live")
+		const findLive = findProxyOf(live)
+		expect(findLive("https://lb.drpc.live/", "lb.drpc.live")).toBe("DIRECT")
+		for (const host of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(findLive(`http://${host}/`, host)).toBe("DIRECT")
+		for (const host of ["rpc.lb.drpc.live", "lb.drpc.live.evil.test", "egress-canary.test", "api.coingecko.com"]) {
+			expect(findLive(`https://${host}/`, host)).toBe("PROXY 127.0.0.1:4321")
+		}
+		expect({ ...live, "network.proxy.autoconfig_url": "" }).toEqual({ ...prefs, "network.proxy.autoconfig_url": "" })
 	})
 })
 

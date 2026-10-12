@@ -161,11 +161,13 @@ runtime env var can never arm a build-time flag.
   reaches, and fails at `close` on any host no list declares (`fixtures/egress-guard.ts`; README §
   Egress guard). A red "egress guard" naming a wallet or spec host means a new outside call: declare
   it in `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
-  `ownHosts`. Setup refuses an unarmed dist outside artifact runs, and artifact runs stay unguarded.
-  The Testnet node is answered by a loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`);
-  a smoke spec that needs a value only a node gives seeds it (`helpers/fpc-seeds.ts`) and holds the
-  node itself from before the profile exists, since an artifact run has no stand-in and the wallet
-  writes beside the seed (`send-keyboard.test.ts`'s fee picker; ledger row 53). One that proves the
+  `ownHosts`. Setup refuses an unarmed dist outside artifact runs; artifact runs are guarded too.
+  The Testnet node is answered by a loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`)
+  in every launch but the artifact-only live spec's (`shipped-token-list.test.ts`: its
+  `launchExtension({ liveNode: true })` sends the node's host direct, refused unless setup provides
+  `liveLeg`); a smoke spec that needs a value only a node gives seeds it (`helpers/fpc-seeds.ts`)
+  and, where the wallet writes beside the seed, holds the node itself from before the profile
+  exists (`send-keyboard.test.ts`'s fee picker; ledger row 53). One that proves the
   offline case arms its own `interceptRpc` refusal, which replaces the stand-in.
 - A file that depends on the PROVERLESS build carries the `@requires-proverless` marker (the only
   marker `agent.sh` scans) AND a `beforeAll` that greps the loaded bundle for the stamp
@@ -187,7 +189,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
 | `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
-| `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): blocks the price host, skips the encrypted `backup-roundtrip` spec, arms no egress guard and no node stand-in, so a spec reaches the live Testnet node unless it intercepts it; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
+| `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): guarded with the node stand-in like a source run, skips the encrypted `backup-roundtrip` spec and the armed-dist check, and provides `liveLeg`, which runs `shipped-token-list.test.ts`, the one launch that reaches the live Testnet node; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
 | `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
@@ -699,7 +701,9 @@ A release-shaped smoke, as the nightly's and release's `smoke-against-artifact` 
 no `VITE_*` variable set and no `.env*` file (`_build-extension.yml` refuses the e2e and key flags),
 copy `dist/<browser>` out to a path that prefixes no other run's `EXTENSION_PATH` (the smoke
 teardown's `pkill` matches by prefix), then run with `NULO_E2E_ARTIFACT_RUN=1 EXTENSION_PATH=<copy>`
-and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`.
+and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`. It runs guarded like a source run;
+`shipped-token-list.test.ts` is its one launch that reaches the live Testnet node, so a dRPC outage
+reds that spec, by name, and nothing else.
 
 Two cores is the amplifier: races that live in a 100ms window on a workstation widen to seconds. Run
 the loop alone on the host, freeze the tree between rounds, and validate the fix under the SAME

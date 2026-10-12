@@ -116,6 +116,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fix-storage-row-repair](fix-storage-row-repair/plan.md) — completed — profile purges get a raw second pass for rows the codec cannot read
 - [fix-transport-sessions](fix-transport-sessions/plan.md) — completed — transport and dApp-session fixes, each proved by a failing test
 - [fix-ui-storage](fix-ui-storage/plan.md) — completed — UI, storage and composable fixes, each proved by a failing test
+- [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
 - [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions

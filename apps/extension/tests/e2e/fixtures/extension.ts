@@ -32,7 +32,7 @@ import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
-import { type EgressCanary, type EgressGuard, type HeldNode, guardArmed, ownGuardedLaunch } from "./egress-guard"
+import { type EgressCanary, type EgressGuard, type HeldNode, LIVE_NODE_HOST, guardArmed, ownGuardedLaunch } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
 import { pageErrorOf } from "./page-errors"
 
@@ -48,7 +48,7 @@ export interface ExtensionContext {
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
 	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
-	 *  no guard is armed. */
+	 *  no guard is armed, and no stand-in in a `liveNode` launch. */
 	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }
 
@@ -82,9 +82,13 @@ function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
  *  `current`, so a spec that is not about the gate never meets it; a reused profile defaults to
  *  `keep`, so whatever the previous launch left is what the relaunch boots over.
  *
- *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`). */
+ *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`).
+ *
+ *  `liveNode: true` sends the Testnet node's host direct instead of holding the stand-in, and fails
+ *  the close if the guard sees that host. Only a run that provides `liveLeg` may ask: elsewhere the
+ *  launch would make a gate depend on the live node. */
 export async function launchExtension(
-	opts: { userDataDir?: string; waitForLiveness?: boolean; legal?: LegalSeed; fixedWindowSize?: boolean } = {},
+	opts: { userDataDir?: string; waitForLiveness?: boolean; legal?: LegalSeed; fixedWindowSize?: boolean; liveNode?: true } = {},
 ): Promise<ExtensionContext> {
 	const { userDataDir, waitForLiveness = true, fixedWindowSize } = opts
 	const extensionPath = inject("extensionPath")
@@ -95,10 +99,14 @@ export async function launchExtension(
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
-	const launch = (egress?: { guardPort: number }) => launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
+	const launch = (egress?: { guardPort: number; liveHost?: string }) =>
+		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
 	const settle = (browser: Browser) =>
 		settleLaunchedExtension(browser, { freshProfile, waitForLiveness, legal: opts.legal ?? (freshProfile ? "current" : "keep") })
-	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle)
+	if (opts.liveNode && inject("liveLeg") !== true) {
+		throw new Error("a liveNode launch reaches the live Testnet node, which only an artifact run's live spec may do")
+	}
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, opts.liveNode ? LIVE_NODE_HOST : undefined)
 
 	const { browser, close: closeBrowser } = await launch()
 	try {
@@ -135,12 +143,14 @@ function cspLatch(
 }
 
 async function launchBehindEgressGuard(
-	launch: (egress: { guardPort: number }) => Promise<LaunchedBrowser>,
+	launch: (egress: { guardPort: number; liveHost?: string }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
+	liveHost: string | undefined,
 ): Promise<ExtensionContext> {
 	const guarded = await ownGuardedLaunch({
 		label: launchLabel(),
 		traffic: browserTraffic,
+		liveHost,
 		launch: async (egress) => {
 			const launched = await launch(egress)
 			return { value: launched.browser, close: launched.close }
@@ -148,7 +158,7 @@ async function launchBehindEgressGuard(
 		settle,
 		probeCanary: fireCanary,
 		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
-		holdNode: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
+		holdNode: liveHost === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
 	})
 	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
 	return {

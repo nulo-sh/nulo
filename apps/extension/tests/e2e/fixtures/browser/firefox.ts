@@ -240,15 +240,6 @@ function resolveFirefoxBinary(): string {
 }
 
 /**
- * Artifact mode runs the production bundle, where a resolved quote breaks the fresh-wallet fiat
- * specs — the Chrome driver's resolver rule has the full reasoning. Only the price host is sent to
- * a dead port; everything else, the RPC included, stays direct.
- */
-const PRICE_HOST_BLACKHOLE = `data:text/javascript,${encodeURIComponent(
-	'function FindProxyForURL(url, host) { return host === "api.coingecko.com" ? "PROXY 127.0.0.1:1" : "DIRECT" }',
-)}`
-
-/**
  * Every pref the suite launches Firefox with. Exported so a unit test can hold the list to what the
  * wallet's users run with: a pref that masks timer throttling would hide the slowdown the PXE host
  * is placed in the background page to avoid.
@@ -263,12 +254,14 @@ export const FIREFOX_LAUNCH_PREFS = {
 /**
  * Every request for a host other than loopback goes to the guard, with no `DIRECT` after it and no
  * fail-over, so a dead guard fails a request rather than sending it out. The canary name resolves to
- * loopback, which only a direct path would use. All prefs, since `failover_direct` and `localDomains`
- * have no capability form, and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
+ * loopback, which only a direct path would use. A live host, compared exactly, goes direct and
+ * resolves as usual. All prefs, since `failover_direct` and `localDomains` have no capability form,
+ * and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
  */
-export function egressGuardPrefs(guardPort: number): Record<string, string | number | boolean> {
+export function egressGuardPrefs(guardPort: number, liveHost?: string): Record<string, string | number | boolean> {
+	const live = liveHost === undefined ? "" : `\n\tif (host === ${JSON.stringify(liveHost)}) return "DIRECT";`
 	const pac = `function FindProxyForURL(url, host) {
-	if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "DIRECT";
+	if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "DIRECT";${live}
 	return "PROXY 127.0.0.1:${guardPort}";
 }`
 	return {
@@ -283,23 +276,19 @@ export function capabilities({
 	profileDir,
 	headless,
 	egress,
-	artifactRun = process.env.NULO_E2E_ARTIFACT_RUN === "1",
 }: {
 	profileDir: string
 	headless: boolean
 	egress?: LaunchOptions["egress"]
-	artifactRun?: boolean
 }): Record<string, unknown> {
-	if (egress && artifactRun) throw new Error("a launch cannot be both behind the egress guard and an artifact run")
 	return {
-		...(artifactRun ? { proxy: { proxyType: "pac", proxyAutoconfigUrl: PRICE_HOST_BLACKHOLE } } : {}),
 		// Asks geckodriver for a BiDi endpoint on the session it owns, which is what makes one
 		// browser drivable from both channels at once.
 		webSocketUrl: true,
 		"moz:firefoxOptions": {
 			binary: resolveFirefoxBinary(),
 			args: ["-profile", profileDir, ...(headless ? ["-headless"] : [])],
-			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort) } : FIREFOX_LAUNCH_PREFS,
+			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort, egress.liveHost) } : FIREFOX_LAUNCH_PREFS,
 		},
 	}
 }
