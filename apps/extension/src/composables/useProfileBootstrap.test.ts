@@ -402,7 +402,7 @@ describe("useProfileBootstrap", () => {
 		await vi.waitFor(() => expect(answers).toHaveLength(1))
 
 		let landing: Promise<unknown> | undefined
-		let answerProfiles!: (profiles: unknown[]) => void
+		let answerProfiles!: (profiles: (typeof fakeProfile)[]) => void
 		const lockedState = createLockedState({
 			closePopups: () => undefined,
 			onLocked: () => undefined,
@@ -420,7 +420,7 @@ describe("useProfileBootstrap", () => {
 		})
 		const lockEvent = lockedState.onLockEvent(
 			() =>
-				new Promise((resolve) => {
+				new Promise<(typeof fakeProfile)[]>((resolve) => {
 					answerProfiles = resolve
 				}),
 			() => true,
