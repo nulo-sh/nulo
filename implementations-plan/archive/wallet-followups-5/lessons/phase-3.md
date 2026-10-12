@@ -55,3 +55,7 @@ Approve. Against base 04137a0: the 553-call injection, the opener diff (11 new o
 ## After merging `origin/dev` (#313, the Firefox page-error relay)
 
 `bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating` and `check:plans`: all exit 0. Firefox, the six files, retry 0: exit 0, 12 passed and 1 skipped, 0 window-ID lines.
+
+## CI on the PR: CodeQL
+
+CodeQL's `js/incomplete-sanitization` (high) flagged `ch.replace(/[()[\]{}]/, "\0")` as replacing only the first occurrence. On a single character that is correct, but both kept-character sites now share one global `KEPT_DELIMITERS` regex, which states the intent and clears the alert without a suppression. Scanner 59/59, `baseline:rescore` exact, lint and typecheck exit 0.

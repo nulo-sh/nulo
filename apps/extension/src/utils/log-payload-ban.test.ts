@@ -158,6 +158,8 @@ type LexState = { inBlockComment: boolean; quote: string | null; interp: Interpo
 
 const FRESH_LEX: LexState = { inBlockComment: false, quote: null, interp: [] }
 
+const KEPT_DELIMITERS = /[()[\]{}]/g
+
 /**
  * The line with string contents and comments blanked, so parens inside them cannot be counted.
  *
@@ -199,7 +201,7 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 				// its delimiters are text: counted, they end a window early or fake an object around
 				// an argument. Their mask is not whitespace, so key text cannot become an arity read.
 				// A plain string is blanked.
-				out += interp.length > 0 ? line.slice(i, i + 2).replace(/[()[\]{}]/g, "\0") : "  "
+				out += interp.length > 0 ? line.slice(i, i + 2).replace(KEPT_DELIMITERS, "\0") : "  "
 				i++
 				continue
 			}
@@ -208,7 +210,7 @@ function stripNoise(line: string, state: LexState): { code: string; state: LexSt
 				out += ch
 				continue
 			}
-			out += interp.length > 0 ? ch.replace(/[()[\]{}]/, "\0") : " "
+			out += interp.length > 0 ? ch.replace(KEPT_DELIMITERS, "\0") : " "
 			continue
 		}
 		// Comments and regex literals are code-context constructs, so they must be recognised the
