@@ -5,6 +5,7 @@ export const getTokenInfo = (token: Token): TokenInfo => ({
 	id: token.id,
 	chainId: token.chainId,
 	contract: token.contract,
+	classId: token.classId,
 	name: token.name,
 	symbol: token.symbol,
 	decimals: token.decimals,

@@ -13,9 +13,16 @@ const LARGE = field(10n ** 30n)
 const BIDI_OVERRIDE = String.fromCodePoint(0x202e)
 const ZERO_WIDTH = String.fromCodePoint(0x200b)
 
-const listed = { contract: TOKEN, decimals: 18, symbol: "TST", hasDecimals: true }
-const other = { contract: OTHER, decimals: 18, symbol: "OTH", hasDecimals: true }
-const mint = (args: unknown[], method = "mint_to_public", contract = TOKEN): TxCall => ({ contract, method, args })
+const CLASS = field(0xc1a55n)
+const UPGRADED = field(0xc1a56n)
+const listed = { contract: TOKEN, classId: CLASS, decimals: 18, symbol: "TST", hasDecimals: true }
+const other = { contract: OTHER, classId: CLASS, decimals: 18, symbol: "OTH", hasDecimals: true }
+const mint = (args: unknown[], method = "mint_to_public", contract = TOKEN, classId = CLASS): TxCall => ({
+	contract,
+	method,
+	args,
+	classId,
+})
 const feePayload: TxCall[] = [
 	{ contract: FEE_JUICE, method: "claim", args: [FPC, LARGE, field(7n), LARGE] },
 	{ contract: FPC, method: "mint_and_pay_fee", args: [RECIPIENT, LARGE] },
@@ -33,6 +40,20 @@ describe("txAmount", () => {
 		["a standard mint of a listed 18-decimal token", [mint([RECIPIENT, ONE])], [listed], tst],
 		["the same mint behind a fee payload with large last arguments", [...feePayload, mint([RECIPIENT, ONE])], [listed], tst],
 		["an unlisted token", [mint([RECIPIENT, ONE])], [other], null],
+		["a mint recorded without a class", [{ ...mint([RECIPIENT, ONE]), classId: undefined }], [listed], null],
+		["a token listed without a class", [mint([RECIPIENT, ONE])], [{ ...listed, classId: undefined }], null],
+		[
+			"a mint whose contract was upgraded since the token was added",
+			[mint([RECIPIENT, ONE], "mint_to_public", TOKEN, UPGRADED)],
+			[listed],
+			null,
+		],
+		[
+			"the same malformed class on the token and the mint",
+			[mint([RECIPIENT, ONE], "mint_to_public", TOKEN, "0xc1a55")],
+			[{ ...listed, classId: "0xc1a55" }],
+			null,
+		],
 		["a token without a decimals getter", [mint([RECIPIENT, ONE])], [{ ...listed, decimals: 0, hasDecimals: false }], null],
 		["decimals 255", [mint([RECIPIENT, ONE])], [{ ...listed, decimals: 255 }], null],
 		["a three-argument mint_to_public", [mint([RECIPIENT, ONE, ONE])], [listed], null],

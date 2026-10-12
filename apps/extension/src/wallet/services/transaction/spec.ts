@@ -41,6 +41,8 @@ export type TxCall = {
 	method: string
 	/** Arguments. */
 	args: unknown[]
+	/** The class the build resolved for `contract`: what the wallet saw, not proof of what ran. */
+	classId?: string
 	/** Additional information telling whether the call produces token transfers. */
 	transfers?: TxTransfer[]
 }

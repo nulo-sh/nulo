@@ -110,13 +110,23 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
 		const TOKEN = `0x${"0a".repeat(32)}`
 		const RECIPIENT = `0x${"0c".repeat(32)}`
+		const CLASS = field(0xc1a55n)
 		const tokens = [
-			{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true },
+			{
+				id: 1,
+				chainId: CHAIN_IDS.TESTNET,
+				contract: TOKEN,
+				classId: CLASS,
+				name: "Test",
+				symbol: "TST",
+				decimals: 18,
+				hasDecimals: true,
+			},
 		]
 		const mintTx = (...amounts: bigint[]) => ({
 			hash: "0xmint1",
 			status: TxStatus.Proposed,
-			calls: amounts.map((a) => ({ contract: TOKEN, method: "mint_to_public", args: [RECIPIENT, field(a)] })),
+			calls: amounts.map((a) => ({ contract: TOKEN, method: "mint_to_public", args: [RECIPIENT, field(a)], classId: CLASS })),
 			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
 		})
 

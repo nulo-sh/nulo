@@ -239,6 +239,23 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		expect(fake.registerCalls).toHaveLength(1)
 	})
 
+	test("a seeded add stores the class its pinned parse matched", async () => {
+		const { tokenService } = await seedHarness()
+		const tokenInterface = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT, undefined, CLASS_ID)
+
+		await tokenService.addSeededToken({
+			profileId: "p1",
+			networkId: NETWORK.id,
+			accountAddress: "0xacc1",
+			tokenInterface,
+			name: "Compressed USD",
+			symbol: "cUSD",
+			decimals: 6,
+		})
+
+		expect((await tokenService.getTokensRaw("p1", NETWORK.chainId))[0].classId).toBe(CLASS_ID)
+	})
+
 	test("pinned parse: class-id mismatch throws PinMismatchError BEFORE any PXE registration", async () => {
 		const { tokenService, fake } = await seedHarness()
 		await expect(tokenService.parseTokenInterface(NETWORK.id, CONTRACT, undefined, "0xNOTTHECLASS")).rejects.toThrow(PinMismatchError)

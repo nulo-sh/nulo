@@ -312,7 +312,7 @@ describe("buildStandard pins", () => {
 		)
 		await expect(build(h, [{ kind: "call", contract: CONTRACT, method: "nope", args: [] }])).rejects.toThrowError("Method not found")
 		const result = await build(h, [{ kind: "call", contract: CONTRACT, method: "transfer", args: [] }])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [] }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [], classId: "0xclass1" }])
 	})
 
 	test("encoded_call resolves by selector from ABI truth; a mismatched dApp name is a scope violation", async () => {
@@ -323,7 +323,7 @@ describe("buildStandard pins", () => {
 		// Every execution field the dApp supplies lies, a stale `returnTypes` included; the call carries the ABI's.
 		const lies = { type: FunctionType.PUBLIC, isStatic: true, returnType: { kind: "field" }, returnTypes: [{ kind: "field" }] }
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: ["0x02"], name: FN.name, ...lies }])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: ["0x02"] }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: ["0x02"], classId: "0xclass1" }])
 		const payload = (h.buildArgs[0] as unknown[])[2] as { calls: FunctionCall[] }
 		expect(payload.calls[0]).toMatchObject({ name: FN.name, type: FN.functionType, isStatic: FN.isStatic, returnType: FN.returnType })
 		expect(payload.calls[0].args.map((a) => a.toBigInt())).toEqual([2n])
@@ -492,7 +492,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const selector = await selectorOf()
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [] }])
 		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(1)
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [] }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [], classId: "0xclass1" }])
 	})
 })
 

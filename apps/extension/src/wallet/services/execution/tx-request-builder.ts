@@ -194,7 +194,12 @@ export class TxRequestBuilder {
 						const fn = resolveCallFn(action, instances, artifacts)
 						const fnSelector = await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters)
 						collected.calls.push(newCallFunctionCall(action, fn, fnSelector))
-						collected.txCalls.push({ contract: action.contract, method: action.method, args: action.args })
+						collected.txCalls.push({
+							contract: action.contract,
+							method: action.method,
+							args: action.args,
+							classId: resolvedClassId(instances, action.contract),
+						})
 						this.log("Call enqueued.")
 						break
 					}
@@ -202,7 +207,12 @@ export class TxRequestBuilder {
 						const artifact = requireArtifact(instances, artifacts, action.to)
 						const fn = validateEncodedCallFn(action, await findFunctionBySelector(artifact, action.selector))
 						collected.calls.push(newEncodedCallFunctionCall(action, fn))
-						collected.txCalls.push({ contract: action.to, method: fn.name, args: action.args })
+						collected.txCalls.push({
+							contract: action.to,
+							method: fn.name,
+							args: action.args,
+							classId: resolvedClassId(instances, action.to),
+						})
 						this.log("EncodedCall enqueued.")
 						break
 					}
@@ -553,6 +563,11 @@ async function buildSetAuthorizedCall(messageHash: Fr): Promise<{ functionCall: 
 		functionCall,
 		txCall: { contract: getAuthRegistryAddress().toString(), method: fn.name, args: [messageHash, true] },
 	}
+}
+
+/** Recorded on the call's history row: a mint figure reads only when it equals the token's pin. */
+function resolvedClassId(instances: ResolvedInstances, contract: string): string | undefined {
+	return instances.get(contract)?.currentContractClassId.toString()
 }
 
 function resolveCallFn(action: Extract<Action, { kind: "call" }>, instances: ResolvedInstances, artifacts: ResolvedArtifacts) {

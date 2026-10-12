@@ -705,6 +705,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			const result: TokenInterface = {
 				chainId: network.chainId,
 				contract,
+				classId: instance.currentContractClassId.toString(),
 				getNameFn: fns.getName.fn?.getImpl(),
 				getNameFnCandidates: fns.getName.candidates.map((x) => x.getImpl()),
 				getSymbolFn: fns.getSymbol.fn?.getImpl(),
@@ -948,6 +949,7 @@ function buildToken(input: PersistTokenInput, metadata: TokenMetadata, id: numbe
 		profileId: input.profileId,
 		chainId: tokenInterface.chainId,
 		contract: tokenInterface.contract,
+		classId: tokenInterface.classId,
 		name: metadata.name,
 		symbol: metadata.symbol,
 		decimals: metadata.decimals,
