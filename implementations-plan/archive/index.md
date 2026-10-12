@@ -84,6 +84,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-followups-2](e2e-followups-2/plan.md) — completed — zombie owners are dead, reverted txs fail the mined wait; the Firefox page-error relay was reverted under its stop rule (#297, #281 stays open)
 - [e2e-followups-3](e2e-followups-3/plan.md) — completed — the Firefox page-error relay re-landed (#281); the lock helper observes its redirect, never reloads; `Invalid window ID` filed (#312)
 - [e2e-followups-4](e2e-followups-4/plan.md) — completed — #308: artifact smoke runs let discovery write a second Nulo sponsor beside the seed; the fee-picker spec holds the node from before the profile exists (#316, #317 filed)
+- [e2e-followups-5](e2e-followups-5/plan.md) — completed — a lock supersedes any activation in flight, so a stale "active" answer cannot unlock the popup (#319); Firefox targets carry an add-on page's committed URL and a failed wait reports without moving focus (#322 stays open)
 - [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
 - [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes

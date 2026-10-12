@@ -21,6 +21,8 @@ const STATE_TOPIC = "nulo-e2e:page-errors:state"
 /** The remote type of the process Firefox runs an add-on's pages in. */
 const EXTENSION_PROCESS = "extension"
 const FAULTS_KEPT = 20
+/** The latest exceptions the relay heard, emitted or not, kept for the launch's close to report. */
+const RECENT_KEPT = 20
 
 export interface CallFrame {
 	url: string
@@ -48,6 +50,22 @@ export interface LogEntryParams {
  */
 export function kindOf(error: { hasException: boolean }): "javascript" | "console" {
 	return error.hasException ? "javascript" : "console"
+}
+
+export interface RawFrame {
+	filename: string
+	functionName: string
+	lineNumber: number
+	columnNumber: number
+}
+
+/**
+ * An error's saved stack, or the one location it reports when it has none. Serialised into the
+ * content listener, so it uses nothing outside itself.
+ */
+export function errorFrames(saved: RawFrame[], error: { sourceName: string; lineNumber: number; columnNumber: number }): RawFrame[] {
+	if (saved.length > 0 || !error.sourceName) return saved
+	return [{ filename: error.sourceName, functionName: "", lineNumber: error.lineNumber, columnNumber: error.columnNumber }]
 }
 
 function isCallFrame(frame: unknown): boolean {
@@ -102,6 +120,7 @@ function listenerSource(addonId: string): string {
 	const CHANNEL = ${JSON.stringify(CHANNEL)};
 	const ADDON_ID = ${JSON.stringify(addonId)};
 	${kindOf}
+	${errorFrames}
 	const send = (record) => Services.cpmm.sendAsyncMessage(CHANNEL, record);
 	const fault = (err) => send({ kind: "fault", reason: String(err) });
 	// Only a window its tab still shows, active as Firefox's extension code judges it, so a replaced
@@ -135,7 +154,7 @@ function listenerSource(addonId: string): string {
 		if (topId === undefined) return;
 		const kind = kindOf(message);
 		const text = message.errorMessage;
-		send({ kind, topId, text, args: kind === "console" ? [text] : [], timeStamp: message.timeStamp, callFrames: callFrames(savedFrames(message.stack)) });
+		send({ kind, topId, text, args: kind === "console" ? [text] : [], timeStamp: message.timeStamp, callFrames: callFrames(errorFrames(savedFrames(message.stack), message)) });
 	};
 	const onConsoleCall = (event) => {
 		const message = event.wrappedJSObject;
@@ -160,10 +179,12 @@ function listenerSource(addonId: string): string {
 
 /**
  * Evaluated in a system sandbox of its own, so it outlives every browser window. A record whose top
- * context has no BiDi id is dropped: the background page and its PXE frame, which no page listener
- * hears on Chrome either, or a page that has closed. The emit is synchronous in the message handler;
- * that an error a page reported before answering a command arrives ahead of the answer is measured,
- * not derived, and the smoke control's barrier holds it.
+ * context has no BiDi id is not emitted: the background page and its PXE frame, which no page
+ * listener hears on Chrome either, or a page that has closed. Every exception, emitted or not, is
+ * kept with its first frame among the recent ones the launch's close reports; console errors are
+ * not, as the wallet's logger writes many. The emit is synchronous in the message handler; that an error a page reported before
+ * answering a command arrives ahead of the answer is measured, not derived, and the smoke control's
+ * barrier holds it.
  */
 const RELAY_SOURCE = `"use strict";
 const { RemoteAgent } = ChromeUtils.importESModule("chrome://remote/content/components/RemoteAgent.sys.mjs");
@@ -174,7 +195,7 @@ if (typeof session?._onMessageHandlerProtocolEvent !== "function") throw new Err
 if (typeof NavigableManager.getIdForBrowsingContext !== "function") throw new Error("NavigableManager has no getIdForBrowsingContext");
 if (typeof BrowsingContext?.get !== "function") throw new Error("NavigableManager's global has no BrowsingContext");
 ${RELAY_HELPERS}
-const state = { faultCount: 0, faults: [], ready: [], extensionProcesses: [] };
+const state = { faultCount: 0, faults: [], ready: [], extensionProcesses: [], recent: [] };
 const fault = (reason) => {
 	state.faultCount++;
 	if (state.faults.length < ${FAULTS_KEPT}) state.faults.push(reason);
@@ -206,6 +227,10 @@ const relay = (record) => {
 	if (record?.kind === "ready") return void state.ready.push({ childId: record.childId, remoteType: record.remoteType });
 	if (record?.kind === "fault") return fault("listener: " + record.reason);
 	const context = typeof record?.topId === "number" ? contextOf(record.topId) : "";
+	if (record?.kind === "javascript" && typeof record.text === "string") {
+		state.recent.push({ context, text: record.text.slice(0, 300), frame: record.callFrames?.[0] ?? null });
+		if (state.recent.length > ${RECENT_KEPT}) state.recent.shift();
+	}
 	if (context === null) return;
 	const entry = logEntryFor(record, context);
 	if (!entry) return fault("a malformed record: " + JSON.stringify(record));
@@ -313,10 +338,37 @@ export function relayVerdict(read: unknown): string | undefined {
 	return undefined
 }
 
-/** The relay's verdict for this launch, read while its session is still open. Never rejects: a
- *  failed read is a verdict of its own. */
-export function checkPageErrorRelay(session: WebDriverSession): Promise<string | undefined> {
-	return session.chromeScript<unknown>(READ, [STATE_TOPIC]).then(relayVerdict, (err: unknown) => {
-		return `its state could not be read (${err instanceof Error ? err.message : String(err)})`
+/**
+ * The relay's latest exceptions, oldest first, each with the BiDi context it was raised in ("no
+ * context" when none was available) and its first frame, 1-based as Firefox prints a stack.
+ * `read` is what the close-time read returned.
+ */
+export function recentExceptions(read: unknown): string[] {
+	const raw = typeof read === "object" && read !== null ? (read as { state?: unknown }).state : undefined
+	const recent = (parseJson(raw) as { recent?: unknown } | undefined)?.recent
+	if (!Array.isArray(recent)) return []
+	return recent.map((r: { context?: unknown; text?: unknown; frame?: unknown }) => {
+		const at = isCallFrame(r.frame) ? ` at ${locationOf(r.frame as CallFrame)}` : ""
+		return `${r.context || "no context"}: ${String(r.text)}${at}`
 	})
+}
+
+const locationOf = (frame: CallFrame): string => `${frame.url}:${frame.lineNumber + 1}:${frame.columnNumber + 1}`
+
+export interface RelayReport {
+	/** Why the relay cannot be trusted for this launch, or `undefined` when it ran clean. */
+	verdict: string | undefined
+	exceptions: string[]
+}
+
+/** The relay's verdict and latest exceptions for this launch, read while its session is still open.
+ *  Never rejects: a failed read is a verdict of its own. */
+export function checkPageErrorRelay(session: WebDriverSession): Promise<RelayReport> {
+	return session.chromeScript<unknown>(READ, [STATE_TOPIC]).then(
+		(read) => ({ verdict: relayVerdict(read), exceptions: recentExceptions(read) }),
+		(err: unknown) => ({
+			verdict: `its state could not be read (${err instanceof Error ? err.message : String(err)})`,
+			exceptions: [],
+		}),
+	)
 }

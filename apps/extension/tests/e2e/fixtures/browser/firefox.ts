@@ -39,7 +39,17 @@ interface LaunchContext {
 	profileDir: string
 	/** The manifest id, which is what `installAddon` returns — NOT the per-profile UUID. */
 	addonId: string
+	attachment: BiDiAttachment
+	/** The latest contexts the silent-close watch reported closed, for a failed wait's report. */
+	reportedClosed: ReportedClose[]
 }
+
+interface ReportedClose {
+	context: string
+	at: number
+}
+
+const REPORTED_CLOSES_KEPT = 20
 
 /** Keyed by the `Browser` rather than carried on the shared launch interface, so nothing
  *  Chrome-side has to know this channel exists. */
@@ -127,8 +137,9 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 		const addonId = await session.installAddon(extensionPath)
 		const attachment = await attachPuppeteerOverBiDi(session.capabilities, session.sessionId)
 		const { browser } = attachment
-		contexts.set(browser, { session, profileDir, addonId })
-		const stopWatching = watchForSilentCloses(session, attachment)
+		const reportedClosed: ReportedClose[] = []
+		contexts.set(browser, { session, profileDir, addonId, attachment, reportedClosed })
+		const stopWatching = watchForSilentCloses(session, attachment, reportedClosed)
 		let closing: Promise<void> | undefined
 		return {
 			browser,
@@ -139,7 +150,10 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 					stopWatching()
 					let relay: string | undefined
 					try {
-						relay = await checkPageErrorRelay(session)
+						const report = await checkPageErrorRelay(session)
+						relay = report.verdict
+						if (report.exceptions.length > 0)
+							console.warn(`[firefox] the add-on's latest exceptions: ${report.exceptions.join("; ")}`)
 						// Disconnect first: the BiDi transport is a client of a session the classic channel
 						// owns, and ending the session under it produces a socket error on the way out.
 						await browser.disconnect().catch(() => {})
@@ -626,18 +640,52 @@ async function waitForTarget(browser: Browser, predicate: (target: Target) => bo
 		if (match) return match
 		await new Promise((resolve) => setTimeout(resolve, 100))
 	}
-	throw new Error(`waitForTarget: no matching target after ${timeout}ms`)
+	const failure = `waitForTarget: no matching target after ${timeout}ms`
+	throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 }
 
-async function waitForOpenedUrl(browser: Browser, url: string, timeout: number): Promise<void> {
-	const session = classicSessionFor(browser)
-	const deadline = Date.now() + timeout
-	while (Date.now() < deadline) {
-		if ((await session.windowsWithUrls()).some((window) => window.url === url)) return
-		await new Promise((resolve) => setTimeout(resolve, 250))
+const INVENTORY_BUDGET_MS = 5_000
+
+/** `failure`, then what `read` reports within `budgetMs` or why it reported nothing: a failed wait's
+ *  report never replaces its failure, and never holds it past the budget. */
+export async function withInventory(failure: string, read: () => Promise<string>, budgetMs: number): Promise<string> {
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const deadline = new Promise<string>((resolve) => {
+		timer = setTimeout(() => resolve(`no inventory within ${budgetMs}ms`), budgetMs)
+	})
+	const report = read().catch((err: unknown) => `inventory failed: ${err instanceof Error ? err.message : String(err)}`)
+	try {
+		return `${failure}; ${await Promise.race([report, deadline])}`
+	} finally {
+		clearTimeout(timer)
 	}
-	throw new Error(`waitForOpenedUrl: nothing is showing ${url} after ${timeout}ms`)
 }
+
+/**
+ * Firefox's own windows beside what Puppeteer was told, read after a failed wait: a window BiDi
+ * never announced, a page on the wrong URL and a window the watch reported closed each point at a
+ * different cause. A caller may let a wait expire as an expected outcome and keep driving the
+ * browser, so this switches no window and runs nothing privileged, either of which moves focus; the
+ * add-on's exceptions are reported at the launch's close instead.
+ */
+async function windowInventory(browser: Browser): Promise<string> {
+	const { session, attachment, reportedClosed } = contextFor(browser)
+	const now = Date.now()
+	const windows = await session.listWindows()
+	const pages = browser
+		.targets()
+		.filter((target) => target.type() === "page")
+		.map((target) => target.url())
+	const closed = reportedClosed.map((close) => `${close.context} ${now - close.at}ms ago`)
+	return [
+		`Firefox's windows: ${listed(windows)}`,
+		`BiDi's open contexts: ${listed(attachment.openContexts())}`,
+		`Puppeteer's pages: ${listed(pages)}`,
+		`reported closed by the watch: ${listed(closed)}`,
+	].join("; ")
+}
+
+const listed = (items: readonly string[]): string => (items.length > 0 ? items.join(", ") : "none")
 
 /**
  * The classic handle list, not `targets()`: BiDi announces a tab through its first browsing context
@@ -687,7 +735,7 @@ async function closeTab(session: WebDriverSession, handle: string): Promise<void
  * two consecutive reads is reported closed. A window BiDi has just announced may not be in the
  * handle list yet, so one never seen there is given much longer before it is judged the same way.
  */
-function watchForSilentCloses(session: WebDriverSession, attachment: BiDiAttachment): () => void {
+function watchForSilentCloses(session: WebDriverSession, attachment: BiDiAttachment, reported: ReportedClose[]): () => void {
 	const watch: SilentCloseWatch = { listed: new Set(), misses: new Map() }
 	let reading = false
 	const timer = setInterval(async () => {
@@ -696,7 +744,11 @@ function watchForSilentCloses(session: WebDriverSession, attachment: BiDiAttachm
 		try {
 			const open = attachment.openContexts()
 			const handles = new Set(await session.listWindows())
-			for (const context of silentlyClosed(watch, open, handles)) attachment.reportClosed(context)
+			for (const context of silentlyClosed(watch, open, handles)) {
+				attachment.reportClosed(context)
+				reported.push({ context, at: Date.now() })
+				if (reported.length > REPORTED_CLOSES_KEPT) reported.shift()
+			}
 		} catch {
 			// The session is closing or geckodriver is busy; the next tick reads again.
 		} finally {
@@ -759,7 +811,6 @@ export const firefoxDriver: BrowserDriver = {
 	newPage,
 	openScratchPage,
 	waitForTarget,
-	waitForOpenedUrl,
 	waitForNewTab,
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
 	prepareClick,

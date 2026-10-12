@@ -27,7 +27,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
-import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
 
 /** Store */
@@ -179,6 +179,7 @@ const lockedState = createLockedState({
 	closePopups: () => popupStore.closeAll(),
 	onLocked,
 	markLocked: () => {
+		supersedeProfileActivations()
 		appStore.isLogined = false
 	},
 	clearActivity: () => appStore.clearActivity(),
@@ -200,8 +201,8 @@ let profileEventSeq = 0
 const onActiveProfileChanged = async (profile) => {
 	const seq = ++profileEventSeq
 	if (profile) {
-		// bootstrapActiveProfile carries its own lock-wins guard: a stale profile event whose
-		// session was already locked re-checks getActiveProfile() before flipping isLogined.
+		// bootstrapActiveProfile carries its own lock-wins guard: it flips isLogined only if its
+		// re-read of getActiveProfile() still finds the profile and no lock has superseded its run.
 		// The wrap is load-bearing: an emitter-callback rejection would otherwise become an
 		// unhandled rejection that silently starves the unlock flow's activation wait. The
 		// identity-keyed failure record releases that waiter IMMEDIATELY (never the full
