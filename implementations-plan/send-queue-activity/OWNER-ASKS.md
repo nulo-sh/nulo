@@ -98,3 +98,34 @@ Items 1 and 2 extend that rule to dApp sends, which you left open (#218). The wa
 **Recommendation.** A. It finishes the rule you chose ("never fail them") at a cost of seconds, only when nodes disagree.
 
 **What ships now.** Nothing until you answer. Phase 1.2 is built only on A.
+
+## OA-6: "Refused by the network" cannot be proven on the default endpoint (#112, page 10 P10-05)
+
+**Surface.** The History card and journal detail of a send the node answered with an error.
+
+**What the page approved.** When the node refused the first attempt, the row ends at once as "Refused by the network" / "The network refused this transaction, so it won't go through. Check the details before sending it again." When the refusal came after a retried attempt, it keeps today's "Not confirmed yet" check.
+
+**Why it is not built.** The approval rests on the wallet seeing whether its send was retried. On one node it can. The default Testnet endpoint, though, is dRPC's load balancer, and its gateway retries a timed-out request on another node, and may also send it to two nodes at once. The wallet sees one attempt either way. So this can happen: node A takes the transaction, the gateway gives up waiting for A, and node B refuses the retry with "Existing nullifier", because A's copy is already in. The row would then say "won't go through" for a send that goes through. A person who sends again pays twice. The probe record is in `lessons/phase-3a.md`.
+
+**Options.**
+- **A. As is.** A refused send reads "Not confirmed yet", then "Unconfirmed" after 30 minutes, as today. Once its expiry is provably past, it reads "Won't go through" / "This transaction expired before the network included it. No fee was paid, and you can send it again." That is #108's state, which ships in this arc. The expiry comes about a day after the send.
+- **B. Refused only on a single-node endpoint.** The wallet cannot tell whether an endpoint is a load balancer. This could only key on a user-added local endpoint, which covers developers, not users.
+- **C. Ship as approved anyway**, accepting that through a load balancer the row can be wrong and invite a double payment.
+
+**Recommendation.** A.
+
+**What ships now.** A: nothing is built for #112, and it stays open.
+
+## OA-7: How "Won't go through" looks (#108, page 10 P10-06)
+
+**Surface.** The History card and journal detail of a send whose expiry is provably past.
+
+**What ships now.**
+- The page's words, verbatim: card and Outcome "Won't go through", context "This transaction expired before the network included it. No fee was paid, and you can send it again."
+- The existing failed look: the red cross icon, and a State row reading "Failed", the same look "Reverted" has. The page set the words, not the look.
+- An "Unconfirmed" row whose post-expiry check finds the transaction on chain keeps reading "Unconfirmed". The page names only the expired move.
+- The state appears once the chain's finalized blocks pass the expiry, about a day after the send. Until then the row reads as today.
+
+**Options.** A: as shipped. B: another icon or colour (amber, as "Unconfirmed"), or a State row word other than "Failed", named by you. C: an included-after-unconfirmed row moves to "Sent", the existing word.
+
+**Recommendation.** A for the look. C is truer than leaving "Unconfirmed" and needs no new words, but the page did not ask for it.

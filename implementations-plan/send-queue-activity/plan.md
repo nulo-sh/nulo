@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: approved v4 (orchestrator); arc 1 in progress (Phases 1.1, 1.3-1.5; 1.2 waits on OA-5)
+status: arc 1 merged (#264); arc 3a in progress (3a.1 stopped, 3a.2-3a.4)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -286,6 +286,10 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **Arc 1: no new copy, layout or state.** It restores the owner's concurrent-sends rule after a restart, so the existing "Queued..." card and "Queued behind your previous send" row appear on a Send-page send that uses the same private fee contract as a pending one (OA-3 item 3; ships under the archived decision). A terminal event or snapshot row from another profile or network no longer removes the current awaiting card or task.
 - **Phase 1.2 (OA-5):** on a multi-endpoint network, the same states show for up to 60 s on a send whose predecessor's block the PXE's node lacks. Built only on OA-5 = A.
 - **Arc 1b (OA-3):** while the account's earlier sends are unmined, a dApp send waits at "Queued..." ("Preparing..." on the silent path). The dApp's answer arrives later, and later requests of the same dApp wait behind it.
+- **Arc 3a (page 10, signed 2026-10-12).**
+  - #108 (P10-06, approved): "When the transaction's expiry is provably past chain time, the row reads 'Won't go through' / 'This transaction expired before the network included it. No fee was paid, and you can send it again.' Until then it reads today's 'Unconfirmed'." The look is the existing failed one (OA-7, D28).
+  - #109 (P10-07, changed): "no new words; only the pruned-block re-check ships." A mined row reads as today until final. A row whose block the finalized chain excludes returns to today's "Not confirmed yet" (journal row) or today's pending clock (Tx row).
+  - #112 (P10-05, approved): not built (D21, OA-6); the row reads as today.
 
 ## Assumptions
 
@@ -566,33 +570,36 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 ### Arc 3a: send outcome states (after page 10; H7 on #108 and #112)
 
-#### Phase 3a.1: refused on the first attempt (#112, P10-05)
+#### Phase 3a.1: refused on the first attempt (#112, P10-05) — stopped (D21, OA-6)
 
-1. Prove how a node refusal surfaces (a 4xx, or an error body in a 200) through the aztec.js JSON-RPC client, with a unit test against the real fetch wrapper; record it in lessons. If a refusal cannot be told from a transport failure, stop and return the limit to OWNER-ASKS.
-2. Add the wallet-core fields; add the per-send counting node; read the count after a throw in `sendTxTask` (its single `node.sendTx` and the legal-guard order unchanged); add the `refused` outcome and its copy; keep a retried refusal on today's check.
-3. Tests, through the real Aztec client adapter: an HTTP refusal and a 200 with an error body read as first-attempt refusals (control); a lost response, a malformed body and a timeout never do (never-happens), nor does a refusal after a second POST; `call-sites.test.ts` still passes unchanged (never-happens: a second `node.sendTx`); `send-check.test.ts` (a first-attempt refusal is not watched; a retried one is, control); `journal-state.test.ts` (the exact P10-05 strings); no response body reaches progress or a log line.
+1. Probe how a node refusal surfaces through the wallet's client and through the default endpoint; record it in lessons. Done: on one node a first-POST refusal is visible at the HTTP layer, but the default endpoint's gateway retries a timed-out request on another node, so the wallet cannot tell a first-attempt refusal from a retried one. The phase stops; the limit is OA-6; #112 stays open with a comment carrying the probe record.
+
+#### Phase 3a.2: expired before inclusion (#108, P10-06; proof per D22)
+
+1. Locate the expiry and the first nullifier on Aztec 6.0.0-rc.1's proven tx; establish whether one node can forget or late-index a receipt; record both in lessons (done: it cannot; the endpoint can route reads to different nodes, hence D22).
+2. Record `expiry: {timestamp, nullifier}` with the hash at submission (none for a genesis-anchored tx); widen `setSendCheck` to the compare-and-set of D25 for the moves this phase needs; add the finalized-anchored nullifier verdict `expired` and its copy (D28's look).
+3. Tests:
+   - `inclusion.test.ts` / `send-check.test.ts`: a finalized tip whose timestamp is not past the expiry claims nothing (never-happens: `expired`); past it with the nullifier absent at that anchor gives `expired` (control); the nullifier present, a read error or a malformed answer claims nothing; the anchored read names the finalized block's number and hash; a row with no recorded expiry never becomes `expired`; an `unconfirmed` row is read again only once the clock passes its expiry, and becomes `expired` on the same proof.
+   - `operation-journal/service.test.ts`: the compare-and-set refuses a stale `expected` and an illegal move (never-happens), applies a legal one once (control), and never changes the stage.
+   - `execution-coordinator` tests: the submitting record carries the expiry and the first nullifier, and none for a genesis-anchored tx.
+   - `journal-state.test.ts`: the exact P10-06 strings.
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3a.2: expired before inclusion (#108, P10-06)
+#### Phase 3a.3: the pruned-block re-check (#109, P10-07 changed; proof per D23-D26)
 
-1. Locate the expiry field on Aztec 6.0.0-rc.1's proven tx, and establish whether a node can forget an included tx's receipt (retention) or answer before indexing it (indexing); record both in lessons. If either can happen, stop and return "No fee was paid" to OWNER-ASKS.
-2. Record the expiry with the hash at submission; add the chain-time-first `expired` verdict and its copy.
-3. Tests: `send-check.test.ts`: chain time one second before expiry keeps today's verdict (never-happens: `expired`); past it with no receipt gives `expired` (control); a tx included between the two reads is read as `sent`, never `expired` (never-happens: the receipt is read after the chain time); a read error keeps today's verdict; a row with no recorded expiry never becomes `expired`. `journal-state.test.ts`: the exact P10-06 strings.
+1. Add `transaction/inclusion.ts` (the finalized-anchored archive proof); record `inclusion: {block, hash}` with a `sent` or `reverted` answer; add the final, re-included and pruned moves to the compare-and-set; give `SendCheck` one watch per row with work; add the `awaitingFinality` marker, its watch, its boot re-arm and its stripping on restore and export to `TransactionService`; build the single-attempt node silent (D27).
+2. Tests:
+   - `inclusion.test.ts`: a finalized tip below the block claims nothing; the hash found at index N is final; absent with a receipt in another block is a re-inclusion, with the recorded block is no answer, with no block is pruned; any error or a found index other than N claims nothing.
+   - `send-check.test.ts`: inclusion → pruned → re-included → final, for a successful and a reverted receipt; a pruned row returns to checking with its window restarted; a final row is never re-armed; a restart in each state resumes the watch from the journal.
+   - `transaction/service.*.test.ts`: a row this worker mined is marked and watched until final, then written Finalized and unmarked; a proven prune returns it to Pending with block, result and fee cleared; a lagging DROPPED or Pending answer never moves a mined row (never-happens); a restored row carrying a marker is stripped and never polled (never-happens); purge and the ambiguous marking end the watch.
+   - `aztec-node-factory-adapter.test.ts`: a transport failure through the single-attempt node logs nothing that names the endpoint.
 
-**Validation gate.** As Phase 3a.1. Layers: lint, typecheck, unit.
-
-#### Phase 3a.3: went through until final (#109, P10-07)
-
-1. Add the finality watch to `send-check.ts` and the slow re-poll of mined rows below Finalized to `TransactionService`; a pruned block returns the row to checking or Pending.
-2. Add the inclusion record, its fenced method and its re-arm at boot.
-3. Tests: `send-check.test.ts` (inclusion → pruning → re-inclusion → finality, for a successful and for a reverted receipt; a reverted inclusion keeps being watched until final; a restart in each state resumes the watch); `operation-journal/service.test.ts` (every disallowed move and a stale `updatedAt` are refused, never-happens; each allowed move is applied once, control; the execution stage never changes); `transaction/service.dropped.test.ts` (a mined row this worker settled is re-polled until Finalized, then not; a restored mined row is never polled, never-happens); `journal-state.test.ts` (the exact P10-07 strings).
-
-**Validation gate.** As Phase 3a.1. Layers: lint, typecheck, unit.
+**Validation gate.** As Phase 3a.2. Layers: lint, typecheck, unit.
 
 #### Phase 3a.4: arc 3a end-to-end gate
 
-**Validation gate.** Commands: unit layers as 3a.1; network on Chrome and Firefox: `tests/e2e/network/failed-send-check.test.ts` with new cases for a first-attempt refusal (`interceptRpc` on the node's `sendTx`) and a send that went through before finality; smoke on Chrome and Firefox. Pass: all exit 0; screenshots of the History card and detail for each new state, both themes. Layers: unit, network e2e, smoke e2e. If the harness cannot advance chain time past an expiry, the expiry stays unit-proven and the PR says so.
+**Validation gate.** Commands: unit layers as 3a.2; network on Chrome and Firefox: `tests/e2e/network/failed-send-check.test.ts` with new cases: the never-received send, once its recorded expiry is set below the finalized tip's time, reads "Won't go through" through the real node's anchored nullifier read (its earlier "Unconfirmed" is the never-happens control); a send that went through keeps reading confirmed until final and its Tx row is recorded Finalized through the real archive proof; smoke on Chrome and Firefox. Pass: all exit 0; screenshots of the History card and detail for "Won't go through", both themes. Layers: unit, network e2e, smoke e2e. A prune cannot be made on a local node, so the prune paths stay unit-proven and the PR says so.
 
 ### Arc 3b: feed surfaces (after page 10, C9, C12-links; R1, R2, R5)
 
@@ -836,6 +843,38 @@ Arc 1 deviations from the text above (the tree won; detail in `lessons/phase-1.m
 - **D19 Composition through the service root.** `send-order.composition.test.ts` drives a fresh `ExecutionService` (its real lane, sequencer and transfer executor) with the real journal instead of wiring the four classes by hand.
 - **D20 The restart case asserts the queued estimate, not a queued record.** Send stays disabled while B's estimate reads queued, so B never gets a record that could leave `queued`. The case runs the file's `expectQueued` contract (B's fee row reads queued and Send stays disabled through the held window while A is unmined; then both confirm) with the background stopped between A's submission and B's start. The popup closes before the stop, since Firefox keeps its event page alive while an extension page is open.
 - **Shared seams touched:** `dapp-send-executor.ts` (one dep, the epoch read in `estimateOperationFee`, the stash's field; not `runInSlot` or `markJournal`), `execution/service.ts` (dep wiring only; the settle handler and estimate admission are untouched without Phase 1.2), `transfer-executor.ts` (FPC resolution and the turn), `RecentActivityView.vue` (the predicate block, two handler guards, the snapshot filter).
+
+The orchestrator's calls at arc 3a's start (2026-10-12; page 10 signed: #112 P10-05 approved, #108 P10-06 approved, #109 P10-07 changed):
+
+- **D-orch-4 Fresh branch, one PR.** Arc 1 landed by squash (#264), so arc 3a branches `send-queue-activity-outcomes` from `origin/dev` and opens one PR against `dev` under the Delivery table's arc 3a title (cut to what ships), `Closes` each issue it closes in full and `Refs` one a stop rule holds back.
+- **D-orch-5 #109 ships without copy.** Phase 3a.3 builds the inclusion record, its fenced journal method, the finality watch and the slow re-poll, and a pruned block returns the row to checking; but no "Went through" state, label or context line is added: a mined row keeps reading as it does today until final, and the only visible effect is a row that returns to today's "Not confirmed yet" when its block is pruned. The owner's words: "no new words; only the pruned-block re-check ships".
+- **D-orch-6 The two stop rules stand.** Phase 3a.1: if a node refusal cannot be told from a transport failure through the real client, stop that phase and return the limit to `OWNER-ASKS.md`. Phase 3a.2: if a node can forget or late-index an included tx's receipt, stop and return "No fee was paid" to `OWNER-ASKS.md`. A stopped phase leaves its issue open with `Refs` and a comment carrying the probe record; the other phases still ship. H7: only the approved strings ship, never "Nothing was sent" or "no fee was paid" after a refusal that can follow a retried POST.
+- **D-orch-7 No new words beyond the page.** An approved string is used verbatim; a surface that would need another goes to `OWNER-ASKS.md` in the "what ships now" form and ships without it.
+- **D-orch-8 Delivery hygiene.** Merge `origin/dev` before the final gates (never a union merge; `lessons.md` is at its 8 KiB budget), and attach screenshots of the History card and detail for each new state, both themes.
+
+Arc 3a deviations from the text above (the tree and the default endpoint won; the probe record and both consults are in `lessons/phase-3a.md`). Panel: Codex gpt-6.1-sol high, session `01a1326f-c394-7b30-a81f-6615789a9de5` (two turns), and one Opus Plan lens.
+
+- **D21 Phase 3a.1 stops (#112 stays open).** The default Testnet endpoint is dRPC's load balancer (`network-endpoints.ts`). Its gateway splits batches per request and retries a timed-out request on another upstream, with optional hedges. So one POST answered with a node error does not prove that no upstream took the tx. The concrete harm (Opus): A includes the tx, the gateway retries on B, B answers "Invalid tx: Existing nullifier", the row says "won't go through", and a resend of a public transfer pays twice. On one node the refusal is visible at the HTTP layer; through the endpoint it is not. Codex and Opus both agree to stop. A whitelist of "intrinsic" refusal reasons was rejected: every reason the wallet can meet depends on node state. The limit goes to `OWNER-ASKS.md` (OA-6).
+- **D22 #108's proof: the tx's first nullifier, absent at a finalized anchor (replaces D15).** D15 needed the tip read and the receipt read to come from one node, and the endpoint cannot promise that. A lagging upstream answers DROPPED for an included tx. The single-node conditions of the stop rule hold (one node never forgets or late-indexes a receipt; the probe is in the lessons), so the rule does not fire. Codex first asked to route this through OWNER-ASKS, then withdrew that ask. What replaces D15:
+  - At submission the journal records `expiry: {timestamp, nullifier}`: `tx.data.expirationTimestamp` and the tail's first non-empty nullifier, the siloed protocol nullifier. Nothing is recorded for a tx anchored at genesis, since the validator's block-1 exception applies to it.
+  - Once the local clock passes the expiry, the check reads the finalized tip F. When `ts(F) > expiry` it asks for the nullifier with `findLeavesIndexes({number, hash} of F, NULLIFIER_TREE, …)`. That query is fork-verified or throws (`node_world_state_queries.js:202-260`). Absent means `expired`. Present, an error or a malformed answer claims nothing.
+  - Why absence is final: block timestamps never decrease (they are slot times), and F cannot be pruned. Proposed and proven anchors were weighed. Finalized was chosen for a claim about money.
+  - Why presence claims nothing: a replacement with the same salt shares the nullifier.
+  - The verdict therefore lands only after finality passes the expiry, about a day after the send, never at a promised time.
+- **D23 #109's proof: the recorded block's hash in the finalized chain's archive.** "Not mined" from one upstream is not a prune behind a load balancer, and a differing hash at the same height only proves two upstreams disagree. The watch waits until the finalized tip F reaches the inclusion block N, then asks `findLeavesIndexes(F anchored, ARCHIVE, [hash])`; archive leaves are block hashes at index = number.
+  - Found at index N: the inclusion is final.
+  - Absent: the receipt decides. A receipt naming another block is a re-inclusion: a new inclusion record, and the result may change. A receipt naming the recorded block (a stale upstream) is no answer. Not mined means pruned.
+  - No slot rule is needed (Opus proposed one), because the anchor already excludes stale branches. The cost is that a prune is noticed only once finality passes its block.
+  - One helper serves both services (`transaction/inclusion.ts`).
+- **D24 Each visible row owns its finality.** A failed send that the check answered `sent` or `reverted` is a journal row: the send check watches it, re-armed at boot from the journal, which no backup carries. A succeeded send's visible row is its Tx row, while its journal record renders nothing, so `TransactionService` watches the Tx row. The worker sets a persisted `awaitingFinality` marker in the same write that takes the row out of Pending. Boot re-arms marked, non-ambiguous rows. `restore` and backup export strip the marker, so a backup never makes the worker dial a restored row's endpoint (D16 parity). This replaces the plan's in-memory set plus journal re-arm, which could only reach the visible Tx row through a cross-service write.
+- **D25 One compare-and-set journal write.** `setSendCheck` compares what the caller read: the stored `check` and the inclusion hash. It does not compare `updatedAt`, which a harmless title update also moves. A pure legality table admits these moves:
+  - none → sent, reverted, unconfirmed or expired;
+  - unconfirmed → expired;
+  - a watched sent or reverted → final, re-included or pruned.
+  Pruned clears the check and the inclusion and sets `checkSince`, the time the window restarts. Nothing leaves expired or a final answer. `SendCheck` keeps one watch per row and acts on the freshly loaded record (Opus found the emit-before-unwatch strand in the sketch).
+- **D26 A pruned Tx row is an ordinary pending send again.** The marker is cleared and the row returns to Pending with block, result and fee cleared. From there it follows the pending poll, its DROPPED debounce and the 30-minute resurrection window, as any submitted tx does. Codex asked to keep pruned rows watched past that window. Rejected: such a row is no likelier to come back than any dropped tx, and the extra watch would be unbounded.
+- **D27 The single-attempt node logs nothing.** `createSingleAttemptNode` is built with `createSafeJsonRpcClient` and `SILENT_RPC_LOG`, as `readPublicStorageOnce` already is. `createAztecNodeClient` cannot take a logger, and the SDK's warning carries the endpoint URL, whose path holds the dRPC key, into the exportable log. Every new read in this arc goes through that node.
+- **D28 How "Won't go through" looks.** The page approves its words, not its look. It takes the existing failed look, the red cross and the State row "Failed", as "Reverted" does. A row the post-expiry read finds included keeps "Unconfirmed", since the page names only the expired move. OA-7 records both for the owner.
 
 ## Audit verdicts
 
