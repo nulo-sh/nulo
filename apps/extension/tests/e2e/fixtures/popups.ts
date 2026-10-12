@@ -20,8 +20,8 @@ export type PopupKind =
 	| "execute"
 	| "json"
 	| "network-unavailable"
-	/** One URL for every logger window: arm the wait before the open, and a second window cannot
-	 *  match while the first is still open. */
+	/** Arm the wait before the open: a logger window's URL can repeat, and a URL already open never
+	 *  matches. */
 	| "logger"
 
 /**
@@ -61,7 +61,8 @@ export async function waitForPopup(
 	)
 	const page = await target.asPage()
 	// An error the window raised before this line, module evaluation first of all, can be in neither
-	// array: Firefox's launch prints the add-on's latest exceptions at its close, Chrome reports nothing.
+	// array: Firefox's launch prints the add-on's latest exceptions at its close; Chrome reports
+	// nothing.
 	recordPageErrors(ctx, page)
 	// Puppeteer can resolve waitForTarget before the page's main frame is wired
 	// up — calling waitForFunction immediately throws "Requesting main frame too

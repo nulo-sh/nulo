@@ -409,6 +409,14 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 
 type ZombieParent = { parent: ChildProcess; child: number | undefined }
 
+function comm(pid: number): string | undefined {
+	try {
+		return readFileSync(`/proc/${pid}/comm`, "utf8").trim()
+	} catch {
+		return undefined
+	}
+}
+
 /** Kills the child first, while its parent still holds the pid, then the parent. */
 function release({ parent, child }: ZombieParent): void {
 	try {
@@ -440,7 +448,7 @@ async function zombieParent(): Promise<ZombieParent & { child: number }> {
 		held.child = child
 		const pid = parent.pid
 		if (pid === undefined) throw new Error("the shell parent did not spawn")
-		const execd = await until(() => readFileSync(`/proc/${pid}/comm`, "utf8").trim() === "sleep" || !running(pid))
+		const execd = await until(() => !running(pid) || comm(pid) === "sleep")
 		if (!execd || !running(pid)) throw new Error(`the shell parent ${pid} never reached its exec`)
 		return { parent, child }
 	} catch (err) {

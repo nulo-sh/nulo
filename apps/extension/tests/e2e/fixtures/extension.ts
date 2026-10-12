@@ -25,7 +25,7 @@ import {
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
 } from "./helpers"
-import { type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
+import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
 import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
@@ -471,7 +471,7 @@ async function setupConnectedPlayground(
 
 /** Drive the playground's requestCapabilities flow for `bundle`, then approve
  *  the cap popup for whichever accounts `pick` selects; returns the granted
- *  addresses. All timeouts match the cold-shard budget (60s for the popup
+ *  addresses once the popup has closed. All timeouts match the cold-shard budget (60s for the popup
  *  target + the account-row render — chrome.windows.create + SW handler boot +
  *  loadInteractionPayload's PXE/accountService warmup can each exceed 30s on a
  *  cold CI runner; 30s for the dApp result). `pick` owns the per-fixture
@@ -493,7 +493,7 @@ export async function grantCapBundle(
 	)
 	const granted = await pick(accountIds, capPopup)
 	await approveCapabilities(capPopup, { accounts: granted })
-	await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000)
+	await assertPgOk(playgroundPage, await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000), "grantCapBundle")
 	// The window resolves the request before it closes, so the dApp's answer can precede its teardown.
 	await waitForPopupClosed(capPopup, 10_000)
 	return granted

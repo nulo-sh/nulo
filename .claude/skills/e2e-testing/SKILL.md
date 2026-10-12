@@ -459,7 +459,8 @@ assertion; drive the rest of the flow with the ordinary helpers.
   catches and merely logs reaches neither fixture array, so an empty array is no proof of no errors
   (`implementations-plan/archive/e2e-deflake/plan.md#console-errors`). Assert on DOM, storage, or
   stage evidence instead. Both arrays restart empty at each `openPopup` and `openOnboarding`, so an
-  assertion covers a window only if neither runs between the window and the assertion.
+  assertion covers a window only if neither runs between the window and the assertion, and its
+  teardown only once `waitForPopupClosed` has returned: a window answers the dApp before it closes.
   `waitForPopup` records the window it hands back from then on; an error the window raised earlier
   can be in neither array (Firefox's launch prints the add-on's latest exceptions at its close).
 - **`chrome.runtime.reload()` disables an unpacked `--load-extension` build** (every later
