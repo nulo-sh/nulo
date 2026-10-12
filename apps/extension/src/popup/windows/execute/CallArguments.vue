@@ -146,13 +146,17 @@ const nonce = computed(() =>
 	width: 100%;
 }
 
+/* A dApp's artifact names each parameter and supplies its value; either may run long and unbroken. */
 .row {
 	width: 100%;
 	gap: 12px;
 
-	> :last-child {
+	> * {
 		min-width: 0;
 		overflow-wrap: anywhere;
+	}
+
+	> :last-child {
 		text-align: right;
 	}
 }

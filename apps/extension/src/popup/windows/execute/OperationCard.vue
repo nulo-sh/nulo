@@ -577,15 +577,9 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 }
 
 /* A dApp names the call and its contract; a long unbroken name must break inside the card, not push the address out. */
-.call_row {
-	> :first-child {
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-
-	> :last-child {
-		flex-shrink: 0;
-	}
+.call_row > * {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .payload {

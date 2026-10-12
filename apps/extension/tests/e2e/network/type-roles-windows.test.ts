@@ -114,6 +114,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			inputs: { tokenAddress, recipient: minterAddress, amount: AMOUNT },
 			ready: `${sel("execute-op-decoded-param-value")}[data-address-shows="name"]`,
 			states: ["an aztec_sendTx request (network)", "a decoded call with an address parameter (network)"],
+			contained: true,
 		},
 		{
 			method: "createAuthWit",
@@ -123,7 +124,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			states: ["an aztec_createAuthWit request for a call (network)"],
 		},
 		{
-			// Its arguments are full 32-byte fields, the longest unbroken strings the payload carries.
+			// Its hex arguments are the longest unbroken strings a generic dApp puts in the payload.
 			method: "grantPublicAuthwit",
 			button: "pg-btn-grantPublicAuthwit",
 			inputs: { tokenAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },

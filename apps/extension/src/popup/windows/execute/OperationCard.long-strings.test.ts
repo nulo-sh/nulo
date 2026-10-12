@@ -68,7 +68,7 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(w.find(`.${CARD.payload}`).text()).toMatch(HUMANIZED)
 	})
 
-	test("a call's 64-character name sits first in the call row, whose first child wraps and whose address does not shrink", () => {
+	test("a call's 64-character name and its address sit in the call row, whose children may break", () => {
 		const row = mountCard(sendTx).find('[data-testid="execute-op-payload-row"]')
 		expect(row.classes()).toContain(CARD.call_row)
 		expect(row.element.firstElementChild?.textContent).toMatch(HUMANIZED)
