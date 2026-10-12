@@ -73,7 +73,10 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { AccountServiceClient } from "@/wallet/services/account/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 import { useAppStore } from "@/stores/app.store"
-import { useProfileBootstrap } from "./useProfileBootstrap"
+import { createMemoryHistory, createRouter } from "vue-router"
+import { createLockedState } from "@/popup/locked-state"
+import { createPopupGuard } from "@/popup/route-guard"
+import { supersedeProfileActivations, useProfileBootstrap } from "./useProfileBootstrap"
 
 // app.store references `managers` as an auto-imported global at runtime
 // (vite auto-import via src/utils/). In vitest the auto-import only covers
@@ -303,5 +306,132 @@ describe("useProfileBootstrap", () => {
 		const stillActive = await bootstrapActiveProfile(fakeProfile)
 		expect(appStore.isLogined).toBe(false)
 		expect(stillActive).toBe(false)
+	})
+
+	/** The service orders the final re-read before a queued lock, but the popup can receive the
+	 *  read's "active" after the lock's event already sealed it. */
+	const deferredReads = () => {
+		const answers: Array<(profile: unknown) => void> = []
+		;(managers.profile.getActiveProfile as ReturnType<typeof vi.fn>).mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					answers.push(resolve)
+				}),
+		)
+		return answers
+	}
+
+	test("a lock that seals while the final re-read is in flight wins over that read's late 'active'", async () => {
+		const answers = deferredReads()
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		const activation = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(answers).toHaveLength(1))
+
+		supersedeProfileActivations()
+		answers[0](fakeProfile)
+
+		expect(await activation).toBe(false)
+		expect(appStore.isLogined).toBe(false)
+		await new Promise((resolve) => setTimeout(resolve, 0))
+		expect(chrome.storage.local.set).not.toHaveBeenCalledWith(
+			expect.objectContaining({ "nulo:ui:lastActiveProfile": expect.anything() }),
+		)
+	})
+
+	test("a hydration superseded by a lock commits nothing and reports no active profile", async () => {
+		const answers = deferredReads()
+		const { hydrateKnownProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		const hydration = hydrateKnownProfile()
+		await vi.waitFor(() => expect(answers).toHaveLength(1))
+		answers[0](fakeProfile)
+		await vi.waitFor(() => expect(answers).toHaveLength(2))
+
+		supersedeProfileActivations()
+		answers[1](fakeProfile)
+
+		expect(await hydration).toBeNull()
+		expect(appStore.isLogined).toBe(false)
+		expect(appStore.isSessionChecked).toBe(true)
+	})
+
+	test("an unlock after the lock activates, while the activation the lock superseded commits nothing", async () => {
+		const answers = deferredReads()
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const appStore = useAppStore()
+		const older = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(answers).toHaveLength(1))
+		supersedeProfileActivations()
+
+		const newer = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(answers).toHaveLength(2))
+		answers[0](fakeProfile)
+		expect(await older).toBe(false)
+		expect(appStore.isLogined).toBe(false)
+
+		answers[1](fakeProfile)
+		expect(await newer).toBe(true)
+		expect(appStore.isLogined).toBe(true)
+	})
+
+	test("the lock's push lands on the lock screen though a stale activation answered 'active' after the seal", async () => {
+		const answers = deferredReads()
+		const appStore = useAppStore()
+		appStore.profile = fakeProfile
+		appStore.isLogined = true
+		appStore.isSessionChecked = true
+		const page = { render: () => null }
+		const router = createRouter({
+			history: createMemoryHistory(),
+			routes: [
+				{ path: "/popup/general", name: "popup-general", component: page, meta: { isAuthRequired: true } },
+				{ path: "/popup/auth", name: "popup-auth", component: page },
+			],
+		})
+		router.beforeEach(
+			createPopupGuard(
+				() => appStore,
+				() => managers.profile as never,
+			),
+		)
+		await router.push("/popup/general")
+
+		const { bootstrapActiveProfile } = useProfileBootstrap()
+		const activation = bootstrapActiveProfile(fakeProfile)
+		await vi.waitFor(() => expect(answers).toHaveLength(1))
+
+		let landing: Promise<unknown> | undefined
+		let answerProfiles!: (profiles: unknown[]) => void
+		const lockedState = createLockedState({
+			closePopups: () => undefined,
+			onLocked: () => undefined,
+			markLocked: () => {
+				supersedeProfileActivations()
+				appStore.isLogined = false
+			},
+			clearActivity: () => undefined,
+			resetInFlight: () => undefined,
+			cachedProfiles: () => [fakeProfile],
+			setProfiles: () => undefined,
+			route: (path) => {
+				landing = router.push(path)
+			},
+		})
+		const lockEvent = lockedState.onLockEvent(
+			() =>
+				new Promise((resolve) => {
+					answerProfiles = resolve
+				}),
+			() => true,
+		)
+		answers[0](fakeProfile)
+		await activation
+		answerProfiles([fakeProfile])
+		await lockEvent
+		await landing
+
+		expect(router.currentRoute.value.name).toBe("popup-auth")
+		expect(appStore.isLogined).toBe(false)
 	})
 })

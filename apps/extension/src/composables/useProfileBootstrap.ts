@@ -44,6 +44,12 @@ const inFlightBootstraps = new Map<string, { isCurrent: () => boolean; promise: 
  */
 const bootstrapFence = createRunFence()
 
+/** After this, no activation whose core run started or was joined earlier sets `isLogined`,
+ *  whatever its last read of the session answered. */
+export function supersedeProfileActivations(): void {
+	bootstrapFence.invalidate()
+}
+
 export function useProfileBootstrap() {
 	const appStore = useAppStore()
 
@@ -117,12 +123,12 @@ export function useProfileBootstrap() {
 	 * (recovery vs. the original event bootstrap) joins the in-flight run rather
 	 * than kicking off a second one that replaces the shared managers mid-use.
 	 */
-	const runBootstrapCore = (profileId: string): Promise<void> => {
+	const runBootstrapCore = (profileId: string): { isCurrent: () => boolean; promise: Promise<void> } => {
 		const existing = inFlightBootstraps.get(profileId)
 		// Join only a STILL-CURRENT same-profile run (same-profile recovery). A run
 		// that a newer activation already superseded is aborting, so re-activating
 		// this profile must start fresh rather than adopt it.
-		if (existing?.isCurrent()) return existing.promise
+		if (existing?.isCurrent()) return existing
 		// A new bootstrap supersedes any older in-flight one (of ANY profile).
 		const isCurrent = bootstrapFence.begin()
 		const promise = (async () => {
@@ -136,8 +142,9 @@ export function useProfileBootstrap() {
 			// Identity-guard: only clear the slot if it still holds THIS run.
 			if (inFlightBootstraps.get(profileId)?.promise === promise) inFlightBootstraps.delete(profileId)
 		})
-		inFlightBootstraps.set(profileId, { isCurrent, promise })
-		return promise
+		const run = { isCurrent, promise }
+		inFlightBootstraps.set(profileId, run)
+		return run
 	}
 
 	/**
@@ -159,14 +166,12 @@ export function useProfileBootstrap() {
 		// and updates (rename).
 		appStore.profiles = await managers.profile.getProfiles()
 
-		await core
+		await core.promise
 
-		// The lock must win: if the active session was cleared or switched while
-		// this bootstrap awaited (e.g. a lock fired right after a password change),
-		// do NOT flip isLogined back on. getActiveProfile() runs under the same
-		// profile-service runExclusive mutex as lockActiveProfile(), so this re-read
-		// observes the completed lock rather than the stale pre-lock session.
-		const stillActive = (await managers.profile.getActiveProfile())?.id === profile.id
+		// The lock must win. The re-read sees a lock that completed before it ran; the fence covers
+		// the one that ran right after it: the service mutex orders the calls, not when the popup
+		// receives their results, so its "active" can arrive after the lock event sealed the popup.
+		const stillActive = (await managers.profile.getActiveProfile())?.id === profile.id && core.isCurrent()
 		if (stillActive) {
 			// Unlocking the same profile changes no profile id, so nothing else
 			// re-reads the in-flight rows the lock emptied.
@@ -192,18 +197,21 @@ export function useProfileBootstrap() {
 		appStore.profile = activeProfile
 		// Join the in-flight event-driven bootstrap for this profile instead
 		// of racing a second network/account init that replaces its clients.
-		await runBootstrapCore(activeProfile.id)
+		const core = runBootstrapCore(activeProfile.id)
+		await core.promise
 
 		// Same lock-wins guard as bootstrapActiveProfile: don't flip isLogined if the
 		// session was cleared/switched mid-hydrate. isSessionChecked is set either way
 		// (the session WAS checked); a stale isLogined=true is the only harmful write.
-		if ((await managers.profile.getActiveProfile())?.id === activeProfile.id) {
+		const stillActive = (await managers.profile.getActiveProfile())?.id === activeProfile.id
+		const current = core.isCurrent()
+		if (current && stillActive) {
 			void appStore.refreshInFlight({ invalidate: true })
 			appStore.isLogined = true
 		}
 		appStore.isSessionChecked = true
 
-		return activeProfile
+		return current ? activeProfile : null
 	}
 
 	return { bootstrapActiveProfile, hydrateKnownProfile, initNetworks, initAccount }

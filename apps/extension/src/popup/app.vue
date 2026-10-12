@@ -27,7 +27,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
-import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
 
 /** Store */
@@ -179,6 +179,7 @@ const lockedState = createLockedState({
 	closePopups: () => popupStore.closeAll(),
 	onLocked,
 	markLocked: () => {
+		supersedeProfileActivations()
 		appStore.isLogined = false
 	},
 	clearActivity: () => appStore.clearActivity(),
