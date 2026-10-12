@@ -102,13 +102,13 @@ const pins = usePinnedTokens({
 })
 void pins.refresh()
 
+const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
+const aggregateDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
+
 const openAddToken = (address: string) => {
 	cacheStore.preselectedTokenAddressToAdd = address
 	popupStore.open("new_token")
 }
-
-const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
-const aggregateDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 
 watch(
 	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],

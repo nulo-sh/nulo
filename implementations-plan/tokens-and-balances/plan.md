@@ -920,6 +920,25 @@ a successor that loses its ticket while draining.
 |---|---|---|---|
 | 1 | Low | R5, § Security and § UI impact still state the pre-D-arc1-3 rule, and the deletion's doc comment says "released, it refuses" without saying before what | Accepted: the exemption is written into R5, § Security and § UI impact ("issued before", not "landed before"); the comment says "released before it issues the remove" |
 
+### Arc 2 implementation, Codex round 1 (gpt-6.1-sol, high, default login), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Medium | The network test's in-test PASTE import mutates the file-scoped wallet; a retry after it (nightly runs config-default retries) fails the first test's count and order assertions | Accepted with another fix: the paste-to-add and refusal steps moved into a second test that deploys a fresh contract on every attempt, so each test is retry-safe and the first keeps its fixture's contract; no retry pin |
+| 2 | Low | `waitForNewTokenAddress` reaches the native field through `querySelector("input")`, against the testid-only rule | Accepted: the popup's Input gets `inputTestid="token-address-field"`; the helper reads it by testid |
+| 3 | Nit | Step-narrating comments in the network test and its header | Accepted: the steps live in their own named test; the header says only why the second test is separate; the toast comment (a timing constraint) stays |
+
+### Arc 2 implementation, Opus 5.5 review (general-purpose), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | The row is offered for any curve point, so an account or a contract on another network reaches "Try again", which cannot succeed; the copy is approved | Accepted as an owner question: OA-5 (what ships now: the generic line); the PR body names it |
+| 2 | Nit | `{ reason: err }` where the logging policy's example and other popup catches use `{ error }` | Rejected with reason: D-orch-7 names `reason`; `trim` projects an Error under any key, and Codex r1 found the key compliant |
+| 3 | Nit | `openAddToken` sits before the reactive state in `holdings.vue` | Accepted: moved below `aggregateDisplay` |
+| 4 | Nit | No test pins that a listed row behind the fold suppresses the add row; split the refused classes | Accepted: one test per refused class (off-curve, a visible row in another case, an empty row behind the fold) |
+| 5 | Nit | The two `test.each` cases in `NewTokenPopup.test.ts` run one path | Rejected with reason: each pins one approved record (P8-02's store refusal, OA-2's other errors), so a later split of the `catch` cannot drop either silently |
+| 6 | Nit | A helper's doc comment restates its name | Accepted: removed (and `clickNewTokenSubmit`'s) |
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no

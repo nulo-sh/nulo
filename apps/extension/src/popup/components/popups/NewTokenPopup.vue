@@ -309,6 +309,7 @@ usePopupEntity(
 			label="Contract address"
 			placeholder="0x"
 			data-testid="token-address-input"
+			inputTestid="token-address-field"
 			autofocus
 			sanitize
 			:disabled="isBusy"

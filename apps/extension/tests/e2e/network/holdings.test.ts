@@ -3,9 +3,8 @@
  * on every row, search by symbol (hit and miss), the sort toggle, and the fold hiding an empty
  * token. Two deployed tokens join the fixture's TST: ZED (funded above TST) and EMPTY (never
  * minted, so its projected balance is a genuine 0). Each import is waited for with the fixture's
- * freshness-gated row check, so the assertions never race the balance projector. A third token,
- * PASTE, is deployed by the test itself and added by pasting its address into the search; an
- * address that holds no contract is pasted last and its refused add reads the generic line.
+ * freshness-gated row check, so the assertions never race the balance projector. The second test
+ * adds tokens of its own, so it runs after the first and deploys a fresh contract on every attempt.
  */
 
 import { expect, inject } from "vitest"
@@ -100,12 +99,23 @@ test.skipIf(!hasConfig)(
 		})
 		expect((await listedSymbols(page)).slice(0, 2)).toEqual(["TST", "ZED"])
 
-		// ── Paste to add: a deployed token the wallet does not list yet is offered from the search,
-		// added through the New token popup the offer opens, and listed.
+		expect(tokenReadyExtension.consoleErrors).toEqual([])
+		expect(tokenReadyExtension.pageErrors).toEqual([])
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"holdings: a pasted contract address adds its token; one with no contract reads the generic line",
+	{ timeout: 420_000 },
+	async ({ tokenReadyExtension }) => {
 		const { deployExtraTokensForAccount } = await import("../fixtures/aztec")
 		const { PASTE: pasted } = await deployExtraTokensForAccount(aztecConfig as AztecTestConfig, tokenReadyExtension.accountAddress, [
 			{ symbol: "PASTE", amount: 7n * ONE },
 		])
+		const page = await openPopup(tokenReadyExtension)
+		await waitForHash(page, "#/popup/general")
+		await openHoldings(page)
+
 		await replaceInputValue(page, '[data-testid="holdings-search"]', pasted)
 		await clickByTestId(page, "holdings-add-token")
 		await waitForNewTokenAddress(page, pasted)
@@ -114,12 +124,9 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 30_000,
 		})
-
-		// The add's success toast closes itself after six seconds; it would sit over the next popup.
+		// A success toast closes itself after six seconds; it would sit over the next popup's field.
 		await waitForToastGone(page, "Token added", 10_000)
 
-		// ── A refused add: an address that holds no contract reads the generic line under Submit, so
-		// the node's own refusal, carried back over the wallet's RPC, never reaches the person.
 		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)
 		await clickByTestId(page, "holdings-add-token")
 		await waitForNewTokenAddress(page, NO_CONTRACT)
