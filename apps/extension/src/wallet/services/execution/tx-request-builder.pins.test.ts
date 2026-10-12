@@ -23,6 +23,8 @@ const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 
 const ACCOUNT_ADDR = AztecAddress.fromBigIntUnsafe(0xacc7n)
 const CONTRACT = AztecAddress.fromBigIntUnsafe(0xc0den).toString()
+const CLASS_ID = Fr.fromString("0xc1a55")
+const UPGRADED_CLASS_ID = Fr.fromString("0xc1a56")
 // chainId must equal (l1ChainId ^ rollupVersion) >>> 0 for the drift assert.
 const NODE_INFO = { l1ChainId: 0, rollupVersion: 31337, txsLimits: { gas: { daGas: 111n, l2Gas: 222n } } }
 const NETWORK = {
@@ -43,6 +45,7 @@ const FN = {
 	isStatic: false,
 	returnType: { kind: "boolean" },
 }
+const PUBLIC_FN = { ...FN, name: "mint_to_public", functionType: FunctionType.PUBLIC }
 
 type Harness = ReturnType<typeof makeHarness>
 function makeHarness() {
@@ -66,8 +69,15 @@ function makeHarness() {
 			return { fake: "txRequest" }
 		}),
 	}
-	const instance = { currentContractClassId: { toString: () => "0xclass1" } }
-	const artifact = { functions: [FN], nonDispatchPublicFunctions: [] }
+	const instance = { currentContractClassId: CLASS_ID }
+	const artifact = { functions: [FN, PUBLIC_FN], nonDispatchPublicFunctions: [] }
+	const node = {
+		getNodeInfo: vi.fn(async () => {
+			calls.push("getNodeInfo")
+			return NODE_INFO
+		}),
+		getContract: vi.fn(async (): Promise<unknown> => ({ currentContractClassId: UPGRADED_CLASS_ID })),
+	}
 	const deps = {
 		pxeService: { getPXE: vi.fn(() => ({ fake: "pxe" })) },
 		profileService: {
@@ -80,12 +90,7 @@ function makeHarness() {
 				calls.push("getNetwork")
 				return NETWORK
 			}),
-			getNode: vi.fn(async () => ({
-				getNodeInfo: vi.fn(async () => {
-					calls.push("getNodeInfo")
-					return NODE_INFO
-				}),
-			})),
+			getNode: vi.fn(async () => node),
 		},
 		accountService: { getAccountContract: vi.fn(async () => account) },
 		authRegistryService: {
@@ -102,7 +107,7 @@ function makeHarness() {
 				calls.push("resolveInstances")
 				return new Map([[CONTRACT, instance]])
 			}),
-			resolveArtifacts: vi.fn(async () => new Map([["0xclass1", artifact]])),
+			resolveArtifacts: vi.fn(async () => new Map([[CLASS_ID.toString(), artifact]])),
 			ensureContractsRegistered: vi.fn(async () => undefined),
 		},
 		authwit: {
@@ -123,7 +128,7 @@ function makeHarness() {
 		deps.authwit as never,
 		deps.logger as never,
 	)
-	return { builder, deps, account, calls, buildArgs, flags }
+	return { builder, deps, account, node, calls, buildArgs, flags }
 }
 
 function build(h: Harness, actions: unknown[], gasSettings?: unknown) {
@@ -312,7 +317,21 @@ describe("buildStandard pins", () => {
 		)
 		await expect(build(h, [{ kind: "call", contract: CONTRACT, method: "nope", args: [] }])).rejects.toThrowError("Method not found")
 		const result = await build(h, [{ kind: "call", contract: CONTRACT, method: "transfer", args: [] }])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [], classId: "0xclass1" }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [], classId: CLASS_ID.toString() }])
+		// A private call's target is never named to the node: the kernel checks its class.
+		expect(h.node.getContract).not.toHaveBeenCalled()
+	})
+
+	test("a public call records the class the node reports, not the PXE's; a failed lookup records none and the build completes", async () => {
+		const action = { kind: "call", contract: CONTRACT, method: PUBLIC_FN.name, args: [] }
+		const result = await build(h, [action])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: PUBLIC_FN.name, args: [], classId: UPGRADED_CLASS_ID.toString() }])
+		expect(h.node.getContract).toHaveBeenCalledWith(AztecAddress.fromStringUnsafe(CONTRACT))
+
+		h.node.getContract.mockRejectedValueOnce(new Error("node down"))
+		const unread = await build(h, [action])
+		expect(unread.txCalls).toEqual([{ contract: CONTRACT, method: PUBLIC_FN.name, args: [], classId: undefined }])
+		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(2)
 	})
 
 	test("encoded_call resolves by selector from ABI truth; a mismatched dApp name is a scope violation", async () => {
@@ -323,7 +342,7 @@ describe("buildStandard pins", () => {
 		// Every execution field the dApp supplies lies, a stale `returnTypes` included; the call carries the ABI's.
 		const lies = { type: FunctionType.PUBLIC, isStatic: true, returnType: { kind: "field" }, returnTypes: [{ kind: "field" }] }
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: ["0x02"], name: FN.name, ...lies }])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: ["0x02"], classId: "0xclass1" }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: ["0x02"], classId: CLASS_ID.toString() }])
 		const payload = (h.buildArgs[0] as unknown[])[2] as { calls: FunctionCall[] }
 		expect(payload.calls[0]).toMatchObject({ name: FN.name, type: FN.functionType, isStatic: FN.isStatic, returnType: FN.returnType })
 		expect(payload.calls[0].args.map((a) => a.toBigInt())).toEqual([2n])
@@ -451,7 +470,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 	test("NO_FROM: a call whose selector is a public function is refused before any fee read; a private one builds", async () => {
 		const PUBLIC_FN = { ...FN, name: "transfer_public_to_public", functionType: FunctionType.PUBLIC }
 		const artifact = { functions: [FN], nonDispatchPublicFunctions: [PUBLIC_FN] }
-		h.deps.resolver.resolveArtifacts.mockResolvedValue(new Map([["0xclass1", artifact]]) as never)
+		h.deps.resolver.resolveArtifacts.mockResolvedValue(new Map([[CLASS_ID.toString(), artifact]]) as never)
 		const getCurrentMinFees = noFromHarness()
 		const publicSelector = (await FunctionSelector.fromNameAndParameters(PUBLIC_FN.name, PUBLIC_FN.parameters)).toString()
 
@@ -492,7 +511,7 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const selector = await selectorOf()
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [] }])
 		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(1)
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [], classId: "0xclass1" }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [], classId: CLASS_ID.toString() }])
 	})
 })
 

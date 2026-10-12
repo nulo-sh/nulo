@@ -58,7 +58,7 @@ vi.mock("./default-tokens", () => {
 
 const NETWORK = { id: "net1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
 const CONTRACT = AztecAddress.fromNumberUnsafe(0x1234).toString()
-const CLASS_ID = "0xc1a55"
+const CLASS_ID = `0x${"c1a55".padStart(64, "0")}`
 
 /** Hardcoded fake instance — deriving a real one needs the bb WASM (not loaded in vitest). */
 function fakeTokenInstance(): ContractInstanceWithAddress {

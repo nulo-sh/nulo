@@ -42,7 +42,14 @@
  */
 
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
-import { encodeArguments, FunctionCall, FunctionSelector, FunctionType, getFunctionReturnType } from "@aztec-labs/stdlib/abi"
+import {
+	encodeArguments,
+	type FunctionAbi,
+	FunctionCall,
+	FunctionSelector,
+	FunctionType,
+	getFunctionReturnType,
+} from "@aztec-labs/stdlib/abi"
 import { AuthWitness } from "@aztec-labs/stdlib/auth-witness"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { Gas, GasSettings } from "@aztec-labs/stdlib/gas"
@@ -198,7 +205,7 @@ export class TxRequestBuilder {
 							contract: action.contract,
 							method: action.method,
 							args: action.args,
-							classId: resolvedClassId(instances, action.contract),
+							classId: await calledClassId(ctx, action.contract, fn),
 						})
 						this.log("Call enqueued.")
 						break
@@ -211,7 +218,7 @@ export class TxRequestBuilder {
 							contract: action.to,
 							method: fn.name,
 							args: action.args,
-							classId: resolvedClassId(instances, action.to),
+							classId: await calledClassId(ctx, action.to, fn),
 						})
 						this.log("EncodedCall enqueued.")
 						break
@@ -565,9 +572,19 @@ async function buildSetAuthorizedCall(messageHash: Fr): Promise<{ functionCall: 
 	}
 }
 
-/** Recorded on the call's history row: a mint figure reads only when it equals the token's pin. */
-function resolvedClassId(instances: ResolvedInstances, contract: string): string | undefined {
-	return instances.get(contract)?.currentContractClassId.toString()
+/**
+ * The class a call runs under, as the build can tell. The PXE resolves a registered contract to its
+ * original class, which the kernel refuses for a private call once the class registry holds another;
+ * a public call runs the class the chain holds when it executes, which only the node reports. A
+ * failed lookup records none: the class is shown nowhere, it only keeps a mint figure from reading.
+ */
+async function calledClassId(ctx: BuildContext, contract: string, fn: FunctionAbi): Promise<string | undefined> {
+	if (fn.functionType !== FunctionType.PUBLIC) return ctx.instances.get(contract)?.currentContractClassId.toString()
+	try {
+		return (await ctx.node.getContract(AztecAddress.fromStringUnsafe(contract)))?.currentContractClassId.toString()
+	} catch {
+		return undefined
+	}
 }
 
 function resolveCallFn(action: Extract<Action, { kind: "call" }>, instances: ResolvedInstances, artifacts: ResolvedArtifacts) {

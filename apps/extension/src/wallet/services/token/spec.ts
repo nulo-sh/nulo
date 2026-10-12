@@ -66,8 +66,8 @@ export type TokenInfo = {
 	/** Token contract address. */
 	contract: string
 	/**
-	 * The class the contract ran when the token was added: trust on first use, and from a restored
-	 * backup unauthenticated and unchecked, so a reader compares it only as a field element.
+	 * The class the wallet resolved when the token was added: trust on first use, unauthenticated
+	 * when restored, so a reader compares it only as a field element.
 	 */
 	classId?: string
 	/** Token name. */
@@ -97,7 +97,7 @@ export type TokenInterface = {
 	chainId: number
 	/** Contract address. */
 	contract: string
-	/** The fetched instance's current class; a pinned parse refuses any other. */
+	/** The contract's original class, as the parse resolved it; a pinned parse refuses any other. */
 	classId: string
 
 	/** Function to get token name. */

@@ -156,7 +156,7 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 
 	test("the row keeps the parsed class, and the add's result and every read project it", async () => {
 		const { tokenService } = await makeHarness()
-		const classId = `0x${"c1".repeat(32)}`
+		const classId = `0x${"c1a55".padStart(64, "0")}`
 
 		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", { ...ti("0xc0ffee"), classId }, { origin: "popup" })
 
