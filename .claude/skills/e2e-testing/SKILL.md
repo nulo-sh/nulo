@@ -163,8 +163,10 @@ runtime env var can never arm a build-time flag.
   it in `DECLARED_REFUSALS` with why; a browser's own host goes, by exact name, in its driver's
   `ownHosts`. Setup refuses an unarmed dist outside artifact runs, and artifact runs stay unguarded.
   The Testnet node is answered by a loopback stand-in with a terminal 400 (`fixtures/node-stub.ts`);
-  a smoke spec that needs a value only a node gives seeds it (`helpers/fpc-seeds.ts`), and one that
-  proves the offline case arms its own `interceptRpc` refusal, which replaces the stand-in.
+  a smoke spec that needs a value only a node gives seeds it (`helpers/fpc-seeds.ts`) and holds the
+  node itself from before the profile exists, since an artifact run has no stand-in and the wallet
+  writes beside the seed (`send-keyboard.test.ts`'s fee picker; ledger row 53). One that proves the
+  offline case arms its own `interceptRpc` refusal, which replaces the stand-in.
 - A file that depends on the PROVERLESS build carries the `@requires-proverless` marker (the only
   marker `agent.sh` scans) AND a `beforeAll` that greps the loaded bundle for the stamp
   (`account-switch-isolation.test.ts` is the idiom) — the belt for direct vitest invocations. Other
@@ -185,7 +187,7 @@ runtime env var can never arm a build-time flag.
 | `NULO_E2E_PROVERLESS=1` | `agent.sh` arms the proverless build pair |
 | `NULO_E2E_MIGRATION_FIXTURE=1` | runtime declaration that the dist carries the migration fixture |
 | `NULO_E2E_CSP_REPORT=1` | runtime declaration that the dist carries the CSP violation recorder: every launch's `close` fails on a missing record or any entry (README § CSP violations) |
-| `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): blocks the price host, skips the encrypted `backup-roundtrip` spec; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
+| `NULO_E2E_ARTIFACT_RUN=1` | smoke against a built artifact (release/nightly): blocks the price host, skips the encrypted `backup-roundtrip` spec, arms no egress guard and no node stand-in, so the live Testnet node answers every spec; set for BOTH artifact paths, never keyed on bare `EXTENSION_PATH` |
 | `EXTENSION_PATH` | smoke: load this unpacked dir instead of `dist/chrome` |
 | `NULO_E2E_DATA_ROOT` | sandbox data-dir root (default `~/.cache/nulo-e2e`) |
 | `NULO_E2E_STAGE_LOG=1` (+`_OUT`) | append per-import stage-trajectory records (`helpers/import-stage-timing.ts`) |
@@ -693,6 +695,12 @@ NULO_E2E_RETRY=0 NULO_E2E_PROVERLESS=1 taskset -c 0,1 bun run e2e:agent tests/e2
 NULO_E2E_RETRY=0 taskset -c 0,1 bun run e2e:agent tests/e2e/network/frozen-account-canary.test.ts   # prover-ON
 ```
 
+A release-shaped smoke, as the nightly's and release's `smoke-against-artifact` run it: build with
+no `VITE_*` variable set and no `.env*` file (`_build-extension.yml` refuses the e2e and key flags),
+copy `dist/<browser>` out to a path that prefixes no other run's `EXTENSION_PATH` (the smoke
+teardown's `pkill` matches by prefix), then run with `NULO_E2E_ARTIFACT_RUN=1 EXTENSION_PATH=<copy>`
+and without `NULO_E2E_MIGRATION_FIXTURE` or `NULO_E2E_CSP_REPORT`.
+
 Two cores is the amplifier: races that live in a 100ms window on a workstation widen to seconds. Run
 the loop alone on the host, freeze the tree between rounds, and validate the fix under the SAME
 amplifier (three rounds green is the bar this repo has used; `implementations-plan/archive/e2e-flake-fixes/`
@@ -816,6 +824,7 @@ the sanctioned response.
 | 50 | `TimeoutError: Waiting failed: 2000ms exceeded` waiting for `tokens-menu-import` in `importToken` (`fixtures/helpers.ts`), `network/import-handshake-note-matrix` on Firefox at retry 0, after `switchToLocalNetwork` (#274) | the helper clicked the tokens trigger with `querySelector(...)?.click()`, which does nothing while Home is still mounting (6 of 6 in a probe: a hash change to Home, then the click), then waited 2 s for the item. `DropdownRoot` toggles on every click, so a blind second click closes an open menu | `openDropdown` (`fixtures/helpers.ts`): `prepareClick`, one page-side read-and-click of the last visible trigger that clicks only a closed menu, then a wait on `data-dropdown-open`, each stage naming the page's state on a timeout; `importToken`, `refreshBalances` and `setTheme` open through it. `navigation.test.ts` releases the navigation to Home on the opener's own first look: red with the old click, green with the opener on both browsers. Rule: wait for a trigger before clicking it, and gate a toggle on its own state, never on a second click | fixed, `e2e-followups` |
 | 51 | `TypeError: error loading dynamically imported module: …/assets/auth-*.js` or `Error: Unable to preload CSS for …/assets/auth-*.css` in `ctx2.pageErrors` (`network/account-balance-orphans`, Firefox, retry 0) | `waitForLockScreen` reloaded the popup when the session record cleared before the hash reached `/popup/auth`; the reload departs a document still loading the auth route, and Firefox rejects its in-flight import (or the CSS preload before it) from that document, which the relay records. Reproduced exactly at 1 reload in 8; Chrome recorded nothing for a cut import | the helper observes the popup's own redirect within its 15 s and never reloads | fixed, `e2e-followups-3` |
 | 52 | `JavaScript error: undefined, line 0: Error: Invalid window ID: N` on Firefox's stderr after an approval window answers (`cap-request-reject`, `connect-*`, `snack-placement`, `sim-from-selfpay`) | product: `closeCurrentWindow` removes its window with no handler, 0-2 ms after `WindowManager._settle` (handled) removed it; the loser rejects. It carries no window, so no array records it | none in the harness: the product fix is #312 | **open** — a stderr line alone is this known diagnostic; a recorded entry or a failed assertion beside it still fails |
+| 53 | `the focused row send-fee-method-sponsored: expected '<8 hex>' to be 'e2e-protocol-fpc-1'` in `send-keyboard.test.ts`'s fee-picker test, the artifact smokes only (nightly 38130969762, Chrome; the same test passed on Firefox there) | an artifact run holds no node stand-in, so the live Testnet node lets the wallet's protocol-FPC discovery, started by Home's gas read once the profile exists, store a second Nulo sponsor beside the seeded one; the menu lists the two by id byte order and a random id before `e2e-` takes the first ArrowDown. Reproduced locally at retry 0 on two cores: 18 of 21 on the release build and 16 of 21 on the armed build in artifact mode, once on Firefox, 0 of 21 guarded | the spec redirects the Testnet origin to a 400 stub (`startNodeStub` + `interceptRpc`) on a fresh launch before `registerProfile`, and asserts the seeded rows are the only FPC rows before the seed and after the picks (`fpcRowIds`); afterwards 63 of 63 Chrome runs and both Firefox runs green across both builds and both modes. Rule: a smoke spec that seeds what a node gives holds the node itself from before the profile exists (`implementations-plan/archive/e2e-followups-4/`) | fixed, `e2e-followups-4` |
 
 ## 6. Editing the harness
 
