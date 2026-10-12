@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-5
 tier: light
-status: closed, awaiting archive
+status: completed (delivered in #314)
 issues: "#312, #302 (arc 1); #308, #310, #294, #290, #281, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
