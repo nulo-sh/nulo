@@ -203,7 +203,7 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test` (it runs `apps/extension/scripts/e2e/*.test.ts`, the harness seam checks); `bun run test:all`; `bun run test:ci-gating`; then from `apps/extension`, C2's environment with `taskset -c 0,1 bun run test:e2e -- tests/e2e/send-keyboard.test.ts --retry=0`. Pass: every command exits 0; the file shows 5 passed; N1's and N2's reds, each at its intended line, are logged in `lessons/phase-2.md`. Layers: lint, typecheck, unit, smoke e2e.
 
-### Phase 3: prove
+### Phase 3: prove ✓
 
 1. Reuse Phase 1's four build dirs. Rebuild them only if a merge from `origin/dev` changed a file outside `apps/extension/tests/`.
 2. Run C1, C2 and C3 (one file run plus 20) and F1 and F2 once each, as in Phase 1, with no probe.
@@ -212,7 +212,7 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 
 **Validation gate.** Pass: all 63 Chrome slots and both Firefox runs green on their first attempt, with no replaced attempt; the whole artifact suite green on its first run. Any red fails the gate; a rerun never turns it green. For a red in a file this lane does not touch, rerun that file once at retry 0 only to classify it, record both runs, file or extend the issue (deduped), and report the gate as failed to the orchestrator, who decides. The arc does not deliver on a failed gate. Layers: smoke e2e, both browsers, both run modes, the whole suite once.
 
-### Phase 4: docs and issues
+### Phase 4: docs and issues ✓
 
 1. Update the e2e-testing skill as the change map says.
 2. File the `addFpc` duplicate-sponsor issue (dedupe first: `gh issue list --repo nulo-sh/nulo --state all --search "fpc sponsor duplicate"`), and any neighbour issue Phase 1 or 3 gave evidence for.

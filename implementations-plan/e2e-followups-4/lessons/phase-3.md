@@ -14,6 +14,17 @@ Phase 1's four build dirs, reused: `origin/dev` had not moved (`6488b1b`), and t
 
 Before the fix the same cells read C1 18 of 21 red, C3 16 of 21, F1 red (`lessons/phase-1.md`). Each slot-0 whole-file run passed all five tests.
 
+## Whole smoke suite on C1 (release build, artifact mode, Chrome)
+
+- `bun run test:e2e -- --retry=0` in C1's environment, 00:53 to 01:17 UTC, one run, load 69.5 at start: **47 files passed, 5 skipped; 200 tests passed, 22 skipped, 0 failed** (exit 0). No neighbour red; the `priced` tests and `send-fee-privacy.test.ts` passed.
+- The nightly's sample of the same suite read 198 passed, 1 failed, 23 skipped.
+
+## Gate
+
+Pass: all 63 Chrome slots and both Firefox runs green on their first attempt, no replaced attempt; the whole artifact suite green on its first run.
+
+After the quality loop's one code edit (the helper's key prefix from `FPC_STORAGE_ROOT`, the same string), the file ran once more on C2 and on C1: 5 passed each.
+
 ### Per attempt
 
 | cell | slot | att | rc | tests | load |

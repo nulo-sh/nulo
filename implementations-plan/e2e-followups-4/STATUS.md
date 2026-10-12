@@ -10,3 +10,6 @@
 - 2026-10-12 — phase 0 gate: pass (ancestry 0, #308 OPEN, Testnet aztec_getNodeInfo HTTP 200 with result); implementing arc 1.
 - 2026-10-12 — phase 1 gate: pass. C1 18/21 red, C3 16/21 red, C2 0/21, F1 red, F2 green; all 35 reds reproduced as defined; rule 1 (F1) → Codex: same cause, Fix A; probe reverted (diff exit 0).
 - 2026-10-12 — phase 2 gate: pass (lint, typecheck:all, test, test:all, test:ci-gating all 0; C2 file 5/5; N1 red at :36, N2 red at :173, both reverted).
+- 2026-10-12 — phase 3 gate: pass (C1, C2, C3 21/21 each, F1 and F2 green, no replaced attempt; whole artifact suite on C1 200 passed, 22 skipped, 0 failed).
+- 2026-10-12 — quality loop: Codex round 1 three doc nits (accepted), Opus one material (check:plans path-token, accepted) and nits; Codex round 2 clean.
+- 2026-10-12 — phase 4 gate: pass (lint 0, check:plans 0 findings; #316 and #317 filed, deduped).
