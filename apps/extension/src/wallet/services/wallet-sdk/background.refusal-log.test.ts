@@ -116,7 +116,7 @@ const NOT_JOURNALED: Refusal[] = [
 	[
 		"grantPublicAuthwit, the call",
 		"grantPublicAuthwit",
-		[opts.from, { caller: "SENTINEL-CALLER", contract: "SENTINEL-CONTRACT", method: "SENTINEL-METHOD", args: ["SENTINEL-ARG"] }],
+		[opts.from, { caller: sentinel(14), contract: sentinel(15), method: "SENTINEL-METHOD", args: ["SENTINEL-ARG"] }],
 		[tx(listed(A))],
 		"Scope violation: grantPublicAuthwit call not permitted by granted transaction scope",
 	],
