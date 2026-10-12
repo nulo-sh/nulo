@@ -70,14 +70,14 @@ interface IncomingMessage {
 const COMMITTED = "browsingContext.navigationCommitted"
 
 /**
- * The frames Puppeteer is handed for one frame from Firefox: none for a real destroy arriving after
- * ours, and after an add-on page's commit in a top-level context, a `historyUpdated` carrying its URL.
- * Firefox sends no `domContentLoaded` or `load` for an add-on page, and Puppeteer takes a page's URL
- * only from those or from a history change, so a window whose own script never writes its history (a
- * page that failed to load its modules) would stay `about:blank` in `targets()` for good.
+ * The messages Puppeteer is handed for one message from Firefox: none for a real destroy arriving
+ * after ours, and after an add-on page's commit in a top-level context, a `historyUpdated` carrying
+ * its URL. Firefox sends no `domContentLoaded` or `load` for an add-on page, and Puppeteer takes a
+ * page's URL only from those or from a history change, so a window whose own script never writes its
+ * history (a page that failed to load its modules) would stay `about:blank` in `targets()` for good.
  */
 export function trackContexts(raw: string, open: Set<string>, closed: Set<string>): string[] {
-	// Cheap pre-filter: this runs on every frame, and almost none mention a context tree or a commit.
+	// Cheap pre-filter: this runs on every message, and almost none mention a context tree or a commit.
 	if (!raw.includes("browsingContext.context") && !raw.includes(COMMITTED) && !raw.includes('"contexts"')) return [raw]
 	const message = JSON.parse(raw) as IncomingMessage
 	for (const info of message.result?.contexts ?? []) open.add(info.context)

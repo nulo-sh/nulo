@@ -8,7 +8,7 @@ import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
-import { armPageErrorRelay, checkPageErrorRelay, recentExceptions } from "./firefox-page-errors"
+import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
 import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
@@ -150,7 +150,10 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 					stopWatching()
 					let relay: string | undefined
 					try {
-						relay = await checkPageErrorRelay(session)
+						const report = await checkPageErrorRelay(session)
+						relay = report.verdict
+						if (report.exceptions.length > 0)
+							console.warn(`[firefox] the add-on's latest exceptions: ${report.exceptions.join("; ")}`)
 						// Disconnect first: the BiDi transport is a client of a session the classic channel
 						// owns, and ending the session under it produces a socket error on the way out.
 						await browser.disconnect().catch(() => {})
@@ -659,27 +662,26 @@ export async function withInventory(failure: string, read: () => Promise<string>
 }
 
 /**
- * Firefox's own windows beside what Puppeteer was told, read after a failed wait. A window Firefox
- * has that Puppeteer never listed, one Puppeteer lists on another URL, one the watch reported closed,
- * and an exception a window raised each point at a different cause. Reading a window's URL over classic
- * switches to it, which is why this runs only once the wait has failed.
+ * Firefox's own windows beside what Puppeteer was told, read after a failed wait: a window BiDi
+ * never announced, a page on the wrong URL and a window the watch reported closed each point at a
+ * different cause. A caller may let a wait expire as an expected outcome and keep driving the
+ * browser, so this switches no window and runs nothing privileged, either of which moves focus; the
+ * add-on's exceptions are reported at the launch's close instead.
  */
 async function windowInventory(browser: Browser): Promise<string> {
 	const { session, attachment, reportedClosed } = contextFor(browser)
 	const now = Date.now()
-	const windows = (await session.windowsWithUrls()).map((window) => `${window.handle} ${window.url}`)
+	const windows = await session.listWindows()
 	const pages = browser
 		.targets()
 		.filter((target) => target.type() === "page")
 		.map((target) => target.url())
 	const closed = reportedClosed.map((close) => `${close.context} ${now - close.at}ms ago`)
-	const exceptions = await recentExceptions(session)
 	return [
 		`Firefox's windows: ${listed(windows)}`,
 		`BiDi's open contexts: ${listed(attachment.openContexts())}`,
 		`Puppeteer's pages: ${listed(pages)}`,
 		`reported closed by the watch: ${listed(closed)}`,
-		`recent add-on exceptions: ${listed(exceptions)}`,
 	].join("; ")
 }
 

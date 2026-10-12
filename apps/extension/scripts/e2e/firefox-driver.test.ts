@@ -13,7 +13,14 @@ import {
 	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
 import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
-import { RELAY_HELPERS, checkPageErrorRelay, errorFrames, kindOf, relayVerdict } from "../../tests/e2e/fixtures/browser/firefox-page-errors"
+import {
+	RELAY_HELPERS,
+	checkPageErrorRelay,
+	errorFrames,
+	kindOf,
+	recentExceptions,
+	relayVerdict,
+} from "../../tests/e2e/fixtures/browser/firefox-page-errors"
 import type { WebDriverSession } from "../../tests/e2e/fixtures/browser/webdriver-classic"
 
 /** The PXE host is placed where Firefox's timer throttling cannot reach it; the suite must run under
@@ -173,7 +180,8 @@ describe("silent window closes", () => {
 	})
 })
 
-/** Firefox sends no `domContentLoaded` or `load` for an add-on page, so its commit is the only report of its URL. */
+/** Firefox sends an add-on page no `domContentLoaded` or `load`, so its commit supplies its URL when
+ *  its own script writes no history. */
 describe("an add-on page's URL in targets()", () => {
 	const event = (method: string, params: Record<string, unknown>) => JSON.stringify({ type: "event", method, params })
 	const created = (context: string, parent: string | null = null) =>
@@ -244,6 +252,18 @@ describe("a page error's location", () => {
 		const saved = [{ filename: "moz-extension://5c9e/assets/popup.js", functionName: "mount", lineNumber: 18, columnNumber: 3 }]
 		expect(errorFrames(saved, reported)).toBe(saved)
 		expect(errorFrames([], { sourceName: "", lineNumber: 0, columnNumber: 0 })).toEqual([])
+	})
+
+	test("the close reports each recent exception with its context and first frame, 1-based as Firefox prints a stack", () => {
+		const frame = { url: reported.sourceName, functionName: "", lineNumber: 4, columnNumber: 811 }
+		const recent = [
+			{ context: "w1", text: "InternalError: too much recursion", frame },
+			{ context: null, text: "TypeError: x is undefined", frame: null },
+		]
+		expect(recentExceptions({ state: JSON.stringify({ recent }), live: [] })).toEqual([
+			`w1: InternalError: too much recursion at ${reported.sourceName}:5:812`,
+			"no context: TypeError: x is undefined",
+		])
 	})
 })
 
@@ -493,7 +513,10 @@ describe("the page-error relay", () => {
 
 		test("fails, without rejecting, on a read that failed", async () => {
 			const session = { chromeScript: () => Promise.reject(new Error("no such window")) } as unknown as WebDriverSession
-			await expect(checkPageErrorRelay(session)).resolves.toBe("its state could not be read (no such window)")
+			await expect(checkPageErrorRelay(session)).resolves.toEqual({
+				verdict: "its state could not be read (no such window)",
+				exceptions: [],
+			})
 		})
 	})
 })
