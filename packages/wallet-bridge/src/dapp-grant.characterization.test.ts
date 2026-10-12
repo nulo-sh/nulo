@@ -209,6 +209,25 @@ describe("grant coverage agrees with enforcement", () => {
 		expect(await enforcement(grant, "registerContract", [wireInstance(TOKEN)])).toEqual(malformed("contracts"))
 	})
 
+	const classRefused = refused("Scope violation: getContractClassMetadata class not permitted by granted contractClasses scope")
+	test.each<[string, unknown, unknown, string, unknown]>([
+		["a listed class", [TOKEN_UP], [TOKEN], TOKEN, "allowed"],
+		["another class", [TOKEN], [OTHER], OTHER, classRefused],
+		["a held * for any class", "*", [OTHER], OTHER, "allowed"],
+		["a requested * under a held list", [TOKEN], "*", OTHER, classRefused],
+	])("contract classes, %s", async (_label, held, asked, classId, admits) => {
+		const grant = { type: "contractClasses", classes: held, canGetMetadata: true }
+		const covered = admits === "allowed" ? "covered" : "window"
+		expect(await coverage(grant, { type: "contractClasses", classes: asked, canGetMetadata: true })).toBe(covered)
+		expect(await enforcement(grant, "getContractClassMetadata", [classId])).toEqual(admits)
+	})
+
+	test("contract classes: a grant without the flag neither covers nor admits", async () => {
+		const grant = { type: "contractClasses", classes: [TOKEN], canGetMetadata: false }
+		expect(await coverage(grant, { type: "contractClasses", classes: [TOKEN], canGetMetadata: true })).toBe("window")
+		expect(await enforcement(grant, "getContractClassMetadata", [TOKEN])).toEqual(classRefused)
+	})
+
 	test("private events: a listing in another case covers and admits", async () => {
 		const grant = { type: "data", privateEvents: { contracts: [TOKEN_UP] } }
 		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toBe("covered")

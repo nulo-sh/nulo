@@ -7,6 +7,7 @@ import { formatCaipAccount, parseCaipAccount } from "./caip"
 import type {
 	AccountsCapability,
 	Capability,
+	ContractClassesCapability,
 	ContractsCapability,
 	DataCapability,
 	GrantedCapabilityRecord,
@@ -26,14 +27,31 @@ import { isRecord } from "@nulo/wallet-core/utils"
  *  contracts grants. NOT equality: shrinking requests must not re-prompt; growing ones must
  *  (the type-only delta silently stranded new addresses after redeploys). */
 function contractsRequestCovered(existing: ContractsCapability[], requested: ContractsCapability): boolean {
-	const flagCovered = (flag: "canRegister" | "canGetMetadata"): boolean => {
-		if (!requested[flag]) return true
-		if (requested.contracts === "*") return existing.some((e) => e[flag] && e.contracts === "*")
-		return requested.contracts.every((addr) =>
-			existing.some((e) => e[flag] && (e.contracts === "*" || e.contracts.some((x) => sameFieldAddress(String(x), String(addr))))),
+	const flagCovered = (flag: "canRegister" | "canGetMetadata"): boolean =>
+		!requested[flag] ||
+		listCovered(
+			requested.contracts,
+			existing.filter((e) => e[flag]).map((e) => e.contracts),
 		)
-	}
 	return flagCovered("canRegister") && flagCovered("canGetMetadata")
+}
+
+/** Per class, as enforcement reads it: a class is covered only by a held grant that lists it AND
+ *  holds `canGetMetadata`, so classes from one grant and the flag from another never cover. */
+function contractClassesRequestCovered(existing: ContractClassesCapability[], requested: ContractClassesCapability): boolean {
+	return (
+		!requested.canGetMetadata ||
+		listCovered(
+			requested.classes,
+			existing.filter((e) => e.canGetMetadata).map((e) => e.classes),
+		)
+	)
+}
+
+/** Every requested entry sits in one of `held`; a requested `*` only under a held `*`. */
+function listCovered(requested: "*" | readonly unknown[], held: ReadonlyArray<"*" | readonly unknown[]>): boolean {
+	if (requested === "*") return held.includes("*")
+	return requested.every((id) => held.some((list) => list === "*" || list.some((x) => sameFieldAddress(String(x), String(id)))))
 }
 
 /** Pattern-list coverage: every requested pattern is satisfied by ONE existing scope. Coverage
@@ -86,14 +104,9 @@ export function dataFieldsCovered(held: DataCapability[], requested: DataCapabil
 
 function privateEventsCovered(held: DataCapability[], requested: "*" | string[] | undefined): boolean {
 	if (!requested) return true
-	if (requested === "*") return held.some((h) => h.privateEvents?.contracts === "*")
-	return requested.every((addr) =>
-		held.some((h) => {
-			// An address-book-only grant legitimately has no list.
-			const list = h.privateEvents?.contracts
-			return list === "*" || (Array.isArray(list) && list.some((x) => sameFieldAddress(String(x), String(addr))))
-		}),
-	)
+	// An address-book-only grant legitimately has no list.
+	const lists = held.map((h) => h.privateEvents?.contracts).filter((list) => list === "*" || Array.isArray(list))
+	return listCovered(requested, lists)
 }
 
 function dataRequestCovered(existing: DataCapability[], requested: DataCapability): boolean {
@@ -342,10 +355,8 @@ export function computeCapabilityDelta(requestedCapabilities: Record<string, unk
 	const delta = requestedCapabilities.filter((cap) => {
 		const type = cap.type as string
 		if (!isKnownCapabilityType(type)) return rejectedTypes.has(type) || !grantedTypes.has(type)
-		// A declined widening left the held grant in force, so a request inside it needs no window;
-		// not for `contractClasses`, whose coverage is type-only.
-		if (type === "contractClasses" && rejectedTypes.has(type)) return true
-		return !isCapabilityCovered(cap as unknown as Capability, existingGrants, grantedTypes)
+		// A declined widening left the held grant in force, so a request inside it needs no window.
+		return !isCapabilityCovered(cap as unknown as Capability, existingGrants)
 	})
 	const existingCaps = existingGrants.filter((g) => !rejectedTypes.has(g.capability.type)).map((g) => g.capability)
 	return {
@@ -508,10 +519,10 @@ function collectNewGrants(
 }
 
 /** Whether the held grants of `cap`'s type already cover it, so no window opens. Field-aware for
- *  every type but `contractClasses`, whose coverage is type-only (pinned in dispatcher.test.ts).
- *  Exhaustive over `Capability["type"]`, so a new variant forces a coverage decision instead of
- *  defaulting to covered (fail-open) or not (a spurious window). */
-function isCapabilityCovered(cap: Capability, existingGrants: GrantedCapabilityRecord[], grantedTypes: Set<string>): boolean {
+ *  every type, each as its enforcement reads the grant. Exhaustive over `Capability["type"]`, so a
+ *  new variant forces a coverage decision instead of defaulting to covered (fail-open) or not (a
+ *  spurious window). */
+function isCapabilityCovered(cap: Capability, existingGrants: GrantedCapabilityRecord[]): boolean {
 	switch (cap.type) {
 		case "accounts": {
 			const existing = grantsOfType(existingGrants, "accounts")[0]
@@ -533,8 +544,10 @@ function isCapabilityCovered(cap: Capability, existingGrants: GrantedCapabilityR
 			const existing = grantsOfType(existingGrants, "data")
 			return existing.length > 0 && dataRequestCovered(existing, cap)
 		}
-		case "contractClasses":
-			return grantedTypes.has("contractClasses")
+		case "contractClasses": {
+			const existing = grantsOfType(existingGrants, "contractClasses")
+			return existing.length > 0 && contractClassesRequestCovered(existing, cap)
+		}
 	}
 }
 

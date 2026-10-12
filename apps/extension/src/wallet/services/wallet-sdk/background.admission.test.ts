@@ -88,7 +88,8 @@ function boot(
 		setTimeout: (fn, ms) => setTimeout(fn, ms),
 		clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 	}
-	initWalletSdkHandler(fakeSdkServices(opts).services, (opts.logger ?? noopLogger) as never, ports)
+	const { services, rows } = fakeSdkServices(opts)
+	initWalletSdkHandler(services, (opts.logger ?? noopLogger) as never, ports)
 	const discover = (requestId: string, over: Record<string, unknown> = {}) =>
 		captured?.onPendingDiscovery({
 			requestId,
@@ -114,7 +115,7 @@ function boot(
 	const closeWindow = (id: number) => {
 		for (const l of onRemoved) l(id)
 	}
-	return { discover, establish, closeWindow, windowsCreated: () => created }
+	return { discover, establish, closeWindow, windowsCreated: () => created, rows }
 }
 
 /** Settle the handler's pending microtasks without moving the clock. */
@@ -355,9 +356,9 @@ describe("discovery without a current Terms acceptance", () => {
 		throw new Error("terms")
 	}
 
-	test("a new origin is rejected before any approval popup opens", async () => {
+	test("a new origin is rejected before any approval popup opens, leaving no row and no approval", async () => {
 		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover } = boot({ popup, legal: refuse })
+		const { discover, establish, rows, windowsCreated } = boot({ popup, legal: refuse })
 
 		discover("fresh-1")
 		await flush()
@@ -365,6 +366,13 @@ describe("discovery without a current Terms acceptance", () => {
 		expect(rejected()).toEqual(["fresh-1"])
 		expect(approved()).toEqual([])
 		expect(popup).not.toHaveBeenCalled()
+		expect(rows.size).toBe(0)
+		// The discovery protocol has no rejection reply, so nothing typed reaches the app; a key
+		// exchange that completed anyway finds no approval to ride and is ended with no window.
+		await establish("fresh-1")
+		await flush()
+		expect(live.has("fresh-1")).toBe(false)
+		expect(windowsCreated()).toBe(0)
 	})
 
 	test("a remembered origin still reconnects: its requests are what get refused, not its channel", async () => {
