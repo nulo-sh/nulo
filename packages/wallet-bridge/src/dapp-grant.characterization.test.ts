@@ -267,6 +267,17 @@ describe("batch refusal", () => {
 		expect(await runBatch(legs)).toEqual({ result: batchRefusal(name), ran: [], sent: [] })
 	})
 
+	test("a batched requestCapabilities for an ungranted type opens one window, as a top-level one does", async () => {
+		const manifest = withHeader({ capabilities: [{ type: "data", addressBook: true }] })
+		const alone = harness([])
+		const batched = harness([])
+		const direct = await outcome(alone.dispatch("requestCapabilities", [manifest]))
+		const leg = await outcome(batched.dispatch("batch", [[{ name: "requestCapabilities", args: [manifest] }]]))
+		expect(direct).toEqual({ threw: UserRejectedError, message: "declined" })
+		expect(leg).toEqual(direct)
+		expect([alone.seen.windows, batched.seen.windows]).toEqual([1, 1])
+	})
+
 	test("a malformed envelope is refused by batch's own guard first", async () => {
 		expect((await runBatch([{ name: "sendTx", args: "x" }])).result).toEqual({
 			threw: InvalidWalletArgumentsError,
