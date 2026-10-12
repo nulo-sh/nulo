@@ -221,7 +221,7 @@ export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupA
 		}
 		if (mismatch) {
 			// REFUSE, do not wipe (D-B2v3). The store's bytes are preserved for the operator.
-			// The parser's message quotes those bytes, so its branch logs the category alone.
+			// The parser's message quotes the stored stamp, so its branch logs the category alone.
 			const data = unparseable ? { reason: UNPARSEABLE_STAMP } : { detail: mismatch }
 			log.warn("PXE store version mismatch — refusing to open (preserving data)", data)
 			throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${mismatch}`)

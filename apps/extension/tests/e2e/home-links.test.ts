@@ -12,8 +12,8 @@ const sel = (testid: string) => `[data-testid="${testid}"]`
 /** The seeded transaction's token, registered so its page opens. */
 const TOKEN_ID = 1
 
-/** The default tokens land from the live network; a failing node holds them through the seeder's
- *  retry waits (15 s, then 60 s). */
+/** A release build's default tokens stop only after the seeder's retry waits (15 s, then 60 s)
+ *  against the launch's stand-in node. */
 const TOKENS_LAND_MS = 150_000
 
 /** Home's token list has answered and no row in it is still on its way in, so the Tab walk below
@@ -35,8 +35,8 @@ async function expectLinkLook(page: Page, testid: string): Promise<void> {
 	expect(await focusRing(page, testid)).toEqual({ ring: "solid 2px 2px", color: await tokenColor(page, "--nulo-accent") })
 }
 
-// "View all" shows only once a fourth token has landed, which the live network behind smoke cannot
-// promise: network/home-cap.test.ts covers it on four funded tokens.
+// "View all" shows only once a fourth token has landed, and smoke's stand-in node lands none:
+// network/home-cap.test.ts covers it on four funded tokens.
 test("View history on Home and on a token's page is a Tab stop after the token list, in the link colour with the accent ring, and Enter opens History", async ({
 	registeredExtensionPerTest: ctx,
 }) => {

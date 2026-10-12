@@ -10,7 +10,7 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { seedsForChain } from "@/wallet/services/token/default-tokens"
 import { openScratchPage } from "./fixtures/browser"
-import { type ExtensionContext, launchExtension, openPopup, registerProfile, waitForHash } from "./fixtures/extension"
+import { type ExtensionContext, launchExtension, openPopup, registerProfile, waitForHash, withTimeoutMessage } from "./fixtures/extension"
 import { captureSoleProfileId } from "./fixtures/helpers"
 
 const SEEDS = seedsForChain(CHAIN_IDS.TESTNET)
@@ -21,6 +21,8 @@ const SEEDS_STOP_MS = 150_000
 const SETTLED = '[data-testid="tokens-list"][data-settled="true"]'
 const SEED_ROW = '[data-testid="token-seed-row"]'
 const SEED_WORKING = `${SEED_ROW}:not([data-status="failed"]):not([data-status="rejected"])`
+/** A default still drawn as anything but a token card: a seed row, or the import row of one whose import began. */
+const NOT_A_TOKEN = `${SEED_ROW}, [data-testid="token-import-row"]`
 
 type TokenTuple = { contract: string; symbol: string; decimals: number }
 
@@ -62,38 +64,39 @@ async function nodeInfo(ctx: ExtensionContext): Promise<string> {
 	}
 }
 
-/** Each default token still shown as a seed row, by symbol, contract, status and reason. */
-async function seedRows(page: Page): Promise<string[]> {
-	const rows = await page.$$eval(SEED_ROW, (els) =>
-		els.map((el) => ({
-			symbol: el.getAttribute("data-symbol") ?? "?",
-			status: el.getAttribute("data-status") ?? "?",
-			reason: el.querySelector('[data-testid="token-seed-reason"]')?.textContent?.trim(),
-		})),
+async function defaultRows(page: Page): Promise<string[]> {
+	const rows = await page.$$eval(NOT_A_TOKEN, (els) =>
+		els.map((el) => {
+			const text = (testid: string) => el.querySelector(`[data-testid="${testid}"]`)?.textContent?.trim()
+			if (el.getAttribute("data-testid") === "token-import-row") {
+				return { symbol: text("token-import-title") ?? "?", status: "import", reason: text("token-import-subtitle") }
+			}
+			return {
+				symbol: el.getAttribute("data-symbol") ?? "?",
+				status: el.getAttribute("data-status") ?? "?",
+				reason: text("token-seed-reason"),
+			}
+		}),
 	)
 	return rows.map(({ symbol, status, reason }) => {
-		const contract = SEEDS.find((s) => s.expectedSymbol === symbol)?.contract ?? "an unshipped contract"
-		return `${symbol} (${contract}) ${status}${reason ? `: ${reason}` : ""}`
+		const contract = SEEDS.find((s) => s.expectedSymbol === symbol)?.contract
+		return `${contract === undefined ? symbol : `${symbol} (${contract})`} ${status}${reason ? `: ${reason}` : ""}`
 	})
 }
 
 async function waitForSeedsToStop(page: Page): Promise<void> {
-	await page
-		.waitForFunction(
+	await withTimeoutMessage(
+		page.waitForFunction(
 			(settled: string, working: string) => document.querySelector(settled) !== null && document.querySelector(working) === null,
 			{ timeout: SEEDS_STOP_MS, polling: 500 },
 			SETTLED,
 			SEED_WORKING,
-		)
-		.catch(async (err: unknown) => {
-			const rows = await seedRows(page)
-			throw new Error(`Home's default tokens never stopped within ${SEEDS_STOP_MS / 1000}s: ${rows.join("; ") || "no seed rows"}`, {
-				cause: err,
-			})
-		})
+		),
+		async () =>
+			`Home's default tokens never stopped within ${SEEDS_STOP_MS / 1000}s: ${(await defaultRows(page)).join("; ") || "none shown"}`,
+	)
 }
 
-/** The profile's Testnet token rows as the wallet stored them. */
 async function storedTestnetTokens(page: Page): Promise<TokenTuple[]> {
 	const profileId = await captureSoleProfileId(page)
 	const rows = await page.evaluate(async () => {
@@ -127,8 +130,8 @@ describe.skipIf(inject("liveLeg") !== true)("the shipped token list on the live 
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
 		await waitForSeedsToStop(page)
-		// Home keeps a stopped default past its row cap, so a seed that failed or was rejected shows here.
-		expect(await seedRows(page), "default tokens that never became tokens").toEqual([])
+		// Home keeps a stopped default past its row cap, so one that failed or was rejected shows here.
+		expect(await defaultRows(page), "default tokens that never became tokens").toEqual([])
 		expect(await storedTestnetTokens(page)).toEqual(EXPECTED)
 	})
 })
