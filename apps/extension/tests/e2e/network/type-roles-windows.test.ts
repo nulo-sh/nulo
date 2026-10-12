@@ -135,14 +135,17 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 	]
 }
 
-/** How far the payload rows' text reaches past the card's right edge, in px; 0 or less is inside. */
+/** Every element that holds dApp-supplied payload text: the call or action rows and the argument rows. */
+const PAYLOAD_TEXT = ["execute-op-payload-row", "execute-op-decoded-param", "execute-op-arg", "execute-op-transfer-nonce"].map(sel)
+
+/** How far the payload's text reaches past the card's right edge, in px; 0 or less is inside. */
 async function payloadPastCard(win: Page): Promise<number> {
-	return win.evaluate(() => {
+	return win.evaluate((selectors: string[]) => {
 		const card = document.querySelector('[data-testid="execute-op-item"]')
 		if (!card) throw new Error("no execute-op-item")
 		const nodes: Node[] = []
-		for (const row of document.querySelectorAll('[data-testid="execute-op-payload-row"]')) {
-			const text = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+		for (const holder of document.querySelectorAll(selectors.join(", "))) {
+			const text = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT)
 			for (let node = text.nextNode(); node; node = text.nextNode()) nodes.push(node)
 		}
 		const rights = nodes.flatMap((node) => {
@@ -152,9 +155,25 @@ async function payloadPastCard(win: Page): Promise<number> {
 		})
 		if (rights.length === 0) throw new Error("no payload text")
 		return Math.max(...rights) - card.getBoundingClientRect().right
-	})
+	}, PAYLOAD_TEXT)
 }
 
+/**
+ * Writes the longest strings a dApp can make the card show into the rendered window: a 64-glyph
+ * function name, a 25-glyph contact name for its contract, 32-glyph parameter names and 64-glyph
+ * values. The playground sends real calls only, so this is the one way to reach them.
+ */
+async function stretchPayload(win: Page): Promise<void> {
+	await win.evaluate(() => {
+		const set = (selector: string, text: string) => {
+			for (const el of document.querySelectorAll(selector)) el.textContent = text
+		}
+		set('[data-testid="execute-op-payload-row"] > :first-child', `I${"i".repeat(63)}`)
+		set('[data-testid="execute-op-call-to"]', "W".repeat(25))
+		set('[data-testid="execute-op-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
+		set('[data-testid="execute-op-decoded-param-value"]', "i".repeat(64))
+	})
+}
 async function openExecute(ctx: Connected, { button, inputs, ready }: Request): Promise<Page> {
 	for (const [name, value] of Object.entries(inputs)) await setPgInput(ctx.playgroundPage, name, value)
 	const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
@@ -183,6 +202,8 @@ test.skipIf(!hasConfig)(
 			try {
 				const observations = await sweepWindow(win, "windows-execute", request.states)
 				if (request.contained) {
+					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+					await stretchPayload(win)
 					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
 					expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
 				}
