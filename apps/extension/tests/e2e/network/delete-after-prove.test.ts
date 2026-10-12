@@ -41,8 +41,8 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const config = aztecConfig as AztecTestConfig
 		const { playgroundPage: dapp, accountAddress } = ctx
-		// `openPopup` restarts the arrays, so the windows opened since the last one are asserted before
-		// it: here the fixture's connect and grant windows.
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before it: here
+		// the fixture's setup popup and its connect and grant windows.
 		expect(ctx.pageErrors).toEqual([])
 		await mintPublicTokensForAccount(config, accountAddress)
 

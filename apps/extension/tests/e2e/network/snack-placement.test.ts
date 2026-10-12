@@ -298,8 +298,8 @@ test.skipIf(!hasConfig)(
 	"Send: a fee-estimate error sits 12px above the footer and follows it when it grows",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
-		// `openPopup` restarts the arrays, so the windows opened since the last one are asserted before
-		// the drain opens one: here the fixture's connect and grant windows.
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before the drain
+		// opens one: here the fixture's setup popup and its connect and grant windows.
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
 		await sendFromDrainedBalance(page)

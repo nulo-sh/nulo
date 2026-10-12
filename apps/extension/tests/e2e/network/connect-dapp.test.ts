@@ -20,8 +20,8 @@ test.skipIf(!hasConfig)(
 	"connect-handshake — playground reaches connected via discover→verify",
 	{ timeout: 90_000 },
 	async ({ dappConnectedExtension }) => {
-		// `openPopup` restarts the arrays, so the windows opened since the last one are asserted before
-		// it: here the fixture's connect windows.
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before it: here
+		// the fixture's setup popup and its connect window.
 		expect(dappConnectedExtension.consoleErrors).toEqual([])
 		expect(dappConnectedExtension.pageErrors).toEqual([])
 

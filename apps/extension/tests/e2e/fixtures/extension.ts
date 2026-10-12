@@ -26,7 +26,7 @@ import {
 	waitForFreshBalanceRow,
 } from "./helpers"
 import { type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
-import { waitForPopup, approveCapabilities } from "./popups"
+import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
@@ -494,6 +494,8 @@ export async function grantCapBundle(
 	const granted = await pick(accountIds, capPopup)
 	await approveCapabilities(capPopup, { accounts: granted })
 	await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000)
+	// The window resolves the request before it closes, so the dApp's answer can precede its teardown.
+	await waitForPopupClosed(capPopup, 10_000)
 	return granted
 }
 

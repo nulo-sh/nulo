@@ -82,8 +82,8 @@ test.skipIf(!hasConfig)(
 		const { playgroundPage: page, accountAddresses } = ctx
 		const config = aztecConfig as AztecTestConfig
 		expect(accountAddresses).toHaveLength(2)
-		// `openPopup` restarts the arrays, so the windows opened since the last one are asserted before
-		// it: here the fixture's connect and grant windows.
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before it: here
+		// the fixture's setup popup and its connect and grant windows.
 		expect(ctx.consoleErrors).toEqual([])
 
 		let wallet = await openPopup(ctx)
