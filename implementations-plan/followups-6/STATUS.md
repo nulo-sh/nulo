@@ -11,3 +11,5 @@
 - 2026-10-12: arc 1 Phase 0 gate pass: base artifact runs, Chrome 47 passed/5 skipped files (200 tests), Firefox 49/3 (197), retry 0, no red.
 - 2026-10-12: arc 1 Phase 2 gate pass: unit, lint, typecheck; guarded artifact runs Chrome 47/5 files (207 tests), Firefox 50/2 (204), retry 0; control spec ran; every guard record declared; no spec changed (stop rule not reached).
 - 2026-10-12: arc 1 Phase 3 gate pass: lint, typecheck:all; live spec artifact Chrome 5/5, Firefox 2/2 green at retry 0; armed runs skipped it on both; the three route removals each red.
+- 2026-10-12: Codex round 1 approve (2 low, applied), Opus review no bugs (3 low, applied), fix 06755d0; Codex round 2 approve, no new material findings. Phase 4 attempt 1 failed on one flake outside the lane (security.test.ts change-password lock route under load, #319); attempt 2 at 06755d0 running.
+- 2026-10-12: arc 1 Phase 4 gate pass (attempt 2, 06755d0): four whole-suite runs green at retry 0 (artifact Chrome 208/0/15, Firefox 205/0/18; armed Chrome 213/0/10, Firefox 210/0/13); test:all, test:ci-gating, lint, typecheck:all exit 0.

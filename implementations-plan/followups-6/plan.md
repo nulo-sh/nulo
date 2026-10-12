@@ -178,6 +178,27 @@ One arc, one PR against `dev` (no stack: D-orch-1). Nothing a person sees change
 
 **Disputes left open:** none. D1 began as a split (Codex B, Opus A) and closed in round 2 with both legs on B.
 
+### Post-implementation (arc 1)
+
+**Codex** (gpt-6.1-sol, high, read-only; session `01a12e3c`, default `~/.codex` login), round 1 on `58d6cbc..1e8f648`: **approve**, two low findings.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. `shipped-token-list.test.ts`'s seed wait caught every rejection, relabelling a frame detach as a seed timeout, and a failing diagnostic replaced the original error | Accepted: the wait goes through `withTimeoutMessage` |
+| 2 | Low. Two comments above the row reader and `storedTestnetTokens` restated their names | Accepted: deleted |
+
+**Opus review** (Opus 5.5, `general-purpose`, read-only), beside round 1: **no correctness bugs**, three low findings.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Low. Comments the change made false: `rows.test.ts:50-52,82`, `home-links.test.ts:15,38` said the default tokens land from the live network | Accepted: they now say the launch's stand-in fails them after the seeder's retry waits, and lands none |
+| 2 | Low. A default that fails after its import was journaled is drawn as `token-import-row` (`home-slots.ts:77`), so the "never became tokens" check missed it by name (the stored-tuple check still reds) | Accepted: the reader reads seed rows and import rows |
+| 3 | Nit. `opfs-store.ts`'s comment said "those bytes", pointing at the line above | Accepted: "the stored stamp" |
+
+Fix commit 06755d0; the live spec green once per browser after it.
+
+**Codex round 2** (resumed) on `1e8f648..06755d0`: **approve**, "No new material findings", high confidence. The loop converged in two rounds.
+
 ## Security & Adversarial Considerations
 
 - **Threat model.** CI harness code: no secret, no product path. The risk is a false gate: an artifact run that looks hermetic but is not, or a live route wider or narrower than intended. The live route is one exact hostname for one launch; Chrome's bypass and resolver rules match it exactly (no subdomains, no IP literals), Firefox's PAC compares with `===`. Both match the host on every scheme and port: the comment and the README say so. The canary still proves the guard route on every launch, the live spec proves the live route by a direct answer, and a guard record for the live host fails that launch.
@@ -227,7 +248,7 @@ Scratch, builds and copies live under `~/.cache/nulo-backlog/followups-6/`, neve
 
 A **release-shaped copy** is built with no `VITE_*` variable and no `.env*` file (`bun run --cwd apps/extension build:chrome` or `build:firefox`), then `dist/<browser>` is copied to a path under the scratch root that prefixes no other run's `EXTENSION_PATH`. An **artifact run** is `NULO_E2E_ARTIFACT_RUN=1 EXTENSION_PATH=<copy> bun run test:e2e -- --retry=0` (add `NULO_E2E_BROWSER=firefox` for Firefox). An **armed run** first builds `ARMED_BUILD` (`global-setup-smoke.ts:35`), then runs `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e -- --retry=0`.
 
-### Phase 0: baseline (before)
+### Phase 0: baseline (before) ✓
 
 1. Build release-shaped copies of the base for Chrome and Firefox.
 2. Run the whole suite as an artifact run on each.
@@ -235,14 +256,14 @@ A **release-shaped copy** is built with no `VITE_*` variable and no `.env*` file
 
 **Validation gate.** Pass: both runs completed and recorded. Layers: smoke e2e, artifact mode, both browsers.
 
-### Phase 1: #315, a fixed category for an unparseable stamp
+### Phase 1: #315, a fixed category for an unparseable stamp ✓
 
 1. Edit `initStoreVersionStamp` per § #315.
 2. Edit the three mismatch tests per § #315. Run the parse pin against the base source first, see it red, and record the red line in `lessons/phase-1.md`.
 
 **Validation gate.** `bun run --cwd packages/aztec-runtime test`, `bun run lint`, `bun run typecheck:all`, `bun run test`. Pass: exit 0 everywhere; the parse pin red on base and green after; both comparison pins green on base and after. Layers: lint, typecheck, unit.
 
-### Phase 2: #317, every artifact launch guarded with the stand-in
+### Phase 2: #317, every artifact launch guarded with the stand-in ✓
 
 1. Edit `global-setup-smoke.ts`, `fixtures/egress-guard.ts`, `fixtures/browser/index.ts`, `chrome.ts`, `firefox.ts`, `fixtures/extension.ts` per § #317 (the `liveNode` launch included; no spec uses it yet).
 2. Edit the unit pins: `scripts/e2e/chrome-driver.test.ts` (with a live host: it bypasses the guard and is excluded from the resolver map, and no other outside host is; without one: today's guarded args) and `scripts/e2e/firefox-driver.test.ts` (the PAC evaluated: the live host `DIRECT`, any other outside host to the guard, loopback `DIRECT`; prefs still outside `FIREFOX_LAUNCH_PREFS`); `scripts/e2e/egress-guard.test.ts` (a guard record for the live host fails the close; without a live host it stays declared). Remove the pins of the deleted branches.
@@ -253,7 +274,7 @@ A **release-shaped copy** is built with no `VITE_*` variable and no `.env*` file
 
 **Validation gate.** `bun run --cwd apps/extension test`, `bun run lint`, `bun run typecheck:all`, then step 5's runs. Pass: exit 0; both artifact runs green on their first run after any stop-rule fix; no undeclared host and no canary hit; the control spec ran (not skipped) in both. Layers: lint, typecheck, unit, smoke e2e (artifact mode, both browsers).
 
-### Phase 3: #317, the declared live spec
+### Phase 3: #317, the declared live spec ✓
 
 1. Write `shipped-token-list.test.ts` per § #317.
 2. Run it five times as an artifact run on Chrome and twice on Firefox, each on a fresh release-shaped copy. Run it once as an armed run per browser and see it skipped.
@@ -261,7 +282,7 @@ A **release-shaped copy** is built with no `VITE_*` variable and no `.env*` file
 
 **Validation gate.** `bun run lint`, `bun run typecheck:all`, plus steps 2 and 3. Pass: every artifact run green on its first attempt; every armed run skipped it; each of the three removals red. Layers: lint, typecheck, smoke e2e (both modes, both browsers).
 
-### Phase 4: proof (after)
+### Phase 4: proof (after) ✓
 
 1. Rebuild release-shaped copies at the final head and run the whole suite as an artifact run on Chrome and Firefox; rebuild the armed dist and run the whole suite as an armed run on both browsers.
 2. `bun run test:all`, `bun run test:ci-gating`, `bun run lint`, `bun run typecheck:all`.
