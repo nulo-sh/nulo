@@ -45,7 +45,6 @@ const FN = {
 	isStatic: false,
 	returnType: { kind: "boolean" },
 }
-const PUBLIC_FN = { ...FN, name: "mint_to_public", functionType: FunctionType.PUBLIC }
 
 type Harness = ReturnType<typeof makeHarness>
 function makeHarness() {
@@ -70,13 +69,13 @@ function makeHarness() {
 		}),
 	}
 	const instance = { currentContractClassId: CLASS_ID }
-	const artifact = { functions: [FN, PUBLIC_FN], nonDispatchPublicFunctions: [] }
+	const artifact = { functions: [FN], nonDispatchPublicFunctions: [] }
 	const node = {
 		getNodeInfo: vi.fn(async () => {
 			calls.push("getNodeInfo")
 			return NODE_INFO
 		}),
-		getContract: vi.fn(async (): Promise<unknown> => ({ currentContractClassId: UPGRADED_CLASS_ID })),
+		getContract: vi.fn(async (): Promise<unknown> => ({ currentContractClassId: CLASS_ID })),
 	}
 	const deps = {
 		pxeService: { getPXE: vi.fn(() => ({ fake: "pxe" })) },
@@ -318,20 +317,20 @@ describe("buildStandard pins", () => {
 		await expect(build(h, [{ kind: "call", contract: CONTRACT, method: "nope", args: [] }])).rejects.toThrowError("Method not found")
 		const result = await build(h, [{ kind: "call", contract: CONTRACT, method: "transfer", args: [] }])
 		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [], classId: CLASS_ID.toString() }])
-		// A private call's target is never named to the node: the kernel checks its class.
-		expect(h.node.getContract).not.toHaveBeenCalled()
 	})
 
-	test("a public call records the class the node reports, not the PXE's; a failed lookup records none and the build completes", async () => {
-		const action = { kind: "call", contract: CONTRACT, method: PUBLIC_FN.name, args: [] }
-		const result = await build(h, [action])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: PUBLIC_FN.name, args: [], classId: UPGRADED_CLASS_ID.toString() }])
-		expect(h.node.getContract).toHaveBeenCalledWith(AztecAddress.fromStringUnsafe(CONTRACT))
+	test("a call records the class the node reports over the PXE's original, the original when the node knows no instance, and none when the lookup fails, which never fails the build", async () => {
+		const action = { kind: "call", contract: CONTRACT, method: FN.name, args: [] }
+		const recorded = async () => (await build(h, [action])).txCalls[0].classId
 
+		h.node.getContract.mockResolvedValueOnce({ currentContractClassId: UPGRADED_CLASS_ID })
+		expect(await recorded()).toBe(UPGRADED_CLASS_ID.toString())
+		expect(h.node.getContract).toHaveBeenLastCalledWith(AztecAddress.fromStringUnsafe(CONTRACT))
+		h.node.getContract.mockResolvedValueOnce(undefined)
+		expect(await recorded()).toBe(CLASS_ID.toString())
 		h.node.getContract.mockRejectedValueOnce(new Error("node down"))
-		const unread = await build(h, [action])
-		expect(unread.txCalls).toEqual([{ contract: CONTRACT, method: PUBLIC_FN.name, args: [], classId: undefined }])
-		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(2)
+		expect(await recorded()).toBeUndefined()
+		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(3)
 	})
 
 	test("encoded_call resolves by selector from ABI truth; a mismatched dApp name is a scope violation", async () => {

@@ -32,3 +32,13 @@
 - Accepted: canonical field-element fixtures in the producer tests; the `TokenInfo.classId` doc. Rejected with
   reasons (plan § Audit verdicts): transfers on a forged mint record, `.catch` for a non-string class,
   pre-existing debug lines carrying class ids. Left out: exact-string contract matching (pre-existing; an issue).
+
+## Review round 2
+
+- 2026-10-12 — Codex r2: reject, one new High: the round 1 premise was false. Upstream's
+  `ContractClassService.getCurrentClassId` asks `node.getContract(address, anchor)` for every non-protocol
+  contract and executes that class (else the original), so a private mint can run an upgraded class whose
+  artifact is registered. The driver read the same resolver while the round ran. Fixed: every call records the
+  node's class, else the original; a failed lookup records none.
+- Lesson: before reasoning from what the kernel enforces, read what the installed PXE resolves; a privacy
+  argument for skipping a node query needs proof that the PXE does not already make it.

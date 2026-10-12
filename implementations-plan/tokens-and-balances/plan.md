@@ -325,8 +325,8 @@ Built only on OA-1 = A or C; designed here so the answer can be built without a 
   use, not a standard check); a `classId` restored from a backup is hostile input, validated as a
   field element but not authenticated. A token row or a transaction record without a class shows no
   figure, which includes every mint record built before Arc 3.
-  As built (D-arc3-5): the PXE resolves a registered contract to its original class, so a public call's
-  class comes from the node; a private call's stays the PXE's, which the kernel checks.
+  As built (D-arc3-5): the wallet's PXE client returns a registered contract at its original class, so
+  the builder reads the class from the node, as the PXE does to execute the call.
 - **C (signature pin).** Record the call's selector (computed at `tx-request-builder.ts:194`) on the
   `TxCall`; `txAmount` reads a mint only when it equals `vocabularySelector(method, 2)`. The
   vocabulary has no `mint_to_commitment/2` selector (`token-transfer-vocabulary.ts:88-105`): C adds
@@ -820,7 +820,7 @@ extension view that has not seen a deletion.
 | D-arc3-2 | `TokenInterface.classId` is required and set from the fetched instance; a seeded add stores the class its pinned parse matched, which is the seed's `expectedClassId` by that parse's check | thread `expectedClassId` through the seeder's `persist` | implementer | `parseTokenInterface` refuses any other class when pinned, so the two are the same string; one source, no new seeder plumbing |
 | D-arc3-3 | A NO_FROM build records no class | record it there too | implementer | Architecture names the `call` and `encoded_call` cases. A standard token's mints check `msg_sender` against the minter (`token_contract/src/main.nr`, `_validate_minter`), and NO_FROM refuses public functions, so no standard mint succeeds there |
 | D-arc3-4 | An add of a contract already listed returns the existing row as it is, so a row added before classes were recorded keeps no class until the person deletes and adds it again | refresh the class on the idempotent path | implementer | The signed text says "until re-added"; the idempotent short-circuit is the dApp-spam guard and writes nothing |
-| D-arc3-5 | A public call records the class the node reports for its contract (`node.getContract`); a private call records the class the PXE resolved; a failed lookup records none and the build continues | record the PXE's class for every call (Architecture § Arc 3 as written); ask the node for every call (Opus r1) | Opus r1 (High): the PXE hydrates `currentContractClassId` from the original class (`packages/aztec-runtime/src/pxe/effective-class.ts`), and the add registers the token, so both sides read the original and no upgrade is ever caught | The PXE's kernel prover reads the class registry for every contract in the private execution tree (`getUpdatedClassIdHints`) and refuses a private call to a class that changed, so the PXE's class is the one a private call ran. A public call runs whatever class the chain holds, which only the node reports, and its target already reaches the node in the estimate's public simulation; a private target is never named to it |
+| D-arc3-5 | Every `call` and `encoded_call` records its contract's class as the PXE resolves it to execute: `node.getContract(target)`'s current class, else the original class `instances` holds; a failed lookup records none and the build continues | record the PXE instance's class (Architecture § Arc 3 as written); ask the node for public calls only (round 1 fix) | Opus r1 (High): the PXE hydrates `currentContractClassId` from the original class (`packages/aztec-runtime/src/pxe/effective-class.ts`) and the add registers the token, so no upgrade is ever caught. Codex r2 (High): the public-only rule leaves a private mint that runs an upgraded class recording the original | Upstream's `ContractClassService.getCurrentClassId` resolves a private call's bytecode and the kernel oracle's class from `node.getContract(address, anchor)`, falling back to the original class, so the builder records the same class with the same rule. It names the node nothing new: the PXE already asks it about every contract it simulates |
 
 ## Audit verdicts
 
@@ -949,9 +949,17 @@ a successor that loses its ticket while draining.
 
 | # | Sev | Finding | Disposition |
 |---|---|---|---|
-| 1 | High | The pin never catches an upgrade: the PXE hydrates `currentContractClassId` from the original class, the add registers the token, so the add and every build record the original class | Accepted (D-arc3-5), verified in `effective-class.ts` and `pxe/service.ts` `getContractInstance`. A public call records the node's class; a private call keeps the PXE's, since the kernel refuses a private call whose class the registry changed (`private_kernel_oracle.js` `getUpdatedClassIdHints`). Opus proposed the node for every call; the narrower rule names no private target to the node. A test: a public call records the node's class, a failed lookup records none and the build completes (red on the pre-fix builder); a private call never queries the node |
+| 1 | High | The pin never catches an upgrade: the PXE hydrates `currentContractClassId` from the original class, the add registers the token, so the add and every build record the original class | Accepted (D-arc3-5), verified in `effective-class.ts` and `pxe/service.ts` `getContractInstance`. Round 1 applied it to public calls only, on a kernel-refusal premise Codex r2 disproved; round 2 applies it to every call, as Opus proposed, with the original class when the node knows no instance |
 | 2 | Low | Pre-existing: `txAmount` matches a listed token's contract by exact string, so a token added with upper-case hex never reads its mint | Left out: pre-existing, and showing those figures is a visible change outside OA-1's text; filed as an issue at delivery |
 | 3 | Nit | A non-string `classId` fails restore | Same as Codex 2 |
+
+### Arc 3 implementation, Codex round 2 (same session, resumed), `reject (one new material High)`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | High | The public-only rule is wrong: upstream resolves a private call's bytecode and the kernel oracle's class through `ContractClassService.getCurrentClassId` (`node.getContract(address, anchor)`), so with the new class's artifact registered an upgraded contract runs its private mint while the builder records the original class; reproduced in memory. The privacy reason does not hold either: the PXE already asks the node about every contract it simulates | Accepted, found by both legs (the driver read the same resolver while the round ran). Every call reads the node's class, else the original; the regression test is a private call (red on both earlier builders); the comment and D-arc3-5 rewritten |
+
+Round 2 also confirmed: function visibility comes from the resolved ABI; a scheduled upgrade reads the previous class until it activates, which the signed build-time limit covers; the failed-lookup `undefined` is the right display-only fail-closed and logs nothing; a reused estimate's `txCalls` keep the estimate build's class, as the signed text allows.
 
 ## Post-implementation
 
