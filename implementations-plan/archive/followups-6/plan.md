@@ -33,7 +33,7 @@ post_implementation_hardening: not scheduled
   - § #317 step 1's probe "from the background": it runs from an extension page (D11).
   - The lane brief's "find the spec that is the documented live leg": did not hold, no spec asserted the shipped list (§ Scope); D1 made it one.
   - Phase 4 attempt 1 failed on one flake outside the lane, filed as #319; attempt 2 at the final head passed.
-- **Open items:** #321 (`ux`, `owner-decision`: the popup's PXE store error quotes the stored stamp), #319 (`bug`: `security.test.ts`'s change-password test can miss the lock route under load).
+- **Open items:** #321 (`ux`, `owner-decision`: the popup's PXE store error quotes the stored stamp), #319 (`bug`: `security.test.ts`'s change-password test can miss the lock route under load), #322 (`bug`: the Firefox `send-chaos` seed 1960252198 once never saw the capability window, beside a recursion error in an extension chunk; red on #320's first run, green on its replay).
 - **Seeds retired:** the `/goal` and `/loop` seeds below are retired with this record; never run them.
 
 Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
