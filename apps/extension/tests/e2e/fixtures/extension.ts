@@ -1210,8 +1210,13 @@ async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
 	}
 }
 
-/** Records `page`'s errors into the launch's arrays. */
-function recordPageErrors(ctx: ExtensionContext, page: Page): void {
+const recorded = new WeakSet<Page>()
+
+/** Records `page`'s errors into the launch's arrays from now on, once however often it is asked:
+ *  `asPage()` hands every caller resolving one target the same `Page`. */
+export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
+	if (recorded.has(page)) return
+	recorded.add(page)
 	const onConsole = (msg: ConsoleMessage) => {
 		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
 		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).

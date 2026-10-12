@@ -10,10 +10,19 @@ import { appendFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
-import { clickByTestId, clickSelector, patchPagePolling, waitForHash, type ExtensionContext } from "./extension"
+import { clickByTestId, clickSelector, patchPagePolling, recordPageErrors, waitForHash, type ExtensionContext } from "./extension"
 import { selectFeeMethod, type FeeMethodSubtitle } from "./helpers"
 
-export type PopupKind = "discover" | "verify" | "capabilities" | "execute" | "json" | "network-unavailable"
+export type PopupKind =
+	| "discover"
+	| "verify"
+	| "capabilities"
+	| "execute"
+	| "json"
+	| "network-unavailable"
+	/** One URL for every logger window: arm the wait before the open, and a second window cannot
+	 *  match while the first is still open. */
+	| "logger"
 
 /**
  * Wait for a popup window of the given kind to open. If `requestId` is given,
@@ -51,6 +60,9 @@ export async function waitForPopup(
 		timeout,
 	)
 	const page = await target.asPage()
+	// An error the window raised before this line, module evaluation first of all, can be in neither
+	// array, and Chrome reports it nowhere else.
+	recordPageErrors(ctx, page)
 	// Puppeteer can resolve waitForTarget before the page's main frame is wired
 	// up — calling waitForFunction immediately throws "Requesting main frame too
 	// early!" Poll until mainFrame() succeeds before doing any further waits.

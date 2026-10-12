@@ -9,8 +9,10 @@ import { randomUUID } from "node:crypto"
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { evaluateInBackground, extensionUrl, gotoExtensionPage, newPage, reloadExtensionPage } from "./fixtures/browser"
-import { openPopup, test } from "./fixtures/extension"
+import { openPopup, recordPageErrors, test } from "./fixtures/extension"
+import { ensureUnlocked } from "./fixtures/helpers"
 import { pageErrorOf } from "./fixtures/page-errors"
+import { waitForPopup } from "./fixtures/popups"
 
 const DEADLINE_MS = 10_000
 
@@ -143,3 +145,58 @@ test("an extension page's errors reach the launch's arrays once, and no other co
 	expectExactly(heardW.errors, [n.web], "the web page's own listener")
 	await w.close()
 })
+
+test("a window `waitForPopup` hands back is recorded once from then on", async ({ registeredExtension: ctx }) => {
+	const a = await openPopup(ctx)
+	// The logger window closes itself while no profile is active.
+	await ensureUnlocked(a)
+	const pageTexts = () => ctx.pageErrors.map((err) => err.message)
+	// A window an earlier attempt left open cannot share this URL.
+	const url = extensionUrl(ctx.extensionId, `/src/popup/index.html#/windows/logger?capture=${randomUUID()}`)
+	const opened = waitForPopup(ctx, "logger")
+	await a.evaluate(async (u: string) => {
+		await chrome.windows.create({ type: "popup", url: u, width: 380, height: 660 })
+	}, url)
+	const w = await opened
+	try {
+		await w.waitForSelector('[data-testid="logger-window"]', { timeout: 30_000 })
+		await w.waitForFunction(() => typeof (console as unknown as { _error?: unknown })._error === "function", {
+			timeout: DEADLINE_MS,
+			polling: 50,
+		})
+		const heardW = hear(w)
+		const n = { wThrow: nonce("W-THROW"), wConsole: nonce("W-CONSOLE"), wAgain: nonce("W-AFTER-SECOND-RECORD") }
+
+		await w.evaluate(raiseThenSettle(throwing(n.wThrow)))
+		expect(count(pageTexts(), n.wThrow), "the window's throw is in the array when the call returns").toBe(1)
+		await w.evaluate(raiseThenSettle(nativeConsoleError(n.wConsole)))
+		expect(count(ctx.consoleErrors, n.wConsole), "and so is its console error").toBe(1)
+
+		// A second helper resolving the same target gets the same `Page`.
+		recordPageErrors(ctx, w)
+		await w.evaluate(raiseThenSettle(throwing(n.wAgain)))
+		expect(count(pageTexts(), n.wAgain), "a page recorded twice reports each error once").toBe(1)
+
+		const s = {
+			wThrow: nonce("W-SENTINEL"),
+			wConsole: nonce("W-SENTINEL-CONSOLE"),
+			aThrow: nonce("A-SENTINEL"),
+			aConsole: nonce("A-SENTINEL-CONSOLE"),
+		}
+		await w.evaluate(raiseThenSettle(`${nativeConsoleError(s.wConsole)}; ${throwing(s.wThrow)}`))
+		await a.evaluate(raiseThenSettle(`${nativeConsoleError(s.aConsole)}; ${throwing(s.aThrow)}`))
+		await until(
+			() =>
+				[s.wThrow, s.aThrow].every((x) => count(pageTexts(), x) > 0) &&
+				[s.wConsole, s.aConsole].every((x) => count(ctx.consoleErrors, x) > 0),
+			"every sentinel arrived",
+		)
+
+		expectExactly(pageTexts(), [n.wThrow, n.wAgain, s.wThrow, s.aThrow], "pageErrors")
+		expectExactly(ctx.consoleErrors, [n.wConsole, s.wConsole, s.aConsole], "consoleErrors")
+		expectExactly(heardW.errors, [n.wThrow, n.wAgain, s.wThrow], "the window's own pageerror listener")
+		expectExactly(heardW.console, [n.wConsole, s.wConsole], "the window's own console listener")
+	} finally {
+		await w.close().catch(() => undefined)
+	}
+}, 90_000)

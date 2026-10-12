@@ -456,10 +456,12 @@ assertion; drive the rest of the flow with the ordinary helpers.
   that flush is gated on `developerMode`, which e2e profiles do not enable, so it returns an empty
   trail unless the test turned Developer Mode on first (the toggles on `#/popup/settings/developer`,
   see the playground subsection); empty means not retained. An error the app
-  catches and merely logs reaches neither fixture array, and `ctx.consoleErrors` restarts empty on
-  every page a helper attaches to, so an empty array is no proof of no errors
+  catches and merely logs reaches neither fixture array, so an empty array is no proof of no errors
   (`implementations-plan/archive/e2e-deflake/plan.md#console-errors`). Assert on DOM, storage, or
-  stage evidence instead. Approval sub-windows carry no listeners at all.
+  stage evidence instead. Both arrays restart empty at each `openPopup` and `openOnboarding`, so an
+  assertion covers a window only if neither runs between the window and the assertion.
+  `waitForPopup` records the window it hands back from then on; an error the window raised earlier
+  can be in neither array.
 - **`chrome.runtime.reload()` disables an unpacked `--load-extension` build** (every later
   `chrome-extension://` goto is `ERR_BLOCKED_BY_CLIENT`). Never use it for harness state reset; when
   the product calls it (the migration barrier's Retry), check the CSP record first
@@ -564,7 +566,7 @@ the pattern.
   window: `windows.update({ focused: true })` and `bringToFront()` fire no `onFocusChanged`. Firefox
   honours sizes and focus.
 - **An approval window's page can have no viewport.** `waitForPopup` wraps approval windows with
-  `target.asPage()` (`fixtures/popups.ts:53`). On that path the page is created by
+  `target.asPage()` (`fixtures/popups.ts:62`). On that path the page is created by
   `CdpTarget.asPage`'s fallback with a `null` viewport (puppeteer-core 25.8.0, `cdp/Target.js:54-70`;
   a target whose page already exists returns that page instead), so it renders at the window's
   native size; `browser.newPage()` pages get the 800×600 default.

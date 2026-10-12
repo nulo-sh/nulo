@@ -4,9 +4,8 @@ import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
-import { pageErrorOf } from "../fixtures/page-errors"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveVerify, rejectCapabilities, waitForPopup } from "../fixtures/popups"
+import { approveVerify, rejectCapabilities, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
 import { tokenColor } from "../helpers/pointer-probes"
 
@@ -123,11 +122,6 @@ test.skipIf(!aztecConfig)(
 		const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
 		await clickByTestId(dapp, "pg-btn-connect")
 		const page = await discoverP
-		const pageErrors: string[] = []
-		page.on("pageerror", (payload) => {
-			const err = pageErrorOf(payload)
-			if (err) pageErrors.push(String(err))
-		})
 		const connectWindow = await page.evaluate(async () => (await chrome.windows.getCurrent()).id)
 		await page.waitForFunction(
 			(sel) => {
@@ -179,7 +173,7 @@ test.skipIf(!aztecConfig)(
 			header: { account: "No account shared", network: "Local Network" },
 			error: null,
 		})
-		expect(pageErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 		await page.waitForFunction(
 			(sel: string, want: string) => document.querySelector(sel)?.textContent === want,
 			{ timeout: 5_000, polling: 50 },
@@ -210,5 +204,7 @@ test.skipIf(!aztecConfig)(
 		])
 		await rejectCapabilities(caps)
 		expect((await waitForPgResult(dapp, "requestCapabilities", seq, 30_000)).status).toBe("error")
+		await waitForPopupClosed(caps)
+		expect(ctx.pageErrors).toEqual([])
 	},
 )
