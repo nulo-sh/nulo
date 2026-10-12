@@ -97,7 +97,7 @@ const handleCopyAddress = (target) => {
 					     the line adapts to whatever width the action icons leave instead of a guessed
 					     trim length fighting the wrapper's own ellipsis. -->
 					<template #description>
-						<Text variant="data" color="tertiary" :class="$style.desc_line" data-testid="manage-accounts-address">
+						<Text variant="meta" color="tertiary" :class="$style.desc_line" data-testid="manage-accounts-address">
 							<template v-if="account.type === AccountType.Imported">
 								<span data-testid="account-imported-badge" :class="$style.desc_fixed">imported</span>
 								<span :class="$style.desc_fixed">&nbsp;&#183;&nbsp;</span>

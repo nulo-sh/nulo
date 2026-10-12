@@ -727,7 +727,7 @@
 			"expression": "account.address.slice(0, -4)",
 			"branch": "",
 			"ordinal": 0,
-			"role": "data",
+			"role": "meta",
 			"selector": "[data-testid=\"manage-accounts-row\"] [data-testid=\"manage-accounts-address\"]",
 			"surface": "popup-settings-accounts",
 			"state": "",
