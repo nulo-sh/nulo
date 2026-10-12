@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS } from "@nulo/wallet-bridge"
+import { LogLevel } from "@/wallet/logger"
 
 type Callbacks = {
 	onPendingDiscovery: (d: unknown) => void
@@ -64,7 +65,14 @@ function deferred<T>() {
 }
 
 /** Boot the handler over a remembered session (`trusted` decides whether a verify window opens). */
-function boot(opts: { remembered?: { trusted: boolean }; popup?: () => Promise<{ approved: boolean }>; legal?: () => Promise<void> } = {}) {
+function boot(
+	opts: {
+		remembered?: { trusted: boolean }
+		popup?: () => Promise<{ approved: boolean }>
+		legal?: () => Promise<void>
+		logger?: { log: (...args: unknown[]) => void }
+	} = {},
+) {
 	let created = 0
 	const onRemoved: Array<(id: number) => void> = []
 	const ports = fakeSdkPorts({
@@ -80,7 +88,7 @@ function boot(opts: { remembered?: { trusted: boolean }; popup?: () => Promise<{
 		setTimeout: (fn, ms) => setTimeout(fn, ms),
 		clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 	}
-	initWalletSdkHandler(fakeSdkServices(opts).services, noopLogger, ports)
+	initWalletSdkHandler(fakeSdkServices(opts).services, (opts.logger ?? noopLogger) as never, ports)
 	const discover = (requestId: string, over: Record<string, unknown> = {}) =>
 		captured?.onPendingDiscovery({
 			requestId,
@@ -308,6 +316,37 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 		await vi.advanceTimersByTimeAsync(DISCOVERY_STALE_MS + 20_000)
 		const settled = new Set(handlerCalls.map((c) => c.split(":")[1]))
 		for (let i = 0; i <= 9; i++) expect(settled.has(`d${i}`)).toBe(true)
+	})
+})
+
+describe("discovery with a chainInfo that does not decode", () => {
+	test("is rejected before any approval popup opens and logged at debug", async () => {
+		const log = vi.fn()
+		const popup = vi.fn(async () => ({ approved: true }))
+		const { discover } = boot({ popup, logger: { log } })
+
+		discover("bad-chain-1", { chainInfo: { chainId: "", version: "0x1" } })
+		await flush()
+
+		expect(rejected()).toEqual(["bad-chain-1"])
+		expect(popup).not.toHaveBeenCalled()
+		const discoveryLines = log.mock.calls.filter(([, , text]) => String(text).startsWith("Discovery rejected"))
+		expect(discoveryLines.map(([, level]) => level)).toEqual([LogLevel.Debug])
+	})
+
+	test("a popup that fails still logs its rejection at warn (control)", async () => {
+		const log = vi.fn()
+		const popup = async (): Promise<{ approved: boolean }> => {
+			throw new Error("closed")
+		}
+		const { discover } = boot({ popup, logger: { log } })
+
+		discover("closed-1")
+		await flush()
+
+		expect(rejected()).toEqual(["closed-1"])
+		const discoveryLines = log.mock.calls.filter(([, , text]) => String(text).startsWith("Discovery rejected"))
+		expect(discoveryLines.map(([, level]) => level)).toEqual([LogLevel.Warn])
 	})
 })
 
