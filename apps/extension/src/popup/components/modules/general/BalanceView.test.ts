@@ -432,6 +432,17 @@ describe("BalanceView — Home hero while the total is still moving", () => {
 		expect(amount(failed.wrapper).text()).toContain("$")
 	})
 
+	test("a late add event for a row already shown holds nothing once that row's update lands", async () => {
+		seedRows = neverSynced as never
+		const { wrapper } = await mountView()
+		expect(isSkeleton(wrapper)).toBe(true)
+		addedHandler?.(neverSynced[0])
+		updatedHandler?.({ ...neverSynced[0], updatedAt: 1 })
+		await flushPromises()
+		expect(isSkeleton(wrapper)).toBe(false)
+		expect(amount(wrapper).text()).toContain("$1,249.82")
+	})
+
 	test("a failed or rejected default does not hold the figure: nothing more is coming", async () => {
 		const { wrapper } = await mountView({ seedEntries: [seedEntry("failed"), seedEntry("rejected")], seedReady: true })
 		expect(isSkeleton(wrapper)).toBe(false)
