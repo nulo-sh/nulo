@@ -61,7 +61,7 @@ export async function waitForPopup(
 	)
 	const page = await target.asPage()
 	// An error the window raised before this line, module evaluation first of all, can be in neither
-	// array, and nothing reports it elsewhere.
+	// array: Firefox's launch prints the add-on's latest exceptions at its close, Chrome reports nothing.
 	recordPageErrors(ctx, page)
 	// Puppeteer can resolve waitForTarget before the page's main frame is wired
 	// up — calling waitForFunction immediately throws "Requesting main frame too

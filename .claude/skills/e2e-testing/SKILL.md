@@ -461,7 +461,7 @@ assertion; drive the rest of the flow with the ordinary helpers.
   stage evidence instead. Both arrays restart empty at each `openPopup` and `openOnboarding`, so an
   assertion covers a window only if neither runs between the window and the assertion.
   `waitForPopup` records the window it hands back from then on; an error the window raised earlier
-  can be in neither array.
+  can be in neither array (Firefox's launch prints the add-on's latest exceptions at its close).
 - **`chrome.runtime.reload()` disables an unpacked `--load-extension` build** (every later
   `chrome-extension://` goto is `ERR_BLOCKED_BY_CLIENT`). Never use it for harness state reset; when
   the product calls it (the migration barrier's Retry), check the CSP record first
