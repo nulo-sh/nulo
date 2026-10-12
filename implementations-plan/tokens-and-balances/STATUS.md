@@ -17,3 +17,6 @@
 - 2026-10-10 — Codex r2: approve, no new material code finding (one Low on plan wording, applied). Loop converged after two rounds.
 - 2026-10-10 — final gates on the merged head: lint, typecheck:all, check:plans, test:all pass; smoke Chrome 46/47 (navigation.test.ts timed out under host load, rerun 5/5), Firefox 49/49; network waits for the host.
 - 2026-10-10 — arc gate on the merged head d142836: lint, typecheck:all, check:plans, test:all pass; smoke Chrome 47/47 files (199 tests), Firefox 49/49 (200); network Chrome 7 files (9 tests), proverless incoming-arrival 7/7, Firefox 3 files (5 tests); all at retry 0. Arc 1 gate passed.
+- 2026-10-12 — arc 3 start: OA-1 = A signed (P8-03); branch `tokens-and-balances-mint-pin` from origin/dev 8d01f9b (arc 1 merged as #271); D-orch-5 to D-orch-9 recorded.
+- 2026-10-12 — gate 3.1 units pass on bd19374: lint, typecheck:all, focused vitest 1234/1234, test 11392, test:all exit 0; the new tests red on base (lessons/phase-3.md).
+- 2026-10-12 — Codex r1 approve with fixes; Opus r1 reject (High: the PXE hydrates the original class, so no upgrade is caught); r2 reject (High: private calls too); r3 approve. D-arc3-1 to D-arc3-5; #329 filed for the pre-existing contract-case match.

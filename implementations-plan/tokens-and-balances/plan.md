@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in review as a draft PR, merges on P8-05 (OA-3); arcs 2 and 3 wait
+status: approved by the orchestrator (D-orch-1 to D-orch-9); arc 1 merged (#271); page 8 signed; arc 3 (OA-1 = A) in review; arc 2 in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -950,7 +950,7 @@ a successor that loses its ticket while draining.
 | # | Sev | Finding | Disposition |
 |---|---|---|---|
 | 1 | High | The pin never catches an upgrade: the PXE hydrates `currentContractClassId` from the original class, the add registers the token, so the add and every build record the original class | Accepted (D-arc3-5), verified in `effective-class.ts` and `pxe/service.ts` `getContractInstance`. Round 1 applied it to public calls only, on a kernel-refusal premise Codex r2 disproved; round 2 applies it to every call, as Opus proposed, with the original class when the node knows no instance |
-| 2 | Low | Pre-existing: `txAmount` matches a listed token's contract by exact string, so a token added with upper-case hex never reads its mint | Left out: pre-existing, and showing those figures is a visible change outside OA-1's text; filed as an issue at delivery |
+| 2 | Low | Pre-existing: `txAmount` matches a listed token's contract by exact string, so a token added with upper-case hex never reads its mint | Left out: pre-existing, and showing those figures is a visible change outside OA-1's text; filed as #329 |
 | 3 | Nit | A non-string `classId` fails restore | Same as Codex 2 |
 
 ### Arc 3 implementation, Codex round 2 (same session, resumed), `reject (one new material High)`
