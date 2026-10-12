@@ -195,3 +195,31 @@ describe("TokenList — fold", () => {
 		expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(false)
 	})
 })
+
+describe("TokenList — add a pasted address", () => {
+	const UNLISTED = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+	const OFF_CURVE = "0x24f20fb6e501242936eb1f47e2f51610f15e6c07486ed62012774e5f14ebd583"
+	const LISTED = "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf"
+	const listed = () => [row(1, "USDC", { contract: LISTED, privateBalance: ONE })]
+
+	test("a valid address no row matches offers one add row in place of the no-results line; a tap emits it", async () => {
+		const w = mountList({ rows: listed() })
+		await setQuery(w, `  ${UNLISTED} `)
+		const add = w.findAll('[data-testid="holdings-add-token"]')
+		expect(add).toHaveLength(1)
+		expect(add[0].text()).toBe("Add token 0x04…7a")
+		expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(false)
+		await add[0].trigger("click")
+		expect(w.emitted("addToken")).toEqual([[UNLISTED]])
+	})
+
+	test("hex that is no curve point and an address a row matches get no add row", async () => {
+		const w = mountList({ rows: listed() })
+		await setQuery(w, OFF_CURVE)
+		expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+		expect(w.find('[data-testid="holdings-no-results"]').exists()).toBe(true)
+		await setQuery(w, LISTED.toUpperCase().replace("0X", "0x"))
+		expect(w.find('[data-testid="holdings-add-token"]').exists()).toBe(false)
+		expect(symbols(w)).toEqual(["USDC"])
+	})
+})

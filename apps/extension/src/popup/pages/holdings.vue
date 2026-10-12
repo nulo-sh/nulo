@@ -29,7 +29,11 @@ import { usePrices } from "@/composables/usePrices"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 const appStore = useAppStore()
+const cacheStore = useCacheStore()
+const popupStore = usePopupStore()
 
 const activeChainId = () => appStore.network?.chainId
 const activeAccount = () => appStore.account?.address
@@ -98,6 +102,11 @@ const pins = usePinnedTokens({
 })
 void pins.refresh()
 
+const openAddToken = (address: string) => {
+	cacheStore.preselectedTokenAddressToAdd = address
+	popupStore.open("new_token")
+}
+
 const aggregate = computed(() => aggregateFiat(rows.value, fiatOf))
 const aggregateDisplay = computed(() => prices.formatUsdMicro(aggregate.value.micro))
 
@@ -140,6 +149,7 @@ onBeforeUnmount(() => {
 				:fiatOf="fiatOf"
 				:usdRateOf="usdRateOf"
 				:dustThresholdUsd="dustThresholdUsd"
+				@addToken="openAddToken"
 			/>
 		</Flex>
 	</Flex>

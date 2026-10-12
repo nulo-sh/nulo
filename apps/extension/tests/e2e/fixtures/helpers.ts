@@ -962,7 +962,24 @@ export async function importToken(page: Page, contractAddress: string): Promise<
 	// Enter contract address
 	await page.waitForSelector('[data-testid="token-address-input"]', { visible: true, timeout: 5_000 })
 	await replaceInputValue(page, '[data-testid="token-address-input"]', contractAddress)
+	await submitNewTokenPopup(page)
+}
 
+/** Waits until the New token popup's address field holds `address`. */
+export async function waitForNewTokenAddress(page: Page, address: string): Promise<void> {
+	await page.waitForFunction(
+		(want: string) => {
+			const field = document.querySelector('[data-testid="token-address-input"]')
+			const input = field instanceof HTMLInputElement ? field : field?.querySelector("input")
+			return input?.value === want
+		},
+		{ timeout: 5_000 },
+		address,
+	)
+}
+
+/** Submits the open New token popup, its address already entered, and waits for the success toast. */
+export async function submitNewTokenPopup(page: Page): Promise<void> {
 	// Wait for parsing to complete (button text changes from "Awaiting..." to
 	// "Import new token"). The wallet calls PXE to fetch token metadata,
 	// which is slow under sustained network-suite load — 60s is the safe

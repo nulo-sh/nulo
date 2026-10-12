@@ -3,13 +3,14 @@
  * on every row, search by symbol (hit and miss), the sort toggle, and the fold hiding an empty
  * token. Two deployed tokens join the fixture's TST: ZED (funded above TST) and EMPTY (never
  * minted, so its projected balance is a genuine 0). Each import is waited for with the fixture's
- * freshness-gated row check, so the assertions never race the balance projector.
+ * freshness-gated row check, so the assertions never race the balance projector. A third token,
+ * PASTE, is deployed by the test itself and added by pasting its address into the search.
  */
 
 import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
-import { openHoldings, seedUsdQuoteAndReload } from "../fixtures/helpers"
+import { openHoldings, seedUsdQuoteAndReload, submitNewTokenPopup, waitForNewTokenAddress } from "../fixtures/helpers"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -87,6 +88,21 @@ test.skipIf(!hasConfig)(
 			timeout: 5_000,
 		})
 		expect((await listedSymbols(page)).slice(0, 2)).toEqual(["TST", "ZED"])
+
+		// ── Paste to add: a deployed token the wallet does not list yet is offered from the search,
+		// added through the New token popup the offer opens, and listed.
+		const { deployExtraTokensForAccount } = await import("../fixtures/aztec")
+		const { PASTE: pasted } = await deployExtraTokensForAccount(aztecConfig as AztecTestConfig, tokenReadyExtension.accountAddress, [
+			{ symbol: "PASTE", amount: 7n * ONE },
+		])
+		await replaceInputValue(page, '[data-testid="holdings-search"]', pasted)
+		await clickByTestId(page, "holdings-add-token")
+		await waitForNewTokenAddress(page, pasted)
+		await submitNewTokenPopup(page)
+		await page.waitForSelector('[data-testid="holdings-page"] [data-testid="token-symbol"][data-symbol="PASTE"]', {
+			visible: true,
+			timeout: 30_000,
+		})
 
 		expect(tokenReadyExtension.consoleErrors).toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])
