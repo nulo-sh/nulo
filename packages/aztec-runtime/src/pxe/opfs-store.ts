@@ -191,6 +191,8 @@ export class PxeStoreVersionMismatch extends Error {
 	public readonly isPxeStoreVersionMismatch = true as const
 }
 
+const UNPARSEABLE_STAMP = "stamp failed to parse"
+
 /**
  * 5.0.1-aligned version guard for OUR injected store. Upstream 5.0.1 moved from wipe-on-mismatch to
  * REFUSE-and-preserve (`initStoreForRollupAndSchemaVersion` no longer clears), and the flip is right
@@ -204,6 +206,7 @@ export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupA
 	const stored = await dbVersion.getAsync()
 	if (stored) {
 		let mismatch: string | undefined
+		let unparseable = false
 		try {
 			const storedVersion = DatabaseVersion.fromBuffer(Buffer.from(stored, "utf-8"))
 			const cmp = storedVersion.cmp(target)
@@ -213,11 +216,14 @@ export async function initStoreVersionStamp(store: AztecSQLiteOPFSStore, rollupA
 				mismatch = `schema version changed (stored ${storedVersion.schemaVersion} != current ${PXE_DATA_SCHEMA_VERSION_PIN})`
 			}
 		} catch (err) {
-			mismatch = `stamp failed to parse (${errorMessageFromUnknown(err)})`
+			unparseable = true
+			mismatch = `${UNPARSEABLE_STAMP} (${errorMessageFromUnknown(err)})`
 		}
 		if (mismatch) {
 			// REFUSE, do not wipe (D-B2v3). The store's bytes are preserved for the operator.
-			log.warn("PXE store version mismatch — refusing to open (preserving data)", { detail: mismatch })
+			// The parser's message quotes those bytes, so its branch logs the category alone.
+			const data = unparseable ? { reason: UNPARSEABLE_STAMP } : { detail: mismatch }
+			log.warn("PXE store version mismatch — refusing to open (preserving data)", data)
 			throw new PxeStoreVersionMismatch(`PXE store version mismatch. Refusing to open (preserving data): ${mismatch}`)
 		}
 	}
