@@ -123,7 +123,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Pl
 - **Control errors are not findings.** The nonces the capture test raises on purpose are excluded from the sweep's dispositions by their `NULO-PAGE-ERROR-` prefix.
 - **Error text is reviewed before it is committed.** A disposition in `lessons/phase-2.md` quotes an error's text only after it is checked for addresses, keys, URLs with paths and other page data; anything sensitive is replaced by its category.
 
-## Phase 1: #326, a zombie the test keeps
+## Phase 1: #326, a zombie the test keeps ✓
 
 **Assumptions:** Facts 8 and 9; nothing inferred.
 
