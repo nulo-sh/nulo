@@ -325,6 +325,7 @@ declare global {
   const storageLocalSet: typeof import('../utils/storage').storageLocalSet
   const storedNameKey: typeof import('../utils/account-name').storedNameKey
   const stringCompare: typeof import('../utils/string').stringCompare
+  const supersedeProfileActivations: typeof import('../composables/useProfileBootstrap').supersedeProfileActivations
   const toRaw: typeof import('vue').toRaw
   const toRef: typeof import('vue').toRef
   const toRefs: typeof import('vue').toRefs
@@ -943,6 +944,7 @@ declare module 'vue' {
     readonly storageLocalSet: UnwrapRef<typeof import('../utils/storage')['storageLocalSet']>
     readonly storedNameKey: UnwrapRef<typeof import('../utils/account-name')['storedNameKey']>
     readonly stringCompare: UnwrapRef<typeof import('../utils/string')['stringCompare']>
+    readonly supersedeProfileActivations: UnwrapRef<typeof import('../composables/useProfileBootstrap')['supersedeProfileActivations']>
     readonly toRaw: UnwrapRef<typeof import('vue')['toRaw']>
     readonly toRef: UnwrapRef<typeof import('vue')['toRef']>
     readonly toRefs: UnwrapRef<typeof import('vue')['toRefs']>

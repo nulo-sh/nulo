@@ -501,6 +501,7 @@
     "storageLocalSet": true,
     "storedNameKey": true,
     "stringCompare": true,
+    "supersedeProfileActivations": true,
     "toRaw": true,
     "toRef": true,
     "toRefs": true,
