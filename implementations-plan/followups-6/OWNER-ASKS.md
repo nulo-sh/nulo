@@ -11,6 +11,8 @@ The lane ships without an answer to either ask: each says what ships now.
 
 ## OA-2. A live Testnet outage and the nightly and release gate
 
+**Closed: decided by the orchestrator (D-orch-3): gating.**
+
 - **Surface.** The nightly prerelease and a release's assets, which the artifact smoke gates.
 - **Today.** Every artifact spec reaches the live Testnet node, so an outage or a slow node can red the artifact smoke through any spec.
 - **What ships now.** Only the new `shipped-token-list.test.ts` reaches the live node; its failure names the node ("the live Testnet node did not answer") or the seed. It gates the nightly and the release like every smoke spec, so a dRPC outage can still withhold them, now through one named spec.

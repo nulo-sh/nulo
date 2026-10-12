@@ -1,7 +1,7 @@
 ---
 plan: followups-6
 tier: light
-status: planned, awaiting orchestrator approval (Codex approve, round 3)
+status: arc 1 implementing (plan approved by the orchestrator at c1d6377)
 issues: "#317 (arc 1), #315 (arc 1)"
 not_this_lane: "#316, #310, #294, #290, #262, #277"
 driver: claude-code
@@ -107,6 +107,13 @@ One arc, one PR against `dev` (no stack: D-orch-1). Nothing a person sees change
 | D8 | #315 test shape | spy `Logger`, exact payload per branch, PIN-derived strings | `loggedAfter` / `data[1]` | both legs: keep |
 | D9 | Live launch's guard record for the node host | fails that launch only | silently declared; failing every launch | Codex round 1 finding 4 and round 2 finding 3, Opus round 1 finding 4 |
 | D10 | Live spec's identity check | stored token rows' `(contract, symbol, decimals)` equal the shipped seeds', after Home settles with no seed row | Home's `token-symbol` set (capped at 3); Holdings with its fold opened | Codex round 2 findings 1-2, Opus round 2 finding 1: storage binds the contract without a `src` change |
+| D-orch-1 | Delivery shape | one PR against `dev`, no stack | a `gh stack` of one | orchestrator |
+| D-orch-2 | OA-1 (the popup's store error quotes the stored stamp) | ships unchanged; at close-out one `owner-decision` issue (`ux` + `owner-decision`, both options and the recommendation from OWNER-ASKS) is filed and listed on the Outcome's `Open items:` line | deciding it in this lane | orchestrator: a screen's copy is the owner's call |
+| D-orch-3 | OA-2 (a live outage and the nightly and release gate) | decided, not asked: the live spec gates the nightly and the release like every smoke spec; a named node outage is a rerun | the live spec reported but not gating | orchestrator, on the plan's recommendation |
+| D-orch-4 | Phase 2's stop rule | stands exactly as written: more than two specs needing a change, or any change that drops coverage, stops the arc for a re-plan; never a loosened or skipped assertion, retry, timer wait or `skipIf` | relaxing it | orchestrator |
+| D-orch-5 | Workflows | never dispatch or re-run `nightly.yml`, `release*.yml` or `publish-*.yml`; the next scheduled nightly after the merge confirms #317; a workflow edit moves its pins in the same commit and runs `lint:actions` | a dispatched confirmation run | orchestrator |
+| D-orch-6 | What a person sees | unchanged: #315 changes one `warn` payload, the thrown message stays (OA-1); no other `apps/extension/src` or `packages/*/src` change | — | orchestrator |
+| D-orch-7 | `lessons.md` | at its 8 KiB budget: promote nothing unless a retirement pays for it; merge `origin/dev` and read `index.md` and `lessons.md` before the final gates; never a union merge | — | orchestrator |
 
 ## Audit record
 
