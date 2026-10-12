@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-5
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved (orchestrator, 208f5f4); arc-1 in implementation
 issues: "#319, #322 (arc-1); #321, #316, #310, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -291,7 +291,7 @@ Only the branch the evidence selects lands. Probe code stays uncommitted.
 
 Mark a phase header ✓ only when its gate passes. Phases 1 and 2 never share a running browser or a build.
 
-### Phase 1: #319, the lock route
+### Phase 1: #319, the lock route ✓ (2026-10-12; the pinned certification half unmet, D15)
 
 Steps:
 1. Record the base SHA. Build the #319 probe patch by § Probe rules. Log both in `lessons/phase-1.md`.
@@ -325,6 +325,8 @@ Steps:
   - zero lost locks in step 11 and in the certification runs.
 - On the not-reproduced branch with no committed change, the stage table is the gate.
 - Layers: lint, typecheck, unit, smoke e2e (amplified, both browsers).
+
+**Gate outcome (Phase 1):** L2 settled by natural reproduction (S0 1 of 10 red on base; S1 6 of 50 lost, all L2); fix `7d2e5fb`, typed `fb3aa70`, filter removed `e9f5b6e`. Green: lint, typecheck:all, test; red-on-base (base copy and fence-removal mutant both red); forced L2 on the fix build 4 of 4 landed; S1 on the fix build 150 of 150 landed; `security.test.ts` 10 of 10 unpinned and 20 of 20 on one CPU without busy loops; full smoke on Chrome (49 files, 213 tests) and Firefox (51 files, 210 tests) at retry 0; the 16 lock-caller network files on Chrome (15, one Firefox-only skipped) and Firefox (16); the bundle grep, no hits. **Not met:** the pinned whole-file run, red on base and fix alike before any changed path (D15); the changed test alone under that load completed the lock 18 times in 60 attempts with no lock-path failure ([lessons/phase-1.md](lessons/phase-1.md#step-12-the-gate)).
 
 ### Phase 2: #322, the capability window and the recursion
 
@@ -422,6 +424,20 @@ The PR quotes the record and names the branch it used.
 | D6 | e2e rounds run one at a time with no build under a running browser. S3 is the one exception, with isolated `EXTENSION_PATH` copies. | planner; Codex C15 | revised after round 1 |
 | D7 | L2 is the leading #319 hypothesis. Its fix shape is pinned: the lock seal invalidates the composable's existing `bootstrapFence`, and every `isLogined = true` commit is gated on its run's fence; the guard stays as it is; boot outcomes stay distinct; onboarding is unchanged | Opus O3 (verified by the planner, Facts 5-7); Codex round 2, C18 | revised after round 2 |
 | D8 | The `security.test.ts` benign filter: measure its source; remove the filter when nothing is recorded or when the arc fixes the source. A source the arc cannot fix leaves #319 open (`Refs`), recorded on the issue; no filtered run counts as proof | Codex C3 (rounds 2 and 3) | revised after round 3 |
+| D-orch-1 | No stack: one arc, one PR | orchestrator | standing |
+| D-orch-2 | The no-ask record in § UI impact is the whole visible budget: a lost lock route, a window that fails to open or a recursion in a page is fixed so the screen behaves as designed, and nothing new appears; a fix that would change what a person sees goes to OWNER-ASKS.md and stays out. The PR body quotes the record | orchestrator, at approval | binding |
+| D-orch-3 | Classify by reproduction under § Decision rules: each branch's fix lands only when its probe recorded the mechanism (L2 only with the queue order recorded); "did not reproduce" closes nothing; S3 only if S0-S2 settle nothing; an unsettled issue stays open with `Refs` and a comment carrying the probe record | orchestrator, at approval | binding |
+| D-orch-4 | D2 stays cut: no route-wait widening, no filter, no retry, no `skipIf`. The benign filter is removed or its source fixed; no filtered run counts as proof. Every timing-sensitive change passes the certification bar (10 runs, then 20 on one CPU under load), at retry 0 | orchestrator, at approval | binding |
+| D-orch-5 | The lock seal is a security boundary: the L2 fix ships with a unit test red on base that pins "after the seal, no reply sets `isLogined` true", the Codex fix loop is asked for an adversarial read of that path, the guard and onboarding stay unchanged, and the invariant is named in one sentence at the code | orchestrator, at approval | binding |
+| D-orch-6 | Probes never reach the bundle: the `nulo:probe:` sentinel, no await or storage write on the measured path, both final dists grepped clean and `git diff` empty of probes before the PR opens | orchestrator, at approval | binding |
+| D-orch-7 | Never dispatch `nightly.yml`, `release*.yml` or `publish-*.yml`. `lessons.md` is at its budget: promote nothing unless a retirement pays for it. Merge `origin/dev` before the final gates, read what changed in `index.md` and `lessons.md`, never a union merge | orchestrator, at approval | binding |
+| D9 | The forced L2 probe holds the bootstrap's tagged final read inside its critical section until the click's `lockActiveProfile` is queued behind it, instead of holding `refreshSession`: with `refreshSession` holding, the bootstrap's own network and account init block on in-process `getActiveProfile` calls and never reach the read (four invalid runs, recorded). Validity: the first `in` after the release is `lockActiveProfile` | implementer, Phase 1 step 2 | deviation, recorded in lessons/phase-1.md |
+| D10 | The probe test's trajectory stops 3 s after the route lands (the dwell catches L5) and runs the full 75 s only while it has not landed | implementer | deviation |
+| D11 | S2 ran one launch (10 locks), not five: each lock took about four minutes on one CPU with three busy loops, and #319 had already settled by natural reproduction in S1 | implementer | deviation |
+| D12 | The fix supersedes activations from `markLocked` in `app.vue`'s locked-state shell (no new shell member); an activation commits `isLogined` only while its core run is current. Consequence stated, not denied: an activation superseded by any newer one (not only by a lock) now returns `false` / `null` in every shell, onboarding included, where before it could set `isLogined` early | Codex and Opus, Phase 1 step 9 (Opus finding 5) | accepted |
+| D13 | Not fixed, recorded: after a seal, a same-profile unlock starts a fresh core whose client replacement can reject a call a superseded boot-path core still awaits, turning that stale boot run into `failed`. Base was no better (the joined run kept calling the locked worker and failed with "unauthorized"), and the window needs an outside lock during a boot-time bootstrap plus an unlock before its pending call returns | Opus finding 2, Phase 1 step 9 | disposition |
+| D14 | The `security.test.ts` filter is removed as dead code: the launch fixture already drops "Client disconnected" from both arrays. Measured with the fixture's own drops removed too (a throwaway edit): the file is green with no entry. The fixture's suite-wide drop of the worker-restart cascade is outside this lane | Opus finding 1, step 7 | accepted |
+| D15 | **Unmet, not claimed.** The pinned half of Phase 1's certification bar (the whole `security.test.ts`, 20 runs, one CPU with three busy loops) cannot go green on this host on any build: the base build failed it 3 of 3 at the same steps as the fix build (3 of 3), the 60 s default test timeout in the input-validation and auto-lock tests (the per-test registration fixture alone takes 40-50 s on that load) and the 5 s toast wait after the password change, all before the lock. Raising those budgets is out of bounds. Evidence gathered instead, none of it presented as the bar: the changed test alone, pinned the same way, until 20 runs pass through the lock, every attempt reported, any failure at or after `lockWallet` a red; the whole file 20 runs on one CPU without the busy loops; the base control. Codex (consulted on this disposition) rejected it as gate satisfaction and found no timing dependency in the diff that the pinned whole-file run alone would expose; the bar's acceptance is the orchestrator's call | implementer; Codex consult | open: orchestrator |
 
 ## Audit record
 
