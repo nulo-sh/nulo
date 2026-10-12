@@ -566,9 +566,8 @@ async function buildSetAuthorizedCall(messageHash: Fr): Promise<{ functionCall: 
 }
 
 /**
- * The class a call runs under, resolved as the PXE resolves it to execute: the node's current class,
- * else the original one, which is all `instances` holds for a registered contract. A failed lookup
- * records none, so the call's mint reads no figure and the build goes on.
+ * The node's current class, else the original one `instances` holds, as the PXE resolves a call to
+ * run it, read at build time. A failed lookup records none, which only withholds a mint figure.
  */
 async function calledClassId(ctx: BuildContext, contract: string): Promise<string | undefined> {
 	try {

@@ -42,3 +42,8 @@
   node's class, else the original; a failed lookup records none.
 - Lesson: before reasoning from what the kernel enforces, read what the installed PXE resolves; a privacy
   argument for skipping a node query needs proof that the PXE does not already make it.
+
+## Review round 3
+
+- 2026-10-12 — Codex r3: approve, no new material finding (one doc nit, applied). Loop converged at the
+  third round.

@@ -961,6 +961,14 @@ a successor that loses its ticket while draining.
 
 Round 2 also confirmed: function visibility comes from the resolved ABI; a scheduled upgrade reads the previous class until it activates, which the signed build-time limit covers; the failed-lookup `undefined` is the right display-only fail-closed and logs nothing; a reused estimate's `txCalls` keep the estimate build's class, as the signed text allows.
 
+### Arc 3 implementation, Codex round 3 (same session, resumed), `approve (no new material finding)`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Nit | `calledClassId`'s doc says "the class a call runs under", but the lookup reads the latest state while a private call executes at its anchor | Accepted: "as the PXE resolves a call to run it, read at build time" |
+
+The reviewer verified the fallback (a PXE hit hydrates the original class, a node fallback passes `assertNotUpgraded`, a bundled instance carries equal classes), that an upgraded contract cannot honestly answer `undefined`, that the extra await bypasses no fence and every failure still reaches `task.fail`, and that repeated targets only cost reads. The loop converged after three rounds.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no
