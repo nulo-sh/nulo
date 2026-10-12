@@ -19,3 +19,9 @@
 - **#316** (`ux`, `owner-decision`): adding Nulo's own sponsor address by hand makes Send list two Nulo sponsors (`addFpc` checks no address; `buildFeeMethods` dedupes nothing).
 - **#317** (`ci`): the artifact smoke runs every spec unguarded against the live Testnet node. A comment links the chain-endpoints plan's Ask A1 and D4, which kept artifact runs unguarded on purpose and deferred a hermetic artifact run to its own issue; Opus's `send-fee-privacy.test.ts` observation is in its body.
 - No neighbour issue: Phase 1's and Phase 3's whole-file and whole-suite runs showed no neighbour red.
+
+## Final local gates (merged head, after `origin/dev` brought #314)
+
+- `origin/dev` merged (no union merge); it changed no line of `implementations-plan/index.md` or `lessons.md`, added `wallet-followups-5` to `archive/index.md`, and touched nothing under `apps/extension/tests/e2e`.
+- `bun run lint`, `typecheck:all`, `test`, `test:all`, `test:ci-gating`, `lint:actions`, `check:plans`: all exit 0.
+- Release and armed builds remade from the merged tree (no `.env*`, stamps checked); `send-keyboard.test.ts` at retry 0 on C2, C1, F2 and F1: 5 passed each.
