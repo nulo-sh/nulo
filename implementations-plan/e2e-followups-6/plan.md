@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-6
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved (a86e120); arc-1 implementing
 issues: "#325, #326 (arc-1); #324, #310, #321, #316, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -323,6 +323,15 @@ Run once, over the whole arc diff, after the arc gate passes.
 | D8 | R1-R4 classification, with R3's ship-Phase-1-alone fallback, applied to every required asserting test | Lane brief's stop rule; Codex R1 #7 widened the trigger | accepted |
 | D9 | Keep the `openPopup` reset; place each assertion before a reset that follows a window, and at the top of a dApp-fixture test that opens a popup first | Codex R1 #1 (blocker). Alternative (per-test arrays) rejected in § Architecture | accepted |
 | D10 | Arm `waitForPopup` before the action that opens a logger window; one `data-testid` on the logger root as the capture test's readiness signal | Codex R1 #2, #4 | accepted |
+| D-orch-1 | Single arc, one PR against `dev`, no stack | Orchestrator | accepted |
+| D-orch-2 | The no-ask record in § UI impact is the whole visible budget. The logger window's `data-testid` is the one product edit outside R2 (it renders the same). An R2 fix ships only with the panel's agreement, a test red on base and its own UI impact line stating the surface shows the same before and after; an R3 finding is an issue, the PR says `Refs #325`, Phase 1 ships alone and `OWNER-ASKS.md` gets the "what ships now" entry. The record is quoted in the PR body | Orchestrator, at approval | accepted |
+| D-orch-3 | Nothing is filtered: every error the wider recording surfaces is classified R1-R4 and recorded in `lessons/phase-2.md` with file, URL, text and disposition. An assertion moves only to a point where the arrays still hold its window (the `openPopup` reset kept); the PR body lists every move with its reason | Orchestrator, at approval | accepted |
+| D-orch-4 | #326 is fixed in the fixture and proven by the probe record: the child is killed only past the parent's `exec`, the sibling zombie test uses the same helper, the report carries the counts. No retry, wider wait or `skipIf`; widened copies run with `-t zombie` and never stay in the tree | Orchestrator, at approval | accepted |
+| D-orch-5 | Host sequencing: e2e runs start only once `e2e-followups-5`'s PR is open (it opened as #328); unit work and Phase 1 probes earlier but off cores 0-1. Merge `origin/dev` before the final gates; the attach comment's Firefox clause only if that merge carries the close-time exception print. Fresh armed build per browser for smoke under `env -u EXTENSION_PATH`; the sweep tap removed and `git diff` proven clean before the PR | Orchestrator, at approval | accepted |
+| D-orch-6 | Never dispatch `nightly.yml`, `release*.yml` or `publish-*.yml`; `lessons.md` gains nothing unless a retirement pays for it; never a union merge | Orchestrator, at approval | accepted |
+| D-orch-7 | An R3 or R4 issue is filed deduped, five sections, with a `Record` link to this plan, and named in the report with its disposition | Orchestrator, at approval | accepted |
+| D12 | `grantCapBundle` waits for the capabilities window to close (10 s, as `approveVerify` waits for its own) before returning, so a cap fixture's first assertion covers the grant window's teardown | Pre-sweep Opus review #1 (`resolveInteraction` precedes `closeWindow(true)`); the fix sits in the helper that owns the window | accepted |
+| D13 | Pattern (b) of the step-6 audit, a window still open or closing at the last assertion, is closed by waiting for the window's close (`register-token`) or by closing it through its own control (`snack-placement`'s execute window, `rejectExecute`) before the assertion | Implementer, from the audit; no assertion removed or loosened | accepted |
 
 ## Audit verdicts
 

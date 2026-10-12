@@ -46,3 +46,13 @@ Run on the three committed Phase 1-2 commits while waiting for `e2e-followups-5`
 | 5 | [nit] A window leaks when `waitForPopup` fails after the target appears (rows, the capture test) | **Rejected.** Only a second failure on a retry is affected, and the first attempt's error is printed by `RetryErrorReporter`; closing windows inside `waitForPopup` on failure would change every caller's failure path for no case the suite has hit. |
 | 6 | [nit] Each test asserts only the arrays it already asserted | **Rejected for this arc** (the plan's choice: assertions move, none is added to a new array). The sweep's JSONL shows what the windows raise in each array; an entry there is a finding whichever array a test asserts. |
 | 7 | [nit] The zombie helper leaks the background `sleep` if the shell prints no pid | **Rejected.** The plan's "once known"; the pid is unknown on that path, and the old fixture had the same exposure. |
+
+## 2026-10-12: smoke on Chrome (armed build, `env -u EXTENSION_PATH`, retry 0, the sweep tap applied)
+
+- `page-error-capture`, `own-window`, `rows`: 3 files, 11/11 green.
+- Red-on-base proof 1 (the `recordPageErrors` call removed from `waitForPopup`, the `"logger"` kind kept): `AssertionError: the window's throw is in the array when the call returns: expected +0 to be 1`. The window was discovered, booted and showed `console._error`; the red is the missed capture.
+- Red-on-base proof 2 (the `WeakSet` guard's early return removed): `AssertionError: a page recorded twice reports each error once: expected 2 to be 1`.
+- Both files restored from copies and diffed clean before the next run.
+- Full smoke suite on Chrome: 49 files passed, 4 skipped (214 tests passed, 10 skipped), 1,459 s.
+- Firefox (armed Firefox build): the three files 11/11 green; proof 1 and proof 2 red with the same two messages as on Chrome.
+- Sweep entries from every smoke run above (Chrome full suite, both browsers' three files, the four proof runs): 56 lines, every one a `NULO-PAGE-ERROR-` control nonce. No window, popup or onboarding page raised anything else.
