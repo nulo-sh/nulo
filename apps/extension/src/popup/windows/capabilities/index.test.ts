@@ -302,8 +302,15 @@ describe("capabilities window — shell lifecycle frozen oracle", () => {
 		// registered anyway so a failed popup still rejects the request on close.
 		w = factory()
 		await flushPromises()
-		getActiveProfilePromiseReject?.(new Error("profile-fetch-failed"))
-		await flushPromises()
+		const failure = new Error("profile-fetch-failed")
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			getActiveProfilePromiseReject?.(failure)
+			await flushPromises()
+			expect(logged.mock.calls).toEqual([["Capabilities window init failed", { error: failure }]])
+		} finally {
+			logged.mockRestore()
+		}
 		expect(beforeunloadAdds()).toBe(1)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(true)
 	})
@@ -404,6 +411,24 @@ describe("capabilities window — shell lifecycle frozen oracle", () => {
 		await flushPromises()
 		expect(w.find('[data-testid="cancelled-overlay"]').exists()).toBe(true)
 		expect(w.find('[data-testid="error-text"]').exists()).toBe(false)
+	})
+
+	test("an approve refused with any other error shows the error strip and is logged under a named key", async () => {
+		const refusal = new Error("service unavailable")
+		resolveInteractionMock.mockRejectedValueOnce(refusal)
+		payloadToLoad = { params: { delta: [], existingGrants: [] }, session: { chainId: "1" } }
+		w = factory()
+		await completeInit()
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		try {
+			const vm = w.vm as unknown as { approve: () => Promise<void> }
+			await vm.approve()
+			await flushPromises()
+			expect(logged.mock.calls).toEqual([["Capabilities approve failed", { error: refusal }]])
+		} finally {
+			logged.mockRestore()
+		}
+		expect(w.find('[data-testid="error-text"]').exists()).toBe(true)
 	})
 })
 

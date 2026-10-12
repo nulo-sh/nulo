@@ -334,7 +334,7 @@ function ratchetBase(): { label: string; sha?: string; branch?: string } | null 
 	return sha ? { label: `${branch}@${sha.slice(0, 8)}`, sha } : { label: `origin/${branch}`, branch }
 }
 
-function pullRequestEvent(eventPath: string | undefined): { base?: { sha?: unknown }; labels?: Array<{ name?: unknown }> } | undefined {
+function pullRequestEvent(eventPath: string | undefined): { base?: { sha?: unknown } } | undefined {
 	if (!eventPath) return undefined
 	try {
 		return JSON.parse(readFileSync(eventPath, "utf8"))?.pull_request ?? undefined
@@ -348,10 +348,14 @@ function pullRequestBaseSha(eventPath: string | undefined): string | undefined {
 	return typeof sha === "string" && /^[0-9a-f]{40}$/.test(sha) ? sha : undefined
 }
 
-/** Whether the PR carries the owner's move-approval label (event state at run start — apply the
- *  label, then re-run the workflow). */
-function movesApproved(eventPath: string | undefined): boolean {
-	return (pullRequestEvent(eventPath)?.labels ?? []).some((l) => l?.name === MOVE_APPROVED_LABEL)
+/** Whether the PR carries the owner's move-approval label, as the unit-tests job read it live just
+ *  before this test (never the event's snapshot): apply the label, then re-run the failed job;
+ *  removing it takes effect at that job's next run. Off Actions, never. */
+function movesApproved(env: Record<string, string | undefined>): boolean {
+	if (env.GITHUB_ACTIONS !== "true") return false
+	if (env.BASELINE_MOVE_APPROVED === "true") return true
+	if (env.BASELINE_MOVE_APPROVED === "false") return false
+	throw new Error(`BASELINE_MOVE_APPROVED must be "true" or "false" on a pull request run; the unit-tests job's live step sets it`)
 }
 
 function git(...args: string[]): { ok: boolean; stdout: string; stderr: string } {
@@ -407,7 +411,7 @@ describe("shrink-only ratchet against the base branch", () => {
 				)
 				return
 			}
-			const approved = movesApproved(process.env.GITHUB_EVENT_PATH)
+			const approved = movesApproved(process.env)
 			const violations = hasEntries(read.manifest)
 				? ratchetViolations(diffEntries(read.manifest.accepted, head.accepted), { movesApproved: approved })
 				: legacyRatchetViolations(read.manifest.rules, head.accepted)
@@ -420,4 +424,43 @@ describe("shrink-only ratchet against the base branch", () => {
 		},
 		{ timeout: 180_000 },
 	)
+})
+
+describe("move approval", () => {
+	const withEvent = (labels: string[], run: (eventPath: string) => void) => {
+		const dir = mkdtempSync(join(tmpdir(), "move-approval-"))
+		try {
+			const eventPath = join(dir, "event.json")
+			writeFileSync(
+				eventPath,
+				JSON.stringify({ pull_request: { base: { sha: "a".repeat(40) }, labels: labels.map((name) => ({ name })) } }),
+			)
+			run(eventPath)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	}
+
+	test("ignores a label the event's snapshot still carries once the live read says it is gone", () => {
+		withEvent([MOVE_APPROVED_LABEL], (GITHUB_EVENT_PATH) => {
+			expect(movesApproved({ GITHUB_ACTIONS: "true", GITHUB_EVENT_PATH, BASELINE_MOVE_APPROVED: "false" })).toBe(false)
+		})
+	})
+
+	test("accepts a label the live read found though the event's snapshot lacks it", () => {
+		withEvent([], (GITHUB_EVENT_PATH) => {
+			expect(movesApproved({ GITHUB_ACTIONS: "true", GITHUB_EVENT_PATH, BASELINE_MOVE_APPROVED: "true" })).toBe(true)
+		})
+	})
+
+	test.each([
+		["unset", undefined],
+		["malformed", "yes"],
+	])("refuses a live answer that is %s, under Actions", (_, value) => {
+		expect(() => movesApproved({ GITHUB_ACTIONS: "true", BASELINE_MOVE_APPROVED: value })).toThrow("BASELINE_MOVE_APPROVED")
+	})
+
+	test("never approves off Actions", () => {
+		expect(movesApproved({ BASELINE_MOVE_APPROVED: "true" })).toBe(false)
+	})
 })

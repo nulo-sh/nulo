@@ -1,14 +1,16 @@
 /**
  * Behavioral pin for the aggregators outside the e2e lanes: `quality-status` (pr-quick.yml),
  * actionlint.yml's `Status` and release.yml's `status`, plus release's `attach-assets` guard; for the
- * sharded PR smoke lanes' `extension-smoke-e2e-status` and its Firefox twin; and, for every PR e2e
- * lane, that a draft whose diff touches the lane's surface gets its suites run, not skipped.
+ * sharded PR smoke lanes' `extension-smoke-e2e-status` and its Firefox twin; for nightly.yml's
+ * `status` and its `publish-nightly` guard; and, for every PR e2e lane, that a draft whose diff
+ * touches the lane's surface gets its suites run, not skipped.
  *
- * Each must fail closed: pass only when every need ended exactly as its own `if:` asks, so a gate
- * that never ran (skipped for the wrong reason, cancelled before a runner, an empty result) reds
- * the check. A text pin cannot show that, so this runs each aggregator's own script with its
- * expressions bound to a world a run can produce: every legitimate world must pass, and any one need
- * ending any other way, or any control output it reads being malformed, must fail.
+ * Each must fail closed (nightly's `status` aside, held to its own rule below): pass only when every
+ * need ended exactly as its own `if:` asks, so a gate that never ran (skipped for the wrong reason,
+ * cancelled before a runner, an empty result) reds the check. A text pin cannot show that, so this
+ * runs each aggregator's own script with its expressions bound to a world a run can produce: every
+ * legitimate world must pass, and any one need ending any other way, or any control output it reads
+ * being malformed, must fail.
  *
  * Wired into CI via the root `test:ci-gating` script in `_unit-tests.yml`.
  */
@@ -268,6 +270,59 @@ describe.each([SMOKE, SMOKE_FIREFOX])("$file aggregator", (agg) => {
 	})
 })
 
+// nightly.yml's `status` passes a skipped stage by design: a quiet day skips every gate, and a stage
+// behind a red one skips while that one reds the run. So it is held to what it states, against every
+// need, and to the exact set it waits on: a job added to the workflow gates the nightly, or is named
+// advisory here.
+const NIGHTLY = aggregator("nightly.yml")
+const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live"]
+const NIGHTLY_WORLDS: Record<string, World> = {
+	"a green night": results(NIGHTLY.needs, []),
+	"a quiet day": results(
+		NIGHTLY.needs,
+		NIGHTLY.needs.filter((job) => job !== "resolve"),
+	),
+}
+
+describe("nightly.yml gates", () => {
+	test("status always runs, nothing can hide a red script, and it waits on every job but the advisory reports", () => {
+		expect(NIGHTLY.if).toBe("always()")
+		expect(NIGHTLY.suppressors).toEqual([undefined, undefined, undefined])
+		expect([...NIGHTLY.needs].sort()).toEqual(NIGHTLY.jobs.filter((job) => !NIGHTLY_ADVISORY.includes(job)).sort())
+	})
+
+	test.each(Object.entries(NIGHTLY_WORLDS))("status passes %s", (_, world) => {
+		expect(exitCode(NIGHTLY, world)).toBe(0)
+	})
+
+	test.each(Object.entries(NIGHTLY_WORLDS))("status fails %s once any one need fails or is cancelled", (_, world) => {
+		for (const job of NIGHTLY.needs) {
+			for (const result of ["failure", "cancelled"]) {
+				expect(exitCode(NIGHTLY, { ...world, [`needs.${job}.result`]: result }), `${job} '${result}'`).not.toBe(0)
+			}
+		}
+	})
+
+	// Enumerating success, not rejecting failure: a gate that skipped or was cancelled must not publish.
+	test("publish-nightly runs only past every gate status reads, each exactly success, never from a cancelled run", () => {
+		const { jobs } = workflow("nightly.yml")
+		const publish = jobs["publish-nightly"]
+		const needs: string[] = [publish.needs].flat()
+		const dependents = Object.keys(jobs).filter((name) => [jobs[name].needs ?? []].flat().includes("publish-nightly"))
+		expect([...needs].sort()).toEqual(NIGHTLY.needs.filter((job) => job !== "publish-nightly" && !dependents.includes(job)).sort())
+		const clauses = String(publish.if)
+			.split("&&")
+			.map((clause) => clause.trim())
+		const expected = [
+			"always()",
+			"!cancelled()",
+			"needs.resolve.outputs.skip != 'true'",
+			...needs.map((need) => `needs.${need}.result == 'success'`),
+		]
+		expect(clauses.sort()).toEqual(expected.sort())
+	})
+})
+
 // A malformed control output would otherwise decide which stages are due. Each world below is what
 // a run really produces with that output malformed: every job whose `if:` compares the output with
 // 'true' or 'false' skips, so the world agrees with itself and only the output's own check can fail it.
@@ -400,6 +455,13 @@ test.each(E2E_LANES)("$file runs a draft's suites, and its aggregator fails on t
 	const ran = { "needs.decide.outputs.run": "true", [READ_ATTEMPT]: "1", "github.run_attempt": "1", ...results(agg.needs, []) }
 	expect(exitCode(agg, ran)).toBe(0)
 	expect(exitCode(agg, { ...ran, ...results(suites, suites) })).not.toBe(0)
+})
+
+// The parity pins compare only the suite jobs, and the loop pin holds when a job leaves `needs` and the
+// loop together, so a suite dropped from a network lane's `status` would stop gating unnoticed.
+test.each(E2E_LANES.filter(({ file }) => file.includes("network")))("$file's aggregator waits on every job", ({ file }) => {
+	const agg = aggregator(file)
+	expect([...agg.needs].sort()).toEqual([...agg.jobs].sort())
 })
 
 // A re-run of `status` or `decide` alone carries the earlier attempt's gate inputs, so a skip decided

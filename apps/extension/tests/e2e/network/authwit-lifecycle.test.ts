@@ -91,7 +91,7 @@ test.skipIf(!hasConfig)(
 		// `from: B`, so this genuinely exercises A's public authwit. Asserts the MINED outcome
 		// — a revoked/blocked consume reverts at sequencing; the NO_WAIT dApp result is
 		// `{ txHash, ... }`, so pull the hash out of either shape.
-		const consume = async (nonce: string): Promise<"ok" | "error"> => {
+		const consume = async (nonce: string): Promise<"ok" | `error: ${string}`> => {
 			await selectPgAccount(callerB)
 			await setInputs(nonce)
 			const seq = await snapshotResultSeq(page)

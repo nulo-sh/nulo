@@ -63,6 +63,7 @@ import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
+import { WalletLockedError } from "./wallet-locked-error"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
 import { deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
@@ -436,7 +437,19 @@ describe("ProfileService integration", () => {
 			const fence = await service.captureExecutionFence()
 			expect(fence.epoch).toBe(0)
 			service.getDeletionState().beginDeletion(fence.profileId)
-			await expect(service.captureExecutionFence()).rejects.toThrow(/Wallet locked/)
+			const reserved = await service.captureExecutionFence().catch((e: unknown) => e)
+			expect((reserved as Error).message).toBe("Wallet locked")
+			// A deletion answers as locked but is not a lock, so it is not typed as one.
+			expect(reserved).not.toBeInstanceOf(WalletLockedError)
+		}, 30_000)
+
+		test("captureExecutionFence with no live session throws the typed lock, with the message callers match", async () => {
+			const { service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			await service.lockActiveProfile()
+			const locked = await service.captureExecutionFence().catch((e: unknown) => e)
+			expect(locked).toBeInstanceOf(WalletLockedError)
+			expect((locked as Error).message).toBe("Wallet locked")
 		}, 30_000)
 
 		test("exportPlain for passkey profile returns credentialId", async () => {

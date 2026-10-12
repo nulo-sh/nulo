@@ -1,12 +1,20 @@
 import { createTestingPinia } from "@pinia/testing"
 import { Flex, MaterialIcon, Text } from "@nulo/design"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { beforeEach, describe, expect, test, vi } from "vitest"
+import type { ConfigProp } from "@/wallet/config"
 
 const fakes = vi.hoisted(() => ({
 	managerProfile: { name: "managers.profile" },
 	lockWallet: { lock: vi.fn(), dispose: vi.fn() },
-	config: { getValue: vi.fn(), setValue: vi.fn(), onUpdate: { add: vi.fn() }, disconnect: vi.fn() },
+	config: {
+		getValue: vi.fn(),
+		setValue: vi.fn(),
+		onUpdate: undefined as unknown as EventHandler<ConfigProp>,
+		onConnected: undefined as unknown as EventHandler<void>,
+		disconnect: vi.fn(),
+	},
 	profile: { refreshSession: vi.fn(), disconnect: vi.fn() },
 }))
 vi.mock("@/utils/core", () => ({ managers: { profile: fakes.managerProfile } }))
@@ -30,6 +38,8 @@ import LockPage from "./lock.vue"
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	fakes.config.onUpdate = new EventHandler<ConfigProp>()
+	fakes.config.onConnected = new EventHandler<void>()
 	fakes.config.getValue.mockImplementation(async (key: string) => (key === "sessionTtl" ? 1_800_000 : true))
 	const c = (globalThis as { chrome?: { storage: Record<string, unknown> } }).chrome
 	if (c) {
@@ -121,6 +131,69 @@ describe("settings/lock", () => {
 
 		await debounced()
 		expect(fakes.config.setValue).toHaveBeenLastCalledWith("sessionTtl", 900_000)
+	})
+
+	describe("a port that drops under the mounted page", () => {
+		const connect = () => fakes.config.onConnected.invoke()
+		const update = (key: string, value: unknown) => fakes.config.onUpdate.invoke({ key, value } as ConfigProp)
+		const strict = (w: VueWrapper) => w.findComponent('[data-testid="strict-security-toggle"]').attributes("modelvalue")
+		const minutes = (w: VueWrapper) => w.findComponent('[data-testid="auto-lock-input"]').attributes("modelvalue")
+
+		test("a read the drop rejected is made again on the reconnect, never on the first open", async () => {
+			fakes.config.getValue.mockRejectedValueOnce(new Error("Client disconnected"))
+			const w = await mountLock()
+			connect()
+			await flushPromises()
+			expect(fakes.config.getValue).toHaveBeenCalledTimes(1)
+			expect(w.find('[data-testid="loading"]').exists()).toBe(true)
+
+			connect()
+			await flushPromises()
+			expect(fakes.config.getValue).toHaveBeenCalledTimes(3)
+			expect(w.find('[data-testid="loading"]').exists()).toBe(false)
+			expect(strict(w)).toBe("true")
+			expect(minutes(w)).toBe("30")
+		})
+
+		test("an older read that answers after the newer one is ignored", async () => {
+			const first = Promise.withResolvers<number>()
+			fakes.config.getValue.mockReturnValueOnce(first.promise)
+			const w = await mountLock()
+			connect()
+			fakes.config.getValue.mockResolvedValueOnce(900_000).mockResolvedValueOnce(false)
+			connect()
+			await flushPromises()
+			expect(strict(w)).toBe("false")
+			expect(minutes(w)).toBe("15")
+
+			first.resolve(1_800_000)
+			await flushPromises()
+			expect(strict(w)).toBe("false")
+			expect(minutes(w)).toBe("15")
+		})
+
+		test("a reconnect's read keeps an edit in progress while the stored timeout is unchanged", async () => {
+			const w = await mountLock()
+			connect()
+			;(w.findComponent('[data-testid="auto-lock-input"]') as VueWrapper).vm.$emit("update:modelValue", "15")
+			connect()
+			await flushPromises()
+			expect(fakes.config.getValue).toHaveBeenCalledTimes(4)
+			expect(minutes(w)).toBe("15")
+		})
+
+		test("an update sent while a read is in flight beats the read's older value", async () => {
+			const w = await mountLock()
+			connect()
+			const reread = Promise.withResolvers<boolean>()
+			fakes.config.getValue.mockResolvedValueOnce(1_800_000).mockReturnValueOnce(reread.promise)
+			connect()
+			await flushPromises()
+			update("strictSecurityMode", false)
+			reread.resolve(true)
+			await flushPromises()
+			expect(strict(w)).toBe("false")
+		})
 	})
 
 	test("unmount disposes the lock after both service clients disconnect", async () => {

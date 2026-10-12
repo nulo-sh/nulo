@@ -307,7 +307,7 @@ describe("handleWalletMessage — a scope refusal", () => {
 		expect(await refuse(method, args, grants)).toEqual({
 			...refusedCleanly(message),
 			rows: 1,
-			row: { stage: "failed", kind: "scope_refused", message, leaks: false, title: "SENTINEL-NAME" },
+			row: { stage: "failed", kind: "scope_refused", message, leaks: false, title: "Transaction" },
 		})
 	})
 
@@ -337,7 +337,7 @@ describe("handleWalletMessage — a schema refusal", () => {
 				kind: "malformed_request",
 				message: "Invalid arguments for wallet method: sendTx",
 				leaks: false,
-				title: "SENTINEL-NAME",
+				title: "Transaction",
 			},
 		})
 	})

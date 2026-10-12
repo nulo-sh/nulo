@@ -305,7 +305,10 @@ function createSdkHandlerState(ports: { windows: WindowPort; clock: ClockPort })
 		decryptLocks: new KeyedLock({ maxHoldMs: null }),
 		admission: new VerifyAdmissionGate(ports.clock, {
 			closeWindow,
-			// A marker still waiting when its slot is given back is tombstoned: that id can no longer establish.
+			navigateWindow: (windowId, url) => ports.windows.navigate(windowId, url),
+			// A marker still waiting when its slot is given back, or when its reservation expires with the
+			// window kept open, is tombstoned: that id can no longer establish.
+			expired: (id) => cancelPendingVerification(pendingVerification, id),
 			released: (id) => cancelPendingVerification(pendingVerification, id),
 		}),
 		dedupeWaiters: new Map(),
@@ -390,7 +393,7 @@ function admitContentMessage(
 		// through, so this remains an upstream coordination item.
 		if (NULO_ALLOW_IFRAME_DAPPS !== true && isSubframeSender(sender)) {
 			logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Debug,
 				// The tab and sender URLs are the user's browsing history, and any subframe on any
 				// page can trigger this line. The frame identity is what diagnoses the rejection.
@@ -407,7 +410,7 @@ function admitContentMessage(
 		// malformed envelopes early with a structured debug log.
 		const verdict = validateContentScriptMessage(message)
 		if (verdict.kind === "invalid") {
-			logger.log("wallet-sdk-bg", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
+			logger.log("wallet-sdk", LogLevel.Debug, "Dropping malformed content-script envelope", verdict.reason)
 			return undefined
 		}
 		if (verdict.kind === "valid" && replyIfStale(verdict.message, sender.tab?.id, deps)) return undefined
@@ -427,7 +430,7 @@ function replyIfStale(envelope: ContentScriptMessageEnvelope, tabId: number | un
 	if (stale === "forward") return false
 	// A connected page repeats this every heartbeat until it reconnects; debug keeps it out of
 	// every user's log buffer.
-	deps.logger.log("wallet-sdk-bg", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
+	deps.logger.log("wallet-sdk", LogLevel.Debug, "Answering a message for a session the sender's tab does not hold", {
 		type: envelope.type,
 		session: describeExternalId(stale.sessionId),
 	})
@@ -507,12 +510,9 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	)
 
 	// Queued journal is created on arrival (concurrent across siblings),
-	// gated on establishment. Only top-level `sendTx` gets a pre-allocated
-	// record — `batch` is excluded by design: the recursive dispatch in
-	// WalletSdkDispatcher.handleBatch can't safely route hooks per-leg, so
-	// we'd end up with a batch-level record no inner leg knows to claim.
-	// TODO(queued-visibility-for-batch): batched sendTx legs currently
-	// bypass the queued-record creation path.
+	// gated on establishment. Only a top-level `sendTx` gets one: the
+	// dispatcher refuses a batch holding a `sendTx` leg before any leg runs,
+	// so no batched send ever waits to be shown.
 	const queuedJournalIdPromise: Promise<string | undefined> =
 		message.type === "sendTx"
 			? establishedPromise.then((ok) => createQueuedJournalIfStamped(ok, message, session, deps, state))
@@ -577,7 +577,7 @@ async function runEstablishedMessage(
 	// its journal. Same promise as the journal gate, so it resolves once.
 	if (!(await establishedPromise)) {
 		deps.logger.log(
-			"wallet-sdk-bg",
+			"wallet-sdk",
 			LogLevel.Warn,
 			`Dropping message for session ${describeExternalId(session.sessionId)}: failed/lost establishment validation`,
 		)
@@ -987,7 +987,7 @@ async function runDiscoveryPopup(
 	deps: DiscoveryDeps,
 ): Promise<void> {
 	const { handler, pendingDiscoveryPromises, logger } = deps
-	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery) }
+	const params: DiscoveryParams = { dappMetadata: discoveryDappMetadata(discovery), chainId }
 
 	// Store a promise that resolves when the popup completes so duplicate
 	// discoveries can await it.
@@ -1019,7 +1019,7 @@ async function runDiscoveryPopup(
 		if (rejectIfNotAdmitted(discovery, deps, admitted)) return
 		if (waitingWindow !== undefined) {
 			// A window closed while its Allow was queued fails the attach: its removal was buffered.
-			if (!admitted?.attach(waitingWindow)) {
+			if (!admitted?.attach(waitingWindow, result.expiredUrl)) {
 				rejectThrottled(discovery, deps, "its connect window closed while waiting for a verify-window slot")
 				return
 			}
@@ -1240,7 +1240,13 @@ export async function handleWalletMessage(
 			// pre-created queued record here too, or it sits at "Queued..."
 			// until the reaper's stuck sweep.
 			if (hooks?.queuedJournalId) {
-				await failQueuedIfUnclaimed(operationJournal, hooks.queuedJournalId, "Session no longer valid — reconnect", logger)
+				await failQueuedIfUnclaimed(
+					operationJournal,
+					hooks.queuedJournalId,
+					"Session no longer valid — reconnect",
+					logger,
+					"wallet_refused",
+				)
 			}
 			return
 		}

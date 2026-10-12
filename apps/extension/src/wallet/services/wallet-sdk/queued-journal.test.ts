@@ -6,9 +6,26 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import type { WalletMessage } from "@aztec-labs/wallet-sdk/types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import type { ActiveSession } from "@aztec-labs/wallet-sdk/extension/handlers"
-import { InvalidWalletArgumentsError, ScopeViolationError } from "@nulo/extension-messaging/errors"
+import {
+	CapabilityNotGrantedError,
+	ChainNotSupportedError,
+	InvalidWalletArgumentsError,
+	JobCancelledError,
+	ScopeViolationError,
+	SessionEndedError,
+	TermsAcceptanceRequiredError,
+	UserRejectedError,
+} from "@nulo/extension-messaging/errors"
+import { NoUsableAccountError } from "@nulo/wallet-bridge"
 import { LogLevel } from "@/wallet/logger"
-import { MAX_QUEUED_GLOBAL, MAX_QUEUED_PER_SESSION, failQueuedForError, tryCreateQueuedJournal } from "./queued-journal"
+import { WalletLockedError } from "@/wallet/services/profile/wallet-locked-error"
+import {
+	MAX_QUEUED_GLOBAL,
+	MAX_QUEUED_PER_SESSION,
+	failQueuedForError,
+	failQueuedIfUnclaimed,
+	tryCreateQueuedJournal,
+} from "./queued-journal"
 import { makeAccountStub, makeDappSessionStub, makeDeps, makeSession } from "./queued-journal.fixtures"
 
 function makeSendTxMessage(messageId = "msg-1"): WalletMessage {
@@ -112,7 +129,7 @@ describe("tryCreateQueuedJournal", () => {
 		expect(await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)).toBeUndefined()
 		expect(await journal.countOperations({ stage: "queued" })).toBe(0)
 		expect(log.mock.calls.filter(([, level]) => level !== LogLevel.Debug)).toEqual([])
-		expect(log).toHaveBeenCalledWith("wallet-sdk-bg", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
+		expect(log).toHaveBeenCalledWith("wallet-sdk", LogLevel.Debug, "Stored grant is malformed; skipping queued visibility")
 	})
 
 	test("skips when networkService can't resolve a Network row for the session's chainId", async () => {
@@ -326,7 +343,7 @@ describe("tryCreateQueuedJournal — record account", () => {
 describe("failQueuedForError — CAS against a concurrent claim", () => {
 	const refusal = new ScopeViolationError("Scope violation: sendTx call not permitted by granted transaction scope")
 
-	test("a record claimed (queued→pending) is NOT failed — the lock-held re-read stands down (regression control)", async () => {
+	test("a record claimed (queued→pending) is NOT failed nor retitled — the lock-held re-read stands down (regression control)", async () => {
 		const { deps, journal } = makeDeps()
 		const id = await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)
 		expect(id).toBeDefined()
@@ -339,23 +356,65 @@ describe("failQueuedForError — CAS against a concurrent claim", () => {
 		vi.spyOn(journal, "getOperation").mockResolvedValueOnce(staleSnapshot as never)
 		await failQueuedForError(journal, id as string, refusal, deps.logger)
 		vi.restoreAllMocks()
-		expect((await journal.getOperation(id as string))?.progress.stage).toBe("pending")
+		const rec = await journal.getOperation(id as string)
+		expect({ stage: rec?.progress.stage, title: rec?.title }).toEqual({ stage: "pending", title: "drip_to_public" })
 	})
 
+	// A refusal before the person saw anything is retitled; a popup_bound row keeps the title the
+	// person saw in the approval window.
 	test.each([
-		["a scope refusal", "scope_refused", refusal],
-		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx")],
-		["any other failure", "popup_bound", new Error("session gone")],
-	])("a still-queued record failed by %s gets the %s kind and the error's message", async (_name, kind, error) => {
+		["a Terms refusal", "terms_refused", new TermsAcceptanceRequiredError(), "Transaction"],
+		["a scope refusal", "scope_refused", refusal, "Transaction"],
+		["a missing grant", "scope_refused", new CapabilityNotGrantedError("transaction"), "Transaction"],
+		["a schema refusal", "malformed_request", InvalidWalletArgumentsError.forMethod("sendTx"), "Transaction"],
+		["an ended session", "session_ended", new SessionEndedError(), "Transaction"],
+		["a lock when its turn came", "session_ended", new WalletLockedError(), "Transaction"],
+		["a chain the wallet does not serve", "wallet_refused", new ChainNotSupportedError(), "Transaction"],
+		[
+			"no account the dApp may use",
+			"wallet_refused",
+			new NoUsableAccountError("No authorized accounts found for this dApp session"),
+			"Transaction",
+		],
+		["the person rejecting the approval", "popup_bound", new UserRejectedError(), "drip_to_public"],
+		["the approval window closing", "popup_bound", new JobCancelledError(), "drip_to_public"],
+		["any other failure", "popup_bound", new Error("session gone"), "drip_to_public"],
+		// Classified by class, never by text: a bare error carrying the lock's words stays unclassified.
+		["a bare error reading like a lock", "popup_bound", new Error("Wallet locked"), "drip_to_public"],
+	])("a still-queued record failed by %s gets the %s kind, the error's message and the title %s", async (_name, kind, error, title) => {
 		const { deps, journal } = makeDeps()
 		const id = await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)
 		await failQueuedForError(journal, id as string, error, deps.logger)
 		const rec = await journal.getOperation(id as string)
-		expect({ stage: rec?.progress.stage, kind: rec?.error?.kind, message: rec?.error?.message }).toEqual({
+		expect({ stage: rec?.progress.stage, kind: rec?.error?.kind, message: rec?.error?.message, title: rec?.title }).toEqual({
 			stage: "failed",
 			kind,
 			message: error.message,
+			title,
 		})
+	})
+
+	test("a refused record that execution already failed and retitled keeps that title", async () => {
+		const { deps, journal } = makeDeps()
+		const id = (await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)) as string
+		await journal.transitionOperation(id, { stage: "pending" })
+		await journal.transitionOperation(
+			id,
+			{ stage: "failed" },
+			{ kind: "scope_refused", message: "x", normalizedRaw: null },
+			"transfer_in_public",
+		)
+		// The rebuilt error then reaches the ingress, which finds the record already terminal.
+		await failQueuedForError(journal, id, new Error("Scope violation"), deps.logger)
+		const rec = await journal.getOperation(id)
+		expect({ kind: rec?.error?.kind, title: rec?.title }).toEqual({ kind: "scope_refused", title: "transfer_in_public" })
+	})
+
+	test("the profile-binding refusal files the shared wallet refusal", async () => {
+		const { deps, journal } = makeDeps()
+		const id = (await tryCreateQueuedJournal(makeSendTxMessage(), makeSession(), deps)) as string
+		await failQueuedIfUnclaimed(journal, id, "Session no longer valid — reconnect", deps.logger, "wallet_refused")
+		expect((await journal.getOperation(id))?.error?.kind).toBe("wallet_refused")
 	})
 
 	test("a missing record is a silent no-op (regression control)", async () => {
@@ -383,7 +442,7 @@ describe("tryCreateQueuedJournal — the session's chain id", () => {
 		const id = await tryCreateQueuedJournal(makeSendTxMessage(), sessionOn({ chainId: "zz", version: "0x1" }), deps)
 		expect(id).toBeUndefined()
 		expect(dappSession.tryGetDappSessionByOriginAndChain).not.toHaveBeenCalled()
-		expect(log).toHaveBeenCalledWith("wallet-sdk-bg", LogLevel.Warn, "tryCreateQueuedJournal failed", expect.any(SyntaxError))
+		expect(log).toHaveBeenCalledWith("wallet-sdk", LogLevel.Warn, "tryCreateQueuedJournal failed", expect.any(SyntaxError))
 	})
 })
 

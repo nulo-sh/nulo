@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
+import { collectUnhandledRejections } from "../../tests/helpers/unhandled-rejections"
 import { authRequiredGate, lookupActiveProfileWithBackoff } from "./auth-guard"
 
 describe("lookupActiveProfileWithBackoff", () => {
@@ -93,19 +94,13 @@ describe("lookupActiveProfileWithBackoff", () => {
 	})
 
 	test("a request the deadline abandons never surfaces as an unhandled rejection", async () => {
-		const unhandled: unknown[] = []
-		const onUnhandled = (reason: unknown) => unhandled.push(reason)
-		process.on("unhandledRejection", onUnhandled)
-		try {
+		const unhandled = await collectUnhandledRejections(async () => {
 			let rejectLate: (e: Error) => void = () => {}
 			const late = () => new Promise<{ id: string } | undefined>((_, reject) => (rejectLate = reject))
 			expect(await lookupActiveProfileWithBackoff(late, { deadlineMs: 20 })).toEqual({ kind: "unreachable" })
 			rejectLate(new Error("late transport failure"))
-			await new Promise((r) => setTimeout(r, 10))
-			expect(unhandled).toEqual([])
-		} finally {
-			process.off("unhandledRejection", onUnhandled)
-		}
+		})
+		expect(unhandled).toEqual([])
 	})
 })
 

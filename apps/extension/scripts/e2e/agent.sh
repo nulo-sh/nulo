@@ -13,25 +13,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-# Proverless-marker guard: some network tests only function against a
-# proverless-armed build (their e2e gate is compiled OUT otherwise, and they
-# fail as an inscrutable multi-minute timeout instead of an error). Those
-# files carry a formal `@requires-proverless` marker line; running any of
-# them unarmed is refused HERE, before a single port or build cycle is spent.
-if [ "${NULO_E2E_PROVERLESS:-}" != "1" ]; then
-  if [ "$#" -gt 0 ]; then
-    marker_scan_targets=("$@")
-  else
-    marker_scan_targets=(tests/e2e/network)
-  fi
-  marked_files=$(grep -rls "@requires-proverless" "${marker_scan_targets[@]}" 2>/dev/null || true)
-  if [ -n "$marked_files" ]; then
-    echo "[e2e:agent] FATAL: this run includes proverless-gated test file(s) but NULO_E2E_PROVERLESS is not set:" >&2
-    while IFS= read -r marked; do echo "[e2e:agent]   $marked" >&2; done <<< "$marked_files"
-    echo "[e2e:agent] Re-run the same command with NULO_E2E_PROVERLESS=1 set." >&2
-    exit 2
-  fi
-fi
+NETWORK_CONFIG=vitest.e2e.network.config.ts
+
+# Before the port claim and the build: the guard exists to spare both.
+bash scripts/e2e/proverless-guard.sh "$NETWORK_CONFIG" "$@"
 
 PORTS_JSON=".e2e-state/ports.json"
 
@@ -64,9 +49,9 @@ on_exit() {
 }
 trap on_exit EXIT
 
-# Clear stale boot-sentinel markers from a prior run so the boot-failure
-# classifier (scripts/e2e/classify-exit.ts) sees only THIS run's state.
-rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started
+# Clear a prior run's markers so the boot-failure classifier
+# (scripts/e2e/classify-exit.ts) and the stall report read only THIS run's state.
+rm -f .e2e-state/boot-started .e2e-state/boot-ready .e2e-state/tests-started .e2e-state/stalled
 
 echo "[e2e:agent] resolving ports..."
 bun run scripts/e2e/resolve-ports.ts
@@ -250,7 +235,7 @@ AZTEC_ADMIN_PORT="$AZTEC_ADMIN_PORT" \
 AZTEC_P2P_PORT="$AZTEC_P2P_PORT" \
 PLAYGROUND_URL="$PLAYGROUND_URL" \
 PLAYGROUND_PORT="$PLAYGROUND_PORT" \
-  bun run vitest run --config vitest.e2e.network.config.ts "$@"
+  bun run vitest run --config "$NETWORK_CONFIG" "$@"
 VITEST_EXIT=$?
 set -e
 

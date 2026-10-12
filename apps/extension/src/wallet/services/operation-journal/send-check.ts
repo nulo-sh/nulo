@@ -11,12 +11,13 @@ import { executionResultFromReceipt, txStatusFromReceipt } from "@/wallet/servic
 import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
 import { TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { isSendCheckable, type OperationJournalService, type OperationRecord } from "./service"
+import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
 
 export const SEND_CHECK_TICK_MS = 5_000
 /** How long after the failure a row is read on every tick; after it, every `DROPPED_RECHECK_INTERVAL_MS`. */
 export const SEND_CHECK_FAST_WINDOW_MS = 2 * 60_000
 
-const LOG_SOURCE = "SendCheck"
+const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
 const MINED: ReadonlySet<TxStatus> = new Set([TxStatus.Proposed, TxStatus.Checkpointed, TxStatus.Proven, TxStatus.Finalized])
 
 export type SendCheckDeps = {

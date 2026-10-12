@@ -34,8 +34,8 @@ const V5_EXPORT = {
 
 describe("NuloAccount.fromSigningKey", () => {
 	test("builds a usable account whose address is a pure function of the signing key", async () => {
-		const a = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger)
-		const b = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger)
+		const a = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger, "account")
+		const b = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger, "account")
 		expect(a.address.toString()).toBe(b.address.toString())
 		expect(a.address.toString()).toMatch(/^0x[0-9a-f]{64}$/)
 	})
@@ -43,13 +43,13 @@ describe("NuloAccount.fromSigningKey", () => {
 
 describe("account-export envelope (NULO-ACCOUNT-EXPORT v1)", () => {
 	test("build → serialize → parse round-trips the signing key + l1ChainId, and recomputes the address", async () => {
-		const account = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger)
+		const account = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger, "account")
 		const exp = buildAccountExport(SIGNING_KEY, L1, account.address.toString())
 		const parsed = parseAccountExport(serializeAccountExport(exp))
 		expect(parsed.signingKey.toString()).toBe(SIGNING_KEY.toString())
 		expect(parsed.l1ChainId).toBe(L1)
 		// The claimed address recomputes from the signing key (the import-side authenticity check).
-		const recomputed = await NuloAccount.fromSigningKey(parsed.signingKey, nullLogger)
+		const recomputed = await NuloAccount.fromSigningKey(parsed.signingKey, nullLogger, "account")
 		expect(recomputed.address.toString()).toBe(parsed.claimedAddress)
 	})
 
@@ -103,7 +103,7 @@ describe("account-export envelope (NULO-ACCOUNT-EXPORT v1)", () => {
 	})
 
 	test("encrypted variant: round-trips under the right password, fails closed otherwise", async () => {
-		const account = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger)
+		const account = await NuloAccount.fromSigningKey(SIGNING_KEY, nullLogger, "account")
 		const exp = buildAccountExport(SIGNING_KEY, L1, account.address.toString())
 		const blob = await encryptAccountExport(exp, "hunter2")
 		const back = parseAccountExport(await decryptAccountExport(blob, "hunter2"))

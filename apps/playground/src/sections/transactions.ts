@@ -1,6 +1,7 @@
 /**
- * `sendTx` variants: default, `NoFrom`, `feePayer`, multicall, chunked,
- * reject, sponsored.
+ * `sendTx` variants: default (its transfer function picked by `pg-select-transferFn`), `NoFrom`
+ * (a public call, which the wallet refuses), `NoFrom` sponsored, `feePayer`, multicall, chunked,
+ * delegated.
  *
  * Each variant constructs an `ExecutionPayload` and calls
  * `wallet.sendTx()`. `sendTx` ALWAYS opens `/windows/execute`
@@ -8,9 +9,27 @@
  * `approveExecute()` / `rejectExecute()`.
  */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { Fr } from "@aztec-labs/aztec.js/fields"
 import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
+
+const TRANSFER_FNS = [
+	"transfer_public_to_public",
+	"transfer_private_to_private",
+	"transfer_private_to_public",
+	"transfer_public_to_private",
+] as const
+type TransferFn = (typeof TRANSFER_FNS)[number]
+
+function selectedTransferFn(): TransferFn {
+	const value = getInput("transferFn")
+	if (value === "") return TRANSFER_FNS[0]
+	const fn = TRANSFER_FNS.find((f) => f === value)
+	if (!fn) throw new Error(`transferFn must be one of ${TRANSFER_FNS.join(", ")}`)
+	return fn
+}
 
 export function renderTransactions(): string {
 	const s = getState()
@@ -22,10 +41,14 @@ export function renderTransactions(): string {
 				<label>Recipient: <input data-testid="pg-input-recipient" name="recipient" type="text" placeholder="0x..." /></label>
 				<label>Amount: <input data-testid="pg-input-amount" name="amount" type="number" placeholder="100" /></label>
 				<label>FeePayer (FPC addr): <input data-testid="pg-input-feePayer" name="feePayer" type="text" placeholder="0x... (defaults to recipient)" /></label>
+				<label>Default transfer: <select data-testid="pg-select-transferFn" name="transferFn">
+					${TRANSFER_FNS.map((fn) => `<option value="${fn}">${fn}</option>`).join("")}
+				</select></label>
 			</div>
 			<div class="pg-row">
 				<button data-testid="pg-btn-sendTx-default" type="button" ${dis}>sendTx default</button>
 				<button data-testid="pg-btn-sendTx-noFrom" type="button" ${dis}>sendTx NoFrom</button>
+				<button data-testid="pg-btn-sendTx-noFrom-sponsored" type="button" ${dis}>sendTx NoFrom (sponsored)</button>
 				<button data-testid="pg-btn-sendTx-feePayer" type="button" ${dis}>sendTx feePayer</button>
 				<button data-testid="pg-btn-sendTx-multicall" type="button" ${dis}>sendTx multicall</button>
 				<button data-testid="pg-btn-sendTx-multicall-chunked" type="button" ${dis}>sendTx multicall &gt;5</button>
@@ -40,7 +63,7 @@ export function renderTransactions(): string {
 	`
 }
 
-async function buildTransferExec(callCount = 1) {
+async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_public_to_public") {
 	const tokenAddress = getInput("tokenAddress")
 	const recipient = getInput("recipient")
 	const amount = getInput("amount") || "1"
@@ -59,9 +82,10 @@ async function buildTransferExec(callCount = 1) {
 
 	// Build N transfer calls. For the chunked variant (callCount > 5) we issue
 	// N independent BatchCall.request() requests and concat their calls arrays.
+	// Nonce 0 on every call: `from` is the sending account, and the Token refuses any other nonce then.
 	const calls: unknown[] = []
 	for (let i = 0; i < callCount; i++) {
-		const exec = await token.methods.transfer_public_to_public(fromAddr, toAddr, BigInt(amount), BigInt(i)).request()
+		const exec = await token.methods[fn](fromAddr, toAddr, BigInt(amount), 0n).request()
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }
@@ -94,7 +118,7 @@ export function bindTransactions(root: HTMLElement): void {
 		"click",
 		safe("sendTx", async () => {
 			const wallet = getWallet()!
-			const { exec, fromAddr } = await buildTransferExec(1)
+			const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
 			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
 		}),
@@ -108,6 +132,21 @@ export function bindTransactions(root: HTMLElement): void {
 			// The wallet sends `from: "NO_FROM"` through the default entrypoint, not the account contract.
 			// biome-ignore lint/suspicious/noExplicitAny: NO_FROM is a sentinel string the SDK doesn't type
 			return wallet.sendTx(exec as any, { from: "NO_FROM", wait: "NO_WAIT" } as any)
+		}),
+	)
+
+	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-noFrom-sponsored"]')?.addEventListener(
+		"click",
+		safe("sendTx", async () => {
+			// The default entrypoint runs one private call with no caller, which must pay its own fee:
+			// the canonical sponsor's `sponsor_unconditionally` reads no sender and makes itself the payer.
+			const wallet = getWallet()!
+			const { SponsoredFPCContract } = await import("@aztec-labs/noir-contracts.js/SponsoredFPC")
+			const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, { salt: new Fr(0n) })
+			await wallet.registerContract(instance, SponsoredFPCContract.artifact)
+			const sponsor = SponsoredFPCContract.at(instance.address, wallet)
+			const exec = await sponsor.methods.sponsor_unconditionally().request()
+			return wallet.sendTx(exec, { from: "NO_FROM", wait: "NO_WAIT" })
 		}),
 	)
 

@@ -1,5 +1,4 @@
 import { isClientDisconnectRejection } from "@nulo/extension-messaging/errors"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { consoleMethods, LogLevel } from "@/wallet/logger"
 import { type DocumentLogContext, documentLogger } from "@/wallet/services/logger/client"
 
@@ -18,6 +17,6 @@ export function installConsoleForwarding(client: Extract<DocumentLogContext, "po
 		const disconnect = isClientDisconnectRejection(e.reason)
 		// Only preventDefault() keeps DevTools from printing the rejection; the level sets the ring's.
 		if (disconnect) e.preventDefault()
-		logger.log("ui", disconnect ? LogLevel.Debug : LogLevel.Error, getErrorData(e.reason))
+		logger.log("ui", disconnect ? LogLevel.Debug : LogLevel.Error, "unhandled rejection", { error: e.reason })
 	}
 }

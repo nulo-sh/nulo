@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arc 1a implemented, in review
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (ready since C13 = A; its wallet fix merged on its own as #285); arc 4 waits on #279
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -347,7 +347,7 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 
 - **Arc 1a, arc 2:** none.
 - **Arc 1b:** Settings → Lock stops hanging on "FETCHING SETTINGS" after a worker restart and shows its toggles, as it does on any other open. No layout, copy, row or format changes. Recorded in `OWNER-ASKS.md` as information, with no decision asked.
-- **Arc 3:** the playground (a test dApp, not the wallet) gains a select and a button. No wallet surface changes. Whether the playground needs a sign-off is `OWNER-ASKS.md` Ask 1. Arc 3's PR carries a screenshot of the new controls and stays unmerged until the owner signs off or exempts the playground; the PR body quotes that message.
+- **Arc 3:** the playground (a test dApp, not the wallet) gains a select and a button. No wallet surface changes. Whether the playground needs a sign-off was `OWNER-ASKS.md` Ask 1; the owner exempted it (C13 = A, D-orch-14), and the PR body quotes that decision. Arc 3's PR carries a screenshot of the new controls.
 
 ## Assumptions
 
@@ -369,8 +369,8 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 
 ### Inferences
 
-- I1. `sponsor_unconditionally` as the only NO_FROM call yields a valid transaction on the local network, and two such transactions do not collide. Verified parts: the function reads no sender and only sets the fee payer and ends setup (the artifact's source), and `TxExecutionRequest` defaults its salt to `Fr.random()`, so two requests hash apart. Unverified: the wallet's NO_FROM path accepts it end to end. Phase 3.2 tests this first.
-- I2. The local network at 6.0.0-rc.1 seeds `PublicChecks`, so the delegated-authwit file runs without the testnet (`@aztec-labs/standard-contracts` doc). Phase 3.3 tests this first.
+- I1. `sponsor_unconditionally` as the only NO_FROM call yields a valid transaction on the local network, and two such transactions do not collide. Verified parts: the function reads no sender and only sets the fee payer and ends setup (the artifact's source), and `TxExecutionRequest` defaults its salt to `Fr.random()`, so two requests hash apart. Unverified: the wallet's NO_FROM path accepts it end to end. Phase 3.2 tests this first. **Result: held only after a wallet fix** (an account with no standard build had no registered instance for discovery to stub; D23).
+- I2. The local network at 6.0.0-rc.1 seeds `PublicChecks`, so the delegated-authwit file runs without the testnet (`@aztec-labs/standard-contracts` doc). Phase 3.3 tests this first. **Result: did not hold.** The 6.0.0-rc.1 local network publishes only AuthRegistry at boot; PublicChecks is preloaded only under the archiver's opt-in `TEST_PRELOAD_STANDARD_CONTRACTS`, which the harness does not set (`lessons/phase-3.md` § 3.3). Per A3 the gate stays and the PR says `Refs #165`.
 - I3. The Lock page's hang is the port-reconnect pattern of `lessons.md`; Phase 1.6 confirms or refutes it before any fix.
 - I4. A stalled fork stops only when killed: `cancelCurrentRun` (vitest 4.1.10, `cli-api` chunk) runs the cancel listeners and then awaits the running promise, so a test stuck on an await keeps it pending. The reporter therefore calls it without awaiting (no new file starts) and kills its own forks after the grace period; the unit test in Phase 1.9 proves the run then ends.
 - I5. A V8 heap cap at twice the sampled peak leaves headroom a green run should not exhaust (sampling can miss the true peak, so the final full suites under the cap are the check), and limits something only if it sits below the default limit; WASM and Chrome memory are outside it. The default on this host is 4288 MiB, so Phase 1.9 measures the hosted default before shipping a cap.
@@ -411,6 +411,21 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D18 | Our client never breaks the registry lock; a lock held past 30 s fails the claim closed; release by token | Every path-lock break races, with or without a check afterwards; an abandoned lock is rare (a millisecond critical section) and the other writers break theirs | A token check on break; an inode-and-mtime check on break; copying the other writers' unverified break |
 | D-orch-1 | No stack: arc 1a opens its own PR against `dev` (`gh pr create --base dev`), title per § Delivery; later arcs branch from 1a's branch and rebase onto `dev` once it lands; the close-out is its own PR after the last arc merges | The orchestrator's call: it merges lanes in order and a stack would tie 1a's merge to later arcs | One `gh stack` per lane (§ Delivery) |
 | D-orch-2 | Arc 1a ships alone and first, as gate G1 for every other lane: no 1b work folds in, and it does not wait on `OWNER-ASKS.md` Ask 1 (which holds arc 3 only) | Every other lane's parallel network e2e waits on it | Folding small 1b fixes into the G1 PR |
+| D-orch-3 | After a squash merge, an arc branches from `dev`: arc 1b is `e2e-harness-gaps-waits` off `origin/dev` at 6201f8b (#267's squash), not off arc 1a's branch | 1a's branch holds nothing `dev` lacks, and merging `dev` into it after a squash is add/add | Branching from `worktree-e2e-harness-gaps` |
+| D-orch-4 | Arc 1b only, every stop rule binding: #162's transport rule, #163's hosted 240 s rule (three dispatches of each smoke workflow), #155's calibration (the watchdog and the cap each ship only on it); nothing of arcs 2-4 is built | The orchestrator's call | — |
+| D-orch-5 | Workflow dispatches on the arc's own branch are allowed (`gh workflow run <file> --ref e2e-harness-gaps-waits`); never a release, nightly or publish workflow, a variable, secret, ruleset, tag or release; every run id and result goes in `lessons/phase-1.md` | The orchestrator's call; the calibrations need hosted numbers | — |
+| D19 | #162: the fix ships in `lock.vue` although the un-skipped opt-out test passes without it, and one Chrome-only case opens Lock inside a new worker's boot window (stop the worker, then navigate), red 3/3 on the base. Its Firefox skip is named here: Firefox does not end an event page while an extension page is open, so the window cannot occur there | The opt-out test opens Lock after the boot has finished; a probe showed a read rejected by the port drop strands the page, and only an e2e exercises the real reject-and-reconnect transport the fix relies on. Codex: ship the fix, but no timing-only race (it can pass vacuously). Opus: ship, and add the case sequentially, since the window is the whole boot, not milliseconds. The sequential shape is taken; the case cannot see the rejection itself, so its base-red count is recorded and the unit tests are the exact check | A concurrent stop-and-navigate race; the unit tests alone |
+| D20 | #155: the watchdog's unit test stalls on a fixture that spins while its file is collected, with a 3 s `stallMs`, and asserts the stall report names the file; a second file must not start and global teardown must run. One reporter, no `observe` switch: every run prints its longest silence, and `stallMs` is required | I4 did not hold: vitest 4.1.10 ends a test awaiting a never-settling promise 3 s after `cancelCurrentRun`, so that fixture never reaches the kill. Only a blocked event loop does, and a blocked fork never reports its test, so the file is what can be named. The printed silence is what a later recalibration reads from CI logs | The plan's awaiting fixture naming the test (it passes with the kill removed) |
+| D21 | #155: the heap cap's assertion lives in `network-setup.ts` and runs in every network fork: a limit outside [cap, cap + 512] MiB throws. Teardown reaps browser launches whose owner died | A fork the `execArgv` misses fails where it runs, in every run, not in a test of a copy of the config. A fork the watchdog kills leaves its Firefox, which only the next Firefox launch reaped | A nested-run unit test of the cap |
+| D-orch-6 | After a squash merge an arc branches from `dev`: arc 2 is `e2e-harness-gaps-types` off `origin/dev` at 8c3c671 (#273's squash). D-orch-1 to D-orch-5 stay | The orchestrator's call, as D-orch-3 for arc 1b | Branching from `e2e-harness-gaps-waits` |
+| D-orch-7 | Arc 2 only, exactly as § Arc 2 and Phase 2.1 state: type-only edits in `tests/e2e`, no edit changes what a test does, no `src` edit for the gate, probe counts in `lessons/phase-2.md` before any fix, no added `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error` measured against the merge base with `origin/dev` (not 4a357b7), `unresolved-names.test.ts` deleted only once the gate's file list is shown to contain the scan's, the skill line rewritten; arc 1b's `run-limits.ts` and `stall-watchdog.ts` are covered; nothing of arcs 3 or 4 | The orchestrator's call | — |
+| D-orch-8 | The gate must bite both ways: Phase 2.1 step 4's four probes are run and their outputs recorded in `lessons/phase-2.md`; a gate that passes a probe it should refuse is not done | The orchestrator's call | — |
+| D-orch-12 | Arc 3 runs now, as `e2e-harness-gaps-coverage` off `origin/dev` at af4afcc, before arc 4 lands (D-orch-9 to D-orch-11 are recorded on arc 4's branch). Its PR opens as a draft and stays one: charter C13 (does a playground change need the owner's sign-off?) is unanswered, and § UI impact holds the merge until the owner signs off or exempts the playground. The PR body carries a screenshot of the new playground controls (`pg-btn-sendTx-noFrom-sponsored`, `pg-select-transferFn`) and quotes nothing as a sign-off; the orchestrator marks it ready once C13 is answered. Everything of arc 3 is built now | The orchestrator's call: arc 4 shares no file with arc 3 and its PR waits on #279 | Waiting for arc 4 |
+| D23 | #153: I1 did not hold. A sponsored NO_FROM send from an account with no standard build in its PXE store (the e2e's fresh profile; also a restore or a purged store) failed at simulation: `buildNoFrom` registered the account's keys but not its contract instance, and authorization discovery stubs the account by that instance (`stubAccountAddresses: no contract instance registered`). `buildNoFrom` now registers the instance next to the keys, after the drift check; a pins case orders it and the drift pin asserts it never runs on a drifted node | The test found a wallet defect on the path #153 is about, and the cause is one missing call the standard build already makes. Codex (high): A, the fix belongs with the regression that proves it, `buildNoFrom` is the right layer (both the window's preview and the confirm go through it; the PXE stub path cannot rebuild the frozen instance from an address); no new privilege, the transaction is unchanged, the only new observable is the instance's local metadata a standard estimate already registers. Opus (high): A, same layer, no other NO_FROM entry reaches the stub unregistered | B (leave it out, #153 stays open): leaves a demonstrated defect broken; C (send a standard transaction first in the e2e): papers over the cause |
+| D24 | The wallet fix ships twice-reachable: as its own `fix(execution)` commit (cc844c1) on arc 3's branch, and cherry-picked alone onto `e2e-harness-gaps-nofrom-fix` off `dev` with its own ready PR (`Refs #153`), so a user-facing fix waits on neither C13 nor the arc 3 draft, and a release note can name it. Arc 3's draft PR carries the same commit until that PR lands; merging `dev` then adds nothing | Opus: a separate `fix:` PR, since arc 3 stays a draft on an unrelated sign-off and a `test(e2e)` squash subject hides the fix from release-please. Codex: one PR with the deviation recorded. Opus's argument is the stronger: the hold is about the playground, not the wallet | Bundling the fix in arc 3's draft only |
+| D25 | #153's serialization evidence: after the second window closes (its approval is in), the journal must keep one send at `proving` (the held first) and the other `queued` for 3 s, every read before `enteredProveAt + PROOF_GATE_HOLD_MS`. One snapshot is not enough: a dApp request's record reads `queued` from its arrival, before its approval reaches the mutex | Codex: a single snapshot can catch the second send before acquisition even with the mutex bypassed; hold the pair over an interval inside the gate window. The once-only bypass run is red on it | The single snapshot § Arc 3 described |
+| D-orch-13 | Nothing a wallet user sees changes. The playground is the only surface that gains a control; every existing playground control keeps its behaviour and testid; the wallet's own screens are untouched. The `tx-request-builder.pins.test.ts` case, the three row cases and the serialization evidence are built exactly as § Arc 3 states; the once-only scratch bypass of the execution mutex is reverted and its red run recorded in `lessons/phase-3.md` | The orchestrator's call | — |
+| D-orch-14 | `OWNER-ASKS.md` Ask 1 is answered. The owner, 2026-10-11, decision page 0 (Program charter), C13 = **A**: "No. The playground is test infrastructure nobody ships; its controls need no sign-off. It must stay generic (reach the wallet only through @aztec-labs/wallet-sdk, never special-case Nulo)." Arc 3's PR (#293) leaves draft after `origin/dev` (27af8d7) is merged and `tx-sendTx-multicall`, `tx-sendTx-noFrom` and `tx-transfer-row` pass again at retry 0 on both browsers; its body quotes the decision in place of the held-for-sign-off note | The owner's call; #298 changed `waitForTxMined`, which two of those files call, so the merged head is re-proven before the PR is marked ready | Merging the held draft without re-running the files #298 touched |
 
 ## Audit verdicts
 
@@ -549,6 +564,88 @@ Verdict: **approve with fixes**. Sound: the ERE escaping (every metacharacter, `
 | V3 | Low. Where `sh` is bash, `sh -c 'sleep 30'` execs sleep and drops the fake Chrome arguments | Accepted: `sleep 30; :` |
 | V4 | Nit. `reap.ts`'s step list and the README's reap paragraph predate the Chrome sweep | Accepted: both rewritten |
 
+### Arc 1b implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve with fixes**. Found no path by which the watchdog signals a process that is not this run's fork: discovery and signalling are synchronous, an unreaped child keeps its pid, and another vitest's children fail the parent check. The observer matches its DOM contract; the retry-0 evidence supports removing the sleeps.
+
+| # | Finding | Disposition |
+|---|---|---|
+| CB1 | Medium. A pending timeout edit is replaced when a reconnect read finds the stored value moved (`lock.vue`) | Rejected: `onSettingUpdate` already replaces the field when the timeout changes elsewhere, and the re-read stands in for the update the dropped port missed. Withdrawn in round 2 |
+| CB2 | Medium. The watchdog arms at `onTestModuleStart`, after setup files and import, so a silent first-file collection is never timed | Accepted: it arms at `onTestModuleQueued` (with OB2). Test: the spin fixture spins at import; without the hook the nested run hits its deadline |
+| CB3 | Medium. `readdirSync("/proc")` throws from the kill timer where `/proc` is absent | Accepted (with OB1): the kill step logs that the blocked fork is left running |
+| CB4 | Low. The watchdog header and the observer's doc narrate | Accepted: both cut to their constraints |
+
+### Arc 1b implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, every claim checked against vitest 4.1.10's dist. Sound: the kill scope, the cancel path (the pool queue emptied, a killed fork ends its task, teardown runs before the pool closes), the Lock page's ordering, the observer.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OB1 | Medium (macOS). The kill timer throws without `/proc` and takes vitest down before teardown | Accepted: see CB3 |
+| OB2 | Low-medium. A collection hang of file N is blamed on file N-1; a crashed fork's test stays in the running set | Accepted: the file is set and the running set cleared at `onTestModuleQueued` |
+| OB3 | Low. `test-retried` reaches no reporter hook, so a retry after a long silent attempt has only the rest of `STALL_MS` | Accepted: the undeclared `onTaskUpdate` call counts it. Test: a fixture silent 2 s per attempt against a 3 s stall stays green; cancelled without the hook |
+| OB4 | Low. A killed Firefox fork leaves Firefox and geckodriver until the next Firefox launch | Accepted: teardown runs the owner-gated `reapOrphanLaunches` on Linux |
+| OB5 | Low (process). Phase 1.8's runs are not recorded | Accepted: they were running; recorded in `lessons/phase-1.md` § 1.8 |
+| OB6 | Comments: the watchdog header inexact and narrating; the export wait's 45-96 s paragraph contradicted by the hosted runs | Accepted: rewritten |
+
+### Arc 1b implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve**, no findings. Teardown's reaper judged safe: it signals only launches whose recorded owner is dead and whose processes carry the record's marker, so a forged record cannot reach a live launch.
+
+### Arc 2 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, high confidence. Checked and found sound: no edit changes runtime behaviour (13 files emit identical JavaScript, reproduced; the fourth `test()` argument is never read; Vite's transform erases every added type import); both declared call forms are documented for Chrome and Firefox and reach neither the `src` nor the scripts program; the gate covers all 233 scanned files and reports every code the scan filtered; the 68 `src` modules it reaches compile cleanly; CI picks it up with no workflow edit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| A1 | Medium. The `pageerror` handlers' `as Error` keeps a pre-existing bug: a primitive payload (`null`, `undefined`) makes the handler throw, and other primitives land in an `Error[]` (`fixtures/extension.ts`, `connect-one-window.test.ts`) | Accepted as an open item, not fixed here: the fix changes runtime behaviour, outside this arc's type-only rule. Filed as #275 |
+| A2 | Low. The skill line's "Node types only" is inexact: the program also loads Vite client, Chrome and DOM declarations | Accepted: "it loads Node's types and no Bun types" |
+| A3 | Low. The `NuloAccount` cast comment overstates the invariant: it also logs while building a transaction | Accepted at all three sites: "Aztec's Logger has no `log`; NuloAccount calls it only from its PXE and transaction methods" |
+
+### Arc 2 implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run independently), vitest's `base.extend` wrapper forwards three arguments, fixture detection ignores whitespace so Biome's re-wrap cannot change which fixtures a test uses, the augmentation stays out of the other two programs, no `bun-types` reached. It also found the plan's premise inexact: the scan's seven codes never included TS2867/TS2868 ("Cannot find name 'Bun'"), so the scan never made a `Bun` global an error; the gate does.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OA1 | Low. Same as A3 | Accepted (A3) |
+| OA2 | Low. Same as A2 | Accepted (A2) |
+| OA3 | Nit. The portal-manager comment runs past the 100-character soft cap | Accepted: one sentence under the cap |
+| OA4 | Low. File the `pageerror` gap before the plan closes | Accepted: #275 |
+| OA5 | Optional. `extends: ./tsconfig.scripts.json`; `include: tests/e2e/**/*` so a future `.mts`/`.cts` is checked | `extends` rejected: the scripts program runs on Bun and this one on Node, so a Bun-side option must not move the Node program. The wider include accepted: a probe `.mts` and `.cts` with a wrong-typed constant fail under it and pass silently under `**/*.ts`; the file list is unchanged (234) |
+| OA6 | Info. Phase 2.1's validation runs not yet recorded | Accepted: recorded in `lessons/phase-2.md` once run |
+
+### Arc 2 implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
+
+### Arc 3 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-11
+
+Verdict: **clean**, no finding, over `git diff af4afcc...HEAD` at 422d6f6 (the multicall nonce, the `buildNoFrom` registration fix and its pins, the sponsored NO_FROM control and file, the transfer-function select and the three private-kind row cases).
+
+### Arc 3 implementation: Opus review (same family, read-only), 2026-10-11
+
+Verdict: **approve with fixes**, no correctness finding. Sound: the wallet fix lets a dApp do or see nothing a standard send does not already cause (a standard send's fee estimate or a dApp `simulateTx` registers the same instance at the same point, before approval; it runs after the fence and the chain-identity check; the built request is unchanged); the multicall balance check is exact; the refusal case's exact match proves the dApp gets only the constant; the concurrent case's held pair cannot pass with the second send short of its claim; a select that silently kept its default would read "Transfer (public)", which no new label check accepts.
+
+| # | Finding | Disposition |
+|---|---|---|
+| OB1 | Low. `tx-transfer-row.test.ts`'s titles promise "From, To and Amount" but no case reads the To row, which has no testid | Accepted: both titles now name what is read (the named sender and the amount). Adding a To assertion was rejected: `AddressDisplay` renders a name or a trimmed address with no full-address hook, so it needs a new wallet-side attribute for a mapping `call-surface.real.test.ts` already pins over the real Token artifact |
+| OB2 | Medium. `tests/e2e/README.md` omits `tx-sendTx-noFrom` from the proof-gate list and still says multicall and noFrom stop at `proving` (through a helper renamed since) | Accepted: noFrom joins the list; the slow-prove paragraph names `waitForDappExecuteWorked()` and says the two files wait for the outcome |
+| OB3 | Low. The playground README says every other send button builds `transfer_public_to_public`, false for the sponsored and delegated buttons | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
+| OB4 | Low. No file time recorded for `tx-sendTx-noFrom.test.ts` against the 3-minute rule | Accepted: recorded in `lessons/phase-3.md` § 3.2 (Chrome 56-72 s, Firefox 74 s); the concurrent case stays in the pool |
+
+### Arc 3 implementation, round 2: Codex (same session, resumed), 2026-10-11
+
+Verdict: **one low finding**, high confidence otherwise. Checked the four fixes, the recipient's decode and rendering, the registration's boundaries, the multicall assertions and the proof-gate ordering; OB1's rejection judged sound, OB2 and OB4 complete.
+
+| # | Finding | Disposition |
+|---|---|---|
+| R3-1 | Low. `lessons/phase-3.md` § 3.3 repeats OB3's wrong claim ("every other button keeps building `transfer_public_to_public`") | Accepted: it names the NoFrom, feePayer, multicall and chunked buttons |
+
+### Arc 3 implementation, round 3: Codex (same session, resumed), 2026-10-11
+
+Verdict: **clean**, high confidence: R3-1's fix confirmed, nothing material left in the arc diff. The loop converged.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
@@ -595,7 +692,7 @@ Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `de
 | close-out | `e2e-harness-gaps-close-out` | — | 4 | off | `docs(plans): close e2e-harness-gaps` | — |
 
 - Arc 1a's PR is the lane's first and is gate G1. It carries this plan's commit.
-- Arc 3's PR stays unmerged until `OWNER-ASKS.md` Ask 1 has an explicit answer; nothing below it waits.
+- Arc 3's PR stayed a draft until `OWNER-ASKS.md` Ask 1 had an explicit answer; answered 2026-10-11 (D-orch-14).
 - Each PR body: what changed and why, the validation runs with outcomes, the `Closes` lines.
 - Mechanics: `gh stack add <branch>` at each boundary; `gh stack submit --auto`, then `gh pr edit` bodies; `gh stack sync` after `dev` moves. Merging (`gh stack merge --squash`) is the orchestrator's.
 - Commits: conventional, lower-case subjects, signed; afterwards `git log --format='%h %G?' -3` shows no `N`.

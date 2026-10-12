@@ -535,10 +535,15 @@ export class ExecutionLane {
 		)
 	}
 
-	public async markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null): Promise<void> {
+	public async markJournal(
+		journalId: string | undefined,
+		progress: JobProgress,
+		error?: JobError | null,
+		failedTitle?: string,
+	): Promise<void> {
 		if (!journalId) return
 		try {
-			await this.deps.operationJournal.transitionOperation(journalId, progress, error)
+			await this.deps.operationJournal.transitionOperation(journalId, progress, error, failedTitle)
 		} catch (err) {
 			this.deps.logError("Failed to update journal operation", err)
 		}

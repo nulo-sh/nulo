@@ -41,7 +41,7 @@ describe("NULO-ACCOUNT-KDF v2 — full words→address chain", () => {
 		expect(masterFr.toString()).toBe(fc.master)
 		const seed = await deriveAccountSeed(masterFr, fc.l1ChainId, fc.type, fc.index)
 		expect(seed.toString()).toBe(fc.seed)
-		const account = await NuloAccount.new(seed, nullLogger)
+		const account = await NuloAccount.new(seed, nullLogger, "account")
 		expect(account.address.toString()).toBe(v6Vectors.fullChain.address)
 	})
 })

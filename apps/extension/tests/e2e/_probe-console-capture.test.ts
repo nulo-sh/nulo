@@ -4,18 +4,18 @@
  * pays for it. Underscore prefix = probe, not a regression gate (convention:
  * `network/_probe-warmup-effect.test.ts`).
  *
- * Establishes, empirically, the three-channel truth behind the `consoleErrors`
+ * Establishes, empirically, the two-channel truth behind the `consoleErrors`
  * fixture (implementations-plan/archive/e2e-deflake/plan.md, Console errors):
  *   1. an app `console.error` in the popup NEVER reaches `page.on("console")`
  *      (the console-sniffer reroutes it over RPC to the SW realm), but IS
  *      readable via the SW's session-storage log ring (`readSwLogTrail`,
  *      polled past LoggerStore's 2s persistence debounce);
- *   2. an UNCAUGHT throw and an UNHANDLED rejection each DO reach
- *      `page.on("pageerror")` — the native uncaught path survives the
- *      entry-point handlers;
- *   3. the BUILT popup HTML preserves sniffer-before-entry script order
+ *   2. the BUILT popup HTML preserves sniffer-before-entry script order
  *      (module order is spec-guaranteed; this eliminates the build-reorder
  *      residual).
+ *
+ * That an uncaught throw or unhandled rejection reaches `pageErrors`, on both
+ * browsers, is the gate `page-error-capture.test.ts`, not a probe.
  *
  * PRECONDITION for claim 1: log retention is opt-in — `LoggerStore` only flushes to
  * `chrome.storage.session` when `developerMode` is on. This probe reads that flushed copy, so it
@@ -66,38 +66,6 @@ test.skipIf(!PROBE_ENABLED)(
 		).toBe(true)
 	},
 )
-
-test.skipIf(!PROBE_ENABLED)("uncaught throw and unhandled rejection each reach pageerror", async ({ registeredExtension: ctx }) => {
-	const page = await openPopup(ctx)
-	const throwNonce = `NULO-PROBE-THROW-${Date.now()}`
-	const rejectNonce = `NULO-PROBE-REJECT-${Date.now()}`
-
-	await page.evaluate((n: string) => {
-		setTimeout(() => {
-			throw new Error(n)
-		}, 0)
-	}, throwNonce)
-	await page.evaluate((n: string) => {
-		setTimeout(() => {
-			void Promise.reject(new Error(n))
-		}, 0)
-	}, rejectNonce)
-
-	await sleep(1_500)
-	const messages = ctx.pageErrors.map((e) => e.message)
-	expect(
-		messages.some((m) => m.includes(throwNonce)),
-		`uncaught throw should reach pageerror — got: ${JSON.stringify(messages)}`,
-	).toBe(true)
-	expect(
-		messages.some((m) => m.includes(rejectNonce)),
-		`unhandled rejection should reach pageerror — got: ${JSON.stringify(messages)}`,
-	).toBe(true)
-
-	// The probes are deliberate noise: drain them so nothing downstream
-	// misreads the fixture arrays.
-	ctx.pageErrors.length = 0
-})
 
 test.skipIf(!PROBE_ENABLED)("built popup HTML keeps the sniffer before every app script", () => {
 	const html = readFileSync(path.join(EXTENSION_PATH, "src/popup/index.html"), "utf8")

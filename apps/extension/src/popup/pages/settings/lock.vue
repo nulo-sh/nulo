@@ -25,12 +25,14 @@ const popupStore = usePopupStore()
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { useConfigRead } from "@/composables/useConfigRead"
 import { useLockWallet } from "@/composables/useLockWallet"
 const { openToast } = useToast()
 const { lock: lockNow, dispose: disposeLockWallet } = useLockWallet(managers.profile)
 
 const configService = new ConfigServiceClient()
 configService.onUpdate.add(onSettingUpdate)
+const lockRead = useConfigRead(configService, fetchLockConfig, landLockConfig)
 
 const profileService = new ProfileServiceClient()
 const isLoading = ref(true)
@@ -119,6 +121,21 @@ function onStrictToggle(next) {
 	}
 }
 
+async function fetchLockConfig() {
+	const ttl = await configService.getValue("sessionTtl")
+	const strict = await configService.getValue("strictSecurityMode")
+	return { ttl, strict }
+}
+
+function landLockConfig({ ttl, strict }, updatedSince) {
+	const ttlMoved = ttl !== undefined && !updatedSince("sessionTtl") && ttl !== sessionTtl.value
+	if (ttlMoved) sessionTtl.value = ttl
+	// A later read leaves the field alone unless the stored timeout moved, so an edit in progress stays.
+	if (ttlMoved || isLoading.value) sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
+	if (strict !== undefined && !updatedSince("strictSecurityMode")) strictSecurityMode.value = strict
+	isLoading.value = false
+}
+
 watch(
 	() => sessionTtlMinutes.value,
 	debounce(() => {
@@ -138,27 +155,21 @@ watch(
 	}, 300),
 )
 
-onBeforeMount(async () => {
-	const ttl = await configService.getValue("sessionTtl")
-	if (ttl !== undefined) sessionTtl.value = ttl
-	sessionTtlMinutes.value = String(sessionTtl.value / 1_000 / 60)
-
-	const strict = await configService.getValue("strictSecurityMode")
-	if (strict !== undefined) strictSecurityMode.value = strict
-
-	isLoading.value = false
+onBeforeMount(() => {
+	void lockRead.read()
 })
 
 onBeforeUnmount(() => {
 	configService.disconnect()
 	profileService.disconnect()
+	lockRead.dispose()
 	disposeLockWallet()
 })
 </script>
 
 <template>
 	<SettingsPageShell title="Lock" :backTo="'/popup/settings'" gap="32">
-		<!-- Outside the load gate: the config reads can hang after a worker restart. -->
+		<!-- Outside the load gate, so locking never waits on the config reads. -->
 		<ItemsContainer>
 			<SettingItem
 				title="Lock now"

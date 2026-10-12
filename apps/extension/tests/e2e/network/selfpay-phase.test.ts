@@ -10,7 +10,7 @@ import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extensi
 import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { readSwLogTrail } from "../fixtures/journal"
-import { navigateByHash, PXE_ANCHOR_SYNC_WORKAROUND_MS } from "../fixtures/helpers"
+import { navigateByHash } from "../fixtures/helpers"
 import {
 	createTestWallet,
 	fundPublicFeeJuice,
@@ -43,7 +43,7 @@ type SimulationSummary = {
 }
 
 type FeeRoute = "self-pay" | "fpc-credit" | "fpc-fuel" | "external"
-type Ctx = Parameters<Parameters<typeof test>[2]>[0]["dappConnectedExtensionWithFirstTwoAccountsContractsCap"]
+type Ctx = Parameters<NonNullable<Parameters<typeof test>[2]>>[0]["dappConnectedExtensionWithFirstTwoAccountsContractsCap"]
 
 const lower = (s: string) => s.toLowerCase()
 /** A `wait: "NO_WAIT"` send settles at submission with `{ txHash }`. */
@@ -377,8 +377,6 @@ test.skipIf(!hasConfig)(
 
 			// ── deployed: A's credit from its (unspent) fuel, minted through the extension ──
 			await claimPrivateFuel(wallet, fuelA)
-			// The mint reads the claim's nullifier at the wallet's anchor block; let the PXE sync it.
-			await new Promise((r) => setTimeout(r, PXE_ANCHOR_SYNC_WORKAROUND_MS))
 			{
 				cell("deployed / first / credit mint (PrivateFPC.mint as A)")
 				await setFields(page, mintFields(fuelAIn))

@@ -4,7 +4,7 @@
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { CONTACT_EXISTS, canonicalContactAddress, sameContactAddress } from "@/utils/contact-rules"
 import { isEmptyContactName, sameContactName, sanitizeContactName } from "@/utils/contact-name"
-import { withoutId } from "@/utils/entity-list"
+import { contactListReducers } from "@/utils/entity-list"
 
 /** Components */
 import ContactFormFields from "@/popup/components/modules/settings/contacts/ContactFormFields.vue"
@@ -26,27 +26,13 @@ const props = defineProps({
 	show: Boolean,
 })
 
-const contactService = new ContactServiceClient()
-contactService.onContactAdded.add(onContactAdded)
-contactService.onContactUpdated.add(onContactUpdated)
-contactService.onContactDeleted.add(onContactDeleted)
-
-function onContactAdded(contact) {
-	contacts.value.push(contact)
-}
-function onContactUpdated(contact) {
-	const idx = contacts.value.findIndex((c) => c.id === contact.id)
-	if (idx !== -1) {
-		contacts.value[idx] = contact
-	} else {
-		contacts.value.push(contact)
-	}
-}
-function onContactDeleted(contact) {
-	contacts.value = withoutId(contacts.value, contact)
-}
-
 const contacts = ref([])
+
+const contactService = new ContactServiceClient()
+const contactList = contactListReducers(contacts)
+contactService.onContactAdded.add(contactList.onAdded)
+contactService.onContactUpdated.add(contactList.onUpdated)
+contactService.onContactDeleted.add(contactList.onDeleted)
 
 const form = useFormState({
 	name: {

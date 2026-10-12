@@ -2,8 +2,8 @@
  * Importing contacts through the real UI: the Contacts menu, the file chooser, the grouped popup,
  * choosing rows by pointer and by keyboard, an edit through the edit popup, Cancel and Escape, and
  * what lands in the book and the list. Every test runs in a fresh wallet, so each book starts empty
- * and every assertion on it is exact. The Testnet RPC is refused throughout, so no run depends on
- * the public endpoint.
+ * and every assertion on it is exact. No run depends on the public endpoint: the launch's stand-in
+ * answers the Testnet RPC until the Contacts page arms its refusal.
  *
  * No confirmed sender row here: smoke's active network is the seeded Testnet, so registering one
  * would need a node. The sender line is checked on screen; registration through an import is

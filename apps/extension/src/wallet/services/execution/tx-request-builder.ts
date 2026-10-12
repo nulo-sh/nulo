@@ -73,8 +73,9 @@ import {
 } from "./contract-resolver"
 import { fenceChecks } from "./execution-coordinator"
 import type { Action, AuthwitContent, AztecSendTxOperation } from "./spec"
+import { EXECUTION_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "TxRequestBuilder"
+const LOG_SOURCE = EXECUTION_SERVICE_NAME
 
 export interface BuiltStandardTx {
 	txRequest: TxExecutionRequest
@@ -400,6 +401,9 @@ export class TxRequestBuilder {
 
 			// Register account in PXE (needed for scopes)
 			await account.ensureRegistered(pxe)
+			// Discovery stubs this account, and the run executes it to check any authorization, both by
+			// its registered instance, which otherwise only a standard build registers.
+			await account.ensureContractRegistered(pxe)
 			this.log("buildNoFrom: account registered in PXE")
 
 			// Register contracts referenced in the payload (same pattern as buildStandard)

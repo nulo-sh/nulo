@@ -79,7 +79,7 @@ const displayNotes = computed(() => {
 			items.push(buildDisplayNote(note))
 		} catch (err) {
 			const message = errorMessageFromUnknown(err)
-			console.warn("[notes] failed to build display row:", message, note)
+			console.warn("[notes] failed to build display row:", { error: err }, note)
 			items.push({
 				key: `err-${items.length}`,
 				type: "Note (failed to render)",

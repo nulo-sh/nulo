@@ -22,7 +22,7 @@ import { useToast } from "@/composables/toast"
 const { openToast } = useToast()
 
 /** Logs helpers */
-import { formatLogs, formatSingleLog, logsDocument } from "./logs-format"
+import { droppedPrefixLength, formatLogs, formatSingleLog, logsDocument } from "./logs-format"
 import { buildLogsCsv } from "./logs-csv"
 import { logDecorationsField } from "./logs-decoration"
 import { useLogFilters } from "./useLogFilters"
@@ -52,24 +52,17 @@ let scrollTimeout = null
 
 function onLogAdded(log) {
 	logs.value.push(log)
-
-	if (logs.value.length > maxLogsCount.value + MAX_LOGS_DIFF) {
-		logs.value.splice(0, MAX_LOGS_DIFF)
-	}
-
-	if (!filters.isLogInclude(log)) return
+	const dropped = logs.value.length > maxLogsCount.value + MAX_LOGS_DIFF ? logs.value.splice(0, MAX_LOGS_DIFF) : []
 	if (!view) return
 
-	const doc = view.state.doc
-	if (filteredLogs.value.length > maxLogsCount.value + MAX_LOGS_DIFF) {
-		view.dispatch({
-			changes: { from: doc.line(1).from, to: doc.line(MAX_LOGS_DIFF).to + 1, insert: "" },
-		})
-	}
-
-	view.dispatch({
-		changes: { from: doc.length, insert: `${formatSingleLog(log)}\n` },
-	})
+	// One change set against one document: the append offset is the length before the trim.
+	const changes = []
+	const trimmed = droppedPrefixLength(view.state, dropped)
+	if (trimmed) changes.push({ from: 0, to: trimmed })
+	const appended = filters.isLogInclude(log)
+	if (appended) changes.push({ from: view.state.doc.length, insert: `${formatSingleLog(log)}\n` })
+	if (changes.length) view.dispatch({ changes })
+	if (!appended) return
 
 	if (shouldAutoScroll.value) scrollToBottom()
 	else showScrollBtn.value = true
@@ -154,17 +147,20 @@ async function exportLogsToCSV() {
 }
 
 async function handleClearLogs() {
+	logViewerService.onLog.remove(onLogAdded)
 	try {
-		logViewerService.onLog.remove(onLogAdded)
 		await logViewerService.clearLogs()
-		logViewerService.onLog.add(onLogAdded)
-		logs.value = []
-		await nextTick()
-		updateEditorContent()
 	} catch (err) {
 		openToast({ kind: "error", label: "Failed to clear logs" })
 		console.error(err)
+		return
+	} finally {
+		// Back before the list is emptied, so a line that lands during the redraw tick is kept.
+		logViewerService.onLog.add(onLogAdded)
 	}
+	logs.value = []
+	await nextTick()
+	updateEditorContent()
 }
 
 async function getLogs() {

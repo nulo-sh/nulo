@@ -5,14 +5,15 @@
  * the same account. Whatever the interleaving, every confirmed send succeeds, no estimate fails,
  * and the balance rows reconcile with the sends.
  *
- * Runs only with `NULO_E2E_CHAOS=1` (the nightly lanes): a seed fixes the actions, not their
- * timing, so this hunts for orderings `same-token-concurrent-sends.test.ts` does not name. The seed
- * is `NULO_E2E_CHAOS_SEED` when set, else random, and is always logged so a failure replays.
+ * Runs only with `NULO_E2E_CHAOS=1`: a seed fixes the actions, not their timing, so a new seed hunts
+ * for orderings `same-token-concurrent-sends.test.ts` does not name and a fixed one replays them. The
+ * seed is `NULO_E2E_CHAOS_SEED` when set, else random, and is always logged so a failure replays.
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
+import { chaosSeed } from "../fixtures/chaos-seed"
 import { clickByTestId, connectPlayground, grantCapBundle } from "../fixtures/extension"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResults } from "../fixtures/playground"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
@@ -27,6 +28,8 @@ import {
 } from "../fixtures/send-burst"
 
 const enabled = aztecConfig !== undefined && process.env.NULO_E2E_CHAOS === "1"
+/** Read at load, so a value that is not a seed fails the file before the burst fixture funds anything. */
+const seed = enabled ? chaosSeed(process.env.NULO_E2E_CHAOS_SEED) : 0
 const ACTIONS = 8
 /** The share of actions that are dApp sends rather than Send-page sends. */
 const DAPP_SHARE = 0.2
@@ -132,7 +135,6 @@ async function runSend(burst: Burst, send: BurstSend, abandon: boolean): Promise
 }
 
 test.skipIf(!enabled)("a seeded burst of sends keeps every invariant", { timeout: 1_800_000, retry: 0 }, async ({ burst }) => {
-	const seed = process.env.NULO_E2E_CHAOS_SEED ? Number(process.env.NULO_E2E_CHAOS_SEED) : Math.floor(Math.random() * 2 ** 31)
 	const actions = plan(seed, burst)
 	console.log(`[send-chaos] seed=${seed} (replay: NULO_E2E_CHAOS=1 NULO_E2E_CHAOS_SEED=${seed}) actions=${JSON.stringify(actions)}`)
 	const playground = await connectAccount(burst)

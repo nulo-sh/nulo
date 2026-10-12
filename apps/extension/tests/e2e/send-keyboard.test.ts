@@ -4,22 +4,33 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { clickByTestId, openPopup, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
+import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { interceptRpc } from "./fixtures/browser"
+import { clickByTestId, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
 import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { startNodeStub } from "./fixtures/node-stub"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
+import { SEEDED_FPC_IDS, SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
 import { activeTestId, coveredAt, focusRing, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
 const OPEN_TRIGGER = `[data-dropdown-open="true"] ${sel("send-fee-method-trigger")}`
 const CLOSED_TRIGGER = `[data-dropdown-open="false"] ${sel("send-fee-method-trigger")}`
+const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
-async function openSendPage(ctx: ExtensionContext, { priced = false } = {}): Promise<Page> {
+async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = false } = {}): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
-	if (priced) {
-		await seedTokenRow(page, await readActivityScope(page), 1)
+	const scope = priced || sponsors ? await readActivityScope(page) : undefined
+	if (scope && sponsors) {
+		expect(await fpcRowIds(page), "FPC rows before the seed").toEqual([])
+		await seedProtocolFpcs(page, scope)
+	}
+	if (scope && priced) {
+		await seedTokenRow(page, scope, 1)
 		await seedUsdQuoteAndReload(page)
 	}
 	await clickByTestId(page, "actions-send")
@@ -101,11 +112,9 @@ test("the token card draws the accent ring when focused", { timeout: 180_000, re
 	await shotSend(page, "send-token-focused", "send-token-trigger")
 })
 
-test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
-	timeout: 180_000,
-	retry: 0,
-}, async ({ registeredExtensionPerTest: ctx }) => {
-	const page = await openSendPage(ctx, { priced: true })
+async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void> {
+	const page = await openSendPage(ctx, { priced: true, sponsors: true })
+	const account = await getAccountAddress(page)
 	await page.waitForSelector(sel("send-fee-method-trigger"), { visible: true, timeout: 30_000 })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-fee-at-rest", "send-fee-method-trigger")
@@ -124,12 +133,28 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	await page.waitForFunction(() => document.activeElement?.closest("[data-dropdown-item]") !== null, { timeout: 5_000 })
 	const row = await activeTestId(page)
 	expect(row).toMatch(/^send-fee-method-/)
+	const fpcId = await page.evaluate(() => document.activeElement?.closest("[data-dropdown-item]")?.getAttribute("data-fpc-id"))
+	expect(fpcId, `the focused row ${row}`).toBe(SEEDED_SPONSOR_FPC_ID)
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await page.waitForFunction(
 		(want: string) => document.querySelector('[data-testid="send-fee-method-trigger"]')?.getAttribute("data-fee-method") === want,
 		{ timeout: 10_000 },
 		row.replace("send-fee-method-", ""),
+	)
+	// The pick may land on the row already showing, so only the saved pick tells Enter from a no-op.
+	await page.waitForFunction(
+		async (key: string, address: string, want: string) => {
+			const saved = (await chrome.storage.local.get(key))[key] as
+				| Record<string, { private?: { type?: string; fpc?: { id?: string } | null } }>
+				| undefined
+			const pick = saved?.[address]?.private
+			return pick?.type === "fpc" && pick.fpc?.id === want
+		},
+		{ timeout: 10_000 },
+		UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS,
+		account,
+		SEEDED_SPONSOR_FPC_ID,
 	)
 	await waitForFocus(page, "send-fee-method-trigger")
 
@@ -138,6 +163,31 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	await page.keyboard.press("Escape")
 	await page.waitForSelector(CLOSED_TRIGGER, { timeout: 5_000 })
 	await waitForFocus(page, "send-fee-method-trigger")
+	expect(await fpcRowIds(page), "FPC rows after the picks").toEqual([...SEEDED_FPC_IDS].sort())
+}
+
+test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
+	timeout: 180_000,
+	retry: 0,
+}, async ({ freshExtensionPerTest: ctx }) => {
+	// Discovery stores its own sponsor rows beside the seeded ones whenever a node answers, so the
+	// node is held from before the profile exists, in every run mode.
+	const stub = await startNodeStub()
+	try {
+		const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "redirect", to: stub.url })
+		try {
+			await registerProfile(ctx)
+			await pickSeededSponsorByKeyboard(ctx)
+			// Read before `stop()`, which drops Firefox's tally.
+			expect(await node.failures(), "testnet interception failures").toEqual([])
+			expect(await node.hits()).toBeGreaterThan(0)
+		} finally {
+			await node.stop()
+		}
+		expect(stub.requests()).toBeGreaterThan(0)
+	} finally {
+		await stub.stop()
+	}
 })
 
 /** The fee menu's edge and its trigger's, once the menu's entry transition has settled. */
