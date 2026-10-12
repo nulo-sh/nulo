@@ -31,7 +31,7 @@ defineProps<{ action: Action }>()
 				<AddressDisplay data-testid="execute-authwit-contract" :address="action.content.contract" />
 				<template v-if="action.content.args?.length">
 					<Text color="secondary"> args </Text>
-					<Text data-testid="execute-authwit-args">{{ action.content.args.map((a) => safeWire(String(a), 48)).join(", ") }}</Text>
+					<Text data-testid="execute-authwit-args" variant="data">{{ action.content.args.map((a) => safeWire(String(a), 48)).join(", ") }}</Text>
 				</template>
 			</template>
 			<!-- Unreachable from today's grant producer (it hardcodes `call`); rendered so a future producer can

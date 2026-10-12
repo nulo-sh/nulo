@@ -100,6 +100,8 @@ type Request = {
 	/** Shown once the window has decoded the request and named what it can. */
 	ready: string
 	states: readonly string[]
+	/** The payload must stay inside the card and every hex string in a mono role. */
+	contained?: true
 }
 
 function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
@@ -120,7 +122,36 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			ready: sel("execute-authwit-target"),
 			states: ["an aztec_createAuthWit request for a call (network)"],
 		},
+		{
+			// Its arguments are full 32-byte fields, the longest unbroken strings the payload carries.
+			method: "grantPublicAuthwit",
+			button: "pg-btn-grantPublicAuthwit",
+			inputs: { tokenAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
+			ready: sel("execute-authwit-args"),
+			states: ["a grantPublicAuthwit request (network)"],
+			contained: true,
+		},
 	]
+}
+
+/** How far the payload rows' text reaches past the card's right edge, in px; 0 or less is inside. */
+async function payloadPastCard(win: Page): Promise<number> {
+	return win.evaluate(() => {
+		const card = document.querySelector('[data-testid="execute-op-item"]')
+		if (!card) throw new Error("no execute-op-item")
+		const nodes: Node[] = []
+		for (const row of document.querySelectorAll('[data-testid="execute-op-payload-row"]')) {
+			const text = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+			for (let node = text.nextNode(); node; node = text.nextNode()) nodes.push(node)
+		}
+		const rights = nodes.flatMap((node) => {
+			const range = document.createRange()
+			range.selectNodeContents(node)
+			return [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.right)
+		})
+		if (rights.length === 0) throw new Error("no payload text")
+		return Math.max(...rights) - card.getBoundingClientRect().right
+	})
 }
 
 async function openExecute(ctx: Connected, { button, inputs, ready }: Request): Promise<Page> {
@@ -150,6 +181,10 @@ test.skipIf(!hasConfig)(
 			const win = await openExecute(ctx, request)
 			try {
 				const observations = await sweepWindow(win, "windows-execute", request.states)
+				if (request.contained) {
+					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+					expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
+				}
 				const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))
 				// Only an `AddressDisplay` states what it shows; every other site reads `null`.
 				for (const { readings } of asserted) for (const { addressShows } of readings) if (addressShows) shown.add(addressShows)

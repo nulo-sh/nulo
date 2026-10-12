@@ -207,7 +207,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 			<!-- send_transaction has actions[]; aztec_sendTx has exec.calls[] -->
 			<Flex v-if="op.kind === 'send_transaction'" :class="$style.prop">
 				<Text variant="label" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4">
+				<Flex direction="column" gap="4" :class="$style.payload">
 					<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" />
 				</Flex>
 			</Flex>
@@ -221,7 +221,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						:data-intent-kind="surface.kind"
 						justify="between"
 						align="center"
-						:class="$style.row"
+						:class="[$style.row, $style.call_row]"
 					>
 						<Text variant="data" color="primary">{{ callName(call, surface) }}</Text>
 						<Text variant="caption" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
@@ -396,7 +396,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-else-if="op.kind === 'simulate_transaction'">
 			<Flex :class="$style.prop">
 				<Text variant="label" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4">
+				<Flex direction="column" gap="4" :class="$style.payload">
 					<OperationActionRow v-for="(action, j) in op.actions" :key="`${index}:${j}`" :action="action" />
 				</Flex>
 			</Flex>
@@ -438,7 +438,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		<template v-else-if="op.kind === 'aztec_simulateTx' || op.kind === 'aztec_profileTx'">
 			<Flex :key="op.kind" :class="$style.prop">
 				<Text variant="label" color="secondary">Payload:</Text>
-				<Flex direction="column" gap="4">
+				<Flex direction="column" gap="4" :class="$style.payload">
 					<Text
 						v-for="(call, j) in op.exec.calls"
 						:key="`${index}:${j}`"
@@ -574,6 +574,23 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 		min-width: 0;
 		text-align: right;
 	}
+}
+
+/* A dApp names the call and its contract; a long unbroken name must break inside the card, not push the address out. */
+.call_row {
+	> :first-child {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	> :last-child {
+		flex-shrink: 0;
+	}
+}
+
+.payload {
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .structured_args {

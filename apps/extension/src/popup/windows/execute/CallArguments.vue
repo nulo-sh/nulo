@@ -152,6 +152,7 @@ const nonce = computed(() =>
 
 	> :last-child {
 		min-width: 0;
+		overflow-wrap: anywhere;
 		text-align: right;
 	}
 }
