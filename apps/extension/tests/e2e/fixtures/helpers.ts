@@ -980,6 +980,18 @@ export async function waitForNewTokenAddress(page: Page, address: string): Promi
 
 /** Submits the open New token popup, its address already entered, and waits for the success toast. */
 export async function submitNewTokenPopup(page: Page): Promise<void> {
+	await clickNewTokenSubmit(page)
+
+	// Wait for success toast. The popup now blocks until the active account's
+	// initial balance projection completes (or 30s timeout in the popup
+	// itself), then fires the toast. Generous timeout because under sustained
+	// network-suite load the flow goes through PXE metadata fetch + storage
+	// write before the projector run.
+	await waitForToast(page, "Token added", 60_000)
+}
+
+/** Clicks the open New token popup's submit once it enables. */
+export async function clickNewTokenSubmit(page: Page): Promise<void> {
 	// Wait for parsing to complete (button text changes from "Awaiting..." to
 	// "Import new token"). The wallet calls PXE to fetch token metadata,
 	// which is slow under sustained network-suite load — 60s is the safe
@@ -996,13 +1008,6 @@ export async function submitNewTokenPopup(page: Page): Promise<void> {
 	// Click import
 	await page.waitForSelector('[data-testid="import-token-button"]', { visible: true })
 	await clickByTestId(page, "import-token-button")
-
-	// Wait for success toast. The popup now blocks until the active account's
-	// initial balance projection completes (or 30s timeout in the popup
-	// itself), then fires the toast. Generous timeout because under sustained
-	// network-suite load the flow goes through PXE metadata fetch + storage
-	// write before the projector run.
-	await waitForToast(page, "Token added", 60_000)
 }
 
 /** Click "Refresh balances" from the token dropdown menu.

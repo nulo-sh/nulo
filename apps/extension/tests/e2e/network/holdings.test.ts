@@ -4,19 +4,23 @@
  * token. Two deployed tokens join the fixture's TST: ZED (funded above TST) and EMPTY (never
  * minted, so its projected balance is a genuine 0). Each import is waited for with the fixture's
  * freshness-gated row check, so the assertions never race the balance projector. A third token,
- * PASTE, is deployed by the test itself and added by pasting its address into the search.
+ * PASTE, is deployed by the test itself and added by pasting its address into the search; an
+ * address that holds no contract is pasted last and its refused add reads the generic line.
  */
 
 import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
-import { openHoldings, seedUsdQuoteAndReload, submitNewTokenPopup, waitForNewTokenAddress } from "../fixtures/helpers"
+import { clickNewTokenSubmit, openHoldings, seedUsdQuoteAndReload, submitNewTokenPopup, waitForNewTokenAddress } from "../fixtures/helpers"
+import { shotSend } from "../fixtures/send-page"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 const ONE = 10n ** 18n
+/** A curve point (a valid address) where no contract was deployed. */
+const NO_CONTRACT = "0x1200000000000000000000000000000000000000000000000000000000000002"
 
 const test = base.extend<{ extraTokens: Record<string, string> }>({
 	extraTokens: extraTokensFixture([
@@ -103,6 +107,18 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 30_000,
 		})
+
+		// ── A refused add: an address that holds no contract reads the generic line under Submit, so
+		// the node's own refusal, carried back over the wallet's RPC, never reaches the person.
+		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)
+		await clickByTestId(page, "holdings-add-token")
+		await waitForNewTokenAddress(page, NO_CONTRACT)
+		await clickNewTokenSubmit(page)
+		await page.waitForFunction(
+			() => document.querySelector('[data-testid="new-token-error"]')?.textContent?.trim() === "Something went wrong. Try again.",
+			{ timeout: 60_000 },
+		)
+		await shotSend(page, "new-token-error", "new-token-error")
 
 		expect(tokenReadyExtension.consoleErrors).toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])

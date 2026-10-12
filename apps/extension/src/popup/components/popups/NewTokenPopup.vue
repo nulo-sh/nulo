@@ -19,7 +19,6 @@ const { openToast } = useToast()
 /** Store */
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
-import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 const appStore = useAppStore()
 const cacheStore = useCacheStore()
 const { order, depth } = usePopupStack("new_token")
@@ -253,7 +252,9 @@ const handleAddToken = async () => {
 				break
 		}
 	} catch (err) {
-		error.value = errorMessageFromUnknown(err)
+		// Nothing that lands here has copy of its own; its text is a developer's, for the log.
+		error.value = "Something went wrong. Try again."
+		console.debug("[new-token] add refused", { reason: err })
 		balanceWait?.abort()
 	} finally {
 		activeBalanceWait = null
@@ -330,7 +331,7 @@ usePopupEntity(
 		</Input>
 
 		<template v-if="error" #belowSubmit>
-			<Flex align="center" gap="6" :class="$style.error_row">
+			<Flex align="center" gap="6" :class="$style.error_row" data-testid="new-token-error">
 				<Icon name="info" size="12" color="red" />
 				<Text size="12" weight="500" color="secondary" :style="{ lineHeight: '1.4' }">
 					{{ error }}
