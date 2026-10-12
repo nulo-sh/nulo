@@ -1,7 +1,7 @@
 ---
 plan: wallet-followups-5
 tier: light
-status: approved by the orchestrator (cecabc2); arc 1 in progress
+status: closed, awaiting archive
 issues: "#312, #302 (arc 1); #308, #310, #294, #290, #281, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,27 @@ post_implementation_hardening: not scheduled
 base: origin/dev at 04137a0
 trunk: dev
 ---
+
+## Outcome
+
+- **Date:** 2026-10-12.
+- **Status:** delivered in one PR against `dev`, [#314](https://github.com/nulo-sh/nulo/pull/314) (arc 1: phases 1 to 3), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #312: `closeCurrentWindow` still calls `remove` inside its synchronous `getCurrent` callback and hands the promise to `quietIfGone`, which swallows a rejection only when a successful `chrome.windows.getAll()` confirms the window gone; every other failure rethrows the browser's error, so it stays today's unhandled rejection. No new log text (D-orch-2's no_ask record). Firefox stderr over the six network files: 4 `Invalid window ID` lines at base, 0 on three head runs. The unhandled-rejection collector moved to `apps/extension/tests/helpers/unhandled-rejections.ts`.
+  - #302: `LOG_CALL` reads every emitting logger level method on any receiver, an optional call included; every opener on a line is read; a nested string kept inside `${…}` masks its delimiters with `"\0"`; `findLoggedSecrets` split under budget and its acceptance retired (manifest 24 → 23; CLAUDE.md 23 acceptances, 13 harness directives); `stripNoise` exact at 41. The header names the logger spellings the scan cannot see by name.
+  - `lessons.md`: nothing promoted (at its 8 KiB budget; the one generalizable lesson, D13, is scanner-specific and lives here).
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #302's "end each window at its balancing paren": rejected in review (D13); every regex/division misreading became a same-line miss and the base's same-line coverage was lost, for one false refusal no line on the tree hits. Its two compensating heuristics (`endsControlHead`, the `.in` lookbehind) were reverted with it, and D8(b) and D8(d) dropped.
+  - Stopping the pages WindowManager settles from closing themselves, and `window.close()`: rejected (D1).
+  - An `async` getCurrent callback, `.catch(() => undefined)` with eleven stub rewrites, a blanket catch, a `chrome.windows.get` lookup and matching the error text: rejected (D2). The "This window could not be closed" log line: dropped (D-orch-2).
+  - Counting parens over `blankComparisonLiterals` instead of masking in `stripNoise`: rejected (D11).
+  - OA-1: resolved by the orchestrator's no_ask record (D-orch-2); nothing for the owner.
+  - `auth-guard.test.ts`'s abandoned-request test cannot fail on `request.catch(() => {})`, which `Promise.race` makes redundant: not a defect, since the test pins the contract (no unhandled rejection); outside this lane.
+  - A literal space inside a bracket key (`row["password .length"]`) reads as an arity read on base and head alike: not a realistic log shape; no item.
+  - The commit trailer names the model that wrote the commits (Claude Opus 5.5) rather than the literal one in the briefs.
+- **Open items:** #315 (`privacy`): `opfs-store.ts`'s version guard logs its parse error flattened into a string (D9, D-orch-3).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # Wallet follow-ups 5: a gone window closes quietly, and the log scan reads every logger call
 
