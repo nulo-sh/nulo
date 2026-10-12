@@ -11,7 +11,14 @@
 import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
-import { clickNewTokenSubmit, openHoldings, seedUsdQuoteAndReload, submitNewTokenPopup, waitForNewTokenAddress } from "../fixtures/helpers"
+import {
+	clickNewTokenSubmit,
+	openHoldings,
+	seedUsdQuoteAndReload,
+	submitNewTokenPopup,
+	waitForNewTokenAddress,
+	waitForToastGone,
+} from "../fixtures/helpers"
 import { shotSend } from "../fixtures/send-page"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
@@ -107,6 +114,9 @@ test.skipIf(!hasConfig)(
 			visible: true,
 			timeout: 30_000,
 		})
+
+		// The add's success toast closes itself after six seconds; it would sit over the next popup.
+		await waitForToastGone(page, "Token added", 10_000)
 
 		// ── A refused add: an address that holds no contract reads the generic line under Submit, so
 		// the node's own refusal, carried back over the wallet's RPC, never reaches the person.
