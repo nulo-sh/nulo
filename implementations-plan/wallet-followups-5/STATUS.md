@@ -13,3 +13,4 @@
 - 2026-10-11 — Phase 3: Firefox head run exit 0, 0 window-ID lines (base 4); test:all exit 0. Codex impl round 1 reject (2 High, 1 Medium), Opus approve; all fixed, unit + lint + typecheck green.
 - 2026-10-11 — Codex impl round 2 reject; cause named as the column cut. Round 3 (design): both legs chose X (drop the cut); Codex conditions applied verbatim. Chrome run on 454716e: 13/13.
 - 2026-10-11 — Phase 3 gate pass on 35c6d62: Firefox 12/1 skipped with 0 window-ID lines (base 4), Chrome 13/13 (454716e, same build), lint, typecheck:all, test:all, test:ci-gating, test:release. Opus round 3 approve.
+- 2026-10-12 — merged origin/dev (#313); fast gates and the Firefox six-file run green on the merged head (0 window-ID lines).

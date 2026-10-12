@@ -51,3 +51,7 @@ Approve. Against base 04137a0: the 553-call injection, the opener diff (11 new o
 - Firefox, the six files, retry 0: exit 0, 12 passed and 1 skipped; `Invalid window ID|No window with id` lines: 0 (base 4, N = 1, K = 29). The earlier head run at 46c4dd4 also printed 0.
 - Chrome, the six files, retry 0, at 454716e: exit 0, 13 passed. 35c6d62 changes only a test file and plan documents, so the built extension is the one that ran.
 - `bun run lint` 0, `bun run typecheck:all` 0, `bun run test:all` 0 (`@nulo/extension` 742 files, 11,326 tests), `bun run test:ci-gating` 0 (526), `bun run test:release` 0 (294). Pass.
+
+## After merging `origin/dev` (#313, the Firefox page-error relay)
+
+`bun run lint`, `typecheck:all`, `test:all`, `test:ci-gating` and `check:plans`: all exit 0. Firefox, the six files, retry 0: exit 0, 12 passed and 1 skipped, 0 window-ID lines.
