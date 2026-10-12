@@ -340,7 +340,7 @@ export function relayVerdict(read: unknown): string | undefined {
 
 /**
  * The relay's latest exceptions, oldest first, each with the BiDi context it was raised in ("no
- * context" for one BiDi never announced) and its first frame, 1-based as Firefox prints a stack.
+ * context" when none was available) and its first frame, 1-based as Firefox prints a stack.
  * `read` is what the close-time read returned.
  */
 export function recentExceptions(read: unknown): string[] {
