@@ -169,7 +169,7 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 ## Security & Adversarial Considerations
 
 - **Threat model.** Test-harness change only. The trust question is the nightly and release gates: a fix that hid a product fault would let a broken build publish. Fix A removes no assertion and adds three. It does not cover discovery (§ Outcome & Quality Bar), which the network suite covers.
-- **What the gate trusts.** That the interception covers every target that could reach the node. Fact 9 shows how; the `failures()`, `hits()` and `stub.requests()` checks fail the test when it did not, for the scenario up to the read; the never-happens assertions fail it when discovery wrote a row anyway, whatever the cause.
+- **What the gate trusts.** That the interception covers every target that could reach the node; Fact 9 shows how, and `failures()` reports a target it could not arm or answer, up to the read. `hits()` and `stub.requests()` prove only that some requests were redirected, not that every one was. The never-happens assertions fail the test when discovery wrote a row anyway, whatever the cause, up to the final snapshot.
 - **The dRPC key.** It is a constant committed in this public repository and shipped in every bundle (Fact 11), so a CI log that prints it exposes nothing new. The lane still adds no output that carries it: the probe, the tally, the plan and the PR print no URL; runs never set `NULO_E2E_INTERCEPT_LOG`. An interception failure string can carry the path (Fact 11), as it can for every spec that uses `interceptRpc` today; changing the shared fixture is outside this lane (D6).
 - **Egress.** Phase 0's one request and Phase 1's artifact-mode runs reach the live Testnet node and dRPC from this host, as the nightly does; nothing else outside is called.
 - **Run isolation.** Smoke runs one at a time; `startNodeStub` claims its port in `~/.agents/ports.md`; the scratch builds live under `~/.cache/nulo-backlog/e2e-followups-4/`, at paths that prefix no other `EXTENSION_PATH`.
@@ -314,6 +314,25 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 ### Round 5 (the Opus edit)
 
 **Codex** (resumed): `approve`. Rule 1 still catches every unreproduced fee-picker red, a red before the picker, every Firefox fee-picker red and any unexpected row in C2; the exception covers only the other four tests, whose reds stay recorded and still fail Phase 3's gate.
+
+### Post-implementation round 1 (the arc's diff)
+
+**Codex** (gpt-6.1-sol, high, read-only; session `01a12da3`): `findings`, three nits, no blocking or material one. It found the cleanup order sound on both browsers and both launch modes, `fpcRowIds` correct, and an origin mismatch with the installed artifact caught by `hits()`.
+
+| # | Finding | Disposition |
+|---|---|---|
+| P1.1 | the skill's `NULO_E2E_ARTIFACT_RUN` row says the live node answers every spec, which this fix contradicts | accepted: "a spec reaches the live Testnet node unless it intercepts it" |
+| P1.2 | ledger row 53 says the seeded rows are the only rows before the seed; the check there wants none | accepted |
+| P1.3 | § Security overstates the counters: `hits()` and `stub.requests()` prove some redirection, not complete coverage | accepted: the sentence now says what each check proves |
+
+**Opus** (general-purpose diff review, beside round 1): `sound, one material finding`.
+
+| # | Finding | Disposition |
+|---|---|---|
+| O-P1.1 | material: ledger row 53 cites `implementations-plan/archive/e2e-followups-4/`, which does not resolve before the archive move, so `check:plans` fails at every commit until then (confirmed: one `path-token` finding) | accepted: the row cites the live plan dir; the close-out's move repoints it |
+| O-P1.2 | the two skill nits Codex raised | same fix |
+| O-P1.3 | `send-fee-privacy.test.ts` arms its refusal after registration, so on an artifact run registration reaches the live node; the skill's "replaces the stand-in" holds on guarded runs only | accepted as evidence for the D-orch-4(b) issue, which names it; no change to that spec in this lane |
+| O-P1.4 | `fpc-seeds.ts` re-spells the product's `FPC_STORAGE_ROOT` | accepted: the key prefix derives from it |
 
 ## Delivery
 

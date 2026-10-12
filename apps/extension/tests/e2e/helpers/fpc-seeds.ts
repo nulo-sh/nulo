@@ -1,7 +1,8 @@
 import type { Page } from "puppeteer"
+import { FPC_STORAGE_ROOT } from "@/wallet/services/fpc/spec"
 import type { ActivityScope } from "./activity-seeds"
 
-const FPC_KEY_PREFIX = "nulo:core:fpcs@"
+const FPC_KEY_PREFIX = `${FPC_STORAGE_ROOT}@`
 
 /** The canonical protocol FPC addresses `src/wallet/services/fpc/protocol-fpcs.test.ts` pins. */
 const PROTOCOL_FPCS = [
