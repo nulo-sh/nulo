@@ -223,23 +223,14 @@ const isTotalKnown = computed(() => balancesState.value === "loaded")
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
 	fetchTokenBalances,
-	markDirty,
-	inActiveScope,
+	onBalanceAdded,
 	onBalanceUpdated,
+	onBalanceDeleted,
 	dispose: disposeBalances,
 } = useTokenBalanceSnapshot({ client: tokenBalanceService, live: appStore, rows: tokenBalances, state: balancesState })
 tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
-function onBalanceAdded(tb) {
-	if (!inActiveScope(tb)) return
-	tokenBalances.value.push(tb)
-	markDirty()
-}
-function onBalanceDeleted(tb) {
-	tokenBalances.value = tokenBalances.value.filter((_tb) => _tb.id !== tb.id)
-	if (inActiveScope(tb)) markDirty()
-}
 
 /** A new scope owes nothing to the previous one: its rows, its loaded state and its cap all restart. */
 function enterScope() {

@@ -1232,6 +1232,57 @@ describe("NetworkService public API", () => {
 	})
 })
 
+describe("NetworkService liveness reads overlapped by a reservation", () => {
+	async function deletableNetwork() {
+		const h = setupServiceWithStorage({ "https://rpc.test/1": nodeInfoForChain(1), "https://rpc.test/2": nodeInfoForChain(2) })
+		const network = await h.service.addNetwork("A", "https://rpc.test/1")
+		await h.service.setActiveNetwork((await h.service.addNetwork("B", "https://rpc.test/2")).id)
+		// A failing cascade reserves the network and ends the reservation with its row still stored.
+		h.service.registerChainPurgeSubscriber(async () => {
+			throw new Error("cascade down")
+		})
+		return { ...h, network }
+	}
+
+	/** Holds the answer of the next storage read, which has already been taken, until `release`. */
+	function holdNextRead(local: FakeStorageArea) {
+		const get = local.get.bind(local)
+		let release!: () => void
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		let started!: () => void
+		const reading = new Promise<void>((resolve) => {
+			started = resolve
+		})
+		local.get = async (keys) => {
+			local.get = get
+			const answer = await get(keys)
+			started()
+			await gate
+			return answer
+		}
+		return { reading, release }
+	}
+
+	test.each([
+		{ name: "isNetworkLive", read: (s: NetworkService, n: Network) => s.isNetworkLive(n.id) },
+		{ name: "isChainLive", read: (s: NetworkService, n: Network) => s.isChainLive(n.profileId, n.chainId) },
+	])("$name: a reservation that begins and ends during the read answers false; reads around it answer true", async ({ read }) => {
+		const { service, local, network } = await deletableNetwork()
+		expect(await read(service, network)).toBe(true)
+
+		const held = holdNextRead(local)
+		const live = read(service, network)
+		await held.reading
+		await expect(service.deleteNetwork(network.id)).rejects.toThrow(/cascade down/)
+		held.release()
+
+		expect(await live).toBe(false)
+		expect(await read(service, network)).toBe(true)
+	})
+})
+
 describe("NetworkService default seeding", () => {
 	test("seeds Testnet and Local Network only; the dRPC endpoint carries the 'dRPC' label", async () => {
 		// Settings renders `endpoint.label || endpoint.rpcUrl` as the row title — the label is what

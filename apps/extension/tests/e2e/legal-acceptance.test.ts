@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
-import { extensionUrl, reloadExtensionPage, waitForOpenedUrl } from "./fixtures/browser"
+import { extensionUrl, reloadExtensionPage, waitForTarget } from "./fixtures/browser"
 import {
 	clickByTestId,
 	expectNoNameField,
@@ -385,7 +385,7 @@ describe("popup: a passkey wallet that declined", () => {
 
 		await pointerClick(page, "legal-about-licences")
 		const expected = extensionUrl(extension.extensionId, "/THIRD-PARTY-NOTICES.txt")
-		await waitForOpenedUrl(extension.browser, expected, 15_000)
+		await waitForTarget(extension.browser, (target) => target.type() === "page" && target.url() === expected, 15_000)
 
 		// Read through the extension origin rather than the tab's text/plain rendering.
 		const notices = await page.evaluate(async (url) => (await fetch(url)).text(), expected)
