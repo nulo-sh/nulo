@@ -1,7 +1,7 @@
 ---
 plan: followups-6
 tier: light
-status: arc 1 implementing (plan approved by the orchestrator at c1d6377)
+status: completed (delivered in #320)
 issues: "#317 (arc 1), #315 (arc 1)"
 not_this_lane: "#316, #310, #294, #290, #262, #277"
 driver: claude-code
@@ -15,6 +15,28 @@ base: origin/dev at 58d6cbc
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-12.
+- **Status:** delivered in one PR against `dev`, [#320](https://github.com/nulo-sh/nulo/pull/320) (arc 1: phases 0 to 4 and this close-out), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #317: every smoke run is guarded with the node stand-in, artifact runs included. One declared live spec, `shipped-token-list.test.ts`, runs only in artifact runs: its launch sends the Testnet node's host direct, and it checks that every shipped seed lands as a stored token by contract, symbol and decimals; a guard record for that host fails its launch. The drivers' artifact branches and price-host blackholes are deleted (D3). At the final head the four whole-suite runs passed at retry 0, and against the baseline the only file changes are the control spec now running and the live spec added (`lessons/phase-4.md`).
+  - #315: the store guard's parse branch logs `{ reason: "stamp failed to parse" }`; each branch's payload is pinned, the parse pin red on base (`lessons/phase-1.md`).
+  - Docs: `tests/e2e/README.md`, `FIREFOX.md`, `.claude/skills/e2e-testing/SKILL.md`, and the spec comments that described the old mode.
+  - `lessons.md`: nothing promoted (D-orch-7: it is at its 8 KiB budget, and #315 applies its existing line on error text the redactor never sees).
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger); OA-2 decided as gating (D-orch-3).
+- **Dropped, rejected, superseded:**
+  - Design A (guard every artifact launch with the node live): rejected for B (D1).
+  - The artifact price-host blackholes and the drivers' "cannot be both" throws: deleted, unreachable once every smoke run is guarded (D3).
+  - Stripping the parser's text from the thrown `PxeStoreVersionMismatch` message: the owner's call (D6, OA-1), filed as #321.
+  - § #317 step 1's probe "from the background": it runs from an extension page (D11).
+  - The lane brief's "find the spec that is the documented live leg": did not hold, no spec asserted the shipped list (§ Scope); D1 made it one.
+  - Phase 4 attempt 1 failed on one flake outside the lane, filed as #319; attempt 2 at the final head passed.
+- **Open items:** #321 (`ux`, `owner-decision`: the popup's PXE store error quotes the stored stamp), #319 (`bug`: `security.test.ts`'s change-password test can miss the lock route under load).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired with this record; never run them.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
 
 # followups-6: a hermetic artifact smoke with one declared live spec (#317), a fixed PXE stamp log category (#315)
 
