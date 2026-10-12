@@ -9,3 +9,4 @@
 - 2026-10-11 — panel rounds 4-5: Codex approve (twice), Opus approve (one low finding, accepted); plan converged at v4; committing.
 - 2026-10-12 — phase 0 gate: pass (ancestry 0, #308 OPEN, Testnet aztec_getNodeInfo HTTP 200 with result); implementing arc 1.
 - 2026-10-12 — phase 1 gate: pass. C1 18/21 red, C3 16/21 red, C2 0/21, F1 red, F2 green; all 35 reds reproduced as defined; rule 1 (F1) → Codex: same cause, Fix A; probe reverted (diff exit 0).
+- 2026-10-12 — phase 2 gate: pass (lint, typecheck:all, test, test:all, test:ci-gating all 0; C2 file 5/5; N1 red at :36, N2 red at :173, both reverted).

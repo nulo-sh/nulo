@@ -195,7 +195,7 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 
 **Validation gate.** Commands: the runs above; `git diff --quiet -- apps/extension/tests/e2e/send-keyboard.test.ts`. Pass: all 21 slots of each of C1, C2 and C3 and both Firefox runs recorded, with every replaced attempt beside its evidence; the tally written; one rule of the table named with its evidence; the probe diff gone (exit 0). Rule 1 stops here for the panel. Layers: smoke e2e, Chrome and Firefox, both run modes.
 
-### Phase 2: fix
+### Phase 2: fix ✓
 
 1. Implement Fix A as the change map says (or the fix the panel chose for an unclassified row).
 2. Run the fast layers after each edit.
