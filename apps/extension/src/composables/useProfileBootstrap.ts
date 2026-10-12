@@ -35,7 +35,7 @@ const inFlightBootstraps = new Map<string, { isCurrent: () => boolean; promise: 
  * Generation fence: per-id single-flight covers same-profile recovery,
  * but a DIFFERENT profile activating mid-bootstrap (a rapid switch) would still
  * run its own init and stomp the shared clients while the older run continues.
- * Every new bootstrap bumps this counter, and `initNetworks`/`initAccount` fence
+ * Every new bootstrap and every lock bump this counter, and `initNetworks`/`initAccount` fence
  * EACH shared-state mutation on it — a superseded run stops before disconnecting/
  * replacing the winner's dynamically-referenced `managers.*` client or writing
  * stale network/account state. Joining also requires the in-flight run to still
@@ -45,7 +45,8 @@ const inFlightBootstraps = new Map<string, { isCurrent: () => boolean; promise: 
 const bootstrapFence = createRunFence()
 
 /** After this, no activation whose core run started or was joined earlier sets `isLogined`,
- *  whatever its last read of the session answered. */
+ *  whatever its last read of the session answered, and those runs abandon their network and
+ *  account setup. */
 export function supersedeProfileActivations(): void {
 	bootstrapFence.invalidate()
 }
@@ -187,8 +188,8 @@ export function useProfileBootstrap() {
 	/**
 	 * Initial load of an already-active profile. Mirrors the
 	 * `getActiveProfile()` branch of `loadProfile()` in popup/app.vue.
-	 * Returns the active profile if one exists (and was bootstrapped),
-	 * or null if there's no active profile to hydrate.
+	 * Returns the active profile if one exists (and was bootstrapped), or null if
+	 * there is none or a lock or a newer activation superseded the run.
 	 */
 	const hydrateKnownProfile = async (): Promise<ProfileInfo | null> => {
 		const activeProfile = await managers.profile.getActiveProfile()
