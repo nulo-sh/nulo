@@ -4,3 +4,5 @@
 2026-10-12 audit rounds 2 and 3: Codex conditional approve both times; last condition (C3) applied; panel converged; plan committed, awaiting orchestrator approval
 2026-10-12 phase 1 gate (partial): lint, typecheck:all, test green; certification 10/10 unpinned; pinned whole-file bar red on fix and base alike (D15, open for the orchestrator)
 2026-10-12 phase 1 gate: green except the pinned whole-file certification (D15, red on base too); full smoke both browsers and lock-caller network files both browsers green; phase 1 done
+2026-10-12 phase 2: floor R0-R3 done (no natural miss, no recursion); W4 shown by forced throw; consults (Codex, Opus) conditional approve; D16 harness fix + D17 committed (264a638, c792d71); gate running
+2026-10-12 phase 2 gate stopped after 3/10 green replays: the review found the failure report moved focus; fixed (2583298, ce9c78b); the whole Phase 2 gate reruns on the final head
