@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-5
 tier: light
-status: approved (orchestrator, 208f5f4); arc-1 in implementation
+status: delivered (#328), awaiting the orchestrator's gate exceptions (D15, D18) and merge
 issues: "#319, #322 (arc-1); #321, #316, #310, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,48 @@ base: origin/dev at 32b7bf4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-12.
+- **Status:** delivered in one PR against `dev`, [#328](https://github.com/nulo-sh/nulo/pull/328) (arc 1: phases 1 to 3 and this close-out). It awaits the orchestrator's gate exceptions (D15, D18) and its merge. The merge that lands it closes this plan.
+- **Shipped:**
+  - **#319 (settled, L2, closed by the PR).**
+    - The popup's lock seal now supersedes every activation in flight (`supersedeProfileActivations` in `markLocked`). The bootstrap's final re-read and the boot hydration set `isLogined` only while their core run is still current.
+    - The mechanism was recorded: the lock event is posted before the stale "active" reply. That order is natural in 6 of 50 locks on base under two cores, and forced 4 of 4 times.
+    - The fix is pinned by four unit tests that are red on base. On the fix, 150 of 150 locks landed (`lessons/phase-1.md`).
+    - The test's dead "Client disconnected" filter is removed (D8).
+  - **#322 (not settled, harness only, `Refs`).**
+    - The BiDi shim hands Puppeteer an add-on page's committed URL (D16), and `waitForOpenedUrl` is retired (D17).
+    - On Firefox, a `waitForTarget` timeout reports Firefox's handles beside BiDi's and Puppeteer's view and the watch's closes, without switching a window.
+    - Each launch's close prints the relay's latest exceptions with their context and first frame. A page error with no saved stack keeps its location (`lessons/phase-2.md`, `lessons/phase-3.md`).
+  - **Docs:** `FIREFOX.md`, plus the e2e skill's ledger rows 54 (#322) and 55 (#319).
+  - **`lessons.md`:** nothing promoted. It is at its 8 KiB budget and no entry is retired by these. The L2 lesson ("the mutex orders calls, not the popup's receipt of answers and events") lives in ledger row 55.
+- **Gates:** at the final head, at retry 0, everything below passed (`lessons/phase-3.md`):
+  - lint, typecheck:all, test:all and test:ci-gating;
+  - #322's CI replay, 10 of 10;
+  - the full smoke suite on Firefox and on Chrome;
+  - the full Firefox network suite;
+  - the probe grep over both armed dists.
+  Two pinned certification halves are **not met and not claimed**, and each needs the orchestrator's explicit gate exception:
+  - D15: #319's whole `security.test.ts` failed on base and fix alike.
+  - D18: the seam's capability-window spec passed 11 of 20 on the fix and 14 of 20 on base, with no target-discovery timeout on either. Two fix-only reds are compatible with D16's earlier match.
+- **Review loop:** Codex and Opus both gave a conditional approve in round 1. Opus's material finding was that the failure report moved focus mid-test, and it was fixed. Codex approved round 2, so the loop converged without a round 3. The verdicts are in § Audit record, under Post-implementation review.
+- **Orchestrator records:**
+  - D-orch-1 to D-orch-7 (§ Decision ledger).
+  - D15 and D18 are open for the orchestrator. Neither pinned half is claimed as met, and the orchestrator accepts or refuses each at merge. If D18 is refused, D16 and D17 come out together, because `legal-acceptance` S10 needs D16.
+- **Dropped, rejected, superseded:**
+  - D2 (widening the route wait) was cut at audit.
+  - S3 did not run: S0 and S1 reproduced naturally.
+  - A stand-in target for W4's fence was rejected for the shim's history update (D16).
+  - The failure report's window URLs and its mid-test exception read were replaced by a focus-free report plus the close-time exception print (round 1).
+  - The first Phase 2 certification chain stopped after 3 of 10 green replays, when round 1 changed the fixtures. The whole gate ran again on the final head.
+- **Open items:**
+  - #322 (`bug`: the recursion's document and cause are unknown, and W1 and W2 are still live readings).
+  - #325 (`bug`: an approval window's page errors reach neither array).
+  - #326 (`bug`, `ci`: the zombie-owner unit test can lose its zombie to the shell's reap).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired with this record; never run them.
+
 
 # e2e-followups-5: classify and fix two single CI reds by reproduction
 
