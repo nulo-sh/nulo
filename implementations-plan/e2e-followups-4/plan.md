@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-4
 tier: light
-status: planned, awaiting orchestrator approval
+status: approved (orchestrator, 87db9bd); implementing arc 1
 issues: "#308 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -177,7 +177,7 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 
 ## Phases
 
-### Phase 0: preflight
+### Phase 0: preflight ✓
 
 1. Run `git rev-parse --show-toplevel`, `git fetch -q origin dev`, `git merge-base --is-ancestor 6488b1b origin/dev`, and `gh issue view 308 --repo nulo-sh/nulo --json state -q .state`.
 2. Send one JSON-RPC request to the Testnet node from a scratch script under `~/.cache/nulo-backlog/e2e-followups-4/`: read `TESTNET_RPC_URL` from `src/wallet/constants/network-endpoints.ts`, POST `{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}` (the method `import-dead-rpc.test.ts:189` sees the wallet send), and print only the HTTP status and whether the reply has a `result`. Never print the URL.
@@ -185,7 +185,7 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 
 **Validation gate.** Pass: the worktree path prints; the ancestry check exits 0; #308 is `OPEN`; the request's status and `result` presence are recorded in `lessons/phase-1.md`, whatever they are. Layers: none.
 
-### Phase 1: reproduce and classify
+### Phase 1: reproduce and classify ✓
 
 1. Apply the probe. Make the builds in the order § Phase 1 gives, and check their stamps.
 2. Run C2, then C1, then C3, then F1 and F2, as the cells table says.
@@ -233,6 +233,13 @@ None. No surface a person sees changes; the lane edits one e2e spec, one e2e hel
 | D7 | Never-happens points | before the seed and after Escape, each shown to fail by its own negative control (N1, N2) | at P2 only (a write after P2 would escape it); one random-id control (it can fail at the focused-row assertion first) | Opus F2; Codex and Opus round 2 |
 | D8 | Phase 3's gate when a file this lane does not touch goes red | the gate fails; one rerun only classifies; the orchestrator decides | passing the gate on a known-flake rerun (v2): the common brief allows a rerun to read a red, but a green rerun does not show the first red had the ledger's cause | Codex round 2 F3 (Opus round 2 accepted v2's rule; the driver takes the stricter one) |
 | D9 | Build flags the release-shaped build must not carry | `env -u`, after checking no `.env*` file exists | explicit empty values (Codex round 2): `VITE_LOCAL_NETWORK_RPC_URL ?? default` keeps an empty string, so the build would differ from the nightly's | driver, after checking `network/service.ts:95` |
+| D-orch-1 | Delivery shape | one PR against `dev`, no stack | a stack for one arc | orchestrator |
+| D-orch-2 | Order of Phase 1 and Phase 2 | Phase 1's measurement (the focused row, the sponsor rows' ids and order, per run and per mode) is logged in `lessons/phase-1.md` before any fix lands; another cause stops the arc for a re-plan | building Fix A on I1 as an inference | orchestrator |
+| D-orch-3 | Phase 3's gate | strict (D8): any red fails it, a rerun only classifies, a red in an untouched file goes to the orchestrator | a rerun to green, a skip, a filter, a retry or a wait | orchestrator |
+| D-orch-4 | Issues at close-out | two, each deduped, five sections, `Record` link to the archived plan: (a) `addFpc` stores a sponsor at any address (`ux`, `owner-decision`); (b) the artifact smoke runs unguarded against the live network while the source-build smoke sits behind #171's guard (`ci`) | (b) disposed of as not a gap: alternative F rejects guarding artifact runs as this lane's fix, which does not make the exposure intended for every spec | orchestrator |
+| D-orch-5 | Nightly and release workflows | never dispatched or re-run; the 10-12 nightly's `smoke-against-artifact` read if it exists when Phase 1 is reached, never waited for | dispatching a nightly for a second sample | orchestrator |
+| D-orch-6 | `apps/extension/src` and the interception fixture's key | no file under `src` changes; the dRPC key is printed in no progress line, report, lesson or plan | — | orchestrator (D6 stands) |
+| D-orch-7 | `lessons.md` | at its 8 KiB budget: nothing promoted unless a retirement pays for it; `origin/dev` merged before the final gates and `index.md` and `lessons.md` read; never a union merge | — | orchestrator |
 
 ## Audit verdicts
 

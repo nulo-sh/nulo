@@ -7,3 +7,5 @@
 - 2026-10-11 — panel round 2: Codex reject (6; 5 accepted, 1 in part; D6 and D4 accepted), Opus conditional approve (3, accepted); plan v3 (ordered classification rules, N1/N2 controls, strict Phase 3 gate D8, build flags D9); Codex resume (round 3) next.
 - 2026-10-11 — panel round 3: Codex conditional approve (3, accepted); plan v4; Codex round 4 for the final verdict.
 - 2026-10-11 — panel rounds 4-5: Codex approve (twice), Opus approve (one low finding, accepted); plan converged at v4; committing.
+- 2026-10-12 — phase 0 gate: pass (ancestry 0, #308 OPEN, Testnet aztec_getNodeInfo HTTP 200 with result); implementing arc 1.
+- 2026-10-12 — phase 1 gate: pass. C1 18/21 red, C3 16/21 red, C2 0/21, F1 red, F2 green; all 35 reds reproduced as defined; rule 1 (F1) → Codex: same cause, Fix A; probe reverted (diff exit 0).
