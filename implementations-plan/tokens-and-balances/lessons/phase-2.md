@@ -31,3 +31,16 @@
   next popup's field. The test waits for it to close (`waitForToastGone`) before the refusal step.
 - The popup chunk search needs a minified-aware walker: `}from"./x.js"` has no space before `from`. A first
   walker reached 4 offscreen chunks and missed the one holding the string; the control caught it.
+
+## Arc boundary
+
+- 2026-10-12 — Codex r1 approve with fixes (1 Medium, 1 Low, 1 Nit), Opus approve with fixes (1 Low, 5 Nits);
+  r2 approve, no new material finding. Verdicts and dispositions are in `plan.md` § Audit verdicts.
+- The Medium was real: the fixture is file-scoped precisely so a retried test reuses its imports, and an add
+  inside the same test broke that. A stateful step belongs in its own test whose every attempt makes its own
+  state (a fresh contract), not behind a retry pin.
+- Incident: to stop my own smoke run I used `pkill -f "vitest run --config vitest.e2e.config.ts --retry=0"`. It
+  matched my own shell (exit 144) and would match any worktree's identical `bun run test:e2e --retry=0`. A run is
+  stopped by the PID or process group this session started, never by a command-line pattern.
+- A foreground Bash call that passes its limit is moved to the background with a 10-minute cap; a full smoke
+  suite runs past that. Start long suites in the background with an explicit limit from the outset.

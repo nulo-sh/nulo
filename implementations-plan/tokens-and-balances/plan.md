@@ -939,6 +939,12 @@ a successor that loses its ticket while draining.
 | 5 | Nit | The two `test.each` cases in `NewTokenPopup.test.ts` run one path | Rejected with reason: each pins one approved record (P8-02's store refusal, OA-2's other errors), so a later split of the `catch` cannot drop either silently |
 | 6 | Nit | A helper's doc comment restates its name | Accepted: removed (and `clickNewTokenSubmit`'s) |
 
+### Arc 2 implementation, Codex round 2 (same session, resumed), `approve (no new material finding)`
+
+The reviewer verified each round 1 fix against the code: the second network test is retry-safe on its own
+(a fresh contract per attempt) and filterable with `-t`; the field is read by testid; the handler move and
+the split component tests change no behaviour. Loop converged after two rounds.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no
