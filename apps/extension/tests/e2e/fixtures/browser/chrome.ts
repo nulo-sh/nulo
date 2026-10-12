@@ -241,9 +241,6 @@ export const chromeDriver: BrowserDriver = {
 		await page.reload({ waitUntil: "domcontentloaded" })
 	},
 	waitForTarget: (browser, predicate, timeout) => browser.waitForTarget(predicate, { timeout }),
-	waitForOpenedUrl: async (browser, url, timeout) => {
-		await browser.waitForTarget((target) => target.type() === "page" && target.url() === url, { timeout })
-	},
 	waitForNewTab: async (browser, open, timeout) => {
 		const before = new Set(browser.targets())
 		await open()

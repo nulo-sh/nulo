@@ -10,8 +10,10 @@ import {
 	silentlyClosed,
 	stopBackgroundWith,
 	uuidFromPrefs,
+	withInventory,
 } from "../../tests/e2e/fixtures/browser/firefox"
-import { RELAY_HELPERS, checkPageErrorRelay, kindOf, relayVerdict } from "../../tests/e2e/fixtures/browser/firefox-page-errors"
+import { trackContexts } from "../../tests/e2e/fixtures/browser/bidi-attach"
+import { RELAY_HELPERS, checkPageErrorRelay, errorFrames, kindOf, relayVerdict } from "../../tests/e2e/fixtures/browser/firefox-page-errors"
 import type { WebDriverSession } from "../../tests/e2e/fixtures/browser/webdriver-classic"
 
 /** The PXE host is placed where Firefox's timer throttling cannot reach it; the suite must run under
@@ -168,6 +170,80 @@ describe("silent window closes", () => {
 		silentlyClosed(watch, ["a"], new Set())
 		expect(silentlyClosed(watch, ["a"], new Set(["a"]))).toEqual([])
 		expect(silentlyClosed(watch, ["a"], new Set())).toEqual([])
+	})
+})
+
+/** Firefox sends no `domContentLoaded` or `load` for an add-on page, so its commit is the only report of its URL. */
+describe("an add-on page's URL in targets()", () => {
+	const event = (method: string, params: Record<string, unknown>) => JSON.stringify({ type: "event", method, params })
+	const created = (context: string, parent: string | null = null) =>
+		event("browsingContext.contextCreated", { context, parent, url: "about:blank", children: [] })
+	const committed = (context: string, url: string) =>
+		event("browsingContext.navigationCommitted", { context, navigation: "n-1", timestamp: 1_000, url })
+	const page = "moz-extension://5c9e/src/popup/index.html#/windows/capabilities?requestId=r1"
+
+	test("a top-level window's add-on page commit is followed by a history update carrying its URL", () => {
+		const open = new Set<string>()
+		trackContexts(created("w"), open, new Set())
+		const commit = committed("w", page)
+		const handed = trackContexts(commit, open, new Set())
+		expect(handed[0]).toBe(commit)
+		expect(handed.slice(1).map((raw) => JSON.parse(raw))).toEqual([
+			{ type: "event", method: "browsingContext.historyUpdated", params: { context: "w", timestamp: 1_000, url: page } },
+		])
+	})
+
+	test("a web page's commit, a frame's and a closed window's are handed on alone", () => {
+		const open = new Set<string>()
+		const closed = new Set<string>()
+		trackContexts(created("w"), open, closed)
+		trackContexts(created("f", "w"), open, closed)
+		const web = committed("w", "http://127.0.0.1:5173/#/windows/capabilities?requestId=r1")
+		expect(trackContexts(web, open, closed)).toEqual([web])
+		const frame = committed("f", page)
+		expect(trackContexts(frame, open, closed)).toEqual([frame])
+		trackContexts(event("browsingContext.contextDestroyed", { context: "w", parent: null }), open, closed)
+		const late = committed("w", page)
+		expect(trackContexts(late, open, closed)).toEqual([late])
+	})
+
+	test("a real destroy arriving after the one the driver reported is not handed on", () => {
+		const open = new Set(["w"])
+		const destroyed = event("browsingContext.contextDestroyed", { context: "w", parent: null })
+		expect(trackContexts(destroyed, open, new Set(["w"]))).toEqual([])
+		expect(trackContexts(destroyed, new Set(["v"]), new Set())).toEqual([destroyed])
+	})
+})
+
+/** A failed wait reports what Firefox had, but the report is a diagnosis: it never stands in for the failure. */
+describe("a failed wait's report", () => {
+	test("follows the failure", async () => {
+		expect(await withInventory("no matching target", async () => "Firefox's windows: none", 1_000)).toBe(
+			"no matching target; Firefox's windows: none",
+		)
+	})
+
+	test("never holds the failure past its budget, nor replaces it when the read fails", async () => {
+		expect(await withInventory("no matching target", () => new Promise<string>(() => {}), 20)).toBe(
+			"no matching target; no inventory within 20ms",
+		)
+		expect(await withInventory("no matching target", () => Promise.reject(new Error("session closed")), 1_000)).toBe(
+			"no matching target; inventory failed: session closed",
+		)
+	})
+})
+
+describe("a page error's location", () => {
+	const reported = { sourceName: "moz-extension://5c9e/assets/creator.js", lineNumber: 5, columnNumber: 812 }
+
+	test("an error with no saved stack names the location it reports", () => {
+		expect(errorFrames([], reported)).toEqual([{ filename: reported.sourceName, functionName: "", lineNumber: 5, columnNumber: 812 }])
+	})
+
+	test("a saved stack is kept as it is, and an error with neither has no frame", () => {
+		const saved = [{ filename: "moz-extension://5c9e/assets/popup.js", functionName: "mount", lineNumber: 18, columnNumber: 3 }]
+		expect(errorFrames(saved, reported)).toBe(saved)
+		expect(errorFrames([], { sourceName: "", lineNumber: 0, columnNumber: 0 })).toEqual([])
 	})
 })
 

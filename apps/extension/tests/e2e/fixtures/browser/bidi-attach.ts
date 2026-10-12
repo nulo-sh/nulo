@@ -18,9 +18,10 @@ export interface BiDiAttachment {
  * with an empty result (ending the session is the classic channel's job, and doing it here would
  * pull the floor out from under the still-open HTTP channel).
  *
- * It also lets the driver supply the one event Firefox omits: a window that closes ITSELF produces
- * no `browsingContext.contextDestroyed`, so Puppeteer would list it, and report its page open,
- * for the rest of the session. Everything else is forwarded untouched.
+ * It also supplies what Firefox leaves out. A window that closes ITSELF produces no
+ * `browsingContext.contextDestroyed`, so Puppeteer would list it, and report its page open, for the
+ * rest of the session; the driver reports it (`reportClosed`). And an add-on page's URL reaches
+ * Puppeteer from its commit (`trackContexts`). Everything else is forwarded untouched.
  */
 export async function attachPuppeteerOverBiDi(capabilities: SessionCapabilities, sessionId: string): Promise<BiDiAttachment> {
 	const open = new Set<string>()
@@ -56,6 +57,8 @@ export async function attachPuppeteerOverBiDi(capabilities: SessionCapabilities,
 interface ContextInfo {
 	context: string
 	parent?: string | null
+	url?: unknown
+	timestamp?: unknown
 }
 
 interface IncomingMessage {
@@ -64,19 +67,36 @@ interface IncomingMessage {
 	result?: { contexts?: ContextInfo[] }
 }
 
-/** Returns false for a message Puppeteer must not see: a real destroy arriving after ours. */
-function trackContexts(raw: string, open: Set<string>, closed: Set<string>): boolean {
-	// Cheap pre-filter: this runs on every frame, and almost none of them mention a context tree.
-	if (!raw.includes("browsingContext.context") && !raw.includes('"contexts"')) return true
+const COMMITTED = "browsingContext.navigationCommitted"
+
+/**
+ * The frames Puppeteer is handed for one frame from Firefox: none for a real destroy arriving after
+ * ours, and after an add-on page's commit in a top-level context, a `historyUpdated` carrying its URL.
+ * Firefox sends no `domContentLoaded` or `load` for an add-on page, and Puppeteer takes a page's URL
+ * only from those or from a history change, so a window whose own script never writes its history (a
+ * page that failed to load its modules) would stay `about:blank` in `targets()` for good.
+ */
+export function trackContexts(raw: string, open: Set<string>, closed: Set<string>): string[] {
+	// Cheap pre-filter: this runs on every frame, and almost none mention a context tree or a commit.
+	if (!raw.includes("browsingContext.context") && !raw.includes(COMMITTED) && !raw.includes('"contexts"')) return [raw]
 	const message = JSON.parse(raw) as IncomingMessage
 	for (const info of message.result?.contexts ?? []) open.add(info.context)
-	if (!message.params || message.params.parent) return true
+	if (!message.params) return [raw]
+	if (message.method === COMMITTED) return [raw, ...addonUrlUpdate(message.params, open)]
+	if (message.params.parent) return [raw]
 	if (message.method === "browsingContext.contextCreated") open.add(message.params.context)
-	if (message.method !== "browsingContext.contextDestroyed") return true
+	if (message.method !== "browsingContext.contextDestroyed") return [raw]
 	open.delete(message.params.context)
 	const alreadyReported = closed.has(message.params.context)
 	closed.add(message.params.context)
-	return !alreadyReported
+	return alreadyReported ? [] : [raw]
+}
+
+/** `open` holds only top-level contexts still open, so a frame's commit, or a closed window's, gets none. */
+function addonUrlUpdate(commit: ContextInfo, open: ReadonlySet<string>): string[] {
+	if (!open.has(commit.context) || typeof commit.url !== "string" || !commit.url.startsWith("moz-extension:")) return []
+	const params = { context: commit.context, timestamp: commit.timestamp, url: commit.url }
+	return [JSON.stringify({ type: "event", method: "browsingContext.historyUpdated", params })]
 }
 
 interface ShimTransport {
@@ -89,7 +109,7 @@ interface ShimTransport {
 function openShimmedTransport(
 	capabilities: SessionCapabilities,
 	sessionId: string,
-	admit: (message: string) => boolean,
+	deliver: (message: string) => string[],
 ): Promise<ShimTransport> {
 	return new Promise((resolve, reject) => {
 		const ws = new WebSocket(capabilities.webSocketUrl)
@@ -108,8 +128,7 @@ function openShimmedTransport(
 			close: () => ws.close(),
 		}
 		ws.onmessage = (event: MessageEvent) => {
-			const message = String(event.data)
-			if (admit(message)) transport.onmessage?.(message)
+			for (const message of deliver(String(event.data))) transport.onmessage?.(message)
 		}
 		ws.onclose = () => transport.onclose?.()
 		const deadline = setTimeout(() => {

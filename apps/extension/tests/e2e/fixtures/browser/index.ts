@@ -106,18 +106,11 @@ export interface BrowserDriver {
 	openScratchPage(browser: Browser, extensionId: string): Promise<Page>
 	/**
 	 * Resolve with the first target matching `predicate`, or reject after `timeout` ms. Over BiDi a
-	 * window is born `about:blank` and no event reports the URL it then loads, so Puppeteer's own
-	 * `waitForTarget` never matches a URL there — while `targets()` does list it, correctly.
+	 * window is born `about:blank` and its URL arrives in a later event that re-announces no target,
+	 * so Puppeteer's own `waitForTarget` never matches a URL there, while `targets()` reads it as it
+	 * stands. On Firefox the rejection also reports the browser's own windows.
 	 */
 	waitForTarget(browser: Browser, predicate: (target: Target) => boolean, timeout: number): Promise<Target>
-	/**
-	 * Resolve once a tab or window is showing exactly `url`, or reject after `timeout` ms. For a
-	 * document the extension opens with `tabs.create`: over BiDi such a tab stays `about:blank` in
-	 * `targets()` for good when what it loads is not HTML, so the URL is read from the browser.
-	 * Reading a window's URL means switching to it, so Firefox is left on the last window listed:
-	 * call this with nothing focus-dependent (a WebAuthn ceremony, a file pick) still pending.
-	 */
-	waitForOpenedUrl(browser: Browser, url: string, timeout: number): Promise<void>
 	/**
 	 * Run `open`, then resolve with the tab or window it opened, or reject once `timeout` ms pass after
 	 * it without one. Nothing else may open a tab or window meanwhile: being new is what identifies it.
@@ -235,8 +228,6 @@ export const reloadExtensionPage = (page: Page): Promise<void> => driver.reloadE
 export const isTargetGone = (text: string): boolean => driver.targetGone?.test(text) ?? false
 export const waitForTarget = (browser: Browser, predicate: (target: Target) => boolean, timeout: number): Promise<Target> =>
 	driver.waitForTarget(browser, predicate, timeout)
-export const waitForOpenedUrl = (browser: Browser, url: string, timeout: number): Promise<void> =>
-	driver.waitForOpenedUrl(browser, url, timeout)
 export const waitForNewTab = (browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab> =>
 	driver.waitForNewTab(browser, open, timeout)
 const standing = standingInterceptions<Browser>((browser, extensionId, fromOrigin, mode, backgroundDown) =>
