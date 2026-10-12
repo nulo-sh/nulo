@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-4
 tier: light
-status: approved (orchestrator, 87db9bd); implementing arc 1
+status: completed (delivered in #318)
 issues: "#308 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -15,7 +15,26 @@ trunk: dev
 post_implementation_hardening: not scheduled
 ---
 
-Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Status: [STATUS.md](STATUS.md).
+## Outcome
+
+- **Date:** 2026-10-12.
+- **Status:** delivered in one PR against `dev`, [#318](https://github.com/nulo-sh/nulo/pull/318) (arc 1: phases 0 to 4), awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #308: Phase 1 reproduced the nightly's red by run mode, not by build: C1 18 of 21, C3 16 of 21, F1 1 of 1 red; C2 0 of 21, F2 green. Every red met the reproduced definition; I1 and I2 held (`lessons/phase-1.md`). The plan's rule 1 sent the Firefox red to Codex: same cause.
+  - Fix A: the fee-picker spec holds the Testnet node behind a 400 stub from before `registerProfile`, on a fresh launch, and asserts no FPC row before the seed and exactly the seeded rows after the picks; `fpcRowIds` and `SEEDED_FPC_IDS` in `helpers/fpc-seeds.ts`. N1 and N2 each went red at their line. Phase 3: 63 of 63 Chrome slots and both Firefox runs green; the whole artifact suite 200 passed, 0 failed.
+  - `.claude/skills/e2e-testing/SKILL.md`: the seeding rule, the artifact-run row, a local release-shaped smoke recipe, flake-ledger row 53.
+  - `lessons.md`: nothing promoted (D-orch-7; the lesson is e2e-domain and lives in the skill).
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - Alternatives B to G and `{ kind: "refuse" }`: rejected (§ Trade-offs).
+  - Sanitising the interception fixture's path-bearing diagnostics: out of this lane (D6).
+  - "`da2d6064` is an address prefix" and "the artifact build lists a different first row": did not hold (§ Scope); the cause is the run mode, which C3 shows on the armed build.
+  - Phase 0's lane-brief line "use `agent.sh` for every run": smoke runs went through `test:e2e` (§ Scope).
+  - The quality loop's round 1 started while the whole-suite run was still going, a deviation from "after Phase 3's gate" (`lessons/phase-4.md`); that run then passed.
+- **Open items:** #316 (`ux`, `owner-decision`: a hand-added sponsor at Nulo's own address shows two Nulo sponsors), #317 (`ci`: the artifact smoke runs every spec unguarded against the live Testnet node).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired with this record; never run them.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
 
 # e2e-followups-4: the fee method picker's focused row on the artifact smoke (#308)
 
