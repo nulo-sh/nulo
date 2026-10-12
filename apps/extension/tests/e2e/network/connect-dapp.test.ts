@@ -20,6 +20,11 @@ test.skipIf(!hasConfig)(
 	"connect-handshake — playground reaches connected via discover→verify",
 	{ timeout: 90_000 },
 	async ({ dappConnectedExtension }) => {
+		// `openPopup` restarts the arrays, so the windows opened since the last one are asserted before
+		// it: here the fixture's connect windows.
+		expect(dappConnectedExtension.consoleErrors).toEqual([])
+		expect(dappConnectedExtension.pageErrors).toEqual([])
+
 		// Verify the wallet popup is still usable
 		const page = await openPopup(dappConnectedExtension)
 		await waitForHash(page, "#/popup/general")

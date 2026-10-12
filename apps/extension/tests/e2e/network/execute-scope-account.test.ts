@@ -82,6 +82,9 @@ test.skipIf(!hasConfig)(
 		const { playgroundPage: page, accountAddresses } = ctx
 		const config = aztecConfig as AztecTestConfig
 		expect(accountAddresses).toHaveLength(2)
+		// `openPopup` restarts the arrays, so the windows opened since the last one are asserted before
+		// it: here the fixture's connect and grant windows.
+		expect(ctx.consoleErrors).toEqual([])
 
 		let wallet = await openPopup(ctx)
 		await waitForHash(wallet, "#/popup/general", 30_000)
@@ -124,6 +127,7 @@ test.skipIf(!hasConfig)(
 		const follow = await sendAsB()
 		await approveExecute(follow.execPopup)
 		await waitForPopupClosed(follow.execPopup, 60_000)
+		expect(ctx.consoleErrors).toEqual([])
 
 		wallet = await openPopup(ctx)
 		await waitForHash(wallet, "#/popup/general", 30_000)
@@ -158,6 +162,7 @@ test.skipIf(!hasConfig)(
 		await declined.execPopup.waitForSelector('[data-testid="execute-scope-banner"][data-state="account-declined"]', { timeout: 10_000 })
 		await approveExecute(declined.execPopup)
 		await waitForPopupClosed(declined.execPopup, 60_000)
+		expect(ctx.consoleErrors).toEqual([])
 
 		wallet = await openPopup(ctx)
 		await waitForHash(wallet, "#/popup/general", 30_000)
