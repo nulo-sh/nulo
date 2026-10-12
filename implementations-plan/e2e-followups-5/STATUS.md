@@ -6,3 +6,4 @@
 2026-10-12 phase 1 gate: green except the pinned whole-file certification (D15, red on base too); full smoke both browsers and lock-caller network files both browsers green; phase 1 done
 2026-10-12 phase 2: floor R0-R3 done (no natural miss, no recursion); W4 shown by forced throw; consults (Codex, Opus) conditional approve; D16 harness fix + D17 committed (264a638, c792d71); gate running
 2026-10-12 phase 2 gate stopped after 3/10 green replays: the review found the failure report moved focus; fixed (2583298, ce9c78b); the whole Phase 2 gate reruns on the final head
+2026-10-12 final-head gate: green except the pinned cap-window half (D18: fix 11/20, base 14/20, no target-discovery timeout; open for the orchestrator with D15); Codex consult: ship as is, gate exception needed
