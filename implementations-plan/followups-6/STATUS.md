@@ -10,3 +10,4 @@
 - 2026-10-12: arc 1 Phase 1 gate pass: aztec-runtime test, lint, typecheck:all, test all exit 0; parse pin red on base, green after.
 - 2026-10-12: arc 1 Phase 0 gate pass: base artifact runs, Chrome 47 passed/5 skipped files (200 tests), Firefox 49/3 (197), retry 0, no red.
 - 2026-10-12: arc 1 Phase 2 gate pass: unit, lint, typecheck; guarded artifact runs Chrome 47/5 files (207 tests), Firefox 50/2 (204), retry 0; control spec ran; every guard record declared; no spec changed (stop rule not reached).
+- 2026-10-12: arc 1 Phase 3 gate pass: lint, typecheck:all; live spec artifact Chrome 5/5, Firefox 2/2 green at retry 0; armed runs skipped it on both; the three route removals each red.
