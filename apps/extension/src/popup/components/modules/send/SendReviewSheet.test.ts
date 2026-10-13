@@ -61,6 +61,7 @@ type SheetProps = {
 	canSend: boolean
 	sending: boolean
 	ready: boolean
+	queuedCapText?: string
 }
 const BASE: SheetProps = {
 	show: true,
@@ -239,6 +240,22 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(fee.text()).toBe(`Fee · —${UNVOUCHED_FEE_SENTENCE}`)
 		expect(fee.find("b").exists()).toBe(false)
 		expect(fee.attributes("data-payer")).toBe("unvouched")
+	})
+
+	test("queued against a cap: the fee line names the cap and the button queues; without it, Send now", async () => {
+		w = mountSheet({ payerKind: "contract", payerType: "private_fpc", queuedCapText: "4.47228 FJ ($0.269)" })
+		const fee = w.get('[data-testid="send-review-fee"]')
+		expect(fee.get('[data-testid="send-review-fee-cap"]').text()).toBe(
+			"Fee up to 4.47228 FJ ($0.269), based on your last send. If it comes out higher, we ask again.",
+		)
+		expect(fee.get("b").text()).toBe("paid by the fee contract")
+		expect(submit(w).text()).toBe("Queue send")
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
+		w.unmount()
+		w = mountSheet()
+		expect(w.find('[data-testid="send-review-fee-cap"]').exists()).toBe(false)
+		expect(submit(w).text()).toBe("Send now")
 	})
 
 	test("send now: enabled and emitting only when shown, sendable, ready and idle", async () => {

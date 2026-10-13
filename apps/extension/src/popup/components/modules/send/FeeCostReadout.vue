@@ -1,5 +1,6 @@
 <script setup>
 import { QUEUED_FEE_COPY, UNVOUCHED_FEE_SENTENCE } from "@/components/composite/send/publish-facts"
+import { feeInWords } from "./fee-helpers"
 
 const props = defineProps({
 	estimate: { type: Object, default: null },
@@ -8,6 +9,9 @@ const props = defineProps({
 	isQueued: { type: Boolean, default: false },
 	/** Who pays an estimate. The parent decides: only it knows whether a sponsor is Nulo's own. */
 	payer: { type: String, default: "self", validator: (v) => ["self", "sponsor", "unvouched"].includes(v) },
+	/** Set while the send can be queued against a cap: `about` is the last fee of this token's sends,
+	 *  `cap` the most it goes out for without asking again, both as the card writes a fee. */
+	queuedCap: { type: Object, default: null },
 })
 
 /** Screen readers skip a strikethrough, so the sponsored row is spoken as this sentence alone. */
@@ -24,7 +28,22 @@ const sponsoredSentence = computed(() => {
 	     layout is reserved from the first frame and the skeleton simply
 	     occupies the value's slot — the row never moves or grows when the
 	     number lands. -->
-	<Flex v-if="isEstimating && isQueued && !estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
+	<Flex
+		v-if="isEstimating && isQueued && !estimate && queuedCap"
+		direction="column"
+		gap="4"
+		:class="$style.detail_row"
+		data-testid="fee-estimate-queued-cap"
+	>
+		<span :class="$style.fee_label">You pay</span>
+		<span :class="$style.fee_value">
+			About {{ queuedCap.about.amount }} FJ<template v-if="queuedCap.about.usd">
+				<span :class="$style.fee_usd" title="At today's AZTEC price" data-testid="fee-estimate-usd"> ({{ queuedCap.about.usd }})</span>
+			</template>
+		</span>
+		<span :class="$style.queued" data-testid="fee-estimate-queued-cap-line">Goes out after your earlier send, for at most {{ feeInWords(queuedCap.cap) }}.</span>
+	</Flex>
+	<Flex v-else-if="isEstimating && isQueued && !estimate" direction="column" gap="4" :class="$style.detail_row" data-testid="fee-estimate-queued">
 		<span :class="$style.fee_label">You pay</span>
 		<span :class="$style.queued">{{ QUEUED_FEE_COPY }}</span>
 	</Flex>

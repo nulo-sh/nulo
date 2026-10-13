@@ -39,6 +39,8 @@ const props = defineProps<{
 	canSend: boolean
 	sending: boolean
 	ready: boolean
+	/** Set while the send is queued against a cap: the cap as the fee card words it. */
+	queuedCapText?: string
 }>()
 const emit = defineEmits<{ close: []; send: [] }>()
 
@@ -151,6 +153,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
+						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
 						<b v-if="paid">{{ paid }}</b>
 					</div>
@@ -165,7 +168,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						:loading="sending"
 						@click="handleSend"
 					>
-						Send now
+						{{ queuedCapText ? "Queue send" : "Send now" }}
 					</Button>
 				</Flex>
 			</div>

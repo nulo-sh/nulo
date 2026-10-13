@@ -1,5 +1,5 @@
 import { FpcType } from "@/wallet/services/fpc/client"
-import { feeJuicePricingFromUsd, feeToUsd, formatGasBalance } from "@/utils/fee-estimation"
+import { feeJuicePricingFromUsd, feeToUsd, formatFeeJuice, formatGasBalance } from "@/utils/fee-estimation"
 
 export { formatGasBalance }
 
@@ -20,10 +20,30 @@ export function feeDisplay(
 	}
 }
 
+/** A fee in running text: the amount, then the dollars when priced. */
+export function feeInWords(display: FeeDisplay): string {
+	return display.usd ? `${display.amount} FJ (${display.usd})` : `${display.amount} FJ`
+}
+
 /** The fee card's "You pay" value as one string, in the card's words. */
 export function feeLine(display: FeeDisplay | null): string | undefined {
-	if (!display) return undefined
-	return display.usd ? `~${display.amount} FJ (${display.usd})` : `~${display.amount} FJ`
+	return display ? `~${feeInWords(display)}` : undefined
+}
+
+/** A fee in base units as the card writes it. */
+export function feeAmountDisplay(raw: string, usdPerFeeJuice: number | undefined): FeeDisplay {
+	return feeDisplay({ maxFee: raw, maxFeeFormatted: formatFeeJuice(BigInt(raw)) }, usdPerFeeJuice) as FeeDisplay
+}
+
+export type FeePayer = "self" | "sponsor" | "unvouched"
+
+/** Who pays the chosen method's fee; none until one is chosen. Only Nulo's own sponsor is promised
+ *  "Nothing": a sponsor added by hand can charge the account through an authorization it granted
+ *  earlier. Fee Juice, public or private, is the person's own. */
+export function feePayerOf(method: { type: FeeMethodOption["type"]; isProtocol?: boolean } | null | undefined): FeePayer | null {
+	if (!method) return null
+	if (method.type !== "fpc") return "self"
+	return method.isProtocol === true ? "sponsor" : "unvouched"
 }
 
 export interface FeeMethodOption {

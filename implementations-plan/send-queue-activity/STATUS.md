@@ -32,3 +32,4 @@
 - 2026-10-13 — arc 4 dual audit r1: Codex conditional approve (8, all accepted), Opus conditional approve (10; 2 rejected with reasons, OA-14 added); plan revised; final fresh Codex pass next.
 - 2026-10-13 — arc 4 final fresh Codex pass: conditional approve (1 finding: re-stash provenance and retention; accepted), resume approve; converged. Commit next.
 - 2026-10-13 — arc 4 phase 4.1 gate: pass. lint, typecheck:all, test exit 0 (extension 11757 passed); touched files run single; removing the cap comparison reds 10 never-happens cases (checked, restored); composition and executor cases soaked 8× green.
+- 2026-10-13 — arc 4 phase 4.3 gate: pass. lint, typecheck:all, test exit 0 (extension 11766 passed); FeeCostReadout, SendReviewSheet, send.integration, send-submit, estimate-when-clear, fee-helpers run single.
