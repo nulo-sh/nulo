@@ -6,19 +6,18 @@
 import type { Page } from "puppeteer"
 import type { TokenListEntry } from "@nulo/token-list"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
-import { heldListEntries } from "../fixtures/token-list"
+import { E2E_LIST_TOKENS, heldListEntries } from "../fixtures/token-list"
 
-/** The active profile, network and account, and the chain's first token with a price id in the list a
- *  listed launch holds. */
+/** The active profile, network and account, and the token the seeded rows name. */
 export type ActivityScope = {
 	profileId: string
 	networkId: string
 	chainId: number
 	account: string
-	token: { contract: string; name: string; symbol: string; decimals: number }
+	token: { contract: string; name: string; symbol: string; decimals: number; priceId?: string }
 }
 
-/** The scope without its token, for a chain the list names no token on (the local one). */
+/** The scope without its token, for a spec that names its own token. */
 export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
@@ -31,27 +30,27 @@ export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope,
 	return { profileId, networkId, chainId, account }
 }
 
-export async function readActivityScope(page: Page): Promise<ActivityScope> {
+/**
+ * `priced` names the chain's first priced entry of the list a listed launch holds, when it has one;
+ * otherwise, and for a spec that prices nothing, a fixture token, so no spec breaks on a valid list.
+ */
+export async function readActivityScope(page: Page, { priced = false } = {}): Promise<ActivityScope> {
 	const identity = await readScopeIdentity(page)
-	const entry = listEntries(identity.chainId).find((e) => e.priceId !== undefined)
-	if (!entry) throw new Error(`the held list prices no token on chain ${identity.chainId}`)
-	return { ...identity, token: tokenOf(entry) }
+	const listed = priced ? heldListEntries().find((e) => e.chainId === identity.chainId && e.priceId !== undefined) : undefined
+	return { ...identity, token: tokenOf(listed ?? E2E_LIST_TOKENS[0]) }
 }
-
-const listEntries = (chainId: number) => heldListEntries().filter((e) => e.chainId === chainId)
 
 const tokenOf = (entry: TokenListEntry): ActivityScope["token"] => ({
 	contract: entry.address,
 	name: entry.name,
 	symbol: entry.symbol,
 	decimals: entry.decimals,
+	priceId: entry.priceId,
 })
 
-/** The chain's next list token: a second contract, for specs that tell two tokens' rows apart. */
+/** A second contract, for specs that tell two tokens' rows apart. */
 export function secondToken(scope: ActivityScope): ActivityScope["token"] {
-	const entry = listEntries(scope.chainId).find((e) => e.address !== scope.token.contract)
-	if (!entry) throw new Error(`the held list has a single token on chain ${scope.chainId}`)
-	return tokenOf(entry)
+	return tokenOf(E2E_LIST_TOKENS.find((e) => e.address !== scope.token.contract) ?? E2E_LIST_TOKENS[1])
 }
 
 export type TransferSeed = {

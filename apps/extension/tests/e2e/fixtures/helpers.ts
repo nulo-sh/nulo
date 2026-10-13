@@ -1081,14 +1081,15 @@ export async function importTokenAndWaitForBalance(
 	})
 }
 
-/** Seed a fresh $1 USDC quote and remount the popup so the stale-on-connect read adopts it.
- *  Resolves on Home. The quote prices a token only through a mapping: the agent build maps every
- *  sandbox contract to `usd-coin`, and a smoke launch needs a held list (`listedExtension`). */
-export async function seedUsdQuoteAndReload(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		const state = { "usd-coin": { coingeckoId: "usd-coin", usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
+/** Seed a fresh $1 quote for `priceId` (USDC by default) and remount the popup so the
+ *  stale-on-connect read adopts it. Resolves on Home. The quote prices a token only through a
+ *  mapping: the agent build maps every sandbox contract to `usd-coin`, and a smoke launch needs a
+ *  held list (`listedExtension`), whose priced token `readActivityScope(page, { priced: true })` names. */
+export async function seedUsdQuoteAndReload(page: Page, priceId = "usd-coin"): Promise<void> {
+	await page.evaluate((id: string) => {
+		const state = { [id]: { coingeckoId: id, usd: 1.0, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		return chrome.storage.local.set({ "nulo:core:token-prices": JSON.stringify(state) })
-	})
+	}, priceId)
 	await reloadExtensionPage(page)
 	await page.waitForFunction(() => window.location.hash === "#/popup/general", { timeout: 15_000 })
 }

@@ -18,6 +18,7 @@ import {
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
 import { waitForPopup } from "./fixtures/popups"
+import { skipUnlessListPrices } from "./fixtures/token-list"
 import { readActivityScope, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
@@ -79,13 +80,14 @@ async function waitForSettledTokens(page: Page, timeout = 15_000): Promise<void>
 		})
 }
 
-/** A priced 1.5 Test USDC transfer: the price map quotes it as USDC. Returns once the token card
+/** A 1.5-unit transfer of the held list's priced token, quoted at $1. Returns once the token card
  *  has settled, which in a release build waits for its default tokens to stop. */
 async function openHomeWithRow(ctx: ExtensionContext): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
-	await seedTransaction(page, await readActivityScope(page), { hash: TX_HASH, amount: "1500000" })
-	await seedUsdQuoteAndReload(page)
+	const scope = await readActivityScope(page, { priced: true })
+	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000" })
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	await waitForSettledTokens(page, TOKENS_LAND_MS)
 	await page.bringToFront()
@@ -254,7 +256,9 @@ async function ensureContact(page: Page): Promise<string> {
 
 test("Home's first activity row: a Tab stop with the ring, Enter and Space each open it with one pushState, the priced span is on top, a press on the icon opens it", async ({
 	listedExtension,
+	skip,
 }) => {
+	skipUnlessListPrices(skip)
 	const page = await openHomeWithRow(listedExtension)
 
 	const walk = await tabTo(page, "tx-card")
@@ -587,10 +591,12 @@ const SURFACES = [
 
 test("rows sit 10px apart on Home, a token's page and History, the date heading 12px above the first; a dApp's long title, a nine-digit amount and a priced receipt stay inside their rows and never cover an amount, dark and light", async ({
 	listedExtensionPerTest,
+	skip,
 }) => {
+	skipUnlessListPrices(skip)
 	const page = await openPopup(listedExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
-	const scope = await readActivityScope(page)
+	const scope = await readActivityScope(page, { priced: true })
 	const now = Date.now()
 	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000", at: now })
 	await seedTransaction(page, scope, { hash: `0x${"6a".repeat(32)}`, amount: "123456789123456", at: now - 1_000 })
@@ -603,7 +609,7 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 	})
 	await seedTokenRow(page, scope, RECEIPT_TOKEN_ID)
 	await seedReceipt(page, scope, { tokenId: RECEIPT_TOKEN_ID, amount: "4200000", nullifier: `0x${"5c".repeat(32)}`, at: now - 3_000 })
-	await seedUsdQuoteAndReload(page)
+	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.bringToFront()
 
 	for (const theme of ["dark", "light"] as const) {

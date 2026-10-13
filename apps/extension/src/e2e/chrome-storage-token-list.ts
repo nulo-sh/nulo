@@ -6,7 +6,6 @@ import type { TokenListSource } from "@/wallet/services/token-list/spec"
  */
 export const TOKEN_LIST_SOURCE_KEY = "nulo:e2e:token-list"
 
-/** The key id a test signs its lists with. */
 export const E2E_TOKEN_LIST_KEY_ID = "nulo-e2e"
 
 const LOCALHOST_URL = /^http:\/\/localhost:\d{1,5}\/[\w./-]*$/

@@ -4,29 +4,43 @@
  * write saw no acceptance. A launch that needs the list's entries (a priced token, the defaults)
  * holds one from its first boot instead: `launchExtension({ tokenList: "held" })`.
  *
- * A source run signs with a per-process key that the armed build reads from `nulo:e2e:token-list`.
- * An artifact run holds the published envelope, the only list a release build's pinned keys accept.
+ * A source run holds and serves a fixed two-token list, signed with a per-process key that the
+ * armed build reads from `nulo:e2e:token-list`, so no spec depends on what the owner lists. An
+ * artifact run holds the published envelope, the only list a release build's pinned keys accept.
  */
 import { readFileSync } from "node:fs"
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http"
 import path from "node:path"
 import type { Page } from "puppeteer"
-import { inject } from "vitest"
-import { readTokenList, selectEntries, parsePayload, type PinnedKey, type TokenListEntry } from "@nulo/token-list"
+import { type TestContext, inject } from "vitest"
+import { BUNDLED_TOKEN_CLASS_IDS, readTokenList, selectEntries, parsePayload, type PinnedKey, type TokenListEntry } from "@nulo/token-list"
 import { decodeBase64Url, importSeed, publicKeyOf } from "@nulo/token-list/envelope"
 import { signList } from "@nulo/token-list/sign"
 import { E2E_TOKEN_LIST_KEY_ID, TOKEN_LIST_SOURCE_KEY } from "@/e2e/chrome-storage-token-list"
 import { TOKEN_SEEDS_KEY } from "@/e2e/chrome-storage-token-seeds"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TOKEN_LIST_REFRESH_ALARM_NAME } from "@/wallet/services/token-list/spec"
 import { REPO_ROOT } from "../lockfile"
 import { listenClaimed } from "./egress-guard"
 
 const LIST_PATH = "/v1/list.json"
-const SOURCE_PATH = path.join(REPO_ROOT, "infra/token-list/list.source.json")
 const PUBLISHED_PATH = path.join(REPO_ROOT, "infra/token-list/public/v1/list.json")
 const STORAGE_KEY = "nulo:core:token-list"
 /** Inside the service's longest deadline, so it is kept, and past any spec: the held list is never refetched. */
 const HELD_FOR_MS = 12 * 60 * 60 * 1000
+
+const fixtureToken = (byte: string, symbol: string, priceId: string): TokenListEntry => ({
+	chainId: CHAIN_IDS.TESTNET,
+	address: `0x${"0".repeat(62)}${byte}`,
+	classId: BUNDLED_TOKEN_CLASS_IDS[0],
+	symbol,
+	decimals: 6,
+	name: `Test ${symbol}`,
+	priceId,
+})
+
+/** The source run's list: two Testnet tokens, the first priced as USDC. */
+export const E2E_LIST_TOKENS: readonly TokenListEntry[] = [fixtureToken("a1", "USDC", "usd-coin"), fixtureToken("a2", "USDT", "tether")]
 
 type Signer = { seedHex: string; pinned: PinnedKey }
 let signer: Promise<Signer> | undefined
@@ -41,10 +55,10 @@ export function e2eSigner(): Promise<Signer> {
 	return signer
 }
 
-/** `list.source.json` (or `tokens` in its place) signed with the run's key, at `nowMs`'s sequence. */
+/** `E2E_LIST_TOKENS` (or `tokens` in their place) signed with the run's key, at `nowMs`'s sequence. */
 export async function signTestList(opts: { tokens?: readonly unknown[]; nowMs?: number } = {}): Promise<string> {
 	const { seedHex, pinned } = await e2eSigner()
-	const sourceText = opts.tokens === undefined ? readFileSync(SOURCE_PATH, "utf8") : JSON.stringify({ tokens: opts.tokens })
+	const sourceText = JSON.stringify({ tokens: opts.tokens ?? E2E_LIST_TOKENS })
 	const signed = await signList({ sourceText, seedHex, keyId: pinned.keyId, nowMs: opts.nowMs ?? Date.now(), keys: [pinned] })
 	return signed.envelopeText
 }
@@ -54,7 +68,7 @@ export async function signForgedList(): Promise<string> {
 	const { pinned } = await e2eSigner()
 	const seedHex = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex")
 	const forger = { keyId: pinned.keyId, publicKey: await publicKeyOf(await importSeed(seedHex)) }
-	const sourceText = readFileSync(SOURCE_PATH, "utf8")
+	const sourceText = JSON.stringify({ tokens: E2E_LIST_TOKENS })
 	return (await signList({ sourceText, seedHex, keyId: forger.keyId, nowMs: Date.now(), keys: [forger] })).envelopeText
 }
 
@@ -165,11 +179,20 @@ function publishedEnvelope(): string {
  * wallet verified it, and a spec only needs to know which tokens it names.
  */
 export function heldListEntries(): TokenListEntry[] {
-	if (!isArtifactRun()) return selectEntries((JSON.parse(readFileSync(SOURCE_PATH, "utf8")) as { tokens: TokenListEntry[] }).tokens)
+	if (!isArtifactRun()) return selectEntries(E2E_LIST_TOKENS)
 	const { payload } = JSON.parse(publishedEnvelope()) as { payload: string }
 	const bytes = decodeBase64Url(payload)
 	if (!bytes) throw new Error("the published token list's payload is not base64url")
 	return selectEntries(parsePayload(bytes, "wallet").tokens)
+}
+
+/** Skips a test that asserts a fiat figure when the held list prices no Testnet token: in a release
+ *  build only the published list can price one, and a list that prices none is valid. */
+export function skipUnlessListPrices(skip: TestContext["skip"]): void {
+	skip(
+		!heldListEntries().some((e) => e.chainId === CHAIN_IDS.TESTNET && e.priceId !== undefined),
+		"the held list prices no Testnet token",
+	)
 }
 
 /**
