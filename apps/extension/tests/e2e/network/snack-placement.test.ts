@@ -289,7 +289,6 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 
 type TxNode = Awaited<ReturnType<typeof createTestWallet>>["node"]
 
-/** Every stored tx row of `account`: read raw in the page, decoded here. */
 async function accountTxRows(page: Page, account: string): Promise<Tx[]> {
 	const raws = await page.evaluate(async (root: string) => {
 		const all = await chrome.storage.local.get(null)
@@ -315,12 +314,17 @@ async function soleGrantRow(page: Page, account: string, grantHash: string): Pro
 /**
  * Drives the grant's block final and waits for the balance write the wallet owes for it. The worker
  * commits the row Finalized, then emits the update its balance subscriber answers with a refresh it
- * does not await, so the row alone proves nothing. Before the mint that refresh is the only one left
- * to enqueue, so a write newer than the commit is its write, and the idle queue after it ends it.
+ * does not await, so the row alone proves nothing. The grant still awaits finality once its mined
+ * write has settled, so the final commit follows that write; before the mint the final refresh is the
+ * only one left to enqueue, so a write newer than the commit is its write, and the idle queue after
+ * it ends it.
  */
 async function settledGrantFinality(page: Page, node: TxNode, account: string, grantHash: string): Promise<void> {
-	const block = (await soleGrantRow(page, account, grantHash)).block?.number
-	if (block === undefined || !Number.isFinite(block)) throw new Error(`the grant ${grantHash} carries no block`)
+	const mined = await soleGrantRow(page, account, grantHash)
+	const block = mined.block?.number
+	if (block === undefined || !Number.isFinite(block) || !mined.awaitingFinality) {
+		throw new Error(`expected the grant mined below Finalized, its final read still owed: ${JSON.stringify(mined)}`)
+	}
 	const started = Date.now()
 	await finalizeThrough(node, block)
 	const chainFinal = Date.now()
@@ -342,12 +346,12 @@ async function settledGrantFinality(page: Page, node: TxNode, account: string, g
 /**
  * Leaves the wallet showing a public balance the chain no longer holds, as when a dApp spends a
  * public approval: the account grants the sandbox's first account a public authwit for
- * {@link DRAINED}, receives that much, and the spender takes it all. A balance refreshes only on the
- * wallet's own transactions, receipts to its accounts and a manual refresh, and the spend is none
- * of them. A wallet transaction first seen mined below Finalized refreshes the account twice, when
- * mined and when the worker reads its block final; one first seen Finalized refreshes once; each
- * move or prune of its block can add another. A receipt to the account refreshes it once. Nothing
- * here asks for a refresh, so each write has one known cause, and none is owed at the spend.
+ * {@link DRAINED}, receives that much, and the spender takes it all. A balance refreshes only on a
+ * token import, the wallet's own transactions, receipts to its accounts and a manual refresh, and the
+ * spend is none of them. A wallet transaction first seen mined below Finalized refreshes balances
+ * twice, when mined and when the worker reads its block final; one first seen Finalized refreshes
+ * once; each move or prune of its block can add another. A receipt to the account refreshes it once.
+ * Nothing here asks for a refresh, so each write has one known cause, and none is owed at the spend.
  */
 async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 	const config = aztecConfig as AztecTestConfig
