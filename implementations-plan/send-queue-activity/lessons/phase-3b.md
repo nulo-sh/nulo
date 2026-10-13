@@ -33,6 +33,13 @@ Codex (gpt-6.1-sol, high, session `01a13373-67ab-76a0-9b2a-ba17bf94bc67`) and on
 - **The task-before-record gap (Opus).** `TransferExecutor.execute` starts its task, awaits `sequence()`, then creates the record. Any "until the snapshot lands" guard is too early, since a snapshot can land with the record not yet written. Only a running step or the record itself names the stage.
 - **A failed journal snapshot was never retried while the port stayed up.** The catch's comment said the next event would retry; no event handler snapshots.
 
+## Code review rounds 2-5 (2026-10-13)
+
+- **Each fix of rounds 2 and 3 opened the next round's finding.** Round 2's mount fence made the mount's journal run stale, which lost a reconciliation (round 3). Round 3's added reconciliation inherited a heuristic match that confused an earlier same-token send with a later one (round 4). Every fix to this view's hydration order needs its own review round. A fix the cap leaves unreviewed is not converged.
+- **Round 4's fix rests on two facts.** A task's own record is written after the task starts (`TransferExecutor.execute`: `startNewTask`, then `sequence()`, then the record). `TaskService` keeps tasks only in memory, so a worker restart drops a task and never re-stamps it.
+- **Round 5: converged** (no material finding).
+- **Two network runs cannot share one worktree.** The second refuses at global setup ("another run in this worktree holds the sandbox", exit 86). Run Chrome and Firefox one after the other per worktree; smoke runs need no sandbox and may overlap a network run.
+
 ## CI on #344 (2026-10-13)
 
 - **Chrome network shard 4/5, attempt 1: a setup timeout.** `snack-placement.test.ts`'s first case timed out in `fillSendForm`, waiting 60 s for the Send amount input to enable, before any snack was drawn. The same drained-balance setup passed twice later in that run (the record-failure case and the new Home case), in every local run on both browsers, and on CI's Firefox lane. No file on the Send page's balance path changed. Re-run as a flake: attempt 2 passed the shard (21m46s), and every check on the PR went green.
