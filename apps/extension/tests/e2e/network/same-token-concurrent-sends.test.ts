@@ -599,6 +599,7 @@ test.skipIf(!hasConfig)(
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
 			if (asks === 1) await reopen(burst)
 			expect((await waitForAwaitingCard(burst.page, "queued")).subtitle).toBe("Fee went up. Review")
+			if (asks === 1) await shotSend(burst.page, "4-home-reask-row", "tx-awaiting-card")
 			await pointerClick(burst.page, "tx-awaiting-card")
 			const sheet = await readReaskSheet(burst.page)
 			expect(sheet.line).toMatch(/^Fee is now [\d.]+ FJ( \(.+\))?, above the [\d.]+ FJ you accepted\.$/)
