@@ -6,3 +6,4 @@
 - 2026-10-13 — audit round 1: Codex conditional approve (5 findings), Opus lens conditional approve (8 findings; F5 rejected). Object-dense probe +772 MiB at 32. OA-2, OA-3 added. Codex round 2 (resume) on dispositions + refusal-reply fork.
 - 2026-10-13 — Codex rounds 2–4: conditional approve → conditions applied → approve. Plan at 150 lines.
 - 2026-10-13 — phase 1 ✓: token vitest set 338 passed, lint 0, typecheck:all 0; T1, T2, T2b red on base copies.
+- 2026-10-13 — phase 2 ✓: wallet-sdk vitest 427 passed, wallet-core 279 passed, lint 0, typecheck:all 0; T4–T7 (6 tests) red on base copies.

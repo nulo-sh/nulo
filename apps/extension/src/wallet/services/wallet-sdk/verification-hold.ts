@@ -5,7 +5,8 @@
  * A hold opens for every transport session when upstream reports it established, bound to that
  * key exchange's own verification hash, and settles once: released (no check is needed, or the
  * person confirmed it) or dropped (the session ended first). Calls that arrive meanwhile wait on
- * its outcome behind the session's FIFO; nothing here refuses or times one out. A hold outlives
+ * its outcome behind the session's FIFO. Settled or not, the hold counts each call from arrival
+ * until its handling settles and refuses one past the bound; nothing here times one out. A hold outlives
  * the check's window, whose slot frees on removal, and leaves the map only when its session ends
  * or the same id key-exchanges again. Nothing persists: a hold dies with the service worker, as
  * the session it gates does.
@@ -18,8 +19,8 @@ import { LogLevel } from "@/wallet/logger"
 /** How a session's hold ended. The drop outcomes are the queued row's failure kinds. */
 export type HoldOutcome = "released" | "wallet_refused" | "session_ended"
 
-/** Calls one unconfirmed session may keep waiting; the next one is answered -32005. */
-export const MAX_HELD_PER_SESSION = 32
+/** Calls one session may keep waiting or running at once; the next one is answered -32005. */
+export const MAX_PENDING_PER_SESSION = 32
 
 /** One transport session's gate on dispatch, opened when upstream reports the session established. */
 export interface VerificationHold {
@@ -28,8 +29,8 @@ export interface VerificationHold {
 	readonly verificationHash: string
 	/** Settles once; the first settle wins. */
 	readonly outcome: Promise<HoldOutcome>
-	/** Counts one arriving call. False only while unsettled and at the cap. */
-	admit(): boolean
+	/** Counts one arriving call until the returned release runs; `undefined` at the bound. */
+	admit(): (() => void) | undefined
 	/** No check is needed, or the person confirmed it. */
 	release(): void
 	/** The session ended before release; held calls are dropped and their queued rows filed as `kind`. */
@@ -40,8 +41,8 @@ class Hold implements VerificationHold {
 	readonly outcome: Promise<HoldOutcome>
 	private readonly settleWith: (outcome: HoldOutcome) => void
 	private settledAs: HoldOutcome | undefined
-	/** Every call admitted while unsettled is still waiting, so this is the number held. */
-	private held = 0
+	/** Admitted calls whose handling has not settled, held or running. */
+	private pending = 0
 
 	constructor(
 		readonly sessionId: string,
@@ -56,11 +57,15 @@ class Hold implements VerificationHold {
 		return this.settledAs !== undefined
 	}
 
-	admit(): boolean {
-		if (this.settled) return true
-		if (this.held >= MAX_HELD_PER_SESSION) return false
-		this.held++
-		return true
+	admit(): (() => void) | undefined {
+		if (this.pending >= MAX_PENDING_PER_SESSION) return undefined
+		this.pending++
+		let released = false
+		return () => {
+			if (released) return
+			released = true
+			this.pending--
+		}
 	}
 
 	release(): void {

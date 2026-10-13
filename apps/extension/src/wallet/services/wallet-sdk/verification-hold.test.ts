@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { MAX_HELD_PER_SESSION, type VerificationHold, VerificationHolds } from "./verification-hold"
+import { MAX_PENDING_PER_SESSION, type VerificationHold, VerificationHolds } from "./verification-hold"
 
 const HASH_A = "a1".repeat(32)
 const HASH_B = "b2".repeat(32)
@@ -10,7 +10,7 @@ async function outcomeOf(hold: VerificationHold): Promise<string> {
 }
 
 describe("VerificationHolds", () => {
-	test("confirming the session's own hash releases its hold, which stays readable and admits every call", async () => {
+	test("confirming the session's own hash releases its hold, which stays readable and admits a call", async () => {
 		const holds = new VerificationHolds()
 		const hold = holds.open("s1", HASH_A)
 		expect(await outcomeOf(hold)).toBe("pending")
@@ -18,7 +18,7 @@ describe("VerificationHolds", () => {
 		expect(holds.confirm(HASH_A)).toBe(true)
 		expect(await outcomeOf(hold)).toBe("released")
 		expect(holds.get("s1")).toBe(hold)
-		expect(hold.admit()).toBe(true)
+		expect(hold.admit()).toBeDefined()
 	})
 
 	test("an unknown hash, or the hash of a settled hold, releases nothing", async () => {
@@ -56,14 +56,28 @@ describe("VerificationHolds", () => {
 		expect(await outcomeOf(after)).toBe("released")
 	})
 
-	test(`an unsettled hold admits ${MAX_HELD_PER_SESSION} calls and refuses the next; a released one admits every call`, () => {
+	// A released hold refuses too: the bound covers a confirmed session's calls, not only held ones.
+	test(`a hold admits ${MAX_PENDING_PER_SESSION} calls, settled or not, and one more per release; a second release frees nothing`, () => {
 		const holds = new VerificationHolds()
 		const hold = holds.open("s1", HASH_A)
-		for (let i = 0; i < MAX_HELD_PER_SESSION; i++) expect(hold.admit()).toBe(true)
-		expect(hold.admit()).toBe(false)
+		const releases = Array.from({ length: MAX_PENDING_PER_SESSION }, () => hold.admit())
+		expect(releases.every((release) => release !== undefined)).toBe(true)
+		expect(hold.admit()).toBeUndefined()
 
 		hold.release()
-		for (let i = 0; i <= MAX_HELD_PER_SESSION; i++) expect(hold.admit()).toBe(true)
+		expect(hold.admit()).toBeUndefined()
+		releases[0]?.()
+		releases[0]?.()
+		expect(hold.admit()).toBeDefined()
+		expect(hold.admit()).toBeUndefined()
+	})
+
+	test("two sessions' holds count apart", () => {
+		const holds = new VerificationHolds()
+		const full = holds.open("s1", HASH_A)
+		for (let i = 0; i < MAX_PENDING_PER_SESSION; i++) full.admit()
+		expect(full.admit()).toBeUndefined()
+		expect(holds.open("s2", HASH_B).admit()).toBeDefined()
 	})
 
 	test("unsettled lists only open holds; end drops an unsettled hold and removes any hold from the map", async () => {

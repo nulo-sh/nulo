@@ -91,7 +91,7 @@ Tests: **T1** (composition) the parse of an upper-case address returns the canon
 
 **Validation gate**: `cd apps/extension && bun --bun vitest run src/wallet/services/token src/utils/tx-amount.test.ts src/popup/components/popups/NewTokenPopup.test.ts src/wallet/services/execution/register-token.test.ts`, then `bun run lint` and `bun run typecheck:all`. Pass: exit 0; T1 and T2 fail against `git show e900f710:<path>` copies of the changed source (never `git stash`). Layers: lint, typecheck, unit, composition.
 
-## Phase 2: a bound on a session's pending calls (#354) — arc-1
+## Phase 2: a bound on a session's pending calls (#354) — arc-1 ✓
 
 Steps: add the `waiting` getters. Make `admit()` count always with a one-shot release. Release on settle in `onWalletMessage`. Route the refusal through the lane. Drop past the bound in `serializeDecryption`. Rename; update the module doc and `ARCHITECTURE.md`.
 
