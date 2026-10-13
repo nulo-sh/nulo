@@ -572,6 +572,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 	> :last-child {
 		min-width: 0;
+		overflow-wrap: anywhere;
 		text-align: right;
 	}
 }
@@ -626,6 +627,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 	:last-child {
 		text-align: right;
+	}
+
+	/* A dApp names the function and the artifact a row shows; a long unbroken name breaks inside the card. */
+	> :last-child {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 }
 </style>

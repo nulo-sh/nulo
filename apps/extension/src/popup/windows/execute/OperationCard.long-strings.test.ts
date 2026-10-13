@@ -1,11 +1,15 @@
 /**
  * A dApp controls the function names and argument values the execute card shows, up to their
  * 64-character caps. In mono, 64 narrow glyphs run wider than the card, so each place that holds
- * them must let them break: these cases pin the wrapping classes on the elements that render them.
- * jsdom applies no stylesheet; the window sweep measures the rendered payload against the card.
+ * them must let them break: these cases pin the wrapping classes on the elements that render them,
+ * and the value-column rules that wrap them. jsdom applies no stylesheet; the window sweep measures
+ * the rendered payload against the card.
  */
 
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { mount } from "@vue/test-utils"
+import postcss, { type Rule } from "postcss"
 import { describe, expect, test } from "vitest"
 import CallArguments from "./CallArguments.vue"
 import OperationCard from "./OperationCard.vue"
@@ -73,6 +77,52 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(row.classes()).toContain(CARD.call_row)
 		expect(row.element.firstElementChild?.textContent).toMatch(HUMANIZED)
 		expect(row.element.lastElementChild?.querySelector(".addr")?.textContent).toBe(TOKEN)
+	})
+
+	test.each([
+		["simulate_utility", { kind: "simulate_utility", contract: TOKEN, method: NARROW }],
+		["aztec_executeUtility", { kind: "aztec_executeUtility", call: { to: TOKEN, name: NARROW, selector: "0x12345678" } }],
+		[
+			"aztec_createAuthWit",
+			{
+				kind: "aztec_createAuthWit",
+				messageHashOrIntent: { caller: SPENDER, call: { to: TOKEN, name: NARROW, selector: "0x12345678", args: [FIELD] } },
+			},
+		],
+	])("%s: the 64-character function name is the wrapping value column of its row", (_, op) => {
+		const w = mountCard({ ...base, network: { id: "net-1", chainId: 1, name: "N" }, ...op })
+		const values = w.findAll(`.${CARD.prop}`).map((row) => row.element.lastElementChild)
+		expect(values.filter((value) => HUMANIZED.test(value?.textContent ?? ""))).toHaveLength(1)
+	})
+
+	test("a prop row's and a row's value column may shrink below its longest word and break inside it", () => {
+		const style = readFileSync(join(__dirname, "OperationCard.vue"), "utf8").split("<style module>")[1]?.split("</style>")[0] ?? ""
+		const root = postcss.parse(style)
+		for (const parent of [".prop", ".row"]) {
+			const rule = root.nodes.find((node): node is Rule => node.type === "rule" && node.selector === parent)
+			const value = rule?.nodes.find((node): node is Rule => node.type === "rule" && node.selector === "> :last-child")
+			const declarations = Object.fromEntries(
+				(value?.nodes ?? []).flatMap((node) => (node.type === "decl" ? [[node.prop, node.value]] : [])),
+			)
+			expect(declarations, parent).toMatchObject({ "min-width": "0", "overflow-wrap": "anywhere" })
+		}
+	})
+
+	test("a discovered authorization's decoded function name is the wrapping value column of its row", () => {
+		const authwit = { messageHash: FIELD, consumer: TOKEN, caller: SPENDER, selector: "0x12345678", args: [FIELD], innerHash: FIELD }
+		const w = mount(OperationCard, {
+			props: {
+				op: sendTx as never,
+				index: 0,
+				feeEstimate: { discoveredAuthwits: [authwit] } as never,
+				decodedAuthwits: new Map([[FIELD, { kind: "decoded", contract: "Token", fn: NARROW, params: [] }]]) as never,
+			},
+			global: { stubs },
+		})
+		const value = w.find('[data-testid="execute-discovered-authwit-function"]')
+		expect(value.text()).toMatch(HUMANIZED)
+		expect(value.element.parentElement?.classList.contains(CARD.row)).toBe(true)
+		expect(value.element.parentElement?.lastElementChild).toBe(value.element)
 	})
 })
 
