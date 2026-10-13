@@ -14,8 +14,9 @@ export interface LaunchOptions {
 	headless: boolean
 	/** `false` drops the fixed window size a driver launches with; only Chrome's launch has one. */
 	fixedWindowSize?: boolean
-	/** Route every request for an outside host to the egress guard on this loopback port. */
-	egress?: { guardPort: number }
+	/** Route every request for an outside host to the egress guard on this loopback port, but
+	 *  `liveHost`, which goes direct. */
+	egress?: { guardPort: number; liveHost?: string }
 }
 
 export interface LaunchedBrowser {
@@ -105,18 +106,11 @@ export interface BrowserDriver {
 	openScratchPage(browser: Browser, extensionId: string): Promise<Page>
 	/**
 	 * Resolve with the first target matching `predicate`, or reject after `timeout` ms. Over BiDi a
-	 * window is born `about:blank` and no event reports the URL it then loads, so Puppeteer's own
-	 * `waitForTarget` never matches a URL there — while `targets()` does list it, correctly.
+	 * window is born `about:blank` and its URL arrives in a later event that re-announces no target,
+	 * so Puppeteer's own `waitForTarget` never matches a URL there, while `targets()` reads it as it
+	 * stands. On Firefox the rejection also reports the browser's own windows.
 	 */
 	waitForTarget(browser: Browser, predicate: (target: Target) => boolean, timeout: number): Promise<Target>
-	/**
-	 * Resolve once a tab or window is showing exactly `url`, or reject after `timeout` ms. For a
-	 * document the extension opens with `tabs.create`: over BiDi such a tab stays `about:blank` in
-	 * `targets()` for good when what it loads is not HTML, so the URL is read from the browser.
-	 * Reading a window's URL means switching to it, so Firefox is left on the last window listed:
-	 * call this with nothing focus-dependent (a WebAuthn ceremony, a file pick) still pending.
-	 */
-	waitForOpenedUrl(browser: Browser, url: string, timeout: number): Promise<void>
 	/**
 	 * Run `open`, then resolve with the tab or window it opened, or reject once `timeout` ms pass after
 	 * it without one. Nothing else may open a tab or window meanwhile: being new is what identifies it.
@@ -211,7 +205,6 @@ export const browserTraffic = { browser: driver.kind, ownHosts: driver.ownHosts 
 export const CHROME_ONLY = {
 	backgroundKillUnderPage: "ends the background under an open extension page; Firefox will not end an event page one keeps busy",
 	cdpFetch: "arms CDP Fetch interception on held targets; BiDi has no equivalent",
-	hangingRequest: "stalls a network on a request a loopback stub never answers; unproven on Firefox, whose interception redirects",
 } as const
 
 /** Why a test does not run on Chrome: a state headless Chrome cannot be driven into — never a failing test. */
@@ -235,8 +228,6 @@ export const reloadExtensionPage = (page: Page): Promise<void> => driver.reloadE
 export const isTargetGone = (text: string): boolean => driver.targetGone?.test(text) ?? false
 export const waitForTarget = (browser: Browser, predicate: (target: Target) => boolean, timeout: number): Promise<Target> =>
 	driver.waitForTarget(browser, predicate, timeout)
-export const waitForOpenedUrl = (browser: Browser, url: string, timeout: number): Promise<void> =>
-	driver.waitForOpenedUrl(browser, url, timeout)
 export const waitForNewTab = (browser: Browser, open: () => Promise<void>, timeout: number): Promise<OpenedTab> =>
 	driver.waitForNewTab(browser, open, timeout)
 const standing = standingInterceptions<Browser>((browser, extensionId, fromOrigin, mode, backgroundDown) =>

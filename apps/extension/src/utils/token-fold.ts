@@ -4,7 +4,7 @@
  * neither do never-synced or malformed rows (nothing is known about them yet).
  */
 import { isAmountAboveDustThreshold } from "@/utils/incoming-dust"
-import { parseRawBalance } from "@/utils/token-amount"
+import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 import { type OrderCtx, type OrderableRow, classifyRow } from "@/utils/token-order"
 
 export function isHiddenHolding<T extends OrderableRow>(
@@ -16,9 +16,12 @@ export function isHiddenHolding<T extends OrderableRow>(
 	const raw = parseRawBalance(tb)
 	if (raw === undefined) return false
 	if (raw === 0n) return true
+	// A funded row's worth needs its decimals; without them it stays in view.
+	const decimals = knownDecimals(tb.token)
+	if (decimals === null) return false
 	return !isAmountAboveDustThreshold({
 		amountRaw: raw.toString(),
-		decimals: tb.token.decimals ?? 0,
+		decimals,
 		usdRate: p.usdRate,
 		thresholdMicro: p.thresholdMicro,
 	})

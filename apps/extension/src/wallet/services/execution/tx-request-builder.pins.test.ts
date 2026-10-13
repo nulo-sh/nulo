@@ -23,6 +23,8 @@ const FENCE = { profileId: "p1", epoch: 0, session: 1 }
 
 const ACCOUNT_ADDR = AztecAddress.fromBigIntUnsafe(0xacc7n)
 const CONTRACT = AztecAddress.fromBigIntUnsafe(0xc0den).toString()
+const CLASS_ID = Fr.fromString("0xc1a55")
+const UPGRADED_CLASS_ID = Fr.fromString("0xc1a56")
 // chainId must equal (l1ChainId ^ rollupVersion) >>> 0 for the drift assert.
 const NODE_INFO = { l1ChainId: 0, rollupVersion: 31337, txsLimits: { gas: { daGas: 111n, l2Gas: 222n } } }
 const NETWORK = {
@@ -54,6 +56,9 @@ function makeHarness() {
 		ensureRegistered: vi.fn(async () => {
 			calls.push("ensureRegistered")
 		}),
+		ensureContractRegistered: vi.fn(async () => {
+			calls.push("ensureContractRegistered")
+		}),
 		createAuthWit: vi.fn(async (h: Fr) => new AuthWitness(h, [Fr.fromString("0x77")])),
 		buildTxExecutionRequest: vi.fn(async (...args: unknown[]) => {
 			calls.push("buildTxExecutionRequest")
@@ -63,8 +68,15 @@ function makeHarness() {
 			return { fake: "txRequest" }
 		}),
 	}
-	const instance = { currentContractClassId: { toString: () => "0xclass1" } }
+	const instance = { currentContractClassId: CLASS_ID }
 	const artifact = { functions: [FN], nonDispatchPublicFunctions: [] }
+	const node = {
+		getNodeInfo: vi.fn(async () => {
+			calls.push("getNodeInfo")
+			return NODE_INFO
+		}),
+		getContract: vi.fn(async (): Promise<unknown> => ({ currentContractClassId: CLASS_ID })),
+	}
 	const deps = {
 		pxeService: { getPXE: vi.fn(() => ({ fake: "pxe" })) },
 		profileService: {
@@ -77,12 +89,7 @@ function makeHarness() {
 				calls.push("getNetwork")
 				return NETWORK
 			}),
-			getNode: vi.fn(async () => ({
-				getNodeInfo: vi.fn(async () => {
-					calls.push("getNodeInfo")
-					return NODE_INFO
-				}),
-			})),
+			getNode: vi.fn(async () => node),
 		},
 		accountService: { getAccountContract: vi.fn(async () => account) },
 		authRegistryService: {
@@ -99,7 +106,7 @@ function makeHarness() {
 				calls.push("resolveInstances")
 				return new Map([[CONTRACT, instance]])
 			}),
-			resolveArtifacts: vi.fn(async () => new Map([["0xclass1", artifact]])),
+			resolveArtifacts: vi.fn(async () => new Map([[CLASS_ID.toString(), artifact]])),
 			ensureContractsRegistered: vi.fn(async () => undefined),
 		},
 		authwit: {
@@ -120,7 +127,7 @@ function makeHarness() {
 		deps.authwit as never,
 		deps.logger as never,
 	)
-	return { builder, deps, account, calls, buildArgs, flags }
+	return { builder, deps, account, node, calls, buildArgs, flags }
 }
 
 function build(h: Harness, actions: unknown[], gasSettings?: unknown) {
@@ -309,7 +316,21 @@ describe("buildStandard pins", () => {
 		)
 		await expect(build(h, [{ kind: "call", contract: CONTRACT, method: "nope", args: [] }])).rejects.toThrowError("Method not found")
 		const result = await build(h, [{ kind: "call", contract: CONTRACT, method: "transfer", args: [] }])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [] }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: "transfer", args: [], classId: CLASS_ID.toString() }])
+	})
+
+	test("a call records the class the node reports over the PXE's original, the original when the node knows no instance, and none when the lookup fails, which never fails the build", async () => {
+		const action = { kind: "call", contract: CONTRACT, method: FN.name, args: [] }
+		const recorded = async () => (await build(h, [action])).txCalls[0].classId
+
+		h.node.getContract.mockResolvedValueOnce({ currentContractClassId: UPGRADED_CLASS_ID })
+		expect(await recorded()).toBe(UPGRADED_CLASS_ID.toString())
+		expect(h.node.getContract).toHaveBeenLastCalledWith(AztecAddress.fromStringUnsafe(CONTRACT))
+		h.node.getContract.mockResolvedValueOnce(undefined)
+		expect(await recorded()).toBe(CLASS_ID.toString())
+		h.node.getContract.mockRejectedValueOnce(new Error("node down"))
+		expect(await recorded()).toBeUndefined()
+		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(3)
 	})
 
 	test("encoded_call resolves by selector from ABI truth; a mismatched dApp name is a scope violation", async () => {
@@ -320,7 +341,7 @@ describe("buildStandard pins", () => {
 		// Every execution field the dApp supplies lies, a stale `returnTypes` included; the call carries the ABI's.
 		const lies = { type: FunctionType.PUBLIC, isStatic: true, returnType: { kind: "field" }, returnTypes: [{ kind: "field" }] }
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: ["0x02"], name: FN.name, ...lies }])
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: ["0x02"] }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: ["0x02"], classId: CLASS_ID.toString() }])
 		const payload = (h.buildArgs[0] as unknown[])[2] as { calls: FunctionCall[] }
 		expect(payload.calls[0]).toMatchObject({ name: FN.name, type: FN.functionType, isStatic: FN.isStatic, returnType: FN.returnType })
 		expect(payload.calls[0].args.map((a) => a.toBigInt())).toEqual([2n])
@@ -368,6 +389,7 @@ describe("buildNoFrom pins", () => {
 		await expect(h.builder.buildNoFrom(op as never, FENCE)).rejects.toThrowError(/Chain identity mismatch/)
 		expect(h.calls).toEqual(["getNetwork", "getNodeInfo"])
 		expect(h.account.ensureRegistered).not.toHaveBeenCalled()
+		expect(h.account.ensureContractRegistered).not.toHaveBeenCalled()
 		expect(h.deps.resolver.resolveInstances).not.toHaveBeenCalled()
 	})
 
@@ -444,6 +466,24 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		expect(built.txRequest.functionSelector.toString()).toBe(selector)
 	})
 
+	test("NO_FROM: a call whose selector is a public function is refused before any fee read; a private one builds", async () => {
+		const PUBLIC_FN = { ...FN, name: "transfer_public_to_public", functionType: FunctionType.PUBLIC }
+		const artifact = { functions: [FN], nonDispatchPublicFunctions: [PUBLIC_FN] }
+		h.deps.resolver.resolveArtifacts.mockResolvedValue(new Map([[CLASS_ID.toString(), artifact]]) as never)
+		const getCurrentMinFees = noFromHarness()
+		const publicSelector = (await FunctionSelector.fromNameAndParameters(PUBLIC_FN.name, PUBLIC_FN.parameters)).toString()
+
+		const refused = await rejectionOf(
+			buildNoFrom(wireCall({ name: PUBLIC_FN.name, selector: publicSelector, type: FunctionType.PUBLIC })),
+		)
+		expect(refused.constructor).toBe(Error)
+		expect(refused.message).toBe("DefaultEntrypoint only supports private functions")
+		expect(getCurrentMinFees).not.toHaveBeenCalled()
+
+		const built = await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }))
+		expect(built.txRequest.functionSelector.toString()).toBe(await selectorOf())
+	})
+
 	test("NO_FROM: an absent name never reaches the binding: the call schema refuses it", async () => {
 		const selector = await selectorOf()
 		const getCurrentMinFees = noFromHarness()
@@ -470,7 +510,16 @@ describe("selector binding: the dApp's name must be the selector's function", ()
 		const selector = await selectorOf()
 		const result = await build(h, [{ kind: "encoded_call", to: CONTRACT, selector, args: [] }])
 		expect(h.account.buildTxExecutionRequest).toHaveBeenCalledTimes(1)
-		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [] }])
+		expect(result.txCalls).toEqual([{ contract: CONTRACT, method: FN.name, args: [], classId: CLASS_ID.toString() }])
+	})
+})
+
+describe("NO_FROM account registration", () => {
+	// Authorization discovery stubs the account by its registered instance.
+	test("the account's contract is registered with its keys, before any resolver work", async () => {
+		noFromHarness()
+		await buildNoFrom(wireCall({ name: FN.name, selector: await selectorOf() }))
+		expect(h.calls).toEqual(["getNetwork", "ensureRegistered", "ensureContractRegistered", "resolveInstances"])
 	})
 })
 

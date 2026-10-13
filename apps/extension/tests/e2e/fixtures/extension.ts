@@ -25,15 +25,16 @@ import {
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
 } from "./helpers"
-import { type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
-import { waitForPopup, approveCapabilities } from "./popups"
+import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
+import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed, legalSeedValue } from "./legal"
 import { assertNoCspViolations, CSP_REPORT_ARMED, closeAfterCspCheck, readCspViolations } from "./csp-violations"
-import { type EgressCanary, type EgressGuard, type HeldNode, guardArmed, ownGuardedLaunch } from "./egress-guard"
+import { type EgressCanary, type EgressGuard, type HeldNode, LIVE_NODE_HOST, guardArmed, ownGuardedLaunch } from "./egress-guard"
 import { holdNodeStub } from "./node-stub"
+import { pageErrorOf } from "./page-errors"
 
 export interface ExtensionContext {
 	browser: Browser
@@ -47,7 +48,7 @@ export interface ExtensionContext {
 	 *  before it reloads the extension, which discards the record; `close` then only closes. */
 	checkCspViolations(): Promise<void>
 	/** The smoke suite's egress guard, canary and stand-in Testnet node for this launch; absent where
-	 *  no guard is armed. */
+	 *  no guard is armed, and no stand-in in a `liveNode` launch. */
 	egress?: { guard: EgressGuard; canary: EgressCanary; node: HeldNode | undefined }
 }
 
@@ -81,9 +82,13 @@ function isPrestoProbeNoise(msg: ConsoleMessage): boolean {
  *  `current`, so a spec that is not about the gate never meets it; a reused profile defaults to
  *  `keep`, so whatever the previous launch left is what the relaunch boots over.
  *
- *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`). */
+ *  `fixedWindowSize: false` launches without the driver's fixed window size (`LaunchOptions`).
+ *
+ *  `liveNode: true` sends the Testnet node's host direct instead of holding the stand-in, and fails
+ *  the close if the guard sees that host. Only a run that provides `liveLeg` may ask: elsewhere the
+ *  launch would make a gate depend on the live node. */
 export async function launchExtension(
-	opts: { userDataDir?: string; waitForLiveness?: boolean; legal?: LegalSeed; fixedWindowSize?: boolean } = {},
+	opts: { userDataDir?: string; waitForLiveness?: boolean; legal?: LegalSeed; fixedWindowSize?: boolean; liveNode?: true } = {},
 ): Promise<ExtensionContext> {
 	const { userDataDir, waitForLiveness = true, fixedWindowSize } = opts
 	const extensionPath = inject("extensionPath")
@@ -94,10 +99,14 @@ export async function launchExtension(
 
 	// HEADLESS=0 flips to windowed mode for local debugging.
 	const headless: boolean = process.env.HEADLESS !== "0"
-	const launch = (egress?: { guardPort: number }) => launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
+	const launch = (egress?: { guardPort: number; liveHost?: string }) =>
+		launchBrowser({ extensionPath, userDataDir, headless, fixedWindowSize, egress })
 	const settle = (browser: Browser) =>
 		settleLaunchedExtension(browser, { freshProfile, waitForLiveness, legal: opts.legal ?? (freshProfile ? "current" : "keep") })
-	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle)
+	if (opts.liveNode && inject("liveLeg") !== true) {
+		throw new Error("a liveNode launch reaches the live Testnet node, which only an artifact run's live spec may do")
+	}
+	if (guardArmed(inject("egressGuard"))) return launchBehindEgressGuard(launch, settle, opts.liveNode ? LIVE_NODE_HOST : undefined)
 
 	const { browser, close: closeBrowser } = await launch()
 	try {
@@ -134,12 +143,14 @@ function cspLatch(
 }
 
 async function launchBehindEgressGuard(
-	launch: (egress: { guardPort: number }) => Promise<LaunchedBrowser>,
+	launch: (egress: { guardPort: number; liveHost?: string }) => Promise<LaunchedBrowser>,
 	settle: (browser: Browser) => Promise<string>,
+	liveHost: string | undefined,
 ): Promise<ExtensionContext> {
 	const guarded = await ownGuardedLaunch({
 		label: launchLabel(),
 		traffic: browserTraffic,
+		liveHost,
 		launch: async (egress) => {
 			const launched = await launch(egress)
 			return { value: launched.browser, close: launched.close }
@@ -147,7 +158,7 @@ async function launchBehindEgressGuard(
 		settle,
 		probeCanary: fireCanary,
 		wrapClose: (closeBrowser, browser, extensionId) => cspLatch(browser, extensionId, closeBrowser),
-		holdNode: (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL),
+		holdNode: liveHost === undefined ? (browser, extensionId) => holdNodeStub(browser, extensionId, TESTNET_RPC_URL) : undefined,
 	})
 	const { value: browser, settled: extensionId, wrapped, guard, canary, node } = guarded
 	return {
@@ -313,40 +324,7 @@ export async function openOnboarding(ctx: ExtensionContext, opts: { legal?: Excl
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
 
-	page.on("console", (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign SW-port-close cascade — pending
-		// background-port RPCs reject en-masse when the SW restarts (e.g. during
-		// account switch). Prod already treats it as benign (the shared
-		// `isClientDisconnectRejection`); filter it here too so the `consoleErrors`
-		// assertions only catch UNEXPECTED errors, not this known noise.
-		// STRUCTURAL BLIND SPOT — root-caused + probe-verified (permanent by
-		// design; see implementations-plan/archive/e2e-deflake/plan.md, Console errors): the console-sniffer
-		// (`utils/console-sniffer.ts`, first module script in the popup/
-		// onboarding/offscreen entry pages — the setup page carries no sniffer)
-		// reroutes app `console.*` over LoggerService RPC to the SW realm;
-		// the native page console never fires on the success path, so CDP's
-		// consoleAPICalled never emits and this listener structurally cannot see
-		// app console output. Browser-emitted entries (e.g. "Unchecked
-		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
-		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
-		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections (probe-verified) — an error the app
-		// catches and merely logs is invisible to BOTH fixture arrays
-		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
-		// prefer DOM/storage/stage evidence for app-level failures.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	})
-	page.on("pageerror", (err) => {
-		// Mirror the consoleErrors filter above: the benign SW-port-close
-		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
-		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
-		// is in flight during an MV3 service-worker restart. Same known noise,
-		// same filter — everything else still fails the assertion.
-		if ((err as Error).message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err as Error)
-	})
+	recordPageErrors(ctx, page)
 
 	const url = extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome")
 	await gotoExtensionPage(page, url)
@@ -493,7 +471,7 @@ async function setupConnectedPlayground(
 
 /** Drive the playground's requestCapabilities flow for `bundle`, then approve
  *  the cap popup for whichever accounts `pick` selects; returns the granted
- *  addresses. All timeouts match the cold-shard budget (60s for the popup
+ *  addresses once the popup has closed. All timeouts match the cold-shard budget (60s for the popup
  *  target + the account-row render — chrome.windows.create + SW handler boot +
  *  loadInteractionPayload's PXE/accountService warmup can each exceed 30s on a
  *  cold CI runner; 30s for the dApp result). `pick` owns the per-fixture
@@ -515,7 +493,9 @@ export async function grantCapBundle(
 	)
 	const granted = await pick(accountIds, capPopup)
 	await approveCapabilities(capPopup, { accounts: granted })
-	await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000)
+	await assertPgOk(playgroundPage, await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000), "grantCapBundle")
+	// The window resolves the request before it closes, so the dApp's answer can precede its teardown.
+	await waitForPopupClosed(capPopup, 10_000)
 	return granted
 }
 
@@ -1232,7 +1212,35 @@ async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
 	}
 }
 
-async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
+const recorded = new WeakSet<Page>()
+
+/** Records `page`'s errors into the launch's arrays from now on, once however often it is asked:
+ *  `asPage()` hands every caller resolving one target the same `Page`. */
+export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
+	if (recorded.has(page)) return
+	recorded.add(page)
+	const onConsole = (msg: ConsoleMessage) => {
+		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
+		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).
+		// App `console.*` never reaches this listener on the success path: the console sniffer reroutes
+		// it to the background's log ring (`fixtures/journal.ts` readSwLogTrail). Browser-emitted entries
+		// do ("Unchecked runtime.lastError", on Chrome). `pageerror` holds every uncaught throw and
+		// unhandled rejection on both browsers, Firefox's through the driver's relay (FIREFOX.md). An
+		// error the app catches and logs reaches neither array: prefer DOM, storage or stage evidence.
+		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
+			ctx.consoleErrors.push(msg.text())
+		}
+	}
+	const onPageError = (payload: unknown) => {
+		const err = pageErrorOf(payload)
+		if (err) ctx.pageErrors.push(err)
+	}
+	page.on("console", onConsole)
+	page.on("pageerror", onPageError)
+}
+
+/** Loads the popup into `page` and records its errors, leaving the arrays as they are. */
+async function loadPopup(ctx: ExtensionContext, page: Page): Promise<void> {
 	patchPagePolling(page)
 	await page.setViewport({ width: 360, height: 600 })
 	// Bring the new page to the front so the tab is "focused" — defense in
@@ -1240,55 +1248,42 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	// backgrounding` it prevents Chrome from suspending the offscreen
 	// renderer.
 	await page.bringToFront()
+	recordPageErrors(ctx, page)
+	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/popup/index.html"))
+}
 
+/** Puppeteer's BiDi `close()` swallows a failed close, so only the `close` event proves one. */
+async function closeConfirmed(page: Page): Promise<void> {
+	const closed = new Promise<void>((resolve) => page.once("close", () => resolve()))
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const refused = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new Error("openPopup: the slow popup tab did not close within 10 s")), 10_000)
+	})
+	try {
+		await Promise.race([page.close().then(() => closed), refused])
+	} finally {
+		clearTimeout(timer)
+	}
+}
+
+const popupReady = (page: Page, timeout: number, polling: number) =>
+	page.waitForFunction(
+		() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
+		{ timeout, polling },
+	)
+
+async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> {
 	ctx.consoleErrors = []
 	ctx.pageErrors = []
 
-	page.on("console", (msg: ConsoleMessage) => {
-		// "Client disconnected" is the benign SW-port-close cascade — pending
-		// background-port RPCs reject en-masse when the SW restarts (e.g. during
-		// account switch). Prod already treats it as benign (the shared
-		// `isClientDisconnectRejection`); filter it here too so the `consoleErrors`
-		// assertions only catch UNEXPECTED errors, not this known noise.
-		// STRUCTURAL BLIND SPOT — root-caused + probe-verified (permanent by
-		// design; see implementations-plan/archive/e2e-deflake/plan.md, Console errors): the console-sniffer
-		// (`utils/console-sniffer.ts`, first module script in the popup/
-		// onboarding/offscreen entry pages — the setup page carries no sniffer)
-		// reroutes app `console.*` over LoggerService RPC to the SW realm;
-		// the native page console never fires on the success path, so CDP's
-		// consoleAPICalled never emits and this listener structurally cannot see
-		// app console output. Browser-emitted entries (e.g. "Unchecked
-		// runtime.lastError") bypass the patch and DO arrive. App-log evidence
-		// channel: `fixtures/journal.ts` readSwLogTrail (SW session-storage
-		// ring, 2s flush debounce). `pageerror` below IS reliable for uncaught
-		// throws + unhandled rejections (probe-verified) — an error the app
-		// catches and merely logs is invisible to BOTH fixture arrays
-		// (`consoleErrors` AND `pageErrors`; it does reach the SW log ring);
-		// prefer DOM/storage/stage evidence for app-level failures.
-		if (msg.type() === "error" && !msg.text().includes("Client disconnected") && !isPrestoProbeNoise(msg)) {
-			ctx.consoleErrors.push(msg.text())
-		}
-	})
-
-	page.on("pageerror", (err) => {
-		// Mirror the consoleErrors filter above: the benign SW-port-close
-		// cascade also surfaces as an UNHANDLED REJECTION (pageerror) when a
-		// fire-and-forget RPC (e.g. app.vue's account-switch syncTransactions)
-		// is in flight during an MV3 service-worker restart. Same known noise,
-		// same filter — everything else still fails the assertion.
-		if ((err as Error).message?.includes("Client disconnected")) return
-		ctx.pageErrors.push(err as Error)
-	})
-
-	const popupUrl = extensionUrl(ctx.extensionId, "/src/popup/index.html")
 	// Fast-path-then-fallback for the SW-handshake workaround.
 	//
 	// Background: the SW's FIRST popup connection on a brand-new tab can
 	// lose the wallet-bridge handshake (popup logs "Client disconnected"
 	// from `client-*.js` and Vue never mounts; hash stays at "#/" with an
 	// empty body). The historical workaround was an unconditional
-	// triple-nav (popup → about:blank → popup) — the second load sees a
-	// fully-warm SW.
+	// triple-nav (popup → about:blank → popup); it now loads the popup again in
+	// a fresh tab — the second load sees a fully-warm SW.
 	//
 	// Readiness predicate: hash leaves "#/"
 	// AND the GlobalLoader is gone. The hash redirect alone fires too
@@ -1315,28 +1310,27 @@ async function setUpPopupPage(ctx: ExtensionContext, page: Page): Promise<Page> 
 	// counting fallback occurrences in CI artifacts).
 	const FAST_PATH_BUDGET_MS = 2_000
 	const t0 = Date.now()
-	await gotoExtensionPage(page, popupUrl)
-	let path: "fast" | "fallback" = "fast"
+	await loadPopup(ctx, page)
 	try {
-		await page.waitForFunction(
-			() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
-			{ timeout: FAST_PATH_BUDGET_MS, polling: 100 },
-		)
+		await popupReady(page, FAST_PATH_BUDGET_MS, 100)
+		if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fast totalMs=${Date.now() - t0}`)
+		return page
 	} catch (err) {
 		if (!(err instanceof TimeoutError)) throw err
-		path = "fallback"
-		await page.goto("about:blank")
-		await gotoExtensionPage(page, popupUrl)
-		await page.waitForFunction(
-			() => window.location.hash !== "#/" && window.location.hash !== "" && !document.querySelector('[data-testid="global-loader"]'),
-			{ timeout: 30_000, polling: 200 },
-		)
 	}
-	if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") {
-		console.log(`[openPopup] path=${path} totalMs=${Date.now() - t0}`)
+	// Closing a tab raises nothing from it, imports in flight included, while a navigation would make
+	// Firefox reject the left document's in-flight imports from it; the tab stays recorded until gone.
+	await closeConfirmed(page)
+	const fresh = await newPage(ctx.browser)
+	try {
+		await loadPopup(ctx, fresh)
+		await popupReady(fresh, 30_000, 200)
+	} catch (err) {
+		await fresh.close().catch(() => {})
+		throw err
 	}
-
-	return page
+	if (process.env.NULO_E2E_OPENPOPUP_LOG === "1") console.log(`[openPopup] path=fallback totalMs=${Date.now() - t0}`)
+	return fresh
 }
 
 /** Wait for Vue hash router to reach the expected hash.

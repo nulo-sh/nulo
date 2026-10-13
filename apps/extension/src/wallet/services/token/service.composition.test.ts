@@ -58,7 +58,7 @@ vi.mock("./default-tokens", () => {
 
 const NETWORK = { id: "net1", chainId: 1, primaryEndpointId: "ep1", endpoints: [{ id: "ep1", rpcUrl: "http://fake" }] }
 const CONTRACT = AztecAddress.fromNumberUnsafe(0x1234).toString()
-const CLASS_ID = "0xc1a55"
+const CLASS_ID = `0x${"c1a55".padStart(64, "0")}`
 
 /** Hardcoded fake instance — deriving a real one needs the bb WASM (not loaded in vitest). */
 function fakeTokenInstance(): ContractInstanceWithAddress {
@@ -237,6 +237,23 @@ describe("TokenService seeding — composition (simulate-free slice)", () => {
 		const ti = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT, undefined, CLASS_ID)
 		expect(ti.contract).toBe(CONTRACT)
 		expect(fake.registerCalls).toHaveLength(1)
+	})
+
+	test("a seeded add stores the class its pinned parse matched", async () => {
+		const { tokenService } = await seedHarness()
+		const tokenInterface = await tokenService.parseTokenInterface(NETWORK.id, CONTRACT, undefined, CLASS_ID)
+
+		await tokenService.addSeededToken({
+			profileId: "p1",
+			networkId: NETWORK.id,
+			accountAddress: "0xacc1",
+			tokenInterface,
+			name: "Compressed USD",
+			symbol: "cUSD",
+			decimals: 6,
+		})
+
+		expect((await tokenService.getTokensRaw("p1", NETWORK.chainId))[0].classId).toBe(CLASS_ID)
 	})
 
 	test("pinned parse: class-id mismatch throws PinMismatchError BEFORE any PXE registration", async () => {

@@ -1,10 +1,10 @@
-import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { SCOPE_VIOLATION_ENVELOPE } from "@/wallet/services/wallet-sdk/error-envelope"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { readStoredCapability } from "../fixtures/dappSession"
-import { navigateByHash, setDeveloperMode } from "../fixtures/helpers"
+import { setDeveloperMode } from "../fixtures/helpers"
 import { readSendRecords, waitForSendRecord } from "../fixtures/journal"
+import { readErrorKind, readJournalDetail, readTerminalCard } from "../fixtures/journal-page"
 import {
 	assertPgOk,
 	callExpectingNoPopup,
@@ -25,49 +25,13 @@ const hasConfig = aztecConfig !== undefined
  * one scope-refusal envelope, and the send's journal record and its History card read as not
  * allowed, the record's developer view showing the refusal's fixed text, which names no address.
  * A call whose selector runs another function than the name its grant check read is refused at
- * execution the same way.
+ * execution the same way. A refused row is titled by what the wallet resolved, never by the name the
+ * app claimed: "Transaction" when nothing resolved it, the selector's function otherwise.
  */
 
 const OTHER = `0x${"0a".repeat(32)}`
 const LISTED = { type: "transaction", scope: [{ contract: OTHER, function: "transfer_public_to_public" }] }
-const DETAIL_FIELDS = ["journal-detail-category", "journal-detail-context", "journal-detail-state", "journal-detail-error-message"]
-
-/** The journal detail's fields for record `id` once its state row renders; a field the page does
- *  not show reads null. */
-async function readJournalDetail(page: Page, id: string): Promise<Record<string, string | null>> {
-	await navigateByHash(page, `#/popup/journal/${id}`)
-	await page.waitForFunction(
-		(sel: string) => (document.querySelector(sel)?.textContent?.trim() ?? "") !== "",
-		{ timeout: 10_000, polling: 100 },
-		'[data-testid="journal-detail-state"]',
-	)
-	return page.evaluate(
-		(ids: string[]) =>
-			Object.fromEntries(ids.map((id) => [id, document.querySelector(`[data-testid="${id}"]`)?.textContent?.trim() ?? null])),
-		DETAIL_FIELDS,
-	)
-}
-
-const CARD_SUBTITLE = '[data-testid="tx-terminal-card"] [data-testid="tx-terminal-subtitle"]'
-
-/** The stored error kind of journal record `id`: the send-record view carries none. */
-async function readErrorKind(page: Page, id: string): Promise<string | undefined> {
-	return page.evaluate(async (key: string) => {
-		const raw = (await chrome.storage.local.get(key))[key]
-		const record = (typeof raw === "string" ? JSON.parse(raw) : raw) as { error?: { kind?: string } | null } | undefined
-		return record?.error?.kind
-	}, `nulo:journal@${id}`)
-}
-
-/** The subtitle of the one terminal card on the page at `hash`, read after the wait: the fixtures'
- *  `waitForSelector` resolves `null`, never an element handle. */
-async function readTerminalCard(page: Page, hash: string): Promise<string | null> {
-	await navigateByHash(page, hash)
-	await page.waitForSelector(CARD_SUBTITLE, { visible: true, timeout: 15_000 })
-	return page.$eval(CARD_SUBTITLE, (el) => el.textContent?.trim() ?? null)
-}
-
-const readHistoryCard = (page: Page) => readTerminalCard(page, "#/popup/activity")
+const readHistoryCard = (page: Parameters<typeof readTerminalCard>[0], shot?: string) => readTerminalCard(page, "#/popup/activity", shot)
 
 test.skipIf(!hasConfig)(
 	"scope-refusal — a send outside the listed scope is refused without a window and filed as not allowed",
@@ -99,8 +63,8 @@ test.skipIf(!hasConfig)(
 		await waitForHash(wallet, "#/popup/general")
 		const record = await waitForSendRecord(wallet, (r) => r.kind === "dapp_execute" && r.stage === "failed")
 		const sends = (await readSendRecords(wallet)).filter((r) => r.kind === "dapp_execute").map((r) => r.id)
-		const detail = await readJournalDetail(wallet, record.id)
-		const card = await readHistoryCard(wallet)
+		const detail = await readJournalDetail(wallet, record.id, "refused-scope-detail")
+		const card = await readHistoryCard(wallet, "refused-scope-card")
 		expect({ status: refused.status, error: refused.errorJson, sends, detail, card }).toEqual({
 			status: "error",
 			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
@@ -109,9 +73,10 @@ test.skipIf(!hasConfig)(
 				"journal-detail-category": "Not allowed",
 				"journal-detail-context": "The app asked for more than you allowed. Nothing was sent.",
 				"journal-detail-state": "Failed",
+				"journal-detail-method": "Transaction",
 				"journal-detail-error-message": null,
 			},
-			card: "Not allowed",
+			card: { title: "Transaction", subtitle: "Not allowed" },
 		})
 
 		await setDeveloperMode(wallet, true)
@@ -155,21 +120,23 @@ test.skipIf(!hasConfig)(
 			status: answer.status,
 			error: answer.errorJson,
 			kind: await readErrorKind(wallet, record.id),
-			home: await readTerminalCard(wallet, "#/popup/general"),
-			detail: await readJournalDetail(wallet, record.id),
+			home: await readTerminalCard(wallet, "#/popup/general", "refused-binding-card"),
+			detail: await readJournalDetail(wallet, record.id, "refused-binding-detail"),
 			card: await readHistoryCard(wallet),
 		}).toEqual({
 			status: "error",
 			error: { message: JSON.stringify(SCOPE_VIOLATION_ENVELOPE) },
 			kind: "scope_refused",
-			home: "Not allowed",
+			// Titled by the function the selector runs, not the "balance_of_public" the call claimed.
+			home: { title: "Transfer (public)", subtitle: "Not allowed" },
 			detail: {
 				"journal-detail-category": "Not allowed",
 				"journal-detail-context": "The app asked for more than you allowed. Nothing was sent.",
 				"journal-detail-state": "Failed",
+				"journal-detail-method": "Transfer (public)",
 				"journal-detail-error-message": null,
 			},
-			card: "Not allowed",
+			card: { title: "Transfer (public)", subtitle: "Not allowed" },
 		})
 
 		await setDeveloperMode(wallet, true)

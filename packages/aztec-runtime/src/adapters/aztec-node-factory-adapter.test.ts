@@ -146,6 +146,19 @@ describe("AztecNodeFactoryAdapter.createSingleAttemptNode", () => {
 	test("refuses a URL outside the allowlist, as createNode does", () => {
 		expect(() => new AztecNodeFactoryAdapter().createSingleAttemptNode("http://example.com", 1_000)).toThrow(/refused/)
 	})
+
+	test.each([
+		["a failed fetch", async () => Promise.reject(new TypeError(`Failed to fetch ${URL}`))],
+		["a body that is not a batch reply", async () => reply({ message: SENTINEL })],
+	])("%s logs nothing that names the endpoint: the SDK's warning goes to the silent logger", async (_label, answer) => {
+		globalThis.fetch = vi.fn(answer) as unknown as typeof fetch
+		const node = new AztecNodeFactoryAdapter().createSingleAttemptNode(URL, 1_000)
+		await expect(node.getBlockData("finalized")).rejects.toThrow()
+		expect(SILENT_RPC_LOG.warn).toHaveBeenCalled()
+		const printed = consoleText(consoleSpies)
+		expect(printed).not.toContain(URL)
+		expect(printed).not.toContain(SENTINEL)
+	})
 })
 
 // The adapter is the only gate for persisted URLs (a pending tx's endpoint, from a backup too), so

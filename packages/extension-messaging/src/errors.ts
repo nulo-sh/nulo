@@ -208,8 +208,10 @@ export class ScopeViolationError extends WalletError {
 /**
  * Raised when a dApp's sendTx is refused because the per-(profileId, chainId)
  * execution lane is at capacity — either the dApp's own per-origin pending cap
- * or the coarse total-lane cap (see `ExecutionMutex`). Backpressure, NOT a
- * permanent failure: the dApp should retry once its in-flight sendTx settle.
+ * or the coarse total-lane cap (see `ExecutionMutex`) — or when any call
+ * arrives while a session's unanswered emoji check already holds its cap of
+ * waiting calls. Backpressure, NOT a permanent failure: the dApp should retry
+ * once its in-flight calls settle.
  *
  * Maps to JSON-RPC code -32005 ("Limit exceeded") when surfaced to dApps, with
  * `data.walletErrorCode = "TOO_MANY_PENDING"`. The message is a stable public
@@ -511,8 +513,8 @@ export class RecoveryModeError extends WalletError {
 }
 
 /**
- * Every class a wire `code` rebuilds as. Two subclasses are absent on purpose: `TooManyPendingError`
- * rebuilds as the base `WalletError`, and `RpcConnectError` never crosses the wire.
+ * Every class a wire `code` rebuilds as. `RpcConnectError` is absent on purpose: it never crosses
+ * the wire.
  */
 const REBUILT_AS = [
 	RpcTimeoutError,
@@ -521,6 +523,7 @@ const REBUILT_AS = [
 	JobCancelledError,
 	CapabilityNotGrantedError,
 	ScopeViolationError,
+	TooManyPendingError,
 	ValidationError,
 	InvalidPasswordError,
 	AccountAddressInconsistencyError,

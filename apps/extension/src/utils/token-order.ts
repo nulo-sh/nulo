@@ -12,7 +12,7 @@ import { type FiatOf, isUnknownRow, parseRawBalance } from "@/utils/token-amount
 export const HOME_TOKEN_ROWS = 3
 
 export type OrderableRow = {
-	token: { chainId: number; contract: string; name: string; symbol: string; decimals?: number }
+	token: { chainId: number; contract: string; name: string; symbol: string; decimals?: number; hasDecimals?: boolean }
 	publicBalance?: string
 	privateBalance?: string
 	updatedAt?: number

@@ -124,3 +124,15 @@ version before that release reaches users (procedure above):
 - Firefox `data_collection_permissions` (`financialAndPaymentInfo`) and the Firefox 153 minimum
   are settled and pinned by `apps/extension/src/manifest.test.ts`; the reasoning is in
   `apps/extension/store/listing.md` § Data collection declaration.
+- **Open security issues.** Before the `release: promote dev → main` PR that carries v1.0.0, every
+  [open issue labelled `security`](https://github.com/nulo-sh/nulo/issues?q=is%3Aopen+label%3Asecurity)
+  is closed, or carries a written disposition in which the owner accepts the remaining risk by
+  name. Draft security advisories follow
+  [`SECURITY.md` § How findings are tracked](./SECURITY.md#how-findings-are-tracked) and are not
+  listed here.
+  Owner's call, 2026-10-11, decision page 0 (C7 note).
+- **A stable Aztec line.** v1.0.0 ships on a stable `6.0.0` of the Aztec packages, never a release
+  candidate. The bump follows the [`aztec-update` skill](./.claude/skills/aztec-update/SKILL.md),
+  and the version is read from the pinned `@aztec-labs/*` line in `apps/extension/package.json` at
+  promote time.
+  Owner's call, 2026-10-11, decision page 0 (C7 note).

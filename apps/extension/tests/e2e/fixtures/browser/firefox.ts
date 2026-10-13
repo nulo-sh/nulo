@@ -8,6 +8,7 @@ import { reservePort } from "../../../../scripts/e2e/resolve-ports"
 import { registeredPorts } from "../../port-registry"
 import { type BiDiAttachment, attachPuppeteerOverBiDi } from "./bidi-attach"
 import { LOCATE_BACKGROUND_PAGE, evaluateViaFrameScript } from "./firefox-frame-script"
+import { armPageErrorRelay, checkPageErrorRelay } from "./firefox-page-errors"
 import { observeAndIntercept } from "./firefox-rpc-intercept"
 import type { BrowserDriver, LaunchOptions, LaunchedBrowser, OpenedTab, PxeHostState, VirtualAuthenticator } from "./index"
 import { launchEnv, ownedProcesses, readStartTime } from "../../owned-processes"
@@ -38,7 +39,17 @@ interface LaunchContext {
 	profileDir: string
 	/** The manifest id, which is what `installAddon` returns — NOT the per-profile UUID. */
 	addonId: string
+	attachment: BiDiAttachment
+	/** The latest contexts the silent-close watch reported closed, for a failed wait's report. */
+	reportedClosed: ReportedClose[]
 }
+
+interface ReportedClose {
+	context: string
+	at: number
+}
+
+const REPORTED_CLOSES_KEPT = 20
 
 /** Keyed by the `Browser` rather than carried on the shared launch interface, so nothing
  *  Chrome-side has to know this channel exists. */
@@ -119,26 +130,40 @@ async function launch({ extensionPath, userDataDir, headless, egress }: LaunchOp
 			// it would outlive every release unnoticed, so that is a launch failure, not a later leak.
 			if (ownedProcesses(marker).length < 2)
 				throw new Error("Firefox did not inherit the launch marker, so teardown could not own it")
+			await armPageErrorRelay(session, extensionPath)
 		} catch (err) {
 			await abandonSession(session, record, err)
 		}
 		const addonId = await session.installAddon(extensionPath)
 		const attachment = await attachPuppeteerOverBiDi(session.capabilities, session.sessionId)
 		const { browser } = attachment
-		contexts.set(browser, { session, profileDir, addonId })
-		const stopWatching = watchForSilentCloses(session, attachment)
+		const reportedClosed: ReportedClose[] = []
+		contexts.set(browser, { session, profileDir, addonId, attachment, reportedClosed })
+		const stopWatching = watchForSilentCloses(session, attachment, reportedClosed)
+		let closing: Promise<void> | undefined
 		return {
 			browser,
-			close: async () => {
-				stopWatching()
-				try {
-					// Disconnect first: the BiDi transport is a client of a session the classic channel
-					// owns, and ending the session under it produces a socket error on the way out.
-					await browser.disconnect().catch(() => {})
-					await session.close().catch(() => {})
-				} finally {
-					await releaseLaunch(record)
-				}
+			// Once: the relay's state is readable only while the session is open, and a second close
+			// is the same teardown, so it answers with the first one's outcome.
+			close: () => {
+				closing ??= (async () => {
+					stopWatching()
+					let relay: string | undefined
+					try {
+						const report = await checkPageErrorRelay(session)
+						relay = report.verdict
+						if (report.exceptions.length > 0)
+							console.warn(`[firefox] the add-on's latest exceptions: ${report.exceptions.join("; ")}`)
+						// Disconnect first: the BiDi transport is a client of a session the classic channel
+						// owns, and ending the session under it produces a socket error on the way out.
+						await browser.disconnect().catch(() => {})
+						await session.close().catch(() => {})
+					} finally {
+						await releaseLaunch(record)
+					}
+					if (relay) throw new Error(`Firefox page-error relay: ${relay}`)
+				})()
+				return closing
 			},
 		}
 	} catch (err) {
@@ -229,15 +254,6 @@ function resolveFirefoxBinary(): string {
 }
 
 /**
- * Artifact mode runs the production bundle, where a resolved quote breaks the fresh-wallet fiat
- * specs — the Chrome driver's resolver rule has the full reasoning. Only the price host is sent to
- * a dead port; everything else, the RPC included, stays direct.
- */
-const PRICE_HOST_BLACKHOLE = `data:text/javascript,${encodeURIComponent(
-	'function FindProxyForURL(url, host) { return host === "api.coingecko.com" ? "PROXY 127.0.0.1:1" : "DIRECT" }',
-)}`
-
-/**
  * Every pref the suite launches Firefox with. Exported so a unit test can hold the list to what the
  * wallet's users run with: a pref that masks timer throttling would hide the slowdown the PXE host
  * is placed in the background page to avoid.
@@ -252,12 +268,14 @@ export const FIREFOX_LAUNCH_PREFS = {
 /**
  * Every request for a host other than loopback goes to the guard, with no `DIRECT` after it and no
  * fail-over, so a dead guard fails a request rather than sending it out. The canary name resolves to
- * loopback, which only a direct path would use. All prefs, since `failover_direct` and `localDomains`
- * have no capability form, and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
+ * loopback, which only a direct path would use. A live host, compared exactly, goes direct and
+ * resolves as usual. All prefs, since `failover_direct` and `localDomains` have no capability form,
+ * and kept out of `FIREFOX_LAUNCH_PREFS`, which holds what users run with.
  */
-export function egressGuardPrefs(guardPort: number): Record<string, string | number | boolean> {
+export function egressGuardPrefs(guardPort: number, liveHost?: string): Record<string, string | number | boolean> {
+	const live = liveHost === undefined ? "" : `\n\tif (host === ${JSON.stringify(liveHost)}) return "DIRECT";`
 	const pac = `function FindProxyForURL(url, host) {
-	if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "DIRECT";
+	if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "DIRECT";${live}
 	return "PROXY 127.0.0.1:${guardPort}";
 }`
 	return {
@@ -272,23 +290,19 @@ export function capabilities({
 	profileDir,
 	headless,
 	egress,
-	artifactRun = process.env.NULO_E2E_ARTIFACT_RUN === "1",
 }: {
 	profileDir: string
 	headless: boolean
 	egress?: LaunchOptions["egress"]
-	artifactRun?: boolean
 }): Record<string, unknown> {
-	if (egress && artifactRun) throw new Error("a launch cannot be both behind the egress guard and an artifact run")
 	return {
-		...(artifactRun ? { proxy: { proxyType: "pac", proxyAutoconfigUrl: PRICE_HOST_BLACKHOLE } } : {}),
 		// Asks geckodriver for a BiDi endpoint on the session it owns, which is what makes one
 		// browser drivable from both channels at once.
 		webSocketUrl: true,
 		"moz:firefoxOptions": {
 			binary: resolveFirefoxBinary(),
 			args: ["-profile", profileDir, ...(headless ? ["-headless"] : [])],
-			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort) } : FIREFOX_LAUNCH_PREFS,
+			prefs: egress ? { ...FIREFOX_LAUNCH_PREFS, ...egressGuardPrefs(egress.guardPort, egress.liveHost) } : FIREFOX_LAUNCH_PREFS,
 		},
 	}
 }
@@ -626,18 +640,52 @@ async function waitForTarget(browser: Browser, predicate: (target: Target) => bo
 		if (match) return match
 		await new Promise((resolve) => setTimeout(resolve, 100))
 	}
-	throw new Error(`waitForTarget: no matching target after ${timeout}ms`)
+	const failure = `waitForTarget: no matching target after ${timeout}ms`
+	throw new Error(await withInventory(failure, () => windowInventory(browser), INVENTORY_BUDGET_MS))
 }
 
-async function waitForOpenedUrl(browser: Browser, url: string, timeout: number): Promise<void> {
-	const session = classicSessionFor(browser)
-	const deadline = Date.now() + timeout
-	while (Date.now() < deadline) {
-		if ((await session.windowsWithUrls()).some((window) => window.url === url)) return
-		await new Promise((resolve) => setTimeout(resolve, 250))
+const INVENTORY_BUDGET_MS = 5_000
+
+/** `failure`, then what `read` reports within `budgetMs` or why it reported nothing: a failed wait's
+ *  report never replaces its failure, and never holds it past the budget. */
+export async function withInventory(failure: string, read: () => Promise<string>, budgetMs: number): Promise<string> {
+	let timer: ReturnType<typeof setTimeout> | undefined
+	const deadline = new Promise<string>((resolve) => {
+		timer = setTimeout(() => resolve(`no inventory within ${budgetMs}ms`), budgetMs)
+	})
+	const report = read().catch((err: unknown) => `inventory failed: ${err instanceof Error ? err.message : String(err)}`)
+	try {
+		return `${failure}; ${await Promise.race([report, deadline])}`
+	} finally {
+		clearTimeout(timer)
 	}
-	throw new Error(`waitForOpenedUrl: nothing is showing ${url} after ${timeout}ms`)
 }
+
+/**
+ * Firefox's own windows beside what Puppeteer was told, read after a failed wait: a window BiDi
+ * never announced, a page on the wrong URL and a window the watch reported closed each point at a
+ * different cause. A caller may let a wait expire as an expected outcome and keep driving the
+ * browser, so this switches no window and runs nothing privileged, either of which moves focus; the
+ * add-on's exceptions are reported at the launch's close instead.
+ */
+async function windowInventory(browser: Browser): Promise<string> {
+	const { session, attachment, reportedClosed } = contextFor(browser)
+	const now = Date.now()
+	const windows = await session.listWindows()
+	const pages = browser
+		.targets()
+		.filter((target) => target.type() === "page")
+		.map((target) => target.url())
+	const closed = reportedClosed.map((close) => `${close.context} ${now - close.at}ms ago`)
+	return [
+		`Firefox's windows: ${listed(windows)}`,
+		`BiDi's open contexts: ${listed(attachment.openContexts())}`,
+		`Puppeteer's pages: ${listed(pages)}`,
+		`reported closed by the watch: ${listed(closed)}`,
+	].join("; ")
+}
+
+const listed = (items: readonly string[]): string => (items.length > 0 ? items.join(", ") : "none")
 
 /**
  * The classic handle list, not `targets()`: BiDi announces a tab through its first browsing context
@@ -687,7 +735,7 @@ async function closeTab(session: WebDriverSession, handle: string): Promise<void
  * two consecutive reads is reported closed. A window BiDi has just announced may not be in the
  * handle list yet, so one never seen there is given much longer before it is judged the same way.
  */
-function watchForSilentCloses(session: WebDriverSession, attachment: BiDiAttachment): () => void {
+function watchForSilentCloses(session: WebDriverSession, attachment: BiDiAttachment, reported: ReportedClose[]): () => void {
 	const watch: SilentCloseWatch = { listed: new Set(), misses: new Map() }
 	let reading = false
 	const timer = setInterval(async () => {
@@ -696,7 +744,11 @@ function watchForSilentCloses(session: WebDriverSession, attachment: BiDiAttachm
 		try {
 			const open = attachment.openContexts()
 			const handles = new Set(await session.listWindows())
-			for (const context of silentlyClosed(watch, open, handles)) attachment.reportClosed(context)
+			for (const context of silentlyClosed(watch, open, handles)) {
+				attachment.reportClosed(context)
+				reported.push({ context, at: Date.now() })
+				if (reported.length > REPORTED_CLOSES_KEPT) reported.shift()
+			}
 		} catch {
 			// The session is closing or geckodriver is busy; the next tick reads again.
 		} finally {
@@ -759,7 +811,6 @@ export const firefoxDriver: BrowserDriver = {
 	newPage,
 	openScratchPage,
 	waitForTarget,
-	waitForOpenedUrl,
 	waitForNewTab,
 	interceptRpc: (browser, _extensionId, fromOrigin, mode) => observeAndIntercept(classicSessionFor(browser), fromOrigin, mode),
 	prepareClick,

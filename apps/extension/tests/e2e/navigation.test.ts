@@ -1,7 +1,7 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { clickByTestId, test, openPopup, waitForHash } from "./fixtures/extension"
-import { clickNavTab, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { clickNavTab, openDropdown, openHoldings, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { readActivityScope, seedTransaction } from "./helpers/activity-seeds"
 import { tabAround } from "./helpers/pointer-probes"
 
@@ -72,6 +72,71 @@ test("about page shows version info", async ({ registeredExtension }) => {
 	// fixed labels, safe to text-match.
 	await page.waitForSelector("text/Wallet version", { visible: true, timeout: 5_000 })
 	await page.waitForSelector("text/Aztec version", { visible: true, timeout: 5_000 })
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+test("the dropdown opener waits for a trigger that is not mounted yet and leaves an open menu open", async ({ registeredExtension }) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	await clickNavTab(page, "settings")
+	await waitForHash(page, "#/popup/settings")
+
+	// The opener's own first look for the trigger, made on Settings where Home's trigger is absent,
+	// releases the navigation to Home: the ordering is observed, never left to a clock.
+	await page.evaluate(() => {
+		const probe: { firstFoundNothing?: boolean; navigated?: boolean } = {}
+		const query = Document.prototype.querySelector
+		const queryAll = Document.prototype.querySelectorAll
+		const observe = (selector: string, foundNothing: boolean) => {
+			if (probe.firstFoundNothing !== undefined || !selector.includes("tokens-menu-trigger")) return
+			probe.firstFoundNothing = foundNothing
+			setTimeout(() => {
+				probe.navigated = true
+				window.location.hash = "/popup/general"
+			})
+		}
+		Document.prototype.querySelector = function (this: Document, selector: string) {
+			const found = query.call(this, selector)
+			observe(selector, found === null)
+			return found
+		} as Document["querySelector"]
+		Document.prototype.querySelectorAll = function (this: Document, selector: string) {
+			const found = queryAll.call(this, selector)
+			observe(selector, found.length === 0)
+			return found
+		} as Document["querySelectorAll"]
+		Object.assign(window, {
+			__openerProbe: probe,
+			__restoreQueries: () => {
+				Document.prototype.querySelector = query
+				Document.prototype.querySelectorAll = queryAll
+			},
+		})
+	})
+	const readProbe = () =>
+		page.evaluate(() => ({
+			...(window as unknown as { __openerProbe: { firstFoundNothing?: boolean; navigated?: boolean } }).__openerProbe,
+			hash: window.location.hash,
+		}))
+	try {
+		await openDropdown(page, "tokens-menu-trigger")
+		expect(await readProbe()).toEqual({ firstFoundNothing: true, navigated: true, hash: "#/popup/general" })
+		await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
+
+		await openDropdown(page, "tokens-menu-trigger")
+		const menuOpen = await page.evaluate(() =>
+			document
+				.querySelector('[data-testid="tokens-menu-trigger"]')
+				?.closest("[data-dropdown-open]")
+				?.getAttribute("data-dropdown-open"),
+		)
+		expect(menuOpen, "a second open must not toggle the menu closed").toBe("true")
+		await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
+	} finally {
+		await page.evaluate(() => (window as unknown as { __restoreQueries: () => void }).__restoreQueries())
+	}
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])

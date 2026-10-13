@@ -39,6 +39,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [capture-await-write-sweep](capture-await-write-sweep/plan.md) — completed — a hunt for the capture, await, stale-write race shape, with each hit fenced
 - [chrome-store-launch](chrome-store-launch/plan.md) — completed — every Chrome and Firefox store-submission input built inside the repository
 - [ci-cd](ci-cd/plan.md) — completed — CI bring-up: two long-lived branches with change-detected gates
+- [ci-followups](ci-followups/plan.md) — completed — no Bun auto-install in jobs that install nothing, the move-approval label read live, the Docker Bun pins in the runbook
+- [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
+- [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
 - [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
 - [code-followups-2](code-followups-2/plan.md) — completed — 16 small follow-ups shipped whole and 6 in part across three PRs; 177 parked with reasons
@@ -54,7 +57,9 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [contacts-rename-export-senders](contacts-rename-export-senders/plan.md) — completed — senders renamed to contacts, with the sender flag kept across export and import
 - [contacts-sender-decouple](contacts-sender-decouple/plan.md) — completed — contacts never register or unregister senders, except the explicit adds an import makes
 - [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
+- [dapp-dispatch-hold](dapp-dispatch-hold/plan.md) — completed — hold an app's calls until They match: a per-session hold opened at establishment, released by the session's own hash, dropped on every session end; a lock ends unconfirmed sessions; 32 held calls then -32005
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
+- [dapp-ingress-grants](dapp-ingress-grants/plan.md) — completed — stored grants validated at every deciding reader, other profiles' handshakes kept, refused app sends named and titled by their call, the app's network in the connect window, the app contract ratified (class widening, address checks, strict `chainInfo`, -32005)
 - [dapp-interaction-lock-fix](dapp-interaction-lock-fix/plan.md) — completed — two pending dApp transactions visible at once, the second popup opening on approval
 - [dapp-popup-cancel-focus](dapp-popup-cancel-focus/plan.md) — completed — cancel closes the dApp transaction window, and the Queued card refocuses it
 - [dapp-preexisting-fee](dapp-preexisting-fee/plan.md) — completed — a dApp can name the account's own held Fee Juice as payer, and the wallet routes it
@@ -77,6 +82,12 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity
+- [e2e-followups](e2e-followups/plan.md) — completed — proverless guard on vitest's file list, one page-error normaliser, tokens-menu waits on the dropdown state, the stalled-network spec on Firefox, the title bar's newest observer entry
+- [e2e-followups-2](e2e-followups-2/plan.md) — completed — zombie owners are dead, reverted txs fail the mined wait; the Firefox page-error relay was reverted under its stop rule (#297, #281 stays open)
+- [e2e-followups-3](e2e-followups-3/plan.md) — completed — the Firefox page-error relay re-landed (#281); the lock helper observes its redirect, never reloads; `Invalid window ID` filed (#312)
+- [e2e-followups-4](e2e-followups-4/plan.md) — completed — #308: artifact smoke runs let discovery write a second Nulo sponsor beside the seed; the fee-picker spec holds the node from before the profile exists (#316, #317 filed)
+- [e2e-followups-5](e2e-followups-5/plan.md) — completed — a lock supersedes any activation in flight, so a stale "active" answer cannot unlock the popup (#319); Firefox targets carry an add-on page's committed URL and a failed wait reports without moving focus (#322 stays open)
+- [e2e-followups-6](e2e-followups-6/plan.md) — completed — every window a helper hands back is recorded and each asserting test checks its arrays before a popup clears them (#325); the zombie tests keep their zombie (#326)
 - [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
 - [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
@@ -109,6 +120,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [fix-storage-row-repair](fix-storage-row-repair/plan.md) — completed — profile purges get a raw second pass for rows the codec cannot read
 - [fix-transport-sessions](fix-transport-sessions/plan.md) — completed — transport and dApp-session fixes, each proved by a failing test
 - [fix-ui-storage](fix-ui-storage/plan.md) — completed — UI, storage and composable fixes, each proved by a failing test
+- [followups-6](followups-6/plan.md) — completed — every smoke run behind the egress guard with one declared live spec for the shipped token list (#317); a fixed log category for an unparseable PXE stamp (#315)
 - [frontend-ux-fixes](frontend-ux-fixes/plan.md) — completed — six reported UX fixes in one batch, ordered by risk
 - [furthering-non-network-e2e](furthering-non-network-e2e/plan.md) — completed — the fast non-network e2e suite grown in seven mergeable steps
 - [fuzz-runner](fuzz-runner/plan.md) — completed — the balances-store fuzz test refactored instead of accepting its suppressions
@@ -127,6 +139,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [hd-same-token-concurrent-sends](hd-same-token-concurrent-sends/plan.md) — completed — a popup send that shares chain state with an in-flight send waits for its inclusion instead of failing; every send takes the slot
 - [holdings-loading-sync](holdings-loading-sync/plan.md) — completed — honest Home token loading states and an outcome-based incoming-scan health signal
 - [home-holdings-pin](home-holdings-pin/plan.md) — completed — Home shows three pinned tokens, and a Holdings tab owns the full list
+- [home-onboarding-chrome](home-onboarding-chrome/plan.md) — completed in part — History filtered from a token page, the token page's header, onboarding's stored theme, Account State under Developer, one own window per flow, the store Send frame; the Firefox loopback permission row stopped by its probe
 - [home-refresh](home-refresh/plan.md) — completed — the locked home-screen spec implemented as a light, reversible change
 - [hygiene](hygiene/plan.md) — completed — technical follow-ups that change no screen
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
@@ -210,6 +223,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [restart-lock-truth](restart-lock-truth/plan.md) — completed — a lock after a worker restart reliably locks the popup
 - [restore-stage-extraction](restore-stage-extraction/plan.md) — completed — the coupling between two full-backup restore stages made an explicit value
 - [row-service-method-families](row-service-method-families/plan.md) — completed — pins first and one extraction across the token and network row services
+- [ruleset-hygiene-1](ruleset-hygiene-1/plan.md) — completed — the release runbook moves to a skill; proportion, known limits, a post-implementation standard and an e2e runtime budget
 - [runtime-edges](runtime-edges/plan.md) — completed — three low-severity runtime edge fixes, each pinned
 - [runtime-start-single-flight](runtime-start-single-flight/plan.md) — completed — a single-flight service-worker start replaces the started latch
 - [security-audit-remediation](security-audit-remediation/plan.md) — completed — a security audit's findings fixed in small, separately reviewed phases
@@ -233,6 +247,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
 - [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC
 - [token-prices](token-prices/plan.md) — completed — live token prices and default token seeding
+- [tokens-and-balances](tokens-and-balances/plan.md) — completed — one balance reducer, resumable token adds, adopted profile ids start clean (#271); Holdings paste-to-add, one generic refusal line (#333); a mint figure reads only from a pinned token class (#334)
 - [tools-readiness](tools-readiness/plan.md) — completed — a dApp session widened to a new account without forgetting the app
 - [transport-unification](transport-unification/plan.md) — completed — one template-method RPC design for the background and offscreen transports
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
@@ -247,6 +262,12 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [vue-router-5](vue-router-5/plan.md) — completed — the archived router plugin dropped and vue-router moved to 5
 - [vue-shell-composites](vue-shell-composites/plan.md) — completed — the duplicated Vue shell pieces that survive review extracted, and the rest recorded
 - [wallet-error-resilience](wallet-error-resilience/plan.md) — completed — resync and retry once on stale anchors, then fail with a named error
+- [wallet-followups](wallet-followups/plan.md) — completed — account name checks, the logs window trim, settings reads after a worker restart, the balances fuzz oracle
+- [wallet-followups-2](wallet-followups-2/plan.md) — completed — Send keeps a token after a delete, every service and every line in the logs filter, a failed clear keeps logs live, the fee card's gas retry runs
+- [wallet-followups-3](wallet-followups-3/plan.md) — completed — a Firefox fee pick saved as plain data behind a storage boundary that refuses non-cloneable values; error objects in five integrity log lines
+- [wallet-followups-4](wallet-followups-4/plan.md) — completed — caught errors logged under a named key at 26 sites and a fixed category at 2 migration lines, `getErrorData` deleted, the log scanner refusing it and error `.message`/`.stack` reads
+- [wallet-followups-5](wallet-followups-5/plan.md) — completed — a gone window closes quietly (#312); the log scan reads every logger level method and every call on a line, the column cut rejected in review (#302)
+- [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set

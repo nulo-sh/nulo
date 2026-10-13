@@ -127,7 +127,7 @@ async function exportContacts(deps: ContactIoServices): Promise<void> {
 			await downloadFile({ data: JSON.stringify(exportPayload, null, 2), filename })
 			openToast({ kind: "success", label: "Contacts exported successfully" })
 		} catch (err) {
-			console.error("Export failed:", (err as Error)?.message || err)
+			console.error("Export failed:", { error: err })
 			openToast({ kind: "error", label: "Failed to export contacts" })
 		}
 	} catch (err) {

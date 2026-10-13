@@ -38,7 +38,7 @@ describe("frozen account artifact pins", () => {
 	//    longer match the frozen descriptor (the init-hash tie to the emitted ctor call is the
 	//    complementary binding in instantiation-descriptor.test.ts).
 	test("the live NuloAccount factory is bound to the V6_REGIME artifact + descriptor", async () => {
-		const account = await NuloAccount.new(Fr.fromHexString("0x01"), nullLogger)
+		const account = await NuloAccount.new(Fr.fromHexString("0x01"), nullLogger, "account")
 		const producedClass = await getContractClassFromArtifact(account.artifact)
 		expect(producedClass.id.toString()).toBe(V6_REGIME.classId)
 		expect(V6_REGIME.classId).toBe(FROZEN_ACCOUNT_CLASS_ID)

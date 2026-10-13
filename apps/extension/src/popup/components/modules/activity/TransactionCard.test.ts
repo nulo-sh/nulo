@@ -11,7 +11,7 @@
 
 import { mount } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
-import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
+import { OriginType, TransferType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flushPromises } from "@vue/test-utils"
 import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
@@ -97,6 +97,16 @@ const mountCard = (tx: Record<string, unknown>, props: Record<string, unknown> =
 	mount(TransactionCard, { props: { tx, ...props }, global: { stubs: STUBS, components: { RowAction } } })
 
 describe("modules/activity/TransactionCard (settled)", () => {
+	test.each([
+		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "check-circle", "txt-success"],
+		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "close-circle", "txt-danger"],
+		["dropped", { status: TxStatus.Dropped }, "close-circle", "txt-danger"],
+		["pending", { status: TxStatus.Pending }, "clock-circle", "gray"],
+	])("a %s tx's status icon fills with its state's status text token", (_label, over, name, fill) => {
+		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="activity-status-icon"][data-name="${name}"]`)
+		expect(icon.attributes("data-color")).toBe(fill)
+	})
+
 	test("dApp-initiated transfer renders BOTH transferTypeLabel and originLabel chips (regression pin)", () => {
 		const w = mountCard(dappTransferTx)
 		// transferTypeLabel from call.transfers[0].type
@@ -110,13 +120,23 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
 		const TOKEN = `0x${"0a".repeat(32)}`
 		const RECIPIENT = `0x${"0c".repeat(32)}`
+		const CLASS = field(0xc1a55n)
 		const tokens = [
-			{ id: 1, chainId: CHAIN_IDS.TESTNET, contract: TOKEN, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true },
+			{
+				id: 1,
+				chainId: CHAIN_IDS.TESTNET,
+				contract: TOKEN,
+				classId: CLASS,
+				name: "Test",
+				symbol: "TST",
+				decimals: 18,
+				hasDecimals: true,
+			},
 		]
 		const mintTx = (...amounts: bigint[]) => ({
 			hash: "0xmint1",
 			status: TxStatus.Proposed,
-			calls: amounts.map((a) => ({ contract: TOKEN, method: "mint_to_public", args: [RECIPIENT, field(a)] })),
+			calls: amounts.map((a) => ({ contract: TOKEN, method: "mint_to_public", args: [RECIPIENT, field(a)], classId: CLASS })),
 			origin: { type: OriginType.DAPP, name: "example.dapp.io" },
 		})
 

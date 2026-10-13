@@ -94,6 +94,23 @@ function recorded<T extends object>(target: T, log: string[]): T {
 	})
 }
 
+describe("buildRecentActivityRows — one card per send", () => {
+	const failedWith = (id: string, txHash: string) => op({ id, progress: { stage: "failed", from: "submitting", txHash } })
+	const keys = (journalOps: OperationRecord[], transactions: Tx[]) =>
+		buildRecentActivityRows({ journalOps, transactions, incomingTransfers: [], scope, token: undefined }).map((r) => r.key)
+
+	test("a failed record whose hash a tx row in scope carries is hidden; one with another hash stays", () => {
+		expect(keys([failedWith("same", "0xh1"), failedWith("other", "0xh2")], [tx({ hash: "0xh1" })])).toEqual([
+			"tx:0xh1",
+			"journal:other",
+		])
+	})
+
+	test("a tx row outside the scope hides nothing", () => {
+		expect(keys([failedWith("same", "0xh1")], [tx({ hash: "0xh1", account: "0xother" })])).toEqual(["journal:same"])
+	})
+})
+
 describe("buildRecentActivityRows — scope pins", () => {
 	const keysOf = (p: {
 		transactions?: Tx[]
@@ -149,7 +166,7 @@ describe("buildRecentActivityRows — read order", () => {
 		expect(reads({})).toEqual(["tokenId", "accountAddress", "networkId", "profileId", "blockTimestamp", "discoveredAt", "id"])
 	})
 
-	test("a tx stops at the first failed check, and a kept one reads its key after its scope", () => {
+	test("a tx stops at the first failed check, and a kept one reads its key after its scope, then its hash for the journal match", () => {
 		const reads = (over: Record<string, unknown>) => {
 			const log: string[] = []
 			buildRecentActivityRows({
@@ -163,7 +180,7 @@ describe("buildRecentActivityRows — read order", () => {
 		}
 		expect(reads({ account: "0xother" })).toEqual(["account"])
 		expect(reads({ chainId: 2 })).toEqual(["account", "chainId"])
-		expect(reads({})).toEqual(["account", "chainId", "profileId", "hash", "updatedAt"])
+		expect(reads({})).toEqual(["account", "chainId", "profileId", "hash", "updatedAt", "hash"])
 	})
 })
 

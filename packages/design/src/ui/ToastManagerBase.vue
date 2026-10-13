@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Vendor */
-import { onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 
 /** Composables */
 import { type ToastState, useToast } from "../composables/toast"
@@ -20,6 +20,10 @@ withDefaults(defineProps<{ teleportTo?: string; bottomInset?: number; inColumn?:
 })
 
 const { toast, closeToast, holdToast } = useToast()
+
+const wrap = useTemplateRef<HTMLElement>("wrap")
+/** The open snack's drawn height, 0 while none is open, for a host that places it clear of the page. */
+defineExpose({ snackHeight: () => wrap.value?.getBoundingClientRect().height ?? 0 })
 
 /** The snack the regions render: a copy of the shared toast that lags it while a card is leaving. */
 const shown = ref<ToastState | null>(null)
@@ -118,7 +122,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<Teleport :to="teleportTo" defer>
-		<div :class="[$style.wrap, inColumn && $style.in_column]" :style="{ bottom: `${bottomInset}px` }">
+		<div ref="wrap" :class="[$style.wrap, inColumn && $style.in_column]" :style="{ bottom: `${bottomInset}px` }">
 			<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region">
 				<Transition
 					mode="out-in"
@@ -160,17 +164,18 @@ onBeforeUnmount(() => {
 					@after-leave="onAfterLeave"
 				>
 					<div
-						v-if="shown && shown.kind === 'error'"
+						v-if="shown && shown.kind !== 'success'"
 						:key="shown.id"
-						:class="[$style.card, $style.error]"
+						:class="[$style.card, shown.kind === 'error' && $style.error]"
 						data-testid="snackbar"
-						data-kind="error"
+						:data-kind="shown.kind"
 						@pointermove="onPointerMove"
 						@mouseleave="hovered = false"
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon name="close-circle" size="16" color="red" aria-hidden="true" />
+						<Icon v-if="shown.kind === 'info'" name="clock-circle" size="16" color="secondary" aria-hidden="true" />
+						<Icon v-else name="close-circle" size="16" color="red" aria-hidden="true" />
 						<div :class="$style.text">
 							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>

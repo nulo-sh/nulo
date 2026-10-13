@@ -50,7 +50,7 @@ function makeHarness() {
 
 /** The service parses the RPC wire form (hex strings), so serialize the real instance first. */
 async function genuineInstance(): Promise<Record<string, unknown>> {
-	const account = await NuloAccount.new(seed, noopLogger)
+	const account = await NuloAccount.new(seed, noopLogger, "account")
 	const instance = (account as unknown as { instance: ContractInstanceWithAddress }).instance
 	return JSON.parse(jsonStringify(instance))
 }

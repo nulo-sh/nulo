@@ -14,6 +14,9 @@ export interface UseScopedTokensOptions {
 export interface UseScopedTokensResult {
 	/** The scope's tokens; empty while the scope is unknown or changing. */
 	tokens: Ref<TokenInfo[]>
+	/** Whether the current scope's first read has settled, landed or failed: until then an empty
+	 *  `tokens` says nothing about which tokens exist. False again on a scope change. */
+	loaded: Readonly<Ref<boolean>>
 	tokenById: (id: number | undefined) => TokenInfo | undefined
 	/** Re-read for the current scope. A failed read keeps the current list. */
 	reload: () => Promise<void>
@@ -27,6 +30,7 @@ export interface UseScopedTokensResult {
  */
 export function useScopedTokens({ tokenService, scope }: UseScopedTokensOptions): UseScopedTokensResult {
 	const tokens = ref<TokenInfo[]>([])
+	const loaded = ref(false)
 	// A read superseded by a later one, or by a scope change, never lands.
 	const fence = createRunFence()
 	let disposed = false
@@ -43,10 +47,12 @@ export function useScopedTokens({ tokenService, scope }: UseScopedTokensOptions)
 		} catch (error) {
 			// A port that cannot open rejects at once; the list is a label lookup, so keep what it holds.
 			console.debug("token lookup failed", { error })
+			if (!disposed && isCurrent()) loaded.value = true
 			return
 		}
 		if (disposed || !isCurrent()) return
 		tokens.value = fetched
+		loaded.value = true
 	}
 
 	const scopeKey = () => {
@@ -58,6 +64,7 @@ export function useScopedTokens({ tokenService, scope }: UseScopedTokensOptions)
 		scopeKey,
 		() => {
 			tokens.value = []
+			loaded.value = false
 			void reload()
 		},
 		{ flush: "sync" },
@@ -73,5 +80,5 @@ export function useScopedTokens({ tokenService, scope }: UseScopedTokensOptions)
 		tokenService.onTokenAdded.remove(reload)
 	}
 
-	return { tokens, tokenById, reload, dispose }
+	return { tokens, loaded, tokenById, reload, dispose }
 }

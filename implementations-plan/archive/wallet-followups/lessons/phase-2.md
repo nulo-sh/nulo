@@ -1,0 +1,6 @@
+# Phase 2: #257 and #256, account names
+
+- New account: only the submit gate changed, to `!storedNameKey(name.value)`. Edit account: the record's validator (`sameStoredName` against every account but the edited one, by address), New account's `#right` `FieldWarning` markup, a gate that refuses a blank key (D-orch-3) and any error, and `nameTerm.value.trim()` on save. `isStartedEditing` stays unread, as before; removing it is outside the change.
+- Tests: New account gains one refused-class case (spaces: Create disabled, Enter creates nothing). Edit account's fixture now holds a second account (reset in `beforeEach`), its `Input` stub renders `#right`, `Transition` is stubbed as in the New account test; four pins (trimmed duplicate warns and blocks Save and Enter; spaces block Save; an outer-spaced name saves trimmed; a name another account already has warns as the form opens, D-orch-4) and one control (a unique name saves).
+- Red/green: against the base copies of both components, the five pins fail and the control plus the existing six cases pass (5 failed, 6 passed).
+- Gate (2026-10-11): `bun run lint` 0 (after a formatter fix on the validator's line), `bun run typecheck:all` 0, both popup test files 11 passed; smoke `tests/e2e/accounts.test.ts` on Chrome at retry 0 against the armed build: 8 passed.

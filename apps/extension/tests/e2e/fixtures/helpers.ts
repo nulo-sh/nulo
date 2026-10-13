@@ -3,7 +3,7 @@ import { wrapParams } from "@nulo/extension-messaging/utils"
 import type { ElementHandle, Page } from "puppeteer"
 import { defaultProfileName } from "@/utils/profile-name"
 import { pinnedTokensKey } from "@/utils/profile-ui-keys"
-import { reloadExtensionPage } from "./browser"
+import { prepareClick, reloadExtensionPage } from "./browser"
 import { TEST_PASSWORD } from "./constants"
 import { clickByTestId, clickSelector, expectNameFieldPrefill, replaceInputValue, waitForHash, withTimeoutMessage } from "./extension"
 import { type SendAction, submitSend } from "./send-page"
@@ -26,16 +26,14 @@ import { type SendAction, submitSend } from "./send-page"
 
 // ── Auth ───────────────────────────────────────────────────────────────
 
-/** Lock the wallet via the Header lock button. Navigates to auth page.
+/** Lock the wallet via the Header lock button, then wait for the lock screen.
  *
  *  Only for a wallet with no approved send running: with one running, the
  *  button asks first, and the test drives that dialog itself.
  *
- *  The handler awaits one journal read, then sets `appStore.isLogined = false`
- *  and fires `managers.profile.lockActiveProfile()` without awaiting it; an
- *  app.vue watcher reacts to the isLogined change and pushes the router.
- *  Under vitest worker pressure the SW round-trip can take 5-10s before
- *  the navigation lands. */
+ *  The chip awaits the session handle and a read of the running sends, marks the popup locked and
+ *  sends the lock without awaiting it; the background's lock event then routes the popup to
+ *  `/popup/auth`. */
 export async function lockWallet(page: Page): Promise<void> {
 	// Wait for the lock control to be mounted BEFORE clicking — a bare
 	// `querySelector(...)?.click()` silently no-ops if the header hasn't
@@ -71,15 +69,10 @@ export async function lockThroughConfirmDialog(page: Page): Promise<ConfirmDialo
 
 /** Wait for a lock, however it was triggered, to land: the session record gone, then the popup on `/popup/auth`. */
 export async function waitForLockScreen(page: Page, timeoutMs = 60_000): Promise<void> {
-	// Assert the AUTHORITATIVE lock — the session record removed from
-	// chrome.storage.session (frozen key SESSION_STORAGE_ROOT) — not the UI
-	// auto-redirect. The redirect is event-driven (onActiveProfileChanged(undefined)
-	// → app.vue → router.push("/popup/auth")) and can be bounced by the route
-	// guard when a stale post-password-change `bootstrapActiveProfile` flips
-	// `isLogined` back to true AFTER the lock. That's a real product race (the
-	// session IS cleared, only the UI redirect loses the race), to be fixed in the auth/session
-	// code; do NOT paper over it in product code from here. Waiting on storage is strictly
-	// stronger than the redirect check.
+	// The session record leaving chrome.storage.session is the authoritative lock; the popup lands
+	// after it, routed by the lock event or, on a page opened after the lock, by its boot.
+	// Observed, never forced: a reload would abandon that route's load in flight, which Firefox
+	// rejects, and would pass a redirect that never lands.
 	await page.waitForFunction(
 		async () => {
 			const r = await chrome.storage.session.get("nulo:core:session")
@@ -87,11 +80,6 @@ export async function waitForLockScreen(page: Page, timeoutMs = 60_000): Promise
 		},
 		{ timeout: timeoutMs },
 	)
-	// If the redirect lost the race, reload: a fresh popup derives the locked
-	// state from storage and routes to /popup/auth (the real reopen path).
-	if (!(await page.evaluate(() => window.location.hash.includes("/popup/auth")))) {
-		await reloadExtensionPage(page)
-	}
 	await page.waitForFunction(() => window.location.hash.includes("/popup/auth"), { timeout: 15_000 })
 }
 
@@ -144,8 +132,8 @@ export async function ensureUnlocked(
 	// from a lone DOM marker — each of those lies in one direction. `app.vue`
 	// pushes `/popup/auth` BEFORE `initNetworks()`/`initAccount()` finish and
 	// `openPopup` returns inside that window, so an UNLOCKED wallet transiently
-	// renders the password field; `header-lock` tracks `isLogined`, which
-	// lockWallet documents as stale-TRUE after an authoritative lock.
+	// renders the password field; `header-lock` tracks `isLogined`, which the
+	// lock chip clears before the background drops the session.
 	//
 	// The record's mere PRESENCE is not enough either: `SessionManager.restore`
 	// deliberately leaves it in place for a passkey profile (WebAuthn needs a
@@ -312,17 +300,15 @@ export async function ensureUnlocked(
 }
 
 /**
- * Model the realistic post-import recovery. The P0-proven wedge: an MV3 service
- * worker restart mid-import drops the in-memory master secret, so in strict mode
- * (the default) the just-imported profile is locked until the user reopens and
- * unlocks. This reproduces that recovery deterministically:
+ * Model the realistic post-import recovery: an MV3 service worker restart mid-import
+ * drops the in-memory master secret, so in strict mode (the default) the just-imported
+ * profile is locked until the user reopens and unlocks. This reproduces that recovery
+ * deterministically, in one document:
  *
- *   lock  — drops the session record from chrome.storage.session, exactly as a
- *           worker restart drops the in-memory master;
- *   reopen via the auth route (lockWallet reloads a fresh popup that derives the
- *           locked state from storage — the real reopen path);
- *   unlock — re-derives the master, which re-provisions the encrypted per-chain
- *           PXE store key and boots the chain runtime.
+ *   lock   — drops the session record from chrome.storage.session, exactly as a
+ *            worker restart drops the in-memory master;
+ *   unlock — on the auth screen the lock lands on: re-derives the master, which
+ *            re-provisions the encrypted per-chain PXE store key and boots the chain runtime.
  *
  * Asserts the wallet lands back on /popup/general. Callers then do a
  * store-dependent read (account address / on-chain balance) to prove the
@@ -577,14 +563,14 @@ export async function navigateToSettings(page: Page, ...segments: string[]): Pro
 	}
 }
 
-/** Open Settings → Developer → Account State → `section`. Account State keeps its `advanced/` URL
- *  and its `setting-nav-advanced-account-state-*` ids, which `navigateToSettings` cannot build. */
+/** Open Settings → Developer → Account State → `section`. Account State keeps its
+ *  `setting-nav-advanced-account-state-*` ids, which `navigateToSettings` cannot build. */
 export async function openAccountState(page: Page, section: "notes" | "authwits" | "contracts" | "senders"): Promise<void> {
 	await navigateToSettings(page, "developer")
 	await clickByTestId(page, "setting-nav-advanced-account-state")
-	await waitForHash(page, "#/popup/settings/advanced/account-state", 5_000)
+	await waitForHash(page, "#/popup/settings/developer/account-state", 5_000)
 	await clickByTestId(page, `setting-nav-advanced-account-state-${section}`)
-	await waitForHash(page, `#/popup/settings/advanced/account-state/${section}`, 5_000)
+	await waitForHash(page, `#/popup/settings/developer/account-state/${section}`, 5_000)
 }
 
 // ── Network ────────────────────────────────────────────────────────────
@@ -917,28 +903,89 @@ export async function deleteContact(page: Page, name: string): Promise<void> {
 	await page.waitForFunction((sel: string) => !document.querySelector(sel), { timeout: 5_000 }, rowSelector)
 }
 
+// ── Dropdown ───────────────────────────────────────────────────────────
+
+/**
+ * Opens the dropdown whose trigger carries `triggerTestId` and resolves once the dropdown's own
+ * state (`data-dropdown-open`) reads open. It waits for a visible trigger and clicks at most once:
+ * `DropdownRoot` toggles on every trigger click, so a second click would close the menu, and a menu
+ * already open is left open.
+ */
+export async function openDropdown(page: Page, triggerTestId: string): Promise<void> {
+	await prepareClick(page)
+	await withTimeoutMessage(page.waitForFunction(openTrigger, { timeout: 10_000 }, triggerTestId, true), () =>
+		dropdownDiagnostic(page, triggerTestId, "no visible trigger"),
+	)
+	await withTimeoutMessage(page.waitForFunction(openTrigger, { timeout: 5_000 }, triggerTestId, false), () =>
+		dropdownDiagnostic(page, triggerTestId, "the menu never read open"),
+	)
+}
+
+/** Page side: the state read and the click pick one trigger by `clickByTestId`'s rule, so they never disagree. */
+function openTrigger(id: string, click: boolean): boolean {
+	const trigger = [...document.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)]
+		.filter((el) => {
+			if ((el as HTMLButtonElement).disabled || el.getAttribute("aria-disabled") === "true") return false
+			const style = window.getComputedStyle(el)
+			if (style.display === "none" || style.visibility === "hidden") return false
+			const rect = el.getBoundingClientRect()
+			return rect.width > 0 && rect.height > 0
+		})
+		.at(-1)
+	if (!trigger) return false
+	const open = trigger.closest("[data-dropdown-open]")?.getAttribute("data-dropdown-open") === "true"
+	if (click && !open) trigger.click()
+	return click || open
+}
+
+/** The page's state at a dropdown wait's timeout, so a red names which stage stalled and why. */
+async function dropdownDiagnostic(page: Page, triggerTestId: string, stage: string): Promise<string> {
+	const state = await page.evaluate((id: string) => {
+		const triggers = [...document.querySelectorAll(`[data-testid="${id}"]`)]
+		return {
+			triggers: triggers.length,
+			open: triggers.map((el) => el.closest("[data-dropdown-open]")?.getAttribute("data-dropdown-open") ?? null),
+			hash: window.location.hash,
+			visibility: document.visibilityState,
+			focused: document.hasFocus(),
+		}
+	}, triggerTestId)
+	return `${triggerTestId}: ${stage}: ${JSON.stringify(state)}`
+}
+
 // ── Token ──────────────────────────────────────────────────────────────
 
 /** Import a token by contract address via the NewTokenPopup. */
 export async function importToken(page: Page, contractAddress: string): Promise<void> {
-	// Open tokens dropdown menu
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-trigger"]') as HTMLElement)?.click()
-	})
-	// The "Import token" item teleports into the dropdown layer after the
-	// menu opens; wait for it before clicking so we don't no-op on an
-	// unmounted target.
-	await page.waitForSelector('[data-testid="tokens-menu-import"]', { visible: true, timeout: 2_000 })
-
-	// Click "Import token"
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-import"]') as HTMLElement)?.click()
-	})
+	await clickTokensMenuItem(page, "tokens-menu-import")
 
 	// Enter contract address
 	await page.waitForSelector('[data-testid="token-address-input"]', { visible: true, timeout: 5_000 })
 	await replaceInputValue(page, '[data-testid="token-address-input"]', contractAddress)
+	await submitNewTokenPopup(page)
+}
 
+export async function waitForNewTokenAddress(page: Page, address: string): Promise<void> {
+	await page.waitForFunction(
+		(want: string) => document.querySelector<HTMLInputElement>('[data-testid="token-address-field"]')?.value === want,
+		{ timeout: 5_000 },
+		address,
+	)
+}
+
+/** Submits the open New token popup, its address already entered, and waits for the success toast. */
+export async function submitNewTokenPopup(page: Page): Promise<void> {
+	await clickNewTokenSubmit(page)
+
+	// Wait for success toast. The popup now blocks until the active account's
+	// initial balance projection completes (or 30s timeout in the popup
+	// itself), then fires the toast. Generous timeout because under sustained
+	// network-suite load the flow goes through PXE metadata fetch + storage
+	// write before the projector run.
+	await waitForToast(page, "Token added", 60_000)
+}
+
+export async function clickNewTokenSubmit(page: Page): Promise<void> {
 	// Wait for parsing to complete (button text changes from "Awaiting..." to
 	// "Import new token"). The wallet calls PXE to fetch token metadata,
 	// which is slow under sustained network-suite load — 60s is the safe
@@ -955,13 +1002,6 @@ export async function importToken(page: Page, contractAddress: string): Promise<
 	// Click import
 	await page.waitForSelector('[data-testid="import-token-button"]', { visible: true })
 	await clickByTestId(page, "import-token-button")
-
-	// Wait for success toast. The popup now blocks until the active account's
-	// initial balance projection completes (or 30s timeout in the popup
-	// itself), then fires the toast. Generous timeout because under sustained
-	// network-suite load the flow goes through PXE metadata fetch + storage
-	// write before the projector run.
-	await waitForToast(page, "Token added", 60_000)
 }
 
 /** Click "Refresh balances" from the token dropdown menu.
@@ -972,13 +1012,15 @@ export async function importToken(page: Page, contractAddress: string): Promise<
  *  (e.g. the fixture loops in extension.ts and the input-enabled wait inside
  *  sendTransfer), so we don't add a defensive trailing sleep here. */
 export async function refreshBalances(page: Page): Promise<void> {
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-trigger"]') as HTMLElement)?.click()
-	})
-	await page.waitForSelector('[data-testid="tokens-menu-refresh"]', { visible: true, timeout: 2_000 })
-	await page.evaluate(() => {
-		;(document.querySelector('[data-testid="tokens-menu-refresh"]') as HTMLElement)?.click()
-	})
+	await clickTokensMenuItem(page, "tokens-menu-refresh")
+}
+
+/** Opens Home's tokens menu and clicks `item`, which teleports into the dropdown layer once open. */
+async function clickTokensMenuItem(page: Page, item: string): Promise<void> {
+	await openDropdown(page, "tokens-menu-trigger")
+	await withTimeoutMessage(clickByTestId(page, item, 2_000), () =>
+		dropdownDiagnostic(page, "tokens-menu-trigger", `${item} never showed`),
+	)
 }
 
 /** Read the displayed balance text from BalanceView. */
@@ -1405,7 +1447,7 @@ export async function waitForToast(
 	page: Page,
 	text: string,
 	timeout = 5_000,
-	opts: { kind?: "success" | "error" } = {},
+	opts: { kind?: "success" | "info" | "error" } = {},
 ): Promise<ElementHandle<Element>> {
 	const handle = await page.waitForFunction(
 		(t: string, kind: string | null) => {
@@ -1496,25 +1538,7 @@ export async function setInputAndBlur(page: Page, selector: string, value: strin
  *  and then waits on an option that is about to disappear. Gate on the
  *  dropdown's OWN state (`data-dropdown-open`, synchronous with `isOpen`). */
 export async function setTheme(page: Page, mode: "system" | "light" | "dark"): Promise<void> {
-	const readOpen = () =>
-		page.evaluate(
-			() =>
-				document
-					.querySelector('[data-testid="theme-trigger"]')
-					?.closest("[data-dropdown-open]")
-					?.getAttribute("data-dropdown-open") === "true",
-		)
-	if (!(await readOpen())) {
-		await clickByTestId(page, "theme-trigger")
-		await page.waitForFunction(
-			() =>
-				document
-					.querySelector('[data-testid="theme-trigger"]')
-					?.closest("[data-dropdown-open]")
-					?.getAttribute("data-dropdown-open") === "true",
-			{ timeout: 5_000 },
-		)
-	}
+	await openDropdown(page, "theme-trigger")
 	await clickByTestId(page, `theme-${mode}-btn`)
 	if (mode === "system") {
 		// system mode resolves to either "dark" or "light" via prefers-color-scheme

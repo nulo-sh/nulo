@@ -1,6 +1,6 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
-import { openPlayground } from "../fixtures/playground"
+import { openPlayground, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { waitForPopup, approveConnect, approveVerify } from "../fixtures/popups"
 import { switchToLocalNetwork } from "../fixtures/helpers"
 import { openPopup, waitForHash } from "../fixtures/extension"
@@ -56,6 +56,10 @@ for (const alwaysTrust of [false, true]) {
 				// No discover popup, no verify popup — should reach connected directly.
 				await clickByTestId(dappPage, "pg-btn-connect")
 				await dappPage.waitForSelector('[data-testid="pg-status"][data-status="connected"]', { timeout: 30_000 })
+				// A trusted reconnect shows no check, so nothing holds the app's first call.
+				const seq = await snapshotResultSeq(dappPage)
+				await clickByTestId(dappPage, "pg-btn-getChainInfo")
+				expect((await waitForPgResult(dappPage, "getChainInfo", seq, 30_000)).status).toBe("ok")
 
 				// Sanity: assert no verify popup ever opened during the reconnect.
 				const verifyOpened = registeredExtensionPerTest.browser.targets().some((t) => t.url().includes("#/windows/verify"))

@@ -8,7 +8,6 @@ import { documentLogger } from "@/wallet/services/logger/client"
 import { ProfileServiceClient } from "@/wallet/services/profile/client"
 import { createPxeOffscreen } from "@nulo/aztec-runtime/offscreen/entry"
 import { ProductionPxeFactory, createProvePhaseSink } from "@nulo/aztec-runtime/pxe"
-import { getErrorData } from "@nulo/wallet-core/utils"
 import { OFFSCREEN_READY_MESSAGE, OFFSCREEN_PONG, shouldRespondPong } from "@/wallet/utils/offscreen"
 import { isClientDisconnectRejection } from "@nulo/extension-messaging/errors"
 
@@ -48,7 +47,7 @@ self.onunhandledrejection = (e: PromiseRejectionEvent) => {
 			logger.log("pxe", LogLevel.Debug, "background port closed; pending RPC rejected (benign cascade)")
 			return
 		}
-		logger.log("pxe", LogLevel.Error, getErrorData(e.reason))
+		logger.log("pxe", LogLevel.Error, "unhandled rejection", { error: e.reason })
 	} catch {
 		// Logger itself may fail if SW is dead — don't cascade
 	}

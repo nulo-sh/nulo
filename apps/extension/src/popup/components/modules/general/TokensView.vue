@@ -15,6 +15,7 @@ import { OperationJournalServiceClient } from "@/wallet/services/operation-journ
 import { PriceServiceClient } from "@/wallet/services/price/client"
 
 /** Utils */
+import { journalRecordInScope } from "@/utils/activity-rows"
 import { stringCompare } from "@/utils/string"
 import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { orderTokenRows } from "@/utils/token-order"
@@ -59,16 +60,11 @@ const tokenImports = ref([])
 // row visibly disappears even if no new journal event fires.
 const tickNow = useTicker(5_000)
 const visibleTokenImports = computed(() => {
-	const account = appStore.account?.address
+	const scope = { accountAddress: appStore.account?.address, profileId: appStore.profile?.id, networkId: appStore.network?.id }
 	const now = tickNow.value ?? Date.now()
 	return tokenImports.value.filter((op) => {
 		if (op.kind !== TOKENS_VIEW_KIND) return false
-		if (op.accountAddress !== account) return false
-		// Two profiles can hold the SAME address (one mnemonic imported twice): the profile
-		// compare keeps one profile's import from rendering under the other.
-		if (op.profileId && appStore.profile?.id && op.profileId !== appStore.profile.id) return false
-		// The same address exists on every network, and so can a contract address.
-		if (op.networkId && op.networkId !== appStore.network?.id) return false
+		if (!journalRecordInScope(op, scope)) return false
 		// In-flight
 		if (op.terminalAt === null) return true
 		// Recently-failed retention window so the user sees the reason.
@@ -202,9 +198,9 @@ const withTaskFlags = (tb) => ({
 const tokenBalanceService = new TokenBalanceServiceClient()
 const {
 	fetchTokenBalances,
-	markDirty,
-	inActiveScope,
+	onBalanceAdded,
 	onBalanceUpdated,
+	onBalanceDeleted,
 	dispose: disposeBalances,
 } = useTokenBalanceSnapshot({
 	client: tokenBalanceService,
@@ -220,20 +216,6 @@ const {
 tokenBalanceService.onTokenBalanceAdded.add(onBalanceAdded)
 tokenBalanceService.onTokenBalanceUpdated.add(onBalanceUpdated)
 tokenBalanceService.onTokenBalanceDeleted.add(onBalanceDeleted)
-function onBalanceAdded(tb) {
-	if (!inActiveScope(tb)) return
-	markDirty()
-	if (tokenBalances.value.some((_tb) => _tb.id === tb.id)) return
-
-	tokenBalances.value.push(withTaskFlags(tb))
-}
-function onBalanceDeleted(tb) {
-	if (inActiveScope(tb)) markDirty()
-	const idx = tokenBalances.value.findIndex((_tb) => _tb.id === tb.id)
-	if (idx !== -1) {
-		tokenBalances.value.splice(idx, 1)
-	}
-}
 
 const journalService = new OperationJournalServiceClient()
 journalService.onOperationAdded.add(onJournalAdded)

@@ -16,6 +16,7 @@
  */
 
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
+import { journalRecordInScope } from "./activity-rows"
 
 /** Stages where a send is still deciding what to build, or has not yet been broadcast. */
 const IN_FLIGHT_STAGES: ReadonlySet<string> = new Set(["queued", "pending", "simulating", "proving", "submitting"])
@@ -56,21 +57,14 @@ export interface InFlightScope {
 /**
  * True when the CURRENTLY VIEWED account has a popup send in flight.
  *
- * Scoped to the account and network on screen, not merely the profile, because
- * the block must line up with the cancel affordance: in-flight cards render for
- * the active account + network, so a profile-wide block could refuse the switch
- * over a record the user cannot see — and therefore cannot cancel.
+ * Scoped by the rule the in-flight cards render by, not merely the profile, because
+ * the block must line up with the cancel affordance: a profile-wide block could
+ * refuse the switch over a record the user cannot see — and therefore cannot cancel.
  *
  * Records that name no account (legacy) are ignored rather than treated as
  * blocking, for the same reason: nothing renders for them.
  */
 export function hasInFlightSend(ops: readonly OperationRecord[], scope: InFlightScope): boolean {
-	const { profileId, accountAddress, networkId } = scope
-	if (!profileId || !accountAddress) return false
-	return ops.some((op) => {
-		if (op.profileId !== profileId || !isInFlightSend(op)) return false
-		if (op.accountAddress !== accountAddress) return false
-		// Tolerant on a record that predates network scoping; strict when it has one.
-		return !op.networkId || !networkId || op.networkId === networkId
-	})
+	if (!scope.profileId || !scope.accountAddress) return false
+	return ops.some((op) => isInFlightSend(op) && journalRecordInScope(op, scope))
 }

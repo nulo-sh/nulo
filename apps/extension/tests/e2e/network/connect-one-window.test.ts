@@ -5,7 +5,14 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveVerify, rejectCapabilities, waitForPopup } from "../fixtures/popups"
+import {
+	approveVerify,
+	type CreatedWindow,
+	recordCreatedWindows,
+	rejectCapabilities,
+	waitForPopup,
+	waitForPopupClosed,
+} from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
 import { tokenColor } from "../helpers/pointer-probes"
 
@@ -13,33 +20,24 @@ import { tokenColor } from "../helpers/pointer-probes"
  * A new connection's emoji check shows in the connect window itself: Allow keeps that window, the
  * check replaces the connect page, and no other window opens until the dApp asks for permissions.
  * The swap is announced in the wallet's own words, and a held Enter at Allow does not carry through
- * the check.
+ * the check. The line under the app names the network the app asked for, before Allow and while it
+ * connects.
  */
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
-
-type Created = { id?: number; type?: string }
 
 const ALLOW = '[data-testid="discover-allow-btn"]'
 const GRID = '[data-testid="verify-emoji-grid"]'
 const STEP_BAR = '[data-testid="connect-step-bar"]'
 const TRUST = '[data-testid="verify-always-trust-toggle"] [data-testid="toggle-switch"]'
 const REPEATS_KEY = "e2e:enter-repeats"
+const ACTION = '[data-testid="discover-action"]'
+const ACTION_KEY = "e2e:action-lines"
 const ANNOUNCE = '[data-testid="verify-announce"][role="status"][aria-live="polite"]'
 const ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-/** Every window the browser creates from now on, as an extension page's listener sees it. */
-async function recordCreatedWindows(control: Page): Promise<() => Promise<Created[]>> {
-	await control.evaluate(() => {
-		const w = window as unknown as { __created: Created[] }
-		w.__created = []
-		chrome.windows.onCreated.addListener((win) => w.__created.push({ id: win.id, type: win.type }))
-	})
-	return () => control.evaluate(() => (window as unknown as { __created: Created[] }).__created)
-}
 
 /** Each Enter keydown's `repeat`, kept in `sessionStorage` so a reload between the pages loses none. */
 async function recordEnterRepeats(page: Page): Promise<void> {
@@ -57,6 +55,24 @@ async function recordEnterRepeats(page: Page): Promise<void> {
 	}, REPEATS_KEY)
 }
 
+/** Each distinct text the line under the app shows from now on, kept like the Enter repeats: the
+ *  line after Allow lasts only until the check replaces the page. */
+async function recordActionLines(page: Page): Promise<void> {
+	await page.evaluate(
+		(key, sel) => {
+			const read = () => document.querySelector(sel)?.textContent?.trim() ?? ""
+			sessionStorage.setItem(key, JSON.stringify([read()]))
+			new MutationObserver(() => {
+				const text = read()
+				const seen = JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[]
+				if (text && seen.at(-1) !== text) sessionStorage.setItem(key, JSON.stringify([...seen, text]))
+			}).observe(document.body, { subtree: true, childList: true, characterData: true })
+		},
+		ACTION_KEY,
+		ACTION,
+	)
+}
+
 async function showsCheck(page: Page): Promise<boolean> {
 	return page
 		.evaluate((grid) => location.hash.startsWith("#/windows/verify") && document.querySelector(grid) !== null, GRID)
@@ -67,7 +83,7 @@ async function showsCheck(page: Page): Promise<boolean> {
 }
 
 /** Hold Enter at the focused Allow until the page shows the check, and a few repeats into it. */
-async function holdEnterThroughAllow(page: Page, created: () => Promise<Created[]>): Promise<void> {
+async function holdEnterThroughAllow(page: Page, created: () => Promise<CreatedWindow[]>): Promise<void> {
 	const deadline = Date.now() + 30_000
 	try {
 		await page.keyboard.down("Enter")
@@ -101,11 +117,6 @@ test.skipIf(!aztecConfig)(
 		const discoverP = waitForPopup(ctx, "discover", { timeout: 30_000 })
 		await clickByTestId(dapp, "pg-btn-connect")
 		const page = await discoverP
-		const pageErrors: string[] = []
-		// "Client disconnected" is the benign port-close cascade the fixtures filter too.
-		page.on("pageerror", (err) => {
-			if (!(err as Error).message?.includes("Client disconnected")) pageErrors.push(String(err))
-		})
 		const connectWindow = await page.evaluate(async () => (await chrome.windows.getCurrent()).id)
 		await page.waitForFunction(
 			(sel) => {
@@ -120,6 +131,7 @@ test.skipIf(!aztecConfig)(
 		expect(emptyHalf, "step 1's empty half").toBe(await tokenColor(page, "--nulo-track"))
 
 		await recordEnterRepeats(page)
+		await recordActionLines(page)
 		await page.evaluate(() => {
 			;(window as unknown as { __connectDocument?: boolean }).__connectDocument = true
 		})
@@ -129,6 +141,8 @@ test.skipIf(!aztecConfig)(
 
 		const repeats = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]") as boolean[], REPEATS_KEY)
 		expect(repeats, "the driver sent no repeat, so the held Enter proved nothing").toContain(true)
+		const actionLines = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[], ACTION_KEY)
+		expect(actionLines).toEqual(["wants to connect on Local Network", "Connecting on Local Network"])
 		const sameDocument = await page.evaluate(() => (window as unknown as { __connectDocument?: boolean }).__connectDocument === true)
 		console.log(`[connect-one-window] ${BROWSER}: the check loaded ${sameDocument ? "in the same document" : "by a reload"}`)
 
@@ -154,7 +168,8 @@ test.skipIf(!aztecConfig)(
 			header: { account: "No account shared", network: "Local Network" },
 			error: null,
 		})
-		expect(pageErrors).toEqual([])
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 		await page.waitForFunction(
 			(sel: string, want: string) => document.querySelector(sel)?.textContent === want,
 			{ timeout: 5_000, polling: 50 },
@@ -185,5 +200,8 @@ test.skipIf(!aztecConfig)(
 		])
 		await rejectCapabilities(caps)
 		expect((await waitForPgResult(dapp, "requestCapabilities", seq, 30_000)).status).toBe("error")
+		await waitForPopupClosed(caps)
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 	},
 )

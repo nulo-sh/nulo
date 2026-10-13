@@ -3,6 +3,7 @@ import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { toRestoreError } from "@/utils/restore-error"
 import type { BrowserApi, StorageArea } from "@nulo/wallet-core/ports"
+import { profileUiKeys } from "@/utils/profile-ui-keys"
 import type { IConfig } from "@/wallet/config"
 import { LogLevel, type ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -60,6 +61,7 @@ import {
 import { RestorePendingRepository } from "./restore-pending-repository"
 import { TombstoneRepository } from "./tombstone-repository"
 import { ProfileDeletionState, type ExecutionFence } from "./profile-deletion-state"
+import { WalletLockedError } from "./wallet-locked-error"
 import type { ProfileDeletionDelegate } from "../profile-deletion/types"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "../account-integrity/blocked-repository"
 import type { AccountIntegrityBlocked, AccountIntegrityDelegate } from "../account-integrity/types"
@@ -243,6 +245,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	private readonly integrityStamps: AccountIntegrityVerifiedStampRepository
 	/** Restore-in-progress markers (torn-import detection at the unlock gate). */
 	private readonly restorePending: RestorePendingRepository
+	private readonly local: StorageArea
 
 	/**
 	 * @param browserApi Optional. Tests pass `FakeBrowserApi` so the
@@ -253,12 +256,11 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	public constructor(config: IConfig, logger: ILogger, browserApi?: BrowserApi) {
 		super(PROFILE_SERVICE_NAME, logger)
 		this.repo = new ProfileRepository(browserApi)
-		this.tombstones = new TombstoneRepository((browserApi?.storage.local ?? chrome.storage.local) as StorageArea)
-		this.integrityBlocked = new AccountIntegrityBlockedRepository((browserApi?.storage.local ?? chrome.storage.local) as StorageArea)
-		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(
-			(browserApi?.storage.local ?? chrome.storage.local) as StorageArea,
-		)
-		this.restorePending = new RestorePendingRepository((browserApi?.storage.local ?? chrome.storage.local) as StorageArea)
+		this.local = (browserApi?.storage.local ?? chrome.storage.local) as StorageArea
+		this.tombstones = new TombstoneRepository(this.local)
+		this.integrityBlocked = new AccountIntegrityBlockedRepository(this.local)
+		this.integrityStamps = new AccountIntegrityVerifiedStampRepository(this.local)
+		this.restorePending = new RestorePendingRepository(this.local)
 		this.secretBox = new PasswordSecretBox()
 		this.sessionManager = new SessionManager(
 			config,
@@ -512,9 +514,9 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		return this.runExclusive(async () => {
 			const session = await this.sessionManager.getActive()
-			if (!session || this.deletionState.isReserved(session.profile.id)) {
-				throw new Error("Wallet locked")
-			}
+			if (!session) throw new WalletLockedError()
+			// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
+			if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
 			return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
 		})
 	}
@@ -1445,8 +1447,16 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  the call site: restore's late-activation paths commit without opening. Caller
 	 *  MUST hold the facade lock. */
 	private async persistNewProfileHoldingLock(profile: Profile): Promise<void> {
+		await this.dropUiKeysBeforeAdoption(profile.id)
 		await this.repo.set(profile.id, profile)
 		this.emit("onProfileAdded", this.getProfileInfo(profile))
+	}
+
+	/** A restore that keeps its backup's id and a passkey import that takes its `userHandle` adopt
+	 *  an id used before; a key written under it since its purge belongs to no profile yet. A
+	 *  rejected removal fails the commit before anything is written. */
+	private async dropUiKeysBeforeAdoption(id: string): Promise<void> {
+		await this.local.remove(profileUiKeys(id))
 	}
 
 	/** Marker BEFORE row (fail-closed): a crash between the two writes leaves an orphan
@@ -1455,6 +1465,7 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  it cannot brand a future same-id profile. No emit here — the restore branches
 	 *  announce AFTER this bracket. Caller MUST hold the facade lock. */
 	private async writeMarkerThenRowHoldingLock(id: string, newProfile: Profile): Promise<void> {
+		await this.dropUiKeysBeforeAdoption(id)
 		await this.restorePending.write({ profileId: id, pxeGeneration: newProfile.pxeGeneration, at: Date.now() })
 		try {
 			await this.repo.set(id, newProfile)

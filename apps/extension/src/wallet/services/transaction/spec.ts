@@ -41,6 +41,8 @@ export type TxCall = {
 	method: string
 	/** Arguments. */
 	args: unknown[]
+	/** The class the build resolved for `contract`: what the wallet saw, not proof of what ran. */
+	classId?: string
 	/** Additional information telling whether the call produces token transfers. */
 	transfers?: TxTransfer[]
 }
@@ -145,6 +147,10 @@ export type Tx = {
 	feeSpender?: string
 	/** Error message, if some. */
 	error?: string
+	/** Set by this wallet's sync worker on a row it saw mined below Finalized, until the finalized
+	 *  chain proves its block one way or the other. It makes the worker dial the row's endpoint, so
+	 *  it never leaves in a backup and never arrives from one. */
+	awaitingFinality?: boolean
 	/**
 	 * RPC URL of the endpoint this tx was submitted through. Captured at
 	 * `addTransaction` time so receipt polling stays bound to the original
@@ -197,6 +203,7 @@ export const TxSchema: z.ZodType<Tx> = z.object({
 	gasDetails: z.custom<TxGasDetails>(tolerantObject).optional(),
 	feeSpender: z.string().optional(),
 	error: z.string().optional(),
+	awaitingFinality: z.boolean().optional(),
 	submittedEndpointUrl: z.string().optional(),
 	origin: z.custom<LocalTxOrigin>(tolerantObject),
 	calls: z.array(TxCallRowSchema),

@@ -209,6 +209,25 @@ describe("grant coverage agrees with enforcement", () => {
 		expect(await enforcement(grant, "registerContract", [wireInstance(TOKEN)])).toEqual(malformed("contracts"))
 	})
 
+	const classRefused = refused("Scope violation: getContractClassMetadata class not permitted by granted contractClasses scope")
+	test.each<[string, unknown, unknown, string, unknown]>([
+		["a listed class", [TOKEN_UP], [TOKEN], TOKEN, "allowed"],
+		["another class", [TOKEN], [OTHER], OTHER, classRefused],
+		["a held * for any class", "*", [OTHER], OTHER, "allowed"],
+		["a requested * under a held list", [TOKEN], "*", OTHER, classRefused],
+	])("contract classes, %s", async (_label, held, asked, classId, admits) => {
+		const grant = { type: "contractClasses", classes: held, canGetMetadata: true }
+		const covered = admits === "allowed" ? "covered" : "window"
+		expect(await coverage(grant, { type: "contractClasses", classes: asked, canGetMetadata: true })).toBe(covered)
+		expect(await enforcement(grant, "getContractClassMetadata", [classId])).toEqual(admits)
+	})
+
+	test("contract classes: a grant without the flag neither covers nor admits", async () => {
+		const grant = { type: "contractClasses", classes: [TOKEN], canGetMetadata: false }
+		expect(await coverage(grant, { type: "contractClasses", classes: [TOKEN], canGetMetadata: true })).toBe("window")
+		expect(await enforcement(grant, "getContractClassMetadata", [TOKEN])).toEqual(classRefused)
+	})
+
 	test("private events: a listing in another case covers and admits", async () => {
 		const grant = { type: "data", privateEvents: { contracts: [TOKEN_UP] } }
 		expect(await coverage(grant, { type: "data", privateEvents: { contracts: [TOKEN] } })).toBe("covered")
@@ -265,6 +284,17 @@ describe("batch refusal", () => {
 		["a refused leg after an unknown one", [{ name: "nope", args: [] }, SEND_LEG], "sendTx"],
 	])("%s is refused before any leg runs", async (_label, legs, name) => {
 		expect(await runBatch(legs)).toEqual({ result: batchRefusal(name), ran: [], sent: [] })
+	})
+
+	test("a batched requestCapabilities for an ungranted type opens one window, as a top-level one does", async () => {
+		const manifest = withHeader({ capabilities: [{ type: "data", addressBook: true }] })
+		const alone = harness([])
+		const batched = harness([])
+		const direct = await outcome(alone.dispatch("requestCapabilities", [manifest]))
+		const leg = await outcome(batched.dispatch("batch", [[{ name: "requestCapabilities", args: [manifest] }]]))
+		expect(direct).toEqual({ threw: UserRejectedError, message: "declined" })
+		expect(leg).toEqual(direct)
+		expect([alone.seen.windows, batched.seen.windows]).toEqual([1, 1])
 	})
 
 	test("a malformed envelope is refused by batch's own guard first", async () => {
@@ -345,7 +375,7 @@ const SENDER_ROWS: SenderRow[] = [
 	["false", [{ from: false }], INVALID],
 	["an object", [{ from: {} }], INVALID],
 	["a session account", [{ from: ACC2 }], ACC2],
-	["a session account in upper case", [{ from: ACC2_UP }], notAuthorized],
+	["a session account in upper case", [{ from: ACC2_UP }], INVALID],
 	["a wallet account outside the session", [{ from: STRANGER }], notAuthorized],
 	["an Fr instance rather than its wire string", [{ from: new Fr(0xabcdefn) }], INVALID],
 	["an object String() cannot convert", [{ from: { toString: "x" } }], INVALID],

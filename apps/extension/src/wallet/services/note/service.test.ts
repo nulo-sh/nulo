@@ -9,6 +9,7 @@
 
 import { describe, expect, test, vi } from "vitest"
 import { LoggerStore } from "@/wallet/logger"
+import { loggedAfter } from "../../../../tests/helpers/logged"
 import { ConfigStore } from "@/wallet/config"
 import { NoteService } from "./service"
 import type { Note } from "./spec"
@@ -52,6 +53,7 @@ function brokenNoteDao(): unknown {
 
 type ServiceHooks = {
 	service: NoteService
+	logger: LoggerStore
 	setNotes: (n: unknown[]) => void
 	setSchemas: (s: Record<string, Record<string, unknown>>) => void
 	setClassIdForContract: (contract: string, classId: string | undefined) => void
@@ -94,6 +96,7 @@ function makeService(): ServiceHooks {
 
 	return {
 		service,
+		logger,
 		setNotes: (n) => {
 			noteList.length = 0
 			noteList.push(...n)
@@ -138,7 +141,7 @@ describe("NoteService.getNotes", () => {
 	})
 
 	test("malformed entry preserves contract/slot/tx fields when those parse ok", async () => {
-		const { service, setNotes } = makeService()
+		const { service, logger, setNotes } = makeService()
 		setNotes([brokenNoteDao()])
 
 		const result = await service.getNotes("n", "0x0000000000000000000000000000000000000000000000000000000000000001")
@@ -148,6 +151,7 @@ describe("NoteService.getNotes", () => {
 		expect(result[0].storageSlot).toBe("0x9")
 		expect(result[0].txHash).toBe("0xff")
 		expect(result[0].renderError).toBeDefined()
+		expect(loggedAfter(logger, "Failed to parse note")).toEqual([{ error: { name: "Error", message: "decode failed" } }])
 	})
 
 	test("propagates errors from the upstream PXE fetch", async () => {

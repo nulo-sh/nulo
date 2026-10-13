@@ -60,7 +60,10 @@ import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
+import { pinnedTokensKey } from "@/utils/profile-ui-keys"
+import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
+import { WalletLockedError } from "./wallet-locked-error"
 import { fromBase64, getMnemonic, toBase64 } from "@nulo/wallet-core/utils"
 import { BUFFER_BINDINGS, withBuffer } from "../../../../tests/helpers/shipped-buffer"
 import { deriveMasterFromMnemonic } from "@nulo/wallet-crypto"
@@ -434,7 +437,19 @@ describe("ProfileService integration", () => {
 			const fence = await service.captureExecutionFence()
 			expect(fence.epoch).toBe(0)
 			service.getDeletionState().beginDeletion(fence.profileId)
-			await expect(service.captureExecutionFence()).rejects.toThrow(/Wallet locked/)
+			const reserved = await service.captureExecutionFence().catch((e: unknown) => e)
+			expect((reserved as Error).message).toBe("Wallet locked")
+			// A deletion answers as locked but is not a lock, so it is not typed as one.
+			expect(reserved).not.toBeInstanceOf(WalletLockedError)
+		}, 30_000)
+
+		test("captureExecutionFence with no live session throws the typed lock, with the message callers match", async () => {
+			const { service } = await makeService()
+			await service.createProfile("P", "pass1234")
+			await service.lockActiveProfile()
+			const locked = await service.captureExecutionFence().catch((e: unknown) => e)
+			expect(locked).toBeInstanceOf(WalletLockedError)
+			expect((locked as Error).message).toBe("Wallet locked")
 		}, 30_000)
 
 		test("exportPlain for passkey profile returns credentialId", async () => {
@@ -1338,6 +1353,61 @@ describe("ProfileService integration", () => {
 			const profile = await service.createPasskeyProfile("PK")
 			expect(profile.type).toBe("passkey")
 			expect(await readPersistedBearer(api)).toBeUndefined()
+		}, 30_000)
+	})
+
+	describe("an adopted id starts with no UI keys", () => {
+		const PIN = JSON.stringify({ 1: ["0xc0ffee"] })
+		const keysOf = async (api: FakeBrowserApi) => Object.keys(await api.storage.local.get(null))
+		const writesFor = (log: string[], id: string) => log.filter((entry) => entry.endsWith(`@${id}`))
+
+		test("a restore that keeps its backup's id removes that id's pins before the marker and the row; another profile's stay", async () => {
+			const { api, service } = await makeService()
+			await api.storage.local.set({ [pinnedTokensKey("abc12345")]: PIN, [pinnedTokensKey("feed0001")]: PIN })
+			const writes = recordWrites(api.storage.local, "nulo:")
+
+			const out = await service.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+			writes.restore()
+
+			expect(out.id).toBe("abc12345")
+			expect(writesFor(writes.log, "abc12345")).toEqual([
+				`remove:${pinnedTokensKey("abc12345")}`,
+				`set:${RESTORE_PENDING_ROOT}@abc12345`,
+				"set:nulo:core:profiles@abc12345",
+			])
+			expect(await keysOf(api)).toContain(pinnedTokensKey("feed0001"))
+		}, 30_000)
+
+		test("a passkey import that adopts its userHandle removes that id's pins before the row", async () => {
+			const { api, service } = await makeService()
+			await api.storage.local.set({ [pinnedTokensKey("user-handle")]: PIN, [pinnedTokensKey("feed0001")]: PIN })
+			const writes = recordWrites(api.storage.local, "nulo:")
+
+			const profile = await service.importPasskey("Imported")
+			writes.restore()
+
+			expect(profile.id).toBe("user-handle")
+			expect(writesFor(writes.log, "user-handle").slice(0, 2)).toEqual([
+				`remove:${pinnedTokensKey("user-handle")}`,
+				"set:nulo:core:profiles@user-handle",
+			])
+			expect(await keysOf(api)).toContain(pinnedTokensKey("feed0001"))
+		}, 30_000)
+
+		test("a removal that rejects fails the restore before its marker or row is written", async () => {
+			const { api, service } = await makeService()
+			const remove = api.storage.local.remove.bind(api.storage.local)
+			api.storage.local.remove = async (keys) => {
+				if ([keys].flat().some((key) => key.startsWith("nulo:ui:"))) throw new Error("storage refused")
+				await remove(keys)
+			}
+
+			const outcome = await service
+				.restore({ id: "abc12345", name: "P", type: "password" }, await restoreSecretFor(11), "pass1234")
+				.catch((error: unknown) => ({ restoreError: String(error) }))
+
+			expect("restoreError" in outcome && outcome.restoreError).toMatch(/storage refused/)
+			expect((await keysOf(api)).filter((key) => key.endsWith("@abc12345"))).toEqual([])
 		}, 30_000)
 	})
 

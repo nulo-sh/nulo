@@ -3,7 +3,8 @@
  * the security-critical verify path is unit-testable without the whole SW service
  * graph. See `session-established.test.ts` for the pins.
  */
-import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { schemas } from "@aztec-labs/stdlib/schemas"
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { WindowPort } from "@nulo/wallet-core/ports"
 import { walletChainId } from "@/utils/chain-ids"
 import type { ILogger } from "../../logger"
@@ -11,16 +12,34 @@ import { LogLevel } from "../../logger"
 import { topRightOf } from "../window-manager/placement"
 import { createPlaced } from "../window-manager/window-manager"
 import { isPendingVerificationDead, type PendingVerificationEntry, settlePendingVerification } from "./pending-verification"
+import type { VerificationHold } from "./verification-hold"
 import type { WindowReservation } from "./verify-admission"
 import { describeExternalId } from "@nulo/wallet-bridge"
 
-/** A session's chain id from its dApp-supplied `chainInfo`: `chainId` decodes before `version`, and
- *  the `Number` rounding and u32 coercion are part of the persisted key, not to be made exact. */
-export function chainInfoToChainId(obj: { chainInfo: { chainId: Fr | string; version: Fr | string } }): number {
-	const raw = obj.chainInfo
-	const chainId = typeof raw.chainId === "string" ? Number(BigInt(raw.chainId)) : Number(raw.chainId.toBigInt())
-	const version = typeof raw.version === "string" ? Number(BigInt(raw.version)) : Number(raw.version.toBigInt())
-	return walletChainId(chainId, version)
+const U32_MAX = 2n ** 32n - 1n
+
+/** A session's chain id from its dApp-supplied `chainInfo`, whose wire fields are strings. Each must
+ *  parse as a field and fit the u32 range of the L1 id and the rollup version, so a malformed value
+ *  never folds onto another chain; distinct valid pairs can still share an id through the frozen
+ *  XOR. `chainId` decodes before `version`. */
+export function chainInfoToChainId(obj: { chainInfo?: { chainId?: unknown; version?: unknown } | null }): number {
+	const chainId = u32Field(obj.chainInfo?.chainId)
+	return walletChainId(chainId, u32Field(obj.chainInfo?.version))
+}
+
+function u32Field(value: unknown): number {
+	const field = parsedField(value)
+	if (field === undefined || field > U32_MAX) throw new InvalidWalletArgumentsError("Invalid chainInfo")
+	return Number(field)
+}
+
+/** The field schema's transform throws a plain error on some strings instead of reporting them. */
+function parsedField(value: unknown): bigint | undefined {
+	try {
+		return schemas.Fr.parse(value).toBigInt()
+	} catch {
+		return undefined
+	}
 }
 
 /** Deps for {@link handleSessionEstablished} — injected so the path is testable
@@ -33,11 +52,12 @@ export interface SessionEstablishedDeps {
 		): Promise<{ id: string; profileId: string; trustedVerification?: boolean } | undefined>
 		setVerificationHash(sessionId: string, verificationHash: string): Promise<unknown>
 	}
+	/** Ends this very session object; a same-id successor is never ended. */
 	terminateSession: (sessionId: string) => void
-	/** Whether the transport session is still in the handler's active set — a
-	 *  switch-teardown can terminate a mid-validation session, and stamping a
-	 *  dead one would leak a `sessionProfiles` entry and pop a verify window
-	 *  for a closed channel. */
+	/** Whether this very session object is still the handler's session for its id — a
+	 *  switch-teardown or a lock can terminate a mid-validation session, which a same-id
+	 *  successor must not pass for, and stamping a dead one would leak a `sessionProfiles`
+	 *  entry and pop a verify window for a closed channel. */
 	isSessionLive: (sessionId: string) => boolean
 	pendingVerification: Map<string, PendingVerificationEntry>
 	/** Bind the established transport session to the profile that owns it —
@@ -47,6 +67,8 @@ export interface SessionEstablishedDeps {
 	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused" | "navigate" | "update">
 	/** The verify-window slot admission reserved for this session id, if the handshake needed one. */
 	reservations: { reservation(sessionId: string): WindowReservation | undefined }
+	/** The session's gate on dispatch: released here only when no check is shown. */
+	hold: Pick<VerificationHold, "release">
 	logger: ILogger
 }
 
@@ -65,13 +87,13 @@ export function verifyWindowUrl(dappSessionId: string, verificationHash: string,
  * The check's grid comes from this session's own hash in the window URL, never from the shared
  * row a concurrent session for the same `(origin, chainId)` can overwrite. A session whose
  * hash could not be persisted or whose check could not be shown is terminated and resolves
- * `false`, and the caller dispatches no message before this resolves `true`.
+ * `false`, and the caller dispatches no message before this resolves `true`. A session that needs
+ * no check has its hold released here; one shown the check stays held until the person confirms.
  */
 export async function handleSessionEstablished(
-	session: { origin: string; sessionId: string; verificationHash: string; chainInfo: { chainId: Fr | string; version: Fr | string } },
+	session: { origin: string; sessionId: string; verificationHash: string } & Parameters<typeof chainInfoToChainId>[0],
 	deps: SessionEstablishedDeps,
 ): Promise<boolean> {
-	const chainId = String(chainInfoToChainId(session))
 	// Keyed by the request id the page chose, which upstream reuses as the session id: captured before
 	// any await, and termination before the stamp and the final settlement check the map still holds
 	// this very object.
@@ -79,8 +101,9 @@ export async function handleSessionEstablished(
 	const isNewConnection = marker !== undefined
 	const reservation = deps.reservations.reservation(session.sessionId)
 	let stamped = false
-	// Before the stamp, a reused id may name another attempt, which termination by id would end; a
-	// stamped channel ends whatever the id names.
+	// Before the stamp, a reused id may name another attempt's approval, which ending this session
+	// would overwrite (upstream restores the id's discovery on termination); once stamped, the
+	// channel is this attempt's own to end.
 	const terminate = (): false => {
 		if (stamped || lostApproval(deps.pendingVerification, session.sessionId, marker) !== "replaced") {
 			deps.terminateSession(session.sessionId)
@@ -88,11 +111,13 @@ export async function handleSessionEstablished(
 		return false
 	}
 	const terminateWith = (message: string): false => {
-		deps.logger.log("wallet-sdk-bg", LogLevel.Warn, message)
+		deps.logger.log("wallet-sdk", LogLevel.Warn, message)
 		return terminate()
 	}
 	let established = false
+	let chainId = ""
 	try {
+		chainId = String(chainInfoToChainId(session))
 		// A DEAD marker (cancelled, or stale: a parked approval that would mint a channel under
 		// whichever profile is active when it completes) is a dead approval and never softens into a
 		// reconnect.
@@ -125,7 +150,7 @@ export async function handleSessionEstablished(
 		// dispatch guard fails closed on the leftover stamp.
 		if (!deps.isSessionLive(session.sessionId)) {
 			deps.logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Warn,
 				`Session ${describeExternalId(session.sessionId)} terminated during validation — skipping establishment`,
 			)
@@ -140,7 +165,7 @@ export async function handleSessionEstablished(
 		// self-compensates; see `stampSessionProfileGuarded`.)
 		if (!deps.isSessionLive(session.sessionId)) {
 			deps.logger.log(
-				"wallet-sdk-bg",
+				"wallet-sdk",
 				LogLevel.Warn,
 				`Session ${describeExternalId(session.sessionId)} terminated during establishment — not stamping`,
 			)
@@ -165,18 +190,13 @@ export async function handleSessionEstablished(
 			if (!reservation) throw new Error("verify window has no reserved slot")
 			const url = verifyWindowUrl(dappSession.id, session.verificationHash, !isNewConnection)
 			await showVerifyWindow(url, session.sessionId, reservation, deps)
-		}
+		} else deps.hold.release()
 		established = true
 		return true
 	} catch (err) {
-		// Fail closed: a session whose hash couldn't be persisted or whose check couldn't be shown
-		// must not stay live accepting messages.
-		deps.logger.log(
-			"wallet-sdk-bg",
-			LogLevel.Warn,
-			`onSessionEstablished failed for session ${describeExternalId(session.sessionId)} on chain ${chainId} — terminating`,
-			err,
-		)
+		// Fail closed: a session whose chain info does not decode, whose hash couldn't be persisted
+		// or whose check couldn't be shown must not stay live accepting messages.
+		logEstablishmentFailure(err, session.sessionId, chainId, deps.logger)
 		return terminate()
 	} finally {
 		// A failed exit leaves a tombstone: the SDK restores the discovery, and a marker-less retry of
@@ -185,6 +205,25 @@ export async function handleSessionEstablished(
 		// Every exit that opened no window gives the slot back; an issued creation keeps it.
 		reservation?.releaseIfUnstarted()
 	}
+}
+
+/** A `chainInfo` that does not decode is the app's own input, which it can repeat at will, so it
+ *  logs at `debug`. */
+function logEstablishmentFailure(err: unknown, sessionId: string, chainId: string, logger: ILogger): void {
+	if (err instanceof InvalidWalletArgumentsError) {
+		logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Session ${describeExternalId(sessionId)} sent a chainInfo that does not decode, so it is terminated`,
+		)
+		return
+	}
+	logger.log(
+		"wallet-sdk",
+		LogLevel.Warn,
+		`onSessionEstablished failed for session ${describeExternalId(sessionId)} on chain ${chainId} — terminating`,
+		err,
+	)
 }
 
 /** Why the approval this attempt captured no longer stands: it was tombstoned (a revocation, or its
@@ -265,7 +304,7 @@ async function openVerifyWindow(
 			},
 			() => deps.isSessionLive(sessionId),
 			deps.logger,
-			"wallet-sdk-bg",
+			"wallet-sdk",
 		)
 		windowId = win?.id
 	} catch {

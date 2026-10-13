@@ -35,7 +35,7 @@ const hasConfig = aztecConfig !== undefined
  *  button renders during loading, and both the loading and error states
  *  show zero rows) — otherwise this pin could false-pass mid-fetch. */
 async function assertNoSendersRegistered(page: Awaited<ReturnType<typeof openPopup>>) {
-	await navigateByHash(page, "#/popup/settings/advanced/account-state/senders")
+	await navigateByHash(page, "#/popup/settings/developer/account-state/senders")
 	await page.waitForSelector('[data-testid="senders-add-btn"]', { visible: true, timeout: 10_000 })
 	await page.waitForFunction(() => !document.querySelector('[data-testid="loading-state"]'), { timeout: 15_000, polling: 100 })
 	const state = await page.evaluate(() => ({

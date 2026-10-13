@@ -1,7 +1,9 @@
 import { describe, expect, test, vi } from "vitest"
 import {
+	CapabilityNotGrantedError,
 	ContractNotRegisteredError,
 	DuplicateInitializationError,
+	InvalidWalletArgumentsError,
 	JobCancelledError,
 	PxeStaleAnchorError,
 	ScopeViolationError,
@@ -11,7 +13,7 @@ import {
 	walletErrorFromPayload,
 } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
-import { SCOPE_VIOLATION_MESSAGE, toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
+import { INVALID_PARAMS_MESSAGE, SCOPE_VIOLATION_MESSAGE, toWalletResponseError } from "@/wallet/services/wallet-sdk/error-envelope"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
 import { classifyOperationCatch, maybeRethrowAsRpcCancel } from "./rpc-cancel"
 
@@ -129,13 +131,40 @@ describe("classifyOperationCatch", () => {
 		})
 	})
 
-	test("OTHER WalletError subclasses do NOT ride the code channel (unsound reconstruction guard)", () => {
-		// TooManyPendingError deliberately reconstructs as base WalletError and
-		// detail-dependent classes lose details through the message-only
-		// channel — a blanket pass-through would silently corrupt them.
+	test("an argument refusal keeps its code across the port and answers -32602 with the fixed message", () => {
 		const task = { cancel: vi.fn(), fail: vi.fn() }
-		const result = classifyOperationCatch(new TooManyPendingError(), task, errorMessage)
+		const result = classifyOperationCatch(InvalidWalletArgumentsError.forMethod("executeUtility"), task, errorMessage) as {
+			code: string
+			error: string
+		}
+		expect(result).toMatchObject({ status: "failed", code: InvalidWalletArgumentsError.CODE })
+		const rebuilt = walletErrorFromPayload({ code: result.code, message: result.error })
+		expect(rebuilt).toBeInstanceOf(InvalidWalletArgumentsError)
+		expect(rebuilt.message).toBe("Invalid arguments for wallet method: executeUtility")
+		expect(toWalletResponseError(rebuilt)).toEqual({
+			code: -32602,
+			message: INVALID_PARAMS_MESSAGE,
+			data: { walletErrorCode: InvalidWalletArgumentsError.CODE },
+		})
+	})
+
+	test("a detail-dependent WalletError does not ride the message-only code channel", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new CapabilityNotGrantedError("accounts"), task, errorMessage)
 		expect(result.status).toBe("failed")
 		expect((result as { code?: string }).code).toBeUndefined()
+	})
+
+	test("a capacity refusal keeps its code across the port and answers -32005", () => {
+		const task = { cancel: vi.fn(), fail: vi.fn() }
+		const result = classifyOperationCatch(new TooManyPendingError(), task, errorMessage) as { code: string; error: string }
+		expect(result).toMatchObject({ status: "failed", code: TooManyPendingError.CODE })
+		const rebuilt = walletErrorFromPayload({ code: result.code, message: result.error })
+		expect(rebuilt).toBeInstanceOf(TooManyPendingError)
+		expect(toWalletResponseError(rebuilt)).toEqual({
+			code: -32005,
+			message: "Too many pending transactions; retry after the in-flight ones settle.",
+			data: { walletErrorCode: TooManyPendingError.CODE },
+		})
 	})
 })

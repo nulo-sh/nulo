@@ -54,7 +54,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 			// The ONE shared formula (NULO-ACCOUNT-KDF v2), reading the row-carried l1ChainId —
 			// self-contained, so this pre-session-open path needs no network lookup.
 			const secret = await deriveAccountSeed(master, account.l1ChainId, account.type, account.index)
-			return (await NuloAccount.new(secret, logger)).address.toString()
+			return (await NuloAccount.new(secret, logger, ACCOUNT_INTEGRITY_COORDINATOR_NAME)).address.toString()
 		},
 	) {
 		const storage = (browserApi?.storage.local ?? chrome.storage.local) as StorageArea
@@ -80,7 +80,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 		// verdict still lands mid-flight (mismatch → durable record + session close), so the exposed
 		// window stays bounded to the verify's own duration.
 		this.bootVerification = this.verifyRestoredSessionOnce().catch((error) => {
-			this.logger.log(this.name, LogLevel.Error, "boot integrity verification failed", String(error))
+			this.logger.log(this.name, LogLevel.Error, "boot integrity verification failed", { error })
 		})
 	}
 
@@ -173,7 +173,7 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 				try {
 					await persistBlock(record)
 				} catch (writeError) {
-					this.logger.log(this.name, LogLevel.Error, "integrity block persist failed", String(writeError))
+					this.logger.log(this.name, LogLevel.Error, "integrity block persist failed", { error: writeError })
 				}
 				throw new AccountAddressInconsistencyError(undefined, {
 					profileId,

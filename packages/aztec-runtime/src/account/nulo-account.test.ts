@@ -27,7 +27,7 @@ describe("NuloAccount.buildTxExecutionRequest — initializesAccount provenance"
 	let account: NuloAccount
 
 	beforeAll(async () => {
-		account = await NuloAccount.new(new Fr(42n), logger)
+		account = await NuloAccount.new(new Fr(42n), logger, "account")
 		// The pins target the wrap DECISION: registration + both build tails are
 		// stubbed on the instance so no PXE/entrypoint machinery runs.
 		const anyAccount = account as unknown as Record<string, unknown>

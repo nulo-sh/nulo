@@ -77,6 +77,8 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
+
 /** A popup approval envelope carrying a reuse id; the producer mints `previewId = estimateId`
  *  for a bound standard estimate, so a real approval always pairs the two equal. */
 const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId })
@@ -334,6 +336,7 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 			"j1",
 			{ stage: "failed" },
 			expect.objectContaining({ message: expect.stringContaining("build broke") }),
+			undefined,
 		)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 	})
@@ -418,7 +421,7 @@ describe("DappSendExecutor.executeAztecSendTx (standard path)", () => {
 		const { executor, deps, releaseSlot } = makeHarness()
 		const op = makeAztecOp({ opts: { from: addr("0xother"), additionalScopes: [], wait: "NO_WAIT" } })
 		await expect(executor.executeAztecSendTx(op, ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("Invalid `opts.from`")
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything(), undefined)
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 	})
@@ -514,7 +517,7 @@ describe("DappSendExecutor: the submitting commit", () => {
 		const { executor, deps, proveAndSend } = makeHarness()
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
 			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
 		})
 		await run(executor)
@@ -522,6 +525,7 @@ describe("DappSendExecutor: the submitting commit", () => {
 			stage: "submitting",
 			txHash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
+			expiry: EXPIRY,
 		})
 	})
 })
@@ -733,7 +737,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			} as never,
 		})
 		await expect(executor.executeAztecSendTx(makeAztecOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("prove broke")
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything(), undefined)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 	})
@@ -872,7 +876,7 @@ describe("DappSendExecutor — slot-scaffold oracle (ordering + no-leak on every
 			} as never,
 		})
 		await expect(executor.executeAztecSendTx(makeNoFromOp(), ORIGIN, undefined, undefined, FENCE)).rejects.toThrow("prove broke")
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything())
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, expect.anything(), undefined)
 		expect(deps.lane.deleteController).toHaveBeenCalledWith("j1")
 		expect(releaseSlot).toHaveBeenCalledTimes(1)
 	})
@@ -1130,7 +1134,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		).rejects.toBeInstanceOf(SessionEndedError)
 		expect(deps.getAccountContract).not.toHaveBeenCalled()
 		expect(proveAndSend).not.toHaveBeenCalled()
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded)
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded, undefined)
 	})
 
 	test("the session ending while a reused build resolves its account: no send, failed/session_ended", async () => {
@@ -1149,7 +1153,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		).rejects.toBeInstanceOf(SessionEndedError)
 		expect(isFenceLive).toHaveBeenCalledWith(FENCE)
 		expect(proveAndSend).not.toHaveBeenCalled()
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded)
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded, undefined)
 	})
 
 	test("tryConsume refusing another profile's entry: the fresh build is never attempted, failed/session_ended", async () => {
@@ -1167,7 +1171,7 @@ describe("DappSendExecutor — the authorizing session", () => {
 		expect(buildAndEstimateFolded).not.toHaveBeenCalled()
 		expect(deps.buildAndEstimateValidated).not.toHaveBeenCalled()
 		expect(proveAndSend).not.toHaveBeenCalled()
-		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded)
+		expect(deps.lane.markJournal).toHaveBeenCalledWith("j1", { stage: "failed" }, sessionEnded, undefined)
 	})
 
 	type Harness = ReturnType<typeof makeHarness>

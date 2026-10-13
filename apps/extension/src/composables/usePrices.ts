@@ -9,6 +9,10 @@ import type { PriceServiceClient, PriceState, PriceQuote } from "@/wallet/servic
 import { isQuoteFresh } from "@/wallet/services/price/spec"
 import { getPriceMapEntry, FEE_JUICE_ENTRY } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
+import { knownDecimals } from "@/utils/token-amount"
+
+/** A token as pricing reads it: priced only when its decimals are known (`knownDecimals`). */
+export type PricedToken = { chainId?: number; contract?: string; decimals?: number; hasDecimals?: boolean }
 
 /**
  * C1 composable over the price feed. Receives the CONNECTED client from the
@@ -73,21 +77,16 @@ export function usePrices(priceService: PriceServiceClient) {
 	 * Fiat value (micro-USD, summable) of `raw` base units of a token —
 	 * undefined when the token has no usable quote.
 	 */
-	const tokenFiatMicro = (
-		token: { chainId?: number; contract?: string; decimals?: number } | undefined,
-		raw: bigint,
-	): bigint | undefined => {
-		if (!token) return undefined
+	const tokenFiatMicro = (token: PricedToken | undefined, raw: bigint): bigint | undefined => {
+		const decimals = knownDecimals(token)
+		if (!token || decimals === null) return undefined
 		const quote = quoteFor(token.chainId, token.contract)
 		if (!quote) return undefined
-		return tokenAmountToUsdMicro(raw, token.decimals ?? 0, quote.usd)
+		return tokenAmountToUsdMicro(raw, decimals, quote.usd)
 	}
 
 	/** `≈ $1,249.38`-style display string, or undefined when unpriced. */
-	const tokenFiatLabel = (
-		token: { chainId?: number; contract?: string; decimals?: number } | undefined,
-		raw: bigint,
-	): string | undefined => {
+	const tokenFiatLabel = (token: PricedToken | undefined, raw: bigint): string | undefined => {
 		const micro = tokenFiatMicro(token, raw)
 		if (micro === undefined) return undefined
 		return `≈ ${formatUsdMicro(micro)}`

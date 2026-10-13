@@ -183,9 +183,15 @@ describe("background death and cold respawn", () => {
 	// mounts in that window has its first reads rejected when their port drops. Strict mode would lock
 	// the popup on reconnect and leave the page, so the session is opted out first. Chrome's alone:
 	// Firefox will not end an event page while an extension page keeps it busy.
-	test.skipIf(isFirefox)(
-		"the Lock page opened while the worker boots reads its settings once the port is back",
-		async ({ registeredExtension }) => {
+	test.skipIf(isFirefox).for([
+		{ name: "Lock", hash: "#/popup/settings/lock", loaded: STRICT_TOGGLE, strict: "false" },
+		{ name: "Display", hash: "#/popup/settings/display", loaded: '[data-testid="theme-trigger"]' },
+		{ name: "Privacy", hash: "#/popup/settings/privacy", loaded: '[data-testid="fiat-values-toggle"]' },
+		{ name: "Developer", hash: "#/popup/settings/developer", loaded: '[data-testid="settings-toggle-developerMode"]' },
+	])(
+		"the $name page opened while the worker boots reads its settings once the port is back",
+		{ timeout: 120_000 },
+		async ({ hash, loaded, strict }, { registeredExtension }) => {
 			const page = await openPopup(registeredExtension)
 			await ensureUnlocked(page)
 			await waitForHash(page, "#/popup/general")
@@ -197,13 +203,12 @@ describe("background death and cold respawn", () => {
 			await navigateByHash(page, "#/popup/general")
 
 			await stopBackground(registeredExtension)
-			await navigateByHash(page, "#/popup/settings/lock")
-			await page.waitForSelector(STRICT_TOGGLE, { visible: true, timeout: 30_000 })
-			expect(await page.$eval(STRICT_TOGGLE, (el) => el.getAttribute("data-toggle-active"))).toBe("false")
+			await navigateByHash(page, hash)
+			await page.waitForSelector(loaded, { visible: true, timeout: 30_000 })
+			if (strict) expect(await page.$eval(loaded, (el) => el.getAttribute("data-toggle-active"))).toBe(strict)
 			expect(registeredExtension.pageErrors).toEqual([])
 			await page.close()
 		},
-		120_000,
 	)
 
 	/**

@@ -13,7 +13,8 @@
  * releasing on session termination alone would let an origin connect, keep the window, close the
  * tab and reconnect past the cap, and releasing while a creation is in flight would let a
  * replacement open before the original window appears. A connect window that waits for its
- * channel is attached to the slot (standby) and shows the check itself, under the same rule.
+ * channel is attached to the slot (standby) and shows the check itself, under the same rule; if its
+ * reservation expires first, the window stays open on its expired page until it is closed.
  */
 
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
@@ -50,6 +51,10 @@ export type AdmissionClock = Pick<ClockPort, "now" | "setTimeout" | "clearTimeou
 export interface AdmissionHooks {
 	/** Close a standby window whose attempt was given up. Best effort: its removal frees the slot. */
 	closeWindow(windowId: number): void
+	/** Load `url` in a standby window. Rejects when the window or its tab is gone. */
+	navigateWindow(windowId: number, url: string): Promise<void>
+	/** The reservation for `id` expired with its window kept open: `id` can no longer establish. */
+	expired(id: string): void
 	/** The slot reserved for `id` was given back. */
 	released(id: string): void
 }
@@ -60,6 +65,7 @@ type ReservationState = "unstarted" | "standby" | "in-flight" | "opened" | "clos
 export class WindowReservation {
 	private state: ReservationState = "unstarted"
 	private cancelled = false
+	private expiredUrl: string | undefined
 	public windowId: number | undefined
 
 	public constructor(
@@ -70,7 +76,7 @@ export class WindowReservation {
 		private readonly release: (r: WindowReservation) => void,
 		/** Consumes a removal that arrived before this reservation knew its window id. */
 		private readonly consumeRemoval: (windowId: number) => boolean,
-		private readonly closeWindow: (windowId: number) => void,
+		private readonly hooks: Omit<AdmissionHooks, "released">,
 	) {}
 
 	public get status(): ReservationState {
@@ -100,10 +106,12 @@ export class WindowReservation {
 	}
 
 	/** Bind the connect window that waits for this session's channel: from here the slot follows it.
+	 *  `expiredUrl` is the page it shows if the reservation expires; without one it is closed then.
 	 *  `false` when the slot is not unstarted, or when the window is already gone, which frees it. */
-	public attach(windowId: number): boolean {
+	public attach(windowId: number, expiredUrl?: string): boolean {
 		if (this.state !== "unstarted") return false
 		this.windowId = windowId
+		this.expiredUrl = expiredUrl
 		if (this.consumeRemoval(windowId)) {
 			this.finish()
 			return false
@@ -172,10 +180,29 @@ export class WindowReservation {
 		return this.unclaimed && now > this.expiresAt
 	}
 
+	/** Reclaim an unclaimed reservation past its expiry. An unstarted slot is freed. A standby window
+	 *  keeps the slot and shows its expired page, so the person learns why the attempt ended; its
+	 *  removal frees the slot, and a window that cannot load the page is closed instead. */
+	public expire(): void {
+		if (this.state === "unstarted") {
+			this.finish()
+			return
+		}
+		if (this.state !== "standby" || this.expiredUrl === undefined) {
+			this.releaseIfUnstarted()
+			return
+		}
+		const windowId = this.windowId as number
+		// Closing before the hook and the navigation: a late establishment then claims no window.
+		this.state = "closing"
+		this.hooks.expired(this.id)
+		this.hooks.navigateWindow(windowId, this.expiredUrl).catch(() => this.hooks.closeWindow(windowId))
+	}
+
 	private closeStandby(): void {
 		// The state changes first: a port that reports the removal synchronously finds it closing.
 		this.state = "closing"
-		if (this.windowId !== undefined) this.closeWindow(this.windowId)
+		if (this.windowId !== undefined) this.hooks.closeWindow(this.windowId)
 	}
 
 	private finish(): void {
@@ -306,7 +333,7 @@ export class VerifyAdmissionGate {
 			req.deadline + RESERVATION_GRACE_MS,
 			(r) => this.released(r),
 			(windowId) => this.recentRemovals.delete(windowId),
-			(windowId) => this.hooks.closeWindow(windowId),
+			this.hooks,
 		)
 		this.reservations.set(req.id, reservation)
 		this.arm()
@@ -326,7 +353,7 @@ export class VerifyAdmissionGate {
 
 	private serve(): void {
 		const now = this.clock.now()
-		for (const r of [...this.reservations.values()]) if (r.expiredUnclaimed(now)) r.releaseIfUnstarted()
+		for (const r of [...this.reservations.values()]) if (r.expiredUnclaimed(now)) r.expire()
 		for (const [name, origin] of this.origins) {
 			this.refill(origin)
 			this.drain(origin, now)

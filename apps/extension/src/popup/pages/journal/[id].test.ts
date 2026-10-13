@@ -1,12 +1,15 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import JournalDetail from "./[id].vue"
 
 const mocks = vi.hoisted(() => ({
 	getOperation: vi.fn(),
 	updated: [] as Array<(op: OperationRecord) => void>,
+	tokens: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock("vue-router", () => ({
@@ -27,7 +30,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { getTokens: vi.fn(async () => [{ id: 7, symbol: "TST", decimals: 0 }]), disconnect: vi.fn() }
+		return { getTokens: vi.fn(async () => mocks.tokens), disconnect: vi.fn() }
 	}),
 }))
 // The app store opens its own journal client for the in-flight rows; it reads none here.
@@ -48,6 +51,7 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 
 // The stores read `chrome.storage.local` through the migration-aware facade on setup.
 beforeEach(() => {
+	mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
 	vi.stubGlobal("chrome", {
 		storage: {
 			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
@@ -66,7 +70,7 @@ afterEach(() => {
 const ACCOUNT = `0x${"0a".repeat(32)}`
 
 /** A transfer that failed at the send line, shaped as the journal stores it. */
-function failedSend(check?: "sent" | "reverted" | "unconfirmed"): OperationRecord {
+function failedSend(check?: SendCheckOutcome): OperationRecord {
 	return {
 		id: "j1",
 		kind: "transfer",
@@ -91,14 +95,16 @@ function failedSend(check?: "sent" | "reverted" | "unconfirmed"): OperationRecor
 	}
 }
 
-async function mountPage(record: OperationRecord) {
+async function mountPage(record: OperationRecord, app: Record<string, unknown> = {}) {
 	mocks.getOperation.mockResolvedValue(record)
 	const w = mount(JournalDetail, {
 		global: {
 			plugins: [
 				createTestingPinia({
 					createSpy: vi.fn,
-					initialState: { app: { profile: { id: "p1" }, network: { id: "n1", chainId: 1 }, account: { address: ACCOUNT } } },
+					initialState: {
+						app: { profile: { id: "p1" }, network: { id: "n1", chainId: 1 }, account: { address: ACCOUNT }, ...app },
+					},
 				}),
 			],
 			stubs: {
@@ -135,5 +141,62 @@ describe("the journal page of a failed send its wallet checks", () => {
 		)
 		expect(row(w, "category").exists()).toBe(false)
 		expect(row(w, "ended").exists()).toBe(true)
+	})
+
+	test("an expired send reads State Failed, with Outcome Won't go through and its context", async () => {
+		const w = await mountPage(failedSend("expired"))
+		expect(row(w, "state").text()).toBe("Failed")
+		expect(row(w, "category").text()).toBe("Won't go through")
+		expect(row(w, "context").text()).toBe(
+			"This transaction expired before the network included it. No fee was paid, and you can send it again.",
+		)
+	})
+})
+
+describe("the amount of a failed transfer", () => {
+	test("shows in the token's decimals when the wallet knows them", async () => {
+		mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
+		const w = await mountPage(failedSend())
+		expect(row(w, "amount").text()).toBe("1 TST")
+	})
+
+	test("shows no figure when the wallet does not know them", async () => {
+		mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: false }]
+		const w = await mountPage(failedSend())
+		expect(row(w, "amount").exists()).toBe(false)
+		expect(row(w, "state").text()).toBe("Checking")
+	})
+})
+
+describe("the hash of a send that reached the send line", () => {
+	const TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
+	const HASH = `0x${"2b".repeat(32)}`
+
+	test("shows the Tx hash row and View on the explorer, both linking to its page", async () => {
+		const w = await mountPage(failedSend("unconfirmed"), { ...TESTNET, defaultExplorer: "aztecscan" })
+		const url = `https://testnet.aztecscan.xyz/tx-effects/${HASH}`
+		expect(row(w, "explorer-link").attributes("href")).toBe(url)
+		expect(row(w, "explorer-link").text()).toBe("View on Aztecscan")
+		expect(row(w, "tx-hash-link").attributes("href")).toBe(url)
+		expect(row(w, "tx-hash-link").text()).toBe("0x2b2b..2b2b")
+	})
+
+	test("under explorer None the row keeps the hash, to copy, and no link shows", async () => {
+		const w = await mountPage(failedSend("unconfirmed"), { ...TESTNET, defaultExplorer: null })
+		expect(row(w, "explorer-link").exists()).toBe(false)
+		expect(row(w, "tx-hash-link").exists()).toBe(false)
+		expect(row(w, "tx-hash-copy").text()).toBe("0x2b2b..2b2b")
+	})
+
+	test("a record with no network stamp shows its hash and no link; one with no hash shows neither", async () => {
+		const legacy = { ...failedSend("unconfirmed"), networkId: undefined }
+		const w = await mountPage(legacy, { ...TESTNET, defaultExplorer: "aztecscan" })
+		expect(row(w, "explorer-link").exists()).toBe(false)
+		expect(row(w, "tx-hash-copy").exists()).toBe(true)
+
+		const neverSent = { ...failedSend(), progress: { stage: "failed" as const, from: "simulating" as const } }
+		const x = await mountPage(neverSent, { ...TESTNET, defaultExplorer: "aztecscan" })
+		expect(x.find('[data-testid^="journal-detail-tx-hash"]').exists()).toBe(false)
+		expect(row(x, "explorer-link").exists()).toBe(false)
 	})
 })

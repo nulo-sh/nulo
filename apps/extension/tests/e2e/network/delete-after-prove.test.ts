@@ -41,6 +41,10 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const config = aztecConfig as AztecTestConfig
 		const { playgroundPage: dapp, accountAddress } = ctx
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before it: here
+		// the fixture's setup popup and its connect and grant windows.
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 		await mintPublicTokensForAccount(config, accountAddress)
 
 		await setPgInput(dapp, "tokenAddress", config.tokenAddress)
@@ -71,6 +75,7 @@ test.skipIf(!hasConfig)(
 		expect(listed).toEqual([profileB])
 
 		expect(await hasCrsCache(page), "the erase must leave bb.js's CRS cache in place").toBe(true)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )

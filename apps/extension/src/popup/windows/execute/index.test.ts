@@ -653,14 +653,21 @@ describe("execute window — init sequencing pins", () => {
 			return { getNetworks: vi.fn(async () => [NETWORK]), connect: vi.fn(), disconnect: vi.fn() }
 		} as never)
 		payloadToLoad = twoOpsPayload()
-		w = factory()
-		await completeInit()
-		const vm = w.vm as unknown as ExecVm & { tokenMetadataLoading: boolean; tokenMetadataError: Map<string, string> }
-		expect(vm.initComplete).toBe(true)
-		// The mocked TokenServiceClient's previewTokenMetadata resolves undefined →
-		// the per-op catch records an error; the finally clears the flag.
-		expect(vm.tokenMetadataLoading).toBe(false)
-		expect(vm.tokenMetadataError.get("0xtok")).toBeDefined()
+		const warned = vi.spyOn(console, "warn").mockImplementation(() => {})
+		try {
+			w = factory()
+			await completeInit()
+			const vm = w.vm as unknown as ExecVm & { tokenMetadataLoading: boolean; tokenMetadataError: Map<string, string> }
+			expect(vm.initComplete).toBe(true)
+			// The mocked TokenServiceClient's previewTokenMetadata resolves undefined →
+			// the per-op catch records an error; the finally clears the flag.
+			expect(vm.tokenMetadataLoading).toBe(false)
+			expect(vm.tokenMetadataError.get("0xtok")).toBeDefined()
+			const message = "[Execute] previewTokenMetadata failed for 0xtok"
+			expect(warned.mock.calls.filter(([m]) => m === message)).toEqual([[message, { error: expect.any(TypeError) }]])
+		} finally {
+			warned.mockRestore()
+		}
 	})
 })
 

@@ -7,6 +7,7 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
 	Spinner: { template: '<span data-testid="stub-spinner" />' },
+	Skeleton: { template: '<i data-testid="stub-skeleton" :data-width="width" :data-height="height" />', props: ["width", "height"] },
 	TransactionCardLayout: {
 		template: `
 			<div :data-testid="testId" :data-stage="stage" :data-backend="backend">
@@ -31,9 +32,16 @@ describe("composite/TransactionAwaitingCard", () => {
 		expect(w.text()).toContain("Creating transaction")
 	})
 
-	test("renders the default subtitle 'Preparing...'", () => {
-		const w = mountCard()
-		expect(w.text()).toContain("Preparing...")
+	test("with no stage known, the stage line is the loading skeleton, never a guessed stage", () => {
+		const line = mountCard().find("[data-testid='tx-awaiting-subtitle']")
+		expect(line.text()).toBe("")
+		expect(line.find("[data-testid='stub-skeleton']").attributes()).toMatchObject({ "data-width": "92", "data-height": "9" })
+	})
+
+	test("a stage line replaces the skeleton", () => {
+		const line = mountCard({ subtitle: "Queued..." }).find("[data-testid='tx-awaiting-subtitle']")
+		expect(line.text()).toBe("Queued...")
+		expect(line.find("[data-testid='stub-skeleton']").exists()).toBe(false)
 	})
 
 	test("custom title prop overrides the default", () => {

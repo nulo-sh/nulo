@@ -328,6 +328,23 @@ describe("export/full.vue — a password profile's file leaves only encrypted", 
 		expect(usePopupStore().isOpened("confirm")).toBe(false)
 	})
 
+	it("a download that fails is logged under a named key", async () => {
+		const encrypt = vi.fn(async () => new Uint8Array(29))
+		vi.spyOn(EncryptionKey, "getPasshash").mockResolvedValue(new Uint8Array(32) as never)
+		vi.spyOn(EncryptionKey, "fromPasshash").mockResolvedValue({ encrypt } as never)
+		const refusal = new Error("Download canceled by the user")
+		downloadFile.mockRejectedValueOnce(refusal)
+		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
+		const wrapper = mountPage()
+		await reachBackupReady(wrapper)
+		await wrapper.find("[data-testid='protect-password-btn']").trigger("click")
+		await vi.waitFor(() => expect(downloadButton(wrapper).attributes("disabled")).toBeUndefined())
+		await downloadButton(wrapper).trigger("click")
+		await vi.waitFor(() =>
+			expect(logged.mock.calls.filter(([m]) => m === "Download failed:")).toEqual([["Download failed:", { error: refusal }]]),
+		)
+	})
+
 	it("a switch to a passkey profile made elsewhere starts the page over instead of offering the password backup", async () => {
 		const wrapper = mountPage()
 		await reachBackupReady(wrapper)

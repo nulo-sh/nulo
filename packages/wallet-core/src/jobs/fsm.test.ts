@@ -21,6 +21,8 @@ describe("job FSM", () => {
 			["queued", "failed"],
 			["queued", "cancelled"],
 			["pending", "simulating"],
+			// The one back-edge: a send that has to wait after its record was created.
+			["pending", "queued"],
 			["simulating", "proving"],
 			["proving", "submitting"],
 			["submitting", "succeeded"],
@@ -51,8 +53,7 @@ describe("job FSM", () => {
 			["queued", "proving"],
 			["queued", "submitting"],
 			["queued", "succeeded"],
-			// no back-edges into queued either.
-			["pending", "queued"],
+			// no back-edge into queued past pending.
 			["simulating", "queued"],
 			["proving", "queued"],
 			// no back-edges

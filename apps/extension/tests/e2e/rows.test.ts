@@ -3,7 +3,7 @@
  *  and of the row's icon, and how far apart rows sit and whether anything leaves one. */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { prepareKeys, waitForNewTab, waitForTarget } from "./fixtures/browser"
+import { prepareKeys, waitForNewTab } from "./fixtures/browser"
 import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import {
 	addContact,
@@ -17,6 +17,7 @@ import {
 	setTheme,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
+import { waitForPopup } from "./fixtures/popups"
 import { readActivityScope, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
@@ -47,9 +48,9 @@ const TOKEN_LOADING = [
 	`${sel("token-seed-row")}:not([data-status="failed"]):not([data-status="rejected"])`,
 ].join(", ")
 
-/** A release artifact seeds the default tokens from the live network, and a node that fails holds
- *  them through the seeder's two retry waits (15 s, then 60 s) and three attempts. The tests that
- *  open Home add it to their own timeouts. */
+/** A release artifact seeds the default tokens against the launch's stand-in node, which fails them
+ *  only after the seeder's two retry waits (15 s, then 60 s) and three attempts. The tests that open
+ *  Home add it to their own timeouts. */
 const TOKENS_LAND_MS = 150_000
 
 /** Home's token card settles after the activity row shows and then pushes the row down: a point
@@ -79,7 +80,7 @@ async function waitForSettledTokens(page: Page, timeout = 15_000): Promise<void>
 }
 
 /** A priced 1.5 Test USDC transfer: the price map quotes it as USDC. Returns once the token card
- *  has settled, which in a release build waits for its default tokens to land. */
+ *  has settled, which in a release build waits for its default tokens to stop. */
 async function openHomeWithRow(ctx: ExtensionContext): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
@@ -306,6 +307,7 @@ test("Home's first activity row: a Tab stop with the ring, Enter and Space each 
 	await waitForHashPrefix(page, "#/popup/tx/")
 	expect(await probe(page)).toMatchObject({ pushes: 1 })
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 240_000)
 
@@ -360,6 +362,7 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 		await tab.close()
 	}
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
@@ -397,6 +400,7 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 		await waitForFocus(page, "endpoint-edit-btn")
 	}
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
@@ -429,12 +433,9 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 	await waitForFocus(page, "settings-logs-open")
 
 	const before = new Set(registeredExtension.browser.targets())
+	const logsP = waitForPopup(registeredExtension, "logger", { timeout: 10_000 })
 	await page.keyboard.press("Enter")
-	const logs = await waitForTarget(
-		registeredExtension.browser,
-		(t) => t.type() === "page" && !before.has(t) && t.url().includes("#/windows/logger"),
-		10_000,
-	)
+	const logs = await logsP
 	try {
 		// The window is open, so Space brings it forward instead of opening a second one.
 		await prepareKeys(page)
@@ -443,9 +444,10 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 		await page.waitForFunction(() => (window as unknown as Probe).__logsClicks === 2, { timeout: 5_000, polling: 50 })
 		expect(registeredExtension.browser.targets().filter((t) => t.type() === "page" && !before.has(t))).toHaveLength(1)
 	} finally {
-		await (await logs.asPage()).close().catch(() => undefined)
+		await logs.close().catch(() => undefined)
 	}
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
@@ -475,6 +477,7 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 	expect(layout.left).toBeGreaterThanOrEqual(0)
 	expect(layout.right).toBeLessThanOrEqual(layout.width)
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 210_000)
 
@@ -626,5 +629,6 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		}
 	}
 
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)

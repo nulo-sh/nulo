@@ -13,8 +13,9 @@ const hasConfig = aztecConfig !== undefined
 /**
  * The standard Token's `transfer_public_to_public`, whose nonce is named `_nonce`, reads as the
  * transfer row on both windows a dApp opens with it: the transaction and an authorization for the
- * same call with a random nonce. The decode, the selector check and the token's units all run for
- * real here; both windows are rejected, since proving the call is other files' job.
+ * same call with a random nonce. Each transfer function that touches a private balance reads as its
+ * own row on the transaction window. The decode, the selector check and the token's units all run
+ * for real here; every window is rejected, since proving the call is other files' job.
  */
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -25,6 +26,15 @@ const NONCE = "0x0f3c7a91e24b6d08c5f1a39e7b2d40c86e9a1f53b7d20c4e8a6f91b3d5c07e2
 const textOf = (page: Page, selector: string) => page.$eval(selector, (el) => (el.textContent ?? "").replace(/\s+/g, " ").trim())
 const senderKind = (page: Page, testid: string) => page.$eval(sel(testid), (el) => el.getAttribute("data-sender-kind"))
 
+/** The card reads an amount in a token's units only for a token the wallet holds. */
+async function holdToken(ctx: ExtensionContext, accountAddress: string): Promise<void> {
+	await mintPublicTokensForAccount(aztecConfig!, accountAddress)
+	const home = await openPopup(ctx)
+	await waitForHash(home, "#/popup/general")
+	await importTokenAndWaitForBalance(home, accountAddress, aztecConfig!.tokenAddress, "100000000000000000000")
+	await home.close()
+}
+
 async function openWindow(ctx: ExtensionContext, page: Page, button: string): Promise<Page> {
 	const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
 	await clickByTestId(page, button)
@@ -34,18 +44,12 @@ async function openWindow(ctx: ExtensionContext, page: Page, button: string): Pr
 }
 
 test.skipIf(!hasConfig)(
-	"tx-transfer-row — a standard Token transfer reads as From, To and Amount in TST, sent or authorized",
+	"tx-transfer-row — a standard Token transfer reads with its named sender and the Amount in TST, sent or authorized",
 	{ timeout: 360_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const { playgroundPage: page, accountAddress } = ctx
 		const { tokenAddress, minterAddress } = aztecConfig!
-
-		// The card reads an amount in a token's units only for a token the wallet holds.
-		await mintPublicTokensForAccount(aztecConfig!, accountAddress)
-		const home = await openPopup(ctx)
-		await waitForHash(home, "#/popup/general")
-		await importTokenAndWaitForBalance(home, accountAddress, tokenAddress, "100000000000000000000")
-		await home.close()
+		await holdToken(ctx, accountAddress)
 
 		await setPgInput(page, "tokenAddress", tokenAddress)
 		await setPgInput(page, "recipient", minterAddress)
@@ -80,5 +84,36 @@ test.skipIf(!hasConfig)(
 		await shotSend(auth, "transfer-row-authwit", "execute-authwit-structured-args")
 		await rejectExecute(auth)
 		expect((await waitForPgResult(page, "createAuthWit", authSeq, 30_000)).status).toBe("error")
+	},
+)
+
+const PRIVATE_KINDS = [
+	{ fn: "transfer_private_to_private", label: /^Transfer \(private\)/ },
+	{ fn: "transfer_private_to_public", label: /^Transfer to public/ },
+	{ fn: "transfer_public_to_private", label: /^Transfer to private/ },
+]
+
+test.skipIf(!hasConfig).for(PRIVATE_KINDS)(
+	"tx-transfer-row — $fn reads as its own transfer row, with its named sender and the Amount in TST",
+	{ timeout: 360_000 },
+	async ({ fn, label }, { dappConnectedExtensionWithTransactionCap: ctx }) => {
+		const { playgroundPage: page, accountAddress } = ctx
+		const { tokenAddress, minterAddress } = aztecConfig!
+		await holdToken(ctx, accountAddress)
+
+		await setPgInput(page, "tokenAddress", tokenAddress)
+		await setPgInput(page, "recipient", minterAddress)
+		await setPgInput(page, "amount", AMOUNT)
+		await page.select(sel("pg-select-transferFn"), fn)
+		const sendSeq = await snapshotResultSeq(page)
+		const send = await openWindow(ctx, page, "pg-btn-sendTx-default")
+		const row = `${sel("execute-op-payload-row")}[data-intent-kind="transfer"]`
+		await send.waitForSelector(row, { visible: true, timeout: 60_000 })
+		expect(await textOf(send, row)).toMatch(label)
+		expect(await senderKind(send, "execute-op-transfer-sender")).toBe("explicit")
+		expect(await textOf(send, sel("execute-op-amount"))).toBe("5 TST")
+		await shotSend(send, `transfer-row-${fn}`, "execute-op-structured-args")
+		await rejectExecute(send)
+		expect((await waitForPgResult(page, "sendTx", sendSeq, 30_000)).status).toBe("error")
 	},
 )

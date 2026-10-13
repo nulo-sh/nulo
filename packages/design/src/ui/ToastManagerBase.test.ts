@@ -128,6 +128,37 @@ describe("ToastManagerBase", () => {
 		expect(alert().querySelector('[data-name="close-circle"]')?.getAttribute("data-color")).toBe("red")
 	})
 
+	test("an info renders in the alert region with a grey clock and ×, and no error border", async () => {
+		mountRegion()
+		open({ kind: "info", label: "Checking" })
+		await settle()
+		expect(status().querySelector(CARD)).toBeNull()
+		const info = alert().querySelector(CARD)
+		expect(info?.getAttribute("data-kind")).toBe("info")
+		expect(info?.querySelector('[data-name="clock-circle"]')?.getAttribute("data-color")).toBe("secondary")
+		expect(info?.querySelector('[data-name="close-circle"]')).toBeNull()
+		expect(info?.querySelector('[data-testid="snackbar-close"]')).not.toBeNull()
+
+		open({ kind: "error", label: "Failed" })
+		await settle()
+		const error = alert().querySelector(CARD)
+		expect(error?.getAttribute("data-kind")).toBe("error")
+		expect(error?.classList.length).toBe((info?.classList.length ?? 0) + 1)
+		expect(error?.querySelector('[data-name="clock-circle"]')).toBeNull()
+	})
+
+	test("it exposes the drawn height of the snack it places, 0 while none is open", async () => {
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			return DOMRect.fromRect({ height: this.querySelector(CARD) ? 72 : 0 })
+		})
+		const wrapper = mountRegion()
+		const height = () => (wrapper.vm as unknown as { snackHeight: () => number }).snackHeight()
+		expect(height()).toBe(0)
+		open({ kind: "error", label: "Send failed" })
+		await nextTick()
+		expect(height()).toBe(72)
+	})
+
 	test("the same text opened twice renders twice: the second card is a new element", async () => {
 		mountRegion()
 		open({ kind: "success", label: "Copied" })

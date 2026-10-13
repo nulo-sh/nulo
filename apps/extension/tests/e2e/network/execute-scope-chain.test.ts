@@ -36,6 +36,10 @@ test.skipIf(!hasConfig)(
 		const ctx = dappConnectedExtensionWithTransactionCap
 		const { playgroundPage: page, accountAddress: signer } = ctx
 		const config = aztecConfig as AztecTestConfig
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before it: here
+		// the fixture's setup popup and its connect and grant windows.
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 
 		await mintPublicTokensForAccount(config, signer)
 
@@ -62,6 +66,8 @@ test.skipIf(!hasConfig)(
 		await approveExecute(execPopup)
 		// The window closes only after both pointer writes landed.
 		await waitForPopupClosed(execPopup, 60_000)
+		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 
 		const reopened = await openPopup(ctx)
 		await waitForHash(reopened, "#/popup/general", 30_000)
@@ -80,5 +86,6 @@ test.skipIf(!hasConfig)(
 		await waitForTxCardByHash(reopened, txHash as string, 120_000)
 
 		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 	},
 )

@@ -136,8 +136,9 @@ import type { CallAction, EncodedCallAction } from "@nulo/wallet-bridge"
 import { type ILogger, LogLevel } from "@/wallet/logger"
 import { type ContractResolver, findFunctionByName, findFunctionBySelector, requireArtifact } from "../contract-resolver"
 import { getBlockHeaderAnchor } from "./block-header-anchor"
+import { EXECUTION_SERVICE_NAME } from "../spec"
 
-const LOG_SOURCE = "batched-view-simulation"
+const LOG_SOURCE = EXECUTION_SERVICE_NAME
 
 export interface BatchedViewSimulationDeps {
 	readonly pxe: IPXE

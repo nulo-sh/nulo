@@ -30,25 +30,17 @@ async function pxeHostState(page: Page): Promise<PxeHostState> {
  * Every request for an outside host goes to the guard, and Chrome resolves no outside name.
  * `<-loopback>` drops Chrome's implicit bypasses, link-local addresses among them, and the entries
  * after it put loopback back on the direct path. `MAP *` also captures IP literals, the guard's own
- * address included, hence the two excludes; `::1` matches only unbracketed. The canary name
- * resolves to loopback, which only a direct path would use.
+ * address included, hence the excludes; `::1` matches only unbracketed. The canary name resolves to
+ * loopback, which only a direct path would use. A live host is bypassed and excluded by its exact
+ * name, so it alone of the outside names goes direct and resolves.
  */
-export const egressGuardArgs = (guardPort: number): string[] => [
-	`--proxy-server=http://127.0.0.1:${guardPort}`,
-	"--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]",
-	`--host-resolver-rules=MAP ${EGRESS_CANARY_HOST} 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1`,
-]
-
-/**
- * Artifact mode runs the production bundle, where token seeds resolve for real and a resolved quote
- * would break `fiat-display`'s "no fiat on a fresh wallet", so it blocks the price host only:
- * blocking RPC makes the node client retry, which pushes profile deletion past the reset specs'
- * waits and fails three of them.
- */
-export function routingArgs(egress: LaunchOptions["egress"], artifactRun: boolean): string[] {
-	if (egress && artifactRun) throw new Error("a launch cannot be both behind the egress guard and an artifact run")
-	if (egress) return egressGuardArgs(egress.guardPort)
-	return artifactRun ? ["--host-resolver-rules=MAP api.coingecko.com 127.0.0.1:1"] : []
+export function egressGuardArgs(guardPort: number, liveHost?: string): string[] {
+	const live = liveHost === undefined ? { bypass: "", exclude: "" } : { bypass: `;${liveHost}`, exclude: `, EXCLUDE ${liveHost}` }
+	return [
+		`--proxy-server=http://127.0.0.1:${guardPort}`,
+		`--proxy-bypass-list=<-loopback>;localhost;127.0.0.1;[::1]${live.bypass}`,
+		`--host-resolver-rules=MAP ${EGRESS_CANARY_HOST} 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE ::1${live.exclude}`,
+	]
 }
 
 async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = true, egress }: LaunchOptions): Promise<LaunchedBrowser> {
@@ -72,7 +64,7 @@ async function launch({ extensionPath, userDataDir, headless, fixedWindowSize = 
 			"--disable-renderer-backgrounding",
 			"--disable-backgrounding-occluded-windows",
 			"--disable-features=CalculateNativeWinOcclusion",
-			...routingArgs(egress, process.env.NULO_E2E_ARTIFACT_RUN === "1"),
+			...(egress ? egressGuardArgs(egress.guardPort, egress.liveHost) : []),
 		],
 		ignoreDefaultArgs: ["--disable-extensions"],
 		// The default 180s is not enough for a cold first run: argon2 unlock plus the bb.js wasm
@@ -249,9 +241,6 @@ export const chromeDriver: BrowserDriver = {
 		await page.reload({ waitUntil: "domcontentloaded" })
 	},
 	waitForTarget: (browser, predicate, timeout) => browser.waitForTarget(predicate, { timeout }),
-	waitForOpenedUrl: async (browser, url, timeout) => {
-		await browser.waitForTarget((target) => target.type() === "page" && target.url() === url, { timeout })
-	},
 	waitForNewTab: async (browser, open, timeout) => {
 		const before = new Set(browser.targets())
 		await open()

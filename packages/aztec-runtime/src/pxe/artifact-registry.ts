@@ -6,6 +6,7 @@ import type { ILogger } from "@nulo/wallet-core/logger"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import { type ArtifactClassIdVerifier, type ClassIdVerifyLogger, DefaultArtifactClassIdVerifier } from "./artifact-class-id"
 import type { KnownArtifacts, KnownArtifactsLoader } from "./known-artifacts"
+import { PXE_SERVICE_NAME } from "./spec"
 
 export type ArtifactSource = "pxe-local" | "known"
 
@@ -39,13 +40,11 @@ export class ArtifactRegistry {
 
 	private readonly verifier: ArtifactClassIdVerifier
 	private readonly logger?: ILogger
-	private readonly logSource: string
 
 	public constructor(
 		private readonly loader: KnownArtifactsLoader,
 		opts?: {
 			logger?: ILogger
-			logSource?: string
 			/** DI seam for class-id verification. Tests pass a fake that
 			 *  bypasses Poseidon recompute (faster + works with fixture
 			 *  artifacts that lack the structure upstream
@@ -55,7 +54,6 @@ export class ArtifactRegistry {
 	) {
 		this.verifier = opts?.verifier ?? new DefaultArtifactClassIdVerifier()
 		this.logger = opts?.logger
-		this.logSource = opts?.logSource ?? "artifact-registry"
 	}
 
 	/** Lazy-load the compiled-in known artifacts + instances. First
@@ -133,7 +131,7 @@ export class ArtifactRegistry {
 		if (this.verified.get(artifact) === key) return artifact
 
 		const verifyLogger: ClassIdVerifyLogger | undefined = this.logger
-			? (level, msg, ...rest) => this.logger?.log(this.logSource, level === "warn" ? LogLevel.Warn : LogLevel.Debug, msg, ...rest)
+			? (level, msg, ...rest) => this.logger?.log(PXE_SERVICE_NAME, level === "warn" ? LogLevel.Warn : LogLevel.Debug, msg, ...rest)
 			: undefined
 		const verified = await this.verifier.verify(artifact, classId, verifyLogger)
 		if (verified === artifact) this.verified.set(artifact, key)

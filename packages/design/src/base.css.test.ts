@@ -17,6 +17,7 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// signal, wrong for click-to-copy); `* { scrollbar-width: none }` stands beside the
 	// `::-webkit-scrollbar` rule Firefox ignores, with `-moz-osx-font-smoothing` on the icon font, so
 	// Firefox matches Chrome; the dark palette is declared once (`:root, [theme="dark"]`), its hairline
-	// and scrim tokens at their literals' values; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("927c106e65e7aabbccf7c0bae4493524028912870c2c38cdf7d725c576f8535a")
+	// and scrim tokens at their literals' values, its --txt-danger lighter than --red so it reads 4.5:1 on a
+	// pressed row; line 1 carries the Apache-2.0 §4(b) header.
+	expect(hash).toBe("910a6a070127fd820b0cbf3cb1bcfed5a592a352b3398e11cf48fbfad284b3e6")
 })

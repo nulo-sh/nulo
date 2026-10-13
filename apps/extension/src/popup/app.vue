@@ -6,7 +6,7 @@ import Navigation from "./components/Navigation.vue"
 
 /** Utils */
 import { managers, isBackgroundConnected } from "@/utils/core"
-import { isPrefersDarkScheme, persistThemeHint } from "@/utils/general"
+import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
@@ -27,7 +27,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
 
 /** Composables */
-import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
+import { supersedeProfileActivations, useProfileBootstrap } from "@/composables/useProfileBootstrap"
 import { ARRIVALS_KEY, useArrivals } from "@/composables/useArrivals"
 
 /** Store */
@@ -84,8 +84,8 @@ const arrivals = useArrivals({
 	routeName: () => route.name,
 	lookupToken: async (record) => {
 		if (record.tokenId === undefined) return undefined
-		const { symbol, decimals } = await arrivalsTokens.getToken(record.tokenId)
-		return { symbol, decimals }
+		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(record.tokenId)
+		return { symbol, decimals, hasDecimals }
 	},
 	accountName: () => appStore.account?.name ?? "",
 	openToast,
@@ -100,12 +100,7 @@ const legalSheetShown = ref(false)
 const settingHandlers = {
 	theme(value) {
 		theme.value = value
-		persistThemeHint(value)
-		if (value === "system") {
-			root.setAttribute("theme", isPrefersDarkScheme() ? "dark" : "light")
-		} else {
-			root.setAttribute("theme", value)
-		}
+		applyThemeChoice(root, value)
 	},
 	disableAnimations(value) {
 		root.classList.toggle("noanimations", Boolean(value))
@@ -179,6 +174,7 @@ const lockedState = createLockedState({
 	closePopups: () => popupStore.closeAll(),
 	onLocked,
 	markLocked: () => {
+		supersedeProfileActivations()
 		appStore.isLogined = false
 	},
 	clearActivity: () => appStore.clearActivity(),
@@ -200,8 +196,8 @@ let profileEventSeq = 0
 const onActiveProfileChanged = async (profile) => {
 	const seq = ++profileEventSeq
 	if (profile) {
-		// bootstrapActiveProfile carries its own lock-wins guard: a stale profile event whose
-		// session was already locked re-checks getActiveProfile() before flipping isLogined.
+		// bootstrapActiveProfile carries its own lock-wins guard: it flips isLogined only if its
+		// re-read of getActiveProfile() still finds the profile and no lock has superseded its run.
 		// The wrap is load-bearing: an emitter-callback rejection would otherwise become an
 		// unhandled rejection that silently starves the unlock flow's activation wait. The
 		// identity-keyed failure record releases that waiter IMMEDIATELY (never the full

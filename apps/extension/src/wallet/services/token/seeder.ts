@@ -5,8 +5,9 @@ import { createSerialQueue } from "@nulo/wallet-core/utils"
 import type { ILogger } from "@/wallet/logger"
 import type { DefaultTokenSeed } from "./default-tokens"
 import type { SeedScope, SeedStatus, SeedStatusEntry, SeedStatusSnapshot, TokenInterface } from "./spec"
+import { TOKEN_SERVICE_NAME } from "./spec"
 
-const LOG_SOURCE = "TokenSeeder"
+const LOG_SOURCE = TOKEN_SERVICE_NAME
 
 /** Thrown by `parseTokenInterface` when a seed's TOFU pin fails — the seeder
  *  hard-skips (attempt stays counted) instead of retrying a hostile answer. */

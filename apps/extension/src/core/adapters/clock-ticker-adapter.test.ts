@@ -1,5 +1,6 @@
 import { describe, test, expect, vi } from "vitest"
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
+import { DummyLogger } from "@/wallet/logger"
 import { ClockTickerAdapter } from "./clock-ticker-adapter"
 
 /** Minimal ClockPort stub: `setInterval` captures the fn + ms and
@@ -39,7 +40,7 @@ const flush = () => new Promise<void>((r) => setTimeout(r, 0))
 describe("ClockTickerAdapter", () => {
 	test("calls onTick on each interval fire", async () => {
 		const { clock, fire } = makeManualClock()
-		const ticker = new ClockTickerAdapter(clock)
+		const ticker = new ClockTickerAdapter(clock, new DummyLogger(), "token-balance")
 		const onTick = vi.fn().mockResolvedValue(undefined)
 		ticker.subscribe(1000, onTick)
 
@@ -50,7 +51,7 @@ describe("ClockTickerAdapter", () => {
 
 	test("serializes concurrent ticks: while one is running, a second fire is coalesced", async () => {
 		const { clock, fire } = makeManualClock()
-		const ticker = new ClockTickerAdapter(clock)
+		const ticker = new ClockTickerAdapter(clock, new DummyLogger(), "token-balance")
 
 		let resolveFirst!: () => void
 		const firstRunning = new Promise<void>((r) => {
@@ -84,7 +85,7 @@ describe("ClockTickerAdapter", () => {
 
 	test("error in onTick is swallowed; future ticks still fire", async () => {
 		const { clock, fire } = makeManualClock()
-		const ticker = new ClockTickerAdapter(clock)
+		const ticker = new ClockTickerAdapter(clock, new DummyLogger(), "token-balance")
 
 		const onTick = vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValue(undefined)
 		ticker.subscribe(1000, onTick)
@@ -97,7 +98,7 @@ describe("ClockTickerAdapter", () => {
 
 	test("cancel prevents future tick delivery (idempotent)", async () => {
 		const { clock, fire, scheduled } = makeManualClock()
-		const ticker = new ClockTickerAdapter(clock)
+		const ticker = new ClockTickerAdapter(clock, new DummyLogger(), "token-balance")
 
 		const onTick = vi.fn().mockResolvedValue(undefined)
 		const handle = ticker.subscribe(1000, onTick)
@@ -120,7 +121,7 @@ describe("ClockTickerAdapter", () => {
 
 	test("cancel during an in-flight tick drops the coalesced pending tick", async () => {
 		const { clock, fire } = makeManualClock()
-		const ticker = new ClockTickerAdapter(clock)
+		const ticker = new ClockTickerAdapter(clock, new DummyLogger(), "token-balance")
 
 		let resolveFirst!: () => void
 		const firstRunning = new Promise<void>((r) => {

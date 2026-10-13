@@ -196,8 +196,10 @@ import {
 	findFunctionByName,
 	findFunctionBySelector,
 	NAMED_CALL_BINDING,
+	refusalTitleOf,
 	type SelectorBindingPolicy,
 } from "./contract-resolver"
+import { normalizeError } from "@nulo/wallet-core/jobs"
 import { type FunctionAbi, FunctionSelector } from "@aztec-labs/stdlib/abi"
 
 // Selector derivation hits Barretenberg's poseidon hash, which isn't
@@ -366,5 +368,43 @@ describe("assertSelectorBinding: a refusal names the policy, never the call", ()
 	test("a matching name, or an absent one where the policy allows it, returns the selector's function", () => {
 		expect(assertSelectorBinding(fn, { name: fn.name }, NAMED_CALL_BINDING)).toBe(fn)
 		expect(assertSelectorBinding(fn, {}, CALL_BINDING)).toBe(fn)
+	})
+})
+
+describe("assertSelectorBinding: the title a refusal gives its record", () => {
+	const fn = fakeFn("transfer_public_to_public") as unknown as FunctionAbi
+
+	function thrown(resolved: FunctionAbi | undefined, policy: SelectorBindingPolicy): unknown {
+		try {
+			assertSelectorBinding(resolved, { name: "balance_of_public" }, policy)
+		} catch (error) {
+			return error
+		}
+		throw new Error("expected a refusal")
+	}
+
+	test.each([
+		["a call", CALL_BINDING],
+		["a fast-path call", NAMED_CALL_BINDING],
+	])("%s: a mismatch is titled by the resolved function, an unresolved selector by Transaction", (_label, policy) => {
+		expect(refusalTitleOf(thrown(fn, policy))).toBe("transfer_public_to_public")
+		expect(refusalTitleOf(thrown(undefined, policy))).toBe("Transaction")
+	})
+
+	test("an authwit's inner call never titles the record", () => {
+		expect(refusalTitleOf(thrown(fn, AUTHWIT_CALL_BINDING))).toBeUndefined()
+		expect(refusalTitleOf(thrown(undefined, AUTHWIT_CALL_BINDING))).toBeUndefined()
+	})
+
+	test("the title never rides the error: not its payload, its keys, its serialization or its journal envelope", () => {
+		const refused = thrown(fn, CALL_BINDING) as ScopeViolationError
+		expect(refusalTitleOf(refused)).toBe("transfer_public_to_public")
+		const carriers = [
+			JSON.stringify(refused.toPayload()),
+			JSON.stringify(Object.keys(refused)),
+			JSON.stringify(refused),
+			JSON.stringify(normalizeError(refused, "scope_refused")),
+		]
+		for (const carrier of carriers) expect(carrier).not.toContain("transfer_public_to_public")
 	})
 })

@@ -472,9 +472,7 @@ describe("ServiceClient telemetry + send-failure", () => {
 		emitMessage(makeResponse(requestId, fromUid, "echo:hi"))
 		await expect(promise).resolves.toBe("echo:hi")
 
-		// LoggingTelemetrySink should have logged the success terminal
-		// at Debug level via the spy logger.
-		const telemetryCall = calls.find(([src]) => src === "offscreen-telemetry")
+		const telemetryCall = calls.find(([src, , data]) => src === "test-client" && (data as RequestTelemetry)?.method === "echo")
 		expect(telemetryCall).toBeDefined()
 		expect(telemetryCall![1]).toBe(LogLevel.Debug) // success → Debug
 		const sanitizedRecord = telemetryCall![2] as RequestTelemetry
@@ -500,7 +498,7 @@ describe("ServiceClient telemetry + send-failure", () => {
 
 	test("LoggingTelemetrySink: Info for anomaly statuses, Debug for normal", () => {
 		const { logger, calls } = makeSpyLogger()
-		const sink = new LoggingTelemetrySink(logger)
+		const sink = new LoggingTelemetrySink(logger, "test-client")
 
 		sink.recordTerminal({ method: "x", requestId: 1, startedAtMs: 0, endedAtMs: 1, status: "success" })
 		sink.recordTerminal({ method: "x", requestId: 2, startedAtMs: 0, endedAtMs: 1, status: "rejected" })

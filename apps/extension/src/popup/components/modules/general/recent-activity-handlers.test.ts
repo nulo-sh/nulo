@@ -7,6 +7,7 @@ import {
 	buildFocusHandler,
 	filterPendingDoubleRender,
 	isMatchingTask,
+	isOwnTerminalRecord,
 	type MinimalChainTx,
 } from "./recent-activity-handlers"
 
@@ -238,5 +239,19 @@ describe("filterPendingDoubleRender", () => {
 			makeOp({ id: "j2", kind: "dapp_execute", terminalAt: null, progress: { stage: "submitting", txHash: t2Hash } }),
 		]
 		expect(filterPendingDoubleRender(txs, inFlight).map((t) => t.hash)).toEqual([t3Hash])
+	})
+})
+
+describe("isOwnTerminalRecord", () => {
+	const task = { createdAt: 10, content: { kind: ContentKind.Transfer, tokenId: 42 } }
+
+	test("an ended record written after the task started is its own; an earlier send's is not", () => {
+		expect(isOwnTerminalRecord(task, makeOp({ createdAt: 10 }), "0xabc")).toBe(true)
+		expect(isOwnTerminalRecord(task, makeOp({ createdAt: 9 }), "0xabc")).toBe(false)
+	})
+
+	test("a record still in flight, or a task with no start time, never counts", () => {
+		expect(isOwnTerminalRecord(task, makeOp({ createdAt: 11, terminalAt: null }), "0xabc")).toBe(false)
+		expect(isOwnTerminalRecord({ content: task.content }, makeOp({ createdAt: 11 }), "0xabc")).toBe(false)
 	})
 })

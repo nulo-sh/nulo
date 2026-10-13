@@ -55,6 +55,8 @@ vi.mock("@/wallet/services/config/client", () => ({
 
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { useAppStore } from "@/stores/app.store"
+import { useCacheStore } from "@/stores/cache.store"
+import { usePopupStore } from "@/stores/popup.store"
 import Holdings from "./holdings.vue"
 import { installChromeStorage } from "../../../tests/helpers/chrome-storage-mock"
 
@@ -75,7 +77,7 @@ const STUBS = {
 const row = (id: string, symbol: string, chainId: number, contract = `0x${symbol.toLowerCase()}`) => ({
 	id,
 	account: "0xacct",
-	token: { id, symbol, name: `${symbol} Token`, decimals: 6, chainId, contract },
+	token: { id, symbol, name: `${symbol} Token`, decimals: 6, hasDecimals: true, chainId, contract },
 	publicBalance: (250n * 10n ** 6n).toString(),
 	privateBalance: (1_000n * 10n ** 6n).toString(),
 	updatedAt: 1,
@@ -155,6 +157,19 @@ describe("holdings page", () => {
 		expect(w.find('[data-testid="holdings-error"]').exists()).toBe(false)
 		expect(w.findAll('[data-testid="token-symbol"]')).toHaveLength(1)
 		expect(w.find('[data-testid="holdings-summary"]').text()).toContain("1 tokens")
+	})
+
+	test("the add row opens the New token popup with the pasted address handed over", async () => {
+		installChromeStorage()
+		seedRows = [row("b1", "AAA", CHAIN_IDS.TESTNET, TEST_USDC)]
+		const w = await mountPage()
+		const address = "0x04d7bb8a4a0239077d7d246279076fdab66f5ed6167bd01882fad6131199457a"
+
+		await w.find('[data-testid="holdings-search"]').setValue(address)
+		await w.find('[data-testid="holdings-add-token"]').trigger("click")
+
+		expect(useCacheStore().preselectedTokenAddressToAdd).toBe(address)
+		expect(usePopupStore().isOpened("new_token")).toBe(true)
 	})
 
 	test("a failed fetch shows the error line, not an empty list", async () => {

@@ -182,6 +182,7 @@ function deferred<T>() {
 
 const inFlightTransferOp = (account: string, id = "op-a") => ({
 	id,
+	profileId: "p1",
 	accountAddress: account,
 	networkId: "net-1",
 	kind: "transfer",
@@ -585,6 +586,24 @@ describe("RecentActivityView — its header", () => {
 		expect(empty.text()).toContain("NOTHING HERE YET")
 		expect(empty.text()).toContain("Recent activity")
 	})
+
+	test("a token page's 'View history' opens History filtered to that token", async () => {
+		H.store.current.transactions = [
+			{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [{ contract: "0xtok" }] } as never,
+		]
+		const router = makeRouter()
+		const feed = mount(RecentActivityView, {
+			shallow: true,
+			props: { token: { id: 4, contract: "0xtok", symbol: "TOK" } },
+			global: { plugins: [router], stubs: { RouterLink: false } },
+		})
+		await flushPromises()
+		const link = feed.find('[data-testid="activity-view-all"]')
+		expect(link.attributes("href")).toBe("/popup/activity?token=4")
+		await link.trigger("click")
+		await flushPromises()
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity?token=4")
+	})
 })
 
 describe("RecentActivityView — one feed block for token and account views", () => {
@@ -840,8 +859,9 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 
 	test("each in-flight op's card reads its title, icon, chips and amount from the record and its token", async () => {
 		H.getTokens.mockResolvedValue([
-			{ id: 42, symbol: "USDC", decimals: 6 },
-			{ id: 43, symbol: "", decimals: 6 },
+			{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true },
+			{ id: 43, symbol: "", decimals: 6, hasDecimals: true },
+			{ id: 44, symbol: "RAW", decimals: 0, hasDecimals: false },
 		])
 		// Newest first: the table's order is the cards' order.
 		const table: [Record<string, unknown>, Record<(typeof FIELDS)[number], unknown>][] = [
@@ -862,8 +882,19 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					title: "USDC",
 					icon: "arrow-narrow-up-right",
 					originLabel: null,
-					amount: "0",
+					amount: null,
 					amountSymbol: "USDC",
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "transfer", tokenId: 44, amountRaw: "2000000" },
+				{
+					title: "RAW",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: null,
+					amountSymbol: "RAW",
 					transferTypeLabel: null,
 				},
 			],
@@ -960,30 +991,152 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 })
 
 describe("RecentActivityView — hydration order", () => {
-	// A characterization, not a requirement: the executing-task snapshot lands before the journal's,
-	// so a queued send first shows stage-less.
-	test("a queued send shows one stage-less card until the journal snapshot lands, then one card at queued", async () => {
+	// The executing-task snapshot lands before the journal's, so a queued send first draws with no stage known.
+	const cards = (w: ReturnType<typeof mountView>) =>
+		w
+			.findAllComponents({ name: "TransactionAwaitingCard" })
+			.map((c) => ({ stage: c.props("stage"), subtitle: c.props("subtitle"), cancellable: c.props("cancellable") }))
+
+	test("a queued send's card draws at once with no stage line until the journal snapshot lands, then reads queued", async () => {
 		const ops = deferred<unknown[]>()
 		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
 		H.getOperations.mockReturnValue(ops.promise)
 		const w = mountView()
-		const cards = () =>
-			w
-				.findAllComponents({ name: "TransactionAwaitingCard" })
-				.map((c) => ({ stage: c.props("stage"), cancellable: c.props("cancellable") }))
 		await flushPromises()
 		expect(vmOf(w).hasOrphanExecutingTask).toBe(true)
-		expect(cards()).toEqual([{ stage: null, cancellable: false }])
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
 
 		ops.resolve([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
 		await flushPromises()
 		expect(vmOf(w).hasOrphanExecutingTask).toBe(false)
-		expect(cards()).toEqual([{ stage: "queued", cancellable: true }])
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+	})
+
+	test("a Send-page task with no running step and no record yet draws no stage line, before or after the snapshot", async () => {
+		const ops = deferred<unknown[]>()
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		ops.resolve([])
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		const created = { ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }
+		H.journalAdded.emit(created)
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+	})
+
+	test("a snapshot that fails while the port stays up is retried, and a scope switch drops the retry", async () => {
+		vi.useFakeTimers()
+		try {
+			H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
+			const w = mountView()
+			await flushPromises()
+			expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+			H.getOperations.mockResolvedValueOnce([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+
+			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
+			H.store.current.account = { address: ACCT_B }
+			await flushPromises()
+			const reads = H.getOperations.mock.calls.length
+			H.store.current.account = { address: ACCT_A }
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(H.getOperations.mock.calls.length, "only the current scope's read runs").toBe(reads + 1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("an unmount while the mount awaits its task snapshot reads no journal and schedules no retry", async () => {
+		vi.useFakeTimers()
+		try {
+			const tasks = deferred<unknown[]>()
+			H.getTasks.mockReturnValue(tasks.promise)
+			H.getOperations.mockRejectedValue(new Error("disconnected"))
+			const w = mountView()
+			await flushPromises()
+			w.unmount()
+			tasks.resolve([])
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(H.getOperations).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a recent terminal record that lands before its task clears the task when the task lands", async () => {
+		const w = mountView()
+		await flushPromises()
+		const tasks = deferred<unknown[]>()
+		H.getTasks.mockReturnValue(tasks.promise)
+		H.getOperations.mockResolvedValue([{ ...inFlightTransferOp(ACCT_B), progress: { stage: "cancelled" }, terminalAt: Date.now() }])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+
+		tasks.resolve([uiTransferTask(ACCT_B, "task-b")])
+		await flushPromises()
+		expect(vmOf(w).executingTask).toBeNull()
+		expect(cards(w)).toEqual([])
+	})
+
+	// An earlier send of the same token ended moments before a later one started: same kind and token.
+	const earlierEnded = (account: string) => ({
+		...inFlightTransferOp(account, "op-earlier"),
+		createdAt: 1,
+		progress: { stage: "succeeded" },
+		terminalAt: Date.now(),
+	})
+	const laterTask = (account: string) => ({ ...uiTransferTask(account, "task-later"), createdAt: 2 })
+
+	test("an earlier send's terminal record leaves a later send's task, whichever snapshot lands second", async () => {
+		H.getTasks.mockResolvedValue([laterTask(ACCT_A)])
+		H.getOperations.mockResolvedValue([earlierEnded(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id, "journal second").toBe("task-later")
+
+		const tasks = deferred<unknown[]>()
+		H.getTasks.mockReturnValue(tasks.promise)
+		H.getOperations.mockResolvedValue([earlierEnded(ACCT_B)])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		tasks.resolve([laterTask(ACCT_B)])
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id, "task second").toBe("task-later")
+	})
+
+	test("an earlier send's record turning terminal leaves a later send's task", async () => {
+		H.getTasks.mockResolvedValue([laterTask(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		H.journalUpdated.emit(earlierEnded(ACCT_A))
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id).toBe("task-later")
+	})
+
+	test("a running step names itself before the snapshot lands", async () => {
+		const ops = deferred<unknown[]>()
+		const task = { ...uiTransferTask(ACCT_A), subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }] }
+		H.getTasks.mockResolvedValue([task])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: "Generating proof...", cancellable: false }])
 	})
 })
 
 describe("RecentActivityView — a journal record of another scope runs no side effect", () => {
-	const TOK = { id: 7, contract: "0xtok", symbol: "TOK", decimals: 18 }
+	const TOK = { id: 7, contract: "0xtok", symbol: "TOK", decimals: 18, hasDecimals: true }
 	/** A cancelled transfer of TOK to 0xrcpt: it matches the placeholder and the task below by account and token alone. */
 	const terminal = (over: Record<string, unknown> = {}) => ({
 		id: "op-done",
@@ -1048,6 +1201,20 @@ describe("RecentActivityView — a journal record of another scope runs no side 
 			expect(vm.pendingCancelJobIds.has("op-done")).toBe(false)
 			expect(vm.journalOps.map((op: { id: string }) => op.id)).toEqual(["op-done"])
 		}
+	})
+
+	test("with no active profile a stamped record is taken in by neither the snapshot nor an event; with one it is", async () => {
+		H.store.current.profile = null
+		H.getOperations.mockResolvedValue([inFlightTransferOp(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A, "op-b"))
+		expect(vmOf(w).journalOps).toEqual([])
+
+		H.store.current.profile = { id: "p1" }
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A, "op-b"))
+		expect(vmOf(w).journalOps.map((op: { id: string }) => op.id)).toEqual(["op-b", "op-a"])
 	})
 
 	test("a record taken in before a scope switch is gone after it", async () => {

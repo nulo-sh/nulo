@@ -25,6 +25,11 @@ const getDappSession = vi.fn(async (id: string) => {
 const setTrustedVerification = vi.fn(async (id: string, trusted: boolean) => {
 	callLog.push(`setTrustedVerification:${id}:${trusted}`)
 })
+let confirmation: () => Promise<void> = async () => undefined
+const confirmVerification = vi.fn(async (hash: string) => {
+	callLog.push(`confirmVerification:${hash}`)
+	return confirmation()
+})
 let refusal: () => Promise<string> = async () => "revoked"
 const refuseVerification = vi.fn(async (target: { origin: string }) => {
 	callLog.push(`refuseVerification:${target.origin}`)
@@ -42,7 +47,7 @@ vi.mock("vue-router", async (importOriginal) => {
 vi.mock("@aztec-labs/wallet-sdk/crypto", () => ({ hashToEmoji: (hash: string) => `grid(${hash})` }))
 vi.mock("@/wallet/services/dapp-session/client", () => ({
 	DappSessionServiceClient: vi.fn(function () {
-		return { connect: () => {}, disconnect: () => {}, getDappSession, setTrustedVerification, refuseVerification }
+		return { connect: () => {}, disconnect: () => {}, getDappSession, setTrustedVerification, confirmVerification, refuseVerification }
 	}),
 }))
 vi.mock("@/wallet/services/account/client", () => ({
@@ -100,9 +105,13 @@ const getCurrent = vi.fn((_options: unknown, cb: (w: { id?: number }) => void) =
 const remove = vi.fn((id: number) => callLog.push(`remove:${id}`))
 
 const wrappers: Array<ReturnType<typeof mount>> = []
-const mountVerify = (query: Record<string, string> = { sessionId: "row-1", verificationHash: URL_HASH, isReconnect: "false" }) => {
+const mountVerify = (
+	query: Record<string, string> = { sessionId: "row-1", verificationHash: URL_HASH, isReconnect: "false" },
+	errors?: unknown[],
+) => {
 	routeQuery = query
-	const w = mount(Verify, { global: { stubs: STUBS, components: { DappIdentityBlock } } })
+	const config = errors ? { errorHandler: (err: unknown) => errors.push(err) } : {}
+	const w = mount(Verify, { global: { stubs: STUBS, components: { DappIdentityBlock }, config } })
 	wrappers.push(w)
 	return w
 }
@@ -127,6 +136,7 @@ beforeEach(() => {
 	sessionCheckedReads = 0
 	currentWindow = { id: 7 }
 	refusal = async () => "revoked"
+	confirmation = async () => undefined
 	// biome-ignore lint/suspicious/noExplicitAny: chrome runtime stub for tests
 	;(globalThis as any).chrome = { windows: { getCurrent, remove } }
 })
@@ -192,13 +202,71 @@ describe("windows/verify — closing", () => {
 		expect(remove).not.toHaveBeenCalled()
 	})
 
-	test("They match with the skip switch on records the trust before the window closes", async () => {
+	test("They match with the skip switch on records the trust, then reports the check, then closes the window", async () => {
 		const w = mountVerify()
 		await flushPromises()
 		await w.get('[data-testid="toggle-stub"]').trigger("click")
 		await w.get('[data-testid="verify-confirm-btn"]').trigger("click")
 		await flushPromises()
-		expect(callLog).toEqual(["getDappSession:row-1", "setTrustedVerification:row-1:true", "getCurrent", "remove:7"])
+		expect(callLog).toEqual([
+			"getDappSession:row-1",
+			"setTrustedVerification:row-1:true",
+			`confirmVerification:${URL_HASH}`,
+			"getCurrent",
+			"remove:7",
+		])
+	})
+})
+
+describe("windows/verify — They match releases the app's calls", () => {
+	const press = async (w: ReturnType<typeof mountVerify>, testid: string) => {
+		await w.get(`[data-testid="${testid}"]`).trigger("click")
+		await flushPromises()
+	}
+
+	test("with the skip switch off it reports the URL's hash, not the row's, and records no trust", async () => {
+		const w = mountVerify()
+		await flushPromises()
+		await press(w, "verify-confirm-btn")
+		expect(callLog).toEqual(["getDappSession:row-1", `confirmVerification:${URL_HASH}`, "getCurrent", "remove:7"])
+		expect(setTrustedVerification).not.toHaveBeenCalled()
+	})
+
+	test("a window opened without a hash closes on They match without reporting the row's", async () => {
+		const w = mountVerify({ sessionId: "row-1", isReconnect: "false" })
+		await flushPromises()
+		await press(w, "verify-confirm-btn")
+		expect(confirmVerification).not.toHaveBeenCalled()
+		expect(remove.mock.calls).toEqual([[7]])
+	})
+
+	test("a report that fails keeps the window open and both controls answer again", async () => {
+		confirmation = async () => {
+			throw new Error("port gone")
+		}
+		const errors: unknown[] = []
+		const w = mountVerify(undefined, errors)
+		await flushPromises()
+		await press(w, "verify-confirm-btn")
+		expect(confirmVerification).toHaveBeenCalledTimes(1)
+		expect(errors).toHaveLength(1)
+		expect(remove).not.toHaveBeenCalled()
+		for (const id of ["verify-mismatch-btn", "verify-confirm-btn"]) {
+			expect(w.get(`[data-testid="${id}"]`).attributes("disabled")).toBeUndefined()
+		}
+
+		confirmation = async () => undefined
+		await press(w, "verify-confirm-btn")
+		expect(confirmVerification).toHaveBeenCalledTimes(2)
+		expect(remove.mock.calls).toEqual([[7]])
+	})
+
+	test("They don't match never reports the check", async () => {
+		const w = mountVerify()
+		await flushPromises()
+		await press(w, "verify-mismatch-btn")
+		expect(refuseVerification).toHaveBeenCalledTimes(1)
+		expect(confirmVerification).not.toHaveBeenCalled()
 	})
 })
 

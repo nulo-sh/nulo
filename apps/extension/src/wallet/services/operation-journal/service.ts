@@ -1,14 +1,7 @@
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { ValidationError } from "@nulo/extension-messaging/errors"
 import { validateParams } from "@nulo/extension-messaging/zod"
-import {
-	type JobError,
-	type JobProgress,
-	type ProveBackend,
-	type SendCheckOutcome,
-	assertCanTransition,
-	isTerminal,
-} from "@nulo/wallet-core/jobs"
+import { type JobError, type JobProgress, type ProveBackend, assertCanTransition, isTerminal } from "@nulo/wallet-core/jobs"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { Lock, EventHandler } from "@nulo/wallet-core/utils"
 import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
@@ -28,6 +21,8 @@ import {
 	OperationJournalMethodSchemas,
 	type OperationRecord,
 	OperationRecordSchema,
+	type SendCheckState,
+	isSendCheckMove,
 } from "./spec"
 
 export * from "./spec"
@@ -111,7 +106,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// logger reference is guaranteed to be the same instance the base
 		// Service stores on `this`. See class field comment above for the
 		// mutex contract.
-		this.transitionLock = new Lock("operation-journal:transition", logger)
+		this.transitionLock = new Lock(OPERATION_JOURNAL_SERVICE_NAME, logger)
 	}
 
 	/**
@@ -332,21 +327,36 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * Transition a record's stage. Enforces the FSM legality rules in
 	 * `@nulo/wallet-core/jobs` and the "error iff failed" invariant.
 	 *
-	 * Sets `terminalAt` if the new stage is terminal.
+	 * Sets `terminalAt` if the new stage is terminal. `failedTitle` retitles the record in the same
+	 * write that fails it, so only the producer whose transition lands renames the row.
 	 */
-	public async transitionOperation(id: string, progress: JobProgress, error?: JobError | null): Promise<OperationRecord> {
-		validateParams(OperationJournalMethodSchemas.transitionOperation.params, [id, progress, error ?? null], "transitionOperation")
+	public async transitionOperation(
+		id: string,
+		progress: JobProgress,
+		error?: JobError | null,
+		failedTitle?: string,
+	): Promise<OperationRecord> {
+		validateParams(
+			OperationJournalMethodSchemas.transitionOperation.params,
+			[id, progress, error ?? null, failedTitle],
+			"transitionOperation",
+		)
 		await this.ensureInitialized()
 
 		// Serialize ALL transitions globally — see `transitionLock` doc for
 		// the claim-vs-cancel race this closes. Critical section is small
 		// (one load + one validate + one write), so global is acceptable.
 		return await this.transitionLock.withLock(async () => {
-			return await this._transitionLocked(id, progress, error)
+			return await this._transitionLocked(id, progress, error, failedTitle)
 		})
 	}
 
-	private async _transitionLocked(id: string, progress: JobProgress, error?: JobError | null): Promise<OperationRecord> {
+	private async _transitionLocked(
+		id: string,
+		progress: JobProgress,
+		error?: JobError | null,
+		failedTitle?: string,
+	): Promise<OperationRecord> {
 		const existing = await this._loadValidated(id)
 		if (!existing) {
 			throw new Error(`Operation not found: ${id}`)
@@ -355,6 +365,9 @@ export class OperationJournalService extends Service<Methods, Events> implements
 		// FSM legality — throws IllegalTransitionError on a bad transition.
 		assertCanTransition(existing.progress.stage, progress.stage)
 		assertErrorInvariant(progress, error)
+		if (failedTitle !== undefined && progress.stage !== "failed") {
+			throw new ValidationError("transitionOperation: a title rides only a transition to 'failed'")
+		}
 		if (progress.stage === "succeeded") {
 			assertSucceededKindInvariant(existing, progress)
 			assertNoHashDrift(existing, progress)
@@ -367,6 +380,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			error: error ?? null,
 			terminalAt: isTerminal(progress.stage) ? now : existing.terminalAt,
 			updatedAt: now,
+			title: failedTitle ?? existing.title,
 		}
 		await this.storage.set(id, updated)
 		this.emit("onOperationUpdated", updated)
@@ -374,17 +388,27 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	}
 
 	/**
-	 * Records the network's answer for a failed send, once. SW-internal, never an RPC. Writes only
-	 * while the row is still `failed` with this hash and no answer, and while `isLive()` holds
-	 * inside the lock; `false` means nothing was written.
+	 * Records the network's answer for a failed send. SW-internal, never an RPC. A compare-and-set:
+	 * writes only while the row is still `failed` with this hash and holds the `expected` answer and
+	 * block, the move is one `isSendCheckMove` admits, and `isLive()` holds inside the lock; `false`
+	 * means nothing was written. `next` replaces all three of the check's fields.
 	 */
-	public async setSendCheck(id: string, txHash: string, check: SendCheckOutcome, isLive: () => boolean): Promise<boolean> {
+	public async setSendCheck(
+		id: string,
+		txHash: string,
+		expected: SendCheckState,
+		next: SendCheckState,
+		isLive: () => boolean,
+	): Promise<boolean> {
 		await this.ensureInitialized()
 		return await this.transitionLock.withLock(async () => {
 			const existing = await this._loadValidated(id)
-			if (existing?.progress.stage !== "failed") return false
-			if (existing.progress.txHash !== txHash || existing.progress.check !== undefined || !isLive()) return false
-			const updated: OperationRecord = { ...existing, progress: { ...existing.progress, check }, updatedAt: Date.now() }
+			if (existing?.progress.stage !== "failed" || existing.progress.txHash !== txHash) return false
+			const { progress } = existing
+			if (progress.check !== expected.check || progress.inclusion?.hash !== expected.inclusion?.hash) return false
+			if (!isSendCheckMove(progress, next) || !isLive()) return false
+			const { check, inclusion, checkSince } = next
+			const updated: OperationRecord = { ...existing, progress: { ...progress, check, inclusion, checkSince }, updatedAt: Date.now() }
 			await this.storage.set(id, updated)
 			this.emit("onOperationUpdated", updated)
 			return true
@@ -549,14 +573,14 @@ export class OperationJournalService extends Service<Methods, Events> implements
 	 * snapshot (equality CAS; a monotonic check would mishandle clock rollback).
 	 * The reaper's sweep decisions ride this: its snapshot goes stale across the
 	 * per-record awaits, and an unconditional transition would fail a record
-	 * that was claimed or heartbeat-touched mid-sweep.
+	 * that was claimed or heartbeat-touched mid-sweep. A no-op writes no `failedTitle`.
 	 */
 	public async transitionIfStage(
 		id: string,
 		allowedStages: readonly JobProgress["stage"][],
 		progress: JobProgress,
 		error?: JobError | null,
-		opts?: { ifUpdatedAtIs?: number },
+		opts?: { ifUpdatedAtIs?: number; failedTitle?: string },
 	): Promise<
 		| { outcome: "transitioned"; record: OperationRecord }
 		| { outcome: "missing" }
@@ -569,7 +593,7 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			if (!existing) return { outcome: "missing" }
 			if (!allowedStages.includes(existing.progress.stage)) return { outcome: "stage", stage: existing.progress.stage }
 			if (opts?.ifUpdatedAtIs !== undefined && existing.updatedAt !== opts.ifUpdatedAtIs) return { outcome: "touched" }
-			const record = await this._transitionLocked(id, progress, error)
+			const record = await this._transitionLocked(id, progress, error, opts?.failedTitle)
 			return { outcome: "transitioned", record }
 		})
 	}
@@ -618,7 +642,8 @@ export class OperationJournalService extends Service<Methods, Events> implements
  *  a hash, a stage or an answer. `prior` is active: the FSM check has already run. */
 function failedFrom(prior: JobProgress): JobProgress {
 	if (prior.stage !== "submitting") return { stage: "failed", from: isTerminal(prior.stage) ? undefined : prior.stage }
-	return { stage: "failed", from: "submitting", txHash: prior.txHash, submittedEndpointUrl: prior.submittedEndpointUrl }
+	const { txHash, submittedEndpointUrl, expiry } = prior
+	return { stage: "failed", from: "submitting", txHash, submittedEndpointUrl, expiry }
 }
 
 /** "error iff failed". */

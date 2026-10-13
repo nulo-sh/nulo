@@ -7,7 +7,8 @@ import { useToast } from "@/composables/toast"
 /** The drawn gap between the snack and what it sits above: the viewport's bottom edge or a footer. */
 export const SNACK_GAP = 12
 
-const footers = new Set<HTMLElement>()
+/** Each counting footer, and whether it is a row in a list. */
+const footers = new Map<HTMLElement, boolean>()
 /** Each open sheet with the order that stacks it, in the order they mounted. */
 const sheets = new Map<HTMLElement, number>()
 const subscribers = new Set<() => void>()
@@ -18,17 +19,18 @@ const changed = () => {
 
 /** A bottom action row: the snack sits `SNACK_GAP` above its top edge while that edge is on screen, or
  *  would be once what scrolls it is scrolled to its end. A row given a value counts only while it is
- *  true, for a row that keeps its place in the layout while it holds no action. */
-export const vSnackFooter: ObjectDirective<HTMLElement, boolean | undefined> = {
-	mounted(el, { value }) {
+ *  true, for a row that keeps its place in the layout while it holds no action. `.listed` marks a row
+ *  in a list, which moves the snack only while the snack would cover it where it is. */
+export const vSnackFooter: ObjectDirective<HTMLElement, boolean | undefined, "listed"> = {
+	mounted(el, { value, modifiers }) {
 		if (value === false) return
-		footers.add(el)
+		footers.set(el, modifiers.listed === true)
 		changed()
 	},
-	updated(el, { value }) {
+	updated(el, { value, modifiers }) {
 		const counts = value !== false
 		if (counts === footers.has(el)) return
-		if (counts) footers.add(el)
+		if (counts) footers.set(el, modifiers.listed === true)
 		else footers.delete(el)
 		changed()
 	},
@@ -75,23 +77,45 @@ export interface FooterBox {
 	bottom: number
 	/** How far the footer rises once everything that scrolls it is scrolled to its end. */
 	riseToEnd?: number
+	/** A row in a list: counted where it is, and only while the snack would cover it. */
+	listed?: boolean
 }
 
 /**
  * The snack's distance from the viewport's bottom edge: `base`, raised to `SNACK_GAP` above the
  * highest point a footer's top edge reaches on screen, where it is now or where it stops once
- * everything that scrolls it is scrolled to its end. A footer with no height places nothing.
+ * everything that scrolls it is scrolled to its end; then raised past each listed row the
+ * `snackHeight`-tall snack would cover there. A footer with no height places nothing.
  */
-export function snackInset(base: number, viewportHeight: number, boxes: readonly FooterBox[]): number {
+export function snackInset(base: number, viewportHeight: number, boxes: readonly FooterBox[], snackHeight = 0): number {
 	let inset = base
-	for (const { top, bottom, riseToEnd = 0 } of boxes) {
+	const listed: FooterBox[] = []
+	for (const box of boxes) {
+		const { top, bottom, riseToEnd = 0 } = box
 		if (bottom <= top) continue
+		if (box.listed) {
+			listed.push(box)
+			continue
+		}
 		// A scroll can bring the row up and a click land on it in one task, before the next measure.
 		for (const at of [top, top - riseToEnd]) {
 			if (at > 0 && at < viewportHeight) inset = Math.max(inset, viewportHeight - at + SNACK_GAP)
 		}
 	}
-	return inset
+	return clearListed(inset, viewportHeight, listed, snackHeight)
+}
+
+/** Climbs past each listed row the snack covers until it covers none. Where that would lift it off the
+ *  top of the screen, the snack stays at `inset`: it is never drawn where it cannot be read. */
+function clearListed(inset: number, viewportHeight: number, rows: readonly FooterBox[], snackHeight: number): number {
+	let at = inset
+	for (;;) {
+		const snackBottom = viewportHeight - at
+		const covered = rows.filter((row) => row.top < snackBottom && row.bottom > snackBottom - snackHeight)
+		if (!covered.length) return at
+		at = viewportHeight - Math.min(...covered.map((row) => row.top)) + SNACK_GAP
+		if (viewportHeight - at - snackHeight < 0) return inset
+	}
 }
 
 /** Overflow values a user can scroll directly; `hidden` scrolls only programmatically. */
@@ -117,12 +141,12 @@ function riseOf(el: HTMLElement): number {
 
 /**
  * The inset for the host that renders the snack. `base` is the inset with no sheet open (above the
- * nav, or `SNACK_GAP`). It is measured again on the next frame after anything that can move a
- * footer (one arriving or leaving, a footer resizing, the page's content changing, a resize, a
- * scroll, the end of a transition) and at once when a snack opens, so a card never rises at a stale
- * height.
+ * nav, or `SNACK_GAP`); `snackHeight` reads the open snack's height. It is measured again on the next
+ * frame after anything that can move a footer (one arriving or leaving, a footer resizing, the page's
+ * content changing, a resize, a scroll, the end of a transition) and at once when a snack opens, so a
+ * card never rises at a stale height.
  */
-export function useSnackInset(base: () => number): Readonly<Ref<number>> {
+export function useSnackInset(base: () => number, snackHeight: () => number = () => 0): Readonly<Ref<number>> {
 	const { toast } = useToast()
 	const inset = ref(base())
 	let frame: number | undefined
@@ -131,12 +155,12 @@ export function useSnackInset(base: () => number): Readonly<Ref<number>> {
 		if (frame !== undefined) cancelAnimationFrame(frame)
 		frame = undefined
 		const top = topSheet()
-		const placing = [...footers].filter((el) => el.isConnected && (!top || top.contains(el)))
-		const boxes = placing.map((el) => {
+		const placing = [...footers].filter(([el]) => el.isConnected && (!top || top.contains(el)))
+		const boxes = placing.map(([el, listed]): FooterBox => {
 			const { top: at, bottom } = el.getBoundingClientRect()
-			return { top: at, bottom, riseToEnd: riseOf(el) }
+			return listed ? { top: at, bottom, listed } : { top: at, bottom, riseToEnd: riseOf(el) }
 		})
-		inset.value = snackInset(top ? SNACK_GAP : base(), document.documentElement.clientHeight, boxes)
+		inset.value = snackInset(top ? SNACK_GAP : base(), document.documentElement.clientHeight, boxes, snackHeight())
 	}
 	const schedule = () => {
 		frame ??= requestAnimationFrame(measure)
@@ -146,7 +170,7 @@ export function useSnackInset(base: () => number): Readonly<Ref<number>> {
 	const resizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(schedule)
 	const onRegistry = () => {
 		resizes?.disconnect()
-		for (const el of footers) resizes?.observe(el)
+		for (const el of footers.keys()) resizes?.observe(el)
 		schedule()
 	}
 	// Content added, removed or restyled above a footer moves it without resizing it.
@@ -160,7 +184,8 @@ export function useSnackInset(base: () => number): Readonly<Ref<number>> {
 	document.addEventListener("transitionend", schedule, true)
 	document.addEventListener("animationend", schedule, true)
 	watch(base, schedule)
-	watch(() => toast.value?.id, measure)
+	// After the render, so the new snack's height is read.
+	watch(() => toast.value?.id, measure, { flush: "post" })
 
 	onScopeDispose(() => {
 		subscribers.delete(onRegistry)

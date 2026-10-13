@@ -7,6 +7,7 @@
 
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
 import { formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
@@ -68,6 +69,7 @@ const CHECKED_DISPLAYS: Record<CheckedOutcome, JournalTerminalDisplay> = {
 	sent: { state: "sent", subtitle: "Sent", icon: ICONS.sent, color: "green" },
 	reverted: { state: "failed", subtitle: "Reverted", icon: ICONS.failed, color: "red" },
 	unconfirmed: { state: "unconfirmed", subtitle: "Unconfirmed", icon: ICONS.unconfirmed, color: "amber" },
+	expired: { state: "failed", subtitle: "Won't go through", icon: ICONS.failed, color: "red" },
 }
 
 /**
@@ -215,6 +217,10 @@ const CHECKED_LABELS: Record<CheckedOutcome, CategoricalFailureLabel> = {
 		label: "Unconfirmed",
 		context: "Your wallet couldn't confirm this. It may still go through, so check History before sending it again.",
 	},
+	expired: {
+		label: "Won't go through",
+		context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
+	},
 }
 
 export function categoricalLabel(op: OperationRecord): CategoricalFailureLabel {
@@ -253,6 +259,16 @@ function kindLabel(kind: JobErrorKind): CategoricalFailureLabel {
 			return { label: "Not allowed", context: "The app asked for more than you allowed. Nothing was sent." }
 		case "malformed_request":
 			return { label: "Couldn't read request", context: "The app sent a request the wallet could not read. Nothing was sent." }
+		case "terms_refused":
+			return { label: "Terms not accepted", context: "Accept Nulo's Terms to let apps send. Nothing was sent." }
+		case "wallet_refused":
+			return {
+				label: "Refused before sending",
+				context: "The wallet refused this request before anything was signed. Nothing was sent.",
+			}
+		case "session_ended":
+			// Never "Nothing was sent": a lock that lands during execution files this kind too.
+			return { label: "Stopped when the wallet locked", context: "The wallet locked while this was in progress." }
 		case "simulation":
 		case "prover":
 		case "stuck_proving":
@@ -301,6 +317,10 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 			return "Not allowed"
 		case "malformed_request":
 			return "Couldn't read request"
+		case "terms_refused":
+			return "Terms not accepted"
+		case "wallet_refused":
+			return "Refused before sending"
 		// popup_bound, transfer, dapp_execute, unknown, and any other / future
 		// kind all fall through to the generic copy. The kind is still preserved
 		// in the journal record's error.kind field for debugging / future
@@ -314,6 +334,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 export interface TokenForCardProps {
 	symbol?: string
 	decimals?: number
+	hasDecimals?: boolean
 }
 
 export interface JournalTerminalCardCtx {
@@ -374,8 +395,9 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 	// An empty or missing `amountRaw` would format as "0", a fake "0 USDC" on the card.
 	let amount: string | null = null
 	let amountSymbol: string | null = null
-	if (op.amountRaw && token) {
-		amount = balanceFormatted(op.amountRaw, token.decimals || 0, 8, { compact: true }).value
+	const decimals = knownDecimals(token)
+	if (op.amountRaw && token && decimals !== null) {
+		amount = balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
 		amountSymbol = token.symbol ?? null
 	}
 

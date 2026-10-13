@@ -2,6 +2,13 @@
 import { TxStatus as AztecTxStatus, TxExecutionResult as AztecTxExecutionResult } from "@aztec-labs/stdlib/tx"
 import { TxExecutionResult, TxStatus } from "./spec"
 
+export const MINED_STATUSES: ReadonlySet<TxStatus> = new Set([
+	TxStatus.Proposed,
+	TxStatus.Checkpointed,
+	TxStatus.Proven,
+	TxStatus.Finalized,
+])
+
 export function txStatusFromReceipt(status: AztecTxStatus): TxStatus {
 	switch (status) {
 		case AztecTxStatus.PENDING:

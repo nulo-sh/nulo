@@ -1,7 +1,7 @@
 import { expect, inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
 import { snapshotResultSeq, waitForPgResult, assertPgOk } from "../fixtures/playground"
-import { approveExecute, waitForPopup } from "../fixtures/popups"
+import { approveExecute, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -78,6 +78,7 @@ test.skipIf(!hasConfig)(
 		await approveExecute(execPopup)
 		const result = await waitForPgResult(page, "registerToken", seqRegister, 30_000)
 		await assertPgOk(page, result, "register-token:result")
+		await waitForPopupClosed(execPopup)
 
 		expect(dappConnectedExtensionWithAccountsCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithAccountsCap.pageErrors).toEqual([])

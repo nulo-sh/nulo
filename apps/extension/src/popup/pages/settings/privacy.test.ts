@@ -27,22 +27,35 @@ let config: {
 	getProps: ReturnType<typeof vi.fn>
 	setValue: ReturnType<typeof vi.fn>
 	onUpdate: EventHandler<ConfigProp>
+	onConnected: EventHandler<void>
 	disconnect: ReturnType<typeof vi.fn>
 }
+
+const stored = (showFiatValues = true) =>
+	[
+		{ key: "showFiatValues", value: showFiatValues },
+		{ key: "defaultExplorer", value: "aztecscan" },
+	] as ConfigProp[]
 
 beforeEach(() => {
 	fakes.openToast.mockReset()
 	config = {
-		getProps: vi.fn(async () => [
-			{ key: "showFiatValues", value: true },
-			{ key: "defaultExplorer", value: "aztecscan" },
-		]),
+		getProps: vi.fn(async () => stored()),
 		setValue: vi.fn(async () => undefined),
 		onUpdate: new EventHandler<ConfigProp>(),
+		onConnected: new EventHandler<void>(),
 		disconnect: vi.fn(),
 	}
 	fakes.config = config
 })
+
+/** The mount's read: its request opens the port, as the real client's first request does. */
+function mountReadOpensPort(answer: () => Promise<ConfigProp[]>) {
+	config.getProps.mockImplementationOnce(() => {
+		config.onConnected.invoke()
+		return answer()
+	})
+}
 
 async function mountPrivacy() {
 	const wrapper = mount(PrivacyPage, {
@@ -103,5 +116,34 @@ describe("settings/privacy", () => {
 		await flushPromises()
 		expect(config.setValue).toHaveBeenCalledTimes(2)
 		expect(w.get('[data-testid="fiat-values-toggle"]').attributes("data-on")).toBe("false")
+	})
+
+	describe("a port that drops under the mounted page", () => {
+		const fiat = (w: Awaited<ReturnType<typeof mountPrivacy>>) => w.find('[data-testid="fiat-values-toggle"]')
+
+		test("a read the drop rejected is made again on the reconnect, and the page loads", async () => {
+			mountReadOpensPort(async () => {
+				throw new Error("Client disconnected")
+			})
+			const w = await mountPrivacy()
+			expect(fiat(w).exists()).toBe(false)
+			config.onConnected.invoke()
+			await flushPromises()
+			expect(config.getProps).toHaveBeenCalledTimes(2)
+			expect(fiat(w).attributes("data-on")).toBe("true")
+		})
+
+		test("an update during a held reread beats the reread's older value", async () => {
+			mountReadOpensPort(async () => stored(true))
+			const w = await mountPrivacy()
+			const reread = Promise.withResolvers<ConfigProp[]>()
+			config.getProps.mockReturnValueOnce(reread.promise)
+			config.onConnected.invoke()
+			config.onUpdate.invoke({ key: "showFiatValues", value: false } as ConfigProp)
+			await flushPromises()
+			reread.resolve(stored(true))
+			await flushPromises()
+			expect(fiat(w).attributes("data-on")).toBe("false")
+		})
 	})
 })

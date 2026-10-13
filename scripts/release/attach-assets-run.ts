@@ -47,7 +47,8 @@ export interface AttachIO extends PublishedReadIO {
 	createDraft(tag: string, prerelease: boolean): Promise<number>
 	deleteAsset(id: number): Promise<void>
 	uploadAsset(releaseId: number, name: string, path: string): Promise<void>
-	editRelease(id: number, patch: { body?: string; draft?: boolean }): Promise<void>
+	/** Every edit restates the release's tag: GitHub detaches a draft edited without one to `untagged-…`. */
+	editRelease(id: number, patch: { tag: string; body?: string; draft?: boolean }): Promise<void>
 	wait(ms: number): Promise<void>
 	output(key: string, value: string): void
 }
@@ -134,8 +135,8 @@ export async function runApply(io: AttachIO, input: RunInput, notes: string, tar
 	const filled = compareAssets(draft.assets, local)
 	if (!filled.ok) return fail(io, `draft ${id} does not hold the built assets: ${filled.reason}`)
 
-	await io.editRelease(id, { body: notes })
-	await io.editRelease(id, { draft: false })
+	await io.editRelease(id, { tag: input.tag, body: notes })
+	await io.editRelease(id, { tag: input.tag, draft: false })
 	return confirmPublished(io, input, id, local)
 }
 
@@ -170,7 +171,7 @@ export async function runVerifyPublished(io: AttachIO, input: RunInput, notes: s
 		if (published !== asset.sha256)
 			io.log(command("warning", `${asset.name}: this run rebuilt ${asset.sha256}; the release ships ${published}`))
 	}
-	await io.editRelease(state.id, { body: notes })
+	await io.editRelease(state.id, { tag: input.tag, body: notes })
 	io.output("dir", dir)
 	io.log(`${input.tag}: shipping the published, attested assets from ${dir}`)
 	return 0
@@ -322,7 +323,7 @@ export function realIO(repo: string, token: string, assetLimit = Number.POSITIVE
 			const url = `https://uploads.github.com/repos/${repo}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`
 			await ok(url, { method: "POST", body: Bun.file(path), headers: { "Content-Type": "application/octet-stream" } })
 		},
-		editRelease: async (id, patch) => void (await ok(`releases/${id}`, send("PATCH", patch))),
+		editRelease: async (id, { tag, ...rest }) => void (await ok(`releases/${id}`, send("PATCH", { tag_name: tag, ...rest }))),
 		async attested(sha256) {
 			const res = await call(`attestations/sha256:${sha256}`)
 			if (res.status === 404) return false

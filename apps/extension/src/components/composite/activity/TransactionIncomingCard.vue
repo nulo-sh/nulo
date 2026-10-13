@@ -9,6 +9,7 @@
  * amount carries a "+" so the feed scans without reading direction.
  */
 
+import { STATUS_ICON_FILL } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 import { balanceFormatted } from "@/utils/amount.js"
@@ -59,7 +60,7 @@ const hashSlice = computed(() => {
 		testId="tx-incoming-card"
 	>
 		<template #badge>
-			<Icon name="check-circle" size="12" color="green" />
+			<Icon name="check-circle" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
 		</template>
 
 		<template #title-trailing>

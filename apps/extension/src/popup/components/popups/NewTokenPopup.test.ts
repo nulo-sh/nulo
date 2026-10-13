@@ -254,10 +254,34 @@ describe("NewTokenPopup", () => {
 		await typeAddress(w, validHex)
 		await submitBtn(w).trigger("click")
 		await flushPromises()
-		expect(w.text()).toContain("Couldn't auto-detect this token's interface")
+		expect(w.find('[data-testid="new-token-error"]').text()).toContain("Couldn't auto-detect this token's interface")
 		// Did NOT call addToken; popup stays open
 		expect(tokenServiceMock.addToken).not.toHaveBeenCalled()
 		expect(w.emitted("onClose")).toBeUndefined()
+	})
+
+	// Each error arrives as the RPC envelope rebuilds it: a plain Error carrying the background's text.
+	test.each([
+		[
+			"a PXE store refusal",
+			"openChainStore: an open for pxe-1a2b3c4d-1 is already in flight or a prior one wedged (its OPFS worker never released its lock). Refusing to start a second worker. Restart the offscreen document to recover.",
+		],
+		["a node refusal", "contract instance not found"],
+	])("%s reads the generic line under Submit, never its own text, and goes to the debug log", async (_, message) => {
+		const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+		const refusal = new Error(message)
+		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: true })
+		tokenServiceMock.addToken.mockRejectedValueOnce(refusal)
+		const w = await mountAndOpen()
+		await typeAddress(w, validHex)
+		await submitBtn(w).trigger("click")
+		await flushPromises()
+
+		expect(w.find('[data-testid="new-token-error"]').text()).toBe("Something went wrong. Try again.")
+		expect(w.text()).not.toContain(message)
+		expect(debug).toHaveBeenCalledWith("[new-token] add refused", { reason: refusal })
+		expect(w.emitted("onClose")).toBeUndefined()
+		debug.mockRestore()
 	})
 
 	test("happy path: addToken → onTokenBalanceAdded → onTaskUpdated finished → close + 'Token added' toast", async () => {

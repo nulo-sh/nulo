@@ -373,18 +373,22 @@ export class ExecutionLane {
 	/**
 	 * The dApp sends' slot for a popup transfer, in its own origin bucket. The transfer already owns
 	 * its controller, so this registers none: `signal` is that controller's, and an abort ends the
-	 * wait as the cancel sentinel. Call `release` in `finally`.
+	 * wait as the cancel sentinel. `onWait` runs once, synchronously, when another send holds or
+	 * awaits the slot as this one joins the line. Call `release` in `finally`.
 	 */
 	public async acquireTransferSlot(
 		networkId: string,
 		journalId: string,
 		fence: ExecutionFence,
 		signal: AbortSignal,
+		onWait?: () => void,
 	): Promise<ExecutionMutexRelease> {
 		this.beginExecutionWait(journalId)
 		try {
 			await this.deps.assertFence(fence)
 			const mutexKey = await this.resolveExecutionMutexKey(fence, networkId)
+			// Nothing is awaited between the check and the enqueue, so the check is the line as joined.
+			if (this.executionMutex.isLocked(mutexKey)) onWait?.()
 			return await this.executionMutex.acquire(mutexKey, signal, {
 				originKey: POPUP_ORIGIN_KEY,
 				maxOriginDepth: ExecutionLane.EXECUTION_ORIGIN_CAP,
@@ -535,10 +539,15 @@ export class ExecutionLane {
 		)
 	}
 
-	public async markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null): Promise<void> {
+	public async markJournal(
+		journalId: string | undefined,
+		progress: JobProgress,
+		error?: JobError | null,
+		failedTitle?: string,
+	): Promise<void> {
 		if (!journalId) return
 		try {
-			await this.deps.operationJournal.transitionOperation(journalId, progress, error)
+			await this.deps.operationJournal.transitionOperation(journalId, progress, error, failedTitle)
 		} catch (err) {
 			this.deps.logError("Failed to update journal operation", err)
 		}

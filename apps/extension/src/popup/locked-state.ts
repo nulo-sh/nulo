@@ -4,7 +4,7 @@ export interface LockedStateShell<P> {
 	closePopups: () => void
 	/** Bumps the scope epoch and closes any snack. */
 	onLocked: () => void
-	/** Clears the shell's logged-in mark. */
+	/** Clears the shell's logged-in mark, and supersedes every activation in flight so none sets it again. */
 	markLocked: () => void
 	clearActivity: () => void
 	resetInFlight: () => void

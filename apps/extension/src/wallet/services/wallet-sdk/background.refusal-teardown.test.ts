@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 
 type Callbacks = { onSessionEstablished: (s: unknown) => Promise<void> | void; onSessionTerminated: (id: string) => void }
 let captured: Callbacks | undefined
-const live = new Set<string>()
+/** The SDK's active sessions by id, each the object it handed to establishment. */
+const live = new Map<string, { sessionId: string; origin: string; chainInfo: { chainId: string; version: string } }>()
 const terminated: string[] = []
 const CHAIN_INFO = { chainId: "1", version: "1" }
 
@@ -20,7 +21,10 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 			return Promise.resolve()
 		}
 		getActiveSessions() {
-			return [...live].map((sessionId) => ({ sessionId, origin: FAKE_DAPP_ORIGIN, chainInfo: CHAIN_INFO }))
+			return [...live.values()]
+		}
+		getSession(id: string) {
+			return live.get(id)
 		}
 		terminateSession(id: string) {
 			terminated.push(id)
@@ -56,8 +60,9 @@ describe("the refusal event through the booted wiring", () => {
 	test("another profile's refusal keeps the channel; its own profile's refusal ends it", async () => {
 		const fake = fakeSdkServices({ remembered: { trusted: true } })
 		initWalletSdkHandler(fake.services, { log: () => {} } as never, fakeSdkPorts())
-		live.add("s1")
-		await captured?.onSessionEstablished({ origin: FAKE_DAPP_ORIGIN, sessionId: "s1", verificationHash: "HASH", chainInfo: CHAIN_INFO })
+		const session = { origin: FAKE_DAPP_ORIGIN, sessionId: "s1", verificationHash: "HASH", chainInfo: CHAIN_INFO }
+		live.set("s1", session)
+		await captured?.onSessionEstablished(session)
 
 		fake.onVerificationRefused.invoke({ origin: FAKE_DAPP_ORIGIN, chainId: "0", profileId: "p2" })
 		expect(terminated).toEqual([])

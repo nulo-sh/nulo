@@ -14,6 +14,7 @@ vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { handleWalletMessage } from "./background"
+import { bindLiveSession } from "./live-session"
 
 const ORIGIN = "https://dapp.example"
 /** `{ chainId: 1, version: 1 }` is wallet chain 0, as every handshake test discovers with. */
@@ -28,10 +29,11 @@ async function callFrom(sessionId: string, sessionProfiles: Map<string, string>)
 	const dispatch = vi.fn(async () => "ok")
 	const sendResponse = vi.fn(async (_sessionId: string, _response: unknown) => {})
 	const terminateSession = vi.fn()
+	const session = live(sessionId) as never
 	await handleWalletMessage(
-		live(sessionId) as never,
+		session,
 		{ messageId: "m1", type: "getChainInfo", args: [] } as never,
-		{ sendResponse, terminateSession } as never,
+		bindLiveSession({ sendResponse, terminateSession, getSession: () => session }, session),
 		{ dispatch } as never,
 		{ captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
 		{} as never,

@@ -12,6 +12,7 @@ vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { handleWalletMessage } from "./background"
+import { bindLiveSession } from "./live-session"
 
 const SESSION = { sessionId: "s1", origin: "https://dapp.example", chainInfo: { chainId: "1", version: "1" } } as never
 
@@ -25,7 +26,7 @@ function harness(assertCurrent: () => Promise<void>) {
 		handleWalletMessage(
 			SESSION,
 			{ messageId: "m1", type, args } as never,
-			{ sendResponse, terminateSession: vi.fn() } as never,
+			bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => SESSION }, SESSION),
 			{ dispatch } as never,
 			{ captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
 			{ transitionIfStage } as never,
@@ -67,7 +68,13 @@ describe("handleWalletMessage — Terms admission", () => {
 		await h.run("sendTx", [{}, {}], "journal-1")
 
 		expect(h.dispatch).not.toHaveBeenCalled()
-		expect(h.transitionIfStage).toHaveBeenCalledWith("journal-1", ["queued"], { stage: "failed" }, expect.anything())
+		expect(h.transitionIfStage).toHaveBeenCalledWith(
+			"journal-1",
+			["queued"],
+			{ stage: "failed" },
+			{ kind: "terms_refused", message: "Open Nulo and accept the Terms to continue.", normalizedRaw: null },
+			{ failedTitle: "Transaction" },
+		)
 	})
 
 	test("a batch costs one acceptance read, however many legs it carries", async () => {

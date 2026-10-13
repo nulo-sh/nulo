@@ -12,7 +12,11 @@ const NAV_HEIGHT = 64
 const FULL_WIDTH_WINDOWS = new Set(["windows-json", "windows-logger"])
 
 const route = useRoute()
-const bottomInset = useSnackInset(() => (route.meta.showBottomNav ? NAV_HEIGHT + SNACK_GAP : SNACK_GAP))
+const snack = useTemplateRef("snack")
+const bottomInset = useSnackInset(
+	() => (route.meta.showBottomNav ? NAV_HEIGHT + SNACK_GAP : SNACK_GAP),
+	() => snack.value?.snackHeight() ?? 0,
+)
 const inColumn = computed(() => {
 	const name = typeof route.name === "string" ? route.name : ""
 	return name.startsWith("windows-") && !FULL_WIDTH_WINDOWS.has(name) && !route.meta.fillsWindow
@@ -20,5 +24,5 @@ const inColumn = computed(() => {
 </script>
 
 <template>
-	<ToastManagerBase :bottomInset="bottomInset" :inColumn="inColumn" />
+	<ToastManagerBase ref="snack" :bottomInset="bottomInset" :inColumn="inColumn" />
 </template>

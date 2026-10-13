@@ -10,12 +10,6 @@ import { changePassword, lockWallet, navigateByHash, waitForToast } from "./fixt
 const ORIGINAL_PASSWORD = TEST_PASSWORD
 const NEW_PASSWORD = "NewTestPassword456!"
 
-/** During a password rotation the SW re-issues the session encryption key,
- *  which forcibly disconnects every open service client. Each pending or
- *  near-pending request rejects with "Client disconnected" — that surfaces
- *  in `consoleErrors`. The cascade is expected behavior, not a regression. */
-const isBenignPasswordChangeError = (msg: string): boolean => msg.includes("Client disconnected")
-
 test("change password rejects too-short and mismatched inputs", async ({ registeredExtensionPerTest }) => {
 	const page = await openPopup(registeredExtensionPerTest)
 	await waitForHash(page, "#/popup/general")
@@ -77,10 +71,8 @@ test("change password succeeds and unlocks with new password", { timeout: 120_00
 
 	await page2.waitForFunction(() => !window.location.hash.includes("/popup/auth"), { timeout: 10_000 })
 
-	const nonBenignConsoleErrors = registeredExtensionPerTest.consoleErrors.filter((e) => !isBenignPasswordChangeError(e))
-	const nonBenignPageErrors = registeredExtensionPerTest.pageErrors.filter((e) => !isBenignPasswordChangeError(e.message))
-	expect(nonBenignConsoleErrors).toEqual([])
-	expect(nonBenignPageErrors).toEqual([])
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 	await page2.close()
 })
 
@@ -112,10 +104,8 @@ test("auto-lock TTL change persists across navigation", async ({ registeredExten
 	})
 	expect(persistedValue).toBe("45")
 
-	const nonBenignConsoleErrors = registeredExtensionPerTest.consoleErrors.filter((e) => !isBenignPasswordChangeError(e))
-	const nonBenignPageErrors = registeredExtensionPerTest.pageErrors.filter((e) => !isBenignPasswordChangeError(e.message))
-	expect(nonBenignConsoleErrors).toEqual([])
-	expect(nonBenignPageErrors).toEqual([])
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
+	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 })
 
 // A file a page can fetch at the extension's fixed URL tells it the wallet is installed, so no file
