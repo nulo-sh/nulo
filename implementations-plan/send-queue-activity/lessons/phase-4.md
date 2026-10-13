@@ -29,3 +29,12 @@ Accepted:
 
 Rejected:
 - **An accept a few milliseconds before the deadline** still resumes, and the next turn's wait fails with the earlier-send wording. It needs a press inside the last instant of a 60-minute wait; nothing is sent, only the terminal wording differs, and mapping it adds a branch to the turn's error path for that instant.
+
+## Codex round 2 (resumed session) over `fc83597d..9b6f7e5c`
+
+Verdict: conditional approve. The deadline, focus, slot, snapshot and closed-press fixes verify; no regression in the product code; the eight safety conclusions stand.
+
+Accepted (all e2e):
+- **Medium.** The case kept the popup page it started with, which `reopen` closes; after the first accept it read the journal through the closed page. It now reads through `burst.page`.
+- **Medium.** `expectEstimateQueued` passed with no Send button at all (`undefined === false` read as disabled), weaker than the base, which required a present, disabled button. It now fails when Send is missing.
+- **Low.** Four test comments overstated or narrated their helpers; trimmed.

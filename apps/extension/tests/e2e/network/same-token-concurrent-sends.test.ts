@@ -522,15 +522,10 @@ baseTest.skipIf(!hasConfig)(
 
 type Asking = TransferRow & { reask: { fee: string; cap: string } }
 
-/** Stages a send passes through before it proves: anything later before an accept is a send that
- *  went out above its cap. */
 const BEFORE_PROOF = new Set(["pending", "queued", "simulating"])
 
-/**
- * Waits until the transfer of `amountRaw` asks again, held to `cap` when given (an accepted fee),
- * or returns "sent" once it proves. It fails the moment it proves while `cap` is unset, so a send
- * that went out without being asked fails here, not in a later balance.
- */
+/** Waits for a re-ask held to `cap` (any, before the first accept) or, after an accept, for proof
+ *  progress; fails on a terminal failure, or on proof progress before any accept. */
 async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Promise<Asking | "sent"> {
 	const deadline = Date.now() + 180_000
 	for (;;) {
@@ -547,7 +542,6 @@ async function waitForAskOrSent(page: Page, amountRaw: string, cap?: string): Pr
 	}
 }
 
-/** The fee text the sheet shows and its button's words, once it has armed. */
 async function readReaskSheet(page: Page): Promise<{ line: string; button: string }> {
 	await waitForReview(page, true)
 	await waitForReviewReady(page)
@@ -557,7 +551,6 @@ async function readReaskSheet(page: Page): Promise<{ line: string; button: strin
 	}))
 }
 
-/** The wallet's recorded max fee of the tx `hash`. */
 async function readRecordedFee(page: Page, hash: string): Promise<string | undefined> {
 	return page.evaluate(async (h: string) => {
 		const value = (await chrome.storage.local.get(`nulo:core:txs@${h}`))[`nulo:core:txs@${h}`]
@@ -566,7 +559,7 @@ async function readRecordedFee(page: Page, hash: string): Promise<string | undef
 	}, hash)
 }
 
-/** A price move between an accept and its build asks again; more than this many is a loop. */
+/** The case's bound on re-asks: each needs a price move between an accept and its build. */
 const MAX_ASKS = 3
 
 test.skipIf(!hasConfig)(
@@ -599,7 +592,7 @@ test.skipIf(!hasConfig)(
 
 		let accepted: string | undefined
 		for (let asks = 1; ; asks++) {
-			const asking = await waitForAskOrSent(page, raw(b.amount), accepted)
+			const asking = await waitForAskOrSent(burst.page, raw(b.amount), accepted)
 			if (asking === "sent") break
 			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
 			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
