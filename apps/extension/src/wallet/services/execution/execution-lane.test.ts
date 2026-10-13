@@ -801,3 +801,24 @@ describe("ExecutionLane.joinOriginLine", () => {
 		second.leave()
 	})
 })
+
+describe("ExecutionLane.failUnclaimed", () => {
+	test("fails only a record still queued or pending, never for a cancel or with no record, and never throws", async () => {
+		const { lane, deps } = makeLane()
+		const transitionIfStage = deps.operationJournal.transitionIfStage as ReturnType<typeof vi.fn>
+		await lane.failUnclaimed("q-1", new Error("fence broke"))
+		expect(transitionIfStage).toHaveBeenCalledWith(
+			"q-1",
+			["queued", "pending"],
+			{ stage: "failed" },
+			expect.objectContaining({ kind: "dapp_execute" }),
+		)
+		transitionIfStage.mockClear()
+		await lane.failUnclaimed("q-1", new JobCancelledSentinel("q-1"))
+		await lane.failUnclaimed(undefined, new Error("no record"))
+		expect(transitionIfStage).not.toHaveBeenCalled()
+		transitionIfStage.mockRejectedValueOnce(new Error("journal down"))
+		await expect(lane.failUnclaimed("q-1", new Error("x"))).resolves.toBeUndefined()
+		expect(deps.logError).toHaveBeenCalledTimes(1)
+	})
+})

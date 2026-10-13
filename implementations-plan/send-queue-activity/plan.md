@@ -912,6 +912,21 @@ Arc 3b as built, where it differs from or adds to the text above:
 - **D43 The switch block reads the cards' rule.** `hasInFlightSend` calls `journalRecordInScope`, so with no network active a send stamped with one no longer blocks a switch it cannot be cancelled from: no card shows it. Its own doc already required the block to line up with the cards.
 - **D44 Two surfaces #103 does not name go to the owner.** The settled transaction card keeps the figure its record stored (OA-8), and a held token of unknown decimals keeps its place in the token order (OA-9). Both ship as they are.
 
+The orchestrator's calls at arc 1b's start (2026-10-13; OA-3 = A, OA-4 = B, OA-5 = A):
+
+- **D-orch-1b-1 The ordering rule.** A dApp send waits for every earlier unmined send of its account, Send-page or dApp (OA-3 A). A dApp never delays a Send-page send: the waiter holds an empty key set. The 60-minute wait limit and the 10-minute submitted hold stay as ratified.
+- **D-orch-1b-2 What the person and the dApp see.** The existing "Queued..." card and existing strings only; a surface that would need a new word goes to `OWNER-ASKS.md` in the "what ships now" form. Nothing on the Send page changes.
+- **D-orch-1b-3 Proportion.** New persistent state, an independent lifecycle, a coordination protocol beyond the waiter and the gate, a recovery policy or a public contract stops for the orchestrator.
+- **D-orch-1b-4 Shared files and delivery.** `dapp-send-executor.ts`, `execution-lane.ts`, `execution-mutex.ts`, `execution/service.ts` and `send-sequencer.ts` belong to this arc. Merge `origin/dev` before the final gates, never a union merge; `lessons.md` is at its 8 KiB budget. One PR against `dev`: `Closes #218`, and `Closes #219` since items a (#264) and c (#344) have shipped.
+- **D-orch-1b-5 E2E budget.** The G1 network files run at retry 0 on both browsers; each added scenario names its failure mode, why a cheaper layer cannot prove it, and its measured runtime; the PR body states each browser's suite wall-clock before and after.
+
+Arc 1b deviations from the text above (detail in `lessons/phase-1b.md`):
+
+- **D45 Origin order is a line from the first grant until the send starts.** The plan kept the tail of an origin's parked chain and let a request re-enter once the earlier one had re-entered. A request that has re-entered but is not yet re-granted must still count as ahead, or a later request of its origin granted in that window starts first. `ExecutionLane.joinOriginLine` gives each send a place, keyed by lane and origin, from its first grant until it starts or ends; a later send parks until every earlier place has left.
+- **D46 A silent-path dApp send reads "Queued..." while it waits.** `parkSlot` moves a `pending` record back to `queued`, the back-edge OA-1 = A opened (D37), and the claim takes it to `pending` again. This supersedes the plan's "Preparing..." line, which predates OA-1's answer; #219's decision text names "Queued..." for this path.
+- **D47 The gate is per network.** `ChainTipGate.unconfirmed` and `wait` take the network id beside the scope, since each network has its own tip; tips, failed reads and running reads are kept per network id.
+- **D48 One rule for what blocks a waiter.** On A a waiter is blocked by any holder of its scope that is sent, external, or earlier in line, and by any pending row of the scope inside the submitted hold. Rows a holder already carries need no exclusion, since that holder blocks too.
+
 ## Audit verdicts
 
 ### Round 1 (plan v1): dual audit

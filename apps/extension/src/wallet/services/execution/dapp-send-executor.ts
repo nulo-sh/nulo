@@ -18,6 +18,11 @@
  *   - `acquireSlot` BEFORE the journal claim and any PXE-touching work.
  *     The session-FIFO baton releases inside the slot acquisition (via
  *     `onExecutionEnqueued`) the instant we're enqueued.
+ *   - Between the grant and the claim, a send whose origin has an earlier
+ *     send still waiting, or whose account has an earlier send unmined (its
+ *     spends are unknown before the build), parks outside the slot and comes
+ *     back; nothing is claimed, built or awaited on the network under the
+ *     slot before that check passes.
  *   - `journalId` hoisted outside the try so catch (mark failed) +
  *     finally (controller cleanup + slot release) run even if the claim
  *     or the post-claim cancel-check throws on a raced cancel —
@@ -47,12 +52,15 @@ import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
 import { fingerprintBuiltFee } from "./estimate-reuse-shared"
+import type { ChainTipGate } from "./chain-tip-gate"
+import type { OriginTurn } from "./execution-lane"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
+import type { SendSequencer, SequenceScope, SequenceTicket } from "./send-sequencer"
 import { probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
@@ -119,6 +127,25 @@ export interface DappSendExecutorLane {
 	): Promise<string | undefined>
 	markJournal(journalId: string | undefined, progress: JobProgress, error?: JobError | null, failedTitle?: string): Promise<void>
 	commitJournal(journalId: string | undefined, progress: JobProgress): Promise<void>
+	parkSlot(
+		release: ExecutionMutexRelease,
+		networkId: string,
+		queuedJournalId: string | undefined,
+		fence: ExecutionFence,
+		preController: AbortController | undefined,
+		originKey: string | undefined,
+		wait: () => Promise<void>,
+	): Promise<ExecutionMutexRelease>
+	joinOriginLine(fence: ExecutionFence, chainId: number, originKey: string | undefined): OriginTurn
+	failUnclaimed(journalId: string | undefined, error: unknown): Promise<void>
+}
+
+/** Where a granted dApp send stands until it starts: its origin's line, and a waiter in the line of
+ *  each account it may spend from. */
+interface DappSendLine {
+	turn: OriginTurn
+	scopes: SequenceScope[]
+	waiters: SequenceTicket[]
 }
 
 /** What the post-send record needs from a built send, whichever arm built it. */
@@ -180,6 +207,8 @@ export interface DappSendExecutorDeps {
 	/** The account's tx reached the node: Send-page sends sharing its calls' state wait for its
 	 *  receipt, and a transfer estimate built before it is stale. */
 	noteSent(chainId: number, account: string, txHash: string, calls: Tx["calls"]): void
+	sequencer: Pick<SendSequencer, "enterWaiter">
+	chainTip: Pick<ChainTipGate, "unconfirmed" | "wait">
 	logDebug(msg: string, ...rest: unknown[]): void
 }
 
@@ -195,6 +224,8 @@ export class DappSendExecutor {
 	 * Frozen ordering (do not reorder — see execution-lane.ts header):
 	 *   - `acquireSlot` BEFORE the journal claim and any PXE work (the
 	 *     session-FIFO baton releases inside acquisition via `onEnqueued`).
+	 *   - the earlier-sends wait between the grant and the claim; whichever
+	 *     slot it holds last is the one `finally` releases.
 	 *   - `journalId` hoisted OUTSIDE the try so catch (mark failed) +
 	 *     finally (controller cleanup + slot release) run even if the claim
 	 *     or the post-claim cancel-check throws on a raced cancel — otherwise
@@ -223,6 +254,8 @@ export class DappSendExecutor {
 			// enqueue (letting a later request overtake) and move any throw out
 			// of the acquire-protected try. Evaluated below, inside the try.
 			getCalls: () => { method?: string }[] | undefined
+			/** The dApp's `additionalScopes`, a thunk for the same reason as `getCalls`. */
+			getAdditionalScopes: () => unknown
 		},
 		run: (ctx: {
 			journalId: string | undefined
@@ -231,16 +264,20 @@ export class DappSendExecutor {
 			commitSubmitting: ProveAndSendContext["commitSubmitting"]
 		}) => Promise<T>,
 	): Promise<T> {
-		const { release: releaseSlot, preController } = await this.deps.lane.acquireSlot(
+		const { release, preController } = await this.deps.lane.acquireSlot(
 			params.networkId,
 			params.hooks?.queuedJournalId,
 			params.fence,
 			params.hooks?.onExecutionEnqueued,
 			params.hooks?.originKey,
 		)
-
+		const slot = { release }
+		let line: DappSendLine | undefined
 		let journalId: string | undefined
 		try {
+			line = await this.joinLines(params)
+			await this.waitForEarlierSends(params, preController, line, slot)
+			line.turn.leave()
 			const claimed = await this.deps.lane.claimOrCreateJournal(
 				params.networkId,
 				params.accountAddress,
@@ -265,8 +302,12 @@ export class DappSendExecutor {
 			})
 		} catch (error) {
 			await markFailedUnlessCancelled(error, journalId, this.deps.lane)
+			// Nothing names the record before the claim; left `queued` or `pending`, it would wait for the reaper.
+			if (!journalId) await this.deps.lane.failUnclaimed(params.hooks?.queuedJournalId, error)
 			throw error
 		} finally {
+			line?.turn.leave()
+			for (const waiter of line?.waiters ?? []) waiter.release()
 			if (journalId) this.deps.lane.deleteController(journalId)
 			// A pre-claim throw leaves `journalId` unset while `acquireSlot`
 			// already registered the pre-controller under `queuedJournalId`;
@@ -275,8 +316,81 @@ export class DappSendExecutor {
 			// the slot release, matching the slot-scaffold ordering contract.
 			const queuedKey = params.hooks?.queuedJournalId
 			if (queuedKey && queuedKey !== journalId) this.deps.lane.deleteController(queuedKey)
-			releaseSlot()
+			slot.release()
 		}
+	}
+
+	/** Joins its origin's line and, with a waiter, the line of every account the send may spend from.
+	 *  Called holding the slot, so both places are the grant order. */
+	private async joinLines(params: {
+		networkId: string
+		accountAddress: string
+		hooks: ExecutionHooks | undefined
+		fence: ExecutionFence
+		getAdditionalScopes: () => unknown
+	}): Promise<DappSendLine> {
+		const { chainId } = await this.deps.getNetwork(params.networkId)
+		const turn = this.deps.lane.joinOriginLine(params.fence, chainId, params.hooks?.originKey)
+		const scopes = spendAccounts(params.accountAddress, params.getAdditionalScopes()).map((account) => ({ chainId, account }))
+		return { turn, scopes, waiters: scopes.map((scope) => this.deps.sequencer.enterWaiter(scope)) }
+	}
+
+	/**
+	 * Parks outside the slot while an earlier send of the origin has not started, a waiter is
+	 * blocked, or the PXE's node lacks a settled predecessor's block in one of its accounts, and
+	 * re-checks under the slot, synchronously, each time it comes back. Past the waiters' 60 minutes
+	 * the send runs unordered, today's degraded mode: the chain still refuses a real conflict.
+	 */
+	private async waitForEarlierSends(
+		params: { networkId: string; hooks: ExecutionHooks | undefined; fence: ExecutionFence },
+		preController: AbortController | undefined,
+		line: DappSendLine,
+		slot: { release: ExecutionMutexRelease },
+	): Promise<void> {
+		// A send with no record has no cancel to answer while it waits.
+		const signal = preController?.signal ?? new AbortController().signal
+		const journalId = params.hooks?.queuedJournalId
+		let unordered = false
+		const held = () =>
+			!unordered &&
+			(line.waiters.some((w) => w.blocked()) ||
+				line.scopes.some((s) => this.deps.chainTip.unconfirmed(s, undefined, params.networkId)))
+		while (line.turn.behind() || held()) {
+			slot.release = await this.deps.lane.parkSlot(
+				slot.release,
+				params.networkId,
+				journalId,
+				params.fence,
+				preController,
+				params.hooks?.originKey,
+				async () => {
+					if (!(await line.turn.earlierDone(signal))) throw new JobCancelledSentinel(journalId ?? "")
+					unordered ||= await this.waitForEarlier(line, params.networkId, signal, journalId)
+				},
+			)
+		}
+	}
+
+	/** The waiters' turns, then the tip in each account; `true` once their deadline has passed. */
+	private async waitForEarlier(
+		line: DappSendLine,
+		networkId: string,
+		signal: AbortSignal,
+		journalId: string | undefined,
+	): Promise<boolean> {
+		for (const waiter of line.waiters) {
+			const turn = await waiter.waitTurn(signal)
+			if (turn === "aborted") throw new JobCancelledSentinel(journalId ?? "")
+			if (turn === "expired") {
+				this.deps.logDebug("dApp send reached its wait limit for earlier sends; running unordered")
+				return true
+			}
+		}
+		for (const scope of line.scopes) {
+			const tip = await this.deps.chainTip.wait(scope, undefined, networkId, signal, line.waiters[0].remainingMs())
+			if (tip === "aborted") throw new JobCancelledSentinel(journalId ?? "")
+		}
+		return false
 	}
 
 	/** `preview` names the popup interaction this estimate belongs to; when set,
@@ -567,6 +681,7 @@ export class DappSendExecutor {
 				hooks,
 				fence,
 				getCalls: () => (primaryMethod ? [{ method: primaryMethod }] : undefined),
+				getAdditionalScopes: () => undefined,
 			},
 			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
 				// Enter `simulating` BEFORE the build/estimate work — fee
@@ -661,6 +776,7 @@ export class DappSendExecutor {
 				hooks,
 				fence,
 				getCalls: () => primaryMethodCalls(op),
+				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
 			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
 				if (op.accountAddress !== op.opts?.from?.toString()) {
@@ -850,6 +966,7 @@ export class DappSendExecutor {
 				hooks,
 				fence,
 				getCalls: () => primaryMethodCalls(op),
+				getAdditionalScopes: () => op.opts?.additionalScopes,
 			},
 			async ({ checkCancelled, markJournal, commitSubmitting, journalId }) => {
 				await markJournal({ stage: "simulating" })
@@ -992,6 +1109,15 @@ export class DappSendExecutor {
 			d.txRequest.authWitnesses.push(await d.account.createAuthWit(messageHash))
 		}
 	}
+}
+
+/** The send's account, then each additional scope the build reads notes for, once each. */
+function spendAccounts(account: string, additionalScopes: unknown): string[] {
+	const accounts = new Map<string, string>()
+	for (const address of [account, ...(Array.isArray(additionalScopes) ? additionalScopes.map(String) : [])]) {
+		if (!accounts.has(address.toLowerCase())) accounts.set(address.toLowerCase(), address)
+	}
+	return [...accounts.values()]
 }
 
 /** The shared picker, not the raw first call: it skips a leading self-pay fee payload, so the proving

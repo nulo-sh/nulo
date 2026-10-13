@@ -11,6 +11,10 @@
  * An estimate holds no place in line and never waits. Between its check and the end of its
  * simulation it holds back sends that enter after it, so a proof can never slip between two of its
  * simulations.
+ *
+ * A dApp send's spends are unknown until its build, so it waits as a waiter: behind every earlier
+ * ticket of the account, every sent tx still holding and every pending row, whatever they share. A
+ * waiter holds no key, so no send ever waits behind one.
  */
 
 import type { Tx } from "@/wallet/services/transaction/spec"
@@ -54,6 +58,8 @@ interface Holder {
 	readonly estimate: boolean
 	/** A send this sequencer did not order (a dApp tx): it holds every ticket, whatever its place. */
 	readonly external: boolean
+	/** A dApp send before its build ({@link SendSequencer.enterWaiter}). */
+	readonly waiter: boolean
 	readonly deadline: number
 	readonly scope: string
 	readonly keys: ReadonlySet<SequenceKey>
@@ -78,12 +84,22 @@ export class SendSequencer {
 	 * changed while it waited) passes its first ticket's `deadline`, so no re-entry extends its wait.
 	 */
 	public enter(scope: SequenceScope, keys: ReadonlySet<SequenceKey>, deadline?: number): SequenceTicket {
-		const holder = this.hold(scope, keys, { estimate: false, external: false }, deadline)
+		const holder = this.hold(scope, keys, { estimate: false, external: false, waiter: false }, deadline)
+		return this.ticket(scope, holder, () => this.blocked(scope, holder.keys, holder))
+	}
+
+	/** A dApp send's place in `scope` before its build; synchronous, so its place is the call order. */
+	public enterWaiter(scope: SequenceScope): SequenceTicket {
+		const holder = this.hold(scope, new Set(), { estimate: false, external: false, waiter: true })
+		return this.ticket(scope, holder, () => this.waiterBlocked(scope, holder))
+	}
+
+	private ticket(scope: SequenceScope, holder: Holder, blocked: () => boolean): SequenceTicket {
 		return {
 			deadline: holder.deadline,
-			blocked: () => this.blocked(scope, holder.keys, holder),
+			blocked,
 			remainingMs: () => Math.max(0, holder.deadline - this.deps.now()),
-			waitTurn: (signal) => this.waitTurn(scope, holder, signal),
+			waitTurn: (signal) => this.waitTurn(holder, signal, blocked),
 			sent: (hash) => {
 				holder.sent = { hash: hash.toLowerCase(), at: this.deps.now() }
 				this.bumpEpoch(scope)
@@ -105,7 +121,7 @@ export class SendSequencer {
 	 */
 	public beginEstimate(scope: SequenceScope, keys: ReadonlySet<SequenceKey>): { end(): void } | undefined {
 		if (this.isBlocked(scope, keys)) return undefined
-		const holder = this.hold(scope, keys, { estimate: true, external: false })
+		const holder = this.hold(scope, keys, { estimate: true, external: false, waiter: false })
 		return {
 			end: () => {
 				holder.released = true
@@ -128,7 +144,7 @@ export class SendSequencer {
 	 * shares a key until its receipt settles, as a ticketed send does, even if its record never lands.
 	 */
 	public externalSent(scope: SequenceScope, txHash: string, keys: ReadonlySet<SequenceKey>): void {
-		const holder = this.hold(scope, keys, { estimate: false, external: true })
+		const holder = this.hold(scope, keys, { estimate: false, external: true, waiter: false })
 		holder.sent = { hash: txHash.toLowerCase(), at: this.deps.now() }
 		holder.released = true
 		this.bumpEpoch(scope)
@@ -142,7 +158,7 @@ export class SendSequencer {
 	private hold(
 		scope: SequenceScope,
 		keys: ReadonlySet<SequenceKey>,
-		kind: { estimate: boolean; external: boolean },
+		kind: { estimate: boolean; external: boolean; waiter: boolean },
 		deadline?: number,
 	): Holder {
 		const now = this.deps.now()
@@ -153,13 +169,28 @@ export class SendSequencer {
 		return holder
 	}
 
-	private async waitTurn(scope: SequenceScope, self: Holder, signal: AbortSignal): Promise<"turn" | "aborted" | "expired"> {
+	private async waitTurn(self: Holder, signal: AbortSignal, blocked: () => boolean): Promise<"turn" | "aborted" | "expired"> {
 		for (;;) {
 			if (signal.aborted) return "aborted"
 			if (this.deps.now() >= self.deadline) return "expired"
-			if (!this.blocked(scope, self.keys, self)) return "turn"
+			if (!blocked()) return "turn"
 			await this.deps.sleep(POLL_MS, signal)
 		}
+	}
+
+	/** Every earlier ticket, every sent tx still holding and every pending row of the scope: a
+	 *  waiter shares state with all of them as far as anyone can tell before its build. */
+	private waiterBlocked(scope: SequenceScope, self: Holder): boolean {
+		const id = scopeId(scope)
+		const now = this.deps.now()
+		this.prune(id, now)
+		for (const h of this.holders) {
+			if (h.scope !== id || h.estimate || h.waiter) continue
+			if (h.sent || h.external || h.seq < self.seq) return true
+		}
+		return this.deps
+			.pendingTxs(scope.account)
+			.some((tx) => tx.chainId === scope.chainId && tx.createdAt <= now && now - tx.createdAt < SUBMITTED_HOLD_MS)
 	}
 
 	private blocked(scope: SequenceScope, keys: ReadonlySet<SequenceKey>, self: Holder | undefined): boolean {

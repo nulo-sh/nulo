@@ -488,7 +488,13 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 					this.lane.beginJournal(networkId, accountAddress, origin, calls, fence),
 				markJournal: (journalId, progress, error, failedTitle) => this.lane.markJournal(journalId, progress, error, failedTitle),
 				commitJournal: (journalId, progress) => this.lane.commitJournal(journalId, progress),
+				parkSlot: (release, networkId, queuedJournalId, fence, preController, originKey, wait) =>
+					this.lane.parkSlot(release, networkId, queuedJournalId, fence, preController, originKey, wait),
+				joinOriginLine: (fence, chainId, originKey) => this.lane.joinOriginLine(fence, chainId, originKey),
+				failUnclaimed: (journalId, error) => this.lane.failUnclaimed(journalId, error),
 			},
+			sequencer: this.sendSequencer,
+			chainTip: this.chainTipGate,
 			buildAndEstimateValidated: (op, feeSettings, fence, parentTask, signal) =>
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal),
 			addTransaction: (...args) => this.transactionService.addTransaction(...args),
