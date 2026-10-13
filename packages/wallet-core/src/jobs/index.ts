@@ -11,6 +11,7 @@ export {
 	type KnownJobErrorKind,
 	type ProveBackend,
 	type SendCheckOutcome,
+	type SendExpiry,
 	type TerminalStage,
 } from "./types"
 

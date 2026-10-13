@@ -175,22 +175,43 @@ export type NewOperationInput = {
 export const OperationKindSchema = z.enum(["transfer", "dapp_execute", "token_import"])
 export const OperationOriginSchema = z.enum(["popup", "dapp", "seed"])
 
+const SendExpirySchema = z.object({ timestamp: z.number(), nullifier: z.string() })
+
 export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("stage", [
 	z.object({ stage: z.literal("queued") }),
 	z.object({ stage: z.literal("pending") }),
 	z.object({ stage: z.literal("simulating") }),
 	z.object({ stage: z.literal("proving"), enteredProveAt: z.number(), backend: z.enum(["presto", "browser"]).optional() }),
-	z.object({ stage: z.literal("submitting"), txHash: z.string().optional(), submittedEndpointUrl: z.string().optional() }),
+	z.object({
+		stage: z.literal("submitting"),
+		txHash: z.string().optional(),
+		submittedEndpointUrl: z.string().optional(),
+		expiry: SendExpirySchema.optional(),
+	}),
 	z.object({ stage: z.literal("succeeded"), txHash: z.string().optional() }),
 	z.object({
 		stage: z.literal("failed"),
 		from: z.enum(["queued", "pending", "simulating", "proving", "submitting"]).optional(),
 		txHash: z.string().optional(),
 		submittedEndpointUrl: z.string().optional(),
-		check: z.enum(["sent", "reverted", "unconfirmed"]).optional(),
+		expiry: SendExpirySchema.optional(),
+		check: z.enum(["sent", "reverted", "unconfirmed", "expired"]).optional(),
 	}),
 	z.object({ stage: z.literal("cancelled") }),
 ])
+
+type FailedProgress = Extract<JobProgress, { stage: "failed" }>
+
+/** The fields of a failed row that only the send check writes. */
+export type SendCheckState = Pick<FailedProgress, "check">
+
+/** The answers the send check may record over what a row holds: a first answer, and `expired`
+ *  over `unconfirmed`. `expired` needs the row's recorded expiry; nothing replaces `sent`,
+ *  `reverted` or `expired`. */
+export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boolean {
+	if (to.check === undefined || (to.check === "expired" && from.expiry === undefined)) return false
+	return from.check === undefined || (from.check === "unconfirmed" && to.check === "expired")
+}
 
 /** May have reached the node: it failed at `submitting` with a hash, and not at the send line's
  *  own liveness check, which throws before `node.sendTx`. */

@@ -21,7 +21,10 @@
  * marker in `dist/`; it must be absent).
  */
 import { describe, expect, test, vi } from "vitest"
+import { BlockNumber } from "@aztec-labs/foundation/branded-types"
+import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { Gas } from "@aztec-labs/stdlib/gas"
+import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { JobCancelledError, JournaledRejection, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -102,6 +105,16 @@ function svc(name: string, methods: Record<string, unknown>) {
 	return { name, dependencies: [], async start() {}, ...methods } as never
 }
 
+/** A proven tx as `proveAndSend` reads it: its hash, and the expiry part of its kernel outputs. */
+function provenTx(hash: string) {
+	const anchorBlockHeader = BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(5) }) })
+	return {
+		getTxHash: () => ({ toString: (): string => hash }),
+		data: { constants: { anchorBlockHeader }, expirationTimestamp: 1_750_003_600n, getNonEmptyNullifiers: () => [new Fr(2n)] },
+	}
+}
+const RECORDED_EXPIRY = { timestamp: 1_750_003_600, nullifier: new Fr(2n).toString() }
+
 async function makeHarness() {
 	// Per-harness state — no module-level mutable singletons, so the rollout can
 	// call makeHarness() in many tests without cross-contamination.
@@ -109,7 +122,7 @@ async function makeHarness() {
 	const sendTx = vi.fn(async () => {})
 	// proveTx returns a stub TxProvingResult whose `toTx` is spied: the post-prove
 	// cancel checkpoint must drop the proof BEFORE `toTx`, so `toTx` proves submission.
-	const toTx = vi.fn(async () => ({ getTxHash: () => ({ toString: (): string => "0xhash" }) }))
+	const toTx = vi.fn(async () => provenTx("0xhash"))
 	const fakeNode = {
 		getCurrentMinFees: async () => MIN_FEES,
 		getNodeInfo: async () => ({ l1ChainId: 5, rollupVersion: 4 }),
@@ -727,7 +740,7 @@ describe("ExecutionService composition — work runs only while the session that
 		h.toTx.mockImplementationOnce(async () => {
 			void h.service.cancelJob(h.getJournalId())
 			await waitFor(cancelWrite.isParked)
-			return { getTxHash: () => ({ toString: () => "0xhash" }) }
+			return provenTx("0xhash")
 		})
 		const run = transfer(h)
 		await waitFor(() => h.ctrl.entered)
@@ -1159,7 +1172,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 	test("sendTx reached the node, its answer did not: the row fails from submitting, then the check reads it sent", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"1e".repeat(32)}`
-		h.toTx.mockResolvedValueOnce({ getTxHash: () => ({ toString: () => hash }) })
+		h.toTx.mockResolvedValueOnce(provenTx(hash))
 		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
 		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => ({
 			txHash: hash,
@@ -1199,7 +1212,13 @@ describe("ExecutionService composition — a send whose answer was lost is check
 
 		expect(h.sendTx).toHaveBeenCalledTimes(1)
 		const failed = await h.journal.getOperation(h.getJournalId())
-		expect(failed?.progress).toEqual({ stage: "failed", from: "submitting", txHash: hash, submittedEndpointUrl: "http://fake" })
+		expect(failed?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: hash,
+			submittedEndpointUrl: "http://fake",
+			expiry: RECORDED_EXPIRY,
+		})
 
 		clock.advance(SEND_CHECK_TICK_MS)
 		await waitFor(() => balances.refreshAccountBalances.mock.calls.length > 0)
@@ -1218,7 +1237,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 	test("a sendTx the node refused reads 'Not confirmed yet' too: a retried POST can come back refused after an accepted attempt", async () => {
 		const h = await makeHarness()
 		const hash = `0x${"2f".repeat(32)}`
-		h.toTx.mockResolvedValueOnce({ getTxHash: () => ({ toString: () => hash }) })
+		h.toTx.mockResolvedValueOnce(provenTx(hash))
 		// As the SDK client throws a node's per-call JSON-RPC error: an HTTP 200, so never retried itself.
 		const refusal = "Invalid tx: Insufficient fee payer balance"
 		h.sendTx.mockRejectedValueOnce(new Error(refusal, { cause: { code: -32702, message: refusal } }))
@@ -1240,7 +1259,13 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(await p).toStrictEqual(recorded(h, expect.any(Error)))
 
 		const failed = await h.journal.getOperation(h.getJournalId())
-		expect(failed?.progress).toEqual({ stage: "failed", from: "submitting", txHash: hash, submittedEndpointUrl: "http://fake" })
+		expect(failed?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: hash,
+			submittedEndpointUrl: "http://fake",
+			expiry: RECORDED_EXPIRY,
+		})
 		expect(failed && sendOutcome(failed)).toBe("checking")
 	})
 })

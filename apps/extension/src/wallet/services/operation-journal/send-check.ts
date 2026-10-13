@@ -1,5 +1,6 @@
+import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxHash, type TxReceipt } from "@aztec-labs/stdlib/tx"
-import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
+import type { SendCheckOutcome, SendExpiry } from "@nulo/wallet-core/jobs"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
 import type { ILogger } from "@/wallet/logger"
@@ -7,6 +8,7 @@ import type { NetworkService } from "@/wallet/services/network/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import type { TokenBalanceService } from "@/wallet/services/token-balance/service"
+import { proveExpired } from "@/wallet/services/transaction/inclusion"
 import { executionResultFromReceipt, txStatusFromReceipt } from "@/wallet/services/transaction/receipt-status"
 import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
 import { TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
@@ -32,18 +34,22 @@ export type SendCheckDeps = {
 type Watch = {
 	id: string
 	profileId: string
-	txHash: string
-	url: string | undefined
-	terminalAt: number
 	nextAt: number
 	inFlight: boolean
 }
+
+/** A row whose answer can still change: one with none yet, read against the window that starts at
+ *  `since`, or an `unconfirmed` one whose expiry can still prove it will never go through. */
+type OpenRow =
+	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number }
+	| { kind: "expiring"; txHash: string; url: string; expiry: SendExpiry }
 
 /**
  * Asks the network what became of a failed send that may have reached it, and records the answer
  * on the journal row. A row is read only on the endpoint it was sent through, only while its
  * profile is the unlocked one, and one read at a time; nothing is persisted but the answer, so a
- * restart resumes every unanswered row.
+ * restart resumes every open row. Each read acts on the row as it loads it, so a write that the
+ * row's own update re-announces never leaves it unwatched.
  */
 export class SendCheck {
 	private readonly deps: SendCheckDeps
@@ -85,17 +91,8 @@ export class SendCheck {
 
 	/** Keeps an existing watch, so the guard of a read in flight outlives the row's next update. */
 	private watch(op: OperationRecord): void {
-		const target = unanswered(op)
-		if (!target || this.watches.has(op.id)) return
-		const now = this.deps.clock.now()
-		this.watches.set(op.id, {
-			id: op.id,
-			profileId: op.profileId,
-			...target,
-			terminalAt: op.terminalAt ?? now,
-			nextAt: now,
-			inFlight: false,
-		})
+		if (!openRow(op) || this.watches.has(op.id)) return
+		this.watches.set(op.id, { id: op.id, profileId: op.profileId, nextAt: this.deps.clock.now(), inFlight: false })
 	}
 
 	private unwatch(watch: Watch): void {
@@ -125,59 +122,103 @@ export class SendCheck {
 		try {
 			await this.readOnce(watch, live, now)
 		} catch {
-			watch.nextAt = nextReadAt(watch.terminalAt, now)
+			watch.nextAt = now + DROPPED_RECHECK_INTERVAL_MS
 			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check read failed", { journalId: watch.id, stage: "read-error" })
 		} finally {
 			watch.inFlight = false
 		}
 	}
 
+	/** A due watch stays due after a write, refused or not: the next tick's read of the row decides
+	 *  what is left to ask. */
 	private async readOnce(watch: Watch, live: () => boolean, now: number): Promise<void> {
 		const op = await this.deps.journal.getOperation(watch.id)
-		if (!op || unanswered(op)?.txHash !== watch.txHash) {
+		const row = op ? openRow(op) : undefined
+		if (!op || !row) {
 			this.unwatch(watch)
 			return
 		}
-		const verdict = watch.url === undefined ? undefined : await this.minedVerdict(watch, watch.url, live)
-		if (!live()) return
-		const last = watch.url === undefined || now - watch.terminalAt >= DROPPED_RESURRECTION_WINDOW_MS
-		const check = verdict ?? (last ? "unconfirmed" : undefined)
-		if (check === undefined) {
-			watch.nextAt = nextReadAt(watch.terminalAt, now)
-			return
-		}
-		await this.record(watch, op, check, live)
+		const check =
+			row.kind === "unanswered" ? await this.firstAnswer(watch, row, live, now) : await this.expiryAnswer(watch, row, live, now)
+		if (check === undefined || !live()) return
+		const expected = row.kind === "unanswered" ? undefined : "unconfirmed"
+		if (!(await this.deps.journal.setSendCheck(watch.id, row.txHash, { check: expected }, { check }, live))) return
+		this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check answered", { journalId: watch.id, outcome: check })
+		const paid = check === "sent" || check === "reverted" ? op.accountAddress : undefined
+		if (paid !== undefined && live()) await this.deps.balances.refreshAccountBalances(paid)
 	}
 
-	/** `sent` or `reverted` once the node reports the transaction in a block; `undefined` otherwise.
-	 *  One attempt per read: a transport retry would dial after `live()` turned false. */
-	private async minedVerdict(watch: Watch, url: string, live: () => boolean): Promise<SendCheckOutcome | undefined> {
-		if (!live()) return undefined
-		const node = await this.deps.network.getSingleAttemptNodeForUrl(url)
-		if (!live()) return undefined
+	private async firstAnswer(
+		watch: Watch,
+		row: Extract<OpenRow, { kind: "unanswered" }>,
+		live: () => boolean,
+		now: number,
+	): Promise<SendCheckOutcome | undefined> {
+		const verdict = row.url === undefined ? undefined : await this.minedVerdict(watch, row.txHash, row.url, live)
+		const last = row.url === undefined || now - row.since >= DROPPED_RESURRECTION_WINDOW_MS
+		const check = verdict ?? (last ? "unconfirmed" : undefined)
+		if (check === undefined) watch.nextAt = nextReadAt(row.since, now)
+		return check
+	}
+
+	/** Starts once the device clock passes the expiry and reads until the finalized chain's time
+	 *  does. A nullifier that chain holds ends the watch for this run; nothing records it, so a
+	 *  restart asks once more. */
+	private async expiryAnswer(
+		watch: Watch,
+		row: Extract<OpenRow, { kind: "expiring" }>,
+		live: () => boolean,
+		now: number,
+	): Promise<SendCheckOutcome | undefined> {
+		const expiresAt = row.expiry.timestamp * 1_000
+		if (now < expiresAt) {
+			watch.nextAt = expiresAt
+			return undefined
+		}
+		watch.nextAt = now + DROPPED_RECHECK_INTERVAL_MS
+		const node = await this.nodeFor(row.url, live)
+		if (!node) return undefined
+		const proof = await proveExpired(node, row.expiry).catch(() => undefined)
+		if (proof === undefined) {
+			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check expiry read failed", {
+				journalId: watch.id,
+				stage: "expiry-error",
+			})
+			return undefined
+		}
+		if (proof === "expired") return "expired"
+		if (proof === "present") this.unwatch(watch)
+		else watch.nextAt = now + Math.max(DROPPED_RECHECK_INTERVAL_MS, proof * 1_000)
+		return undefined
+	}
+
+	/** `sent` or `reverted` once the node reports the transaction in a block; `undefined` otherwise. */
+	private async minedVerdict(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<SendCheckOutcome | undefined> {
+		const node = await this.nodeFor(url, live)
+		if (!node) return undefined
 		try {
-			return verdictOf(await node.getTxReceipt(TxHash.fromString(watch.txHash)))
+			return verdictOf(await node.getTxReceipt(TxHash.fromString(txHash)))
 		} catch {
 			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check receipt failed", { journalId: watch.id, stage: "receipt-error" })
 			return undefined
 		}
 	}
 
-	/** A refused write keeps the row watched and due: the next tick's re-read decides again. */
-	private async record(watch: Watch, op: OperationRecord, check: SendCheckOutcome, live: () => boolean): Promise<void> {
-		if (!(await this.deps.journal.setSendCheck(watch.id, watch.txHash, check, live))) return
-		const refresh = check !== "unconfirmed" && live() ? op.accountAddress : undefined
-		this.unwatch(watch)
-		this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check answered", { journalId: watch.id, outcome: check })
-		if (refresh !== undefined) await this.deps.balances.refreshAccountBalances(refresh)
+	/** One attempt per read: a transport retry would dial after `live()` turned false. */
+	private async nodeFor(url: string, live: () => boolean): Promise<AztecNode | undefined> {
+		if (!live()) return undefined
+		const node = await this.deps.network.getSingleAttemptNodeForUrl(url)
+		return live() ? node : undefined
 	}
 }
 
-/** The hash and endpoint of a row that may have reached the network and has no answer yet. */
-function unanswered(op: OperationRecord): { txHash: string; url: string | undefined } | undefined {
+function openRow(op: OperationRecord): OpenRow | undefined {
 	const { progress } = op
-	if (progress.stage !== "failed" || progress.check !== undefined || !progress.txHash || !isSendCheckable(op)) return undefined
-	return { txHash: progress.txHash, url: progress.submittedEndpointUrl }
+	if (progress.stage !== "failed" || !progress.txHash || !isSendCheckable(op)) return undefined
+	const { txHash, submittedEndpointUrl: url, check, expiry } = progress
+	if (check === undefined) return { kind: "unanswered", txHash, url, since: op.terminalAt ?? op.updatedAt }
+	if (check === "unconfirmed" && expiry !== undefined && url !== undefined) return { kind: "expiring", txHash, url, expiry }
+	return undefined
 }
 
 function verdictOf(receipt: Pick<TxReceipt, "status" | "executionResult">): SendCheckOutcome | undefined {
