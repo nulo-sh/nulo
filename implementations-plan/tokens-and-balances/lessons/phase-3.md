@@ -55,3 +55,15 @@
   `NULO_E2E_MIGRATION_FIXTURE=1` too, or backup-migration's arming contract fails); network
   `token-add-auto-trust.test.ts` Chrome 1/1 at retry 0 via `agent.sh`. Phase 3.1 ✓; the close-out waits on
   arc 2's PR (#333).
+
+## Merge of `dev` and close-out
+
+- 2026-10-13 — arc 2 merged as #333 (7287048) after #334 opened. Merged `origin/dev` (8a54313): only `plan.md` and
+  `STATUS.md` conflicted, both arcs' content kept; no ledger id collided (arc 3's were D-orch-9 to D-orch-13
+  already). #333 left `token/service.ts` alone; its pasted-address row adds through the same popup path, so the
+  class is recorded there too.
+- Gates on the merged tree: lint, typecheck:all, check:plans, focused vitest (1235), `test` (11400), `test:all`
+  pass; network Chrome retry 0 via `agent.sh`: `token-add-auto-trust.test.ts` 1/1, `holdings.test.ts` 2/2; smoke
+  Chrome retry 0 on the armed build: 50 files, 214 tests, 0 failed, 4 files skipped by design.
+- Close-out in #334 (D-orch-10): #338 and #339 filed; `lessons.md` kept under budget by folding the class lesson
+  into the MAC entry and retiring the `tag_name` entry, which a release test now pins.

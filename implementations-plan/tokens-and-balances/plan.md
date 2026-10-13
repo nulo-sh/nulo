@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-13); arc 1 merged (#271); arc 2 merged (#333); arc 3 (OA-1 = A) in review
+status: completed (delivered in #271, #333 and #334)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,7 +14,32 @@ trunk: dev
 issues: [80, 93, 94, 104, 105, 106, 134, 136, 206]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** delivered in three PRs against `dev`: #271 (arc 1, merged 2026-10-12), #333 (arc 2, merged 2026-10-13) and #334 (arc 3 and this close-out), awaiting the orchestrator's merge; the merge that lands #334 closes this plan.
+- **Shipped:**
+  - #206 (#271): balance add and delete events go through one id-keyed reducer, so a seeding race no longer duplicates a row.
+  - #94 (#271): a released token add resumes under a fresh ticket and writes, deletes and announces only while it owns one (R1 to R5; OA-3 = A).
+  - #93 (#271): adopting a profile id removes that id's per-profile UI keys first.
+  - #134 (#333): Holdings search offers to add a token from a pasted contract address (P8-01).
+  - #136 (#333): the New token popup shows one generic line for every refused add (P8-02, OA-2 = A); the error goes to a debug line under `reason` (OA-4 = A, D-orch-7).
+  - #105 (#334): a listed token's mint figure reads only when the class the build recorded equals the class the token was added with (OA-1 = A). The build records the node's class, as the PXE resolves a call, because the wallet's PXE reports every instance at its original class (D-arc3-5).
+  - `lessons.md`: the class lesson joins the MAC and class entry; the draft-release `tag_name` entry is retired, its one code path pinned by `scripts/release/attach-assets-run.test.ts`.
+- **Orchestrator records:** D-orch-1 to D-orch-13 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #80: not built, `blocked:external` until a V6 mainnet exists; stays open with a comment.
+  - #104: not built, hold H8 until a real dApp reports a mint outside the standard call shapes; stays open with a comment.
+  - #106: not built, hold H8 until charter C12-fetch and its own plan; stays open with a comment.
+  - #93's orphan keys (D4): a key a racing page recreates for an id never adopted again stays, read by nothing; no sweep, no item.
+  - OA-1's options B and C: not built; the owner chose A.
+  - D9's store-refusal marker: not built, since OA-2 = A needs none (D-arc2-1).
+  - The § Delivery stack with its own close-out layer: replaced by independent PRs off `dev` (D-orch-1, D-orch-5, D-orch-9), this close-out riding #334 (D-orch-10).
+  - The final cross-arc Codex pass (§ Post-implementation step 3): not run. The arcs landed as independent PRs, each looped to convergence (arcs 1 and 2 in two rounds, arc 3 in three); the orchestrator's close-out brief did not schedule it.
+- **Open items:** #338 (`hardening`): the #93 late-write residue (D1, I2). #339 (`owner-decision`): OA-5, "Try again" for a pasted address that is not a token on this network. #262 (`bug`): the lockless chain sweep's id-reuse race (D-orch-4). #329 (`bug`): a token added with upper-case hex never matches its own calls (arc 3's review).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
 
 ## Tier and budget
 
@@ -416,7 +441,7 @@ with `cd`.
 
 ### Arc 1: one balance reducer, a resumable token add, adopted ids start clean (merges on OA-3)
 
-#### Phase 1.1: one reducer for balance events (#206)
+#### Phase 1.1: one reducer for balance events (#206) ✓
 
 1. Add `onBalanceAdded` and `onBalanceDeleted` to `useTokenBalanceSnapshot`, as in Architecture.
 2. In `BalanceView.vue` and `TokensView.vue`, subscribe the returned handlers. Delete the local ones.
@@ -435,7 +460,7 @@ Validation gate:
 - Pass: every command exits 0. The new BalanceView test fails against the base `BalanceView.vue`.
 - Layers: lint, typecheck, unit, component.
 
-#### Phase 1.2: a released token add resumes under a fresh ticket (#94)
+#### Phase 1.2: a released token add resumes under a fresh ticket (#94) ✓
 
 1. Extend the test helper `recordWrites` (`wallet/services/storage-write-log.ts`) with an awaitable
    hook that can hold a set before it applies, and make `afterSet` awaitable, so a test can stop the
@@ -509,7 +534,7 @@ Validation gate:
   `token/service.ts` and `network/service.ts` (paste the red run).
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1.3: an adopted profile id starts with no UI keys (#93)
+#### Phase 1.3: an adopted profile id starts with no UI keys (#93) ✓
 
 1. Keep one `StorageArea` field in the `ProfileService` constructor.
 2. In `persistNewProfileHoldingLock` and `writeMarkerThenRowHoldingLock`, await
