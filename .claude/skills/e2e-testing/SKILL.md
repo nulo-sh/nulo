@@ -250,11 +250,12 @@ CLAUDE.md: the distinct failure mode it proves, why a cheaper layer cannot prove
 then measured runtime, with each browser's suite wall-clock before and after in the PR body.
 
 - **Suite wall-clock** is the CI suite job envelope: GitHub's job timestamps over the `Run / …` jobs
-  of a run whose first attempt succeeded. Read the PR's run and the latest `dev` run of the same
-  workflow and lane:
+  that ran and passed in a run whose first attempt succeeded (a skipped job carries no real times).
+  The PR e2e workflows run on pull requests, not on `dev`: "after" is the PR's run, "before" the
+  latest such run of the same workflow on another PR (`gh run list --workflow <file> --status success`):
 
   ```bash
-  gh run view <id> --attempt 1 --json conclusion,jobs --jq 'if .conclusion != "success" then "attempt 1: \(.conclusion)" else [.jobs[] | select(.name | startswith("Run / "))] | ((map(.completedAt | fromdateiso8601) | max) - (map(.startedAt | fromdateiso8601) | min)) / 60 | floor end'
+  gh run view <id> --attempt 1 --json conclusion,jobs --jq 'if .conclusion != "success" then "attempt 1: \(.conclusion)" else [.jobs[] | select((.name | startswith("Run / ")) and .conclusion == "success")] | if length == 0 then "suite skipped" else ((map(.completedAt | fromdateiso8601) | max) - (map(.startedAt | fromdateiso8601) | min)) / 60 | floor end end'
   ```
 
   It prints whole minutes (`21` for run 38364426588, Chrome network) and includes setup and

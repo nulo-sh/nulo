@@ -117,6 +117,12 @@ Gate: `bun run check:plans`, `bun run test:release`, `bun run test:ci-gating` an
 - R2-2 Low: the e2e skill gave the measuring steps without citing the rule. Accepted: Phase 4 links it and copies the timeout sentence.
 - Both conditions are met in this revision. No third round: the orchestrator allowed a second only on a material finding.
 
+**Implementation round 1, Codex (gpt-6.1-sol, high; session `01a1352e-e2fb-7d01-9b9b-3ff0bbcfb70c`) plus one Opus diff review, 2026-10-13: approve with fixes.** Both verified the move: the normalized diff is `5c5` only, nothing else left CLAUDE.md, every anchor resolves.
+- C1 Medium, demonstrated (= O1): the one-liner printed `-1` for a run whose suite jobs were all skipped (38332413848). Fixed: only jobs that ran and passed count; none prints `suite skipped`.
+- C2 Low: the close-out's "stays open" read as covering closed known limits. Fixed: open unless the comment closes it as one.
+- O2 demonstrated: the PR e2e workflows never run on `dev`, so "before" is the latest such run on another PR. O3: CLAUDE.md's "the one issue without a demonstrated path" contradicted open plausible issues; dropped (the README keeps the brief's words). O4: README's tree said `STATUS.md` goes after merge; now at close-out.
+- O5, left out: `send-queue-activity` arc 4 (#220) names CLAUDE.md § Staged-rollout switches; that lane's prose stays its own (D5), so the report flags it.
+
 ## Delivery
 
 Single arc: `gh pr create --base dev` from `worktree-ruleset-hygiene-1`, after the loop converges. Title: `docs(claude): move the release runbook into a skill; add proportion and e2e budget rules` (88 characters). No `Closes` line, no label (F7). The close-out is this PR's final commits. `code_review`: off.
