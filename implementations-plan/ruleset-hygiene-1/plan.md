@@ -123,7 +123,7 @@ Single arc: `gh pr create --base dev` from `worktree-ruleset-hygiene-1`, after t
 
 ## Post-implementation
 
-Follow `implementations-plan/README.md` § Post-implementation standard at commit `<Phase 3 SHA, written by Phase 3>`. Specific to this plan:
+Follow `implementations-plan/README.md` § Post-implementation standard at commit `de9f1bf53ce0df048f00053214e8caca46c6eb90`. Specific to this plan:
 
 - **Loop:** single arc, once over the whole diff after the final gate; round 1 at `high`, a second only on a material finding. `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume with `resume-codex.sh "" <followup> <codex-dir> high`. On a quota or 401 error, retry once with `CODEX_ACCOUNT=alejo-icloud`, then log it and continue within scope. The prompt asks for dropped runbook lines first.
 - **Approval boundary:** the orchestrator approves plan changes; the owner keeps persistence, permissions, public contracts, background work and scope.

@@ -6,3 +6,4 @@
 - 2026-10-13: approved by the orchestrator (D-orch-1 to D-orch-5 recorded); implementing Phase 1.
 - 2026-10-13: Phase 1 gate pass: check:plans 0 findings; label known-limit created (#6E7781); lint 0; no local paths.
 - 2026-10-13: Phase 2 gate pass: check:plans 0 findings; lint 0. Deviation: the brief's 'Until that README section exists' sentence is dropped (the section lands in Phase 3); 'launched' reads 'started'.
+- 2026-10-13: Phase 3 gate pass: check:plans 0 findings; the verbatim rule appears once; lint 0. Standard at de9f1bf53ce0df048f00053214e8caca46c6eb90.
