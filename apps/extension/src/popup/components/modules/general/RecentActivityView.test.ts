@@ -1038,6 +1038,24 @@ describe("RecentActivityView — hydration order", () => {
 		}
 	})
 
+	test("an unmount while the mount awaits its task snapshot reads no journal and schedules no retry", async () => {
+		vi.useFakeTimers()
+		try {
+			const tasks = deferred<unknown[]>()
+			H.getTasks.mockReturnValue(tasks.promise)
+			H.getOperations.mockRejectedValue(new Error("disconnected"))
+			const w = mountView()
+			await flushPromises()
+			w.unmount()
+			tasks.resolve([])
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(10_000)
+			expect(H.getOperations).not.toHaveBeenCalled()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
 	test("a running step names itself before the snapshot lands", async () => {
 		const ops = deferred<unknown[]>()
 		const task = { ...uiTransferTask(ACCT_A), subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }] }

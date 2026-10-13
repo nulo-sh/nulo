@@ -1083,6 +1083,8 @@ Rejected:
 - **A settled send's figure and the token order for unknown decimals** (Opus, low): UI calls outside the signed list, OA-8 and OA-9.
 - **A multi-card network e2e** (Codex): the climb past several rows and the off-screen fallback are unit-proven; a browser case would need several unfunded dApp sends held at once.
 
+**Round 2 (resumed Codex session): one medium.** An unmount while the mount awaited its task snapshot let the mount resume and begin a fresh journal run, whose failed read on the disconnected client then retried every 2 s. Accepted: the mount begins its run before its awaits, and a stale run reads nothing; a test defers the task snapshot, unmounts, and sees no journal read or retry. It found `clearListed` terminating, the plain footer and sheet rules intact, the scope-switch retry fenced, and the tightened e2e checks closing the reported gaps.
+
 
 ## Seeds
 

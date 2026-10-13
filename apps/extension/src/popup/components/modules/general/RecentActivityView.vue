@@ -550,6 +550,8 @@ journalService.onOperationDeleted.add(onJournalDeleted)
  * terminal transitions during SW down windows.
  */
 async function resnapshotJournal(isCurrent = journalFence.begin()) {
+	// A stale run reads nothing: after unmount the read would reconnect the client.
+	if (!isCurrent()) return
 	try {
 		// Generation guard (not captured-equality): equality re-validates on
 		// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
@@ -717,6 +719,8 @@ watch(
 defineExpose({ journalOps, executingTask, executingSubtasks, pendingCancelJobIds, hasOrphanExecutingTask, recentActivityRows, tokens })
 
 onMounted(async () => {
+	// Begun before the awaits below, so an unmount during them leaves this run stale.
+	const journalRun = journalFence.begin()
 	await scopedTokens.reload()
 
 	// ServiceClient doesn't auto-connect on listener registration — make
@@ -742,7 +746,7 @@ onMounted(async () => {
 	// Load persisted in-flight ops for the active account (captured-account
 	// guarded). `resnapshotJournal` also runs the v4 cancel-dupe mount check
 	// (`clearExecutingTaskIfRecentTerminalMatch`, 30s window) after assigning.
-	await resnapshotJournal()
+	await resnapshotJournal(journalRun)
 })
 onBeforeUnmount(() => {
 	taskService.disconnect()
