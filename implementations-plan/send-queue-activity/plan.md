@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: arc 1 merged (#264); arc 3a merged (#343); arc 3b in review (3b.1-3b.5 built)
+status: arc 1 merged (#264); arc 3a merged (#343); arc 3b in review (3b.1-3b.6 built)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -294,7 +294,7 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **Arc 3b (page 10 with C9 and C12-links, signed 2026-10-12).**
   - #209 (P10-11): no visible change on a normal network; a record of another network no longer opens on the journal page, and one from before the network stamp opens on every page that lists it.
   - #103 (P10-10) and #213 (P10-09): an amount whose token's decimals are unknown shows no figure; an in-progress card with no amount shows none rather than 0.
-  - #110: "Send not confirmed" reads in a neutral snack (grey clock, stays until closed); Home shows one card per send; a checked send's journal page shows the Tx hash row and "View on <explorer>", none under explorer None; an open snack sits above an awaiting card's Cancel.
+  - #110: "Send not confirmed" reads in a neutral snack (grey clock, stays until closed); Home shows one card per send; a checked send's journal page shows the Tx hash row and "View on <explorer>", none under explorer None; an open snack sits above an awaiting card's Cancel wherever it would otherwise cover it, and keeps its usual place when it would not.
   - #122 (P10-08): an awaiting card whose stage is unknown shows the loading skeleton in its stage line.
   - #219 c (OA-1 A): a Send-page send that starts waiting after it was created reads "Queued..." while it waits.
   - #243 (P10-12, P10-13): status icons take their status text colour; dark red status text is lighter (#ff534b).
@@ -647,7 +647,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3b.6: arc 3b end-to-end gate
+#### Phase 3b.6: arc 3b end-to-end gate ✓
 
 **Validation gate.** Commands: `bun run test`; `bun run test:all`; smoke on Chrome and Firefox; network on Chrome and Firefox: `snack-placement.test.ts`, `failed-send-check.test.ts`, `account-switch-isolation.test.ts`, and on OA-1 = A `same-token-concurrent-sends.test.ts`. Pass: all exit 0; screenshots of every surface the page names, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
 
