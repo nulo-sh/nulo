@@ -74,6 +74,8 @@ The frame scrolls so the amount line clears the footer. That needs about 35 px; 
 
 **What ships now:** A, only if #170 ships under OA-6's condition. The PR shows the committed capture beside the re-staged one. Nothing is uploaded and no store file changes.
 
+**As built (arc 2):** A needs 35 px. At that scroll the From/To labels pass wholly under the header, not partly, and the two toggles stay in the frame (`screenshots/170-send-after.png`, beside `170-send-before.png`). B would also hide the toggles.
+
 ## OA-6. If the sandbox truthfully cannot vouch for the fee payer (#170)
 
 **Surface:** the privacy strip in the same Send frame ("YOU" cell).
