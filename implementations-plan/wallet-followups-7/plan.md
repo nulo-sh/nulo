@@ -27,7 +27,7 @@ status: completed (delivered in one PR against dev)
   - The "two holds count apart" unit test, a duplicate of T4's second-session control.
 - **Known limits:** #371 (KL-1), #372 (KL-2).
 - **Open items:** none.
-- **Seeds:** the `/goal` and `/loop` seeds below are retired; this record is evidence, not instructions.
+- **Seeds retired:** the `/goal` and `/loop` seeds below; this record is evidence, not instructions.
 - Over the light size target (178 lines): the Outcome and the implementation rows of § Audit verdicts record the delivery.
 
 # wallet-followups-7: one token contract spelling; a bound on a session's pending calls
