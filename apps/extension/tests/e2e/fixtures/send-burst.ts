@@ -4,7 +4,7 @@
  * proof or mining. Reads what the page and the journal say; never sleeps for an outcome.
  */
 import type { Page } from "puppeteer"
-import { replaceInputValue } from "./extension"
+import { clickByTestId, replaceInputValue } from "./extension"
 import { type FeeMethodSubtitle, selectFeeMethod, selectSendToken, setActiveSendType } from "./helpers"
 import { openSend, readSendView, submitSend, waitForSendGone } from "./send-page"
 
@@ -18,6 +18,8 @@ export interface BurstSend {
 	amount: string
 	destination: string
 	fee: FeeMethodSubtitle
+	/** The fee card's priority; Normal, the card's default, when unset. */
+	speed?: "normal" | "fast" | "urgent"
 }
 
 export type EstimateState = "ready" | "failed" | "queued" | "estimating"
@@ -42,6 +44,7 @@ export async function startSend(page: Page, send: BurstSend): Promise<void> {
 	await replaceInputValue(page, '[data-testid="send-amount-input"]', send.amount)
 	await replaceInputValue(page, '[data-testid="send-destination-field"] input', send.destination)
 	await selectFeeMethod(page, send.fee)
+	if (send.speed) await clickByTestId(page, `send-fee-priority-${send.speed}`)
 }
 
 /** The estimate's state right now: the fee row (landed or queued), or the page's "Couldn't estimate fee" snack. */
@@ -53,7 +56,8 @@ export async function readEstimateState(page: Page): Promise<EstimateState> {
 			if (`${title} ${sub}`.toLowerCase().includes("estimate fee")) return "failed"
 		}
 		if (document.querySelector('[data-testid="fee-estimate"]')) return "ready"
-		return document.querySelector('[data-testid="fee-estimate-queued"]') ? "queued" : "estimating"
+		const queued = document.querySelector('[data-testid="fee-estimate-queued"], [data-testid="fee-estimate-queued-cap"]')
+		return queued ? "queued" : "estimating"
 	})
 }
 
@@ -67,10 +71,15 @@ export async function waitForEstimate(page: Page, timeout = 120_000): Promise<Es
 	}
 }
 
-const sendDisabled = (page: Page) =>
-	page.evaluate(() => document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')?.disabled === true)
+/** Whether Send is enabled, and whether the queued row offers a fee cap to queue against. */
+const readQueueOffer = (page: Page) =>
+	page.evaluate(() => ({
+		enabled: document.querySelector<HTMLButtonElement>('[data-testid="send-submit"]')?.disabled === false,
+		capped: Boolean(document.querySelector('[data-testid="fee-estimate-queued-cap-line"]')),
+	}))
 
-/** Fails unless the fee row turns queued and stays queued, with Send disabled, for the whole window. */
+/** Fails unless the fee row turns queued and stays queued for the whole window, with Send enabled
+ *  exactly while it offers a cap. */
 export async function expectEstimateQueued(page: Page, windowMs: number): Promise<void> {
 	const settle = Date.now() + 30_000
 	while ((await readEstimateState(page)) === "estimating") {
@@ -81,7 +90,8 @@ export async function expectEstimateQueued(page: Page, windowMs: number): Promis
 	while (Date.now() < deadline) {
 		const state = await readEstimateState(page)
 		if (state !== "queued") throw new Error(`the estimate was expected to stay queued, but it is ${state}`)
-		if (!(await sendDisabled(page))) throw new Error("Send was enabled while the estimate was queued")
+		const offer = await readQueueOffer(page)
+		if (offer.enabled !== offer.capped) throw new Error(`Send must be enabled exactly while a cap shows: ${JSON.stringify(offer)}`)
 		await new Promise((r) => setTimeout(r, 250))
 	}
 }
@@ -102,6 +112,8 @@ export interface TransferRow {
 	txHash: string | undefined
 	error: string | undefined
 	createdAt: number
+	/** Set while the send asks again: the fee it found and the cap it was held to. */
+	reask: { fee: string; cap: string } | undefined
 }
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"])
@@ -117,7 +129,7 @@ export async function readTransferRows(page: Page): Promise<TransferRow[]> {
 		try {
 			const row = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>
 			if (row.kind !== "transfer") continue
-			const progress = row.progress as { stage?: string; txHash?: string } | undefined
+			const progress = row.progress as { stage?: string; txHash?: string; reask?: { fee: string; cap: string } } | undefined
 			const error = row.error as { message?: string } | null | undefined
 			rows.push({
 				id: String(row.id),
@@ -127,6 +139,7 @@ export async function readTransferRows(page: Page): Promise<TransferRow[]> {
 				txHash: progress?.txHash ?? (typeof row.txHash === "string" ? row.txHash : undefined),
 				error: error?.message,
 				createdAt: Number(row.createdAt ?? 0),
+				reask: progress?.reask && { fee: progress.reask.fee, cap: progress.reask.cap },
 			})
 		} catch {
 			// A row this reader cannot parse is not a transfer it drove.
