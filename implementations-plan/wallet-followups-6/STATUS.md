@@ -7,3 +7,4 @@
 - 2026-10-13 — final Codex pass: `approve`; findings folded in. Plan ready for the orchestrator's approval.
 - 2026-10-13 — common brief gained the proportion rule (reachable triggers, light plan ≤ 150 lines); panel round 2 on #262: Codex and Opus both `known limit: build nothing`. Phase 4 (purge) dropped, #262 a known limit, plan cut from 321 to 149 lines. Ready for the orchestrator's approval.
 - 2026-10-13 — orchestrator approved the plan (D-orch-1 to D-orch-7 recorded); arc 1 phase 1 started.
+- 2026-10-13 — phase 1 gate PASS (lint, typecheck:all, wallet-bridge 706, refusal-log 28; new cases red on base).

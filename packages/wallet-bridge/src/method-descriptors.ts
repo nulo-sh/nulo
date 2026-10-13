@@ -334,8 +334,14 @@ export type MethodName = keyof typeof METHOD_REGISTRY_SOURCE
  *  "Unsupported wallet method" string) for any name absent from `METHOD_REGISTRY`;
  *  `Object.hasOwn` (not a truthy index) rejects prototype names. On return,
  *  `methodName` is narrowed to `MethodName`. This is the single typed choke point
- *  the dispatcher routes through — no permissive default, no `as` at the boundary. */
-export function assertKnownMethod(methodName: string): asserts methodName is MethodName {
+ *  the dispatcher routes through — no permissive default, no `as` at the boundary.
+ *  The name is decrypted JSON: a non-string is refused under `describeWireMethod`'s
+ *  placeholder before `Object.hasOwn` coerces it (`["sendTx"]` would pass, an object
+ *  with an own `toString` would throw untyped). */
+export function assertKnownMethod(methodName: unknown): asserts methodName is MethodName {
+	if (typeof methodName !== "string") {
+		throw UnsupportedMethodError.forMethod(`[${typeof methodName}]`)
+	}
 	if (!Object.hasOwn(METHOD_REGISTRY, methodName)) {
 		throw UnsupportedMethodError.forMethod(methodName)
 	}

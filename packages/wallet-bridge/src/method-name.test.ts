@@ -36,4 +36,16 @@ describe("assertKnownMethod — typed dispatch-entry choke point", () => {
 	test("fail-closed: an empty method name throws", () => {
 		expect(() => assertKnownMethod("")).toThrow(/Unsupported wallet method/)
 	})
+
+	// The name is decrypted JSON. Coerced, an array naming a method would pass and an object with
+	// an own `toString` would throw a bare TypeError the envelope cannot classify.
+	test.each([
+		[{ toString: "x" }, "[object]"],
+		[42, "[number]"],
+		[null, "[object]"],
+		[["sendTx"], "[object]"],
+	])("refuses the non-string name %j as unsupported under its type placeholder", (name, shown) => {
+		expect(() => assertKnownMethod(name)).toThrow(UnsupportedMethodError)
+		expect(() => assertKnownMethod(name)).toThrow(`Unsupported wallet method: ${shown}`)
+	})
 })
