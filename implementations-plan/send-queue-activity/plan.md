@@ -1131,6 +1131,8 @@ Every new test fails on the pre-fix source (six cases), and the fixes restore it
 
 **Round 2 (resumed Codex session): one P2, accepted.** The pending set was still read at stash time, after the build: a predecessor pending when the estimate began, settling during the build, left an empty snapshot, the gate's `lagging` sample was already taken, and the confirm would reuse the stale build once the gate cleared. Fixed (D52); a test settles the predecessor inside the build fake and fails on the round-1 source, and the #60 pin now asserts the pre-build view. Codex confirmed the round-1 fixes: skipping the stash still mints an independent `previewId`, cancellation evicts it, and every dApp send arm keeps `OriginType.DAPP` through `runInSlot`. Two gate comments corrected.
 
+**Round 3 (resumed): no new material finding.** The repaired race snapshots the predecessor before the build and the consume ladder refuses reuse with its unchanged "pending tx set changed"; the ladder's order and the transfer path's snapshot are untouched. **The loop converged here.**
+
 ## Seeds
 
 Draft until the orchestrator approves; no ELI5 is produced (orchestrator-owned).

@@ -32,3 +32,4 @@ Arc 1b ships on OA-3 = A, OA-4 = B and OA-5 = A, so Phase 1.2 (the chain-tip gat
 
 - Codex: lead questions hold; five P2s accepted: the stranded origin line on a throwing scopes thunk, finality re-observing a block, a cancel waiting out a tip read, the failure cutoff, and e2e asserting submission. Opus: lead questions hold; wallet (Settings) sends parked with no card (D49), the same stranded line, and a lag-window estimate reused after the gate (D50). All fixed with failing-first tests: six cases fail on the pre-fix source.
 - Round 2 (resumed): one P2, the reuse snapshot's pending set read after the build (D52); fixed failing-first, and the #60 pin that asserted the late read now asserts the pre-build view. Round-1 fixes confirmed.
+- Round 3 (resumed): no new material finding; the loop converged.
