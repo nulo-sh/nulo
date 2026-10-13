@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { mount } from "@vue/test-utils"
-import postcss, { type Rule } from "postcss"
+import postcss, { type ChildNode, type Rule } from "postcss"
 import { describe, expect, test } from "vitest"
 import CallArguments from "./CallArguments.vue"
 import OperationCard from "./OperationCard.vue"
@@ -27,6 +27,22 @@ const styleOf = (component: unknown): Record<string, string> =>
 	(component as { __cssModules: { $style: Record<string, string> } }).__cssModules.$style
 const CARD = styleOf(OperationCard)
 const ARGS = styleOf(CallArguments)
+
+/** The card's own `<style module>` source, read for the rules jsdom never applies. */
+const CARD_STYLE = postcss.parse(
+	readFileSync(join(__dirname, "OperationCard.vue"), "utf8").split("<style module>")[1]?.split("</style>")[0] ?? "",
+)
+const isRule =
+	(selector: string) =>
+	(node: ChildNode): node is Rule =>
+		node.type === "rule" && node.selector === selector
+/** A top-level rule's declarations, or those of a rule nested in it. */
+const declarationsOf = (selector: string, nested?: string): Record<string, string> => {
+	const top = CARD_STYLE.nodes.find(isRule(selector))
+	const rule = nested === undefined ? top : top?.nodes.find(isRule(nested))
+	return Object.fromEntries((rule?.nodes ?? []).flatMap((node) => (node.type === "decl" ? [[node.prop, node.value]] : [])))
+}
+const WRAPS = { "min-width": "0", "overflow-wrap": "anywhere" }
 
 const account = { name: "Owner", address: OWNER, profileId: "p1", chainId: 0, index: 0, type: 0, visible: true }
 const base = { networkId: "net-1", accountAddress: OWNER, account, feeSettings: { paymentMethod: { kind: "fj" } } }
@@ -96,16 +112,7 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 	})
 
 	test("a prop row's and a row's value column may shrink below its longest word and break inside it", () => {
-		const style = readFileSync(join(__dirname, "OperationCard.vue"), "utf8").split("<style module>")[1]?.split("</style>")[0] ?? ""
-		const root = postcss.parse(style)
-		for (const parent of [".prop", ".row"]) {
-			const rule = root.nodes.find((node): node is Rule => node.type === "rule" && node.selector === parent)
-			const value = rule?.nodes.find((node): node is Rule => node.type === "rule" && node.selector === "> :last-child")
-			const declarations = Object.fromEntries(
-				(value?.nodes ?? []).flatMap((node) => (node.type === "decl" ? [[node.prop, node.value]] : [])),
-			)
-			expect(declarations, parent).toMatchObject({ "min-width": "0", "overflow-wrap": "anywhere" })
-		}
+		for (const parent of [".prop", ".row"]) expect(declarationsOf(parent, "> :last-child"), parent).toMatchObject(WRAPS)
 	})
 
 	test("a discovered authorization's decoded function name is the wrapping value column of its row", () => {
@@ -123,6 +130,23 @@ describe("OperationCard — long dApp strings break inside the card", () => {
 		expect(value.text()).toMatch(HUMANIZED)
 		expect(value.element.parentElement?.classList.contains(CARD.row)).toBe(true)
 		expect(value.element.parentElement?.lastElementChild).toBe(value.element)
+	})
+
+	test("a registered token's 31-character symbol and its row may shrink and break inside the card", () => {
+		const symbol = "W".repeat(31)
+		const w = mount(OperationCard, {
+			props: {
+				op: { ...base, kind: "register_token", address: TOKEN } as never,
+				index: 0,
+				tokenMetadata: { symbol, name: "Wide Token", decimals: 18 },
+			},
+			global: { stubs },
+		})
+		const value = w.find('[data-testid="register-token-symbol"]')
+		expect(value.text()).toBe(symbol)
+		expect(value.classes()).toContain(CARD.token_meta)
+		expect(value.element.parentElement?.classList.contains(CARD.token_meta)).toBe(true)
+		expect(declarationsOf(".token_meta")).toMatchObject(WRAPS)
 	})
 })
 

@@ -361,8 +361,8 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				     attacker-controllable. Name is hidden when it duplicates
 				     the symbol (e.g. test USDC where both equal "USDC"). -->
 				<Flex :class="$style.prop">
-					<Flex justify="between" :class="$style.row">
-						<Text variant="row-title" color="primary" :class="$style.title_size" data-testid="register-token-symbol">
+					<Flex justify="between" :class="[$style.row, $style.token_meta]">
+						<Text variant="row-title" color="primary" :class="[$style.title_size, $style.token_meta]" data-testid="register-token-symbol">
 							{{ safeWire(tokenMetadata.symbol, 32) }}
 						</Text>
 						<Text
@@ -584,6 +584,12 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 }
 
 .payload {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+/* A token's contract names its symbol and name; the row and its symbol break inside the card. */
+.token_meta {
 	min-width: 0;
 	overflow-wrap: anywhere;
 }
