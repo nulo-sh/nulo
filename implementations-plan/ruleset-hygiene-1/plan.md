@@ -1,7 +1,7 @@
 ---
 plan: ruleset-hygiene-1
 tier: light
-status: approved (orchestrator, 2026-10-13); implementing
+status: closed (2026-10-13)
 issues: none
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 36c43155
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** closed. One arc, #350 against `dev`; the merge that lands it closes the plan.
+- **Shipped:** in #350, the release runbook as `.claude/skills/release/SKILL.md` behind a six-line CLAUDE.md pointer (only the D4 sentence changed; CLAUDE.md 115,423 → 86,787 bytes); README § Proportion and § Post-implementation standard, cited from CLAUDE.md; the `known-limit` row, path sentence, search and `Known limits:` line; the e2e runtime budget with its measuring one-liner. On GitHub: the `known-limit` label (D-orch-3).
+- **Dropped:** the advisory shard summary step (D1, D-orch-2): pool shards write no json report, the env that would make them write one is pinned, and the job envelope already records the number. Not promoted to `lessons.md`: git's `*` pathspec crossing `/` (recon.md); the file holds 8,190 of 8,192 bytes, and the line does not earn a retirement.
+- **Known limits:** none.
+- **Open items:** none. Reported to the orchestrator instead (D5): `send-queue-activity` arc 4 (#220) names CLAUDE.md § Staged-rollout switches, which now lives in the `release` skill.
+- **Size:** 161 lines against the light target of 150; the Outcome and the implementation review round are the excess, and nothing restated was left to cut.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # ruleset-hygiene-1: the release runbook becomes a skill; proportion, known limits, an e2e runtime budget
 
