@@ -37,8 +37,8 @@ Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-AS
 | #209 | 3b | page 10 P10-11 | arc 3b merges |
 | #213 | 3b | page 10 P10-09, C9 | arc 3b merges |
 | #243 | 3b | page 10 P10-12, P10-13 | arc 3b merges |
-| #217 | 4 | page 9 P9-04, hold H3 | arc 4 merges |
-| #220 | 4 | charter C6, ci-release-supply's `nightly.yml` arcs | arc 4 merges |
+| #217 | 4 | page 9 P9-04, P9-04a to P9-04d (signed 2026-10-13); fees-and-sponsors arc 2 (seam) | arc 4 merges |
+| #220 | none | moved to ci-followups-2 on 2026-10-11 (Phase 4.2) | there |
 | #242 | 5 | page 9 P9-05, arc 2 merged | arc 5 merges |
 | #244 | no arc | its own trigger (a third site) | stays open, untouched |
 
@@ -58,7 +58,7 @@ Arc 3 of the lane map is split into 3a and 3b (D11): thirteen records over about
 
 ## Scope
 
-In: the sixteen issues above, as the issue map says. Out: #244 (no arc); confirm-now-send-later (#217 item 1, not built per P9-04); a pending-aware PXE simulation (an upstream change); two public spends that together overdraw a balance (out of scope since the archived concurrent-sends plan); any change to the session-FIFO baton or to dispatch timing (dapp-ingress-grants, H1); a hold on a submitted dApp tx wider than its recorded keys (OA-4).
+In: the sixteen issues above, as the issue map says, with confirm-now-send-later (#217 item 1) built in arc 4 since P9-04 changed on 2026-10-13. Out: #244 (no arc); a pending-aware PXE simulation (an upstream change); two public spends that together overdraw a balance (out of scope since the archived concurrent-sends plan); any change to the session-FIFO baton or to dispatch timing (dapp-ingress-grants, H1); a hold on a submitted dApp tx wider than its recorded keys (OA-4).
 
 ## Architecture & Implementation
 
@@ -213,12 +213,70 @@ Items 3-6 of #90. Every option of P9-01 is planned so the chosen one builds with
 
 **Arc 3b file map.** As listed above, plus their colocated tests; e2e `tests/e2e/rows.test.ts`, `home-links.test.ts`, `navigation.test.ts`; network `snack-placement.test.ts`, `failed-send-check.test.ts`, `account-switch-isolation.test.ts`, `same-token-concurrent-sends.test.ts` (#219 c).
 
-### Arc 4: queued-send rule and chaos criterion (after page 9 P9-04 and C6; hold H3)
+### Arc 4: a queued send against a fee cap (#217; page 9 P9-04, P9-04a to P9-04d, signed 2026-10-13)
 
-- **#217 (P9-04 approved as proposed).** Item 1 builds nothing. The arc pins what the page ratifies: export `WAIT_LIMIT_MESSAGE` from `transfer-executor.ts` and assert its exact text in `transfer-executor.test.ts` (the test today repeats the literal); assert `SUBMITTED_HOLD_MS === 600_000` and `MAX_WAIT_MS === 3_600_000` in `send-sequencer.test.ts` under names that say the owner ratified them. The third answer (a failed public send and private balance) has no string in the tree: nothing to pin, said on the page (OA-2). On "Change", re-plan from the note.
-- **#220 (C6).** Option A: a row in CLAUDE.md § Staged-rollout switches for `network-e2e-chaos` and `network-e2e-chaos-firefox`: advisory by default; eligible after 30 consecutive green nightlies, a red resetting the count; eligibility is never authority; the owner promotes by adding the job to `status`'s `needs` with the `behavior-gating.test.ts:620-645` pin changed in the same commit; a lane that cannot reach 30 gets a bug issue and is never dropped to turn a run green. A one-line pointer in `CI.md` near `:122` and a comment on the two jobs in `.github/workflows/nightly.yml`. Option B or C: the row says that rule instead. After ci-release-supply's `nightly.yml` arcs merge.
+Re-planned on 2026-10-13: the owner turned "approved as proposed, builds nothing" into confirm-now-send-later (D-orch-14). #220 left this arc on 2026-10-11 (Phase 4.2). Recon: [recon.md § Arc 4](recon.md#arc-4-recon-queued-send-against-a-fee-cap-read-at-dev-e900f710).
 
-**Arc 4 file map.** `apps/extension/src/wallet/services/execution/{transfer-executor.ts, transfer-executor.test.ts, send-sequencer.test.ts}`, `CLAUDE.md`, `CI.md`, `.github/workflows/nightly.yml`.
+**The rule.** Today a Send-page send whose keys an earlier send holds gets the queued estimate answer, and Send stays disabled until a real estimate lands. After arc 4, when a basis exists and the person pays the fee themselves, the page offers "Queue send" against a cap Y. The send then waits in the service worker exactly as a queued send waits today (`execute` → `takeTurn`). At its turn it builds. A build whose fee is at or under Y is proved and sent as built. A build above Y is not proved: the send keeps its place and asks again. Nothing is signed or simulated before the turn (P9-04).
+
+**Basis and cap (new `execution/queued-fee-cap.ts`, beside the sequencer).**
+- `queuedFeeBasis(rows, profileId, chainId, token)`: the newest Tx row of the account (by `createdAt`) stamped with the active profile, not `ambiguous`, on `chainId`, whose origin is the Send page, whose first call is `token`'s contract, and whose `estimatedFee` passes `isFeeAmount` (a positive decimal of at most 39 digits, the width of a u128), and whose `createdAt` is not in the future (a restored row from the future would stay the basis for good; the sequencer skips such rows too). Two profiles of one seed share an address, so the profile stamp keeps another profile's figure out. It is the figure `recordTransfer` stored from `getEstimatedFee`, the arithmetic the readout's `~X FJ` shows. No such row means no basis: the page keeps today's queued state (OA-11).
+- `queuedFeeCap(basis)`: `basis × 125 / 100`, rounded down to the readout's six decimals (`10^12` base units), so the Y on screen is the Y enforced. A cap of 0, or one that fails `isFeeAmount`, is no cap. `QUEUED_FEE_MARGIN_PERCENT = 25n` is the one constant.
+- `estimateTransferFee`'s queued answer (`service.ts:585`) gains `cap?: { basis: string; cap: string }` (`TransferFeeQueued`, `spec.ts:18`). The basis is read from `getTransactions` there, outside admission; it is a storage read, nothing on the network.
+
+**The Send page (screens 1 and 2).**
+- `estimateWhenClear`'s `onQueued` receives the answer; `send.vue` keeps `queuedCap` beside `feeQueued` and clears both together (`:383, :484, :529`). An unspent queued answer sets `queuedCap` (to none when it carries no cap). A spent-token answer (`QUEUED_SPENT`, which carries none) leaves it as it is, so "Queue send" does not flicker during the requeue.
+- Queue mode holds when `feeQueued`, a cap and a self-paid method (Public or Private Fee Juice) hold together. `FeeSettingsCard.vue:266-270`'s `feePayer === "self"` rule moves into one helper in `fee-helpers.ts`, which the card and the page both call. The helper requires a chosen `fj` or `private_fpc` method: today's rule reads "self" with no method at all. A sponsor or an unvouched contract keeps today's queued state (OA-10).
+- `FeeCostReadout.vue` gains the queued-cap branch of the shot (`fee-estimate-queued-cap`, `fee-estimate-queued-cap-line`, the USD span keeps `fee-estimate-usd`). "About X" is the basis through `feeDisplay`. `fee-helpers.ts` gains `feeInWords` (`X FJ (usd)`); `feeLine` becomes `~` plus it.
+- `isAllowedToSend` refuses `feeQueued` only outside queue mode. The button label is `CONFIRMING`, else "Review send" when the review gates, else "Queue send" in queue mode, else "Confirm Transaction" (the shot's precedence).
+- `SendReviewSheet.vue` gains `queuedCapText` (fee line and "Queue send"), as `shot/217-review`.
+- `snapshotTransfer` carries `feeCap` in queue mode and no estimate id; `submitTransfer` passes it as `executeTransfer`'s ninth argument.
+
+**The background.**
+- `executeTransfer(…, precomputedEstimateId?, feeCap?)`. `service.ts` accepts `feeCap` only as `undefined` or a string that passes `isFeeAmount`. Anything else is refused with the boundary's typed parameter error, before the legal check spares a proof. `execute(req, estimateId, fence, cap?)` takes it beside the request, so `TransferRequest` and the reuse fingerprint are untouched.
+- `execute`'s build moves into one loop (`buildWithinCap`), and the re-ask arm into its own helper (`askAgain`, which returns the accepted fee or throws), so each stays under the 80-line and complexity budgets. The current slot release lives in one mutable holder, as `TransferLine` holds the ticket; each pass replaces it, and `execute`'s `finally` releases whatever it holds (the mutex release is idempotent, `execution-mutex.ts:121-124`). A throw on a second pass therefore never leaks a grant:
+  1. `takeTurn` as today; the held estimate id (the popup's, then the re-ask's) through `tryConsume`, else `buildFresh`.
+  2. Without a cap, or with `fee = getEstimatedFee(build) ≤ cap`: prove and send this build, as today.
+  3. Above the cap, in this order, with nothing awaited on the network:
+     - release the slot;
+     - stash the build under a fresh id with the entry `runEstimate` writes (that entry's construction is extracted once and shared; `buildFresh` keeps `chainIdentity`, `fpcIdentity` and the epoch for it). The reused arm keeps the entry it consumed, so a re-stash copies that entry's provenance and its `builtAt`: re-stashing never renews a signed request's retention. `SingleShotTtlCache.stash` schedules the physical drop at `builtAt` + TTL, not stash time + TTL (the same for today's callers, which all stash at build time). The frame that built it returns only `{ stashId, fee, payer }`, so nothing holds the signed request while the person decides;
+     - register the waiter (`QueuedFeeAnswers.wait`), then publish `simulating → queued` with `reask: { fee, cap, payer }` through the throwing `transitionJournal`, not the swallowing `markJournal`. An accept can therefore never arrive before its waiter exists. A failed publication removes the waiter and fails the send as any build error does;
+     - wait for the answer inside `beginQueuedWait`/`endQueuedWait`. A signal already aborted when the wait starts answers `aborted` at once.
+  4. The ticket is neither released nor sent during the wait, so a later send that shares its keys waits behind it, as "Goes out after your earlier send" promises. The slot is free.
+  5. Accept: claim `queued → pending` (the progress replacement drops `reask`), set `cap = fee`, keep the stash id, and loop to 1. A row that must wait again moves back to `queued` through D37's `waiting()`. Within the TTL and with every rung holding, the re-ask build itself goes out ("Send for X"); after a rebuild the accepted fee is the cap.
+  6. The executor's own moves here (the publication, the accept's claim, the expiry's cancel) follow `claim`'s rule (`transfer-executor.ts:416-424`): a move that fails while the signal is aborted, or on a record already `cancelled`, throws the cancel sentinel, never a failure. `cancelJob` writes `cancelled` before it aborts, so each can lose that race. `aborted` (the × or a session end) throws the cancel sentinel. `expired`, the send's own 60-minute deadline (`ticket.remainingMs()`, under the 90-minute heartbeat lease), moves `queued → cancelled` and throws the same sentinel (OA-12). Every exit evicts the stash entry (`TransferEstimateReuse.evict`, which exists).
+- `QueuedFeeAnswers` (in `queued-fee-cap.ts`) holds one entry per waiting `journalId`: `{ fee, resolve }`. `wait(id, fee, signal, ms)` resolves once, with `accepted`, `aborted` or `expired`. `accept(id, fee)` resolves only an entry whose fee equals `fee`, and deletes it. It returns whether it resumed.
+- New popup RPC `acceptQueuedFee(jobId, fee): boolean` (`spec.ts`, `rpcMethods`, `client.ts` passthrough list). It applies `cancelJob`'s ownership gate: the record exists, belongs to the active profile, is a `transfer` at `queued` with `reask.fee === fee`. The fee string passes `isFeeAmount`. It is not a broadcasting entry point: the broadcast still runs from the original `executeTransfer` through `sendTxTask`'s legal guard, so `call-sites.test.ts` is unchanged.
+- `payer` is the popup's `PayerDescriptor` shape, `{ type, fpcId?, isProtocol }`: `{ type: "fj", isProtocol: false }`, or the pinned `Fpc`'s id, `isProtocol` and type (`FpcType.PrivateFpc` → `private_fpc`, else `fpc`). It is what the sheet needs to draw this send's facts as Send drew them.
+
+**The journal.**
+- `packages/wallet-core/src/jobs/types.ts:76`: `{ stage: "queued"; reask?: QueuedFeeReask }`, the type declared there (wallet-core imports nothing above it). It is mirrored in `JobProgressSchema` (`operation-journal/spec.ts:181`) with decimal-string fields.
+- `fsm.ts:49`: `simulating → queued`, with its line in the header comment. `queued → simulating` stays illegal.
+- The reaper is unchanged. The re-ask wait heartbeats as the dependency wait does; the boot sweep fails it as every waiting record (`stuck_queued`).
+- Pre-production: no migration. The journal is in no backup slice, so neither field enters or leaves a backup (Phase 4.1 pins this).
+
+**Home (screens 3 and 4, option B).**
+- `RecentActivityView.vue`: a `transfer` record at `queued` reads "Waiting for your earlier send" (`shot/217-queued-card`), and one with `reask` reads "Fee went up. Review". A dApp record keeps "Queued...".
+- `TransactionAwaitingCard.vue` gains `reaskLine` and a `review` emit, as `shot/217-reask-B`. The row opens; the × stays.
+- `review` stores the record's id and opens `SendReviewSheet` under the popup key `send_reask_review`. Its inputs:
+  - `facts`: `publishFacts` of the record's `transferType` sides and `payerKindOf(settings, payer)`, where a two-line adapter in the view rebuilds `settings` (`{ paymentMethod: { kind: "fj" } }` or `{ kind: "fpc", fpcId }`) from the persisted `payer`;
+  - amount and symbol: `cardAmountFor`, `cardAmountSymbolFor`;
+  - the recipient address only (Home has no contact lookup; the shot shows none);
+  - `ready`: `useSendReview`'s gate.
+  The sheet keeps the fee it opened with, and closes when that record leaves the re-ask state or its `reask.fee` changes. A changed figure is never under the person's finger.
+- `SendReviewSheet.vue` gains `reask` (`{ now, nowAmount, capAmount }`): the line "Fee is now {X with USD}, above the {Y} FJ you accepted." and the button "Send for {X} FJ", as the shot. Send calls `acceptQueuedFee(id, reask.fee)` once (`sending` until it returns), then closes. A refusal changes nothing; the row reads the record.
+- Keyboard: `Popup` closes the sheet on Escape and returns focus to the row. The sheet has no document-level Enter; its button is the keyboard path. The row is a button while it opens.
+
+**What the seams are (fees-and-sponsors arc 2 decides every number).** Arc 4 calls `getEstimatedFee` for both the basis and the at-turn check, so P6-10 (teardown counted once) moves both together. It reads the multiplier only through the build (P6-09), and the reuse ladder only through `stash`/`tryConsume` (P6-12 B: reuse while the prepared cap covers the price). P6-03 with OA-9 A ("Confirm stays disabled until an estimate lands") and arc 4 both edit `isAllowedToSend`. The rule after both: allowed with a landed estimate, or in queue mode. Whichever lands second writes that. The page re-checks nothing about the cap; the background enforces it.
+
+**Competing outlines (both rejected; D45).**
+- *B, a persisted intent resumed from the record.* `execute` returns at queue time; a background runner builds the intent when its predecessor settles, after a restart too. For: survives a restart. Against: a persisted request, an independent lifecycle and a recovery policy (a resumed intent can double-send when the crash fell after `sendTx`), all of them plan changes; and the reaper's boot sweep changes.
+- *C, the popup holds the intent.* For: no background change. Against: no record exists until the turn, so Home shows nothing to cancel, and closing the popup drops the send.
+
+**Arc 4 file map.**
+- Added: `apps/extension/src/wallet/services/execution/{queued-fee-cap.ts, queued-fee-cap.test.ts}`.
+- Modified: `packages/wallet-core/src/jobs/{types.ts, fsm.ts}` (+ `fsm.test.ts`); `apps/extension/src/wallet/services/execution/{transfer-executor.ts, estimate-reuse-shared.ts, service.ts, spec.ts, client.ts}`; `apps/extension/src/wallet/services/operation-journal/spec.ts`; `apps/extension/src/utils/estimate-when-clear.ts`; `apps/extension/src/popup/pages/{send.vue, send-submit.ts}`; `apps/extension/src/popup/components/modules/send/{FeeCostReadout.vue, FeeSettingsCard.vue, SendReviewSheet.vue, fee-helpers.ts}`; `apps/extension/src/popup/components/modules/general/RecentActivityView.vue`; `apps/extension/src/components/composite/activity/TransactionAwaitingCard.vue`; each with its colocated test.
+- e2e: `tests/e2e/network/same-token-concurrent-sends.test.ts`, `tests/e2e/fixtures/send-burst.ts`.
 
 ### Arc 5: keyboard reach on Send's fee card and suggestions (after page 9 P9-05; after arc 2)
 
@@ -239,6 +297,15 @@ Items 3-6 of #90. Every option of P9-01 is planned so the chosen one builds with
 - `RecentActivityView.vue` (R5): arc 1 scopes the event side effects (`:499-524`) and adds one comment; arc 3b owns the rest. Branch `type-roles-arc3` also edits it.
 - `journal/[id].vue` and `journal-state.ts` (R1): arc 3a edits the outcome maps, arc 3b the hash row and decimals. forms-and-contacts arc 3 (#211) starts after 3b.
 - `usePrices.ts` and `BalanceView.vue` (R2): arc 3b only, between tokens-and-balances arc 1 and chain-endpoints arc 2.
+- Arc 4's seams (it rebases on whichever lands first; none of these hunks moves another's lines):
+  - `transfer-executor.ts`: arc 4 owns `execute`'s build loop and the stash call. Arc 1b and Phase 1.2 own `takeTurn` and the gate; arc 4 calls `takeTurn` unchanged.
+  - `execution/service.ts`: arc 4 adds `cap` to the queued answer at `:585`, the `executeTransfer` argument and `acceptQueuedFee`. Phase 1.2 adds `gate.unconfirmed` to the same condition, and arc 1b edits the dApp deps block.
+  - `send-sequencer.ts`: untouched by arc 4; the cap lives in `queued-fee-cap.ts` beside it.
+  - `send.vue`'s `isAllowedToSend`: fees-and-sponsors arc 2 (P6-03, OA-9 A) and arc 4, as § Arc 4 says. Arc 2 edits `:746` and `send-fiat-gate.ts`.
+  - `SendReviewSheet.vue`: arc 2 moves the line gap (`:231-233`); arc 4 adds the fee-line branches and the button label.
+  - `FeeSettingsCard.vue`: arc 5 turns two links into buttons (`:871, :903`); arc 4 passes `queuedCap` and calls the self-paid helper.
+  - `RecentActivityView.vue` (R5), `TransactionAwaitingCard.vue`, `send.vue`, `FeeCostReadout.vue`, `SendReviewSheet.vue`: PR #359 (type-roles arc 3) restyles them. Arc 4's new text takes the type role its neighbours carry on whichever base it lands.
+  - `transfer-estimate-reuse.ts`: fees-and-sponsors arc 2 changes the base-fee rung (P6-12 B); arc 4 only calls `stash`, `tryConsume` and `evict`. In `estimate-reuse-shared.ts` arc 4 times the physical drop from `builtAt`, which every caller already sets at build time.
 
 ### Trade-offs & alternatives not taken
 
@@ -277,7 +344,17 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **Fail-open choices.** A lapsed observation, a failed tip read, or a 60-minute wait runs the send unordered. That is today's degraded mode, where the chain refuses a real conflict (nullifier uniqueness). No new error code or message reaches a dApp (H5 untouched).
 - **Logging.** New lines log a fixed category at `debug`, with no hash, address, block number or URL (CLAUDE.md § Logging policy).
 - **Least privilege, crypto, supply chain.** No new dependency, permission, key or cryptographic code. The lockfile is untouched.
-- **Arcs 2-5.** These are UI only and sit behind signed pages.
+- **Arc 4: a queued send against a cap.**
+  - *Surface.* No new external boundary: `feeCap` and `acceptQueuedFee` are popup RPCs, and the wallet-sdk dispatcher exposes neither. The basis comes from Tx rows, which restore writes with a caller-chosen `estimatedFee` and `createdAt`.
+  - *Overcharge.* The figure compared is the build's committed max fee, at least what the network checks (gas limits × `maxFeesPerGas`). So a send goes out only at or under the Y the person saw, or the X they accepted. Rounding Y down keeps the shown figure the enforced one.
+  - *A planted basis.* An imported row can move only the X and Y shown before the person queues. The charge is the fresh build's, at most that shown Y. A low basis re-asks; a high one shows a high Y the person must accept. No path charges above a figure on screen.
+  - *Double send.* The re-ask stops before proving. Accept resumes the same `execute` call, one entry per journal id resolves once, and a stale or repeated accept is refused. The stashed build is single-shot. Tests pin one proof and one broadcast.
+  - *Skipped predecessor.* The ticket stays held through the re-ask. Accept re-takes the turn and re-checks under the slot, and a reused build passes the epoch and pending-set rungs.
+  - *Slot hygiene.* The cap check is arithmetic on the build; the slot is released before the wait for the person.
+  - *A signed request in memory.* The stash's 120 s TTL, counted from the build (a re-stash keeps the original `builtAt`, and the physical drop follows it), and `evict` on every exit bound it; it never persists. The journal keeps figures and the payer descriptor, no hash.
+  - *Rounding.* The readout rounds X half-up to six decimals, as every fee figure today, while the accept carries the raw fee; the difference is under 0.0000005 FJ. Changing the format is the owner's; it stays a known limit.
+  - *Stuck flow.* A forgotten re-ask holds its keys until the send's 60-minute deadline at most (OA-12); a lock ends it at once. New log lines are fixed categories at `debug`, with no fee figure.
+- **Arcs 2, 3a, 3b and 5.** These are UI only and sit behind signed pages.
   - Arc 3a records attempt counts, never response bodies, in progress and logs, and never re-polls a restored row's stored endpoint (D16).
   - Arc 3b's explorer link contacts nothing until it is tapped, and disappears under explorer None (C12-links).
 
@@ -298,6 +375,13 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
   - #122 (P10-08): an awaiting card whose stage is unknown shows the loading skeleton in its stage line.
   - #219 c (OA-1 A): a Send-page send that starts waiting after it was created reads "Queued..." while it waits.
   - #243 (P10-12, P10-13): status icons take their status text colour; dark red status text is lighter (#ff534b).
+
+- **Arc 4 (page 9, P9-04a to P9-04d, signed 2026-10-13).** The four approved shots are the sign-off; nothing beyond their words ships.
+  - Send page (P9-04a): "The fee card reads "You pay: About X" with the line "Goes out after your earlier send, for at most Y." under it, where Y is the last estimate for this token plus the margin. The primary button reads "Queue send" and is enabled. Every other row stays as today."
+  - Review sheet (P9-04b): "The fee line reads "Fee up to Y, based on your last send. If it comes out higher, we ask again." The submit button reads "Queue send". The sheet's layout stays as today."
+  - Home (P9-04c): "The existing Queued card, its stage line reading "Waiting for your earlier send", with its Cancel as today." Every Send-page send at `queued` reads it, the two-window case included; a dApp send keeps "Queued...".
+  - The re-ask (P9-04d, option B): "The row says 'Fee went up. Review'. Tapping opens the usual review sheet for this send with one added line, 'Fee is now X, above the Y you accepted', and 'Send for X'. Closing the sheet keeps the send queued; the row's × cancels it." As shot: the line ends with a full stop, X carries its USD figure, Y reads in FJ, and the button reads "Send for X FJ". Option A is the recorded fallback (D-orch-17).
+  - Where the shots are silent, today's screen ships: OA-10 to OA-14.
 
 ## Assumptions
 
@@ -323,7 +407,7 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
   - `sync()` exists (`pxe.js:318-322`).
 
   Nulo sets no `syncChainTip`, so the default is proposed.
-- **F11** The FSM has no `pending → queued` edge (`packages/wallet-core/src/jobs/fsm.ts:43-44`).
+- **F11** The FSM had no `pending → queued` edge (`packages/wallet-core/src/jobs/fsm.ts:43-44`); arc 3b added it (D37, `fsm.ts:48`).
 - **F12** `blocked()` returns early on an empty key set (`send-sequencer.ts:153`). `keysIntersect` has no empty-set check of its own (`transfer-sequence-keys.ts:112-117`).
 - **F13** The wallet is pre-production, so a stored shape change needs no migration.
 - **F14** The mutex decrements depth only in `release` (`execution-mutex.ts:127-135`). Queued-journal caps only skip visibility (`wallet-sdk/queued-journal.ts:151-162`).
@@ -334,6 +418,13 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **F19** The Aztec JSON-RPC client turns transport failures into synthetic JSON-RPC errors thrown on the same surface as server errors (`@aztec-labs/foundation` `safe_json_rpc_client.ts:183-204, 233-234`).
 - **F20** `abandonDeadSessions` transitions a pre-submit record to `cancelled` first and aborts its controller second (`execution-lane.ts:228-247`).
 - **F21** On mount and reconnect the feed fetches by account and runs `clearExecutingTaskIfRecentTerminalMatch` over unfiltered rows (`RecentActivityView.vue:450-458, 552-559`).
+- **F22** The readout's figure is the estimate's `maxFee`: `getEstimatedFee` → `computeMaxFee`, (gas limits + teardown limits) × `maxFeesPerGas` (`tx-fee-details.ts:14-21`, `fee-helpers.ts:12-27`). `recordTransfer` stores the same figure as `Tx.estimatedFee` (`transfer-executor.ts:306`).
+- **F23** The journal record has no fee field, `JobProgress`'s `queued` variant is bare (`types.ts:76`, `operation-journal/spec.ts:181`), and the FSM has no `simulating → queued` (`fsm.ts:49`).
+- **F24** The × shows at every stage but `submitting` (`TransactionAwaitingCard.vue:52`); `cancelJob` writes `cancelled` before it aborts (`execution-lane.ts:178-254`); a session end cancels pre-submit records (`:228-240`).
+- **F25** The popup never waits on `executeTransfer`: `submitTransfer` leaves at once (`send-submit.ts:62-97`). The client's ceiling is 60 minutes (`execution/client.ts:11`).
+- **F26** The journal is in no backup slice (`backup-migration-registry.ts:198-222`), and `footprint-coverage.test.ts` judges migrations only.
+- **F27** Only `RecentActivityView.vue` renders awaiting cards.
+- **F28** The reuse stash is single-shot with a 120 s TTL, and its entry needs `chainIdentity`, `fpcIdentity` and the epoch read before the build (`transfer-executor.ts:588-640`, `transfer-estimate-reuse.ts:132-197`).
 
 ### Inferences
 
@@ -342,6 +433,9 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **I3** The composition harness can compose the real `ExecutionLane`, `ExecutionMutex`, `SendSequencer`, `OperationJournalService` and `TransferExecutor` with no PXE call, provided every case stops before the build. Any case that would reach the build becomes a unit test instead.
 - **I4** No existing network e2e expects a dApp send to start while a Send-page send of the same account is unmined. Phase 1b.3 runs the whole Chrome network suite to prove it.
 - **I5** On OA-3 = A, both sends in `concurrent-sendtx-confirm.test.ts` confirm. On B the file is unchanged.
+- **I6** At one speed and one shape, a transfer's max fee moves less than 25% between two sends a block apart on a calm network, so most at-turn builds pass the cap. Unverified on testnet.
+- **I7** Normal to Urgent multiplies `maxFeesPerGas` by 2.5 on Public Fee Juice (`PRIORITY_MULTIPLIERS`, `packages/wallet-bridge/src/fee.ts:28-32`). With flat prices on a local node and two private sends of one shape, the at-turn fee is about 2.5 times the basis against a 1.25 cap: a factor of two of headroom for gas differences. Private Fee Juice is 1.2× at every level after P6-09 C, so the case pays with Public Fee Juice.
+- **I8** The re-ask wait uses the heartbeat today's queued waits use (a `chrome.storage` touch every 30 s, `execution-lane.ts:440-486`), which keeps the record from the reaper. No test proves a long unattended wait; the e2e covers a closed and reopened popup only.
 
 ### Asks
 
@@ -349,7 +443,8 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **A2 (OA-3)** Arc 1's restored restart wait ships under the archived decision. #218's dApp wait is built only on A or B.
 - **A5 (OA-5)** The lag gate waits past the receipt settling, where the archived decision ends a wait. Working assumption: not built until answered.
 - **A3 (OA-4)** A submitted dApp tx keeps today's narrow hold. Working assumption: as is, with the correctness claim narrowed to match.
-- **A4 (OA-2)** P9-04's third "ratified string" does not exist as copy. Working assumption: arc 4 pins the two that exist.
+- **A4 (OA-2)** Answered 2026-10-13: P9-04's qualification says only the 60-minute string is copy.
+- **A6-A10 (OA-10 to OA-14)** Where the shots are silent (another payer, no basis, an unanswered re-ask, a basis of another shape, a pause on the re-ask button), today's screen or the cancel outcome ships until answered.
 
 ## Phases
 
@@ -651,13 +746,119 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** Commands: `bun run test`; `bun run test:all`; smoke on Chrome and Firefox; network on Chrome and Firefox: `snack-placement.test.ts`, `failed-send-check.test.ts`, `account-switch-isolation.test.ts`, and on OA-1 = A `same-token-concurrent-sends.test.ts`. Pass: all exit 0; screenshots of every surface the page names, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
 
-### Arc 4: queued-send rule and chaos criterion (after P9-04 and C6; H3)
+### Arc 4: a queued send against a fee cap (P9-04, P9-04a to P9-04d; re-planned 2026-10-13)
 
-#### Phase 4.1: pin the ratified ordering choices (#217)
+Branch `send-queue-activity-queued-cap` off `origin/dev`. A fresh build is out of a composition case's reach (`COMPOSITION-TESTS.md` D2, D3), but the cancel spike's carve-out is not: a seeded prepared request and a `proveTx` checked only for being called. Phase 4.1 uses it for the races against the real journal lock.
 
-1. Export `WAIT_LIMIT_MESSAGE`; assert it and the two constants exactly.
+#### Phase 4.1: the cap, the queued answer and the re-ask in the service worker
 
-**Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; the two test files as single test files. Pass: all exit 0. Layers: lint, typecheck, unit.
+1. Add `queued-fee-cap.ts`: `isFeeAmount`, `queuedFeeBasis`, `queuedFeeCap`, `QUEUED_FEE_MARGIN_PERCENT`, `QueuedFeeAnswers` and the payer descriptor.
+2. Add `reask` to `JobProgress` and to `JobProgressSchema`. Add `simulating → queued` to `fsm.ts` and its header comment.
+3. In `transfer-executor.ts`:
+   - extract the stash entry `runEstimate` builds into one helper; keep `chainIdentity`, `fpcIdentity` and the epoch from `buildFresh`, and the consumed entry from `fromReusedEstimate`, whose `builtAt` a re-stash keeps;
+   - in `estimate-reuse-shared.ts`, time `SingleShotTtlCache`'s physical drop from the entry's `builtAt`;
+   - read the epoch before each build;
+   - write `buildWithinCap` as § Arc 4 orders it, evicting the stash entry on every exit.
+4. In `service.ts`, `spec.ts` and `client.ts`: the queued answer's `cap`, `executeTransfer`'s `feeCap` check, and `acceptQueuedFee` with its ownership gate.
+5. Add tests:
+   - `queued-fee-cap.test.ts`:
+     - the basis is the newest valid row (control); one case per refused row: another profile, an `ambiguous` row, another chain, another token, a dApp origin, and an `estimatedFee` that is missing, zero, not decimal or 40 digits long;
+     - the cap rounds down to six decimals; a basis whose cap rounds to 0, or whose cap fails `isFeeAmount`, gives none;
+     - `accept` with the waiting fee resumes once (control); a different fee, no waiter, or a second accept is refused (never-happens: a resume on a stale fee);
+     - abort gives `aborted`, the deadline gives `expired`, and each removes the entry.
+   - `transfer-executor.test.ts`, with the build stubbed:
+     - a fee equal to the cap proves once and never moves the row to `queued` (control);
+     - a fee above the cap never proves (never-happens); the slot is free before the wait starts (never-happens: the slot held while the person decides); the row moves `simulating → queued` with `reask`; a later send that shares a key stays blocked;
+     - an accept within the TTL proves the stashed build once and records its fee;
+     - a reused build above the cap is re-stashed with its original `builtAt`; on a fake clock, an accept after that `builtAt` + TTL rebuilds (never-happens: a re-stash that renews retention);
+     - an accept after an epoch bump rebuilds; it sends at or under the accepted fee, and asks again above it with the accepted fee as the cap;
+     - a ×, a session end, and the deadline each end `cancelled`, never prove, and evict the stash entry;
+     - with no cap, the path is today's (control);
+     - a publication that fails removes the waiter and fails the send; a signal aborted before the wait answers at once;
+     - a throw on the second pass (a `SessionEndedError` from `tryConsume`, a build error) releases the slot (never-happens: a leaked grant);
+     - the publication, the claim and the expiry's cancel, each losing to a ×, end `cancelled` and reject with the cancel error (never-happens: a failure on a cancelled record).
+   - `service.composition.test.ts`, on the cancel spike's carve-out (a seeded prepared request whose gas settings price it above the cap; `proveTx` and `sendTx` checked only for being called), with the real journal and lane:
+     - a × and an accept in the same tick, in both orders, end `cancelled` with `proveTx` never called (never-happens);
+     - an accept against a session end; two accepts; an accept as the deadline passes;
+     - the control: the seeded request consumed, re-asked, re-stashed with its provenance, accepted and consumed again, then one proof and one broadcast of that request.
+     Each ends with one terminal row consistent with what happened and no waiter left. The PR carries the COMPOSITION-TESTS checklist.
+   - `service.estimate-queue.test.ts` and the service tests:
+     - the queued answer carries `cap` when a basis exists, and none otherwise;
+     - `executeTransfer` refuses one `feeCap` of each class (a number, a decimal point, a leading zero, 40 digits);
+     - `acceptQueuedFee` refuses another profile's record, a record without `reask`, and a different fee, and resumes the matching one once.
+   - `estimate-reuse-shared.test.ts`: an entry stashed 100 s after its `builtAt` is gone 21 s later (never-happens: a late stash renewing the physical drop).
+   - `fsm.test.ts`: `simulating → queued` is legal, and `queued → simulating` is still illegal (never-happens).
+   - `operation-journal/spec` test: a queued progress with `reask` parses, and one with a non-decimal fee does not.
+   - The backup registry test: the journal root is in no backup slice.
+
+**Validation gate.**
+- Commands: `bun run lint`; `bun run typecheck:all`; the touched files as single test files (`fsm.test.ts` from `packages/wallet-core`); `bun run test`.
+- Pass: every command exits 0. Removing the cap comparison makes the never-happens proving case fail; check that once, then restore.
+- Layers: lint, typecheck, unit.
+
+#### Phase 4.3: the Send page (screens 1 and 2)
+
+1. Pass the queued answer to `onQueued`. Keep `queuedCap` in `send.vue`.
+2. Move the self-paid rule into `fee-helpers.ts`; call it from `FeeSettingsCard.vue` and `send.vue`. Add `feeInWords`, and build `feeLine` on it.
+3. Add the readout branch, the label, the `isAllowedToSend` change and the sheet's `queuedCapText`, as the shots have them.
+4. Carry `feeCap` through `snapshotTransfer` and `submitTransfer`.
+5. Add tests:
+   - `FeeCostReadout.test.ts`: with a cap, "You pay", "About X FJ (usd)" and the exact cap line; without one, today's queued line (control).
+   - `SendReviewSheet.test.ts`: `queuedCapText` gives the exact fee line and "Queue send"; without it, "Send now" (control).
+   - `send.integration.test.ts`:
+     - queued with a cap and Private Fee Juice: "Queue send" is enabled, and a click calls `executeTransfer` with `feeCap` and no estimate id;
+     - queued with a cap and a sponsor: Send stays disabled and nothing is called (never-happens: queue mode where the person does not pay);
+     - queued with no cap: disabled, as today (control);
+     - a queued answer for a superseded input never enables "Queue send".
+   - `send-submit.test.ts`, `estimate-when-clear.test.ts`, `fee-helpers` tests: the argument; the answer; a spent-token answer keeps `queuedCap`; `feeInWords` with and without USD; the self-paid rule for each method and for none chosen.
+
+**Validation gate.**
+- Commands: `bun run lint`; `bun run typecheck:all`; the touched files as single test files; `bun run test`.
+- Pass: every command exits 0.
+- Layers: lint, typecheck, unit, component.
+
+#### Phase 4.4: Home (screens 3 and 4)
+
+1. Add `reaskLine` and `review` to `TransactionAwaitingCard.vue`.
+2. In `RecentActivityView.vue`, add the two stage lines and the sheet over Home.
+3. Add `reask` to `SendReviewSheet.vue`.
+4. Add tests:
+   - `TransactionAwaitingCard.test.ts`: with `reaskLine` the row shows it, opens and emits `review`, and the × still emits `cancel`; without it a transfer's row stays inert (control).
+   - `RecentActivityView.test.ts`, with fees as 18-decimal base-unit strings:
+     - a queued transfer reads "Waiting for your earlier send"; a queued dApp record reads "Queued..." (control);
+     - a re-ask record reads "Fee went up. Review"; opening it shows the exact line and "Send for X FJ";
+     - Send calls `acceptQueuedFee(id, fee)` once, a double press included (never-happens: two calls);
+     - the sheet closes when the record leaves the re-ask state or its fee changes (never-happens: a press accepting a figure the sheet did not open with);
+     - a Private Fee Juice payer draws the hidden facts; Public Fee Juice on a private origin draws the exposed row and arms the review gate.
+   - `SendReviewSheet.test.ts`: the `reask` line and button, exact strings.
+   - The three Send-page transfer expectations of "Queued..." (`RecentActivityView.test.ts:1012, 1030, 1044`) read "Waiting for your earlier send".
+
+**Validation gate.**
+- Commands: `bun run lint`; `bun run typecheck:all`; the touched files as single test files; `bun run test`; `bun run test:all`.
+- Pass: every command exits 0.
+- Layers: lint, typecheck, unit, component.
+
+#### Phase 4.5: arc 4 end-to-end gate
+
+1. Update the network fixtures and assertions:
+   - `send-burst.ts`: `readEstimateState` reads `fee-estimate-queued-cap` as `queued`; `BurstSend` gains an optional `speed`, picked through `send-fee-priority-<level>`.
+   - `expectEstimateQueued` keeps what holds with or without a cap: B's row reads queued, with no estimate and no failure toast. Send is enabled exactly when the cap line shows.
+   - The two-window case's subtitle (`same-token-concurrent-sends.test.ts:356`) becomes "Waiting for your earlier send".
+2. Add one case to `same-token-concurrent-sends.test.ts`: "a private send held unmined; a second private send of the token at Urgent is queued against the cap, asked again after the release, accepted from Home, and goes out once".
+   - Setup: two private sends of one token to one recipient, so they share keys (public-to-public sends share none: `transfer-sequence-keys.ts:22-31`). Both pay with Public Fee Juice, so both go through the review gate; A at Normal, B at Urgent (I7). The popup closes and reopens before the accept, so the row and the sheet come from the journal, not the page.
+   - Never-happens: while A is held, and after the release until the accept, B's record never reaches `proving` and the node holds no tx of B.
+   - The cap line shows before "Queue send" is pressed (a cap that rounds to 0 would offer none).
+   - Control: both confirm, and B's recorded fee is at most the fee accepted. A second re-ask (a price move before the accept) is accepted again, at most three times.
+   - Failure mode: the round trip across processes. A held `execute` call, a journal-driven row and the accept RPC resume one broadcast at the accepted fee. No cheaper layer reaches it: the check follows a real build, and the units stub the build and the popup.
+   - Runtime: estimated 120 s per browser (one held block, one re-ask); the PR states the measured figure.
+3. Capture screens 1 to 4 during the case, light and dark, on Chrome and Firefox, into `screenshots/4-*.png`.
+
+**Validation gate.**
+- Unit: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`; `bun run test:ci-gating` (the lane's gate); `bun run check:plans`.
+- Network, Chrome then Firefox, retry 0, one run at a time through `agent.sh`: `NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/same-token-concurrent-sends.test.ts`, then `send-chaos.test.ts` as CI runs its two fixed seeds (it reads `readEstimateState`). Firefox repeats both with `NULO_E2E_BROWSER=firefox`, since the fixture changed.
+- Smoke, Chrome and Firefox: `cd apps/extension && bun run test:e2e -- --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`.
+- Pass: every command exits 0, and no existing case changes outcome. The PR states the network file's wall-clock per browser, before and after, and attaches the screenshots.
+- Layers: lint, typecheck, unit, component, network e2e, smoke e2e.
 
 #### Phase 4.2: record the chaos rule (#220)
 
@@ -694,12 +895,13 @@ One `gh stack`, one PR per arc, a docs-only close-out on top. Titles name only w
 | 2 | `send-queue-activity-amount` | 2.1-2.4 | layer 1b (layer 1 when 1b is not built) | off | `fix(send): fit long usd figures, review-line gap, price-moved notice` (68) | #90 |
 | 3 | `send-queue-activity-outcomes` | 3a.1-3a.4 | layer 2 | off | `feat(activity): refused, expired and not-yet-final send states` (62) | #112, #108, #109 |
 | 4 | `send-queue-activity-feed` | 3b.1-3b.6 | layer 3 | off | `fix(activity): one scope rule, known decimals, failed-send surfaces, status contrast` (84) | #209, #103, #213, #110, #122, #243, #219 |
-| 5 | `send-queue-activity-queue-rule` | 4.1-4.2 | layer 4 | off | `chore(send): pin the ratified ordering rules, record the chaos promotion rule` (77) | #217, #220 |
+| 5 | `send-queue-activity-queued-cap` | 4.1, 4.3-4.5 | `dev` (D-orch-15) | off | `feat(send): queue a send behind an earlier one against a fee cap, ask again above it` (84) | #217 |
 | 6 | `send-queue-activity-keyboard` | 5.1-5.3 | layer 5 | off | `fix(a11y): keyboard reach on send's fee card and suggestions` (60) | #242 |
 | 7 | `send-queue-activity-close-out` | close-out | the top layer | off | `docs(plans): close send-queue-activity` (38) | none |
 
-- **Arc gates.** Arc 1 needs no owner answer beyond the archived concurrent-sends decision (OA-3 records why); it ships first, alone if the pages are late, with the close-out recording the rest as open work in their issues. Arc 1b waits on OA-3 (the dApp wait) and OA-5 (the lag gate); a part answered before arc 1's PR opens joins layer 1 instead (its title re-measured ≤ 93), and the PR closes #218 when the dApp wait is in it. On OA-3 = C #218 closes as not planned; on OA-5 = B #219 item b closes as not planned in the layer that closes #219. Arcs 2 and 5 wait on page 9 (5 also on arc 2); arcs 3a and 3b on page 10 and the charter items named; arc 4 on page 9 and C6. A stack layer whose page is unsigned is not built; the layers above it re-stack on the last built one.
-- **Holds.** H7 holds arc 3a's merge until page 10 is signed with P10-05 and P10-06; H3 holds arc 4's merge until pages 6 and 9 are signed.
+- **Arc gates.** Arc 1 needs no owner answer beyond the archived concurrent-sends decision (OA-3 records why); it ships first, alone if the pages are late, with the close-out recording the rest as open work in their issues. Arc 1b waits on OA-3 (the dApp wait) and OA-5 (the lag gate); a part answered before arc 1's PR opens joins layer 1 instead (its title re-measured ≤ 93), and the PR closes #218 when the dApp wait is in it. On OA-3 = C #218 closes as not planned; on OA-5 = B #219 item b closes as not planned in the layer that closes #219. Arcs 2 and 5 wait on page 9 (5 also on arc 2); arcs 3a and 3b on page 10 and the charter items named; arc 4 on page 9's P9-04 records (signed 2026-10-13). A stack layer whose page is unsigned is not built; the layers above it re-stack on the last built one.
+- **Holds.** H7 holds arc 3a's merge until page 10 is signed with P10-05 and P10-06; H3 holds arc 4's merge until pages 6 and 9 are signed (both signed 2026-10-13).
+- **Arc 4 (D-orch-15).** One PR against `dev` from `send-queue-activity-queued-cap`, whose first commit is this plan; opened after the Phase 4.5 gate and arc 4's Codex loop converge. Body: what changed and why, the validation runs, the network file's wall-clock per browser before and after, the screenshots, the four records quoted, `Closes #217`. It rebases on fees-and-sponsors arc 2, arc 1b, arc 2 or PR #359, whichever lands first (§ Shared files and seams). **Lane close-out:** arc 4 is planned to merge last, since it rebases on fees-and-sponsors arc 2, the longest dependency. So its PR's final commits carry the lane's close-out (§ Post-implementation step 5, with `dev` merged in first). If the orchestrator merges another arc of this lane after it, that arc's PR carries the close-out instead, and arc 4 writes only its Outcome lines into this plan.
 - **Mechanics.** `gh stack init --adopt worktree-send-queue-activity --base dev`; at each arc boundary, after its loop converges, `gh stack add <next-branch>`. In Delivery: `gh stack sync`, then `gh stack submit --auto`, then `gh pr edit` each body: what changed and why, the validation runs with outcomes, `Closes #n` per issue, for UI arcs the page records quoted with screenshots. Then `gh stack add send-queue-activity-close-out`, its commits, `gh stack submit --auto`.
 - **Labels.** Open each PR without labels; add `e2e:extension-network` or `e2e:extension-smoke` afterwards only when the path filter skips a suite the arc needs.
 - Never merge; never `--admin`; never force-push a branch another human touched.
@@ -715,7 +917,7 @@ The orchestrator writes a `## Pickup` section into each issue. The arc that clos
 - Arc 2: #90 (Phases 2.1-2.3).
 - Arc 3a: #112 (3a.1), #108 (3a.2), #109 (3a.3).
 - Arc 3b: #209 (3b.1), #103 and #213 (3b.2), #110 (3b.3), #122 and #219 item c (3b.4), #243 (3b.5).
-- Arc 4: #217 (4.1), #220 (4.2).
+- Arc 4: #217 (4.1, 4.3-4.5). #220 moved to ci-followups-2 (4.2).
 - Arc 5: #242 (5.1, 5.2).
 - No arc: #244.
 
@@ -729,6 +931,7 @@ The implementing session runs these steps from this file. `code_review` is `off`
    - The prompt carries the arc's diff (`git diff <arc-base>..HEAD`), this plan and its decision ledger, and the arc map ("this is arc N; later arcs add X").
    - It carries an explicit adversarial ask: can any path send twice, skip a predecessor, deadlock the slot, hold the slot while waiting, strand a queued record, leak an identifier into a log, or change what a dApp receives; which assertion is weaker than at base.
    - Arc 1's prompt asks first whether anything is awaited on the network while the slot is held, and whether an imported row can reach the gate; arc 1b's asks first about `parkSlot`'s error mapping, the reservation's drop on every exit, and origin order.
+   - Arc 4's asks first whether any path proves above the cap, broadcasts twice after an accept, holds the slot while the person decides, strands a re-ask record, resumes on a stale fee, lets a later send overtake a re-asked one, or keeps a signed request past the send; and whether the queued answer reads anything on the network.
    - It ends with the two rules below, verbatim.
 2. **Fix loop.**
    - Verify each finding against the code first. Apply the accepted fixes and commit them.
@@ -912,6 +1115,27 @@ Arc 3b as built, where it differs from or adds to the text above:
 - **D43 The switch block reads the cards' rule.** `hasInFlightSend` calls `journalRecordInScope`, so with no network active a send stamped with one no longer blocks a switch it cannot be cancelled from: no card shows it. Its own doc already required the block to line up with the cards.
 - **D44 Two surfaces #103 does not name go to the owner.** The settled transaction card keeps the figure its record stored (OA-8), and a held token of unknown decimals keeps its place in the token order (OA-9). Both ship as they are.
 
+The orchestrator's calls at arc 4's re-plan (2026-10-13; page 9 P9-04 and P9-04a to P9-04d signed, page 6 P6-07 to P6-18 signed):
+
+- **D-orch-14 Arc 4 is re-planned.** The owner changed P9-04 from "builds nothing" to confirm-now-send-later against a cap. The old Phase 4.1 (pin the ratified constants) is superseded; #220 stays in ci-followups-2.
+- **D-orch-15 One arc, one PR against `dev`, no stack.** Branch `send-queue-activity-queued-cap` off `origin/dev`; tier `mid` with a dual audit (Codex `gpt-6.1-sol` high, an Opus lens) converged before the build.
+- **D-orch-16 Only the mockups' words ship.** A word they lack goes to `OWNER-ASKS.md` in the "what ships now" form. Keyboard and screen-reader paths follow CLAUDE.md.
+- **D-orch-17 Screen 4 is option B; option A is the fallback design, not built.** Option A: the row reads "Fee went up. Tap to review."; tapping opens the send's detail page, which gains a Queued state and shows the new fee and the cap the person accepted, with two buttons, "Send for the new fee" and "Cancel send" (`shot/217-reask-A`). The owner's note: "Let's do "B" but save "A's" idea in case I ever want to fallback into that one."
+- **D-orch-18 #188's cap rules belong to fees-and-sponsors arc 2** (P6-07 with the owner's note, P6-08 OA-1 = B, P6-09 to P6-11, P6-12 = B, P6-13 to a design round). Arc 4 names the seam and rebases on it; it never re-decides a number.
+- **D-orch-19 Proportion.** Arc 4's sections target 350 lines. Persistent state beyond the cap and the re-ask state, an independent lifecycle, a coordination protocol beyond the sequencer, a recovery policy or a public contract is a plan change to surface, not a phase.
+
+Arc 4's own decisions (the panel's views are in § Audit verdicts):
+
+- **D45 Where the queued send waits and asks: inside its own `execute` call (Outline A).** Rejected: B, a persisted intent resumed by a runner (a persisted request, a lifecycle and a recovery policy, with a double-send hazard after a crash past `sendTx`); C, the intent in the popup (no record to show or cancel, dropped when the popup closes).
+- **D46 The basis is the newest same-token Send-page `Tx.estimatedFee`.** It is the figure the readout showed for that send, and it exists for every submitted send. Rejected: an in-memory last estimate per token (a second source, empty after a restart, and the earlier send's estimate leaves with its popup); a fee on the journal record (persisted state beyond the cap); matching privacy, fee method and speed too (OA-13).
+- **D47 The check compares the at-turn build's `getEstimatedFee`** with the cap, which is rounded down to six decimals. That figure is the committed max fee and at least what the network checks, so "for at most Y" holds whatever P6-10 decides.
+- **D48 The ticket stays held during the re-ask; the slot does not.** Rejected: releasing the ticket. A later queued send would go out first, breaking "after your earlier send", and the accepted build would go stale.
+- **D49 Accept reuses the re-ask build through `stash`/`tryConsume`, else rebuilds against the accepted fee (disputed).** Its value lands with P6-12 B: while the prepared cap still covers a risen price, "Send for X" sends exactly X, where a rebuild in a rising market (the usual cause of a re-ask) asks again. An attentive person answers within the 120 s TTL, since they watch the earlier send land. It also keeps the accept path within a composition case's reach. Rejected: a local validity check (a second copy of the ladder). Opus's view: drop it, since today's base-fee rung rejects any price change, a rebuild at an unchanged price gives the same X, and holding a signed request goes against "the wallet holds only the intent and the cap". Answer: that sentence covers the wait before the turn; the stash is the same 120 s cache every estimate uses, evicted on every exit.
+- **D50 The re-ask wait ends at the send's own 60-minute deadline, as a cancel (OA-12).** Rejected: no bound, because the 90-minute heartbeat lease would let the reaper fail the record while the call still waits; and failing with `WAIT_LIMIT_MESSAGE`, whose words name an earlier send.
+- **D51 The re-ask state is `queued` progress with `reask`, entered by `simulating → queued`.** Rejected: a new stage (every stage map, the reaper, the card's stage line and both schemas change); staying at `simulating` with a marker (Cancel, the reaper's grace and the stage line would all read the wrong stage).
+- **D52 No separate pin of the ratified limits.** P9-04 ratified them as built; arc 4's tests exercise the 60-minute deadline through `ticket.remainingMs()`.
+- **D53 A restart fails a queued or re-asked send** (`stuck_queued`, "Transaction failed"), as for every queued send today. A resume is Outline B's recovery policy, a plan change. The close-out files it as a closed `known-limit` issue (dedupe first).
+
 ## Audit verdicts
 
 ### Round 1 (plan v1): dual audit
@@ -1092,6 +1316,36 @@ Rejected:
 **Round 5 (resumed, over the round-4 fix): no material finding.** Codex found the chronology check sound for every supported lifecycle. A backward wall-clock step between the two stamps can only delay a clear until TaskService's own completion event; it strands nothing. **The loop converged here.**
 
 
+### Arc 4 plan, round 1: dual audit (2026-10-13)
+
+**Codex** (gpt-6.1-sol, high, read-only, session `01a136ec-26d6-7ea0-ac28-0dcf8166c141`): **conditional approve**. Outline A is the strongest; B brings recovery and double-send obligations, C loses Home and cancel. Findings, each verified against the tree:
+1. High, demonstrated: the e2e case could not queue. Public-to-public sends on Public Fee Juice hold no sequence keys (`transfer-sequence-keys.ts:22-31`). **Accepted**: two private sends of one token to one recipient, on Public Fee Juice.
+2. Medium, demonstrated: the basis read other profiles' rows (Tx rows of one address span same-seed profiles; `profileId` is stamped) and accepted a 78-digit fee whose cap the RPC refuses. **Accepted**: the profile stamp, no `ambiguous` rows, `isFeeAmount` on the basis, the cap and both RPCs.
+3. Low: `evict` exists; the payer needs `isProtocol` and an adapter to `payerKindOf(settings, payer)`. **Accepted** (the driver found `evict` too).
+4. Medium, plausible: an accept could arrive before its waiter existed; an already-aborted signal; publication through the swallowing `markJournal`. **Accepted**: register first, publish through the throwing transition, clean up on failure.
+5. Medium: the races need the real journal lock; the cancel spike's carve-out reaches them. **Accepted**: the composition cases.
+6. Medium, plausible: the executor's frame could hold the build past the TTL. **Accepted**: the frame returns only `{ stashId, fee, payer }`.
+7. Low: I6 and I8 overstate. **Accepted**: I8 narrowed; the e2e closes and reopens the popup. A long unattended wait stays unproven.
+8. Medium: the lapse as "Cancelled" is the owner's (OA-12, already there); the half-up X is a sub-micro-FJ known limit. **Accepted** as written.
+
+**Opus** (Plan agent): **conditional approve**. Findings:
+1. High, plausible: a second pass's slot grant had no owner on a throw. **Accepted**: one mutable release holder, released in `finally`.
+2. Medium: drop D49. **Rejected** (D49 records both views): its value lands with P6-12 B, and it keeps the accept path composable.
+3. Medium: composition applies. **Accepted** (as Codex 5).
+4. Medium, plausible: the executor's own moves could lose to a × and surface a failure on a "Cancelled" card. **Accepted**: all three follow `claim`'s rule; the waiter registers first.
+5. Medium: deadline interactions. (b) and (c) **accepted** into OA-12. (a), mapping a late accept's slot-wait expiry to a cancel, is **rejected**: after the accept the send waits for an earlier send or the slot again, which is what the ratified "An earlier send of this account is still in flight" says.
+6. Medium: OA-13 left out speed. **Accepted**.
+7. Medium: e2e determinism. **Accepted**: a `speed` field, the cap line asserted, recorded fee at most the accepted one, accepted again up to three times.
+8. Low: the spent-token answer, the self-paid helper with no method, the sheet closing on a fee change, future-dated rows, the three "Queued..." tests. **Accepted**. Rounding X up is **rejected** (a format change; Codex 8's known limit). A pause on "Send for X" is **OA-14**.
+9. Low: complexity. **Accepted**: `askAgain`.
+10. Low: interfaces. **Accepted** (as Codex 3); the ninth positional argument stays, since the transport keeps `undefined` by arity.
+Facts: F23's citation and the stale F11 are corrected.
+
+### Arc 4 plan, round 2: final fresh Codex pass (2026-10-13)
+
+**Codex** (gpt-6.1-sol, high, read-only, new session `01a136fc-cea6-75f1-a013-fb12eca022cf`): **conditional approve**, then **approve** on resume. It keeps D49 (P6-12 B is the substantive reason, the shared ladder the simpler one) and Outline A, and holds D53, the deadline, the rounding limit and OA-10 to OA-14 as settled. One finding:
+1. Medium, demonstrated: `fromReusedEstimate` (`transfer-executor.ts:487-512`) drops the entry's `chainIdentity`, `fpcIdentity`, epoch and `builtAt`, so a reused build re-stashed above the cap could never be consumed again, and the composition control would have crossed into a fresh build. Re-stashing with `builtAt: Date.now()` and the stash-relative drop timer (`estimate-reuse-shared.ts:136-142`) would also have renewed a signed request's retention. **Accepted**: the reused arm keeps the consumed entry, a re-stash keeps its `builtAt`, the cache times its physical drop from `builtAt` (every caller stashes at build time), plus a fake-clock executor case and a cache case. The resume verified the fix and found nothing new.
+
 ## Seeds
 
 Draft until the orchestrator approves; no ELI5 is produced (orchestrator-owned).
@@ -1099,11 +1353,11 @@ Draft until the orchestrator approves; no ELI5 is produced (orchestrator-owned).
 **Recommended: `/goal`**
 
 ```
-/goal Every phase of implementations-plan/send-queue-activity/plan.md whose gate is open (Arc 1 now; Arc 1b only after OA-3 is answered A or B; Arcs 2 and 5 only after page 9 is signed, Arc 5 also after Arc 2; Arcs 3a and 3b only after page 10 and C9, C12-links are signed, Phase 3b.4 step 2 only on OA-1 = A; Arc 4 only after page 9 P9-04 and C6) is marked ✓ in plan.md, each ✓ backed by its validation gate reported passing in the transcript; for each phase the agent printed LESSONS_FILE=implementations-plan/send-queue-activity/lessons/phase-N.md; /code-review was NOT run (code_review is off); the Codex fix loop converged for each built arc and for the final cross-arc pass, each convergence quoted from a resumed Codex pass reporting no new material finding; the § Delivery stack exists on GitHub, created only after the loops converged (gh stack view in the transcript), including the close-out layer that archived the plan (git show --stat of the archive-move commit); bun run test and bun run lint both report exit 0 in the transcript.
+/goal Every phase of implementations-plan/send-queue-activity/plan.md whose gate is open (Arc 1 now; Arc 1b only after OA-3 is answered A or B; Arcs 2 and 5 only after page 9 is signed, Arc 5 also after Arc 2; Arcs 3a and 3b only after page 10 and C9, C12-links are signed, Phase 3b.4 step 2 only on OA-1 = A; Arc 4 only after the orchestrator approves its 2026-10-13 re-plan) is marked ✓ in plan.md, each ✓ backed by its validation gate reported passing in the transcript; for each phase the agent printed LESSONS_FILE=implementations-plan/send-queue-activity/lessons/phase-N.md; /code-review was NOT run (code_review is off); the Codex fix loop converged for each built arc and for the final cross-arc pass, each convergence quoted from a resumed Codex pass reporting no new material finding; the § Delivery stack exists on GitHub, created only after the loops converged (gh stack view in the transcript), including the close-out layer that archived the plan (git show --stat of the archive-move commit); bun run test and bun run lint both report exit 0 in the transcript.
 ```
 
 **Alternative: `/loop`**
 
 ```
-/loop 15m Drive implementations-plan/send-queue-activity forward. Never idle. Each firing: 1) Reality check: read plan.md, STATUS.md and lessons/ from the top stack layer; if implementations-plan/archive/send-queue-activity/plan.md exists on origin/dev (git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/send-queue-activity/plan.md), run agent-worktree done send-queue-activity --merged, report, clear this loop and stop; if the close-out is delivered but not merged, babysit CI only. 2) Pick the next open phase whose owner gate is signed (Arc 1b: OA-3 = A or B; Arcs 2, 5: page 9; Arcs 3a, 3b: page 10 with C9, C12-links; Arc 4: P9-04 and C6); never build a gated phase early. 3) After each edit run bun run lint and the touched tests; commit signed. 4) Phase green means its gate in plan.md passes: paste it, mark ✓, write lessons, print LESSONS_FILE=…. 5) Network e2e: one e2e:agent on the host until #169 merges. 6) At an arc boundary run the Codex loop per § Post-implementation (hard stop at three rounds), then gh stack add. 7) Stuck or facing a design fork: consult Codex (gpt-6.1-sol, high), log it, decide; anything a person would notice goes to OWNER-ASKS.md, never decided here. 8) All built arcs looped: final cross-arc pass, Delivery, close-out, report and stop. Hard limits: never merge, never push to main, never --admin, never force-push a pushed branch another human touched.
+/loop 15m Drive implementations-plan/send-queue-activity forward. Never idle. Each firing: 1) Reality check: read plan.md, STATUS.md and lessons/ from the top stack layer; if implementations-plan/archive/send-queue-activity/plan.md exists on origin/dev (git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/send-queue-activity/plan.md), run agent-worktree done send-queue-activity --merged, report, clear this loop and stop; if the close-out is delivered but not merged, babysit CI only. 2) Pick the next open phase whose owner gate is signed (Arc 1b: OA-3 = A or B; Arcs 2, 5: page 9; Arcs 3a, 3b: page 10 with C9, C12-links; Arc 4: the orchestrator's approval of its re-plan); never build a gated phase early. 3) After each edit run bun run lint and the touched tests; commit signed. 4) Phase green means its gate in plan.md passes: paste it, mark ✓, write lessons, print LESSONS_FILE=…. 5) Network e2e: one e2e:agent on the host until #169 merges. 6) At an arc boundary run the Codex loop per § Post-implementation (hard stop at three rounds), then gh stack add. 7) Stuck or facing a design fork: consult Codex (gpt-6.1-sol, high), log it, decide; anything a person would notice goes to OWNER-ASKS.md, never decided here. 8) All built arcs looped: final cross-arc pass, Delivery, close-out, report and stop. Hard limits: never merge, never push to main, never --admin, never force-push a pushed branch another human touched.
 ```

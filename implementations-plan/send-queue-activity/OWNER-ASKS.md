@@ -30,7 +30,7 @@ Questions only the owner can answer, for the orchestrator to put on a page. Each
 
 **Recommendation.** A, as P9-04 itself instructs ("If either cannot be found, the page says so instead of asking").
 
-**What ships now.** Nothing until page 9 is signed; then arc 4 pins the string and the two time limits.
+**What ships now.** Answered 2026-10-13: P9-04's qualification says only the 60-minute string is copy. Arc 4 was re-planned on the changed P9-04 and pins nothing separately (plan D52).
 
 ## OA-3: New waits from the ordering fixes (#218, #219 item a)
 
@@ -157,5 +157,76 @@ Items 1 and 2 extend that rule to dApp sends, which you left open (#218). The wa
 - **B. With the rows whose balance is unknown**, at the end of the list.
 
 **Recommendation.** B: a row that shows no amount should not be ranked by one.
+
+**What ships now.** A.
+
+## OA-10: Queue a send whose fee someone else pays (#217, page 9 P9-04a)
+
+**Surface.** The Send page while an earlier send is in flight, when the fee method is a sponsor (the readout's "You pay: Nothing") or a hand-added fee contract ("You pay: —").
+
+**The gap.** The shot shows the queue state for a fee the person pays ("You pay: About X"). For a sponsor or an unvouched contract, "You pay: About X" would be false, and no shot shows another form.
+
+**Options.**
+- **A. As is.** The fee row reads "Queued behind your previous send" and Send stays disabled until the estimate lands, as today.
+- **B. Queue it too**, with a readout you design for these payers.
+
+**Recommendation.** A. The cap protects the person's own money; with a sponsor there is nothing of theirs to cap.
+
+**What ships now.** A.
+
+## OA-11: No earlier send of this token to base the cap on (#217, page 9 P9-04a)
+
+**Surface.** The Send page while an earlier send is in flight.
+
+**The gap.** Y is "the last estimate for this token plus the margin". The wallet keeps that figure only for a send that reached the network. So there is none when this token was never sent from this account on this network, or when the only earlier send is still proving (its figure is recorded when it is submitted, usually seconds to minutes later).
+
+**Options.**
+- **A. As is** until a basis exists: "Queued behind your previous send" and Send disabled; the queue state appears once the earlier send's figure is recorded.
+- **B. Another basis**, for example the fee of any earlier send of the account, which may differ a lot from this one.
+
+**Recommendation.** A.
+
+**What ships now.** A.
+
+## OA-12: A re-ask nobody answers (#217, page 9 P9-04d)
+
+**Surface.** Home's row "Fee went up. Review" and the card it becomes.
+
+**The gap.** Option B keeps the send queued until the person sends or cancels it. Meanwhile, later sends that share its balance wait behind it, and their own 60 minutes keep running, so one queued behind a forgotten re-ask may get only seconds for its own question. The wallet already ends any waiting send after 60 minutes, and locking the wallet cancels it. Nothing tells a person with the popup closed that a send is asking: the wallet shows no badge and sends no notification today, and adding either is a new surface.
+
+**Options.**
+- **A. It ends as "Cancelled"** at the send's 60-minute limit, as a lock already ends it. Nothing was sent.
+- **B. It fails** with the ratified "An earlier send of this account is still in flight", which names the wrong cause here.
+- **C. No limit.** It waits until answered, locked or the browser restarts. Later sends of the same balance fail at their own 60 minutes.
+
+**Recommendation.** A.
+
+**What ships now.** A.
+
+## OA-13: A cap based on a different kind of send (#217, page 9 P9-04)
+
+**Surface.** The Send page's "About X" and "for at most Y", and how often the re-ask row appears.
+
+**The gap.** "The last estimate for this token" can come from a send of another shape: public where this one is private, another fee method, or another speed (Urgent commits 2.5 times Normal's cap on Public Fee Juice). Those fees can differ by more than the 25% margin. Then X misleads, and the send asks again almost every time.
+
+**Options.**
+- **A. As decided.** The last send of this token, whatever its shape.
+- **B. The last send of this token with the same privacy, fee method and speed.** It is offered less often (OA-11's state shows otherwise), and its cap fits.
+
+**Recommendation.** B.
+
+**What ships now.** A, the decision's words.
+
+## OA-14: A pause before "Send for X" can be pressed (#217, page 9 P9-04d)
+
+**Surface.** The re-ask sheet's "Send for X" button.
+
+**The gap.** The usual review sheet arms its button 800 ms after it opens only when the send publishes the person's address. A quick double tap on the row could press "Send for X" at a higher fee before it is read, wherever the button sits under the second tap.
+
+**Options.**
+- **A. As the usual sheet.** The pause applies only when the review gates the send.
+- **B. Always pause** 800 ms on the re-ask sheet.
+
+**Recommendation.** B: a higher fee is the one thing this sheet asks about.
 
 **What ships now.** A.
