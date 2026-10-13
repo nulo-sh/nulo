@@ -9,7 +9,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "52e6b2ec6fc359b82194eae1ca8057f43eb095ff97835208913403a6fa846401"
+				"packages/wallet-bridge/src/dispatcher.ts": "af33d5882fbb6a2774ddf21fd38725a2a12f853f9cbe8ea39aa54400c42df9b3"
 			},
 			"evidence": [
 				{
@@ -43,7 +43,7 @@
 				}
 			],
 			"digests": {
-				"packages/wallet-bridge/src/dispatcher.ts": "52e6b2ec6fc359b82194eae1ca8057f43eb095ff97835208913403a6fa846401"
+				"packages/wallet-bridge/src/dispatcher.ts": "af33d5882fbb6a2774ddf21fd38725a2a12f853f9cbe8ea39aa54400c42df9b3"
 			},
 			"evidence": [
 				{
