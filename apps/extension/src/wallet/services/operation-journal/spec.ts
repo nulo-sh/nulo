@@ -20,6 +20,7 @@
 
 import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
 import { z } from "zod"
+import { isFeeAmount } from "@/wallet/services/execution/queued-fee-cap"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"
@@ -177,8 +178,20 @@ export const OperationOriginSchema = z.enum(["popup", "dapp", "seed"])
 
 const SendExpirySchema = z.object({ timestamp: z.number(), nullifier: z.string() })
 
+const FeeAmountSchema = z.string().refine(isFeeAmount)
+
+const QueuedFeeReaskSchema = z.object({
+	fee: FeeAmountSchema,
+	cap: FeeAmountSchema,
+	payer: z.object({
+		type: z.enum(["fj", "private_fpc", "fpc"]),
+		fpcId: z.string().optional(),
+		isProtocol: z.boolean(),
+	}),
+})
+
 export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("stage", [
-	z.object({ stage: z.literal("queued") }),
+	z.object({ stage: z.literal("queued"), reask: QueuedFeeReaskSchema.optional() }),
 	z.object({ stage: z.literal("pending") }),
 	z.object({ stage: z.literal("simulating") }),
 	z.object({ stage: z.literal("proving"), enteredProveAt: z.number(), backend: z.enum(["presto", "browser"]).optional() }),

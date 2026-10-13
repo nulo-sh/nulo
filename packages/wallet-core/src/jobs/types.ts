@@ -57,6 +57,14 @@ export type SendInclusion = { block: number; hash: string }
 
 export type ProveBackend = "presto" | "browser"
 
+/** Who pays a queued send's fee, in the Send page's terms: Fee Juice from the account, or a fee
+ *  contract by its row. */
+export type QueuedFeePayer = { type: "fj" | "private_fpc" | "fpc"; fpcId?: string; isProtocol: boolean }
+
+/** A queued send whose build came out above its cap and waits for the person: `fee` is that
+ *  build's fee and `cap` the one it was held to, both in base units. */
+export type QueuedFeeReask = { fee: string; cap: string; payer: QueuedFeePayer }
+
 /**
  * Progress payload, discriminated by stage. Adding fields per stage variant
  * does NOT require a schema migration — consumers ignore unknown keys.
@@ -73,7 +81,7 @@ export type ProveBackend = "presto" | "browser"
  * `updateProvingBackend` seam only.
  */
 export type JobProgress =
-	| { stage: "queued" }
+	| { stage: "queued"; reask?: QueuedFeeReask }
 	| { stage: "pending" }
 	| { stage: "simulating" }
 	| { stage: "proving"; enteredProveAt: number; backend?: ProveBackend }

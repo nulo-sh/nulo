@@ -12,6 +12,7 @@ import { TransferType } from "@/wallet/services/transaction/service"
 import type { TransferRequest } from "./operation-planner"
 import { SendSequencer } from "./send-sequencer"
 import { FpcType } from "@/wallet/services/fpc/spec"
+import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { TransferExecutor, type TransferExecutorDeps } from "./transfer-executor"
 
 const FEE_SETTINGS = { paymentMethod: { kind: "fj" } } as never
@@ -69,6 +70,7 @@ function makeDeps(overrides: Partial<TransferExecutorDeps>): TransferExecutorDep
 		getPXE: vi.fn(() => ({}) as never),
 		getAccountContract: vi.fn(async () => ({}) as never),
 		getPendingForAccount: vi.fn(() => []),
+		answers: new QueuedFeeAnswers(),
 		addTransaction: vi.fn(async () => ({}) as never),
 		buildAndEstimate: vi.fn(
 			async () =>

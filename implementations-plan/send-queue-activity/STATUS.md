@@ -31,3 +31,4 @@
 - 2026-10-13 — arc 4 draft: Architecture, Phases 4.1 and 4.3-4.5, UI impact, Security, Delivery, ledger D-orch-14..19 and D45-D53; OWNER-ASKS OA-10 to OA-13; dual audit next.
 - 2026-10-13 — arc 4 dual audit r1: Codex conditional approve (8, all accepted), Opus conditional approve (10; 2 rejected with reasons, OA-14 added); plan revised; final fresh Codex pass next.
 - 2026-10-13 — arc 4 final fresh Codex pass: conditional approve (1 finding: re-stash provenance and retention; accepted), resume approve; converged. Commit next.
+- 2026-10-13 — arc 4 phase 4.1 gate: pass. lint, typecheck:all, test exit 0 (extension 11757 passed); touched files run single; removing the cap comparison reds 10 never-happens cases (checked, restored); composition and executor cases soaked 8× green.

@@ -10,6 +10,8 @@ export {
 	type JobStage,
 	type KnownJobErrorKind,
 	type ProveBackend,
+	type QueuedFeePayer,
+	type QueuedFeeReask,
 	type SendCheckOutcome,
 	type SendExpiry,
 	type SendInclusion,

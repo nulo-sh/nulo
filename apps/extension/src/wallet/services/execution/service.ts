@@ -80,7 +80,8 @@ import type { LastProveOutcome } from "./models"
 import { SendSequencer } from "./send-sequencer"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
-import { OperationPlanner } from "./operation-planner"
+import { OperationPlanner, type TransferRequest } from "./operation-planner"
+import { isFeeAmount, type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
@@ -165,6 +166,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		"previewOperationAuthwits",
 		"decodeCallsForDisplay",
 		"cancelJob",
+		"acceptQueuedFee",
 		"cancelEstimate",
 		"getLastProveOutcome",
 	)
@@ -229,6 +231,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		sleep: abortableSleep,
 		now: () => Date.now(),
 	})
+	private readonly queuedFeeAnswers = new QueuedFeeAnswers()
 	private dappSendExecutor: DappSendExecutor = null!
 	private viewExecutor: ViewExecutor = null!
 	private lane: ExecutionLane = null!
@@ -419,6 +422,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				this.buildAndEstimateTxRequest(op, feeSettings, fence, parentTask, signal, undefined, fpc),
 			createJournalOperation: (input) => this.operationJournal.createOperation(input),
 			transitionJournal: (journalId, progress, error) => this.operationJournal.transitionOperation(journalId, progress, error),
+			answers: this.queuedFeeAnswers,
 			logDebug: (msg, ...rest) => this.logDebug(msg, ...rest),
 			logError: (msg, ...rest) => this.logError(msg, ...rest),
 		})
@@ -550,8 +554,10 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		amount: bigint,
 		feeSettings: FeeSettings,
 		precomputedEstimateId?: string,
+		feeCap?: string,
 	): Promise<string> {
 		await this.ensureInitialized()
+		if (feeCap !== undefined && !isFeeAmount(feeCap)) throw InvalidWalletArgumentsError.forMethod("executeTransfer")
 		// Early refusal only — the wall is in the coordinator. This spares the user a proof.
 		await this.legal.assertCurrent()
 		amount = coerceAmount(amount)
@@ -560,6 +566,7 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			{ networkId, accountAddress, tokenId, transferType, recipientAddress, amount, feeSettings },
 			precomputedEstimateId,
 			fence,
+			feeCap,
 		)
 	}
 
@@ -582,8 +589,22 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		// would wait behind that proof anyway, past its RPC deadline on a real prover.
 		const profile = await requireActiveProfile(this.profileService, "Wallet locked")
 		const slotBusy = this.lane.isSlotBusy(profile.id, sequence.scope.chainId)
-		if (slotBusy || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) return { queued: true, tokenSpent: false }
+		if (slotBusy || this.sendSequencer.isBlocked(sequence.scope, sequence.keys)) {
+			const cap = await this.queuedFeeCapFor(req, profile.id, sequence.scope.chainId)
+			return { queued: true, tokenSpent: false, ...(cap ? { cap } : {}) }
+		}
 		return this.withEstimateAdmission(estimateToken, "send", (signal) => this.transferExecutor.estimateFee(req, signal, sequence))
+	}
+
+	/** The cap a queued transfer is offered, read from stored rows only: nothing on the network. */
+	private async queuedFeeCapFor(req: TransferRequest, profileId: string, chainId: number): Promise<QueuedFeeCap | undefined> {
+		const [token, rows] = await Promise.all([
+			this.tokenService.getTokenRaw(req.tokenId),
+			this.transactionService.getTransactions(req.accountAddress),
+		])
+		const basis = queuedFeeBasis(rows, profileId, chainId, token.contract, Date.now())
+		const cap = basis ? queuedFeeCap(basis) : undefined
+		return basis && cap ? { basis, cap } : undefined
 	}
 
 	/** Admission + cancellation envelope for the estimate entry points.
@@ -651,6 +672,17 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 	public async cancelJob(jobId: string): Promise<void> {
 		await this.ensureInitialized()
 		return this.lane.cancelJob(jobId)
+	}
+
+	/** Applies `cancelJob`'s ownership gate (the active profile's own record, nothing disclosed
+	 *  about any other), then resumes only a transfer waiting at `queued` with exactly this fee. */
+	public async acceptQueuedFee(jobId: string, fee: string): Promise<boolean> {
+		await this.ensureInitialized()
+		if (typeof jobId !== "string" || !isFeeAmount(fee)) throw InvalidWalletArgumentsError.forMethod("acceptQueuedFee")
+		const [record, profile] = await Promise.all([this.operationJournal.getOperation(jobId), this.profileService.getActiveProfile()])
+		if (!record || !profile || record.profileId !== profile.id || record.kind !== "transfer") return false
+		if (record.progress.stage !== "queued" || record.progress.reask?.fee !== fee) return false
+		return this.queuedFeeAnswers.accept(jobId, fee)
 	}
 
 	/** Start pre-claim liveness vouching for a queued journal record — see
