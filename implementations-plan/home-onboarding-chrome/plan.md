@@ -550,6 +550,8 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 | 1 | Low | OA-3 and OA-4 still read as shipping after #156's stop | Accepted: both carry a "Stopped (arc 2)" line; the options stay as a record |
 | 2 | Low | `waitForFee`'s comment promised a settled payer the trigger does not show | Accepted: the comment now says the trigger names the pick while the card is still resolving who pays. Comment only, no behaviour change, so D11's caller sweep has nothing to run |
 
+**Confirmation (same session, resumed on `db35b7b1`): approve.** Both findings resolved, no regression. **Convergence (cross-arc):** conditional approve, then approve.
+
 ## Delivery
 
 One PR per arc against `dev`, no stack (D-orch-1). Each is opened only after its arc gate passes and its Codex loop converges.
