@@ -67,7 +67,7 @@ function callsIn(file: { path: string; text: string }): Call[] {
 	})
 }
 
-const LITERAL_KIND = /\bkind:\s*(?:"(?:success|error)"|[^,{}?]+\?\s*"(?:success|error)"\s*:\s*"(?:success|error)")\s*[,}\n]/
+const LITERAL_KIND = /\bkind:\s*(?:"(?:success|info|error)"|[^,{}?]+\?\s*"(?:success|info|error)"\s*:\s*"(?:success|info|error)")\s*[,}\n]/
 
 /** One object literal, nothing after it, with a literal `kind`. */
 function oneLiteralWithKind(args: string): boolean {
@@ -85,7 +85,7 @@ describe("every snack names its kind", () => {
 		expect(calls.length).toBeGreaterThanOrEqual(100)
 	})
 
-	test("each call passes one object literal whose kind is success, error, or a ternary of the two", () => {
+	test("each call passes one object literal whose kind is success, info, error, or a ternary of two of them", () => {
 		expect(calls.filter((call) => !oneLiteralWithKind(call.args)).map((call) => call.site)).toEqual([])
 	})
 

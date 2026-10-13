@@ -7,6 +7,7 @@
 
 import type { JobErrorKind, SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
 import { formatTransferType, humanizeMethodName } from "@/utils/tx-enrichment"
 import { isSendCheckable, type OperationKind, type OperationRecord, wasNeverSent } from "@/wallet/services/operation-journal/spec"
 
@@ -333,6 +334,7 @@ function failedSubtitleFor(kind: JobErrorKind): string {
 export interface TokenForCardProps {
 	symbol?: string
 	decimals?: number
+	hasDecimals?: boolean
 }
 
 export interface JournalTerminalCardCtx {
@@ -393,8 +395,9 @@ function transferCardFields(op: OperationRecord, ctx: JournalTerminalCardCtx): J
 	// An empty or missing `amountRaw` would format as "0", a fake "0 USDC" on the card.
 	let amount: string | null = null
 	let amountSymbol: string | null = null
-	if (op.amountRaw && token) {
-		amount = balanceFormatted(op.amountRaw, token.decimals || 0, 8, { compact: true }).value
+	const decimals = knownDecimals(token)
+	if (op.amountRaw && token && decimals !== null) {
+		amount = balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
 		amountSymbol = token.symbol ?? null
 	}
 

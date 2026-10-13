@@ -201,6 +201,7 @@ declare global {
   const journalCardOriginLabel: typeof import('../utils/journal-state').journalCardOriginLabel
   const journalCardTitle: typeof import('../utils/journal-state').journalCardTitle
   const journalCardTransferTypeLabel: typeof import('../utils/journal-state').journalCardTransferTypeLabel
+  const journalRecordInScope: typeof import('../utils/activity-rows').journalRecordInScope
   const journalTerminalDisplay: typeof import('../utils/journal-state').journalTerminalDisplay
   const knownDecimals: typeof import('../utils/token-amount').knownDecimals
   const legalAboutRow: typeof import('../utils/legal-about').legalAboutRow
@@ -491,6 +492,9 @@ declare global {
   // @ts-ignore
   export type { PrestoCheckConfig } from '../composables/usePrestoCheck'
   import('../composables/usePrestoCheck')
+  // @ts-ignore
+  export type { PricedToken } from '../composables/usePrices'
+  import('../composables/usePrices')
   // @ts-ignore
   export type { UseProfileCreateFlowOptions } from '../composables/useProfileCreateFlow'
   import('../composables/useProfileCreateFlow')
@@ -820,6 +824,7 @@ declare module 'vue' {
     readonly journalCardOriginLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardOriginLabel']>
     readonly journalCardTitle: UnwrapRef<typeof import('../utils/journal-state')['journalCardTitle']>
     readonly journalCardTransferTypeLabel: UnwrapRef<typeof import('../utils/journal-state')['journalCardTransferTypeLabel']>
+    readonly journalRecordInScope: UnwrapRef<typeof import('../utils/activity-rows')['journalRecordInScope']>
     readonly journalTerminalDisplay: UnwrapRef<typeof import('../utils/journal-state')['journalTerminalDisplay']>
     readonly knownDecimals: UnwrapRef<typeof import('../utils/token-amount')['knownDecimals']>
     readonly legalAboutRow: UnwrapRef<typeof import('../utils/legal-about')['legalAboutRow']>

@@ -34,7 +34,7 @@ const STUBS = {
 
 type Row = {
 	id: number
-	token: { id: number; chainId: number; contract: string; name: string; symbol: string; decimals: number }
+	token: { id: number; chainId: number; contract: string; name: string; symbol: string; decimals: number; hasDecimals: boolean }
 	account: string
 	publicBalance?: string
 	privateBalance?: string
@@ -49,6 +49,7 @@ const row = (id: number, symbol: string, over: Partial<Row> & { name?: string; c
 		name: over.name ?? `${symbol} Token`,
 		symbol,
 		decimals: over.decimals ?? 18,
+		hasDecimals: true,
 	},
 	account: "0xacct",
 	publicBalance: over.publicBalance ?? "0",

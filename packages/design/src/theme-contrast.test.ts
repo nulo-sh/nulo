@@ -190,17 +190,38 @@ describe("theme contrast — home links, focus rings and the step bar (required)
 	}
 })
 
-// Status text: light needs its own darker values; dark keeps the status colours it always drew.
+// Status text on a row at rest (the page), hovered (--nulo-surface-low) and pressed (--nulo-surface-high).
+// Light has its own darker values; dark keeps the status colours it always drew, but for a red lightened
+// just enough to read on a pressed row.
 describe("theme contrast — status text (required)", () => {
-	const STATUS = { "--txt-warning": "--yellow", "--txt-danger": "--red", "--txt-success": "--green" }
-	for (const [fg, status] of Object.entries(STATUS)) {
-		for (const bg of ["--app-bg", "--nulo-surface-low", "--nulo-surface-high"]) {
+	const ROW = ["--app-bg", "--nulo-surface-low", "--nulo-surface-high"]
+	for (const fg of ["--txt-warning", "--txt-danger", "--txt-success"]) {
+		for (const bg of ROW) {
 			test(`light: ${fg} on ${bg} >= ${AA_TEXT}:1`, () => {
 				expect(contrast(fg, bg, "light")).toBeGreaterThanOrEqual(AA_TEXT)
 			})
 		}
+	}
+	for (const bg of ROW) {
+		test(`dark: --txt-danger on ${bg} >= ${AA_TEXT}:1`, () => {
+			expect(contrast("--txt-danger", bg, "dark")).toBeGreaterThanOrEqual(AA_TEXT)
+		})
+	}
+	for (const [fg, status] of Object.entries({ "--txt-warning": "--yellow", "--txt-success": "--green" })) {
 		test(`dark: ${fg} is ${status}`, () => {
 			expect(resolveColor(fg, themeMap("dark"))).toEqual(resolveColor(status, themeMap("dark")))
 		})
+	}
+})
+
+// An activity card's status icon fills with its state's status text token, and a graphic needs 3:1
+// against the page (WCAG 1.4.11).
+describe("theme contrast — status icons (required)", () => {
+	for (const theme of ["dark", "light"] as const) {
+		for (const fg of ["--txt-warning", "--txt-danger", "--txt-success"]) {
+			test(`${theme}: a ${fg} icon on --app-bg >= 3:1`, () => {
+				expect(contrast(fg, "--app-bg", theme)).toBeGreaterThanOrEqual(3)
+			})
+		}
 	}
 })

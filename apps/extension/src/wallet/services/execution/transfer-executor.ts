@@ -71,7 +71,13 @@ export interface TransferExecutorLane {
 	isSlotBusy(profileId: string, chainId: number): boolean
 	/** The slot, only if nobody holds or waits for it; `undefined` otherwise. */
 	tryTakeSlot(profileId: string, chainId: number): Promise<ExecutionMutexRelease> | undefined
-	acquireTransferSlot(networkId: string, journalId: string, fence: ExecutionFence, signal: AbortSignal): Promise<ExecutionMutexRelease>
+	acquireTransferSlot(
+		networkId: string,
+		journalId: string,
+		fence: ExecutionFence,
+		signal: AbortSignal,
+		onWait?: () => void,
+	): Promise<ExecutionMutexRelease>
 }
 
 /** Where a transfer stands in its account's line, and what it holds there; `feeSpender` is the fee
@@ -308,8 +314,9 @@ export class TransferExecutor {
 	/**
 	 * Waits for the sends this one depends on, then takes the slot and re-checks under it: a dApp tx
 	 * proving when the wait ended is pending by now, and an edited fee contract moves this send's key,
-	 * so either gives the slot back (an edit re-enters the line). Returns the fee contract row the
-	 * build pays with, the one this send was ordered against.
+	 * so either gives the slot back (an edit re-enters the line). A send whose row is `pending` when it
+	 * has to wait moves it back to `queued` for the wait. Returns the fee contract row the build pays
+	 * with, the one this send was ordered against.
 	 */
 	private async takeTurn(
 		req: TransferRequest,
@@ -317,11 +324,23 @@ export class TransferExecutor {
 		controller: AbortController,
 		line: TransferLine,
 		fence: ExecutionFence,
-		queued: boolean,
+		createdQueued: boolean,
 	): Promise<{ release: ExecutionMutexRelease; fpc: Fpc | undefined }> {
+		let queued = createdQueued
+		let requeued: Promise<unknown> | undefined
+		const waiting = () => {
+			if (queued) return
+			queued = true
+			requeued = this.deps.transitionJournal(journalId, { stage: "queued" })
+			// Handled at once, so a run that ends before its claim raises no unhandled rejection; the
+			// claim awaits the transition itself and fails with its error.
+			requeued.catch(() => undefined)
+		}
 		for (;;) {
+			// `waitTurn` checks first in this same task, so this is the wait as it starts.
+			if (line.ticket.blocked()) waiting()
 			await this.waitForDependencies(journalId, controller, line.ticket)
-			const release = await this.acquireSlotWithin(req.networkId, journalId, fence, controller, line.ticket)
+			const release = await this.acquireSlotWithin(req.networkId, journalId, fence, controller, line.ticket, waiting)
 			// The caller holds no release until this returns, so every throw past the grant gives it back.
 			try {
 				if (line.ticket.blocked()) {
@@ -334,7 +353,7 @@ export class TransferExecutor {
 					await this.reenter(req, line)
 					continue
 				}
-				if (queued) await this.claim(journalId, controller)
+				if (queued) await this.claim(journalId, controller, requeued)
 				return { release, fpc }
 			} catch (err) {
 				release()
@@ -367,6 +386,7 @@ export class TransferExecutor {
 		fence: ExecutionFence,
 		controller: AbortController,
 		ticket: SequenceTicket,
+		onWait: () => void,
 	): Promise<ExecutionMutexRelease> {
 		const remainingMs = ticket.remainingMs()
 		if (remainingMs <= 0) throw new Error(WAIT_LIMIT_MESSAGE)
@@ -378,6 +398,7 @@ export class TransferExecutor {
 				journalId,
 				fence,
 				AbortSignal.any([controller.signal, limit.signal]),
+				onWait,
 			)
 			if (!limit.signal.aborted && ticket.remainingMs() > 0) return release
 			release()
@@ -390,9 +411,11 @@ export class TransferExecutor {
 		}
 	}
 
-	/** `queued → pending`; a cancel that landed first leaves the transition illegal. */
-	private async claim(journalId: string, controller: AbortController): Promise<void> {
+	/** `queued → pending`, once a move back to `queued` has landed; a cancel that landed first leaves
+	 *  either transition illegal. */
+	private async claim(journalId: string, controller: AbortController, requeued: Promise<unknown> | undefined): Promise<void> {
 		try {
+			await requeued
 			await this.deps.transitionJournal(journalId, { stage: "pending" })
 		} catch (err) {
 			if (controller.signal.aborted) throw new JobCancelledSentinel(journalId)

@@ -38,8 +38,8 @@ export interface BuildActivityRowsParams {
 	accountAddress?: string
 	/** Active chain id — scopes tx rows (tx carries `chainId`). Applied only when set. */
 	chainId?: number
-	/** Active network id — scopes incoming and terminal journal rows. Applied only when set; a journal
-	 *  row with no `networkId` predates the stamp and shows on every network, as on Home. */
+	/** Active network id — scopes incoming rows when set, and terminal journal rows per
+	 *  {@link journalRecordInScope}. */
 	networkId?: string
 	/** Active profile id — scopes rows that name a profile. Two profiles can derive
 	 *  the same address, so account + chain alone are not a unique scope. */
@@ -75,8 +75,8 @@ export function isForeignProfile(scopeProfileId: string | undefined, rowProfileI
 
 /** Scope tx to the active account+chain when a scope is supplied (a late/
  *  out-of-scope tx from the store's flat list must not render under B). */
-export function scopedTxRows(transactions: BuildActivityRowsParams["transactions"], scope: RowScope): ActivityRow[] {
-	const rows: ActivityRow[] = []
+export function scopedTxRows(transactions: BuildActivityRowsParams["transactions"], scope: RowScope): ActivityRowTx[] {
+	const rows: ActivityRowTx[] = []
 	for (const tx of transactions) {
 		if (scope.accountAddress !== undefined && tx.account !== scope.accountAddress) continue
 		if (scope.chainId !== undefined && tx.chainId !== scope.chainId) continue
@@ -86,14 +86,26 @@ export function scopedTxRows(transactions: BuildActivityRowsParams["transactions
 	return rows
 }
 
+/**
+ * The one scope rule every journal surface applies. A record's profile and network stamps must name
+ * the active ones, so with either unknown no stamped record shows; a record that predates the
+ * network stamp names none and shows on every network.
+ */
+export function journalRecordInScope(
+	op: Pick<OperationRecord, "accountAddress" | "profileId" | "networkId">,
+	scope: Pick<RowScope, "accountAddress" | "profileId" | "networkId">,
+): boolean {
+	if (op.accountAddress !== scope.accountAddress) return false
+	if (op.profileId !== scope.profileId) return false
+	return op.networkId === undefined || op.networkId === scope.networkId
+}
+
 function journalRows(terminalJournalOps: BuildActivityRowsParams["terminalJournalOps"], scope: RowScope): ActivityRow[] {
 	const rows: ActivityRow[] = []
 	for (const op of terminalJournalOps) {
 		if (op.progress?.stage === "succeeded") continue
 		if (!ACTIVITY_FEED_KINDS.has(op.kind)) continue
-		if (op.accountAddress !== scope.accountAddress) continue
-		if (isForeignProfile(scope.profileId, op.profileId)) continue
-		if (op.networkId && scope.networkId && op.networkId !== scope.networkId) continue
+		if (!journalRecordInScope(op, scope)) continue
 		if (op.terminalAt === null) continue
 		rows.push({ type: "journal", key: `journal:${op.id}`, sortKey: op.terminalAt, op })
 	}

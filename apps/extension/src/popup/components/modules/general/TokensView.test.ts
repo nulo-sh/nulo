@@ -128,7 +128,7 @@ function deferred<T>() {
 const CONTRACT = "0xtokenA"
 const balanceRow = (contract = CONTRACT) => ({
 	id: 1,
-	token: { id: 1, chainId: 1, contract, name: "Token A", symbol: "TKA", decimals: 18 },
+	token: { id: 1, chainId: 1, contract, name: "Token A", symbol: "TKA", decimals: 18, hasDecimals: true },
 	account: "0xacct",
 	publicBalance: "1",
 	privateBalance: "0",
@@ -145,6 +145,7 @@ const namedRow = (id: number, symbol: string, over: Partial<{ chainId: number; c
 		name: `${symbol} Token`,
 		symbol,
 		decimals: 18,
+		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "1",
 })
@@ -311,6 +312,28 @@ describe("TokensView — Home order and cap", () => {
 		H.journalAdded.emit(op("late-mine", "p1"))
 		await nextTick()
 		expect(rows()).toEqual(["mine", "late-mine"])
+	})
+
+	test("with no active profile a token_import op stamped with one is hidden; it shows once that profile is active", async () => {
+		H.store.current.profile = null
+		H.getOperations.mockResolvedValue([
+			{
+				id: "mine",
+				kind: "token_import",
+				profileId: "p1",
+				accountAddress: H.store.current.account?.address,
+				terminalAt: null,
+				progress: { stage: "pending" },
+			},
+		])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		const rows = () => wrapper.findAllComponents({ name: "TokenImportRow" }).map((c) => (c.props("op") as { id: string }).id)
+		expect(rows()).toEqual([])
+
+		H.store.current.profile = { id: "p1" }
+		await flushPromises()
+		expect(rows()).toEqual(["mine"])
 	})
 
 	test("a token_import op from ANOTHER network never shows, not even in a default's slot", async () => {

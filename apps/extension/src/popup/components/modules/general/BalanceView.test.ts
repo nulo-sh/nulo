@@ -23,14 +23,14 @@ const SEED = [
 	{
 		id: "b1",
 		account: "0xacct",
-		token: { id: "tok-1", symbol: "AAA", decimals: 6, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC },
+		token: { id: "tok-1", symbol: "AAA", decimals: 6, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC },
 		publicBalance: (250n * 10n ** 6n).toString(),
 		privateBalance: (1_000n * 10n ** 6n).toString(),
 	},
 	{
 		id: "b2",
 		account: "0xacct",
-		token: { id: "tok-2", symbol: "BBB", decimals: 18, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped" },
+		token: { id: "tok-2", symbol: "BBB", decimals: 18, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped" },
 		publicBalance: (5n * 10n ** 18n).toString(),
 		privateBalance: "0",
 	},
@@ -259,7 +259,7 @@ describe("BalanceView — Home aggregate", () => {
 			{
 				id: "b9",
 				account: "0xacct",
-				token: { id: "tok-9", symbol: "ZZZ", decimals: 18, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped9" },
+				token: { id: "tok-9", symbol: "ZZZ", decimals: 18, hasDecimals: true, chainId: CHAIN_IDS.TESTNET, contract: "0xunmapped9" },
 				publicBalance: "0",
 				privateBalance: "0",
 			},
@@ -608,6 +608,15 @@ describe("BalanceView — token hero (tokenBalance prop)", () => {
 
 		const bad = await mountView({ tokenBalance: { ...SEED[0], token: { ...SEED[0].token, decimals: 500 } } })
 		expect(bad.wrapper.find('[data-testid="balance-amount"]').text()).toContain("—")
+	})
+
+	test("a token whose decimals the wallet does not know renders dashes and no fiat, never a figure", async () => {
+		mockQuotes = FRESH()
+		const { wrapper } = await mountView({ tokenBalance: { ...SEED[0], token: { ...SEED[0].token, decimals: 0, hasDecimals: false } } })
+		expect(wrapper.find('[data-testid="balance-amount"]').text()).toContain("—")
+		expect(wrapper.find('[data-testid="private-balance-value"]').text()).toBe("—")
+		expect(wrapper.find('[data-testid="public-balance-value"]').text()).toBe("—")
+		expect(wrapper.find('[data-testid="balance-fiat"]').exists()).toBe(false)
 	})
 
 	test("a priced token shows its amount, the ≈ fiat line and the lock/globe split", async () => {

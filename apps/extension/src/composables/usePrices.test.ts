@@ -137,18 +137,27 @@ describe("composables/usePrices", () => {
 	test("tokenFiatMicro computes bigint fiat for a priced token, undefined otherwise", async () => {
 		const client = fakeClient(quoteState(Date.now()))
 		const { api } = await withPrices(client)
-		const token = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 18 }
+		const token = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 18, hasDecimals: true }
 		expect(api.tokenFiatMicro(token, 1_250n * 10n ** 18n)).toBe(1_249_821_250n)
-		expect(api.tokenFiatMicro({ chainId: 1, contract: "0x1", decimals: 18 }, 10n ** 18n)).toBeUndefined()
+		expect(api.tokenFiatMicro({ chainId: 1, contract: "0x1", decimals: 18, hasDecimals: true }, 10n ** 18n)).toBeUndefined()
 		expect(api.tokenFiatMicro(undefined, 10n ** 18n)).toBeUndefined()
+	})
+
+	test("a priced token whose decimals the wallet does not know has no fiat; known, it has", async () => {
+		const client = fakeClient(quoteState(Date.now()))
+		const { api } = await withPrices(client)
+		const token = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 0, hasDecimals: false }
+		expect(api.tokenFiatMicro(token, 1_250n)).toBeUndefined()
+		expect(api.tokenFiatLabel(token, 1_250n)).toBeUndefined()
+		expect(api.tokenFiatMicro({ ...token, hasDecimals: true }, 1_250n)).toBe(1_249_821_250n)
 	})
 
 	test("tokenFiatLabel renders the ≈-prefixed display string", async () => {
 		const client = fakeClient(quoteState(Date.now()))
 		const { api } = await withPrices(client)
-		const token = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 18 }
+		const token = { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 18, hasDecimals: true }
 		expect(api.tokenFiatLabel(token, 1_250n * 10n ** 18n)).toBe("≈ $1,249.82")
-		expect(api.tokenFiatLabel({ chainId: 1, contract: "0x1", decimals: 18 }, 1n)).toBeUndefined()
+		expect(api.tokenFiatLabel({ chainId: 1, contract: "0x1", decimals: 18, hasDecimals: true }, 1n)).toBeUndefined()
 	})
 
 	test("staleness flips reactively via the ticker — a quote crossing the TTL disappears", async () => {

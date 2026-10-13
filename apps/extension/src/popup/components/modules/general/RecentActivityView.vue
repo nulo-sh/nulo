@@ -25,8 +25,9 @@ import { createRunFence } from "@/composables/runFence"
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
 import { stageSubtitle } from "@/utils/card-subtitle"
-import { activityRowRoute } from "@/utils/activity-rows"
+import { activityRowRoute, journalRecordInScope } from "@/utils/activity-rows"
 import {
 	ACTIVITY_FEED_KINDS,
 	buildJournalTerminalCardProps,
@@ -39,7 +40,13 @@ import {
 } from "@/utils/journal-state"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { buildIncomingCardProps } from "@/utils/received-display"
-import { buildCancelHandler, buildFocusHandler, filterPendingDoubleRender, isMatchingTask } from "./recent-activity-handlers"
+import {
+	buildCancelHandler,
+	buildFocusHandler,
+	filterPendingDoubleRender,
+	isMatchingTask,
+	isOwnTerminalRecord,
+} from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
 /** Composables */
@@ -177,7 +184,9 @@ const executingProgressTitle = computed(() => {
 })
 const executingProgressSubtitle = computed(() => {
 	const active = executingSubtasks.value.find((s) => s.status === TaskStatus.Processing)
-	return active ? `${active.content.label}...` : "Preparing..."
+	if (active) return `${active.content.label}...`
+	// The task starts before its record exists, so only a running step or the record names the stage.
+	return null
 })
 /** dApp identity chip for the in-flight card — same chip the settled
  *  `TransactionCard` shows via `getOriginLabel`. UI-initiated transfers
@@ -192,9 +201,9 @@ const executingOriginLabel = computed(() => {
 })
 const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
-	const token = tokenById(executingTask.value.content.tokenId)
-	if (!token) return null
-	return balanceFormatted(String(executingTask.value.content.amount), token.decimals || 0, 8, { compact: true }).value
+	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
+	if (decimals === null) return null
+	return balanceFormatted(String(executingTask.value.content.amount), decimals, 8, { compact: true }).value
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
@@ -212,6 +221,9 @@ taskService.onTaskDeleted.add(onExecutingTaskDeleted)
  *  off automatically. */
 const journalService = new OperationJournalServiceClient()
 const journalOps = ref([])
+/** A snapshot that fails while the port stays up has no reconnect to retry it. */
+const JOURNAL_RETRY_MS = 2_000
+let journalRetry
 
 /** Third source for the activity-row merge: incoming-receive records from
  *  trusted fungible-token contracts. Filtered at the service layer
@@ -274,22 +286,14 @@ const onFocusInFlight = buildFocusHandler(dappInteractionService)
  *  below match on account and token alone, so another scope's terminal record would remove this
  *  scope's card. The scope watcher empties the state synchronously on a switch. */
 function journalRecordInActiveScope(op) {
-	if (op.accountAddress !== appStore.account?.address) return false
-	// Profile scoping: two profiles can hold the SAME account address (the same
-	// mnemonic imported twice), so account + network alone would let one
-	// profile's operations render under the other.
-	if (op.profileId && appStore.profile?.id && op.profileId !== appStore.profile.id) return false
-	// Network scoping (multi-network profiles): a tx
-	// fired on chain A shouldn't surface in the activity feed for chain B.
-	// Records before the journal carried `networkId` may have it
-	// undefined — show those everywhere so we don't strand legacy ops.
-	if (op.networkId && appStore.network?.id && op.networkId !== appStore.network.id) return false
-	return true
+	return journalRecordInScope(op, {
+		accountAddress: appStore.account?.address,
+		profileId: appStore.profile?.id,
+		networkId: appStore.network?.id,
+	})
 }
 
-/** Shared scoping for journal-record filters, the token page's token included.
- *  Same rules apply to in-flight and recently-terminal surfaces. */
-function journalRecordInScope(op) {
+function journalRecordOnThisView(op) {
 	if (!journalRecordInActiveScope(op)) return false
 	if (props.token && op.tokenId !== props.token.id) return false
 	return true
@@ -304,7 +308,7 @@ const inFlightJournalOps = computed(() =>
 		// `utils/journal-state.ts` so future kinds opt in (or stay routed to
 		// their own home surface) by one set update, not scattered if-chains.
 		if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-		return journalRecordInScope(op)
+		return journalRecordOnThisView(op)
 	}),
 )
 
@@ -319,7 +323,7 @@ const recentlyTerminalJournalOps = computed(() => {
 			// and render via TransactionCard.
 			if (op.progress?.stage === "succeeded") return false
 			if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-			return journalRecordInScope(op)
+			return journalRecordOnThisView(op)
 		})
 		.sort((a, b) => (b.terminalAt ?? 0) - (a.terminalAt ?? 0))
 })
@@ -350,15 +354,14 @@ const showJournalAwaiting = computed(() => inFlightJournalOps.value.length > 0)
  *  is independent. */
 const renderedInFlightOps = computed(() => [...inFlightJournalOps.value].sort((a, b) => b.createdAt - a.createdAt))
 
-/** The awaiting card's amount, gated unlike the terminal card's: an empty `amountRaw` still shows
- *  (as 0). Null while the token is unknown or for dApp ops. */
+/** The awaiting card's amount, gated as the terminal card's is: null for an empty `amountRaw`, while
+ *  the token or its decimals are unknown, and for dApp ops. */
 function cardAmountFor(op) {
 	if (op?.kind !== "transfer") return null
-	if (op.amountRaw === undefined) return null
-	if (op.tokenId === undefined) return null
-	const token = tokenById(op.tokenId)
-	if (!token) return null
-	return balanceFormatted(op.amountRaw, token.decimals || 0, 8, { compact: true }).value
+	if (!op.amountRaw || op.tokenId === undefined) return null
+	const decimals = knownDecimals(tokenById(op.tokenId))
+	if (decimals === null) return null
+	return balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
 }
 
 /** The awaiting card's symbol: set whenever the token is known, amount or not. */
@@ -427,30 +430,17 @@ const hasOrphanExecutingTask = computed(() => {
 })
 
 /**
- * When a journal record turns terminal and matches
- * the current executingTask, clear executingTask in the same tick so the
- * stale awaiting card disappears immediately alongside the terminal card
- * appearing. Without this, TaskService's eventual onTaskUpdated (after
- * the SW's catch block runs) leaves a brief duplicate-render window.
- *
- * Two call shapes, because terminal records never age out and a scan of
- * all of them would let an old cancelled record matching by kind+tokenId
- * clear a fresh executingTask:
- *
- * - **Event path** (`onJournalAdded`/`Updated`): we already know which op
- *   just changed; check only that op. No scan; can't false-match an
- *   ancient terminal.
- * - **Snapshot path** (`onMounted` + `resnapshotJournal`): no incoming
- *   op; scan with a 30-second `terminalAt` window. Catches the
- *   close-popup-mid-cancel-and-reopen race without sweeping in week-old
- *   terminals.
+ * The executingTask's own record turning terminal clears the task in the same tick, so its awaiting
+ * card leaves as the terminal card arrives instead of waiting for TaskService's update. The event
+ * path checks the record that changed; a snapshot has no such record, so it scans records that ended
+ * in the last 30 s (a popup closed mid-cancel and reopened), never older ones. `isOwnTerminalRecord`
+ * refuses a record created before the task, an earlier send of the same kind and token.
  */
 const SNAPSHOT_TERMINAL_WINDOW_MS = 30_000
 
 function clearExecutingTaskIfThisIsTerminalMatch(op) {
 	if (!executingTask.value) return
-	if (op.terminalAt === null) return
-	if (!isMatchingTask(executingTask.value, op, appStore.account?.address)) return
+	if (!isOwnTerminalRecord(executingTask.value, op, appStore.account?.address)) return
 	executingTask.value = null
 	executingSubtasks.value = []
 }
@@ -459,9 +449,7 @@ function clearExecutingTaskIfRecentTerminalMatch() {
 	if (!executingTask.value) return
 	const account = appStore.account?.address
 	const cutoff = Date.now() - SNAPSHOT_TERMINAL_WINDOW_MS
-	const match = journalOps.value.find(
-		(op) => op.terminalAt !== null && op.terminalAt >= cutoff && isMatchingTask(executingTask.value, op, account),
-	)
+	const match = journalOps.value.find((op) => isOwnTerminalRecord(executingTask.value, op, account) && op.terminalAt >= cutoff)
 	if (match) {
 		executingTask.value = null
 		executingSubtasks.value = []
@@ -553,6 +541,8 @@ journalService.onOperationDeleted.add(onJournalDeleted)
  * terminal transitions during SW down windows.
  */
 async function resnapshotJournal(isCurrent = journalFence.begin()) {
+	// A stale run reads nothing: after unmount the read would reconnect the client.
+	if (!isCurrent()) return
 	try {
 		// Generation guard (not captured-equality): equality re-validates on
 		// A→B→A, letting the ABA run's stale snapshot land. Every trigger is a
@@ -570,7 +560,9 @@ async function resnapshotJournal(isCurrent = journalFence.begin()) {
 		// current executingTask.
 		clearExecutingTaskIfRecentTerminalMatch()
 	} catch {
-		// Reconnect may race the port — next event or the next reconnect retries.
+		if (!isCurrent()) return
+		clearTimeout(journalRetry)
+		journalRetry = setTimeout(() => isCurrent() && resnapshotJournal(isCurrent), JOURNAL_RETRY_MS)
 	}
 }
 journalService.onConnected.add(resnapshotJournal)
@@ -652,6 +644,8 @@ async function loadExecutingTaskSnapshot(isCurrent = taskFence.begin()) {
 			executingTask.value = activeExec
 			executingSubtasks.value = activeExec.subtasks || []
 		}
+		// The journal snapshot may land first; whichever lands second reconciles the two.
+		clearExecutingTaskIfRecentTerminalMatch()
 	} catch {
 		// Non-fatal; a later task event or reconnect re-snapshots.
 	}
@@ -718,6 +712,8 @@ watch(
 defineExpose({ journalOps, executingTask, executingSubtasks, pendingCancelJobIds, hasOrphanExecutingTask, recentActivityRows, tokens })
 
 onMounted(async () => {
+	// Begun before the awaits below, so an unmount during them leaves this run stale.
+	const journalRun = journalFence.begin()
 	await scopedTokens.reload()
 
 	// ServiceClient doesn't auto-connect on listener registration — make
@@ -743,7 +739,7 @@ onMounted(async () => {
 	// Load persisted in-flight ops for the active account (captured-account
 	// guarded). `resnapshotJournal` also runs the v4 cancel-dupe mount check
 	// (`clearExecutingTaskIfRecentTerminalMatch`, 30s window) after assigning.
-	await resnapshotJournal()
+	await resnapshotJournal(journalRun)
 })
 onBeforeUnmount(() => {
 	taskService.disconnect()
@@ -758,6 +754,8 @@ onBeforeUnmount(() => {
 	disposeIncomingTransfers()
 	syncHealth.dispose()
 	scopedTokens.dispose()
+	journalFence.invalidate()
+	clearTimeout(journalRetry)
 })
 </script>
 

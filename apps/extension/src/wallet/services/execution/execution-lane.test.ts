@@ -217,6 +217,20 @@ describe("ExecutionLane.acquireTransferSlot", () => {
 		}
 	})
 
+	test("onWait runs once as a send joins behind another, never at a free slot", async () => {
+		const { lane } = makeLane()
+		const signal = new AbortController().signal
+		const atFree = vi.fn()
+		const first = await lane.acquireTransferSlot("net-1", "j1", FENCE, signal, atFree)
+		expect(atFree).not.toHaveBeenCalled()
+		const behind = vi.fn()
+		const second = lane.acquireTransferSlot("net-1", "j2", FENCE, signal, behind)
+		await vi.waitFor(() => expect(behind).toHaveBeenCalledTimes(1))
+		first()
+		;(await second)()
+		expect(behind).toHaveBeenCalledTimes(1)
+	})
+
 	test("an abort of the transfer's own signal ends the wait as the cancel sentinel; the lane stays usable", async () => {
 		const { lane } = makeLane()
 		const holder = await lane.acquireSlot("net-1", undefined, FENCE)

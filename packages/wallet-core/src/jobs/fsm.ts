@@ -21,6 +21,10 @@
  * records may take this edge; `transfer`/`dapp_execute` must go through the
  * full prove + submit path.
  *
+ * `pending → queued` is the one back-edge: a send created `pending` that then has to wait for an
+ * earlier send or the execution slot reads `queued` while it waits, and is claimed again
+ * (`queued → pending`) when its turn comes.
+ *
  * Terminal stages have no outgoing edges.
  *
  * Submit is the point-of-no-return: once we hand the tx to `sendTxTask` it
@@ -41,7 +45,7 @@ const LEGAL_TRANSITIONS: Readonly<Record<JobStage, ReadonlySet<JobStage>>> = {
 	// before-claim paths. No queued → simulating shortcut: any executor
 	// MUST pass through pending so the FSM invariant holds.
 	queued: new Set<JobStage>(["pending", "failed", "cancelled"]),
-	pending: new Set<JobStage>(["simulating", "failed", "cancelled"]),
+	pending: new Set<JobStage>(["queued", "simulating", "failed", "cancelled"]),
 	simulating: new Set<JobStage>(["proving", "succeeded", "failed", "cancelled"]),
 	proving: new Set<JobStage>(["submitting", "failed", "cancelled"]),
 	submitting: new Set<JobStage>(["succeeded", "failed"]),

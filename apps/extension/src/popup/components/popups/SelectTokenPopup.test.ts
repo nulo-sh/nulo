@@ -112,6 +112,7 @@ const row = (
 		name: `${symbol} Token`,
 		symbol,
 		decimals: 18,
+		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "1",
 	privateBalance: "0",

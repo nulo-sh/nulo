@@ -8,7 +8,7 @@ import { usePrices } from "@/composables/usePrices"
 
 /** Utils */
 import { balanceFormatted } from "@/utils/amount.js"
-import { isValidDecimals, parseRawBalance } from "@/utils/token-amount"
+import { knownDecimals, parseRawBalance } from "@/utils/token-amount"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -27,10 +27,10 @@ const props = defineProps({
 
 const token = computed(() => props.tokenBalance.token)
 // Row numbers come from storage rows that contracts fed: a side that is not a non-negative
-// integer literal, or a `decimals` outside 0..77, makes the row "unknown" — rendered as a dash,
-// never parsed into BigInt or an exponent.
+// integer literal, or decimals the wallet does not know, makes the row "unknown" — rendered as a
+// dash, never parsed into BigInt or an exponent.
 const isMalformed = computed(
-	() => !props.tokenBalance || parseRawBalance(props.tokenBalance) === undefined || !isValidDecimals(token.value?.decimals),
+	() => !props.tokenBalance || parseRawBalance(props.tokenBalance) === undefined || knownDecimals(token.value) === null,
 )
 const decimals = computed(() => (isMalformed.value ? 0 : token.value.decimals))
 const publicRaw = computed(() => (isMalformed.value ? 0n : BigInt(props.tokenBalance.publicBalance || 0)))

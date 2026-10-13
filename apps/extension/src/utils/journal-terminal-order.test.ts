@@ -36,7 +36,7 @@ function terminal(overrides: Partial<OperationRecord>): OperationRecord {
 }
 
 function build(op: OperationRecord, log: string[]) {
-	const token = recorded({ symbol: "USDC", decimals: 6 }, "token", log)
+	const token = recorded({ symbol: "USDC", decimals: 6, hasDecimals: true }, "token", log)
 	const lookups: number[] = []
 	const ctx = recorded(
 		{
@@ -63,9 +63,11 @@ describe("buildJournalTerminalCardProps — evaluation order", () => {
 			"ctx.tokenById",
 			"op.tokenId",
 			"lookup(42)",
-			"op.amountRaw",
-			"op.amountRaw",
+			"token.hasDecimals",
 			"token.decimals",
+			"token.decimals",
+			"op.amountRaw",
+			"op.amountRaw",
 			"token.symbol",
 			"token.symbol",
 			"op.transferType",
@@ -78,7 +80,17 @@ describe("buildJournalTerminalCardProps — evaluation order", () => {
 		const { run, lookups } = build(terminal({ tokenId: 42, amountRaw: "bad", transferType: 0 }), log)
 		expect(run).toThrow()
 		expect(lookups).toEqual([42])
-		expect(log).toEqual(["op.tokenId", "ctx.tokenById", "op.tokenId", "lookup(42)", "op.amountRaw", "op.amountRaw", "token.decimals"])
+		expect(log).toEqual([
+			"op.tokenId",
+			"ctx.tokenById",
+			"op.tokenId",
+			"lookup(42)",
+			"token.hasDecimals",
+			"token.decimals",
+			"token.decimals",
+			"op.amountRaw",
+			"op.amountRaw",
+		])
 	})
 
 	test("a dApp card never reads the token lookup, even when its record carries a token id", () => {
@@ -98,7 +110,7 @@ describe("journalCardTitle — the awaiting card's title", () => {
 		const lookups: number[] = []
 		const tokenById = (id: number) => {
 			lookups.push(id)
-			return id === 42 ? { symbol: "USDC", decimals: 6 } : undefined
+			return id === 42 ? { symbol: "USDC", decimals: 6, hasDecimals: true } : undefined
 		}
 		expect(journalCardTitle(terminal({ kind: "dapp_execute", origin: "dapp", tokenId: 42, title: "swap" }), tokenById)).toBe("Swap")
 		expect(lookups).toEqual([])

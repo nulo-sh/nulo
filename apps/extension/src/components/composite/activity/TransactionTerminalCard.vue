@@ -9,6 +9,7 @@
  * Plain `<script setup>`, like `TransactionAwaitingCard.vue`: vue-tsc cannot type the slots of
  * its untyped consumers.
  */
+import { STATUS_ICON_FILL } from "./status-icon-fill"
 import TransactionCardLayout from "./TransactionCardLayout.vue"
 
 defineProps({
@@ -20,8 +21,8 @@ defineProps({
 	/** Icon name for the status badge (e.g. "cancel", "refresh-circle",
 	 *  "close-circle"). Mapped per-state by journalTerminalDisplay. */
 	icon: { type: String, required: true },
-	/** Status color. Drives the icon color + visual tone. One of
-	 *  "gray" | "amber" | "red" | "green". */
+	/** Status tone, one of "gray" | "amber" | "red" | "green": the status line's colour and, through
+	 *  `STATUS_ICON_FILL`, the icon's. */
 	color: { type: String, required: true },
 	/** Activity-row icon (left of the badge). Same convention as the
 	 *  awaiting card: "arrow-narrow-up-right" for UI transfers, "zap" for
@@ -44,7 +45,7 @@ defineProps({
 <template>
 	<TransactionCardLayout :title="title" :icon="activityIcon" :amount="amount" :amountSymbol="amountSymbol" :to="to" testId="tx-terminal-card">
 		<template #badge>
-			<Icon :name="icon" size="12" :color="color" :class="$style.status_icon" :data-color="color" />
+			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>

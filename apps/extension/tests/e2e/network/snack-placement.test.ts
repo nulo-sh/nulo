@@ -26,6 +26,7 @@ import {
 } from "../fixtures/helpers"
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { shotSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -162,6 +163,58 @@ async function hitsAfterScroll(page: Page, testids: string[]): Promise<Hit[]> {
 	)
 }
 
+type Box = { top: number; bottom: number; left: number; right: number }
+type ControlPlacement = { at: string; hit: string; covered: boolean; snack: Box; control: Box; viewport: number }
+
+/** Scrolls `testid` to `at` (the end of the container that scrolls it, or centred) and waits for the
+ *  snack to measure again. */
+async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "centre"): Promise<void> {
+	await page.evaluate(
+		async (id: string, where: string) => {
+			const el = document.querySelector(`[data-testid="${id}"]`)
+			if (!el) throw new Error(`${id} not found`)
+			let scroller = el.parentElement
+			while (scroller && !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+			if (where === "end") (scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
+			if (where === "centre") el.scrollIntoView({ block: "center" })
+			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+		},
+		testid,
+		at,
+	)
+}
+
+/** `testid` where the page rests, with the container that scrolls it at its end, then centred, each
+ *  read once the snack has measured again: what a click at its centre hits, whether any part of it is
+ *  under the snack, and where both are. */
+async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<ControlPlacement[]> {
+	const placements: ControlPlacement[] = []
+	for (const at of ["rest", "end", "centre"] as const) {
+		await scrollControl(page, testid, at)
+		const placement = await page.evaluate(
+			(s: string, id: string, where: string) => {
+				const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+				const card = document.querySelector(s)?.getBoundingClientRect()
+				if (!box || !card) throw new Error("no control or no snack")
+				const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+				return {
+					at: where,
+					hit: hit?.closest("[data-testid]")?.getAttribute("data-testid") ?? hit?.tagName ?? "none",
+					covered: card.top < box.bottom && card.bottom > box.top && card.left < box.right && card.right > box.left,
+					snack: { top: card.top, bottom: card.bottom, left: card.left, right: card.right },
+					control: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+					viewport: window.innerHeight,
+				}
+			},
+			SNACK,
+			testid,
+			at,
+		)
+		placements.push(placement)
+	}
+	return placements
+}
+
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
@@ -294,6 +347,19 @@ async function sendFromDrainedBalance(page: Page): Promise<void> {
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
 }
 
+/** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that
+ *  holds none, and returns the execute window it opens; its estimate fails. */
+async function openUnfundedDappSend(ctx: ExtensionContext & { playgroundPage: Page }): Promise<Page> {
+	const config = aztecConfig as AztecTestConfig
+	const pg = ctx.playgroundPage
+	await setPgInput(pg, "tokenAddress", config.tokenAddress)
+	await setPgInput(pg, "recipient", config.minterAddress)
+	await setPgInput(pg, "amount", "1000000")
+	const execute = waitForPopup(ctx, "execute", { timeout: 60_000 })
+	await clickByTestId(pg, "pg-btn-sendTx-default")
+	return execute
+}
+
 test.skipIf(!hasConfig)(
 	"Send: a fee-estimate error sits 12px above the footer and follows it when it grows",
 	{ timeout: 420_000 },
@@ -354,26 +420,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		const ctx = dappConnectedExtensionWithTransactionCap
-		const config = aztecConfig as AztecTestConfig
-		const pg = ctx.playgroundPage
-		// A public transfer of 1,000,000 base units from an account that holds none fails the estimate.
-		await pg.evaluate(
-			({ token, recipient }: { token: string; recipient: string }) => {
-				const setVal = (s: string, v: string) => {
-					const input = document.querySelector<HTMLInputElement>(s)
-					if (!input) return
-					Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, v)
-					input.dispatchEvent(new Event("input", { bubbles: true }))
-				}
-				setVal('[data-testid="pg-input-tokenAddress"]', token)
-				setVal('[data-testid="pg-input-recipient"]', recipient)
-				setVal('[data-testid="pg-input-amount"]', "1000000")
-			},
-			{ token: config.tokenAddress, recipient: config.minterAddress },
-		)
-		const executeP = waitForPopup(ctx, "execute", { timeout: 60_000 })
-		await clickByTestId(pg, "pg-btn-sendTx-default")
-		const execute = await executeP
+		const execute = await openUnfundedDappSend(ctx)
 		await waitForToast(execute, "Couldn't estimate fee", 180_000, { kind: "error" })
 
 		const at = await placement(execute, sel("dapp-approval-footer"))
@@ -412,6 +459,52 @@ test.skipIf(!hasConfig)(
 		const linedHits = await hitsAfterScroll(execute, BUTTONS)
 		expect(linedHits.map((h) => h.covered)).toEqual([false, false])
 		expect(linedHits[0]?.hit).toBe("execute-reject-btn")
+
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
+		expect(ctx.pageErrors).toEqual([])
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"Home: an error snack covers no part of an awaiting send's Cancel, at rest or scrolled",
+	{ timeout: 480_000 },
+	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		const ctx = dappConnectedExtensionWithTransactionCap
+		expect(ctx.pageErrors).toEqual([])
+		const page = await balanceDrainedBehindTheWallet(ctx)
+		await sendFromDrainedBalance(page)
+		await clickByTestId(page, "send-submit")
+		await waitForHash(page, "#/popup/general", 10_000)
+		await waitForToast(page, "Send failed", 180_000, { kind: "error" })
+
+		// A dApp send waiting on its approval window keeps its Cancel; the failure snack stays until closed.
+		const execute = await openUnfundedDappSend(ctx)
+		await waitForExecuteContent(execute)
+		await page.bringToFront()
+		await page.waitForSelector(`${sel("tx-awaiting-card")}[data-stage="queued"] ${sel("tx-awaiting-cancel")}`, { timeout: 60_000 })
+		await waitForToast(page, "Send failed", 5_000, { kind: "error" })
+		// The snack measures again on the frame after the card arrives.
+		await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+		await settledCard(page)
+
+		const placed = await placementsAtRestAndScrolled(page, "tx-awaiting-cancel")
+		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(placed)}`)
+		for (const p of placed) {
+			expect([p.at, p.covered, p.hit], "Cancel is clear of the snack and takes the click").toEqual([
+				p.at,
+				false,
+				"tx-awaiting-cancel",
+			])
+			expect(p.snack.top >= 0 && p.snack.bottom <= p.viewport, `${p.at}: the snack is wholly on screen`).toBe(true)
+		}
+		// Clear of the Cancel, the snack rests 12px above the 64px nav rather than above where the row was.
+		expect(placed.slice(1).map((p) => p.viewport - p.snack.bottom)).toEqual([76, 76])
+		await page.evaluate(async () => {
+			window.scrollTo(0, 0)
+			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+		})
+		await shotSend(page, "home-snack-above-cancel", "tx-awaiting-card")
 
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)

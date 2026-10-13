@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: arc 1 merged (#264); arc 3a in review (3a.1 stopped, 3a.2-3a.4 built)
+status: arc 1 merged (#264); arc 3a merged (#343); arc 3b in review (3b.1-3b.6 built)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -290,6 +290,14 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
   - #108 (P10-06, approved): "When the transaction's expiry is provably past chain time, the row reads 'Won't go through' / 'This transaction expired before the network included it. No fee was paid, and you can send it again.' Until then it reads today's 'Unconfirmed'." The look is the existing failed one (OA-7, D28).
   - #109 (P10-07, changed): "no new words; only the pruned-block re-check ships." A mined row reads as today until final. A row whose block the finalized chain excludes returns to today's "Not confirmed yet" (journal row) or today's pending clock (Tx row).
   - #112 (P10-05, approved): not built (D21, OA-6); the row reads as today.
+
+- **Arc 3b (page 10 with C9 and C12-links, signed 2026-10-12).**
+  - #209 (P10-11): no visible change on a normal network; a record of another network no longer opens on the journal page, and one from before the network stamp opens on every page that lists it.
+  - #103 (P10-10) and #213 (P10-09): an amount whose token's decimals are unknown shows no figure; an in-progress card with no amount shows none rather than 0.
+  - #110: "Send not confirmed" reads in a neutral snack (grey clock, stays until closed); Home shows one card per send; a checked send's journal page shows the Tx hash row and "View on <explorer>", none under explorer None; an open snack sits above an awaiting card's Cancel wherever it would otherwise cover it, and keeps its usual place when it would not.
+  - #122 (P10-08): an awaiting card whose stage is unknown shows the loading skeleton in its stage line.
+  - #219 c (OA-1 A): a Send-page send that starts waiting after it was created reads "Queued..." while it waits.
+  - #243 (P10-12, P10-13): status icons take their status text colour; dark red status text is lighter (#ff534b).
 
 ## Assumptions
 
@@ -603,28 +611,28 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 ### Arc 3b: feed surfaces (after page 10, C9, C12-links; R1, R2, R5)
 
-#### Phase 3b.1: one scope rule (#209, P10-11)
+#### Phase 3b.1: one scope rule (#209, P10-11) ✓
 
 1. Export `journalRecordInScope` from `utils/activity-rows.ts`; use it on the four surfaces.
 2. Tests: `activity-rows.test.ts` (one case per rule: stamped and active, stamped and inactive, no active profile, unstamped); `journal-detail-scope.test.ts`, `TokensView.test.ts`, `activity.test.ts` updated.
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3b.2: no guessed decimals (#103, P10-10) and no fake 0 (#213, P10-09)
+#### Phase 3b.2: no guessed decimals (#103, P10-10) and no fake 0 (#213, P10-09) ✓
 
 1. Move each site to `knownDecimals`; treat an empty `amountRaw` as absent.
 2. Tests per site: an unknown-decimals token shows no figure (never-happens: a figure); a known one shows as today (control). Update the `RecentActivityView.test.ts` fixtures that lack `hasDecimals`.
 
 **Validation gate.** As 3b.1. Layers: lint, typecheck, unit.
 
-#### Phase 3b.3: failed-send surfaces (#110, P10-01..04)
+#### Phase 3b.3: failed-send surfaces (#110, P10-01..04) ✓
 
 1. Build the P10-01 option chosen; P10-02 unless struck; P10-03 with the extracted `TxHashRow`; reproduce P10-04, then fix it only if it reproduces.
 2. Tests: `toast.test.ts` and `ToastManagerBase.test.ts` (option A), `send-submit.test.ts` (the kind), `recent-activity-rows.test.ts` (P10-02: the failed record hides only when a settled row carries the same hash; control: a different hash keeps it), `journal/[id].test.ts` (hash row and link; none under explorer None), `snack-placement.test.ts` (P10-04).
 
 **Validation gate.** As 3b.1. Layers: lint, typecheck, unit.
 
-#### Phase 3b.4: the awaiting card on reopen (#122, P10-08) and #219 c (on OA-1 = A)
+#### Phase 3b.4: the awaiting card on reopen (#122, P10-08) and #219 c (on OA-1 = A) ✓
 
 1. Draw the stage line as the loading skeleton until the stage arrives.
 2. On OA-1 = A: add the FSM edge; move a waiting `pending` transfer row to `queued` and claim it back.
@@ -632,14 +640,14 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** As 3b.1. Layers: lint, typecheck, unit.
 
-#### Phase 3b.5: status colours (#243, P10-12, P10-13)
+#### Phase 3b.5: status colours (#243, P10-12, P10-13) ✓
 
 1. Add the `fill--txt-*` utilities (`token-contract.ts`, then `bun run --cwd packages/design gen:tokens`); use them in `TransactionTerminalCard.vue`; set the dark `--txt-danger`.
 2. Tests: `theme-contrast.test.ts` asserts the icons at 3:1 on the light page and the dark red text at 4.5:1 on page, hover and pressed; the drift tests pass.
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test:all`. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3b.6: arc 3b end-to-end gate
+#### Phase 3b.6: arc 3b end-to-end gate ✓
 
 **Validation gate.** Commands: `bun run test`; `bun run test:all`; smoke on Chrome and Firefox; network on Chrome and Firefox: `snack-placement.test.ts`, `failed-send-check.test.ts`, `account-switch-isolation.test.ts`, and on OA-1 = A `same-token-concurrent-sends.test.ts`. Pass: all exit 0; screenshots of every surface the page names, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
 
@@ -879,6 +887,31 @@ Arc 3a deviations from the text above (the tree and the default endpoint won; th
 - **D29 Phase 3a.2 as built.** The expiry proof runs only on an `unconfirmed` row, so the table admits `unconfirmed → expired` and not `none → expired`: the owner's words put "Unconfirmed" before "Won't go through", and one path per state keeps the table small. A nullifier the finalized chain holds is not recorded; it ends that row's watch until the next restart, which reads it once more (such a row is rare: its receipt went unseen for the whole window, yet it was included). The one-watch-per-row restructure of D25 lands here rather than in 3a.3, because `unconfirmed → expired` is the first answer that leaves a row with work. The expiry is read from the tx in `sendExpiryOf` (`execution-coordinator.ts`); a real-kernel test (`execution-coordinator.real.test.ts`, node environment) pins the field and the first non-revertible nullifier.
 - **D30 Phase 3a.3 as built.** A `sent` or `reverted` answer records its block unless the receipt is already Finalized; a mined receipt that names no block is no answer, where it read `sent` before (the node always names one). From a watched block the table admits final with either result, so a move into a block that is already final needs no extra round. The finality read runs every 60 s (`FINALITY_READ_INTERVAL_MS`) through the silent single-attempt node; the pending poll keeps its retrying node. A journal row's balances refresh on a first answer, a move and a prune, not on final, `unconfirmed` or `expired`. A pruned Tx row returns to Pending, which refreshes nothing today; its balances refresh when its next status lands. `TransactionService` files every worker write through one `commit` that picks the row's single watch, and one `unwatch` clears all of them for the purge and the ambiguous marking.
 
+The orchestrator's calls at arc 3b's start (2026-10-13; page 10 with C9 and C12-links signed; OA-1 = A):
+
+- **D-orch-9 Only the signed words and looks ship.** A surface that would need another word goes to `OWNER-ASKS.md` in the "what ships now" form. P10-04: reproduce first; if it does not reproduce, #110 keeps that item open with a comment carrying the probe record, and the rest of #110 ships.
+- **D-orch-10 C9 as signed.** A value not yet known draws the loading skeleton until it lands, then "—" with a short reason; never 0, $0.00 or a figure from guessed decimals. #103: no figure while `knownDecimals` is null.
+- **D-orch-11 Generated tokens.** `fill--txt-*` comes from `token-contract.ts` through `bun run --cwd packages/design gen:tokens`, never a hand edit of a generated file; `theme-contrast.test.ts` asserts the ratios and the drift tests pass.
+- **D-orch-12 Merge `origin/dev` before the final gates.** Never a union merge; `lessons.md` is at its 8 KiB budget.
+- **D-orch-13 Screenshots close the loop.** Every surface the page names, both themes, both browsers, attached to the PR.
+
+Arc 3b as built, where it differs from or adds to the text above:
+
+- **D31 One rule, the journal page included.** `journal-detail-scope.ts` calls `journalRecordInScope`, so a record from before the network stamp now opens there as it shows on History. Home's own token-aware filter is `journalRecordOnThisView`.
+- **D32 Known decimals, wider than the list.** Besides the listed sites, `BalanceView`'s hero sides, `TokenCard`'s malformed check, `useArrivals`, `received-display.ts` and `app.vue`'s token lookup read `knownDecimals`. `token-fold.ts` keeps a funded row of unknown decimals in view rather than folding it as dust. `TransactionCard` passes `hasDecimals: true` to the fiat line, since a tx row carries its transfer's own decimals. The read-order pins in `journal-terminal-order.test.ts` gained the `hasDecimals` read. The smoke helper `seedTokenRow` now writes the decimals getter a real row has; without it the seeded receipts in `rows.test.ts` would lose their amounts.
+- **D33 P10-01 as built.** `info` renders in the alert region and stays until closed, as `error` does. The copy module reports `checking`, and `send-submit.ts` names the kind at the call (`checking ? "info" : "error"`), so every `openToast` call keeps a literal kind; `toast-call-sites.test.ts` accepts `info`, the third `ToastKind`.
+- **D34 P10-03 on two pages, not three.** `TxHashRow` serves the tx and journal pages. The received page keeps its own row: its link is `--txt-primary` where the tx page's is `--txt-secondary`, and one row would change the received page without sign-off. The journal page links only while its record's network is the active one, since the explorer URL is per chain. Under explorer None it adds no hero "Copy hash": the page names only the link, and the row's hash copies on a click.
+- **D35 P10-04 reproduced.** Probe (Chrome, 360x600 popup, a queued dApp send and a failed Send-page send on Home): at rest the error snack spanned y 452-524 and Cancel y 433-461, so 9 px of Cancel sat under it; at the scroll's end and centred it was clear. Fix as signed: `TransactionCardLayout`'s action row is a `vSnackFooter` (only the awaiting card fills it), marked `.listed`. A listed row is not a bottom footer: it moves the snack only while the snack, at its resting spot, would cover it where it is now, and the snack then climbs past each listed row it covers. Where clearing them all would lift the snack off the top of the screen, it stays where the footers put it. The rule reads the open snack's height, which `ToastManagerBase` exposes. A plain footer's rule is unchanged.
+- **D36 #122 as built.** A null subtitle draws the skeleton (92x9, `TokenCard`'s secondary line). A Send-page task card with no running step reads no stage until its record arrives: the task starts before the record exists, so "Preparing..." there was a guess that could precede "Queued...". A running subtask's own label still shows. The Send page's placeholder card, which never knows its stage, draws the skeleton until its record arrives. A journal snapshot that fails while the port stays up is retried every 2 s on the scope's fence; the old comment said the next event retried it, and none did.
+- **D37 #219 c as built.** The row moves back to `queued` at either wait: before the dependency wait (checked in the same task as `waitTurn`'s first check) and at the slot (the lane's synchronous `onWait`, called with nothing awaited before the enqueue). The move runs during the wait; the claim awaits it and maps its failure as it maps its own, so a cancel that won either move ends as cancelled. A requeued row is never reaped while it waits: the reaper's `queued` grace (10 min) is longer than `pending`'s (2 min) and both waits heartbeat the row. No dApp record takes the edge while arc 1b is unbuilt.
+- **D38 #243 on every status icon.** The rule names "the activity card's status icon", so it reaches the three cards that draw one (terminal, settled tx, incoming) through one map, `status-icon-fill.ts`; otherwise one list would show two greens. The generated map also yields `.color--txt-*`. The dark `--txt-danger` is #ff534b, the colour nearest #f03c3c in OKLab among those reading 4.5:1 on `--nulo-surface-high`: page 6.24, hovered 5.39, pressed 4.50 (was 5.13, 4.43, 3.70). The dark red icon follows the token, as the two signed items combine. `base.css`'s pin is re-hashed.
+- **D39 #209's premise cannot be shot.** With the active-network key removed, the popup restores the primary network while it loads, so no Home or History of the no-network state exists to capture. The rule ships unit-proven: its never-happens cases fail on the base.
+- **D40 #213 has no shot.** A Send-page record always carries an amount, so no real flow draws an in-progress card with an empty one; the case is unit-proven.
+- **D41 Two looks shot from Storybook.** No deterministic e2e reaches "Send not confirmed", and the stage-less window lasts one snapshot, so the info snack and the stage-less awaiting card are captured from the built Storybook in both browsers and themes.
+- **D42 #219 stays open.** Items a and c ship; item b waits on OA-5 (page 9, P9-08). The PR says `Refs #219`.
+- **D43 The switch block reads the cards' rule.** `hasInFlightSend` calls `journalRecordInScope`, so with no network active a send stamped with one no longer blocks a switch it cannot be cancelled from: no card shows it. Its own doc already required the block to line up with the cards.
+- **D44 Two surfaces #103 does not name go to the owner.** The settled transaction card keeps the figure its record stored (OA-8), and a held token of unknown decimals keeps its place in the token order (OA-9). Both ship as they are.
+
 ## Audit verdicts
 
 ### Round 1 (plan v1): dual audit
@@ -1028,6 +1061,36 @@ Rejected:
 - **A forging RPC** (Codex, trust note): outside the model. The proofs hold against lagging or forked upstreams.
 
 **Round 2 (resumed Codex session): the fixes hold, no runtime finding.** It judged the e2e's empty L1 mining sound and harmless. One low remained: review provenance in three inherited comments and one narrating doc, both removed. The loop stops here.
+
+### Arc 3b code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `39b50d82..f575ab8d`
+
+**Codex: no high, one medium. Opus: no high, two medium.** Both found nothing material in the requeue path: no send goes out twice or skips a predecessor, every throw past the grant gives the slot back, the journal lock orders the requeue before a failure or cancel that follows it, and cancel, the session-end sweep and the reaper all handle a requeued row. No new log leak, no dApp response change, `sendTxTask` unchanged.
+
+Accepted:
+- **Medium (both).** The action row as a plain footer lifted the snack above every point it reached: mid-screen while the card was below the fold, and off the top of the screen with several cards or a scrolled feed. Now a listed row (D35). Unit tests pin the cases; the network e2e reads every position after the snack measures again, with the hit, on-screen and resting-place checks.
+- **Medium-low (Opus).** "Preparing..." could show before a send's record existed, then flip to "Queued...". The Send-page task card now names no stage without a running step or its record (D36).
+- **Low.**
+  - A failed snapshot was never retried while the port stayed up (Codex): retried on the fence (D36), tested reject-then-succeed and dropped on a scope switch.
+  - The switch block counted a stamped send with no network active (Opus): D43.
+  - The smoke spec's colour and amount checks could pass vacuously (Codex): they now assert the record identities, a real colour and the exact figure.
+  - Comments (Codex): two removed, the requeue handler's reworded.
+
+Rejected:
+- **`→ queued` allowed for every record kind** (Opus, low): the FSM is kind-agnostic, only the transfer executor takes the edge, and the dApp queue belongs to arc 1b (D37).
+- **`await requeued` in the claim is redundant** (Opus, low): the lock orders the writes, but the await makes a failed requeue fail the claim with its own error instead of an illegal `pending → pending`.
+- **The fallback card's skeleton** (Opus, low): that placeholder never knows its stage; the skeleton is C9's look for an unknown value (D36).
+- **`TxHashRow` not on the received page** (Opus, low): D34.
+- **A settled send's figure and the token order for unknown decimals** (Opus, low): UI calls outside the signed list, OA-8 and OA-9.
+- **A multi-card network e2e** (Codex): the climb past several rows and the off-screen fallback are unit-proven; a browser case would need several unfunded dApp sends held at once.
+
+**Round 2 (resumed Codex session): one medium.** An unmount while the mount awaited its task snapshot let the mount resume and begin a fresh journal run, whose failed read on the disconnected client then retried every 2 s. Accepted: the mount begins its run before its awaits, and a stale run reads nothing; a test defers the task snapshot, unmounts, and sees no journal read or retry. It found `clearListed` terminating, the plain footer and sheet rules intact, the scope-switch retry fenced, and the tightened e2e checks closing the reported gaps.
+
+**Round 3 (resumed Codex session, the last): one medium, caused by round 2's fix.** With the mount's journal run stale after a scope change during its awaits, a recent terminal record could land before its task, the task land second, and no reconciliation run: the card of a send that had already ended stayed up. Accepted: the task snapshot reconciles too, so whichever lands second clears the match. A test lands the terminal record first and fails without the line. The unmount fix otherwise held, and the first connect starts a replacement read rather than losing the snapshot. The loop reached its three-round cap with this fix unreviewed, so the orchestrator asked for a fourth round.
+
+**Round 4 (resumed Codex session, over the round-3 fix and the whole arc against `origin/dev`): one finding, low and high confidence.** Matching is by kind and token only, so a recent ended record of an EARLIER send of the same token could clear a later send's running task. The journal-side scan always could; round 3's task-side call added the order where the task lands second, and the event path could do the same to concurrent same-token sends. The later send's record card and Cancel stayed, but its task was gone for good: its running-step line, and its card before its record existed. Accepted: `isOwnTerminalRecord` refuses a record created before the task (a task's record is written after the task starts, and tasks live only in the worker's memory), and both reconciliation paths use it. Three component cases (journal second, task second, the event) and two unit cases fail without it. A narrating comment in `status-icon-fill.ts` was removed and the reconciliation comment tightened. Nothing else material in either diff: no ordering, slot, log, dApp-response or assertion regression, and no unsigned look.
+
+**Round 5 (resumed, over the round-4 fix): no material finding.** Codex found the chronology check sound for every supported lifecycle. A backward wall-clock step between the two stamps can only delay a clear until TaskService's own completion event; it strands nothing. **The loop converged here.**
+
 
 ## Seeds
 

@@ -195,7 +195,7 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 describe("pages/activity — the received row's token", () => {
 	const TEST_USDC = TESTNET_TOKENS.USDC
 	const TESTNET = { id: "net-1", chainId: CHAIN_IDS.TESTNET }
-	const TST = { id: 7, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, name: "Test", symbol: "TST", decimals: 18 }
+	const TST = { id: 7, chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true }
 	const USDC_QUOTE = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
 	const receipt = (over: Record<string, unknown> = {}) => ({
 		...record("r", 1000),
