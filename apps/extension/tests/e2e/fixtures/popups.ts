@@ -128,6 +128,18 @@ export async function waitForMainFrame(page: Page, timeout = 5_000): Promise<voi
 	throw new Error(`waitForMainFrame: page main frame not ready after ${timeout}ms`)
 }
 
+export type CreatedWindow = { id?: number; type?: string }
+
+/** Every window the browser creates from now on, as an extension page's listener sees it. */
+export async function recordCreatedWindows(control: Page): Promise<() => Promise<CreatedWindow[]>> {
+	await control.evaluate(() => {
+		const w = window as unknown as { __created: CreatedWindow[] }
+		w.__created = []
+		chrome.windows.onCreated.addListener((win) => w.__created.push({ id: win.id, type: win.type }))
+	})
+	return () => control.evaluate(() => (window as unknown as { __created: CreatedWindow[] }).__created)
+}
+
 /** Wait for a popup page to be fully closed (target removed). Use before
  *  opening a second popup of the same kind so waitForTarget doesn't match
  *  the still-closing first popup. */

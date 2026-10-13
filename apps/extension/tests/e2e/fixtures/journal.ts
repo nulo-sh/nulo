@@ -62,6 +62,45 @@ export async function readDappExecuteRecords(page: Page): Promise<DappExecuteVie
 	})
 }
 
+export type DappExecuteOutcome = { id: string; stage: string; failure?: string }
+
+/** Every `dapp_execute` row's stage and, once it failed, its failure kind (`error.kind`). */
+export async function readDappExecuteOutcomes(page: Page): Promise<DappExecuteOutcome[]> {
+	const outcomes = await page.evaluate(async () => {
+		type Row = { id?: string; kind?: string; progress?: { stage?: string }; error?: { kind?: string } }
+		const parse = (raw: unknown): Row | undefined => {
+			try {
+				return (typeof raw === "string" ? JSON.parse(raw) : raw) as Row
+			} catch {
+				return undefined
+			}
+		}
+		const all = (await chrome.storage.local.get(null)) as Record<string, unknown>
+		return Object.entries(all)
+			.filter(([key]) => key.startsWith("nulo:journal@"))
+			.map(([, raw]) => parse(raw))
+			.filter((row): row is Row => row?.kind === "dapp_execute")
+			.map((row) => ({ id: row.id ?? "", stage: row.progress?.stage ?? "?", failure: row.error?.kind }))
+	})
+	return outcomes
+}
+
+/** Polls the `dapp_execute` rows until `holds` accepts them; a timeout names the last read. */
+export async function waitForDappExecuteOutcomes(
+	page: Page,
+	what: string,
+	holds: (rows: DappExecuteOutcome[]) => boolean,
+	timeout = 30_000,
+): Promise<DappExecuteOutcome[]> {
+	const deadline = Date.now() + timeout
+	for (;;) {
+		const rows = await readDappExecuteOutcomes(page)
+		if (holds(rows)) return rows
+		if (Date.now() > deadline) throw new Error(`waitForDappExecuteOutcomes: ${what} within ${timeout}ms; rows: ${JSON.stringify(rows)}`)
+		await new Promise((resolve) => setTimeout(resolve, 200))
+	}
+}
+
 /** A send's record: its owner and how far it got. `enteredProveAt` is stamped just before a held
  *  proof gate starts its release timer, so it is a lower bound on that start. */
 export type SendRecordView = { id: string; kind: "transfer" | "dapp_execute"; profileId: string; stage: string; enteredProveAt?: number }

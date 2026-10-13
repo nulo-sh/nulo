@@ -5,7 +5,14 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 import { BROWSER, prepareKeys } from "../fixtures/browser"
 import { clickByTestId, openPopup, test, waitForHash } from "../fixtures/extension"
 import { openPlayground, selectPgBundle, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveVerify, rejectCapabilities, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
+import {
+	approveVerify,
+	type CreatedWindow,
+	recordCreatedWindows,
+	rejectCapabilities,
+	waitForPopup,
+	waitForPopupClosed,
+} from "../fixtures/popups"
 import { shotSend } from "../fixtures/send-page"
 import { tokenColor } from "../helpers/pointer-probes"
 
@@ -19,8 +26,6 @@ import { tokenColor } from "../helpers/pointer-probes"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
-type Created = { id?: number; type?: string }
-
 const ALLOW = '[data-testid="discover-allow-btn"]'
 const GRID = '[data-testid="verify-emoji-grid"]'
 const STEP_BAR = '[data-testid="connect-step-bar"]'
@@ -33,16 +38,6 @@ const ANNOUNCEMENT =
 	"Connection check. Check that the app shows these same emojis in the same order. If they differ, the connection may not be safe. Choose They don't match."
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-/** Every window the browser creates from now on, as an extension page's listener sees it. */
-async function recordCreatedWindows(control: Page): Promise<() => Promise<Created[]>> {
-	await control.evaluate(() => {
-		const w = window as unknown as { __created: Created[] }
-		w.__created = []
-		chrome.windows.onCreated.addListener((win) => w.__created.push({ id: win.id, type: win.type }))
-	})
-	return () => control.evaluate(() => (window as unknown as { __created: Created[] }).__created)
-}
 
 /** Each Enter keydown's `repeat`, kept in `sessionStorage` so a reload between the pages loses none. */
 async function recordEnterRepeats(page: Page): Promise<void> {
@@ -88,7 +83,7 @@ async function showsCheck(page: Page): Promise<boolean> {
 }
 
 /** Hold Enter at the focused Allow until the page shows the check, and a few repeats into it. */
-async function holdEnterThroughAllow(page: Page, created: () => Promise<Created[]>): Promise<void> {
+async function holdEnterThroughAllow(page: Page, created: () => Promise<CreatedWindow[]>): Promise<void> {
 	const deadline = Date.now() + 30_000
 	try {
 		await page.keyboard.down("Enter")

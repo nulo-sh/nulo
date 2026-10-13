@@ -12,9 +12,11 @@
  * foreign artifact — the dispatch guard would reject it anyway; killing it
  * here just delivers the disconnect signal sooner.
  *
- * LOCK (profile → undefined) deliberately tears nothing down: the pinned
- * production semantics are per-call "Wallet is locked" errors over surviving
- * channels, and unlock-to-the-SAME-profile must find them intact. A key
+ * LOCK (profile → undefined) deliberately tears no confirmed channel down: the
+ * pinned production semantics are per-call "Wallet is locked" errors over
+ * surviving channels, and unlock-to-the-SAME-profile must find them intact. (A
+ * channel whose emoji check is unanswered ends at a lock, in
+ * `verification-hold.ts`.) A key
  * exchange completing AFTER this listener ran is handled at establishment
  * (the approver-bound marker fail-closes a profile skew), not here.
  *

@@ -56,6 +56,9 @@ function consentAfter(
 	return consent
 }
 
+/** A key exchange's verification hash: HMAC-SHA-256, lower-case hex. */
+const VERIFICATION_HASH = /^[0-9a-f]{64}$/
+
 function readRefusalTarget(target: VerificationRefusalTarget): VerificationRefusalTarget {
 	const { origin, chainId, profileId } = (target ?? {}) as Partial<Record<keyof VerificationRefusalTarget, unknown>>
 	if (typeof profileId !== "string" || profileId === "") {
@@ -75,6 +78,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 		"updateDappSession",
 		"deleteDappSession",
 		"refuseVerification",
+		"confirmVerification",
 		"setVerificationHash",
 		"setTrustedVerification",
 		"setAuthorizationsWithoutAsking",
@@ -91,6 +95,7 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	public readonly onDappSessionUpdated = new EventHandler<DappSession>()
 	public readonly onDappSessionDeleted = new EventHandler<DappSession>()
 	public readonly onVerificationRefused = new EventHandler<{ origin: string; chainId: string; profileId: string }>()
+	public readonly onVerificationConfirmed = new EventHandler<{ verificationHash: string }>()
 
 	private readonly storage: DappSessionMacStorage
 	private readonly lock = new Lock()
@@ -444,6 +449,19 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 				return "unavailable"
 			}
 		})
+	}
+
+	/**
+	 * The emoji check's They match, reported with the hash the window showed. The service worker's own
+	 * listeners run before this returns, so the session it names is released by the time the window
+	 * closes. Only extension pages reach a service port, and the hash binds the report to the one key
+	 * exchange the person compared.
+	 */
+	public async confirmVerification(verificationHash: string): Promise<void> {
+		if (typeof verificationHash !== "string" || !VERIFICATION_HASH.test(verificationHash)) {
+			throw new ValidationError("confirmVerification needs the check's verification hash")
+		}
+		this.emit("onVerificationConfirmed", { verificationHash })
 	}
 
 	public async isExpired(session: DappSession): Promise<boolean> {

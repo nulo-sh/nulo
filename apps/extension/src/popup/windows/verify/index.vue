@@ -50,6 +50,8 @@ const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
 const alwaysTrust = ref(false)
+/** The key exchange's hash, as the service worker wrote it into the URL; an open without one reports nothing. */
+const checkHash = ref<string>()
 /** One answer per window: either control locks both, released only when that answer fails. */
 const isBusy = ref(false)
 const refusalError = ref<"unremoved" | "failed">()
@@ -80,6 +82,9 @@ const handleConfirm = async () => {
 		if (alwaysTrust.value && session.value) {
 			await dappSessionService.setTrustedVerification(session.value.id, true)
 		}
+		// The app's calls wait for this report. Only the URL's hash names this window's key exchange: the
+		// row's may belong to another session of the same app.
+		if (checkHash.value) await dappSessionService.confirmVerification(checkHash.value)
 	} catch (err) {
 		isBusy.value = false
 		throw err
@@ -164,6 +169,7 @@ onMounted(async () => {
 	// hash, so the trust-decision emojis MUST derive from THIS session's own hash, not
 	// the row's. The row hash is only a legacy fallback for opens without the param.
 	const snapshotHash = router.currentRoute.value.query.verificationHash as string | undefined
+	checkHash.value = snapshotHash
 	isReconnect.value = router.currentRoute.value.query.isReconnect === "true"
 
 	if (!sessionId) {
