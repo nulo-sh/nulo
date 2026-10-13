@@ -375,7 +375,7 @@ const SENDER_ROWS: SenderRow[] = [
 	["false", [{ from: false }], INVALID],
 	["an object", [{ from: {} }], INVALID],
 	["a session account", [{ from: ACC2 }], ACC2],
-	["a session account in upper case", [{ from: ACC2_UP }], notAuthorized],
+	["a session account in upper case", [{ from: ACC2_UP }], INVALID],
 	["a wallet account outside the session", [{ from: STRANGER }], notAuthorized],
 	["an Fr instance rather than its wire string", [{ from: new Fr(0xabcdefn) }], INVALID],
 	["an object String() cannot convert", [{ from: { toString: "x" } }], INVALID],

@@ -1,5 +1,7 @@
 import { AppCapabilitiesSchema, CapabilitySchema, MessageHashOrIntentSchema, WalletSchema } from "@aztec-labs/aztec.js/wallet"
 import { getSchemaParameters, parseWithOptionals } from "@aztec-labs/foundation/schemas"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { ContractInstanceWithAddressSchema } from "@aztec-labs/stdlib/contract"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { applyNuloSchemaPatch } from "@nulo/wallet-sdk-schema-patch/apply"
 import { isRecord } from "@nulo/wallet-core/utils"
@@ -31,24 +33,53 @@ const CALL_INTENT = MessageHashOrIntentSchema.options[1]
 /**
  * Refuses an argument list the wallet API's schema refuses, after cutting it to the schema's own
  * arity (extra trailing args stay ignored). A pass/fail predicate: the parsed value is discarded,
- * so every later layer reads the exact wire args. A method with no schema entry is refused, and
- * every refusal is one fixed error with no cause.
+ * so every later layer reads the exact wire args, which is why an address is admitted only in the
+ * one spelling the parse writes for it. A method with no schema entry is refused, and every
+ * refusal is one fixed error with no cause.
  */
 export async function assertWalletSchemaArgs(method: MethodName, args: readonly unknown[]): Promise<void> {
 	if (NOT_PARSED[method] !== undefined) return
 	try {
 		const parameters = getSchemaParameters(SCHEMA[method])
-		const parsed = args.slice(0, parameters.def.items.length)
-		assertNoOwnToString(parsed.filter((_, index) => index !== ARTIFACT_ARG[method]))
+		const wire = args.slice(0, parameters.def.items.length)
+		const withoutArtifact = (values: readonly unknown[]) => values.filter((_, index) => index !== ARTIFACT_ARG[method])
+		assertNoOwnToString(withoutArtifact(wire))
 		if (method === "requestCapabilities") {
-			await parseCapabilityRequest(parsed[0])
+			await parseCapabilityRequest(wire[0])
 			return
 		}
-		await parseWithOptionals(parsed, parameters)
-		if (method === "createAuthWit") await parseCallIntentKeys(parsed[1])
+		const parsed = await parseWithOptionals(wire, parameters)
+		assertCanonicalAddresses(withoutArtifact(parsed), withoutArtifact(wire))
+		if (method === "createAuthWit") assertCanonicalAddresses(await parseCallIntentKeys(wire[1]), wire[1])
+		// The method's schema takes a preimage and strips `address`, which the scope check and the
+		// executor read.
+		if (method === "registerContract") assertCanonicalAddresses(await ContractInstanceWithAddressSchema.parseAsync(wire[0]), wire[0])
 	} catch {
 		throw InvalidWalletArgumentsError.forMethod(method)
 	}
+}
+
+/** Refuses an address the parse produced unless its wire value is exactly the parse's `toString()`.
+ *  The schema also admits base64, a Buffer-shaped object, unprefixed and upper-case hex, and readers
+ *  compare and convert the raw wire value, so any other spelling gets a second answer. An address
+ *  with no wire value under the same key is refused too; a parsed object whose wire value is a
+ *  primitive is a packed encoding (a capsule, a field) and is not entered. Iterative, like
+ *  `assertNoOwnToString`. */
+function assertCanonicalAddresses(parsed: unknown, wire: unknown): void {
+	const pending: Array<[unknown, unknown]> = [[parsed, wire]]
+	while (pending.length > 0) {
+		const [value, onWire] = pending.pop() as [unknown, unknown]
+		if (value instanceof AztecAddress) {
+			if (onWire !== value.toString()) throw new Error("an address not in its canonical spelling")
+			continue
+		}
+		if (!isTraversable(value) || (typeof onWire !== "object" && onWire !== undefined)) continue
+		for (const [key, child] of Object.entries(value)) pending.push([child, (onWire as Record<string, unknown> | null)?.[key]])
+	}
+}
+
+function isTraversable(value: unknown): value is object {
+	return typeof value === "object" && value !== null && !ArrayBuffer.isView(value) && !(value instanceof Map) && !(value instanceof Set)
 }
 
 /** Wire args come from `JSON.parse`, so an own `toString` is data, never a function, and makes
@@ -83,6 +114,7 @@ async function parseCapabilityRequest(manifest: unknown): Promise<void> {
 /** The intent union takes its inner-hash branch first and strips other keys, while the scope check,
  *  the window and the signer all read the call branch whenever `caller` or `call` is present, so
  *  such an intent must parse as a call intent too. */
-async function parseCallIntentKeys(intent: unknown): Promise<void> {
-	if (isRecord(intent) && ("caller" in intent || "call" in intent)) await CALL_INTENT.parseAsync(intent)
+async function parseCallIntentKeys(intent: unknown): Promise<unknown> {
+	if (isRecord(intent) && ("caller" in intent || "call" in intent)) return CALL_INTENT.parseAsync(intent)
+	return undefined
 }
