@@ -62,8 +62,11 @@
   `STATUS.md` conflicted, both arcs' content kept; no ledger id collided (arc 3's were D-orch-9 to D-orch-13
   already). #333 left `token/service.ts` alone; its pasted-address row adds through the same popup path, so the
   class is recorded there too.
-- Gates on the merged tree: lint, typecheck:all, check:plans, focused vitest (1235), `test` (11400), `test:all`
-  pass; network Chrome retry 0 via `agent.sh`: `token-add-auto-trust.test.ts` 1/1, `holdings.test.ts` 2/2; smoke
-  Chrome retry 0 on the armed build: 50 files, 214 tests, 0 failed, 4 files skipped by design.
+- `dev` moved again (#335, #337, #342) before the push; merged 517aedf (e2c80c6): only `lessons.md` conflicted,
+  with dapp-ingress-grants' close-out, both sides kept (8190 B). None of the three touches the pin's code.
+- Gates on e2c80c6: lint, typecheck:all, check:plans, focused vitest (1237), `test` (11444), `test:all` pass;
+  network Chrome retry 0 via `agent.sh`: `token-add-auto-trust.test.ts` 1/1, `holdings.test.ts` 2/2; smoke Chrome
+  retry 0 on the armed build: 50 files, 215 tests, 0 failed, 4 files skipped by design. The same gates had passed
+  on 8a54313.
 - Close-out in #334 (D-orch-10): #338 and #339 filed; `lessons.md` kept under budget by folding the class lesson
   into the MAC entry and retiring the `tag_name` entry, which a release test now pins.
