@@ -680,7 +680,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 			const pxe = this.pxeService.getPXE(networkInfoFrom(network))
 
 			const address = AztecAddress.fromStringUnsafe(contract)
-			// The one spelling every stored row and lookup uses: the lower-case form a call's address takes.
+			// Every add stores the lower-case spelling a dApp call records, so exact comparisons match.
 			const canonical = address.toString()
 			const instance = await pxe.getContractInstance(address)
 			if (!instance) {

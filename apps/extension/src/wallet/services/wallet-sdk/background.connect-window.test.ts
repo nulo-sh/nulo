@@ -1227,6 +1227,22 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(refusedIds()).toEqual(["over", "over-again"])
 		})
 
+		test("decrypted payloads that are not objects take no slot: after 32 of them a call still runs", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			for (let i = 0; i < MAX_PENDING_PER_SESSION; i++) {
+				// Upstream catches whatever the callback throws, so a throw here is swallowed there too.
+				try {
+					captured?.onWalletMessage(sessions.get("r1"), null)
+				} catch {}
+			}
+			h.send("r1", "getChainInfo", "valid")
+			await settle()
+			expect(refusedIds()).toEqual([])
+			expect(dispatched()).toEqual(["r1:getChainInfo"])
+		})
+
 		test("a send past its FIFO release keeps its slot until it is answered", async () => {
 			const h = boot()
 			remember(h, false)

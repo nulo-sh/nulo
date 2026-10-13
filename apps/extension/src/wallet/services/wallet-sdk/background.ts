@@ -525,6 +525,16 @@ function buildHandlerCallbacks(
 
 function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: SdkDeps, state: SdkHandlerState): void {
 	const key = session.sessionId
+	// Upstream passes whatever the ciphertext's JSON decoded to. A non-object has no id to answer, and
+	// reading one past the admission below would throw before its slot could be released.
+	if (typeof message !== "object" || message === null) {
+		deps.logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Dropping a decrypted message that is not an object, session ${describeExternalId(key)}`,
+		)
+		return
+	}
 	const live = bindLiveSession(state.late.handler!, session)
 	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
 	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
