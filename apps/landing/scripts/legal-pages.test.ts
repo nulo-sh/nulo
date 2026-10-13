@@ -17,8 +17,9 @@ function inBun<F extends "renderLegalPage" | "planLegalPages">(
 	fn: F,
 	...args: Parameters<(typeof LegalPages)[F]>
 ): ReturnType<(typeof LegalPages)[F]> {
-	const run = spawnSync("bun", ["-e", BRIDGE, MODULE], { input: JSON.stringify({ fn, args }), encoding: "utf8" })
-	if (run.status !== 0) throw new Error(`bun exited ${run.status}: ${run.stderr}`)
+	// A sync spawn blocks vitest's own test timeout, so the child gets one.
+	const run = spawnSync("bun", ["-e", BRIDGE, MODULE], { input: JSON.stringify({ fn, args }), encoding: "utf8", timeout: 30_000 })
+	if (run.status !== 0) throw new Error(`bun exited ${run.status}: ${run.error ?? run.stderr}`)
 	const reply = JSON.parse(run.stdout) as { value: ReturnType<(typeof LegalPages)[F]> } | { error: string }
 	if ("error" in reply) throw new Error(reply.error)
 	return reply.value

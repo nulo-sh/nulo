@@ -8,7 +8,8 @@ import { afterAll, describe, expect, test } from "vitest"
 import { withReconcileLock } from "../../tests/e2e/lockfile"
 import { ownIdentity } from "../../tests/e2e/owned-processes"
 
-// Child processes import this TypeScript as it is on disk, which Bun runs and Node's type stripping refuses.
+// Child processes import this TypeScript as it is on disk, which Bun runs and Node's loader refuses (an
+// extensionless relative import).
 const MODULE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tests/e2e/lockfile.ts")
 const DEAD_HOLDER = "2000000000:1 0123456789abcdef"
 const DIR = mkdtempSync(path.join(tmpdir(), "nulo-reconcile-lock-test-"))

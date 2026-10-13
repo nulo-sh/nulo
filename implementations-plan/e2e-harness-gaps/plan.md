@@ -329,7 +329,7 @@ Validation gate: Fast; Network (file) `tests/e2e/network/tx-transfer-row.test.ts
 
 **Phase 4a.1 (#279).** The fixes and the list as § Arc 4a states, one commit each, then the gate on a clean tree.
 
-Validation gate: Fast; `bun run test:ci-gating`; `bun run test:all`; the #279 suites through `scripts/ci-cd/test-soak/cli.ts`, 3 runs per engine (`soak --runtime node` and `--runtime script` with the files as filters, then `compare`) for `apps/extension` and `apps/landing`. Pass: all exit 0, both compares `COMPARE OK`, the extension's report names the three Bun-only files.
+Validation gate: Fast; `bun run test:ci-gating`; `bun run test:all`; the #279 suites through `scripts/ci-cd/test-soak/cli.ts`, 3 runs per engine (`soak --runtime node` and `--runtime script` with the files as filters, then `compare`) for `apps/extension` and `apps/landing`. Pass: all exit 0, both compares `COMPARE OK`, the extension's report names each of the three Bun-only files with a nonzero test count (the filters name them, so a file the candidate never ran fails the compare).
 
 ### Arc 4: ESM configs (#186)
 
@@ -703,6 +703,31 @@ Verdict: **one low finding**, high confidence otherwise. Checked the four fixes,
 ### Arc 3 implementation, round 3: Codex (same session, resumed), 2026-10-11
 
 Verdict: **clean**, high confidence: R3-1's fix confirmed, nothing material left in the arc diff. The loop converged.
+
+### Arc 4a design consult: Codex (gpt-6.1-sol, high) and Opus (Plan), 2026-10-13
+
+Both **approve with changes**; folded into D26 before the code was written: the narrow comparator change is necessary; the set-aside tests are held to passing every run; a reference that ran a listed file is refused by name; files match exactly on the id's file part; the exact list is pinned; membership is computed from the compared id sets; CLAUDE.md names the exception; `soak()` is refactored under budget. Split on granularity, settled for whole files (D26).
+
+### Arc 4a implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-13
+
+Verdict: **findings**, high confidence; no assertion removed or weakened, the landing bridge keeps every asserted message and refuses a nonzero exit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4a-C1 | Medium. Any filter switched the never-ran check off, even one naming the listed file, so a filtered gate could pass with that file absent | Accepted: the check applies when the candidate was asked to run the file, the unfiltered `test` script or a forwarded filter vitest's case-insensitive substring match selects it by. Test: a filter naming it fails, an unrelated filter does not |
+| 4a-C2 | Medium. An unfiltered `--script test:components` (scoped to `src/components`) would fail on the three listed files outside its scope | Accepted: only the `test` script stands for the whole suite. Test case |
+| 4a-C3 | Low. The comparator's doc comment narrates the order and reads historically; a test helper's comment restates it | Accepted: both cut |
+
+### Arc 4a implementation: Opus review (same family, read-only), 2026-10-13
+
+Verdict: **approve with small fixes**. Sound: no test body changed beyond its engine path; a broken bridge reds the file through its positive cases; the hoisted imports load through vitest's runner; the comparator fails closed on every path tried, including a list that changes between soak and compare; complexity counts match CLAUDE.md.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4a-O1 | Low. `reconcile-lock.test.ts`'s comment blames type stripping; `lockfile.ts` fails on Node's loader (an extensionless import) | Accepted: each file's comment names its own cause |
+| 4a-O2 | Low. The bridge's `spawnSync` has no timeout, and a blocking spawn holds off vitest's test timeout | Accepted: a 30 s bound, and the spawn error in the message |
+| 4a-O3 | Nit. JSON turns an `undefined` argument into `null`, which would bypass a default parameter | No change: no call passes one |
+| 4a-O4 | Nit. Phase 4a.1's pass criterion ("names the three files") cannot fail | Accepted: a nonzero count per file, and the filters name the files |
 
 ## Post-implementation
 

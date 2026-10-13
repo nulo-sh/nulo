@@ -18,7 +18,8 @@ const ROOT = mkdtempSync(path.join(tmpdir(), "nulo-port-registry-test-"))
 // Belt and braces: a case that forgot its `file` must never touch the host's real registry.
 process.env.NULO_E2E_PORT_REGISTRY = path.join(ROOT, "default-ports.md")
 
-// Child processes import this TypeScript as it is on disk, which Bun runs and Node's type stripping refuses.
+// Child processes import this TypeScript as it is on disk, which Bun runs and Node's type stripping refuses
+// (a parameter property).
 const MODULE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tests/e2e/port-registry.ts")
 const HEADER = [
 	"# Ports registry — who is RUNNING what, where (atomic-locked)",
