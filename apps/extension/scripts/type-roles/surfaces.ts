@@ -33,7 +33,8 @@ import {
  * that host it, without their Header.
  *
  * `arcs` are those among 3 and 4 whose `ARC_GLOBS` match a file in `renders`, or `[2]`. A shell file
- * counts only for the surface it is the source of: arc 3 edits `popup/app.vue`'s boot retry alone.
+ * counts only for the surface it is the source of: a later glob takes `popup/app.vue` for its boot
+ * retry alone.
  *
  * Blind spots: a computed `<component :is>`, a popup key built at run time, and a component reached
  * only through another entry (`src/setup/`). The review of the output covers them.
@@ -66,7 +67,7 @@ const SHELLS = {
 type ShellName = keyof typeof SHELLS
 const SHELL_FILES = new Set<string>(Object.values(SHELLS).flat())
 
-/** Arc 2's shared modules: they sit under arc 3 and 4 globs, but arc 2 migrates them whole. */
+/** Shared modules: each migrates whole with the primitives, though its path matches a later glob. */
 const SHARED_MODULES = [
 	`${SRC}/popup/pages/tab-hero.module.css`,
 	`${SRC}/popup/components/popups/popup-shared.module.css`,
