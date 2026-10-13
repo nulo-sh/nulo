@@ -10,3 +10,4 @@
 - 2026-10-13 — phase 1 gate PASS (lint, typecheck:all, wallet-bridge 706, refusal-log 28; new cases red on base).
 - 2026-10-13 — phase 2 gate PASS (lint, typecheck:all, wallet-bridge 750, schema-patch 15; 27 refused rows red on base, controls green).
 - 2026-10-13 — phase 3 gate PASS (lint, typecheck:all, wallet-sdk 380; 7 refused cases red on base; 44-artifact pin passes, largest x2 within budget).
+- 2026-10-13 — arc 1 gate: test:all PASS, test:ci-gating PASS; Codex r1 reject (__proto__ bypass, fixed 3e3eb839), Opus approve with fixes, Codex r2 approve; Chrome e2e running (proverless).
