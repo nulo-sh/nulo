@@ -1,7 +1,7 @@
 ---
 plan: home-onboarding-chrome
 tier: mid
-status: planned; awaiting the orchestrator's approval (final Codex pass's findings applied)
+status: approved by the orchestrator (D-orch-2 to D-orch-6); arc 1 implemented, in its Codex loop; arc 2 not started
 issues: "#130, #132, #133, #135, #149 (arc 1); #156, #170 (arc 2); #181 (no arc, struck); #154, #160 (no arc, owner Mac checks); #242 (no arc, OWNER-ASKS); #244 (no arc, trigger not met)"
 driver: claude-code
 claude_model: opus
@@ -240,7 +240,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 
 ### Arc 1: History filter, header, theme, route, windows (#130, #132, #133, #135, #149)
 
-#### Phase 1.1: Account State under Developer (#135)
+#### Phase 1.1: Account State under Developer (#135) ✓
 1. Move the directory with `git mv`. Rewrite every link and back link to the developer path.
 2. Add the five redirect records to `legacy-routes.ts`.
 3. Rewrite `legacy-routes.test.ts`: the eight-record pin; each old path lands on its new path when unlocked and on the lock screen when locked.
@@ -251,7 +251,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 - Pass criteria: every command exits 0. `legacy-routes.test.ts` fails with the moved pages and the base `legacy-routes.ts` (the old paths reach no page).
 - Layers: lint, typecheck, unit, smoke e2e on both browsers. (The network files run at the arc gate.)
 
-#### Phase 1.2: one own window per flow on Firefox (#149)
+#### Phase 1.2: one own window per flow on Firefox (#149) ✓
 1. Add the flow keys, the popup-only self-registration in `captureOwnWindow`, the in-flight promise and focus path in `moveToOwnWindow`, the owner-checked key removal in `releaseOwnWindow`, and `followOwnRoute` with its `afterEach` in `popup/index.ts`.
 2. Unit tests in `own-window.test.ts`:
    - A live `popup` window under the flow's key is focused with the window manager's options, and no window is created (never-happens: `create` called). A closed window (`get` rejects) creates (control).
@@ -269,7 +269,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 - Pass criteria: exit 0; the new e2e case fails on the base `own-window.ts` (two windows).
 - Layers: lint, typecheck, unit, smoke e2e on Firefox.
 
-#### Phase 1.3: onboarding honours the stored theme (#133)
+#### Phase 1.3: onboarding honours the stored theme (#133) ✓
 1. Add `applyThemeChoice` to `utils/general.ts`; the popup's theme handler calls it.
 2. Rewrite onboarding's theme bootstrap: `useConfigRead`, no hint write before a read, teardown in order. Rewrite `presto.vue:32`'s comment.
 3. Unit tests:
@@ -282,7 +282,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 - Pass criteria: exit 0; the new e2e case fails on the base `onboarding/app.vue`.
 - Layers: lint, typecheck, unit, smoke e2e on both browsers.
 
-#### Phase 1.4: the header and the filtered History (#132, #130)
+#### Phase 1.4: the header and the filtered History (#132, #130) ✓
 1. Delete the two declarations from `.section_header`.
 2. Add `txOnToken` and `rowOnToken` with their tests: journal and incoming by id; a tx by contract; another token's rows never match (never-happens) while the token's own do (control). Switch `RecentActivityView.vue:79` to `txOnToken`; its existing token-page tests stay green.
 3. Add `loaded` to `useScopedTokens` with tests: false until the first read settles; true after a landed read and after a failed read; false again on a scope change; a superseded read never sets it.
@@ -376,7 +376,21 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 | D11 | #170: find the `you` cell's cause first. A harness cause (the method picked, or a read before the protocol addresses are derived) is fixed in the harness, and #170 ships. A wallet fault → an issue for the fee lane; a truthful `unknown` → OA-6. Under either, #170 ships nothing and stays open with a comment | No loosened assertion; the scroll cannot be proven while the earlier expectation is red (both audits, r1) | Move the expectation to `unknown`; ship the scroll untested |
 | D12 | #244 gets no arc | Its trigger is not met: the new controls are existing primitives that carry the ring | Build the ring token and announcer now; add a ring to `Banner`'s action (a visible change on every Banner action) |
 | D13 | Two arcs as the lane map groups them, one PR each against `dev`, no stack | D-orch-1; arc 1's dependencies are met, arc 2 waits on R5 | One PR; a split of arc 1 |
+| D-orch-2 | Arc 1 is approved as planned. OA-1, OA-2 and OA-8 ship exactly their "what ships now" lines; OA-1 to OA-6 and OA-8 go to a later owner page, OA-7 is P9-05 | The orchestrator's call; a detail no ask covers that a person would see goes to OWNER-ASKS.md with a "what ships now" line, and that line is built | — |
+| D-orch-3 | R5 is released in writing for arc 2, under D14: arc 2 may edit `manifest.firefox.config.ts` and `manifest.test.ts`'s Firefox block (`:133` onward) only; a needed shared-manifest edit stops arc 2 and is reported. Arc 2 is spawned after arc 1 merges, from `dev` | The orchestrator's call | — |
+| D-orch-4 | The commit trailer names the model that ran (Claude Opus 5.5) | The orchestrator's call: the planner's trailer was correct | — |
+| D-orch-5 | Shots: every surface the arc changes, both themes, both browsers, captured with `NULO_E2E_SHOT_DIR`, committed under `screenshots/`, linked raw from the PR body, and copied to the orchestrator's shots directory | The orchestrator's call (F16) | — |
+| D-orch-6 | No nightly, release or publish dispatch; no `--admin`; no merge; every e2e at retry 0 through `agent.sh`'s ports, one `e2e:agent` run at a time; the PR opens as a normal PR only after the Codex loop converges | The orchestrator's call | — |
+| D15 | `followOwnRoute` is the router's `afterEach` hook itself, not a path function called from one | The failed-navigation case then runs against a real memory router with a cancelling guard, without mounting `popup/index.ts` | A wrapper in `popup/index.ts` (untestable without mounting the app) |
+| D16 | The chip keeps the owner-viewed prototype's look (`shot/130-A`) with the plan's `RowAction` and fixed name; two testids (`activity-token-filter-symbol`, `activity-empty`) added for the e2e | Closest to what the owner saw; e2e selects only by testid, and the glyph's ligature text sits in the chip's text | A hand-built 20 px clear button (no ring); selecting the label by DOM shape |
 | D14 | Arc 2 never edits `manifest.config.ts` | It can then land before or after #101 without a conflict: chain-endpoints edits `manifest.config.ts:52-60` and `manifest.test.ts:122-124`; arc 2 edits at most `manifest.firefox.config.ts` and `manifest.test.ts`'s Firefox block (`:133` onward) | An edit after `host_permissions` in the shared file |
+
+## Deviations (arc 1)
+
+- Phase 1.3's e2e: the plan named a fresh install; a fresh install cannot hold a stored theme without a raw `nulo:config` write and a worker restart, so the case stores `dark` through Settings → Display on a registered profile, writes a `light` hint, flips the onboarding flag and opens onboarding (an unlocked profile keeps it open on `learn`). The read and the paint are the same code.
+- Phase 1.2's e2e: after the second `toOwnWindow`, it asserts the window left on profile creation is not focused (the plan's words), not that the new one is; headless Firefox returns focus to the main window when `armPanelDeath`'s guard disarms.
+- Phase 1.2's red-on-base: the committed case fails on the base at its registration wait; a proof variant waiting for the first window's boot instead shows the base's duplicate window (logged in `lessons/phase-1.md`).
+- Phase 1.4: D16's two testids.
 
 ## Audit verdicts
 
