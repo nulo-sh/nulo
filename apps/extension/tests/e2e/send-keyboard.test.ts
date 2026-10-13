@@ -127,6 +127,12 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	expect(await readSuggestionList(page)).toEqual({ role: "listbox", rows: 4, scrolls: true, controlled: true, active: null })
 	await page.keyboard.press("ArrowDown")
 	expect((await readSuggestionList(page)).active).toEqual({ row: 0, role: "option", selected: "true", shown: true })
+	// The list fades in, and a shot taken mid-fade shows the token card through it.
+	await page.waitForFunction(
+		(s: string) => document.querySelector(s)?.getAnimations().length === 0,
+		{ timeout: 5_000 },
+		sel("send-destination-suggestions"),
+	)
 	await shotSend(page, "send-suggestion-highlighted", "send-destination-field")
 
 	expect(await pressEscape(page)).toBe(true)

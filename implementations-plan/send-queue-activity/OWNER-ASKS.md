@@ -183,7 +183,7 @@ Before, the same line wrapped onto three lines and pushed Max 28 px past the car
 
 **What ships now.** Both are buttons with the accent focus ring, as signed. No flow shows them. Whenever an app sets the fee payment, the confirm window shows "Fee payment method set by <app>" in place of the fee card, and the wallet refuses an app-paid pick when the request is approved. Nobody sees the change.
 
-If the path were shown: pressing either button swaps it for the other control (the method picker or the banner), and focus falls to the page, so the next Tab starts from the top.
+If the path were shown: pressing either button swaps it for the other control (the method picker or the banner), and focus falls to the page. The next Tab goes to the method picker on Firefox, but past it to the priority row on Chrome. Shots, from a build that shows the card for an app-paid send: `screenshots/5-fee-*`.
 
 **Options.**
 - **A. As built.** The path stays unreachable and is now keyboard-ready.

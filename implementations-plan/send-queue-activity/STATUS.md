@@ -35,3 +35,5 @@
 - 2026-10-13 — arc 5 started on `send-queue-activity-keyboard`, stacked on arc 2 (5523126b).
 - 2026-10-13 — phase 5.1 gates: pass at 692dec8f (lint, typecheck:all, test 11717, test:all).
 - 2026-10-13 — phase 5.2 gates: pass at 7d89fffc (unit; smoke at retry 0 `send-keyboard.test.ts` Chrome 5/5, Firefox 5/5). OA-20 filed: item 1's fee links are on a path no flow shows.
+- 2026-10-13 — arc 5 review: Codex r1 approve (two lows), Opus approve (two fixes, five small ones, OA-21), Codex r2 approve (two e2e tightenings). Loop converged at 03b6e101.
+- 2026-10-13 — phase 5.3 gates at b05c281c (origin/dev merged): smoke at retry 0 Chrome 219 passed, 11 skipped; Firefox 217 passed, 13 skipped; network Chrome `tx-sendTx-feePayer` 1/1; `send-keyboard` 5/5 on both browsers after the shot wait. 28 screenshots committed.
