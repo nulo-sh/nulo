@@ -32,3 +32,7 @@ Codex (gpt-6.1-sol, high, session `01a13373-67ab-76a0-9b2a-ba17bf94bc67`) and on
 
 - **The task-before-record gap (Opus).** `TransferExecutor.execute` starts its task, awaits `sequence()`, then creates the record. Any "until the snapshot lands" guard is too early, since a snapshot can land with the record not yet written. Only a running step or the record itself names the stage.
 - **A failed journal snapshot was never retried while the port stayed up.** The catch's comment said the next event would retry; no event handler snapshots.
+
+## CI on #344 (2026-10-13)
+
+- **Chrome network shard 4/5, attempt 1: a setup timeout.** `snack-placement.test.ts`'s first case timed out in `fillSendForm`, waiting 60 s for the Send amount input to enable, before any snack was drawn. The same drained-balance setup passed twice later in that run (the record-failure case and the new Home case), in every local run on both browsers, and on CI's Firefox lane. No file on the Send page's balance path changed. Re-run as a flake: attempt 2 passed the shard (21m46s), and every check on the PR went green.
