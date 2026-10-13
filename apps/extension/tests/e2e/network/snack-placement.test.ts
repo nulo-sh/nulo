@@ -366,6 +366,7 @@ test.skipIf(!hasConfig)(
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		// `openPopup` restarts the arrays, so what came since the last one is asserted before the drain
 		// opens one: here the fixture's setup popup and its connect and grant windows.
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
 		await sendFromDrainedBalance(page)
@@ -380,6 +381,7 @@ test.skipIf(!hasConfig)(
 		expect(grown.footerTop - grown.snackBottom).toBeGreaterThanOrEqual(11.5)
 		expect(grown.footerTop - grown.snackBottom).toBeLessThanOrEqual(12.5)
 
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 	},
 )
@@ -388,6 +390,7 @@ test.skipIf(!hasConfig)(
 	"Send: a send that fails once its record is written offers Details, which opens that record",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
 		await sendFromDrainedBalance(page)
@@ -411,6 +414,7 @@ test.skipIf(!hasConfig)(
 		await page.waitForFunction((s: string) => document.querySelector(s) === null, { timeout: 5_000, polling: 50 }, SNACK)
 		expect(await page.$(SNACK)).toBeNull()
 
+		expect(dappConnectedExtensionWithTransactionCap.consoleErrors).toEqual([])
 		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 	},
 )
@@ -462,6 +466,7 @@ test.skipIf(!hasConfig)(
 
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )
@@ -471,6 +476,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 480_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		const ctx = dappConnectedExtensionWithTransactionCap
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(ctx)
 		await sendFromDrainedBalance(page)
@@ -508,6 +514,7 @@ test.skipIf(!hasConfig)(
 
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )

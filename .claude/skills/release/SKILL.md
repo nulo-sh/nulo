@@ -7,6 +7,8 @@ description: The Nulo release runbook. Promote dev → main, merge the Release P
 
 Two flows: **stable** (from `main`, tagged `vX.Y.Z`) and **prerelease** (from `dev`, tagged `vX.Y.Z-rc.N`). Both share the same v4 abort bug + manual unstick pattern.
 
+Human `chore: bump extension to X.Y.Z` commits remain **deprecated**. Config files: `.github/release-please-config.json` + `.release-please-manifest.json` (stable), `.github/release-please-prerelease-config.json` + `.release-please-prerelease-manifest.json` (prerelease), `CHANGELOG.md`. Workflows: `.github/workflows/release.yml` (stable + publish chain), `.github/workflows/release-prerelease.yml` (rc PR opener).
+
 > **This runbook is the source of truth for the release process. Update it when the process changes** — a new failure mode, a changed step, a flipped switch. CLAUDE.md's § Release runbook and its skill-routing table point here. Worked examples: `implementations-plan/archive/{release-prerelease-fix,required-check-mismatch,stable-release,release-pipeline-hardening}/`.
 
 ## Start here — what a release is, and what you actually do

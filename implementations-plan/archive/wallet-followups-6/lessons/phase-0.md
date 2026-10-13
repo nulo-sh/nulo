@@ -36,7 +36,7 @@ Verdict: `conditional approve` (conditions: a #262 test that fails on base; clos
 
 - D-262: the row-id lock (Codex), over the same-turn re-read (Opus): the in-order property is in neither Chrome's `storage` documentation nor the `MinimalStorageArea` contract; a destructive delete should be correct by exclusion.
 - D-331b: exact spelling (Opus), over keeping upper-case hex (Codex): readers compare with `===`, so a second spelling gets a second answer.
-- One related ingress question outside #345 was removed from the committed plan and recon and carried in the orchestrator report instead, in case it is a suspected exploitable weakness (A1).
+- A1 was carried in the orchestrator report, not in the committed plan or recon; it is tracked privately: GHSA-v48v-f4rj-78p6.
 
 ### Final pass, Codex (gpt-6.1-sol, high; fresh session 01a13503)
 
