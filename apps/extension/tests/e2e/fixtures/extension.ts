@@ -25,8 +25,8 @@ import {
 	switchToLocalNetwork,
 	waitForFreshBalanceRow,
 } from "./helpers"
-import { type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
-import { waitForPopup, approveCapabilities } from "./popups"
+import { assertPgOk, type PgBundle, selectPgBundle, snapshotResultSeq, waitForPgResult } from "./playground"
+import { waitForPopup, waitForPopupClosed, approveCapabilities } from "./popups"
 import { TEST_PASSWORD } from "./constants"
 import type { AztecTestConfig } from "./aztec"
 import { PRESTO_HTTP_HEALTH_URL, PRESTO_HTTPS_HEALTH_URL } from "./presto"
@@ -471,7 +471,7 @@ async function setupConnectedPlayground(
 
 /** Drive the playground's requestCapabilities flow for `bundle`, then approve
  *  the cap popup for whichever accounts `pick` selects; returns the granted
- *  addresses. All timeouts match the cold-shard budget (60s for the popup
+ *  addresses once the popup has closed. All timeouts match the cold-shard budget (60s for the popup
  *  target + the account-row render — chrome.windows.create + SW handler boot +
  *  loadInteractionPayload's PXE/accountService warmup can each exceed 30s on a
  *  cold CI runner; 30s for the dApp result). `pick` owns the per-fixture
@@ -493,7 +493,9 @@ export async function grantCapBundle(
 	)
 	const granted = await pick(accountIds, capPopup)
 	await approveCapabilities(capPopup, { accounts: granted })
-	await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000)
+	await assertPgOk(playgroundPage, await waitForPgResult(playgroundPage, "requestCapabilities", seqGrant, 30_000), "grantCapBundle")
+	// The window resolves the request before it closes, so the dApp's answer can precede its teardown.
+	await waitForPopupClosed(capPopup, 10_000)
 	return granted
 }
 
@@ -1210,8 +1212,13 @@ async function openPopupOnce(ctx: ExtensionContext): Promise<Page> {
 	}
 }
 
-/** Records `page`'s errors into the launch's arrays. */
-function recordPageErrors(ctx: ExtensionContext, page: Page): void {
+const recorded = new WeakSet<Page>()
+
+/** Records `page`'s errors into the launch's arrays from now on, once however often it is asked:
+ *  `asPage()` hands every caller resolving one target the same `Page`. */
+export function recordPageErrors(ctx: ExtensionContext, page: Page): void {
+	if (recorded.has(page)) return
+	recorded.add(page)
 	const onConsole = (msg: ConsoleMessage) => {
 		// "Client disconnected" is the benign port-close cascade: pending RPCs reject en masse when the
 		// background restarts, and production treats it as benign too (`isClientDisconnectRejection`).
