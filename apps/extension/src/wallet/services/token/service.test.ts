@@ -122,6 +122,20 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 		expect(fetchStub).not.toHaveBeenCalled()
 	})
 
+	test("a row stored in one spelling and an add in the other are one token", async () => {
+		const { tokenService, journal, fetchStub } = await makeHarness()
+		const first = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xC0FFEE"), { origin: "popup" })
+		journal.createOperation.mockClear()
+		fetchStub.mockClear()
+
+		const again = await tokenService.addToken("p1", NETWORK.id, "0xacc", ti("0xc0ffee"), { origin: "popup" })
+
+		expect(again.id).toBe(first.id)
+		expect(await tokenService.getTokensRaw("p1", NETWORK.chainId)).toHaveLength(1)
+		expect(journal.createOperation).not.toHaveBeenCalled()
+		expect(fetchStub).not.toHaveBeenCalled()
+	})
+
 	test("a failed fetch journals 'failed' and rethrows", async () => {
 		const { tokenService, journal, fetchStub } = await makeHarness()
 		fetchStub.mockRejectedValueOnce(new Error("metadata boom"))
