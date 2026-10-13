@@ -754,7 +754,7 @@ Session 01a1371f-ae61-7fe1-99aa-eef142841ddf over arcs 1 to 4 (`c0e1e696`, `69ea
 | # | Finding | Disposition |
 |---|---|---|
 | F1 | Medium; demonstrated in memory. A re-run of an old run's `publish-nightly` past retention reuses that run's `resolve` outputs, republishes a pruned name, and its prune deletes it | Known limit #377: the prune already removes it in the same run and nothing kept is touched; the fix would add a check to the release publisher for an operator error |
-| F2 | Low. `CLAUDE.md`'s nightly bullet still called it the only scheduled workflow besides `source-rebuild.yml`, though arc 2 added `verify-store-copies.yml` | Accepted |
+| F2 | Low. `CLAUDE.md`'s nightly bullet still called it the only scheduled workflow besides `source-rebuild.yml`, though arc 2 added `verify-store-copies.yml` | Accepted; #374 then moved the whole bullet out of `CLAUDE.md` |
 | F3 | Nit. The prune job's comment restated the job and implied a refusal path (D25 filters) | Accepted: one sentence |
 
 Round 2 (resumed, on `413531ff`): **CLEAN**. The loop converged.
