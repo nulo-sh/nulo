@@ -23,3 +23,6 @@
 - 2026-10-10: phase 2.3 gate passed: D-orch-7 answered yes on every item by Codex round 1 and the Opus review; their fixes committed (282d857), gates green again; #260 filed for the pre-existing auto-install exposure.
 - 2026-10-10: phase 2.4 stop rule fired (six third-party undeclared imports > three): `hoist = false` reverted, the list commented on #172, which stays open (D21).
 - 2026-10-10: arc 2 merged into dev as 69eab05 (#261); D-orch-8 and D-orch-9 recorded; arcs 3 and 4 branch from dev as two PRs. Neither edits a line of this file or of plan.md that the other edits: each logs its gates in its own `lessons/phase-N.md` and its review under its own phase in plan.md, so the second to land merges dev in without a conflict.
+- 2026-10-13: decision page 5 applied (D-orch-10 to D-orch-14); arc 5a branched from dev at e900f710.
+- 2026-10-13: phase 5a.1 gate passed (unit red on base; onboarding-tab smoke at retry 0: Chrome 11/11, Firefox 11/11; screenshots in both themes). Phase 5a.2: #183 verified, no gap.
+- 2026-10-13: phase 5a.3 pins red on base and under six mutations; the leg measured at 9 min 39 s (soak run 38461936523, green at retry 0); lint, lint:actions, test:ci-gating passed.
