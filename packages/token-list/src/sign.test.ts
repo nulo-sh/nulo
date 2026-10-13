@@ -1,0 +1,92 @@
+import { spawnSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
+import { afterAll, describe, expect, test } from "vitest"
+import { BUNDLED_TOKEN_CLASS_IDS } from "./class-ids"
+import { readTokenList } from "./index"
+import { publishedSequence, signList, tokensSha256 } from "./sign"
+import { main } from "./sign-cli"
+import { freshKey } from "./test-keys"
+
+const HERE = fileURLToPath(new URL(".", import.meta.url))
+const SOURCE = {
+	tokens: [
+		{
+			chainId: 1,
+			address: `0x${"0".repeat(63)}1`,
+			classId: BUNDLED_TOKEN_CLASS_IDS[0],
+			symbol: "USDC",
+			decimals: 6,
+			name: "Test USDC",
+			priceId: "usd-coin",
+		},
+	],
+}
+const SOURCE_TEXT = `${JSON.stringify(SOURCE, null, "\t")}\n`
+const NOW = 1_760_000_000_500
+const dir = mkdtempSync(join(tmpdir(), "token-list-sign-"))
+afterAll(() => rmSync(dir, { recursive: true, force: true }))
+
+describe("signList", () => {
+	test("signs a source into a list the wallet reads, sequence from the signing clock", async () => {
+		const { seedHex, pinned } = await freshKey("nulo-ci-1")
+		const result = await signList({ sourceText: SOURCE_TEXT, seedHex, keyId: "nulo-ci-1", nowMs: NOW, keys: [pinned] })
+		const list = await readTokenList(result.envelopeText, [pinned])
+		expect(list).toMatchObject({ keyId: "nulo-ci-1", sequence: 1_760_000_000, issuedAt: "2025-10-09T08:53:20.000Z" })
+		expect(list.entries).toEqual(SOURCE.tokens)
+		expect(result.tokensSha256).toBe(await tokensSha256(SOURCE.tokens))
+		expect(publishedSequence(result.envelopeText)).toBe(1_760_000_000)
+	})
+
+	test("refuses a non-increasing sequence, a foreign seed, an unexpected token set and an invalid source", async () => {
+		const { seedHex, pinned } = await freshKey("nulo-ci-1")
+		const other = await freshKey("nulo-ci-1")
+		const base = { sourceText: SOURCE_TEXT, seedHex, keyId: "nulo-ci-1", nowMs: NOW, keys: [pinned] }
+		const published = (await signList(base)).envelopeText
+		await expect(signList({ ...base, publishedText: published })).rejects.toThrow("not above the published sequence")
+		await expect(signList({ ...base, nowMs: NOW + 1000, publishedText: published })).resolves.toBeDefined()
+		await expect(signList({ ...base, publishedText: "{}" })).rejects.toThrow("published envelope is unreadable")
+		await expect(signList({ ...base, keys: [other.pinned] })).rejects.toThrow("does not match the pinned key")
+		await expect(signList({ ...base, expectTokensSha256: "0".repeat(64) })).rejects.toThrow("approver was shown")
+		await expect(signList({ ...base, sourceText: JSON.stringify({ ...SOURCE, sequence: 9 }) })).rejects.toThrow("source.sequence")
+	})
+})
+
+describe("sign-cli", () => {
+	test("writes the envelope, prints only ids and digests, and drops the seed from the environment", async () => {
+		const { seedHex, pinned } = await freshKey("nulo-ci-1")
+		writeFileSync(join(dir, "source.json"), SOURCE_TEXT)
+		const env: Record<string, string | undefined> = { TOKEN_LIST_SIGNING_KEY: `0x${seedHex}` }
+		const writes: string[] = []
+		const write = process.stdout.write
+		process.stdout.write = ((chunk: string) => writes.push(chunk) > 0) as typeof process.stdout.write
+		try {
+			await main(["--source", join(dir, "source.json"), "--out", join(dir, "list.json")], env, [pinned])
+		} finally {
+			process.stdout.write = write
+		}
+		expect(env).not.toHaveProperty("TOKEN_LIST_SIGNING_KEY")
+		expect(writes.join("")).toMatch(
+			/^keyId=nulo-ci-1\nsequence=\d+\ntokens=1\ntokensSha256=[0-9a-f]{64}\npayloadSha256=[0-9a-f]{64}\n$/,
+		)
+		expect((await readTokenList(readFileSync(join(dir, "list.json"), "utf8"), [pinned])).entries).toHaveLength(1)
+	})
+
+	test("run as a script, it refuses to sign under the placeholder keys", async () => {
+		const { seedHex } = await freshKey()
+		writeFileSync(join(dir, "source.json"), SOURCE_TEXT)
+		const run = spawnSync(
+			"bun",
+			["--no-install", join(HERE, "sign-cli.ts"), "--source", join(dir, "source.json"), "--out", join(dir, "x.json")],
+			{
+				env: { PATH: process.env.PATH, TOKEN_LIST_SIGNING_KEY: seedHex },
+				encoding: "utf8",
+			},
+		)
+		expect(run.status).toBe(1)
+		expect(run.stderr).toContain("does not match the pinned key nulo-ci-1")
+		expect(`${run.stdout}${run.stderr}`).not.toContain(seedHex)
+	})
+})

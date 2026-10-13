@@ -72,7 +72,7 @@ The wallet's default tokens are a list compiled into each build (`apps/extension
 
 - `packages/token-list` (`@nulo/token-list`, private, tested by `test:all`):
   - `envelope.ts` and `sign-cli.ts` / `keygen-cli.ts` use only WebCrypto and `node:` imports. A test pins that import closure, so the signing step runs with `bun --no-install`.
-  - `parse.ts` (zod): bounds, refuse-not-normalize, BN254 field modulus (a constant the extension test pins to `Fr.MODULUS`), no control or bidi characters in `name` or `symbol`.
+  - `parse.ts` (no dependency, so the signer validates exactly what it signs): bounds, refuse-not-normalize, BN254 field modulus (a constant the extension test pins to `Fr.MODULUS`), no control or bidi characters in `name` or `symbol`.
   - `keys.ts` holds the pinned `{keyId, publicKey}` list.
   - `price-ids.ts` is the single price table: id, sanity band, proxy ticker. `price-map.ts` imports it.
   - `class-ids.ts` holds the bundled token classes, which an extension test pins to `getBundledTokenClassId()`.
@@ -93,7 +93,7 @@ The wallet's default tokens are a list compiled into each build (`apps/extension
 - The tree tests are strict: `list.source.json` has known keys and allowlisted ids only, at most 16 entries per chain, and canonical serialization. A placeholder key fails. A committed envelope, when one exists, verifies against `keys.ts` and parses strictly. Arc 1 ships none; the first publish (O6) adds it.
 
 **Publish flow** (`.github/workflows/publish-token-list.yml`). Triggers: `push` to `dev` filtered to `infra/token-list/list.source.json`, and `workflow_dispatch` from `dev`. `concurrency: publish-token-list`, with no cancel.
-1. `prepare`: no secret. The step summary shows the token diff, the payload sha256, and `git diff --stat` since the last publish commit for the workflow, `packages/token-list/src/**` and the source. The owner reads it before approving.
+1. `prepare`: no secret. The step summary shows the token diff, the tokens sha256 (`sign` refuses any other token set), and `git diff --stat` since the last publish commit for the workflow, `packages/token-list/src/**` and the source. The owner reads it before approving.
 2. `sign` (environment `token-list`, owner reviewer, branch `dev`, `contents: read`):
    - checks out without credentials;
    - runs `bun --no-install packages/token-list/src/sign-cli.ts`, with the secret in that step only;
@@ -184,7 +184,7 @@ Each gate also runs `bun run lint`, `bun run typecheck:all` and `bun run check:p
 
 ### Arc 1: format, host and publish
 
-**P1. `packages/token-list`.**
+**P1. `packages/token-list`.** ✓
 1. Add the package: envelope, `sign-cli`, `keygen-cli install`, parse, keys, `price-ids`, `class-ids`, and per-run vectors.
 2. Add the extension pins: class ids, `Fr.MODULUS`, price table.
 3. Pin the import closure.

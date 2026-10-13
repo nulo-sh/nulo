@@ -52,6 +52,7 @@
         "@nulo/legal": "workspace:*",
         "@nulo/resolve-asset": "workspace:*",
         "@nulo/third-party-notices": "workspace:*",
+        "@nulo/token-list": "workspace:*",
         "@nulo/wallet-bridge": "workspace:*",
         "@nulo/wallet-core": "workspace:*",
         "@nulo/wallet-crypto": "workspace:*",
@@ -244,6 +245,15 @@
       "devDependencies": {
         "@nulo/design": "workspace:*",
         "@nulo/resolve-asset": "workspace:*",
+        "@types/node": "^24.10.1",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
+    "packages/token-list": {
+      "name": "@nulo/token-list",
+      "version": "0.1.0",
+      "devDependencies": {
         "@types/node": "^24.10.1",
         "typescript": "^6.0.3",
         "vitest": "^4.1.9",
@@ -803,6 +813,8 @@
     "@nulo/resolve-asset": ["@nulo/resolve-asset@workspace:packages/resolve-asset"],
 
     "@nulo/third-party-notices": ["@nulo/third-party-notices@workspace:packages/third-party-notices"],
+
+    "@nulo/token-list": ["@nulo/token-list@workspace:packages/token-list"],
 
     "@nulo/wallet-bridge": ["@nulo/wallet-bridge@workspace:packages/wallet-bridge"],
 
