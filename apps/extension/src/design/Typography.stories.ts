@@ -57,7 +57,7 @@ export const Sizes: Story = {
 				${fontSizes
 					.map(
 						(s) => `
-					<code style="color: var(--txt-secondary); font-family: var(--font-mono); font-size: 12px;">.fz--${s}</code>
+					<code style="color: var(--txt-secondary); font-family: var(--font-mono); font-size: 12px;">step ${s}</code>
 					<div style="font-size: ${s}px;">Aa Bb Cc — ${s}px</div>
 				`,
 					)
@@ -74,7 +74,7 @@ export const Weights: Story = {
 				${fontWeights
 					.map(
 						(w) => `
-					<code style="color: var(--txt-secondary); font-family: var(--font-mono); font-size: 12px;">.fw--${w}</code>
+					<code style="color: var(--txt-secondary); font-family: var(--font-mono); font-size: 12px;">step ${w}</code>
 					<div style="font-weight: ${w};">Brutalist weight ${w}</div>
 				`,
 					)
