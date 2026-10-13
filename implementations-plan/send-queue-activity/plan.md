@@ -574,7 +574,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 1. Probe how a node refusal surfaces through the wallet's client and through the default endpoint; record it in lessons. Done: on one node a first-POST refusal is visible at the HTTP layer, but the default endpoint's gateway retries a timed-out request on another node, so the wallet cannot tell a first-attempt refusal from a retried one. The phase stops; the limit is OA-6; #112 stays open with a comment carrying the probe record.
 
-#### Phase 3a.2: expired before inclusion (#108, P10-06; proof per D22)
+#### Phase 3a.2: expired before inclusion (#108, P10-06; proof per D22) ✓
 
 1. Locate the expiry and the first nullifier on Aztec 6.0.0-rc.1's proven tx; establish whether one node can forget or late-index a receipt; record both in lessons (done: it cannot; the endpoint can route reads to different nodes, hence D22).
 2. Record `expiry: {timestamp, nullifier}` with the hash at submission (none for a genesis-anchored tx); widen `setSendCheck` to the compare-and-set of D25 for the moves this phase needs; add the finalized-anchored nullifier verdict `expired` and its copy (D28's look).
@@ -586,7 +586,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `bun run test`; `bun run test:all`. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3a.3: the pruned-block re-check (#109, P10-07 changed; proof per D23-D26)
+#### Phase 3a.3: the pruned-block re-check (#109, P10-07 changed; proof per D23-D26) ✓
 
 1. Add `transaction/inclusion.ts` (the finalized-anchored archive proof); record `inclusion: {block, hash}` with a `sent` or `reverted` answer; add the final, re-included and pruned moves to the compare-and-set; give `SendCheck` one watch per row with work; add the `awaitingFinality` marker, its watch, its boot re-arm and its stripping on restore and export to `TransactionService`; build the single-attempt node silent (D27).
 2. Tests:
@@ -1002,6 +1002,32 @@ Rejected:
 - **A non-protocol PrivateFPC row now throws in `sequence()`, before the journal record exists** (Opus, no fix asked). It fails closed, and the estimate already refuses that row before Send enables.
 
 **Round 2 (resumed Codex session): no new material finding.** It upheld every rejection and corrected one rationale: with a renumbered enum, the second case would still fail on its key assertion. The loop stops here.
+
+### Arc 3a code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `8d01f9b..HEAD`
+
+**Codex: one medium, the rest low. Opus: no high, one medium.** Both answer the lead questions the same way:
+- No path writes `expired` for an included or includable send. The finalized time must be strictly past the expiry, the read is anchored by number and hash, and genesis anchors are excluded.
+- No false final or false prune: every read is pinned to the finalized block.
+- No backup reaches the worker's dial: restore and export strip the marker.
+- No hash, address, URL or nullifier reaches a log line.
+- `sendTxTask` is unchanged.
+
+Accepted:
+- **Medium (Codex).** A lock, purge or stop between a proof's reads let the next read go out. The proofs now check the caller's liveness before every read. Two tests fail when it is ignored.
+- **Medium (Opus).** Nothing showed that an included send's recorded nullifier is in the real nullifier tree. The network e2e now reads it at the finalized block after a public send is Finalized.
+- **Low.**
+  - `unconfirmed` never becoming mined is pinned.
+  - Archive fixtures are wire-shaped.
+  - A test title is fixed.
+  - The e2e card read waits for state.
+  - Comments: a plan tag, the first-nullifier rule, a narrating class doc, two redundant docs.
+
+Rejected:
+- **A lagging upstream re-answers a pruned block** (Opus, low): accepted as a bounded flap in D23.
+- **Inherited hash-prefix log lines in `transaction/service.ts`** (Codex): they predate the arc.
+- **A forging RPC** (Codex, trust note): outside the model. The proofs hold against lagging or forked upstreams.
+
+**Round 2 (resumed Codex session): the fixes hold, no runtime finding.** It judged the e2e's empty L1 mining sound and harmless. One low remained: review provenance in three inherited comments and one narrating doc, both removed. The loop stops here.
 
 ## Seeds
 
