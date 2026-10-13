@@ -33,7 +33,7 @@ import { beforeAll, expect, inject } from "vitest"
 import { categoricalLabel, sendOutcome } from "@/utils/journal-state"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
-import { type AztecTestConfig, createTestWallet, readPublicTokenBalance } from "../fixtures/aztec"
+import { type AztecTestConfig, createTestWallet, finalizeThrough, readPublicTokenBalance } from "../fixtures/aztec"
 import { stopBackground } from "../fixtures/browser"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import { fillSendForm, navigateByHash, refreshBalances, setActiveSendType, unlockAfterBackgroundDeath } from "../fixtures/helpers"
@@ -52,7 +52,6 @@ const OBSERVE_PAST_TERMINAL_MS = 150_000
 const SAMPLE_EVERY_MS = 5_000
 /** The check's 30-minute window (`DROPPED_RESURRECTION_WINDOW_MS`) and a minute. */
 const PAST_THE_WINDOW_MS = 31 * 60_000
-const ANVIL_URL = process.env.ANVIL_URL ?? "http://localhost:8545"
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 beforeAll(() => {
@@ -161,29 +160,6 @@ async function recordJournalWrites(page: Page): Promise<void> {
 async function journalWrites(page: Page, id: string): Promise<OperationRecord[]> {
 	const raw = await page.evaluate(() => (window as unknown as { __journalWrites: unknown[] }).__journalWrites)
 	return raw.map((r) => (typeof r === "string" ? JSON.parse(r) : r) as OperationRecord).filter((r) => r.id === id)
-}
-
-async function mineL1Blocks(count: number): Promise<void> {
-	const res = await fetch(ANVIL_URL, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "anvil_mine", params: [`0x${count.toString(16)}`] }),
-	})
-	const body = (await res.json()) as { error?: { message: string } }
-	if (body.error) throw new Error(`anvil_mine: ${body.error.message}`)
-}
-
-type Node = ReturnType<typeof createAztecNodeClient>
-
-async function finalizeThrough(node: Node, block: number, timeoutMs: number): Promise<void> {
-	const deadline = Date.now() + timeoutMs
-	for (;;) {
-		const finalized = await node.getBlockData("finalized")
-		if ((finalized?.header.getBlockNumber() ?? 0) >= block) return
-		if (Date.now() > deadline) throw new Error(`[${SPEC}] the finalized block stayed below ${block} for ${timeoutMs} ms`)
-		await mineL1Blocks(3)
-		await sleep(2_000)
-	}
 }
 
 async function waitForRow(page: Page, testId: string, text: string): Promise<void> {
@@ -365,7 +341,7 @@ test.skipIf(!hasConfig)(
 		await navigateByHash(page, "#/popup/activity", 10_000)
 		await waitForCardStatus(page, txHash, "confirmed")
 
-		await finalizeThrough(node, mined.block?.number ?? Number.POSITIVE_INFINITY, 180_000)
+		await finalizeThrough(node, mined.block?.number ?? Number.POSITIVE_INFINITY)
 		const final = await waitForTx(page, txHash, (tx) => tx.status === TxStatus.Finalized, "was not written Finalized", 180_000)
 		expect(final.awaitingFinality, "the marker, once final").toBeUndefined()
 		expect(final.block, "the block it was mined in").toEqual(mined.block)
