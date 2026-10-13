@@ -39,7 +39,7 @@ describe("transferFailureSnack", () => {
 	test("a Terms refusal says what the Send banner says whatever its record holds, and is not an error-level event", () => {
 		const overTheWire = walletErrorFromPayload(new TermsAcceptanceRequiredError().toPayload())
 		expect(transferFailureSnack(overTheWire, failed(MAYBE_SENT))).toEqual({
-			kind: "error",
+			checking: false,
 			label: "Send failed",
 			sub: "Accept the Terms to send",
 			details: true,
@@ -52,7 +52,7 @@ describe("transferFailureSnack", () => {
 		[
 			"a send that may have reached the node",
 			failed(MAYBE_SENT),
-			"info",
+			true,
 			"Send not confirmed",
 			"Checking whether it reached the network. Don't send it again yet.",
 			true,
@@ -60,7 +60,7 @@ describe("transferFailureSnack", () => {
 		[
 			"a send that failed before broadcast",
 			failed({ stage: "failed", from: "simulating" }),
-			"error",
+			false,
 			"Send failed",
 			"Nothing was sent. You can try again.",
 			true,
@@ -68,13 +68,13 @@ describe("transferFailureSnack", () => {
 		[
 			"a record with no recorded stage",
 			failed({ stage: "failed" }),
-			"error",
+			false,
 			"Send status unknown",
 			"Check History before sending it again.",
 			false,
 		],
-		["no record", undefined, "error", "Send status unknown", "Check History before sending it again.", false],
-	])("any other failure reads from its record: %s", (_name, record, kind, label, sub, details) => {
-		expect(transferFailureSnack(new Error("boom"), record)).toEqual({ kind, label, sub, details })
+		["no record", undefined, false, "Send status unknown", "Check History before sending it again.", false],
+	])("any other failure reads from its record: %s", (_name, record, checking, label, sub, details) => {
+		expect(transferFailureSnack(new Error("boom"), record)).toEqual({ checking, label, sub, details })
 	})
 })
