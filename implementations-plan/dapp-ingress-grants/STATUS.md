@@ -28,3 +28,4 @@
 - 2026-10-12: Codex design consult (Q1-Q4) agreed; gate 3.4 green (lint, typecheck:all, wallet-bridge 701, root test 11427). Commit bac198a.
 - 2026-10-13: network e2e on bac198a, the seven files, retry 0: Chrome 7/7, Firefox 7/7. Issues filed: #330 (`blocked:external`, typed discovery rejection), #331 (Buffer-shaped address residual), #332 (non-string method name).
 - 2026-10-13: review round 1: Codex approve with fixes (three accepted, af22322), Opus approve with fixes (two fixed in dfdaaf2, two recorded: #331 extended, #332). Codex round 2 started.
+- 2026-10-13: Codex round 2 approve with no findings: the loop converged. Gate 3.5 green on 13c838c: audit:vue 0 (extension 11430 passed), test:all 0, test:release 294 pass, test:ci-gating 526 pass, check:plans 0; the seven network files, retry 0: Chrome 7/7, Firefox 7/7.

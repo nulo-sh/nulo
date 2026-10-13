@@ -46,3 +46,9 @@
 - Codex round 1 (session `01a1328b`): approve with fixes. C1 (Med) was real: a contract artifact's `storageLayout` is keyed by storage-field names, so the blanket own-`toString` walk refused a legal `registerContract`; the walk now skips the artifact argument. C2: a capacity refusal is repeatable with silent sends, so it logs at debug. C3: two comments. All three new tests red on base. Commit af22322.
 - Opus review: approve with fixes, four Lows. O1: `schemas.AztecAddress` admits the Buffer shape that `z.string()` refused, so `grantPublicAuthwit` joins #331's residual. O2: filed as #332 (pre-existing, outside the arc). O3, O4 fixed in dfdaaf2.
 - The planned PR title fails commitlint's `subject-case` on the bare `chainInfo`; backticks pass (D-impl-31).
+- Codex round 2: approve, no findings; both dispositions (#331, #332) accepted. Loop converged.
+
+## Gate 3.5 (2026-10-13, 13c838c)
+
+- `bun run audit:vue` 0 (extension 11430 passed, build ok); `bun run test:all` 0 (wallet-bridge 702, extension-messaging 385, schema-patch 15); `bun run test:release` 294 pass; `bun run test:ci-gating` 526 pass; `bun run check:plans` 0.
+- The seven network files, retry 0: Chrome 7/7 files, 7/7 tests; Firefox 7/7 files, 7/7 tests.

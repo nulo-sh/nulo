@@ -487,7 +487,7 @@ Before the first step: read the page 3 and C11 answers. Build each item as answe
 
 **Gate 3.4**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd packages/wallet-bridge test`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3.5: arc 3 end-to-end gate
+#### Phase 3.5: arc 3 end-to-end gate ✓
 
 Warning: the G1 rule applies until #169 merges.
 
@@ -713,6 +713,7 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 |---|---|---|---|
 | 1 | Codex gpt-6.1-sol, high (session `01a1328b`) | approve with fixes | C1 Med accepted: a stock artifact may key `storageLayout` by `toString`, so the walk skips the artifact argument (D-impl-29); C2 Low accepted: capacity refusals log at `debug` at both sites (D-impl-30); C3 Low accepted: `listCovered`'s narrating comment deleted, the composition header names every stub |
 | 1 | Opus general-purpose review | approve with fixes (4 Low) | O1 accepted as a residual: a Buffer-shaped `caller` or `contract` now passes the address schema and fails closed at the authwit build; same root as #331, which the orchestrator keeps out of this arc (D-orch-10), so #331 now names these sites. O2 pre-existing and outside every arc-3 decision (a non-string method name throws at `assertKnownMethod`; unsupported methods log at `error`): filed as #332. O3 accepted (the capacity describe restores its spies). O4 accepted (the README's 0.2.0 line says which wallets refuse and that they receive `AztecAddress` values) |
+| 2 | Codex, same session resumed | **approve** | no findings; C1 to C3 confirmed resolved (real-artifact probes), both recorded dispositions (#331, #332) accepted; the loop converged |
 
 ## Seeds (draft; finalized after approval)
 
