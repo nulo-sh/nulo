@@ -729,6 +729,18 @@ Verdict: **approve with small fixes**. Sound: no test body changed beyond its en
 | 4a-O3 | Nit. JSON turns an `undefined` argument into `null`, which would bypass a default parameter | No change: no call passes one |
 | 4a-O4 | Nit. Phase 4a.1's pass criterion ("names the three files") cannot fail | Accepted: a nonzero count per file, and the filters name the files |
 
+### Arc 4a implementation, round 2: Codex (same session, resumed), 2026-10-13
+
+Verdict: **one medium finding**; 4a-C1 to 4a-C3 and the Opus fixes otherwise judged clean.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4a-R2-1 | Medium. `selects()` missed a filter vitest still matches through `relative(dir, f)`: `./scripts/store-icons.test.ts`, or an absolute path (canonical `<repo>/…` in the summary), so a filtered soak could pass with that file absent | Accepted: each filter is also matched as a workspace-relative path. Two regression cases; the check fails with the normalized form removed |
+
+### Arc 4a implementation, round 3: Codex (same session, resumed), 2026-10-13
+
+Verdict: **clean**, high confidence. The loop converged.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before `gh stack add` opens the next arc; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
