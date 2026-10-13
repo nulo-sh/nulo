@@ -50,7 +50,7 @@ const dapp = ref<UIDappMetadata>()
 const emojis = ref("")
 const isReconnect = ref(false)
 const alwaysTrust = ref(false)
-/** The hash this window's grid is drawn from, as the service worker wrote it into the URL. */
+/** The key exchange's hash, as the service worker wrote it into the URL; an open without one reports nothing. */
 const checkHash = ref<string>()
 /** One answer per window: either control locks both, released only when that answer fails. */
 const isBusy = ref(false)

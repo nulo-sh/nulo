@@ -147,7 +147,18 @@ export function initWalletSdkHandler(
 	ports.windows.onRemoved((windowId) => state.admission.windowRemoved(windowId))
 
 	serializeDecryption(handler, state.decryptLocks)
-	wireSessionTeardown(handler, deps.dappSessionService, state, logger)
+	// The wallet's decision to end a session drops its held calls before the transport is told: a
+	// termination that throws leaves the session live, and its calls must not wait on it.
+	const endSession = (sessionId: string) => {
+		state.holds.get(sessionId)?.drop("wallet_refused")
+		handler.terminateSession(sessionId)
+	}
+	wireSessionTeardown(
+		{ getActiveSessions: () => handler.getActiveSessions(), terminateSession: endSession },
+		deps.dappSessionService,
+		state,
+		logger,
+	)
 
 	// Profile-bound channel teardown: a switch disconnects every live session
 	// stamped to another profile (and unstamped debris) BEFORE the discovery
@@ -158,7 +169,7 @@ export function initWalletSdkHandler(
 		onActiveProfileChanged: deps.profileService.onActiveProfileChanged,
 		getActiveSessions: () => handler.getActiveSessions(),
 		sessionProfiles: state.sessionProfiles,
-		terminateSession: (sessionId) => handler.terminateSession(sessionId),
+		terminateSession: endSession,
 		logger,
 	})
 	wireVerificationHold({
@@ -176,7 +187,7 @@ export function initWalletSdkHandler(
 	wireTabLifecycle({
 		onTabTeardown: (tabId) => tearDownTabAttempts(state, tabId),
 		terminateForTab: (tabId) => handler.terminateForTab(tabId),
-		terminateSession: (sessionId) => handler.terminateSession(sessionId),
+		terminateSession: endSession,
 		getActiveSessions: () => handler.getActiveSessions(),
 		logger,
 	})

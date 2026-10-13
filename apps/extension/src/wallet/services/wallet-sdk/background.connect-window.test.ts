@@ -849,13 +849,12 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		expect(row(h)?.kind).toBe("wallet_refused")
 	})
 
-	test("a lock ends only the session whose check is unanswered, its row reads the lock, and its hash releases nothing after", async () => {
+	test("a lock ends only the session whose check is unanswered, and its held send's row reads the lock", async () => {
 		const h = boot()
 		remember(h, false)
 		await reconnect(h, "c1")
 		h.confirm(hashOf("c1"))
 		await reconnect(h, "h1")
-		const held = hashOf("h1")
 		h.send("h1", "sendTx", "s")
 		await settle()
 
@@ -864,9 +863,25 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		expect(terminated()).toEqual(["h1"])
 		expect(sessions.has("c1")).toBe(true)
 		expect(row(h)?.kind).toBe("session_ended")
-		h.confirm(held)
-		await settle()
 		expect(dispatched()).toEqual([])
+	})
+
+	test("an establishment that fails with no termination, its id's approval taken by another attempt, settles its hold: a lock ends nothing", async () => {
+		const h = boot()
+		h.discover("f1")
+		await flush()
+		h.allow("f1", 41)
+		await flush()
+		const establishing = h.establish("f1")
+		markers().set("f1", { ...markers().get("f1")! })
+		await establishing
+		await settle()
+		expect(terminated()).toEqual([])
+		expect(sessions.has("f1")).toBe(true)
+
+		h.lock()
+		await settle()
+		expect(terminated()).toEqual([])
 	})
 
 	test("a lock whose first termination throws still drops the other held session's calls", async () => {
@@ -972,6 +987,33 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		expect(dispatched()).toEqual([])
 		expect(row(h)?.kind).toBe("wallet_refused")
 	})
+
+	test.each([
+		["They don't match", (h: ReturnType<typeof boot>) => h.refuse()],
+		["the row deleted", (h: ReturnType<typeof boot>) => h.rowDeleted("p1")],
+		["a direct switch to another profile", (h: ReturnType<typeof boot>) => h.switchProfile("p2")],
+	])(
+		"%s whose termination throws still refuses the held send; the live session's later calls run nothing and file nothing",
+		async (_, end) => {
+			const h = boot()
+			remember(h, false)
+			await reconnect(h, "r1")
+			const held = hashOf("r1")
+			h.send("r1", "sendTx", "s1")
+			await settle()
+			failingTerminations.add("r1")
+
+			end(h)
+			await settle()
+			expect(sessions.has("r1")).toBe(true)
+			expect(row(h)?.kind).toBe("wallet_refused")
+			h.confirm(held)
+			h.send("r1", "sendTx", "s2")
+			await settle()
+			expect(dispatched()).toEqual([])
+			expect([...h.journal.ops.keys()]).toEqual(["queued-1"])
+		},
+	)
 
 	test("a send decrypted for an ended session files nothing and runs nothing on the session that re-keyed its id", async () => {
 		const h = boot()
