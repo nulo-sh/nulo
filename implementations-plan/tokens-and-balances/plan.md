@@ -552,7 +552,7 @@ Validation gate:
 
 Page 8 was signed on 2026-10-12 (D-orch-6); every phase below is built.
 
-#### Phase 2.1: paste an address to add a token (#134, P8-01)
+#### Phase 2.1: paste an address to add a token (#134, P8-01) ✓
 
 1. Add `addCandidate`, the add row and the `addToken` emit to `TokenList.vue`.
 2. In `pages/holdings.vue`, set `preselectedTokenAddressToAdd`, then open `new_token`.
@@ -578,7 +578,7 @@ Validation gate:
 - Pass: every command exits 0. Screenshots of the row in both themes attach to the PR.
 - Layers: lint, typecheck, unit, component, smoke e2e and network e2e on both browsers.
 
-#### Phase 2.2: one generic line under Submit (#136, P8-02, OA-2 = A)
+#### Phase 2.2: one generic line under Submit (#136, P8-02, OA-2 = A) ✓
 
 1. In `NewTokenPopup.vue`'s `catch`, set the generic line and log the error at debug under `reason`.
    Give the line under Submit a testid (`new-token-error`) for the e2e.
