@@ -1,7 +1,7 @@
 ---
 plan: home-onboarding-chrome
 tier: mid
-status: arc 1 merged (#348); arc 2 released (D-orch-7): #156 stopped by Phase 2.1's stop rule, #170 implemented
+status: closed (2026-10-13)
 issues: "#130, #132, #133, #135, #149 (arc 1); #156, #170 (arc 2); #181 (no arc, struck); #154, #160 (no arc, owner Mac checks); #242 (no arc, OWNER-ASKS); #244 (no arc, trigger not met)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 36c43155
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** closed. Two arcs, one PR each against `dev`: #348 (arc 1, merged) and #351 (arc 2); the merge that lands #351 closes the plan.
+- **Shipped:** in #348, History filtered from a token page (#130), the token page's section header (#132), onboarding's stored theme (#133), Account State under Developer with its redirects (#135), one own window per flow on Firefox (#149). In #351, the store capture's Send frame re-staged (#170): the strip is read once the send arms, and `clearAmountLine` takes the least scroll that clears the amount line (OA-5 A); nothing under `apps/extension/store/` changes.
+- **Dropped:** #156's Proving row (Phase 2.2) is not built: Phase 2.1's stop rule fired, I3 refuted on Firefox 153.0.4 ([lessons/phase-2.md](lessons/phase-2.md)); #156 stays open with its reopening condition in a comment, and OA-3 and OA-4 ship nothing. #181 is closed as not planned, struck by the owner (P13-06). D12's second ring-carrying control was that row's `Button`; #244's trigger stays unmet with `RowAction` alone. Not promoted to `lessons.md`: the Firefox CORS-mode reading lives on #156, where reopening starts, and the pending-pick read lives in `waitForFee`'s comment; the file holds 8,190 of 8,192 bytes, and neither line earns a retirement.
+- **Known limits:** #352 (D7: a start from a re-opened toolbar panel during an own window's boot opens a second window).
+- **Open items:** #156 (stopped, see above); #154 and #160 (the owner's Mac checks, P13-07 and P13-08); #242 (P9-05, restated as OA-7); #244 (trigger not met); #349 (`snack-placement`'s Home case, red once on #348's CI). OA-1, OA-2, OA-5 and OA-8 shipped their "what ships now" lines and go to the orchestrator's owner page (D-orch-10).
+- **Size:** about 670 lines against the mid target of 350: two arcs of audit verdicts (about 150 lines) and a Post-implementation section written before the README's standard existed to cite. The verdicts are the record, so nothing was cut at close.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # home-onboarding-chrome: History filter, header, onboarding theme, Account State route, own windows, the Firefox Presto permission, the store Send frame
 
