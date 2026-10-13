@@ -937,7 +937,7 @@ onBeforeUnmount(() => {
 				:class="$style.detail_row"
 				data-testid="fee-init-degraded"
 			>
-				<Icon name="info" size="14" color="primary" />
+				<Icon name="info" size="14" color="primary" aria-hidden="true" />
 				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ statusNotice }}
 				</Text>

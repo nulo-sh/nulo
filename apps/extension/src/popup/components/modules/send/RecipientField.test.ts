@@ -228,8 +228,10 @@ describe("modules/send/RecipientField", () => {
 			expect(list.attributes("role")).toBe("listbox")
 			expect(field(w)["aria-controls"]).toBe(list.attributes("id"))
 			expect(document.getElementById(list.attributes("aria-labelledby") ?? "")?.textContent).toBe("Recipient Address")
+			expect(list.attributes("tabindex")).toBe("-1")
 			expect(options(w)).toHaveLength(2)
 			for (const o of options(w)) expect(o.attributes("tabindex")).toBeUndefined()
+			for (const a of w.findAll('[data-testid="stub-avatar"]')) expect(a.attributes("aria-hidden")).toBe("true")
 			expect(new Set(options(w).map((o) => o.attributes("id"))).size).toBe(2)
 			expect(highlighted(w)).toEqual({ index: -1, selected: [] })
 		})
@@ -268,17 +270,33 @@ describe("modules/send/RecipientField", () => {
 			expect(field(w)["aria-activedescendant"]).toBeUndefined()
 			expect(await press(w, "Escape")).toBe(false)
 			expect(await press(w, "ArrowDown")).toBe(false)
+			expect(await press(w, "Enter")).toBe(false)
+			expect(w.emitted("update:selectedContact")).toBeUndefined()
 
 			await w.setProps({ searchTerm: "acc" })
 			expect(options(w)).toHaveLength(1)
 			expect(highlighted(w).index).toBe(-1)
 		})
 
-		test("a new list drops the highlight, and a composing key moves nothing", async () => {
+		test("the highlight follows its row through a new list, and goes when the row does", async () => {
 			const w = await open()
-			await press(w, "ArrowDown")
-			await w.setProps({ searchTerm: "al" })
-			expect(highlighted(w)).toEqual({ index: -1, selected: [] })
+			await press(w, "ArrowUp")
+			const abe = { id: "6", name: "Abe", address: "0xdddd" }
+			await w.setProps({ candidates: [abe, alice, account1] })
+			expect(highlighted(w)).toEqual({ index: 2, selected: [2] })
+			await press(w, "Enter")
+			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
+
+			const next = await open()
+			await press(next, "ArrowUp")
+			await next.setProps({ searchTerm: "al" })
+			expect(highlighted(next)).toEqual({ index: -1, selected: [] })
+			await press(next, "ArrowDown")
+			expect(highlighted(next).index).toBe(0)
+		})
+
+		test("a composing key moves nothing and closes nothing", async () => {
+			const w = await open()
 			expect(await press(w, "ArrowDown", { isComposing: true })).toBe(false)
 			expect(await press(w, "Escape", { keyCode: 229 })).toBe(false)
 			expect(highlighted(w).index).toBe(-1)

@@ -8,7 +8,7 @@ import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
 import { clickByTestId, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
-import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
@@ -21,9 +21,30 @@ const OPEN_TRIGGER = `[data-dropdown-open="true"] ${sel("send-fee-method-trigger
 const CLOSED_TRIGGER = `[data-dropdown-open="false"] ${sel("send-fee-method-trigger")}`
 const TESTNET_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
 
-async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = false } = {}): Promise<Page> {
+/** Saves contacts straight to storage, which Send reads when it opens. */
+async function seedContacts(page: Page, names: string[]): Promise<void> {
+	const profileId = await captureSoleProfileId(page)
+	await page.evaluate(
+		(pid: string, list: string[]) => {
+			const rows = list.map((name, i) => {
+				const id = `e2e-contact-${i}`
+				const address = `0x${String(i + 1).padStart(64, "0")}`
+				return [
+					`nulo:core:contacts@${id}`,
+					JSON.stringify({ id, profileId: pid, name, address, abbr: name.slice(0, 2).toUpperCase() }),
+				]
+			})
+			return chrome.storage.local.set(Object.fromEntries(rows))
+		},
+		profileId,
+		names,
+	)
+}
+
+async function openSendPage(ctx: ExtensionContext, { priced = false, sponsors = false, contacts = [] as string[] } = {}): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general", 30_000)
+	if (contacts.length) await seedContacts(page, contacts)
 	const scope = priced || sponsors ? await readActivityScope(page) : undefined
 	if (scope && sponsors) {
 		expect(await fpcRowIds(page), "FPC rows before the seed").toEqual([])
@@ -45,8 +66,6 @@ async function expectAccentRing(page: Page, testid: string): Promise<void> {
 	expect(color, testid).toBe(await tokenColor(page, "--nulo-accent"))
 }
 
-/** What the destination field tells a screen reader about the suggestions: the list it controls, and
- *  which of its rows the field's `aria-activedescendant` names. */
 async function readSuggestionList(page: Page) {
 	return page.evaluate(
 		(input: string, list: string) => {
@@ -54,12 +73,24 @@ async function readSuggestionList(page: Page) {
 			const box = document.querySelector(list)
 			const named = document.getElementById(field?.getAttribute("aria-activedescendant") ?? "")
 			const rows = [...(box?.children ?? [])]
+			const view = box?.getBoundingClientRect()
+			const shown = (el: Element) => {
+				const r = el.getBoundingClientRect()
+				return Boolean(view) && r.top >= (view?.top ?? 0) - 1 && r.bottom <= (view?.bottom ?? 0) + 1
+			}
 			return {
 				role: box?.getAttribute("role") ?? null,
+				rows: rows.length,
+				scrolls: (box?.scrollHeight ?? 0) > (box?.clientHeight ?? 0),
 				controlled: Boolean(box?.id) && field?.getAttribute("aria-controls") === box?.id,
 				active:
 					named && rows.includes(named)
-						? { row: rows.indexOf(named), role: named.getAttribute("role"), selected: named.getAttribute("aria-selected") }
+						? {
+								row: rows.indexOf(named),
+								role: named.getAttribute("role"),
+								selected: named.getAttribute("aria-selected"),
+								shown: shown(named),
+							}
 						: null,
 			}
 		},
@@ -76,25 +107,26 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	timeout: 120_000,
 	retry: 0,
 }, async ({ registeredExtensionPerTest: ctx }) => {
-	const page = await openSendPage(ctx)
+	// Three contacts and the profile's own "Account 1" match "Acc": four rows, more than the list shows.
+	const page = await openSendPage(ctx, { contacts: ["Acc A", "Acc B", "Acc C"] })
 	const account = await getAccountAddress(page)
 
-	// Accounts are suggested by name, so the profile's own "Account 1" stands in for a contact.
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
 	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
-	expect(await readSuggestionList(page)).toEqual({ role: "listbox", controlled: true, active: null })
+	expect(await readSuggestionList(page)).toEqual({ role: "listbox", rows: 4, scrolls: true, controlled: true, active: null })
 	await page.keyboard.press("ArrowDown")
-	expect((await readSuggestionList(page)).active).toEqual({ row: 0, role: "option", selected: "true" })
+	expect((await readSuggestionList(page)).active).toEqual({ row: 0, role: "option", selected: "true", shown: true })
 	await shotSend(page, "send-suggestion-highlighted", "send-destination-field")
 
 	expect(await pressEscape(page)).toBe(true)
 	await page.waitForSelector(sel("send-destination-suggestions"), { hidden: true, timeout: 5_000 })
 	expect(await activeTestId(page)).toBe("send-destination-field")
-	await page.keyboard.type("o")
+	await page.keyboard.press("Backspace")
 	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
+	// Up from no highlight goes to the last row, which the list scrolls to.
 	await page.keyboard.press("ArrowUp")
-	expect((await readSuggestionList(page)).active?.row).toBe(0)
+	expect((await readSuggestionList(page)).active).toMatchObject({ row: 3, shown: true })
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
 	expect((await readSendInputs(page)).destination).toBe(account)
@@ -103,7 +135,9 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
-	// Inside the quarter second the suggestions outlive the field's blur by. No row is a Tab stop.
+	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
+	// Inside the quarter second the suggestions outlive the field's blur by. The list scrolls, and a
+	// scrolling element is a Tab stop unless it opts out: Tab must leave both it and its rows.
 	await page.keyboard.press("Tab")
 	expect(await page.evaluate(() => document.activeElement?.closest('[role="listbox"]') === null)).toBe(true)
 	await page.keyboard.press("Enter")

@@ -32,8 +32,9 @@ const isSearchInputFocused = ref(false)
 const justCleared = ref(false)
 /** Escape closed the suggestions; the next input or focus opens them again. */
 const dismissed = ref(false)
-/** The suggestion Down and Up moved to, or -1: none until an arrow is pressed. */
-const activeIndex = ref(-1)
+/** The suggestion Down and Up moved to, or null: none until an arrow is pressed. Held by identity,
+ *  so a row that loads in ahead of it does not move the highlight onto another destination. */
+const activeRow = shallowRef(null)
 const listId = useId()
 const labelId = `${listId}-label`
 const optionId = (i) => `${listId}-${i}`
@@ -48,7 +49,8 @@ let releaseTimer
 const filteredContacts = computed(() => matchRecipients(props.candidates, searchTerm.value))
 
 const showSuggestions = computed(() => Boolean(filteredContacts.value?.length && isSearchInputFocused.value && !dismissed.value))
-const activeId = computed(() => (showSuggestions.value && activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
+const activeIndex = computed(() => (showSuggestions.value ? filteredContacts.value.indexOf(activeRow.value) : -1))
+const activeId = computed(() => (activeIndex.value >= 0 ? optionId(activeIndex.value) : undefined))
 const showInvalidHint = computed(() => !isSearchInputFocused.value && !isValidAztecAddress(searchTerm.value) && searchTerm.value.length > 0)
 
 const handleSelectContact = (contact) => {
@@ -142,18 +144,21 @@ watch(
 )
 
 watch([filteredContacts, showSuggestions], () => {
-	activeIndex.value = -1
+	if (activeIndex.value < 0) activeRow.value = null
 })
 
 const ARROW_STEPS = { ArrowDown: 1, ArrowUp: -1 }
 
 const moveHighlight = (e, step) => {
 	e.preventDefault()
-	const count = filteredContacts.value.length
-	activeIndex.value = activeIndex.value < 0 && step < 0 ? count - 1 : (activeIndex.value + step + count) % count
-	document.getElementById(optionId(activeIndex.value))?.scrollIntoView({ block: "nearest" })
+	const rows = filteredContacts.value
+	const at = activeIndex.value
+	const next = at < 0 && step < 0 ? rows.length - 1 : (at + step + rows.length) % rows.length
+	activeRow.value = rows[next]
+	document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" })
 }
 
+// With no row highlighted, Enter keeps its typed-name shortcut: the first suggestion.
 const pickHighlighted = (e) => {
 	if (e.repeat) return
 	e.preventDefault()
@@ -161,6 +166,7 @@ const pickHighlighted = (e) => {
 	e.target.blur()
 }
 
+// Marked handled: Chrome closes the toolbar popup on an Escape the page leaves unhandled.
 const dismiss = (e) => {
 	e.preventDefault()
 	dismissed.value = true
@@ -228,6 +234,7 @@ onBeforeUnmount(() => {
 					placeholder="0x... or contact name"
 				/>
 
+				<!-- A list that scrolls is a Tab stop unless it opts out; the field keeps the keyboard. -->
 				<Transition name="fade">
 					<Flex
 						v-if="showSuggestions"
@@ -237,6 +244,7 @@ onBeforeUnmount(() => {
 						:class="$style.contacts_wrapper"
 						:id="listId"
 						role="listbox"
+						tabindex="-1"
 						:aria-labelledby="labelId"
 						data-testid="send-destination-suggestions"
 					>
@@ -251,7 +259,7 @@ onBeforeUnmount(() => {
 							role="option"
 							:aria-selected="i === activeIndex"
 						>
-							<AccountAvatar :name="c.name" :address="c.address" :size="28" />
+							<AccountAvatar :name="c.name" :address="c.address" :size="28" aria-hidden="true" />
 
 							<Flex direction="column" gap="4" wide>
 								<Text size="14" weight="600" color="primary" :class="$style.title">{{ c.name }}</Text>

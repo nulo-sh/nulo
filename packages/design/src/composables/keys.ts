@@ -4,7 +4,6 @@ export function isComposing(e: KeyboardEvent): boolean {
 	return e.isComposing || e.keyCode === 229
 }
 
-/** An auto-repeated or composing keydown. */
 export function isRepeatOrComposing(e: KeyboardEvent): boolean {
 	return e.repeat || isComposing(e)
 }
