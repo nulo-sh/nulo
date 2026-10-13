@@ -5,6 +5,7 @@
  */
 import { describe, expect, test, vi } from "vitest"
 import { TransferType } from "@/wallet/services/transaction/spec"
+import { ChainTipGate } from "./chain-tip-gate"
 import { SendSequencer } from "./send-sequencer"
 import { ExecutionService } from "./service"
 
@@ -13,19 +14,30 @@ const KEYS = new Set(["seq:0xtoken:0xme"])
 
 function makeFacade() {
 	const sendSequencer = new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 })
+	const node = { tip: 0, reads: 0 }
+	const chainTipGate = new ChainTipGate({
+		readTip: async () => {
+			node.reads += 1
+			return node.tip
+		},
+		sleep: () => new Promise((r) => setTimeout(r, 0)),
+		now: () => 0,
+		logDebug: () => {},
+	})
 	const admit = vi.fn(async () => new AbortController().signal)
 	const estimateFee = vi.fn(async () => ({ maxFee: "1", maxFeeFormatted: "1", gasDetails: {} }))
 	const lane = { isSlotBusy: vi.fn(() => false) }
 	const facade = Object.assign(Object.create(ExecutionService.prototype), {
 		ensureInitialized: async () => {},
 		sendSequencer,
+		chainTipGate,
 		transferExecutor: { sequence: vi.fn(async () => ({ scope: SCOPE, keys: KEYS })), estimateFee },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane,
 		estimateCancel: { admit, settle: vi.fn() },
 	}) as ExecutionService
 	const estimate = () => facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, {} as never, "tok-1")
-	return { facade, sendSequencer, lane, admit, estimateFee, estimate }
+	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate }
 }
 
 describe("ExecutionService.estimateTransferFee while a send holds the transfer's chain state", () => {
@@ -43,6 +55,24 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
 		expect(lane.isSlotBusy).toHaveBeenCalledWith("p1", 7)
 		expect(admit).not.toHaveBeenCalled()
+	})
+
+	test("a predecessor's block the PXE's node lacks answers queued and reads the tip; once read, it estimates", async () => {
+		const { chainTipGate, node, admit, estimateFee, estimate } = makeFacade()
+		node.tip = 6
+		const swap = { contract: "0xtoken", method: "swap", args: [] }
+		chainTipGate.observe({ chainId: 7, account: "0xme", networkId: "net-1", block: { number: 7, hash: "0xb" }, calls: [swap] })
+		await new Promise((r) => setTimeout(r, 0))
+		const readsBefore = node.reads
+		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
+		expect(node.reads).toBe(readsBefore + 1)
+		expect(admit).not.toHaveBeenCalled()
+		// Each queued answer reads the tip for the popup's next ask.
+		node.tip = 7
+		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })
+		await new Promise((r) => setTimeout(r, 0))
+		expect(await estimate()).toMatchObject({ maxFee: "1" })
+		expect(estimateFee).toHaveBeenCalledTimes(1)
 	})
 
 	test("once clear, admits the token and estimates with the transfer's sequence", async () => {

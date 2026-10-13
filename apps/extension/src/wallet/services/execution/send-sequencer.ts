@@ -61,7 +61,8 @@ interface Holder {
 	sent?: { hash: string; at: number }
 }
 
-const scopeId = (scope: SequenceScope): string => `${scope.chainId}|${scope.account.toLowerCase()}`
+/** One account's line on one chain. */
+export const scopeId = (scope: SequenceScope): string => `${scope.chainId}|${scope.account.toLowerCase()}`
 
 export class SendSequencer {
 	private readonly holders: Holder[] = []

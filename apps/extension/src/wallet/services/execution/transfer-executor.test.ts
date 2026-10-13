@@ -23,6 +23,7 @@ import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { OriginType, TransferType } from "@/wallet/services/transaction/service"
 import type { ProveAndSendContext } from "./execution-coordinator"
 import type { TransferRequest } from "./operation-planner"
+import { ChainTipGate } from "./chain-tip-gate"
 import { MAX_WAIT_MS, SendSequencer } from "./send-sequencer"
 import type { TransferFeeEstimate } from "./spec"
 import { TransferExecutor, type TransferExecutorDeps } from "./transfer-executor"
@@ -66,6 +67,21 @@ function makeReq(overrides: Partial<TransferRequest> = {}): TransferRequest {
 	}
 }
 
+/** A real gate over `readTip`, on a clock frozen at 0 whose sleeps only yield a macrotask. */
+function tipGate(readTip: () => Promise<number>) {
+	const reads = { count: 0 }
+	const gate = new ChainTipGate({
+		readTip: () => {
+			reads.count += 1
+			return readTip()
+		},
+		sleep: () => new Promise((r) => setTimeout(r, 0)),
+		now: () => 0,
+		logDebug: vi.fn(),
+	})
+	return { gate, reads }
+}
+
 function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 	const task = { complete: vi.fn(), fail: vi.fn(), cancel: vi.fn() }
 	const network = {
@@ -101,6 +117,7 @@ function makeHarness(overrides: Partial<TransferExecutorDeps> = {}) {
 		estimateReuse: { tryConsume: vi.fn(async () => undefined), stash: vi.fn() } as never,
 		coordinator: { proveAndSend } as never,
 		sequencer: new SendSequencer({ pendingTxs: () => [], sleep: () => new Promise((r) => setTimeout(r, 5)), now: () => 0 }),
+		chainTip: tipGate(async () => 0).gate,
 		getFpcImpl: vi.fn(
 			async () => ({ infoData: { type: FpcType.DefaultSponsoredFpc, isProtocol: true, chainId: 7, address: "0xsponsor" } }) as never,
 		),
@@ -926,6 +943,96 @@ describe("TransferExecutor.estimateFee: each cancel checkpoint", () => {
 		const target = notCalled === "buildTransferOperation" ? deps.planner.buildTransferOperation : deps[notCalled]
 		expect(target).not.toHaveBeenCalled()
 		expect(deps.estimateReuse.stash).not.toHaveBeenCalled()
+	})
+})
+
+describe("TransferExecutor: a predecessor's block the PXE's node does not have yet", () => {
+	/** A tx of the token settled at `block`: it shares a key with every `makeReq()` send. */
+	const settledAt = (block: number) => ({
+		chainId: 7,
+		account: "0xme",
+		networkId: "net-1",
+		block: { number: block, hash: `0xb${block}` },
+		calls: [{ contract: "0xtoken", method: "swap", args: [] }],
+	})
+	const settle = () => new Promise((r) => setTimeout(r, 0))
+
+	test("starts queued and takes no slot, heartbeated, until the tip reads the block", async () => {
+		const node = { tip: 6 }
+		const { gate, reads } = tipGate(async () => node.tip)
+		gate.observe(settledAt(7))
+		await settle()
+		const { executor, deps } = makeHarness({ chainTip: gate })
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await vi.waitFor(() => expect(reads.count).toBeGreaterThan(2))
+		expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "queued" } }))
+		expect(deps.lane.acquireTransferSlot).not.toHaveBeenCalled()
+		expect(deps.lane.beginQueuedWait).toHaveBeenCalledWith("j1")
+		expect(deps.lane.endQueuedWait).not.toHaveBeenCalled()
+		node.tip = 7
+		await run
+		expect(deps.lane.endQueuedWait).toHaveBeenCalledWith("j1")
+		expect(deps.lane.acquireTransferSlot).toHaveBeenCalledTimes(1)
+		expect((deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1].stage).slice(0, 2)).toEqual([
+			"pending",
+			"simulating",
+		])
+	})
+
+	test("a block the tip already reached, or another token's, holds nothing", async () => {
+		const reached = tipGate(async () => 7)
+		reached.gate.observe(settledAt(7))
+		const other = tipGate(async () => 0)
+		other.gate.observe({ ...settledAt(7), calls: [{ contract: "0xother", method: "swap", args: [] }] })
+		await settle()
+		for (const { gate } of [reached, other]) {
+			const { executor, deps } = makeHarness({ chainTip: gate })
+			await executor.execute(makeReq(), undefined, FENCE)
+			expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "pending" } }))
+		}
+	})
+
+	test("a predecessor that settles while the send takes the slot: the slot goes back with no read awaited under it", async () => {
+		// Tip reads hang and no sleep ends until the test says so: a read awaited under the slot would hold it.
+		const sleeps: (() => void)[] = []
+		const gate = new ChainTipGate({
+			readTip: () => new Promise<number>(() => {}),
+			sleep: (_ms, signal) =>
+				new Promise<void>((resolve) => {
+					sleeps.push(resolve)
+					signal.addEventListener("abort", () => resolve())
+				}),
+			now: () => 0,
+			logDebug: vi.fn(),
+		})
+		const { executor, deps } = makeHarness({ chainTip: gate })
+		const releases: ReturnType<typeof vi.fn>[] = []
+		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			if (releases.length === 0) gate.observe(settledAt(8))
+			const release = vi.fn()
+			releases.push(release)
+			return release
+		})
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await vi.waitFor(() => expect(releases[0]).toHaveBeenCalled())
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		// The hung read times out, which lets the send run unordered.
+		let finished = false
+		void run.then(
+			() => {
+				finished = true
+			},
+			() => {
+				finished = true
+			},
+		)
+		while (!finished) {
+			for (const wake of sleeps.splice(0)) wake()
+			await settle()
+		}
+		await run
+		expect(releases).toHaveLength(2)
+		expect(deps.buildAndEstimate).toHaveBeenCalledTimes(1)
 	})
 })
 
