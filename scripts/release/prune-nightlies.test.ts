@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isNightlyTag, KEEP, planPrune, type ReleaseEntry } from "./prune-nightlies"
 
-/** `count` nightlies on one line, a day apart from `start`, each with a release and a tag. */
 const nights = (count: number, start = 26200, version = "0.30.2"): string[] =>
 	Array.from({ length: count }, (_, i) => `v${version}-nightly.${start + i}`)
 const released = (tags: readonly string[], from = 1): ReleaseEntry[] => tags.map((tag, i) => ({ id: from + i, tag }))
@@ -28,6 +27,7 @@ describe("planPrune", () => {
 			"v1.0.0-nightly.26200.1",
 			"v1.0.0-nightly.26200-x",
 			"1.0.0-nightly.26200",
+			"xv1.0.0-nightly.26200",
 			"v1.0.0-Nightly.26200",
 			"v1.0-nightly.26200",
 			"untagged-0123456789abcdef",
@@ -43,9 +43,11 @@ describe("planPrune", () => {
 		expect(planPrune(released(tags), tags).map((d) => d.tag)).toEqual(["v0.30.2-nightly.25365"])
 	})
 
-	test("breaks a shared date code by version: each version line searches its own codes", () => {
-		const tags = [...nights(13, 26300, "0.31.0"), "v0.30.2-nightly.26290", "v0.31.0-nightly.26290"]
-		expect(planPrune(released(tags), tags).map((d) => d.tag)).toEqual(["v0.30.2-nightly.26290"])
+	test("orders by date code before version, and by version within one code", () => {
+		const across = [...nights(13, 26300), "v0.30.2-nightly.26295", "v0.31.0-nightly.26290"]
+		expect(planPrune(released(across), across).map((d) => d.tag)).toEqual(["v0.31.0-nightly.26290"])
+		const shared = [...nights(13, 26300, "0.31.0"), "v0.30.2-nightly.26290", "v0.31.0-nightly.26290"]
+		expect(planPrune(released(shared), shared).map((d) => d.tag)).toEqual(["v0.30.2-nightly.26290"])
 	})
 
 	test("counts a draft by its name, and selects a tag whose release is gone and a release whose tag is gone", () => {

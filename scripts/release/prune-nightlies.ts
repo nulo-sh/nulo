@@ -22,7 +22,7 @@ export interface Doomed {
 
 export const isNightlyTag = (tag: string): boolean => NIGHTLY.test(tag)
 
-/** Date code first, then the version: `resolve` searches codes per version, so two lines can share one. */
+/** Date code first, as `resolve` cuts each one above every existing code; the version settles a tie. */
 function age(tag: string): number[] {
 	const [, major, minor, patch, code] = (NIGHTLY.exec(tag) as RegExpExecArray).map(Number)
 	return [code, major, minor, patch]

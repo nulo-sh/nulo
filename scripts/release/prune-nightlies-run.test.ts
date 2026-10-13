@@ -12,7 +12,6 @@ interface World {
 	fail?: Record<string, () => unknown>
 }
 
-/** Every listed nightly with a release (ids from 1) and a tag. */
 function world(tags: readonly string[]): World {
 	return { releases: new Map(tags.map((tag, i) => [i + 1, tag])), tags: new Set(tags), calls: [], logs: [] }
 }

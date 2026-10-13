@@ -74,8 +74,8 @@ function privileged(job: Job, wf: Workflow): boolean {
 	const declared = job.permissions ?? wf.permissions ?? {}
 	if (declared === "write-all") return true
 	const permissions = declared as Record<string, unknown>
-	const signs = permissions["id-token"] === "write" || permissions.attestations === "write"
-	return signs || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
+	const writes = permissions["id-token"] === "write" || permissions.attestations === "write" || permissions.contents === "write"
+	return writes || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
 }
 
 /** The exact permission set of each App token; none may name another owner or repository. */
@@ -134,6 +134,7 @@ const THIRD_PARTY: Record<string, string[]> = {
 	"store-check.yml#chrome": ["google-github-actions/auth", "oven-sh/setup-bun"],
 	"publish-packages.yml#publish": [],
 	"nightly.yml#publish-nightly": ["oven-sh/setup-bun"],
+	"nightly.yml#prune-nightlies": ["oven-sh/setup-bun"],
 }
 
 function credentialedJobFindings(tree: Tree, where: string, wf: Workflow, job: Job): string[] {
@@ -441,10 +442,12 @@ function pruneFindings(tree: Tree): string[] {
 	if (!Bun.deepEquals(job.permissions, { contents: "write" })) findings.push(`${PRUNE}: permissions ${JSON.stringify(job.permissions)}`)
 	if (!Bun.deepEquals(needsOf(job), ["publish-nightly"]) || job.if !== PRUNE_GUARD)
 		findings.push(`${PRUNE}: runs without a published night`)
-	const steps = (job.steps ?? []).filter((s) => s.run?.includes("prune-nightlies-run.ts"))
-	const env = (steps[0] as { env?: Record<string, unknown> } | undefined)?.env
-	if (steps.length !== 1 || steps[0].run !== PRUNE_RUN || env?.DRY_RUN !== PRUNE_DRY_RUN)
-		findings.push(`${PRUNE}: may delete on a dry run`)
+	const steps = [...jobs(tree)].flatMap(({ where, job }) =>
+		(job.steps ?? []).filter((s) => s.run?.includes("prune-nightlies-run.ts")).map((step) => ({ where, step })),
+	)
+	const env = (steps[0]?.step as { env?: Record<string, unknown> } | undefined)?.env
+	if (steps.length !== 1 || steps[0].where !== PRUNE || steps[0].step.run !== PRUNE_RUN || env?.DRY_RUN !== PRUNE_DRY_RUN)
+		findings.push(`${PRUNE}: may delete on a dry run, or from another job`)
 	return findings
 }
 
@@ -527,6 +530,11 @@ describe("credentialed jobs", () => {
 			(t: Tree) => Object.assign(step(t, "store-check.yml#chrome", "actions/checkout@").with ?? {}, { "persist-credentials": true }),
 		],
 		["a job-wide GH_TOKEN", (t: Tree) => Object.assign(t.workflows["release.yml"].jobs["auto-unstick"], { env: { GH_TOKEN: "x" } })],
+		[
+			"a persisted checkout in a contents-write job",
+			(t: Tree) =>
+				Object.assign(step(t, "nightly.yml#prune-nightlies", "actions/checkout@").with ?? {}, { "persist-credentials": true }),
+		],
 		[
 			"an unlisted action",
 			(t: Tree) =>
@@ -886,6 +894,14 @@ describe("nightly prune", () => {
 		[
 			"a second prune step",
 			(t: Tree) => prune(t).steps?.push({ run: "bun --no-install scripts/release/prune-nightlies-run.ts --apply" }),
+		],
+		[
+			"the prune moved into the publishing job",
+			(t: Tree) => {
+				const steps = prune(t).steps ?? []
+				const at = steps.findIndex((s) => s.run?.includes("prune-nightlies-run.ts"))
+				t.workflows["nightly.yml"].jobs["publish-nightly"].steps?.push(...steps.splice(at, 1))
+			},
 		],
 	])("finds %s", (_, edit) => {
 		expect(pruneFindings(mutated(edit)).length).toBeGreaterThan(0)

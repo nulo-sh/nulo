@@ -122,24 +122,15 @@ jobs:
             exit 1
           fi
 
+          # Above every nightly code on any version line: prune-nightlies frees the oldest names, and
+          # a code below a kept one would sort oldest and be pruned at once (GitHub never reissues a
+          # deleted immutable release's tag). Captured first, so a failed probe aborts via set -e
+          # instead of reading as "no tags".
+          REMOTE_TAGS="$(git ls-remote --tags origin)"
+          LAST_CODE="$(sed -nE 's#.*refs/tags/v[0-9]+\.[0-9]+\.[0-9]+-nightly\.([0-9]{5})$#\1#p' <<<"$REMOTE_TAGS" | sort -n | tail -n 1)"
+          LAST_CODE="${LAST_CODE:-0}"
           DATE_CODE="$(date -u +%y%j)"
-          CODE="$DATE_CODE"
-          ATTEMPT=0
-          while true; do
-            # Capture first so a git/network failure aborts via set -e instead
-            # of reading as "tag absent" (an empty result must only ever mean
-            # absence, never an errored probe).
-            REMOTE_MATCH="$(git ls-remote --tags origin "refs/tags/v${BASE_VERSION}-nightly.${CODE}")"
-            if ! grep -q . <<<"$REMOTE_MATCH"; then
-              break
-            fi
-            ATTEMPT=$((ATTEMPT + 1))
-            if [ "$ATTEMPT" -gt 20 ]; then
-              echo "::error::more than 20 nightly tags exist for date-code $DATE_CODE — aborting rather than looping further"
-              exit 1
-            fi
-            CODE=$((CODE + 1))
-          done
+          CODE=$((DATE_CODE > LAST_CODE ? DATE_CODE : LAST_CODE + 1))
 
           TAG="v${BASE_VERSION}-nightly.${CODE}"
           VERSION="${TAG#v}"
@@ -618,9 +609,9 @@ jobs:
           ls -la dist/release/
 
   # Keeps the newest fourteen nightly tags and their releases and deletes the rest, release before
-  # tag. After this night's publish, inside the same run, so the two never race. It needs the owner's
-  # exclusion of `refs/tags/v*-nightly.*` from the `release tags` ruleset, which keeps every stable
-  # and rc tag out of its reach; its selection refuses any other name as well.
+  # tag. After this night's publish, inside the same run, so the two never race. The `release tags`
+  # ruleset excludes `refs/tags/v*-nightly.*` for it and still holds every stable and rc tag; its
+  # selection refuses any other name as well.
   prune-nightlies:
     needs: publish-nightly
     if: always() && !cancelled() && needs.publish-nightly.result == 'success'
