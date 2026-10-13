@@ -35,18 +35,19 @@ export function wirePayload(calls: readonly Record<string, unknown>[], feePayer?
 	return { ...payload, calls: [...calls], ...(feePayer === undefined ? {} : { feePayer }) }
 }
 
-/** A contract instance preimage with its address, as `registerContract` takes it. */
+/** A contract instance with its address, as `registerContract` takes it. */
 export function wireInstance(address: string): Record<string, unknown> {
-	const preimage = {
+	const instance = {
 		version: 2,
 		salt: new Fr(7n),
 		deployer: AztecAddress.ZERO,
+		currentContractClassId: new Fr(8n),
 		originalContractClassId: new Fr(8n),
 		initializationHash: new Fr(9n),
 		immutablesHash: new Fr(10n),
 		publicKeys: PublicKeys.default(),
 	}
-	return { ...(onWire(preimage) as Record<string, unknown>), address }
+	return { ...(onWire(instance) as Record<string, unknown>), address }
 }
 
 /** A 32-byte address whose every byte is `byte`, lower-case as the wire carries it. */

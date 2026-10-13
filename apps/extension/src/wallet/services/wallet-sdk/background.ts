@@ -78,6 +78,7 @@ import {
 	ScopeViolationError,
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
+	UnsupportedMethodError,
 	isReceiverGoneRejection,
 } from "@nulo/extension-messaging/errors"
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
@@ -1336,6 +1337,7 @@ function isExpectedRefusal(error: unknown): boolean {
 		error instanceof ScopeViolationError ||
 		error instanceof ChainNotSupportedError ||
 		error instanceof InvalidWalletArgumentsError ||
+		error instanceof UnsupportedMethodError ||
 		error instanceof TooManyPendingError
 	)
 }
