@@ -26,3 +26,4 @@
 - 2026-10-13: decision page 5 applied (D-orch-10 to D-orch-14); arc 5a branched from dev at e900f710.
 - 2026-10-13: phase 5a.1 gate passed (unit red on base; onboarding-tab smoke at retry 0: Chrome 11/11, Firefox 11/11; screenshots in both themes). Phase 5a.2: #183 verified, no gap.
 - 2026-10-13: phase 5a.3 pins red on base and under six mutations; the leg measured at 9 min 39 s (soak run 38461936523, green at retry 0); lint, lint:actions, test:ci-gating passed.
+- 2026-10-13: arc 5a review: Codex round 1 and Opus approve with fixes, all accepted (54156237); Codex round 2 CLEAN; tx-sendTx-default green on a runner (soak 38464845247) and locally.

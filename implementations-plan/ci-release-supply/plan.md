@@ -676,6 +676,21 @@ On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same
 
 Built in parallel as two PRs off `dev` (D-orch-8). A block both branches insert merges once only while neither edits inside it, so each arc records its Codex rounds and Opus review, with every finding's disposition, under its own phase in § Phases (3.1, 4.1).
 
+### Arc 5a, Codex round 1 (gpt-6.1-sol, high, read-only) and the Opus review, 2026-10-13
+
+Codex session 01a136f7-4c81-7ec2-99b5-d2eb603bc9b7 on `e900f710...225d5aef`: **approve with fixes**, three Low. Opus: **approve with fixes**, one Low-Medium, two Low, one Nit. Both found that nothing can gate a publish, the pins can fail, and #82 and #183 hold.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1, O1 | Low, Low-Medium; plausible. The leg's evidence rests on unasserted facts: `tx-sendTx-default` accepts either awaiting card off required mode (Codex), and nothing pins that `disable_presto` maps to neither proverless nor required mode (Opus), so a native service on the runner or a "WASM is slow" edit could green the leg without proving in the browser | Accepted, both: on a runner a plain build must show the browser card (presto-server starts for required builds only); the WASM-leg pin also holds both env expressions of the suite. Proven on a runner by soak run 38464845247 |
+| C2 | Low. CI.md: "a red night publishes nothing" no longer holds; the Presto paragraph and "every other prover-ON job" ignore the leg and the rollback flag | Accepted |
+| C3 | Low. The plan called arc 5's code built before it existed | Accepted |
+| O2 | Low. CLAUDE.md's nightly bullet named two non-gating jobs | Accepted |
+| O3 | Low. The Presto copy header still misstated which titles are Nulo's own (the pitch states, the remembered denial) | Accepted |
+| O4 | Nit. Two new comment lines over 100 characters | Accepted |
+
+Round 2 (resumed, on `54156237`): **CLEAN**. The backend selection holds on every lane (required canaries and native soaks require Presto; the leg, rollback-variable canaries and Presto-off soaks require the browser; local plain builds accept either), and the expression pins hold. The loop converged.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before the next arc's branch starts; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
