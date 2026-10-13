@@ -19,7 +19,10 @@ const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
 	getTokenBalances: vi.fn(),
 	getFpcs: vi.fn(),
+	saveFeePick: vi.fn(),
 }))
+
+vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
 
 // Vitest 4 requires `function` expressions (not arrow functions) for mocks
 // instantiated with `new`. Arrow factories error: "() => ... is not a constructor".
@@ -79,6 +82,8 @@ vi.mock("@/stores/app.store", () => ({
 }))
 
 import FeeSettingsCard from "./FeeSettingsCard.vue"
+import { applyFeePickUpdate, type FeePickUpdate } from "@/utils/fee-picks"
+import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { INIT_FETCH_TIMEOUT_MS, INIT_RETRY_BACKOFF_MS, useBalancesStore } from "@/stores/balances.store"
 
 const STUBS = {
@@ -122,7 +127,7 @@ const STUBS = {
 	},
 }
 
-const FEE_METHOD_LS_KEY = "nulo:ui:feePaymentMethods"
+const FEE_METHOD_LS_KEY = feePicksKey("p1")
 
 const profile = { id: "p1", name: "Profile 1" }
 const network = { id: "n1", chainId: 11155111 }
@@ -203,6 +208,15 @@ beforeEach(() => {
 	mocks.getGasBalances.mockReset()
 	mocks.getTokenBalances.mockReset()
 	mocks.getFpcs.mockReset()
+	mocks.saveFeePick.mockReset()
+	// The profile service's writer, over this suite's storage: the real reducer, no lock.
+	mocks.saveFeePick.mockImplementation(async (profileId: string, update: FeePickUpdate) => {
+		const keys = { app: feePicksKey(profileId), send: sendFeePicksKey(profileId) }
+		const next = applyFeePickUpdate({ app: storageBacking[keys.app], send: storageBacking[keys.send] }, update)
+		if (next.app) storageBacking[keys.app] = next.app
+		if (next.send) storageBacking[keys.send] = next.send
+		return true
+	})
 	// Defaults — individual tests override.
 	mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
 	mocks.getTokenBalances.mockResolvedValue([])
@@ -668,8 +682,7 @@ describe("FeeSettingsCard — the saved pick, outside Send", () => {
 		await flushPromises()
 
 		const refusal = new Error("QUOTA_BYTES quota exceeded")
-		// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-		vi.spyOn((globalThis as any).chrome.storage.local, "set").mockRejectedValueOnce(refusal)
+		mocks.saveFeePick.mockRejectedValueOnce(refusal)
 		const logged = vi.spyOn(console, "error").mockImplementation(() => {})
 		try {
 			await pickSponsor(w, "s2")
@@ -1887,7 +1900,7 @@ describe("FeeSettingsCard — null public balance (unknown wire slot)", () => {
  * committed snapshot and the account's own pick — see `fee-privacy.ts` for the rule itself.
  */
 describe("FeeSettingsCard — Send: the fee source follows the transfer's origin", () => {
-	const SEND_KEY = "nulo:ui:sendFeePaymentMethods"
+	const SEND_KEY = sendFeePicksKey("p1")
 	const HELD = "1000000000000000000"
 	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
 	const SPONSOR = { id: "s1", type: 1, name: "Sponsor", isProtocol: true }
@@ -2058,7 +2071,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			const gas = deferred<unknown>()
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, SPONSOR])
 			mocks.getGasBalances.mockReturnValue(gas.promise)
-			storageBacking["nulo:ui:sendFeePaymentMethods"] = {
+			storageBacking[sendFeePicksKey("p1")] = {
 				[account.address]: { private: { type: "fpc", fpc: { id: "s1", name: "Sponsor" } } },
 			}
 			const w = mountSend()
@@ -2177,8 +2190,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			const w = mountSend()
 			await flushPromises()
 			const refusal = new Error("QUOTA_BYTES quota exceeded")
-			// biome-ignore lint/suspicious/noExplicitAny: test-only global stub
-			vi.spyOn((globalThis as any).chrome.storage.local, "set").mockRejectedValueOnce(refusal)
+			mocks.saveFeePick.mockRejectedValueOnce(refusal)
 			const logged = vi.spyOn(console, "error").mockImplementation(() => {})
 			try {
 				await w.find('[data-testid="pick-fj"]').trigger("click")
@@ -2269,22 +2281,6 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await w.setProps({ account: accountB })
 			storageGate.resolve()
 			storageGate = undefined
-			await flushPromises()
-			expect(storageBacking[SEND_KEY]).toEqual({ [account.address]: { private: { type: "fj" } } })
-		})
-
-		test("a pick racing an FPC prune: both effects are persisted", async () => {
-			allPayers()
-			storageBacking[SEND_KEY] = { [accountB.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
-			const { mutateSendSelections, withoutFpc } = await import("./fee-send-selection")
-			const w = mountSend()
-			await flushPromises()
-			storageGate = deferred<void>()
-			await w.find('[data-testid="pick-fj"]').trigger("click")
-			const prune = mutateSendSelections((raw) => withoutFpc(raw, "s1"))
-			storageGate.resolve()
-			storageGate = undefined
-			await prune
 			await flushPromises()
 			expect(storageBacking[SEND_KEY]).toEqual({ [account.address]: { private: { type: "fj" } } })
 		})
@@ -2834,7 +2830,7 @@ describe("FeeSettingsCard — Send: the payer model", () => {
 	test("a hand-added sponsor, once picked, is reported unvouched; an identity switch withdraws the payer until the new read lands", async () => {
 		// It pays only once picked: both accounts saved it for a private send.
 		const picked = { private: { type: "fpc", fpc: { id: "s2" } } }
-		storageBacking["nulo:ui:sendFeePaymentMethods"] = { [account.address]: picked, [accountB.address]: picked }
+		storageBacking[sendFeePicksKey("p1")] = { [account.address]: picked, [accountB.address]: picked }
 		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, HAND_ADDED])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: "0" })
 		const w = mountSend()
@@ -3067,7 +3063,7 @@ describe("FeeSettingsCard — the identity guards, field by field", () => {
 	const shortSponsor = async () => {
 		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, NULO])
 		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: HELD, privateFeeJuice: "0" })
-		storageBacking["nulo:ui:sendFeePaymentMethods"] = { [account.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
+		storageBacking[sendFeePicksKey("p1")] = { [account.address]: { public: { type: "fpc", fpc: { id: "s1" } } } }
 		const w = mount(FeeSettingsCard, {
 			props: baseProps({ originPrivacy: "public", destinationPrivacy: "private" }),
 			global: { stubs: STUBS },

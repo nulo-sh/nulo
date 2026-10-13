@@ -4,11 +4,11 @@
  */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
 import { clickByTestId, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
-import { getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
+import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
@@ -152,7 +152,7 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 			return pick?.type === "fpc" && pick.fpc?.id === want
 		},
 		{ timeout: 10_000 },
-		UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS,
+		sendFeePicksKey(await captureSoleProfileId(page)),
 		account,
 		SEEDED_SPONSOR_FPC_ID,
 	)

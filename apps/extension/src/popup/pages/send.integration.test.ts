@@ -109,6 +109,7 @@ vi.mock("@/wallet/services/transaction/client", async (importOriginal) => ({
 }))
 vi.mock("@/utils/core", () => ({
 	managers: {
+		profile: { saveFeePick: vi.fn(async () => true) },
 		legal: {
 			onAcceptanceChanged: new EventHandler(),
 			onConnected: new EventHandler(),
@@ -129,7 +130,7 @@ vi.mock("vue-router", () => ({
 
 import type { PayerKind, TransferSide, Visibility } from "@/components/composite/send/publish-facts"
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
+import { sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { useAppStore } from "@/stores/app.store"
 import { INIT_RETRY_BACKOFF_MS } from "@/stores/balances.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -195,7 +196,7 @@ const HELD = "1000000000000000000"
 const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
 const SPONSOR = { id: "s1", type: 1, name: "Sponsor", isProtocol: true }
 const HAND_ADDED = { id: "s2", type: 1, name: "Mine", isProtocol: false }
-const SEND_PICKS = UI_STORAGE_KEYS.SEND_FEE_PAYMENT_METHODS
+const SEND_PICKS = sendFeePicksKey("p1")
 /** A hand-added sponsor pays only once picked: saved for both origins. */
 const HAND_ADDED_PICKED = { [ACCOUNT]: { private: { type: "fpc", fpc: { id: "s2" } }, public: { type: "fpc", fpc: { id: "s2" } } } }
 

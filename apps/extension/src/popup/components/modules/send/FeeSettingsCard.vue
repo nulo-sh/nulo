@@ -9,10 +9,12 @@ import FeeMethodSelector from "./FeeMethodSelector.vue"
 /** Vendor */
 import { getRandomHex } from "@/wallet/utils"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
-import { UI_STORAGE_KEYS } from "@/popup/constants/storage-keys"
 
 /** Utils */
-import { storageLocalGet, storageLocalSet } from "@/utils/storage"
+import { managers } from "@/utils/core"
+import { storageLocalGet } from "@/utils/storage"
+import { readAppPicks, readSendSlots } from "@/utils/fee-picks"
+import { feePicksKey, sendFeePicksKey } from "@/utils/profile-ui-keys"
 
 /** Services */
 import { FpcServiceClient } from "@/wallet/services/fpc/client"
@@ -33,7 +35,6 @@ import {
 	settingsForMethod,
 } from "./fee-helpers"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
-import { loadSendSelections, mutateSendSelections, readSendSlots, withSendSlot } from "./fee-send-selection"
 import { usePrices } from "@/composables/usePrices"
 
 /** Composables */
@@ -74,8 +75,8 @@ const props = defineProps({
 	txShape: { type: String, default: "" },
 })
 
-const FEE_METHOD_LS_KEY = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
-const readSavedFeeMethods = async () => (await storageLocalGet(FEE_METHOD_LS_KEY))[FEE_METHOD_LS_KEY] || {}
+const readStored = async (key) => (await storageLocalGet(key))[key]
+const readSavedFeeMethods = async (profileId) => readAppPicks(await readStored(feePicksKey(profileId)))
 
 const settings = defineModel()
 
@@ -360,9 +361,8 @@ watch(
  * `onBalanceUpdated`.
  */
 const persistSelection = async (method) => {
-	const fpms = await readSavedFeeMethods()
-	fpms[props.account.address] = savedSelectionOf(method)
-	await storageLocalSet({ [FEE_METHOD_LS_KEY]: fpms })
+	const update = { kind: "app", address: props.account.address, pick: savedSelectionOf(method) }
+	await managers.profile.saveFeePick(props.profile.id, update)
 
 	if (method.type === "fpc" || method.type === "private_fpc") {
 		const idx = cacheStore.feePaymentMethods.findIndex((m) => m.id === methodId)
@@ -378,9 +378,10 @@ const pickForSend = (m) => {
 	const origin = props.originPrivacy
 	const record = recordOf(m)
 	sendPicks[address] = { ...sendPicks[address], [origin]: record }
-	mutateSendSelections((raw) => withSendSlot(raw, address, origin, record)).catch((e) =>
-		console.error("Failed to save the send fee selection", { error: e }),
-	)
+	const update = { kind: "send", address, side: origin, pick: record }
+	managers.profile
+		.saveFeePick(props.profile.id, update)
+		.catch((e) => console.error("Failed to save the send fee selection", { error: e }))
 }
 
 /** The selection is the card's own default, not a saved or live pick. */
@@ -610,9 +611,9 @@ const ensureLegsSettled = async (scope) => {
 /** The saved selections this card reconciles against. Send reads its own key into `sendPicks`, for
  *  the address it read for and under any pick already made in this mount (which is newer), and
  *  reconciles nothing — so it hands back an empty legacy map. */
-const readSavedSelections = async (address) => {
-	if (props.originPrivacy === null) return readSavedFeeMethods()
-	const slots = readSendSlots(await loadSendSelections(), address)
+const readSavedSelections = async ({ profileId, accountAddress: address }) => {
+	if (props.originPrivacy === null) return readSavedFeeMethods(profileId)
+	const slots = readSendSlots(await readStored(sendFeePicksKey(profileId)), address)
 	sendPicks[address] = { ...slots, ...sendPicks[address] }
 	return {}
 }
@@ -634,7 +635,7 @@ const prefillSelection = (saved) => {
  *  the pre-fill would clobber that run's reconcile. */
 const readAndPrefill = async (scope, myRun) => {
 	const beforeRead = { method: selectedMethod.value, pick: pickSeq }
-	const saved = await readSavedSelections(scope.accountAddress)
+	const saved = await readSavedSelections(scope)
 	if (myRun !== runSeq || !isMounted) return null
 	if (touchedSince(beforeRead)) return { saved, baseline: beforeRead }
 	prefillSelection(saved)
@@ -742,7 +743,7 @@ const recommit = async () => {
 	// baseline, so the reconcile keeps the pick instead of re-applying a
 	// stale storage snapshot over it.
 	const baseline = { method: selectedMethod.value, pick: pickSeq }
-	const saved = await readSavedFeeMethods()
+	const saved = await readSavedFeeMethods(scope.profileId)
 	// Re-validate AFTER the await: an identity switch during the storage read
 	// must not let this late commit re-open the gate with the OLD identity's
 	// data (the switch closed it; only the new identity's init may commit).

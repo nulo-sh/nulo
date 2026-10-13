@@ -1,5 +1,6 @@
 import { FpcType } from "@/wallet/services/fpc/client"
 import { feeJuicePricingFromUsd, feeToUsd, formatGasBalance } from "@/utils/fee-estimation"
+import type { AppPick } from "@/utils/fee-picks"
 
 export { formatGasBalance }
 
@@ -169,15 +170,9 @@ export function resolveSavedSelection(
 	}
 }
 
-/** The one-pick-per-account key's record: what the trigger shows while the card loads, and the
- *  sponsor's identity and whether Nulo vouches for it. */
-export type SavedSelection = Pick<FeeMethodOption, "type" | "title" | "subtitle"> & {
-	fpc?: Pick<RegisteredFpc, "id" | "isProtocol">
-}
-
 /** A picked row as plain values, without the row's `fpc` itself: that is the card's reactive state,
  *  and it carries fields no reader of the record uses. */
-export function savedSelectionOf({ type, title, subtitle, fpc }: FeeMethodOption): SavedSelection {
+export function savedSelectionOf({ type, title, subtitle, fpc }: FeeMethodOption): AppPick {
 	return fpc ? { type, title, subtitle, fpc: { id: fpc.id, isProtocol: fpc.isProtocol } } : { type, title, subtitle }
 }
 

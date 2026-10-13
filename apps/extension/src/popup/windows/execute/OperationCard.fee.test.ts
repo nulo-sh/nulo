@@ -12,8 +12,11 @@ const mocks = vi.hoisted(() => ({
 	getGasBalances: vi.fn(),
 	getFpcs: vi.fn(),
 	storageSet: vi.fn(async (_items: Record<string, unknown>) => {}),
+	saveFeePick: vi.fn(async () => true),
 	feeJuiceUsd: undefined as number | undefined,
 }))
+
+vi.mock("@/utils/core", () => ({ managers: { profile: { saveFeePick: mocks.saveFeePick } } }))
 
 // Vitest 4 requires `function` expressions for mocks instantiated with `new`.
 vi.mock("@/wallet/services/execution/client", () => ({
@@ -130,8 +133,6 @@ const mountCard = async (op: unknown, dapp?: { name: string }) => {
 }
 /** The fee settings the card last handed the window. */
 const lastSettings = (w: VueWrapper) => w.emitted<[number, unknown]>("updateFeeSettings")?.at(-1)?.[1]
-const FEE_PICKS_KEY = "nulo:ui:feePaymentMethods"
-const savedKeys = () => mocks.storageSet.mock.calls.flatMap(([items]) => Object.keys(items))
 
 /** The text a screen reader reaches in `el`: every text node outside an `aria-hidden` subtree. */
 function spokenText(el: Element): string {
@@ -217,7 +218,7 @@ describe("OperationCard — the sponsor a wire-shaped transaction defaults to", 
 		mocks.getFpcs.mockResolvedValue(fpcs)
 		const w = await mountCard(sendTx(exec), dapp)
 		expect(lastSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
-		expect(savedKeys()).not.toContain(FEE_PICKS_KEY)
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
 	})
 })
 

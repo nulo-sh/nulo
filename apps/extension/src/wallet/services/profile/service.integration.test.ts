@@ -60,7 +60,7 @@ import { ProfileService } from "./service"
 import type { ProfileInfo } from "./spec"
 import { RESTORE_PENDING_ROOT, RestorePendingRepository } from "./restore-pending-repository"
 import { SESSION_STORAGE_ROOT, SESSION_TTL_ALARM_NAME } from "./session-manager"
-import { pinnedTokensKey } from "@/utils/profile-ui-keys"
+import { feePicksKey, pinnedTokensKey, profileUiKeys, sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { recordWrites } from "../storage-write-log"
 import { PROFILE_TOMBSTONE_ROOT, type Tombstone } from "./tombstone-repository"
 import { WalletLockedError } from "./wallet-locked-error"
@@ -1371,7 +1371,7 @@ describe("ProfileService integration", () => {
 
 			expect(out.id).toBe("abc12345")
 			expect(writesFor(writes.log, "abc12345")).toEqual([
-				`remove:${pinnedTokensKey("abc12345")}`,
+				...profileUiKeys("abc12345").map((key) => `remove:${key}`),
 				`set:${RESTORE_PENDING_ROOT}@abc12345`,
 				"set:nulo:core:profiles@abc12345",
 			])
@@ -1387,8 +1387,9 @@ describe("ProfileService integration", () => {
 			writes.restore()
 
 			expect(profile.id).toBe("user-handle")
-			expect(writesFor(writes.log, "user-handle").slice(0, 2)).toEqual([
-				`remove:${pinnedTokensKey("user-handle")}`,
+			const uiKeys = profileUiKeys("user-handle")
+			expect(writesFor(writes.log, "user-handle").slice(0, uiKeys.length + 1)).toEqual([
+				...uiKeys.map((key) => `remove:${key}`),
 				"set:nulo:core:profiles@user-handle",
 			])
 			expect(await keysOf(api)).toContain(pinnedTokensKey("feed0001"))
@@ -2242,6 +2243,113 @@ describe("ProfileService — deletion coordinator integration (finding D)", () =
 		expect(purged).toEqual([])
 		expect((await boot2.getProfiles()).map((x) => x.id)).toContain(named.id)
 		expect(state.isReserved("other")).toBe(true)
+	})
+})
+
+describe("fee picks: one writer per profile", () => {
+	const FJ = { type: "fj", title: "Public Fee Juice", subtitle: "public" } as const
+	const appPick = (address: string) => ({ kind: "app", address, pick: FJ }) as const
+	const read = async (api: FakeBrowserApi, key: string) => (await api.storage.local.get(key))[key]
+
+	/** The coordinator's purge, as far as the picks go: it removes the profile's UI keys. */
+	const purgingDelegate = (api: FakeBrowserApi, gate?: Promise<void>) => ({
+		snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }),
+		runFor: async (id: string) => {
+			await gate
+			await api.storage.local.remove(profileUiKeys(id))
+		},
+	})
+
+	test("a pick is the profile's own: another profile holding the same address keeps its own", async () => {
+		const { api, service } = await makeService()
+		const a = await service.createProfile("A", "password123")
+		const b = await service.createProfile("B", "password123")
+
+		expect(await service.saveFeePick(a.id, appPick("0xsame"))).toBe(true)
+		await service.saveFeePick(b.id, { kind: "send", address: "0xsame", side: "public", pick: { type: "private_fpc" } })
+
+		expect(await read(api, feePicksKey(a.id))).toEqual({ "0xsame": FJ })
+		expect(await read(api, feePicksKey(b.id))).toBeUndefined()
+		expect(await read(api, sendFeePicksKey(b.id))).toEqual({ "0xsame": { public: { type: "private_fpc" } } })
+		expect(await read(api, sendFeePicksKey(a.id))).toBeUndefined()
+	})
+
+	test("a write for a deleted profile, or one whose deletion has begun, is refused and writes nothing", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+		let releasePurge = () => {}
+		service.setDeletionDelegate(purgingDelegate(api, new Promise<void>((resolve) => (releasePurge = resolve))))
+
+		const deleting = service.deleteProfile(p.id)
+		await vi.waitFor(() => expect(service.getDeletionState().isReserved(p.id)).toBe(true))
+		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(false)
+		releasePurge()
+		await deleting
+		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(false)
+
+		expect(Object.keys(await api.storage.local.get(null)).filter((key) => key.endsWith(`@${p.id}`))).toEqual([])
+	})
+
+	test("a row still present under a begun deletion (a worker that died mid-delete) is refused too", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+		service.getDeletionState().beginDeletion(p.id)
+
+		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(false)
+		expect(await read(api, feePicksKey(p.id))).toBeUndefined()
+	})
+
+	test("a pick saved before the delete is removed by its purge", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+		service.setDeletionDelegate(purgingDelegate(api))
+		expect(await service.saveFeePick(p.id, appPick("0xa"))).toBe(true)
+
+		await service.deleteProfile(p.id)
+
+		expect(await read(api, feePicksKey(p.id))).toBeUndefined()
+	})
+
+	test("two windows saving picks for different accounts at once keep both", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+
+		await Promise.all([service.saveFeePick(p.id, appPick("0xa")), service.saveFeePick(p.id, appPick("0xb"))])
+
+		expect(await read(api, feePicksKey(p.id))).toEqual({ "0xa": FJ, "0xb": FJ })
+	})
+
+	test("a writer the lock's watchdog displaced writes nothing once deletion has run", async () => {
+		const { api, service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+		service.setDeletionDelegate(purgingDelegate(api))
+		const get = api.storage.local.get.bind(api.storage.local)
+		let releaseRead = () => {}
+		const stalled = new Promise<void>((resolve) => (releaseRead = resolve))
+		api.storage.local.get = async (keys) => {
+			if ([keys].flat().includes(feePicksKey(p.id))) await stalled
+			return get(keys)
+		}
+
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		try {
+			const writing = service.saveFeePick(p.id, appPick("0xa"))
+			await vi.advanceTimersByTimeAsync(5 * 60_000)
+			vi.useRealTimers()
+			await service.deleteProfile(p.id)
+			releaseRead()
+
+			expect(await writing).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+		expect(await read(api, feePicksKey(p.id))).toBeUndefined()
+	})
+
+	test("a malformed update is refused at the boundary", async () => {
+		const { service } = await makeService()
+		const p = await service.createProfile("A", "password123")
+		await expect(service.saveFeePick(p.id, { kind: "app", address: "0xa", pick: { type: "embedded" } } as never)).rejects.toThrow()
 	})
 })
 
