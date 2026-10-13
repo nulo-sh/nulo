@@ -20,3 +20,5 @@
 - 2026-10-10 Phase 1.5 network e2e, Chrome, retry 0, at 29f3ba7: 8 files, 16 tests pass; proverless same-token-concurrent-sends: 14 tests pass.
 - 2026-10-10 Phase 1.5 unit gates at 21b3982: lint, typecheck:all, test:all (extension 11056), test:ci-gating 480, check:plans pass.
 - 2026-10-10 Phase 1.5 smoke at 21b3982 code, retry 0: Chrome 47 files / 199 tests pass (11 skipped by design); Firefox 49 files / 200 tests pass (10 skipped). Gate passed; pushing.
+- 2026-10-13 arc 2: page 6 signed; branch fees-and-sponsors-sponsors from origin/dev e900f710; D-orch-6 to D-orch-12 recorded.
+- 2026-10-13 Phase 2.1 gate (#91): pass (lint, typecheck:all, unit; network fee-methods Chrome 8/8; smoke security-reset Chrome).
