@@ -313,6 +313,28 @@ describe("TokensView — Home order and cap", () => {
 		expect(rows()).toEqual(["mine", "late-mine"])
 	})
 
+	test("with no active profile a token_import op stamped with one is hidden; it shows once that profile is active", async () => {
+		H.store.current.profile = null
+		H.getOperations.mockResolvedValue([
+			{
+				id: "mine",
+				kind: "token_import",
+				profileId: "p1",
+				accountAddress: H.store.current.account?.address,
+				terminalAt: null,
+				progress: { stage: "pending" },
+			},
+		])
+		const wrapper = mount(TokensView, { shallow: true })
+		await flushPromises()
+		const rows = () => wrapper.findAllComponents({ name: "TokenImportRow" }).map((c) => (c.props("op") as { id: string }).id)
+		expect(rows()).toEqual([])
+
+		H.store.current.profile = { id: "p1" }
+		await flushPromises()
+		expect(rows()).toEqual(["mine"])
+	})
+
 	test("a token_import op from ANOTHER network never shows, not even in a default's slot", async () => {
 		const op = (id: string, networkId: string) => ({
 			id,

@@ -182,6 +182,7 @@ function deferred<T>() {
 
 const inFlightTransferOp = (account: string, id = "op-a") => ({
 	id,
+	profileId: "p1",
 	accountAddress: account,
 	networkId: "net-1",
 	kind: "transfer",
@@ -1048,6 +1049,20 @@ describe("RecentActivityView — a journal record of another scope runs no side 
 			expect(vm.pendingCancelJobIds.has("op-done")).toBe(false)
 			expect(vm.journalOps.map((op: { id: string }) => op.id)).toEqual(["op-done"])
 		}
+	})
+
+	test("with no active profile a stamped record is taken in by neither the snapshot nor an event; with one it is", async () => {
+		H.store.current.profile = null
+		H.getOperations.mockResolvedValue([inFlightTransferOp(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A, "op-b"))
+		expect(vmOf(w).journalOps).toEqual([])
+
+		H.store.current.profile = { id: "p1" }
+		await flushPromises()
+		H.journalAdded.emit(inFlightTransferOp(ACCT_A, "op-b"))
+		expect(vmOf(w).journalOps.map((op: { id: string }) => op.id)).toEqual(["op-b", "op-a"])
 	})
 
 	test("a record taken in before a scope switch is gone after it", async () => {

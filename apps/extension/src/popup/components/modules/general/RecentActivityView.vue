@@ -26,7 +26,7 @@ import { createRunFence } from "@/composables/runFence"
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
 import { stageSubtitle } from "@/utils/card-subtitle"
-import { activityRowRoute } from "@/utils/activity-rows"
+import { activityRowRoute, journalRecordInScope } from "@/utils/activity-rows"
 import {
 	ACTIVITY_FEED_KINDS,
 	buildJournalTerminalCardProps,
@@ -274,22 +274,15 @@ const onFocusInFlight = buildFocusHandler(dappInteractionService)
  *  below match on account and token alone, so another scope's terminal record would remove this
  *  scope's card. The scope watcher empties the state synchronously on a switch. */
 function journalRecordInActiveScope(op) {
-	if (op.accountAddress !== appStore.account?.address) return false
-	// Profile scoping: two profiles can hold the SAME account address (the same
-	// mnemonic imported twice), so account + network alone would let one
-	// profile's operations render under the other.
-	if (op.profileId && appStore.profile?.id && op.profileId !== appStore.profile.id) return false
-	// Network scoping (multi-network profiles): a tx
-	// fired on chain A shouldn't surface in the activity feed for chain B.
-	// Records before the journal carried `networkId` may have it
-	// undefined — show those everywhere so we don't strand legacy ops.
-	if (op.networkId && appStore.network?.id && op.networkId !== appStore.network.id) return false
-	return true
+	return journalRecordInScope(op, {
+		accountAddress: appStore.account?.address,
+		profileId: appStore.profile?.id,
+		networkId: appStore.network?.id,
+	})
 }
 
-/** Shared scoping for journal-record filters, the token page's token included.
- *  Same rules apply to in-flight and recently-terminal surfaces. */
-function journalRecordInScope(op) {
+/** The token page shows only its token's records, in flight and terminal alike. */
+function journalRecordOnThisView(op) {
 	if (!journalRecordInActiveScope(op)) return false
 	if (props.token && op.tokenId !== props.token.id) return false
 	return true
@@ -304,7 +297,7 @@ const inFlightJournalOps = computed(() =>
 		// `utils/journal-state.ts` so future kinds opt in (or stay routed to
 		// their own home surface) by one set update, not scattered if-chains.
 		if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-		return journalRecordInScope(op)
+		return journalRecordOnThisView(op)
 	}),
 )
 
@@ -319,7 +312,7 @@ const recentlyTerminalJournalOps = computed(() => {
 			// and render via TransactionCard.
 			if (op.progress?.stage === "succeeded") return false
 			if (!ACTIVITY_FEED_KINDS.has(op.kind)) return false
-			return journalRecordInScope(op)
+			return journalRecordOnThisView(op)
 		})
 		.sort((a, b) => (b.terminalAt ?? 0) - (a.terminalAt ?? 0))
 })

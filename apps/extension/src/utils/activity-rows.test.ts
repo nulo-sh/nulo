@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 import type { IncomingNoteRecord, IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { Tx } from "@/wallet/services/transaction/spec"
-import { buildActivityRows } from "./activity-rows"
+import { buildActivityRows, journalRecordInScope } from "./activity-rows"
 
 function tx(updatedAt: number, hash: string): Tx {
 	return { hash, updatedAt, account: "0xa", calls: [] } as unknown as Tx
@@ -51,6 +51,8 @@ function incoming(overrides: Partial<IncomingNoteRecord>): IncomingTransferRecor
 }
 
 describe("buildActivityRows — three-source merge", () => {
+	const ACTIVE = { accountAddress: "0xa", profileId: "p1", networkId: "net-1" }
+
 	test("empty input → empty output", () => {
 		expect(buildActivityRows({ transactions: [], terminalJournalOps: [], incomingTransfers: [] })).toEqual([])
 	})
@@ -60,7 +62,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [tx(3_000, "0xtx1")],
 			terminalJournalOps: [journal({ terminalAt: 2_000 })],
 			incomingTransfers: [incoming({ discoveredAt: 1_000 })],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		expect(rows).toHaveLength(3)
 		expect(rows.map((r) => r.type)).toEqual(["tx", "journal", "incoming"])
@@ -71,7 +73,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [tx(1_000, "0xtx-old")],
 			terminalJournalOps: [journal({ id: "j-new", terminalAt: 5_000 })],
 			incomingTransfers: [incoming({ siloedNullifier: "0xn-mid", discoveredAt: 3_000 })],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		expect(rows.map((r) => r.sortKey)).toEqual([5_000, 3_000, 1_000])
 	})
@@ -81,7 +83,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [],
 			terminalJournalOps: [journal({ progress: { stage: "succeeded", txHash: "0xchain" } })],
 			incomingTransfers: [],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		expect(rows).toHaveLength(0)
 	})
@@ -91,7 +93,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [],
 			terminalJournalOps: [journal({ kind: "token_import" } as unknown as Partial<OperationRecord>)],
 			incomingTransfers: [],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		expect(rows).toHaveLength(0)
 	})
@@ -101,7 +103,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [],
 			terminalJournalOps: [journal({ accountAddress: "0xother" })],
 			incomingTransfers: [],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		expect(rows).toHaveLength(0)
 	})
@@ -111,7 +113,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [],
 			terminalJournalOps: [journal({ terminalAt: null, progress: { stage: "proving", enteredProveAt: 0 } })],
 			incomingTransfers: [],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		expect(rows).toHaveLength(0)
 	})
@@ -131,7 +133,7 @@ describe("buildActivityRows — three-source merge", () => {
 			transactions: [tx(1_000, "0xtx1")],
 			terminalJournalOps: [journal({ id: "j1" })],
 			incomingTransfers: [incoming({ siloedNullifier: "0xn1" })],
-			accountAddress: "0xa",
+			...ACTIVE,
 		})
 		const keys = rows.map((r) => r.key)
 		expect(new Set(keys).size).toBe(keys.length)
@@ -264,15 +266,19 @@ describe("buildActivityRows — scope pins", () => {
 		expect(rows.map((r) => r.key)).toEqual(["journal:legacy"])
 	})
 
-	test("with no active network every terminal journal row is kept, whatever its network", () => {
+	test("with no active network only the terminal journal row with no networkId is kept", () => {
 		const rows = buildActivityRows({
 			transactions: [],
-			terminalJournalOps: [journal({ id: "a", networkId: "net-1" }), journal({ id: "b", networkId: "net-2", terminalAt: 900 })],
+			terminalJournalOps: [
+				journal({ id: "a", networkId: "net-1" }),
+				journal({ id: "b", networkId: "net-2", terminalAt: 900 }),
+				journal({ id: "legacy", networkId: undefined, terminalAt: 800 }),
+			],
 			incomingTransfers: [],
 			...scoped,
 			networkId: undefined,
 		})
-		expect(rows.map((r) => r.key)).toEqual(["journal:a", "journal:b"])
+		expect(rows.map((r) => r.key)).toEqual(["journal:legacy"])
 	})
 
 	const incomingKeys = (records: IncomingTransferRecord[], scope: Record<string, unknown> = scoped) =>
@@ -309,6 +315,36 @@ describe("buildActivityRows — scope pins", () => {
 				incoming({ siloedNullifier: "0xempty", profileId: "", discoveredAt: 900 }),
 			]),
 		).toEqual(["incoming:note:p1|net-1|0xmine"])
+	})
+})
+
+describe("journalRecordInScope — the one rule every journal surface applies", () => {
+	const ACTIVE = { accountAddress: "0xa", profileId: "p1", networkId: "net-1" }
+
+	test("a record stamped with the active profile and network shows", () => {
+		expect(journalRecordInScope(journal({}), ACTIVE)).toBe(true)
+	})
+
+	test.each([
+		["another profile", { profileId: "p2" }],
+		["another network", { networkId: "net-2" }],
+		["another account", { accountAddress: "0xother" }],
+	])("a record stamped with %s does not", (_name, stamp) => {
+		expect(journalRecordInScope(journal(stamp), ACTIVE)).toBe(false)
+	})
+
+	test("with no active profile no record shows, though its account and network match", () => {
+		expect(journalRecordInScope(journal({}), { ...ACTIVE, profileId: undefined })).toBe(false)
+	})
+
+	test("with no active network a network-stamped record does not show and an unstamped one does", () => {
+		const noNetwork = { ...ACTIVE, networkId: undefined }
+		expect(journalRecordInScope(journal({}), noNetwork)).toBe(false)
+		expect(journalRecordInScope(journal({ networkId: undefined }), noNetwork)).toBe(true)
+	})
+
+	test("a record with no network stamp shows on every network", () => {
+		expect(journalRecordInScope(journal({ networkId: undefined }), { ...ACTIVE, networkId: "net-2" })).toBe(true)
 	})
 })
 
