@@ -21,7 +21,8 @@ export type ReaskReview = {
 	reask: { now: string; nowAmount: string; capAmount: string }
 }
 
-/** None for a record that is not a transfer asking at `queued`, or whose sides are unknown. */
+/** None for a record that is not a transfer asking at `queued`, or whose sides are unknown. The
+ *  figures are rounded to six decimals; the accept carries the record's exact fee. */
 export function reaskReview(
 	op: { kind?: string; transferType?: TransferType; progress?: { stage: string; reask?: QueuedFeeReask } },
 	usdPerFeeJuice: number | undefined,

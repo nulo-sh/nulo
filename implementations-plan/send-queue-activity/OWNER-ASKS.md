@@ -229,4 +229,4 @@ Items 1 and 2 extend that rule to dApp sends, which you left open (#218). The wa
 
 **Recommendation.** B: a higher fee is the one thing this sheet asks about.
 
-**What ships now.** A.
+**What ships now.** B, by the orchestrator's call (D-orch-21): the usual sheet's existing 800 ms guard, with no new words and no layout change.

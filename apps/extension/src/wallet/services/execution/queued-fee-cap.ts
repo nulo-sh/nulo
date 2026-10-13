@@ -1,26 +1,19 @@
 /**
  * The fee cap of a send queued behind an earlier one. The send goes out without asking only when
  * its build's committed max fee is at most the cap the person saw; above it the send keeps its
- * place and asks again, and nothing is signed for the network until the person answers.
+ * place and asks again, and the build is neither proved nor broadcast until the person answers.
  */
 
-import type { QueuedFeePayer } from "@nulo/wallet-core/jobs"
+import { isFeeAmount, type QueuedFeePayer } from "@nulo/wallet-core/jobs"
 import type { Fpc } from "@/wallet/services/fpc/fpc"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, type Tx } from "@/wallet/services/transaction/spec"
 
-/** What the cap adds over the basis, in percent. */
 export const QUEUED_FEE_MARGIN_PERCENT = 25n
 
 /** The readout shows six of Fee Juice's 18 decimals; the cap is cut to them so the Y on screen is
  *  the Y enforced. */
 const READOUT_UNIT = 10n ** 12n
-
-/** A positive integer in base units of at most 39 digits, the width of a u128: no sign, point,
- *  exponent or leading zero. */
-export function isFeeAmount(value: unknown): value is string {
-	return typeof value === "string" && /^[1-9]\d{0,38}$/.test(value)
-}
 
 /** The figures a queued answer offers: the last fee of this token's sends, and the cap above it. */
 export type QueuedFeeCap = { basis: string; cap: string }
@@ -66,17 +59,19 @@ export type QueuedFeeAnswer = "accepted" | "aborted" | "expired"
  * that waits on it, so a restart ends both.
  */
 export class QueuedFeeAnswers {
-	private readonly waiting = new Map<string, { fee: string; settle: (answer: QueuedFeeAnswer) => void }>()
+	private readonly waiting = new Map<string, { fee: string; deadline: number; settle: (answer: QueuedFeeAnswer) => void }>()
 
 	/**
 	 * Registers the waiter before it returns, and resolves once: `accepted` by {@link accept} with
-	 * this `fee`, `aborted` by `signal` (at once when it already is), `expired` after `ms`.
+	 * this `fee`, `aborted` by `signal` (at once when it already is), `expired` after `ms` or at an
+	 * accept that comes later.
 	 */
 	public wait(journalId: string, fee: string, signal: AbortSignal, ms: number): Promise<QueuedFeeAnswer> {
 		return new Promise((resolve) => {
 			const onAbort = () => entry.settle("aborted")
 			const entry = {
 				fee,
+				deadline: Date.now() + Math.max(0, ms),
 				settle: (answer: QueuedFeeAnswer) => {
 					if (this.waiting.get(journalId) !== entry) return
 					this.waiting.delete(journalId)
@@ -97,6 +92,11 @@ export class QueuedFeeAnswers {
 	public accept(journalId: string, fee: string): boolean {
 		const entry = this.waiting.get(journalId)
 		if (!entry || entry.fee !== fee) return false
+		// A timer can fire late: past the deadline the send stays unanswered, whichever arrives first.
+		if (Date.now() >= entry.deadline) {
+			entry.settle("expired")
+			return false
+		}
 		entry.settle("accepted")
 		return true
 	}

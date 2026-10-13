@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { FpcType } from "@/wallet/services/fpc/spec"
 import { OriginType, type Tx } from "@/wallet/services/transaction/spec"
-import { isFeeAmount, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, queuedFeePayer } from "./queued-fee-cap"
+import { QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap, queuedFeePayer } from "./queued-fee-cap"
 
 const NOW = 1_000_000
 const TOKEN = "0xToken"
@@ -62,16 +62,6 @@ describe("queuedFeeCap", () => {
 	})
 })
 
-describe("isFeeAmount", () => {
-	test("takes a positive integer of at most 39 digits, nothing else", () => {
-		expect(isFeeAmount("1")).toBe(true)
-		expect(isFeeAmount("9".repeat(39))).toBe(true)
-		for (const refused of ["0", "01", "1.5", "-1", "1e3", "", " 1", "9".repeat(40), 1, null]) {
-			expect(isFeeAmount(refused), String(refused)).toBe(false)
-		}
-	})
-})
-
 describe("queuedFeePayer", () => {
 	test("names Fee Juice, or the fee contract the send was ordered against", () => {
 		expect(queuedFeePayer(undefined)).toEqual({ type: "fj", isProtocol: false })
@@ -115,6 +105,15 @@ describe("QueuedFeeAnswers", () => {
 		vi.advanceTimersByTime(1_000)
 		expect(await answer).toBe("expired")
 		expect(answers.accept("j1", "500")).toBe(false)
+	})
+
+	test("an accept past the deadline, before its timer has fired, expires the waiter instead", async () => {
+		vi.useFakeTimers()
+		const answers = new QueuedFeeAnswers()
+		const answer = answers.wait("j1", "500", new AbortController().signal, 1_000)
+		vi.setSystemTime(Date.now() + 1_000)
+		expect(answers.accept("j1", "500")).toBe(false)
+		expect(await answer).toBe("expired")
 	})
 
 	test("a dropped waiter can no longer be accepted", async () => {

@@ -2,6 +2,7 @@ export {
 	KNOWN_JOB_ERROR_KINDS,
 	NORMALIZED_RAW_MAX_CHARS,
 	TERMINAL_STAGES,
+	isFeeAmount,
 	isTerminal,
 	type ActiveStage,
 	type JobError,

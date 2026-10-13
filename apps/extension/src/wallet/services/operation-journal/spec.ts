@@ -20,7 +20,7 @@
 
 import { type JobError, type JobProgress, type JobStage, NORMALIZED_RAW_MAX_CHARS } from "@nulo/wallet-core/jobs"
 import { z } from "zod"
-import { isFeeAmount } from "@/wallet/services/execution/queued-fee-cap"
+import { isFeeAmount } from "@nulo/wallet-core/jobs"
 import { TransferType } from "@/wallet/services/transaction/spec"
 
 export const OPERATION_JOURNAL_SERVICE_NAME = "operation-journal"

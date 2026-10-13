@@ -1345,7 +1345,10 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		answer.resolve(true)
 		await flushPromises()
 		expect(H.acceptQueuedFee.mock.calls).toEqual([["op-r", FEE]])
-		expect(sheet(w).exists()).toBe(false)
+		expect(sheet(w).props("show"), "closed, and still mounted so focus returns to the row").toBe(false)
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(H.acceptQueuedFee).toHaveBeenCalledTimes(1)
 	})
 
 	test("a refused accept closes the sheet and leaves the row reading its record", async () => {
@@ -1353,7 +1356,7 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		const w = await openReview()
 		sheet(w).vm.$emit("send")
 		await flushPromises()
-		expect(sheet(w).exists()).toBe(false)
+		expect(sheet(w).props("show")).toBe(false)
 		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
 	})
 
@@ -1362,14 +1365,25 @@ describe("RecentActivityView — a queued send that asks again", () => {
 		["it leaves the re-ask state", { stage: "pending" }],
 	])("the sheet closes when %s, so no press accepts a figure it did not open with", async (_name, progress) => {
 		const w = await openReview()
-		const opened = sheet(w)
 		H.journalUpdated.emit({ ...asking(), progress })
 		await flushPromises()
-		expect(sheet(w).exists()).toBe(false)
+		expect(sheet(w).props("show")).toBe(false)
 		expect(usePopupStore().isOpened("send_reask_review"), "the slot leaves the popup stack with it").toBe(false)
-		opened.vm.$emit("send")
+		sheet(w).vm.$emit("send")
 		await flushPromises()
 		expect(H.acceptQueuedFee).not.toHaveBeenCalled()
+	})
+
+	test("a review of a record it cannot draw opens nothing; a scope switch drops the sheet", async () => {
+		const w = await openReview([asking({ transferType: undefined })])
+		expect(sheet(w).exists()).toBe(false)
+		expect(usePopupStore().len).toBe(0)
+
+		const shown = await openReview()
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		expect(sheet(shown).exists()).toBe(false)
+		expect(usePopupStore().isOpened("send_reask_review")).toBe(false)
 	})
 
 	test.each([

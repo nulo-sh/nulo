@@ -380,23 +380,25 @@ function cardAmountSymbolFor(op) {
 
 const isQueuedTransfer = (op) => op?.kind === "transfer" && op.progress?.stage === "queued"
 
-/** A popup send has no approval window to wait on; at `queued` it waits on the send before it. */
 function awaitingSubtitleFor(op) {
 	return isQueuedTransfer(op) ? "Waiting for your earlier send" : cardSubtitleFor(op)
 }
 
 const reaskLineFor = (op) => (isQueuedTransfer(op) && op.progress.reask ? "Fee went up. Review" : null)
 
-/** A queued send that asked again is answered from a review sheet over this feed, which keeps the
- *  record and fee it opened with: a changed figure closes it rather than move under the finger. */
+/** A queued send that asked again is answered from a review sheet over this feed. The sheet draws
+ *  what it opened with and stays mounted after it closes, so it leaves the way it came and focus
+ *  returns to its row; a changed figure closes it rather than move under the finger. */
 const REASK_KEY = "send_reask_review"
 const reaskOpen = computed(() => popupStore.isOpened(REASK_KEY))
 const reaskOrder = computed(() => popupStore.popups[REASK_KEY]?.order ?? 0)
 const reaskDepth = computed(() => popupStore.len - reaskOrder.value)
 const reaskOpened = ref(null)
 const reaskSending = ref(false)
-const reaskOp = computed(() => reaskOpened.value && renderedInFlightOps.value.find((op) => op.id === reaskOpened.value.id))
-const reaskSheet = computed(() => (reaskOp.value ? reaskReview(reaskOp.value, incomingPrices.feeJuiceQuote.value?.usd) : null))
+const liveReaskFee = (id) => {
+	const op = renderedInFlightOps.value.find((x) => x.id === id)
+	return isQueuedTransfer(op) ? op.progress.reask?.fee : undefined
+}
 // Its subject is a higher fee, so its button arms after the usual pause whatever the facts say.
 const { ready: reaskReady } = useSendReview({
 	isGated: () => true,
@@ -405,20 +407,25 @@ const { ready: reaskReady } = useSendReview({
 })
 
 function onReviewInFlight(jobId) {
-	const fee = renderedInFlightOps.value.find((op) => op.id === jobId && isQueuedTransfer(op))?.progress.reask?.fee
-	if (!fee) return
-	reaskOpened.value = { id: jobId, fee }
+	const op = renderedInFlightOps.value.find((x) => x.id === jobId)
+	const sheet = op && reaskReview(op, incomingPrices.feeJuiceQuote.value?.usd)
+	if (!sheet) return
+	reaskOpened.value = {
+		id: jobId,
+		fee: op.progress.reask.fee,
+		sheet,
+		amount: cardAmountFor(op) ?? undefined,
+		symbol: cardAmountSymbolFor(op) ?? undefined,
+		recipientAddress: op.recipientAddress,
+	}
 	if (!reaskOpen.value) popupStore.open(REASK_KEY)
 }
 
-function closeReask() {
-	popupStore.close(REASK_KEY)
-	reaskOpened.value = null
-}
+const closeReask = () => popupStore.close(REASK_KEY)
 
 async function sendReask() {
 	const opened = reaskOpened.value
-	if (!opened || reaskSending.value) return
+	if (!opened || !reaskOpen.value || reaskSending.value) return
 	reaskSending.value = true
 	try {
 		await executionService.acceptQueuedFee(opened.id, opened.fee)
@@ -740,6 +747,8 @@ watch(
 		executingTask.value = null
 		executingSubtasks.value = []
 		pendingCancelJobIds.value = new Set()
+		closeReask()
+		reaskOpened.value = null
 		if (!nv) return
 		resnapshotJournal(journalRun)
 		loadExecutingTaskSnapshot(taskRun)
@@ -748,7 +757,7 @@ watch(
 )
 
 watch(
-	() => reaskOpened.value && (isQueuedTransfer(reaskOp.value) ? reaskOp.value.progress.reask?.fee : undefined),
+	() => reaskOpened.value && liveReaskFee(reaskOpened.value.id),
 	(fee) => {
 		if (reaskOpened.value && fee !== reaskOpened.value.fee) closeReask()
 	},
@@ -910,25 +919,6 @@ onBeforeUnmount(() => {
 				/>
 			</template>
 		</div>
-
-		<SendReviewSheet
-			v-if="reaskSheet"
-			:show="reaskOpen"
-			:order="reaskOrder"
-			:depth="reaskDepth"
-			:facts="reaskSheet.facts"
-			:amount="cardAmountFor(reaskOp) ?? undefined"
-			:symbol="cardAmountSymbolFor(reaskOp) ?? undefined"
-			:recipientAddress="reaskOp.recipientAddress"
-			:payerKind="reaskSheet.payerKind"
-			:payerType="reaskSheet.payerType"
-			:canSend="true"
-			:sending="reaskSending"
-			:ready="reaskReady"
-			:reask="reaskSheet.reask"
-			@close="closeReask"
-			@send="sendReask"
-		/>
 	</Flex>
 	<Flex v-else-if="token" direction="column" gap="16" data-testid="activity-feed-root" :data-active-account="appStore.account?.address">
 		<Flex align="end" justify="between">
@@ -940,6 +930,24 @@ onBeforeUnmount(() => {
 			<span :class="$style.empty_sub">Send or receive {{ token.symbol }} to see activity here.</span>
 		</div>
 	</Flex>
+	<SendReviewSheet
+		v-if="reaskOpened"
+		:show="reaskOpen"
+		:order="reaskOrder"
+		:depth="reaskDepth"
+		:facts="reaskOpened.sheet.facts"
+		:amount="reaskOpened.amount"
+		:symbol="reaskOpened.symbol"
+		:recipientAddress="reaskOpened.recipientAddress"
+		:payerKind="reaskOpened.sheet.payerKind"
+		:payerType="reaskOpened.sheet.payerType"
+		:canSend="true"
+		:sending="reaskSending"
+		:ready="reaskReady"
+		:reask="reaskOpened.sheet.reask"
+		@close="closeReask"
+		@send="sendReask"
+	/>
 </template>
 
 <style module>

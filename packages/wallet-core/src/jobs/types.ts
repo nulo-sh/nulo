@@ -65,6 +65,12 @@ export type QueuedFeePayer = { type: "fj" | "private_fpc" | "fpc"; fpcId?: strin
  *  build's fee and `cap` the one it was held to, both in base units. */
 export type QueuedFeeReask = { fee: string; cap: string; payer: QueuedFeePayer }
 
+/** A positive integer in base units of at most 39 digits, the width of a u128: no sign, point,
+ *  exponent or leading zero. */
+export function isFeeAmount(value: unknown): value is string {
+	return typeof value === "string" && /^[1-9]\d{0,38}$/.test(value)
+}
+
 /**
  * Progress payload, discriminated by stage. Adding fields per stage variant
  * does NOT require a schema migration — consumers ignore unknown keys.

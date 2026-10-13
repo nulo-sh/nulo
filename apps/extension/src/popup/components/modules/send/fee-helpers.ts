@@ -20,7 +20,6 @@ export function feeDisplay(
 	}
 }
 
-/** A fee in running text: the amount, then the dollars when priced. */
 export function feeInWords(display: FeeDisplay): string {
 	return display.usd ? `${display.amount} FJ (${display.usd})` : `${display.amount} FJ`
 }

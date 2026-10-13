@@ -48,7 +48,7 @@ import {
 	TermsAcceptanceRequiredError,
 	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
-import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
+import { isFeeAmount, JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import { assertLiveChainIdentity, liveChainInfo } from "@nulo/aztec-runtime/utils"
 import { assertArtifactClassId } from "@nulo/aztec-runtime/pxe"
@@ -81,7 +81,7 @@ import { SendSequencer } from "./send-sequencer"
 import { recordedTxKeys } from "./transfer-sequence-keys"
 import { coerceAmount } from "./coerce-amount"
 import { OperationPlanner, type TransferRequest } from "./operation-planner"
-import { isFeeAmount, type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap } from "./queued-fee-cap"
+import { type QueuedFeeCap, QueuedFeeAnswers, queuedFeeBasis, queuedFeeCap } from "./queued-fee-cap"
 import { TransferEstimateReuse } from "./transfer-estimate-reuse"
 import { type ChainIdentity, feeMultiplierFor } from "./estimate-reuse-shared"
 import { OperationEstimateReuse } from "./operation-estimate-reuse"
