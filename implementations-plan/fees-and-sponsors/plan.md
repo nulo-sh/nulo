@@ -1134,6 +1134,8 @@ The three-round limit was reached with the round-3 fixes unreviewed by Codex. Th
 | O2: Revoke-all over 12 chunks (337 or more authwits) cannot land every estimate under the per-profile admission caps (4 running, 8 parked), so Revoke stays off | low | **Known limit.** The surface is Settings → Developer, single revokes still work, and serializing the estimates is a client queue for a case nobody reported. Closed `known-limit` issue. |
 | O3: the authwit popups' watcher and unmount hook sat above their handlers | low | **Accepted.** Moved below them. |
 
+**Codex round 2 (session `01a1374d`), on aac6d2e1.** **No findings.** All three round 1 findings closed, including the paths its reproductions used (a result that lands and clears in one tick, a pick made during a delayed storage read); no blocking or high finding elsewhere in the arc. The loop ends here.
+
 **Live check of the teardown limits (OA-3, OA-13).** A temporary probe on the Chrome network run read every stored transaction's gas details: the teardown limits were 0 on all of the wallet's own sends (sponsor, public Fee Juice, private fee juice; 12 reads). The app-paid file's send was not stored within the probe's wait, so an app transaction's teardown limit stays unread.
 
 ## Seeds

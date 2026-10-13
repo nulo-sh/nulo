@@ -40,4 +40,7 @@
 
 - Codex: three findings, all fixed in aac6d2e1 (picks keyed by profile, a shown shortfall held through a re-estimate, Revoke's gate tested). Opus: approve, three lows (one shared with Codex, two known limits).
 - The in-mount pick map outlived #91's move to per-profile storage: when storage gains a key dimension, the in-memory caches over it need the same key.
+- The app-paid funding check had no live run: the playground's `sendTx feePayer` names a payer in the payload but makes no call that sets it, so the kernel's fee payer is zero and nothing is probed. A new playground button, `sendTx app-sponsored`, sends the shape aztec.js's `SponsoredFeePaymentMethod` builds, and one `fee-sponsor-funding` scenario sends it through the unfunded salt-1 sponsor: the window shows the notice and holds Confirm. Failure mode: `appPayerOf` reading the live `TxSimulationResult`, which every unit layer mocks. Runtime: 5.1 s on Chrome, the playground already connected by the file's earlier test.
+- A second `connectPlayground` in one browser times out waiting for the discovery window, because the origin is already approved; the file now connects once per browser (`playgroundFor`).
+- Fee Juice's L1 handler mints a fixed 1000 FJ, so a small public balance is a mint to the L1 account followed by `bridgeTokensPublic(to, amount, false)`.
 

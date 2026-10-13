@@ -1,7 +1,7 @@
 /**
  * `sendTx` variants: default (its transfer function picked by `pg-select-transferFn`), `NoFrom`
- * (a public call, which the wallet refuses), `NoFrom` sponsored, `feePayer`, multicall, chunked,
- * delegated.
+ * (a public call, which the wallet refuses), `NoFrom` sponsored, `feePayer`, app-sponsored,
+ * multicall, chunked, delegated.
  *
  * Each variant constructs an `ExecutionPayload` and calls
  * `wallet.sendTx()`. `sendTx` ALWAYS opens `/windows/execute`
@@ -10,7 +10,9 @@
  */
 import { AztecAddress } from "@aztec-labs/aztec.js/addresses"
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
 import { Fr } from "@aztec-labs/aztec.js/fields"
+import { mergeExecutionPayloads } from "@aztec-labs/aztec.js/tx"
 import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
@@ -41,6 +43,7 @@ export function renderTransactions(): string {
 				<label>Recipient: <input data-testid="pg-input-recipient" name="recipient" type="text" placeholder="0x..." /></label>
 				<label>Amount: <input data-testid="pg-input-amount" name="amount" type="number" placeholder="100" /></label>
 				<label>FeePayer (FPC addr): <input data-testid="pg-input-feePayer" name="feePayer" type="text" placeholder="0x... (defaults to recipient)" /></label>
+				<label>App sponsor salt: <input data-testid="pg-input-sponsorSalt" name="sponsorSalt" type="number" placeholder="0" /></label>
 				<label>Default transfer: <select data-testid="pg-select-transferFn" name="transferFn">
 					${TRANSFER_FNS.map((fn) => `<option value="${fn}">${fn}</option>`).join("")}
 				</select></label>
@@ -50,6 +53,7 @@ export function renderTransactions(): string {
 				<button data-testid="pg-btn-sendTx-noFrom" type="button" ${dis}>sendTx NoFrom</button>
 				<button data-testid="pg-btn-sendTx-noFrom-sponsored" type="button" ${dis}>sendTx NoFrom (sponsored)</button>
 				<button data-testid="pg-btn-sendTx-feePayer" type="button" ${dis}>sendTx feePayer</button>
+				<button data-testid="pg-btn-sendTx-appSponsored" type="button" ${dis}>sendTx app-sponsored</button>
 				<button data-testid="pg-btn-sendTx-multicall" type="button" ${dis}>sendTx multicall</button>
 				<button data-testid="pg-btn-sendTx-multicall-chunked" type="button" ${dis}>sendTx multicall &gt;5</button>
 			</div>
@@ -89,6 +93,22 @@ async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_publi
 		calls.push(...(exec.calls ?? []))
 	}
 	return { exec: { calls, authWitnesses: [], capsules: [], extraHashedArgs: [] }, fromAddr }
+}
+
+/** The app pays through a SponsoredFPC of its own (salt `sponsorSalt`), the way aztec.js sends with
+ *  `SponsoredFeePaymentMethod`: the payment's call goes first and names the payer. */
+async function sendAppSponsored() {
+	const wallet = getWallet()!
+	const { exec, fromAddr } = await buildTransferExec(1)
+	const { SponsoredFPCContract } = await import("@aztec-labs/noir-contracts.js/SponsoredFPC")
+	const salt = new Fr(BigInt(getInput("sponsorSalt") || "0"))
+	const instance = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, { salt })
+	await wallet.registerContract(instance, SponsoredFPCContract.artifact)
+	const fee = await new SponsoredFeePaymentMethod(instance.address).getExecutionPayload()
+	// biome-ignore lint/suspicious/noExplicitAny: the transfer payload is built structurally
+	const payload = mergeExecutionPayloads([fee, exec as any])
+	// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
+	return wallet.sendTx(payload, { from: fromAddr, wait: "NO_WAIT" } as any)
 }
 
 function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
@@ -167,6 +187,11 @@ export function bindTransactions(root: HTMLElement): void {
 			// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
 			return wallet.sendTx(execWithFeePayer, { from: fromAddr, wait: "NO_WAIT" } as any)
 		}),
+	)
+
+	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-appSponsored"]')?.addEventListener(
+		"click",
+		safe("sendTx", sendAppSponsored),
 	)
 
 	root.querySelector<HTMLButtonElement>('[data-testid="pg-btn-sendTx-multicall"]')?.addEventListener(
