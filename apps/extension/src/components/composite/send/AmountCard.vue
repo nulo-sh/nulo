@@ -464,6 +464,7 @@ const handleFiatBalanceAction = (divisor) => {
 							<span :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
 								derivedTokenLabel
 							}}</span>
+							<!-- Inside the meta line, so it measures in the line's own mono 10 px. -->
 							<span aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
 						</template>
 					</template>

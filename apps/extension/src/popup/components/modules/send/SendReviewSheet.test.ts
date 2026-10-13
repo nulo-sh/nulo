@@ -315,11 +315,10 @@ describe("modules/send/SendReviewSheet — the amount line fits", () => {
 describe("modules/send/SendReviewSheet — the gap before the symbol", () => {
 	let w: W | undefined
 	afterEach(() => w?.unmount())
-	// The figure's own span, in the line and in its ruler.
 	const numbers = (sheet: W) => sheet.findAll("span").filter((s) => s.element.childElementCount === 0 && s.text() === "25")
 
 	test("the 4 px gap ends the number and no longer starts the symbol, so a wrapped symbol starts flush", () => {
-		// jsdom lays out no line: the rule is read from the source, the shots show the drawn one.
+		// jsdom lays out no line, so the rule is read from the source.
 		const source = readFileSync(resolve(__dirname, "SendReviewSheet.vue"), "utf8").replace(/\s+/g, " ")
 		expect(source).toContain(".number { margin-right: 4px; }")
 		expect(source).not.toMatch(/\.amount small \{[^}]*margin/)

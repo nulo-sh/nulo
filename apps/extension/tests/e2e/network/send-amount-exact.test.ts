@@ -183,7 +183,6 @@ test.skipIf(!hasConfig)(
 		expect.soft(review.fontSize, "the review's amount is below 60% of 30 px").toBeGreaterThanOrEqual(18)
 		await closeReview(page)
 
-		// In USD, at rest, the figure shows whole and the token amount it derives stays on one line.
 		await pointerClick(page, "send-amount-fiat-toggle")
 		await page.waitForSelector('[data-testid="send-amount-derived"]', { visible: true, timeout: 10_000 })
 		expect((await page.$eval(USD, (el) => (el as HTMLInputElement).value)).length, "a long USD figure").toBeGreaterThanOrEqual(12)
