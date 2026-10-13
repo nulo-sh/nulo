@@ -121,7 +121,7 @@ export async function runUnstick(opts: RunUnstickOpts): Promise<RunUnstickResult
 			)
 			const blanks = launchBlanks(opts.version, documents)
 			if (blanks.length > 0) {
-				const reason = `${tag} would launch with blanks in its legal documents:\n${blanks.join("\n")}\nNo tag was created and Release PR #${decision.prNumber} stays '${AUTORELEASE_PENDING_LABEL}'. Fill them on main, then tag the repaired commit by hand (CLAUDE.md, Release runbook, Troubleshooting).`
+				const reason = `${tag} would launch with blanks in its legal documents:\n${blanks.join("\n")}\nNo tag was created and Release PR #${decision.prNumber} stays '${AUTORELEASE_PENDING_LABEL}'. Fill them on main, then tag the repaired commit by hand (.claude/skills/release/SKILL.md, Troubleshooting).`
 				io.log(command("error", `auto-unstick: REFUSED — ${reason}`))
 				return { action: "refused", reason, performed: false, continues: false, exitCode: 1 }
 			}
