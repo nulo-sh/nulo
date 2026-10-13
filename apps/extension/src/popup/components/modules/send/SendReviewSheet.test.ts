@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
@@ -307,5 +309,29 @@ describe("modules/send/SendReviewSheet — the amount line fits", () => {
 		const line = w.get('[data-testid="send-review-amount"]')
 		expect((line.element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
 		expect(line.text()).toBe("1,235,567.123456789012345678TST")
+	})
+})
+
+describe("modules/send/SendReviewSheet — the gap before the symbol", () => {
+	let w: W | undefined
+	afterEach(() => w?.unmount())
+	// The figure's own span, in the line and in its ruler.
+	const numbers = (sheet: W) => sheet.findAll("span").filter((s) => s.element.childElementCount === 0 && s.text() === "25")
+
+	test("the 4 px gap ends the number and no longer starts the symbol, so a wrapped symbol starts flush", () => {
+		// jsdom lays out no line: the rule is read from the source, the shots show the drawn one.
+		const source = readFileSync(resolve(__dirname, "SendReviewSheet.vue"), "utf8").replace(/\s+/g, " ")
+		expect(source).toContain(".number { margin-right: 4px; }")
+		expect(source).not.toMatch(/\.amount small \{[^}]*margin/)
+	})
+
+	test("the number carries the gap beside a symbol, in the line and its ruler alike, and none without one", () => {
+		w = mountSheet()
+		const [line, ruler] = numbers(w)
+		expect(line?.classes()).toHaveLength(1)
+		expect(ruler?.classes()).toEqual(line?.classes())
+		w.unmount()
+		w = mountSheet({ symbol: undefined })
+		expect(numbers(w).map((s) => s.classes())).toEqual([[], []])
 	})
 })
