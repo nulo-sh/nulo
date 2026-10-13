@@ -344,7 +344,6 @@ describe("compareSummaries", () => {
 describe("Bun-only files", () => {
 	const WS = "apps/extension"
 	const ICONS = "scripts/store-icons.test.ts"
-	/** A candidate that also ran one test in each of the workspace's Bun-only files. */
 	function withBunOnly(statuses: Record<string, number> = { passed: 2 }, observations = 2): SoakSummary {
 		const b = summary("bun", { cwd: WS })
 		for (const { file } of bunOnlyFiles(WS)) b.inventory[`${file} :: t`] = { statuses, observations, failures: statuses.failed ?? 0 }
@@ -387,12 +386,18 @@ describe("Bun-only files", () => {
 		)
 		expect(compareSummaries(a, withBunOnly({ passed: 1 }, 1)).problems.join("\n")).toContain(`"${ICONS} :: t" observed 1/2 runs`)
 	})
-	test("an unfiltered candidate that never ran one fails; a filtered soak may leave it out", () => {
-		const b = withBunOnly()
-		delete b.inventory[`${ICONS} :: t`]
-		expect(compareSummaries(summary("node", { cwd: WS }), b).problems).toEqual([`candidate never ran Bun-only file "${ICONS}"`])
-		b.meta.filters = ["src/a.test.ts"]
-		expect(compareSummaries(summary("node", { cwd: WS, filters: ["src/a.test.ts"] }), b).problems).toEqual([])
+	test("a candidate asked to run one that never did fails: the whole suite, or a filter naming it", () => {
+		const missing = (overrides: Partial<SoakSummary["meta"]>) => {
+			const b = withBunOnly()
+			delete b.inventory[`${ICONS} :: t`]
+			Object.assign(b.meta, overrides)
+			return compareSummaries(summary("node", { cwd: WS, ...overrides }), b).problems
+		}
+		const never = [`candidate never ran Bun-only file "${ICONS}"`]
+		expect(missing({})).toEqual(never)
+		expect(missing({ filters: ["src/a.test.ts", "Scripts/Store-Icons"] })).toEqual(never)
+		expect(missing({ filters: ["src/a.test.ts"] })).toEqual([])
+		expect(missing({ script: "test:components" })).toEqual([])
 	})
 	test("the exact match still holds for every other file, and the list only applies to its own workspace", () => {
 		const missing = withBunOnly()

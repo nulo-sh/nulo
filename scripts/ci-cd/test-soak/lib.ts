@@ -415,8 +415,16 @@ export function checkInventoryEntries(idsA: string[], a: SoakSummary, b: SoakSum
 	return { problems, lines }
 }
 
+/** Whether the candidate was asked to run `file`: the unfiltered `test` script (the whole suite,
+ *  where another script may scope it), or a forwarded filter vitest's case-insensitive substring
+ *  match selects it by. */
+function selects(meta: SoakMeta, file: string): boolean {
+	if (meta.filters.length === 0) return meta.script === "test"
+	return meta.filters.some((filter) => file.toLowerCase().includes(filter.toLowerCase()))
+}
+
 /** The Bun-only files stand outside the reference match: the reference must not have run them,
- *  each of their candidate tests must pass every run, and an unfiltered soak must have run each. */
+ *  each of their candidate tests must pass every run, and a candidate asked to run one must have. */
 export function checkBunOnly(a: SoakSummary, b: SoakSummary, files: readonly BunOnlyFile[]): Findings {
 	const problems: string[] = []
 	const lines: string[] = []
@@ -424,7 +432,7 @@ export function checkBunOnly(a: SoakSummary, b: SoakSummary, files: readonly Bun
 	for (const { file, reason } of files) {
 		if (Object.keys(a.inventory).some((id) => fileOf(id) === file)) problems.push(`reference ran Bun-only file "${file}"`)
 		const ids = Object.keys(b.inventory).filter((id) => fileOf(id) === file)
-		if (ids.length === 0 && b.meta.filters.length === 0) problems.push(`candidate never ran Bun-only file "${file}"`)
+		if (ids.length === 0 && selects(b.meta, file)) problems.push(`candidate never ran Bun-only file "${file}"`)
 		for (const id of ids) {
 			const statuses = JSON.stringify(Object.entries(b.inventory[id]?.statuses ?? {}).sort())
 			if (statuses !== passedEveryRun) problems.push(`"${id}": a Bun-only test must pass every run, got ${statuses}`)
@@ -470,9 +478,8 @@ function buildReport(a: SoakSummary, b: SoakSummary, lines: string[], problems: 
 	return [...header, ...lines, ...problems.map((problem) => `  ✖ ${problem}`), verdict].join("\n")
 }
 
-/** `a` is the Node reference, `b` the Bun candidate. Every rule is fail-closed. The validators run
- *  in the report's order — meta, reference side, candidate side, inventory, Bun-only files,
- *  resolutions — so `problems` and the report lines read exactly as they always did. */
+/** `a` is the Node reference, `b` the Bun candidate. Every rule is fail-closed, and the validators
+ *  run in the order the report lists their findings. */
 export function compareSummaries(a: SoakSummary, b: SoakSummary): CompareResult {
 	const problems: string[] = [...checkMeta(a, b), ...checkSide(a, "reference", false), ...checkSide(b, "candidate", true)]
 	const lines: string[] = []
