@@ -162,6 +162,44 @@ async function hitsAfterScroll(page: Page, testids: string[]): Promise<Hit[]> {
 	)
 }
 
+type Box = { top: number; bottom: number; left: number; right: number }
+type Cover = { at: string; hit: string; covered: boolean; snack: Box; control: Box }
+
+/** `testid` where the page rests, then in the same task as each scroll (the container that scrolls it
+ *  to its end, the control to its centre): what a click at its centre hits, and whether any part of it
+ *  is under the snack. */
+async function coverAtRestAndScrolled(page: Page, testid: string): Promise<Cover[]> {
+	return page.evaluate(
+		(s: string, id: string) => {
+			const el = document.querySelector(`[data-testid="${id}"]`)
+			if (!el) throw new Error(`${id} not found`)
+			const read = (at: string) => {
+				const box = el.getBoundingClientRect()
+				const card = document.querySelector(s)?.getBoundingClientRect()
+				if (!card) throw new Error("no snack")
+				const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+				const covered = card.top < box.bottom && card.bottom > box.top && card.left < box.right && card.right > box.left
+				return {
+					at,
+					hit: hit?.closest("[data-testid]")?.getAttribute("data-testid") ?? hit?.tagName ?? "none",
+					covered,
+					snack: { top: card.top, bottom: card.bottom, left: card.left, right: card.right },
+					control: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+				}
+			}
+			const rest = read("rest")
+			let scroller = el.parentElement
+			while (scroller && !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+			;(scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
+			const end = read("end")
+			el.scrollIntoView({ block: "center" })
+			return [rest, end, read("centre")]
+		},
+		SNACK,
+		testid,
+	)
+}
+
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
@@ -294,6 +332,19 @@ async function sendFromDrainedBalance(page: Page): Promise<void> {
 	await waitForToast(page, "Couldn't estimate fee", 120_000, { kind: "error" })
 }
 
+/** Asks, through the playground, for a public transfer of 1,000,000 base units from an account that
+ *  holds none, and returns the execute window it opens; its estimate fails. */
+async function openUnfundedDappSend(ctx: ExtensionContext & { playgroundPage: Page }): Promise<Page> {
+	const config = aztecConfig as AztecTestConfig
+	const pg = ctx.playgroundPage
+	await setPgInput(pg, "tokenAddress", config.tokenAddress)
+	await setPgInput(pg, "recipient", config.minterAddress)
+	await setPgInput(pg, "amount", "1000000")
+	const execute = waitForPopup(ctx, "execute", { timeout: 60_000 })
+	await clickByTestId(pg, "pg-btn-sendTx-default")
+	return execute
+}
+
 test.skipIf(!hasConfig)(
 	"Send: a fee-estimate error sits 12px above the footer and follows it when it grows",
 	{ timeout: 420_000 },
@@ -354,26 +405,7 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
 		const ctx = dappConnectedExtensionWithTransactionCap
-		const config = aztecConfig as AztecTestConfig
-		const pg = ctx.playgroundPage
-		// A public transfer of 1,000,000 base units from an account that holds none fails the estimate.
-		await pg.evaluate(
-			({ token, recipient }: { token: string; recipient: string }) => {
-				const setVal = (s: string, v: string) => {
-					const input = document.querySelector<HTMLInputElement>(s)
-					if (!input) return
-					Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, v)
-					input.dispatchEvent(new Event("input", { bubbles: true }))
-				}
-				setVal('[data-testid="pg-input-tokenAddress"]', token)
-				setVal('[data-testid="pg-input-recipient"]', recipient)
-				setVal('[data-testid="pg-input-amount"]', "1000000")
-			},
-			{ token: config.tokenAddress, recipient: config.minterAddress },
-		)
-		const executeP = waitForPopup(ctx, "execute", { timeout: 60_000 })
-		await clickByTestId(pg, "pg-btn-sendTx-default")
-		const execute = await executeP
+		const execute = await openUnfundedDappSend(ctx)
 		await waitForToast(execute, "Couldn't estimate fee", 180_000, { kind: "error" })
 
 		const at = await placement(execute, sel("dapp-approval-footer"))
@@ -412,6 +444,43 @@ test.skipIf(!hasConfig)(
 		const linedHits = await hitsAfterScroll(execute, BUTTONS)
 		expect(linedHits.map((h) => h.covered)).toEqual([false, false])
 		expect(linedHits[0]?.hit).toBe("execute-reject-btn")
+
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
+		expect(ctx.pageErrors).toEqual([])
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"Home: an error snack covers no part of an awaiting send's Cancel, at rest or scrolled",
+	{ timeout: 480_000 },
+	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		const ctx = dappConnectedExtensionWithTransactionCap
+		expect(ctx.pageErrors).toEqual([])
+		const page = await balanceDrainedBehindTheWallet(ctx)
+		await sendFromDrainedBalance(page)
+		await clickByTestId(page, "send-submit")
+		await waitForHash(page, "#/popup/general", 10_000)
+		await waitForToast(page, "Send failed", 180_000, { kind: "error" })
+
+		// A dApp send waiting on its approval window keeps its Cancel; the failure snack stays until closed.
+		const execute = await openUnfundedDappSend(ctx)
+		await waitForExecuteContent(execute)
+		await page.bringToFront()
+		await page.waitForSelector(`${sel("tx-awaiting-card")}[data-stage="queued"] ${sel("tx-awaiting-cancel")}`, { timeout: 60_000 })
+		await waitForToast(page, "Send failed", 5_000, { kind: "error" })
+		// The snack measures again on the frame after the card arrives.
+		await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+		await settledCard(page)
+
+		const covers = await coverAtRestAndScrolled(page, "tx-awaiting-cancel")
+		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(covers)}`)
+		expect(covers.map((c) => [c.at, c.covered])).toEqual([
+			["rest", false],
+			["end", false],
+			["centre", false],
+		])
+		expect(covers[0]?.hit).toBe("tx-awaiting-cancel")
 
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)

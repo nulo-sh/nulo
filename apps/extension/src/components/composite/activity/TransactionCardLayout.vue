@@ -2,11 +2,12 @@
 import { Comment, type PropType, ref, useId, useSlots } from "vue"
 import type { JobStage, ProveBackend } from "@nulo/wallet-core/jobs"
 import RowTarget from "@/components/ui/RowTarget.vue"
+import { vSnackFooter } from "@/composables/snackInset"
 /**
  * The one layout every activity card composes, so field positions stay identical across the
  * lifecycle: [activity icon + badge] [title (+ trailing) / secondary] [amount column], with an
- * optional `#actions` corner. It owns the row's interactivity: with `to` the row is a link, with
- * `opens` a button whose press emits `activate`, otherwise it is inert.
+ * optional `#actions` corner, which an open snack sits above. It owns the row's interactivity: with
+ * `to` the row is a link, with `opens` a button whose press emits `activate`, otherwise it is inert.
  *
  * `txAmountDisplay` / `txTransferTypeLabel` / `txStatus` / `txHash` bind as `data-tx-*` on the
  * root and `stage` / `backend` as `data-stage` / `data-backend`, the facts e2e waits on; Vue omits
@@ -126,7 +127,7 @@ function hasActionsContent() {
 			</span>
 		</Flex>
 
-		<div v-if="hasActionsContent()" :class="$style.actions">
+		<div v-if="hasActionsContent()" v-snack-footer :class="$style.actions">
 			<slot name="actions" />
 		</div>
 	</Flex>
