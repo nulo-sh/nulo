@@ -2370,6 +2370,12 @@
 		},
 		{
 			"rule": "faceless",
+			"text": "font-size: calc(10px * var(--hero-scale, 1))",
+			"role": "meta",
+			"at": ".derived_type"
+		},
+		{
+			"rule": "faceless",
 			"text": "font-size: calc(40px * var(--hero-scale, 1))",
 			"role": "amount-hero",
 			"at": ".field_type"
