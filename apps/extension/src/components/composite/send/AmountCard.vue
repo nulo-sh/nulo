@@ -6,7 +6,7 @@ import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 /** Utils */
 import { clampDecimals, formatBaseUnits, readAmountText } from "@/utils/amount"
 import { fitHero } from "@/utils/hero-fit"
-import { inputRoom, rulerWidth } from "@/utils/hero-ruler"
+import { heroRoom, inputRoom, rulerWidth } from "@/utils/hero-ruler"
 import { usdToTokenAmount, tokenAmountToUsdMicro, formatUsdMicro, usdMicroToPlainString } from "@/wallet/services/price/convert"
 import { caretAfter, nextAmountText, restingAmount } from "./amount-field"
 
@@ -52,6 +52,8 @@ let lastText = String(model.value ?? "")
 
 const inputEl = useTemplateRef("inputEl")
 const fieldRuler = useTemplateRef("fieldRuler")
+const conversionEl = useTemplateRef("conversionEl")
+const derivedRuler = useTemplateRef("derivedRuler")
 
 const tokenDecimals = computed(() => (typeof props.token?.decimals === "number" ? props.token.decimals : undefined))
 
@@ -66,8 +68,8 @@ const readHint = ref(null)
 
 onMounted(() => {
 	if (props.tokenBalanceByType) inputEl.value.focus()
-	fitField()
-	document.fonts?.addEventListener("loadingdone", fitField)
+	fitLines()
+	document.fonts?.addEventListener("loadingdone", fitLines)
 })
 
 /** Every write of the token amount goes through here, so the next edit starts from it. */
@@ -150,17 +152,36 @@ const handleAmountBlur = () => {
 	writeAmount(rest, { atRest: true, point: commaPoint && rest.includes(".") })
 }
 
-/** The token field's type as a fraction of its 40 px: full with focus, and at rest the largest
- *  that shows the whole amount, however small. */
+const handleFiatBlur = () => {
+	isFocused.value = false
+}
+
+/** The amount field's type, token or USD, as a fraction of its 40 px: full with focus, and at rest
+ *  the largest that shows the whole amount, however small. */
 const fieldScale = ref(1)
 function fitField() {
 	const input = inputEl.value
 	const form = fieldRuler.value
-	if (fiatMode.value || !input || !form) return
-	// Both: the fiat input sets `isFocused` and never clears it, and a window losing focus blurs the
-	// field while leaving it the document's active element.
+	if (!input || !form) return
+	// Both: `isFocused` can outlive a field the unit switch or a lost quote swapped out, and a window
+	// losing focus blurs the field while leaving it the document's active element.
 	const typing = isFocused.value && document.activeElement === input
 	fieldScale.value = typing ? 1 : fitHero(1, (_, scale) => rulerWidth(form, scale), inputRoom(input)).scale
+}
+
+/** The derived token line's type as a fraction of its 10 px: the largest that keeps it on one line
+ *  beside the balance and Max. */
+const derivedScale = ref(1)
+function fitDerived() {
+	const form = derivedRuler.value
+	const line = conversionEl.value
+	if (!form || !line) return
+	derivedScale.value = fitHero(1, (_, scale) => rulerWidth(form, scale), heroRoom(line)).scale
+}
+
+function fitLines() {
+	fitField()
+	fitDerived()
 }
 
 // ── Fiat-denominated input ──────────────────────────────────────────
@@ -315,8 +336,13 @@ watch(
 watch(canUseFiatInput, (can) => {
 	if (!can && fiatMode.value) exitFiatMode({ clearAmount: true })
 })
-// After the render, so the ruler holds what the field shows; the fiat toggle takes the field's width.
-watch([model, isFocused, fiatMode, canUseFiatInput], fitField, { flush: "post" })
+// After the render, so each ruler holds what its line shows; the unit switch takes the field's width,
+// the balance corner the derived line's.
+watch(
+	[model, fiatTerm, isFocused, fiatMode, canUseFiatInput, derivedTokenLabel, balanceSegment, () => fiatGuard.value?.converting],
+	fitLines,
+	{ flush: "post" },
+)
 /**
  * Watch-driven exits are FAIL-CLOSED: they also clear the amount. Leaving the
  * fiat-derived token amount sendable after the session's basis vanished (quote
@@ -347,7 +373,7 @@ defineExpose({ refreezeQuote, focusAmount: () => handleFocus() })
 
 onBeforeUnmount(() => {
 	clearTimeout(convertTimer)
-	document.fonts?.removeEventListener("loadingdone", fitField)
+	document.fonts?.removeEventListener("loadingdone", fitLines)
 })
 
 const handleFocus = () => {
@@ -392,10 +418,12 @@ const handleFiatBalanceAction = (divisor) => {
 						v-model="fiatTerm"
 						@input="handleFiatInput"
 						@focus="handleAmountFocus"
+						@blur="handleFiatBlur"
 						:disabled="!tokenBalanceByType"
 						placeholder="0.00"
 						data-testid="send-amount-fiat-input"
 						:class="[$style.input_field, $style.field_type]"
+						:style="{ '--hero-scale': fieldScale }"
 					/>
 					<input
 						v-else
@@ -411,7 +439,7 @@ const handleFiatBalanceAction = (divisor) => {
 						:style="{ '--hero-scale': fieldScale }"
 					/>
 					<!-- The fit's ruler: it shares the field's `field_type` class, or the two widths part. -->
-					<span aria-hidden="true" :class="$style.field_ruler"><span ref="fieldRuler" :class="$style.field_type">{{ model }}</span></span>
+					<span aria-hidden="true" :class="$style.ruler"><span ref="fieldRuler" :class="$style.field_type">{{ fiatMode ? fiatTerm : model }}</span></span>
 				</div>
 				<button
 					v-if="canUseFiatInput"
@@ -429,12 +457,15 @@ const handleFiatBalanceAction = (divisor) => {
 			</Flex>
 
 			<Flex align="center" justify="between" gap="8">
-				<span :class="$style.conversion" data-testid="send-amount-meta">
+				<span ref="conversionEl" :class="[$style.conversion, fiatMode && $style.conversion_fit]" data-testid="send-amount-meta">
 					<template v-if="fiatMode">
 						<span v-if="fiatGuard?.converting" :class="$style.skeleton" data-testid="send-amount-converting" />
-						<span v-else-if="derivedTokenLabel" :title="conversionTitle" data-testid="send-amount-derived">{{
-							derivedTokenLabel
-						}}</span>
+						<template v-else-if="derivedTokenLabel">
+							<span :title="conversionTitle" data-testid="send-amount-derived" :class="$style.derived_type" :style="{ '--hero-scale': derivedScale }">{{
+								derivedTokenLabel
+							}}</span>
+							<span aria-hidden="true" :class="$style.ruler"><span ref="derivedRuler" :class="$style.derived_type">{{ derivedTokenLabel }}</span></span>
+						</template>
 					</template>
 					<template v-else>
 						<span v-if="tokenModeFiatLabel" :title="conversionTitle" data-testid="send-amount-fiat-label">{{
@@ -523,7 +554,7 @@ const handleFiatBalanceAction = (divisor) => {
 	letter-spacing: -0.04em;
 }
 
-.field_ruler {
+.ruler {
 	position: absolute;
 	width: 0;
 	height: 0;
@@ -532,7 +563,7 @@ const handleFiatBalanceAction = (divisor) => {
 	pointer-events: none;
 }
 
-.field_ruler > span {
+.ruler > span {
 	position: absolute;
 }
 
@@ -569,6 +600,17 @@ const handleFiatBalanceAction = (divisor) => {
 	font-family: var(--font-mono);
 	font-size: 10px;
 	color: var(--nulo-secondary);
+}
+
+/* The derived line's room is all the row leaves beside the balance and Max. */
+.conversion_fit {
+	flex: 1;
+	min-width: 0;
+}
+
+.derived_type {
+	font-size: calc(10px * var(--hero-scale, 1));
+	white-space: nowrap;
 }
 
 .skeleton {
