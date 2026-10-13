@@ -679,13 +679,16 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 			const pxe = this.pxeService.getPXE(networkInfoFrom(network))
 
-			const instance = await pxe.getContractInstance(AztecAddress.fromStringUnsafe(contract))
+			const address = AztecAddress.fromStringUnsafe(contract)
+			// Every add stores the lower-case spelling a dApp call records, so exact comparisons match.
+			const canonical = address.toString()
+			const instance = await pxe.getContractInstance(address)
 			if (!instance) {
 				throw new Error("contract instance not found")
 			}
 
 			if (expectedClassId !== undefined) {
-				if (instance.address.toString().toLowerCase() !== contract.toLowerCase()) {
+				if (instance.address.toString().toLowerCase() !== canonical) {
 					throw new PinMismatchError(`instance address ${instance.address.toString()} ≠ requested ${contract}`)
 				}
 				if (instance.currentContractClassId.toString() !== expectedClassId) {
@@ -698,13 +701,13 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 				throw new Error("contract artifact not found")
 			}
 
-			await ensureRegistered(pxe, contract, instance, artifact)
+			await ensureRegistered(pxe, canonical, instance, artifact)
 
 			const fns = resolveTokenFns(artifact)
 
 			const result: TokenInterface = {
 				chainId: network.chainId,
-				contract,
+				contract: canonical,
 				classId: instance.currentContractClassId.toString(),
 				getNameFn: fns.getName.fn?.getImpl(),
 				getNameFnCandidates: fns.getName.candidates.map((x) => x.getImpl()),
@@ -810,7 +813,9 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	private async findToken(profileId: string, chainId: number, contract: string): Promise<Token | undefined> {
 		const tokens = await this.tokens.getValues()
-		return tokens.find((token) => token.profileId === profileId && token.chainId === chainId && token.contract === contract)
+		// A row stored or restored in another spelling is still this contract.
+		const key = contract.toLowerCase()
+		return tokens.find((token) => token.profileId === profileId && token.chainId === chainId && token.contract.toLowerCase() === key)
 	}
 
 	/** Token ids harvested from RAW rows (codec-hidden included) owned by

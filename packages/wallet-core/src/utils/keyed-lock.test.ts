@@ -12,6 +12,19 @@ const deferred = <T = void>() => {
 }
 
 describe("KeyedLock", () => {
+	test("waiting counts the ops queued behind a key's running one; an unknown or deleted key reads 0", async () => {
+		const kl = new KeyedLock()
+		const a = deferred()
+		const ops = [kl.withLock("k", () => a.promise), kl.withLock("k", () => {}), kl.withLock("k", () => {})]
+		expect(kl.waiting("k")).toBe(2)
+		expect(kl.waiting("other")).toBe(0)
+
+		kl.delete("k")
+		expect(kl.waiting("k")).toBe(0)
+		a.resolve()
+		await Promise.all(ops)
+	})
+
 	test("serializes ops for the SAME key in FIFO order", async () => {
 		const kl = new KeyedLock()
 		const order: string[] = []

@@ -230,3 +230,20 @@ Items 1 and 2 extend that rule to dApp sends, which you left open (#218). The wa
 **Recommendation.** B: a higher fee is the one thing this sheet asks about.
 
 **What ships now.** B, by the orchestrator's call (D-orch-21): the usual sheet's existing 800 ms guard, with no new words and no layout change.
+
+## OA-15: How small the derived token line may get in USD mode (#90, page 9 P9-01 A)
+
+**Surface.** Send in USD mode: the "≈ … TST" line under the amount, beside the balance and Max.
+
+**What ships now.** Option A as signed: the line scales down until it fits on one line, with no lower limit. Normal amounts look as today. The room it gets is what the balance and Max leave, so a long balance shrinks it hard. Measured with a 12,345,679,901.12 TST balance, an 18-decimal token, on Chrome and Firefox:
+- Max in USD: the line draws at 4.6 px;
+- a typed $1,234.56: "≈ 1,234.736567329128065313 TST" draws at 6 px.
+
+Before, the same line wrapped onto three lines and pushed Max 28 px past the card's edge. Shots: `screenshots/2-usd-typed-at-rest-*`, `screenshots/2-usd-long-at-rest-*`.
+
+**Options.**
+- **A. As built.** Every figure stays whole and on one line, however small.
+- **B. A floor**, e.g. 8 px. Below it the line wraps under itself, as the review sheet's amount does below 60%.
+- **C. Option C of P9-01 for long lines only.** The line moves to its own row under the amount when it would draw below the floor, so it gets the card's full width.
+
+**Recommendation.** C. It keeps the signed shrink for ordinary amounts and keeps the figure readable when it is long. The review sheet shows the full amount before anything is sent, so A is not a money risk; it is a legibility one.

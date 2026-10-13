@@ -36,6 +36,7 @@ import { TokenService } from "./service"
 import { PinMismatchError, TokenSeeder, type TokenSeederDeps } from "./seeder"
 import { DEFAULT_TOKEN_SEEDS } from "./default-tokens"
 import type { Token, TokenInterface } from "./spec"
+import { txAmount } from "@/utils/tx-amount"
 
 /** The shipped seed list can be empty, so the default-token paths run against a fixture seed. */
 const FIXTURE_SEED = vi.hoisted(() => ({
@@ -61,9 +62,9 @@ const CONTRACT = AztecAddress.fromNumberUnsafe(0x1234).toString()
 const CLASS_ID = `0x${"c1a55".padStart(64, "0")}`
 
 /** Hardcoded fake instance — deriving a real one needs the bb WASM (not loaded in vitest). */
-function fakeTokenInstance(): ContractInstanceWithAddress {
+function fakeTokenInstance(contract = CONTRACT): ContractInstanceWithAddress {
 	return {
-		address: AztecAddress.fromStringUnsafe(CONTRACT),
+		address: AztecAddress.fromStringUnsafe(contract),
 		currentContractClassId: { toString: () => CLASS_ID } as unknown as Fr,
 	} as unknown as ContractInstanceWithAddress
 }
@@ -134,6 +135,23 @@ describe("TokenService composition — in-process, no sandbox", () => {
 
 		await tokenService.parseTokenInterface(NETWORK.id, CONTRACT)
 		expect(fake.registerCalls).toHaveLength(0) // getContracts() already lists it → no register
+	})
+
+	test("an address typed in upper case parses to the spelling a dApp call records, so its mint reads", async () => {
+		const lettered = AztecAddress.fromNumberUnsafe(0xabcdef).toString()
+		const { tokenService, fake } = await makeHarness({
+			instances: new Map([[lettered, fakeTokenInstance(lettered)]]),
+			artifacts: new Map([[CLASS_ID, TokenContractArtifact]]),
+			registered: [AztecAddress.fromStringUnsafe(lettered)],
+		})
+
+		const ti = await tokenService.parseTokenInterface(NETWORK.id, `0x${lettered.slice(2).toUpperCase()}`)
+
+		expect(ti.contract).toBe(lettered)
+		expect(fake.registerCalls).toHaveLength(0)
+		const token = { contract: ti.contract, classId: ti.classId, decimals: 6, symbol: "TST", hasDecimals: true }
+		const mint = { contract: lettered, method: "mint_to_public", args: [CONTRACT, "1000000"], classId: CLASS_ID }
+		expect(txAmount([mint], [token])).toEqual({ units: 1_000_000n, decimals: 6, symbol: "TST" })
 	})
 })
 

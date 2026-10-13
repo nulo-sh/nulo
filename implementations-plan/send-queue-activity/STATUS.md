@@ -34,3 +34,9 @@
 - 2026-10-13 — arc 4 phase 4.1 gate: pass. lint, typecheck:all, test exit 0 (extension 11757 passed); touched files run single; removing the cap comparison reds 10 never-happens cases (checked, restored); composition and executor cases soaked 8× green.
 - 2026-10-13 — arc 4 phase 4.3 gate: pass. lint, typecheck:all, test exit 0 (extension 11766 passed); FeeCostReadout, SendReviewSheet, send.integration, send-submit, estimate-when-clear, fee-helpers run single.
 - 2026-10-13 — arc 4 phase 4.4 gate: pass. lint, typecheck:all, test:all exit 0 (extension 11776 passed); TransactionAwaitingCard, RecentActivityView, SendReviewSheet, incoming-row-parity run single; dropping the double-press guard or the close-on-change watch reds its case (checked, restored).
+
+- 2026-10-13 — arc 2 start: branch `send-queue-activity-amount` off origin/dev e900f710 (#344 merged); D-orch-25..30 recorded.
+- 2026-10-13 — phases 2.1-2.3 gates: pass at 0ceee1bf (lint, typecheck:all; AmountCard, SendReviewSheet, send-fiat-gate, send tests 200/200; every new case fails on the base file).
+- 2026-10-13 — phase 2.4 gates: network at retry 0 Chrome and Firefox (send-amount-exact 1/1, fiat-send 1/1 each; the new USD step fails on the base sources); Chrome smoke at retry 0 on a smoke-armed build: 219 passed, 11 skipped. 40 before/after screenshots committed. OA-15 filed (derived line legibility at large balances).
+- 2026-10-13 — arc 2 review: Codex r1 approve (two comment lows), Opus approve (comment nits; one rejection; one known limit, #367 filed closed); Codex r2 approve. Loop converged.
+- 2026-10-13 — phase 2.4: Firefox smoke at retry 0 on a smoke-armed build: 217 passed, 13 skipped. Merged origin/dev (dd922823, #356: e2e assertions only, no overlap).
