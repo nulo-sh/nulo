@@ -23,3 +23,9 @@
 ## Implementation review, round 3 (2026-10-13)
 
 - Codex (session `01a1336a`): approve. One nit, a comment the round-2 binding made false. The loop closed at three rounds with nothing open.
+
+## Phase 4: the shots (2026-10-13)
+
+- The first History capture with a held send showed the empty state. History lists terminal journal records only (`activity.vue` loads `isTerminal: true`), so a queued row appears in Home's Recent activity while it waits, and in History only once it ends. This is today's rule, unchanged. The plan's UI impact row and DH-0's table had said otherwise and were corrected; the surface is captured as "History while held".
+- The playground's header is not sticky, so its status and its result feed never share an 800×600 frame. For the three playground captures only, the local spec pins the header to the top of the frame. The PR body says so.
+- The capture spec ran inside the Firefox full-suite run, so that run counts one local file beyond the committed suite.

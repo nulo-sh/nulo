@@ -332,7 +332,7 @@ See § Decision ledger for the forks between the drafts. The rejected alternativ
 | Skip the check by reconnecting | Only two things release a hold: `!needsVerification` (the approval marker and the row's trust flag, neither app-writable) and a confirmation of the session's own hash. A reconnect is a new key exchange with a new hash | `session-established.test.ts`: an untrusted reconnect holds, a trusted one releases |
 | Release one session with another's confirmation | `confirm` matches the session's own hash, which is unique per key exchange; a stale window's hash names a settled hold | unit: a wrong, stale or predecessor hash releases nothing, with the right one as control |
 | Forge a confirmation from the page | Service ports refuse content scripts. The hash is not a secret, so reachability is the boundary | existing `sender-auth` tests; the RPC adds no new ingress |
-| Race a lock, a termination or a re-key against a confirmation | Every hold transition is synchronous on one thread and settles once. A call acts only while its own `ActiveSession` is the live one (`bindLiveSession`): at arrival, after the release, synchronously before the dispatch, and on every send and termination, so neither a late old-key message nor a call parked or paused across a re-key reaches or answers the successor | unit: settle-once and re-key; callback integration: a lock during the hold, a late old-session message, a parked call, a deferred legal read and a deferred fence across a re-key |
+| Race a lock, a termination or a re-key against a confirmation | Every hold transition is synchronous on one thread and settles once. A call acts only while its own `ActiveSession` is the live one (`bindLiveSession`): at arrival, after the release, synchronously before the dispatch, on every send and termination, and in establishment's liveness gates and terminations, so neither a late old-key message nor a call or establishment parked or paused across a re-key reaches, answers or ends the successor. The wallet's own terminations drop the hold before they reach the transport | unit: settle-once and re-key; callback integration: a lock during the hold, a late old-session message, a parked call, a deferred legal read and a deferred fence across a re-key, an establishment paused across a lock and a re-key, a termination that throws |
 | Flood a held session | `admit()` caps admitted waiting calls at 32 per unconfirmed session. The call past the cap is answered `-32005` at arrival and keeps nothing | callback integration: the 33rd call gets `-32005`; control: the first 32 run after confirm |
 | Keep a session held forever | PINGs keep the channel open. The session ends when the person refuses, disconnects it in Settings, or locks; when the app disconnects; or when the tab closes. Held sessions are paced by windows the person must close | not bounded by a timer (Good enough) |
 | Trick the person into confirming | Out of scope: the check's screen is unchanged, and a mismatch is the person's call | — |
@@ -344,7 +344,7 @@ See § Decision ledger for the forks between the drafts. The rejected alternativ
 - A lock tears no confirmed channel down. `wallet-locked-mid-session.test.ts` stays green unchanged.
 
 **Logging.**
-- A confirmation that finds no hold, a dropped held call, and a cap refusal each log at `debug` only, with the session id and the method at most.
+- A confirmation that finds no hold, a dropped held call, and a cap refusal each log at `debug` only, with the session id and the method at most. The lock's per-session termination logs at `info`, with the session id, as the revocation and profile-switch teardowns do.
 - Never the hash, the URL, or the call's arguments (§ Logging policy). `log-payload-ban.test.ts` scans the new lines.
 - `isExpectedRefusal` already classes `TooManyPendingError`.
 
@@ -365,7 +365,7 @@ See § Decision ledger for the forks between the drafts. The rejected alternativ
 | Emoji check closed without an answer | The app's calls already ran | The app stays connected and its calls stay pending until the session ends. Nothing on screen says so (DH-6) |
 | An approval window a held call opens (connect capabilities, execute, sign) | Opens beside the check while it is still open | Opens only after They match, and never after They don't match (DH-0) |
 | Lock while a check is open | The check goes to the auth screen. The session survives, and its calls already ran | Same routing. The unconfirmed session ends and the app gets the standard disconnect (DH-2) |
-| Home and History: a held app send | A queued row on arrival, claimed within moments | The same queued row, now waiting until They match. If the session ends first, the row fails with existing copy: W, or L after a lock, titled "Transaction" as every queued-row failure is today (DH-3) |
+| Home and History: a held app send | A queued row in Home's Recent activity on arrival, claimed within moments; History lists a send once it ends (today's rule) | The same queued row in Home's Recent activity, now waiting until They match; History stays as it is until the row ends. If the session ends first, the row fails with existing copy and appears in History: W, or L after a lock, titled "Transaction" as every queued-row failure is today (DH-3) |
 | Journal detail, Developer or Debug mode, a dropped held send | — | today's developer line "Session no longer valid — reconnect" (existing words) |
 | Playground (`apps/playground`) | `connected`, then each call's `pg-result` row settles at once | `connected`, then each call's row stays `pending` until They match. No playground change (DH-4) |
 | The app, past 32 held calls | — | `-32005` with today's message, which says "transactions" (DH-5) |
@@ -487,7 +487,7 @@ One arc, four phases. Each phase ends with its gate. Inside a phase, run the fas
    - the check for a new connection and for an untrusted reconnect, each while a call is held;
    - the playground with a `pending` call during the check;
    - a held `requestCapabilities`' approval window opening after They match;
-   - Home and History with a held send's queued row;
+   - Home with a held send's queued row, and History while it is held;
    - History with a dropped held send (W) and a lock-dropped one (L), each titled "Transaction";
    - the journal detail of a dropped held send in Developer mode.
 2. **Where they go.** Into the PR body, where the orchestrator's decision page reads them. Never into the extension bundle.

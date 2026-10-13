@@ -6,13 +6,13 @@ Each ask has a recommendation and a **what ships now** line: what arc 1 builds w
 
 ## DH-0. Sign-off on the unchanged screens and the app-side wait (P2-09's "before merge")
 
-**Surfaces:** the emoji check (new connection, inside the connect window after Allow, and the standalone reconnect window), the approval windows a waiting call opens, the playground while its calls wait, Home and History with a held send's queued row.
+**Surfaces:** the emoji check (new connection, inside the connect window after Allow, and the standalone reconnect window), the approval windows a waiting call opens, the playground while its calls wait, Home with a held send's queued row, and History, which lists it once it ends.
 
 | | Today | With the hold |
 |---|---|---|
 | Emoji check | Same screen. The app's calls run while it is open | Same screen, same words. The app's calls wait for They match |
 | Playground | `connected`, then each call's result settles at once | `connected`, then each call reads `pending` until They match |
-| Home / History | A held send's queued row, claimed within moments | The same queued row, waiting until They match |
+| Home / History | A held send's queued row in Home's Recent activity, claimed within moments; History lists a send once it ends | The same queued row in Home's Recent activity, waiting until They match; History lists it once it ends, as today |
 | Approval windows (connect capabilities, execute, sign) a waiting call opens | Open beside the check while it is still on screen | Open only after They match; never after They don't match |
 
 **What ships now:** the hold with every screen as it is. Arc 1's PR opens when its gates pass; it merges after this page is signed.
