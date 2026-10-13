@@ -1,7 +1,7 @@
 import type { PinnedKey } from "./envelope"
 
-/** The all-zero key: a stand-in until the key ceremony pastes the real ones. Never verifies. */
-export const PLACEHOLDER_PUBLIC_KEY = "A".repeat(43)
+/** Stands in until the key ceremony; not base64url, so it refuses every envelope as `bad-key`. */
+export const PLACEHOLDER_PUBLIC_KEY = "placeholder: run the key ceremony"
 
 /**
  * The keys a list may be signed with. `nulo-ci-1` signs in the `token-list` environment;

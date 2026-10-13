@@ -70,11 +70,13 @@ const thirdParty = (steps: Step[]): string[] =>
 		),
 	].sort()
 
-/** A secret the repository or an environment defines; `GITHUB_TOKEN` is the job's own token, not a stored credential. */
-const CUSTOM_SECRET = /\bsecrets\s*(\.\s*(?!GITHUB_TOKEN\b)[A-Za-z_]|\[)/
+const EXPRESSION = /\$\{\{([\s\S]*?)\}\}/g
+/** Any read of the `secrets` context, `toJSON(secrets)` included, but the job's own `secrets.GITHUB_TOKEN`. */
+const CUSTOM_SECRET = /\bsecrets\b(?!\s*\.\s*GITHUB_TOKEN\b)/
 
-/** Whether any step, the job's env or the workflow's env reads a custom secret. */
-const readsCustomSecret = (job: Job, wf: Workflow): boolean => CUSTOM_SECRET.test(JSON.stringify([wf.env, job.env, job.steps]))
+/** Whether an expression in any step, the job's env or the workflow's env reads a stored secret. */
+const readsCustomSecret = (job: Job, wf: Workflow): boolean =>
+	[...JSON.stringify([wf.env, job.env, job.steps]).matchAll(EXPRESSION)].some(([, expression]) => CUSTOM_SECRET.test(expression))
 
 function privileged(job: Job, wf: Workflow): boolean {
 	const declared = job.permissions ?? wf.permissions ?? {}
@@ -576,6 +578,10 @@ describe("credentialed jobs", () => {
 		[
 			"a custom secret read by bracket",
 			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { env: { KEY: "${{ secrets['ANY_KEY'] }}" } }),
+		],
+		[
+			"the whole secrets context",
+			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { env: { ALL: "${{ toJSON(secrets) }}" } }),
 		],
 	])("finds %s", (_, edit) => {
 		expect(credentialedFindings(mutated(edit)).length).toBeGreaterThan(0)

@@ -339,6 +339,7 @@ This section follows [`implementations-plan/README.md` § Post-implementation st
   - Accepted: 1, `seeded` is written without a preview → D12 `verifiedPins`; 2, a `secrets.*` predicate would make the network e2e and nightly `resolve` jobs privileged → custom secrets only, plus a mutation test; 3, a circular first publish → D21; 4 (nonblocking), an in-flight persist → D22 and a held-persist test; and that `refreshIfStale` and the incoming-transfer filter consume quotes too → both carry the mapping.
 - **Owner: approve (2026-10-13).** A1 to A5 confirmed; A4 is disclose. The one condition: the agent drives the key ceremony with the keyed-run tools (D23).
 - **Final pass on the round-2 fixes** (same session, resumed): **approve**. All four findings are closed and no new material defect was found. Implementation review must verify that the marker round-trips and that the named regression tests exist.
+- **Arc 1 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (the summary's code was outside `SIGNING_PATHS`); all seven findings accepted and fixed, each listed in `lessons/phase-2.md`.
 
 ## Seeds
 

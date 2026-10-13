@@ -1,14 +1,4 @@
-/**
- * The tree invariants of the token-list host, as findings. `test/tree.test.ts` asserts there are
- * none; `bun scripts/check.ts` prints them and exits non-zero, for the publish workflow's `prepare`.
- *
- * - `list.source.json` passes the strict rules and is in canonical form (tab-indented, key order as
- *   the payload writes it), so a diff of it is a diff of the tokens.
- * - Every pinned key is a real Ed25519 public key: a placeholder fails, so CI stays red until the
- *   key ceremony has run.
- * - `public/` serves `_headers` and `v1/list.json` only.
- * - A committed envelope is canonical, verifies against the pinned keys and parses strictly.
- */
+/** The host's tree invariants, as findings: `test/tree.test.ts` asserts none, and `prepare` runs this file. */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -25,6 +15,7 @@ export function canonical(value: unknown): string {
 	return `${JSON.stringify(value, null, "\t")}\n`
 }
 
+/** Canonical form makes a diff of the source a diff of the tokens. */
 function sourceFindings(root: string): string[] {
 	const text = readFileSync(join(root, SOURCE), "utf8")
 	try {
@@ -35,6 +26,7 @@ function sourceFindings(root: string): string[] {
 	}
 }
 
+/** A placeholder is a finding, so CI stays red until the key ceremony has run. */
 export function keyFindings(keys: readonly PinnedKey[]): string[] {
 	const findings: string[] = []
 	if (keys.length === 0) findings.push("keys.ts: no pinned key")

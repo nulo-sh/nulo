@@ -71,10 +71,10 @@ describe("envelope", () => {
 		}
 	})
 
-	test("the placeholder key verifies nothing", async () => {
+	test("the placeholder key refuses every envelope before any signature check", async () => {
 		const { privateKey } = await freshKey()
 		const text = JSON.stringify(await signEnvelope(PAYLOAD, privateKey, "nulo-ci-1"))
-		expect(["bad-key", "bad-signature"]).toContain(await refusal(text, [{ keyId: "nulo-ci-1", publicKey: PLACEHOLDER_PUBLIC_KEY }]))
+		expect(await refusal(text, [{ keyId: "nulo-ci-1", publicKey: PLACEHOLDER_PUBLIC_KEY }])).toBe("bad-key")
 	})
 
 	test("base64url admits one spelling per value", () => {

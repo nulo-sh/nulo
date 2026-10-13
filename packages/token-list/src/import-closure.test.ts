@@ -7,16 +7,21 @@ const HERE = fileURLToPath(new URL(".", import.meta.url))
 // The `sign` job runs `bun --no-install` with no `node_modules`: anything the two CLIs reach outside
 // this directory or `node:` would fail there, or be fetched from a registry beside the secret.
 const ENTRIES = ["sign-cli.ts", "keygen-cli.ts"]
-const SPECIFIER = /(?:^|\n)\s*(?:import|export)\s[^;"]*?from\s+"([^"]+)"|(?:^|\n)\s*import\s+"([^"]+)"|\bimport\s*\(/g
+const SPECIFIER = /(?:^|\n)\s*(?:import|export)\s[^;"]*?from\s+"([^"]+)"|(?:^|\n)\s*import\s+"([^"]+)"/g
+// A run-time load names no static specifier, so the scan refuses the forms outright.
+const RUNTIME_LOAD = /\bimport\s*\(|\brequire\s*\(/
+
+function specifiers(file: string, text: string): string[] {
+	expect(RUNTIME_LOAD.test(text), `${file} loads a module at run time`).toBe(false)
+	return [...text.matchAll(SPECIFIER)].map((match) => match[1] ?? match[2])
+}
 
 function closure(entry: string): Set<string> {
 	const seen = new Set<string>()
 	const visit = (file: string) => {
 		if (seen.has(file)) return
 		seen.add(file)
-		for (const match of readFileSync(join(HERE, file), "utf8").matchAll(SPECIFIER)) {
-			const specifier = match[1] ?? match[2]
-			expect(specifier, `${file} uses a dynamic import`).toBeDefined()
+		for (const specifier of specifiers(file, readFileSync(join(HERE, file), "utf8"))) {
 			if (specifier.startsWith("node:")) continue
 			expect(specifier, `${file} imports ${specifier}`).toMatch(/^\.\/[a-z-]+$/)
 			const target = `${specifier.slice(2)}.ts`
@@ -32,6 +37,13 @@ describe("signing import closure", () => {
 	test.each(ENTRIES)("%s reaches only node: builtins and files in this directory", (entry) => {
 		expect(closure(entry).size).toBeGreaterThan(1)
 	})
+
+	test.each([`const m = require("../../../scripts/x")`, `const m = await import("./x")`, `import.meta.require("./x")`])(
+		"refuses a run-time load: %s",
+		(text) => {
+			expect(() => specifiers("x.ts", text)).toThrow("loads a module at run time")
+		},
+	)
 
 	test("the signer's closure is exactly the format modules", () => {
 		expect([...closure("sign-cli.ts")].sort()).toEqual([

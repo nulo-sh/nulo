@@ -1,12 +1,4 @@
-/**
- * Opens the publish PR for a signed envelope: branch `token-list-publish-<sequence>` from the commit
- * the run signed, one commit writing `public/v1/list.json`, a PR into `dev`, and older open publish
- * PRs closed as superseded. The commit goes through `createCommitOnBranch` with the App token, so
- * GitHub signs it and its PR runs CI, whose tree tests verify the envelope; the owner merges.
- *
- * Node builtins and fetch only: the `publish-pr` job runs it with `bun --no-install` beside an App
- * token, and installs nothing.
- */
+/** Node builtins and fetch only: the `publish-pr` job runs this with `bun --no-install` beside an App token. */
 import { readFileSync } from "node:fs"
 
 export const ENVELOPE_PATH = "infra/token-list/public/v1/list.json"
@@ -17,7 +9,7 @@ export interface PublishIO {
 	createBranch(branch: string, sha: string): Promise<void>
 	/** A file's text at a commit, or null when absent. */
 	read(path: string, commit: string): Promise<string | null>
-	/** Commits `text` to `path` only while `branch` still points at `expectedHead`. */
+	/** Commits `text` to `path` only while `branch` still points at `expectedHead`; GitHub signs it, as `dev` requires. */
 	commit(branch: string, expectedHead: string, path: string, text: string, headline: string): Promise<void>
 	/** Open publish PRs into `dev`, by head branch. */
 	openPublishPrs(): Promise<{ number: number; branch: string }[]>
@@ -48,6 +40,15 @@ export function prBody(input: PublishInput, keyId: string, sequence: number): st
 		"The tree tests in `quality-status` verify this envelope against the pinned keys and parse it strictly.",
 		"Once merged, Workers Builds deploys `dev` and https://tokens.nulo.sh/v1/list.json serves it.",
 	].join("\n")
+}
+
+type Pull = { number: number; head: { ref: string; repo: { full_name: string } | null } }
+
+/** A fork can name its branch like ours, so only this repository's branches count as publish PRs. */
+export function publishPrs(pulls: readonly Pull[], repo: string): { number: number; branch: string }[] {
+	return pulls
+		.filter((pr) => pr.head.repo?.full_name === repo && pr.head.ref.startsWith(BRANCH_PREFIX))
+		.map((pr) => ({ number: pr.number, branch: pr.head.ref }))
 }
 
 export async function runPublish(input: PublishInput, io: PublishIO): Promise<number> {
@@ -111,10 +112,7 @@ function githubIO(repo: string, token: string): PublishIO {
 			}
 		},
 		async openPublishPrs() {
-			const prs = await json<{ number: number; head: { ref: string } }[]>(
-				call(`repos/${repo}/pulls?state=open&base=dev&per_page=100`),
-			)
-			return prs.filter((pr) => pr.head.ref.startsWith(BRANCH_PREFIX)).map((pr) => ({ number: pr.number, branch: pr.head.ref }))
+			return publishPrs(await json<Pull[]>(call(`repos/${repo}/pulls?state=open&base=dev&per_page=100`)), repo)
 		},
 		async openPr(branch, title, body) {
 			const pr = await json<{ number: number }>(

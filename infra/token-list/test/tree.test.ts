@@ -1,7 +1,7 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { PinnedKey } from "@nulo/token-list"
+import { type PinnedKey, PLACEHOLDER_PUBLIC_KEY } from "@nulo/token-list"
 import { importSeed, publicKeyOf } from "@nulo/token-list/envelope"
 import { main as signCli } from "@nulo/token-list/sign-cli"
 import { afterAll, describe, expect, test } from "vitest"
@@ -65,7 +65,7 @@ describe("the host tree", () => {
 
 	test("refuses a placeholder, malformed or repeated key", async () => {
 		const { pinned } = await throwawayKey()
-		expect(keyFindings([{ keyId: "nulo-ci-1", publicKey: "A".repeat(43) }])).toEqual([
+		expect(keyFindings([{ keyId: "nulo-ci-1", publicKey: PLACEHOLDER_PUBLIC_KEY }])).toEqual([
 			"keys.ts: nulo-ci-1 is still the placeholder; run the key ceremony",
 		])
 		expect(keyFindings([{ keyId: "x", publicKey: "short" }])).toEqual(["keys.ts: x is not a 32-byte base64url key"])

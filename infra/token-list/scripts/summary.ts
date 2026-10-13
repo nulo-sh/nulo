@@ -15,15 +15,16 @@ import { checkSource, checkTokens } from "@nulo/token-list/parse"
 import { tokensSha256 } from "@nulo/token-list/sign"
 import { ENVELOPE, HOST_ROOT, SOURCE } from "./check"
 
-const REPO_ROOT = join(HOST_ROOT, "..", "..")
-/** Everything that decides what gets signed, or runs beside the secret. */
+export const REPO_ROOT = join(HOST_ROOT, "..", "..")
+/** Everything that decides what gets signed, what this summary shows, or what runs beside a secret. */
 export const SIGNING_PATHS = [
 	".github/workflows/publish-token-list.yml",
 	".github/actions/setup-bun",
 	"bunfig.toml",
 	"packages/token-list/src",
 	"infra/token-list/list.source.json",
-	"infra/token-list/scripts/open-publish-pr.ts",
+	"infra/token-list/package.json",
+	"infra/token-list/scripts",
 ]
 
 export type TokenDiff = { added: TokenListEntry[]; removed: TokenListEntry[]; changed: { from: TokenListEntry; to: TokenListEntry }[] }
@@ -51,7 +52,9 @@ export function publishedTokens(envelopeText: string | undefined): TokenListEntr
 	return checkTokens((JSON.parse(new TextDecoder().decode(payload)) as { tokens: unknown }).tokens, "published.tokens", "wallet")
 }
 
-const cell = (text: string) => text.replaceAll("|", "\\|").replaceAll("`", "'")
+// Backslash-escaping every ASCII punctuation mark shows the signed text verbatim: no `<!-- -->` hides
+// part of it, and no `|` or backtick reshapes the table.
+const cell = (text: string) => text.replace(/[!-/:-@[-`{-~]/g, "\\$&")
 const row = (sign: string, t: TokenListEntry) =>
 	`| ${sign} | ${t.chainId} | \`${t.address}\` | ${cell(t.symbol)} | ${cell(t.name)} | ${t.decimals} | ${t.priceId ?? "unpriced"} | \`${t.classId.slice(0, 10)}…\` |`
 

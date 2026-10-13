@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import type { TokenListEntry } from "@nulo/token-list"
 import { describe, expect, test } from "vitest"
-import { BRANCH_PREFIX, ENVELOPE_PATH, envelopeMeta, type PublishIO, runPublish } from "../scripts/open-publish-pr"
-import { publishedTokens, renderDiff, tokenDiff } from "../scripts/summary"
+import { BRANCH_PREFIX, ENVELOPE_PATH, envelopeMeta, type PublishIO, publishPrs, runPublish } from "../scripts/open-publish-pr"
+import { publishedTokens, REPO_ROOT, renderDiff, SIGNING_PATHS, tokenDiff } from "../scripts/summary"
 
 const b64url = (text: string) => btoa(text).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")
 const envelopeFor = (sequence: number, tokens: unknown[] = []) =>
@@ -61,6 +63,21 @@ describe("open-publish-pr", () => {
 		expect(calls).toEqual([])
 	})
 
+	test("counts only this repository's publish branches, never a fork's of the same name", () => {
+		const branch = `${BRANCH_PREFIX}1760000000`
+		const pull = (number: number, ref: string, repo: string | null) => ({
+			number,
+			head: { ref, repo: repo === null ? null : { full_name: repo } },
+		})
+		const pulls = [
+			pull(1, branch, "fork/nulo"),
+			pull(2, branch, null),
+			pull(3, "feat/x", "nulo-sh/nulo"),
+			pull(4, branch, "nulo-sh/nulo"),
+		]
+		expect(publishPrs(pulls, "nulo-sh/nulo")).toEqual([{ number: 4, branch }])
+	})
+
 	test("refuses a file that is not an envelope with a sequence", () => {
 		expect(() => envelopeMeta("{}")).toThrow("not a token list envelope")
 		expect(() => envelopeMeta(envelopeFor(0))).toThrow("no sequence")
@@ -85,6 +102,37 @@ describe("the prepare summary", () => {
 		expect(diff.changed.map(({ from, to }) => [from.name, to.name])).toEqual([["Token 2", "Renamed | x"]])
 		expect(renderDiff(diff)).toContain("Renamed \\| x")
 		expect(renderDiff(tokenDiff([token(1)], [token(1)]))).toBe("No token changes against the served list.\n")
+	})
+
+	test("shows the signed text verbatim, with no markup the approver cannot see", () => {
+		const rendered = renderDiff(tokenDiff([], [token(1, { name: "Test USDC<!--hidden-->", symbol: "`x`" })]))
+		expect(rendered).toContain("Test USDC\\<\\!\\-\\-hidden\\-\\-\\>")
+		expect(rendered).toContain("\\`x\\`")
+		expect(rendered).not.toContain("<!--")
+	})
+
+	test("lists every file the publish workflow runs and every repository file those import", () => {
+		const workflow = ".github/workflows/publish-token-list.yml"
+		const entries = [...readFileSync(join(REPO_ROOT, workflow), "utf8").matchAll(/\b(?:infra|packages)\/[\w./-]+\.ts\b/g)].map(
+			([entry]) => entry,
+		)
+		expect(entries).toContain("infra/token-list/scripts/summary.ts")
+		const resolve = (file: string, specifier: string) => {
+			if (specifier.startsWith(".")) return `${join(dirname(file), specifier)}.ts`
+			expect(specifier).toMatch(/^@nulo\/token-list(\/[a-z-]+)?$/)
+			return `packages/token-list/src/${specifier.replace(/^@nulo\/token-list\/?/, "") || "index"}.ts`
+		}
+		const files = new Set([workflow, "infra/token-list/package.json"])
+		const visit = (file: string) => {
+			if (files.has(file)) return
+			files.add(file)
+			for (const [, specifier] of readFileSync(join(REPO_ROOT, file), "utf8").matchAll(/\bfrom\s+"([^"]+)"/g)) {
+				if (!specifier.startsWith("node:")) visit(resolve(file, specifier))
+			}
+		}
+		// `prepare` reaches `check.ts` through the host's `check` script.
+		for (const entry of [...entries, "infra/token-list/scripts/check.ts"]) visit(entry)
+		expect([...files].filter((file) => !SIGNING_PATHS.some((path) => file === path || file.startsWith(`${path}/`)))).toEqual([])
 	})
 
 	test("reads the served envelope's tokens, and none before the first publish", () => {

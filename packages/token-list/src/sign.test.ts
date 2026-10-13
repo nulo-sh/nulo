@@ -74,7 +74,7 @@ describe("sign-cli", () => {
 		expect((await readTokenList(readFileSync(join(dir, "list.json"), "utf8"), [pinned])).entries).toHaveLength(1)
 	})
 
-	test("run as a script, it refuses to sign under the placeholder keys", async () => {
+	test("run as a script, it refuses a seed that is not the pinned key", async () => {
 		const { seedHex } = await freshKey()
 		writeFileSync(join(dir, "source.json"), SOURCE_TEXT)
 		const run = spawnSync(
