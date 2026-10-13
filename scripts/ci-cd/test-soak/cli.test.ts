@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process"
 import { readdirSync, statSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { runOnce } from "./cli"
+import { launchPlan, runOnce } from "./cli"
 import { isFailedRun, parseFlippedScript } from "./lib"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -46,6 +46,29 @@ function walk(dir: string, out: string[] = []): string[] {
 test("no fixture file can be discovered by `bun test` (a crash or hang fixture would take CI down)", () => {
 	const discoverable = walk(fixtures).filter((file) => BUN_TEST_DISCOVERY.test(file))
 	expect(discoverable).toEqual([])
+})
+
+test("the node reference excludes its workspace's Bun-only files; the candidate runs the script as it is", () => {
+	const args = { cwd: "ws", script: "test", runtime: "node" as const, runs: 1, out: "o.json", timeoutMin: 1, filters: ["a.test.ts"] }
+	const scripts = { test: "bun --bun vitest run" }
+	expect(launchPlan(args, "/ws", "apps/extension", scripts).launcher).toEqual([
+		...["bun", "--no-install", "run", "--cwd", "/ws", "vitest", "run"],
+		...["--exclude", "scripts/store-icons.test.ts", "--exclude", "src/popup/windows/json/index.test.ts"],
+		...["--exclude", "src/popup/windows/logger/index.test.ts", "a.test.ts"],
+	])
+	expect(launchPlan(args, "/ws", "apps/landing", scripts).launcher).toEqual([
+		"bun",
+		"--no-install",
+		"run",
+		"--cwd",
+		"/ws",
+		"vitest",
+		"run",
+		"a.test.ts",
+	])
+	expect(launchPlan({ ...args, runtime: "script" }, "/ws", "apps/extension", scripts).launcher).toEqual([
+		...["bun", "--no-install", "run", "--cwd", "/ws", "test", "--", "a.test.ts"],
+	])
 })
 
 test("the node reference mode only accepts the flipped script shape", () => {

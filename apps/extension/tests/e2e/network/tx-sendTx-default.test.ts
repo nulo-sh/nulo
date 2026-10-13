@@ -24,8 +24,9 @@ const hasConfig = aztecConfig !== undefined
  * promise (the popup-shape signal), then on the awaiting card's backend
  * evidence: `presto` / "Proving with Presto ✦" in the prover-ON CI lane
  * (`VITE_NULO_PRESTO_REQUIRED=1`), `browser` / "Proving in browser…" on a
- * local WASM build with no Presto listening. Under a proverless build the op
- * never lingers in `proving`, so that assertion is skipped there.
+ * plain build with no Presto listening, which on a runner is every plain
+ * build. Under a proverless build the op never lingers in `proving`, so that
+ * assertion is skipped there.
  */
 test.skipIf(!hasConfig)(
 	"tx-sendTx-default — popup opens, fee picker shown, confirm submits with real proof (prover-ON canary)",
@@ -80,11 +81,16 @@ test.skipIf(!hasConfig)(
 		await waitForDappExecuteWorked(walletPopup)
 
 		if (process.env.NULO_E2E_PROVERLESS !== "1") {
-			// The required-mode build (CI's prover-ON lanes) may only prove natively. A plain build
-			// proves wherever the box allows: natively when a healthy Presto answers, in the browser
-			// otherwise — either way the card must name the backend the journal recorded.
+			// A runner starts presto-server for required-mode builds only, so a plain build there must
+			// prove in the browser; elsewhere a healthy local Presto may take the proof.
 			const native = process.env.VITE_NULO_PRESTO_REQUIRED === "1"
-			await waitForAwaitingCardBackend(walletPopup, native ? [PRESTO_AWAITING_CARD] : [PRESTO_AWAITING_CARD, BROWSER_AWAITING_CARD])
+			const runner = process.env.GITHUB_ACTIONS === "true"
+			const accepted = native
+				? [PRESTO_AWAITING_CARD]
+				: runner
+					? [BROWSER_AWAITING_CARD]
+					: [PRESTO_AWAITING_CARD, BROWSER_AWAITING_CARD]
+			await waitForAwaitingCardBackend(walletPopup, accepted)
 		}
 
 		// Prover-ON canary (this file runs in the real-proving canary job, NOT the

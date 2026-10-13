@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test"
+import { existsSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import {
+	BUN_ONLY_FILES,
 	RESOLVE_ALLOWLIST,
 	RESOLVE_SPECS,
 	type RunRecord,
 	type SoakSummary,
 	buildInventory,
+	bunOnlyFiles,
 	canonicalExecPath,
 	checkFailedRuns,
 	checkInventoryEntries,
@@ -336,6 +341,80 @@ describe("compareSummaries", () => {
 	})
 })
 
+describe("Bun-only files", () => {
+	const WS = "apps/extension"
+	const ICONS = "scripts/store-icons.test.ts"
+	function withBunOnly(statuses: Record<string, number> = { passed: 2 }, observations = 2): SoakSummary {
+		const b = summary("bun", { cwd: WS })
+		for (const { file } of bunOnlyFiles(WS)) b.inventory[`${file} :: t`] = { statuses, observations, failures: statuses.failed ?? 0 }
+		return b
+	}
+
+	test("the list is exactly the three reviewed files, each an existing file named literally, each with its reason", () => {
+		expect([...BUN_ONLY_FILES.keys()]).toEqual([WS])
+		expect(bunOnlyFiles(WS).map(({ file }) => file)).toEqual([
+			ICONS,
+			"src/popup/windows/json/index.test.ts",
+			"src/popup/windows/logger/index.test.ts",
+		])
+		const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
+		for (const { file, reason } of bunOnlyFiles(WS)) {
+			expect(file).toMatch(/^[\w./-]+\.test\.ts$/)
+			expect(existsSync(join(repoRoot, WS, file))).toBe(true)
+			expect(reason).not.toBe("")
+		}
+	})
+	test("skipped by the reference and passed every run by the candidate, they compare clean and are named with their reason", () => {
+		const result = compareSummaries(summary("node", { cwd: WS }), withBunOnly())
+		expect(result.problems).toEqual([])
+		expect(result.report).toContain(
+			`  bun-only, not run on the reference: ${ICONS} (1 tests): renders through Bun.Image, which Node does not have`,
+		)
+	})
+	test("a reference that ran one fails, naming the file", () => {
+		const a = summary("node", { cwd: WS })
+		a.inventory[`${ICONS} :: t`] = { statuses: { passed: 2 }, observations: 2, failures: 0 }
+		expect(compareSummaries(a, withBunOnly()).problems).toEqual([`reference ran Bun-only file "${ICONS}"`])
+	})
+	test("a candidate test in one that skipped, failed or missed a run fails", () => {
+		const a = summary("node", { cwd: WS })
+		expect(compareSummaries(a, withBunOnly({ passed: 1, skipped: 1 })).problems).toContain(
+			`"${ICONS} :: t": a Bun-only test must pass every run, got [["passed",1],["skipped",1]]`,
+		)
+		expect(compareSummaries(a, withBunOnly({ passed: 1, failed: 1 })).problems).toContain(
+			`"${ICONS} :: t": a Bun-only test must pass every run, got [["failed",1],["passed",1]]`,
+		)
+		expect(compareSummaries(a, withBunOnly({ passed: 1 }, 1)).problems.join("\n")).toContain(`"${ICONS} :: t" observed 1/2 runs`)
+	})
+	test("a candidate asked to run one that never did fails: the whole suite, or a filter naming it", () => {
+		const missing = (overrides: Partial<SoakSummary["meta"]>) => {
+			const b = withBunOnly()
+			delete b.inventory[`${ICONS} :: t`]
+			Object.assign(b.meta, overrides)
+			return compareSummaries(summary("node", { cwd: WS, ...overrides }), b).problems
+		}
+		const never = [`candidate never ran Bun-only file "${ICONS}"`]
+		expect(missing({})).toEqual(never)
+		expect(missing({ filters: ["src/a.test.ts", "Scripts/Store-Icons"] })).toEqual(never)
+		expect(missing({ filters: [`./${ICONS}`] })).toEqual(never)
+		expect(missing({ filters: [`<repo>/${WS}/scripts/`] })).toEqual(never)
+		expect(missing({ filters: ["src/a.test.ts"] })).toEqual([])
+		expect(missing({ script: "test:components" })).toEqual([])
+	})
+	test("the exact match still holds for every other file, and the list only applies to its own workspace", () => {
+		const missing = withBunOnly()
+		missing.inventory["src/b.test.ts :: only on bun"] = { statuses: { passed: 2 }, observations: 2, failures: 0 }
+		expect(compareSummaries(summary("node", { cwd: WS }), missing).problems).toEqual([
+			"inventories differ: 0 only in reference, 1 only in candidate",
+		])
+		const elsewhere = summary("bun")
+		elsewhere.inventory[`${ICONS} :: t`] = { statuses: { passed: 2 }, observations: 2, failures: 0 }
+		expect(compareSummaries(summary("node"), elsewhere).problems).toEqual([
+			"inventories differ: 0 only in reference, 1 only in candidate",
+		])
+	})
+})
+
 describe("compare validators (each on its own inputs)", () => {
 	test("checkMeta: role swap, provenance drift and filters", () => {
 		expect(checkMeta(summary("node"), summary("bun"))).toEqual([])
@@ -374,7 +453,7 @@ describe("compare validators (each on its own inputs)", () => {
 			b.inventory[`src/x${String(i).padStart(2, "0")}.test.ts :: t`] = { statuses: { passed: 2 }, observations: 2, failures: 0 }
 		const idsA = Object.keys(a.inventory).sort()
 		const idsB = Object.keys(b.inventory).sort()
-		const membership = checkInventoryMembership(idsA, idsB, a, b)
+		const membership = checkInventoryMembership(idsA, idsB)
 		expect(membership.problems).toEqual(["inventories differ: 0 only in reference, 25 only in candidate"])
 		expect(membership.lines).toHaveLength(20)
 		expect(membership.lines[0]).toBe("  only in candidate: src/x00.test.ts :: t")

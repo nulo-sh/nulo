@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: arcs 1 (#264), 3a (#343), 3b (#344) merged; arc 2 in PR #373; arc 5 building
+status: arcs 1 (#264), 2 (#373), 3a (#343), 3b (#344) merged; arc 5 in review
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -574,7 +574,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `send-fiat-gate.test.ts` as a single test file. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 2.4: arc 2 end-to-end gate
+#### Phase 2.4: arc 2 end-to-end gate ✓
 
 **Validation gate.** Commands: `bun run audit:vue`; `bun run test:all`; smoke on Chrome and Firefox (`cd apps/extension && bun run test:e2e -- --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`); network Chrome and Firefox `tests/e2e/network/fiat-send.test.ts` and `send-amount-exact.test.ts` (D48). Pass: all exit 0; the PR attaches before and after screenshots of the amount card at rest and focused and of the review sheet, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
 

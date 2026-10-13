@@ -275,7 +275,7 @@ describe.each([SMOKE, SMOKE_FIREFOX])("$file aggregator", (agg) => {
 // need, and to the exact set it waits on: a job added to the workflow gates the nightly, or is named
 // advisory here.
 const NIGHTLY = aggregator("nightly.yml")
-const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live"]
+const NIGHTLY_ADVISORY = ["dup-trend", "rp-host-live", "network-e2e-canary-wasm"]
 const NIGHTLY_WORLDS: Record<string, World> = {
 	"a green night": results(NIGHTLY.needs, []),
 	"a quiet day": results(
@@ -289,6 +289,16 @@ describe("nightly.yml gates", () => {
 		expect(NIGHTLY.if).toBe("always()")
 		expect(NIGHTLY.suppressors).toEqual([undefined, undefined, undefined])
 		expect([...NIGHTLY.needs].sort()).toEqual(NIGHTLY.jobs.filter((job) => !NIGHTLY_ADVISORY.includes(job)).sort())
+	})
+
+	// An advisory job that some gate waited on would decide the publish through that gate.
+	test("no job waits on an advisory one", () => {
+		const { jobs } = workflow("nightly.yml")
+		for (const advisory of NIGHTLY_ADVISORY) {
+			expect(jobs[advisory], `${advisory} is a nightly job`).toBeDefined()
+			const waiting = Object.keys(jobs).filter((name) => [jobs[name].needs ?? []].flat().includes(advisory))
+			expect(waiting, `jobs waiting on ${advisory}`).toEqual([])
+		}
 	})
 
 	test.each(Object.entries(NIGHTLY_WORLDS))("status passes %s", (_, world) => {
