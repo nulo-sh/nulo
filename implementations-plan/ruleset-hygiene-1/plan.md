@@ -1,7 +1,7 @@
 ---
 plan: ruleset-hygiene-1
 tier: light
-status: draft, awaiting the orchestrator's approval
+status: approved (orchestrator, 2026-10-13); implementing
 issues: none
 driver: claude-code
 claude_model: opus
@@ -45,7 +45,7 @@ One arc, one PR into `dev`, docs plus one new label. The planning standard gains
 
 **Inferences:** I1. Claude Code discovers `.claude/skills/release/SKILL.md` as it does the four sibling skills. I2. GitHub derives an anchor from heading text alone, so a lifted heading keeps its anchor.
 
-**Asks:** none for the owner. For the orchestrator, A1: D1 drops the summary step under the lane brief's own fallback; working assumption: dropped, unless it authorizes the pin change.
+**Asks:** none for the owner. A1 (the summary step) is answered by D-orch-2: dropped.
 
 ## Architecture & Implementation
 
@@ -76,7 +76,7 @@ None. No screen, copy or behaviour a person sees changes.
 
 Each phase is one signed commit. Every gate also runs `bun run lint` and `bash scripts/check-no-local-paths.sh` (exit 0).
 
-**Phase 1: known limits.** Add to CLAUDE.md § Where open work lives, after the "Rejected, superseded" row, the lane brief's row: "A finding whose path needs conditions the wallet does not support, or whose consequence does not matter | an issue labelled `known-limit`, closed as not planned in the same breath: failure hypothesis, consequence, missing prerequisite, disposition, reopening condition; the Outcome lists it as `Known limits: #N`". Extend the five-sections bullet: `## What happens` states the path (initial conditions, actions, order, broken invariant, consequence) and labels it demonstrated or plausible but unverified. Add the closed-limits search to the "Finding work" bullet. Add `Known limits:` (the closed `known-limit` issues, or `none`) to README rule 5 and to CLAUDE.md's closing bullet. Create the label: `gh label create known-limit --color ededed --description "Closed as not planned: the path needs unsupported conditions or the consequence does not matter"`. Change no check (D2).
+**Phase 1: known limits.** Add to CLAUDE.md § Where open work lives, after the "Rejected, superseded" row, the lane brief's row: "A finding whose path needs conditions the wallet does not support, or whose consequence does not matter | an issue labelled `known-limit`, closed as not planned in the same breath: failure hypothesis, consequence, missing prerequisite, disposition, reopening condition; the Outcome lists it as `Known limits: #N`". Extend the five-sections bullet: `## What happens` states the path (initial conditions, actions, order, broken invariant, consequence) and labels it demonstrated or plausible but unverified. Add the closed-limits search to the "Finding work" bullet. Add `Known limits:` (the closed `known-limit` issues, or `none`) to README rule 5 and to CLAUDE.md's closing bullet. Create the label: `gh label create known-limit --color 6E7781 --description "no demonstrated path; closed with its reopening condition" --force` (D-orch-3). Change no check (D2).
 Gate: `bun run check:plans` exits 0; `gh label list --search known-limit` prints the label.
 
 **Phase 2: Proportion.** Write README § Proportion after § Code and plans: the common brief's § Proportion bullets verbatim, with three substitutions: "lane" becomes "plan"; the approval sentence becomes "the owner approves, and may delegate bounded, reversible changes in writing; persistence, permissions, public contracts, background work and scope expansion stay the owner's"; the e2e bullet becomes one line citing CLAUDE.md § Quality gates (D6). Add a paragraph of at most four sentences to CLAUDE.md § Implementation plans that names the rule and links `implementations-plan/README.md#proportion`.
@@ -101,6 +101,7 @@ Gate: `bun run check:plans`, `bun run test:release`, `bun run test:ci-gating` an
 - **D4. The moved text changes in three ways.** Headings rise two levels (`###` → `#`, `####` → `##`) so the skill reads as its own document; anchors stay (I2). Four repo-relative links gain `../../../`. The `:559` sentence becomes "CLAUDE.md's § Release runbook and its skill-routing table point here."
 - **D5. The pointer keeps the `### Release runbook` heading,** so `#release-runbook` anchors and prose in archived and other active plans still land; live docs and strings point straight at the skill.
 - **D6. Where each rule lives.** Proportion, known limits and the Post-implementation standard: README, cited from CLAUDE.md. The e2e budget binds e2e authors: CLAUDE.md § Quality gates, with the measuring steps in the e2e skill.
+- **D-orch-1 to D-orch-5 (orchestrator, 2026-10-13).** (1) One PR, no stack. (2) Approved as planned; A1: D1 stands, no pin change, no CI step; suite numbers come from the F8 envelope. (3) The label is created exactly as Phase 1 gives it; another lane runs the same command, so the two cannot disagree; the row, the path sentence and the search carry the common brief's § Proportion wording. (4) README § Proportion and § Post-implementation standard are the one authoritative home; CLAUDE.md cites them in short paragraphs; the standard is harness-neutral, and its review-loop step states the two rules verbatim and that a resumed round verifies and does not reopen a settled disposition without new evidence. (5) Commit trailers name the model that ran (`Claude Opus 5.5`).
 
 ## Audit verdicts
 
