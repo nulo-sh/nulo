@@ -37,3 +37,8 @@ Round 1: **conditional approve**, no blocking finding. All four accepted and fix
 2. Smoke required the list to price a token, hold two tokens and list a Testnet entry, none of which the format requires, so a valid publish could red a PR or a release. A source run now holds a fixed two-token list (`E2E_LIST_TOKENS`); specs that price nothing name fixture tokens; the five priced tests skip through `skipUnlessListPrices` when the held list prices nothing (checked by unpricing the fixture: 5 skipped, 6 passed); the live leg accepts zero Testnet entries.
 3. `infra/token-list/FORMAT.md` said the listed name is checked against the chain; only class, symbol and decimals are. Fixed on arc 1.
 4. Two comments that restated their identifiers: removed (one on each arc).
+
+Round 2 (resumed): **conditional approve**, two residual findings, both fixed:
+
+1. `skipUnlessListPrices` would also skip in a source run, so an unpriced fixture could pass the suite without its priced assertions. A source run now throws instead (checked: unpricing the fixture fails the five priced tests with "E2E_LIST_TOKENS must price a Testnet token").
+2. Nit: the History sideways test priced its row from the held list though it asserts no fiat. It now takes fixture metadata (`openHomeWithRow(ctx, { priced: false })`). The other non-pricing rows tests keep the shared listed launch: a release build seeded its defaults in that launch before this change too, and a second file-scope launch costs more than it proves.

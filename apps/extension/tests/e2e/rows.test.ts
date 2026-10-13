@@ -80,12 +80,12 @@ async function waitForSettledTokens(page: Page, timeout = 15_000): Promise<void>
 		})
 }
 
-/** A 1.5-unit transfer of the held list's priced token, quoted at $1. Returns once the token card
- *  has settled, which in a release build waits for its default tokens to stop. */
-async function openHomeWithRow(ctx: ExtensionContext): Promise<Page> {
+/** A 1.5-unit transfer, of the held list's priced token when `priced`, quoted at $1. Returns once the
+ *  token card has settled, which in a release build waits for its default tokens to stop. */
+async function openHomeWithRow(ctx: ExtensionContext, { priced = true } = {}): Promise<Page> {
 	const page = await openPopup(ctx)
 	await waitForHash(page, "#/popup/general")
-	const scope = await readActivityScope(page, { priced: true })
+	const scope = await readActivityScope(page, { priced })
 	await seedTransaction(page, scope, { hash: TX_HASH, amount: "1500000" })
 	await seedUsdQuoteAndReload(page, scope.token.priceId)
 	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
@@ -456,7 +456,7 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 }, 90_000)
 
 test("History's list keeps the −8px row box inside the page: nothing scrolls sideways", async ({ listedExtension }) => {
-	const page = await openHomeWithRow(listedExtension)
+	const page = await openHomeWithRow(listedExtension, { priced: false })
 	await clickNavTab(page, "activity")
 	await waitForHash(page, "#/popup/activity")
 	await page.waitForSelector(`${sel("activity-feed-root")} ${sel("tx-card")}`, { visible: true, timeout: 15_000 })

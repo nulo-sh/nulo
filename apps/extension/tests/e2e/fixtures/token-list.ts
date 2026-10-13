@@ -186,13 +186,12 @@ export function heldListEntries(): TokenListEntry[] {
 	return selectEntries(parsePayload(bytes, "wallet").tokens)
 }
 
-/** Skips a test that asserts a fiat figure when the held list prices no Testnet token: in a release
- *  build only the published list can price one, and a list that prices none is valid. */
+/** Skips a test that asserts a fiat figure when an artifact run's published list prices no Testnet
+ *  token, which is valid. A source run's fixture list always prices one, so there it never skips. */
 export function skipUnlessListPrices(skip: TestContext["skip"]): void {
-	skip(
-		!heldListEntries().some((e) => e.chainId === CHAIN_IDS.TESTNET && e.priceId !== undefined),
-		"the held list prices no Testnet token",
-	)
+	const prices = heldListEntries().some((e) => e.chainId === CHAIN_IDS.TESTNET && e.priceId !== undefined)
+	if (!prices && !isArtifactRun()) throw new Error("E2E_LIST_TOKENS must price a Testnet token")
+	skip(!prices, "the published list prices no Testnet token")
 }
 
 /**
