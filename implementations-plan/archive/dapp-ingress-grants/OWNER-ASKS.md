@@ -155,6 +155,8 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 
 **What ships now.** A.
 
+**At close (2026-10-13): unanswered.** A ships, and the ask is filed as #340 (`owner-decision`).
+
 ## 10. P2-03 and item 8: "Stopped when the wallet locked" names a lock that did not happen (arc 2)
 
 **Surface.** History card and journal detail of a send filed as `session_ended`.
@@ -168,3 +170,5 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 **Recommendation.** A until a profile switch during a send is common enough to matter.
 
 **What ships now.** A.
+
+**At close (2026-10-13): unanswered.** A ships, the recommendation; nothing stays open.

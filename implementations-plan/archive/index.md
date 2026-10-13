@@ -58,6 +58,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [contacts-sender-decouple](contacts-sender-decouple/plan.md) — completed — contacts never register or unregister senders, except the explicit adds an import makes
 - [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
+- [dapp-ingress-grants](dapp-ingress-grants/plan.md) — completed — stored grants validated at every deciding reader, other profiles' handshakes kept, refused app sends named and titled by their call, the app's network in the connect window, the app contract ratified (class widening, address checks, strict `chainInfo`, -32005)
 - [dapp-interaction-lock-fix](dapp-interaction-lock-fix/plan.md) — completed — two pending dApp transactions visible at once, the second popup opening on approval
 - [dapp-popup-cancel-focus](dapp-popup-cancel-focus/plan.md) — completed — cancel closes the dApp transaction window, and the Queued card refocuses it
 - [dapp-preexisting-fee](dapp-preexisting-fee/plan.md) — completed — a dApp can name the account's own held Fee Juice as payer, and the wallet routes it
