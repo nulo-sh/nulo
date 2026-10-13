@@ -49,7 +49,7 @@ describe("applyNuloSchemaPatch pins", () => {
 	test("a same-arity grantPublicAuthwit whose content lacks a key the handler reads is drift", () => {
 		const schema = {
 			grantPublicAuthwit: z.function({
-				input: z.tuple([schemas.AztecAddress, z.object({ caller: z.string() })]),
+				input: z.tuple([schemas.AztecAddress, z.object({ caller: schemas.AztecAddress })]),
 				output: z.string(),
 			}),
 		}
@@ -62,7 +62,7 @@ describe("applyNuloSchemaPatch pins", () => {
 		const grantPublicAuthwit = z.function({
 			input: z.tuple([
 				schemas.AztecAddress,
-				z.object({ caller: z.string(), contract: z.string(), method: z.string(), args: z.array(z.unknown()) }),
+				z.object({ caller: schemas.AztecAddress, contract: schemas.AztecAddress, method: z.string(), args: z.array(z.unknown()) }),
 			]),
 			output: z.string(),
 		})

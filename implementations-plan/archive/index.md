@@ -58,6 +58,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [contacts-sender-decouple](contacts-sender-decouple/plan.md) — completed — contacts never register or unregister senders, except the explicit adds an import makes
 - [copy-polish](copy-polish/plan.md) — completed — four small user-visible copy changes, including the clause-dash ban
 - [dapp-grants](dapp-grants/plan.md) — completed — a refused dApp request tells no one more than it must
+- [dapp-ingress-grants](dapp-ingress-grants/plan.md) — completed — stored grants validated at every deciding reader, other profiles' handshakes kept, refused app sends named and titled by their call, the app's network in the connect window, the app contract ratified (class widening, address checks, strict `chainInfo`, -32005)
 - [dapp-interaction-lock-fix](dapp-interaction-lock-fix/plan.md) — completed — two pending dApp transactions visible at once, the second popup opening on approval
 - [dapp-popup-cancel-focus](dapp-popup-cancel-focus/plan.md) — completed — cancel closes the dApp transaction window, and the Queued card refocuses it
 - [dapp-preexisting-fee](dapp-preexisting-fee/plan.md) — completed — a dApp can name the account's own held Fee Juice as payer, and the wallet routes it
@@ -85,6 +86,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-followups-3](e2e-followups-3/plan.md) — completed — the Firefox page-error relay re-landed (#281); the lock helper observes its redirect, never reloads; `Invalid window ID` filed (#312)
 - [e2e-followups-4](e2e-followups-4/plan.md) — completed — #308: artifact smoke runs let discovery write a second Nulo sponsor beside the seed; the fee-picker spec holds the node from before the profile exists (#316, #317 filed)
 - [e2e-followups-5](e2e-followups-5/plan.md) — completed — a lock supersedes any activation in flight, so a stale "active" answer cannot unlock the popup (#319); Firefox targets carry an add-on page's committed URL and a failed wait reports without moving focus (#322 stays open)
+- [e2e-followups-6](e2e-followups-6/plan.md) — completed — every window a helper hands back is recorded and each asserting test checks its arrays before a popup clears them (#325); the zombie tests keep their zombie (#326)
 - [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
 - [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes

@@ -430,7 +430,11 @@ describe("tryCreateQueuedJournal — the session's chain id", () => {
 	test("every chain-scoped read gets the unsigned composite, as a decimal string or a number", async () => {
 		const account = makeAccountStub()
 		const { deps, dappSession, networkSvc } = makeDeps({ account: account as never })
-		await tryCreateQueuedJournal(makeSendTxMessage(), sessionOn({ chainId: new Fr(1n), version: new Fr(2n ** 31n) }), deps)
+		await tryCreateQueuedJournal(
+			makeSendTxMessage(),
+			sessionOn({ chainId: new Fr(1n).toString(), version: new Fr(2n ** 31n).toString() }),
+			deps,
+		)
 		expect(dappSession.tryGetDappSessionByOriginAndChain).toHaveBeenCalledWith("https://example.test", "2147483649", "profile-1")
 		expect(account.getAccounts).toHaveBeenCalledWith("profile-1", 2147483649)
 		expect(networkSvc.getNetworksRaw).toHaveBeenCalledWith("profile-1", 2147483649)
@@ -442,7 +446,12 @@ describe("tryCreateQueuedJournal — the session's chain id", () => {
 		const id = await tryCreateQueuedJournal(makeSendTxMessage(), sessionOn({ chainId: "zz", version: "0x1" }), deps)
 		expect(id).toBeUndefined()
 		expect(dappSession.tryGetDappSessionByOriginAndChain).not.toHaveBeenCalled()
-		expect(log).toHaveBeenCalledWith("wallet-sdk", LogLevel.Warn, "tryCreateQueuedJournal failed", expect.any(SyntaxError))
+		expect(log).toHaveBeenCalledWith(
+			"wallet-sdk",
+			LogLevel.Warn,
+			"tryCreateQueuedJournal failed",
+			expect.any(InvalidWalletArgumentsError),
+		)
 	})
 })
 

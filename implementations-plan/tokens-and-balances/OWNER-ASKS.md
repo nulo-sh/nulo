@@ -1,9 +1,8 @@
 # tokens-and-balances — owner asks
 
-Four asks. Page 8 (P8-01, P8-02) is already on the owner's pages and is not repeated here; these
-asks cover only what those records do not say. Each ask says what ships if it is not answered. OA-3
-is the only one that touches Arc 1, and it covers race paths only: in normal operation Arc 1 changes
-nothing a person sees. Arc 1 is built and its PR opens without an answer; it merges only on OA-3's.
+Five asks. OA-1 to OA-4 were answered on page 8 (2026-10-12: all four A); their text stays as the
+record of what was asked. OA-5 is new, from Arc 2's build, and open. Each ask says what ships if it is
+not answered.
 
 ## OA-1. #105: when a mint row in Activity may show an amount
 
@@ -129,3 +128,24 @@ version); no balance, key or account address.
 the background's lines are the evidence a bug report needs.
 
 **What ships now.** No log level changes.
+
+## OA-5. #134 and #136: "Try again" for an address that is not a token contract on this network
+
+**Surface.** The line under Submit in the New token popup, opened from the Holdings search row (P8-01).
+
+**Situation.** The search row is offered for any valid address that no listed token holds, so it is also
+offered for an address that is a person's account, a contract on another network, or nothing deployed.
+Submitting one is refused by the node ("contract instance not found"), and under OA-2 = A the line reads
+"Something went wrong. Try again." A retry cannot succeed. Before page 8 this needed a person to type such an
+address into the popup by hand; the search row makes it one tap. The PR's second pair of screenshots shows it.
+
+**Options.**
+
+- **A. Keep the generic line** (what ships now, as approved).
+- **B. Give this one refusal its own copy**, in the owner's words (for example, that the address is not a
+  token on this network). It needs the background to tell this refusal apart from the rest, which it does not
+  today, and the owner's words.
+
+**Recommendation.** A for now; B is worth a line of copy if people report retrying.
+
+**What ships now.** A: the generic line, as P8-02 and OA-2 approved.

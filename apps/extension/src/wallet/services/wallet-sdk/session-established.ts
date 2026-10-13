@@ -3,7 +3,8 @@
  * the security-critical verify path is unit-testable without the whole SW service
  * graph. See `session-established.test.ts` for the pins.
  */
-import type { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { schemas } from "@aztec-labs/stdlib/schemas"
+import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import type { WindowPort } from "@nulo/wallet-core/ports"
 import { walletChainId } from "@/utils/chain-ids"
 import type { ILogger } from "../../logger"
@@ -14,13 +15,30 @@ import { isPendingVerificationDead, type PendingVerificationEntry, settlePending
 import type { WindowReservation } from "./verify-admission"
 import { describeExternalId } from "@nulo/wallet-bridge"
 
-/** A session's chain id from its dApp-supplied `chainInfo`: `chainId` decodes before `version`, and
- *  the `Number` rounding and u32 coercion are part of the persisted key, not to be made exact. */
-export function chainInfoToChainId(obj: { chainInfo: { chainId: Fr | string; version: Fr | string } }): number {
-	const raw = obj.chainInfo
-	const chainId = typeof raw.chainId === "string" ? Number(BigInt(raw.chainId)) : Number(raw.chainId.toBigInt())
-	const version = typeof raw.version === "string" ? Number(BigInt(raw.version)) : Number(raw.version.toBigInt())
-	return walletChainId(chainId, version)
+const U32_MAX = 2n ** 32n - 1n
+
+/** A session's chain id from its dApp-supplied `chainInfo`, whose wire fields are strings. Each must
+ *  parse as a field and fit the u32 range of the L1 id and the rollup version, so a malformed value
+ *  never folds onto another chain; distinct valid pairs can still share an id through the frozen
+ *  XOR. `chainId` decodes before `version`. */
+export function chainInfoToChainId(obj: { chainInfo?: { chainId?: unknown; version?: unknown } | null }): number {
+	const chainId = u32Field(obj.chainInfo?.chainId)
+	return walletChainId(chainId, u32Field(obj.chainInfo?.version))
+}
+
+function u32Field(value: unknown): number {
+	const field = parsedField(value)
+	if (field === undefined || field > U32_MAX) throw new InvalidWalletArgumentsError("Invalid chainInfo")
+	return Number(field)
+}
+
+/** The field schema's transform throws a plain error on some strings instead of reporting them. */
+function parsedField(value: unknown): bigint | undefined {
+	try {
+		return schemas.Fr.parse(value).toBigInt()
+	} catch {
+		return undefined
+	}
 }
 
 /** Deps for {@link handleSessionEstablished} — injected so the path is testable
@@ -68,10 +86,9 @@ export function verifyWindowUrl(dappSessionId: string, verificationHash: string,
  * `false`, and the caller dispatches no message before this resolves `true`.
  */
 export async function handleSessionEstablished(
-	session: { origin: string; sessionId: string; verificationHash: string; chainInfo: { chainId: Fr | string; version: Fr | string } },
+	session: { origin: string; sessionId: string; verificationHash: string } & Parameters<typeof chainInfoToChainId>[0],
 	deps: SessionEstablishedDeps,
 ): Promise<boolean> {
-	const chainId = String(chainInfoToChainId(session))
 	// Keyed by the request id the page chose, which upstream reuses as the session id: captured before
 	// any await, and termination before the stamp and the final settlement check the map still holds
 	// this very object.
@@ -92,7 +109,9 @@ export async function handleSessionEstablished(
 		return terminate()
 	}
 	let established = false
+	let chainId = ""
 	try {
+		chainId = String(chainInfoToChainId(session))
 		// A DEAD marker (cancelled, or stale: a parked approval that would mint a channel under
 		// whichever profile is active when it completes) is a dead approval and never softens into a
 		// reconnect.
@@ -169,14 +188,9 @@ export async function handleSessionEstablished(
 		established = true
 		return true
 	} catch (err) {
-		// Fail closed: a session whose hash couldn't be persisted or whose check couldn't be shown
-		// must not stay live accepting messages.
-		deps.logger.log(
-			"wallet-sdk",
-			LogLevel.Warn,
-			`onSessionEstablished failed for session ${describeExternalId(session.sessionId)} on chain ${chainId} — terminating`,
-			err,
-		)
+		// Fail closed: a session whose chain info does not decode, whose hash couldn't be persisted
+		// or whose check couldn't be shown must not stay live accepting messages.
+		logEstablishmentFailure(err, session.sessionId, chainId, deps.logger)
 		return terminate()
 	} finally {
 		// A failed exit leaves a tombstone: the SDK restores the discovery, and a marker-less retry of
@@ -185,6 +199,25 @@ export async function handleSessionEstablished(
 		// Every exit that opened no window gives the slot back; an issued creation keeps it.
 		reservation?.releaseIfUnstarted()
 	}
+}
+
+/** A `chainInfo` that does not decode is the app's own input, which it can repeat at will, so it
+ *  logs at `debug`. */
+function logEstablishmentFailure(err: unknown, sessionId: string, chainId: string, logger: ILogger): void {
+	if (err instanceof InvalidWalletArgumentsError) {
+		logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Session ${describeExternalId(sessionId)} sent a chainInfo that does not decode, so it is terminated`,
+		)
+		return
+	}
+	logger.log(
+		"wallet-sdk",
+		LogLevel.Warn,
+		`onSessionEstablished failed for session ${describeExternalId(sessionId)} on chain ${chainId} — terminating`,
+		err,
+	)
 }
 
 /** Why the approval this attempt captured no longer stands: it was tombstoned (a revocation, or its

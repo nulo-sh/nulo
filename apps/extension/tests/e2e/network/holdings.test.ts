@@ -3,19 +3,30 @@
  * on every row, search by symbol (hit and miss), the sort toggle, and the fold hiding an empty
  * token. Two deployed tokens join the fixture's TST: ZED (funded above TST) and EMPTY (never
  * minted, so its projected balance is a genuine 0). Each import is waited for with the fixture's
- * freshness-gated row check, so the assertions never race the balance projector.
+ * freshness-gated row check, so the assertions never race the balance projector. The second test
+ * adds tokens of its own, so it runs after the first and deploys a fresh contract on every attempt.
  */
 
 import { expect, inject } from "vitest"
 import { test as base, openPopup, waitForHash, clickByTestId, replaceInputValue } from "../fixtures/extension"
 import { extraTokensFixture } from "../fixtures/extra-tokens"
-import { openHoldings, seedUsdQuoteAndReload } from "../fixtures/helpers"
+import {
+	clickNewTokenSubmit,
+	openHoldings,
+	seedUsdQuoteAndReload,
+	submitNewTokenPopup,
+	waitForNewTokenAddress,
+	waitForToastGone,
+} from "../fixtures/helpers"
+import { shotSend } from "../fixtures/send-page"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 const ONE = 10n ** 18n
+/** A curve point (a valid address) where no contract was deployed. */
+const NO_CONTRACT = "0x1200000000000000000000000000000000000000000000000000000000000002"
 
 const test = base.extend<{ extraTokens: Record<string, string> }>({
 	extraTokens: extraTokensFixture([
@@ -87,6 +98,44 @@ test.skipIf(!hasConfig)(
 			timeout: 5_000,
 		})
 		expect((await listedSymbols(page)).slice(0, 2)).toEqual(["TST", "ZED"])
+
+		expect(tokenReadyExtension.consoleErrors).toEqual([])
+		expect(tokenReadyExtension.pageErrors).toEqual([])
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"holdings: a pasted contract address adds its token; one with no contract reads the generic line",
+	{ timeout: 420_000 },
+	async ({ tokenReadyExtension }) => {
+		const { deployExtraTokensForAccount } = await import("../fixtures/aztec")
+		const { PASTE: pasted } = await deployExtraTokensForAccount(aztecConfig as AztecTestConfig, tokenReadyExtension.accountAddress, [
+			{ symbol: "PASTE", amount: 7n * ONE },
+		])
+		const page = await openPopup(tokenReadyExtension)
+		await waitForHash(page, "#/popup/general")
+		await openHoldings(page)
+
+		await replaceInputValue(page, '[data-testid="holdings-search"]', pasted)
+		await clickByTestId(page, "holdings-add-token")
+		await waitForNewTokenAddress(page, pasted)
+		await submitNewTokenPopup(page)
+		await page.waitForSelector('[data-testid="holdings-page"] [data-testid="token-symbol"][data-symbol="PASTE"]', {
+			visible: true,
+			timeout: 30_000,
+		})
+		// A success toast closes itself after six seconds; it would sit over the next popup's field.
+		await waitForToastGone(page, "Token added", 10_000)
+
+		await replaceInputValue(page, '[data-testid="holdings-search"]', NO_CONTRACT)
+		await clickByTestId(page, "holdings-add-token")
+		await waitForNewTokenAddress(page, NO_CONTRACT)
+		await clickNewTokenSubmit(page)
+		await page.waitForFunction(
+			() => document.querySelector('[data-testid="new-token-error"]')?.textContent?.trim() === "Something went wrong. Try again.",
+			{ timeout: 60_000 },
+		)
+		await shotSend(page, "new-token-error", "new-token-error")
 
 		expect(tokenReadyExtension.consoleErrors).toEqual([])
 		expect(tokenReadyExtension.pageErrors).toEqual([])

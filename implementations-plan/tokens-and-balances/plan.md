@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-4); arc 1 in review as a draft PR, merges on P8-05 (OA-3); arcs 2 and 3 wait
+status: approved by the orchestrator (D-orch-1 to D-orch-8); arc 1 merged (#271); arc 2 building (page 8 signed); arc 3 answered (OA-1 = A), not yet started
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -42,7 +42,7 @@ inherits a token service whose lock can be released under a running add.
 3. Home's hero and the token list read balance events through one reducer, so a late add event for a
    row already shown cannot hold the hero's skeleton.
 4. After page 8, a pasted contract address in Holdings search offers the add in one tap, and the
-   New token popup never shows the PXE store's own refusal text.
+   New token popup never shows the PXE store's own refusal text, nor any other error's raw text.
 
 **Good enough.** No new screen or setting in Arc 1, and no new copy in normal operation; its one new
 message, `token lock lost`, appears only when the five-minute lock watchdog expires during a
@@ -58,7 +58,7 @@ background start. The mint-figure pin (#105) is designed here and built only on 
 | #94 | A released token add resumes under a fresh ticket and writes, deletes and emits only while it owns one | 1 (Phase 1.2) | none |
 | #93 | Adopting a profile id removes that id's per-profile UI keys first | 1 (Phase 1.3) | none |
 | #134 | Holdings search offers "Add token" for a pasted contract address | 2 (Phase 2.1) | page 8, P8-01 |
-| #136 | The New token popup maps PXE store refusals to a generic line | 2 (Phase 2.2) | page 8, P8-02 |
+| #136 | The New token popup shows one generic line for every error without approved copy | 2 (Phase 2.2) | page 8, P8-02 and OA-2 |
 | #105 | A listed token's mint figure needs a pinned class | 3 (Phase 3.1) | OA-1 |
 | #80 | V6 mainnet seeds and fee policy | no arc | `blocked:external` (no V6 mainnet) |
 | #104 | Mint calls outside the standard shapes show no amount | no arc | hold H8 (waits on a real dApp report) |
@@ -85,8 +85,8 @@ C9 rule makes that an owner question. #105 moves to Arc 3, which waits on OA-1.
 - **`profile/service.ts`.** Arc 1 adds one awaited call in each of two private helpers. Held lanes
   (backup-import-export arc 3, account-session-life arcs 2-4) may meet it near the restore marker; a
   trivial rebase.
-- **Arc 2 waits on page 8** (P8-01, P8-02). Every Arc 2 phase is marked "waits on page 8"; nothing of
-  it is built until the orchestrator says page 8 is signed. An "as is" answer drops that phase.
+- **Arc 2: page 8 is signed** (owner, 2026-10-12): P8-01 and P8-02 approved, OA-2 = A, OA-4 = A
+  (D-orch-6).
 - **Arc 3 waits on OA-1.** Nothing of #105 is built until OA-1 is answered.
 - **Runner (gate G1).** Until e2e-harness-gaps arc 1a (#169) merges, run one network e2e at a time on
   the host. Check `~/.agents/ports.md` for a live `e2e:agent` row before each network run.
@@ -261,13 +261,17 @@ the new row.
   first, never a balance, row or key. Closing it fully needs an incarnation every pin reader and writer
   checks (rejected, D1). The close-out files the residue as an issue.
 
-### Arc 2: Holdings search and add-token copy (waits on page 8)
+### Arc 2: Holdings search and add-token copy (page 8 signed, 2026-10-12)
+
+Page 8's answers: P8-01 and P8-02 approved, OA-2 (P8-04) = A, OA-4 (P8-06) = A. OA-2 = A widens
+P8-02 to every error under Submit that has no approved copy, which retires the store-refusal marker
+this section first designed (D-arc2-1).
 
 **Phase 2.1 (#134, P8-01).**
 
 - `TokenList.vue` computes `addCandidate`: the trimmed query when `isValidAztecAddress` holds and no
   row matches. While it is set, the list shows one button row in place of the no-results message,
-  text `Add token ${q.slice(0, 4)}…${q.slice(-2)}` (the proposal's "0x12…ab" form), testid
+  text `Add token ${trimAddress(q, 4, 2, "…")}` (the proposal's "0x12…ab" form), testid
   `holdings-add-token`. A click emits `addToken(address)`; TokenList stays presentational.
 - `pages/holdings.vue` handles it: `cacheStore.preselectedTokenAddressToAdd = address`, then
   `popupStore.open("new_token")`. The popup's existing `onShow` fills the field
@@ -276,37 +280,28 @@ the new row.
   (`isValidHex`, `NewTokenPopup.vue:44`); the row needs a valid Aztec address (`isValidAztecAddress`:
   below the field modulus and on the curve, `utils/aztec-address.ts:24`). Every contract address
   passes both; a hex value that is no address gets no row, and typing it in the popup behaves as today.
-- The row reuses an existing row primitive from `@nulo/design` or `components/composite`; the PR
-  attaches the result in both themes, as the proposal requires. Keyboard: it is a `<button>` after
-  the search field in DOM order, so Tab reaches it and Enter activates it (no `tabindex`).
+- The row is the local `Button` primitive (`variant="secondary"`, `wide`): a full-width surface row
+  that keeps the address's case, where the outline and primary variants set every label in capitals
+  (D-arc2-2). The PR attaches the result in both themes, as the proposal requires. Keyboard: it is a
+  `<button>` after the search field in DOM order, so Tab reaches it and Enter activates it.
 
-**Phase 2.2 (#136, P8-02).**
+**Phase 2.2 (#136, P8-02 with OA-2 = A and OA-4 = A).**
 
-- A pure helper `popup/components/popups/new-token-error-text.ts`, beside `endpoint-error-text.ts`:
-  `newTokenErrorText(err)` returns `"Something went wrong. Try again."` for a PXE store refusal and
-  `errorMessageFromUnknown(err)` for anything else (as today).
-- The refusals are three throws in `packages/aztec-runtime/src/pxe/opfs-store.ts`: a stalled open
-  (`ChainStoreOpenTimeoutError`, `:131`), a reopen while one is quarantined (`ChainStoreWedgedError`,
-  `:109`) and a version mismatch (`PxeStoreVersionMismatch`, `:221`). The timeout class is private;
-  the other two are exported (`:54`, `:190`). No class or flag survives the hops to the popup, which
-  sees message text only: the RPC envelope rebuilds a plain error
-  (`packages/extension-messaging/src/errors.ts:589`).
-- A dependency-free module `packages/aztec-runtime/src/pxe/store-refusal.ts` holds one marker,
-  `PXE_STORE_REFUSAL_MARKER`, which those three throws, and only they, put in their message. The
-  messages' shared opening `openChainStore:` is no marker: the invalid key length (`:100`) and the
-  wrong store key (`:165`) open with it too, and they keep their raw text (OA-2). The module gets its
-  own subpath export (`./pxe/store-refusal`, beside `./pxe/public-events`), so the popup bundle pulls
-  no PXE code. The helper matches with `includes`, as `endpoint-error-text.ts:8-9` does, so a prefix
-  an RPC hop adds does not defeat it.
-- Tests: `opfs-store.test.ts` asserts each of the three real throw sites carries the marker and the
-  invalid-key and wrong-key errors do not (driving the existing fakes, not constructing the classes);
-  the helper's test feeds the marker as the popup receives it (bare, and wrapped the way
-  `errorMessageFromUnknown` flattens a cross-process error) plus a control error that keeps its
-  text.
-- No popup log line: the background already records every store failure (`pxe/service.ts:975` at
-  error, `opfs-store.ts:220` at warn). Whether P8-02's "debug log only" also lowers those lines is
-  OA-4; Arc 2 changes no log level.
-- Any other raw text under Submit is not in P8-02; OA-2 asks about it.
+- `NewTokenPopup.vue`'s `catch` sets the line under Submit to `"Something went wrong. Try again."` for
+  every error it catches: none of them has approved copy. The two lines that have copy are set outside
+  the `catch` and stay: "Couldn't auto-detect this token's interface…" (an incomplete parse) and
+  "Account is still loading…" (no account yet).
+- The raw text goes to the popup's debug log only: `console.debug(…, { reason: err })`. The error is
+  passed whole under a named key, so `trim` projects it to its name and message and an exported log
+  matches the report without a visible code (D-orch-7). A debug line costs nothing unless debug mode is
+  on (CLAUDE.md § Logging policy).
+- The background's error and warn lines for a store refusal keep their levels (OA-4 = A).
+- No change in `packages/aztec-runtime`: with every uncopied error reading the same line, nothing
+  needs to tell a store refusal from the rest (D-arc2-1). The popup bundle still pulls no PXE code; the
+  gate's build search for `did not answer init` proves it stays so.
+- Tests: `NewTokenPopup.test.ts`, a store refusal (as the popup receives it) and a node refusal each
+  show the generic line and never their raw text, each logged at debug under `reason`; the
+  incomplete-parse line keeps its copy (control).
 
 ### Arc 3: the mint figure's class pin (waits on OA-1)
 
@@ -352,11 +347,8 @@ Built only on OA-1 = A or C; designed here so the answer can be built without a 
 | 1 | `apps/extension/src/utils/profile-ui-keys.ts` | header comment |
 | 2 | `apps/extension/src/popup/components/modules/holdings/TokenList.vue` (+ test) | add row |
 | 2 | `apps/extension/src/popup/pages/holdings.vue` (+ test) | prefill and open |
-| 2 | `packages/aztec-runtime/src/pxe/store-refusal.ts` (new), `packages/aztec-runtime/package.json` | refusal markers, subpath export `./pxe/store-refusal` |
-| 2 | `packages/aztec-runtime/src/pxe/opfs-store.ts` (+ `opfs-store.test.ts`) | throw messages built from the markers |
-| 2 | `apps/extension/src/popup/components/popups/new-token-error-text.ts` (new, + test) | refusal copy |
-| 2 | `apps/extension/src/popup/components/popups/NewTokenPopup.vue` (+ test) | use it |
-| 2 | `apps/extension/tests/e2e/` smoke file for Holdings; `tests/e2e/network/holdings.test.ts` | paste to add |
+| 2 | `apps/extension/src/popup/components/popups/NewTokenPopup.vue` (+ test) | the generic line, the debug log line, a testid on the line |
+| 2 | `apps/extension/tests/e2e/holdings-add-token.test.ts` (new smoke); `tests/e2e/network/holdings.test.ts` | paste to add; the generic line on a node refusal |
 | 3 | `token/spec.ts`, `token/utils.ts`, `token/service.ts`, `execution/tx-request-builder.ts`, `transaction/spec.ts`, `utils/tx-amount.ts` (+ tests) | per OA-1 |
 
 ### Trade-offs and alternatives not taken
@@ -556,12 +548,11 @@ Validation gate:
 - Layers: typecheck, lint, unit, component, composition, build, smoke e2e (Chrome and Firefox),
   network e2e (Chrome; three files on Firefox).
 
-### Arc 2: Holdings search and add-token copy (waits on page 8)
+### Arc 2: Holdings search and add-token copy (page 8 signed)
 
-Build nothing here until the orchestrator says page 8 is signed. A record answered "as is" drops its
-phase; a "changed" answer is built as its note says.
+Page 8 was signed on 2026-10-12 (D-orch-6); every phase below is built.
 
-#### Phase 2.1: paste an address to add a token (#134, P8-01) — waits on page 8
+#### Phase 2.1: paste an address to add a token (#134, P8-01) ✓
 
 1. Add `addCandidate`, the add row and the `addToken` emit to `TokenList.vue`.
 2. In `pages/holdings.vue`, set `preselectedTokenAddressToAdd`, then open `new_token`.
@@ -587,39 +578,40 @@ Validation gate:
 - Pass: every command exits 0. Screenshots of the row in both themes attach to the PR.
 - Layers: lint, typecheck, unit, component, smoke e2e and network e2e on both browsers.
 
-#### Phase 2.2: a readable line for store refusals (#136, P8-02) — waits on page 8
+#### Phase 2.2: one generic line under Submit (#136, P8-02, OA-2 = A) ✓
 
-1. Add `packages/aztec-runtime/src/pxe/store-refusal.ts` and its subpath export; put the marker in
-   the three refusal messages in `opfs-store.ts`.
-2. Add `new-token-error-text.ts` with `newTokenErrorText`.
-3. In `NewTokenPopup.vue`'s catch, set `error.value = newTokenErrorText(err)`.
-4. Test `opfs-store.test.ts`: each of the three throw sites (stalled open, reopen while quarantined,
-   version mismatch) produces a message that carries the marker; the invalid-key and wrong-key errors
-   do not (controls).
-5. Test `new-token-error-text.test.ts`: the marker, bare and as the popup receives it, reads the
-   generic line; any other error keeps its message (control).
-6. Test `NewTokenPopup.test.ts`: a refused add shows the generic line under Submit.
+1. In `NewTokenPopup.vue`'s `catch`, set the generic line and log the error at debug under `reason`.
+   Give the line under Submit a testid (`new-token-error`) for the e2e.
+2. Test `NewTokenPopup.test.ts`: a store refusal and a node refusal each show the generic line, never
+   their raw text, and are logged at debug under `reason`; an incomplete parse keeps its own line
+   (control).
+3. Extend `tests/e2e/network/holdings.test.ts`: paste a valid address that holds no contract, take the
+   add row, submit; the line under Submit reads the generic line (the node's own refusal crosses the
+   real RPC hops). The shots of the line in both themes come from this step.
 
-UI impact (P8-02, quoted): "When the wallet's store refuses (a reopen, a stalled open), the line
-under Submit reads "Something went wrong. Try again."; the raw developer text goes to the debug log
-only." The background's existing log lines stay as they are (OA-4).
+UI impact (P8-02 and P8-04, quoted): "When the wallet's store refuses (a reopen, a stalled open), the
+line under Submit reads "Something went wrong. Try again."; the raw developer text goes to the debug
+log only." OA-2: "One generic line for every error that has no approved copy: "Something went wrong.
+Try again." (P8-02's words). The existing "Couldn't auto-detect this token's interface…" and
+"Account is still loading…" lines stay." The background's log lines keep their levels (OA-4 = A).
 
 Validation gate:
 - Commands: `bun run lint`; `bun run typecheck:all`;
-  `cd packages/aztec-runtime && bun run test`;
   `cd apps/extension && bun --bun vitest run src/popup/components/popups/`;
   `bun run audit:vue`; then search the built output for `did not answer init` (a string only
   `opfs-store.ts` holds) and confirm no chunk `popup.html` loads contains it;
   `cd apps/extension && bun run test:e2e -- tests/e2e/settings-crud.test.ts --retry=0`;
-  `bun run build:firefox`, then the same with `NULO_E2E_BROWSER=firefox`.
+  `bun run build:firefox`, then the same with `NULO_E2E_BROWSER=firefox`;
+  `tests/e2e/network/holdings.test.ts` on both browsers, as in Phase 2.1.
 - Pass: every command exits 0, and the search finds the string in no popup chunk.
-- Layers: lint, typecheck, unit, component, build, smoke e2e on both browsers.
+- Layers: lint, typecheck, unit, component, build, smoke e2e and network e2e on both browsers.
 
 #### Arc 2 boundary gate
 
 - Commands: `bun run audit:vue`; `bun run test:all`; the whole smoke suite on Chrome, then
   `bun run build:firefox` and the whole smoke suite on Firefox;
-  `tests/e2e/network/holdings.test.ts` on both browsers (one network run at a time).
+  `tests/e2e/network/holdings.test.ts` on both browsers (one network run at a time; Phase 2.2's runs
+  count when the head has not moved since).
 - Pass: every command exits 0.
 
 ### Arc 3: the mint figure's class pin (waits on OA-1)
@@ -670,7 +662,9 @@ Validation gate:
     deleting another token's row. A deletion whose own remove was issued before the lock was lost
     completes and announces it, as today (D-arc1-3). A restored row whose network was deleted during that wait stays,
     and is listed again if a network for its chain is added back.
-- **Arc 2:** P8-01 and P8-02, quoted in their phases. Anything beyond them is OA-2 and OA-4.
+- **Arc 2:** P8-01, P8-02 and OA-2 = A, quoted in their phases; OA-4 = A changes no log level. The
+  popup's debug line for a refused add carries the error under `reason`; nothing is added to the
+  visible line (D-orch-7).
 - **Arc 3:** per OA-1.
 
 ## Security & Adversarial Considerations
@@ -701,10 +695,11 @@ extension view that has not seen a deletion.
   residue (D1).
 - **#206.** No trust change; rows still pass the scope filter.
 - **Arc 2.** The pasted address never leaves the popup until the person submits the existing popup.
-  The refusal marker is a fixed constant; it adds no data to a message.
   `isValidAztecAddress` rejects anything that is not a curve point, so no arbitrary string reaches the
-  add flow from the search box. The popup adds no log line; the background's existing lines (error
-  and warn) carry the store dir, which names a profile id and a chain id (OA-4).
+  add flow from the search box. The popup's new line is at debug, dropped unless debug mode is on,
+  and passes the error whole under `reason`, so `trim` caps it to a name and a message; the error
+  text names a contract address or a store dir (a profile id and a chain id), no balance or key. The
+  background's existing lines keep their levels (OA-4 = A).
 - **Arc 3.** A restored `classId` or `TxCall` class is hostile input: validated as a field element,
   never authenticated; OA-1 states this limit.
 - **Least privilege, crypto, supply chain.** No new permission, dependency, key or cryptography.
@@ -777,11 +772,11 @@ extension view that has not seen a deletion.
 ### Asks
 
 - A1 (OA-1): the mint-figure pin for #105. Working assumption: nothing built; Arc 3 waits.
-- A2 (OA-2): other raw errors under Submit in the New token popup. Working assumption: as today.
+- A2 (OA-2): other raw errors under Submit in the New token popup. Answered A (page 8): one generic line.
 - A3 (OA-3): Arc 1's race-path effects. Working assumption: Arc 1 is built and opened, and merges
   only on the owner's answer.
-- A4 (OA-4): whether P8-02's "debug log only" lowers the background's existing log lines. Working
-  assumption: no log level changes.
+- A4 (OA-4): whether P8-02's "debug log only" lowers the background's existing log lines. Answered A
+  (page 8): no log level changes.
 
 ## Decision ledger
 
@@ -805,6 +800,12 @@ extension view that has not seen a deletion.
 | D-arc1-2 | A tracked add write that rejects issues `failed` from its own rejection handler, before it leaves the tracker | journal the failure only in the attempt's `catch` | implementer | The `catch` sits three async frames above the set; a successor draining the set could pass the empty check one turn before `failed` was issued (R3's "a successor waits for it") |
 | D-arc1-3 | A deletion announces its removal (`onTokenDeleted`) whenever its own remove landed, owned or not; only the remove itself needs an owned ticket | R5's check before the emit too (plan); a fresh-ticket finalization (Codex) | Codex r1 (Medium): the check left a removed row with live balance rows and no retry path. Opus r1 (Low): keep the check, a successor's same-contract re-add could be wiped | The emit runs in the turn the tracked remove settles, ahead of any successor, which must drain that remove before it reads; so no successor's row can exist yet. A late handler racing a re-add is base behaviour for every deletion |
 | D-arc1-4 | An add whose post-set liveness read overlapped a network deletion that then failed keeps its row and rejects "network deleted" (accepted, disclosed in § UI impact) | re-read `isNetworkLive` when the chain is live (Opus r1) | Opus r1 (Low): needs a failed cascade, acceptable if stated | The reservation may have swept rows before failing, so R4's false is right; a re-read loop risks spinning on a replacement network, and the row is correct data on a live chain |
+| D-orch-5 | After a squash merge an arc branches from `dev`: arc 2 is `tokens-and-balances-holdings` off `origin/dev` 8d01f9b (arc 1 landed as #271), its PR against `dev` | stack on arc 1's branch (`gh stack`, § Delivery); the Delivery table's branch name `tokens-and-balances-holdings-add` | orchestrator, 2026-10-12 | Arc 1's content is on `dev`; a stack would carry a merged layer. D-orch-1 to D-orch-4 stay |
+| D-orch-6 | Page 8 is signed (owner, 2026-10-12 21:54Z) and each issue carries its decision block: P8-01 and P8-02 approved, OA-2 (P8-04) = A, OA-4 (P8-06) = A, OA-3 (P8-05) = A (arc 1 merged on it), OA-1 (P8-03) = A (arc 3, not this arc). Arc 2 builds the two quoted records; anything beyond them is an `OWNER-ASKS.md` entry | | orchestrator, 2026-10-12 | CLAUDE.md § UI changes |
+| D-orch-7 | The owner's note on P8-04 ("an internal identifier in case we need to debug?") adds nothing to the visible line: the popup's debug line for a refused add carries the error under `reason`, so an exported log matches a report without a visible code | a short code under Submit | orchestrator, 2026-10-12 | The visible line is the owner's approved copy; the logging policy passes an error whole under a named key |
+| D-orch-8 | The PR attaches the add row and the generic line in both themes; the smoke and network e2e of Phase 2.1 run on both browsers at retry 0; the `did not answer init` build search is run and quoted | | orchestrator, 2026-10-12 | CLAUDE.md § UI changes: screenshots close the loop |
+| D-arc2-1 | No store-refusal marker: the popup's `catch` shows the generic line for every error it catches, and `packages/aztec-runtime` is unchanged | the marker module, its subpath export and the marked throws (D9, designed for OA-2 = B) | implementer; panel at the arc's review | Under OA-2 = A no error the `catch` sees has approved copy, so nothing needs to tell a store refusal from another error; the two lines with copy are set outside the `catch`. D9 stands as the design for an answer that was not given |
+| D-arc2-2 | The add row is the local `Button`, `variant="secondary"`, `wide` | the outline and primary variants; the fold row's own style | implementer | An existing primitive; the secondary variant keeps the address's lower case, where the outline, primary and fold styles set every letter in capitals ("0X12…AB"). The owner judges the shots in both themes |
 
 ## Audit verdicts
 
@@ -919,6 +920,31 @@ a successor that loses its ticket while draining.
 |---|---|---|---|
 | 1 | Low | R5, § Security and § UI impact still state the pre-D-arc1-3 rule, and the deletion's doc comment says "released, it refuses" without saying before what | Accepted: the exemption is written into R5, § Security and § UI impact ("issued before", not "landed before"); the comment says "released before it issues the remove" |
 
+### Arc 2 implementation, Codex round 1 (gpt-6.1-sol, high, default login), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Medium | The network test's in-test PASTE import mutates the file-scoped wallet; a retry after it (nightly runs config-default retries) fails the first test's count and order assertions | Accepted with another fix: the paste-to-add and refusal steps moved into a second test that deploys a fresh contract on every attempt, so each test is retry-safe and the first keeps its fixture's contract; no retry pin |
+| 2 | Low | `waitForNewTokenAddress` reaches the native field through `querySelector("input")`, against the testid-only rule | Accepted: the popup's Input gets `inputTestid="token-address-field"`; the helper reads it by testid |
+| 3 | Nit | Step-narrating comments in the network test and its header | Accepted: the steps live in their own named test; the header says only why the second test is separate; the toast comment (a timing constraint) stays |
+
+### Arc 2 implementation, Opus 5.5 review (general-purpose), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | The row is offered for any curve point, so an account or a contract on another network reaches "Try again", which cannot succeed; the copy is approved | Accepted as an owner question: OA-5 (what ships now: the generic line); the PR body names it |
+| 2 | Nit | `{ reason: err }` where the logging policy's example and other popup catches use `{ error }` | Rejected with reason: D-orch-7 names `reason`; `trim` projects an Error under any key, and Codex r1 found the key compliant |
+| 3 | Nit | `openAddToken` sits before the reactive state in `holdings.vue` | Accepted: moved below `aggregateDisplay` |
+| 4 | Nit | No test pins that a listed row behind the fold suppresses the add row; split the refused classes | Accepted: one test per refused class (off-curve, a visible row in another case, an empty row behind the fold) |
+| 5 | Nit | The two `test.each` cases in `NewTokenPopup.test.ts` run one path | Rejected with reason: each pins one approved record (P8-02's store refusal, OA-2's other errors), so a later split of the `catch` cannot drop either silently |
+| 6 | Nit | A helper's doc comment restates its name | Accepted: removed (and `clickNewTokenSubmit`'s) |
+
+### Arc 2 implementation, Codex round 2 (same session, resumed), `approve (no new material finding)`
+
+The reviewer verified each round 1 fix against the code: the second network test is retry-safe on its own
+(a fresh contract per attempt) and filterable with `-t`; the field is read by testid; the handler move and
+the split component tests change no behaviour. Loop converged after two rounds.
+
 ## Post-implementation
 
 The implementing session runs these steps from this file. `code_review` is `off`, so no
@@ -1008,7 +1034,7 @@ clause for a phase dropped or answered "as is".
 | Layer | Branch | Phases | Stacks on | `/code-review` | PR title (≤ 93 characters) | Closes |
 |---|---|---|---|---|---|---|
 | 1 | `worktree-tokens-and-balances` (adopted; carries the plan commit) | 1.1-1.3 | `dev` | off | `fix(tokens): one balance reducer, resumable token adds, adopted profile ids start clean` (87) | #206, #94, #93 |
-| 2 | `tokens-and-balances-holdings-add` | 2.1-2.2 | layer 1 | off | `feat(holdings): add a token from a pasted address, readable store refusals` (74) | #134, #136 |
+| 2 | `tokens-and-balances-holdings` (D-orch-5) | 2.1-2.2 | `dev` (layer 1 merged as #271) | off | `feat(holdings): add a token from a pasted address, readable store refusals` (74) | #134, #136 |
 | 3 | `tokens-and-balances-mint-pin` | 3.1 | the layer below | off | `fix(activity): read a mint figure only from a pinned token class` (63) | #105 |
 | 4 | `tokens-and-balances-close-out` | close-out | the top layer | off | `docs(plans): close tokens-and-balances` (38) | none |
 

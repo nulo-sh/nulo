@@ -77,6 +77,7 @@ import {
 	InvalidWalletArgumentsError,
 	ScopeViolationError,
 	TermsAcceptanceRequiredError,
+	TooManyPendingError,
 	isReceiverGoneRejection,
 } from "@nulo/extension-messaging/errors"
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
@@ -801,11 +802,17 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 
 		if (served) await runDiscoveryPopup(discovery, chainId, dedupeKey, profile.id, deps)
 		else await runNetworkUnavailableNotice(discovery, chainId, dedupeKey, { staleSession: existingSession, entryEpoch }, deps)
-	} catch {
-		// User rejected or popup was closed
-		handler.rejectDiscovery(discovery.requestId)
-		logger.log("wallet-sdk", LogLevel.Warn, `Discovery rejected for request ${describeExternalId(discovery.requestId)}`)
+	} catch (error) {
+		rejectFailedDiscovery(discovery, error, deps)
 	}
+}
+
+/** The person declined or closed the window, or the app sent a `chainInfo` that does not decode,
+ *  which it can repeat at will and so logs at `debug`. */
+function rejectFailedDiscovery(discovery: PendingDiscovery, error: unknown, deps: DiscoveryDeps): void {
+	deps.handler.rejectDiscovery(discovery.requestId)
+	const level = error instanceof InvalidWalletArgumentsError ? LogLevel.Debug : LogLevel.Warn
+	deps.logger.log("wallet-sdk", level, `Discovery rejected for request ${describeExternalId(discovery.requestId)}`)
 }
 
 /** Reject an approval the dApp can no longer receive. The drain-gate
@@ -1321,13 +1328,14 @@ export async function handleWalletMessage(
 	}
 }
 
-/** A refusal a connected dApp can repeat on every poll, so it logs at `debug`: an `error` line lands
- *  in every user's log buffer. */
+/** A refusal a connected dApp can repeat on every poll, or with silent sends over the waiting-sends
+ *  cap, so it logs at `debug`: an `error` line lands in every user's log buffer. */
 function isExpectedRefusal(error: unknown): boolean {
 	return (
 		error instanceof TermsAcceptanceRequiredError ||
 		error instanceof ScopeViolationError ||
 		error instanceof ChainNotSupportedError ||
-		error instanceof InvalidWalletArgumentsError
+		error instanceof InvalidWalletArgumentsError ||
+		error instanceof TooManyPendingError
 	)
 }

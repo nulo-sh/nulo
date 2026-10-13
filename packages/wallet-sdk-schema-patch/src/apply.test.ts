@@ -53,6 +53,28 @@ describe("applyNuloSchemaPatch", () => {
 		expect(() => applyNuloSchemaPatch(schema)).toThrow(/grantPublicAuthwit signature changed/)
 	})
 
+	test.each(["caller", "contract"])("an existing grantPublicAuthwit taking %s as a plain string is drift", (key) => {
+		const strict = { caller: schemas.AztecAddress, contract: schemas.AztecAddress, method: z.string(), args: z.array(z.unknown()) }
+		const schema = {
+			grantPublicAuthwit: z.function({
+				input: z.tuple([schemas.AztecAddress, z.object({ ...strict, [key]: z.string() })]),
+				output: z.string(),
+			}),
+		}
+		expect(() => applyNuloSchemaPatch(schema)).toThrow(/grantPublicAuthwit signature changed/)
+	})
+
+	test("the patched grantPublicAuthwit refuses a non-address caller or contract and parses hex addresses", () => {
+		const schema: Record<string, unknown> = {}
+		applyNuloSchemaPatch(schema)
+		const content = entry(schema, "grantPublicAuthwit").def.input.def.items[1]
+		const address = `0x${"0b".repeat(32)}`
+		const valid = { caller: address, contract: address, method: "transfer", args: [] }
+		expect(content.safeParse(valid).success).toBe(true)
+		expect(content.safeParse({ ...valid, caller: "SENTINEL" }).success).toBe(false)
+		expect(content.safeParse({ ...valid, contract: "SENTINEL" }).success).toBe(false)
+	})
+
 	test("leaves a shape-compatible existing entry in place without throwing", () => {
 		const compatible = z.function({ input: z.tuple([schemas.AztecAddress, schemas.AztecAddress]), output: z.void() })
 		const schema = { registerToken: compatible }
