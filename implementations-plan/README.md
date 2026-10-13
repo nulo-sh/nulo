@@ -70,7 +70,7 @@ The standard, stated so another repository can adopt it unchanged.
 
 ## Post-implementation standard
 
-A plan's Post-implementation and Delivery sections cite this section at a named commit and keep inline only what is specific to the plan: its commands, parameters, loop placement, slug, trunk, deviations and approval boundaries. The steps bind the implementing session, which may never have loaded a planning skill.
+A plan's Post-implementation and Delivery sections cite this section at a named commit on the trunk and keep inline only what is specific to the plan: its commands, parameters, loop placement, slug, trunk, deviations and approval boundaries. The steps bind the implementing session, which may never have loaded a planning skill.
 
 1. **Optional diff review.** Only when the plan's front matter sets `code_review` to a level other than `off`: run that review over the diff under review, skim what it applied, and commit its fixes separately from the implementation commits. With `off` the step is absent, not skipped.
 2. **The review loop.** The reviewer of the other model family reads, at the effort the plan names: the diff under review; a summary of the diff-review commits, when step 1 ran; the plan and its decision ledger; on a stack, the arc map ("this is arc N of M; later arcs build X on it"), so seams kept for later arcs are not flagged as dead code; the adversarial ask, "What could go wrong? What would an attacker target? What are we trusting that we shouldn't?"; and these two rules, verbatim, in every prompt, first and resumed:
