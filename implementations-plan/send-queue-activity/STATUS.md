@@ -19,3 +19,5 @@
 - 2026-10-13 — phase 3a.3 gate: pass (lint, typecheck:all, test:all: extension 11435 passed). Finalized-archive proof for mined rows (journal and Tx), the persisted Tx marker, the silent single-attempt node (D30).
 - 2026-10-13 — arc 3a review: Codex r1 one medium (proof reads after the caller stopped) and lows, Opus one medium (the recorded nullifier unproven on a real node) and lows; all fixed or recorded; Codex r2 no runtime finding. Loop closed.
 - 2026-10-13 — phase 3a.4 gate: pass. `failed-send-check.test.ts` at retry 0: Chrome 2/2, Firefox 2/2 (the second case mines empty L1 blocks so the local finalized tag moves). Smoke at retry 0 on a smoke-armed build: Chrome 213 passed, 10 skipped; Firefox 210 passed, 13 skipped. Screenshots committed.
+- 2026-10-13 — arc 3b start: branch `send-queue-activity-feed` off origin/dev 39b50d82 (#343 merged).
+- 2026-10-13 — phases 3b.1 and 3b.2 gate: pass at f15e100f (lint; typecheck:all; test: 11517 passed). One scope rule for every journal surface; knownDecimals at every listed site; an empty `amountRaw` is absent on the awaiting card. 3b.1's own gate run was stopped when 3b.2 edits landed under it, and ran with 3b.2.
