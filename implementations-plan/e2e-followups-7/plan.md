@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-7
 tier: light
-status: planned, awaiting the orchestrator's approval
+status: arc 1 implemented; Phase 1 gate passed (lessons/phase-1.md)
 issues: "#349 (arc-1); #322, #329, #354, #279, #186, #195 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -79,7 +79,7 @@ Test-only. No product, permission, secret, network or dependency change. `anvil_
 
 None. No screen, copy or rendered value changes.
 
-## Phase 1: the drain waits for the grant's final write
+## Phase 1: the drain waits for the grant's final write ✓
 
 The tree is clean at the plan commit (the planner's probe edit is gone).
 1. Move `mineL1Blocks` and `finalizeThrough` into `fixtures/aztec.ts` per the change map; failed-send-check keeps its behaviour.
@@ -122,6 +122,12 @@ Follow `implementations-plan/README.md` § Post-implementation standard at e900f
 | D4 | Drive finality with the moved `finalizeThrough`, not by waiting | Codex: the mint has not run, and leaning on other traffic is a timing dependency. Keep its node-taking signature (`createTestWallet` returns the node) | accepted |
 | D5 | KL1: the reorg and stale-anchor retry paths stay boundaries | Codex and Opus: traced, unreproduced, fix disproportionate; one closed `known-limit` issue, each path with its own trace | accepted |
 | D6 | The Finalized wait is 180 s, not 90 s | Codex: 90 s is one cadence plus healthy margin, not a bound; say so and measure. Opus: a one-attempt read can fail, and with 90 s one missed read fails the barrier. Opus's path wins: two reads, the 180 s precedent | accepted |
+| D7 | The grant must still await finality when the drive starts | Codex review r1: if the final commit lands before the mined write (a mined projection over a minute), a write newer than it can be the mined one (plausible, unverified). A fail-closed precondition, the sole grant still `awaitingFinality` after the mined write settled; a first answer already Finalized fails closed too, unreachable before the drive (F5). Opus lens: no false green found | accepted |
+| D-orch-2 | Approved as planned: the test-side barrier, the move, no raised wait (`fillSendForm`'s 60 s and the 120 s submit wait stay), no retry, no `skipIf`; the 180 s Finalized wait is a new barrier on a new condition, never raised (over it, stop and report) | orchestrator | accepted |
+| D-orch-3 | Merge `origin/dev` (#356 at dd922823) before the first edit; the amplified rounds then meet the arc gate's once-more-per-browser clause | orchestrator | done at 7ab2d3b8 |
+| D-orch-4 | The widened copy stays uncommitted; its base and head results, qualifying and non-qualifying runs counted, go in `lessons/phase-1.md` and the PR body | orchestrator | done |
+| D-orch-5 | No new committed scenario; the PR body states snack-placement's per-browser wall-clock on base and head, the barrier's trail margin and the drained cases' headroom (under 75%, else stop and report) | orchestrator | accepted |
+| D-orch-6 | KL1's two paths are one closed `known-limit` issue filed at close-out; nothing promoted to `lessons.md` without a retirement paying for it; close-out in this PR | orchestrator | accepted |
 
 ## Audit verdicts
 
@@ -129,6 +135,9 @@ Follow `implementations-plan/README.md` § Post-implementation standard at e900f
 - **Codex, plan audit** (same session, resumed): `conditional approve`. Accepted: F4 and F5 narrowed; the sole-grant precondition (D3); the copy observes the causal write before Send and records non-qualifying base runs; the 90 s derivation (D6, resolved at 180 s); 15+5 denominators and the base ledger; `finalizeThrough`'s default; no recaptured baseline; probe removal; `lint:actions`. Rejected: none.
 - **Codex, verify** (same session, resumed): `approve`, confidence high; D6's 180 s accepted as an operational budget. One execution detail, accepted: the head copy compares against a timestamp taken before the spend is sent, not after it returns.
 - **Opus 5.5 Plan lens**: `conditional approve`. Accepted: D6; the clean tree; the base ledger; base's copy before implementing (run during planning: red 3/3 per browser); the error loop and Node-side classification; the grant inside the filtered set; the move's details; the Firefox and suite-runtime gate notes; the headroom bound; the cost in the Outcome; the non-vacuous head copy. Corrected: "owed" no longer names Dropped rows. Rejected: none.
+- **Codex, code review r1** (gpt-6.1-sol, high, read-only; session `01a1370b-868e-7410-90fe-4b75536177fc`, over `git diff 7ab2d3b8 0fcecdae`): `conditional approve`. Accepted: the mined/final overlap closed fail-closed (D7); one narrating comment cut. Rejected: cutting the drain's per-step write-count line (the steps' lines are the model). Headroom: the measured gate.
+- **Opus 5.5 diff lens** (beside r1): `conditional approve`, no false green found. Accepted: the token import named as a cause, "refreshes balances", the README row's read timing, the narrating comment; ledger row 56 held until the head copy was green.
+- **Codex, code review r2** (resumed, over `git diff 0fcecdae 91353f1c`): no new material finding; `conditional approve`, the conditions being the validation gates.
 
 ## Seeds (draft; the orchestrator owns execution)
 
