@@ -234,14 +234,20 @@ async function expectAddTokenOffer(page: Page): Promise<void> {
 	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
 	await page.waitForSelector(sel("holdings-add-token-address"), VISIBLE)
 	await expectPageClean(page, "Holdings add-token", [["popup-holdings", "a pasted address no listed token matches"]])
+	// The label's text, not its box: under `nowrap` text can run past a box that fits, and the button clips it.
 	const fit = await page.$eval(sel("holdings-add-token-address"), (address) => {
 		const button = address.closest("button") as HTMLElement
 		const pad = getComputedStyle(button)
-		const room = button.clientWidth - Number.parseFloat(pad.paddingLeft) - Number.parseFloat(pad.paddingRight)
-		return { label: (address.parentElement as HTMLElement).getBoundingClientRect().width, room }
+		const outer = button.getBoundingClientRect()
+		const start = outer.left + button.clientLeft + Number.parseFloat(pad.paddingLeft)
+		const end = outer.left + button.clientLeft + button.clientWidth - Number.parseFloat(pad.paddingRight)
+		const range = document.createRange()
+		range.selectNodeContents(address.parentElement as HTMLElement)
+		const text = range.getBoundingClientRect()
+		return { width: text.width, room: end - start, inset: Math.min(text.left - start, end - text.right) }
 	})
-	console.log(`[type-roles] holdings add-token label ${fit.label}px in ${fit.room}px`)
-	expect(fit.label).toBeLessThanOrEqual(fit.room)
+	console.log(`[type-roles] holdings add-token label ${fit.width}px in ${fit.room}px, inset ${fit.inset}px`)
+	expect(fit.inset).toBeGreaterThanOrEqual(0)
 }
 
 async function expectRoleAt(page: Page, testid: string, role: string, native = false): Promise<void> {
