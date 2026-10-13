@@ -719,10 +719,12 @@ describe("canary lanes", () => {
 		{ file: "nightly.yml", browser: "firefox" },
 	] as const
 	type SuiteJob = { uses?: string; with?: Record<string, unknown> }
+	/** Nightly's advisory rerun of the canary files on the in-browser prover; it belongs to no lane. */
+	const WASM_LEG = "network-e2e-canary-wasm"
 	/** A lane is one browser's network suite in one caller: the shard pool plus its dedicated jobs. */
 	const laneJobs = (file: string, browser: string): [string, SuiteJob][] =>
 		(Object.entries(workflow(file).jobs) as [string, SuiteJob][]).filter(
-			([, job]) => String(job.uses).endsWith(SUITE) && (job.with?.browser ?? "chrome") === browser,
+			([name, job]) => name !== WASM_LEG && String(job.uses).endsWith(SUITE) && (job.with?.browser ?? "chrome") === browser,
 		)
 	const canaryFiles = readdirSync(join(ROOT, "apps/extension/tests/e2e/network"))
 		.filter((name) => name.endsWith("-canary.test.ts"))
@@ -758,6 +760,21 @@ describe("canary lanes", () => {
 				expect(excluded, `${file} ${browser}: ${canary} is out of the shard pool`).toContain(canary)
 			}
 		}
+	})
+
+	// Every other prover-ON job proves natively, so this leg is the canary files' only run on the prover
+	// users without Presto get. Its label must start with `canary` for the results assertion to arm;
+	// aggregators.test.ts holds it advisory.
+	test("nightly's in-browser leg runs the Chrome canary's files, on the same nights, with Presto off", () => {
+		const { jobs } = workflow("nightly.yml")
+		const [leg, canary] = [jobs[WASM_LEG], jobs["network-e2e-canary"]]
+		expect(leg.uses).toBe(canary.uses)
+		expect(leg.needs).toEqual(canary.needs)
+		expect(leg.if).toBe(canary.if)
+		expect(leg.strategy).toBeUndefined()
+		const { test_files, ...inputs } = leg.with
+		expect(words(test_files)).toEqual(words(canary.with.test_files))
+		expect(inputs).toEqual({ ref: canary.with.ref, shard_label: "canary-wasm", disable_presto: true })
 	})
 
 	// A file in a dedicated job's list but not the pool's runs twice; one in neither never runs.

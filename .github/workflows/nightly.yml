@@ -16,6 +16,8 @@ name: nightly
 #   2. The full gate battery runs at that sha: lint+typecheck, unit, the
 #      complete network e2e suite and the seeded send chaos run on chrome and
 #      on firefox, chrome+firefox builds, smoke against each built artifact.
+#      Beside them, one advisory leg runs the canary files on the in-browser
+#      prover and gates nothing.
 #   3. Only if EVERY gate is green, publish-nightly creates the tag at that
 #      sha, then fills, checks and publishes a draft PRE-release with the
 #      zips + SHASUMS256.txt + git-cliff notes (scripts/release/
@@ -243,6 +245,21 @@ jobs:
       shard_label: "canary"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
+
+  # The canary files on the in-browser WASM prover, the path of every user without Presto; every other
+  # prover-ON job proves natively. ADVISORY: no job needs it, so a red leg reds the run but neither
+  # `status` nor the publish (a job that calls a reusable workflow cannot take `continue-on-error`).
+  # Making it a gate is the owner's call, after 30 consecutive green nights.
+  network-e2e-canary-wasm:
+    name: Run / canary / in-browser proving
+    needs: resolve
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      shard_label: "canary-wasm"
+      test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
+      disable_presto: true
 
   # The seeded send chaos run (send-chaos.test.ts) gates the publish. Unseeded it takes the run's
   # id, which "Re-run failed jobs" keeps, so a re-run replays the actions a red night drew (a seed
