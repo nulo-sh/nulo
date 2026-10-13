@@ -1,8 +1,10 @@
 /**
  * The connect window through the SDK handler's callbacks: an Allow hands its window to the
  * connection, which shows the emoji check in it, and every exit before the check closes it. Tab
- * lifecycle runs for real over a `chrome.tabs` stub that captures its listeners.
+ * lifecycle runs for real over a `chrome.tabs` stub that captures its listeners. The handler keeps
+ * one `ActiveSession` object per live session id, as upstream does: a re-key replaces it.
  */
+import { createHash } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { WindowPort } from "@nulo/wallet-core/ports"
 import { DISCOVERY_STALE_MS, WalletSdkDispatcher } from "@nulo/wallet-bridge"
@@ -13,9 +15,15 @@ type Callbacks = {
 	onSessionTerminated: (id: string) => void
 	onWalletMessage: (session: unknown, message: unknown) => void
 }
+type Session = { sessionId: string; origin: string; tabId?: number; verificationHash: string; chainInfo: unknown }
 let captured: Callbacks | undefined
 const handlerCalls: string[] = []
-const live = new Set<string>()
+/** The handler's live sessions by id, each the one object every callback for it receives. */
+const sessions = new Map<string, Session>()
+/** Every response the handler was asked to send, by session id. */
+const responses: Array<{ sessionId: string; response: { messageId: string; error?: { code: number } } }> = []
+/** Session ids whose termination throws before the handler forgets them. */
+const failingTerminations = new Set<string>()
 const discoveryTabs = new Map<string, number>()
 /** What each discovery named, which the SDK's session for that request id carries. */
 const discovered = new Map<string, { origin: string; chainInfo: unknown }>()
@@ -31,7 +39,10 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 			return Promise.resolve()
 		}
 		getActiveSessions() {
-			return [...live].map((sessionId) => ({ sessionId, tabId: discoveryTabs.get(sessionId), ...discovered.get(sessionId) }))
+			return [...sessions.values()]
+		}
+		getSession(id: string) {
+			return sessions.get(id)
 		}
 		approveDiscovery(id: string) {
 			handlerCalls.push(`approve:${id}`)
@@ -40,18 +51,20 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 		rejectDiscovery(id: string) {
 			handlerCalls.push(`reject:${id}`)
 		}
-		sendResponse() {
+		sendResponse(sessionId: string, response: { messageId: string; error?: { code: number } }) {
+			responses.push({ sessionId, response })
 			return Promise.resolve()
 		}
 		terminateSession(id: string) {
 			handlerCalls.push(`terminate:${id}`)
-			live.delete(id)
+			if (failingTerminations.has(id)) throw new Error("No tab with id: 7.")
+			sessions.delete(id)
 			captured?.onSessionTerminated(id)
 		}
 		/** The SDK drops the tab's discoveries and ends its sessions. */
 		terminateForTab(tabId: number) {
 			droppedTabs.add(tabId)
-			for (const id of [...live]) if (discoveryTabs.get(id) === tabId) this.terminateSession(id)
+			for (const id of [...sessions.keys()]) if (discoveryTabs.get(id) === tabId) this.terminateSession(id)
 		}
 		initialize() {}
 	},
@@ -69,6 +82,7 @@ import type { PendingVerificationEntry } from "./pending-verification"
 import { chainInfoToChainId } from "./session-established"
 import { RESERVATION_GRACE_MS, VerifyAdmissionGate } from "./verify-admission"
 import { fakeSdkPorts } from "./test-ports"
+import { SESSION_INVALID_ERROR } from "./error-envelope"
 import { FAKE_DAPP_ORIGIN as ORIGIN, FAKE_SENDER, fakeSdkServices } from "./test-services"
 
 const OTHER_ORIGIN = "https://other.example"
@@ -76,6 +90,29 @@ const noopLogger = { log: () => {} } as never
 const tabRemoved: Array<(tabId: number) => void> = []
 const admit = vi.spyOn(VerifyAdmissionGate.prototype, "admit")
 const dispatch = vi.spyOn(WalletSdkDispatcher.prototype, "dispatch")
+
+/** A wire-shaped verification hash, fresh for each key exchange of `requestId`. */
+const keyExchanges = new Map<string, number>()
+function nextHash(requestId: string): string {
+	const n = (keyExchanges.get(requestId) ?? 0) + 1
+	keyExchanges.set(requestId, n)
+	return createHash("sha256").update(`${requestId}#${n}`).digest("hex")
+}
+
+/** The SDK finished key exchange for `requestId`: a new session object under that id. */
+function keyExchange(requestId: string, over: Record<string, unknown> = {}): Session {
+	const session = {
+		origin: ORIGIN,
+		sessionId: requestId,
+		tabId: discoveryTabs.get(requestId),
+		verificationHash: nextHash(requestId),
+		...chain(1),
+		...discovered.get(requestId),
+		...over,
+	}
+	sessions.set(requestId, session)
+	return session
+}
 
 function deferred<T>() {
 	let resolve!: (v: T) => void
@@ -143,22 +180,59 @@ function fakeWindows() {
 
 const chain = (n: number) => ({ chainInfo: { chainId: String(n), version: "0" } })
 
-function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
+/** The operation journal as far as the queued row goes: created at `queued`, failed by kind. */
+function fakeJournal() {
+	const ops = new Map<string, { sessionId: string; stage: string; kind?: string }>()
+	let seq = 0
+	return {
+		ops,
+		countOperations: vi.fn(
+			async (q: { sessionId?: string; stage?: string }) =>
+				[...ops.values()].filter((op) => (q.sessionId ?? op.sessionId) === op.sessionId && (q.stage ?? op.stage) === op.stage)
+					.length,
+		),
+		createOperation: vi.fn(async (args: { sessionId: string }) => {
+			const id = `queued-${++seq}`
+			ops.set(id, { sessionId: args.sessionId, stage: "queued" })
+			return { id }
+		}),
+		transitionIfStage: vi.fn(async (id: string, stages: string[], next: { stage: string }, error?: { kind: string }) => {
+			const op = ops.get(id)
+			if (!op || !stages.includes(op.stage)) return
+			op.stage = next.stage
+			op.kind = error?.kind
+		}),
+	}
+}
+
+function boot(
+	opts: { setCapabilityGrants?: () => Promise<unknown>; setVerificationHash?: () => Promise<unknown>; legal?: () => Promise<void> } = {},
+) {
 	const windows = fakeWindows()
 	const popups = new Map<string, (answer: { approved: boolean; windowId?: number; expiredUrl?: string }) => void>()
 	const asked = new Map<string, unknown>()
-	const journal = { countOperations: vi.fn(async () => 0), createOperation: vi.fn(async () => ({ id: "queued-1" })) }
+	const journal = fakeJournal()
 	let activeProfile: { id: string } | undefined = { id: "p1" }
-	const { services, rows, onDappSessionDeleted } = fakeSdkServices({
-		popup: (params, requestId) => {
-			asked.set(requestId, params)
-			return new Promise((resolve) => popups.set(requestId, resolve))
-		},
-		activeProfile: async () => activeProfile,
-		setCapabilityGrants: opts.setCapabilityGrants,
-		operationJournal: journal,
-	})
-	initWalletSdkHandler(services, noopLogger, fakeSdkPorts(windows.port))
+	/** Holds the next active-profile read, once: the execution fence's, for a read call. */
+	let nextProfileRead: Promise<void> | undefined
+	const { services, rows, onDappSessionDeleted, onVerificationRefused, onVerificationConfirmed, onActiveProfileChanged } =
+		fakeSdkServices({
+			popup: (params, requestId) => {
+				asked.set(requestId, params)
+				return new Promise((resolve) => popups.set(requestId, resolve))
+			},
+			activeProfile: async () => {
+				const held = nextProfileRead
+				nextProfileRead = undefined
+				await held
+				return activeProfile
+			},
+			setCapabilityGrants: opts.setCapabilityGrants,
+			setVerificationHash: opts.setVerificationHash,
+			operationJournal: journal,
+			legal: opts.legal,
+		})
+	const handler = initWalletSdkHandler(services, noopLogger, fakeSdkPorts(windows.port))
 	const discover = (requestId: string, over: Record<string, unknown> = {}) => {
 		const discovery = { requestId, origin: ORIGIN, appId: "app", appName: "App", ...chain(1), timestamp: Date.now(), tabId: 7, ...over }
 		discoveryTabs.set(requestId, discovery.tabId)
@@ -170,16 +244,27 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 		windows.open.add(windowId)
 		popups.get(requestId)?.({ approved: true, windowId, expiredUrl: `EXPIRED-${requestId}` })
 	}
-	/** The SDK finished key exchange for `requestId`; its hash is `HASH-<requestId>` unless given. */
+	/** The SDK finished key exchange for `requestId`, under a fresh session object and hash. */
 	const establish = async (requestId: string, over: Record<string, unknown> = {}) => {
-		live.add(requestId)
-		await captured?.onSessionEstablished({
-			origin: ORIGIN,
-			sessionId: requestId,
-			verificationHash: `HASH-${requestId}`,
-			...chain(1),
-			...over,
-		})
+		await captured?.onSessionEstablished(keyExchange(requestId, over))
+	}
+	/** The app sends `type` on `requestId`'s live session, or on the `session` object given. */
+	const send = (requestId: string, type: string, messageId: string, session: Session | undefined = sessions.get(requestId)) =>
+		captured?.onWalletMessage(session, { type, args: [], messageId })
+	/** The check of the session whose hash is `verificationHash` reports They match. */
+	const confirm = (verificationHash: string) => onVerificationConfirmed.invoke({ verificationHash })
+	/** The check reports They don't match for the app's row on chain 1 under p1. */
+	const refuse = () => onVerificationRefused.invoke({ origin: ORIGIN, chainId: String(chainInfoToChainId(chain(1))), profileId: "p1" })
+	const lock = () => {
+		activeProfile = undefined
+		onActiveProfileChanged.invoke(undefined)
+	}
+	const switchProfile = (id: string) => {
+		activeProfile = { id }
+		onActiveProfileChanged.invoke({ id })
+	}
+	const holdNextProfileRead = (until: Promise<void>) => {
+		nextProfileRead = until
 	}
 	const closeTab = (tabId: number) => {
 		for (const l of tabRemoved) l(tabId)
@@ -189,8 +274,29 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown> } = {}) {
 	}
 	/** A row of the app on chain 1 under `profileId` went away. */
 	const rowDeleted = (profileId: string) => onDappSessionDeleted.invoke({ dappMetadata: { url: ORIGIN }, chainId: "1", profileId })
-	return { discover, allow, establish, closeTab, setProfile, rowDeleted, windows, rows, journal, asked }
+	return {
+		discover,
+		allow,
+		establish,
+		send,
+		confirm,
+		refuse,
+		lock,
+		switchProfile,
+		holdNextProfileRead,
+		closeTab,
+		setProfile,
+		rowDeleted,
+		handler,
+		windows,
+		rows,
+		journal,
+		asked,
+	}
 }
+
+/** The hash of `requestId`'s live session. */
+const hashOf = (requestId: string) => sessions.get(requestId)?.verificationHash ?? ""
 
 /** Settle the handler's pending microtasks without moving the clock. */
 const flush = async () => {
@@ -208,7 +314,10 @@ const markers = () =>
 beforeEach(() => {
 	vi.useFakeTimers()
 	handlerCalls.length = 0
-	live.clear()
+	sessions.clear()
+	responses.length = 0
+	failingTerminations.clear()
+	keyExchanges.clear()
 	discoveryTabs.clear()
 	discovered.clear()
 	droppedTabs.clear()
@@ -440,7 +549,7 @@ describe("a deleted row while an approved handshake is not stamped yet", () => {
 		h.allow("f1", 41)
 		await flush()
 		// Key exchange is done, so the SDK lists the session; establishment has not stamped it.
-		live.add("f1")
+		keyExchange("f1")
 
 		h.rowDeleted(profileId)
 
@@ -465,7 +574,7 @@ describe("establishment shows the check in the connect window", () => {
 
 		expect(h.windows.navigated).toHaveLength(1)
 		expect(h.windows.navigated[0].windowId).toBe(41)
-		expect(h.windows.navigated[0].url).toContain("verificationHash=HASH-f1&isReconnect=false")
+		expect(h.windows.navigated[0].url).toContain(`verificationHash=${hashOf("f1")}&isReconnect=false`)
 		expect(h.windows.focused).toEqual([41])
 		expect(h.windows.created).toEqual([])
 		expect(terminated()).toEqual([])
@@ -480,8 +589,8 @@ describe("establishment shows the check in the connect window", () => {
 		await h.establish("a1")
 
 		expect(h.windows.navigated.map((n) => n.windowId)).toEqual([42, 41])
-		expect(h.windows.navigated[0].url).toContain("verificationHash=HASH-b1")
-		expect(h.windows.navigated[1].url).toContain("verificationHash=HASH-a1")
+		expect(h.windows.navigated[0].url).toContain(`verificationHash=${hashOf("b1")}`)
+		expect(h.windows.navigated[1].url).toContain(`verificationHash=${hashOf("a1")}`)
 		expect(h.windows.created).toEqual([])
 		expect(terminated()).toEqual([])
 	})
@@ -500,9 +609,9 @@ describe("establishment shows the check in the connect window", () => {
 		await h.establish("twin")
 
 		expect(h.windows.navigated).toHaveLength(1)
-		expect(h.windows.navigated[0].url).toContain("verificationHash=HASH-f1")
+		expect(h.windows.navigated[0].url).toContain(`verificationHash=${hashOf("f1")}`)
 		expect(h.windows.created).toHaveLength(1)
-		expect(h.windows.created[0].url).toContain("verificationHash=HASH-twin&isReconnect=true")
+		expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("twin")}&isReconnect=true`)
 		expect(terminated()).toEqual([])
 	})
 
@@ -531,17 +640,20 @@ describe("establishment shows the check in the connect window", () => {
 		const establishing = h.establish("f1")
 		await vi.waitFor(() => expect(h.windows.navigated).toHaveLength(1))
 
-		captured?.onWalletMessage({ sessionId: "f1", origin: ORIGIN, tabId: 7, ...chain(1) }, { type: "sendTx", args: [], messageId: "m1" })
+		h.send("f1", "sendTx", "m1")
 		settle(navigation)
 		await establishing
 		await flush()
 	}
 
-	test("a sendTx arriving while the check loads is journaled and dispatched once it shows", async () => {
+	test("a sendTx arriving while the check loads is journaled at once and dispatched once the check is confirmed", async () => {
 		const h = boot()
 		dispatch.mockResolvedValueOnce(undefined)
 		await sendTxWhileNavigating(h, (navigation) => navigation.resolve())
+		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
+		expect(dispatch).not.toHaveBeenCalled()
 
+		h.confirm(hashOf("f1"))
 		await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1))
 		expect(dispatch.mock.calls[0][0]).toBe("sendTx")
 		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
@@ -552,11 +664,11 @@ describe("establishment shows the check in the connect window", () => {
 		const h = boot()
 		dispatch.mockResolvedValueOnce(undefined)
 		await sendTxWhileNavigating(h, (navigation) => navigation.resolve())
+		h.confirm(hashOf("f1"))
 		await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1))
 		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
 
-		const session = { sessionId: "f1", origin: ORIGIN, tabId: 7, ...chain(1) }
-		captured?.onWalletMessage(session, { type: "batch", args: [[{ name: "sendTx", args: [] }]], messageId: "m2" })
+		captured?.onWalletMessage(sessions.get("f1"), { type: "batch", args: [[{ name: "sendTx", args: [] }]], messageId: "m2" })
 		await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
 
 		await expect(dispatch.mock.results[1].value).rejects.toThrow(
@@ -609,7 +721,7 @@ describe("establishment shows the check in the connect window", () => {
 			await flush()
 			await h.establish("r2")
 			expect(h.windows.created).toHaveLength(1)
-			expect(h.windows.created[0].url).toContain("verificationHash=HASH-r2&isReconnect=true")
+			expect(h.windows.created[0].url).toContain(`verificationHash=${hashOf("r2")}&isReconnect=true`)
 
 			// A sibling's check set "Skip this check next time" on the row the abandoned attempt wrote.
 			const row = [...h.rows.values()][0]
@@ -629,4 +741,426 @@ describe("establishment shows the check in the connect window", () => {
 			expect(h.windows.created).toHaveLength(1)
 		},
 	)
+})
+
+describe("an app's calls wait for the person to confirm the check", () => {
+	const CHAIN = String(chainInfoToChainId(chain(1)))
+	/** The app's remembered row on chain 1 under p1, sharing `FAKE_SENDER` with a transaction grant. */
+	const remember = (h: ReturnType<typeof boot>, trusted: boolean) =>
+		h.rows.set(`${ORIGIN}|${CHAIN}`, {
+			id: "row-1",
+			profileId: "p1",
+			chainId: CHAIN,
+			trustedVerification: trusted,
+			accounts: [`aztec:${CHAIN}:${FAKE_SENDER}`],
+			capabilityGrants: [{ capability: { type: "transaction", scope: "*" } as { type: string } }],
+		})
+	/** A reconnect of the remembered app on `requestId`, which shows its own check unless the row is trusted. */
+	async function reconnect(h: ReturnType<typeof boot>, requestId: string) {
+		h.discover(requestId)
+		await flush()
+		await h.establish(requestId)
+		await settle()
+	}
+	/** The session ends, its check window closes, and the page key-exchanges the same id again. */
+	async function rekey(h: ReturnType<typeof boot>, requestId: string, checkWindow: number) {
+		h.handler.terminateSession(requestId)
+		h.windows.closeByUser(checkWindow)
+		await settle()
+		await reconnect(h, requestId)
+	}
+	/** Enough turns for a released call to reach the dispatcher; each control proves it with the same count. */
+	const settle = async () => {
+		for (let i = 0; i < 300; i++) await Promise.resolve()
+	}
+	const dispatched = () => dispatch.mock.calls.map(([method, , ctx]) => `${(ctx as { sessionId: string }).sessionId}:${method}`)
+	const row = (h: ReturnType<typeof boot>, n = 1) => h.journal.ops.get(`queued-${n}`)
+	/** The first verify window the fake browser created. */
+	const FIRST_CHECK_WINDOW = 100
+
+	beforeEach(() => {
+		dispatch.mockImplementation(async () => "ok")
+	})
+	afterEach(() => dispatch.mockReset())
+
+	test("calls sent while the check shows wait, then run in arrival order once it is confirmed; a later call runs at once", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		expect(h.windows.created).toHaveLength(1)
+		h.send("r1", "getChainInfo", "a")
+		h.send("r1", "sendTx", "s")
+		h.send("r1", "getAccounts", "b")
+		await settle()
+		expect(row(h)?.stage).toBe("queued")
+		expect(dispatched()).toEqual([])
+
+		h.confirm(hashOf("r1"))
+		await settle()
+		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
+		h.send("r1", "getAddressBook", "c")
+		await settle()
+		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts", "r1:getAddressBook"])
+		expect(terminated()).toEqual([])
+	})
+
+	test("control: a trusted reconnect shows no check and runs the same calls with no confirmation", async () => {
+		const h = boot()
+		remember(h, true)
+		await reconnect(h, "r1")
+		expect(h.windows.created).toEqual([])
+		h.send("r1", "getChainInfo", "a")
+		h.send("r1", "sendTx", "s")
+		h.send("r1", "getAccounts", "b")
+		await settle()
+		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:sendTx", "r1:getAccounts"])
+		h.send("r1", "getAddressBook", "c")
+		await settle()
+		expect(dispatched()).toHaveLength(4)
+	})
+
+	test("They don't match ends the session; its calls never run and the held send's row is refused", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.send("r1", "getChainInfo", "a")
+		h.send("r1", "sendTx", "s")
+		await settle()
+		h.refuse()
+		await settle()
+		expect(terminated()).toEqual(["r1"])
+		expect(dispatched()).toEqual([])
+		expect(responses).toEqual([])
+		expect(row(h)).toEqual({ sessionId: "r1", stage: "failed", kind: "wallet_refused" })
+	})
+
+	test("closing the check keeps the calls held; the tab closing then ends the session and refuses the row", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.send("r1", "sendTx", "s")
+		await settle()
+		h.windows.closeByUser(FIRST_CHECK_WINDOW)
+		await settle()
+		expect(terminated()).toEqual([])
+		expect(row(h)?.stage).toBe("queued")
+
+		h.closeTab(7)
+		await settle()
+		expect(terminated()).toEqual(["r1"])
+		expect(dispatched()).toEqual([])
+		expect(row(h)?.kind).toBe("wallet_refused")
+	})
+
+	test("a lock ends only the session whose check is unanswered, and its held send's row reads the lock", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "c1")
+		h.confirm(hashOf("c1"))
+		await reconnect(h, "h1")
+		h.send("h1", "sendTx", "s")
+		await settle()
+
+		h.lock()
+		await settle()
+		expect(terminated()).toEqual(["h1"])
+		expect(sessions.has("c1")).toBe(true)
+		expect(row(h)?.kind).toBe("session_ended")
+		expect(dispatched()).toEqual([])
+	})
+
+	test("an establishment that fails with no termination, its id's approval taken by another attempt, settles its hold: a lock ends nothing", async () => {
+		const h = boot()
+		h.discover("f1")
+		await flush()
+		h.allow("f1", 41)
+		await flush()
+		const establishing = h.establish("f1")
+		markers().set("f1", { ...markers().get("f1")! })
+		await establishing
+		await settle()
+		expect(terminated()).toEqual([])
+		expect(sessions.has("f1")).toBe(true)
+
+		h.lock()
+		await settle()
+		expect(terminated()).toEqual([])
+	})
+
+	test("a lock whose first termination throws still drops the other held session's calls", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "h1")
+		await reconnect(h, "h2")
+		h.send("h1", "sendTx", "s1")
+		h.send("h2", "sendTx", "s2")
+		await settle()
+		failingTerminations.add("h1")
+
+		h.lock()
+		await settle()
+		expect(terminated()).toEqual(["h1", "h2"])
+		expect([row(h, 1)?.kind, row(h, 2)?.kind]).toEqual(["session_ended", "session_ended"])
+		expect(dispatched()).toEqual([])
+	})
+
+	test("a direct switch to another profile ends the held session through the switch teardown", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.send("r1", "sendTx", "s")
+		await settle()
+		h.switchProfile("p2")
+		await settle()
+		expect(terminated()).toEqual(["r1"])
+		expect(dispatched()).toEqual([])
+		expect(row(h)?.kind).toBe("wallet_refused")
+	})
+
+	test("two checks for one app hold independently: each hash releases only its own session's calls", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		await reconnect(h, "r2")
+		h.send("r1", "getChainInfo", "a1")
+		h.send("r2", "getChainInfo", "a2")
+		await settle()
+		h.confirm(hashOf("r2"))
+		await settle()
+		expect(dispatched()).toEqual(["r2:getChainInfo"])
+		h.confirm(hashOf("r1"))
+		await settle()
+		expect(dispatched()).toEqual(["r2:getChainInfo", "r1:getChainInfo"])
+	})
+
+	test("past 32 held calls the next is answered -32005 at once, with no row; the 32 run after the confirmation", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		for (let i = 0; i < 32; i++) h.send("r1", "getChainInfo", `m${i}`)
+		h.send("r1", "sendTx", "over")
+		expect(responses).toEqual([
+			{
+				sessionId: "r1",
+				response: expect.objectContaining({
+					messageId: "over",
+					error: expect.objectContaining({ code: -32005, data: { walletErrorCode: "TOO_MANY_PENDING" } }),
+				}),
+			},
+		])
+		await settle()
+		expect(h.journal.createOperation).not.toHaveBeenCalled()
+
+		h.confirm(hashOf("r1"))
+		await vi.waitFor(() => expect(dispatched()).toHaveLength(32))
+		expect(dispatched()).not.toContain("r1:sendTx")
+	})
+
+	test("a hold dropped while the held send's row is still being written fails that row once the write lands", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		const write = deferred<void>()
+		const create = h.journal.createOperation.getMockImplementation()!
+		h.journal.createOperation.mockImplementationOnce(async (args) => {
+			await write.promise
+			return create(args)
+		})
+		h.send("r1", "sendTx", "s")
+		await settle()
+		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
+		h.refuse()
+		await settle()
+
+		write.resolve()
+		await settle()
+		expect(row(h)?.kind).toBe("wallet_refused")
+		expect(dispatched()).toEqual([])
+	})
+
+	test("the app's row deleted while its calls wait ends the session and refuses the held send", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.send("r1", "sendTx", "s")
+		await settle()
+		h.rowDeleted("p1")
+		await settle()
+		expect(terminated()).toEqual(["r1"])
+		expect(dispatched()).toEqual([])
+		expect(row(h)?.kind).toBe("wallet_refused")
+	})
+
+	test.each([
+		["They don't match", (h: ReturnType<typeof boot>) => h.refuse()],
+		["the row deleted", (h: ReturnType<typeof boot>) => h.rowDeleted("p1")],
+		["a direct switch to another profile", (h: ReturnType<typeof boot>) => h.switchProfile("p2")],
+	])(
+		"%s whose termination throws still refuses the held send; the live session's later calls run nothing and file nothing",
+		async (_, end) => {
+			const h = boot()
+			remember(h, false)
+			await reconnect(h, "r1")
+			const held = hashOf("r1")
+			h.send("r1", "sendTx", "s1")
+			await settle()
+			failingTerminations.add("r1")
+
+			end(h)
+			await settle()
+			expect(sessions.has("r1")).toBe(true)
+			expect(row(h)?.kind).toBe("wallet_refused")
+			h.confirm(held)
+			h.send("r1", "sendTx", "s2")
+			await settle()
+			expect(dispatched()).toEqual([])
+			expect([...h.journal.ops.keys()]).toEqual(["queued-1"])
+		},
+	)
+
+	test.each([
+		["completes", (write: ReturnType<typeof deferred<undefined>>) => write.resolve(undefined)],
+		["fails", (write: ReturnType<typeof deferred<undefined>>) => write.reject(new Error("the profile is locked"))],
+	])(
+		"an establishment whose hash write %s after a lock, an unlock into another profile and a same-id re-key leaves the successor alone",
+		async (_, finish) => {
+			const firstWrite = deferred<undefined>()
+			let writes = 0
+			const h = boot({ setVerificationHash: () => (++writes === 1 ? firstWrite.promise : Promise.resolve()) })
+			remember(h, false)
+			h.discover("r1")
+			await flush()
+			const stale = h.establish("r1")
+			await settle()
+			h.lock()
+			await settle()
+			// The person unlocks another profile, which has its own row for the app.
+			h.rows.set(`${ORIGIN}|${CHAIN}`, { ...h.rows.get(`${ORIGIN}|${CHAIN}`)!, profileId: "p2" })
+			h.switchProfile("p2")
+			await reconnect(h, "r1")
+			const successor = sessions.get("r1")
+			h.send("r1", "getChainInfo", "a")
+
+			finish(firstWrite)
+			await stale
+			await settle()
+			expect(sessions.get("r1")).toBe(successor)
+			expect(terminated()).toEqual(["r1"])
+			expect(dispatched()).toEqual([])
+			h.confirm(hashOf("r1"))
+			await settle()
+			expect(dispatched()).toEqual(["r1:getChainInfo"])
+			expect(terminated()).toEqual(["r1"])
+		},
+	)
+
+	test("a send decrypted for an ended session files nothing and runs nothing on the session that re-keyed its id", async () => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		const ended = sessions.get("r1")
+		await rekey(h, "r1", FIRST_CHECK_WINDOW)
+		h.confirm(hashOf("r1"))
+		await settle()
+
+		h.send("r1", "sendTx", "late", ended)
+		await settle()
+		expect(h.journal.createOperation).not.toHaveBeenCalled()
+		expect(dispatched()).toEqual([])
+		expect(responses).toEqual([])
+		h.send("r1", "sendTx", "own")
+		await settle()
+		expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
+		expect(dispatched()).toEqual(["r1:sendTx"])
+	})
+
+	test("a call parked behind a confirmed session's slow call never runs on the session that re-keys its id", async () => {
+		const legal = vi.fn(async () => undefined)
+		const h = boot({ legal })
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.confirm(hashOf("r1"))
+		const slow = deferred<unknown>()
+		dispatch.mockImplementationOnce(() => slow.promise as never)
+		h.send("r1", "getChainInfo", "first")
+		h.send("r1", "sendTx", "parked")
+		await settle()
+		expect(dispatched()).toEqual(["r1:getChainInfo"])
+
+		await rekey(h, "r1", FIRST_CHECK_WINDOW)
+		const termsReads = legal.mock.calls.length
+		slow.resolve("ok")
+		await settle()
+		expect(dispatched()).toEqual(["r1:getChainInfo"])
+		expect(responses).toEqual([])
+		expect(row(h)?.kind).toBe("wallet_refused")
+		// Dropped as soon as the FIFO reaches it, before it reads anything for a session that is gone.
+		expect(legal.mock.calls.length).toBe(termsReads)
+
+		h.send("r1", "getAccounts", "own")
+		h.confirm(hashOf("r1"))
+		await settle()
+		expect(dispatched()).toEqual(["r1:getChainInfo", "r1:getAccounts"])
+	})
+
+	test.each([
+		["ends and its id re-keys", true],
+		["stays live (control)", false],
+	])("a confirmed session's call paused in the Terms read while the session %s", async (_, rekeyed) => {
+		let nextRead: Promise<void> | undefined
+		const h = boot({
+			legal: () => {
+				const held = nextRead
+				nextRead = undefined
+				return held ?? Promise.resolve()
+			},
+		})
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.confirm(hashOf("r1"))
+		const read = deferred<void>()
+		nextRead = read.promise
+		h.send("r1", "sendTx", "s")
+		await settle()
+		expect(dispatched()).toEqual([])
+
+		if (rekeyed) await rekey(h, "r1", FIRST_CHECK_WINDOW)
+		read.resolve()
+		await settle()
+		expect(dispatched()).toEqual(rekeyed ? [] : ["r1:sendTx"])
+		expect(responses.map((r) => r.response.messageId)).toEqual(rekeyed ? [] : ["s"])
+		expect(row(h)?.kind).toBe(rekeyed ? "wallet_refused" : undefined)
+	})
+
+	test.each([
+		["ends and its id re-keys", true],
+		["stays live (control)", false],
+	])("a profile mismatch found after the fence read, while the session %s", async (_, rekeyed) => {
+		const h = boot()
+		remember(h, false)
+		await reconnect(h, "r1")
+		h.confirm(hashOf("r1"))
+		const fence = deferred<void>()
+		h.holdNextProfileRead(fence.promise)
+		h.send("r1", "getChainInfo", "g")
+		await settle()
+
+		if (rekeyed) await rekey(h, "r1", FIRST_CHECK_WINDOW)
+		const successor = sessions.get("r1")
+		h.setProfile({ id: "p2" })
+		fence.resolve()
+		await settle()
+		expect(dispatched()).toEqual([])
+		if (rekeyed) {
+			expect(responses).toEqual([])
+			expect(terminated()).toEqual(["r1"])
+			expect(sessions.get("r1")).toBe(successor)
+		} else {
+			expect(responses).toEqual([
+				{ sessionId: "r1", response: expect.objectContaining({ messageId: "g", error: SESSION_INVALID_ERROR }) },
+			])
+			expect(terminated()).toEqual(["r1"])
+			expect(sessions.has("r1")).toBe(false)
+		}
+	})
 })

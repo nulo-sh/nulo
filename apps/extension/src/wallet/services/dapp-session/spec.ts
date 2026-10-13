@@ -124,6 +124,7 @@ export type Methods = {
 	updateDappSession(sessionId: string, permissions: DappPermissions[], accounts: string[], confirmationLevel: AccessLevel): DappSession
 	deleteDappSession(sessionId: string): DappSession
 	refuseVerification(target: VerificationRefusalTarget): VerificationRefusal
+	confirmVerification(verificationHash: string): void
 	setVerificationHash(sessionId: string, verificationHash: string): DappSession
 	setTrustedVerification(sessionId: string, trusted: boolean): DappSession
 	setAuthorizationsWithoutAsking(sessionId: string, on: boolean, shownBroad: boolean): DappSession
@@ -140,4 +141,5 @@ export type Events = {
 	onDappSessionUpdated: DappSession
 	onDappSessionDeleted: DappSession
 	onVerificationRefused: { origin: string; chainId: string; profileId: string }
+	onVerificationConfirmed: { verificationHash: string }
 }

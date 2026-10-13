@@ -16,7 +16,8 @@ type Callbacks = {
 }
 let captured: Callbacks | undefined
 const handlerCalls: string[] = []
-const live = new Set<string>()
+/** The SDK's active sessions by id, each the object it handed to establishment. */
+const live = new Map<string, { sessionId: string }>()
 let approveReturns = true
 
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
@@ -28,7 +29,10 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 			return Promise.resolve()
 		}
 		getActiveSessions() {
-			return [...live].map((sessionId) => ({ sessionId }))
+			return [...live.values()]
+		}
+		getSession(id: string) {
+			return live.get(id)
 		}
 		approveDiscovery(id: string) {
 			handlerCalls.push(`approve:${id}`)
@@ -103,14 +107,15 @@ function boot(
 		})
 	/** The SDK finished key exchange for an approved request: establish it (opens the verify window if due). */
 	const establish = async (requestId: string, over: Record<string, unknown> = {}) => {
-		live.add(requestId)
-		await captured?.onSessionEstablished({
+		const session = {
 			origin: ORIGIN,
 			sessionId: requestId,
 			verificationHash: "HASH",
 			chainInfo: { chainId: "1", version: "1" },
 			...over,
-		})
+		}
+		live.set(requestId, session)
+		await captured?.onSessionEstablished(session)
 	}
 	const closeWindow = (id: number) => {
 		for (const l of onRemoved) l(id)

@@ -162,7 +162,8 @@ export function toWalletResponseError(error: unknown): WalletResponse["error"] {
 	if (error instanceof TooManyPendingError) {
 		// -32005 = JSON-RPC "Limit exceeded" (closest standard; EIP-1193 has no
 		// rate-limit code). Backpressure — the dApp retries after its in-flight
-		// sendTx settle. No origin/profile detail (no oracle).
+		// sendTx settle, or, for a call held behind an unanswered emoji check,
+		// after the check is answered. No origin/profile detail (no oracle).
 		return {
 			code: -32005,
 			message: error.message,

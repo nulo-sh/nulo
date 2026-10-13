@@ -86,6 +86,7 @@ function makeServices(discoverImpl: () => Promise<{ approved: boolean }>) {
 		"dapp-session": {
 			onDappSessionDeleted,
 			onVerificationRefused: new EventHandler<unknown>(),
+			onVerificationConfirmed: new EventHandler<unknown>(),
 			tryGetDappSessionByOriginAndChain: async () => undefined,
 			addDappSession: async () => {
 				const s = { id: `s${sessions.size + 1}`, profileId: "p1" }
@@ -132,8 +133,9 @@ describe("initWalletSdkHandler install order", () => {
 		expect(log.at(-1)).toBe("handler:initialize")
 		expect(log.indexOf("tabs:wire")).toBe(log.length - 2)
 		expect(log.indexOf("sessionDeleted:add")).toBeLessThan(log.indexOf("profile:add"))
-		// Three profile subscriptions: switch-epoch tracker, teardown, the drain.
-		expect(log.filter((l) => l === "profile:add")).toHaveLength(3)
+		// Four profile subscriptions: switch-epoch tracker, teardown, the lock's end of unconfirmed
+		// sessions, the drain.
+		expect(log.filter((l) => l === "profile:add")).toHaveLength(4)
 		expect(captured).toBeDefined()
 	})
 })

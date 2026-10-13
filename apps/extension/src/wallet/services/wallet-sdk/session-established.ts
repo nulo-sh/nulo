@@ -12,6 +12,7 @@ import { LogLevel } from "../../logger"
 import { topRightOf } from "../window-manager/placement"
 import { createPlaced } from "../window-manager/window-manager"
 import { isPendingVerificationDead, type PendingVerificationEntry, settlePendingVerification } from "./pending-verification"
+import type { VerificationHold } from "./verification-hold"
 import type { WindowReservation } from "./verify-admission"
 import { describeExternalId } from "@nulo/wallet-bridge"
 
@@ -51,11 +52,12 @@ export interface SessionEstablishedDeps {
 		): Promise<{ id: string; profileId: string; trustedVerification?: boolean } | undefined>
 		setVerificationHash(sessionId: string, verificationHash: string): Promise<unknown>
 	}
+	/** Ends this very session object; a same-id successor is never ended. */
 	terminateSession: (sessionId: string) => void
-	/** Whether the transport session is still in the handler's active set — a
-	 *  switch-teardown can terminate a mid-validation session, and stamping a
-	 *  dead one would leak a `sessionProfiles` entry and pop a verify window
-	 *  for a closed channel. */
+	/** Whether this very session object is still the handler's session for its id — a
+	 *  switch-teardown or a lock can terminate a mid-validation session, which a same-id
+	 *  successor must not pass for, and stamping a dead one would leak a `sessionProfiles`
+	 *  entry and pop a verify window for a closed channel. */
 	isSessionLive: (sessionId: string) => boolean
 	pendingVerification: Map<string, PendingVerificationEntry>
 	/** Bind the established transport session to the profile that owns it —
@@ -65,6 +67,8 @@ export interface SessionEstablishedDeps {
 	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused" | "navigate" | "update">
 	/** The verify-window slot admission reserved for this session id, if the handshake needed one. */
 	reservations: { reservation(sessionId: string): WindowReservation | undefined }
+	/** The session's gate on dispatch: released here only when no check is shown. */
+	hold: Pick<VerificationHold, "release">
 	logger: ILogger
 }
 
@@ -83,7 +87,8 @@ export function verifyWindowUrl(dappSessionId: string, verificationHash: string,
  * The check's grid comes from this session's own hash in the window URL, never from the shared
  * row a concurrent session for the same `(origin, chainId)` can overwrite. A session whose
  * hash could not be persisted or whose check could not be shown is terminated and resolves
- * `false`, and the caller dispatches no message before this resolves `true`.
+ * `false`, and the caller dispatches no message before this resolves `true`. A session that needs
+ * no check has its hold released here; one shown the check stays held until the person confirms.
  */
 export async function handleSessionEstablished(
 	session: { origin: string; sessionId: string; verificationHash: string } & Parameters<typeof chainInfoToChainId>[0],
@@ -96,8 +101,9 @@ export async function handleSessionEstablished(
 	const isNewConnection = marker !== undefined
 	const reservation = deps.reservations.reservation(session.sessionId)
 	let stamped = false
-	// Before the stamp, a reused id may name another attempt, which termination by id would end; a
-	// stamped channel ends whatever the id names.
+	// Before the stamp, a reused id may name another attempt's approval, which ending this session
+	// would overwrite (upstream restores the id's discovery on termination); once stamped, the
+	// channel is this attempt's own to end.
 	const terminate = (): false => {
 		if (stamped || lostApproval(deps.pendingVerification, session.sessionId, marker) !== "replaced") {
 			deps.terminateSession(session.sessionId)
@@ -184,7 +190,7 @@ export async function handleSessionEstablished(
 			if (!reservation) throw new Error("verify window has no reserved slot")
 			const url = verifyWindowUrl(dappSession.id, session.verificationHash, !isNewConnection)
 			await showVerifyWindow(url, session.sessionId, reservation, deps)
-		}
+		} else deps.hold.release()
 		established = true
 		return true
 	} catch (err) {
