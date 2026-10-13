@@ -1,7 +1,7 @@
 ---
 plan: dapp-dispatch-hold
 tier: deep
-status: planned; panel approved (final pass round 2 conditional approve, condition met); awaiting orchestrator approval
+status: in review, held for the decision page (2026-10-13); one draft PR closing #15, built and gated; merges after the owner signs DH-0
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,7 +15,40 @@ trunk: dev
 issues: [15]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults: [lessons/phase-0.md](lessons/phase-0.md).
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** in review, held for the decision page. One draft PR against `dev`, `feat(dapp): hold an app's calls until the person confirms the emoji check`, closes #15. It stays a draft until the owner signs the decision page for OWNER-ASKS DH-0 to DH-6, built from the PR's shots (D-orch-1, D-orch-5); the merge that lands it closes this plan. If the page approves a visible line, the orchestrator reopens this close-out for it (D-orch-6).
+- **Shipped:** one PR, with its close-out.
+  - **The hold** (`verification-hold.ts`): one settle-once hold per transport session, opened synchronously when upstream reports the session established and bound to its own verification hash. A trusted reconnect releases it; otherwise only They match on that very check does. Termination, a failed establishment and a re-key drop it `wallet_refused`; a lock drops it `session_ended`. Calls that arrive meanwhile wait behind the session's queue, then run in arrival order.
+  - **The report:** the verify page sends the hash its URL carried through `confirmVerification`, an internal RPC that extension pages alone can reach and that refuses anything but 64 lower-case hex; the event it emits releases the matching hold before the RPC answers.
+  - **Session identity** (`live-session.ts`, L16, L18): arrival, the post-release check, the check right before dispatch, every response and termination, and establishment's liveness gates and terminations act on the `ActiveSession` object upstream handed them, never on the id, so nothing paused across a same-id re-key reaches, answers or ends the successor. A call whose session is not live on arrival is dropped there with no row.
+  - **The wallet's own terminations** (refusal, a deleted row, a switch with no lock, a cross-origin navigation) drop the hold before they reach the transport, so a termination that throws cannot leave a refused send queued.
+  - **The lock rule** (DH-2 = A, D-orch-2): a lock ends every session whose check is unanswered, and the app gets the standard disconnect; a held send's row reads "Stopped when the wallet locked". This is the behaviour P2-09's scope named ("a lock ... while held ends the session and drops the calls"). A confirmed channel keeps today's behaviour.
+  - **The cap** (Ask 3, D-orch-3): 32 held calls per unconfirmed session; the 33rd is answered `-32005` with today's message at arrival, with no row and no queue slot. No contract page item.
+  - **Tests:** unit tests for the hold, the identity binding, the service method and the verify page; callback integration tests over the real `background.ts` for every ending in § Teardown table, with a dispatch spy and a trusted-reconnect control; the network spec `verify-hold.test.ts`; `reconnectPlayground` answers the check; the trusted reconnect proves a read runs with no check. Each guard was removed once and a test went red (M0 to M10, `lessons/phase-1-2.md` and `lessons/phase-3-4.md`).
+  - **Docs:** `ARCHITECTURE.md` § 8 states the hold; `FIREFOX.md` drops a line the change made false.
+- **Owner asks as shipped** (D-orch-4): DH-0 is the merge condition, open until the page is signed. DH-1 = A, nothing new on the check. DH-2 = A, built. DH-3: the existing copy (W, or L after a lock, titled "Transaction"). DH-4: no playground change. DH-5 = A ships, and the wording stays an owner ask, #346. DH-6: no new surface.
+- **Gates** (all at retry 0, the network runs armed `NULO_E2E_PROVERLESS=1` except the canaries):
+  - Lint, `typecheck:all`, `test:all`, `audit:vue` and `test:ci-gating` green on the merged head; `scripts/complexity-baseline/manifest.json` unchanged, no suppression.
+  - The targeted network files, Chrome 9 files and Firefox 10, green on both browsers, and again on Chrome on the final build.
+  - The full network suite on both browsers: 114 files passed and 5 skipped (opt-in or browser-specific) of 119 on each. The Firefox suite ran as two runs, because the first hit the harness's two-hour cap on a background command after 112 files with no failure (`lessons/phase-3-4.md`).
+  - Both prover-ON execution canaries green on both browsers.
+  - Smoke on both browsers. The PR body lists every file, with its browser and pass counts.
+- **Review loop:**
+  - The plan: three drafts, a contradiction check, a double audit, and a final fresh Codex pass in two rounds, ending in approve (§ Audit verdicts).
+  - The implementation: Codex reject, reject, approve in three rounds, with an Opus review (conditional approve) beside the first. Every finding is dispositioned in § Audit verdicts.
+- **Dropped, rejected, superseded:**
+  - **Sender proof, a byte budget, unconfirmed-session bounds, an expiry timer, an e2e trace recorder, a global or per-origin cap:** rejected in the ledger (L4, L6, L8, L9; § Trade-offs). The byte bound is an existing gap for every call and is filed as #345.
+  - **The `showCheck` extraction:** not needed. `handleSessionEstablished` stayed within its budget (L13).
+  - **"A missing hold drops the call `wallet_refused`":** superseded by the arrival drop with no row (L18).
+  - **Opus findings 3 and 7** (answering calls on a session whose termination threw; the lock's log level): rejected, with reasons in § Audit verdicts.
+  - **"History shows the held send's queued row":** corrected. History lists a send once it ends, as today; Home's Recent activity shows it while it waits.
+  - **`STATUS.md`:** removed at close-out.
+- **Open items:** #345, #346.
+- **Seeds retired:** this plan's `/goal` and `/loop` seeds. It is a record of what was decided and why, never a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md). Consults and phase logs: [lessons/phase-0.md](lessons/phase-0.md), [lessons/phase-1-2.md](lessons/phase-1-2.md), [lessons/phase-3-4.md](lessons/phase-3-4.md).
 
 # Hold an app's calls until the person confirms the emoji check (#15)
 
