@@ -752,6 +752,11 @@ describe("type role ban rules", () => {
 			["text-prop"],
 		],
 		[
+			"text-prop: Text aliased from the package barrel",
+			'<script setup>import { Flex, Text as Label } from "@nulo/design"</script><template><Label size="12">x</Label></template>',
+			["text-prop"],
+		],
+		[
 			"tie: the module class of a <Text variant>",
 			'<template><Text variant="label" :class="$style.k">x</Text></template><style module>.k { font-weight: 600; }</style>',
 			["tie"],

@@ -215,10 +215,15 @@ export function boundAttr(node: TemplateNode, name: string): string | undefined 
 }
 
 const TEXT_IMPORT = /import\s+(\w+)\s+from\s+["'][^"']*\/Text\.vue["']/g
+const BARREL_IMPORT = /import\s*\{([^}]*)\}\s*from\s*["']@nulo\/design["']/g
+const BARREL_TEXT = /(?:^|,)\s*Text\s+as\s+(\w+)\s*(?=,|$)/g
 
 /** Every tag name `Text` renders under in this file: the auto-import, plus each local import name. */
 export function textTagNames(parsed: ParsedSource): Set<string> {
 	const names = new Set(["Text"])
-	for (const { content } of parsed.scripts) for (const match of content.matchAll(TEXT_IMPORT)) names.add(match[1])
+	for (const { content } of parsed.scripts) {
+		for (const match of content.matchAll(TEXT_IMPORT)) names.add(match[1])
+		for (const [, list] of content.matchAll(BARREL_IMPORT)) for (const match of list.matchAll(BARREL_TEXT)) names.add(match[1])
+	}
 	return names
 }
