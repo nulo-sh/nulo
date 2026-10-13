@@ -3,7 +3,7 @@
  *  and of the row's icon, and how far apart rows sit and whether anything leaves one. */
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
-import { prepareKeys, waitForNewTab, waitForTarget } from "./fixtures/browser"
+import { prepareKeys, waitForNewTab } from "./fixtures/browser"
 import { type ExtensionContext, openPopup, test, waitForHash } from "./fixtures/extension"
 import {
 	addContact,
@@ -17,6 +17,7 @@ import {
 	setTheme,
 } from "./fixtures/helpers"
 import { settleClosedPopup } from "./fixtures/popup-leave"
+import { waitForPopup } from "./fixtures/popups"
 import { readActivityScope, seedReceipt, seedTokenRow, seedTransaction } from "./helpers/activity-seeds"
 import { pointerClick } from "./helpers/legal-drivers"
 import { coveredAt, pressEscape, tabAround, waitForFocus } from "./helpers/pointer-probes"
@@ -429,12 +430,9 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 	await waitForFocus(page, "settings-logs-open")
 
 	const before = new Set(registeredExtension.browser.targets())
+	const logsP = waitForPopup(registeredExtension, "logger", { timeout: 10_000 })
 	await page.keyboard.press("Enter")
-	const logs = await waitForTarget(
-		registeredExtension.browser,
-		(t) => t.type() === "page" && !before.has(t) && t.url().includes("#/windows/logger"),
-		10_000,
-	)
+	const logs = await logsP
 	try {
 		// The window is open, so Space brings it forward instead of opening a second one.
 		await prepareKeys(page)
@@ -443,7 +441,7 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 		await page.waitForFunction(() => (window as unknown as Probe).__logsClicks === 2, { timeout: 5_000, polling: 50 })
 		expect(registeredExtension.browser.targets().filter((t) => t.type() === "page" && !before.has(t))).toHaveLength(1)
 	} finally {
-		await (await logs.asPage()).close().catch(() => undefined)
+		await logs.close().catch(() => undefined)
 	}
 
 	expect(registeredExtension.pageErrors).toEqual([])
