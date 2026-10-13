@@ -722,3 +722,7 @@ No contradiction with the lane rules was found by either.
 
 **Codex (gpt-6.1-sol, high, fresh session): reject.** One finding, accepted. The round-1 fixes were not disputed.
 1. Major: establishment still checked liveness and terminated by id. An untrusted reconnect paused in its hash write, then ended by a lock, followed by an unlock and a same-id re-key, resumed on the successor's id. With a failed write it ended the successor. With a completed write it stamped its own profile over the successor's, and the identity guard then ended the successor on its first released call. Fixed: establishment's `isSessionLive` and `terminateSession` are bound to its own session object (L16). Test: a `test.each` over a hash write that completes and one that fails, unlocking into another profile whose row the app also has. Liveness by id goes red on the first case and termination by id on the second. Two more mocked handlers (`background.admission.test.ts`, `background.refusal-teardown.test.ts`) now keep the session objects upstream would.
+
+### Implementation review, round 3 (2026-10-13)
+
+**Codex (gpt-6.1-sol, high, fresh session): approve.** It found no functional defect and confirmed that the accepted fixes close the reported races. One nit, accepted: `session-established.ts`'s comment on its termination still said a stamped channel "ends whatever the id names", which the round-2 binding made false. Rewritten, and the `terminateSession` and `isSessionLive` contracts now say they act on that session object. The loop stops here (three rounds) with no finding open.

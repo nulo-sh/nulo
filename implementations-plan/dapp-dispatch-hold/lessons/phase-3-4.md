@@ -19,3 +19,7 @@
 - Codex (session `01a1335e`): reject, one major: establishment's id-based liveness and termination. It was real. The lock rule made a mid-establishment end reachable, and the regression test reproduced the successor's loss before the fix.
 - The first version of the test proved only the termination binding. With liveness by id it stayed green, because the stale establishment stamped the same profile as the successor. The harm needs a successor under another profile, so the test unlocks into p2, whose row the app also has. Each binding then has its own red (M9 liveness by id, M10 termination by id).
 - Rebinding establishment broke two harnesses whose mocked handler kept ids, not session objects (`background.admission.test.ts`, `background.refusal-teardown.test.ts`). They now store the object establishment receives and answer `getSession` with it, as upstream does.
+
+## Implementation review, round 3 (2026-10-13)
+
+- Codex (session `01a1336a`): approve. One nit, a comment the round-2 binding made false. The loop closed at three rounds with nothing open.

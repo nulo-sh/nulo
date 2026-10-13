@@ -52,11 +52,12 @@ export interface SessionEstablishedDeps {
 		): Promise<{ id: string; profileId: string; trustedVerification?: boolean } | undefined>
 		setVerificationHash(sessionId: string, verificationHash: string): Promise<unknown>
 	}
+	/** Ends this very session object; a same-id successor is never ended. */
 	terminateSession: (sessionId: string) => void
-	/** Whether the transport session is still in the handler's active set — a
-	 *  switch-teardown can terminate a mid-validation session, and stamping a
-	 *  dead one would leak a `sessionProfiles` entry and pop a verify window
-	 *  for a closed channel. */
+	/** Whether this very session object is still the handler's session for its id — a
+	 *  switch-teardown or a lock can terminate a mid-validation session, which a same-id
+	 *  successor must not pass for, and stamping a dead one would leak a `sessionProfiles`
+	 *  entry and pop a verify window for a closed channel. */
 	isSessionLive: (sessionId: string) => boolean
 	pendingVerification: Map<string, PendingVerificationEntry>
 	/** Bind the established transport session to the profile that owns it —
@@ -100,8 +101,9 @@ export async function handleSessionEstablished(
 	const isNewConnection = marker !== undefined
 	const reservation = deps.reservations.reservation(session.sessionId)
 	let stamped = false
-	// Before the stamp, a reused id may name another attempt, which termination by id would end; a
-	// stamped channel ends whatever the id names.
+	// Before the stamp, a reused id may name another attempt's approval, which ending this session
+	// would overwrite (upstream restores the id's discovery on termination); once stamped, the
+	// channel is this attempt's own to end.
 	const terminate = (): false => {
 		if (stamped || lostApproval(deps.pendingVerification, session.sessionId, marker) !== "replaced") {
 			deps.terminateSession(session.sessionId)
