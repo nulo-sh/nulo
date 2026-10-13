@@ -396,8 +396,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 				endQueuedWait: (journalId) => this.lane.endQueuedWait(journalId),
 				isSlotBusy: (profileId, chainId) => this.lane.isSlotBusy(profileId, chainId),
 				tryTakeSlot: (profileId, chainId) => this.lane.tryTakeSlot(profileId, chainId),
-				acquireTransferSlot: (networkId, journalId, fence, signal) =>
-					this.lane.acquireTransferSlot(networkId, journalId, fence, signal),
+				acquireTransferSlot: (networkId, journalId, fence, signal, onWait) =>
+					this.lane.acquireTransferSlot(networkId, journalId, fence, signal, onWait),
 			},
 			sequencer: this.sendSequencer,
 			getTokenContract: async (tokenId) => (await this.tokenService.getTokenRaw(tokenId)).contract,

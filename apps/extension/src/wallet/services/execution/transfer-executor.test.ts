@@ -969,7 +969,10 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		expect((busy.deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls[0][1]).toEqual({ stage: "pending" })
 	})
 
-	test("a dApp tx that shares a key and is pending once the slot frees: the slot goes back and the send waits again", async () => {
+	const stages = (deps: { transitionJournal: unknown }) =>
+		(deps.transitionJournal as ReturnType<typeof vi.fn>).mock.calls.map((c) => (c[1] as { stage: string }).stage)
+
+	test("a dApp tx that shares a key and is pending once the slot frees: the slot goes back and the send waits again at queued", async () => {
 		const pending: { hash: string; chainId: number; account: string; calls: unknown[]; createdAt: number }[] = []
 		const sequencer = new SendSequencer({
 			pendingTxs: () => pending as never,
@@ -988,12 +991,63 @@ describe("TransferExecutor: sends that share chain state take turns", () => {
 		})
 		const run = executor.execute(makeReq(), undefined, FENCE)
 		await vi.waitFor(() => expect(releases[0]).toHaveBeenCalled())
+		expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "pending" } }))
+		await vi.waitFor(() => expect(stages(deps)).toEqual(["queued"]))
 		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 		pending.length = 0
 		await run
 		expect(releases).toHaveLength(2)
 		expect(deps.buildAndEstimate).toHaveBeenCalled()
 		expect(releases[1]).toHaveBeenCalled()
+		expect(stages(deps).slice(0, 3)).toEqual(["queued", "pending", "simulating"])
+		expect(stages(deps).filter((stage) => stage === "queued")).toHaveLength(1)
+	})
+
+	test("a slot another send takes after the row was created: the row reads queued for that wait, then is claimed", async () => {
+		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
+		let grant!: () => void
+		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(
+			async (_n: string, _j: string, _f: unknown, _s: AbortSignal, onWait?: () => void) => {
+				onWait?.()
+				await new Promise<void>((resolve) => {
+					grant = resolve
+				})
+				return () => {}
+			},
+		)
+		const run = executor.execute(makeReq(), undefined, FENCE)
+		await vi.waitFor(() => expect(stages(deps)).toEqual(["queued"]))
+		expect(deps.createJournalOperation).toHaveBeenCalledWith(expect.objectContaining({ initialStage: { stage: "pending" } }))
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
+		grant()
+		await run
+		expect(stages(deps).slice(0, 3)).toEqual(["queued", "pending", "simulating"])
+	})
+
+	test("a cancel that wins the move back to queued ends the wait as cancelled, with nothing built", async () => {
+		let registered: AbortController | undefined
+		const { executor, deps } = makeHarness({ sequencer: sequencerOnPendingMap() })
+		;(deps.lane.registerInFlight as ReturnType<typeof vi.fn>).mockImplementation((_id: string, _s: number, c: AbortController) => {
+			registered = c
+			return { live: true }
+		})
+		;(deps.lane.acquireTransferSlot as ReturnType<typeof vi.fn>).mockImplementation(
+			(_n: string, journalId: string, _f: unknown, signal: AbortSignal, onWait?: () => void) => {
+				onWait?.()
+				return new Promise((_resolve, reject) =>
+					signal.addEventListener("abort", () => reject(new JobCancelledSentinel(journalId))),
+				)
+			},
+		)
+		;(deps.transitionJournal as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, progress: { stage: string }) => {
+			if (progress.stage !== "queued") return {}
+			// The cancel's own transition lands first, then it aborts.
+			await Promise.resolve()
+			registered?.abort()
+			throw new Error("illegal transition cancelled -> queued")
+		})
+		await expect(executor.execute(makeReq(), undefined, FENCE)).rejects.toBeInstanceOf(JobCancelledError)
+		expect(deps.buildAndEstimate).not.toHaveBeenCalled()
 	})
 
 	test("a cancel that wins the claim ends the send as cancelled and frees the slot", async () => {
