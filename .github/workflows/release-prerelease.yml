@@ -13,7 +13,7 @@ name: release-please (dev / prerelease)
 #      `chore(dev): release X.Y.Z-rc[.N]`.
 #   4. Review + merge the PR.
 #   5. The publish chain runs via release.yml's workflow_dispatch escape
-#      hatch (see CLAUDE.md `### Release runbook` → `Prerelease (rc)`).
+#      hatch (see .claude/skills/release/SKILL.md → `Prerelease (rc)`).
 on:
   workflow_dispatch:
 
