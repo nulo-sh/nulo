@@ -428,9 +428,10 @@ export class DappSendExecutor {
 		// Reuse fingerprints bind the POST-PLANNER, PRE-DISCOVERY action set —
 		// the consume side re-derives the same normalization point.
 		const preDiscoveryActions = [...actions]
-		// Read before the build: a send that reaches the node during it may hold this build's notes.
+		// Read before the build: a send that reaches the node, or settles, during it may hold this build's notes.
 		const { chainId } = await this.deps.getNetwork(operation.networkId)
 		const sequenceEpoch = this.deps.sequenceEpoch(chainId, operation.accountAddress)
+		const pendingHashes = this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash)
 		// A settled predecessor's block the node lacks: neither the epoch nor the pending set changes
 		// once it lands, so a build simulated without it must not be reused.
 		const lagging = this.deps.chainTip.unconfirmed({ chainId, account: operation.accountAddress }, undefined, operation.networkId)
@@ -459,7 +460,7 @@ export class DappSendExecutor {
 		const discoveredHashes = discovered.map((d) => d.messageHash)
 		const estimateId = lagging
 			? undefined
-			: await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, sequenceEpoch)
+			: await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, { sequenceEpoch, pendingHashes })
 		// `send_transaction`'s confirm skips discovery, so listing what THIS estimate
 		// found would show authorizations confirm never adds.
 		const bound = operation.kind === "aztec_sendTx"
@@ -569,7 +570,7 @@ export class DappSendExecutor {
 		detectedFee: FeeOptions | undefined,
 		built: FeeEstimate,
 		discoveredHashes: readonly string[],
-		sequenceEpoch: number,
+		before: { sequenceEpoch: number; pendingHashes: readonly string[] },
 	): Promise<string | undefined> {
 		const { feeSettings } = identity
 		const kind = feeSettings.paymentMethod.kind
@@ -606,8 +607,7 @@ export class DappSendExecutor {
 				baseFeeFingerprint,
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
-				pendingHashes: this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash),
-				sequenceEpoch,
+				...before,
 				fpcIdentity: built.fpcIdentity,
 				txRequest: built.txRequest,
 				initializesAccount: built.initializesAccount,

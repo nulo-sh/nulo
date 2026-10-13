@@ -929,6 +929,7 @@ Arc 1b deviations from the text above (detail in `lessons/phase-1b.md`):
 - **D49 Only dApp-origin sends wait.** A wallet send through the same path (Settings: revoking authwits, toggling the auth registry; `OriginType.UI`) keeps today's behaviour: it has no record before its claim, so a wait would be a spinner with no card and nothing to cancel, and OA-3 names dApp sends (Opus, arc 1b review).
 - **D50 A lag-window dApp estimate is never stashed.** A build simulated while a settled predecessor's block is past the node's tip passes the reuse ladder's epoch and pending checks once the block lands, so `estimateOperationFee` skips the stash then (the ineligible path that already exists); the confirm builds afresh after the gate. The approval window is unchanged (Opus, arc 1b review).
 - **D51 Gate hygiene.** An observation is recorded once per placement (`hash|block hash`), so a later update of the same row (its finality) never restarts a lapsed hold; a failed read releases everything observed before the failure, not before the read began; a cancel ends `wait` without waiting out a tip read, and the recheck sleep never overshoots the bound (Codex, arc 1b review).
+- **D52 The dApp reuse snapshot is the pre-build view.** `estimateOperationFee` reads the pending set with the epoch, before the build, so a predecessor that settles during the build is a change the confirm sees. This replaces the post-build read pinned by #60: that read only turned a tx landing after the build into a hit, which the pre-build epoch already refuses (Codex, arc 1b review round 2).
 
 ## Audit verdicts
 
@@ -1127,6 +1128,8 @@ Also: a vacuous `beginEstimate(...)?.end()` now asserts admission; four comments
 Comment: "today's degraded mode" reworded.
 
 Every new test fails on the pre-fix source (six cases), and the fixes restore it.
+
+**Round 2 (resumed Codex session): one P2, accepted.** The pending set was still read at stash time, after the build: a predecessor pending when the estimate began, settling during the build, left an empty snapshot, the gate's `lagging` sample was already taken, and the confirm would reuse the stale build once the gate cleared. Fixed (D52); a test settles the predecessor inside the build fake and fails on the round-1 source, and the #60 pin now asserts the pre-build view. Codex confirmed the round-1 fixes: skipping the stash still mints an independent `previewId`, cancellation evicts it, and every dApp send arm keeps `OriginType.DAPP` through `runInSlot`. Two gate comments corrected.
 
 ## Seeds
 

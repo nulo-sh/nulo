@@ -1127,6 +1127,22 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 		expect(stash[1]).toMatchObject({ sequenceEpoch: 4 })
 	})
 
+	test("the stash records the account's pending set as it was before the build: a send settling during it is a miss", async () => {
+		let pending = [{ hash: "0xprev" }]
+		const { executor, deps, built, buildAndEstimateValidated, buildAndEstimateFolded } = makeHarness({
+			getPendingForAccount: vi.fn(() => pending),
+		})
+		const settling = async () => {
+			pending = []
+			return built as never
+		}
+		buildAndEstimateValidated.mockImplementation(settling)
+		buildAndEstimateFolded.mockImplementation(settling)
+		await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		const stash = (deps.operationEstimateReuse.stash as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect(stash[1]).toMatchObject({ pendingHashes: ["0xprev"] })
+	})
+
 	test("embedded payment method: no stash, estimateId undefined", async () => {
 		const { executor, deps } = makeHarness()
 		const result = await executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "embedded" } } as never)
@@ -2108,7 +2124,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 		}
 	})
 
-	test("a pending tx that lands during the profile read is in the snapshot", async () => {
+	test("the snapshot is the pending set before the build: a tx landing during the profile read is a change the confirm sees", async () => {
 		const pending: { hash: string }[] = [{ hash: "0xpending" }]
 		const { executor, deps } = snapshotHarness({
 			getPendingForAccount: vi.fn(() => [...pending]),
@@ -2118,7 +2134,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 			}),
 		})
 		await executor.estimateOperationFee(makeAztecOp(), FPC_SETTINGS as never)
-		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending", "0xraced"])
+		expect((stashed(deps)[0][1] as { pendingHashes: string[] }).pendingHashes).toEqual(["0xpending"])
 	})
 
 	test("an fj entry carries no fpcIdentity", async () => {

@@ -44,7 +44,7 @@ export class ChainTipGate {
 
 	public constructor(private readonly deps: ChainTipGateDeps) {}
 
-	/** A row this worker watched left Pending; one in a block holds the sends sharing its keys. */
+	/** The first update placing a row in a block holds the sends sharing its keys. */
 	public observe(row: Pick<Tx, "hash" | "chainId" | "account" | "calls" | "feeSpender" | "block" | "networkId">): void {
 		const { block, networkId } = row
 		if (!block || !networkId) return
@@ -95,7 +95,7 @@ export class ChainTipGate {
 		return read
 	}
 
-	/** Waits while {@link unconfirmed}, reading the tip every second, for at most `maxMs`. Never throws. */
+	/** Waits while {@link unconfirmed}, reading the tip every second, for `maxMs` plus at most one tip read. Never throws. */
 	public async wait(
 		scope: SequenceScope,
 		keys: ReadonlySet<SequenceKey> | undefined,
