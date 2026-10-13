@@ -535,6 +535,21 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 | 3 | Nit | The no-scroller case reported "no footer or amount line" | Accepted: the message names the scroll container |
 | 4 | Low | The records said the #156 comment exists; it is a close-out step | Accepted: reworded as the close-out's step |
 
+### Arc 2 fix loop, round 2, Codex (same session, resumed on `dc1cde0a`), 2026-10-13
+
+**Verdict: approve, no new material findings.** The armed read now catches a fallback payer, the fit's comment limits its guarantee to a successful fit, and the records describe the #156 comment as a close-out step.
+
+**Convergence (arc 2).** Round 1 (Codex approve, one Low; Opus approve, three Lows and a nit, all fixed in `dc1cde0a`), round 2 (Codex approve, nothing new).
+
+### Final cross-arc pass, Codex (fresh session `01a1356d-1f30-7331-a4eb-8e491fa02c40`, gpt-6.1-sol, high, read-only), 2026-10-13
+
+**Verdict: conditional approve.** No blocking bug, material duplication or unsigned visible change across the net diff from `36c43155`. Its adversarial checks of the History query, the symbol, the redirects, the window registration and the theme read found no further path; D7's boot race and OA-8 stay accepted limits.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | OA-3 and OA-4 still read as shipping after #156's stop | Accepted: both carry a "Stopped (arc 2)" line; the options stay as a record |
+| 2 | Low | `waitForFee`'s comment promised a settled payer the trigger does not show | Accepted: the comment now says the trigger names the pick while the card is still resolving who pays. Comment only, no behaviour change, so D11's caller sweep has nothing to run |
+
 ## Delivery
 
 One PR per arc against `dev`, no stack (D-orch-1). Each is opened only after its arc gate passes and its Codex loop converges.

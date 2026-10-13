@@ -51,6 +51,8 @@ P13-01 A gives the chip ("USDC ×", under the title, clearing shows all activity
 
 **What ships now:** form A; pin A if the probe proves the request works without an optional permission, otherwise the Firefox-only optional permission (your P13-04 text). The PR attaches both surfaces in both themes.
 
+**Stopped (arc 2):** nothing of this ships. The probe proved the request works without an optional permission, and also that Firefox 153 reaches Presto with the permission withheld, so the plan's stop rule fired: there was no failure for the row to fix (`lessons/phase-2.md`). The options stand as a record, to be asked again only if #156 shows a failure that the permission causes.
+
 ## OA-4. A Mac check: does the toolbar panel survive the permission prompt? (#156)
 
 **Surface:** Settings → Proving inside Firefox's toolbar panel, on macOS.
@@ -60,6 +62,8 @@ Firefox's toolbar panel closes when a passkey prompt takes focus (Mozilla bug 20
 **Check (two minutes, with #160's):** Firefox on a Mac, revoke Nulo's "127.0.0.1" permission (and "Access your data for all websites") in about:addons, open the toolbar panel → Settings → Proving → Allow. Note whether the panel stays open, whether the prompt stays, and whether the row is gone the next time the panel opens.
 
 **What ships now:** nothing extra. If the panel closes and cancels the prompt, the row is still there next time and the same step works from the onboarding tab or about:addons; making the row open its own window first would be a new ask.
+
+**Stopped (arc 2):** no row ships, so there is nothing to check. This applies only if #156 comes back with a row.
 
 ## OA-5. The re-staged store Send frame's composition (#170, P13-05)
 

@@ -79,8 +79,9 @@ export function assertPublishInvariant(view: SendView): SendView {
 	return view
 }
 
-/** Waits until the card, under `origin`, has settled on `method` — a default takes a balance read to
- *  land, so this is the signal, never a sleep. The returned view has passed the invariant. */
+/** Waits until the card, under `origin`, names `method` on its trigger — a default takes a balance read
+ *  to land, so this is the signal, never a sleep. A pick shows there while the card is still resolving
+ *  who pays: read the strip once the send arms. The returned view has passed the invariant. */
 export async function waitForFee(page: Page, origin: "private" | "public", method: FeeMethodSubtitle, timeout = 90_000): Promise<SendView> {
 	try {
 		await page.waitForFunction(
