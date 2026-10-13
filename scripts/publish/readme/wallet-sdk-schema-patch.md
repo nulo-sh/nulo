@@ -29,7 +29,7 @@ import "@nulo-sh/wallet-sdk-schema-patch/register"
 
 ## Changes
 
-- **0.2.0**: `grantPublicAuthwit` parses `caller` and `contract` with the `AztecAddress` schema, so a wallet using the patch refuses a call that sends a non-address there with INVALID_PARAMS. An existing `grantPublicAuthwit` entry that takes either one with another schema now throws the signature-drift error.
+- **0.2.0**: `grantPublicAuthwit` parses `caller` and `contract` with the `AztecAddress` schema. A wallet that parses incoming calls with the patched schema refuses a non-address there (Nulo answers INVALID_PARAMS) and receives both as `AztecAddress` values, not strings. An existing `grantPublicAuthwit` entry that takes either one with another schema now throws the signature-drift error.
 
 ## Provenance
 

@@ -325,6 +325,10 @@ describe("handleWalletMessage — a scope refusal", () => {
 })
 
 describe("handleWalletMessage — a capacity refusal", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	test("of a sendTx over the waiting-sends cap answers -32005 at debug", async () => {
 		const overCap = async () => [{ status: "failed", error: "Too many pending", code: TooManyPendingError.CODE }]
 		expect(await refuse("sendTx", [wirePayload([call]), { from: ACCOUNT }], [tx("*")], { execute: overCap })).toMatchObject({
