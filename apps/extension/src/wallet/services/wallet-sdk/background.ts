@@ -480,18 +480,21 @@ function buildHandlerCallbacks(
 			// Upstream calls this synchronously after posting the key-exchange response, and a message
 			// needs a round trip and a decrypt to arrive, so the hold exists before any message does.
 			const hold = state.holds.open(session.sessionId, session.verificationHash)
+			// Liveness and termination read this session object, not its id: an establishment paused
+			// across its own end and a same-id re-key must neither proceed on nor end the successor.
+			const live = bindLiveSession(handler, session)
 			// Record the validation promise SYNCHRONOUSLY (before its first await)
 			// so onWalletMessage can gate on it even if a message arrives in the
 			// gap between the SDK's key-exchange response and this validation.
 			const validated = handleSessionEstablished(session, {
 				dappSessionService: deps.dappSessionService,
-				terminateSession: (sessionId) => handler.terminateSession(sessionId),
+				terminateSession: () => live.terminate(),
 				pendingVerification: state.pendingVerification,
 				stampSessionProfile: (sessionId, profileId) =>
 					stampSessionProfileGuarded(state.sessionProfiles, sessionId, profileId, (id) =>
 						handler.getActiveSessions().some((s) => s.sessionId === id),
 					),
-				isSessionLive: (sessionId) => handler.getActiveSessions().some((s) => s.sessionId === sessionId),
+				isSessionLive: () => live.isLive(),
 				windows,
 				reservations: state.admission,
 				hold,

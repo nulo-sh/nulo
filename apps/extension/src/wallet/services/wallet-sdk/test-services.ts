@@ -32,6 +32,8 @@ export function fakeSdkServices(
 		activeProfile?: () => Promise<{ id: string } | undefined>
 		/** The approval's second durable write; resolves at once by default. */
 		setCapabilityGrants?: () => Promise<unknown>
+		/** Establishment's write of the session's hash to its row; resolves at once by default. */
+		setVerificationHash?: () => Promise<unknown>
 		/** The operation journal; empty by default. */
 		operationJournal?: Record<string, unknown>
 	} = {},
@@ -94,7 +96,7 @@ export function fakeSdkServices(
 					deleteDappSession: async (id: string) => {
 						for (const [key, row] of rows) if (row.id === id) rows.delete(key)
 					},
-					setVerificationHash: async () => undefined,
+					setVerificationHash: opts.setVerificationHash ?? (async () => undefined),
 				},
 				"operation-journal": opts.operationJournal ?? {},
 				token: { getTokens: async () => [] },

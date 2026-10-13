@@ -205,7 +205,9 @@ function fakeJournal() {
 	}
 }
 
-function boot(opts: { setCapabilityGrants?: () => Promise<unknown>; legal?: () => Promise<void> } = {}) {
+function boot(
+	opts: { setCapabilityGrants?: () => Promise<unknown>; setVerificationHash?: () => Promise<unknown>; legal?: () => Promise<void> } = {},
+) {
 	const windows = fakeWindows()
 	const popups = new Map<string, (answer: { approved: boolean; windowId?: number; expiredUrl?: string }) => void>()
 	const asked = new Map<string, unknown>()
@@ -226,6 +228,7 @@ function boot(opts: { setCapabilityGrants?: () => Promise<unknown>; legal?: () =
 				return activeProfile
 			},
 			setCapabilityGrants: opts.setCapabilityGrants,
+			setVerificationHash: opts.setVerificationHash,
 			operationJournal: journal,
 			legal: opts.legal,
 		})
@@ -1012,6 +1015,42 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			await settle()
 			expect(dispatched()).toEqual([])
 			expect([...h.journal.ops.keys()]).toEqual(["queued-1"])
+		},
+	)
+
+	test.each([
+		["completes", (write: ReturnType<typeof deferred<undefined>>) => write.resolve(undefined)],
+		["fails", (write: ReturnType<typeof deferred<undefined>>) => write.reject(new Error("the profile is locked"))],
+	])(
+		"an establishment whose hash write %s after a lock, an unlock into another profile and a same-id re-key leaves the successor alone",
+		async (_, finish) => {
+			const firstWrite = deferred<undefined>()
+			let writes = 0
+			const h = boot({ setVerificationHash: () => (++writes === 1 ? firstWrite.promise : Promise.resolve()) })
+			remember(h, false)
+			h.discover("r1")
+			await flush()
+			const stale = h.establish("r1")
+			await settle()
+			h.lock()
+			await settle()
+			// The person unlocks another profile, which has its own row for the app.
+			h.rows.set(`${ORIGIN}|${CHAIN}`, { ...h.rows.get(`${ORIGIN}|${CHAIN}`)!, profileId: "p2" })
+			h.switchProfile("p2")
+			await reconnect(h, "r1")
+			const successor = sessions.get("r1")
+			h.send("r1", "getChainInfo", "a")
+
+			finish(firstWrite)
+			await stale
+			await settle()
+			expect(sessions.get("r1")).toBe(successor)
+			expect(terminated()).toEqual(["r1"])
+			expect(dispatched()).toEqual([])
+			h.confirm(hashOf("r1"))
+			await settle()
+			expect(dispatched()).toEqual(["r1:getChainInfo"])
+			expect(terminated()).toEqual(["r1"])
 		},
 	)
 
