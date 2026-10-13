@@ -53,7 +53,7 @@ import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprin
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
-import { probeSponsorFunding } from "./sponsor-funding"
+import { probeAppPayerFunding, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
@@ -320,20 +320,12 @@ export class DappSendExecutor {
 		// choreography for dApp sends; stage-boundary cancellation preserved
 		// inside it).
 		throwIfAborted(signal)
-		const { built, discovered } = await this.deps.estimateWithDiscovery.estimate(
-			operation,
-			actions,
-			detectedFee,
-			feeSettings,
-			fence,
-			undefined,
-			signal,
-		)
+		const { built, discovered } = await this.buildForEstimate(operation, actions, detectedFee, feeSettings, fence, signal)
 		const { txRequest } = built
 		throwIfAborted(signal)
-		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, (msg, data) =>
-			this.deps.logDebug(msg, data),
-		)
+		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
+		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
+		const appPayerFunding = await probeAppPayerFunding(built, this.deps.readPublicStorageOnce, log)
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
@@ -354,7 +346,26 @@ export class DappSendExecutor {
 			previewId,
 			...(bound ? { discoveredAuthwits: discovered } : {}),
 			...(sponsorFunding ? { sponsorFunding } : {}),
+			...(appPayerFunding ? { appPayerFunding } : {}),
 		}
+	}
+
+	/** An embedded fee payment skips discovery, as its confirm does: the app's own fee calls conflict
+	 *  with the discovery simulation's dummy fee method. */
+	private async buildForEstimate(
+		operation: Operation,
+		actions: Action[],
+		detectedFee: FeeOptions | undefined,
+		feeSettings: FeeSettings,
+		fence: ExecutionFence,
+		signal?: AbortSignal,
+	): Promise<{ built: FeeEstimate; discovered: readonly DiscoveredAuthwit[] }> {
+		const fee = detectedFee ?? (operation as SendTransactionOperation).fee
+		if (!fee?.embeddedFeePayment) {
+			return this.deps.estimateWithDiscovery.estimate(operation, actions, detectedFee, feeSettings, fence, undefined, signal)
+		}
+		const op = { ...(operation as SendTransactionOperation), actions: [...actions], fee }
+		return { built: await this.deps.buildAndEstimateValidated(op, feeSettings, fence, undefined, signal), discovered: [] }
 	}
 
 	/**

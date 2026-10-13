@@ -11,6 +11,8 @@
 
 import { describe, expect, test, vi } from "vitest"
 import { Gas, GasFees, GasSettings } from "@aztec-labs/stdlib/gas"
+import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { FEE_JUICE_ADDRESS } from "@aztec-labs/constants"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { DummyLogger } from "@/wallet/logger"
@@ -484,4 +486,39 @@ describe("account reads at V2 and V3", () => {
 			expect(order.slice(0, order.indexOf("simulate") + 1)).toEqual(ORDER[path])
 		},
 	)
+})
+
+describe("embedded: the app's own fee contract", () => {
+	const APP_PAYER = AztecAddress.fromNumberUnsafe(0xa9)
+	const FEE_JUICE = AztecAddress.fromNumberUnsafe(FEE_JUICE_ADDRESS)
+	const call = (contract: AztecAddress, nested: unknown[] = []) => ({
+		publicInputs: { callContext: { contractAddress: contract } },
+		nestedExecutionResults: nested,
+	})
+
+	function withKernel(route: "fpc" | "fjwc", entrypoint: unknown) {
+		const h = harness("embedded")
+		h.simulateTxTask.mockImplementation(async () => ({
+			...sentinelSim(),
+			publicInputs: { feePayer: APP_PAYER },
+			privateExecutionResult: { entrypoint },
+		}))
+		;(h.ctx.op.fee as { embeddedFeePayment: string }).embeddedFeePayment = route
+		return h
+	}
+
+	test.each([
+		["calls nothing of Fee Juice", call(APP_PAYER), false],
+		["claims Fee Juice in a nested call", call(APP_PAYER, [call(FEE_JUICE)]), true],
+	])("an app contract pays, and its transaction %s: the kernel's payer is named", async (_case, entrypoint, callsFeeJuice) => {
+		const { strategy, ctx } = withKernel("fpc", entrypoint)
+		const built = await strategy.buildAndEstimate(ctx)
+		expect(built.appPayer?.address.equals(APP_PAYER)).toBe(true)
+		expect(built.appPayer?.callsFeeJuice).toBe(callsFeeJuice)
+	})
+
+	test("a claim to the sender names no app payer: the sender pays itself", async () => {
+		const { strategy, ctx } = withKernel("fjwc", call(APP_PAYER))
+		expect((await strategy.buildAndEstimate(ctx)).appPayer).toBeUndefined()
+	})
 })

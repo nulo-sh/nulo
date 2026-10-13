@@ -73,6 +73,10 @@ const props = defineProps({
 	payerNoticeShape: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
+	/** Outside Send: a short sponsor's selection falls to the next payer of Send's public-side walk
+	 *  instead of to nothing. For a transaction whose calls are public, where paying from the
+	 *  account's own Fee Juice publishes nothing new. */
+	fallsBack: { type: Boolean, default: false },
 })
 
 const readStored = async (key) => (await storageLocalGet(key))[key]
@@ -751,6 +755,13 @@ const recommit = async () => {
 	commitFromEntry(scope, feeScopeKey(scope), saved, baseline)
 }
 
+/** The payer Send's public-side walk lands on with this card's verdicts applied, or none. */
+const publicFallback = () => {
+	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
+	const next = resolveSendSelection("public", know, undefined)
+	return next.kind === "selected" ? next.method : undefined
+}
+
 const forgetVerdicts = () => {
 	shortSponsorIds.clear()
 	setAsideSponsorIds.clear()
@@ -783,7 +794,8 @@ watch(
 		setAsideSponsorIds.add(verdict.fpcId)
 		// A pick of a contract that cannot pay is dropped too; its saved record stays.
 		if (props.originPrivacy === null && selectedMethod.value?.fpc?.id === verdict.fpcId) {
-			selectedMethod.value = undefined
+			selectedMethod.value = props.fallsBack ? publicFallback() : undefined
+			chosenUnasked = true
 			droppedForVerdictId.value = verdict.fpcId
 		}
 	},

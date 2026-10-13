@@ -2687,6 +2687,43 @@ describe("FeeSettingsCard — a sponsor that can't cover this fee, outside Send"
 	})
 })
 
+describe("FeeSettingsCard — a card that falls back on a short sponsor", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+	const SHORT = {
+		maxFee: "1000",
+		maxFeeFormatted: "0.000000000000001",
+		sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
+	}
+
+	test.each([
+		{
+			case: "public Fee Juice held",
+			gas: { publicFeeJuice: "5", privateFeeJuice: null },
+			kind: "fj",
+			text: "The sponsor can't cover this fee right now, so Public Fee Juice pays it.",
+		},
+		{
+			case: "nothing else can pay",
+			gas: { publicFeeJuice: "0", privateFeeJuice: null },
+			kind: undefined,
+			text: "The sponsor can't cover this fee right now.",
+		},
+	])("$case: the selection moves along Send's public walk, unsaved, and the notice names who pays", async ({ gas, kind, text }) => {
+		mocks.getFpcs.mockResolvedValue([NULO])
+		mocks.getGasBalances.mockResolvedValue(gas)
+		const w = mount(FeeSettingsCard, { props: { ...baseProps(), fallsBack: true }, global: { stubs: STUBS } })
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+
+		await w.setProps({ feeEstimate: SHORT })
+		await flushPromises()
+		expect((lastEmittedSettings(w) as { paymentMethod?: { kind: string } } | undefined)?.paymentMethod?.kind).toBe(kind)
+		expect(w.get('[data-testid="fee-sponsor-short"]').text()).toBe(text)
+		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+		w.unmount()
+	})
+})
+
 describe("FeeSettingsCard — the sponsor notice's region in a dApp's embedded payment", () => {
 	test("the region mounts with the embedded card, and the notice stays hidden there as before", async () => {
 		const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }

@@ -1732,6 +1732,50 @@ describe("DappSendExecutor.estimateOperationFee sponsor funding", () => {
 	})
 })
 
+describe("DappSendExecutor.estimateOperationFee: an operation the app pays for", () => {
+	const APP_PAYER = AztecAddress.fromNumberUnsafe(0xa9)
+	const EMBEDDED = { paymentMethod: { kind: "embedded" } } as never
+
+	function appPaidHarness(callsFeeJuice: boolean) {
+		const readPublicStorageOnce = vi.fn(async () => new Fr(0n))
+		const h = makeHarness({
+			readPublicStorageOnce,
+			planner: {
+				processAztecJsPayload: vi.fn(async () => ({
+					actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+					feePaymentMethod: undefined,
+					feeOptions: { embeddedFeePayment: "fpc" },
+				})),
+			} as never,
+		})
+		const gasSettings = new GasSettings(new Gas(100, 200), new Gas(10, 20), new GasFees(2n, 3n), new GasFees(0n, 0n))
+		Object.assign(h.built, {
+			txRequest: { authWitnesses: [], txContext: { gasSettings } },
+			appPayer: { address: APP_PAYER, callsFeeJuice },
+		})
+		return { ...h, readPublicStorageOnce }
+	}
+
+	test.each([
+		[false, true],
+		[true, false],
+	])(
+		"skips discovery, as its confirm does, and reads the app's fee contract (calls Fee Juice: %s)",
+		async (callsFeeJuice, provenShort) => {
+			const { executor, authwit, buildAndEstimateValidated, buildAndEstimateFolded } = appPaidHarness(callsFeeJuice)
+
+			const result = await executor.estimateOperationFee(makeAztecOp({ feeSettings: EMBEDDED }), EMBEDDED)
+
+			expect(authwit.discoverPrivateAuthwits).not.toHaveBeenCalled()
+			expect(buildAndEstimateFolded).not.toHaveBeenCalled()
+			expect((buildAndEstimateValidated.mock.calls[0] as unknown[])[0]).toMatchObject({ fee: { embeddedFeePayment: "fpc" } })
+			expect(result.appPayerFunding).toEqual({ address: APP_PAYER.toString(), funded: false, provenShort })
+			expect(result).not.toHaveProperty("sponsorFunding")
+			expect(result.estimateId).toBeUndefined()
+		},
+	)
+})
+
 describe("DappSendExecutor: the activity record, field by field", () => {
 	const GAS_DETAILS = {
 		l2GasLimit: 200,

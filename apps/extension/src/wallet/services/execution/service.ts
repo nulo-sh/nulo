@@ -666,6 +666,19 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		this.lane.endQueuedWait(journalId)
 	}
 
+	/** A wallet-built transaction's fee, estimated where it was built: the operation never crosses an
+	 *  RPC boundary, so no popup can supply one. */
+	public async estimateSendTransactionFee(
+		operation: SendTransactionOperation,
+		estimateToken?: string,
+		flowKey?: string,
+	): Promise<TransferFeeEstimate> {
+		await this.ensureInitialized()
+		return this.withEstimateAdmission(estimateToken, flowKey ?? "wallet", (signal) =>
+			this.dappSendExecutor.estimateOperationFee(operation, operation.feeSettings, signal),
+		)
+	}
+
 	public async estimateOperationFee(
 		interactionId: string,
 		index: number,

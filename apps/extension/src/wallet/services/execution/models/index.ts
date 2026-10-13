@@ -28,6 +28,7 @@ export type {
 	GasBalances,
 	PriorityLevel,
 	SponsorFunding,
+	AppPayerFunding,
 	TransferFeeEstimate,
 	DiscoveredAuthwit,
 	OperationAuthwitPreview,

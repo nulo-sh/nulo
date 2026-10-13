@@ -16,6 +16,7 @@ import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
 import { useSendStageLine } from "@/composables/useSendStageLine"
+import { useWalletTxEstimates } from "@/composables/useWalletTxEstimates"
 const { openToast } = useToast()
 
 /** Store */
@@ -42,16 +43,40 @@ const { isRegistryEnabled, isLoading, error } = registry
 const journalService = new OperationJournalServiceClient()
 const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
 const stageLine = stage.line
-onBeforeUnmount(() => {
-	registry.dispose()
-	stage.dispose()
-	journalService.disconnect()
-})
 
 const authwits = ref([])
 const chunkedAuthwits = ref([])
 const chunksCount = computed(() => chunkedAuthwits.value.length)
 const isErrorOccurred = computed(() => !!error.value)
+
+const estimates = useWalletTxEstimates({
+	estimate: (p, token, flowKey) => authwitsService.estimateRevokeFee(p.networkId, p.account, p.ids, p.feeSettings, token, flowKey),
+	cancel: (token) => authwitsService.cancelFeeEstimate(token),
+	paramsOf: (i) => {
+		const ch = chunkedAuthwits.value[i]
+		if (!props.show || !ch?.feeSettings || !appStore.network || !appStore.account) return undefined
+		return { networkId: appStore.network.id, account: appStore.account.address, ids: ch.ids, feeSettings: ch.feeSettings }
+	},
+	keys: () => chunkedAuthwits.value.map((_, i) => i),
+	scope: () => appStore.scopeEpoch,
+	onError: (err) => {
+		console.error("Revoke fee estimate failed", { error: err })
+		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+	},
+})
+const { results: feeEstimates, estimating: estimatingFees } = estimates
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	estimates.dispose()
+	journalService.disconnect()
+})
+
+/** Synchronous with the input: Confirm never reads an estimate made for the settings just replaced. */
+function setChunkFee(i, settings) {
+	chunkedAuthwits.value[i].feeSettings = settings
+	estimates.refresh(i)
+}
 
 function chunkAuthwits() {
 	chunkedAuthwits.value = authwits.value
@@ -70,11 +95,7 @@ function chunkAuthwits() {
 		}))
 }
 
-const isAllowedToExecute = computed(() => {
-	if (chunkedAuthwits.value.filter((ch) => !ch.feeSettings).length) return
-
-	return true
-})
+const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch.feeSettings) && estimates.landed())
 
 async function handleRevokeAuthwits() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
@@ -141,6 +162,7 @@ usePopupEntity(() => props.show, {
 		chunkAuthwits()
 	},
 	onHide: () => {
+		estimates.cancelAll()
 		authwits.value = []
 		chunkedAuthwits.value = []
 		registry.reset()
@@ -221,12 +243,11 @@ usePopupEntity(() => props.show, {
 							:profile="appStore.profile"
 							:network="appStore.network"
 							:account="appStore.account"
+							:feeEstimate="feeEstimates[i] ?? null"
+							:isEstimating="!!estimatingFees[i]"
+							fallsBack
 							:modelValue="ch.feeSettings"
-							@update:modelValue="
-								$event => {
-									ch.feeSettings = $event
-								}
-							"
+							@update:modelValue="($event) => setChunkFee(i, $event)"
 						/>
 
 						<div v-if="ch.status === 'progress'" :class="[$style.status_line, $style.runner]" />

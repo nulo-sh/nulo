@@ -1,5 +1,5 @@
 /**
- * The seven popup RPCs that carry fee settings refuse an unknown speed level at the port: the reply
+ * The nine popup RPCs that carry fee settings refuse an unknown speed level at the port: the reply
  * is `INVALID_PARAMS` naming only the method, logged at debug, and the method never runs. Driven
  * through each service's real `handleRequest` with the params wrapped as the client's wire carries
  * them; the method itself is a spy, so a call that passes the port does nothing.
@@ -35,6 +35,8 @@ const METHODS: Array<{ service: ServiceName; method: string; args: (feeSettings:
 	},
 	{ service: "authRegistry", method: "revokeAuthwits", args: (f) => ["net-1", "0xacc", [1], f] },
 	{ service: "authRegistry", method: "setRegistryEnabled", args: (f) => ["net-1", "0xacc", true, f] },
+	{ service: "authRegistry", method: "estimateRevokeFee", args: (f) => ["net-1", "0xacc", [1], f, "token"] },
+	{ service: "authRegistry", method: "estimateRegistryToggleFee", args: (f) => ["net-1", "0xacc", true, f, "token"] },
 ]
 const firstOf = (service: ServiceName) => METHODS.find((m) => m.service === service) as (typeof METHODS)[number]
 

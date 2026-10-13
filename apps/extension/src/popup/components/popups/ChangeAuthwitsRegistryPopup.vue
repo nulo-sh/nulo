@@ -16,6 +16,7 @@ import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
 import { useSendStageLine } from "@/composables/useSendStageLine"
+import { useWalletTxEstimates } from "@/composables/useWalletTxEstimates"
 const { openToast } = useToast()
 
 /** Store */
@@ -38,20 +39,41 @@ const { isRegistryEnabled, isLoading, error } = registry
 const journalService = new OperationJournalServiceClient()
 const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
 const stageLine = stage.line
-onBeforeUnmount(() => {
-	registry.dispose()
-	stage.dispose()
-	journalService.disconnect()
-})
 
 const feeSettings = ref()
 const isErrorOccurred = computed(() => !!error.value)
 
-const isAllowedToExecute = computed(() => {
-	if (!feeSettings.value) return
-
-	return true
+const estimates = useWalletTxEstimates({
+	estimate: (p, token, flowKey) =>
+		authwitsService.estimateRegistryToggleFee(p.networkId, p.account, p.enabled, p.feeSettings, token, flowKey),
+	cancel: (token) => authwitsService.cancelFeeEstimate(token),
+	paramsOf: () =>
+		props.show && feeSettings.value && isRegistryEnabled.value !== undefined && appStore.network && appStore.account
+			? {
+					networkId: appStore.network.id,
+					account: appStore.account.address,
+					enabled: !isRegistryEnabled.value,
+					feeSettings: feeSettings.value,
+				}
+			: undefined,
+	keys: () => [0],
+	scope: () => appStore.scopeEpoch,
+	onError: (err) => {
+		console.error("Registry toggle fee estimate failed", { error: err })
+		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
+	},
 })
+const { results: feeEstimates, estimating: estimatingFees } = estimates
+// Synchronous: Confirm never reads an estimate made for the inputs just replaced.
+watch([feeSettings, isRegistryEnabled], () => estimates.refresh(0), { flush: "sync" })
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	estimates.dispose()
+	journalService.disconnect()
+})
+
+const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed())
 
 async function handleChangeRegistry() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks
@@ -94,6 +116,7 @@ usePopupEntity(() => props.show, {
 	onHide: () => {
 		registry.reset()
 		stage.stop()
+		estimates.cancelAll()
 		authwitsService.disconnect()
 		journalService.disconnect()
 	},
@@ -129,6 +152,9 @@ usePopupEntity(() => props.show, {
 					:profile="appStore.profile"
 					:network="appStore.network"
 					:account="appStore.account"
+					:feeEstimate="feeEstimates[0] ?? null"
+					:isEstimating="!!estimatingFees[0]"
+					fallsBack
 					v-model="feeSettings"
 				/>
 

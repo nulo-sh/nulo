@@ -284,20 +284,29 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 
 		<div :class="$style.op_divider" />
 
-		<Flex
-			v-if="isEmbeddedFeePayment(op)"
-			data-testid="execute-op-fee-set-badge"
-			align="center"
-			gap="8"
-			wide
-			:class="$style.op_fee_set"
-		>
-			<Icon name="check-circle" size="14" color="green" />
-			<Text size="13" weight="500" color="secondary">
-				Fee payment method set by
-				<Text size="13" weight="600" color="primary">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
-			</Text>
-		</Flex>
+		<template v-if="isEmbeddedFeePayment(op)">
+			<Flex data-testid="execute-op-fee-set-badge" align="center" gap="8" wide :class="$style.op_fee_set">
+				<Icon name="check-circle" size="14" color="green" />
+				<Text size="13" weight="500" color="secondary">
+					Fee payment method set by
+					<Text size="13" weight="600" color="primary">{{ safeWire(dapp?.name, 64) || 'the app' }}</Text>
+				</Text>
+			</Flex>
+			<!-- Mounted with the row: a region created with its text in place may go unannounced. -->
+			<div role="status" aria-live="polite" aria-atomic="true" data-testid="execute-op-app-payer-live">
+				<Flex
+					v-if="feeEstimate?.appPayerFunding?.funded === false"
+					align="start"
+					gap="6"
+					wide
+					:class="$style.op_fee_set"
+					data-testid="execute-op-app-payer-short"
+				>
+					<Icon name="info" size="14" color="primary" aria-hidden="true" />
+					<Text size="12" weight="600" color="secondary">This app's fee contract may not cover this fee right now.</Text>
+				</Flex>
+			</div>
+		</template>
 
 		<FeeSettingsCard
 			v-else

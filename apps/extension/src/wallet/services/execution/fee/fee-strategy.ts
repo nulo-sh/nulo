@@ -80,6 +80,9 @@ export interface FeeEstimate extends BuiltStandardTx {
 	/** The sponsor row this build paid with, as it read it: a reuse entry binds to this, never to a
 	 *  later read, which an edit during the build would have moved. Set by every `fpc` build. */
 	fpcIdentity?: FpcIdentitySnapshot
+	/** Set only when the app's own fee contract pays: the address the final simulation's kernel names
+	 *  as fee payer, and whether the transaction calls Fee Juice, which alone could credit it. */
+	appPayer?: { address: AztecAddress; callsFeeJuice: boolean }
 }
 
 /** Simulate callback — facade owns the TaskService wrapping so that

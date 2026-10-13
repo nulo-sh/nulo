@@ -44,4 +44,7 @@ definePassthroughsExhaustive<Methods>()(AuthRegistryServiceClient.prototype, [
 	"getRegistryEnabled",
 	"setRegistryEnabled",
 	"syncRegistry",
+	"estimateRevokeFee",
+	"estimateRegistryToggleFee",
+	"cancelFeeEstimate",
 ])
