@@ -10,4 +10,4 @@ Format: `- [plan-name](plan-name/plan.md) — status — one-line hook`
 - [chain-endpoints](chain-endpoints/plan.md) — arc 1 in review (arc 2 waits on page 12) — a smoke suite that reaches no outside host; node-URL hidden characters, the extension CSP, the price hero after page 12
 - [fees-and-sponsors](fees-and-sponsors/plan.md) — arc 1 in review (arc 2 waits on page 6, R4 and OWNER-ASKS) — unknown speed levels refused at the popup RPCs, a timed-out estimate keeps its place, fee-cap precedence pinned; sponsor checks, long authwit proofs, the fee-juice nudge, per-profile fee picks
 - [send-queue-activity](send-queue-activity/plan.md) — arcs 1, 2, 3a, 3b merged; arc 5 in review; arcs 1b and 4 wait on owner answers — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach
-- [type-roles](type-roles/plan.md) — approved, implementing — one rulebook of 28 type roles chooses every text face; a six-PR stack
+- [type-roles](type-roles/plan.md) — closed, awaiting archive — one rulebook of 28 type roles chooses every text face; a six-PR stack
