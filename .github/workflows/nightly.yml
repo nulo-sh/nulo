@@ -625,10 +625,8 @@ jobs:
           echo "DRY RUN — would have created tag $TAG at $SHA and uploaded:"
           ls -la dist/release/
 
-  # Keeps the newest fourteen nightly tags and their releases and deletes the rest, release before
-  # tag. After this night's publish, inside the same run, so the two never race. The `release tags`
-  # ruleset excludes `refs/tags/v*-nightly.*` for it and still holds every stable and rc tag; its
-  # selection refuses any other name as well.
+  # After this night's publish, in the same run, so the two never race. The `release tags` ruleset
+  # excludes `refs/tags/v*-nightly.*` for it and still holds every stable and rc tag.
   prune-nightlies:
     needs: publish-nightly
     if: always() && !cancelled() && needs.publish-nightly.result == 'success'

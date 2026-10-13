@@ -715,6 +715,16 @@ Codex session 01a1370f-6de0-7942-9a01-c8bede4a23b3 on `dd922823...bb4d6e8c`: **a
 
 Round 2 (resumed, on `494267c0`): **CLEAN**. The loop converged.
 
+### Final cross-arc pass, Codex (gpt-6.1-sol, high, fresh session), 2026-10-13
+
+Session 01a1371f-ae61-7fe1-99aa-eef142841ddf over arcs 1 to 4 (`c0e1e696`, `69eab05c`, `e3b7bf54`, `4f34f563`) and `dd922823...88d898fd` (arcs 5a and 5): **approve with fixes**. No seam breaks a gate: nightly's `status` holds the prune and none of the three advisory jobs, nothing waits on the WASM leg, and the credentialed set, the docs' gate lists and the release skill's tables agree with the ledger.
+
+| # | Finding | Disposition |
+|---|---|---|
+| F1 | Medium; demonstrated in memory. A re-run of an old run's `publish-nightly` past retention reuses that run's `resolve` outputs, republishes a pruned name, and its prune deletes it | Known limit #377: the prune already removes it in the same run and nothing kept is touched; the fix would add a check to the release publisher for an operator error |
+| F2 | Low. `CLAUDE.md`'s nightly bullet still called it the only scheduled workflow besides `source-rebuild.yml`, though arc 2 added `verify-store-copies.yml` | Accepted |
+| F3 | Nit. The prune job's comment restated the job and implied a refusal path (D25 filters) | Accepted: one sentence |
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before the next arc's branch starts; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
