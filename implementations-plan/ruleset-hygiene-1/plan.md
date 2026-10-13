@@ -112,16 +112,16 @@ Gate: `bun run check:plans`, `bun run test:release`, `bun run test:ci-gating` an
 - R1-4 Medium: D2 did not settle documentation versus gate. Accepted: documentation, with the reason.
 - Normalizer: sound; require the exact permitted sentence. Accepted (Phase 5 gate).
 
-**Round 2, Codex (same session resumed), 2026-10-13: conditional approve.** R1-1 to R1-4 verified as resolved.
+**Round 2, Codex (same session resumed), 2026-10-13: conditional approve; both conditions met below, no third round.** R1-1 to R1-4 verified as resolved.
 - R2-1 Medium: F8 called a rerun's completion latency suite runtime (traced on 38373410688, attempt 2). Accepted and reproduced: F8 is the CI suite job envelope of a first-attempt-green run; failed and rerun attempts are reported apart.
 - R2-2 Low: the e2e skill gave the measuring steps without citing the rule. Accepted: Phase 4 links it and copies the timeout sentence.
-- Both conditions are met in this revision. No third round: the orchestrator allowed a second only on a material finding.
 
 **Implementation round 1, Codex (gpt-6.1-sol, high; session `01a1352e-e2fb-7d01-9b9b-3ff0bbcfb70c`) plus one Opus diff review, 2026-10-13: approve with fixes.** Both verified the move: the normalized diff is `5c5` only, nothing else left CLAUDE.md, every anchor resolves.
 - C1 Medium, demonstrated (= O1): the one-liner printed `-1` for a run whose suite jobs were all skipped (38332413848). Fixed: only jobs that ran and passed count; none prints `suite skipped`.
 - C2 Low: the close-out's "stays open" read as covering closed known limits. Fixed: open unless the comment closes it as one.
 - O2 demonstrated: the PR e2e workflows never run on `dev`, so "before" is the latest such run on another PR. O3: CLAUDE.md's "the one issue without a demonstrated path" contradicted open plausible issues; dropped (the README keeps the brief's words). O4: README's tree said `STATUS.md` goes after merge; now at close-out.
 - O5, left out: `send-queue-activity` arc 4 (#220) names CLAUDE.md § Staged-rollout switches; that lane's prose stays its own (D5), so the report flags it.
+- Round 2 (resumed), 2026-10-13: converged. C1, C2 and O2 to O4 verified (C1 on five runs, the skipped one included); the normalized diff is still `5c5`.
 
 ## Delivery
 

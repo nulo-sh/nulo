@@ -7,3 +7,4 @@
 ## Review loop
 
 - 2026-10-13, round 1: Codex (gpt-6.1-sol, high, session `01a1352e-e2fb-7d01-9b9b-3ff0bbcfb70c`; `CODEX_ACCOUNT=best` from the managed settings routed it to the alejo-icloud roster account) and one Opus diff review. Approve with fixes: C1 (= O1) skipped suite jobs carry `completedAt` before `startedAt`, so the envelope read `-1` (reproduced on 38332413848); C2, O2, O3, O4 fixed; O5 left to its lane. Phase 2's README opening reads "The entropy of this work" for the brief's "The program's entropy" (no program in a repository standard).
+- 2026-10-13, round 2 (resumed): converged, no new material finding.
