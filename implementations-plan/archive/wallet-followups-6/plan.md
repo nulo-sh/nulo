@@ -28,7 +28,7 @@ issues: "#345, #332, #331 (arc 1); #336 (arc 2); #262 known limit, no arc"
   - A2, the other e2e files that assert one array: scope left out (D-orch-3); no item.
   - D-262's row-id lock: withdrawn under the proportion rule; nothing built.
   - Upper-case hex kept as a second spelling (D-331b), the parsed value handed to later layers or a rewrite at the issue's sites (D-331a), an answer after the decrypt or an ended session for an oversized message (D-345a): rejected.
-  - `verify-hold` in arc 1's e2e list: not run, since #347 was still a draft when #353 merged (D-orch-6).
+  - `verify-hold` in arc 1's e2e list: not run with arc 1, since #347 was still a draft when #353 merged (D-orch-6). Once #347 reached `dev`, #356 merged it and ran `verify-hold` with the six arc 2 files once per browser at retry 0: 7/7 files, 15 tests, on Chrome and on Firefox.
   - Phase 4's "every run green": not met by `snack-placement`'s #349 flake, which the arc's lines are not on; the evidence is on #349 (D-a2-1).
 - **Known limits:** #262 (D-262), #355 (D-345e).
 - **Open items:** #354 (`hardening`, residual 1); tracked privately: GHSA-v48v-f4rj-78p6.
