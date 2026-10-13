@@ -248,6 +248,16 @@ describe("NewTokenPopup", () => {
 		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
 	})
 
+	test("a listed contract typed in upper case is the same token: 'Already exist', button off", async () => {
+		tokenServiceMock.getTokens.mockReset().mockResolvedValue([defaultTokenInfo({ contract: validHex })])
+		const w = mount(NewTokenPopup, { props: { show: false }, global: { stubs: STUBS } })
+		await w.setProps({ show: true })
+		await flushPromises()
+		await typeAddress(w, `0x${"A".repeat(64)}`)
+		expect(w.find('[data-testid="error-text"]').text()).toContain("Already exist")
+		expect(submitBtn(w).attributes("disabled")).toBeDefined()
+	})
+
 	test("parseTokenInterface returning isComplete=false shows the parse error", async () => {
 		const w = await mountAndOpen()
 		tokenServiceMock.parseTokenInterface.mockResolvedValueOnce({ isComplete: false })

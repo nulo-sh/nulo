@@ -46,6 +46,8 @@ Options:
 
 Build a dynamic mapping: `changed file → relevant section(s)`
 
+A section that names its home (a skill in § Skills own their domains, the plans README, `CI.md`) is a pointer, so a change to its depth goes there.
+
 Example discovery:
 ```
 Sections found:
@@ -85,14 +87,14 @@ Wait for engineer confirmation before proceeding.
 ### Phase 4: Apply Updates
 
 After engineer approval:
-1. Read affected sections from current CLAUDE.md
+1. Read affected sections from current CLAUDE.md or the home it names
 2. Apply changes matching existing style
 3. Add new sections in appropriate locations
 
 ### Phase 5: Resolve conflicts with `dev` (after applying updates)
 
 ```bash
-git diff dev -- CLAUDE.md
+git diff dev -- CLAUDE.md <each home edited>
 ```
 
 Run this after applying updates so it catches:

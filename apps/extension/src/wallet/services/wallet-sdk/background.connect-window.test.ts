@@ -29,14 +29,18 @@ const discoveryTabs = new Map<string, number>()
 const discovered = new Map<string, { origin: string; chainInfo: unknown }>()
 const droppedTabs = new Set<number>()
 let approveReturns = true
+/** Stands in for upstream's decrypt of one secure message; patched over by `serializeDecryption`. */
+let decryptHook: (sessionId: string, encrypted: unknown) => Promise<void> = () => Promise.resolve()
+/** Replaces the next response send's outcome, once. */
+let nextResponse: Promise<void> | undefined
 
 vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 	BackgroundConnectionHandler: class {
 		constructor(_meta: unknown, _transport: unknown, callbacks: Callbacks) {
 			captured = callbacks
 		}
-		handleEncryptedMessage() {
-			return Promise.resolve()
+		handleEncryptedMessage(sessionId: string, encrypted: unknown) {
+			return decryptHook(sessionId, encrypted)
 		}
 		getActiveSessions() {
 			return [...sessions.values()]
@@ -53,7 +57,9 @@ vi.mock("@aztec-labs/wallet-sdk/extension/handlers", () => ({
 		}
 		sendResponse(sessionId: string, response: { messageId: string; error?: { code: number } }) {
 			responses.push({ sessionId, response })
-			return Promise.resolve()
+			const outcome = nextResponse
+			nextResponse = undefined
+			return outcome ?? Promise.resolve()
 		}
 		terminateSession(id: string) {
 			handlerCalls.push(`terminate:${id}`)
@@ -83,6 +89,7 @@ import { chainInfoToChainId } from "./session-established"
 import { RESERVATION_GRACE_MS, VerifyAdmissionGate } from "./verify-admission"
 import { fakeSdkPorts } from "./test-ports"
 import { SESSION_INVALID_ERROR } from "./error-envelope"
+import { MAX_PENDING_PER_SESSION } from "./verification-hold"
 import { FAKE_DAPP_ORIGIN as ORIGIN, FAKE_SENDER, fakeSdkServices } from "./test-services"
 
 const OTHER_ORIGIN = "https://other.example"
@@ -323,6 +330,8 @@ beforeEach(() => {
 	droppedTabs.clear()
 	tabRemoved.length = 0
 	approveReturns = true
+	decryptHook = () => Promise.resolve()
+	nextResponse = undefined
 	captured = undefined
 	admit.mockClear()
 	dispatch.mockClear()
@@ -933,12 +942,14 @@ describe("an app's calls wait for the person to confirm the check", () => {
 		expect(dispatched()).toEqual(["r2:getChainInfo", "r1:getChainInfo"])
 	})
 
-	test("past 32 held calls the next is answered -32005 at once, with no row; the 32 run after the confirmation", async () => {
+	test("past 32 held calls the next is answered -32005 before any row; the 32 run after the confirmation", async () => {
 		const h = boot()
 		remember(h, false)
 		await reconnect(h, "r1")
 		for (let i = 0; i < 32; i++) h.send("r1", "getChainInfo", `m${i}`)
 		h.send("r1", "sendTx", "over")
+		// The refusal is queued on the session's decrypt lane, so it goes out a few turns later.
+		await flush()
 		expect(responses).toEqual([
 			{
 				sessionId: "r1",
@@ -1162,5 +1173,212 @@ describe("an app's calls wait for the person to confirm the check", () => {
 			expect(terminated()).toEqual(["r1"])
 			expect(sessions.has("r1")).toBe(false)
 		}
+	})
+
+	describe("a session's pending calls are bounded", () => {
+		const refusedIds = () => responses.filter((r) => r.response.error?.code === -32005).map((r) => r.response.messageId)
+		/** A secure message reaching the handler, as the content relay hands it over. */
+		const post = (h: ReturnType<typeof boot>, requestId: string, encrypted: string) =>
+			(h.handler as unknown as { handleEncryptedMessage(id: string, enc: unknown): Promise<void> }).handleEncryptedMessage(
+				requestId,
+				encrypted,
+			)
+		async function confirmedSession(h: ReturnType<typeof boot>, requestId: string) {
+			await reconnect(h, requestId)
+			h.confirm(hashOf(requestId))
+			await settle()
+		}
+		/** The bound's worth of calls in flight on `requestId`: its head waits in dispatch, the rest behind it. */
+		async function fillToBound(h: ReturnType<typeof boot>, requestId: string) {
+			dispatch.mockImplementationOnce(() => new Promise(() => {}))
+			h.send(requestId, "getChainInfo", `${requestId}-head`)
+			for (let i = 1; i < MAX_PENDING_PER_SESSION; i++) h.send(requestId, "getAccounts", `${requestId}-${i}`)
+			await settle()
+		}
+		const range = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i}`)
+
+		test("a confirmed session whose head waits in dispatch admits 31 more, answers the next -32005 with no row, and frees a slot when the head fails", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			await confirmedSession(h, "r2")
+			const head = deferred<unknown>()
+			dispatch.mockImplementationOnce(() => head.promise as never)
+			h.send("r1", "getChainInfo", "head")
+			h.send("r1", "sendTx", "admitted")
+			for (let i = 0; i < MAX_PENDING_PER_SESSION - 2; i++) h.send("r1", "getAccounts", `m${i}`)
+			await settle()
+			h.send("r1", "sendTx", "over")
+			h.send("r2", "getChainInfo", "other")
+			await settle()
+			expect(refusedIds()).toEqual(["over"])
+			expect(h.journal.createOperation).toHaveBeenCalledTimes(1)
+			expect(row(h)?.stage).toBe("queued")
+			expect(dispatched()).toEqual(["r1:getChainInfo", "r2:getChainInfo"])
+
+			// The admitted send then holds the FIFO, so the head's failure frees exactly its own slot.
+			dispatch.mockImplementationOnce(() => new Promise(() => {}))
+			head.reject(new Error("node unreachable"))
+			await settle()
+			expect(dispatched()).toEqual(["r1:getChainInfo", "r2:getChainInfo", "r1:sendTx"])
+			h.send("r1", "getAccounts", "next")
+			h.send("r1", "getAccounts", "over-again")
+			await settle()
+			expect(refusedIds()).toEqual(["over", "over-again"])
+		})
+
+		test("decrypted payloads that are not objects take no slot: after 32 of them a call still runs", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			for (let i = 0; i < MAX_PENDING_PER_SESSION; i++) {
+				// Upstream catches whatever the callback throws, so a throw here is swallowed there too.
+				try {
+					captured?.onWalletMessage(sessions.get("r1"), null)
+				} catch {}
+			}
+			h.send("r1", "getChainInfo", "valid")
+			await settle()
+			expect(refusedIds()).toEqual([])
+			expect(dispatched()).toEqual(["r1:getChainInfo"])
+		})
+
+		test("a send past its FIFO release keeps its slot until it is answered", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			dispatch
+				.mockImplementationOnce((_method, _args, _ctx, hooks) => {
+					hooks?.onExecutionEnqueued?.()
+					return new Promise(() => {})
+				})
+				.mockImplementationOnce(() => new Promise(() => {}))
+			h.send("r1", "sendTx", "s")
+			for (let i = 1; i < MAX_PENDING_PER_SESSION; i++) h.send("r1", "getAccounts", `m${i}`)
+			await settle()
+			expect(dispatched()).toEqual(["r1:sendTx", "r1:getAccounts"])
+
+			h.send("r1", "getAccounts", "over")
+			await settle()
+			expect(refusedIds()).toEqual(["over"])
+		})
+
+		test("with a session's head decrypt held, 32 more wait and the next is dropped before its decrypt", async () => {
+			const h = boot()
+			remember(h, true)
+			await reconnect(h, "r1")
+			const head = deferred<void>()
+			const decrypted: unknown[] = []
+			decryptHook = async (_id, encrypted) => {
+				decrypted.push(encrypted)
+				if (encrypted === "head") await head.promise
+			}
+			const queued = range("c", MAX_PENDING_PER_SESSION)
+			void post(h, "r1", "head")
+			for (const c of queued) void post(h, "r1", c)
+			void post(h, "r1", "over")
+			head.resolve()
+			await settle()
+			expect(decrypted).toEqual(["head", ...queued])
+
+			void post(h, "r1", "after")
+			await settle()
+			expect(decrypted.at(-1)).toBe("after")
+		})
+
+		test("control: an id that re-keys while its old lane is full and held decrypts its successor's message at once", async () => {
+			const h = boot()
+			remember(h, true)
+			await reconnect(h, "r1")
+			const head = deferred<void>()
+			const decrypted: unknown[] = []
+			decryptHook = async (_id, encrypted) => {
+				decrypted.push(encrypted)
+				if (encrypted === "head") await head.promise
+			}
+			const queued = range("c", MAX_PENDING_PER_SESSION)
+			void post(h, "r1", "head")
+			for (const c of queued) void post(h, "r1", c)
+
+			await rekey(h, "r1", FIRST_CHECK_WINDOW)
+			void post(h, "r1", "successor")
+			await settle()
+			expect(decrypted).toEqual(["head", "successor"])
+			head.resolve()
+			await settle()
+			expect(decrypted).toEqual(["head", "successor", ...queued])
+		})
+
+		test("at the bound, a refusal appended while a decrypt runs still goes out: every decrypted call is answered, the dropped one never", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			await fillToBound(h, "r1")
+			const first = deferred<void>()
+			const decrypted: unknown[] = []
+			decryptHook = async (id, encrypted) => {
+				decrypted.push(encrypted)
+				if (encrypted === "d0") await first.promise
+				captured?.onWalletMessage(sessions.get(id), { type: "getChainInfo", args: [], messageId: encrypted })
+			}
+			const behind = range("q", MAX_PENDING_PER_SESSION)
+			void post(h, "r1", "d0")
+			for (const q of behind) void post(h, "r1", q)
+			void post(h, "r1", "dropped")
+			first.resolve()
+			await settle()
+			expect(decrypted).toEqual(["d0", ...behind])
+			expect(refusedIds()).toEqual(["d0", ...behind])
+		})
+
+		test("a held refusal reply takes the lane's turn, so 32 ciphertexts fill it; a reply that fails still lets the lane advance", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			await fillToBound(h, "r1")
+			const reply = deferred<void>()
+			nextResponse = reply.promise
+			h.send("r1", "getChainInfo", "over")
+			await settle()
+			expect(refusedIds()).toEqual(["over"])
+			const decrypted: unknown[] = []
+			decryptHook = async (_id, encrypted) => {
+				decrypted.push(encrypted)
+			}
+			const queued = range("c", MAX_PENDING_PER_SESSION)
+			for (const c of queued) void post(h, "r1", c)
+			void post(h, "r1", "dropped")
+			await settle()
+			expect(decrypted).toEqual([])
+
+			reply.reject(new Error("tab gone"))
+			await settle()
+			expect(decrypted).toEqual(queued)
+		})
+
+		test("a refusal queued behind a held decrypt sends nothing once its id re-keys; the successor's refusal is sent", async () => {
+			const h = boot()
+			remember(h, false)
+			await confirmedSession(h, "r1")
+			await fillToBound(h, "r1")
+			const held = deferred<void>()
+			decryptHook = (_id, encrypted) => (encrypted === "held" ? held.promise : Promise.resolve())
+			void post(h, "r1", "held")
+			h.send("r1", "getChainInfo", "old-over")
+			await settle()
+			expect(responses).toEqual([])
+
+			await rekey(h, "r1", FIRST_CHECK_WINDOW)
+			h.confirm(hashOf("r1"))
+			await settle()
+			await fillToBound(h, "r1")
+			h.send("r1", "getChainInfo", "new-over")
+			await settle()
+			expect(refusedIds()).toEqual(["new-over"])
+
+			held.resolve()
+			await settle()
+			expect(refusedIds()).toEqual(["new-over"])
+		})
 	})
 })

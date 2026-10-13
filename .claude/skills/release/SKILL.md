@@ -7,6 +7,8 @@ description: The Nulo release runbook. Promote dev → main, merge the Release P
 
 Two flows: **stable** (from `main`, tagged `vX.Y.Z`) and **prerelease** (from `dev`, tagged `vX.Y.Z-rc.N`). Both share the same v4 abort bug + manual unstick pattern.
 
+Human `chore: bump extension to X.Y.Z` commits remain **deprecated**. Config files: `.github/release-please-config.json` + `.release-please-manifest.json` (stable), `.github/release-please-prerelease-config.json` + `.release-please-prerelease-manifest.json` (prerelease), `CHANGELOG.md`. Workflows: `.github/workflows/release.yml` (stable + publish chain), `.github/workflows/release-prerelease.yml` (rc PR opener).
+
 > **This runbook is the source of truth for the release process. Update it when the process changes** — a new failure mode, a changed step, a flipped switch. CLAUDE.md's § Release runbook and its skill-routing table point here. Worked examples: `implementations-plan/archive/{release-prerelease-fix,required-check-mismatch,stable-release,release-pipeline-hardening}/`.
 
 ## Start here — what a release is, and what you actually do
@@ -195,6 +197,7 @@ Several pieces ship **guarded** and get promoted only after they're proven on re
 | `vars.AUTO_UNSTICK_ENABLED` | the `auto-unstick` job acting vs no-op | **on** in code (unset = on); var **on** | flipped | kill switch: `gh variable set AUTO_UNSTICK_ENABLED -b off` (back: `-b on`, or delete the var) |
 | `smoke-firefox-against-artifact` ∈ `attach-assets.needs` | whether a red Firefox smoke blocks the release's assets | **gating** (in `attach-assets.needs` and `status`) | flipped | back: remove it from `attach-assets`' `needs` and `if:`, and from `status`'s `needs`, `env:` and checks; update the pins in `behavior-gating.test.ts` and `aggregators.test.ts` in the same commit |
 | `nightly.yml`'s Firefox and chaos jobs ∈ `publish-nightly.needs` | whether a red Firefox suite, Firefox smoke or chaos run withholds the nightly | **gating** (in `publish-nightly`'s `needs` and `if:` and `status`) | flipped | back: remove them from `publish-nightly`'s `needs` and `if:` and from `status`'s `needs` and loop, and name them advisory in `aggregators.test.ts`, in the same commit |
+| `network-e2e-canary-wasm` ∈ `publish-nightly.needs` | whether a red run of the canary files on the in-browser prover withholds the nightly | **advisory** (no job needs it) | after 30 consecutive green nights of that job — owner's call | add it to `publish-nightly`'s `needs` and `if:` and to `status`'s `needs` and loop, and drop it from `NIGHTLY_ADVISORY` in `aggregators.test.ts`, in the same commit |
 | `extension-smoke-e2e-firefox-status` required | whether a red Firefox smoke blocks a merge | **required on `dev` and `main`** | flipped on both | the protection runbook (`scripts/ci-cd/required-checks.sh`), per branch — owner's call |
 | `extension-network-e2e-firefox-status` required | whether a red Firefox network suite blocks a merge | **required on `dev`**; advisory on `main` | on `main`: after 30 consecutive green nightlies of the four `network-e2e-*-firefox` jobs, or earlier by the owner's call | same runbook — owner's call |
 

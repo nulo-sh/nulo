@@ -91,7 +91,7 @@ import { chainInfoToChainId, handleSessionEstablished } from "./session-establis
 import { wireSessionTeardown } from "./session-revocation"
 import { wireTabLifecycle } from "./tab-lifecycle"
 import { bindLiveSession, type LiveSession } from "./live-session"
-import { type VerificationHold, VerificationHolds, wireVerificationHold } from "./verification-hold"
+import { MAX_PENDING_PER_SESSION, type VerificationHold, VerificationHolds, wireVerificationHold } from "./verification-hold"
 import type { ILogger } from "@/wallet/logger"
 import { LogLevel } from "@/wallet/logger"
 
@@ -147,7 +147,7 @@ export function initWalletSdkHandler(
 	// A verify window's slot is freed only when the window itself is gone.
 	ports.windows.onRemoved((windowId) => state.admission.windowRemoved(windowId))
 
-	serializeDecryption(handler, state.decryptLocks)
+	serializeDecryption(handler, state.decryptLocks, logger)
 	// The wallet's decision to end a session drops its held calls before the transport is told: a
 	// termination that throws leaves the session live, and its calls must not wait on it.
 	const endSession = (sessionId: string) => {
@@ -301,7 +301,7 @@ type SdkHandlerState = {
 	establishmentStatus: Map<string, Promise<boolean>>
 	/** Per-session gate on dispatch until the person confirms the session's check (see `verification-hold.ts`). */
 	holds: VerificationHolds
-	/** Per-session decryption serializer (see `serializeDecryption`). */
+	/** Per-session decrypt lane, which also carries refusal replies (see `serializeDecryption`). */
 	decryptLocks: KeyedLock
 	/** Per-origin reconnect throttle and verify-window budget (see `verify-admission.ts`). */
 	admission: VerifyAdmissionGate
@@ -525,6 +525,16 @@ function buildHandlerCallbacks(
 
 function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: SdkDeps, state: SdkHandlerState): void {
 	const key = session.sessionId
+	// Upstream passes whatever the ciphertext's JSON decoded to. A non-object has no id to answer, and
+	// reading one past the admission below would throw before its slot could be released.
+	if (typeof message !== "object" || message === null) {
+		deps.logger.log(
+			"wallet-sdk",
+			LogLevel.Debug,
+			`Dropping a decrypted message that is not an object, session ${describeExternalId(key)}`,
+		)
+		return
+	}
 	const live = bindLiveSession(state.late.handler!, session)
 	// Captured once, on arrival. Upstream reads the session before it awaits the decrypt, so a message
 	// whose session ended meanwhile arrives with the old object: it must not capture a successor's
@@ -538,8 +548,9 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 		)
 		return
 	}
-	if (!hold.admit()) {
-		refuseOverHeldCap(live, message, deps.logger)
+	const release = hold.admit()
+	if (release === undefined) {
+		refuseOverPendingCap(live, key, message, state.decryptLocks, deps.logger)
 		return
 	}
 	const prev = state.sessionQueues.get(key) ?? Promise.resolve()
@@ -581,6 +592,8 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 	// the reaper's grace cannot distinguish from a lost handler. The
 	// begin/end PLACEMENT invariants live (unit-pinned) in
 	// `queued-wait-vouching.ts`.
+	// The slot frees when the call's handling settles, not at the FIFO release: a send past its
+	// baton still holds its arguments until it is answered.
 	chainSendTxWithVouching({
 		queuedJournalIdPromise,
 		prev,
@@ -588,7 +601,7 @@ function onWalletMessage(session: ActiveSession, message: WalletMessage, deps: S
 		releaseFifo,
 		run: (queuedJournalId) =>
 			runEstablishedMessage(queuedJournalId, establishedPromise, releaseFifo, { session, live, hold }, message, deps, state),
-	})
+	}).then(release, release)
 	state.sessionQueues.set(
 		key,
 		baton.catch(() => {}),
@@ -622,18 +635,27 @@ function createQueuedJournalIfStamped(
 		: undefined
 }
 
-/** Answered at arrival, before any row or FIFO slot: the session's check is still unanswered and
- *  `MAX_HELD_PER_SESSION` of its calls already wait on it. */
-function refuseOverHeldCap(live: LiveSession, message: WalletMessage, logger: ILogger): void {
-	logger.log("wallet-sdk", LogLevel.Debug, `Refusing ${describeWireMethod(message.type)}: too many calls wait for the session's check`)
+/** Refused at arrival, before any row or FIFO slot: `MAX_PENDING_PER_SESSION` of the session's
+ *  calls already wait or run. The reply rides the session's decrypt lane, so the lane's depth bounds
+ *  owed replies with its decrypts; it is enqueued and never awaited, since this runs inside the lane. */
+function refuseOverPendingCap(
+	live: LiveSession,
+	sessionId: string,
+	message: WalletMessage,
+	decryptLocks: KeyedLock,
+	logger: ILogger,
+): void {
+	logger.log("wallet-sdk", LogLevel.Debug, `Refusing ${describeWireMethod(message.type)}: too many of the session's calls are pending`)
 	const response: WalletResponse = {
 		messageId: message.messageId,
 		walletId: "nulo",
 		error: toWalletResponseError(new TooManyPendingError()),
 	}
-	live.respond(response).catch((error: unknown) => {
-		logger.log("wallet-sdk", LogLevel.Error, `Failed to send response for ${describeWireMethod(message.type)}`, { error })
-	})
+	decryptLocks
+		.withLock(sessionId, () => live.respond(response))
+		.catch((error: unknown) => {
+			logger.log("wallet-sdk", LogLevel.Error, `Failed to send response for ${describeWireMethod(message.type)}`, { error })
+		})
 }
 
 /** A call whose session ended before it ran: nothing is sent, and its queued row fails as `kind`. */
@@ -711,14 +733,25 @@ async function runEstablishedMessage(
  * Serialize decryption per-session to prevent message reordering.
  * The wallet-sdk uses `void this.handleEncryptedMessage(...)` (fire-and-forget),
  * so two messages can have their decryptions race.
+ * A message that finds `MAX_PENDING_PER_SESSION` operations queued in its session's lane is dropped
+ * unanswered: its id is inside the ciphertext, so nothing can be refused before the decrypt.
  * TODO: Remove this monkey-patch if wallet-sdk adds a proper serialization API.
  */
-function serializeDecryption(handler: BackgroundConnectionHandler, decryptLocks: KeyedLock): void {
+function serializeDecryption(handler: BackgroundConnectionHandler, decryptLocks: KeyedLock, logger: ILogger): void {
 	// biome-ignore lint/suspicious/noExplicitAny: monkey-patching private method on BackgroundConnectionHandler to serialize decryption
 	const origDecrypt = (handler as any).handleEncryptedMessage.bind(handler)
 	// biome-ignore lint/suspicious/noExplicitAny: monkey-patching private method on BackgroundConnectionHandler to serialize decryption
-	;(handler as any).handleEncryptedMessage = (sessionId: string, encrypted: unknown) =>
-		decryptLocks.withLock(sessionId, () => origDecrypt(sessionId, encrypted))
+	;(handler as any).handleEncryptedMessage = (sessionId: string, encrypted: unknown) => {
+		if (decryptLocks.waiting(sessionId) >= MAX_PENDING_PER_SESSION) {
+			logger.log(
+				"wallet-sdk",
+				LogLevel.Debug,
+				`Dropping a secure message for session ${describeExternalId(sessionId)}: its lane is full`,
+			)
+			return Promise.resolve()
+		}
+		return decryptLocks.withLock(sessionId, () => origDecrypt(sessionId, encrypted))
+	}
 }
 
 /** On unlock, drain any queued discovery requests */

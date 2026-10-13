@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from "vitest"
-import { QUOTE_DRIFT_LIMIT, SNAPSHOT_MAX_AGE_MS, evaluateFiatGate } from "./send-fiat-gate"
+import { QUOTE_DRIFT_LIMIT, SNAPSHOT_MAX_AGE_MS, evaluateFiatGate, requoteReason } from "./send-fiat-gate"
 
 const GUARD = (usd = 1, converting = false) => ({ frozenUsd: usd, frozenAt: 1, converting })
 
@@ -95,5 +95,23 @@ describe("send-fiat-gate — snapshot expiry", () => {
 		})
 		// Just inside the window it still passes.
 		expect(evaluateFiatGate({ fiatMode: true, guard, liveUsd: 1, now: frozenAt + SNAPSHOT_MAX_AGE_MS - 1 }).ok).toBe(true)
+	})
+})
+
+describe("send-fiat-gate — what the requote notice claims", () => {
+	test("a snapshot that aged at an unchanged price is stale, never moved", () => {
+		expect(evaluateFiatGate({ fiatMode: true, guard: GUARD(1), liveUsd: 1, now: 1 + SNAPSHOT_MAX_AGE_MS }).ok).toBe(false)
+		expect(requoteReason(1, 1)).toBe("stale")
+	})
+
+	test.each([
+		["drifted past the limit", 1.05],
+		["aged after a move inside the limit", 1.004],
+	])("a live quote that differs from the snapshot (%s) is moved", (_, live) => {
+		expect(requoteReason(1, live)).toBe("moved")
+	})
+
+	test.each([null, undefined, 0, Number.NaN])("no usable live quote (%s) is stale", (live) => {
+		expect(requoteReason(1, live)).toBe("stale")
 	})
 })

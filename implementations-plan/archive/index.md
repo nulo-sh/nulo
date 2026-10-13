@@ -224,6 +224,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [restore-stage-extraction](restore-stage-extraction/plan.md) — completed — the coupling between two full-backup restore stages made an explicit value
 - [row-service-method-families](row-service-method-families/plan.md) — completed — pins first and one extraction across the token and network row services
 - [ruleset-hygiene-1](ruleset-hygiene-1/plan.md) — completed — the release runbook moves to a skill; proportion, known limits, a post-implementation standard and an e2e runtime budget
+- [ruleset-hygiene-2](ruleset-hygiene-2/plan.md) — completed — CLAUDE.md sheds depth: complexity budgets and logging policy become skills; plans point at their README, CI at CI.md
 - [runtime-edges](runtime-edges/plan.md) — completed — three low-severity runtime edge fixes, each pinned
 - [runtime-start-single-flight](runtime-start-single-flight/plan.md) — completed — a single-flight service-worker start replaces the started latch
 - [security-audit-remediation](security-audit-remediation/plan.md) — completed — a security audit's findings fixed in small, separately reviewed phases
@@ -268,6 +269,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-followups-4](wallet-followups-4/plan.md) — completed — caught errors logged under a named key at 26 sites and a fixed category at 2 migration lines, `getErrorData` deleted, the log scanner refusing it and error `.message`/`.stack` reads
 - [wallet-followups-5](wallet-followups-5/plan.md) — completed — a gone window closes quietly (#312); the log scan reads every logger level method and every call on a line, the column cut rejected in review (#302)
 - [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
+- [wallet-followups-7](wallet-followups-7/plan.md) — completed — one token contract spelling at the parse (#329); a bound of 32 pending calls on every dApp session at decrypt and dispatch (#354); #371 and #372 known limits
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set
