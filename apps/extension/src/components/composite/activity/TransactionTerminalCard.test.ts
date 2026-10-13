@@ -77,7 +77,7 @@ describe("composite/TransactionTerminalCard", () => {
 
 	test("Cancelled state: gray status icon + cancel", () => {
 		const w = mountCard(CANCELLED)
-		const badgeIcon = w.find('[data-testid="stub-icon"][data-color="gray"]')
+		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="gray"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("gray")
 		expect(badgeIcon.attributes("data-name")).toBe("cancel")
@@ -85,7 +85,7 @@ describe("composite/TransactionTerminalCard", () => {
 
 	test("Interrupted state: amber status icon, filled with the warning text token, + refresh-circle", () => {
 		const w = mountCard(INTERRUPTED)
-		const badgeIcon = w.find('[data-testid="stub-icon"][data-color="amber"]')
+		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="amber"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("txt-warning")
 		expect(badgeIcon.attributes("data-name")).toBe("refresh-circle")
@@ -93,7 +93,7 @@ describe("composite/TransactionTerminalCard", () => {
 
 	test("Failed state: red status icon, filled with the danger text token, + close-circle", () => {
 		const w = mountCard(FAILED)
-		const badgeIcon = w.find('[data-testid="stub-icon"][data-color="red"]')
+		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="red"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("txt-danger")
 		expect(badgeIcon.attributes("data-name")).toBe("close-circle")
@@ -101,7 +101,7 @@ describe("composite/TransactionTerminalCard", () => {
 
 	test("Sent state: green status icon, filled with the success text token, + check-circle, over a green subtitle", () => {
 		const w = mountCard(SENT)
-		const badgeIcon = w.find('[data-testid="stub-icon"][data-color="green"]')
+		const badgeIcon = w.find('[data-testid="activity-status-icon"][data-color="green"]')
 		expect(badgeIcon.exists()).toBe(true)
 		expect(badgeIcon.attributes("data-fill")).toBe("txt-success")
 		expect(badgeIcon.attributes("data-name")).toBe("check-circle")

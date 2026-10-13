@@ -146,7 +146,7 @@ onBeforeUnmount(() => {
 		:txHash="props.tx.hash"
 	>
 		<template #badge>
-			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" />
+			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>

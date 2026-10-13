@@ -45,7 +45,7 @@ defineProps({
 <template>
 	<TransactionCardLayout :title="title" :icon="activityIcon" :amount="amount" :amountSymbol="amountSymbol" :to="to" testId="tx-terminal-card">
 		<template #badge>
-			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" />
+			<Icon :name="icon" size="12" :color="STATUS_ICON_FILL[color]" :class="$style.status_icon" :data-color="color" data-testid="activity-status-icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>

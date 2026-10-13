@@ -77,9 +77,16 @@ export async function seedTransaction(page: Page, scope: ActivityScope, seed: Tr
 	)
 }
 
-/** The scope's token as a registered row: a receipt shows its amount and quote only through one. */
-export async function seedTokenRow(page: Page, scope: ActivityScope, id: number): Promise<void> {
-	const row = { id, profileId: scope.profileId, chainId: scope.chainId, ...scope.token }
+/** A registered token row, the scope's token unless `token` names another: a receipt shows its amount
+ *  and quote only through one, and only with the decimals getter that makes its stored decimals known. */
+export async function seedTokenRow(
+	page: Page,
+	scope: ActivityScope,
+	id: number,
+	opts: { token?: ActivityScope["token"]; decimalsGetter?: boolean } = {},
+): Promise<void> {
+	const getter = opts.decimalsGetter === false ? {} : { getDecimalsFn: { name: "decimals", impl: 0 } }
+	const row = { id, profileId: scope.profileId, chainId: scope.chainId, ...(opts.token ?? scope.token), ...getter }
 	await page.evaluate(
 		(key: string, value: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(value) }),
 		`nulo:core:tokens@${id}`,
@@ -117,4 +124,43 @@ export async function seedReceipt(page: Page, scope: ActivityScope, seed: Receip
 		record,
 	)
 	return id
+}
+
+export type JournalSeed = {
+	/** 16 hex characters, as the journal mints them. */
+	id: string
+	tokenId: number
+	/** Base units of the token. */
+	amount: string
+	progress: { stage: "failed" | "cancelled"; [field: string]: unknown }
+	errorKind?: string
+	at?: number
+}
+
+/** A Send-page transfer that ended without a settled transaction, stamped with the scope. */
+export async function seedJournalRecord(page: Page, scope: ActivityScope, seed: JournalSeed): Promise<void> {
+	const at = seed.at ?? Date.now()
+	const record = {
+		id: seed.id,
+		kind: "transfer",
+		origin: "popup",
+		profileId: scope.profileId,
+		accountAddress: scope.account,
+		networkId: scope.networkId,
+		tokenId: seed.tokenId,
+		amountRaw: seed.amount,
+		recipientAddress: scope.account,
+		transferType: 0,
+		progress: seed.progress,
+		error: seed.errorKind === undefined ? null : { kind: seed.errorKind, message: "seeded", normalizedRaw: null },
+		terminalAt: at,
+		attempts: 0,
+		createdAt: at,
+		updatedAt: at,
+	}
+	await page.evaluate(
+		(key: string, row: unknown) => chrome.storage.local.set({ [key]: JSON.stringify(row) }),
+		`nulo:journal@${seed.id}`,
+		record,
+	)
 }

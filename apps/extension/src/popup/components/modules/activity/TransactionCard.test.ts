@@ -103,7 +103,7 @@ describe("modules/activity/TransactionCard (settled)", () => {
 		["dropped", { status: TxStatus.Dropped }, "close-circle", "txt-danger"],
 		["pending", { status: TxStatus.Pending }, "clock-circle", "gray"],
 	])("a %s tx's status icon fills with its state's status text token", (_label, over, name, fill) => {
-		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="stub-icon"][data-name="${name}"]`)
+		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="activity-status-icon"][data-name="${name}"]`)
 		expect(icon.attributes("data-color")).toBe(fill)
 	})
 

@@ -60,7 +60,7 @@ const hashSlice = computed(() => {
 		testId="tx-incoming-card"
 	>
 		<template #badge>
-			<Icon name="check-circle" size="12" :color="STATUS_ICON_FILL.green" />
+			<Icon name="check-circle" size="12" :color="STATUS_ICON_FILL.green" data-testid="activity-status-icon" />
 		</template>
 
 		<template #title-trailing>

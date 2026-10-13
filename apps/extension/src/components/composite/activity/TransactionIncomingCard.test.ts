@@ -41,7 +41,9 @@ const mountCard = (props: Record<string, unknown> = {}) =>
 
 describe("composite/TransactionIncomingCard", () => {
 	test("the status icon fills with the success text token", () => {
-		expect(mountCard().find('[data-testid="stub-icon"][data-name="check-circle"]').attributes("data-color")).toBe("txt-success")
+		expect(mountCard().find('[data-testid="activity-status-icon"][data-name="check-circle"]').attributes("data-color")).toBe(
+			"txt-success",
+		)
 	})
 
 	test("formats the raw amount by token decimals with a + prefix", () => {

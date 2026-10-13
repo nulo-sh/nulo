@@ -209,7 +209,7 @@ export async function readSendInputs(page: Page): Promise<{ amount: string; dest
 /** Waits, at most 1 s and never throwing, for the CSS transitions a theme flip started: sheets and
  *  buttons fade their colours over 0.2 s, and a shot taken mid-fade reads washed out. Only transitions
  *  count, so an endless spinner animation cannot hold it. */
-async function settleThemeTransitions(page: Page): Promise<void> {
+export async function settleThemeTransitions(page: Page): Promise<void> {
 	await page
 		.evaluate(() => {
 			const ends = document.getAnimations().flatMap((a) => (a instanceof CSSTransition ? [a.finished.catch(() => undefined)] : []))
