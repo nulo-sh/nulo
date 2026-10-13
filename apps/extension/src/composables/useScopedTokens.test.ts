@@ -169,4 +169,57 @@ describe("useScopedTokens", () => {
 		await flushPromises()
 		expect(tokens.value).toEqual([])
 	})
+
+	describe("loaded", () => {
+		test("is false until the first read lands, then true", async () => {
+			const first = deferred<TokenInfo[]>()
+			getTokens.mockReturnValueOnce(first.promise)
+			const { loaded, reload } = setup()
+			void reload()
+			await flushPromises()
+			expect(loaded.value).toBe(false)
+
+			first.resolve([token(1, "TST")])
+			await flushPromises()
+			expect(loaded.value).toBe(true)
+		})
+
+		test("a failed first read settles it too, with the list still empty", async () => {
+			vi.spyOn(console, "debug").mockImplementation(() => {})
+			getTokens.mockRejectedValue(new Error("port cannot open"))
+			const { tokens, loaded, reload } = setup()
+			await reload()
+			expect(loaded.value).toBe(true)
+			expect(tokens.value).toEqual([])
+		})
+
+		test("a scope change unsettles it until the new scope's read lands", async () => {
+			const { loaded, reload } = setup()
+			await reload()
+			const next = deferred<TokenInfo[]>()
+			getTokens.mockReturnValueOnce(next.promise)
+
+			store.chainId = 2
+			expect(loaded.value).toBe(false)
+			next.resolve([token(2, "NEW")])
+			await flushPromises()
+			expect(loaded.value).toBe(true)
+		})
+
+		test("a read superseded by a scope change never settles the new scope", async () => {
+			const stale = deferred<TokenInfo[]>()
+			const fresh = deferred<TokenInfo[]>()
+			getTokens.mockReturnValueOnce(stale.promise).mockReturnValueOnce(fresh.promise)
+			const { loaded, reload } = setup()
+			void reload()
+
+			store.profileId = "p2"
+			stale.resolve([token(9, "STALE")])
+			await flushPromises()
+			expect(loaded.value).toBe(false)
+			fresh.resolve([token(2, "FRESH")])
+			await flushPromises()
+			expect(loaded.value).toBe(true)
+		})
+	})
 })

@@ -1,4 +1,6 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
+import type { Config } from "@/wallet/config/config"
+
 export const isPrefersDarkScheme = (): boolean => {
 	return window.matchMedia("(prefers-color-scheme: dark)")?.matches ?? false
 }
@@ -17,6 +19,14 @@ export const persistThemeHint = (value: string): void => {
 	} catch {
 		// localStorage can throw (privacy mode / disabled storage); the paint-hint is best-effort.
 	}
+}
+
+/** Paints a theme choice on `root` and mirrors it, raw, to the pre-paint hint; `system` resolves to
+ *  the OS scheme as it is now. Call it only with a choice read from Config, never a default: the hint
+ *  is what the next document paints first. */
+export const applyThemeChoice = (root: HTMLElement, choice: Config["theme"]): void => {
+	persistThemeHint(choice)
+	root.setAttribute("theme", choice === "system" ? (isPrefersDarkScheme() ? "dark" : "light") : choice)
 }
 
 export const debounce = <T extends (...args: never[]) => unknown>(fn: T, delay: number): ((...args: Parameters<T>) => void) => {

@@ -38,7 +38,7 @@ import {
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
-const SENDERS_HASH = "#/popup/settings/advanced/account-state/senders"
+const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
 const CONTACTS_HASH = "#/popup/settings/contacts"
 
 /** Valid (on-curve) random address + a name tied to it, fresh per call. */

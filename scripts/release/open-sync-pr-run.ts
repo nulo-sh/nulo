@@ -88,7 +88,7 @@ export async function runSync(opts: RunSyncOpts): Promise<RunSyncResult> {
 		`\`CHANGELOG.md\` into \`dev\` and re-baselines \`.release-please-prerelease-manifest.json\` to \`${opts.version}\` ` +
 		`(so the next rc series cuts from the right base). **Merge-commit** via the UI — NOT squash: a merge preserves ` +
 		`main's release-commit ancestry on \`dev\`, which the prerelease version-anchor needs (a squash drops it and re-breaks the rc cut). ` +
-		`See CLAUDE.md § "After a stable cut promotes to main".`
+		`See .claude/skills/release/SKILL.md § "After a stable cut promotes to main".`
 	const pr = await io.openPr(branch, title, body)
 
 	const mergeable = await io.mergeability(pr)

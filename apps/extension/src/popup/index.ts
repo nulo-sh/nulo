@@ -16,7 +16,7 @@ import "@nulo/design/base.css"
 import "./index.scss"
 
 import { initAppServiceContext, managers } from "@/utils/core"
-import { captureOwnWindow } from "@/utils/own-window"
+import { captureOwnWindow, followOwnRoute } from "@/utils/own-window"
 import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
 
@@ -52,5 +52,6 @@ router.beforeEach(
 		() => managers.profile,
 	),
 )
+router.afterEach(followOwnRoute)
 
 createApp(App).use(router).use(createPinia()).mount("#app")
