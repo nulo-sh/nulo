@@ -58,6 +58,7 @@ test.skipIf(!hasConfig)(
 		await shotSend(check, "verify-mismatch-new", "verify-mismatch-btn")
 
 		await refuseAndExpectForgotten(check, dapp, wallet)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )
@@ -94,6 +95,7 @@ test.skipIf(!hasConfig)(
 		await shotSend(check, "verify-mismatch-reconnect", "verify-mismatch-btn")
 
 		await refuseAndExpectForgotten(check, dapp, wallet)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )

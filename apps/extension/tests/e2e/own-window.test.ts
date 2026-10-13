@@ -76,6 +76,7 @@ test("an export window boots on export, returns there after a lock, and its back
 	await clickByTestId(own, "subpage-back")
 	await waitForPopupClosed(own, 10_000)
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 	await home.close()
 }, 180_000)

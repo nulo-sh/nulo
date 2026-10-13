@@ -173,6 +173,7 @@ test.skipIf(!aztecConfig)(
 			header: { account: "No account shared", network: "Local Network" },
 			error: null,
 		})
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 		await page.waitForFunction(
 			(sel: string, want: string) => document.querySelector(sel)?.textContent === want,
@@ -205,6 +206,7 @@ test.skipIf(!aztecConfig)(
 		await rejectCapabilities(caps)
 		expect((await waitForPgResult(dapp, "requestCapabilities", seq, 30_000)).status).toBe("error")
 		await waitForPopupClosed(caps)
+		expect(ctx.consoleErrors).toEqual([])
 		expect(ctx.pageErrors).toEqual([])
 	},
 )
