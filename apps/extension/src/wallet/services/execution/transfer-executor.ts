@@ -332,7 +332,8 @@ export class TransferExecutor {
 			if (queued) return
 			queued = true
 			requeued = this.deps.transitionJournal(journalId, { stage: "queued" })
-			// Awaited by the claim; a run that ends before it fails or cancels the row on its own path.
+			// Handled at once, so a run that ends before its claim raises no unhandled rejection; the
+			// claim awaits the transition itself and fails with its error.
 			requeued.catch(() => undefined)
 		}
 		for (;;) {

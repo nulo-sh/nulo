@@ -179,8 +179,8 @@ const executingProgressTitle = computed(() => {
 const executingProgressSubtitle = computed(() => {
 	const active = executingSubtasks.value.find((s) => s.status === TaskStatus.Processing)
 	if (active) return `${active.content.label}...`
-	// Before the scope's journal snapshot lands, the task may be a send whose record holds another stage.
-	return journalLanded.value ? "Preparing..." : null
+	// The task starts before its record exists, so only a running step or the record names the stage.
+	return null
 })
 /** dApp identity chip for the in-flight card — same chip the settled
  *  `TransactionCard` shows via `getOriginLabel`. UI-initiated transfers
@@ -215,8 +215,9 @@ taskService.onTaskDeleted.add(onExecutingTaskDeleted)
  *  off automatically. */
 const journalService = new OperationJournalServiceClient()
 const journalOps = ref([])
-/** Whether the current scope's journal snapshot has landed. */
-const journalLanded = ref(false)
+/** A snapshot that fails while the port stays up has no reconnect to retry it. */
+const JOURNAL_RETRY_MS = 2_000
+let journalRetry
 
 /** Third source for the activity-row merge: incoming-receive records from
  *  trusted fungible-token contracts. Filtered at the service layer
@@ -286,7 +287,6 @@ function journalRecordInActiveScope(op) {
 	})
 }
 
-/** The token page shows only its token's records, in flight and terminal alike. */
 function journalRecordOnThisView(op) {
 	if (!journalRecordInActiveScope(op)) return false
 	if (props.token && op.tokenId !== props.token.id) return false
@@ -561,14 +561,15 @@ async function resnapshotJournal(isCurrent = journalFence.begin()) {
 		if (!isCurrent() || captured !== appStore.account?.address) return
 		// The read filters by account and profile, not network.
 		journalOps.value = ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
-		journalLanded.value = true
 		// v4 cancel-dupe (snapshot path): catches close-popup-mid-cancel-and-
 		// reopen + SW disconnect mid-cancel. Uses 30s window to avoid
 		// sweeping in old terminals that don't actually correspond to the
 		// current executingTask.
 		clearExecutingTaskIfRecentTerminalMatch()
 	} catch {
-		// Reconnect may race the port — next event or the next reconnect retries.
+		if (!isCurrent()) return
+		clearTimeout(journalRetry)
+		journalRetry = setTimeout(() => isCurrent() && resnapshotJournal(isCurrent), JOURNAL_RETRY_MS)
 	}
 }
 journalService.onConnected.add(resnapshotJournal)
@@ -682,7 +683,6 @@ watch(
 		const journalRun = journalFence.begin()
 		const taskRun = taskFence.begin()
 		journalOps.value = []
-		journalLanded.value = false
 		executingTask.value = null
 		executingSubtasks.value = []
 		pendingCancelJobIds.value = new Set()
@@ -757,6 +757,8 @@ onBeforeUnmount(() => {
 	disposeIncomingTransfers()
 	syncHealth.dispose()
 	scopedTokens.dispose()
+	journalFence.invalidate()
+	clearTimeout(journalRetry)
 })
 </script>
 

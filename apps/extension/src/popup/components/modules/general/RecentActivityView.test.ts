@@ -994,23 +994,48 @@ describe("RecentActivityView — hydration order", () => {
 		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
 	})
 
-	test("a scope switch draws the new scope's task with no stage line until that scope's snapshot lands", async () => {
-		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
-		H.getOperations.mockResolvedValue([])
-		const w = mountView()
-		await flushPromises()
-		expect(cards(w)).toEqual([{ stage: null, subtitle: "Preparing...", cancellable: false }])
-
+	test("a Send-page task with no running step and no record yet draws no stage line, before or after the snapshot", async () => {
 		const ops = deferred<unknown[]>()
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
 		H.getOperations.mockReturnValue(ops.promise)
-		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_B, "task-b")])
-		H.store.current.account = { address: ACCT_B }
+		const w = mountView()
 		await flushPromises()
 		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
 
 		ops.resolve([])
 		await flushPromises()
-		expect(cards(w)).toEqual([{ stage: null, subtitle: "Preparing...", cancellable: false }])
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		const created = { ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }
+		H.journalAdded.emit(created)
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+	})
+
+	test("a snapshot that fails while the port stays up is retried, and a scope switch drops the retry", async () => {
+		vi.useFakeTimers()
+		try {
+			H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
+			const w = mountView()
+			await flushPromises()
+			expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+			H.getOperations.mockResolvedValueOnce([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+
+			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
+			H.store.current.account = { address: ACCT_B }
+			await flushPromises()
+			const reads = H.getOperations.mock.calls.length
+			H.store.current.account = { address: ACCT_A }
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2_000)
+			expect(H.getOperations.mock.calls.length, "only the current scope's read runs").toBe(reads + 1)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	test("a running step names itself before the snapshot lands", async () => {

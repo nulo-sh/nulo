@@ -238,8 +238,6 @@ onBeforeUnmount(() => {
 		<SubPageHeader :title="title" :backTo="'/popup/activity'" />
 
 		<Flex v-if="op && display" wide direction="column" gap="20" :class="$style.content">
-			<!-- Hero meta: the record's terminal time in tx/[id].vue's tx_time slot, then its explorer link
-				 when the record has a hash and an explorer is set. -->
 			<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
 				<span v-if="terminalAtLabel" :class="$style.tx_time">{{ terminalAtLabel }}</span>
 				<span v-if="terminalAtLabel && explorerUrl" :class="$style.meta_sep">·</span>
