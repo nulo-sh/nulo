@@ -10,3 +10,4 @@
 - 2026-10-13 — final-pass confirmation (same session): conditional approve; 3 conditions verified and applied. Planning converged; committing.
 - 2026-10-13 — arc 1 phase 1.1 (#135) gate pass: lint, typecheck:all, test (745 files), settings-routes smoke Chrome + Firefox at retry 0; legacy-routes pin red on the base `legacy-routes.ts`.
 - 2026-10-13 — arc 1 phase 1.2 (#149) gate pass: lint, typecheck:all, test; `passkey-toolbar-panel` Firefox 6/6 at retry 0; new case red on base.
+- 2026-10-13 — arc 1 phase 1.3 (#133) gate pass: lint, typecheck:all, test; `appearance` Chrome + Firefox at retry 0; new e2e and unit cases red on base.

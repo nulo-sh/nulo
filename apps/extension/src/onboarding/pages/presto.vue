@@ -29,7 +29,8 @@ const isPitch = computed(() => isPitchKind(state.value.kind))
 const isProbing = computed(() => state.value.kind === "detecting")
 const canContinue = computed(() => state.value.kind === "available" || state.value.kind === "downloading")
 const diagnosis = computed(() => (state.value.kind === "secure-connection-unavailable" ? state.value.diagnosis : undefined))
-// app.vue resolves the config's theme (system → light/dark) onto `<html theme>` before any page mounts.
+// The pre-paint theme from the hint, which onboarding's first Config read may still change; the banner
+// keeps the theme it mounted with.
 const bannerTheme = document.documentElement.getAttribute("theme") === "light" ? "light" : "dark"
 
 const pitchRef = useTemplateRef<HTMLDivElement>("pitchRef")

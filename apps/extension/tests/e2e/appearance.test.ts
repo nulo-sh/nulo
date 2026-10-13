@@ -1,5 +1,6 @@
 import { expect } from "vitest"
-import { test, openPopup, waitForHash, clickByTestId } from "./fixtures/extension"
+import { extensionUrl, gotoExtensionPage, newPage } from "./fixtures/browser"
+import { test, openPopup, waitForHash, clickByTestId, patchPagePolling, recordPageErrors } from "./fixtures/extension"
 import { navigateByHash, navigateToSettings, setTheme } from "./fixtures/helpers"
 
 test("cycle theme system → light → dark verifies html[theme=…] each step", async ({ registeredExtension }) => {
@@ -88,4 +89,31 @@ test.skip("theme persists across navigation away and back", async ({ registeredE
 
 	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
+})
+
+// An explicit choice, never `system`: Firefox cannot emulate the OS scheme.
+test("onboarding paints the stored theme over a pre-paint hint that disagrees", async ({ registeredExtension: ctx }) => {
+	const popup = await openPopup(ctx)
+	await waitForHash(popup, "#/popup/general")
+	await navigateToSettings(popup, "display")
+	await setTheme(popup, "dark")
+	// The hint a reset leaves behind: chrome.storage is cleared, the page's localStorage is not.
+	await popup.evaluate(async () => {
+		localStorage.setItem("nulo:theme", "light")
+		await chrome.storage.local.set({ "nulo:onboarding:completed": false })
+	})
+	await popup.close()
+
+	const page = await newPage(ctx.browser)
+	patchPagePolling(page)
+	recordPageErrors(ctx, page)
+	await gotoExtensionPage(page, extensionUrl(ctx.extensionId, "/src/onboarding/index.html#/onboarding/welcome"))
+	await page.waitForFunction(
+		() => document.documentElement.getAttribute("theme") === "dark" && localStorage.getItem("nulo:theme") === "dark",
+		{ timeout: 15_000, polling: 50 },
+	)
+
+	expect(ctx.consoleErrors).toEqual([])
+	expect(ctx.pageErrors).toEqual([])
+	await page.close()
 })

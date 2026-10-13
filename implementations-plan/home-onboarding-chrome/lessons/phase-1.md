@@ -16,3 +16,12 @@
 - E2E (Firefox, `passkey-toolbar-panel`): headless Firefox returns focus to the main window once `armPanelDeath`'s guard disarms, so after the second `toOwnWindow` the case asserts the window left on profile creation is not focused (the plan's wording), not that the new one is.
 - Red on base: the committed case fails at the registration wait (the base never registers). A proof variant that waits for the first window's boot instead fails at the focus check: the base's second start opened window 75 and focused it, the duplicate the issue reports. Logs under the lane's scratch dir.
 - Gate: lint, typecheck:all, test; `passkey-toolbar-panel` on Firefox at retry 0, 6 of 6: green.
+
+## Phase 1.3: onboarding honours the stored theme (#133), 2026-10-13
+
+- `applyThemeChoice(root, choice)` takes `Config["theme"]`, so its domain follows the config schema.
+- `useConfigRead` swallows a rejected read, so onboarding's fetch logs its fixed debug category itself and rethrows.
+- E2E deviation: the plan named a fresh install. A fresh install cannot hold a stored theme without writing `nulo:config` raw and restarting the worker (the config store reads storage only at boot), so the case registers a profile, stores `dark` through Settings → Display, writes a `light` hint, flips the onboarding flag and opens onboarding; with an unlocked profile onboarding moves to `learn` and stays open. The read and the paint are the same code either way.
+- The build regenerates `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` for each new export under `utils/`; they are tracked and ride with the change that adds the export.
+- Red on base: the three `onboarding/app.test.ts` cases fail on the base `app.vue`; the e2e case times out on it (Chrome).
+- Gate: lint, typecheck:all, test (747 files); `appearance` smoke on Chrome and Firefox at retry 0: green.

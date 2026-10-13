@@ -75,6 +75,7 @@ declare global {
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
+  const applyThemeChoice: typeof import('../utils/general').applyThemeChoice
   const approvedSendsInFlight: typeof import('../utils/in-flight-send').approvedSendsInFlight
   const arrivalAmount: typeof import('../composables/useArrivals').arrivalAmount
   const arrivalChipLabel: typeof import('../composables/useArrivals').arrivalChipLabel
@@ -134,6 +135,7 @@ declare global {
   const findTransferSignature: typeof import('../utils/token-transfer-vocabulary').findTransferSignature
   const fitHero: typeof import('../utils/hero-fit').fitHero
   const foldLabel: typeof import('../utils/token-fold').foldLabel
+  const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
   const formatFeeJuice: typeof import('../utils/fee-estimation').formatFeeJuice
@@ -698,6 +700,7 @@ declare module 'vue' {
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
+    readonly applyThemeChoice: UnwrapRef<typeof import('../utils/general')['applyThemeChoice']>
     readonly approvedSendsInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['approvedSendsInFlight']>
     readonly arrivalAmount: UnwrapRef<typeof import('../composables/useArrivals')['arrivalAmount']>
     readonly arrivalChipLabel: UnwrapRef<typeof import('../composables/useArrivals')['arrivalChipLabel']>
@@ -757,6 +760,7 @@ declare module 'vue' {
     readonly findTransferSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findTransferSignature']>
     readonly fitHero: UnwrapRef<typeof import('../utils/hero-fit')['fitHero']>
     readonly foldLabel: UnwrapRef<typeof import('../utils/token-fold')['foldLabel']>
+    readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
     readonly formatFeeJuice: UnwrapRef<typeof import('../utils/fee-estimation')['formatFeeJuice']>
