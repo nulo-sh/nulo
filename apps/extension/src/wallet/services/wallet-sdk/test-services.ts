@@ -41,11 +41,13 @@ export function fakeSdkServices(
 	onActiveProfileChanged: EventHandler<unknown>
 	onDappSessionDeleted: EventHandler<unknown>
 	onVerificationRefused: EventHandler<unknown>
+	onVerificationConfirmed: EventHandler<{ verificationHash: string }>
 } {
 	const rows = new Map<string, FakeDappSessionRow>()
 	const onActiveProfileChanged = new EventHandler<unknown>()
 	const onDappSessionDeleted = new EventHandler<unknown>()
 	const onVerificationRefused = new EventHandler<unknown>()
+	const onVerificationConfirmed = new EventHandler<{ verificationHash: string }>()
 	let rowSeq = 0
 	const getActiveProfile = opts.activeProfile ?? (async () => ({ id: "p1" }))
 	if (opts.remembered)
@@ -81,6 +83,7 @@ export function fakeSdkServices(
 				"dapp-session": {
 					onDappSessionDeleted,
 					onVerificationRefused,
+					onVerificationConfirmed,
 					tryGetDappSessionByOriginAndChain: async (origin: string, chainId: string) => rows.get(`${origin}|${chainId}`),
 					addDappSession: async (metadata: { url: string }, _p: unknown, _a: unknown, _l: unknown, chainId: string) => {
 						const row = { id: `row-${++rowSeq}`, profileId: "p1", chainId, trustedVerification: false }
@@ -98,5 +101,5 @@ export function fakeSdkServices(
 				"legal-acceptance": { assertCurrent: opts.legal ?? (async () => undefined) },
 			})[name],
 	} as never
-	return { services, rows, onActiveProfileChanged, onDappSessionDeleted, onVerificationRefused }
+	return { services, rows, onActiveProfileChanged, onDappSessionDeleted, onVerificationRefused, onVerificationConfirmed }
 }

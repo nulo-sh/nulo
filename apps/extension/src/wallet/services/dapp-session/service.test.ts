@@ -606,3 +606,28 @@ describe("refuseVerification", () => {
 		expect(svc.refused).toEqual([])
 	})
 })
+
+describe("confirmVerification", () => {
+	const HASH = "3c".repeat(32)
+
+	test("a check's hash is relayed to the listeners before the call answers", async () => {
+		const { service } = await makeService()
+		const confirmed: unknown[] = []
+		service.onVerificationConfirmed.add((payload) => confirmed.push(payload))
+		const answered = service.confirmVerification(HASH)
+		expect(confirmed).toEqual([{ verificationHash: HASH }])
+		await expect(answered).resolves.toBeUndefined()
+	})
+
+	test.each([
+		["upper-case hex", HASH.toUpperCase()],
+		["63 characters", HASH.slice(1)],
+		["a non-string", 7],
+	])("refuses %s and relays nothing", async (_, bad) => {
+		const { service } = await makeService()
+		const confirmed: unknown[] = []
+		service.onVerificationConfirmed.add((payload) => confirmed.push(payload))
+		await expect(service.confirmVerification(bad as never)).rejects.toBeInstanceOf(ValidationError)
+		expect(confirmed).toEqual([])
+	})
+})
