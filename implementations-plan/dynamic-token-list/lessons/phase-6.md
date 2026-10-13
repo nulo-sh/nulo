@@ -42,3 +42,5 @@ Round 2 (resumed): **conditional approve**, two residual findings, both fixed:
 
 1. `skipUnlessListPrices` would also skip in a source run, so an unpriced fixture could pass the suite without its priced assertions. A source run now throws instead (checked: unpricing the fixture fails the five priced tests with "E2E_LIST_TOKENS must price a Testnet token").
 2. Nit: the History sideways test priced its row from the held list though it asserts no fiat. It now takes fixture metadata (`openHomeWithRow(ctx, { priced: false })`). The other non-pricing rows tests keep the shared listed launch: a release build seeded its defaults in that launch before this change too, and a second file-scope launch costs more than it proves.
+
+Round 3 (resumed): **approve**, "No new material findings. Confidence: high."
