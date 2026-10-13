@@ -306,6 +306,21 @@ describe("RevokeAuthwitsPopup — the Revoke button", () => {
 		resolveRevoke()
 	})
 
+	test("one chunk whose estimate finds the account's own Fee Juice short keeps every revoke off", async () => {
+		// Nine authwits make two chunks; only the second, a single revoke, is short.
+		authwitsServiceMock.estimateRevokeFee.mockImplementation(async (_n: unknown, _a: unknown, ids: string[]) =>
+			ids.length === 1 ? { ...ESTIMATE, feeJuiceShortfall: { maxFee: "800", balance: "799" } } : ESTIMATE,
+		)
+		const many = Array.from({ length: 9 }, (_, i) => ({ id: `aw-${i}`, content: `c${i}` }))
+		const w = await mountAndOpen(many)
+		await setAllFees(w)
+		expect(new Set(authwitsServiceMock.estimateRevokeFee.mock.calls.map((c) => c[2].length))).toEqual(new Set([8, 1]))
+		expect(w.find('[data-testid="revoke-authwits-submit"]').attributes("disabled")).toBeDefined()
+		pressOn(submitButton(w), "Enter")
+		await flushPromises()
+		expect(authwitsServiceMock.revokeAuthwits).not.toHaveBeenCalled()
+	})
+
 	test("a press before every chunk has a fee revokes nothing", async () => {
 		const w = await mountAndOpen()
 		pressOn(submitButton(w), "Enter")

@@ -64,14 +64,6 @@ const estimates = useWalletTxEstimates({
 	},
 })
 const { results: feeEstimates, estimating: estimatingFees } = estimates
-// Synchronous: Confirm never reads an estimate made for the inputs just replaced.
-watch([feeSettings, isRegistryEnabled], () => estimates.refresh(0), { flush: "sync" })
-onBeforeUnmount(() => {
-	registry.dispose()
-	stage.dispose()
-	estimates.dispose()
-	journalService.disconnect()
-})
 
 const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed() && !estimates.short())
 
@@ -120,6 +112,15 @@ usePopupEntity(() => props.show, {
 		authwitsService.disconnect()
 		journalService.disconnect()
 	},
+})
+
+// Synchronous: Confirm never reads an estimate made for the inputs just replaced.
+watch([feeSettings, isRegistryEnabled], () => estimates.refresh(0), { flush: "sync" })
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	estimates.dispose()
+	journalService.disconnect()
 })
 </script>
 

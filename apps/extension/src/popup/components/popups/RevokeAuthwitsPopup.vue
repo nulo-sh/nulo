@@ -65,12 +65,6 @@ const estimates = useWalletTxEstimates({
 	},
 })
 const { results: feeEstimates, estimating: estimatingFees } = estimates
-onBeforeUnmount(() => {
-	registry.dispose()
-	stage.dispose()
-	estimates.dispose()
-	journalService.disconnect()
-})
 
 /** Synchronous with the input: Confirm never reads an estimate made for the settings just replaced. */
 function setChunkFee(i, settings) {
@@ -171,6 +165,13 @@ usePopupEntity(() => props.show, {
 		authwitsService.disconnect()
 		journalService.disconnect()
 	},
+})
+
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	estimates.dispose()
+	journalService.disconnect()
 })
 </script>
 

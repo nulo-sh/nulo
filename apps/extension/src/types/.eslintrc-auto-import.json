@@ -293,7 +293,6 @@
     "compareTokenRows": true,
     "completeImportWithRecovery": true,
     "compressData": true,
-    "computeMaxFee": true,
     "computed": true,
     "confirmationPolicies": true,
     "contactListReducers": true,

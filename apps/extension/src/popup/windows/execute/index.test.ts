@@ -876,6 +876,35 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
+	test("a shortfall already shown holds Confirm while its replacement estimate runs", async () => {
+		const { vm, fees, confirm } = await opened()
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.results.value = { 0: { maxFee: "800", feeJuiceShortfall: { maxFee: "800", balance: "799" } } }
+		await flushPromises()
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "700" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
+	test("a replacement estimate that fails releases the hold: a failed read is no refusal", async () => {
+		const { fees, confirm } = await opened()
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.results.value = verdict(true)
+		await flushPromises()
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+	})
+
 	test("a short read the transaction could still fund leaves Confirm as today", async () => {
 		const { vm, fees, confirm } = await opened()
 		fees.api.results.value = verdict(false)

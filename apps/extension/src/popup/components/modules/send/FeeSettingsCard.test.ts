@@ -2258,6 +2258,22 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
 		})
 
+		test("one account's pick in one profile never governs it in another, and switching back restores it", async () => {
+			allPayers()
+			const w = mountSend()
+			await flushPromises()
+			await w.find('[data-testid="pick-fj"]').trigger("click")
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+
+			await w.setProps({ profile: { id: "p2", name: "Profile 2" } })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "p1" } })
+
+			await w.setProps({ profile })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+		})
+
 		test("account A's balances never produce settings for account B, not even for the tick of the switch", async () => {
 			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC])
 			mocks.getGasBalances.mockResolvedValueOnce({ publicFeeJuice: HELD, privateFeeJuice: HELD })

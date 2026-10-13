@@ -162,11 +162,18 @@ const {
 const isAppPaid = (op: UIOperation | undefined): boolean =>
 	(op?.kind === "aztec_sendTx" || op?.kind === "send_transaction") && isEmbeddedFeePayment(op)
 
-/** An app-paid operation whose fee contract the estimate proved unable to pay: its Confirm stays off. */
-const appPayerProvenShort = computed(() => operations.value.some((_, i) => feeEstimates.value[i]?.appPayerFunding?.provenShort === true))
-/** The node would refuse it at submission, so nothing is proven. */
-const payerShort = computed(
-	() => appPayerProvenShort.value || operations.value.some((_, i) => feeEstimates.value[i]?.feeJuiceShortfall !== undefined),
+/** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
+ *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
+const isShortEstimate = (estimate: TransferFeeEstimate): boolean =>
+	estimate.appPayerFunding?.provenShort === true || estimate.feeJuiceShortfall !== undefined
+/** Each operation's last landed verdict. A replacement estimate clears the result while it runs, so a
+ *  shortfall already shown holds Confirm until the replacement answers. */
+const lastLandedShort = ref<Record<number, boolean>>({})
+const payerShort = computed(() =>
+	operations.value.some((_, i) => {
+		const landed = feeEstimates.value[i]
+		return landed ? isShortEstimate(landed) : estimatingOps.value[i] === true && lastLandedShort.value[i] === true
+	}),
 )
 
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
@@ -608,6 +615,14 @@ watch(
 )
 
 watch([feeEstimates, authwitPreviews], decodeDiscoveredAuthwits, { deep: true })
+// Synchronous, so a result cleared in the tick it landed still leaves its verdict behind.
+watch(
+	feeEstimates,
+	(results) => {
+		for (const [i, landed] of Object.entries(results)) if (landed) lastLandedShort.value[Number(i)] = isShortEstimate(landed)
+	},
+	{ deep: true, flush: "sync" },
+)
 
 onMounted(startWindow)
 

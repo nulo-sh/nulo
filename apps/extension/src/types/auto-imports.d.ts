@@ -107,7 +107,6 @@ declare global {
   const compareTokenRows: typeof import('../utils/token-order').compareTokenRows
   const completeImportWithRecovery: typeof import('../composables/completeImportWithRecovery').completeImportWithRecovery
   const compressData: typeof import('../utils/files').compressData
-  const computeMaxFee: typeof import('../utils/fee-estimation').computeMaxFee
   const computed: typeof import('vue').computed
   const confirmationPolicies: typeof import('../utils/confirmation-policies').confirmationPolicies
   const contactListReducers: typeof import('../utils/entity-list').contactListReducers
@@ -751,7 +750,6 @@ declare module 'vue' {
     readonly compareTokenRows: UnwrapRef<typeof import('../utils/token-order')['compareTokenRows']>
     readonly completeImportWithRecovery: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['completeImportWithRecovery']>
     readonly compressData: UnwrapRef<typeof import('../utils/files')['compressData']>
-    readonly computeMaxFee: UnwrapRef<typeof import('../utils/fee-estimation')['computeMaxFee']>
     readonly computed: UnwrapRef<typeof import('vue')['computed']>
     readonly confirmationPolicies: UnwrapRef<typeof import('../utils/confirmation-policies')['confirmationPolicies']>
     readonly contactListReducers: UnwrapRef<typeof import('../utils/entity-list')['contactListReducers']>

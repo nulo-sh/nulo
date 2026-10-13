@@ -210,8 +210,11 @@ const showMethodSelector = computed(() => {
 	return useOwnMethod.value
 })
 
-/** Send's picks, `{ [address]: { private?, public? } }` — keyed by address so nothing crosses accounts. */
+/** Send's picks, `{ [slot]: { private?, public? } }`, one slot per profile and address: storage keeps
+ *  each profile's picks apart, so an account held by two profiles has two picks. */
 const sendPicks = reactive({})
+const pickSlot = (profileId, address) => `${profileId}\n${address}`
+const livePicks = () => sendPicks[pickSlot(props.profile?.id, props.account?.address)]
 
 /** Structured scope of the committed snapshot — the recovery watch's target. */
 const committedScope = ref(null)
@@ -236,7 +239,7 @@ const snapshotPending = computed(() => !snapshotCommitted.value && readingKey.va
  */
 const sendSelection = computed(() => {
 	if (props.originPrivacy === null) return null
-	const pick = sendPicks[props.account?.address]?.[props.originPrivacy]
+	const pick = livePicks()?.[props.originPrivacy]
 	if (!isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) {
 		return { kind: "pending", preview: previewForPick(pick, methods.value) }
 	}
@@ -249,7 +252,7 @@ const sendSelection = computed(() => {
 const sponsorShort = computed(() => {
 	if (props.originPrivacy === null) return droppedForVerdictId.value !== null
 	if (shortSponsorIds.size === 0 || !isInitComplete.value || !scopeIsLiveIdentity(committedScope.value)) return false
-	const pick = sendPicks[props.account?.address]?.[props.originPrivacy]
+	const pick = livePicks()?.[props.originPrivacy]
 	const know = { fpcs: knownFpcs.value, balances: gasBalances.value }
 	const unset = resolveSendSelection(props.originPrivacy, know, pick)
 	return unset.kind === "selected" && unset.method.type === "fpc" && shortSponsorIds.has(unset.method.fpc?.id)
@@ -403,16 +406,17 @@ const persistSelection = async (method) => {
 	}
 }
 
-/** Address and origin are captured before any await: the pick belongs to the account and side it was made on. */
+/** Profile, address and origin are captured before any await: the pick belongs to the account and
+ *  side it was made on. */
 const pickForSend = (m) => {
+	const profileId = props.profile.id
 	const address = props.account.address
 	const origin = props.originPrivacy
 	const record = recordOf(m)
-	sendPicks[address] = { ...sendPicks[address], [origin]: record }
+	const slot = pickSlot(profileId, address)
+	sendPicks[slot] = { ...sendPicks[slot], [origin]: record }
 	const update = { kind: "send", address, side: origin, pick: record }
-	managers.profile
-		.saveFeePick(props.profile.id, update)
-		.catch((e) => console.error("Failed to save the send fee selection", { error: e }))
+	managers.profile.saveFeePick(profileId, update).catch((e) => console.error("Failed to save the send fee selection", { error: e }))
 }
 
 /** The selection is the card's own default, not a saved or live pick. */
@@ -645,7 +649,8 @@ const ensureLegsSettled = async (scope) => {
 const readSavedSelections = async ({ profileId, accountAddress: address }) => {
 	if (props.originPrivacy === null) return readSavedFeeMethods(profileId)
 	const slots = readSendSlots(await readStored(sendFeePicksKey(profileId)), address)
-	sendPicks[address] = { ...slots, ...sendPicks[address] }
+	const slot = pickSlot(profileId, address)
+	sendPicks[slot] = { ...slots, ...sendPicks[slot] }
 	return {}
 }
 
