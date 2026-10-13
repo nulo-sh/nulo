@@ -973,25 +973,54 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 })
 
 describe("RecentActivityView — hydration order", () => {
-	// A characterization, not a requirement: the executing-task snapshot lands before the journal's,
-	// so a queued send first shows stage-less.
-	test("a queued send shows one stage-less card until the journal snapshot lands, then one card at queued", async () => {
+	// The executing-task snapshot lands before the journal's, so a queued send first draws with no stage known.
+	const cards = (w: ReturnType<typeof mountView>) =>
+		w
+			.findAllComponents({ name: "TransactionAwaitingCard" })
+			.map((c) => ({ stage: c.props("stage"), subtitle: c.props("subtitle"), cancellable: c.props("cancellable") }))
+
+	test("a queued send's card draws at once with no stage line until the journal snapshot lands, then reads queued", async () => {
 		const ops = deferred<unknown[]>()
 		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
 		H.getOperations.mockReturnValue(ops.promise)
 		const w = mountView()
-		const cards = () =>
-			w
-				.findAllComponents({ name: "TransactionAwaitingCard" })
-				.map((c) => ({ stage: c.props("stage"), cancellable: c.props("cancellable") }))
 		await flushPromises()
 		expect(vmOf(w).hasOrphanExecutingTask).toBe(true)
-		expect(cards()).toEqual([{ stage: null, cancellable: false }])
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
 
 		ops.resolve([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
 		await flushPromises()
 		expect(vmOf(w).hasOrphanExecutingTask).toBe(false)
-		expect(cards()).toEqual([{ stage: "queued", cancellable: true }])
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+	})
+
+	test("a scope switch draws the new scope's task with no stage line until that scope's snapshot lands", async () => {
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_A)])
+		H.getOperations.mockResolvedValue([])
+		const w = mountView()
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: "Preparing...", cancellable: false }])
+
+		const ops = deferred<unknown[]>()
+		H.getOperations.mockReturnValue(ops.promise)
+		H.getTasks.mockResolvedValue([uiTransferTask(ACCT_B, "task-b")])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: null, cancellable: false }])
+
+		ops.resolve([])
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: "Preparing...", cancellable: false }])
+	})
+
+	test("a running step names itself before the snapshot lands", async () => {
+		const ops = deferred<unknown[]>()
+		const task = { ...uiTransferTask(ACCT_A), subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }] }
+		H.getTasks.mockResolvedValue([task])
+		H.getOperations.mockReturnValue(ops.promise)
+		const w = mountView()
+		await flushPromises()
+		expect(cards(w)).toEqual([{ stage: null, subtitle: "Generating proof...", cancellable: false }])
 	})
 })
 

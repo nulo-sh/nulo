@@ -178,7 +178,9 @@ const executingProgressTitle = computed(() => {
 })
 const executingProgressSubtitle = computed(() => {
 	const active = executingSubtasks.value.find((s) => s.status === TaskStatus.Processing)
-	return active ? `${active.content.label}...` : "Preparing..."
+	if (active) return `${active.content.label}...`
+	// Before the scope's journal snapshot lands, the task may be a send whose record holds another stage.
+	return journalLanded.value ? "Preparing..." : null
 })
 /** dApp identity chip for the in-flight card — same chip the settled
  *  `TransactionCard` shows via `getOriginLabel`. UI-initiated transfers
@@ -213,6 +215,8 @@ taskService.onTaskDeleted.add(onExecutingTaskDeleted)
  *  off automatically. */
 const journalService = new OperationJournalServiceClient()
 const journalOps = ref([])
+/** Whether the current scope's journal snapshot has landed. */
+const journalLanded = ref(false)
 
 /** Third source for the activity-row merge: incoming-receive records from
  *  trusted fungible-token contracts. Filtered at the service layer
@@ -557,6 +561,7 @@ async function resnapshotJournal(isCurrent = journalFence.begin()) {
 		if (!isCurrent() || captured !== appStore.account?.address) return
 		// The read filters by account and profile, not network.
 		journalOps.value = ops.filter(journalRecordInActiveScope).sort((a, b) => b.createdAt - a.createdAt)
+		journalLanded.value = true
 		// v4 cancel-dupe (snapshot path): catches close-popup-mid-cancel-and-
 		// reopen + SW disconnect mid-cancel. Uses 30s window to avoid
 		// sweeping in old terminals that don't actually correspond to the
@@ -677,6 +682,7 @@ watch(
 		const journalRun = journalFence.begin()
 		const taskRun = taskFence.begin()
 		journalOps.value = []
+		journalLanded.value = false
 		executingTask.value = null
 		executingSubtasks.value = []
 		pendingCancelJobIds.value = new Set()
