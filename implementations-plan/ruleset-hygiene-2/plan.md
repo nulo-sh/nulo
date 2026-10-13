@@ -1,7 +1,7 @@
 ---
 plan: ruleset-hygiene-2
 tier: light
-status: planned, awaiting approval (Codex: conditional approve, condition met)
+status: closed (2026-10-13)
 issues: none
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,16 @@ base: origin/dev at dd9228237a5115c2d39f7def1e79a3ab69119580
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** closed. One arc, #374 against `dev`; the merge that lands it closes the plan.
+- **Shipped:** in #374, `CLAUDE.md` 86,744 → 65,091 bytes: the `complexity-budgets` and `logging-policy` skills; the plans README gains § Where open work lives, the path rules, the permalink allowlist and three clauses; the In CI pointer, with two literals carried into `CI.md`; `### Branches + releases` folded into the `release` skill (D9); three strings repointed; `update-docs` routes depth to its home (D8).
+- **Dropped:** the stale "only scheduled workflow" claim (F4, D5). Not promoted to `lessons.md`: "lift a sentence whole" ([lessons/phase-5.md](lessons/phase-5.md)); the file holds 8,192 bytes and no entry retires for it (D11).
+- **Known limits:** none.
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` drafts were never run (the orchestrator drove the lane) and are removed; this plan is a record, not a task list.
 
 # ruleset-hygiene-2: complexity and logging become skills; plans and CI point at their standards
 
@@ -133,13 +143,3 @@ Follow `implementations-plan/README.md` § Post-implementation standard at commi
 - **Loop:** single arc, once over the whole diff after the final gate, at `high`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume with `resume-codex.sh`. On a quota or 401 error retry once with `CODEX_ACCOUNT=alejo-icloud`, then log it and continue within scope. The prompt attaches the normalized diffs and asks first for a rule dropped or changed in a move.
 - **Close-out:** merge `origin/dev` first. `Known limits:` and `Open items:` read `none` unless the loop files one. Delete `STATUS.md`, keep `OWNER-ASKS.md`, archive to `implementations-plan/archive/ruleset-hygiene-2`.
 - **Teardown:** the orchestrator merges and tells the session; a `/loop` session also checks each firing. Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/ruleset-hygiene-2/plan.md` succeeds, run `agent-worktree done ruleset-hygiene-2 --merged --trunk dev`. The session starts inside the worktree, so it has nothing to exit.
-
-## Seeds
-
-```
-/goal Phases 1-5 of implementations-plan/ruleset-hygiene-2/plan.md are marked ✓, each backed by its gate reported passing in the transcript, including every normalized and -U0 diff showing only the planned edits; LESSONS_FILE=implementations-plan/ruleset-hygiene-2/lessons/phase-N.md printed per phase; /code-review NOT run; the Codex loop (run-codex.sh … high read-only gpt-6.1-sol) converged, quoted; the PR into dev exists, opened after the loop (gh pr view in the transcript), with the archive-move commit (git show --stat); bun run test and bun run lint exit 0.
-```
-
-```
-/loop 15m Drive implementations-plan/ruleset-hygiene-2. Each firing: read plan.md and lessons/; if the plan moved to archive/, run the teardown in § Post-implementation and stop. Otherwise take the next unmarked phase, stage it, run its gate, mark ✓, log lessons, commit (signed). After the final gate: the Codex loop, Delivery, the close-out, then report and stop. Anything a person sees goes to OWNER-ASKS.md. Never merge, never push to main, never edit a workflow or a file under apps/ or packages/.
-```
