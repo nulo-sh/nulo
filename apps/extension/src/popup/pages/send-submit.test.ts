@@ -284,7 +284,7 @@ describe("send-submit: Details on a failed send", () => {
 		["a failure of its own", "transfer"],
 		["a send the reaper declared lost", "stale_on_resume"],
 		["a first send the node answered as already initialized", "duplicate_initialization"],
-	])("a record that failed at submitting with its hash (%s): Send not confirmed, with Details", async (_name, kind) => {
+	])("a record that failed at submitting with its hash (%s): Send not confirmed, an info with Details", async (_name, kind) => {
 		const { deps, settle } = harness()
 		vi.mocked(deps.readJournal).mockResolvedValue(
 			failedRecord({ progress: MAYBE_SENT, error: { kind, message: "fetch failed", normalizedRaw: null } }),
@@ -293,7 +293,7 @@ describe("send-submit: Details on a failed send", () => {
 		settle().reject(fromWire(new Error("fetch failed"), JOURNAL_ID))
 		await flush()
 		expect(deps.openToast).toHaveBeenCalledWith({
-			kind: "error",
+			kind: "info",
 			label: "Send not confirmed",
 			sub: TRANSFER_NOT_CONFIRMED_COPY,
 			action: { label: "Details", onSelect: expect.any(Function) },

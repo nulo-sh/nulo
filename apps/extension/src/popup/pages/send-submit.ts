@@ -93,9 +93,9 @@ export function submitTransfer(deps: SubmitDeps, snap: TransferSnapshot): string
 			const id = journalIdOf(err)
 			const record = await ownRecord(deps, snap, id)
 			if (!deps.isCurrent(snap.epoch)) return
-			const { label, sub, details } = transferFailureSnack(err, record)
+			const { kind, label, sub, details } = transferFailureSnack(err, record)
 			const action = details && record && id !== null ? { label: "Details", onSelect: () => deps.viewJournal(id) } : undefined
-			deps.openToast({ kind: "error", label, sub, action })
+			deps.openToast({ kind, label, sub, action })
 		})
 		.finally(deps.onSettled)
 

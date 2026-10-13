@@ -128,6 +128,25 @@ describe("ToastManagerBase", () => {
 		expect(alert().querySelector('[data-name="close-circle"]')?.getAttribute("data-color")).toBe("red")
 	})
 
+	test("an info renders in the alert region with a grey clock and ×, and no error border", async () => {
+		mountRegion()
+		open({ kind: "info", label: "Checking" })
+		await settle()
+		expect(status().querySelector(CARD)).toBeNull()
+		const info = alert().querySelector(CARD)
+		expect(info?.getAttribute("data-kind")).toBe("info")
+		expect(info?.querySelector('[data-name="clock-circle"]')?.getAttribute("data-color")).toBe("secondary")
+		expect(info?.querySelector('[data-name="close-circle"]')).toBeNull()
+		expect(info?.querySelector('[data-testid="snackbar-close"]')).not.toBeNull()
+
+		open({ kind: "error", label: "Failed" })
+		await settle()
+		const error = alert().querySelector(CARD)
+		expect(error?.getAttribute("data-kind")).toBe("error")
+		expect(error?.classList.length).toBe((info?.classList.length ?? 0) + 1)
+		expect(error?.querySelector('[data-name="clock-circle"]')).toBeNull()
+	})
+
 	test("the same text opened twice renders twice: the second card is a new element", async () => {
 		mountRegion()
 		open({ kind: "success", label: "Copied" })

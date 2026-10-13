@@ -60,6 +60,17 @@ describe("useToast", () => {
 		expect(toast.value).toMatchObject({ kind: "error", label: "Failed" })
 	})
 
+	it("an info keeps its kind and, like an error, stays after any time, held or not", () => {
+		const { toast, openToast, holdToast } = useToast()
+		openToast({ kind: "info", label: "Checking" })
+		expect(toast.value?.kind).toBe("info")
+		vi.advanceTimersByTime(600_000)
+		holdToast(true)
+		holdToast(false)
+		vi.advanceTimersByTime(600_000)
+		expect(toast.value).toMatchObject({ kind: "info", label: "Checking" })
+	})
+
 	it("a missing or unknown kind is an error", () => {
 		const { toast, openToast } = useToast()
 		openToast({ label: "Unknown" } as unknown as ToastOptions)

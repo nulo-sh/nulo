@@ -1447,7 +1447,7 @@ export async function waitForToast(
 	page: Page,
 	text: string,
 	timeout = 5_000,
-	opts: { kind?: "success" | "error" } = {},
+	opts: { kind?: "success" | "info" | "error" } = {},
 ): Promise<ElementHandle<Element>> {
 	const handle = await page.waitForFunction(
 		(t: string, kind: string | null) => {

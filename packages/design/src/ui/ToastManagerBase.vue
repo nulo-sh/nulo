@@ -160,17 +160,18 @@ onBeforeUnmount(() => {
 					@after-leave="onAfterLeave"
 				>
 					<div
-						v-if="shown && shown.kind === 'error'"
+						v-if="shown && shown.kind !== 'success'"
 						:key="shown.id"
-						:class="[$style.card, $style.error]"
+						:class="[$style.card, shown.kind === 'error' && $style.error]"
 						data-testid="snackbar"
-						data-kind="error"
+						:data-kind="shown.kind"
 						@pointermove="onPointerMove"
 						@mouseleave="hovered = false"
 						@focusin="onFocusIn"
 						@focusout="onFocusOut"
 					>
-						<Icon name="close-circle" size="16" color="red" aria-hidden="true" />
+						<Icon v-if="shown.kind === 'info'" name="clock-circle" size="16" color="secondary" aria-hidden="true" />
+						<Icon v-else name="close-circle" size="16" color="red" aria-hidden="true" />
 						<div :class="$style.text">
 							<span :class="$style.title" data-testid="snackbar-title">{{ shown.label }}</span>
 							<span v-if="shown.sub" :class="$style.sub" data-testid="snackbar-sub">{{ shown.sub }}</span>
