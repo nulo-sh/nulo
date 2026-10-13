@@ -304,6 +304,31 @@ describe("DappSendExecutor.executeSendTransaction", () => {
 		expect(call[4]).toBe("https://dapp.example")
 	})
 
+	const SEND_OP = {
+		kind: "send_transaction",
+		networkId: "net-1",
+		accountAddress: "0xacct",
+		feeSettings: { paymentMethod: { kind: "fj" } },
+		actions: [{ kind: "call", contract: "0xc", method: "dapp_method", args: [] }],
+	} as never
+
+	test("names the claimed journal record to onJournalCreated once, before the send leaves", async () => {
+		const { executor, deps } = makeHarness()
+		const onJournalCreated = vi.fn(() => expect(deps.lane.markJournal).not.toHaveBeenCalled())
+		await executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })
+		expect(onJournalCreated.mock.calls).toEqual([["j1"]])
+	})
+
+	test("a send whose journal claim fails names no record", async () => {
+		const { executor, deps } = makeHarness()
+		;(deps.lane.claimOrCreateJournal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("claim broke"))
+		const onJournalCreated = vi.fn()
+		await expect(executor.executeSendTransaction(SEND_OP, ORIGIN, undefined, FENCE, { onJournalCreated })).rejects.toThrow(
+			"claim broke",
+		)
+		expect(onJournalCreated).not.toHaveBeenCalled()
+	})
+
 	test("records the SUBMITTING network's primary endpoint URL (recording-site pin)", async () => {
 		// addTransaction's submittedEndpointUrl (arg 7) must come from the network the
 		// executor built+submitted against — NOT re-derived from active-profile state,

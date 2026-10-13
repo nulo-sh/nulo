@@ -8,7 +8,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
 import { createApp, h, nextTick, ref } from "vue"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { usePopupEntity } from "@/composables/usePopupEntity"
+import type { SendStarted } from "@/wallet/services/auth-registry/spec"
+import { heldJobSubscription, LIVE_STAGES, record } from "../../../../tests/helpers/held-job-subscription"
 import { pressOn } from "../../../../tests/helpers/press-key"
 
 const authwitsServiceMock = {
@@ -17,7 +20,10 @@ const authwitsServiceMock = {
 	disconnect: vi.fn(),
 	onRegistryEnabled: { add: vi.fn(), remove: vi.fn() },
 	onRegistryDisabled: { add: vi.fn(), remove: vi.fn() },
+	onSendStarted: new EventHandler<SendStarted>(),
 }
+
+const journalMock = { subscribeJob: vi.fn(), disconnect: vi.fn() }
 
 const openToastMock = vi.fn()
 const popupOpenMock = vi.fn()
@@ -29,6 +35,12 @@ vi.mock("@/wallet/services/auth-registry/client", () => ({
 		return authwitsServiceMock
 	}),
 	MAX_REVOKES_PER_TX: 8,
+}))
+
+vi.mock("@/wallet/services/operation-journal/client", () => ({
+	OperationJournalServiceClient: vi.fn(function () {
+		return journalMock
+	}),
 }))
 
 vi.mock("@/popup/utils/cancellable-rejection", () => ({
@@ -138,6 +150,7 @@ beforeEach(() => {
 	authwitsServiceMock.getRegistryEnabled.mockReset()
 	authwitsServiceMock.revokeAuthwits.mockReset().mockResolvedValue(undefined)
 	authwitsServiceMock.disconnect.mockReset()
+	journalMock.subscribeJob.mockReset()
 	openToastMock.mockReset()
 	popupOpenMock.mockReset()
 	feeControlClick.mockReset()
@@ -321,5 +334,61 @@ describe("RevokeAuthwitsPopup — the Revoke button", () => {
 		await w.find('[data-testid="revoke-authwits-submit"]').trigger("click")
 		await flushPromises()
 		expect(authwitsServiceMock.revokeAuthwits).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("RevokeAuthwitsPopup — the send's stage line", () => {
+	const stageLine = (w: ReturnType<typeof mount>) => w.get('[data-testid="authwit-stage-line"]').text()
+
+	/** Starts a send that stays in flight and returns the key it carried. */
+	async function startSend() {
+		authwitsServiceMock.revokeAuthwits.mockReturnValueOnce(new Promise(() => {}))
+		const w = await mountAndOpen()
+		await setAllFees(w)
+		await w.get('[data-testid="revoke-authwits-submit"]').trigger("click")
+		await flushPromises()
+		const correlation = authwitsServiceMock.revokeAuthwits.mock.calls[0]?.[4] as string
+		return { w, correlation }
+	}
+
+	test("follows this popup's revoke through each live stage and clears when it ends", async () => {
+		const job = heldJobSubscription(journalMock.subscribeJob)
+		const { w, correlation } = await startSend()
+		expect(correlation).toMatch(/^[0-9a-f]{16}$/)
+		authwitsServiceMock.onSendStarted.invoke({ correlation, journalId: "j1" })
+		expect(journalMock.subscribeJob).toHaveBeenCalledWith("j1", expect.any(Function))
+		for (const [progress, line] of LIVE_STAGES) {
+			job.show(record(progress))
+			await nextTick()
+			expect(stageLine(w)).toBe(line)
+		}
+		job.show(record({ stage: "succeeded" }, 9))
+		await nextTick()
+		expect(stageLine(w)).toBe("")
+	})
+
+	test("another popup's send is ignored", async () => {
+		const { w } = await startSend()
+		authwitsServiceMock.onSendStarted.invoke({ correlation: "0xsomeone-else", journalId: "j2" })
+		await nextTick()
+		expect(journalMock.subscribeJob).not.toHaveBeenCalled()
+		expect(stageLine(w)).toBe("")
+	})
+
+	test("hidden before the record's snapshot lands: the subscription is released and nothing renders", async () => {
+		const job = heldJobSubscription(journalMock.subscribeJob)
+		const { w, correlation } = await startSend()
+		authwitsServiceMock.onSendStarted.invoke({ correlation, journalId: "j1" })
+		await w.setProps({ show: false })
+		await flushPromises()
+		job.land()
+		await flushPromises()
+		expect(job.release).toHaveBeenCalledTimes(1)
+		authwitsServiceMock.getRegistryEnabled.mockResolvedValueOnce(true)
+		await w.setProps({ show: true })
+		await flushPromises()
+		job.show(record({ stage: "simulating" }))
+		await nextTick()
+		expect(stageLine(w)).toBe("")
 	})
 })

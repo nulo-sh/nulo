@@ -5,6 +5,8 @@ import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue
 
 /** Utils */
 import { AuthRegistryServiceClient, MAX_REVOKES_PER_TX } from "@/wallet/services/auth-registry/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { getRandomHex } from "@/wallet/utils"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
@@ -13,6 +15,7 @@ import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { useSendStageLine } from "@/composables/useSendStageLine"
 const { openToast } = useToast()
 
 /** Store */
@@ -36,7 +39,14 @@ const registry = useAuthRegistryStatus(authwitsService, () =>
 		: undefined,
 )
 const { isRegistryEnabled, isLoading, error } = registry
-onBeforeUnmount(() => registry.dispose())
+const journalService = new OperationJournalServiceClient()
+const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
+const stageLine = stage.line
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	journalService.disconnect()
+})
 
 const authwits = ref([])
 const chunkedAuthwits = ref([])
@@ -76,6 +86,7 @@ async function handleRevokeAuthwits() {
 	try {
 		await revokeChunks()
 	} finally {
+		stage.stop()
 		isLoading.value = false
 	}
 
@@ -98,7 +109,9 @@ async function revokeChunks() {
 	for (const ch of chunkedAuthwits.value) {
 		try {
 			ch.status = "progress"
-			await authwitsService.revokeAuthwits(appStore.network.id, appStore.account.address, ch.ids, ch.feeSettings)
+			const correlation = getRandomHex(16)
+			stage.follow(correlation)
+			await authwitsService.revokeAuthwits(appStore.network.id, appStore.account.address, ch.ids, ch.feeSettings, correlation)
 			ch.status = "success"
 		} catch (err) {
 			if (classifyCancellableRejection(err) === "silent") {
@@ -131,8 +144,10 @@ usePopupEntity(() => props.show, {
 		authwits.value = []
 		chunkedAuthwits.value = []
 		registry.reset()
+		stage.stop()
 
 		authwitsService.disconnect()
+		journalService.disconnect()
 	},
 })
 </script>
@@ -254,6 +269,10 @@ usePopupEntity(() => props.show, {
 					>
 						Revoke
 					</Button>
+
+					<div role="status" aria-live="polite" data-testid="authwit-stage-line">
+						<Text v-if="stageLine" size="12" weight="500" color="secondary">{{ stageLine }}</Text>
+					</div>
 
 					<Tooltip v-if="isErrorOccurred" side="top" wide>
 						<Flex align="center" justify="start" gap="6" wide>

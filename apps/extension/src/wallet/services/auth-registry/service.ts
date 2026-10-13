@@ -36,14 +36,18 @@ import {
 	AuthwitSchema,
 	AuthwitStatusSchema,
 	parseAuthwitStatusRowId,
+	type SendStarted,
 } from "./spec"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { type FeeSettingsReaders, refuseUnknownPriorities } from "@nulo/wallet-bridge"
+import { type FeeSettingsReaders, type IExecutionHooks, refuseUnknownPriorities } from "@nulo/wallet-bridge"
 import { TxHash } from "@aztec-labs/stdlib/tx"
 
 export * from "./spec"
 
 /** The popup's fee settings for the two RPCs that send a transaction. */
+/** A popup mints its key per call; the bound only keeps an absurd one off the event. */
+const MAX_CORRELATION_LENGTH = 64
+
 const FEE_SETTINGS_OF = {
 	revokeAuthwits: ([, , , feeSettings]) => [feeSettings],
 	setRegistryEnabled: ([, , , feeSettings]) => [feeSettings],
@@ -67,6 +71,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 	public readonly onAuthwitDeleted = new EventHandler<Authwit>()
 	public readonly onRegistryEnabled = new EventHandler<AuthwitRegistryScope>()
 	public readonly onRegistryDisabled = new EventHandler<AuthwitRegistryScope>()
+	public readonly onSendStarted = new EventHandler<SendStarted>()
 
 	private readonly authwits: EntityStorage<Authwit>
 	private readonly statuses: EntityStorage<boolean>
@@ -263,7 +268,19 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		})
 	}
 
-	public async revokeAuthwits(networkId: string, account: string, ids: number[], feeSettings: FeeSettings): Promise<void> {
+	/** Names the send's journal record to the caller that keyed the call; a call with no key gets none. */
+	private sendStartedHooks(correlation: unknown): IExecutionHooks | undefined {
+		if (typeof correlation !== "string" || correlation.length === 0 || correlation.length > MAX_CORRELATION_LENGTH) return undefined
+		return { onJournalCreated: (journalId) => this.emit("onSendStarted", { correlation, journalId }) }
+	}
+
+	public async revokeAuthwits(
+		networkId: string,
+		account: string,
+		ids: number[],
+		feeSettings: FeeSettings,
+		correlation?: string,
+	): Promise<void> {
 		await this.ensureInitialized()
 		if (ids.length > MAX_REVOKES_PER_TX) {
 			throw new Error(`Cannot revoke more than ${MAX_REVOKES_PER_TX} authwits per single tx`)
@@ -310,7 +327,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				},
 				{ type: OriginType.UI },
 				task,
-				undefined,
+				this.sendStartedHooks(correlation),
 				fence,
 			)
 
@@ -340,7 +357,13 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 		return (await this.statuses.get(authwitStatusRowId(profile.id, chainId, account))) ?? true
 	}
 
-	public async setRegistryEnabled(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): Promise<void> {
+	public async setRegistryEnabled(
+		networkId: string,
+		account: string,
+		enabled: boolean,
+		feeSettings: FeeSettings,
+		correlation?: string,
+	): Promise<void> {
 		await this.ensureInitialized()
 		// Captured first, for the same reason as `revokeAuthwits`.
 		const fence = await this.profileService.captureExecutionFence()
@@ -365,7 +388,7 @@ export class AuthRegistryService extends Service<Methods, Events> implements Ser
 				},
 				{ type: OriginType.UI },
 				task,
-				undefined,
+				this.sendStartedHooks(correlation),
 				fence,
 			)
 

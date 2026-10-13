@@ -5,6 +5,8 @@ import FeeSettingsCard from "@/popup/components/modules/send/FeeSettingsCard.vue
 
 /** Utils */
 import { AuthRegistryServiceClient } from "@/wallet/services/auth-registry/client"
+import { OperationJournalServiceClient } from "@/wallet/services/operation-journal/client"
+import { getRandomHex } from "@/wallet/utils"
 import { classifyCancellableRejection } from "@/popup/utils/cancellable-rejection"
 
 /** Composables */
@@ -13,6 +15,7 @@ import { useToast } from "@/composables/toast"
 import { useAuthRegistryStatus } from "@/composables/useAuthRegistryStatus"
 import { refuseRepeatEnter, usePopupEntity } from "@/composables/usePopupEntity"
 import { usePopupStack } from "@/composables/usePopupStack"
+import { useSendStageLine } from "@/composables/useSendStageLine"
 const { openToast } = useToast()
 
 /** Store */
@@ -32,7 +35,14 @@ const registry = useAuthRegistryStatus(authwitsService, () =>
 		: undefined,
 )
 const { isRegistryEnabled, isLoading, error } = registry
-onBeforeUnmount(() => registry.dispose())
+const journalService = new OperationJournalServiceClient()
+const stage = useSendStageLine({ sendStarted: authwitsService.onSendStarted, journal: journalService })
+const stageLine = stage.line
+onBeforeUnmount(() => {
+	registry.dispose()
+	stage.dispose()
+	journalService.disconnect()
+})
 
 const feeSettings = ref()
 const isErrorOccurred = computed(() => !!error.value)
@@ -52,7 +62,15 @@ async function handleChangeRegistry() {
 	try {
 		isLoading.value = true
 
-		await authwitsService.setRegistryEnabled(appStore.network.id, appStore.account.address, !isRegistryEnabled.value, feeSettings.value)
+		const correlation = getRandomHex(16)
+		stage.follow(correlation)
+		await authwitsService.setRegistryEnabled(
+			appStore.network.id,
+			appStore.account.address,
+			!isRegistryEnabled.value,
+			feeSettings.value,
+			correlation,
+		)
 
 		openToast({ kind: "success", label: "Account authwit registry is changed" })
 	} catch (err) {
@@ -65,6 +83,7 @@ async function handleChangeRegistry() {
 	} finally {
 		// Handler-owned latch release — closure via the hide watcher still
 		// happens, but the latch must not depend on it.
+		stage.stop()
 		isLoading.value = false
 		emit("onClose")
 	}
@@ -74,7 +93,9 @@ usePopupEntity(() => props.show, {
 	onShow: registry.fetch,
 	onHide: () => {
 		registry.reset()
+		stage.stop()
 		authwitsService.disconnect()
+		journalService.disconnect()
 	},
 })
 </script>
@@ -125,6 +146,10 @@ usePopupEntity(() => props.show, {
 					>
 						Send
 					</Button>
+
+					<div role="status" aria-live="polite" data-testid="authwit-stage-line">
+						<Text v-if="stageLine" size="12" weight="500" color="secondary">{{ stageLine }}</Text>
+					</div>
 
 					<Tooltip v-if="isErrorOccurred" side="top">
 						<Flex align="center" gap="6">

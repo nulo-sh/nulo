@@ -244,6 +244,49 @@ describe("AuthRegistryService sends run under the session the user acted in", ()
 	})
 })
 
+describe("AuthRegistryService names a send's journal record to the caller that keyed it", () => {
+	const FEE = { paymentMethod: { kind: "fj" } } as never
+
+	async function harnessWithEvents() {
+		const h = await makeHarness()
+		await h.service.recordPendingAuthwits(P1, [{ hash: "0xh1", content }], "0xtx1")
+		const started: unknown[] = []
+		h.service.onSendStarted.add((event) => started.push(event))
+		const internals = h.service as unknown as Record<string, unknown> & { transactionService: Record<string, unknown> }
+		internals.transactionService.waitForTx = async () => {}
+		internals.nodeFor = async () => ({})
+		internals.waitForTxProven = async () => {}
+		internals.syncAuthwits = async () => {}
+		internals.syncStatus = async () => {}
+		return { h, started }
+	}
+
+	test.each([
+		["revokeAuthwits", (h: Awaited<ReturnType<typeof makeHarness>>) => h.service.revokeAuthwits("net-1", A, [1], FEE, "key-1")],
+		[
+			"setRegistryEnabled",
+			(h: Awaited<ReturnType<typeof makeHarness>>) => h.service.setRegistryEnabled("net-1", A, false, FEE, "key-1"),
+		],
+	])("%s emits the key and the journal id once the record exists, once", async (_name, send) => {
+		const { h, started } = await harnessWithEvents()
+		h.executeSendTransaction.mockImplementation(async (...args: unknown[]) => {
+			;(args[3] as { onJournalCreated: (id: string) => void }).onJournalCreated("journal-1")
+			return "0xtx"
+		})
+		await send(h)
+		expect(started).toEqual([{ correlation: "key-1", journalId: "journal-1" }])
+	})
+
+	test("a send that fails before its record exists emits nothing; a call with no key passes no hook", async () => {
+		const { h, started } = await harnessWithEvents()
+		h.executeSendTransaction.mockRejectedValueOnce(new Error("refused before the claim"))
+		await expect(h.service.revokeAuthwits("net-1", A, [1], FEE, "key-1")).rejects.toThrow("refused before the claim")
+		await h.service.setRegistryEnabled("net-1", A, false, FEE)
+		expect(started).toEqual([])
+		expect(h.executeSendTransaction.mock.calls.at(-1)?.[3]).toBeUndefined()
+	})
+})
+
 describe("AuthRegistryService purges — each method's scope, survivors and order", () => {
 	const ROOT = "nulo:core:auth-registry@"
 	const STATUS_ROOT = "nulo:core:auth-registry-enabled@"

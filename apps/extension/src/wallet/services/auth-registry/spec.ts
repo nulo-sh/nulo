@@ -107,8 +107,9 @@ export type Methods = {
 	 * @param account Account address.
 	 * @param ids Ids of the authwits to revoke.
 	 * @param feeSettings Fee settings to be used for sending the transaction.
+	 * @param correlation The caller's key for this call, echoed by `onSendStarted`.
 	 */
-	revokeAuthwits(networkId: string, account: string, ids: number[], feeSettings: FeeSettings): void
+	revokeAuthwits(networkId: string, account: string, ids: number[], feeSettings: FeeSettings, correlation?: string): void
 	/**
 	 * Returns whether or not the auth registry is enabled for `(active profile, chainId, account)`.
 	 * @param chainId Aztec chain id scoping the lookup.
@@ -121,8 +122,9 @@ export type Methods = {
 	 * @param account Account address.
 	 * @param enabled Whether to enable or disable the auth registry.
 	 * @param feeSettings Fee settings to be used for sending the transaction.
+	 * @param correlation The caller's key for this call, echoed by `onSendStarted`.
 	 */
-	setRegistryEnabled(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings): void
+	setRegistryEnabled(networkId: string, account: string, enabled: boolean, feeSettings: FeeSettings, correlation?: string): void
 	/**
 	 * Triggers synchronization of the auth registry for the account.
 	 * @param networkId Network id.
@@ -141,4 +143,9 @@ export type Events = {
 	onRegistryEnabled: AuthwitRegistryScope
 	/** Emitted when an auth registry is disabled — same scope. */
 	onRegistryDisabled: AuthwitRegistryScope
+	/** Emitted once a send's journal record exists, so its caller can follow the record's stage. */
+	onSendStarted: SendStarted
 }
+
+/** A send's journal record, named for the caller that passed `correlation`. */
+export type SendStarted = { correlation: string; journalId: string }

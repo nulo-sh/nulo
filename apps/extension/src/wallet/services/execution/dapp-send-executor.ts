@@ -251,6 +251,7 @@ export class DappSendExecutor {
 				params.fence,
 			)
 			journalId = claimed.journalId
+			if (journalId) params.hooks?.onJournalCreated?.(journalId)
 			const controller = claimed.controller
 			const checkCancelled = (): void => {
 				if (controller?.signal.aborted) throw new JobCancelledSentinel(journalId ?? "")
