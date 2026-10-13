@@ -17,6 +17,7 @@
 
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
+import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 
 /** Vendor */
 import { DateTime } from "luxon"
@@ -35,6 +36,8 @@ import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
+import { copyWithToast } from "@/utils/clipboard"
+import { getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -117,6 +120,19 @@ const originChip = computed(() => {
 	if (op.value?.kind !== "dapp_execute") return null
 	return sanitizeJournalSubtitle(op.value.subtitle)
 })
+
+const txHash = computed(() => op.value?.progress?.txHash ?? null)
+
+// Only a record that names the active network places its hash on a chain; a legacy record names none.
+const explorerUrl = computed(() => {
+	if (!txHash.value || !appStore.network || op.value?.networkId !== appStore.network.id) return null
+	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, txHash.value)
+})
+const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+
+const handleCopy = (target) => {
+	void copyWithToast(target, openToast, "Successfully copied")
+}
 
 const errorMessage = computed(() => op.value?.error?.message ?? null)
 const errorNormalizedRaw = computed(() => op.value?.error?.normalizedRaw ?? null)
@@ -222,10 +238,23 @@ onBeforeUnmount(() => {
 		<SubPageHeader :title="title" :backTo="'/popup/activity'" />
 
 		<Flex v-if="op && display" wide direction="column" gap="20" :class="$style.content">
-			<!-- Hero meta: the record's terminal time in tx/[id].vue's tx_time slot, with no
-				 explorer link. -->
+			<!-- Hero meta: the record's terminal time in tx/[id].vue's tx_time slot, then its explorer link
+				 when the record has a hash and an explorer is set. -->
 			<Flex align="center" justify="center" gap="8" :class="$style.hero_meta">
 				<span v-if="terminalAtLabel" :class="$style.tx_time">{{ terminalAtLabel }}</span>
+				<span v-if="terminalAtLabel && explorerUrl" :class="$style.meta_sep">·</span>
+				<a
+					v-if="explorerUrl"
+					:href="explorerUrl"
+					target="_blank"
+					rel="noopener noreferrer"
+					@click.stop
+					:class="$style.hero_link"
+					data-testid="journal-detail-explorer-link"
+				>
+					<span>View on {{ explorerName }}</span>
+					<Icon name="external-link" size="10" color="tertiary" />
+				</a>
 			</Flex>
 
 			<!-- Transfer amount block (transfer kind only) -->
@@ -252,6 +281,15 @@ onBeforeUnmount(() => {
 					<span :class="$style.detail_key">What happened</span>
 					<span :class="$style.detail_context" data-testid="journal-detail-context">{{ category.context }}</span>
 				</Flex>
+
+				<TxHashRow
+					v-if="txHash"
+					:hash="txHash"
+					:explorerUrl="explorerUrl"
+					linkTestid="journal-detail-tx-hash-link"
+					copyTestid="journal-detail-tx-hash-copy"
+					@copy="handleCopy"
+				/>
 
 				<Flex v-if="originChip" wide justify="between" align="center">
 					<span :class="$style.detail_key">App</span>
@@ -329,6 +367,14 @@ onBeforeUnmount(() => {
 
 .tx_time {
 	composes: tx_time from "../detail-page.module.css";
+}
+
+.meta_sep {
+	composes: meta_sep from "../detail-page.module.css";
+}
+
+.hero_link {
+	composes: hero_link from "../detail-page.module.css";
 }
 
 .amount_value {

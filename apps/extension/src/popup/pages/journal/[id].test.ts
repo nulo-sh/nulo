@@ -3,6 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import JournalDetail from "./[id].vue"
 
 const mocks = vi.hoisted(() => ({
@@ -94,14 +95,16 @@ function failedSend(check?: SendCheckOutcome): OperationRecord {
 	}
 }
 
-async function mountPage(record: OperationRecord) {
+async function mountPage(record: OperationRecord, app: Record<string, unknown> = {}) {
 	mocks.getOperation.mockResolvedValue(record)
 	const w = mount(JournalDetail, {
 		global: {
 			plugins: [
 				createTestingPinia({
 					createSpy: vi.fn,
-					initialState: { app: { profile: { id: "p1" }, network: { id: "n1", chainId: 1 }, account: { address: ACCOUNT } } },
+					initialState: {
+						app: { profile: { id: "p1" }, network: { id: "n1", chainId: 1 }, account: { address: ACCOUNT }, ...app },
+					},
 				}),
 			],
 			stubs: {
@@ -162,5 +165,38 @@ describe("the amount of a failed transfer", () => {
 		const w = await mountPage(failedSend())
 		expect(row(w, "amount").exists()).toBe(false)
 		expect(row(w, "state").text()).toBe("Checking")
+	})
+})
+
+describe("the hash of a send that reached the send line", () => {
+	const TESTNET = { network: { id: "n1", chainId: CHAIN_IDS.TESTNET } }
+	const HASH = `0x${"2b".repeat(32)}`
+
+	test("shows the Tx hash row and View on the explorer, both linking to its page", async () => {
+		const w = await mountPage(failedSend("unconfirmed"), { ...TESTNET, defaultExplorer: "aztecscan" })
+		const url = `https://testnet.aztecscan.xyz/tx-effects/${HASH}`
+		expect(row(w, "explorer-link").attributes("href")).toBe(url)
+		expect(row(w, "explorer-link").text()).toBe("View on Aztecscan")
+		expect(row(w, "tx-hash-link").attributes("href")).toBe(url)
+		expect(row(w, "tx-hash-link").text()).toBe("0x2b2b..2b2b")
+	})
+
+	test("under explorer None the row keeps the hash, to copy, and no link shows", async () => {
+		const w = await mountPage(failedSend("unconfirmed"), { ...TESTNET, defaultExplorer: null })
+		expect(row(w, "explorer-link").exists()).toBe(false)
+		expect(row(w, "tx-hash-link").exists()).toBe(false)
+		expect(row(w, "tx-hash-copy").text()).toBe("0x2b2b..2b2b")
+	})
+
+	test("a record with no network stamp shows its hash and no link; one with no hash shows neither", async () => {
+		const legacy = { ...failedSend("unconfirmed"), networkId: undefined }
+		const w = await mountPage(legacy, { ...TESTNET, defaultExplorer: "aztecscan" })
+		expect(row(w, "explorer-link").exists()).toBe(false)
+		expect(row(w, "tx-hash-copy").exists()).toBe(true)
+
+		const neverSent = { ...failedSend(), progress: { stage: "failed" as const, from: "simulating" as const } }
+		const x = await mountPage(neverSent, { ...TESTNET, defaultExplorer: "aztecscan" })
+		expect(x.find('[data-testid^="journal-detail-tx-hash"]').exists()).toBe(false)
+		expect(row(x, "explorer-link").exists()).toBe(false)
 	})
 })

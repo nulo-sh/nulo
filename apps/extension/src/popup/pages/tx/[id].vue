@@ -11,6 +11,7 @@
 /** Components */
 import SubPageHeader from "@/components/ui/SubPageHeader.vue"
 import TxFeeRow from "@/popup/components/modules/tx/TxFeeRow.vue"
+import TxHashRow from "@/popup/components/modules/tx/TxHashRow.vue"
 import TxDebugPanel from "@/popup/components/modules/tx/TxDebugPanel.vue"
 
 /** Vendor */
@@ -259,22 +260,7 @@ onBeforeUnmount(() => {
 				<SectionLabel label="Details" />
 
 				<Flex wide direction="column" gap="10" :class="$style.details_box">
-					<Flex v-if="tx?.hash" wide justify="between" align="center">
-						<span :class="$style.detail_key">Tx hash</span>
-						<a
-							v-if="explorerUrl"
-							:href="explorerUrl"
-							target="_blank"
-							rel="noopener noreferrer"
-							data-testid="tx-hash-link"
-							:class="[$style.detail_value_mono, $style.detail_link]"
-						>{{ trimAddress(tx.hash, 6, 4) }}</a>
-						<span
-							v-else
-							@click="handleCopy(tx.hash)"
-							:class="[$style.detail_value_mono, 'copyable']"
-						>{{ trimAddress(tx.hash, 6, 4) }}</span>
-					</Flex>
+					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" @copy="handleCopy" />
 
 					<Flex v-if="originLabel" wide justify="between" align="center">
 						<span :class="$style.detail_key">App</span>
@@ -383,11 +369,6 @@ onBeforeUnmount(() => {
 
 .hero_link {
 	composes: hero_link from "../detail-page.module.css";
-}
-
-.detail_link {
-	composes: detail_link from "../detail-page.module.css";
-	color: var(--txt-secondary);
 }
 
 .amount_value {
