@@ -401,7 +401,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 ## Deviations (arc 2)
 
 - Phase 2.1: two scratch files, not one. The second adds CORS controls (a path with no CORS headers, a preflight short of `x-aztec-version`) and requests from the background, so "reachable" is shown to come from CORS mode and not from a leftover grant. The stub is a claimed loopback listener on a drawn port.
-- Phase 2.1's stop rule fired (I3 refuted): Phase 2.2 is not built, nothing in the manifest or `manifest.test.ts` changes, and OA-3 and OA-4 ship nothing. #156 stays open with a comment in the narrower wording the Codex consult gave (`lessons/phase-2.md`).
+- Phase 2.1's stop rule fired (I3 refuted): Phase 2.2 is not built, nothing in the manifest or `manifest.test.ts` changes, and OA-3 and OA-4 ship nothing. The close-out comments on #156, which stays open, in the narrower wording the Codex consult gave (`lessons/phase-2.md`).
 - Phase 2.3: the cause of `you: unknown` was none of I6's four. The harness read the strip while the fee card's selection was still pending after the pick: the trigger draws the pick before the send arms. It is a harness cause (D11's harness branch), fixed in `store-captures.test.ts` alone.
 - Arc 2 gate: no smoke e2e runs, since #156 ships nothing; the gate is `audit:vue`, `build:firefox` and Phase 2.3's two capture runs.
 
@@ -515,6 +515,25 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 **Verdict: approve, no new material findings.** It accepted the drop-only fix over its own recovery proposal ("Recovery would restore flow behavior after reload that the base did not preserve"), confirmed by an in-memory run of the source that reload, departure and another export open a fresh window and keep the other flow's key, and marked all three round-1 findings resolved. Noted, not a finding: `forgetThisWindow`'s read-then-remove is not atomic, like `unregister`'s; the only overlapping trigger is D7's accepted boot residual.
 
 **Convergence (arc 1).** Round 1 (Codex reject, one Medium; Opus approve, three Lows), round 2 (Codex approve, nothing new). No open material finding.
+
+### Arc 2 fix loop, round 1, Codex (session `01a13562-ba7e-7670-996a-4496907339c2`, gpt-6.1-sol, high, read-only), 2026-10-13
+
+**Verdict: approve.** It confirmed the armed send as the payer-settled signal (settings and payer derive from one effective method; a pending selection yields no settings and disarms Send), the re-measure and the empty-set guard, the records' pending-preview explanation, and that nothing under `apps/extension/store/` changes.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | `clearAmountLine`'s comment promised "a written frame never clips the line", but a failed fit still writes its diagnostic frame | Accepted: the comment now says a fit that returns `scrolled` leaves the line clear |
+
+### Arc 2 fix loop, round 1, Opus (same family, `general-purpose`, read-only), 2026-10-13
+
+**Verdict: approve.** It verified the armed signal in `send.vue` and `FeeSettingsCard.vue` and judged the #156 stop sound, noting that the SDK's reading of a reachable Presto with the permission withheld is derived from the code, not measured.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | The armed read no longer ties the strip to the picked method: a pick that turns ineligible falls back to the sponsor and still reads `hidden` | Accepted: the read also matches `origin` and `method` |
+| 2 | Low | The same overstated comment (Codex 1) | Accepted with Codex 1 |
+| 3 | Nit | The no-scroller case reported "no footer or amount line" | Accepted: the message names the scroll container |
+| 4 | Low | The records said the #156 comment exists; it is a close-out step | Accepted: reworded as the close-out's step |
 
 ## Delivery
 

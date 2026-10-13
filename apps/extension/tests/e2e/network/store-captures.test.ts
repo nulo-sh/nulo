@@ -195,6 +195,8 @@ async function fillPrivateSend(page: Page, chain: Chain, amount: string, fee: Fe
 	// The trigger names a pick before the card has resolved who pays for it, and the strip reads "—"
 	// until it has; an armed send is the page's own word that the payer is settled.
 	expect(assertPublishInvariant(await readSendView(page))).toMatchObject({
+		origin: "private",
+		method: fee,
 		action: "send",
 		strip: { you: "hidden", to: "hidden", amount: "hidden" },
 	})
@@ -291,8 +293,8 @@ function revealCutActivityRow(): Fit {
 
 /**
  * In-page, on Send: the least scroll that lifts the amount's conversion line clear of the sticky
- * footer, measured again once scrolled, so a written frame never clips the line. The transfer-type
- * labels may pass under the sticky header.
+ * footer, measured again once scrolled, so a fit that returns `scrolled` leaves the line clear. The
+ * transfer-type labels may pass under the sticky header.
  */
 function clearAmountLine(): Fit {
 	const footer = document.querySelector<HTMLElement>('[data-testid="send-footer"]')
@@ -304,7 +306,8 @@ function clearAmountLine(): Fit {
 				.map((id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().bottom)
 				.filter((bottom): bottom is number => bottom !== undefined),
 		)
-	if (!footer || !scroller || lineBottom() === Number.NEGATIVE_INFINITY) return { error: "Send has no footer or amount line" }
+	if (!footer || !scroller || lineBottom() === Number.NEGATIVE_INFINITY)
+		return { error: "Send has no footer, scroll container or amount line" }
 	const overlap = () => Math.ceil(lineBottom() + 4 - footer.getBoundingClientRect().top)
 	const need = Math.max(0, overlap())
 	const reach = Math.floor(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)
