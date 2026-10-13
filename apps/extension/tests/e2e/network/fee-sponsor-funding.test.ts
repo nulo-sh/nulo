@@ -76,6 +76,8 @@ function playgroundFor(ctx: ExtensionContext): Promise<Page> {
 		return pg
 	})()
 	playgrounds.set(ctx, connected)
+	// A failed connect is not kept: a retry that fails before the origin was approved connects afresh.
+	connected.catch(() => playgrounds.delete(ctx))
 	return connected
 }
 

@@ -1136,6 +1136,12 @@ The three-round limit was reached with the round-3 fixes unreviewed by Codex. Th
 
 **Codex round 2 (session `01a1374d`), on aac6d2e1.** **No findings.** All three round 1 findings closed, including the paths its reproductions used (a result that lands and clears in one tick, a pick made during a delayed storage read); no blocking or high finding elsewhere in the arc. The loop ends here.
 
+**Codex round 3 (session `01a1376a`), the last, on 8fe9253e (the playground's app-sponsored send and the live app-paid scenario) and the origin/dev merge.** One finding; the payload shape, the bundle, the playground's genericity and the merge clean.
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| R3-1: the once-per-browser playground connect kept a rejected attempt, so a retry after a failure before the origin was approved got the same rejection | low | **Accepted.** A failed connect is dropped from the cache. A failure after approval still cannot reconnect through discovery, as before the change. |
+
 **Live check of the teardown limits (OA-3, OA-13).** A temporary probe on the Chrome network run read every stored transaction's gas details: the teardown limits were 0 on all of the wallet's own sends (sponsor, public Fee Juice, private fee juice; 12 reads). The app-paid file's send was not stored within the probe's wait, so an app transaction's teardown limit stays unread.
 
 ## Seeds
