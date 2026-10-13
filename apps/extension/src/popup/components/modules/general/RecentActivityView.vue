@@ -653,6 +653,8 @@ async function loadExecutingTaskSnapshot(isCurrent = taskFence.begin()) {
 			executingTask.value = activeExec
 			executingSubtasks.value = activeExec.subtasks || []
 		}
+		// The journal snapshot may land first; whichever lands second reconciles the two.
+		clearExecutingTaskIfRecentTerminalMatch()
 	} catch {
 		// Non-fatal; a later task event or reconnect re-snapshots.
 	}

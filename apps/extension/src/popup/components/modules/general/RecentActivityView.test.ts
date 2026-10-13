@@ -1056,6 +1056,21 @@ describe("RecentActivityView — hydration order", () => {
 		}
 	})
 
+	test("a recent terminal record that lands before its task clears the task when the task lands", async () => {
+		const w = mountView()
+		await flushPromises()
+		const tasks = deferred<unknown[]>()
+		H.getTasks.mockReturnValue(tasks.promise)
+		H.getOperations.mockResolvedValue([{ ...inFlightTransferOp(ACCT_B), progress: { stage: "cancelled" }, terminalAt: Date.now() }])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+
+		tasks.resolve([uiTransferTask(ACCT_B, "task-b")])
+		await flushPromises()
+		expect(vmOf(w).executingTask).toBeNull()
+		expect(cards(w)).toEqual([])
+	})
+
 	test("a running step names itself before the snapshot lands", async () => {
 		const ops = deferred<unknown[]>()
 		const task = { ...uiTransferTask(ACCT_A), subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }] }

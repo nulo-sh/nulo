@@ -1085,6 +1085,8 @@ Rejected:
 
 **Round 2 (resumed Codex session): one medium.** An unmount while the mount awaited its task snapshot let the mount resume and begin a fresh journal run, whose failed read on the disconnected client then retried every 2 s. Accepted: the mount begins its run before its awaits, and a stale run reads nothing; a test defers the task snapshot, unmounts, and sees no journal read or retry. It found `clearListed` terminating, the plain footer and sheet rules intact, the scope-switch retry fenced, and the tightened e2e checks closing the reported gaps.
 
+**Round 3 (resumed Codex session, the last): one medium, caused by round 2's fix.** With the mount's journal run stale after a scope change during its awaits, a recent terminal record could land before its task, the task land second, and no reconciliation run: the card of a send that had already ended stayed up. Accepted: the task snapshot reconciles too, so whichever lands second clears the match. A test lands the terminal record first and fails without the line. The unmount fix otherwise held, and the first connect starts a replacement read rather than losing the snapshot. The loop stops at its three-round cap; the round-3 fix is one call, proven by that test, and was not reviewed again.
+
 
 ## Seeds
 
