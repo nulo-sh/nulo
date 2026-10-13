@@ -110,11 +110,11 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 				<Flex direction="column" gap="14" :class="$style.body">
 					<div ref="summary" :class="$style.summary">
 						<span :class="$style.amount" :style="{ '--hero-scale': amountScale }" data-testid="send-review-amount">
-							{{ amount || "—" }}<small v-if="amount && symbol">{{ symbol }}</small>
+							<span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol">{{ symbol }}</small>
 						</span>
 						<!-- The fit's ruler: it holds what the line holds, in the line's classes, or the two widths part. -->
 						<span aria-hidden="true" :class="$style.amount_ruler">
-							<span ref="amountRuler" :class="$style.amount">{{ amount || "—" }}<small v-if="amount && symbol">{{ symbol }}</small></span>
+							<span ref="amountRuler" :class="$style.amount"><span :class="amount && symbol && $style.number">{{ amount || "—" }}</span><small v-if="amount && symbol">{{ symbol }}</small></span>
 						</span>
 						<span :class="$style.to" data-testid="send-review-recipient">{{ toLine }}</span>
 					</div>
@@ -227,10 +227,14 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 	white-space: nowrap;
 }
 
+/* The gap ends the number, so a symbol a wrapping line moves down starts flush with the line. */
+.number {
+	margin-right: 4px;
+}
+
 /* Atomic, so a wrapping line breaks before the symbol, never inside it. */
 .amount small {
 	display: inline-block;
-	margin-left: 4px;
 
 	font-family: var(--font-mono);
 	font-size: 11px;

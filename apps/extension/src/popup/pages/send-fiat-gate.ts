@@ -45,11 +45,22 @@ export function evaluateFiatGate(input: {
 	// Guard against a frozen quote that could never have been valid — a zero
 	// or non-finite denominator would make the drift check meaningless.
 	if (!Number.isFinite(guard.frozenUsd) || guard.frozenUsd <= 0) return { ok: false, requote: false, reason: "no-guard" }
-	if (liveUsd === null || liveUsd === undefined || !Number.isFinite(liveUsd) || liveUsd <= 0) {
-		return { ok: false, requote: true, reason: "no-live-quote" }
-	}
+	if (!isUsableUsd(liveUsd)) return { ok: false, requote: true, reason: "no-live-quote" }
 	if (Math.abs(liveUsd - guard.frozenUsd) / guard.frozenUsd > limit) {
 		return { ok: false, requote: true, reason: "drift" }
 	}
 	return { ok: true, requote: false }
+}
+
+function isUsableUsd(usd: number | null | undefined): usd is number {
+	return typeof usd === "number" && Number.isFinite(usd) && usd > 0
+}
+
+/**
+ * What a requote notice may claim: `moved` only when a usable live quote differs from the frozen
+ * one. A snapshot that merely aged past its limit at an unchanged price, or has no live quote to
+ * compare, is `stale`.
+ */
+export function requoteReason(frozenUsd: number | undefined, liveUsd: number | null | undefined): "moved" | "stale" {
+	return isUsableUsd(liveUsd) && liveUsd !== frozenUsd ? "moved" : "stale"
 }
