@@ -9,6 +9,7 @@ import { checkSource, parsePayload } from "@nulo/token-list/parse"
 export const HOST_ROOT = fileURLToPath(new URL("..", import.meta.url))
 export const SOURCE = "list.source.json"
 export const ENVELOPE = "public/v1/list.json"
+export const FORMAT = "FORMAT.md"
 const SERVED = ["_headers", "v1/list.json"]
 
 export function canonical(value: unknown): string {
@@ -39,6 +40,13 @@ export function keyFindings(keys: readonly PinnedKey[]): string[] {
 	return findings
 }
 
+/** Third parties verify against the published table, so it must name exactly the pinned keys. */
+export function formatFindings(text: string, keys: readonly PinnedKey[]): string[] {
+	const rows = [...text.matchAll(/^\| `([^`]+)` \| `([A-Za-z0-9_-]{43})` \|/gm)].map(([, keyId, key]) => `${keyId} ${key}`)
+	const pinned = keys.map(({ keyId, publicKey }) => `${keyId} ${publicKey}`)
+	return rows.sort().join("\n") === pinned.sort().join("\n") ? [] : [`${FORMAT}: the key table does not match keys.ts`]
+}
+
 function servedFiles(dir: string, root = dir): string[] {
 	return readdirSync(dir).flatMap((name) => {
 		const path = join(dir, name)
@@ -67,6 +75,7 @@ export async function treeFindings(root = HOST_ROOT, keys: readonly PinnedKey[] 
 	return [
 		...sourceFindings(root),
 		...keyFindings(keys),
+		...formatFindings(readFileSync(join(root, FORMAT), "utf8"), keys),
 		...publicFindings(root),
 		...(existsSync(envelope) ? await envelopeFindings(readFileSync(envelope, "utf8"), keys) : []),
 	]

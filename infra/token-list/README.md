@@ -23,8 +23,9 @@ verifier are [`@nulo/token-list`](../../packages/token-list/README.md).
   bad commit can serve anything; a wallet accepts only a list signed by a pinned key, with a sequence
   above the last it accepted.
 - **The tree tests are strict** (`bun run test`, in `test:all`): the source passes the strict rules in
-  canonical form; every pinned key is real (a placeholder fails); `public/` holds `_headers` and
-  `v1/list.json` only; a committed envelope is canonical, verifies and parses strictly.
+  canonical form; every pinned key is real (a placeholder fails) and is the one `FORMAT.md` publishes;
+  `public/` holds `_headers` and `v1/list.json` only; a committed envelope is canonical, verifies and
+  parses strictly.
 - **One name.** `tokens.nulo.sh` only: no workers.dev origin, no preview URLs, no route in the file.
 
 ## Publishing a change

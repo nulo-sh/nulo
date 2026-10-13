@@ -5,7 +5,17 @@ import { type PinnedKey, PLACEHOLDER_PUBLIC_KEY } from "@nulo/token-list"
 import { importSeed, publicKeyOf } from "@nulo/token-list/envelope"
 import { main as signCli } from "@nulo/token-list/sign-cli"
 import { afterAll, describe, expect, test } from "vitest"
-import { canonical, ENVELOPE, envelopeFindings, HOST_ROOT, keyFindings, SOURCE, treeFindings } from "../scripts/check"
+import {
+	canonical,
+	ENVELOPE,
+	envelopeFindings,
+	FORMAT,
+	formatFindings,
+	HOST_ROOT,
+	keyFindings,
+	SOURCE,
+	treeFindings,
+} from "../scripts/check"
 
 const work = mkdtempSync(join(tmpdir(), "token-list-host-"))
 afterAll(() => rmSync(work, { recursive: true, force: true }))
@@ -15,6 +25,10 @@ async function throwawayKey(): Promise<{ seedHex: string; pinned: PinnedKey }> {
 	return { seedHex, pinned: { keyId: "nulo-ci-1", publicKey: await publicKeyOf(await importSeed(seedHex)) } }
 }
 
+function tableRow({ keyId, publicKey }: PinnedKey): string {
+	return `| \`${keyId}\` | \`${publicKey}\` | signs |\n`
+}
+
 /** A copy of the host tree, the envelope signed by sign-cli itself under a throwaway pinned key. */
 async function signedTree(name: string): Promise<{ root: string; pinned: PinnedKey }> {
 	const root = join(work, name)
@@ -22,6 +36,7 @@ async function signedTree(name: string): Promise<{ root: string; pinned: PinnedK
 	cpSync(join(HOST_ROOT, SOURCE), join(root, SOURCE))
 	cpSync(join(HOST_ROOT, "public/_headers"), join(root, "public/_headers"))
 	const { seedHex, pinned } = await throwawayKey()
+	writeFileSync(join(root, FORMAT), tableRow(pinned))
 	const write = process.stdout.write
 	process.stdout.write = (() => true) as typeof process.stdout.write
 	try {
@@ -33,7 +48,6 @@ async function signedTree(name: string): Promise<{ root: string; pinned: PinnedK
 }
 
 describe("the host tree", () => {
-	// Red until the key ceremony pastes the real public keys into packages/token-list/src/keys.ts.
 	test("has no finding", async () => {
 		expect(await treeFindings()).toEqual([])
 	})
@@ -70,5 +84,12 @@ describe("the host tree", () => {
 		])
 		expect(keyFindings([{ keyId: "x", publicKey: "short" }])).toEqual(["keys.ts: x is not a 32-byte base64url key"])
 		expect(keyFindings([pinned, { ...pinned, keyId: "nulo-recovery-1" }])).toEqual(["keys.ts: a public key is pinned twice"])
+	})
+
+	test("refuses a key table that names a key keys.ts does not pin, or misses one", async () => {
+		const [a, b] = [(await throwawayKey()).pinned, { ...(await throwawayKey()).pinned, keyId: "nulo-recovery-1" }]
+		expect(formatFindings(tableRow(a) + tableRow(b), [b, a])).toEqual([])
+		expect(formatFindings(tableRow(a), [a, b])).toEqual([`${FORMAT}: the key table does not match keys.ts`])
+		expect(formatFindings(tableRow(a) + tableRow(b), [a])).toEqual([`${FORMAT}: the key table does not match keys.ts`])
 	})
 })
