@@ -174,7 +174,8 @@ describe("assertWalletSchemaArgs — an address in another spelling", () => {
 	const intent = (caller: unknown) => ({ caller, call })
 	const override = (address: unknown) => ({ contracts: { [TOKEN]: { instance: { ...wireInstance(TOKEN), address } } } })
 
-	/** Every argument position a check, handler, window or signer reads as an address. */
+	/** Address positions of every shape the walk meets: an argument, a nested key, an array element,
+	 *  a union branch, a class the parse builds, and each extra parse. */
 	const POSITIONS: Array<[string, MethodName, (address: unknown) => unknown[]]> = [
 		["isTokenRegistered[0]", "isTokenRegistered", (a) => [a]],
 		["registerToken[0]", "registerToken", (a) => [a, TOKEN]],

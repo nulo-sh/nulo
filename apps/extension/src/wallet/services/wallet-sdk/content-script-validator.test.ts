@@ -171,6 +171,7 @@ describe("validateContentScriptMessage — a secure message's content", () => {
 		["no content", undefined],
 		["content that is not an object", "A"],
 		["a key beside iv and ciphertext", { iv: IV, ciphertext: "", padding: "A" }],
+		["an own __proto__ key beside iv and ciphertext", JSON.parse(`{"iv":"${IV}","ciphertext":"","__proto__":"A"}`)],
 	])("refuses %s", (_label, content) => {
 		expect(validateContentScriptMessage(secure(content)).kind).toBe("invalid")
 	})

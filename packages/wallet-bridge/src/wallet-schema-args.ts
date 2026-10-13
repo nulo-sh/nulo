@@ -59,12 +59,10 @@ export async function assertWalletSchemaArgs(method: MethodName, args: readonly 
 	}
 }
 
-/** Refuses an address the parse produced unless its wire value is exactly the parse's `toString()`.
- *  The schema also admits base64, a Buffer-shaped object, unprefixed and upper-case hex, and readers
- *  compare and convert the raw wire value, so any other spelling gets a second answer. An address
- *  with no wire value under the same key is refused too; a parsed object whose wire value is a
- *  primitive is a packed encoding (a capsule, a field) and is not entered. Iterative, like
- *  `assertNoOwnToString`. */
+/** Refuses an address the parse produced unless the wire carries exactly its `toString()`: readers
+ *  compare and convert the raw wire value, so another spelling the schema admits (base64, a
+ *  Buffer-shaped object, other hex) would get a second answer. A parsed object whose wire value is
+ *  a primitive is a packed encoding (a capsule, a field) and is not entered. */
 function assertCanonicalAddresses(parsed: unknown, wire: unknown): void {
 	const pending: Array<[unknown, unknown]> = [[parsed, wire]]
 	while (pending.length > 0) {

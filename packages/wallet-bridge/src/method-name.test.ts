@@ -4,10 +4,10 @@ import { METHOD_REGISTRY, assertKnownMethod } from "./method-descriptors"
 
 /**
  * The typed dispatch-entry choke point. `assertKnownMethod` is the
- * single fail-closed guard the dispatcher routes through: it narrows the wire
- * `methodName: string` to `MethodName` (the literal key union of METHOD_REGISTRY)
- * or throws. Lives in its OWN file — NOT `method-descriptors.test.ts` (the frozen
- * authz oracle, which stays byte-UNEDITED).
+ * single fail-closed guard the dispatcher routes through: it narrows the decrypted
+ * method name to `MethodName` (the literal key union of METHOD_REGISTRY) or throws
+ * `UnsupportedMethodError`. Lives in its OWN file — NOT `method-descriptors.test.ts`
+ * (the frozen authz oracle, which stays byte-UNEDITED).
  */
 describe("assertKnownMethod — typed dispatch-entry choke point", () => {
 	test("passes (narrows) for every registered method", () => {

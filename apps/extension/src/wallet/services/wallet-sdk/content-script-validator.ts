@@ -50,15 +50,18 @@ import { z } from "zod"
 const CONTENT_SCRIPT_MESSAGE_TYPES = ["discovery-request", "key-exchange-request", "secure-message", "disconnect-request", "ping"] as const
 
 /**
- * The longest secure-message ciphertext admitted, in base64 characters (one byte each). A
- * connected page's call is decrypted, queued and possibly held whole, and its id is inside the
- * ciphertext, so an oversized one is dropped unanswered here. Twice the largest call the bundled
- * artifacts produce (a `registerContract` carrying the artifact), which a test re-measures.
+ * The longest secure-message ciphertext admitted, in base64 characters (one byte each), per
+ * message, a batch included. A connected page's call is decrypted, queued and possibly held
+ * whole, and its id is inside the ciphertext, so an oversized one is dropped unanswered here.
+ * Twice the largest call the bundled artifacts produce (a `registerContract` carrying the
+ * artifact), which a test re-measures.
  */
 export const MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS = 16 * 1024 * 1024
 
-/** AES-GCM's 12-byte IV is 16 base64 characters. */
+/** Twice AES-GCM's 12-byte IV, which is 16 base64 characters. */
 const MAX_SECURE_MESSAGE_IV_CHARS = 32
+
+const SECURE_MESSAGE_CONTENT_KEYS: ReadonlySet<string> = new Set(["iv", "ciphertext"])
 
 const EnvelopeSchema = z.object({
 	origin: z.literal("content-script"),
@@ -68,12 +71,20 @@ const EnvelopeSchema = z.object({
 const ContentScriptMessageSchema = z.discriminatedUnion("type", [
 	EnvelopeSchema.extend({
 		type: z.literal("secure-message"),
-		// Strict: upstream queues the whole `content` for the session's decrypt, so a key beside
-		// `ciphertext` would carry data past its bound.
-		content: z.strictObject({
-			iv: z.string().max(MAX_SECURE_MESSAGE_IV_CHARS),
-			ciphertext: z.string().max(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
-		}),
+		// Upstream queues the whole `content` for the session's decrypt, so any other key would carry
+		// data past the bound. Its keys are read from the raw value: zod's object parse skips an own
+		// `__proto__` key, even under `strictObject`.
+		content: z
+			.custom<object>(
+				(value) =>
+					typeof value === "object" && value !== null && Object.keys(value).every((key) => SECURE_MESSAGE_CONTENT_KEYS.has(key)),
+			)
+			.pipe(
+				z.object({
+					iv: z.string().max(MAX_SECURE_MESSAGE_IV_CHARS),
+					ciphertext: z.string().max(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
+				}),
+			),
 	}),
 	EnvelopeSchema.extend({
 		type: z.enum(CONTENT_SCRIPT_MESSAGE_TYPES).exclude(["secure-message"]),
