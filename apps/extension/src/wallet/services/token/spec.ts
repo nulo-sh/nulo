@@ -157,7 +157,7 @@ export type TokenInterface = {
  */
 export type SeedStatus = "pending" | "seeding" | "failed" | "rejected" | "seeded"
 
-/** One default the user has not deleted. `symbol` and `displayName` are compiled-in literals, never chain data. */
+/** One default the user has not deleted. `symbol` and `displayName` come from the signed list, never chain data. */
 export type SeedStatusEntry = {
 	chainId: number
 	contract: string

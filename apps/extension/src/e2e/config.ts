@@ -66,10 +66,9 @@ export const E2E_MIGRATION_FIXTURE = (import.meta.env.VITE_NULO_E2E_MIGRATION_FI
 
 /**
  * E2E-only default-token seed source. When armed at BUILD time, the token
- * seeder reads its seed list from `chrome.storage.session` instead of
- * `DEFAULT_TOKEN_SEEDS` — the sandbox mints a fresh token address per run, so
- * no build-time list can cover it (same problem `price-map.ts` solves for
- * pricing).
+ * seeder reads its seed list from `chrome.storage.session` instead of the
+ * token list — the sandbox mints a fresh token address per run, so no signed
+ * list can cover it (same problem `price-map.ts` solves for pricing).
  *
  * Double opt-in, like proverless and unlike the migration fixture: an armed
  * build REPLACES the production seed list, so a stray single flag would not be

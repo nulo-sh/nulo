@@ -215,7 +215,7 @@ Each gate also runs `bun run lint`, `bun run typecheck:all` and `bun run check:p
    - timing: one deadline (boot honours the backoff; an unsupported verify backs off to daily), single-flight overlap, the request options, `onListChanged` reaching the seeder.
 - Gate: `bun run audit:vue` exits 0, and `bun run test:ci-gating` is green.
 
-**P4. Consumers.**
+**P4. Consumers.** ✓
 1. Rewire `getSeeds`/`getVersion`, `invalidate()`, tombstone-on-delete, `knownContracts`, `price-map`, `getQuotes`, and `usePrices`/`BalanceView`.
 2. Remove `TESTNET_TOKENS` and `DEFAULT_TOKEN_SEEDS`.
 3. Write seeder tests: a re-pin and a delist during a held preview; a list change during a held persist (the row lands, with no name under the new pins); no `verifiedPins` for an already-present token; a rejected default that retries after an update.

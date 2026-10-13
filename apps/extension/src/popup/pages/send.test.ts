@@ -86,7 +86,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			refreshIfStale: vi.fn(async () => ({})),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
 		}
 	}),
 }))
@@ -119,8 +120,7 @@ vi.mock("vue-router", () => ({
 import { REVIEW_ARM_MS } from "@/composables/useSendReview"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { PriceServiceClient } from "@/wallet/services/price/client"
-import { getPriceMapEntry } from "@/wallet/services/price/price-map"
-import { seedsForChain } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 import { TRANSFER_STATUS_UNKNOWN_COPY, TRANSFER_TERMS_COPY } from "@/popup/utils/transfer-failure-copy"
 import { useAppStore } from "@/stores/app.store"
 import { useCacheStore } from "@/stores/cache.store"
@@ -1316,14 +1316,15 @@ describe("send page — Refresh quote by keyboard", () => {
 
 	test("on the real card a moved quote is refreshed by keyboard: the amount re-derives and the USD field holds the focus", async () => {
 		const chainId = CHAIN_IDS.TESTNET
-		const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract)?.coingeckoId === "usd-coin")
-		if (!seed) throw new Error("no USDC-priced testnet seed")
-		const priced = { ...TOKEN, chainId, contract: seed.contract, symbol: "USDC" }
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
 		const { w } = await mountSend({ realAmountCard: true })
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
-		const quote = (usd: number) => ({ "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } })
+		const quote = (usd: number) => ({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+		})
 
 		price.onQuotesUpdated.invoke(quote(1))
 		await nextTick()

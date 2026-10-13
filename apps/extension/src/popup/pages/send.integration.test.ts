@@ -97,7 +97,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			refreshIfStale: vi.fn(async () => ({})),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
 		}
 	}),
 }))
@@ -630,7 +631,8 @@ describe("send page with the real fee card — the review sheet's fee", () => {
 		// Every price client holds a different quote, as after a reconnect that refreshed only one.
 		vi.mocked(PriceServiceClient).mock.results.forEach(({ value }, i) => {
 			value.onQuotesUpdated.invoke({
-				aztec: { coingeckoId: "aztec", usd: 0.01 * (i + 1), fetchedAt: Date.now(), providerUpdatedAt: null },
+				quotes: { aztec: { coingeckoId: "aztec", usd: 0.01 * (i + 1), fetchedAt: Date.now(), providerUpdatedAt: null } },
+				pricedTokens: {},
 			})
 		})
 		await flushPromises()

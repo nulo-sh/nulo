@@ -39,8 +39,8 @@ export type SeedMarkerEntry = {
 	attempts: number
 	/** Extension version active when `attempts` hit the cap. */
 	cappedAtVersion?: string
-	/** Extension version under which a pin or metadata bound rejected this seed.
-	 *  Not retried until the version changes — a seed-list fix ships in a release. */
+	/** Seed version under which a pin or metadata bound rejected this seed. Not
+	 *  retried until the version changes: a new release or a new signed list. */
 	rejectedAtVersion?: string
 	/** When the seeder may try again by itself. Written WITH the attempt, before
 	 *  the slow work, so a service worker that dies mid-attempt still resumes. */
@@ -50,6 +50,9 @@ export type SeedMarkerEntry = {
 	outcome?: "seeded" | "deleted"
 	/** Chain-observed decimals recorded at seed time; equal to the seed's `expectedDecimals`. */
 	observedDecimals?: number
+	/** `seedPins` of the seed whose preview passed, written only by that path: what lets the
+	 *  connect window name the token as one Nulo knows while the list still pins it the same way. */
+	verifiedPins?: string
 }
 
 type SeedMarkerState = Record<string, SeedMarkerEntry>
@@ -65,6 +68,10 @@ type SeedPassContext = {
 	state: SeedMarkerState
 	version: string
 	guardsHold: () => Promise<boolean>
+}
+
+export function seedPins(seed: DefaultTokenSeed): string {
+	return `${seed.expectedClassId}|${seed.expectedSymbol}|${seed.expectedDecimals}`
 }
 
 /** Status of one default, or `undefined` for one the user deleted. `seeded` stays listed: the
@@ -114,6 +121,7 @@ function parseMarkerEntry(raw: unknown, now: number): SeedMarkerEntry | undefine
 		rejectedAtVersion: e.rejectedAtVersion,
 	}
 	if (typeof e.observedDecimals === "number") entry.observedDecimals = e.observedDecimals
+	if (typeof e.verifiedPins === "string") entry.verifiedPins = e.verifiedPins
 	if (e.nextAttemptAt === undefined) return entry
 	if (typeof e.nextAttemptAt !== "number" || !Number.isFinite(e.nextAttemptAt) || e.nextAttemptAt < 0) return undefined
 	// Beyond the longest wait the seeder ever writes, the value is not the seeder's (or the clock
@@ -130,8 +138,8 @@ export type SeedPreview = { name: string; symbol: string; decimals: number; inte
  * without the PXE/simulation stack.
  */
 export interface TokenSeederDeps {
-	/** Resolved once per pass. Production returns `DEFAULT_TOKEN_SEEDS`; armed
-	 *  e2e builds return a storage-backed list the running test writes. */
+	/** Resolved once per pass. Production returns the signed token list's entries;
+	 *  armed e2e builds may return a storage-backed list the running test writes. */
 	getSeeds(): Promise<readonly DefaultTokenSeed[]>
 	getActiveProfile(): Promise<{ id: string } | undefined>
 	getActiveNetwork(): Promise<{ id: string; chainId: number } | null>
@@ -299,10 +307,32 @@ export class TokenSeeder {
 		this.clearContinuation()
 	}
 
-	/** User deleted a seeded token → permanent tombstone (survives chain purges). */
+	/** User deleted a token → permanent tombstone (survives chain purges). Written for every
+	 *  delete, listed or not, so a later list that names the token cannot bring it back. */
 	public async markDeletedByUser(profileId: string, chainId: number, contract: string): Promise<void> {
 		await this.updateMarker(profileId, seedKey(chainId, contract), () => ({ attempts: 0, outcome: "deleted" }))
 		await this.announce(profileId, chainId)
+	}
+
+	/**
+	 * A new signed list: fence every in-flight pass, so nothing it read from the old list is
+	 * written, re-announce the active scope, whose defaults may have changed, and seed anew. A
+	 * commit whose `persist()` already started still lands, as one just before the change would.
+	 */
+	public async listChanged(): Promise<void> {
+		this.invalidate(() => true)
+		const profile = await this.deps.getActiveProfile()
+		const network = profile && (await this.deps.getActiveNetwork())
+		if (profile && network) await this.announce(profile.id, network.chainId)
+		await this.run()
+	}
+
+	/** The listed defaults of `chainId` whose current pins this profile's seeding verified on chain. */
+	public async verifiedSeeds(profileId: string, chainId: number): Promise<DefaultTokenSeed[]> {
+		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
+		if (seeds.length === 0) return []
+		const state = await this.readMarkerState(profileId)
+		return seeds.filter((seed) => state[seedKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
 	}
 
 	/**
@@ -399,6 +429,9 @@ export class TokenSeeder {
 		// this await can only make the READ stale — every write below is fenced
 		// by `guardsHold`, which re-checks the epoch.
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === network.chainId)
+		// Read with the seeds: a list change between the two also bumps the epoch, which drops
+		// every write of this pass.
+		const version = this.getVersion()
 		if (seeds.length === 0) return undefined
 
 		/** Lifecycle guard, re-checked before EVERY write: the pass's captured
@@ -421,7 +454,6 @@ export class TokenSeeder {
 		const account = accounts[0]
 
 		const state = await this.readMarkerState(profile.id)
-		const version = this.getVersion()
 		return { epoch, profile, network, seeds, account, state, version, guardsHold }
 	}
 
@@ -497,7 +529,7 @@ export class TokenSeeder {
 			// Lifecycle guard first: a purge or switch during the slow
 			// preview aborts the whole pass.
 			if (!(await guardsHold())) return "abort"
-			const committed = await this.commitSeedResult(ctx, account, key, preview)
+			const committed = await this.commitSeedResult(ctx, account, key, preview, seedPins(seed))
 			if (!committed && this.epoch !== ctx.epoch) return "abort"
 		} catch (err) {
 			// Transient failure (network down, RPC error): attempt counted; the
@@ -514,7 +546,13 @@ export class TokenSeeder {
 	 *  before the purge's cleanup (which then sweeps it) — no resurrection window
 	 *  either way. Direct reads/writes here: updateMarker would re-acquire the
 	 *  lock and deadlock the promise chain — never decompose this block further. */
-	private commitSeedResult(ctx: SeedPassContext, account: { address: string }, key: string, preview: SeedPreview): Promise<boolean> {
+	private commitSeedResult(
+		ctx: SeedPassContext,
+		account: { address: string },
+		key: string,
+		preview: SeedPreview,
+		verifiedPins: string,
+	): Promise<boolean> {
 		const { profile, network, epoch } = ctx
 		return this.withMarkerLock(async () => {
 			if (this.epoch !== epoch) return false
@@ -531,7 +569,7 @@ export class TokenSeeder {
 			})
 			const state = await this.readMarkerState(profile.id)
 			const existing = state[key] ?? { attempts: 0 }
-			state[key] = { ...existing, outcome: "seeded", observedDecimals: preview.decimals, nextAttemptAt: undefined }
+			state[key] = { ...existing, outcome: "seeded", observedDecimals: preview.decimals, verifiedPins, nextAttemptAt: undefined }
 			await this.markerStorage(profile.id).set(state)
 			return true
 		})
@@ -578,9 +616,9 @@ export class TokenSeeder {
 
 	private async statusFor(profileId: string, chainId: number): Promise<SeedStatusEntry[]> {
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
+		const version = this.getVersion()
 		if (seeds.length === 0) return []
 		const state = await this.readMarkerState(profileId)
-		const version = this.getVersion()
 		const entries: SeedStatusEntry[] = []
 		for (const seed of seeds) {
 			const key = seedKey(chainId, seed.contract)
@@ -634,10 +672,10 @@ export class TokenSeeder {
 		const network = await this.deps.getActiveNetwork()
 		if (!network) return undefined
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === network.chainId)
+		const version = this.getVersion()
 		if (seeds.length === 0) return undefined
 		if ((await this.deps.getAccounts(profile.id, network.chainId)).length === 0) return undefined
 		const state = await this.readMarkerState(profile.id)
-		const version = this.getVersion()
 		let due: number | undefined
 		for (const seed of seeds) {
 			const entry = state[seedKey(seed.chainId, seed.contract)]

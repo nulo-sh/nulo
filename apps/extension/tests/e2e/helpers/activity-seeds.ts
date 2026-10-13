@@ -4,12 +4,11 @@
  * on demand.
  */
 import type { Page } from "puppeteer"
-import { getPriceMapEntry } from "@/wallet/services/price/price-map"
-import { seedsForChain } from "@/wallet/services/token/default-tokens"
+import type { TokenListEntry } from "@nulo/token-list"
+import { TEST_LIST_ENTRIES } from "@/wallet/services/token-list/list.fixture"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
 
-/** The active profile, network and account, and the chain's first default token the price map
- *  prices. */
+/** The active profile, network and account, and the chain's first list token with a price id. */
 export type ActivityScope = {
 	profileId: string
 	networkId: string
@@ -18,7 +17,7 @@ export type ActivityScope = {
 	token: { contract: string; name: string; symbol: string; decimals: number }
 }
 
-/** The scope without its token, for a chain with no default token seeds (the local one). */
+/** The scope without its token, for a chain the list names no token on (the local one). */
 export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
@@ -33,18 +32,25 @@ export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope,
 
 export async function readActivityScope(page: Page): Promise<ActivityScope> {
 	const identity = await readScopeIdentity(page)
-	const { chainId } = identity
-	const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract))
-	if (!seed) throw new Error(`the price map prices no default token seed on chain ${chainId}`)
-	const token = { contract: seed.contract, name: seed.displayName, symbol: seed.expectedSymbol, decimals: seed.expectedDecimals }
-	return { ...identity, token }
+	const entry = listEntries(identity.chainId).find((e) => e.priceId !== undefined)
+	if (!entry) throw new Error(`the test list prices no token on chain ${identity.chainId}`)
+	return { ...identity, token: tokenOf(entry) }
 }
 
-/** The chain's next default token: a second contract, for specs that tell two tokens' rows apart. */
+const listEntries = (chainId: number) => TEST_LIST_ENTRIES.filter((e) => e.chainId === chainId)
+
+const tokenOf = (entry: TokenListEntry): ActivityScope["token"] => ({
+	contract: entry.address,
+	name: entry.name,
+	symbol: entry.symbol,
+	decimals: entry.decimals,
+})
+
+/** The chain's next list token: a second contract, for specs that tell two tokens' rows apart. */
 export function secondToken(scope: ActivityScope): ActivityScope["token"] {
-	const seed = seedsForChain(scope.chainId).find((s) => s.contract !== scope.token.contract)
-	if (!seed) throw new Error(`chain ${scope.chainId} has a single default token seed`)
-	return { contract: seed.contract, name: seed.displayName, symbol: seed.expectedSymbol, decimals: seed.expectedDecimals }
+	const entry = listEntries(scope.chainId).find((e) => e.address !== scope.token.contract)
+	if (!entry) throw new Error(`the test list has a single token on chain ${scope.chainId}`)
+	return tokenOf(entry)
 }
 
 export type TransferSeed = {

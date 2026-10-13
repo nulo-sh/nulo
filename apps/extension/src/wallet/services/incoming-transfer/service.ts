@@ -17,7 +17,7 @@ import { ConfigService } from "@/wallet/services/config/service"
 import { TokenBalanceService } from "@/wallet/services/token-balance/service"
 import { TaskService } from "@/wallet/services/task/service"
 import { TaskStatus } from "@/wallet/services/task/spec"
-import { PriceService } from "@/wallet/services/price/service"
+import { PriceService, type PriceSnapshot } from "@/wallet/services/price/service"
 import { getPriceMapEntry } from "@/wallet/services/price/price-map"
 import { isAmountAboveDustThreshold, usdThresholdToMicro } from "@/utils/incoming-dust"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
@@ -635,11 +635,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (thresholdMicro <= 0n) return records // filter off
 		let chainId: number
 		let tokensById: Map<number, Token>
-		let quotes: Record<string, { usd: number }>
+		let prices: PriceSnapshot
 		try {
 			chainId = (await this.networkService.getNetwork(networkId)).chainId
 			tokensById = new Map((await this.tokenService.getTokensRaw(profileId, chainId)).map((t) => [t.id, t]))
-			quotes = await this.priceService.getQuotes()
+			prices = await this.priceService.getQuotes()
 		} catch {
 			return records // any price/token/network dependency unavailable → fail open
 		}
@@ -647,8 +647,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (r.tokenId === undefined) return true
 			const token = tokensById.get(r.tokenId)
 			if (!token) return true
-			const entry = getPriceMapEntry(chainId, token.contract)
-			const usdRate = entry ? quotes[entry.coingeckoId]?.usd : undefined // `getQuotes` returns FRESH quotes only
+			const entry = getPriceMapEntry(prices.pricedTokens, chainId, token.contract)
+			const usdRate = entry ? prices.quotes[entry.coingeckoId]?.usd : undefined // `getQuotes` returns FRESH quotes only
 			return isAmountAboveDustThreshold({ amountRaw: r.amountRaw, decimals: token.decimals, usdRate, thresholdMicro })
 		})
 	}

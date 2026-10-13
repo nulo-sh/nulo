@@ -116,7 +116,7 @@ async function makeHarness() {
 	)
 	collection.add(svc(TokenBalanceService.name, { requestBalanceRefresh: async () => ({ busy: true }) }))
 	collection.add(svc(TaskService.name, { getTaskSync: () => ({ status: 0 }) }))
-	collection.add(svc(PriceService.name, { getQuotes: async () => ({}) }))
+	collection.add(svc(PriceService.name, { getQuotes: async () => ({ quotes: {}, pricedTokens: {} }) }))
 	const service = new IncomingTransferService(new LoggerStore(new ConfigStore()), api, 1_000_000, reader)
 	collection.add(service)
 	await collection.start()

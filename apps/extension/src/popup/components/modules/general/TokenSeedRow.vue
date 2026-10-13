@@ -1,8 +1,8 @@
 <script setup>
 /**
  * A default token that is not a token row yet. Inert on purpose: there is no token id to open,
- * so it is a `div` — never a link, never a picker option. Every string it shows is a compiled-in
- * literal from the seed list; chain data only ever reaches the real `TokenCard`.
+ * so it is a `div` — never a link, never a picker option. Every string it shows comes from the
+ * signed token list; chain data only ever reaches the real `TokenCard`.
  */
 
 /** Components */
