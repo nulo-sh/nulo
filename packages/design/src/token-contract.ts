@@ -83,7 +83,7 @@ export const tokenGroups = {
 	},
 } as const
 
-/** Font-size scale (px): every size a role or a module rule may set is a step of it. */
+/** Font-size scale (px): a role sets a step of it, and so does a module rule outside the guard's keyed exceptions. */
 export const fontSizes = [8, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 26, 28, 32, 36, 38, 40] as const
 
 /** Font-weight scale: every weight a role sets is a step of it. */
