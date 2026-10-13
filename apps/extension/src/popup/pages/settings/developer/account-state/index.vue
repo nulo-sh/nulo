@@ -15,7 +15,7 @@
 		<ItemsContainer>
 			<SettingItem
 				size="large"
-				to="/popup/settings/advanced/account-state/notes"
+				to="/popup/settings/developer/account-state/notes"
 				title="Notes"
 				description="View all notes"
 				materialIcon="note_alt"
@@ -24,7 +24,7 @@
 			/>
 			<SettingItem
 				size="large"
-				to="/popup/settings/advanced/account-state/authwits"
+				to="/popup/settings/developer/account-state/authwits"
 				title="Authwits"
 				description="View all authwits"
 				materialIcon="verified_user"
@@ -33,7 +33,7 @@
 			/>
 			<SettingItem
 				size="large"
-				to="/popup/settings/advanced/account-state/contracts"
+				to="/popup/settings/developer/account-state/contracts"
 				title="Contracts"
 				description="View all contracts"
 				materialIcon="receipt_long"
@@ -42,7 +42,7 @@
 			/>
 			<SettingItem
 				size="large"
-				to="/popup/settings/advanced/account-state/senders"
+				to="/popup/settings/developer/account-state/senders"
 				title="Senders"
 				description="View all senders"
 				materialIcon="inbox"

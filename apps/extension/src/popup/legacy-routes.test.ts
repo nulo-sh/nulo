@@ -70,11 +70,16 @@ beforeAll(async () => {
 })
 
 describe("the legacy Settings redirects", () => {
-	test("move security, appearance and advanced to lock, display and developer", () => {
+	test("move security, appearance and advanced to lock, display and developer, and Account State under developer", () => {
 		expect(LEGACY_SETTINGS_REDIRECTS.map(({ path, redirect }) => [path, redirect])).toEqual([
 			["/popup/settings/security", "/popup/settings/lock"],
 			["/popup/settings/appearance", "/popup/settings/display"],
 			["/popup/settings/advanced", "/popup/settings/developer"],
+			["/popup/settings/advanced/account-state", "/popup/settings/developer/account-state"],
+			["/popup/settings/advanced/account-state/notes", "/popup/settings/developer/account-state/notes"],
+			["/popup/settings/advanced/account-state/authwits", "/popup/settings/developer/account-state/authwits"],
+			["/popup/settings/advanced/account-state/contracts", "/popup/settings/developer/account-state/contracts"],
+			["/popup/settings/advanced/account-state/senders", "/popup/settings/developer/account-state/senders"],
 		])
 	})
 
@@ -103,15 +108,8 @@ describe("the legacy Settings redirects", () => {
 		expect(route.query).toEqual({ redirect: "https://example.org" })
 	})
 
-	test.each([
-		"/popup/settings/security/export",
-		"/popup/settings/advanced/account-state",
-		"/popup/settings/advanced/account-state/notes",
-		"/popup/settings/advanced/account-state/authwits",
-		"/popup/settings/advanced/account-state/contracts",
-		"/popup/settings/advanced/account-state/senders",
-	])("%s under an old prefix keeps its own page", async (path) => {
-		expect((await landing(path, unlocked)).path).toBe(path)
+	test("/popup/settings/security/export under an old prefix keeps its own page", async () => {
+		expect((await landing("/popup/settings/security/export", unlocked)).path).toBe("/popup/settings/security/export")
 	})
 
 	test("a passkey profile's deep link to change-password ends on its profile page", async () => {

@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Senders" :backTo="'/popup/settings/advanced/account-state'" gap="16">
+	<SettingsPageShell title="Senders" :backTo="'/popup/settings/developer/account-state'" gap="16">
 		<AsyncListStatus v-if="isLoading || error" :loading="isLoading" :error="error" label="FETCHING SENDERS" @retry="fetchSenders()" />
 
 		<Flex v-else-if="senders.length" direction="column" gap="8">

@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper">
-		<SubPageHeader title="Authwits" :backTo="'/popup/settings/advanced/account-state'">
+		<SubPageHeader title="Authwits" :backTo="'/popup/settings/developer/account-state'">
 			<template #trailing>
 				<Dropdown>
 					<button type="button" data-testid="authwits-actions-btn" :class="$style.icon_btn" aria-label="Authwit actions">
