@@ -1,6 +1,5 @@
 import type { TextColorName } from "@nulo/design"
 
-/** A card state's tone, as the status line names it. */
 export type StatusTone = "gray" | "amber" | "red" | "green"
 
 /** An activity card's status icon fills with its state's status text token, which reads 3:1 on the

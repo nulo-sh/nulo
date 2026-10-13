@@ -1071,6 +1071,41 @@ describe("RecentActivityView — hydration order", () => {
 		expect(cards(w)).toEqual([])
 	})
 
+	// An earlier send of the same token ended moments before a later one started: same kind and token.
+	const earlierEnded = (account: string) => ({
+		...inFlightTransferOp(account, "op-earlier"),
+		createdAt: 1,
+		progress: { stage: "succeeded" },
+		terminalAt: Date.now(),
+	})
+	const laterTask = (account: string) => ({ ...uiTransferTask(account, "task-later"), createdAt: 2 })
+
+	test("an earlier send's terminal record leaves a later send's task, whichever snapshot lands second", async () => {
+		H.getTasks.mockResolvedValue([laterTask(ACCT_A)])
+		H.getOperations.mockResolvedValue([earlierEnded(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id, "journal second").toBe("task-later")
+
+		const tasks = deferred<unknown[]>()
+		H.getTasks.mockReturnValue(tasks.promise)
+		H.getOperations.mockResolvedValue([earlierEnded(ACCT_B)])
+		H.store.current.account = { address: ACCT_B }
+		await flushPromises()
+		tasks.resolve([laterTask(ACCT_B)])
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id, "task second").toBe("task-later")
+	})
+
+	test("an earlier send's record turning terminal leaves a later send's task", async () => {
+		H.getTasks.mockResolvedValue([laterTask(ACCT_A)])
+		const w = mountView()
+		await flushPromises()
+		H.journalUpdated.emit(earlierEnded(ACCT_A))
+		await flushPromises()
+		expect(vmOf(w).executingTask?.id).toBe("task-later")
+	})
+
 	test("a running step names itself before the snapshot lands", async () => {
 		const ops = deferred<unknown[]>()
 		const task = { ...uiTransferTask(ACCT_A), subtasks: [{ status: H.TaskStatus.Processing, content: { label: "Generating proof" } }] }

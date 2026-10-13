@@ -40,7 +40,13 @@ import {
 } from "@/utils/journal-state"
 import { humanizeMethodName } from "@/utils/tx-enrichment"
 import { buildIncomingCardProps } from "@/utils/received-display"
-import { buildCancelHandler, buildFocusHandler, filterPendingDoubleRender, isMatchingTask } from "./recent-activity-handlers"
+import {
+	buildCancelHandler,
+	buildFocusHandler,
+	filterPendingDoubleRender,
+	isMatchingTask,
+	isOwnTerminalRecord,
+} from "./recent-activity-handlers"
 import { buildRecentActivityRows, remainingRowSlots } from "./recent-activity-rows"
 
 /** Composables */
@@ -424,30 +430,17 @@ const hasOrphanExecutingTask = computed(() => {
 })
 
 /**
- * When a journal record turns terminal and matches
- * the current executingTask, clear executingTask in the same tick so the
- * stale awaiting card disappears immediately alongside the terminal card
- * appearing. Without this, TaskService's eventual onTaskUpdated (after
- * the SW's catch block runs) leaves a brief duplicate-render window.
- *
- * Two call shapes, because terminal records never age out and a scan of
- * all of them would let an old cancelled record matching by kind+tokenId
- * clear a fresh executingTask:
- *
- * - **Event path** (`onJournalAdded`/`Updated`): we already know which op
- *   just changed; check only that op. No scan; can't false-match an
- *   ancient terminal.
- * - **Snapshot path** (`onMounted` + `resnapshotJournal`): no incoming
- *   op; scan with a 30-second `terminalAt` window. Catches the
- *   close-popup-mid-cancel-and-reopen race without sweeping in week-old
- *   terminals.
+ * The executingTask's own record turning terminal clears the task in the same tick, so its awaiting
+ * card leaves as the terminal card arrives instead of waiting for TaskService's update. The event
+ * path checks the record that changed; a snapshot has no such record, so it scans records that ended
+ * in the last 30 s (a popup closed mid-cancel and reopened), never older ones. `isOwnTerminalRecord`
+ * refuses a record created before the task, an earlier send of the same kind and token.
  */
 const SNAPSHOT_TERMINAL_WINDOW_MS = 30_000
 
 function clearExecutingTaskIfThisIsTerminalMatch(op) {
 	if (!executingTask.value) return
-	if (op.terminalAt === null) return
-	if (!isMatchingTask(executingTask.value, op, appStore.account?.address)) return
+	if (!isOwnTerminalRecord(executingTask.value, op, appStore.account?.address)) return
 	executingTask.value = null
 	executingSubtasks.value = []
 }
@@ -456,9 +449,7 @@ function clearExecutingTaskIfRecentTerminalMatch() {
 	if (!executingTask.value) return
 	const account = appStore.account?.address
 	const cutoff = Date.now() - SNAPSHOT_TERMINAL_WINDOW_MS
-	const match = journalOps.value.find(
-		(op) => op.terminalAt !== null && op.terminalAt >= cutoff && isMatchingTask(executingTask.value, op, account),
-	)
+	const match = journalOps.value.find((op) => isOwnTerminalRecord(executingTask.value, op, account) && op.terminalAt >= cutoff)
 	if (match) {
 		executingTask.value = null
 		executingSubtasks.value = []
