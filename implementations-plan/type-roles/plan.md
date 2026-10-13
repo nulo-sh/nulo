@@ -142,6 +142,7 @@ Home, Holdings, Activity:
 | Activity empty state: "No transactions yet" (`activity.vue:254-260`); its line (`:262-267`) | G 14/600 -0.02, sentence case; I 12 | `title-page` G 13/700 caps 0.12 (gains caps and weight); `body`, unchanged † |
 | "NO MATCHES · TRY A DIFFERENT TERM" (`ListStatusMessage.vue:24`, rule `:44-52`, literal caps) | G 12/700 0.1, no transform | `body` I 12/400; reads in Inter caps, copy unchanged |
 | Activity's collapsed title bar (`tab-hero.module.css:21` `.page_title_label`, `activity.vue:178`, `page-title-bar`) | G 13/700 caps 0.12 | `title-page`, unchanged † |
+| History's token filter chip, its symbol (`activity.vue` `.filter_label`, `activity-token-filter-symbol`, from dev's #348) | G 11/700 caps 0.12 | `label-section` G 11/700 caps 0.1; owner, 2026-10-13: "label-section (Recommended)" † |
 | Home action buttons, "SEND" and "RECEIVE" (`ActionButtonsView.vue:71-77`, `.label`) | G 14/700 caps 0.2 | `button`, unchanged † |
 | Section links "View all" (`TokensView.vue:487-492`) and "View history" (`RecentActivityView.vue:853-858`), `RouterLink`s since #76 | G 10/700 caps 0.1 | `label`, unchanged † |
 | Token row failure line, "Couldn't refresh" (`TokenCard.vue:231-235`) | M 10/400 red | `caption` I 11/400 † |
