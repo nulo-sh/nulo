@@ -326,7 +326,7 @@ export function retiredFileFindings(ctx: Ctx): Finding[] {
 			path,
 			1,
 			`${path} is retired: open work lives in GitHub issues`,
-			"delete it; open an issue per item, or a draft advisory for an exploitable one (CLAUDE.md § Where open work lives)",
+			"delete it; open an issue per item, or a draft advisory for an exploitable one (implementations-plan/README.md § Where open work lives)",
 		),
 	)
 }

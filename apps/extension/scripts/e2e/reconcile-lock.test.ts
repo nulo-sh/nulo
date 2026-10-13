@@ -8,6 +8,8 @@ import { afterAll, describe, expect, test } from "vitest"
 import { withReconcileLock } from "../../tests/e2e/lockfile"
 import { ownIdentity } from "../../tests/e2e/owned-processes"
 
+// Child processes import this TypeScript as it is on disk, which Bun runs and Node's loader refuses (an
+// extensionless relative import).
 const MODULE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../tests/e2e/lockfile.ts")
 const DEAD_HOLDER = "2000000000:1 0123456789abcdef"
 const DIR = mkdtempSync(path.join(tmpdir(), "nulo-reconcile-lock-test-"))
@@ -91,7 +93,7 @@ for (let i = 0; i < 3; i++) {
 			[1, 2, 3, 4].map(
 				(id) =>
 					new Promise<number | null>((resolve) => {
-						const child = spawn(process.execPath, [script], {
+						const child = spawn("bun", [script], {
 							stdio: "inherit",
 							env: { ...process.env, LOCK: file, LOG: log, ID: String(id) },
 						})

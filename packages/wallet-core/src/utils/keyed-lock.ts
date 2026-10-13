@@ -45,6 +45,11 @@ export class KeyedLock {
 		return this.#lockFor(key).withLock(fn)
 	}
 
+	/** Operations queued for `key` behind its running one; 0 for a key with no lock, deleted included. */
+	public waiting(key: string): number {
+		return this.#locks.get(key)?.waiting ?? 0
+	}
+
 	/**
 	 * Drop a key's lock (e.g. on session termination). Safe when absent. An
 	 * in-flight op keeps its own reference and still completes; a later
