@@ -70,12 +70,18 @@ const thirdParty = (steps: Step[]): string[] =>
 		),
 	].sort()
 
+/** A secret the repository or an environment defines; `GITHUB_TOKEN` is the job's own token, not a stored credential. */
+const CUSTOM_SECRET = /\bsecrets\s*(\.\s*(?!GITHUB_TOKEN\b)[A-Za-z_]|\[)/
+
+/** Whether any step, the job's env or the workflow's env reads a custom secret. */
+const readsCustomSecret = (job: Job, wf: Workflow): boolean => CUSTOM_SECRET.test(JSON.stringify([wf.env, job.env, job.steps]))
+
 function privileged(job: Job, wf: Workflow): boolean {
 	const declared = job.permissions ?? wf.permissions ?? {}
 	if (declared === "write-all") return true
 	const permissions = declared as Record<string, unknown>
 	const writes = permissions["id-token"] === "write" || permissions.attestations === "write" || permissions.contents === "write"
-	return writes || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
+	return writes || readsCustomSecret(job, wf) || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
 }
 
 /** The exact permission set of each App token; none may name another owner or repository. */
@@ -89,6 +95,7 @@ const MINTS: Record<string, Record<string, string>> = {
 		"permission-pull-requests": "write",
 	},
 	"_release-pr-lockfile.yml#lock-version": { "permission-contents": "write" },
+	"publish-token-list.yml#publish-pr": { "permission-contents": "write", "permission-pull-requests": "write" },
 }
 
 function mintStepFindings(where: string, step: Step): string[] {
@@ -129,12 +136,16 @@ const THIRD_PARTY: Record<string, string[]> = {
 	"release.yml#sync-main-to-dev": ["oven-sh/setup-bun"],
 	"release.yml#attach-assets": ["oven-sh/setup-bun"],
 	"release.yml#publish-chrome-store": ["google-github-actions/auth", "oven-sh/setup-bun"],
+	"release.yml#publish-firefox-amo": ["oven-sh/setup-bun"],
 	"release-prerelease.yml#release-please": ["googleapis/release-please-action"],
 	"_release-pr-lockfile.yml#lock-version": ["oven-sh/setup-bun"],
 	"store-check.yml#chrome": ["google-github-actions/auth", "oven-sh/setup-bun"],
+	"store-check.yml#firefox": ["oven-sh/setup-bun"],
 	"publish-packages.yml#publish": [],
 	"nightly.yml#publish-nightly": ["oven-sh/setup-bun"],
 	"nightly.yml#prune-nightlies": ["oven-sh/setup-bun"],
+	"publish-token-list.yml#sign": ["oven-sh/setup-bun"],
+	"publish-token-list.yml#publish-pr": ["oven-sh/setup-bun"],
 }
 
 function credentialedJobFindings(tree: Tree, where: string, wf: Workflow, job: Job): string[] {
@@ -164,6 +175,8 @@ const CLEAN = [
 	"release.yml#sync-main-to-dev",
 	"nightly.yml#publish-nightly",
 	"nightly.yml#prune-nightlies",
+	"publish-token-list.yml#sign",
+	"publish-token-list.yml#publish-pr",
 ]
 const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b/
 /** A step's shell text with line continuations joined, so a command reads the same however it wraps. */
@@ -214,6 +227,8 @@ const NO_INSTALL = [
 	"nightly.yml#publish-nightly",
 	"pr-quick.yml#changes",
 	"pr-quick.yml#preview-comment",
+	"publish-token-list.yml#publish-pr",
+	"publish-token-list.yml#sign",
 	"release.yml#attach-assets",
 	"release.yml#auto-unstick",
 	"release.yml#publish-chrome-store",
@@ -550,8 +565,28 @@ describe("credentialed jobs", () => {
 			"a job granted write-all",
 			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { permissions: "write-all" }),
 		],
+		[
+			"a new job reading a custom secret",
+			(t: Tree) =>
+				t.workflows["release.yml"].jobs["release-notes"].steps?.push({
+					run: "true",
+					env: { KEY: "${{ secrets.ANY_KEY }}" },
+				} as Step),
+		],
+		[
+			"a custom secret read by bracket",
+			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { env: { KEY: "${{ secrets['ANY_KEY'] }}" } }),
+		],
 	])("finds %s", (_, edit) => {
 		expect(credentialedFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+	test("the job's own GITHUB_TOKEN is not a stored credential", () => {
+		const tree = mutated((t) =>
+			Object.assign(t.workflows["release.yml"].jobs["release-notes"], { env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" } }),
+		)
+		const job = tree.workflows["release.yml"].jobs["release-notes"]
+		expect(privileged(job, tree.workflows["release.yml"])).toBe(false)
+		expect(privileged({ ...job, env: { KEY: "${{ secrets.GITHUB_TOKEN_EXTRA }}" } }, tree.workflows["release.yml"])).toBe(true)
 	})
 })
 
@@ -767,6 +802,8 @@ describe("jobs that install nothing", () => {
 				"nightly.yml#prune-nightlies",
 				"nightly.yml#publish-nightly",
 				"pr-quick.yml#changes",
+				"publish-token-list.yml#publish-pr",
+				"publish-token-list.yml#sign",
 				"release.yml#attach-assets",
 				"release.yml#auto-unstick",
 				"release.yml#sync-main-to-dev",

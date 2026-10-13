@@ -1,0 +1,26 @@
+{
+	"name": "@nulo/token-list-host",
+	"version": "0.0.0",
+	"license": "Apache-2.0",
+	"private": true,
+	"type": "module",
+	"description": "The static host and publish tooling for the signed Nulo token list (tokens.nulo.sh).",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"test": "bun --bun vitest run",
+		"check": "bun scripts/check.ts",
+		"summary": "bun scripts/summary.ts",
+		"deploy": "wrangler deploy",
+		"deploy:dry": "wrangler deploy --dry-run --outdir dist",
+		"test:live": "TOKEN_LIST_HOST_LIVE=1 bun --bun vitest run test/live.test.ts"
+	},
+	"dependencies": {
+		"@nulo/token-list": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^24.10.1",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.9",
+		"wrangler": "4.129.1"
+	}
+}

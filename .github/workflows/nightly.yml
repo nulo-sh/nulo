@@ -305,6 +305,24 @@ jobs:
       - name: Probe passkey.nulo.sh
         run: bun run --cwd infra/passkey-rp test:live
 
+  # The token-list host serves the signed list every wallet fetches; probe it from outside every
+  # night, quiet days included, so a zone change, a stale deploy or a list that no longer verifies
+  # against this revision's pinned keys surfaces here. ADVISORY, like rp-host-live.
+  token-list-host-live:
+    needs: resolve
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: Probe tokens.nulo.sh
+        run: bun run --cwd infra/token-list test:live
+
   # Builds gate on lint+unit only (not network) — same wall-time overlap as
   # release.yml; the publish job waits for everything.
 

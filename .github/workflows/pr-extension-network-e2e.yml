@@ -82,6 +82,8 @@ jobs:
               - 'packages/resolve-asset/package.json'
               - 'packages/third-party-notices/src/**'
               - 'packages/third-party-notices/package.json'
+              - 'packages/token-list/src/**'
+              - 'packages/token-list/package.json'
               - 'packages/wallet-bridge/src/**'
               - 'packages/wallet-bridge/package.json'
               - 'packages/wallet-core/src/**'

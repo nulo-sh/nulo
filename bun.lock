@@ -151,6 +151,19 @@
         "wrangler": "^4",
       },
     },
+    "infra/token-list": {
+      "name": "@nulo/token-list-host",
+      "version": "0.0.0",
+      "dependencies": {
+        "@nulo/token-list": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^24.10.1",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+        "wrangler": "4.129.1",
+      },
+    },
     "packages/aztec-runtime": {
       "name": "@nulo/aztec-runtime",
       "version": "0.1.0",
@@ -815,6 +828,8 @@
     "@nulo/third-party-notices": ["@nulo/third-party-notices@workspace:packages/third-party-notices"],
 
     "@nulo/token-list": ["@nulo/token-list@workspace:packages/token-list"],
+
+    "@nulo/token-list-host": ["@nulo/token-list-host@workspace:infra/token-list"],
 
     "@nulo/wallet-bridge": ["@nulo/wallet-bridge@workspace:packages/wallet-bridge"],
 

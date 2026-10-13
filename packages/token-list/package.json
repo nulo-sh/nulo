@@ -8,7 +8,8 @@
 		".": "./src/index.ts",
 		"./envelope": "./src/envelope.ts",
 		"./parse": "./src/parse.ts",
-		"./sign": "./src/sign.ts"
+		"./sign": "./src/sign.ts",
+		"./sign-cli": "./src/sign-cli.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
