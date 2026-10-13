@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: arc 1 merged (#264); arc 3a in progress (3a.1 stopped, 3a.2-3a.4)
+status: arc 1 merged (#264); arc 3a in review (3a.1 stopped, 3a.2-3a.4 built)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -597,7 +597,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 **Validation gate.** As Phase 3a.2. Layers: lint, typecheck, unit.
 
-#### Phase 3a.4: arc 3a end-to-end gate
+#### Phase 3a.4: arc 3a end-to-end gate ✓
 
 **Validation gate.** Commands: unit layers as 3a.2; network on Chrome and Firefox: `tests/e2e/network/failed-send-check.test.ts` with new cases: the never-received send, once its recorded expiry is set below the finalized tip's time, reads "Won't go through" through the real node's anchored nullifier read (its earlier "Unconfirmed" is the never-happens control); a send that went through keeps reading confirmed until final and its Tx row is recorded Finalized through the real archive proof; smoke on Chrome and Firefox. Pass: all exit 0; screenshots of the History card and detail for "Won't go through", both themes. Layers: unit, network e2e, smoke e2e. A prune cannot be made on a local node, so the prune paths stay unit-proven and the PR says so.
 

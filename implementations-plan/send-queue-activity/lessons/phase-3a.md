@@ -48,3 +48,7 @@ Codex, resumed on `faf29458` and the e2e change: the fixes hold (high confidence
 ## Network e2e: the local finalized tip stands still (2026-10-13)
 
 The local anvil mines only on a transaction, and its `finalized` tag trails `latest` by two blocks (`--slots-in-an-epoch 1`). Once the L2 chain is quiet, no L1 transaction lands, so L1's finalized block, and with it the archiver's finalized checkpoint (`l1_synchronizer.js` `updateFinalizedCheckpoint`: the proven checkpoint at L1's finalized block), stops. The first run waited 420 s with the row Proven and never final. The case now mines empty L1 blocks (`anvil_mine`) until `getBlockData("finalized")` reaches the send's block.
+
+## Smoke after a network run needs its own build (2026-10-13)
+
+The network runner and the smoke suite share `dist/<browser>`. Smoke run straight after `e2e:agent` loaded the network's proverless build and failed four tests: `backup-migration`'s fixture-arming contract and three `import-dead-rpc` cases. Rebuild with the smoke flags `_extension-smoke-e2e.yml` sets first: `VITE_NULO_E2E_MIGRATION_FIXTURE`, `VITE_NULO_E2E_TOKEN_SEEDS`, `VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM`, `VITE_NULO_E2E_CSP_REPORT`. Then run with `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1`. Both browsers then passed clean.
