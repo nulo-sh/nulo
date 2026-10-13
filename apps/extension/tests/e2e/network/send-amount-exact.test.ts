@@ -6,7 +6,7 @@ import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
 import { type AztecTestConfig, mintPublicTokensForAccount } from "../fixtures/aztec"
 import { openPopup, replaceInputValue, test, waitForHash } from "../fixtures/extension"
-import { captureBalanceBaseline, setActiveSendType, waitForFreshBalanceRow } from "../fixtures/helpers"
+import { captureBalanceBaseline, seedUsdQuoteAndReload, setActiveSendType, waitForFreshBalanceRow } from "../fixtures/helpers"
 import { closeReview, openReviewFromStrip, openSend, readSendInputs, shotSend } from "../fixtures/send-page"
 import { pointerClick } from "../helpers/legal-drivers"
 import { activeTestId, tabTo } from "../helpers/pointer-probes"
@@ -17,6 +17,7 @@ const hasConfig = aztecConfig !== undefined
 const MINTED = 1_234_567_123_456_789_012_345_678n
 const PUBLIC_BALANCE = 1000n * 10n ** 18n + MINTED
 const AMOUNT = '[data-testid="send-amount-input"]'
+const USD = '[data-testid="send-amount-fiat-input"]'
 const DESTINATION = '[data-testid="send-destination-field"]'
 const REVIEW_AMOUNT = '[data-testid="send-review-amount"]'
 
@@ -83,6 +84,27 @@ async function fieldShowsWholeAmount(page: Page): Promise<boolean> {
 	)
 }
 
+/** The USD field, and the derived token line beside the balance and Max: on one line, Max inside the row. */
+async function readUsdLines(page: Page): Promise<{ hidden: number; fontSize: number; lines: number; overlap: number; spill: number }> {
+	return page.$eval(USD, (el) => {
+		const input = el as HTMLInputElement
+		const at = input.scrollLeft
+		input.scrollLeft = 1e6
+		const hidden = input.scrollLeft
+		input.scrollLeft = at
+		const box = (id: string) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+		const derived = document.querySelector('[data-testid="send-amount-derived"]')
+		const [balance, max, row] = [box("send-amount-balance"), box("send-amount-max"), box("send-amount-row")]
+		return {
+			hidden,
+			fontSize: Number.parseFloat(getComputedStyle(input).fontSize),
+			lines: derived?.getClientRects().length ?? 0,
+			overlap: (derived?.getBoundingClientRect().right ?? Number.NaN) - (balance?.left ?? Number.NaN),
+			spill: (max?.right ?? Number.NaN) - (row?.right ?? Number.NaN),
+		}
+	})
+}
+
 async function readReviewAmount(page: Page): Promise<{ text: string; overflow: number; fontSize: number }> {
 	return page.$eval(REVIEW_AMOUNT, (el) => ({
 		text: el.textContent?.replace(/\s+/g, "") ?? "",
@@ -108,6 +130,7 @@ test.skipIf(!hasConfig)(
 			baselineUpdatedAt: baseline,
 			timeoutMs: 90_000,
 		})
+		await seedUsdQuoteAndReload(page)
 
 		await openSend(page)
 		await setActiveSendType(page, "send-from-type", "public")
@@ -159,6 +182,27 @@ test.skipIf(!hasConfig)(
 		expect.soft(review.overflow, `the review's amount line overflows: ${JSON.stringify(review)}`).toBeLessThanOrEqual(0)
 		expect.soft(review.fontSize, "the review's amount is below 60% of 30 px").toBeGreaterThanOrEqual(18)
 		await closeReview(page)
+
+		// In USD, at rest, the figure shows whole and the token amount it derives stays on one line.
+		await pointerClick(page, "send-amount-fiat-toggle")
+		await page.waitForSelector('[data-testid="send-amount-derived"]', { visible: true, timeout: 10_000 })
+		expect((await page.$eval(USD, (el) => (el as HTMLInputElement).value)).length, "a long USD figure").toBeGreaterThanOrEqual(12)
+		const usd = await readUsdLines(page)
+		expect.soft(usd.hidden, `USD at rest hides its tail: ${JSON.stringify(usd)}`).toBe(0)
+		expect.soft(usd.lines, `the derived line wraps: ${JSON.stringify(usd)}`).toBe(1)
+		expect.soft(usd.overlap, `the derived line runs into the balance: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
+		expect.soft(usd.spill, `Max leaves the row: ${JSON.stringify(usd)}`).toBeLessThanOrEqual(0.5)
+		await page.$eval(USD, (el) => (el as HTMLInputElement).focus())
+		await page
+			.waitForFunction(
+				(sel: string) => Number.parseFloat(getComputedStyle(document.querySelector(sel) as Element).fontSize) === 40,
+				{ timeout: 3_000 },
+				USD,
+			)
+			.catch(() => undefined)
+		expect.soft((await readUsdLines(page)).fontSize, "with focus the USD field is at full size").toBe(40)
+		await pointerClick(page, "send-amount-fiat-toggle")
+		await waitForAmount(page, "1,235,567.123456789012345678")
 
 		// A paste the field cannot read stays as pasted, says so, and blocks Send until an amount reads.
 		await page.$eval(AMOUNT, (el) => {
