@@ -21,7 +21,7 @@ One arc, one docs PR into `dev`. Four `CLAUDE.md` sections keep their rules and 
 
 ## Scope
 
-**In:** the lane brief's five items. **Out:** code under `apps/` and `packages/`; any workflow, required check or ruleset; the aa-skills repository; rewording a rule; § Branching + merging, `### Branches + releases`, `### Release runbook` (D6); other plans' prose (D1).
+**In:** the lane brief's five items. **Out:** code under `apps/` and `packages/`; any workflow, required check or ruleset; the aa-skills repository; rewording a rule; § Branching + merging and `### Release runbook` (D6); other plans' prose (D1).
 
 ## Outcome & Quality Bar
 
@@ -42,7 +42,7 @@ One arc, one docs PR into `dev`. Four `CLAUDE.md` sections keep their rules and 
 
 **Inferences:** I1. A skill body loads when its description matches the task or when a session names it; nothing guarantees either. So `CLAUDE.md` keeps every prohibition an author must apply, and each pointer says to read the full text before such an edit (D3). I2. GitHub derives an anchor from heading text alone, so a lifted heading keeps its anchor.
 
-**Asks:** none for the owner. A1, for the orchestrator: accept about 64 KB against the brief's 60, with `### Branches + releases` left in place (D6)? Working assumption: yes; folding it would expand scope.
+**Asks:** none for the owner. A1, for the orchestrator: accept about 64 KB against the brief's 60, with `### Branches + releases` left in place (D6)? Working assumption: yes; folding it would expand scope. **Answered: folded (D9).**
 
 ## Architecture & Implementation
 
@@ -78,7 +78,7 @@ Gate: `diff -w <(old 115,127) <(body .claude/skills/complexity-budgets/SKILL.md)
 **Phase 2: logging policy.** ✓ Same steps for `.claude/skills/logging-policy/SKILL.md` (triggers: a `console.*` or `this.log*` call, `trim()`, `REDACTED_KEYS`, `log-payload-ban`, `scrubUrls`, the log viewer or its CSV export) from `:165-225`, D3's short section, the routing row.
 Gate: `diff -w <(old 165,225) <(body .claude/skills/logging-policy/SKILL.md)` is empty.
 
-**Phase 3: implementation plans.** In `implementations-plan/README.md` (D4): (1) `## Where open work lives` after § Proportion: `:500-519` verbatim. (2) `:494-496` as bullets nested under portable rule 9. (3) § The gate gains `:490`'s permalink clause as "A permalink is `https://github.com/nulo-sh/nulo/blob/<full sha>/<path>` at a SHA listed in …", through "restated in place instead." (4) Rule 5's last sentence gains "; until then a running `/loop` only babysits delivery"; § What lives gains ", never re-cut as `plan-v2.md`". (5) `:9` and `:84` link `#where-open-work-lives` in-file. Then in `CLAUDE.md`: `:484-519` become D3's ten lines; `:43` links `./implementations-plan/README.md#where-open-work-lives`; `:477`'s "(§ Implementation plans)" names the README's § The gate.
+**Phase 3: implementation plans.** ✓ In `implementations-plan/README.md` (D4): (1) `## Where open work lives` after § Proportion: `:500-519` verbatim. (2) `:494-496` as bullets nested under portable rule 9. (3) § The gate gains `:490`'s permalink clause as "A permalink is `https://github.com/nulo-sh/nulo/blob/<full sha>/<path>` at a SHA listed in …", through "restated in place instead." (4) Rule 5's last sentence gains "; until then a running `/loop` only babysits delivery"; § What lives gains ", never re-cut as `plan-v2.md`". (5) `:9` and `:84` link `#where-open-work-lives` in-file. Then in `CLAUDE.md`: `:484-519` become D3's ten lines; `:43` links `./implementations-plan/README.md#where-open-work-lives`; `:477`'s "(§ Implementation plans)" names the README's § The gate.
 Gate: `diff -w` of `:500-519` against the README section body is empty, and of `:494-496` against the nested bullets is empty; `git diff -U0 $B -- implementations-plan/README.md` shows only steps 1-5, each added clause traced to its `CLAUDE.md` line in the PR body; `git grep -n 'CLAUDE[.]md#where-open-work-lives' -- . ':!implementations-plan/archive'` prints nothing.
 
 **Phase 4: quality gates.** (1) `CI.md` § Presto in CI: "the headless server is HTTP-only" gains "(`127.0.0.1:59833`)"; "the exact subtitle" gains ", `Proving with Presto ✦`". (2) `CLAUDE.md:540-547` become D5's pointer; the Locally subsection and the `:549` warning stay byte-identical.
@@ -96,9 +96,13 @@ Gate: also `bun run test:release` and `bun run typecheck:all`; `git grep -n 'CLA
 - **D3. What `CLAUDE.md` keeps**, lifted sentences plus a pointer that says to read the full text before such an edit. Complexity: `:117`'s first sentence; the three ceilings (`:119-121`, the bold heads); "The baseline only shrinks — NEVER add a complexity suppression"; "a NEW acceptance is a blueprint with owner sign-off, never a PR nit"; "The generator never writes an acceptance for you"; `:126` whole. Logging: `:167-171`; "Pass the value as an object property NAMED for what it is" with "A finished string is opaque to it"; `:194-196`, the "Never log" list, whole; "Pick the level by REACH, not by tone" with its `warn`/`error` and stranger's-bug-report sentences; `:222-225`, the `REDACTED_KEYS` paragraph. Plans: committed artifacts; the README is the standard; read `lessons.md` first; Proportion in one sentence; under the stub, `:500` and the advisory bullet's "Until publication its finding never appears in a committed plan, a PR body or a test name", then "read the README section before filing an issue, a known limit or an advisory"; each with its README anchor.
 - **D4. One home per rule in the README.** § Where open work lives follows § Proportion, which the Post-implementation standard and rule 5 cite. The path bullets nest under rule 9, which states the same rule; a new section would restate it. The allowlist goes in § The gate, keeping rule 4 portable.
 - **D5. The CI pointer:** where CI lives (`.github/`, `CI.md`, `WORKFLOWS.md`); the five required checks by produced name and branch (§ Branching); the two labels, and that a skipped lane's aggregator passes; the warning, unchanged. The stale scheduling claim (F4) is not carried.
-- **D6. `### Branches + releases` (about 1.6 KB) and `### Release runbook` stay.** The first restates § Branching + merging, `CI.md` § Branch model and the `release` skill, but it is outside the brief's four items (A1). With it, the file lands near 64 KB, not 60.
+- **D6. `### Branches + releases` (about 1.6 KB) and `### Release runbook` stay.** The first restates § Branching + merging, `CI.md` § Branch model and the `release` skill, but it is outside the brief's four items (A1). With it, the file lands near 64 KB, not 60. Superseded for `### Branches + releases` by D9.
 - **D7. Item 5 is a string phase, not a test phase** (F1): two strings and a comment move to the new home, and `test:ci-gating` runs in every gate. `nightly.yml:265` stays: a workflow edit is out of scope, and D1 resolves it.
 - **D8. `update-docs` routes depth to its home.** Phase 2 gains one sentence: a section that names its home (a skill in § Skills own their domains, the plans README, `CI.md`) is a pointer, so a change to its depth goes there. Phase 4 step 1 reads "from current CLAUDE.md or the home it names"; Phase 5's `git diff dev -- CLAUDE.md` also names each home edited. Without it the skill maps a change under `scripts/complexity-baseline/` back into `CLAUDE.md`.
+- **D9 (orchestrator). A1: scope grows by one item.** `### Branches + releases` is deleted after any sentence it alone states moves, verbatim, into § Branching + merging (one line) or the `release` skill; the PR body carries each destination's `-U0` diff and the exact bytes (about 62 KB expected). Done in Phase 4.
+- **D10 (orchestrator). Moves are verbatim; stubs stay.** Only deixis changes; the three repoints follow their text; `test:ci-gating` runs after every phase; every moved heading keeps a stub, and no plan file is edited for it.
+- **D11 (orchestrator). Proportion.** Later Codex rounds verify; `lessons.md` is at its 8 KiB budget, so nothing is promoted unless a retirement pays for it; no issue is filed unless the tree proves a defect outside this scope; the close-out ships in this PR.
+- **D12. Deviation, Phase 3 gate:** the grep also hits `lessons/phase-0.md:7`, which quotes the pattern (C3's self-match). It ran again with this plan's directory excluded, and in link form over the whole tree; both printed nothing.
 
 ## Audit verdicts
 

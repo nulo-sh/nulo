@@ -5,3 +5,4 @@
 - 2026-10-13: Codex round 2 (resumed): conditional approve; condition C8 met in place; plan committed for the orchestrator's approval.
 - 2026-10-13: Phase 1 gate green: normalized diff shows only the D2 deixis line; lint, check-no-local-paths, check:plans, test:ci-gating (526 pass) exit 0.
 - 2026-10-13: Phase 2 gate green: normalized diff empty; lint, check-no-local-paths, check:plans, test:ci-gating (526 pass) exit 0.
+- 2026-10-13: Phase 3 gate green: both normalized diffs empty; README -U0 shows steps 1-5 only; anchor grep empty outside this plan (D12); lint, check-no-local-paths, check:plans, test:ci-gating (526 pass) exit 0.
