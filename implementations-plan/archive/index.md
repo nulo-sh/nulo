@@ -242,6 +242,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [third-party-notices](third-party-notices/plan.md) — completed — every extension build writes and checks a third-party notices file
 - [token-identity](token-identity/plan.md) — completed — distinct faucet and bridge token identities, and a scope-gated `isTokenRegistered` RPC
 - [token-prices](token-prices/plan.md) — completed — live token prices and default token seeding
+- [tokens-and-balances](tokens-and-balances/plan.md) — completed — one balance reducer, resumable token adds, adopted profile ids start clean (#271); Holdings paste-to-add, one generic refusal line (#333); a mint figure reads only from a pinned token class (#334)
 - [tools-readiness](tools-readiness/plan.md) — completed — a dApp session widened to a new account without forgetting the app
 - [transport-unification](transport-unification/plan.md) — completed — one template-method RPC design for the background and offscreen transports
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command

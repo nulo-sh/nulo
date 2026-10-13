@@ -21,7 +21,6 @@
 - Never skip required aggregators. PR workflows queue per head commit and cancel only on dispatch; `pr-supersede.yml` cancels old heads, re-reading the head before each cancel; a cancelled run still posts FAILURE on its old head. [Evidence](ci-release-supply/plan.md#arc-1-workflows)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/amount-honesty/plan.md#add-add)
-- Editing a draft release without `tag_name` untags it: send it (2026-10). [Evidence](archive/ci-followups-3/plan.md#the-cause-of-309)
 
 ## Extension runtime
 
@@ -33,7 +32,7 @@
 - The local network's chain id is 0, so a truthiness guard on `chainId` skips every network e2e's chain: test `chainId === undefined`. [Evidence](archive/ux-owner-picks/plan.md#chain-zero)
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
-- A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row) and refuse on failure, never self-heal; an address binds its original class id, not `currentContractClassId`: check an artifact against it. [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md)
+- A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row); refuse on failure, never self-heal. An address binds its original class: check an artifact against it. The wallet's PXE reports that class for every instance; a call runs the node's current one (`node.getContract`). [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md), [more](archive/tokens-and-balances/lessons/phase-3.md)
 - On Chrome, `bun run dev` runs the popup under Chrome's baseline policy, not the manifest CSP: check CSP on a production build. [Evidence](archive/code-followups-2/lessons/phase-2.md)
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
 - A balances fuzz model owes what the store's observers adopt, and only where it holds an entry: owe rules keyed on failure commits over- and under-owed. [Evidence](archive/wallet-followups-2/lessons/phase-4.md)
