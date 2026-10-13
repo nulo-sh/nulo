@@ -29,6 +29,10 @@ function tableRow({ keyId, publicKey }: PinnedKey): string {
 	return `| \`${keyId}\` | \`${publicKey}\` | signs |\n`
 }
 
+function keyTable(...rows: string[]): string {
+	return `# Format\n\n### Public keys\n\n| keyId | key | Role |\n|---|---|---|\n${rows.join("")}\nProse.\n`
+}
+
 /** A copy of the host tree, the envelope signed by sign-cli itself under a throwaway pinned key. */
 async function signedTree(name: string): Promise<{ root: string; pinned: PinnedKey }> {
 	const root = join(work, name)
@@ -36,7 +40,7 @@ async function signedTree(name: string): Promise<{ root: string; pinned: PinnedK
 	cpSync(join(HOST_ROOT, SOURCE), join(root, SOURCE))
 	cpSync(join(HOST_ROOT, "public/_headers"), join(root, "public/_headers"))
 	const { seedHex, pinned } = await throwawayKey()
-	writeFileSync(join(root, FORMAT), tableRow(pinned))
+	writeFileSync(join(root, FORMAT), keyTable(tableRow(pinned)))
 	const write = process.stdout.write
 	process.stdout.write = (() => true) as typeof process.stdout.write
 	try {
@@ -86,10 +90,15 @@ describe("the host tree", () => {
 		expect(keyFindings([pinned, { ...pinned, keyId: "nulo-recovery-1" }])).toEqual(["keys.ts: a public key is pinned twice"])
 	})
 
-	test("refuses a key table that names a key keys.ts does not pin, or misses one", async () => {
+	test("refuses a key table that differs from keys.ts in any row a reader sees", async () => {
 		const [a, b] = [(await throwawayKey()).pinned, { ...(await throwawayKey()).pinned, keyId: "nulo-recovery-1" }]
-		expect(formatFindings(tableRow(a) + tableRow(b), [b, a])).toEqual([])
-		expect(formatFindings(tableRow(a), [a, b])).toEqual([`${FORMAT}: the key table does not match keys.ts`])
-		expect(formatFindings(tableRow(a) + tableRow(b), [a])).toEqual([`${FORMAT}: the key table does not match keys.ts`])
+		const refused = [`${FORMAT}: the key table does not match keys.ts`]
+		expect(formatFindings(keyTable(tableRow(a), tableRow(b)), [b, a])).toEqual([])
+		expect(formatFindings(keyTable(tableRow(a)), [a, b])).toEqual(refused)
+		expect(formatFindings(keyTable(tableRow(a), tableRow(b)), [a])).toEqual(refused)
+		expect(formatFindings(keyTable(tableRow(a), tableRow(a)), [a])).toEqual(refused)
+		expect(formatFindings(keyTable(tableRow(a), `| ${b.keyId} | ${b.publicKey} | signs |\n`), [a])).toEqual(refused)
+		const fenced = `${keyTable(`| \`${a.keyId}\`  | \`${b.publicKey}\` | signs |\n`)}\n\`\`\`\n${tableRow(a)}\`\`\`\n`
+		expect(formatFindings(fenced, [a])).toEqual(refused)
 	})
 })

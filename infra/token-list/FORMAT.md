@@ -32,8 +32,7 @@ The file is a JSON object, at most 64 KiB:
 
 The wallet reads its keys from [`packages/token-list/src/keys.ts`](../../packages/token-list/src/keys.ts),
 and a test keeps this table equal to it. The keys in that file at a released tag are the keys that
-release accepts. A key removed from the
-file has been rotated out: refuse lists it signed.
+release accepts. A key removed from the file has been rotated out: refuse lists it signed.
 
 ## Payload
 

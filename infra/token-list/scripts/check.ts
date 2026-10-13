@@ -40,11 +40,20 @@ export function keyFindings(keys: readonly PinnedKey[]): string[] {
 	return findings
 }
 
-/** Third parties verify against the published table, so it must name exactly the pinned keys. */
+const KEY_TABLE = /\n### Public keys\n\n((?:\|.*\n)+)/g
+const KEY_ROW = /^\| `([a-z0-9][a-z0-9-]{0,31})` \| `([A-Za-z0-9_-]{43})` \| [^|]+ \|$/
+
+/**
+ * Third parties verify against the published table, so it must name exactly the pinned keys.
+ * Every data row of the one table must parse: a row the pattern skipped would still render.
+ */
 export function formatFindings(text: string, keys: readonly PinnedKey[]): string[] {
-	const rows = [...text.matchAll(/^\| `([^`]+)` \| `([A-Za-z0-9_-]{43})` \|/gm)].map(([, keyId, key]) => `${keyId} ${key}`)
+	const tables = [...text.matchAll(KEY_TABLE)]
+	const rows = tables.length === 1 ? tables[0][1].trimEnd().split("\n").slice(2) : []
+	const pairs = rows.map((row) => KEY_ROW.exec(row)?.slice(1, 3).join(" "))
 	const pinned = keys.map(({ keyId, publicKey }) => `${keyId} ${publicKey}`)
-	return rows.sort().join("\n") === pinned.sort().join("\n") ? [] : [`${FORMAT}: the key table does not match keys.ts`]
+	const exact = pairs.length === pinned.length && new Set(pairs).size === pairs.length && pinned.every((p) => pairs.includes(p))
+	return exact ? [] : [`${FORMAT}: the key table does not match keys.ts`]
 }
 
 function servedFiles(dir: string, root = dir): string[] {
