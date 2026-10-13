@@ -3,7 +3,7 @@
 ## Phase 3.1 (#105)
 
 - 2026-10-12 — OA-1 = A (P8-03, signed 2026-10-12). Built on `tokens-and-balances-mint-pin` from origin/dev
-  `8d01f9b` (arc 1 merged as #271), a standalone PR against `dev` (D-orch-5).
+  `8d01f9b` (arc 1 merged as #271), a standalone PR against `dev` (D-orch-9).
 - `parseTokenInterface` sets `classId` from the instance it fetched; `buildToken` copies it to the row;
   `TokenSchema` names it, or the read codec and restore would strip it (zod drops keys a schema does not name);
   `getTokenInfo` projects it. The builder records the resolved instance's class on the `call` and `encoded_call`
@@ -47,3 +47,11 @@
 
 - 2026-10-12 — Codex r3: approve, no new material finding (one doc nit, applied). Loop converged at the
   third round.
+
+## Gate
+
+- 2026-10-13 — on 9b69713: lint, typecheck:all, check:plans, the focused vitest run, `test` and `test:all`
+  pass; smoke Chrome 49 files, 213 tests, 0 failed, retry 0 (the armed build needs the runtime
+  `NULO_E2E_MIGRATION_FIXTURE=1` too, or backup-migration's arming contract fails); network
+  `token-add-auto-trust.test.ts` Chrome 1/1 at retry 0 via `agent.sh`. Phase 3.1 ✓; the close-out waits on
+  arc 2's PR (#333).

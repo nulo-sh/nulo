@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-9); arc 1 merged (#271); page 8 signed; arc 3 (OA-1 = A) in review; arc 2 in progress
+status: approved by the orchestrator (D-orch-1 to D-orch-13); arc 1 merged (#271); page 8 signed; arc 3 (OA-1 = A) in review; arc 2 in progress
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -626,7 +626,7 @@ Validation gate:
 
 ### Arc 3: the mint figure's class pin (waits on OA-1)
 
-#### Phase 3.1: pin the class a mint figure reads (#105)
+#### Phase 3.1: pin the class a mint figure reads (#105) ✓
 
 1. Build the option OA-1 names (Architecture § Arc 3). Build nothing on B.
 2. Test `tx-amount.test.ts`: a matching pin reads the figure (control); a missing pin and a different
@@ -811,12 +811,12 @@ extension view that has not seen a deletion.
 | D-arc1-2 | A tracked add write that rejects issues `failed` from its own rejection handler, before it leaves the tracker | journal the failure only in the attempt's `catch` | implementer | The `catch` sits three async frames above the set; a successor draining the set could pass the empty check one turn before `failed` was issued (R3's "a successor waits for it") |
 | D-arc1-3 | A deletion announces its removal (`onTokenDeleted`) whenever its own remove landed, owned or not; only the remove itself needs an owned ticket | R5's check before the emit too (plan); a fresh-ticket finalization (Codex) | Codex r1 (Medium): the check left a removed row with live balance rows and no retry path. Opus r1 (Low): keep the check, a successor's same-contract re-add could be wiped | The emit runs in the turn the tracked remove settles, ahead of any successor, which must drain that remove before it reads; so no successor's row can exist yet. A late handler racing a re-add is base behaviour for every deletion |
 | D-arc1-4 | An add whose post-set liveness read overlapped a network deletion that then failed keeps its row and rejects "network deleted" (accepted, disclosed in § UI impact) | re-read `isNetworkLive` when the chain is live (Opus r1) | Opus r1 (Low): needs a failed cascade, acceptable if stated | The reservation may have swept rows before failing, so R4's false is right; a re-read loop risks spinning on a replacement network, and the row is correct data on a live chain |
-| D-orch-5 | No stack: arcs 2 and 3 are independent PRs off `dev`; arc 3 is `tokens-and-balances-mint-pin`, opened with `gh pr create --base dev` | stack arc 3 on arc 2 | orchestrator, 2026-10-12 | Arc 1 landed by squash (#271) and arc 2 is built in parallel; neither needs the other's code |
-| D-orch-6 | The close-out is conditional: arc 3's PR carries it only if arc 2's PR has merged by the time arc 3's Codex loop converges; otherwise Phase 3.1 is ticked, the index line says arc 3 is in review and the orchestrator assigns the close-out | close out in arc 3 regardless | orchestrator, 2026-10-12 | A plan closes with the merge that lands its last work |
-| D-orch-7 | Hostile input stays hostile: a `classId` restored from a backup or read from a transaction record is compared only as a field element and never authenticated; a mismatch or a missing class shows no figure, never an error, never a log line carrying the class or the amount | authenticate restored pins | orchestrator, 2026-10-12 | OA-1's signed limits; the logging policy |
-| D-orch-8 | No new words; screenshots of a mint row with and without a figure, both themes, close the loop on the PR | new copy for an unpinned mint | orchestrator, 2026-10-12 | Option A adds no copy; CLAUDE.md § UI changes |
-| D-orch-9 | Gate as Phase 3.1 states it, plus the Chrome smoke suite #105's Pickup names | a lighter gate | orchestrator, 2026-10-12 | Nothing weakens a gate |
-| D-arc3-1 | A class is checked where it is read: `txAmount` matches only two field elements that are the same value (`sameFieldAddress`); `TokenSchema` carries `classId` as an optional string and the tx row schema passes it through | refuse a malformed class in `TokenSchema` and the tx row schema; recover a non-string as absent (`.catch`, Codex r1) | implementer; Codex r1 and Opus r1 flagged the non-string case | A malformed string reads as a missing class: no figure, no error, and the row survives (D-orch-7). A value of the wrong type fails the row's parse, as it does for every other `TokenSchema` field: restore records it and the codec hides it, and only a hand-written backup holds one |
+| D-orch-9 | No stack: arcs 2 and 3 are independent PRs off `dev`; arc 3 is `tokens-and-balances-mint-pin`, opened with `gh pr create --base dev` | stack arc 3 on arc 2 | orchestrator, 2026-10-12 | Arc 1 landed by squash (#271) and arc 2 is built in parallel; neither needs the other's code |
+| D-orch-10 | The close-out is conditional: arc 3's PR carries it only if arc 2's PR has merged by the time arc 3's Codex loop converges; otherwise Phase 3.1 is ticked, the index line says arc 3 is in review and the orchestrator assigns the close-out | close out in arc 3 regardless | orchestrator, 2026-10-12 | A plan closes with the merge that lands its last work |
+| D-orch-11 | Hostile input stays hostile: a `classId` restored from a backup or read from a transaction record is compared only as a field element and never authenticated; a mismatch or a missing class shows no figure, never an error, never a log line carrying the class or the amount | authenticate restored pins | orchestrator, 2026-10-12 | OA-1's signed limits; the logging policy |
+| D-orch-12 | No new words; screenshots of a mint row with and without a figure, both themes, close the loop on the PR | new copy for an unpinned mint | orchestrator, 2026-10-12 | Option A adds no copy; CLAUDE.md § UI changes |
+| D-orch-13 | Gate as Phase 3.1 states it, plus the Chrome smoke suite #105's Pickup names | a lighter gate | orchestrator, 2026-10-12 | Nothing weakens a gate |
+| D-arc3-1 | A class is checked where it is read: `txAmount` matches only two field elements that are the same value (`sameFieldAddress`); `TokenSchema` carries `classId` as an optional string and the tx row schema passes it through | refuse a malformed class in `TokenSchema` and the tx row schema; recover a non-string as absent (`.catch`, Codex r1) | implementer; Codex r1 and Opus r1 flagged the non-string case | A malformed string reads as a missing class: no figure, no error, and the row survives (D-orch-11). A value of the wrong type fails the row's parse, as it does for every other `TokenSchema` field: restore records it and the codec hides it, and only a hand-written backup holds one |
 | D-arc3-2 | `TokenInterface.classId` is required and set from the fetched instance; a seeded add stores the class its pinned parse matched, which is the seed's `expectedClassId` by that parse's check | thread `expectedClassId` through the seeder's `persist` | implementer | `parseTokenInterface` refuses any other class when pinned, so the two are the same string; one source, no new seeder plumbing |
 | D-arc3-3 | A NO_FROM build records no class | record it there too | implementer | Architecture names the `call` and `encoded_call` cases. A standard token's mints check `msg_sender` against the minter (`token_contract/src/main.nr`, `_validate_minter`), and NO_FROM refuses public functions, so no standard mint succeeds there |
 | D-arc3-4 | An add of a contract already listed returns the existing row as it is, so a row added before classes were recorded keeps no class until the person deletes and adds it again | refresh the class on the idempotent path | implementer | The signed text says "until re-added"; the idempotent short-circuit is the dApp-spam guard and writes nothing |
@@ -941,7 +941,7 @@ a successor that loses its ticket while draining.
 |---|---|---|---|
 | 1 | Medium | A restored record can attach `transfers` to a `mint_to_public` call; `txAmount` reads the transfer before any class check | Rejected with reason: a forged record controls both sides of the pin anyway (OA-1: "a forged backup can pin any class") and can show any figure through `transfers` on any call; a wallet-written mint record carries no transfers |
 | 2 | Medium | A non-string `classId` fails `TokenSchema`, so restore refuses the row and the codec hides it, where before the key was stripped | Rejected for code, accepted for wording: every `TokenSchema` field refuses a wrong type, and only a hand-written backup holds one; D-arc3-1 now says the "reads as missing" rule covers malformed strings |
-| 3 | Low | Pre-existing: `contract-resolver.ts` debug lines carry class ids | Rejected: pre-existing, debug level, public chain data, and not the pin's path; D-orch-7 binds the comparison, which logs nothing |
+| 3 | Low | Pre-existing: `contract-resolver.ts` debug lines carry class ids | Rejected: pre-existing, debug level, public chain data, and not the pin's path; D-orch-11 binds the comparison, which logs nothing |
 | 4 | Low | The producer tests record pins the consumer would refuse (`"0xclass1"`, `"0xc1a55"`, a value above the field modulus) | Accepted: the builder harness uses an `Fr` class, the composition and service fixtures a canonical 64-digit field element |
 | 5 | Nit | `TokenInfo.classId`'s doc claims the class the contract ran | Accepted: "the class the wallet resolved when the token was added" |
 
@@ -1085,7 +1085,7 @@ The orchestrator writes a `## Pickup` section into each issue. The arc that clos
 
 - Arc 1 (built now; merges on OA-3): #206 (Phase 1.1), #94 (Phase 1.2), #93 (Phase 1.3).
 - Arc 2 (waits on page 8): #134 (Phase 2.1, P8-01), #136 (Phase 2.2, P8-02).
-- Arc 3 (waits on OA-1): #105 (Phase 3.1; closed as not planned on OA-1 = B).
+- Arc 3 (OA-1 = A, signed 2026-10-12): #105 (Phase 3.1).
 - No arc: #80 (`blocked:external`, no V6 mainnet), #104 (hold H8, waits on a real dApp report), #106
   (hold H8, waits on C12-fetch and its own plan).
 
