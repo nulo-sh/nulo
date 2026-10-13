@@ -1289,14 +1289,15 @@ describe("send page — Refresh quote by keyboard", () => {
 
 	test("the notice says the price moved only when the live quote differs from the snapshot", async () => {
 		const chainId = CHAIN_IDS.TESTNET
-		const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract)?.coingeckoId === "usd-coin")
-		if (!seed) throw new Error("no USDC-priced testnet seed")
-		const priced = { ...TOKEN, chainId, contract: seed.contract, symbol: "USDC" }
+		const priced = { ...TOKEN, chainId, contract: TEST_TOKENS.USDC, symbol: "USDC" }
 		mocks.getTokens.mockResolvedValue([priced])
 		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
 		const { w } = await mountSend()
 		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
-		const quote = (usd: number) => ({ "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } })
+		const quote = (usd: number) => ({
+			quotes: { "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } },
+			pricedTokens: TEST_PRICED_TOKENS,
+		})
 		const notice = () => w.get('[data-testid="send-fiat-requote"]').element.parentElement?.textContent ?? ""
 
 		price.onQuotesUpdated.invoke(quote(1))
