@@ -118,6 +118,10 @@ Gate: also `bun run test:release` and `bun run typecheck:all`; `git grep -n 'CLA
 **Round 2, Codex (same session resumed), 2026-10-13: conditional approve; the condition is met below, no third round.** C1 to C7 verified as resolved (C7 as an open ask).
 - C8 Medium, demonstrated: a gate diffing `CLAUDE.md` against the base also shows the earlier phases' edits, so "only the phase's lines" refused a correct run. Fixed: the hunks are the planned edits of this phase and the phases before it.
 
+**Implementation review, 2026-10-13.** Codex round 1 (gpt-6.1-sol, high; session `01a13716-1ff5-7a43-8409-d3068877451e`): approve, no findings. The Opus 5.5 diff review alongside found five, all verified:
+- Accepted, fixed in one commit: I1 the short logging section had cut base `:180-183` mid-sentence, dropping "never flattened first by a helper or a `.message` / `.stack` read" (restored verbatim); I2 the advisory stub lacked base `:518`'s "The fix may land first; …" (a PR title becomes the squash subject; restored verbatim); I3 "The generator" names `bun run baseline:complexity` (deixis: the nearest earlier generator was the notices one); I4 the complexity pointer names the duplication trend, where `nightly.yml:265` sends readers; I5 README rule 3 regains "A worktree's transcripts are deleted with it". Rejected: moving the path bullets out of rule 9 (D4 settled it; rule 5 already names `BEFORE-LAUNCH.md`); CI.md's "Settings → Variables" (a hint, not a rule, and neither string is GitHub's exact path).
+- Codex round 2 (resumed): approve, no new finding. The loop converged.
+
 ## Delivery
 
 Single arc: `gh pr create --base dev` from `worktree-ruleset-hygiene-2` (the worktree's branch, not the brief's `ruleset-hygiene-2`), after the loop converges. Title: `docs(claude): move complexity budgets and logging to skills; point plans and ci at standards` (92 characters). No `Closes` line, no label (F3). Body: `CLAUDE.md` bytes before and after, each normalized diff, the traced README clauses, the In CI claim homes, the validation runs; no e2e lane runs, so no wall-clock. The close-out is this PR's final commits.
@@ -127,13 +131,10 @@ Single arc: `gh pr create --base dev` from `worktree-ruleset-hygiene-2` (the wor
 Follow `implementations-plan/README.md` § Post-implementation standard at commit `dd9228237a5115c2d39f7def1e79a3ab69119580`. Specific to this plan:
 
 - **Loop:** single arc, once over the whole diff after the final gate, at `high`: `~/.claude/skills/codex/scripts/run-codex.sh <prompt-file> <worktree> high read-only gpt-6.1-sol`; resume with `resume-codex.sh`. On a quota or 401 error retry once with `CODEX_ACCOUNT=alejo-icloud`, then log it and continue within scope. The prompt attaches the normalized diffs and asks first for a rule dropped or changed in a move.
-- **Approval boundary:** the orchestrator approves plan changes; the owner keeps persistence, permissions, public contracts, background work and scope.
 - **Close-out:** merge `origin/dev` first. `Known limits:` and `Open items:` read `none` unless the loop files one. Delete `STATUS.md`, keep `OWNER-ASKS.md`, archive to `implementations-plan/archive/ruleset-hygiene-2`.
 - **Teardown:** the orchestrator merges and tells the session; a `/loop` session also checks each firing. Once `git fetch -q origin dev && git cat-file -e FETCH_HEAD:implementations-plan/archive/ruleset-hygiene-2/plan.md` succeeds, run `agent-worktree done ruleset-hygiene-2 --merged --trunk dev`. The session starts inside the worktree, so it has nothing to exit.
 
 ## Seeds
-
-Recommended: `/goal`. Drafts until the orchestrator approves.
 
 ```
 /goal Phases 1-5 of implementations-plan/ruleset-hygiene-2/plan.md are marked ✓, each backed by its gate reported passing in the transcript, including every normalized and -U0 diff showing only the planned edits; LESSONS_FILE=implementations-plan/ruleset-hygiene-2/lessons/phase-N.md printed per phase; /code-review NOT run; the Codex loop (run-codex.sh … high read-only gpt-6.1-sol) converged, quoted; the PR into dev exists, opened after the loop (gh pr view in the transcript), with the archive-move commit (git show --stat); bun run test and bun run lint exit 0.
