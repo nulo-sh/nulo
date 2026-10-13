@@ -33,6 +33,7 @@ import {
 	resolveSavedSelection,
 	savedSelectionOf,
 	settingsForMethod,
+	shortfallSentence,
 } from "./fee-helpers"
 import { applyFpcEdits, previewForPick, recordOf, resolveSendSelection } from "./fee-privacy"
 import { usePrices } from "@/composables/usePrices"
@@ -290,6 +291,12 @@ const takeoverName = (m) => {
 const sponsorShortText = computed(() => {
 	const name = takeoverName(effectiveMethod.value)
 	return name ? `${SPONSOR_SHORT} ${name} pays it instead.` : SPONSOR_SHORT
+})
+
+/** The account's own Fee Juice, read short of this estimate's fee while it pays. */
+const shortfallText = computed(() => {
+	const shortfall = props.feeEstimate?.feeJuiceShortfall
+	return shortfall && effectiveMethod.value?.type === "fj" ? shortfallSentence(shortfall) : null
 })
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
@@ -987,6 +994,19 @@ onBeforeUnmount(() => {
 				<Icon name="info" size="14" color="primary" aria-hidden="true" />
 				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ sponsorShortText }}
+				</Text>
+			</Flex>
+			<Flex
+				v-if="showMethodSelector && shortfallText"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-juice-shortfall"
+			>
+				<Icon name="warning" size="14" color="secondary" aria-hidden="true" />
+				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+					{{ shortfallText }}
 				</Text>
 			</Flex>
 		</div>

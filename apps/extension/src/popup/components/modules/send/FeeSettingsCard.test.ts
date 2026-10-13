@@ -2831,6 +2831,41 @@ describe("FeeSettingsCard — the fee-juice nudge outside Send", () => {
 	})
 })
 
+describe("FeeSettingsCard — the account's own Fee Juice short of the fee", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+	const SHORT = {
+		maxFee: "2100000000000000",
+		maxFeeFormatted: "0.0021",
+		feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" },
+	}
+	const shortfall = (w: ReturnType<typeof mount>) => w.find('[data-testid="fee-juice-shortfall"]')
+
+	test("named in the live region, with both figures, while Fee Juice pays", async () => {
+		mocks.getFpcs.mockResolvedValue([])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "1500000000000000", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		await w.get('[data-testid="pick-fj"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fj" } })
+
+		await w.setProps({ feeEstimate: SHORT })
+		await flushPromises()
+		expect(w.get('[data-testid="fee-sponsor-live"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		w.unmount()
+	})
+
+	test("never while another payer pays", async () => {
+		mocks.getFpcs.mockResolvedValue([NULO])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps({ feeEstimate: SHORT }), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+		expect(shortfall(w).exists()).toBe(false)
+		w.unmount()
+	})
+})
+
 describe("FeeSettingsCard — the sponsor notice's region in a dApp's embedded payment", () => {
 	test("the region mounts with the embedded card, and the notice stays hidden there as before", async () => {
 		const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }

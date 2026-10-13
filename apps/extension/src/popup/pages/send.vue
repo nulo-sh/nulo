@@ -284,6 +284,7 @@ const isAllowedToSend = computed(() => {
 	if (!feeSettings.value) return false
 	// Nothing goes out on a fee the person has not seen: a failed estimate leaves this off too.
 	if (!feeEstimate.value) return false
+	if (feeEstimate.value.feeJuiceShortfall) return false
 	if (fiatQuoteBlocked.value) return false
 	return amountValidation.value.valid
 })

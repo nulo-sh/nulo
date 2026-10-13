@@ -4,7 +4,7 @@
  * (kind `"embedded"`). The dApp has already set `feePayer` in the
  * payload; no Nulo-side fee-payload injection required.
  *
- * The cap is the app's, else the current minimum at 1.0x (`applyEmbeddedFpcGasCap`), and
+ * The cap is the app's, else the predicted worst minimum at 1.0x (`applyEmbeddedFpcGasCap`), and
  * finalize commits it unchanged.
  */
 

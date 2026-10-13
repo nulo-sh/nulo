@@ -61,17 +61,28 @@ function sentinelSim() {
 type PathName = "fj" | "fjwc" | "embedded" | "fpc two-pass" | "fpc fast path"
 const PATHS: PathName[] = ["fj", "fjwc", "embedded", "fpc two-pass", "fpc fast path"]
 
-function makeFpc(path: PathName, chainId?: number) {
-	const type = path === "fpc fast path" ? FpcType.DefaultSponsoredFpc : FpcType.PrivateFpc
+/** The two-pass path's row: PrivateFPC unless a test names a sponsor added by hand. */
+type TwoPassRow = "private fee juice" | "hand-added sponsor"
+
+function makeFpc(path: PathName, chainId?: number, twoPassRow: TwoPassRow = "private fee juice") {
+	const sponsor = path === "fpc fast path" || twoPassRow === "hand-added sponsor"
+	const type = sponsor ? FpcType.DefaultSponsoredFpc : FpcType.PrivateFpc
 	return {
-		infoData: { type, isProtocol: true, chainId },
+		infoData: { type, isProtocol: path === "fpc fast path" || !sponsor, chainId },
 		getTotalGas: () => new Gas(1_000, 2_000),
 		getTeardownGas: () => new Gas(100, 200),
 		getFeePayload: vi.fn((_account: string, _maxFee: unknown) => [PAYLOAD]),
 	}
 }
 
-type HarnessOpts = { build?: BuildOpts; fpcChainId?: number; effects?: Action[]; probe?: boolean; abortOnFirstSim?: boolean }
+type HarnessOpts = {
+	build?: BuildOpts
+	fpcChainId?: number
+	twoPassRow?: TwoPassRow
+	effects?: Action[]
+	probe?: boolean
+	abortOnFirstSim?: boolean
+}
 
 function harness(path: PathName, opts: HarnessOpts = {}) {
 	const builds: Built[] = []
@@ -93,7 +104,7 @@ function harness(path: PathName, opts: HarnessOpts = {}) {
 		log.push(`created:${task.content.label}`)
 	})
 	tasks.onTaskUpdated.add((task) => log.push(`${TaskStatus[task.status]}:${task.content.label}`))
-	const fpc = makeFpc(path, opts.fpcChainId)
+	const fpc = makeFpc(path, opts.fpcChainId, opts.twoPassRow)
 	const deps = {
 		txBuilder: { buildStandard },
 		simulateTxTask,
@@ -372,9 +383,9 @@ describe("committed fees for an explicit multiplier", () => {
 	})
 
 	test.each(["fpc two-pass", "fpc fast path"] as PathName[])(
-		"%s: the fee basis, Pass 2's cap and the payload's maxFee use × 3",
+		"%s, a sponsor: the fee basis, Pass 2's cap and the payload's maxFee use × 3",
 		async (path) => {
-			const h = harness(path)
+			const h = harness(path, { twoPassRow: "hand-added sponsor" })
 			h.ctx.feeMultiplier = 3
 			const capsAtSim: bigint[][] = []
 			h.simulateTxTask.mockImplementation(async (...args: unknown[]) => {
@@ -389,6 +400,25 @@ describe("committed fees for an explicit multiplier", () => {
 			expect(lastPayload[1].toBigInt()).toBe(115_551_000n)
 		},
 	)
+
+	test("private fee juice: the level and an app's cap never apply; the cap is the basis × 1.2, rounded up", async () => {
+		const h = harness("fpc two-pass")
+		h.ctx.feeMultiplier = 3
+		const op = h.ctx.op as { fee?: Record<string, unknown> }
+		op.fee = { ...op.fee, maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } }
+		const capsAtSim: bigint[][] = []
+		h.simulateTxTask.mockImplementation(async (...args: unknown[]) => {
+			capsAtSim.push(feesOf(args[1] as never))
+			return sentinelSim()
+		})
+		const result = await h.strategy.buildAndEstimate(h.ctx)
+		// 555 × 1.2 = 666; 666 × 1.2 = 799.2, rounded up.
+		expect(feesOf(result.txRequest as never)).toEqual([666n, 800n])
+		expect(capsAtSim[1]).toEqual([666n, 800n])
+		const lastPayload = h.fpc.getFeePayload.mock.calls.at(-1) as unknown as [string, { toBigInt(): bigint }]
+		// 31_000 · 666 + 32_000 · 800: the charge the PrivateFPC takes.
+		expect(lastPayload[1].toBigInt()).toBe(46_246_000n)
+	})
 
 	test("embedded: the multiplier never applies; the committed cap stays at the node min", async () => {
 		const h = harness("embedded")
@@ -413,9 +443,9 @@ describe("an app's fee settings against the wallet's", () => {
 	})
 
 	test.each(["fpc two-pass", "fpc fast path"] as PathName[])(
-		"%s: the app's cap is ignored; the cap and the payload's maxFee are the wallet's",
+		"%s, a sponsor: the app's cap is ignored; the cap and the payload's maxFee are the wallet's",
 		async (path) => {
-			const h = harness(path)
+			const h = harness(path, { twoPassRow: "hand-added sponsor" })
 			h.ctx.feeMultiplier = 3
 			withAppFee(h, { maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } })
 			const result = await h.strategy.buildAndEstimate(h.ctx)

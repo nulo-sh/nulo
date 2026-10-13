@@ -750,6 +750,26 @@ describe("send page — Confirm waits for the current input's estimate", () => {
 		w.unmount()
 	})
 
+	test("an estimate the account's own Fee Juice cannot cover keeps it off, and the card says by how much", async () => {
+		mocks.estimateTransferFee.mockResolvedValueOnce({
+			...LANDED,
+			feeJuiceShortfall: { maxFee: "2100000000000000", balance: "1500000000000000" },
+		})
+		const { w } = await mountSend(PUBLIC_FJ)
+		await fillForm(w)
+		await estimateLands()
+		expect(w.get('[data-testid="fee-juice-shortfall"]').text()).toBe("This send can cost up to 0.0021 FJ. You have 0.0015 FJ.")
+		expect(sendDisabled(w)).toBe(true)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).not.toHaveBeenCalled()
+
+		await w.get('[data-testid="stub-amount"]').setValue("2")
+		await estimateLands()
+		expect(w.find('[data-testid="fee-juice-shortfall"]').exists()).toBe(false)
+		expect(sendDisabled(w)).toBe(false)
+		w.unmount()
+	})
+
 	test("an estimate for the network just left never enables it", async () => {
 		const held = deferred<unknown>()
 		mocks.estimateTransferFee.mockReturnValueOnce(held.promise)

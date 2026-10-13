@@ -9,8 +9,9 @@
 import type { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { TxExecutionRequest } from "@aztec-labs/stdlib/tx"
 import { PRIORITY_MULTIPLIERS, type PriorityLevel } from "@nulo/wallet-bridge"
-import type { FpcIdentitySnapshot, FpcInfo } from "@/wallet/services/fpc/spec"
+import { FpcType, type FpcIdentitySnapshot, type FpcInfo } from "@/wallet/services/fpc/spec"
 import type { NetworkEndpoint } from "@/wallet/services/network/spec"
+import type { FeeCapRule } from "./fee/fee-cap"
 import { DEFAULT_FEE_MULTIPLIER } from "./fee/fee-strategy"
 import type { FeeSettings } from "./spec"
 
@@ -20,18 +21,25 @@ import type { FeeSettings } from "./spec"
 // almost no hit rate.
 export const ESTIMATE_REUSE_TTL_MS = 120_000
 
-/** Stable fingerprint for a fee basis so we can compare the snapshot
- *  taken at estimate time against the value at confirm.
- *  FORMAT IS BYTE-STABLE — cached entries depend on it. */
-export function fingerprintBaseFee(min: { feePerDaGas: bigint; feePerL2Gas: bigint }): string {
-	return `${min.feePerDaGas.toString()}:${min.feePerL2Gas.toString()}`
+/** A committed `maxFeesPerGas`, by value. */
+export type FeeCap = { readonly feePerDaGas: bigint; readonly feePerL2Gas: bigint }
+
+/** The cap `txRequest` was built with, never a refetch: consume compares it with the cap a fresh
+ *  build would commit. */
+export function builtCapOf(txRequest: TxExecutionRequest): FeeCap {
+	const { feePerDaGas, feePerL2Gas } = txRequest.txContext.gasSettings.maxFeesPerGas
+	return { feePerDaGas, feePerL2Gas }
 }
 
-/** The fingerprint of the exact fee `txRequest` was built with, never a refetch: every strategy
- *  commits `maxFeesPerGas` as the node minimum × multiplier, so consume compares the same product. */
-export function fingerprintBuiltFee(txRequest: TxExecutionRequest): string {
-	const builtFees = txRequest.txContext.gasSettings.maxFeesPerGas
-	return fingerprintBaseFee({ feePerDaGas: builtFees.feePerDaGas, feePerL2Gas: builtFees.feePerL2Gas })
+/** The rule a fresh build of a reusable entry would commit by. No entry carries an app's cap: such
+ *  an operation is never stashed. */
+export function reuseCapRule(
+	paymentMethod: FeeSettings["paymentMethod"],
+	fpc: FpcIdentitySnapshot | undefined,
+	multiplier: number,
+): FeeCapRule {
+	if (paymentMethod.kind !== "fpc") return { payer: "account", multiplier }
+	return fpc?.type === FpcType.PrivateFpc ? { payer: "private-fee-juice" } : { payer: "sponsor", multiplier }
 }
 
 /** The raw pair a node reports. The network row's stored chainId is an XOR composite — `(1,4)` and
@@ -47,7 +55,7 @@ export type ReuseEntryBase = {
 	readonly chainIdentity: ChainIdentity
 	/** The sponsor row the build paid with; set for every `fpc` payment. */
 	readonly fpcIdentity?: FpcIdentitySnapshot
-	readonly baseFeeFingerprint: string
+	readonly builtCap: FeeCap
 	readonly primaryEndpointId: string
 	readonly primaryEndpointUrl: string
 	/** Pending-tx snapshot for the active account. If new pending txs

@@ -62,7 +62,6 @@ import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
 import type { OperationPlanner } from "./operation-planner"
 import type { PreviewSnapshots } from "./preview-snapshots"
-import { fingerprintBaseFee } from "./estimate-reuse-shared"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
 import { assertSelectorBinding, CALL_BINDING } from "./contract-resolver"
@@ -279,10 +278,10 @@ async function makeHarness() {
 		profileId: "p1",
 		chainIdentity: { l1ChainId: 5, rollupVersion: 4 },
 		fpcIdentity: SPONSOR,
-		baseFeeFingerprint: fingerprintBaseFee({
+		builtCap: {
 			feePerDaGas: MIN_FEES.feePerDaGas * BigInt(DEFAULT_FEE_MULTIPLIER),
 			feePerL2Gas: MIN_FEES.feePerL2Gas * BigInt(DEFAULT_FEE_MULTIPLIER),
-		}),
+		},
 		primaryEndpointId: "ep1",
 		primaryEndpointUrl: "http://fake",
 		pendingHashes: [],

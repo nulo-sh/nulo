@@ -10,6 +10,7 @@ import {
 	feeLine,
 	feeScopeKey,
 	formatGasBalance,
+	shortfallSentence,
 	isLiveFeeScope,
 	liveFeeScope,
 	menuOrder,
@@ -354,6 +355,14 @@ describe("fee-helpers/buildFeeMethods — rows whose read has not landed", () =>
 	test("a loading sponsor is never the default; an answered one is", () => {
 		expect(defaultSponsor(buildFeeMethods([NULO_SPONSOR], undefined, NEITHER))).toBeUndefined()
 		expect(defaultSponsor(buildFeeMethods([NULO_SPONSOR], undefined, BALANCES))?.fpc?.id).toBe("s1")
+	})
+})
+
+describe("fee-helpers/shortfallSentence", () => {
+	test("the cost rounds up and the balance down, so a shortfall never reads as enough", () => {
+		expect(shortfallSentence({ maxFee: "2100000000000001", balance: "2099999999999999" })).toBe(
+			"This send can cost up to 0.002101 FJ. You have 0.002099 FJ.",
+		)
 	})
 })
 

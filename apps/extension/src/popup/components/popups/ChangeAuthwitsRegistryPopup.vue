@@ -73,7 +73,7 @@ onBeforeUnmount(() => {
 	journalService.disconnect()
 })
 
-const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed())
+const isAllowedToExecute = computed(() => Boolean(feeSettings.value) && estimates.landed() && !estimates.short())
 
 async function handleChangeRegistry() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks

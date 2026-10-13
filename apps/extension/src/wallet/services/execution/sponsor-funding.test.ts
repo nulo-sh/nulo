@@ -10,7 +10,8 @@ import { describe, expect, test, vi } from "vitest"
 import { trim } from "@/wallet/logger/utils"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { FeeEstimate } from "./fee/fee-strategy"
-import { SPONSOR_PROBE_TIMEOUT_MS, callsFeeJuice, probeAppPayerFunding, probeSponsorFunding } from "./sponsor-funding"
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
+import { SPONSOR_PROBE_TIMEOUT_MS, callsFeeJuice, probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 
 const SPONSOR = AztecAddress.fromNumberUnsafe(0x5f)
 const NETWORK = { id: "net-1", chainId: 7 }
@@ -72,6 +73,38 @@ describe("probeSponsorFunding", () => {
 		expect(log.mock.calls).toEqual([["sponsor probe", { outcome: "failed" }]])
 		const logged = JSON.stringify(log.mock.calls.map((args) => args.map((arg) => trim(arg))))
 		for (const leak of leaks) expect(logged).not.toContain(leak)
+	})
+})
+
+describe("probeOwnFeeJuice", () => {
+	const ACCOUNT = AztecAddress.fromNumberUnsafe(0xacc)
+	const paying = (method: AccountFeePaymentMethodOptions) =>
+		({ ...built(false), account: { address: ACCOUNT }, feePaymentMethod: method }) as unknown as FeeEstimate
+
+	test.each([
+		{ balance: FEE_LIMIT - 1n, shortfall: { maxFee: "800", balance: "799" } },
+		{ balance: FEE_LIMIT, shortfall: undefined },
+	])("the account's own balance $balance against the fee limit", async ({ balance, shortfall }) => {
+		const read = reader(balance)
+		const log = vi.fn()
+		expect(await probeOwnFeeJuice(paying(AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE), read, log)).toEqual(shortfall)
+		expect(read.mock.calls[0]?.[2]?.equals(await computeFeePayerBalanceStorageSlot(ACCOUNT))).toBe(true)
+	})
+
+	test.each([
+		["a claim pays", AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM],
+		["another contract pays", AccountFeePaymentMethodOptions.EXTERNAL],
+	])("%s: no read", async (_case, method) => {
+		const read = reader(0n)
+		expect(await probeOwnFeeJuice(paying(method), read, vi.fn())).toBeUndefined()
+		expect(read).not.toHaveBeenCalled()
+	})
+
+	test("a failed read is no shortfall", async () => {
+		const log = vi.fn()
+		const result = await probeOwnFeeJuice(paying(AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE), reader(new Error("down")), log)
+		expect(result).toBeUndefined()
+		expect(log.mock.calls).toEqual([["own fee juice probe", { outcome: "failed" }]])
 	})
 })
 

@@ -44,6 +44,8 @@ export function useWalletTxEstimates<P>(deps: WalletTxEstimatesDeps<P>) {
 		const keys = deps.keys()
 		return keys.length > 0 && keys.every((key) => map.results.value[key] != null)
 	}
+	/** Some key's payer was read short of its fee: the node would refuse that transaction. */
+	const short = () => deps.keys().some((key) => map.results.value[key]?.feeJuiceShortfall !== undefined)
 
 	const stopScope = watch(deps.scope, refreshAll, { flush: "sync" })
 
@@ -53,6 +55,7 @@ export function useWalletTxEstimates<P>(deps: WalletTxEstimatesDeps<P>) {
 		refresh,
 		refreshAll,
 		landed,
+		short,
 		cancelAll: map.cancelAll,
 		dispose: () => {
 			stopScope()

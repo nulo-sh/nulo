@@ -867,6 +867,15 @@ describe("execute window — an operation the app pays for", () => {
 		expect(approveInteractionMock).not.toHaveBeenCalled()
 	})
 
+	test("an estimate whose payer is the account, read short of the fee, holds Confirm the same way", async () => {
+		const { vm, fees, confirm } = await opened()
+		fees.api.results.value = { 0: { maxFee: "800", feeJuiceShortfall: { maxFee: "800", balance: "799" } } }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
 	test("a short read the transaction could still fund leaves Confirm as today", async () => {
 		const { vm, fees, confirm } = await opened()
 		fees.api.results.value = verdict(false)

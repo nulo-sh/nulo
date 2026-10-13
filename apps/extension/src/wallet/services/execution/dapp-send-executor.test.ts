@@ -683,7 +683,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 		const foldedOp = (buildAndEstimateFolded.mock.calls[0] as unknown[])[0] as { actions: unknown[] }
 		expect(foldedOp.actions).toEqual(originalActions)
 		expect(foldedOp.actions).not.toBe(originalActions)
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 
@@ -707,7 +707,7 @@ describe("DappSendExecutor.estimateOperationFee", () => {
 			actions: unknown[]
 		}
 		expect(builtOp.actions).toEqual([...originalActions, extraAction])
-		expect(result.maxFee).toBe("880")
+		expect(result.maxFee).toBe("800")
 		expect("estimateId" in result && result.estimateId).toBeFalsy()
 	})
 })
@@ -1807,7 +1807,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1826,7 +1826,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: { kind: "fee_juice" },
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1860,7 +1860,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.live",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-1",
@@ -1880,7 +1880,7 @@ describe("DappSendExecutor: the activity record, field by field", () => {
 			feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL,
 			hash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
-			estimatedFee: "880",
+			estimatedFee: "800",
 			gasDetails: GAS_DETAILS,
 			fence: FENCE,
 			networkId: "net-op",
@@ -1970,7 +1970,7 @@ describe("DappSendExecutor.estimateOperationFee: the reuse snapshot", () => {
 						feeSettings: FPC_SETTINGS,
 						profileId: "p-active",
 						chainIdentity: { l1ChainId: 1, rollupVersion: 6 },
-						baseFeeFingerprint: "7:11",
+						builtCap: { feePerDaGas: 7n, feePerL2Gas: 11n },
 						primaryEndpointId: "ep2",
 						primaryEndpointUrl: "https://primary",
 						pendingHashes: [],

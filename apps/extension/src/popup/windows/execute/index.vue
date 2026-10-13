@@ -164,6 +164,10 @@ const isAppPaid = (op: UIOperation | undefined): boolean =>
 
 /** An app-paid operation whose fee contract the estimate proved unable to pay: its Confirm stays off. */
 const appPayerProvenShort = computed(() => operations.value.some((_, i) => feeEstimates.value[i]?.appPayerFunding?.provenShort === true))
+/** The node would refuse it at submission, so nothing is proven. */
+const payerShort = computed(
+	() => appPayerProvenShort.value || operations.value.some((_, i) => feeEstimates.value[i]?.feeJuiceShortfall !== undefined),
+)
 
 // A `default_entrypoint` operation never gets a fee estimate (the dApp pays), so
 // the authorizations the wallet would sign are previewed through their own slot
@@ -489,7 +493,7 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (appPayerProvenShort.value) return
+	if (payerShort.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the estimates and previews to the
@@ -689,7 +693,7 @@ onUnmounted(() => {
 				!initComplete ||
 				operations.length === 0 ||
 				needsFeeSelection ||
-				appPayerProvenShort ||
+				payerShort ||
 				isInteractionCancelled
 			"
 			@reject="reject"

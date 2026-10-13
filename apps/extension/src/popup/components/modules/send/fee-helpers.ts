@@ -1,5 +1,6 @@
 import { FpcType } from "@/wallet/services/fpc/client"
-import { feeJuicePricingFromUsd, feeToUsd, formatGasBalance } from "@/utils/fee-estimation"
+import { FEE_JUICE_DECIMALS, feeJuicePricingFromUsd, feeToUsd, formatGasBalance } from "@/utils/fee-estimation"
+import { formatBaseUnits } from "@/utils/amount"
 import type { AppPick } from "@/utils/fee-picks"
 
 export { formatGasBalance }
@@ -54,7 +55,18 @@ export interface FeeMethodOption {
  *  drifted only by luck). `null` on either leg = UNKNOWN (read failed):
  *  fail closed for gating, render as an em dash for display. */
 export type { GasBalances } from "@/wallet/services/execution/models"
-import type { GasBalances } from "@/wallet/services/execution/models"
+import type { FeeJuiceShortfall, GasBalances } from "@/wallet/services/execution/models"
+
+const SHORTFALL_DECIMALS = 6
+
+/** The refusal for a balance short of the fee. The cost rounds up and the balance down at the same
+ *  precision, so the two figures never read equal. */
+export function shortfallSentence({ maxFee, balance }: FeeJuiceShortfall): string {
+	const step = 10n ** BigInt(FEE_JUICE_DECIMALS - SHORTFALL_DECIMALS)
+	const cost = ((BigInt(maxFee) + step - 1n) / step) * step
+	const options = { maxDecimals: SHORTFALL_DECIMALS }
+	return `This send can cost up to ${formatBaseUnits(cost, FEE_JUICE_DECIMALS, options)} FJ. You have ${formatBaseUnits(BigInt(balance), FEE_JUICE_DECIMALS, options)} FJ.`
+}
 
 export interface BuildSettingsInput {
 	paymentMethod: { kind: string; fpcId?: string } | undefined

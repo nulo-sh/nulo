@@ -70,6 +70,18 @@ describe("useWalletTxEstimates", () => {
 		expect(estimates.landed()).toBe(true)
 	})
 
+	test("short holds while any key's payer was read short of its fee", async () => {
+		const { estimate, estimates } = setup({ 0: { network: "A", fee: 1 }, 1: { network: "A", fee: 2 } })
+		estimate.mockImplementation(async (p: P) => ({
+			...estimateFor(p),
+			...(p.fee === 2 ? { feeJuiceShortfall: { maxFee: "2", balance: "1" } } : {}),
+		}))
+		estimates.refreshAll()
+		await lands()
+		expect(estimates.landed()).toBe(true)
+		expect(estimates.short()).toBe(true)
+	})
+
 	test("a refresh drops the key's answer at once, before the new one is asked", async () => {
 		const { inputs, estimates } = setup()
 		estimates.refresh(0)

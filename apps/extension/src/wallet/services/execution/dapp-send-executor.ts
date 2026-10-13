@@ -46,14 +46,14 @@ import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
 import type { DiscoveryAwareEstimator } from "./discovery-aware-estimator"
 import { type ExecutionCoordinator, type ProveAndSendContext, fenceChecks } from "./execution-coordinator"
-import { fingerprintBuiltFee } from "./estimate-reuse-shared"
+import { builtCapOf } from "./estimate-reuse-shared"
 import type { ExecutionMutexRelease } from "./execution-mutex"
 import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintNoFromInputs, fingerprintOperation, type OperationFingerprintInput } from "./operation-fingerprint"
 import { PREVIEW_FOREIGN_MESSAGE, type PreviewLookup, type PreviewSnapshots, assertWithinPreview } from "./preview-snapshots"
 import { decodeAuthwitEffects } from "./decode-authwit-effects"
 import { throwIfAborted } from "./rpc-cancel"
-import { probeAppPayerFunding, probeSponsorFunding } from "./sponsor-funding"
+import { probeAppPayerFunding, probeOwnFeeJuice, probeSponsorFunding } from "./sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { type FeeEstimate, finalizeGasLimits, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
@@ -326,6 +326,7 @@ export class DappSendExecutor {
 		const log = (msg: string, data: object) => this.deps.logDebug(msg, data)
 		const sponsorFunding = await probeSponsorFunding(built, this.deps.readPublicStorageOnce, log)
 		const appPayerFunding = await probeAppPayerFunding(built, this.deps.readPublicStorageOnce, log)
+		const feeJuiceShortfall = await probeOwnFeeJuice(built, this.deps.readPublicStorageOnce, log)
 		throwIfAborted(signal)
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
@@ -347,6 +348,7 @@ export class DappSendExecutor {
 			...(bound ? { discoveredAuthwits: discovered } : {}),
 			...(sponsorFunding ? { sponsorFunding } : {}),
 			...(appPayerFunding ? { appPayerFunding } : {}),
+			...(feeJuiceShortfall ? { feeJuiceShortfall } : {}),
 		}
 	}
 
@@ -481,7 +483,7 @@ export class DappSendExecutor {
 			if (!primary) return undefined
 			const profile = await this.deps.getActiveProfile()
 			if (!profile) return undefined
-			const baseFeeFingerprint = fingerprintBuiltFee(built.txRequest)
+			const builtCap = builtCapOf(built.txRequest)
 			const estimateId = crypto.randomUUID()
 			this.deps.operationEstimateReuse.stash(estimateId, {
 				fingerprint,
@@ -493,7 +495,7 @@ export class DappSendExecutor {
 				// an endpoint flip would snapshot a chain this request was not
 				// signed under (consume would then compare live-vs-live).
 				chainIdentity: built.chainIdentity,
-				baseFeeFingerprint,
+				builtCap,
 				primaryEndpointId: primary.id,
 				primaryEndpointUrl: primary.rpcUrl,
 				pendingHashes: this.deps.getPendingForAccount(operation.accountAddress).map((tx) => tx.hash),

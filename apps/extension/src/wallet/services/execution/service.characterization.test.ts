@@ -4,10 +4,8 @@
  * These tests pin CURRENT behavior of facade internals that later phases
  * extract (estimate-reuse cache, gas-balance cache, cancelJob). They are
  * deliberately byte-precise where downstream contracts depend on exact
- * strings: `TransferEstimateReuseEntry.baseFeeFingerprint` is compared
- * against a freshly-computed fingerprint at consume time, so the
- * fingerprint FORMAT is load-bearing — an extraction that changes it
- * invalidates every cached estimate silently.
+ * values: `TransferEstimateReuseEntry.builtCap` is compared against a
+ * freshly computed cap at consume time.
  *
  * Tests bypass ServiceCollection.start() via the private-field-injection
  * pattern from `feesettings-invariant.test.ts`: construct the service,

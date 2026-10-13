@@ -12,7 +12,7 @@ import type { FpcInfo } from "@/wallet/services/fpc/spec"
 import { TransferType } from "@/wallet/services/transaction/spec"
 import type { Network } from "@/wallet/services/network/service"
 import type { FeeSettings } from "./spec"
-import { ESTIMATE_REUSE_TTL_MS, fingerprintBaseFee } from "./estimate-reuse-shared"
+import { ESTIMATE_REUSE_TTL_MS } from "./estimate-reuse-shared"
 import {
 	TransferEstimateReuse,
 	type TransferEstimateReuseDeps,
@@ -34,9 +34,9 @@ const INPUTS = {
 }
 
 // Node reports min fees of 50/100; default multiplier 2 → a fresh build
-// would finalize 100:200, so a matching entry stores that fingerprint.
+// would finalize 100:200, so a matching entry was built with that cap.
 const CURRENT_MIN = new GasFees(50n, 100n)
-const MATCHING_BASE_FEE_FINGERPRINT = "100:200"
+const MATCHING_BUILT_CAP = { feePerDaGas: 100n, feePerL2Gas: 200n }
 
 const PRIMARY_ENDPOINT = { id: "ep-1", rpcUrl: "http://localhost:8080" }
 const CHAIN = { l1ChainId: 31337, rollupVersion: 31337 }
@@ -62,7 +62,7 @@ function makeEntry(overrides: Partial<TransferEstimateReuseEntry> = {}): Transfe
 		feeSettingsHash: fingerprintFeeSettings(FEE_SETTINGS),
 		profileId: "profile-1",
 		chainIdentity: CHAIN,
-		baseFeeFingerprint: MATCHING_BASE_FEE_FINGERPRINT,
+		builtCap: MATCHING_BUILT_CAP,
 		primaryEndpointId: PRIMARY_ENDPOINT.id,
 		primaryEndpointUrl: PRIMARY_ENDPOINT.rpcUrl,
 		pendingHashes: [],
@@ -115,11 +115,6 @@ function makeReuse(
 }
 
 describe("fingerprint byte-stability (cache-compare contract)", () => {
-	test("fingerprintBaseFee exact format: '<da>:<l2>'", () => {
-		expect(fingerprintBaseFee({ feePerDaGas: 100n, feePerL2Gas: 200n })).toBe("100:200")
-		expect(fingerprintBaseFee({ feePerDaGas: 0n, feePerL2Gas: 0n })).toBe("0:0")
-	})
-
 	test("fingerprintFeeSettings exact format per payment-method variant", () => {
 		expect(fingerprintFeeSettings({ paymentMethod: { kind: "fj" } })).toBe("fj|default")
 		expect(fingerprintFeeSettings({ paymentMethod: { kind: "fj" }, priorityLevel: "fast" })).toBe("fj|fast")
@@ -198,6 +193,11 @@ describe("tryConsume: every observable exit", () => {
 		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBeUndefined()
 	})
 
+	test("a price that fell since the build: the higher cap still covers it and is reused", async () => {
+		const { reuse, entry } = makeReuse({ getCurrentMinFees: async () => new GasFees(40n, 90n) })
+		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBe(entry)
+	})
+
 	test("predicted-worst (not current-min) is the consume-time basis", async () => {
 		// Current-min alone would finalize 100:200 and match the entry, but a
 		// fresh build prices off the worst predicted slot (60/120 → 120:240),
@@ -210,7 +210,7 @@ describe("tryConsume: every observable exit", () => {
 
 	test("predicted-worst entry matches when the prediction is stable", async () => {
 		const { reuse, entry } = makeReuse({
-			entry: { baseFeeFingerprint: "120:240" },
+			entry: { builtCap: { feePerDaGas: 120n, feePerL2Gas: 240n } },
 			getPredictedMinFees: async () => [new GasFees(55n, 110n), new GasFees(60n, 120n)],
 		})
 		expect(await reuse.tryConsume("est-1", INPUTS, FENCE)).toBe(entry)

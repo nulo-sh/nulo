@@ -95,7 +95,7 @@ function chunkAuthwits() {
 		}))
 }
 
-const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch.feeSettings) && estimates.landed())
+const isAllowedToExecute = computed(() => chunkedAuthwits.value.every((ch) => ch.feeSettings) && estimates.landed() && !estimates.short())
 
 async function handleRevokeAuthwits() {
 	// Full-lifetime submit latch, handler-owned: every route (click, any future caller) self-checks

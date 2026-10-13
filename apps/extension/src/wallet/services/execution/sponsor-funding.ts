@@ -1,43 +1,63 @@
 /**
- * Whether the contract that pays an estimate can cover its fee: the node refuses a transaction whose
- * fee payer's public Fee Juice, plus any setup-phase Fee Juice claim to it, is below
- * `gasSettings.getFeeLimit()` (Σ maxFeesPerGas × gasLimits, teardown excluded), and accepts at
- * equality. Nulo builds no claim to a sponsor, so the balance alone decides; a sponsor contract
- * that claims to itself during setup can read short.
+ * Whether the payer of an estimate can cover its fee: the node refuses a transaction whose fee
+ * payer's public Fee Juice, plus any setup-phase Fee Juice claim to it, is below
+ * the fee limit (`feeLimitOf`: Σ maxFeesPerGas × gasLimits, teardown counted once), and accepts at
+ * equality. Nulo builds no claim to a sponsor or to an account paying from its own balance, so the
+ * balance alone decides; a sponsor contract that claims to itself during setup can read short.
  */
 
+import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import type { PrivateExecutionResult } from "@aztec-labs/stdlib/tx"
 import type { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { feeJuiceAddress } from "@/wallet/utils/fee-juice"
 import { type PublicStorageReader, readPublicFeeJuiceBalance } from "@/wallet/utils/fee-juice-balance"
 import { sameFieldAddress } from "@nulo/wallet-bridge"
 import type { FeeEstimate } from "./fee/fee-strategy"
-import type { AppPayerFunding, SponsorFunding } from "./spec"
+import { feeLimitOf } from "./tx-fee-details"
+import type { AppPayerFunding, FeeJuiceShortfall, SponsorFunding } from "./spec"
 
 export const SPONSOR_PROBE_TIMEOUT_MS = 5_000
 
 type ProbeOutcome = "funded" | "short" | "failed"
 type ProbeLog = (msg: string, data: { outcome: ProbeOutcome }) => void
 
-/** Whether `payer`'s public Fee Juice covers `built`'s fee limit, or `undefined` when the read fails.
- *  Logs one fixed line per probe: an RPC error can carry addresses, figures or the endpoint URL. */
-async function coversFeeLimit(
+/** `payer`'s public Fee Juice and `built`'s fee limit, or `undefined` when the read fails. Logs one
+ *  fixed line per probe: an RPC error can carry addresses, figures or the endpoint URL. */
+async function readCoverage(
 	built: FeeEstimate,
 	payer: AztecAddress,
 	read: PublicStorageReader,
 	log: ProbeLog,
 	label: string,
-): Promise<boolean | undefined> {
-	let funded: boolean
+): Promise<{ balance: bigint; limit: bigint } | undefined> {
+	let coverage: { balance: bigint; limit: bigint }
 	try {
 		const balance = await readPublicFeeJuiceBalance(read, built.network, payer, SPONSOR_PROBE_TIMEOUT_MS)
-		funded = balance >= built.txRequest.txContext.gasSettings.getFeeLimit().toBigInt()
+		coverage = { balance, limit: feeLimitOf(built.txRequest) }
 	} catch {
 		log(label, { outcome: "failed" })
 		return undefined
 	}
-	log(label, { outcome: funded ? "funded" : "short" })
-	return funded
+	log(label, { outcome: coverage.balance >= coverage.limit ? "funded" : "short" })
+	return coverage
+}
+
+async function coversFeeLimit(...args: Parameters<typeof readCoverage>): Promise<boolean | undefined> {
+	const coverage = await readCoverage(...args)
+	return coverage && coverage.balance >= coverage.limit
+}
+
+/** The account's shortfall when it pays from its own public Fee Juice and that balance is below the
+ *  fee limit; `undefined` when it covers it, another payer pays, or the read fails. */
+export async function probeOwnFeeJuice(
+	built: FeeEstimate,
+	read: PublicStorageReader,
+	log: ProbeLog,
+): Promise<FeeJuiceShortfall | undefined> {
+	if (built.feePaymentMethod !== AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE) return undefined
+	const coverage = await readCoverage(built, built.account.address, read, log, "own fee juice probe")
+	if (!coverage || coverage.balance >= coverage.limit) return undefined
+	return { maxFee: coverage.limit.toString(), balance: coverage.balance.toString() }
 }
 
 /** The verdict on `built`'s sponsor, or `undefined` when no sponsor pays or the read fails. */

@@ -389,6 +389,21 @@ describe("ChangeAuthwitsRegistryPopup — the fee check before proving", () => {
 		expect(authwitsServiceMock.setRegistryEnabled).toHaveBeenCalledTimes(1)
 	})
 
+	test("an estimate the account's own Fee Juice cannot cover keeps Send off", async () => {
+		authwitsServiceMock.estimateRegistryToggleFee.mockResolvedValueOnce({
+			maxFee: "800",
+			maxFeeFormatted: "0",
+			gasDetails: {},
+			feeJuiceShortfall: { maxFee: "800", balance: "799" },
+		})
+		const w = await mountAndOpen()
+		await setFee(w)
+		expect(disabled(w)).toBe(true)
+		await w.get('[data-testid="registry-toggle-submit"]').trigger("click")
+		await flushPromises()
+		expect(authwitsServiceMock.setRegistryEnabled).not.toHaveBeenCalled()
+	})
+
 	test("new fee settings, a speed change or a fallback, turn Send off until their estimate lands", async () => {
 		const w = await mountAndOpen()
 		await setFee(w)

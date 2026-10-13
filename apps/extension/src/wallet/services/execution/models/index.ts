@@ -29,6 +29,7 @@ export type {
 	PriorityLevel,
 	SponsorFunding,
 	AppPayerFunding,
+	FeeJuiceShortfall,
 	TransferFeeEstimate,
 	DiscoveredAuthwit,
 	OperationAuthwitPreview,
