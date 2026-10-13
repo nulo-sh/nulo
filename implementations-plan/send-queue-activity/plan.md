@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: arc 1 merged (#264); arc 3a merged (#343); arc 3b in review (3b.1-3b.6 built)
+status: arcs 1 (#264), 3a (#343), 3b (#344) merged; arc 2 building, arc 5 next
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -286,6 +286,7 @@ Outline A (this plan) won; both auditors judged it stronger. Opus noted that B c
 - **Arc 1: no new copy, layout or state.** It restores the owner's concurrent-sends rule after a restart, so the existing "Queued..." card and "Queued behind your previous send" row appear on a Send-page send that uses the same private fee contract as a pending one (OA-3 item 3; ships under the archived decision). A terminal event or snapshot row from another profile or network no longer removes the current awaiting card or task.
 - **Phase 1.2 (OA-5):** on a multi-endpoint network, the same states show for up to 60 s on a send whose predecessor's block the PXE's node lacks. Built only on OA-5 = A.
 - **Arc 1b (OA-3):** while the account's earlier sends are unmined, a dApp send waits at "Queued..." ("Preparing..." on the silent path). The dApp's answer arrives later, and later requests of the same dApp wait behind it.
+- **Arc 2 (page 9, signed 2026-10-13).** P9-01 A: "Shrink: the USD field and the derived token line scale their type down until the figure fits; nothing wraps or is cut. Normal amounts look as today." P9-02: "In the review sheet the 4 px gap moves from the symbol's left margin to the number's end; unwrapped lines draw identical pixels." P9-03: "'The price moved since you started typing.' shows only when the live quote differs from the snapshot; a stale snapshot that did not move shows the existing 'The price quote went stale.'"
 - **Arc 3a (page 10, signed 2026-10-12).**
   - #108 (P10-06, approved): "When the transaction's expiry is provably past chain time, the row reads 'Won't go through' / 'This transaction expired before the network included it. No fee was paid, and you can send it again.' Until then it reads today's 'Unconfirmed'." The look is the existing failed one (OA-7, D28).
   - #109 (P10-07, changed): "no new words; only the pruned-block re-check ships." A mined row reads as today until final. A row whose block the finalized chain excludes returns to today's "Not confirmed yet" (journal row) or today's pending clock (Tx row).
@@ -551,21 +552,21 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 ### Arc 2: amount card and review sheet (after page 9: P9-01, P9-02, P9-03)
 
-#### Phase 2.1: long figures in USD mode (P9-01)
+#### Phase 2.1: long figures in USD mode (P9-01) ✓
 
 1. Build the option the owner chose, as § Architecture describes it. On "As is", build nothing and record it.
 2. In `AmountCard.test.ts`: for A, a long figure gets a scale below 1 on both the field and the derived line, and `$25.00` keeps 1 (control); for B, the derived line carries the ellipsis styles and the field keeps its size; for C, `send-amount-derived` sits in the new row and the meta row keeps Max and the balance.
 
 **Validation gate.** Commands: `bun run lint`; `bun run typecheck:all`; `AmountCard.test.ts` as a single test file. Pass: all exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 2.2: the review line's gap (P9-02; unless struck)
+#### Phase 2.2: the review line's gap (P9-02) ✓
 
 1. Move the 4 px gap in `SendReviewSheet.vue` to the number's end.
 2. Assert the new rule in `SendReviewSheet.test.ts`.
 
 **Validation gate.** Commands: `bun run lint`; `SendReviewSheet.test.ts` as a single test file. Pass: both exit 0. Layers: lint, unit.
 
-#### Phase 2.3: "price moved" only when it moved (P9-03; unless struck)
+#### Phase 2.3: "price moved" only when it moved (P9-03) ✓
 
 1. Add `requoteReason` to `send-fiat-gate.ts`; read it in `send.vue`.
 2. In `send-fiat-gate.test.ts`: a live quote equal to the snapshot gives `stale` (never-happens: `moved`); a different one gives `moved` (control); no live quote gives `stale`.
@@ -574,7 +575,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 #### Phase 2.4: arc 2 end-to-end gate
 
-**Validation gate.** Commands: `bun run test`; `bun run test:all`; smoke on Chrome and Firefox (`cd apps/extension && bun run test:e2e -- --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`); network Chrome `tests/e2e/network/fiat-send.test.ts` (USD mode lives there). Pass: all exit 0; the PR attaches before and after screenshots of the amount card at rest and focused and of the review sheet, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
+**Validation gate.** Commands: `bun run audit:vue`; `bun run test:all`; smoke on Chrome and Firefox (`cd apps/extension && bun run test:e2e -- --retry=0`, then the same with `NULO_E2E_BROWSER=firefox`); network Chrome and Firefox `tests/e2e/network/fiat-send.test.ts` and `send-amount-exact.test.ts` (D48). Pass: all exit 0; the PR attaches before and after screenshots of the amount card at rest and focused and of the review sheet, both themes, both browsers. Layers: unit, smoke e2e, network e2e.
 
 ### Arc 3a: send outcome states (after page 10; H7 on #108 and #112)
 
@@ -912,6 +913,22 @@ Arc 3b as built, where it differs from or adds to the text above:
 - **D43 The switch block reads the cards' rule.** `hasInFlightSend` calls `journalRecordInScope`, so with no network active a send stamped with one no longer blocks a switch it cannot be cancelled from: no card shows it. Its own doc already required the block to line up with the cards.
 - **D44 Two surfaces #103 does not name go to the owner.** The settled transaction card keeps the figure its record stored (OA-8), and a held token of unknown decimals keeps its place in the token order (OA-9). Both ship as they are.
 
+The orchestrator's calls at arcs 2 and 5's start (2026-10-13; page 9 signed: #90 P9-01 = A, P9-02 and P9-03 accepted; #242 P9-05 approved as proposed):
+
+- **D-orch-14 Fresh branches, two PRs.** Arc 2 branches `send-queue-activity-amount` from `origin/dev` and opens one PR against `dev` (`Closes #90`). Arc 5 branches `send-queue-activity-keyboard` from arc 2's branch, opens its PR (`Closes #242`) only after arc 2's loop converged and its PR is open, and rebases onto `origin/dev` once arc 2 merges.
+- **D-orch-15 Only the signed words and looks ship.** P9-01 A exactly as § Arc 2 describes it; the P9-02 gap and the P9-03 notice as planned; P9-05's five items as proposed. A surface that would need another word or look goes to `OWNER-ASKS.md` in the "what ships now" form.
+- **D-orch-16 Proportion.** A finding becomes a change only with its path written; a fix that adds persistent state, a lifecycle, a coordination protocol or a public contract stops for the orchestrator. Later review rounds verify.
+- **D-orch-17 Screenshots close the loop.** The amount card with a long figure (USD mode, focused and at rest), the review sheet, the price-moved notice, and the fee card's two new buttons with their focus rings: both themes, both browsers, in the PR.
+- **D-orch-18 E2E runtime budget.** An added e2e scenario names its failure mode, why a cheaper layer cannot prove it, and its measured runtime; the PR states the per-browser suite wall-clock before and after.
+- **D-orch-19 Delivery hygiene.** Merge `origin/dev` before the final gates, never a union merge (`lessons.md` is at its budget). Commits and PR bodies name the model that ran.
+
+Arc 2 as built (detail in `lessons/phase-2.md`):
+
+- **D45 P9-01 A.** The USD field takes the token field's fit: one ruler holds whichever text the visible field shows, full size with focus, the largest scale that shows the whole figure at rest. The USD field gained the blur it lacked, so leaving it refits. In USD mode the meta line fills what the balance and Max leave, and the derived line, `nowrap`, takes the largest scale that keeps it on that room, with no floor, as signed. Token mode is untouched. At a ten-billion balance the line draws at 5-6 px: OA-10.
+- **D46 P9-02.** The number sits in its own span, which carries the 4 px only beside a symbol; the ruler holds the same markup. Known limit (Opus), #367: in a band of about 4 px at or below the 60% floor, the trailing margin can carry the number's last character down with the symbol.
+- **D47 P9-03.** `requoteReason(frozenUsd, liveUsd)` shares the gate's usable-quote predicate (`isUsableUsd`). A page test in `send.test.ts` drives the notice through the real gate.
+- **D48 The USD fit's e2e lives in `send-amount-exact.test.ts`**, not `fiat-send.test.ts`: that file already mints the seven-figure balance and holds the token field's fit checks. It seeds a $1 quote before Send opens and adds one USD step: the field shows its whole figure, the derived line is one line clear of the balance, Max stays in the row, focus restores 40 px. Failure mode: a real layout that still clips or wraps, which jsdom's stand-in font cannot show. It fails on the base sources (40 px hidden, three lines, Max 28.6 px out). The 2.4 gate runs both files.
+
 ## Audit verdicts
 
 ### Round 1 (plan v1): dual audit
@@ -1090,6 +1107,21 @@ Rejected:
 **Round 4 (resumed Codex session, over the round-3 fix and the whole arc against `origin/dev`): one finding, low and high confidence.** Matching is by kind and token only, so a recent ended record of an EARLIER send of the same token could clear a later send's running task. The journal-side scan always could; round 3's task-side call added the order where the task lands second, and the event path could do the same to concurrent same-token sends. The later send's record card and Cancel stayed, but its task was gone for good: its running-step line, and its card before its record existed. Accepted: `isOwnTerminalRecord` refuses a record created before the task (a task's record is written after the task starts, and tasks live only in the worker's memory), and both reconciliation paths use it. Three component cases (journal second, task second, the event) and two unit cases fail without it. A narrating comment in `status-icon-fill.ts` was removed and the reconciliation comment tightened. Nothing else material in either diff: no ordering, slot, log, dApp-response or assertion regression, and no unsigned look.
 
 **Round 5 (resumed, over the round-4 fix): no material finding.** Codex found the chronology check sound for every supported lifecycle. A backward wall-clock step between the two stamps can only delay a clear until TaskService's own completion event; it strands nothing. **The loop converged here.**
+
+### Arc 2 code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `e900f710..22765f13`
+
+**Codex: approve** (session `01a136cb-cf50-73b2-899f-c303f0021659`). **Opus: approve.** Both found no visible change beyond the three signed items, no wrong-scale path (focus and blur, the swapped inputs, a lost quote, Max in USD, the skeleton, a late balance, fonts), `requoteReason` fed the gate's own values, and nothing that changes what is sent or weakens an assertion.
+
+Accepted, comments only:
+- two narrating comments removed (Codex), and a test comment that pointed at the PR's shots reworded (Opus);
+- the derived ruler states why it sits inside the meta line (Opus).
+
+Rejected:
+- **The quote seed hides the unpriced layout** (Opus, low): the priced row gives the field less room, so the fit checks are at least as strong, and the file never pinned the unpriced room.
+
+Known limit: the trailing-margin band (D46), filed closed as #367.
+
+**Round 2 (resumed Codex session, over the comment fixes): approve, no new finding.** It upheld the rejection and the known-limit call, and compiled AmountCard's template both ways: identical production render code. **The loop converged here.**
 
 
 ## Seeds

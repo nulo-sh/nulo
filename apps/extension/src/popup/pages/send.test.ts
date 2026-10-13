@@ -1285,6 +1285,33 @@ describe("send page — Refresh quote by keyboard", () => {
 		w.unmount()
 	})
 
+	test("the notice says the price moved only when the live quote differs from the snapshot", async () => {
+		const chainId = CHAIN_IDS.TESTNET
+		const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract)?.coingeckoId === "usd-coin")
+		if (!seed) throw new Error("no USDC-priced testnet seed")
+		const priced = { ...TOKEN, chainId, contract: seed.contract, symbol: "USDC" }
+		mocks.getTokens.mockResolvedValue([priced])
+		mocks.getTokenBalances.mockResolvedValue([{ ...BALANCE, token: priced }])
+		const { w } = await mountSend()
+		const price = vi.mocked(PriceServiceClient).mock.results.at(-1)?.value as { onQuotesUpdated: { invoke: (s: unknown) => void } }
+		const quote = (usd: number) => ({ "usd-coin": { coingeckoId: "usd-coin", usd, fetchedAt: Date.now(), providerUpdatedAt: null } })
+		const notice = () => w.get('[data-testid="send-fiat-requote"]').element.parentElement?.textContent ?? ""
+
+		price.onQuotesUpdated.invoke(quote(1))
+		const amount = w.findComponent({ name: "AmountCard" })
+		amount.vm.$emit("update:fiatMode", true)
+		// Frozen at today's price, but past the snapshot's age limit.
+		amount.vm.$emit("update:fiatGuard", { frozenUsd: 1, frozenAt: Date.now() - 16 * 60_000, converting: false })
+		await nextTick()
+		expect(notice()).toContain("The price quote went stale.")
+		expect(notice()).not.toContain("moved")
+
+		price.onQuotesUpdated.invoke(quote(1.05))
+		await nextTick()
+		expect(notice()).toContain("The price moved since you started typing.")
+		w.unmount()
+	})
+
 	test("on the real card a moved quote is refreshed by keyboard: the amount re-derives and the USD field holds the focus", async () => {
 		const chainId = CHAIN_IDS.TESTNET
 		const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract)?.coingeckoId === "usd-coin")

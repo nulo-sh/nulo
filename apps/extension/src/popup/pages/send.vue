@@ -36,7 +36,7 @@ import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
 import { FEE_JUICE_BRIDGE_URL, feeLine } from "@/popup/components/modules/send/fee-helpers"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
-import { evaluateFiatGate } from "@/popup/pages/send-fiat-gate"
+import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
 
@@ -263,6 +263,7 @@ const fiatGate = computed(() =>
 const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
 /** Distinguishes "needs explicit re-confirmation" from "just converting". */
 const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
+const fiatQuoteMoved = computed(() => requoteReason(fiatGuard.value?.frozenUsd, liveQuote.value?.usd) === "moved")
 const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
@@ -744,7 +745,7 @@ onBeforeUnmount(() => {
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
 						<Text size="11" weight="500" color="tertiary">
-							{{ liveQuote ? "The price moved since you started typing." : "The price quote went stale." }}
+							{{ fiatQuoteMoved ? "The price moved since you started typing." : "The price quote went stale." }}
 						</Text>
 						<button type="button" @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">
 							Refresh quote
