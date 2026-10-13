@@ -147,6 +147,18 @@ describe("ToastManagerBase", () => {
 		expect(error?.querySelector('[data-name="clock-circle"]')).toBeNull()
 	})
 
+	test("it exposes the drawn height of the snack it places, 0 while none is open", async () => {
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+			return DOMRect.fromRect({ height: this.querySelector(CARD) ? 72 : 0 })
+		})
+		const wrapper = mountRegion()
+		const height = () => (wrapper.vm as unknown as { snackHeight: () => number }).snackHeight()
+		expect(height()).toBe(0)
+		open({ kind: "error", label: "Send failed" })
+		await nextTick()
+		expect(height()).toBe(72)
+	})
+
 	test("the same text opened twice renders twice: the second card is a new element", async () => {
 		mountRegion()
 		open({ kind: "success", label: "Copied" })

@@ -26,6 +26,7 @@ import {
 } from "../fixtures/helpers"
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { shotSend } from "../fixtures/send-page"
 import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
@@ -163,41 +164,55 @@ async function hitsAfterScroll(page: Page, testids: string[]): Promise<Hit[]> {
 }
 
 type Box = { top: number; bottom: number; left: number; right: number }
-type Cover = { at: string; hit: string; covered: boolean; snack: Box; control: Box }
+type ControlPlacement = { at: string; hit: string; covered: boolean; snack: Box; control: Box; viewport: number }
 
-/** `testid` where the page rests, then in the same task as each scroll (the container that scrolls it
- *  to its end, the control to its centre): what a click at its centre hits, and whether any part of it
- *  is under the snack. */
-async function coverAtRestAndScrolled(page: Page, testid: string): Promise<Cover[]> {
-	return page.evaluate(
-		(s: string, id: string) => {
+/** Scrolls `testid` to `at` (the end of the container that scrolls it, or centred) and waits for the
+ *  snack to measure again. */
+async function scrollControl(page: Page, testid: string, at: "rest" | "end" | "centre"): Promise<void> {
+	await page.evaluate(
+		async (id: string, where: string) => {
 			const el = document.querySelector(`[data-testid="${id}"]`)
 			if (!el) throw new Error(`${id} not found`)
-			const read = (at: string) => {
-				const box = el.getBoundingClientRect()
-				const card = document.querySelector(s)?.getBoundingClientRect()
-				if (!card) throw new Error("no snack")
-				const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
-				const covered = card.top < box.bottom && card.bottom > box.top && card.left < box.right && card.right > box.left
-				return {
-					at,
-					hit: hit?.closest("[data-testid]")?.getAttribute("data-testid") ?? hit?.tagName ?? "none",
-					covered,
-					snack: { top: card.top, bottom: card.bottom, left: card.left, right: card.right },
-					control: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
-				}
-			}
-			const rest = read("rest")
 			let scroller = el.parentElement
 			while (scroller && !["auto", "scroll"].includes(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-			;(scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
-			const end = read("end")
-			el.scrollIntoView({ block: "center" })
-			return [rest, end, read("centre")]
+			if (where === "end") (scroller ?? document.scrollingElement ?? document.documentElement).scrollTop = Number.MAX_SAFE_INTEGER
+			if (where === "centre") el.scrollIntoView({ block: "center" })
+			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 		},
-		SNACK,
 		testid,
+		at,
 	)
+}
+
+/** `testid` where the page rests, with the container that scrolls it at its end, then centred, each
+ *  read once the snack has measured again: what a click at its centre hits, whether any part of it is
+ *  under the snack, and where both are. */
+async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<ControlPlacement[]> {
+	const placements: ControlPlacement[] = []
+	for (const at of ["rest", "end", "centre"] as const) {
+		await scrollControl(page, testid, at)
+		const placement = await page.evaluate(
+			(s: string, id: string, where: string) => {
+				const box = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect()
+				const card = document.querySelector(s)?.getBoundingClientRect()
+				if (!box || !card) throw new Error("no control or no snack")
+				const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+				return {
+					at: where,
+					hit: hit?.closest("[data-testid]")?.getAttribute("data-testid") ?? hit?.tagName ?? "none",
+					covered: card.top < box.bottom && card.bottom > box.top && card.left < box.right && card.right > box.left,
+					snack: { top: card.top, bottom: card.bottom, left: card.left, right: card.right },
+					control: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+					viewport: window.innerHeight,
+				}
+			},
+			SNACK,
+			testid,
+			at,
+		)
+		placements.push(placement)
+	}
+	return placements
 }
 
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
@@ -473,14 +488,23 @@ test.skipIf(!hasConfig)(
 		await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
 		await settledCard(page)
 
-		const covers = await coverAtRestAndScrolled(page, "tx-awaiting-cancel")
-		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(covers)}`)
-		expect(covers.map((c) => [c.at, c.covered])).toEqual([
-			["rest", false],
-			["end", false],
-			["centre", false],
-		])
-		expect(covers[0]?.hit).toBe("tx-awaiting-cancel")
+		const placed = await placementsAtRestAndScrolled(page, "tx-awaiting-cancel")
+		console.log(`[snack-placement] Home, Cancel at rest, at the scroll's end and centred: ${JSON.stringify(placed)}`)
+		for (const p of placed) {
+			expect([p.at, p.covered, p.hit], "Cancel is clear of the snack and takes the click").toEqual([
+				p.at,
+				false,
+				"tx-awaiting-cancel",
+			])
+			expect(p.snack.top >= 0 && p.snack.bottom <= p.viewport, `${p.at}: the snack is wholly on screen`).toBe(true)
+		}
+		// Clear of the Cancel, the snack rests 12px above the 64px nav rather than above where the row was.
+		expect(placed.slice(1).map((p) => p.viewport - p.snack.bottom)).toEqual([76, 76])
+		await page.evaluate(async () => {
+			window.scrollTo(0, 0)
+			await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+		})
+		await shotSend(page, "home-snack-above-cancel", "tx-awaiting-card")
 
 		await rejectExecute(execute)
 		await waitForPopupClosed(execute)

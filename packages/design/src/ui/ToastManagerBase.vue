@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Vendor */
-import { onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue"
 
 /** Composables */
 import { type ToastState, useToast } from "../composables/toast"
@@ -20,6 +20,10 @@ withDefaults(defineProps<{ teleportTo?: string; bottomInset?: number; inColumn?:
 })
 
 const { toast, closeToast, holdToast } = useToast()
+
+const wrap = useTemplateRef<HTMLElement>("wrap")
+/** The open snack's drawn height, 0 while none is open, for a host that places it clear of the page. */
+defineExpose({ snackHeight: () => wrap.value?.getBoundingClientRect().height ?? 0 })
 
 /** The snack the regions render: a copy of the shared toast that lags it while a card is leaving. */
 const shown = ref<ToastState | null>(null)
@@ -118,7 +122,7 @@ onBeforeUnmount(() => {
 
 <template>
 	<Teleport :to="teleportTo" defer>
-		<div :class="[$style.wrap, inColumn && $style.in_column]" :style="{ bottom: `${bottomInset}px` }">
+		<div ref="wrap" :class="[$style.wrap, inColumn && $style.in_column]" :style="{ bottom: `${bottomInset}px` }">
 			<div role="status" aria-live="polite" aria-atomic="true" :class="$style.region">
 				<Transition
 					mode="out-in"
