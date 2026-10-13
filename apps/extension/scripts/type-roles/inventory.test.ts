@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { beforeAll, describe, expect, test } from "vitest"
 import { type BranchStep, type IdentifierSite, identifierSites, type ProducerHit, producerHits, sitesInSource } from "./identifier-sites"
-import { parseSource, REPO_ROOT, sourceFiles, type TemplateNode, walkElements } from "./source-scan"
+import { escapeRegExp, parseSource, REPO_ROOT, sourceFiles, type TemplateNode, walkElements } from "./source-scan"
 import { type Surface, surfaces } from "./surfaces"
 
 /**
@@ -92,7 +92,7 @@ const contentOf = (node: TemplateNode): string =>
  * and, for a site bound to a prop, renders that prop inside it, so the selector reads the value.
  */
 function declaresInside(component: string, testid: string, prop: string | null): boolean {
-	const named = new RegExp(`\\b${prop}\\b`)
+	const named = new RegExp(`\\b${escapeRegExp(String(prop))}\\b`)
 	let found = false
 	for (const file of sourceFiles().filter((path) => path.endsWith(`/${component}.vue`))) {
 		const { template } = parseSource(file)
@@ -118,7 +118,7 @@ function namesOwnElement(site: IdentifierSite, selector: readonly string[]): boo
 		const pattern = own.text
 			.slice(1, -1)
 			.split(/\$\{[^}]*\}/)
-			.map((part) => part.replace(/[.*+?^$()|[\]\\]/g, "\\$&"))
+			.map(escapeRegExp)
 		return new RegExp(`^${pattern.join(".*")}$`).test(testid)
 	}
 	if (own?.text === testid) return true

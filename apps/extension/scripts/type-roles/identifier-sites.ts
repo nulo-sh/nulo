@@ -4,6 +4,7 @@ import ts from "typescript"
 import {
 	boundAttr,
 	directive,
+	escapeRegExp,
 	NODE,
 	type ParsedSource,
 	parseSource,
@@ -116,7 +117,6 @@ type Candidate = {
 
 const normalize = (text: string): string => text.replace(/\s+/g, " ").trim()
 const start = (node: { loc: { start: unknown } }): Located => node.loc.start as Located
-const literal = (name: string): string => name.replace(/[$]/g, "\\$")
 
 function receivers(expression: string, pattern: RegExp): Set<string> {
 	return new Set([...expression.matchAll(pattern)].map((match) => match[1].replace(/[?!]/g, "")))
@@ -130,8 +130,8 @@ function hasSlicePair(text: string): boolean {
 /** Matches a call to any of `callables` or any mention of `values` (a local `computed`, read bare or as `.value`). */
 function reachPattern(callables: readonly string[], values: readonly string[]): RegExp | undefined {
 	const parts = [
-		...(callables.length ? [String.raw`(?<![\w$])(?:${callables.map(literal).join("|")})\s*\(`] : []),
-		...(values.length ? [String.raw`(?<![\w$.])(?:${values.map(literal).join("|")})(?![\w$])`] : []),
+		...(callables.length ? [String.raw`(?<![\w$])(?:${callables.map(escapeRegExp).join("|")})\s*\(`] : []),
+		...(values.length ? [String.raw`(?<![\w$.])(?:${values.map(escapeRegExp).join("|")})(?![\w$])`] : []),
 	]
 	return parts.length ? new RegExp(parts.join("|")) : undefined
 }

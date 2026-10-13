@@ -7,6 +7,7 @@ import { PAGES_OPTIONS } from "../pages-options"
 import {
 	boundAttr,
 	componentName,
+	escapeRegExp,
 	type ParsedSource,
 	parseSource,
 	REPO_ROOT,
@@ -115,7 +116,7 @@ export type LaterArc = keyof typeof ARC_GLOBS
 const GLOB_TOKENS: Record<string, string> = { "**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "{": "(?:", "}": ")", ",": "|" }
 
 export function globToRegExp(glob: string): RegExp {
-	const body = glob.replace(/[.+^$()|[\]\\]/g, "\\$&").replace(/\*\*\/|\*\*|\*|\{|\}|,/g, (token) => GLOB_TOKENS[token])
+	const body = glob.replace(/[.+?^$()|[\]\\]/g, "\\$&").replace(/\*\*\/|\*\*|\*|\{|\}|,/g, (token) => GLOB_TOKENS[token])
 	return new RegExp(`^${body}$`)
 }
 
@@ -437,7 +438,7 @@ function popupMounts(graph: SourceGraph): PopupMount[] {
 }
 
 function openersOf(key: string, own: string, files: readonly string[]): string[] {
-	const opens = new RegExp(String.raw`\b(?!isOpened\b)\w*[oO]pen\w*\(\s*["']${key}["']`)
+	const opens = new RegExp(String.raw`\b(?!isOpened\b)\w*[oO]pen\w*\(\s*["']${escapeRegExp(key)}["']`)
 	return files.filter((file) => file !== own && file !== POPUP_MANAGER && opens.test(read(file)))
 }
 

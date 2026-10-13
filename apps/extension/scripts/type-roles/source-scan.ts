@@ -102,6 +102,9 @@ export function parseSource(file: string, source = readFileSync(join(REPO_ROOT, 
 	return { file, scripts: [{ content: source, startLine: 1 }], styles: [] }
 }
 
+/** `text` with every regular-expression metacharacter escaped, so it matches only itself. */
+export const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
 /** `text` split at each `separator` character outside parentheses and brackets, parts trimmed, empty parts dropped. */
 export function splitTopLevel(text: string, separator: RegExp): string[] {
 	const parts: string[] = []
