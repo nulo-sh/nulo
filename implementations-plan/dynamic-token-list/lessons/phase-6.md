@@ -28,3 +28,12 @@ Round 1: **reject**, one blocking finding. All seven accepted and fixed; each fi
 7. Comments: `SUSPECT`'s comment named only verifying lists, the cap comments said "extension version", and one type comment narrated its type.
 
 Round 2 (resumed): **approve**, "No new material findings. Confidence: high." It confirmed that an early alarm re-arms, a due or absent deadline refreshes, a discarded envelope refetches, and that `updateMarker`'s moved check keeps the purge guarantee.
+
+## Final cross-arc review (fresh Codex session, `gpt-6.1-sol`, high)
+
+Round 1: **conditional approve**, no blocking finding. All four accepted and fixed:
+
+1. Priced smoke specs took the held list's first priced entry but seeded only a `usd-coin` quote, so a list without USDC broke them. A priced spec now quotes its own token's price id (`seedUsdQuoteAndReload(page, scope.token.priceId)`).
+2. Smoke required the list to price a token, hold two tokens and list a Testnet entry, none of which the format requires, so a valid publish could red a PR or a release. A source run now holds a fixed two-token list (`E2E_LIST_TOKENS`); specs that price nothing name fixture tokens; the five priced tests skip through `skipUnlessListPrices` when the held list prices nothing (checked by unpricing the fixture: 5 skipped, 6 passed); the live leg accepts zero Testnet entries.
+3. `infra/token-list/FORMAT.md` said the listed name is checked against the chain; only class, symbol and decimals are. Fixed on arc 1.
+4. Two comments that restated their identifiers: removed (one on each arc).
