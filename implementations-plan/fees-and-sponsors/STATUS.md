@@ -24,3 +24,5 @@
 - 2026-10-13 Phase 2.1 gate (#91): pass (lint, typecheck:all, unit; network fee-methods Chrome 8/8; smoke security-reset Chrome).
 - 2026-10-13 Phase 2.2 gate (#107) at e28f18dd: lint, typecheck:all, unit (88 files, 1498 tests), network authwit-lifecycle Chrome 1/1 pass; the Firefox leg was stopped by the runner's time limit mid-run and is folded into Phase 2.3's gate (same file, both browsers).
 - 2026-10-13 Phase 2.3 gate (#113) at 86cbc4f2: lint, typecheck:all, unit (extension 3456 in the touched suites, wallet-bridge 750); network retry 0 fee-sponsor-funding, authwit-lifecycle, tx-sendTx-feePayer: Chrome 4/4 (305 s), Firefox 4/4 (562 s), which also closes Phase 2.2's Firefox leg.
+- 2026-10-13 Phases 2.4 (221e0d71) and 2.5 (cb3e9c48): lint, typecheck:all, `bun run test` (754 files, 11824 tests); network Phase 1.5 list Chrome retry 0, 16/16 (1208 s, a temporary probe's 180 s wait included).
+- 2026-10-13 review round 1: Codex 3 findings, fixed in aac6d2e1; Opus approve with 3 lows (1 shared, 2 known limits). Codex round 2 running.

@@ -19,3 +19,25 @@
 - Send: `isAllowedToSend` requires `feeEstimate`; the estimate watch lists token, network and account too (D21). Tests: Confirm off before the estimate and after an input change, off after a failure (OA-9 A), an estimate for the network just left never enables it. Mutation: dropping the term fails all three.
 - Authwit popups (OA-8 A): `estimateRevokeFee` / `estimateRegistryToggleFee` build through the same code as the sends (`revokeOperation`, `registryToggleOperation`) and call `ExecutionService.estimateSendTransactionFee` (admission, cancel); `cancelFeeEstimate` delegates. Both join #196's guard table. `useWalletTxEstimates` binds each key's estimate to its inputs and re-asks every key synchronously on a scope change. The card gets the estimate (readout) and `fallsBack` (D20).
 - App-paid rows (OA-7 B): D18 and D19. `EmbeddedStrategy` names `appPayer` from the kernel; `probeAppPayerFunding` shares `coversFeeLimit` with the sponsor probe; the execute window estimates each app-paid standard operation once and holds Confirm on `provenShort`.
+- Gate at 86cbc4f2: network `fee-sponsor-funding`, `authwit-lifecycle`, `tx-sendTx-feePayer` at retry 0, Chrome 4/4 (305 s), Firefox 4/4 (562 s).
+- **Missed at this gate:** the phase ran only the touched suites, so `pages/send.test.ts` (19 tests that sent before any estimate landed) went red unseen until Phase 2.5's full run; repaired in 024f9b4a. A gate's unit leg is the whole `bun run test`.
+
+## Phase 2.4: the nudge, the notice and the loading row (#114, #115)
+
+- Notice: D22, the four signed forms by takeover kind. Loading row: D23 (`verifying`, selectable, transaction change only). Nudge: D24.
+- The first loading-row draft made `verifyingSponsorId` read `effectiveMethod`, which on Send reads `methods` while pending: a computed cycle. The row id is set by the transaction watcher and cleared by an `effectiveMethod` watcher instead.
+- Mutation: dropping the nudge rule fails both nudge tests; a constant `verifyingSponsorId` fails the loading test.
+
+## Phase 2.5: one cap rule, the shown maximum, the shortfall, reuse (#188, #118)
+
+- D25 to D29. `feeCapFor` replaces four copies of the cap arithmetic; `finalizeGasLimits` keeps its precedence (an embedded app cap still wins before the pre-set cap).
+- `getEstimatedFee` first called `GasSettings.getFeeLimit()`, which test fixtures with plain gas settings lack; `feeLimitOf` computes the same sum from the fields, pinned equal to `getFeeLimit`.
+- Dropping the transfer cache's re-wrap of the fee reply broke the composition harness (a plain reply has no `mul`); the class is now given once, in `predictedWorstMinFees`.
+- Mutation: each Confirm gate on a shortfall (Send, app window, registry popup) fails its test when removed.
+- Network gate at cb3e9c48: the Phase 1.5 list on Chrome at retry 0, 16/16, 1208 s (a temporary 180 s probe wait included; the probe was reverted).
+
+## Phase 2.6: review round 1
+
+- Codex: three findings, all fixed in aac6d2e1 (picks keyed by profile, a shown shortfall held through a re-estimate, Revoke's gate tested). Opus: approve, three lows (one shared with Codex, two known limits).
+- The in-mount pick map outlived #91's move to per-profile storage: when storage gains a key dimension, the in-memory caches over it need the same key.
+
