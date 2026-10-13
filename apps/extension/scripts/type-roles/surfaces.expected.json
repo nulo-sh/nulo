@@ -585,7 +585,7 @@
 			"source": "apps/extension/src/popup/pages/holdings.vue",
 			"arcs": [3],
 			"reach": "#/popup/holdings",
-			"states": ["default"],
+			"states": ["default", "a pasted address no listed token matches"],
 			"suite": "smoke"
 		},
 		{

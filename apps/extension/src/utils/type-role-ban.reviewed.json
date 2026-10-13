@@ -3925,6 +3925,12 @@
 			"text": "font-size: 10px",
 			"role": "label",
 			"at": ".sort"
+		},
+		{
+			"rule": "identifier",
+			"text": "trimaddress(addcandidate, 4, 2, \"…\")",
+			"role": "data",
+			"at": "span[data-testid=holdings-add-token-address]"
 		}
 	],
 	"apps/extension/src/popup/components/modules/send/FeeCostReadout.vue": [

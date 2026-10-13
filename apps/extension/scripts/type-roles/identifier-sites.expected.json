@@ -272,6 +272,17 @@
 			"liveFrom": 3
 		},
 		{
+			"file": "apps/extension/src/popup/components/modules/holdings/TokenList.vue",
+			"expression": "trimAddress(addCandidate, 4, 2, \"…\")",
+			"branch": "addCandidate",
+			"ordinal": 0,
+			"role": "data",
+			"selector": "[data-testid=\"holdings-add-token-address\"]",
+			"surface": "popup-holdings",
+			"state": "a pasted address no listed token matches",
+			"liveFrom": 3
+		},
+		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
 			"expression": "searchTerm",
 			"branch": "!(selectedContact && !holdView)",
