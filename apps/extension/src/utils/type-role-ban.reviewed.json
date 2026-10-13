@@ -5325,6 +5325,20 @@
 			"at": ".fee_grid_key"
 		}
 	],
+	"apps/extension/src/popup/components/modules/tx/TxHashRow.vue": [
+		{
+			"rule": "identifier",
+			"text": "trimaddress(hash, 6, 4)",
+			"role": "data",
+			"at": "a[data-testid=linkTestid]"
+		},
+		{
+			"rule": "identifier",
+			"text": "trimaddress(hash, 6, 4)",
+			"role": "data",
+			"at": "span[data-testid=copyTestid]"
+		}
+	],
 	"apps/extension/src/popup/components/popups/AccountsPopup.vue": [
 		{
 			"rule": "face",
@@ -6283,10 +6297,34 @@
 			"at": ".empty_title"
 		},
 		{
+			"rule": "face",
+			"text": "font-family: var(--font-headline)",
+			"role": "label-section",
+			"at": ".filter_label"
+		},
+		{
 			"rule": "tracking",
 			"text": "letter-spacing: -0.02em",
 			"role": "title-page",
 			"at": ".empty_title"
+		},
+		{
+			"rule": "tracking",
+			"text": "letter-spacing: 0.12em",
+			"role": "label-section",
+			"at": ".filter_label"
+		},
+		{
+			"rule": "case",
+			"text": "text-transform: uppercase",
+			"role": "label-section",
+			"at": ".filter_label"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-size: 11px",
+			"role": "label-section",
+			"at": ".filter_label"
 		},
 		{
 			"rule": "faceless",
@@ -6305,6 +6343,12 @@
 			"text": "font-weight: 600",
 			"role": "title-page",
 			"at": ".empty_title"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-weight: 700",
+			"role": "label-section",
+			"at": ".filter_label"
 		}
 	],
 	"apps/extension/src/popup/pages/auth.vue": [
@@ -7293,126 +7337,6 @@
 			"at": "Text \"{{ hiddenAccounts.length }}\""
 		}
 	],
-	"apps/extension/src/popup/pages/settings/advanced/account-state/authwits/index.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "body",
-			"at": "Text \"Account authwits registry\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "drop",
-			"at": "Text \"disabled\""
-		}
-	],
-	"apps/extension/src/popup/pages/settings/advanced/account-state/contracts/index.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"14\"",
-			"role": "row-title",
-			"at": "Text \"Contract\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "row-title",
-			"at": "Text \"Contract\""
-		}
-	],
-	"apps/extension/src/popup/pages/settings/advanced/account-state/notes/index.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label",
-			"at": ".render_error_label"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "meta",
-			"at": ".contract"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "data",
-			"at": ".location"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "data",
-			"at": ".raw_line"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "body",
-			"at": ".render_error_msg"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.02em",
-			"role": "meta",
-			"at": ".contract"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.06em",
-			"role": "label",
-			"at": ".render_error_label"
-		},
-		{
-			"rule": "size",
-			"text": "font-size: 10px",
-			"role": "meta",
-			"at": ".contract"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 10px",
-			"role": "label",
-			"at": ".render_error_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "data",
-			"at": ".raw_line"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "body",
-			"at": ".render_error_msg"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "data",
-			"at": ".location"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "drop",
-			"at": ".contract_name"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 600",
-			"role": "meta",
-			"at": ".contract"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label",
-			"at": ".render_error_label"
-		}
-	],
 	"apps/extension/src/popup/pages/settings/connected-apps/[id].vue": [
 		{
 			"rule": "text-prop",
@@ -7559,6 +7483,126 @@
 			"text": "font-weight: 700",
 			"role": "title-page",
 			"at": ".empty_label"
+		}
+	],
+	"apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue": [
+		{
+			"rule": "text-prop",
+			"text": "size=\"13\"",
+			"role": "body",
+			"at": "Text \"Account authwits registry\""
+		},
+		{
+			"rule": "text-prop",
+			"text": "size=\"13\"",
+			"role": "drop",
+			"at": "Text \"disabled\""
+		}
+	],
+	"apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue": [
+		{
+			"rule": "text-prop",
+			"text": "size=\"14\"",
+			"role": "row-title",
+			"at": "Text \"Contract\""
+		},
+		{
+			"rule": "text-prop",
+			"text": "weight=\"600\"",
+			"role": "row-title",
+			"at": "Text \"Contract\""
+		}
+	],
+	"apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue": [
+		{
+			"rule": "face",
+			"text": "font-family: var(--font-headline)",
+			"role": "label",
+			"at": ".render_error_label"
+		},
+		{
+			"rule": "face",
+			"text": "font-family: var(--font-mono)",
+			"role": "meta",
+			"at": ".contract"
+		},
+		{
+			"rule": "face",
+			"text": "font-family: var(--font-mono)",
+			"role": "data",
+			"at": ".location"
+		},
+		{
+			"rule": "face",
+			"text": "font-family: var(--font-mono)",
+			"role": "data",
+			"at": ".raw_line"
+		},
+		{
+			"rule": "face",
+			"text": "font-family: var(--font-mono)",
+			"role": "body",
+			"at": ".render_error_msg"
+		},
+		{
+			"rule": "tracking",
+			"text": "letter-spacing: 0.02em",
+			"role": "meta",
+			"at": ".contract"
+		},
+		{
+			"rule": "tracking",
+			"text": "letter-spacing: 0.06em",
+			"role": "label",
+			"at": ".render_error_label"
+		},
+		{
+			"rule": "size",
+			"text": "font-size: 10px",
+			"role": "meta",
+			"at": ".contract"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-size: 10px",
+			"role": "label",
+			"at": ".render_error_label"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-size: 11px",
+			"role": "data",
+			"at": ".raw_line"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-size: 11px",
+			"role": "body",
+			"at": ".render_error_msg"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-size: 12px",
+			"role": "data",
+			"at": ".location"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-weight: 500",
+			"role": "drop",
+			"at": ".contract_name"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-weight: 600",
+			"role": "meta",
+			"at": ".contract"
+		},
+		{
+			"rule": "faceless",
+			"text": "font-weight: 700",
+			"role": "label",
+			"at": ".render_error_label"
 		}
 	],
 	"apps/extension/src/popup/pages/settings/developer/index.vue": [
@@ -8497,18 +8541,6 @@
 			"text": "trimaddress(tx.block.hash, 6, 4)",
 			"role": "meta",
 			"at": "span \"{{ trimAddress(tx.block.hash, \""
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(tx.hash, 6, 4)",
-			"role": "data",
-			"at": "a[data-testid=tx-hash-link]"
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(tx.hash, 6, 4)",
-			"role": "data",
-			"at": "span \"{{ trimAddress(tx.hash, 6, 4) \""
 		},
 		{
 			"rule": "identifier",

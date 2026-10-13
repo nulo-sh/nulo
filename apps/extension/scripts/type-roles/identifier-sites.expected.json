@@ -322,7 +322,7 @@
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-selector\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an encoded_call authwit record",
 			"liveFrom": 2
 		},
@@ -333,7 +333,7 @@
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-hash\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with a message_hash authwit record",
 			"liveFrom": 2
 		},
@@ -344,7 +344,7 @@
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-caller\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a public authwit granted (network)",
 			"liveFrom": 2
 		},
@@ -355,7 +355,7 @@
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-contract\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a public authwit granted (network)",
 			"liveFrom": 2
 		},
@@ -366,7 +366,7 @@
 			"ordinal": 1,
 			"role": "data",
 			"selector": "[data-testid=\"record-caller\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an encoded_call authwit record",
 			"liveFrom": 2
 		},
@@ -377,7 +377,7 @@
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-to\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an encoded_call authwit record",
 			"liveFrom": 2
 		},
@@ -388,7 +388,7 @@
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-consumer\"]",
-			"surface": "popup-settings-advanced-account-state-authwits",
+			"surface": "popup-settings-developer-account-state-authwits",
 			"state": "a backup restored with an intent authwit record",
 			"liveFrom": 2
 		},
@@ -725,46 +725,46 @@
 			"liveFrom": 2
 		},
 		{
-			"file": "apps/extension/src/popup/pages/settings/advanced/account-state/contracts/index.vue",
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
 			"expression": "contract",
 			"branch": "appStore.isLogined && contracts.length && !(searchTerm && filteredContracts.length === 0)",
 			"ordinal": 0,
 			"role": "data-lead",
 			"selector": "[data-testid=\"address-display\"]",
-			"surface": "popup-settings-advanced-account-state-contracts",
+			"surface": "popup-settings-developer-account-state-contracts",
 			"state": "a registered contract (network)",
 			"liveFrom": 2
 		},
 		{
-			"file": "apps/extension/src/popup/pages/settings/advanced/account-state/notes/index.vue",
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue",
 			"expression": "display.contractTrim",
 			"branch": "appStore.isLogined && filteredDisplayNotes.length && display.contractTrim",
 			"ordinal": 0,
 			"role": "meta",
 			"selector": "[data-testid=\"note-contract\"]",
-			"surface": "popup-settings-advanced-account-state-notes",
+			"surface": "popup-settings-developer-account-state-notes",
 			"state": "a note (network)",
 			"liveFrom": 4
 		},
 		{
-			"file": "apps/extension/src/popup/pages/settings/advanced/account-state/notes/index.vue",
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue",
 			"expression": "entry.value",
 			"branch": "appStore.isLogined && filteredDisplayNotes.length && display",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"record-value\"]",
-			"surface": "popup-settings-advanced-account-state-notes",
+			"surface": "popup-settings-developer-account-state-notes",
 			"state": "a note exists (network)",
 			"liveFrom": 2
 		},
 		{
-			"file": "apps/extension/src/popup/pages/settings/advanced/account-state/senders/index.vue",
+			"file": "apps/extension/src/popup/pages/settings/developer/account-state/senders/index.vue",
 			"expression": "sender",
 			"branch": "senders.length",
 			"ordinal": 0,
 			"role": "data-lead",
 			"selector": "[data-testid=\"address-display\"]",
-			"surface": "popup-settings-advanced-account-state-senders",
+			"surface": "popup-settings-developer-account-state-senders",
 			"state": "a registered sender (network)",
 			"liveFrom": 2
 		},
@@ -835,9 +835,9 @@
 			"liveFrom": 2
 		},
 		{
-			"file": "apps/extension/src/popup/pages/tx/[id].vue",
-			"expression": "trimAddress(tx.hash, 6, 4)",
-			"branch": "tx && tx?.hash && explorerUrl",
+			"file": "apps/extension/src/popup/components/modules/tx/TxHashRow.vue",
+			"expression": "trimAddress(hash, 6, 4)",
+			"branch": "explorerUrl",
 			"ordinal": 0,
 			"role": "data",
 			"selector": "[data-testid=\"tx-hash-link\"]",
@@ -846,9 +846,9 @@
 			"liveFrom": 3
 		},
 		{
-			"file": "apps/extension/src/popup/pages/tx/[id].vue",
-			"expression": "trimAddress(tx.hash, 6, 4)",
-			"branch": "tx && tx?.hash && !(explorerUrl)",
+			"file": "apps/extension/src/popup/components/modules/tx/TxHashRow.vue",
+			"expression": "trimAddress(hash, 6, 4)",
+			"branch": "!(explorerUrl)",
 			"ordinal": 1,
 			"role": "data",
 			"selector": "[data-testid=\"tx-hash\"]",

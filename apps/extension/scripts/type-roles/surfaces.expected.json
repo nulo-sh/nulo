@@ -1,42 +1,42 @@
 {
 	"surfaces": [
 		{
-			"id": "popup-settings-advanced-account-state-senders",
+			"id": "popup-settings-developer-account-state-senders",
 			"name": "Account state: senders",
 			"kind": "route",
-			"source": "apps/extension/src/popup/pages/settings/advanced/account-state/senders/index.vue",
+			"source": "apps/extension/src/popup/pages/settings/developer/account-state/senders/index.vue",
 			"arcs": [3, 4],
-			"reach": "#/popup/settings/advanced/account-state/senders",
+			"reach": "#/popup/settings/developer/account-state/senders",
 			"states": ["default"],
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-settings-advanced-account-state-notes",
+			"id": "popup-settings-developer-account-state-notes",
 			"name": "Account state: notes",
 			"kind": "route",
-			"source": "apps/extension/src/popup/pages/settings/advanced/account-state/notes/index.vue",
+			"source": "apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue",
 			"arcs": [3, 4],
-			"reach": "#/popup/settings/advanced/account-state/notes",
+			"reach": "#/popup/settings/developer/account-state/notes",
 			"states": ["default"],
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-settings-advanced-account-state-contracts",
+			"id": "popup-settings-developer-account-state-contracts",
 			"name": "Account state: contracts",
 			"kind": "route",
-			"source": "apps/extension/src/popup/pages/settings/advanced/account-state/contracts/index.vue",
+			"source": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
 			"arcs": [3, 4],
-			"reach": "#/popup/settings/advanced/account-state/contracts",
+			"reach": "#/popup/settings/developer/account-state/contracts",
 			"states": ["default"],
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-settings-advanced-account-state-authwits",
+			"id": "popup-settings-developer-account-state-authwits",
 			"name": "Account state: authwits",
 			"kind": "route",
-			"source": "apps/extension/src/popup/pages/settings/advanced/account-state/authwits/index.vue",
+			"source": "apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue",
 			"arcs": [3, 4],
-			"reach": "#/popup/settings/advanced/account-state/authwits",
+			"reach": "#/popup/settings/developer/account-state/authwits",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -81,12 +81,12 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "popup-settings-advanced-account-state",
+			"id": "popup-settings-developer-account-state",
 			"name": "Account state",
 			"kind": "route",
-			"source": "apps/extension/src/popup/pages/settings/advanced/account-state/index.vue",
+			"source": "apps/extension/src/popup/pages/settings/developer/account-state/index.vue",
 			"arcs": [3, 4],
-			"reach": "#/popup/settings/advanced/account-state",
+			"reach": "#/popup/settings/developer/account-state",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -706,7 +706,7 @@
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ConfirmPopup.vue",
 			"arcs": [3],
-			"reach": "open 'confirm' from composables/useLockWallet.ts, composables/useProfileImportFlow.ts, popup/pages/settings/advanced/account-state/senders/index.vue, popup/pages/settings/connected-apps/[id].vue, popup/pages/settings/connected-apps/index.vue, popup/pages/settings/contacts/index.vue, popup/pages/settings/fpcs/index.vue, popup/pages/settings/lock.vue, popup/pages/settings/networks/[id].vue, popup/pages/settings/tokens/index.vue, popup/pages/tokens/[id].vue",
+			"reach": "open 'confirm' from composables/useLockWallet.ts, composables/useProfileImportFlow.ts, popup/pages/settings/developer/account-state/senders/index.vue, popup/pages/settings/connected-apps/[id].vue, popup/pages/settings/connected-apps/index.vue, popup/pages/settings/contacts/index.vue, popup/pages/settings/fpcs/index.vue, popup/pages/settings/lock.vue, popup/pages/settings/networks/[id].vue, popup/pages/settings/tokens/index.vue, popup/pages/tokens/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -716,7 +716,7 @@
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/DataViewerPopup.vue",
 			"arcs": [3],
-			"reach": "open 'data_viewer' from popup/components/popups/RevokeAuthwitsPopup.vue, popup/pages/import.vue, popup/pages/settings/advanced/account-state/authwits/index.vue, popup/pages/settings/advanced/account-state/notes/index.vue",
+			"reach": "open 'data_viewer' from popup/components/popups/RevokeAuthwitsPopup.vue, popup/pages/import.vue, popup/pages/settings/developer/account-state/authwits/index.vue, popup/pages/settings/developer/account-state/notes/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -866,7 +866,7 @@
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewSenderPopup.vue",
 			"arcs": [3],
-			"reach": "open 'new_sender' from popup/pages/settings/advanced/account-state/senders/index.vue",
+			"reach": "open 'new_sender' from popup/pages/settings/developer/account-state/senders/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -876,7 +876,7 @@
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ChangeAuthwitsRegistryPopup.vue",
 			"arcs": [3],
-			"reach": "open 'change_authwits_registry' from popup/pages/settings/advanced/account-state/authwits/index.vue",
+			"reach": "open 'change_authwits_registry' from popup/pages/settings/developer/account-state/authwits/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
@@ -886,7 +886,7 @@
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/RevokeAuthwitsPopup.vue",
 			"arcs": [3],
-			"reach": "open 'revoke_authwits' from popup/pages/settings/advanced/account-state/authwits/index.vue",
+			"reach": "open 'revoke_authwits' from popup/pages/settings/developer/account-state/authwits/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
 		},
