@@ -7,3 +7,4 @@
 - 2026-10-13: Phase 1 gate pass: check:plans 0 findings; label known-limit created (#6E7781); lint 0; no local paths.
 - 2026-10-13: Phase 2 gate pass: check:plans 0 findings; lint 0. Deviation: the brief's 'Until that README section exists' sentence is dropped (the section lands in Phase 3); 'launched' reads 'started'.
 - 2026-10-13: Phase 3 gate pass: check:plans 0 findings; the verbatim rule appears once; lint 0. Standard at de9f1bf53ce0df048f00053214e8caca46c6eb90.
+- 2026-10-13: Phase 4 gate pass: the skill's one-liner prints 21 on run 38364426588 (floor; the exact envelope is 21.92 min); check:plans 0; lint 0.

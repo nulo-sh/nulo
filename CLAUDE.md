@@ -533,6 +533,8 @@ No file in this repository holds a backlog. Open work lives in GitHub issues; a 
 
 `audit:vue` excludes e2e tests (the `tests/e2e/**` entry in `apps/extension/vitest.config.ts`'s `exclude`). Smoke and network e2e are separate gates.
 
+**E2E has a runtime budget, not a file quota.** Each added e2e scenario names the distinct failure mode it proves, why a cheaper layer (unit, component, composition) cannot establish it, and its estimated then measured runtime; the PR body states the per-browser suite wall-clock before and after. File count is diagnostic only: merging files to hit a number saves nothing. A timeout stays visible in the numbers. How to measure both: the [`e2e-testing`](./.claude/skills/e2e-testing/SKILL.md) skill, § Runtime budget.
+
 ### In CI (server-side enforcement)
 
 Configured in [`.github/`](./.github/). The full contributor guide is at [`CI.md`](./CI.md); the quick reference is at [`.github/WORKFLOWS.md`](./.github/WORKFLOWS.md).
