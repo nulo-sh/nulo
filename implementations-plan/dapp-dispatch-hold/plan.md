@@ -203,7 +203,7 @@ lock ─► onActiveProfileChanged(undefined): drop every unsettled hold "sessio
 - **Why the hold opens on the first tick.**
   - Upstream calls `onSessionEstablished` synchronously, right after it sets the active session and posts the key-exchange response. A dApp message needs a round trip through the content script and an async decrypt, so no message can arrive before the hold exists. The same reasoning already guards `establishmentStatus`.
   - Opening here also puts the hash at hand: it is on the `ActiveSession`. So `session-established.ts` needs only a `release()` dependency.
-  - A missing hold at arrival (possible only if upstream reorders this) drops the call as `wallet_refused`. It is never let through.
+  - A missing hold at arrival (possible only if upstream reorders this) drops the call there, with no row and nothing sent (L18). It is never let through.
 - **Why a call acts only while its own session is live.** A call carries the `ActiveSession` object upstream handed it, and `bindLiveSession` binds every outward effect of the call to that object (`handler.getSession(id) === session`). A same-id successor can exist because termination restores the discovery and a confirmed check frees its slot, so the page can key-exchange the same id again; the successor is stamped to the same profile before its check shows.
   - **At arrival.** Upstream reads the session before it awaits the decrypt and does not re-check it (`background_connection_handler.js`, `handleEncryptedMessage`). A message whose decrypt finishes after its session ended and the id re-keyed arrives with the old object. It must not capture the successor's hold.
   - **After the hold releases.** A call parked in the FIFO keeps its settled establishment and its `released` hold. A dead session's call is dropped here, before it reads the fence or the legal record.
@@ -224,6 +224,7 @@ lock ─► onActiveProfileChanged(undefined): drop every unsettled hold "sessio
   - Every unsettled hold is dropped `session_ended` first, then each session is terminated inside its own try/catch, as `profile-switch-teardown.ts` does. The terminations' `end(…, "wallet_refused")` then find settled holds, so the rows read the lock's copy, and one throwing termination cannot leave another hold held.
   - A fast unlock can supersede the lock's landing, so the check may stay mounted (`locked-state.ts`). That changes nothing: its hold is already dropped and removed, so a later They match finds no hold and only closes.
   - `profile-switch-teardown.ts`'s header line "LOCK deliberately tears nothing down" is narrowed to confirmed channels in the same PR.
+- **Why the wallet's own terminations drop the hold first.** Refusal, a deleted row, a switch with no lock and a cross-origin navigation end a session through one seam in `background.ts` (`endSession`), which drops its hold `wallet_refused` before it calls `terminateSession`. A termination that throws leaves the session live upstream, so `onSessionTerminated`, and its `end`, never runs; without the early drop the held calls and their queued rows would wait on a session the wallet already refused. The settled hold stays in the map until the session really ends, so a later call on it is dropped too, and the stale hash releases nothing.
 - **Counting held calls.** The cap bounds the number of admitted waiting calls per session, not memory: payload bytes and messages still being decrypted are not counted (§ Residual risk).
   - `admit()` increments a counter only while the hold is unsettled. Every call admitted then is still waiting, because nothing passes or drops without settling the hold. The counter is therefore exactly the number of held calls, with no decrement path to get wrong.
   - Once released, `admit()` always says yes, and the execution lane's caps apply as today.
@@ -635,6 +636,18 @@ D = driver draft, C = Codex draft, O = Opus draft. Later rounds amend a row in p
 | L15 | A released hold in the map | — | removed when settled | removed when settled | kept until `end` or a re-key (contradiction check) | Removing it on release would drop every later call as "no hold" |
 | L16 | Calls from an ended session after a same-id re-key | — | — | — | `bindLiveSession` (`handler.getSession(id) === session`) at arrival, after the release, synchronously before the dispatch, and on every send and termination (contradiction check; widened by the double audit and the final pass, replacing a hash comparison at arrival only) | Upstream hands `onWalletMessage` the object it read before the decrypt, and a parked call keeps its settled gates; the session object is the ground truth upstream already owns |
 | L17 | The Phase 3 network gate | — | — | — | armed `NULO_E2E_PROVERLESS=1` for the targeted and full runs, plus the prover-ON canary files unarmed (double audit) | The proverless guard refuses an unarmed selection of a `@requires-proverless` file |
+| L18 | A call whose session is not live at arrival, or that finds no hold | — | — | — | dropped at arrival: a `debug` line, no queued row, no FIFO slot (implementation) | Routing it through the outcome gate would file its queued row under the successor's id after a same-id re-key; test 23c pins it |
+
+**Orchestrator decisions** (on approving the plan, 2026-10-13):
+
+| # | Decision |
+|---|---|
+| D-orch-1 | Ask 1: yes. The PR opens as a draft once Phases 1–4 pass and the Codex loop converges, and stays a draft until the owner signs the decision page (DH-0); the orchestrator marks it ready and merges |
+| D-orch-2 | Ask 2: yes. DH-2 option A ships: a lock ends an unconfirmed session and the app gets the standard disconnect, a behaviour P2-09's scope named |
+| D-orch-3 | Ask 3: yes. The held-call cap answers `-32005` with today's message and needs no C11 page item; DH-5 stays an ask for the wording only |
+| D-orch-4 | DH-1, DH-3, DH-4 and DH-6 ship "what ships now": no new words, no new surface, no playground change. A surface that would need a word goes to `OWNER-ASKS.md` and ships without it |
+| D-orch-5 | The shots cover both browsers, light theme, one per § UI impact surface, in the PR body only; the `-32005` message is quoted, not captured |
+| D-orch-6 | The close-out lands in this PR, assuming "what ships now": status "in review: held for decision page" |
 
 ## Audit verdicts
 
@@ -687,3 +700,19 @@ No contradiction with the lane rules was found by either.
 ### Final fresh Codex pass, round 2 (2026-10-13)
 
 **Codex (gpt-6.1-sol, high, fresh session): conditional approve.** Round 1's fixes close their findings; no remaining path dispatches or answers a call before They match on a shown check. One condition, a minor: Phase 2 step 2 still made the `showCheck` extraction unconditional, against L13. Fixed: the step now extracts only if Biome reports the budget exceeded. With that condition met, the panel's last verdict is **approve**; no open finding remains.
+
+### Implementation review, round 1 (2026-10-13)
+
+**Codex (gpt-6.1-sol, high, fresh session): reject.** Three findings, all accepted:
+1. Blocker: a wallet-decided termination that throws before upstream's delete leaves the session live, so `onSessionTerminated` never runs and the held send's row stays queued and vouched instead of failing `wallet_refused`. Fixed: refusal, row deletion, a switch with no lock and a cross-origin navigation end a session through one seam, `endSession`, which drops the hold before it calls the transport (§ Mechanics). Test: a `test.each` over the three triggers with a throwing termination. With the seam's drop removed, all three go red.
+2. Minor: the e2e "no window created" assertions were single reads. Fixed: read over a bounded window with `staysFor`.
+3. Nit: inserting `recordCreatedWindows` detached `waitForPopupClosed`'s doc comment. Fixed.
+
+**Opus (general-purpose, fresh): conditional approve.** It found no path past the hold. Seven findings:
+1. Minor, accepted: nothing pinned the drop on a failed establishment, and § Tests item 23 was missing. In the lost-approval "replaced" path nothing terminates the session, so without the drop a lock would end it by id. Added test 23 ("replaced" establishment, then a lock ends nothing); it goes red with the drop removed.
+2. Minor, accepted: the lock test's "its hash releases nothing after" clause was vacuous, because the session had already ended. The clause is removed; unit test 2 covers settled hashes.
+3. Minor, rejected: answer calls on a live session whose hold was dropped (the throwing-termination state), or stop defending that state. The state needs `terminateSession` to throw before its delete, which our `sendToTab` cannot produce (it catches the rejection). The app-side wait there is the closed check's (DH-6), and nothing runs. The seam is kept because every termination site in this module already treats termination as fallible. A response path for an unreachable state is not added.
+4. Nit: the same as Codex 3.
+5. Nit, accepted: test 26's "read A is pending" was a single read. Fixed with `staysFor`.
+6. Nit, accepted: the verify page's `checkHash` comment was false for an open without a hash. Fixed.
+7. Nit, rejected: move the lock's per-session termination line from Info to Debug. Its sibling teardown lines (a revocation, a profile switch) log the same identifier at Info, and a session the wallet ended belongs in a bug report.
