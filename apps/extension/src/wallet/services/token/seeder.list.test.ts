@@ -8,7 +8,18 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { fakeBrowser } from "@webext-core/fake-browser"
 import type { DefaultTokenSeed } from "./default-tokens"
 import { type SeedPreview, seedPins } from "./seeder"
-import { CHAIN_ID, KEY, SEED, disposeSeeders, goodPreview, makeSeeder, readMarker, skipBackoff } from "./seeder.harness"
+import {
+	CHAIN_ID,
+	KEY,
+	MARKER_KEY,
+	SEED,
+	disposeSeeders,
+	goodPreview,
+	makeSeeder,
+	readMarker,
+	skipBackoff,
+	writeMarker,
+} from "./seeder.harness"
 
 const REPINNED: DefaultTokenSeed = { ...SEED, expectedSymbol: "cUSDx" }
 
@@ -47,6 +58,23 @@ function heldPreview() {
 			}),
 	)
 	return { preview, held }
+}
+
+/** Parks the next read of the marker blob until the test releases it. */
+function holdNextMarkerRead(area: ReturnType<typeof makeSeeder>["api"]["storage"]["local"]) {
+	const held: { release?: () => void } = {}
+	const realGet = area.get.bind(area)
+	let armed = true
+	vi.spyOn(area, "get").mockImplementation(async (...args: Parameters<typeof area.get>) => {
+		if (armed && args[0] === MARKER_KEY) {
+			armed = false
+			await new Promise<void>((resolve) => {
+				held.release = resolve
+			})
+		}
+		return realGet(...args)
+	})
+	return held
 }
 
 describe("TokenSeeder — a new list while a pass is in flight", () => {
@@ -88,6 +116,40 @@ describe("TokenSeeder — a new list while a pass is in flight", () => {
 		expect(preview).toHaveBeenCalledTimes(1)
 		expect(deps.persist).not.toHaveBeenCalled()
 		expect((await seeder.getStatus(CHAIN_ID)).entries).toEqual([])
+	})
+
+	test("a re-pin while the commit reads its marker persists nothing from the old pins", async () => {
+		const { preview, held } = heldPreview()
+		const { seeder, deps, api, publish } = listSeeder({ preview })
+
+		const pass = seeder.run()
+		await vi.waitFor(() => expect(held.release).toBeDefined())
+		const read = holdNextMarkerRead(api.storage.local)
+		held.release?.(goodPreview())
+		await vi.waitFor(() => expect(read.release).toBeDefined())
+		const changed = publish([REPINNED])
+		read.release?.()
+		await Promise.all([pass, changed])
+
+		expect(deps.persist).not.toHaveBeenCalled()
+		expect((await readMarker())[KEY].verifiedPins).toBeUndefined()
+	})
+
+	test("a re-pin while the connect window reads the marker names nothing", async () => {
+		// Written, not seeded: a finished pass leaves marker reads in flight that the hold could catch.
+		await writeMarker({
+			[KEY]: { attempts: 1, outcome: "seeded", observedDecimals: SEED.expectedDecimals, verifiedPins: seedPins(SEED) },
+		})
+		const { seeder, api, publish } = listSeeder()
+		expect(await seeder.verifiedSeeds("p1", CHAIN_ID)).toEqual([SEED])
+
+		const read = holdNextMarkerRead(api.storage.local)
+		const named = seeder.verifiedSeeds("p1", CHAIN_ID)
+		await vi.waitFor(() => expect(read.release).toBeDefined())
+		const changed = publish([REPINNED])
+		read.release?.()
+		expect(await named).toEqual([])
+		await changed
 	})
 
 	test("a list change during a held persist: the row lands, and the token has no name under the new pins", async () => {

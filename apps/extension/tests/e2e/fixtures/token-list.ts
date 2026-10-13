@@ -110,9 +110,21 @@ export async function serveTokenList(): Promise<ListHost> {
 	}
 }
 
-/** The worker's refresh alarm, fired now from an extension page: the daily refresh, brought forward. */
+/**
+ * The daily refresh, brought forward: the stored deadline moved to now, then the worker's refresh
+ * alarm fired from an extension page. A tick before the deadline fetches nothing.
+ */
 export async function requestListRefresh(page: Page): Promise<void> {
-	await page.evaluate((name: string) => chrome.alarms.create(name, { when: Date.now() }), TOKEN_LIST_REFRESH_ALARM_NAME)
+	await page.evaluate(
+		async (key: string, name: string) => {
+			const raw = (await chrome.storage.local.get(key))[key]
+			const state = typeof raw === "string" ? (JSON.parse(raw) as Record<string, unknown>) : { failures: 0 }
+			await chrome.storage.local.set({ [key]: JSON.stringify({ ...state, nextAttemptAt: Date.now() }) })
+			await chrome.alarms.create(name, { when: Date.now() })
+		},
+		STORAGE_KEY,
+		TOKEN_LIST_REFRESH_ALARM_NAME,
+	)
 }
 
 export type StoredListState = { envelope?: string; failures: number }

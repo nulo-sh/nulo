@@ -69,7 +69,7 @@ surface.
 ## When it runs without a click
 
 A connected application's calls go through the interaction service. `isConfirmationNeeded`
-(`apps/extension/src/wallet/services/dapp-interaction/service.ts:686-715`) shows the confirmation
+(`apps/extension/src/wallet/services/dapp-interaction/service.ts:735-763`) shows the confirmation
 popup when the call's access level reaches the session's confirmation level, when a send spends the
 account's own Fee Juice (it names no fee payer, or pays itself), and always for token registration; the wallet-sdk session is created at
 `AccessLevel.Transactions` (`apps/extension/src/wallet/services/wallet-sdk/background.ts:1081`), so
@@ -77,7 +77,7 @@ sends prompt. Auth-witness creation prompts too, unless the user let that applic
 asking, the authorizations its granted scopes cover: a consent stored on the session
 (`packages/wallet-bridge/src/dispatcher.ts:604-628`). Simulations and utility calls at lower
 levels run silently for a session the user already approved
-(`apps/extension/src/wallet/services/dapp-interaction/service.ts:430-431`). A silent utility call can
+(`apps/extension/src/wallet/services/dapp-interaction/service.ts:464-465`). A silent utility call can
 therefore execute application-supplied bytecode and, through the oracle, cause node reads, with no
 per-request window. What it cannot do is any of the things listed above.
 

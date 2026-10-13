@@ -19,8 +19,8 @@ export class PinMismatchError extends Error {
 }
 
 /** Failed attempts per entry before the seeder stops retrying — until the
- *  next extension version, which resets the cap (each release gets one fresh
- *  round, so transient RPC failures never permanently kill a default token). */
+ *  next seed version (a release or a new list), which resets the cap, so
+ *  transient RPC failures never permanently kill a default token. */
 export const SEED_ATTEMPT_CAP = 3
 
 /** Wait before the seeder retries a failed attempt on its own, indexed by the
@@ -37,7 +37,7 @@ const DECIMALS_MAX = 18
 
 export type SeedMarkerEntry = {
 	attempts: number
-	/** Extension version active when `attempts` hit the cap. */
+	/** Seed version active when `attempts` hit the cap. */
 	cappedAtVersion?: string
 	/** Seed version under which a pin or metadata bound rejected this seed. Not
 	 *  retried until the version changes: a new release or a new signed list. */
@@ -329,9 +329,11 @@ export class TokenSeeder {
 
 	/** The listed defaults of `chainId` whose current pins this profile's seeding verified on chain. */
 	public async verifiedSeeds(profileId: string, chainId: number): Promise<DefaultTokenSeed[]> {
+		const epoch = this.epoch
 		const seeds = (await this.deps.getSeeds()).filter((s) => s.chainId === chainId)
 		if (seeds.length === 0) return []
 		const state = await this.readMarkerState(profileId)
+		if (this.epoch !== epoch) return []
 		return seeds.filter((seed) => state[seedKey(chainId, seed.contract)]?.verifiedPins === seedPins(seed))
 	}
 
@@ -360,8 +362,8 @@ export class TokenSeeder {
 		epoch?: number,
 	): Promise<void> {
 		return this.withMarkerLock(async () => {
-			if (epoch !== undefined && this.epoch !== epoch) return
 			const state = await this.readMarkerState(profileId)
+			if (epoch !== undefined && this.epoch !== epoch) return
 			const existing = state[key] ?? { attempts: 0 }
 			const next = update(existing)
 			if (existing.outcome === "deleted" && next.outcome !== "deleted") return
@@ -544,7 +546,8 @@ export class TokenSeeder {
 	 *  concurrent marker mutations. Purges bump the epoch BEFORE queueing on this
 	 *  same lock, so either we see the bump and abort, or our whole commit lands
 	 *  before the purge's cleanup (which then sweeps it) — no resurrection window
-	 *  either way. Direct reads/writes here: updateMarker would re-acquire the
+	 *  either way. A list change bumps the epoch without queueing here, so the
+	 *  check follows the last await before `persist()`. Direct reads/writes here: updateMarker would re-acquire the
 	 *  lock and deadlock the promise chain — never decompose this block further. */
 	private commitSeedResult(
 		ctx: SeedPassContext,
@@ -555,9 +558,8 @@ export class TokenSeeder {
 	): Promise<boolean> {
 		const { profile, network, epoch } = ctx
 		return this.withMarkerLock(async () => {
-			if (this.epoch !== epoch) return false
 			const latest = await this.readMarkerState(profile.id)
-			if (latest[key]?.outcome === "deleted") return false
+			if (this.epoch !== epoch || latest[key]?.outcome === "deleted") return false
 			await this.deps.persist({
 				profileId: profile.id,
 				networkId: network.id,

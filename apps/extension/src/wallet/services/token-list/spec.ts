@@ -9,7 +9,6 @@ export const TOKEN_LIST_URL = "https://tokens.nulo.sh/v1/list.json"
 /** The verified list the wallet acts on: the bundled-class entries, at most 16 per chain. */
 export type TokenListSnapshot = { sequence: number; keyId: string; entries: readonly TokenListEntry[] }
 
-/** Where the list comes from and which keys may sign it. */
 export type TokenListSource = { url: string; keys: readonly PinnedKey[] }
 
 /** What a refresh did; the only detail that reaches a log line. */

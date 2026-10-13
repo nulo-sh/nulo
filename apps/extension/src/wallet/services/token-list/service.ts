@@ -25,7 +25,7 @@ export const FAILURE_BACKOFF_MS: readonly number[] = [5 * 60_000, 30 * 60_000, 2
 const FETCH_TIMEOUT_MS = 10_000
 
 const FAILED: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused", "oversize", "http-status", "network"])
-/** A served list that verifies but cannot be used is worth a line in a bug report; a dead network is not. */
+/** A served list the wallet refused is worth a line in a bug report; a dead network is not. */
 const SUSPECT: ReadonlySet<RefreshOutcome> = new Set(["older-sequence", "refused", "oversize"])
 
 type StoredState = { envelope?: string; lastSuccessAt?: number; nextAttemptAt?: number; failures: number }
@@ -98,7 +98,7 @@ export class TokenListService implements IService {
 		this.legal = services.get(LegalAcceptanceService.name)
 		this.legal.onAcceptanceChanged.add(this.onAcceptanceChanged)
 		this.snapshot = await this.loadStored()
-		this.booted = this.boot().catch((error) => this.log(LogLevel.Warn, "token list boot failed", { error }))
+		this.booted = this.refreshIfDue().catch((error) => this.log(LogLevel.Warn, "token list boot failed", { error }))
 	}
 
 	/** The kept list, read synchronously by the seeder, the price map and the connect window. */
@@ -106,8 +106,9 @@ export class TokenListService implements IService {
 		return this.snapshot
 	}
 
+	/** A waking alarm also boots the service, whose refresh may finish before the tick arrives. */
 	public onAlarmTick(): Promise<void> {
-		return this.refresh()
+		return this.refreshIfDue()
 	}
 
 	/** Single-flight. Never rejects: the outcome and the next deadline are stored, or the failure logged. */
@@ -124,7 +125,7 @@ export class TokenListService implements IService {
 		if (status === "current") void this.refresh()
 	}
 
-	private async boot(): Promise<void> {
+	private async refreshIfDue(): Promise<void> {
 		if ((await this.legal.getStatus()) !== "current") return this.dispatcher.clear()
 		const due = (await this.readState()).nextAttemptAt
 		if (due !== undefined && due > this.now()) return this.dispatcher.create({ when: due })

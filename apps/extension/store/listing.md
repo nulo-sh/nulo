@@ -28,7 +28,7 @@ PRIVATE BY DEFAULT
 
 YOURS ALONE
 • Your keys stay on your device, behind your password or passkey.
-• No Nulo server, no account, no telemetry.
+• No account, no telemetry.
 • Back up your profile whenever you want.
 
 APPS HAVE TO ASK

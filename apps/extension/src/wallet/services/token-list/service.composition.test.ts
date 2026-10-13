@@ -45,7 +45,8 @@ async function signer(keyId = "nulo-ci-1") {
 	return { pinned, sign }
 }
 
-type Served = { body: string; status?: number } | Error
+/** `"stall"` answers only when the request is aborted. */
+type Served = { body: string; status?: number } | Error | "stall"
 
 function scriptedFetch(answers: Served[]) {
 	const calls: { url: string; init: RequestInit }[] = []
@@ -53,6 +54,11 @@ function scriptedFetch(answers: Served[]) {
 		calls.push({ url, init })
 		const answer = answers.shift() ?? new Error("no scripted answer")
 		if (answer instanceof Error) throw answer
+		if (answer === "stall") {
+			return new Promise<Response>((_, reject) =>
+				init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))),
+			)
+		}
 		return new Response(answer.body, { status: answer.status ?? 200 })
 	}
 	return { fetchFn, calls }
@@ -89,6 +95,7 @@ async function makeHarness(opts: { keys: PinnedKey[]; answers?: Served[]; api?: 
 }
 
 afterEach(() => {
+	vi.useRealTimers()
 	vi.restoreAllMocks()
 })
 
@@ -96,11 +103,13 @@ describe("TokenListService admission", () => {
 	test("requests nothing before the Terms are accepted, then fetches on acceptance with no credentials", async () => {
 		const { pinned, sign } = await signer()
 		const h = await makeHarness({ keys: [pinned], answers: [{ body: await sign(10) }] })
+		await h.service.onAlarmTick()
+		await h.service.refresh()
 		expect(h.calls).toEqual([])
 		expect(await h.alarm()).toBeUndefined()
 
 		await h.legal.accept("onboarding")
-		await h.service.refresh()
+		await vi.waitFor(() => expect(h.service.getSnapshot()?.sequence).toBe(10))
 
 		expect(h.calls).toEqual([
 			{
@@ -129,8 +138,10 @@ describe("TokenListService commit", () => {
 			],
 		})
 		expect(h.service.getSnapshot()?.sequence).toBe(10)
+		const kept = (await h.stored()).envelope
 		for (let i = 0; i < 3; i++) await h.service.refresh()
 
+		expect((await h.stored()).envelope).toBe(kept)
 		expect(h.service.getSnapshot()?.entries[0].symbol).toBe("USDC")
 		expect(h.changes.map((c) => c.sequence)).toEqual([10])
 		expect(h.outcomes).toEqual(["accepted", "unchanged", "older-sequence", "refused"])
@@ -146,6 +157,18 @@ describe("TokenListService commit", () => {
 		const h = await makeHarness({ keys: [next.pinned], api: first.api, answers: [{ body: await next.sign(5) }] })
 		expect(h.calls).toHaveLength(1)
 		expect(h.service.getSnapshot()).toMatchObject({ sequence: 5, keyId: "nulo-ci-2" })
+	})
+
+	test("drops a stored list whose payload no longer matches its signature, and refetches at boot", async () => {
+		const { pinned, sign } = await signer()
+		const first = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(10) }] })
+		const state = await first.stored()
+		const swapped = { ...JSON.parse(state.envelope), payload: JSON.parse(await sign(10, "EVIL")).payload }
+		await first.api.storage.local.set({ "nulo:core:token-list": JSON.stringify({ ...state, envelope: JSON.stringify(swapped) }) })
+
+		const h = await makeHarness({ keys: [pinned], api: first.api, answers: [{ body: await sign(11) }] })
+		expect(h.calls).toHaveLength(1)
+		expect(h.service.getSnapshot()).toMatchObject({ sequence: 11, entries: [expect.objectContaining({ symbol: "USDC" })] })
 	})
 
 	test("refuses a body over 64 KiB without keeping it", async () => {
@@ -192,6 +215,28 @@ describe("TokenListService timing", () => {
 		waiting.clock.now = T0 + FAILURE_BACKOFF_MS[0]
 		await waiting.service.onAlarmTick()
 		expect(waiting.service.getSnapshot()?.sequence).toBe(10)
+	})
+
+	test("an alarm tick after the boot refresh has finished waits for the deadline that refresh set", async () => {
+		const { pinned, sign } = await signer()
+		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: "", status: 503 }, { body: await sign(10) }] })
+		expect(h.calls).toHaveLength(1)
+
+		await h.service.onAlarmTick()
+		expect(h.calls).toHaveLength(1)
+		expect((await h.stored()).failures).toBe(1)
+	})
+
+	test("a download that stalls is abandoned after 10 s and counts as a failure", async () => {
+		const { pinned, sign } = await signer()
+		const h = await makeHarness({ keys: [pinned], accepted: true, answers: [{ body: await sign(10) }, "stall"] })
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		const pending = h.service.refresh()
+		await vi.advanceTimersByTimeAsync(10_000)
+		await pending
+
+		expect(h.outcomes).toEqual(["accepted", "network"])
+		expect(await h.stored()).toMatchObject({ failures: 1, nextAttemptAt: T0 + FAILURE_BACKOFF_MS[0] })
 	})
 
 	test("a runtime without Ed25519 backs off to daily instead of retrying", async () => {
