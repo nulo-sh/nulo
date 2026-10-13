@@ -49,13 +49,10 @@ type OpenRow =
 type Answer = { next: SendCheckState; refresh: boolean }
 
 /**
- * Asks the network what became of a failed send that may have reached it, and records the answer
- * on the journal row: first whether it was mined, then, for a mined one, whether its block became
- * final or was pruned, and for an unconfirmed one, whether its expiry passed. A row is read only
- * on the endpoint it was sent through, only while its profile is the unlocked one, and one read
- * at a time; nothing is persisted but the answer, so a restart resumes every open row. Each read
- * acts on the row as it loads it, so a write that the row's own update re-announces never leaves
- * it unwatched.
+ * Records on a failed send's journal row what became of it: mined or not, then whether a mined
+ * block became final or was pruned, and whether an unconfirmed send's expiry passed. A row is read
+ * one read at a time, only on the endpoint it was sent through and only while its profile is
+ * unlocked; only the answer is persisted, so a restart resumes every open row.
  */
 export class SendCheck {
 	private readonly deps: SendCheckDeps
@@ -121,7 +118,7 @@ export class SendCheck {
 	}
 
 	private async read(watch: Watch, fence: ExecutionFence, generation: number, now: number): Promise<void> {
-		// The one guard on every dial and write. A lock, a switch, a begun deletion, `stop()` or the
+		// The one guard on every read and write. A lock, a switch, a begun deletion, `stop()` or the
 		// row's deletion makes it false for good, so a check before each step is enough.
 		const live = () => this.deps.profile.isFenceLive(fence) && generation === this.generation && this.watches.get(watch.id) === watch
 		watch.inFlight = true
@@ -197,7 +194,7 @@ export class SendCheck {
 		watch.nextAt = now + DROPPED_RECHECK_INTERVAL_MS
 		const node = await this.nodeFor(row.url, live)
 		if (!node) return undefined
-		const proof = await proveExpired(node, row.expiry).catch(() => undefined)
+		const proof = await proveExpired(node, row.expiry, live).catch(() => undefined)
 		if (proof === undefined) {
 			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check expiry read failed", {
 				journalId: watch.id,
@@ -221,7 +218,7 @@ export class SendCheck {
 		watch.nextAt = now + FINALITY_READ_INTERVAL_MS
 		const node = await this.nodeFor(row.url, live)
 		if (!node) return undefined
-		const proof = await proveFinal(node, row.txHash, row.inclusion).catch(() => undefined)
+		const proof = await proveFinal(node, row.txHash, row.inclusion, live).catch(() => undefined)
 		if (proof === undefined) {
 			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check finality read failed", {
 				journalId: watch.id,
@@ -266,7 +263,6 @@ function openRow(op: OperationRecord): OpenRow | undefined {
 	return undefined
 }
 
-/** What the row held when it was read, for the journal's compare-and-set. */
 function expectedOf(row: OpenRow): SendCheckState {
 	if (row.kind === "unanswered") return {}
 	if (row.kind === "expiring") return { check: "unconfirmed" }

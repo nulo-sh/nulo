@@ -356,8 +356,8 @@ export class ExecutionCoordinator {
 	}
 }
 
-/** The expiry the chain enforces on `tx`, with its first nullifier: the protocol nullifier every
- *  inclusion inserts, reverted or not. None when the anchor is the genesis block, since the first
+/** The expiry the chain enforces on `tx`, with its first nullifier, which is non-revertible: every
+ *  inclusion inserts it, reverted or not. None when the anchor is the genesis block, since the first
  *  block is built without the expiry rule. */
 export function sendExpiryOf(tx: Tx): SendExpiry | undefined {
 	const { data } = tx

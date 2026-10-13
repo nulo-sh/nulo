@@ -26,3 +26,21 @@ Codex (gpt-6.1-sol, high, default login, session `01a1326f-c394-7b30-a81f-661578
 - **Opus.** It agreed to stop 3a.1 and added the double-pay path ("Existing nullifier" on a gateway retry). It agreed the first nullifier is the siloed protocol nullifier and non-revertible, though not unique per tx. It proposed a proven anchor and building now, and a slot rule for #109. It also found the emit-before-unwatch strand in the `SendCheck` sketch and the endpoint URL reaching the exportable log through the single-attempt node's SDK logger.
 - **Turn 2 (resumed).** Codex agreed with A-E of the resolution: build #108 at a finalized anchor (it withdrew the OWNER-ASKS routing, since the failure is D15's routing premise, not one node's receipts); use one finalized archive proof for #109 with no slot rule; the compare-and-set `setSendCheck`; the persisted Tx marker; and a silent single-attempt client built with `createSafeJsonRpcClient`. Its one remaining condition, keeping pruned Tx rows watched past the dropped window, is rejected in D26.
 - Before relying on mocks, verify the ARCHIVE `findLeavesIndexes` through the real client, including F's own membership: the network e2e case does.
+
+## Code review round 1 (2026-10-13)
+
+Codex (gpt-6.1-sol, high, session `01a132a8-6c5c-7d10-b981-48f25cbe6eb5`) and one Opus general-purpose review, same adversarial brief. Neither found a high.
+
+Accepted and fixed:
+- Codex, medium: a lock, purge or stop mid-proof left the proof's later reads running, sending the hash or nullifier after the caller stopped. The proofs take `live()` and check it before each read; SendCheck passes its fence, TransactionService its watch identity. Two tests (a lock between the finalized read and the nullifier read; a purge between the finalized read and the archive read) fail when `live` is replaced by `() => true`.
+- Opus, medium: nothing showed an included send's recorded nullifier is in the real nullifier tree, which is what makes absence mean "not included" (`mockTx` lays the nullifier out itself). The network e2e's second case now captures the `submitting` row's `expiry.nullifier` and reads it at the finalized block after the send is Finalized: a public-to-public send, the path the native AVM inserts.
+- Opus, low: an `unconfirmed` row must never become `sent` or `reverted` (D28); now pinned in `service.test.ts`.
+- Both, low: fixture shapes (`archiveLeaf` with `l2BlockNumber`/`l2BlockHash`), a test title that claimed a Pending receipt it never fed, the e2e card read without a state wait, and comments (a plan tag, a wrong nullifier rule, a redundant doc, a narrating class doc).
+
+Rejected or deferred:
+- Opus, low: a lagging upstream can re-answer a pruned block (D23, accepted with reasons).
+- Codex: hash-prefix log lines in `transaction/service.ts` predate this arc and are outside its scope. A lying RPC is outside the trust model the proofs claim (they hold against lagging or forked upstreams, not a forger).
+
+## Network e2e: the local finalized tip stands still (2026-10-13)
+
+The local anvil mines only on a transaction, and its `finalized` tag trails `latest` by two blocks (`--slots-in-an-epoch 1`). Once the L2 chain is quiet, no L1 transaction lands, so L1's finalized block, and with it the archiver's finalized checkpoint (`l1_synchronizer.js` `updateFinalizedCheckpoint`: the proven checkpoint at L1's finalized block), stops. The first run waited 420 s with the row Proven and never final. The case now mines empty L1 blocks (`anvil_mine`) until `getBlockData("finalized")` reaches the send's block.

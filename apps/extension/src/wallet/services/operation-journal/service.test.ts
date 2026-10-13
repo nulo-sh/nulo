@@ -840,10 +840,22 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		expect((await service.getOperation(id))?.progress).toMatchObject({ stage: "failed", check: "sent" })
 	})
 
-	test("unconfirmed becomes expired only on a row with a recorded expiry, and nothing leaves expired", async () => {
+	test("unconfirmed becomes expired only on a row with a recorded expiry, never mined, and nothing leaves expired", async () => {
 		const withExpiry = await failedFromSubmitting(EXPIRY)
 		const without = await failedFromSubmitting()
 		expect(await service.setSendCheck(withExpiry, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
+		for (const check of ["sent", "reverted"] as const) {
+			expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check }, live)).toBe(false)
+			expect(
+				await service.setSendCheck(
+					withExpiry,
+					HASH,
+					{ check: "unconfirmed" },
+					{ check, inclusion: { block: 5, hash: `0x${"01".repeat(32)}` } },
+					live,
+				),
+			).toBe(false)
+		}
 		expect(await service.setSendCheck(without, HASH, {}, { check: "expired" }, live)).toBe(false)
 		expect(await service.setSendCheck(without, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
 		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(false)

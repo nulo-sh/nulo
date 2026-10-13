@@ -370,6 +370,21 @@ describe("SendCheck: one guard on every dial and write", () => {
 		expect(h.balances.refreshAccountBalances).not.toHaveBeenCalled()
 	})
 
+	test("a lock while the finalized block is read: the nullifier is never sent, nothing written", async () => {
+		const h = makeHarness([unconfirmedRow()])
+		h.clock.setNow(EXPIRES_AT + 1_000)
+		const finalized = deferred<unknown>()
+		h.getBlockData.mockImplementationOnce(() => finalized.promise)
+		await h.check.start()
+		await h.tick()
+		h.lock()
+		finalized.resolve(finalizedAt(EXPIRY.timestamp + 1))
+		await h.tick(3)
+		expect(h.getBlockData).toHaveBeenCalledTimes(1)
+		expect(h.findLeavesIndexes).not.toHaveBeenCalled()
+		expect(h.journal.writes).toEqual([])
+	})
+
 	test("a lock and an unlock while the write waits for the journal: written once, on the next live tick", async () => {
 		const h = makeHarness()
 		h.getTxReceipt.mockResolvedValue(mined("proven"))

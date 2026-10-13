@@ -37,7 +37,12 @@ const finalizedAt = (block: number) => ({
 	header: BlockHeader.empty({ globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(block) }) }),
 	blockHash: BlockHash.fromString(`0x${"1f".repeat(32)}`),
 })
-const archiveLeaf = (index?: number) => [index === undefined ? undefined : { data: BigInt(index) }]
+/** The finalized archive's answer: the block's hash found at `index`, or absent. */
+const archiveLeaf = (index?: number) => [
+	index === undefined
+		? undefined
+		: { data: BigInt(index), l2BlockNumber: index, l2BlockHash: BlockHash.fromString(`0x${"1f".repeat(32)}`) },
+]
 
 /** A mined row as storage holds it. */
 const storedRow = (overrides: Partial<Tx> = {}): Tx => ({
@@ -184,7 +189,7 @@ describe("TransactionService — a mined row until its block is final", () => {
 		expect((await service.getTransaction(HASH)).status).toBe(TxStatus.Finalized)
 	})
 
-	test("a lagging answer never moves a mined row: DROPPED and Pending are not read, and the recorded block still named is no answer", async () => {
+	test("a lagging answer never moves a mined row: its receipt is not polled, and one still naming the recorded block is no answer", async () => {
 		await minedAndMarked()
 		const receiptsAfterMine = getTxReceipt.mock.calls.length
 		getTxReceipt.mockResolvedValue({ status: "dropped" })
@@ -228,5 +233,18 @@ describe("TransactionService — a mined row until its block is final", () => {
 		getBlockData.mockResolvedValue(finalizedAt(BLOCK.number))
 		await tick(FINALITY_READ_INTERVAL_MS * 2)
 		expect(getBlockData).not.toHaveBeenCalled()
+	})
+
+	test("a purge while the finalized block is read: the block hash is never sent", async () => {
+		await minedAndMarked()
+		let answer: (value: unknown) => void = () => {}
+		getBlockData.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+		await tick(FINALITY_READ_INTERVAL_MS)
+		expect(getBlockData).toHaveBeenCalledTimes(1)
+		await service.purgeForAccounts([ACCOUNT])
+		answer(finalizedAt(BLOCK.number))
+		await tick(FINALITY_READ_INTERVAL_MS * 2)
+		expect(findLeavesIndexes).not.toHaveBeenCalled()
+		expect(getBlockData).toHaveBeenCalledTimes(1)
 	})
 })

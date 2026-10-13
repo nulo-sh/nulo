@@ -139,15 +139,10 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// fenced (see `updateTx`) so a mid-poll tx can't resurrect (finding D).
 		this.accountService.onAccountDeleted.add(this.onAccountDeleted)
 
-		// Only Pending rows and rows carrying the finality marker are re-armed.
-		// Dropped rows are NOT added to the resurrection watch across restarts:
-		// rows can enter storage via backup restore, and their
-		// `submittedEndpointUrl` is backup-controlled — the worker must never dial
-		// it for a row this wallet's worker didn't transition itself (D16 parity;
-		// see `restore`, which refuses Pending and strips the marker).
-		// `ambiguous` rows are excluded here too, not just when they are marked:
-		// otherwise a restart puts them straight back into the poller, against
-		// whichever profile is now active.
+		// Only Pending rows and rows carrying the finality marker are re-armed: a restored row's
+		// `submittedEndpointUrl` is backup-controlled, so the worker never dials it for a row it did
+		// not transition itself (`restore` refuses Pending and strips the marker). `ambiguous` rows
+		// stay out, or a restart would poll them against whichever profile is now active.
 		const rows = (await this.txs.getValues()).filter((x) => !x.ambiguous)
 		for (const tx of rows.filter((x) => x.status === TxStatus.Pending)) this.pending.set(tx.hash, tx)
 		for (const tx of rows.filter((x) => x.awaitingFinality)) this.finalityWatch.set(tx.hash, tx)
@@ -531,11 +526,12 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	private async checkFinality(tx: Tx): Promise<void> {
 		const { submittedEndpointUrl: url, block } = tx
 		if (!url || !block) return
+		const watched = () => this.finalityWatch.get(tx.hash) === tx
 		const node = await this.networkService.getSingleAttemptNodeForUrl(url)
-		const proof = await proveFinal(node, tx.hash, { block: block.number, hash: block.hash })
+		const proof = await proveFinal(node, tx.hash, { block: block.number, hash: block.hash }, watched)
 		if (proof.kind === "unsettled" || proof.kind === "unknown") return
 		await this.lock.withLock(async () => {
-			if (this.finalityWatch.get(tx.hash) !== tx) return
+			if (!watched()) return
 			if (proof.kind === "final") tx.status = TxStatus.Finalized
 			else if (proof.kind === "moved") applyReceipt(tx, proof.receipt)
 			else clearInclusion(tx)

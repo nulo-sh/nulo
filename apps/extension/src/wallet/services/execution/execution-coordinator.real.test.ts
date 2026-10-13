@@ -1,8 +1,9 @@
 // @vitest-environment node
 /**
- * The expiry `proveAndSend` records with a send, read from REAL kernel outputs (`mockTx` builds
- * them and hashes the tx). Node environment on purpose: under jsdom, foundation's hashing takes the
- * sync `BarretenbergSync` branch, which fails under vitest (`authwit-discoverer.real.test.ts`).
+ * The expiry `proveAndSend` records with a send, read from a real `Tx` (`mockTx` lays out the
+ * kernel outputs and hashes it). Node environment on purpose: under jsdom, foundation's hashing
+ * takes the sync `BarretenbergSync` branch, which fails under vitest
+ * (`authwit-discoverer.real.test.ts`).
  */
 import { BlockNumber } from "@aztec-labs/foundation/branded-types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"

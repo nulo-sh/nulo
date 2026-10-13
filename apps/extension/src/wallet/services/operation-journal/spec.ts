@@ -211,7 +211,7 @@ export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "check
  * The answers the send check may record over what a row holds:
  * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`;
  * - `unconfirmed`: `expired`, on a row with a recorded expiry;
- * - `sent` or `reverted` with a block not yet final: final (the block dropped), included in
+ * - `sent` or `reverted` with a block not yet final: final (the block cleared), included in
  *   another block, or pruned (no answer, its window restarted at `checkSince`).
  * Nothing replaces `expired`, or a `sent` or `reverted` that holds no block.
  */

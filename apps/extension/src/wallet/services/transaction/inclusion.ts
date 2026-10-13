@@ -18,15 +18,21 @@ export const FINALITY_READ_INTERVAL_MS = 60_000
  * pruned and a fresh receipt says where the send is now: `moved` (mined in another block, its
  * receipt attached) or `pruned` (not mined). `unsettled`: the chain has not reached the block.
  * `unknown`: no claim, e.g. the receipt still names the pruned block. Throws on a missing or
- * malformed answer.
+ * malformed answer, and before any read once `live()` is false.
  */
 export type FinalityProof = { kind: "final" | "unsettled" | "unknown" | "pruned" } | { kind: "moved"; receipt: TxReceipt }
 
-export async function proveFinal(node: InclusionNode, txHash: string, inclusion: SendInclusion): Promise<FinalityProof> {
-	const finalized = await finalizedBlock(node)
+export async function proveFinal(
+	node: InclusionNode,
+	txHash: string,
+	inclusion: SendInclusion,
+	live: () => boolean,
+): Promise<FinalityProof> {
+	const finalized = await finalizedBlock(node, live)
 	if (finalized.header.getBlockNumber() < inclusion.block) return { kind: "unsettled" }
-	const leaf = await leafAt(node, finalized, MerkleTreeId.ARCHIVE, inclusion.hash)
+	const leaf = await leafAt(node, live, finalized, MerkleTreeId.ARCHIVE, inclusion.hash)
 	if (leaf !== undefined) return { kind: leaf === BigInt(inclusion.block) ? "final" : "unknown" }
+	assertLive(live)
 	const receipt = await node.getTxReceipt(TxHash.fromString(txHash))
 	if (!MINED_STATUSES.has(txStatusFromReceipt(receipt.status))) return { kind: "pruned" }
 	return receipt.blockHash?.toString() === inclusion.hash ? { kind: "unknown" } : { kind: "moved", receipt }
@@ -37,16 +43,24 @@ export async function proveFinal(node: InclusionNode, txHash: string, inclusion:
  * and the send's first nullifier is absent, so no block holds the send and no later one can (block
  * times never decrease, and a tx whose expiry is below a block's time is refused). `present`: the
  * nullifier is there, which proves nothing about this send, since a replacement can share it. A
- * number: the chain seconds still to pass. Throws on a missing or malformed answer.
+ * number: the chain seconds still to pass. Throws as `proveFinal` does.
  */
-export async function proveExpired(node: InclusionNode, expiry: SendExpiry): Promise<"expired" | "present" | number> {
-	const finalized = await finalizedBlock(node)
+export async function proveExpired(node: InclusionNode, expiry: SendExpiry, live: () => boolean): Promise<"expired" | "present" | number> {
+	const finalized = await finalizedBlock(node, live)
 	const ahead = BigInt(expiry.timestamp) - finalized.header.globalVariables.timestamp
 	if (ahead >= 0n) return Number(ahead)
-	return (await leafAt(node, finalized, MerkleTreeId.NULLIFIER_TREE, expiry.nullifier)) === undefined ? "expired" : "present"
+	const leaf = await leafAt(node, live, finalized, MerkleTreeId.NULLIFIER_TREE, expiry.nullifier)
+	return leaf === undefined ? "expired" : "present"
 }
 
-async function finalizedBlock(node: InclusionNode): Promise<BlockData> {
+/** A caller that stopped (a lock, a purge, its watch ended) sends nothing more: not even the hash
+ *  or nullifier the next read would carry. */
+function assertLive(live: () => boolean): void {
+	if (!live()) throw new Error("proof stopped")
+}
+
+async function finalizedBlock(node: InclusionNode, live: () => boolean): Promise<BlockData> {
+	assertLive(live)
 	const finalized = await node.getBlockData("finalized")
 	if (!finalized) throw new Error("no finalized block")
 	return finalized
@@ -55,7 +69,14 @@ async function finalizedBlock(node: InclusionNode): Promise<BlockData> {
 /** The leaf's index in `tree` as of the finalized block. The read names that block's number and
  *  hash together, so a node on another branch, or one that has not reached it, refuses instead of
  *  answering for its own chain. */
-async function leafAt(node: InclusionNode, finalized: BlockData, tree: MerkleTreeId, value: string): Promise<bigint | undefined> {
+async function leafAt(
+	node: InclusionNode,
+	live: () => boolean,
+	finalized: BlockData,
+	tree: MerkleTreeId,
+	value: string,
+): Promise<bigint | undefined> {
+	assertLive(live)
 	const anchor = { number: finalized.header.getBlockNumber(), hash: finalized.blockHash }
 	const found = await node.findLeavesIndexes(anchor, tree, [Fr.fromString(value)])
 	if (found.length !== 1) throw new Error("malformed leaf answer")
