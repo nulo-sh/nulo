@@ -31,6 +31,7 @@ Arc 1b ships on OA-3 = A, OA-4 = B and OA-5 = A, so Phase 1.2 (the chain-tip gat
 - **Gate runs at retry 0, merged HEAD 69336274.**
   - Both named files: Chrome 16/16, Firefox 16/16.
   - The full Chrome network suite: 113 files passed, 5 skipped, 1 failed (205 tests passed, 6474 s on a host at load ~217 of 188 cores). The failure was `snack-placement.test.ts`'s "Send: a send that fails once its record is written offers Details": the Details action vanished between its read and its 10 s click wait. Its file rerun went 4/4, and another branch's CI failed the same file's Home case the same evening, so it is a host-load flake with no path through this arc.
+- **Second `dev` merge, HEAD 6634a128** (#369, #370, #373, #374, #379). It touches none of this arc's files. #379's 32-call session cap sits above the 8-per-origin park cap, so parked sends cannot reach it. Unit gates exit 0 (extension 11768 passed, `test:ci-gating` 535 pass, `check:plans` 0 findings), and both named files on Chrome went 16/16 in 708 s.
 - **Wall-clock.** CI's `concurrent-confirm` shard runs exactly these two files; before this arc it took 542.9 s on Chrome and 599.3 s on Firefox (vitest duration, runs 38450729101 and 38450729487). Locally after: Chrome 765.5 s, Firefox 746.9 s, on the loaded host; the PR's CI run gives the comparable figure.
 
 ## Review round 1 (Codex gpt-6.1-sol high, session `01a136de-aba7-7b02-9052-83efa8909e5e`; Opus general-purpose)
