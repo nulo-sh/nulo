@@ -307,6 +307,7 @@ test("Home's first activity row: a Tab stop with the ring, Enter and Space each 
 	await waitForHashPrefix(page, "#/popup/tx/")
 	expect(await probe(page)).toMatchObject({ pushes: 1 })
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 240_000)
 
@@ -361,6 +362,7 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 		await tab.close()
 	}
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
@@ -398,6 +400,7 @@ test("a click-mode Settings row opens on Enter and on Space; an action inside a 
 		await waitForFocus(page, "endpoint-edit-btn")
 	}
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
@@ -444,6 +447,7 @@ test("Settings → Developer's Logs row: one Tab stop with the ring; Enter opens
 		await logs.close().catch(() => undefined)
 	}
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
@@ -473,6 +477,7 @@ test("History's list keeps the −8px row box inside the page: nothing scrolls s
 	expect(layout.left).toBeGreaterThanOrEqual(0)
 	expect(layout.right).toBeLessThanOrEqual(layout.width)
 
+	expect(registeredExtension.consoleErrors).toEqual([])
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 210_000)
 
@@ -624,5 +629,6 @@ test("rows sit 10px apart on Home, a token's page and History, the date heading 
 		}
 	}
 
+	expect(registeredExtensionPerTest.consoleErrors).toEqual([])
 	expect(registeredExtensionPerTest.pageErrors).toEqual([])
 }, 180_000)

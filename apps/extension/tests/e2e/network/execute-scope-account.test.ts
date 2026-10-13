@@ -85,6 +85,7 @@ test.skipIf(!hasConfig)(
 		// `openPopup` restarts the arrays, so what came since the last one is asserted before it: here
 		// the fixture's setup popup and its connect and grant windows.
 		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 
 		let wallet = await openPopup(ctx)
 		await waitForHash(wallet, "#/popup/general", 30_000)
@@ -128,6 +129,7 @@ test.skipIf(!hasConfig)(
 		await approveExecute(follow.execPopup)
 		await waitForPopupClosed(follow.execPopup, 60_000)
 		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 
 		wallet = await openPopup(ctx)
 		await waitForHash(wallet, "#/popup/general", 30_000)
@@ -163,6 +165,7 @@ test.skipIf(!hasConfig)(
 		await approveExecute(declined.execPopup)
 		await waitForPopupClosed(declined.execPopup, 60_000)
 		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 
 		wallet = await openPopup(ctx)
 		await waitForHash(wallet, "#/popup/general", 30_000)
@@ -219,5 +222,6 @@ test.skipIf(!hasConfig)(
 		console.log("✓ contention: released, the window closed and the pointer moved to B")
 
 		expect(ctx.consoleErrors).toEqual([])
+		expect(ctx.pageErrors).toEqual([])
 	},
 )
