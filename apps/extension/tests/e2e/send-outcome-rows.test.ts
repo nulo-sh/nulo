@@ -123,9 +123,13 @@ test("Home shows one card per send; each status icon wears its status line's col
 	for (const theme of ["light", "dark"] as const) {
 		await setThemeAttribute(page, theme)
 		const history = (await readCards(page, 6)).filter((c) => c.journal !== null)
-		for (const card of history) expect(card.iconFill, `${theme}: ${card.journal}'s icon`).toBe(card.lineColor)
+		expect(history.map((c) => c.journal)).toEqual(Object.values(RECORDS).map((r) => r.id))
+		for (const card of history) {
+			expect(card.iconFill, `${theme}: ${card.journal}'s icon`).toBe(card.lineColor)
+			expect(card.lineColor, `${theme}: ${card.journal}'s status line`).toMatch(/^rgb/)
+		}
 		expect(history.find((c) => c.journal === RECORDS.raw.id)?.amount, "no figure without known decimals").toBeNull()
-		expect(history.find((c) => c.journal === RECORDS.failed.id)?.amount).not.toBeNull()
+		expect(history.find((c) => c.journal === RECORDS.failed.id)?.amount).toBe("1.5")
 	}
 	await shotSend(page, "history-status-icons", "tx-terminal-card")
 

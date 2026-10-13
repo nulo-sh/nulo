@@ -48,6 +48,7 @@ import {
 	unlockProfile,
 	waitForProfilePurged,
 } from "../fixtures/helpers"
+import { shotSend } from "../fixtures/send-page"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
@@ -356,6 +357,7 @@ test.skipIf(!hasConfig)(
 			focus: false,
 			cancel: true,
 		})
+		await shotSend(burst.page, "home-queued-send", "tx-awaiting-card")
 		await releaseMining()
 		await expectBothSucceed(burst, a, b)
 	},
