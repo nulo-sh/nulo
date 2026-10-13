@@ -949,6 +949,7 @@ describe("TransferExecutor.estimateFee: each cancel checkpoint", () => {
 describe("TransferExecutor: a predecessor's block the PXE's node does not have yet", () => {
 	/** A tx of the token settled at `block`: it shares a key with every `makeReq()` send. */
 	const settledAt = (block: number) => ({
+		hash: `0xtx${block}`,
 		chainId: 7,
 		account: "0xme",
 		networkId: "net-1",

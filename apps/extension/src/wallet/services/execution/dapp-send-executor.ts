@@ -46,6 +46,7 @@ import { findPrimaryEndpoint, primaryEndpointUrl } from "@/wallet/services/netwo
 import type { ExecutionHooks } from "@/wallet/services/dapp-interaction/spec"
 import type { WrappedTask } from "@/wallet/services/task/service"
 import type { AddTransactionInput, LocalTxOrigin, TransactionService, Tx } from "@/wallet/services/transaction/service"
+import { OriginType } from "@/wallet/services/transaction/spec"
 import type { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import type { Network } from "@/wallet/services/network/service"
 import type { PublicStorageReader } from "@/wallet/utils/fee-juice-balance"
@@ -275,9 +276,10 @@ export class DappSendExecutor {
 		let line: DappSendLine | undefined
 		let journalId: string | undefined
 		try {
-			line = await this.joinLines(params)
-			await this.waitForEarlierSends(params, preController, line, slot)
-			line.turn.leave()
+			// A wallet send (Settings) has no record before its claim, so a wait would show nothing.
+			line = params.origin.type === OriginType.DAPP ? await this.joinLines(params) : undefined
+			if (line) await this.waitForEarlierSends(params, preController, line, slot)
+			line?.turn.leave()
 			const claimed = await this.deps.lane.claimOrCreateJournal(
 				params.networkId,
 				params.accountAddress,
@@ -330,16 +332,17 @@ export class DappSendExecutor {
 		getAdditionalScopes: () => unknown
 	}): Promise<DappSendLine> {
 		const { chainId } = await this.deps.getNetwork(params.networkId)
-		const turn = this.deps.lane.joinOriginLine(params.fence, chainId, params.hooks?.originKey)
 		const scopes = spendAccounts(params.accountAddress, params.getAdditionalScopes()).map((account) => ({ chainId, account }))
-		return { turn, scopes, waiters: scopes.map((scope) => this.deps.sequencer.enterWaiter(scope)) }
+		const waiters = scopes.map((scope) => this.deps.sequencer.enterWaiter(scope))
+		// Last: a throw after it would leave a place in the origin's line that no `finally` frees.
+		return { turn: this.deps.lane.joinOriginLine(params.fence, chainId, params.hooks?.originKey), scopes, waiters }
 	}
 
 	/**
 	 * Parks outside the slot while an earlier send of the origin has not started, a waiter is
 	 * blocked, or the PXE's node lacks a settled predecessor's block in one of its accounts, and
 	 * re-checks under the slot, synchronously, each time it comes back. Past the waiters' 60 minutes
-	 * the send runs unordered, today's degraded mode: the chain still refuses a real conflict.
+	 * the send runs unordered, the sequencer's degraded mode: the chain still refuses a real conflict.
 	 */
 	private async waitForEarlierSends(
 		params: { networkId: string; hooks: ExecutionHooks | undefined; fence: ExecutionFence },
@@ -428,6 +431,9 @@ export class DappSendExecutor {
 		// Read before the build: a send that reaches the node during it may hold this build's notes.
 		const { chainId } = await this.deps.getNetwork(operation.networkId)
 		const sequenceEpoch = this.deps.sequenceEpoch(chainId, operation.accountAddress)
+		// A settled predecessor's block the node lacks: neither the epoch nor the pending set changes
+		// once it lands, so a build simulated without it must not be reused.
+		const lagging = this.deps.chainTip.unconfirmed({ chainId, account: operation.accountAddress }, undefined, operation.networkId)
 
 		// Discover-then-estimate via the decorator (the single owner of that
 		// choreography for dApp sends; stage-boundary cancellation preserved
@@ -451,7 +457,9 @@ export class DappSendExecutor {
 
 		const identity = fingerprintInputFor(operation, feeSettings, detectedFee, preDiscoveryActions)
 		const discoveredHashes = discovered.map((d) => d.messageHash)
-		const estimateId = await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, sequenceEpoch)
+		const estimateId = lagging
+			? undefined
+			: await this.stashOperationEstimate(operation, identity, detectedFee, built, discoveredHashes, sequenceEpoch)
 		// `send_transaction`'s confirm skips discovery, so listing what THIS estimate
 		// found would show authorizations confirm never adds.
 		const bound = operation.kind === "aztec_sendTx"

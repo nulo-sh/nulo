@@ -8,6 +8,7 @@ const SHARES = K("seq:0xt:0xbob")
 const DISJOINT = K("seq:0xu:0xbob")
 
 const settledRow = (over: object = {}) => ({
+	hash: "0xTX",
 	chainId: 1,
 	account: "0xMe",
 	networkId: "net",
@@ -81,6 +82,55 @@ describe("ChainTipGate", () => {
 		gate.observe(settledRow({ block: { number: 8, hash: "0xb8" } }))
 		await settle()
 		expect(gate.unconfirmed(SCOPE, SHARES, "net")).toBe(true)
+	})
+
+	test("a later update of the same placement (its finality) never restarts a lapsed hold; another block holds again", async () => {
+		const { gate, clock } = harness(6)
+		gate.observe(settledRow())
+		await settle()
+		clock.now += CHAIN_LAG_MAX_MS
+		gate.observe(settledRow())
+		await settle()
+		expect(gate.unconfirmed(SCOPE, SHARES, "net")).toBe(false)
+		gate.observe(settledRow({ block: { number: 8, hash: "0xb8" } }))
+		await settle()
+		expect(gate.unconfirmed(SCOPE, SHARES, "net")).toBe(true)
+	})
+
+	test("a read that fails lets everything observed before the failure run, even what arrived during the read", async () => {
+		const clock = { now: 1_000 }
+		let fail: (error: Error) => void = () => {}
+		const gate = new ChainTipGate({
+			readTip: () =>
+				new Promise<number>((_, reject) => {
+					fail = reject
+				}),
+			sleep: () => new Promise<void>(() => {}),
+			now: () => clock.now,
+			logDebug: vi.fn(),
+		})
+		gate.observe(settledRow())
+		clock.now += 1
+		gate.observe(settledRow({ hash: "0xTX2", block: { number: 8, hash: "0xb8" } }))
+		expect(gate.unconfirmed(SCOPE, SHARES, "net")).toBe(true)
+		fail(new Error("node down"))
+		await settle()
+		expect(gate.unconfirmed(SCOPE, SHARES, "net")).toBe(false)
+	})
+
+	test("a cancel ends the wait while a tip read is still out", async () => {
+		const gate = new ChainTipGate({
+			readTip: () => new Promise<number>(() => {}),
+			sleep: (_ms, signal) => new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true })),
+			now: () => 1_000,
+			logDebug: vi.fn(),
+		})
+		gate.observe(settledRow())
+		const abort = new AbortController()
+		const waited = gate.wait(SCOPE, SHARES, "net", abort.signal, 30_000)
+		await settle()
+		abort.abort()
+		await expect(waited).resolves.toBe("aborted")
 	})
 
 	test("reads are shared per network while one runs, and a row with no block or network observes nothing", async () => {

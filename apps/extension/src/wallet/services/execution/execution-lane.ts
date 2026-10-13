@@ -427,15 +427,10 @@ export class ExecutionLane {
 
 	/** Any exit from a slot wait but the grant. Always throws. */
 	private async refuseSlot(err: unknown, queuedJournalId: string | undefined): Promise<never> {
-		// Clean the pre-acquire controller for any non-grant exit.
 		if (queuedJournalId) this.activeControllers.delete(queuedJournalId)
 		if (err instanceof ExecutionMutexCapacityError) {
-			// Lane/origin backpressure. Terminalize the journal record HERE: the
-			// caller's claim never runs, and the background safety-net only
-			// terminalizes records still at `queued` — but the silent path
-			// fast-forwards to `pending` before executing, so without this an
-			// over-cap silent sendTx would leave a stuck `pending` card until the
-			// reaper grace expires. Surface to the dApp as -32005.
+			// No claim follows, and the reaper's safety net never fails the silent path's `pending`
+			// record, so the refusal fails it here. The dApp sees -32005.
 			await this.markJournal(queuedJournalId, { stage: "failed" }, normalizeError(err, "dapp_execute"))
 			throw new TooManyPendingError()
 		}
@@ -654,7 +649,7 @@ export class ExecutionLane {
 	}
 }
 
-/** `true` once `promise` settles, `false` if `signal` aborts first. */
+/** `true` once `promise` fulfills, `false` if `signal` aborts first. */
 function untilOrAborted(promise: Promise<unknown>, signal: AbortSignal): Promise<boolean> {
 	if (signal.aborted) return Promise.resolve(false)
 	return new Promise<boolean>((resolve) => {

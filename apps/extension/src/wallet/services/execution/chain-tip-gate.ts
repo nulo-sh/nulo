@@ -7,8 +7,8 @@
  * {@link CHAIN_LAG_MAX_MS} after it was made, and a tip that cannot be read lets the send run: both
  * fall back to the degraded mode in which the chain still refuses a real conflict.
  *
- * Observations are this worker's own: a row it watched leaving Pending for a block. Restore emits no
- * such event, so a backup can never hold a send.
+ * Observations are this worker's own: the first update it saw placing a tx in a given block. Restore
+ * emits no update, so a backup can never hold a send.
  */
 
 import type { Tx } from "@/wallet/services/transaction/spec"
@@ -33,6 +33,9 @@ type Observation = { scope: string; keys: ReadonlySet<SequenceKey>; block: numbe
 
 export class ChainTipGate {
 	private observations: Observation[] = []
+	/** `hash|block hash` of each placement observed, so a later update of the same row (its finality)
+	 *  never restarts a lapsed hold. */
+	private readonly observed = new Set<string>()
 	/** The last tip read per network id. */
 	private readonly tips = new Map<string, number>()
 	/** When a read of the network last failed: what was observed by then no longer holds. */
@@ -42,9 +45,12 @@ export class ChainTipGate {
 	public constructor(private readonly deps: ChainTipGateDeps) {}
 
 	/** A row this worker watched left Pending; one in a block holds the sends sharing its keys. */
-	public observe(row: Pick<Tx, "chainId" | "account" | "calls" | "feeSpender" | "block" | "networkId">): void {
+	public observe(row: Pick<Tx, "hash" | "chainId" | "account" | "calls" | "feeSpender" | "block" | "networkId">): void {
 		const { block, networkId } = row
 		if (!block || !networkId) return
+		const placement = `${row.hash.toLowerCase()}|${block.hash.toLowerCase()}`
+		if (this.observed.has(placement)) return
+		this.observed.add(placement)
 		const tip = this.tips.get(networkId)
 		if (tip !== undefined && tip >= block.number) return
 		this.observations.push({ scope: scopeId(row), keys: recordedTxKeys(row), block: block.number, observedAt: this.deps.now() })
@@ -74,14 +80,13 @@ export class ChainTipGate {
 	public refresh(networkId: string): Promise<void> {
 		const running = this.reads.get(networkId)
 		if (running) return running
-		const startedAt = this.deps.now()
 		const read = this.readWithin(networkId)
 			.then((tip) => {
 				if (tip === undefined) throw new Error("tip read timed out")
 				this.tips.set(networkId, tip)
 			})
 			.catch(() => {
-				this.failedAt.set(networkId, startedAt)
+				this.failedAt.set(networkId, this.deps.now())
 				// The error is not logged: the node client's messages can carry the endpoint URL.
 				this.deps.logDebug("Chain tip unreadable; sends waiting on it run")
 			})
@@ -103,8 +108,10 @@ export class ChainTipGate {
 			if (signal.aborted) return "aborted"
 			if (!this.unconfirmed(scope, keys, networkId)) return "confirmed"
 			if (this.deps.now() >= until) return "expired"
-			await this.refresh(networkId)
-			if (this.unconfirmed(scope, keys, networkId)) await this.deps.sleep(RECHECK_MS, signal)
+			await settledOrAborted(this.refresh(networkId), signal)
+			if (signal.aborted) continue
+			if (this.unconfirmed(scope, keys, networkId))
+				await this.deps.sleep(Math.min(RECHECK_MS, Math.max(0, until - this.deps.now())), signal)
 		}
 	}
 
@@ -120,4 +127,17 @@ export class ChainTipGate {
 			timer.abort()
 		}
 	}
+}
+
+/** Resolves once `promise` settles or `signal` aborts; a cancel never waits out a tip read. */
+function settledOrAborted(promise: Promise<void>, signal: AbortSignal): Promise<void> {
+	if (signal.aborted) return Promise.resolve()
+	return new Promise((resolve) => {
+		const done = () => {
+			signal.removeEventListener("abort", done)
+			resolve()
+		}
+		signal.addEventListener("abort", done, { once: true })
+		void promise.finally(done)
+	})
 }

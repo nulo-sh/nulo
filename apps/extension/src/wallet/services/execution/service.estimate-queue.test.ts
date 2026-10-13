@@ -61,7 +61,14 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		const { chainTipGate, node, admit, estimateFee, estimate } = makeFacade()
 		node.tip = 6
 		const swap = { contract: "0xtoken", method: "swap", args: [] }
-		chainTipGate.observe({ chainId: 7, account: "0xme", networkId: "net-1", block: { number: 7, hash: "0xb" }, calls: [swap] })
+		chainTipGate.observe({
+			hash: "0xtx",
+			chainId: 7,
+			account: "0xme",
+			networkId: "net-1",
+			block: { number: 7, hash: "0xb" },
+			calls: [swap],
+		})
 		await new Promise((r) => setTimeout(r, 0))
 		const readsBefore = node.reads
 		expect(await estimate()).toEqual({ queued: true, tokenSpent: false })

@@ -926,6 +926,9 @@ Arc 1b deviations from the text above (detail in `lessons/phase-1b.md`):
 - **D46 A silent-path dApp send reads "Queued..." while it waits.** `parkSlot` moves a `pending` record back to `queued`, the back-edge OA-1 = A opened (D37), and the claim takes it to `pending` again. This supersedes the plan's "Preparing..." line, which predates OA-1's answer; #219's decision text names "Queued..." for this path.
 - **D47 The gate is per network.** `ChainTipGate.unconfirmed` and `wait` take the network id beside the scope, since each network has its own tip; tips, failed reads and running reads are kept per network id.
 - **D48 One rule for what blocks a waiter.** On A a waiter is blocked by any holder of its scope that is sent, external, or earlier in line, and by any pending row of the scope inside the submitted hold. Rows a holder already carries need no exclusion, since that holder blocks too.
+- **D49 Only dApp-origin sends wait.** A wallet send through the same path (Settings: revoking authwits, toggling the auth registry; `OriginType.UI`) keeps today's behaviour: it has no record before its claim, so a wait would be a spinner with no card and nothing to cancel, and OA-3 names dApp sends (Opus, arc 1b review).
+- **D50 A lag-window dApp estimate is never stashed.** A build simulated while a settled predecessor's block is past the node's tip passes the reuse ladder's epoch and pending checks once the block lands, so `estimateOperationFee` skips the stash then (the ineligible path that already exists); the confirm builds afresh after the gate. The approval window is unchanged (Opus, arc 1b review).
+- **D51 Gate hygiene.** An observation is recorded once per placement (`hash|block hash`), so a later update of the same row (its finality) never restarts a lapsed hold; a failed read releases everything observed before the failure, not before the read began; a cancel ends `wait` without waiting out a tip read, and the recheck sleep never overshoots the bound (Codex, arc 1b review).
 
 ## Audit verdicts
 
@@ -1106,6 +1109,24 @@ Rejected:
 
 **Round 5 (resumed, over the round-4 fix): no material finding.** Codex found the chronology check sound for every supported lifecycle. A backward wall-clock step between the two stamps can only delay a clear until TaskService's own completion event; it strands nothing. **The loop converged here.**
 
+
+### Arc 1b code, round 1: Codex (gpt-6.1-sol, high) and an Opus review, over `e900f710..HEAD`
+
+**Codex** (session `01a136de-aba7-7b02-9052-83efa8909e5e`): the three lead questions hold (`parkSlot` maps every exit to one terminal state with the controller and heartbeat cleaned; no reservation leak or double return; first-grant origin order holds). No double send, network await under the slot, or reachable imported row. Five P2 findings, all **accepted**:
+1. A throw while reading the scopes, after `joinOriginLine`, stranded the origin's line (later sends parked until cancelled). Fixed: the place is taken last in `joinLines`; a test throws from `additionalScopes` and finds no place left behind.
+2. A finality update of a settled row re-observed the same block and restarted a lapsed hold. Fixed (D51); test.
+3. `wait` awaited a whole tip read before honouring a cancel or its bound. Fixed (D51); a hung-read test.
+4. A failed read used its start as the cutoff, so an observation made during it stayed held. Fixed (D51); test.
+5. The e2e asserted the playground's NO_WAIT answers, which are submissions. Fixed: both files read each dApp tx's inclusion on the node (`waitForTxMined`).
+Also: a vacuous `beginEstimate(...)?.end()` now asserts admission; four comments tightened or removed (the mutex depth now names parked requests).
+
+**Opus** (a general-purpose review, read-only; 283/283 arc tests run): sound on the three lead questions. Three findings:
+1. Medium: wallet sends (Settings) through `executeSendTransaction` parked with no card and no cancel. **Accepted** (D49); a test runs a UI-origin send past a pending row without a park.
+2. Low: the same stranded-line path as Codex 1. **Accepted** (same fix).
+3. Low, plausible: a dApp estimate built in the lag window could be reused after it. **Accepted** after a trace: the reuse carries the built request (account initialization included), and neither the epoch nor the pending set moves once the block lands (D50); a test.
+Comment: "today's degraded mode" reworded.
+
+Every new test fails on the pre-fix source (six cases), and the fixes restore it.
 
 ## Seeds
 

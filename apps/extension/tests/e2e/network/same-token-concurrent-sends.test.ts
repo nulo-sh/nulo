@@ -22,7 +22,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { Page } from "puppeteer"
 import { afterEach, expect } from "vitest"
-import type { AztecTestConfig } from "../fixtures/aztec"
+import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 import { stopBackground } from "../fixtures/browser"
 import { type Burst, aztecConfig, burstTest as test, expectLedger, raw, reopen, settle } from "../fixtures/burst-account"
 import { TEST_PASSWORD } from "../fixtures/constants"
@@ -51,7 +51,8 @@ import {
 import { shotSend } from "../fixtures/send-page"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdMining, releaseMining, waitForEmptyMempool } from "../fixtures/mining-hold"
-import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, openPlayground, type PgResult, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { reconnectPlayground } from "../fixtures/send"
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { holdAccountRegistration, releaseAccountRegistration } from "../fixtures/projection-gate"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
@@ -387,19 +388,35 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** Whether this file's browser has approved the playground's origin: the burst fixture is file-scoped. */
+let playgroundApproved = false
+
+/** The playground with the matrix account granted. Once the origin is approved, a new page's
+ *  discovery is automatic and only the emoji check asks. */
+async function matrixPlayground(burst: Burst): Promise<Page> {
+	if (playgroundApproved) {
+		const playground = await openPlayground(burst.ctx)
+		await reconnectPlayground(burst.ctx, playground, "transaction", "same-token-concurrent-sends:reconnect")
+		return playground
+	}
+	const playground = await connectPlayground(burst.ctx)
+	await grantCapBundle(burst.ctx, playground, "transaction", async (ids) => {
+		const mine = ids.find((id) => id?.toLowerCase() === burst.account.toLowerCase())
+		if (!mine) throw new Error("the capabilities popup does not offer the matrix account")
+		return [mine]
+	})
+	playgroundApproved = true
+	return playground
+}
+
 test.skipIf(!hasConfig)(
 	"a Send-page send confirmed while a dApp send proves waits at queued, then both succeed",
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const config = aztecConfig as AztecTestConfig
 		await reopen(burst)
-		const playground = await connectPlayground(burst.ctx)
+		const playground = await matrixPlayground(burst)
 		try {
-			await grantCapBundle(burst.ctx, playground, "transaction", async (ids) => {
-				const mine = ids.find((id) => id?.toLowerCase() === burst.account.toLowerCase())
-				if (!mine) throw new Error("the capabilities popup does not offer the matrix account")
-				return [mine]
-			})
 			const b: BurstSend = { token: "TST", from: "private", to: "private", amount: "29", destination: to(), fee: "sponsored" }
 			await waitForEmptyMempool(config.nodeUrl)
 			await startSend(burst.page, b)
@@ -439,6 +456,13 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** The hash a NO_WAIT `sendTx` answered with: the answer comes at submission, not inclusion. */
+function dappTxHash(result: PgResult): string {
+	const txHash = (result.resultJson as { txHash?: string }).txHash
+	if (typeof txHash !== "string") throw new Error(`no txHash in ${JSON.stringify(result.resultJson)}`)
+	return txHash
+}
+
 /** The dApp send recorded after `known` keeps reading `stage` for `windowMs`: its build has not started. */
 async function expectDappRecordHeld(page: Page, known: ReadonlySet<string>, stage: string, windowMs: number): Promise<void> {
 	const fresh = async () => (await readDappExecuteRecords(page)).filter((r) => !known.has(r.id))
@@ -462,13 +486,8 @@ test.skipIf(!hasConfig)(
 	async ({ burst }) => {
 		const config = aztecConfig as AztecTestConfig
 		await reopen(burst)
-		const playground = await connectPlayground(burst.ctx)
+		const playground = await matrixPlayground(burst)
 		try {
-			await grantCapBundle(burst.ctx, playground, "transaction", async (ids) => {
-				const mine = ids.find((id) => id?.toLowerCase() === burst.account.toLowerCase())
-				if (!mine) throw new Error("the capabilities popup does not offer the matrix account")
-				return [mine]
-			})
 			// A private send on a sponsor: it shares nothing with the dApp's public transfer, so only the
 			// opaque wait (a dApp send's spends are unknown before its build) can hold the dApp send.
 			const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "33", destination: to(), fee: "sponsored" }
@@ -489,7 +508,9 @@ test.skipIf(!hasConfig)(
 			expect((await readTxStatuses(burst.page, [aHash]))[aHash], "A is still unmined while the dApp send waits").toBe(0)
 
 			await releaseMining()
-			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send behind a held transfer")
+			const sent = await waitForPgResult(playground, "sendTx", seq, 300_000)
+			await assertPgOk(playground, sent, "dApp send behind a held transfer")
+			await waitForTxMined(config, dappTxHash(sent))
 			const row = (await waitForTransfersTerminal(burst.page)).find((r) => r.amount === raw(a.amount))
 			expect([row?.stage, row?.error]).toEqual(["succeeded", undefined])
 			await waitForTxsMined(burst.page, [aHash])

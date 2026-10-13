@@ -1027,6 +1027,37 @@ describe("DappSendExecutor: a dApp send waits outside the slot for its accounts'
 		expect(h.proveAndSend).toHaveBeenCalledTimes(1)
 	})
 
+	test("a wallet send (Settings) never waits: it claims at once behind an unmined send", async () => {
+		const h = parked()
+		h.pending.push(row())
+		await h.executor.executeAztecSendTx(makeAztecOp(), { type: OriginType.UI } as never, undefined, HOOKS, FENCE)
+		expect(h.lane.parkSlot).not.toHaveBeenCalled()
+		expect(h.lane.joinOriginLine).not.toHaveBeenCalled()
+		expect(h.lane.claimOrCreateJournal).toHaveBeenCalledTimes(1)
+	})
+
+	test("a throw while reading its scopes leaves no place behind in its origin's line", async () => {
+		const h = parked()
+		const places: { left: boolean }[] = []
+		h.lane.joinOriginLine = vi.fn(() => {
+			const place = { left: false }
+			places.push(place)
+			const leave = () => {
+				place.left = true
+			}
+			return { behind: () => false, earlierDone: async () => true, leave }
+		})
+		const op = makeAztecOp() as { opts: object }
+		Object.defineProperty(op.opts, "additionalScopes", {
+			get() {
+				throw new Error("scopes boom")
+			},
+		})
+		await expect(h.run(op as never)).rejects.toThrow("scopes boom")
+		expect(places.filter((p) => !p.left)).toEqual([])
+		expect(h.lane.failUnclaimed).toHaveBeenCalledWith("q-1", expect.objectContaining({ message: "scopes boom" }))
+	})
+
 	test("a throw before the claim fails the unclaimed record; a claimed send's failure leaves that to its catch", async () => {
 		const h = parked()
 		h.pending.push(row())
@@ -1065,6 +1096,16 @@ describe("DappSendExecutor estimate→confirm reuse (aztec_sendTx)", () => {
 			txCalls: built.txCalls,
 			pendingPublicAuthwits: built.pendingPublicAuthwits,
 		})
+	})
+
+	test("an estimate built while a settled predecessor's block is past the node's tip is never stashed for reuse", async () => {
+		const unconfirmed = vi.fn(() => true)
+		const lagging = makeHarness({ chainTip: { unconfirmed, wait: async () => "confirmed" } })
+		const result = await lagging.executor.estimateOperationFee(makeAztecOp(), { paymentMethod: { kind: "fj" } } as never)
+		expect(unconfirmed).toHaveBeenCalledWith({ chainId: 7, account: "0xacct" }, undefined, "net-1")
+		expect(result.estimateId).toBeUndefined()
+		expect(result.maxFee).toBeDefined()
+		expect(lagging.deps.operationEstimateReuse.stash).not.toHaveBeenCalled()
 	})
 
 	test("the stash records the account's send epoch as it was before the build, not after", async () => {

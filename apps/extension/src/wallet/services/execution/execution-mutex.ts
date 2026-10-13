@@ -87,7 +87,7 @@ export class ExecutionMutex {
 	 *  awaits the current tail, then installs its own promise as the new tail. */
 	private readonly tails = new Map<string, Promise<void>>()
 
-	/** Per-lane depth (waiting + holding). Tracked ONLY for capped acquires, so
+	/** Per-lane depth (waiting, holding or parked). Tracked ONLY for capped acquires, so
 	 *  uncapped callers (and the FIFO-mechanics unit tests) are unaffected. */
 	private readonly laneDepth = new Map<string, number>()
 	/** Per-(lane, origin) depth, keyed `${laneKey}|${originKey}` (a lane key
@@ -95,7 +95,6 @@ export class ExecutionMutex {
 	 *  unambiguous — and ASCII, unlike a NUL separator which makes git treat the
 	 *  source as binary). */
 	private readonly originDepth = new Map<string, number>()
-	/** What `keep` does for each live capped hold. */
 	private readonly keepers = new WeakMap<ExecutionMutexRelease, () => SlotReservation>()
 	/** Each reservation not yet re-entered or dropped, with the place it holds. */
 	private readonly reservations = new WeakMap<SlotReservation, DepthClaim>()

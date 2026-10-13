@@ -21,3 +21,13 @@ Arc 1b ships on OA-3 = A, OA-4 = B and OA-5 = A, so Phase 1.2 (the chain-tip gat
 - **Waiters ignore waiters and estimates.** `waiterBlocked` is true for any holder in scope that is sent, external, or earlier, and for any pending row of the scope's chain inside `SUBMITTED_HOLD_MS`; ticketed rows need no exclusion, since a sent holder already blocks. A waiter holds an empty key set, which no ticket's keys intersect, so no Send-page send ever waits for a dApp send (D-orch-1b-1).
 - **The pre-claim failure lives in the lane.** `failUnclaimed(queuedJournalId, error)` fails a record still `queued` or `pending` and skips the cancel sentinel; `runInSlot` calls it whenever it throws with no `journalId`. A claimed record keeps its existing catch.
 - **Composition stage log.** A waiting record's heartbeat touch re-emits its stage, so the composition harness logs stage changes only.
+
+## Phase 1b.3: the end-to-end gate
+
+- **One browser per file, so one approval per origin.** The burst fixture is file-scoped: a second dApp case's `connectPlayground` waited 30 s for a discover window that never opens, because an approved origin's discovery is automatic and only the emoji check asks. The file's dApp cases share `matrixPlayground`: connect and grant once, `reconnectPlayground` after.
+- **A NO_WAIT answer is a submission.** The playground's `sendTx` answers at submission, so "both confirm" reads each dApp hash's inclusion on the node (`waitForTxMined`), not the playground's `ok`.
+- **First Chrome run (two files, retry 0):** `concurrent-sendtx-confirm` passed with both sends confirmed (42 s); the new same-token case failed on the reconnect above, before any send.
+
+## Review round 1 (Codex gpt-6.1-sol high, session `01a136de-aba7-7b02-9052-83efa8909e5e`; Opus general-purpose)
+
+- Codex: lead questions hold; five P2s accepted: the stranded origin line on a throwing scopes thunk, finality re-observing a block, a cancel waiting out a tip read, the failure cutoff, and e2e asserting submission. Opus: lead questions hold; wallet (Settings) sends parked with no card (D49), the same stranded line, and a lag-window estimate reused after the gate (D50). All fixed with failing-first tests: six cases fail on the pre-fix source.

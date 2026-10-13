@@ -4,7 +4,7 @@ import { snapshotResultSeq, waitForPgResults, assertPgOk } from "../fixtures/pla
 import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { readDappExecuteRecords, waitForDappExecuteStagesPresent } from "../fixtures/journal"
 import { holdProofGate, releaseProofGate } from "../fixtures/proof-gate"
-import type { AztecTestConfig } from "../fixtures/aztec"
+import { type AztecTestConfig, waitForTxMined } from "../fixtures/aztec"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -96,8 +96,16 @@ test.skipIf(!hasConfig)(
 		await releaseProofGate(orderingPopup)
 		await orderingPopup.close()
 
-		const [r1, r2] = await waitForPgResults(page, "sendTx", seqBefore, 2, 540_000)
-		await assertPgOk(page, r1, "concurrent-sendtx-confirm:r1")
-		await assertPgOk(page, r2, "concurrent-sendtx-confirm:r2")
+		// The playground's sendTx is NO_WAIT: each answer is a submission, so inclusion is read on the node.
+		const [r1, r2] = await waitForPgResults(page, "sendTx", seqBefore, 2, 480_000)
+		for (const [label, result] of [
+			["r1", r1],
+			["r2", r2],
+		] as const) {
+			await assertPgOk(page, result, `concurrent-sendtx-confirm:${label}`)
+			const txHash = (result.resultJson as { txHash?: string }).txHash
+			if (typeof txHash !== "string") throw new Error(`${label}: no txHash in ${JSON.stringify(result.resultJson)}`)
+			await waitForTxMined(aztecConfig!, txHash)
+		}
 	},
 )
