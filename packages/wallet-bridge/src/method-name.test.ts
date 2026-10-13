@@ -4,10 +4,9 @@ import { METHOD_REGISTRY, assertKnownMethod } from "./method-descriptors"
 
 /**
  * The typed dispatch-entry choke point. `assertKnownMethod` is the
- * single fail-closed guard the dispatcher routes through: it narrows the wire
- * `methodName: string` to `MethodName` (the literal key union of METHOD_REGISTRY)
- * or throws. Lives in its OWN file — NOT `method-descriptors.test.ts` (the frozen
- * authz oracle, which stays byte-UNEDITED).
+ * single fail-closed guard the dispatcher routes through: it narrows the decrypted
+ * method name to `MethodName` (the literal key union of METHOD_REGISTRY) or throws
+ * `UnsupportedMethodError`.
  */
 describe("assertKnownMethod — typed dispatch-entry choke point", () => {
 	test("passes (narrows) for every registered method", () => {
@@ -35,5 +34,17 @@ describe("assertKnownMethod — typed dispatch-entry choke point", () => {
 
 	test("fail-closed: an empty method name throws", () => {
 		expect(() => assertKnownMethod("")).toThrow(/Unsupported wallet method/)
+	})
+
+	// The name is decrypted JSON. Coerced, an array naming a method would pass and an object with
+	// an own `toString` would throw a bare TypeError the envelope cannot classify.
+	test.each([
+		[{ toString: "x" }, "[object]"],
+		[42, "[number]"],
+		[null, "[object]"],
+		[["sendTx"], "[object]"],
+	])("refuses the non-string name %j as unsupported under its type placeholder", (name, shown) => {
+		expect(() => assertKnownMethod(name)).toThrow(UnsupportedMethodError)
+		expect(() => assertKnownMethod(name)).toThrow(`Unsupported wallet method: ${shown}`)
 	})
 })

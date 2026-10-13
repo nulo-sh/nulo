@@ -2,12 +2,9 @@ import { describe, expect, test } from "vitest"
 import type { ContentScriptMessageEnvelope } from "./content-script-validator"
 import { SESSION_DISCONNECTED, sessionDisconnectedMessage, sessionKnownTo, staleSessionVerdict } from "./stale-session"
 
-const envelope = (over: Partial<ContentScriptMessageEnvelope>): ContentScriptMessageEnvelope => ({
-	origin: "content-script",
-	type: "ping",
-	sessionId: "s1",
-	...over,
-})
+/** The verdict reads only `type` and `sessionId`; extra keys stand for what a hostile page adds. */
+const envelope = (over: Record<string, unknown> = {}) =>
+	({ origin: "content-script", type: "ping", sessionId: "s1", ...over }) as ContentScriptMessageEnvelope
 const unknown = () => false
 const known = () => true
 
@@ -20,7 +17,7 @@ describe("staleSessionVerdict", () => {
 	})
 
 	test("a session the sender's tab holds is forwarded", () => {
-		expect(staleSessionVerdict(envelope({}), 7, known)).toBe("forward")
+		expect(staleSessionVerdict(envelope(), 7, known)).toBe("forward")
 	})
 
 	test("the predicate is asked for the browser's tab, not one the envelope could name", () => {
@@ -29,7 +26,7 @@ describe("staleSessionVerdict", () => {
 			asked.push([sessionId, tabId])
 			return true
 		}
-		const hostile = { ...envelope({}), tabId: 99 } as ContentScriptMessageEnvelope
+		const hostile = envelope({ tabId: 99 })
 		staleSessionVerdict(hostile, 7, recording)
 		expect(asked).toEqual([["s1", 7]])
 	})
@@ -42,7 +39,7 @@ describe("staleSessionVerdict", () => {
 	)
 
 	test("no tab id — nowhere to reply — forwards", () => {
-		expect(staleSessionVerdict(envelope({}), undefined, unknown)).toBe("forward")
+		expect(staleSessionVerdict(envelope(), undefined, unknown)).toBe("forward")
 	})
 
 	test("no session id forwards, and the predicate is never asked", () => {
@@ -56,7 +53,7 @@ describe("staleSessionVerdict", () => {
 	})
 
 	test("the reply goes to the browser's tab, never one the envelope could name", () => {
-		const hostile = { ...envelope({}), tabId: 99 } as ContentScriptMessageEnvelope
+		const hostile = envelope({ tabId: 99 })
 		expect(staleSessionVerdict(hostile, 7, unknown)).toEqual({ disconnectTab: 7, sessionId: "s1" })
 	})
 })

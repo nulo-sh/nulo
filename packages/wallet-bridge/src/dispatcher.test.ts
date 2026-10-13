@@ -3435,6 +3435,19 @@ describe("dispatcher — the schema parse", () => {
 		).rejects.toBeInstanceOf(ScopeViolationError)
 	})
 
+	test("a grantPublicAuthwit under a `*` transaction scope naming a Buffer-shaped contract never reaches the window", async () => {
+		const content = { caller: ACCOUNT, contract: TOKEN, method: "transfer_public", args: [] }
+		const bufferShaped = { type: "Buffer", data: [...Buffer.from(TOKEN.slice(2), "hex")] }
+		const refused = harness()
+		await expect(refused.dispatch("grantPublicAuthwit", [ACCOUNT, { ...content, contract: bufferShaped }])).rejects.toThrow(
+			InvalidWalletArgumentsError.forMethod("grantPublicAuthwit"),
+		)
+		expect(refused.sent).toHaveLength(0)
+		const canonical = harness()
+		await expect(canonical.dispatch("grantPublicAuthwit", [ACCOUNT, content])).resolves.toBe("0xtx")
+		expect(canonical.sent).toHaveLength(1)
+	})
+
 	test("an account the address schema admits but String() cannot convert is refused by the parse", async () => {
 		const h = harness()
 		const bufferShaped = JSON.parse(JSON.stringify({ type: "Buffer", data: Array(32).fill(10), toString: "x" }))

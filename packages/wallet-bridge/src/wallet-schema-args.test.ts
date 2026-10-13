@@ -7,6 +7,7 @@ import { WalletSchema } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { getSchemaParameters, parseWithOptionals } from "@aztec-labs/foundation/schemas"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { Capsule } from "@aztec-labs/stdlib/tx"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { describe, expect, test } from "vitest"
 import { METHOD_REGISTRY, type MethodName } from "./method-descriptors"
@@ -164,5 +165,66 @@ describe("assertWalletSchemaArgs", () => {
 
 	test("a method with no schema entry is refused", async () => {
 		await expect(assertWalletSchemaArgs("notAMethod" as MethodName, [])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+	})
+})
+
+describe("assertWalletSchemaArgs — an address in another spelling", () => {
+	/** The same 32 bytes as the JSON form of a Node `Buffer`, which the address schema also admits. */
+	const bufferShaped = (address: string) => ({ type: "Buffer", data: [...Buffer.from(address.slice(2), "hex")] })
+	const intent = (caller: unknown) => ({ caller, call })
+	const override = (address: unknown) => ({ contracts: { [TOKEN]: { instance: { ...wireInstance(TOKEN), address } } } })
+
+	/** Address positions of every shape the walk meets: an argument, a nested key, an array element,
+	 *  a union branch, a class the parse builds, and each extra parse. */
+	const POSITIONS: Array<[string, MethodName, (address: unknown) => unknown[]]> = [
+		["isTokenRegistered[0]", "isTokenRegistered", (a) => [a]],
+		["registerToken[0]", "registerToken", (a) => [a, TOKEN]],
+		["registerToken[1]", "registerToken", (a) => [ACCOUNT, a]],
+		["createAuthWit[0]", "createAuthWit", (a) => [a, { consumer: TOKEN, innerHash: FIELD }]],
+		["createAuthWit[1].consumer", "createAuthWit", (a) => [ACCOUNT, { consumer: a, innerHash: FIELD }]],
+		["createAuthWit[1].caller", "createAuthWit", (a) => [ACCOUNT, intent(a)]],
+		["createAuthWit[1].call.to", "createAuthWit", (a) => [ACCOUNT, { caller: ACCOUNT, call: { ...call, to: a } }]],
+		["createAuthWit[1].caller, both branches", "createAuthWit", (a) => [ACCOUNT, { ...intent(a), consumer: TOKEN, innerHash: FIELD }]],
+		["grantPublicAuthwit[0]", "grantPublicAuthwit", (a) => [a, content]],
+		["grantPublicAuthwit[1].caller", "grantPublicAuthwit", (a) => [ACCOUNT, { ...content, caller: a }]],
+		["grantPublicAuthwit[1].contract", "grantPublicAuthwit", (a) => [ACCOUNT, { ...content, contract: a }]],
+		["sendTx[0].calls[0].to", "sendTx", (a) => [wirePayload([{ ...call, to: a }]), { from: ACCOUNT }]],
+		["sendTx[1].from", "sendTx", (a) => [payload, { from: a }]],
+		["simulateTx[1].overrides, a contract instance", "simulateTx", (a) => [payload, { from: ACCOUNT, overrides: override(a) }]],
+		["executeUtility[0].to", "executeUtility", (a) => [{ ...call, to: a }, { scopes: [ACCOUNT] }]],
+		["getContractMetadata[0]", "getContractMetadata", (a) => [a]],
+		["getPrivateEvents[1].contractAddress", "getPrivateEvents", (a) => [wireEventQuery(TOKEN)[0], { contractAddress: a, scopes: [] }]],
+		["registerSender[0]", "registerSender", (a) => [a, null]],
+		["registerContract[0].address", "registerContract", (a) => [{ ...wireInstance(TOKEN), address: a }]],
+	]
+
+	test.each(POSITIONS)("%s: a Buffer-shaped address is refused", async (_label, method, args) => {
+		await expect(assertWalletSchemaArgs(method, args(bufferShaped(TOKEN)))).rejects.toThrow(
+			`Invalid arguments for wallet method: ${method}`,
+		)
+	})
+
+	test.each(POSITIONS)("%s: the same address as the SDK writes it passes (control)", async (_label, method, args) => {
+		await expect(assertWalletSchemaArgs(method, args(TOKEN))).resolves.toBeUndefined()
+	})
+
+	test.each([
+		["base64", Buffer.from(TOKEN.slice(2), "hex").toString("base64")],
+		["unprefixed hex", TOKEN.slice(2)],
+		["upper-case hex", `0x${TOKEN.slice(2).toUpperCase()}`],
+	])("registerToken[1]: an address in %s is refused", async (_label, spelling) => {
+		await expect(assertWalletSchemaArgs("registerToken", [ACCOUNT, spelling])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+	})
+
+	test("registerContract: an instance without its address is refused, one with an artifact passes (control)", async () => {
+		await expect(assertWalletSchemaArgs("registerContract", [without(wireInstance(TOKEN), "address")])).rejects.toBeInstanceOf(
+			InvalidWalletArgumentsError,
+		)
+		await expect(assertWalletSchemaArgs("registerContract", [wireInstance(TOKEN), wireArtifact()])).resolves.toBeUndefined()
+	})
+
+	test("sendTx: a payload carrying a capsule, whose packed encoding holds an address, passes (control)", async () => {
+		const capsule = onWire(new Capsule(AztecAddress.fromBigIntUnsafe(0x0bn), new Fr(1n), [new Fr(2n)]))
+		await expect(assertWalletSchemaArgs("sendTx", [{ ...payload, capsules: [capsule] }, { from: ACCOUNT }])).resolves.toBeUndefined()
 	})
 })

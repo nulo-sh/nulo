@@ -339,6 +339,32 @@ describe("handleWalletMessage — a capacity refusal", () => {
 	})
 })
 
+describe("handleWalletMessage — an unsupported method", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	const unsupported = (shown: string) => ({
+		refusal: `Unsupported wallet method: ${shown}`,
+		level: LogLevel.Debug,
+		envelope: {
+			code: -32601,
+			message: `Unsupported wallet method: ${shown}`,
+			data: { walletErrorCode: "UNSUPPORTED_METHOD" },
+		},
+		ran: [],
+		rows: 0,
+	})
+
+	test("named by an unknown string answers -32601 at debug and runs nothing", async () => {
+		expect(await refuse("aztec_notARealMethod", [], [grant(authWit)])).toMatchObject(unsupported("aztec_notARealMethod"))
+	})
+
+	test("named by a non-string answers -32601 under its type placeholder at debug and runs nothing", async () => {
+		expect(await refuse(42 as never, [], [grant(authWit)])).toMatchObject(unsupported("[number]"))
+	})
+})
+
 describe("handleWalletMessage — a schema refusal", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()

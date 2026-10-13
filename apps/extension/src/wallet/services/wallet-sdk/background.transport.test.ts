@@ -25,6 +25,7 @@ vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { initWalletSdkHandler } from "./background"
+import { MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS } from "./content-script-validator"
 import { SESSION_DISCONNECTED } from "./stale-session"
 import { fakeSdkPorts } from "./test-ports"
 import { FAKE_DAPP_ORIGIN, fakeSdkServices } from "./test-services"
@@ -197,6 +198,17 @@ describe("a live session, established through the real key exchange", () => {
 		await flush()
 		expect(encrypted).toHaveBeenCalledWith("s1", expect.anything())
 		expect(disconnectsSent()).toEqual([])
+	})
+
+	test("its secure message over the ciphertext budget is dropped before the SDK sees it", async () => {
+		const { deliver } = boot()
+		await establish(deliver, "s1")
+		const ciphertext = "A".repeat(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS + 1)
+		deliver({ ...secure("s1"), content: { iv: "", ciphertext } })
+		await flush()
+		expect(sdkListener).not.toHaveBeenCalled()
+		expect(encrypted).not.toHaveBeenCalled()
+		expect(sendMessage).not.toHaveBeenCalled()
 	})
 
 	test("its id sent from another tab is answered in that tab only: not forwarded, the owning tab untouched and still live", async () => {
