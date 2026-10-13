@@ -116,10 +116,10 @@ Account addresses are a **frozen, versioned artifact of the extension major**, n
 
 ## Complexity budgets
 
-Biome enforces per-function complexity budgets at **error** severity, everywhere Biome runs (editor, pre-commit `--staged`, `bun run lint`, `quality-status`). The full rules, their four enforcers and the Biome-bump procedure are the [`complexity-budgets`](./.claude/skills/complexity-budgets/SKILL.md) skill: read it before you add, move, re-stamp or delete a `biome-ignore lint/complexity` directive, regenerate the manifest, or bump `@biomejs/biome`.
+Biome enforces per-function complexity budgets at **error** severity, everywhere Biome runs (editor, pre-commit `--staged`, `bun run lint`, `quality-status`). The full rules, their four enforcers, the Biome-bump procedure and the duplication trend (`audit:dup`) are the [`complexity-budgets`](./.claude/skills/complexity-budgets/SKILL.md) skill: read it before you add, move, re-stamp or delete a `biome-ignore lint/complexity` directive, regenerate the manifest, or bump `@biomejs/biome`.
 
 - **Cognitive complexity ≤ 15** (`noExcessiveCognitiveComplexity`), **≤ 80 non-blank lines per production function** (`noExcessiveLinesPerFunction`), **`describe()` nesting ≤ 5** (`noExcessiveNestedTestSuites`).
-- **The baseline only shrinks — NEVER add a complexity suppression.** A NEW acceptance is a blueprint with owner sign-off, never a PR nit. **The generator never writes an acceptance for you.**
+- **The baseline only shrinks — NEVER add a complexity suppression.** A NEW acceptance is a blueprint with owner sign-off, never a PR nit. **The generator (`bun run baseline:complexity`) never writes an acceptance for you.**
 - Raising the ceilings in `biome.json`, loosening the override globs, or hand-editing `manifest.json` (it is only ever written by `bun run baseline:complexity`) all count as weakening a quality gate — see the gates warning below.
 
 ## Package boundaries
@@ -174,7 +174,9 @@ change a log line, a redaction key or the log viewer.
   (`wallet/logger/utils.ts`), an object walker. It redacts **by key name**, so `{ password }` is
   safe and `{ value: password }` is not. **A finished string is opaque to it** — `` `k=${x}` ``
   can never be redacted — and neither can `"k=" + x` or a bare `x` string argument. A caught
-  error is passed the same way, under a named key (`{ error }`).
+  error is passed the same way, under a named key (`{ error }`; `trim` projects an `Error` to a
+  capped `{ name, message }` with no stack), never flattened first by a helper or a `.message` /
+  `.stack` read.
 - **Never log**: decrypted note contents, simulation/utility return values, contact name or
   address, page or navigation URLs, balances, whole RPC envelopes (`params`/`result` carry
   passwords and export returns), or whole backup rows.
@@ -453,7 +455,7 @@ Plans under [`implementations-plan/`](./implementations-plan/README.md) are comm
 
 ### Where open work lives
 
-No file in this repository holds a backlog. Open work lives in GitHub issues; a suspected exploitable weakness lives in a private draft security advisory. Until publication its finding never appears in a committed plan, a PR body or a test name. Read [`implementations-plan/README.md` § Where open work lives](./implementations-plan/README.md#where-open-work-lives) before filing an issue, a known limit or an advisory.
+No file in this repository holds a backlog. Open work lives in GitHub issues; a suspected exploitable weakness lives in a private draft security advisory. Until publication its finding never appears in a committed plan, a PR body or a test name. The fix may land first; its PR and tests describe the change, not the weakness (`SECURITY.md` § How findings are tracked). Read [`implementations-plan/README.md` § Where open work lives](./implementations-plan/README.md#where-open-work-lives) before filing an issue, a known limit or an advisory.
 
 ## Quality gates — local and CI
 
