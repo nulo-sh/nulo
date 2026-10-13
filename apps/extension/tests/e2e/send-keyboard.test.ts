@@ -66,6 +66,16 @@ async function expectAccentRing(page: Page, testid: string): Promise<void> {
 	expect(color, testid).toBe(await tokenColor(page, "--nulo-accent"))
 }
 
+/** Contacts load with Send's other mount reads, after the field already suggests the account. */
+async function waitForSuggestionRows(page: Page, rows: number): Promise<void> {
+	await page.waitForFunction(
+		(s: string, n: number) => document.querySelector(s)?.children.length === n,
+		{ timeout: 10_000 },
+		sel("send-destination-suggestions"),
+		rows,
+	)
+}
+
 async function readSuggestionList(page: Page) {
 	return page.evaluate(
 		(input: string, list: string) => {
@@ -113,7 +123,7 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
-	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
+	await waitForSuggestionRows(page, 4)
 	expect(await readSuggestionList(page)).toEqual({ role: "listbox", rows: 4, scrolls: true, controlled: true, active: null })
 	await page.keyboard.press("ArrowDown")
 	expect((await readSuggestionList(page)).active).toEqual({ row: 0, role: "option", selected: "true", shown: true })
@@ -135,11 +145,11 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
-	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
+	await waitForSuggestionRows(page, 4)
 	// Inside the quarter second the suggestions outlive the field's blur by. The list scrolls, and a
-	// scrolling element is a Tab stop unless it opts out: Tab must leave both it and its rows.
+	// scrolling element is a Tab stop unless it opts out: Tab goes on to the token card.
 	await page.keyboard.press("Tab")
-	expect(await page.evaluate(() => document.activeElement?.closest('[role="listbox"]') === null)).toBe(true)
+	expect(await activeTestId(page)).toBe("send-token-trigger")
 	await page.keyboard.press("Enter")
 	expect((await readSendInputs(page)).destination).toBe("Acc")
 })
