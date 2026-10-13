@@ -31,3 +31,4 @@
 - 2026-10-13 — phases 2.1-2.3 gates: pass at 0ceee1bf (lint, typecheck:all; AmountCard, SendReviewSheet, send-fiat-gate, send tests 200/200; every new case fails on the base file).
 - 2026-10-13 — phase 2.4 gates: network at retry 0 Chrome and Firefox (send-amount-exact 1/1, fiat-send 1/1 each; the new USD step fails on the base sources); Chrome smoke at retry 0 on a smoke-armed build: 219 passed, 11 skipped. 40 before/after screenshots committed. OA-10 filed (derived line legibility at large balances).
 - 2026-10-13 — arc 2 review: Codex r1 approve (two comment lows), Opus approve (comment nits; one rejection; one known limit, #367 filed closed); Codex r2 approve. Loop converged.
+- 2026-10-13 — phase 2.4: Firefox smoke at retry 0 on a smoke-armed build: 217 passed, 13 skipped. Merged origin/dev (dd922823, #356: e2e assertions only, no overlap).
