@@ -232,7 +232,7 @@ Each gate also runs `bun run lint`, `bun run typecheck:all` and `bun run check:p
   - the full smoke suite is green on both browsers;
   - `bun run e2e:agent tests/e2e/network/default-token-seeding.test.ts` is green on Chrome and Firefox.
 
-**P6. Disclosure and docs.**
+**P6. Disclosure and docs.** ✓
 1. `legal/privacy.md` 1.2: the short version, § 2, a new § 5.x, § 5.5, the appendix, and the `Origin` per A4. Archive the old copy and add the `@nulo/legal` entry.
 2. Terms § 7.5 as a patch.
 3. `store/remote-code.md` and its citations; `store/listing.md` (data row, alarms "four jobs", reviewer notes).
@@ -341,7 +341,7 @@ This section follows [`implementations-plan/README.md` § Post-implementation st
 - **Final pass on the round-2 fixes** (same session, resumed): **approve**. All four findings are closed and no new material defect was found. Implementation review must verify that the marker round-trips and that the named regression tests exist.
 - **Arc 1 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (the summary's code was outside `SIGNING_PATHS`); all seven findings accepted and fixed, each listed in `lessons/phase-2.md`. Round 2: **conditional approve**, one new should-fix (a quoted `}}` hid a secret read from `privileged()`), fixed. Round 3: **approve**, "No NEW material findings or comment issues in arc 1." After the key ceremony, rounds 4-6 on the pinned keys and the `FORMAT.md` key-table check: two should-fixes (rows the check skipped), both fixed; round 6 **approve**, "No new material findings."
 - **Arc 2 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (a list change during the commit's marker read let `persist()` start under old pins); all seven findings accepted and fixed, each listed in `lessons/phase-6.md`. Round 2: **approve**, "No new material findings. Confidence: high."
-- **Final cross-arc review** (fresh Codex session from `d01569a2`, `gpt-6.1-sol`, high). Round 1: **conditional approve**, no blocking finding; four accepted (smoke coupled to the owner's list contents, a FORMAT.md claim about names, two comments). Round 2: **conditional approve**, two residual (a source run could skip priced tests; History priced from the list), fixed. Round 3: **approve**, "No new material findings. Confidence: high." Each in `lessons/phase-6.md`.
+- **Final cross-arc review** (fresh Codex session from `d01569a2`, `gpt-6.1-sol`, high). Round 1: **conditional approve**, no blocking finding; four accepted (smoke coupled to the owner's list contents, a FORMAT.md claim about names, two comments). Round 2: **conditional approve**, two residual (a source run could skip priced tests; History priced from the list), fixed. Round 3: **approve**, "No new material findings. Confidence: high." Each in `lessons/phase-6.md`. After the rebase onto `dev` `1823144f`, round 4 on the range-diff: **approve**, "No new material findings."
 
 ## Seeds
 

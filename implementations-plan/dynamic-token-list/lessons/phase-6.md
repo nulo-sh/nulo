@@ -14,6 +14,7 @@
 - `bun run test:all`: every workspace exits 0 but `@nulo/token-list-host`, whose one red test is `tree.test.ts > has no finding`, listing only the two placeholder keys (red by design until the key ceremony). Re-run after the keys land.
 - The Chrome legal smoke specs (`legal-acceptance`, `settings-routes`, 19 tests) and the full Firefox smoke ran on a build carrying privacy 1.2: green.
 - `bun run lint`, `bun run typecheck:all`, `bun run check:plans`: exit 0.
+- After the key ceremony and the rebase onto `dev` `1823144f`: `bun run test:all` exits 0 (extension 11,750 passed; the tree test passes on the real keys), `test:ci-gating` 544 pass, `lint`, `lint:actions`, `typecheck:all` and `check:plans` exit 0; smoke `token-list`, `rows`, `send-keyboard` and `own-window` pass on both browsers (15 tests each).
 
 ## Arc 2 implementation review (Codex `gpt-6.1-sol`, high)
 
@@ -44,3 +45,7 @@ Round 2 (resumed): **conditional approve**, two residual findings, both fixed:
 2. Nit: the History sideways test priced its row from the held list though it asserts no fiat. It now takes fixture metadata (`openHomeWithRow(ctx, { priced: false })`). The other non-pricing rows tests keep the shared listed launch: a release build seeded its defaults in that launch before this change too, and a second file-scope launch costs more than it proves.
 
 Round 3 (resumed): **approve**, "No new material findings. Confidence: high."
+
+## The rebase onto dev
+
+Seven `dev` commits landed during review. Conflicts: the index line, the nightly advisory set (now the union with `network-e2e-canary-wasm`), the `WORKFLOWS.md` rows, `CLAUDE.md` § In CI (dev's slimmer text kept) and the `rows` e2e error-array assertions, moved onto the listed fixtures. Dev's new moved-quote notice test read the removed seed list; it now prices from the list fixture. The cross-arc session, resumed on the range-diff, read #379 and #347 against the seeder and the first fetch: **approve**, "No new material findings. Confidence: high."
