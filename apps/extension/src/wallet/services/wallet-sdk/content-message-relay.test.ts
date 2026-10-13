@@ -90,7 +90,10 @@ describe("content-message-relay", () => {
 		dispatch(discovery("iframe"), { frameId: 3, origin: "https://evil.example", tab: { id: 7 } })
 		// Malformed per the envelope schema: sessionId must be a string when present.
 		dispatch({ origin: "content-script", type: "discovery-request", sessionId: 42 }, topFrameSender())
-		dispatch({ origin: "content-script", type: "secure-message", sessionId: "s", payload: "x" }, topFrameSender())
+		dispatch(
+			{ origin: "content-script", type: "secure-message", sessionId: "s", content: { iv: "", ciphertext: "" } },
+			topFrameSender(),
+		)
 		dispatch({ origin: "content-script", type: "ping", sessionId: "s" }, topFrameSender())
 
 		const seen: unknown[] = []

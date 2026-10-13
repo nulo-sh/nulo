@@ -17,8 +17,9 @@
  *     offscreen pings) are passed through untouched — the listener's
  *     receiver does its own filter on `origin === "background"` etc.
  *
- * NOT a security boundary on its own (the upstream handler also
- * filters), just a noise-reduction + invariant check that catches
+ * Apart from the secure-message size bound, which nothing upstream
+ * enforces, NOT a security boundary on its own (the upstream handler
+ * also filters), just a noise-reduction + invariant check that catches
  * malformed dispatches before they reach the upstream code.
  *
  * Pure function — no chrome.*, no globals. Tested directly with
@@ -48,15 +49,38 @@ import { z } from "zod"
  */
 const CONTENT_SCRIPT_MESSAGE_TYPES = ["discovery-request", "key-exchange-request", "secure-message", "disconnect-request", "ping"] as const
 
-const ContentScriptMessageSchema = z.object({
+/**
+ * The longest secure-message ciphertext admitted, in base64 characters (one byte each). A
+ * connected page's call is decrypted, queued and possibly held whole, and its id is inside the
+ * ciphertext, so an oversized one is dropped unanswered here. Twice the largest call the bundled
+ * artifacts produce (a `registerContract` carrying the artifact), which a test re-measures.
+ */
+export const MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS = 16 * 1024 * 1024
+
+/** AES-GCM's 12-byte IV is 16 base64 characters. */
+const MAX_SECURE_MESSAGE_IV_CHARS = 32
+
+const EnvelopeSchema = z.object({
 	origin: z.literal("content-script"),
-	type: z.enum(CONTENT_SCRIPT_MESSAGE_TYPES),
 	sessionId: z.string().optional(),
-	// `content` is intentionally `unknown` — its shape varies by `type`
-	// and the upstream handler does its own per-type validation. We
-	// just verify the envelope is well-formed.
-	content: z.unknown().optional(),
 })
+
+const ContentScriptMessageSchema = z.discriminatedUnion("type", [
+	EnvelopeSchema.extend({
+		type: z.literal("secure-message"),
+		// Strict: upstream queues the whole `content` for the session's decrypt, so a key beside
+		// `ciphertext` would carry data past its bound.
+		content: z.strictObject({
+			iv: z.string().max(MAX_SECURE_MESSAGE_IV_CHARS),
+			ciphertext: z.string().max(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS),
+		}),
+	}),
+	EnvelopeSchema.extend({
+		type: z.enum(CONTENT_SCRIPT_MESSAGE_TYPES).exclude(["secure-message"]),
+		// Its shape varies by `type` and the upstream handler validates it per type.
+		content: z.unknown().optional(),
+	}),
+])
 
 export type ContentScriptMessageEnvelope = z.infer<typeof ContentScriptMessageSchema>
 

@@ -9,3 +9,4 @@
 - 2026-10-13 — orchestrator approved the plan (D-orch-1 to D-orch-7 recorded); arc 1 phase 1 started.
 - 2026-10-13 — phase 1 gate PASS (lint, typecheck:all, wallet-bridge 706, refusal-log 28; new cases red on base).
 - 2026-10-13 — phase 2 gate PASS (lint, typecheck:all, wallet-bridge 750, schema-patch 15; 27 refused rows red on base, controls green).
+- 2026-10-13 — phase 3 gate PASS (lint, typecheck:all, wallet-sdk 380; 7 refused cases red on base; 44-artifact pin passes, largest x2 within budget).
