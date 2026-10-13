@@ -41,7 +41,8 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v?.length) return null
 			if (!isValidHex(v)) return "Invalid address"
-			if (tokens.value.some((t) => t.contract === v)) return "Already exist"
+			// Hex is case-insensitive: another spelling of a listed contract is that token.
+			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return "Already exist"
 			return null
 		},
 	},
