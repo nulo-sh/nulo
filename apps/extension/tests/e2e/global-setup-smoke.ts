@@ -34,9 +34,9 @@ function cleanupOrphanChromeProcesses() {
 const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:${BROWSER}`
 
 /**
- * A source run loads the armed build, whose empty seed list and switched-off token-list fetcher keep
- * the shipped Testnet tokens off every profile; only a release build, smoked as an artifact, seeds
- * them. The token-seed stamp is what `_extension-smoke-e2e.yml` greps for after its armed build.
+ * A source run loads the armed build, whose token-list fetcher reads its host and key only from a
+ * spec (`fixtures/token-list.ts`), so no source profile holds a list it did not ask for. The
+ * token-seed stamp is what `_extension-smoke-e2e.yml` greps for after its armed build.
  */
 function assertArmedSmokeBuild(): void {
 	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
@@ -67,8 +67,8 @@ export async function setup(project: TestProject) {
 	if (!fs.existsSync(manifest)) {
 		throw new Error(`No ${BROWSER} extension at ${EXTENSION_PATH}\nBuild the armed smoke build first: ${ARMED_BUILD}`)
 	}
-	// Every smoke run is guarded. Only a release build seeds the shipped token list, so only an
-	// artifact run may start the live spec's launch, which checks that list against the live chain.
+	// Every smoke run is guarded. Only a release build pins the production keys, so only an artifact
+	// run may start the live spec's launch, which checks the published list against the live chain.
 	const liveLeg = process.env.NULO_E2E_ARTIFACT_RUN === "1"
 	if (!liveLeg) assertArmedSmokeBuild()
 	project.provide("extensionPath", EXTENSION_PATH)

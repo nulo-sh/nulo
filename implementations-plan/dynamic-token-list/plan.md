@@ -222,7 +222,7 @@ Each gate also runs `bun run lint`, `bun run typecheck:all` and `bun run check:p
 4. Write a `usePrices` test: the mapping is resnapshotted on reconnect.
 - Gate: `bun run audit:vue` exits 0. `rg -n "TESTNET_TOKENS|DEFAULT_TOKEN_SEEDS" apps/extension/src` returns nothing.
 
-**P5. E2E.**
+**P5. E2E.** ✓
 1. Declare `tokens.nulo.sh` in `DECLARED_REFUSALS`.
 2. Add one smoke file, `token-list.test.ts`. A port-registry server on `http://localhost` sends the Worker's headers, and a per-run key signs its lists. The file checks that a signed list makes placeholder rows appear, that a forged list is refused, that a lower sequence leaves the rows in place, and that the request carries no cookie and no referrer. It records each browser's `Origin` header.
 3. Add a live leg, which runs only in artifact launches (nightly and release): it lets `tokens.nulo.sh` through and asserts a verified, non-empty stored list. It reads the shipped-token-list expectations from that list. Its first green run comes after O6; it is not a delivery gate.

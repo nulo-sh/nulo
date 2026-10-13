@@ -5,10 +5,11 @@
  */
 import type { Page } from "puppeteer"
 import type { TokenListEntry } from "@nulo/token-list"
-import { TEST_LIST_ENTRIES } from "@/wallet/services/token-list/list.fixture"
 import { captureSoleProfileId, getAccountAddress } from "../fixtures/helpers"
+import { heldListEntries } from "../fixtures/token-list"
 
-/** The active profile, network and account, and the chain's first list token with a price id. */
+/** The active profile, network and account, and the chain's first token with a price id in the list a
+ *  listed launch holds. */
 export type ActivityScope = {
 	profileId: string
 	networkId: string
@@ -33,11 +34,11 @@ export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope,
 export async function readActivityScope(page: Page): Promise<ActivityScope> {
 	const identity = await readScopeIdentity(page)
 	const entry = listEntries(identity.chainId).find((e) => e.priceId !== undefined)
-	if (!entry) throw new Error(`the test list prices no token on chain ${identity.chainId}`)
+	if (!entry) throw new Error(`the held list prices no token on chain ${identity.chainId}`)
 	return { ...identity, token: tokenOf(entry) }
 }
 
-const listEntries = (chainId: number) => TEST_LIST_ENTRIES.filter((e) => e.chainId === chainId)
+const listEntries = (chainId: number) => heldListEntries().filter((e) => e.chainId === chainId)
 
 const tokenOf = (entry: TokenListEntry): ActivityScope["token"] => ({
 	contract: entry.address,
@@ -49,7 +50,7 @@ const tokenOf = (entry: TokenListEntry): ActivityScope["token"] => ({
 /** The chain's next list token: a second contract, for specs that tell two tokens' rows apart. */
 export function secondToken(scope: ActivityScope): ActivityScope["token"] {
 	const entry = listEntries(scope.chainId).find((e) => e.address !== scope.token.contract)
-	if (!entry) throw new Error(`the test list has a single token on chain ${scope.chainId}`)
+	if (!entry) throw new Error(`the held list has a single token on chain ${scope.chainId}`)
 	return tokenOf(entry)
 }
 

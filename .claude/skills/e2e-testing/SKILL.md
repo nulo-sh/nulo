@@ -628,6 +628,11 @@ the pattern.
   replaces the $1 seed mid-test and every fiat figure moves. Wait for a priced figure, never
   for an exact one carried across a remount
   (`implementations-plan/archive/hygiene/plan.md#price-settle`).
+- **A smoke launch holds no token list unless it asks for one.** The worker fetches on Terms
+  acceptance, and a launch's seeded acceptance is a storage write no listener hears, so a plain
+  launch prices nothing and shows no defaults. A spec that needs a priced token or the defaults
+  launches with `tokenList: "held"` or the `listedExtension` fixtures (`fixtures/token-list.ts`;
+  the e2e README's "The signed token list").
 
 ## 3. Kill or restart the background
 

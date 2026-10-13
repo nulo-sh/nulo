@@ -11,11 +11,12 @@ import { CHAIN_IDS } from "@/utils/chain-ids"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { BUNDLED_TOKEN_CLASS_IDS, readTokenList, type TokenListEntry } from "@nulo/token-list"
 import { openScratchPage } from "./fixtures/browser"
-import { type ExtensionContext, launchExtension, openPopup, registerProfile, waitForHash, withTimeoutMessage } from "./fixtures/extension"
+import { type ExtensionContext, launchExtension, openPopup, waitForHash, withTimeoutMessage } from "./fixtures/extension"
 import { captureSoleProfileId } from "./fixtures/helpers"
+import { createProfileAcceptingTerms } from "./helpers/legal-drivers"
 
 const PROBE_BUDGET_MS = 10_000
-/** The boot fetch waits only on the Terms the launch accepts: a few seconds, with the 10 s abort. */
+/** The fetch on the Terms acceptance: a few seconds, inside the 10 s abort. */
 const LIST_ARRIVES_MS = 30_000
 /** The seed pass's own budget against a failing node: two retry waits (15 s, then 60 s) and three
  *  attempts, as `rows.test.ts` gives Home. */
@@ -131,7 +132,7 @@ describe.skipIf(inject("liveLeg") !== true)("the shipped token list on the live 
 	let ctx: ExtensionContext
 
 	beforeAll(async () => {
-		ctx = await launchExtension({ liveNode: true })
+		ctx = await launchExtension({ live: true })
 	})
 
 	afterAll(async () => {
@@ -145,7 +146,7 @@ describe.skipIf(inject("liveLeg") !== true)("the shipped token list on the live 
 		const outcome = await nodeInfo(ctx)
 		expect(outcome, `the live Testnet node did not answer: ${outcome}`).toBe("answered")
 
-		await registerProfile(ctx)
+		await createProfileAcceptingTerms(ctx)
 		const page = await openPopup(ctx)
 		await waitForHash(page, "#/popup/general", 30_000)
 		const entries = await verifiedTestnetEntries(page)

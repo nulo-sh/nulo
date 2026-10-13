@@ -7,7 +7,7 @@ import { expect } from "vitest"
 import { sendFeePicksKey } from "@/utils/profile-ui-keys"
 import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { interceptRpc } from "./fixtures/browser"
-import { clickByTestId, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
+import { clickByTestId, launchExtension, openPopup, registerProfile, test, waitForHash, type ExtensionContext } from "./fixtures/extension"
 import { captureSoleProfileId, getAccountAddress, seedUsdQuoteAndReload } from "./fixtures/helpers"
 import { startNodeStub } from "./fixtures/node-stub"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
@@ -163,7 +163,7 @@ test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, p
 test("the unit switch: a Tab stop right after the token card, the accent ring, Enter and Space, a held Enter once", {
 	timeout: 180_000,
 	retry: 0,
-}, async ({ registeredExtensionPerTest: ctx }) => {
+}, async ({ listedExtensionPerTest: ctx }) => {
 	const page = await openSendPage(ctx, { priced: true })
 	await page.waitForSelector(sel("send-amount-fiat-toggle"), { visible: true, timeout: 30_000 })
 	await shotSend(page, "send-at-rest", "send-amount-row")
@@ -192,7 +192,7 @@ test("the unit switch: a Tab stop right after the token card, the accent ring, E
 	expect((await tabAround(page, 1))[0]).not.toBe("send-amount-max")
 })
 
-test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ registeredExtensionPerTest: ctx }) => {
+test("the token card draws the accent ring when focused", { timeout: 180_000, retry: 0 }, async ({ listedExtensionPerTest: ctx }) => {
 	const page = await openSendPage(ctx, { priced: true })
 	await page.waitForSelector(sel("send-token-symbol"), { visible: true, timeout: 30_000 })
 	await tabTo(page, "send-token-trigger")
@@ -257,9 +257,18 @@ async function pickSeededSponsorByKeyboard(ctx: ExtensionContext): Promise<void>
 test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrows and Enter pick, Escape returns to it", {
 	timeout: 180_000,
 	retry: 0,
-}, async ({ freshExtensionPerTest: ctx }) => {
+}, async () => {
 	// Discovery stores its own sponsor rows beside the seeded ones whenever a node answers, so the
 	// node is held from before the profile exists, in every run mode.
+	const ctx = await launchExtension({ tokenList: "held" })
+	try {
+		await pickSponsorBehindStub(ctx)
+	} finally {
+		await ctx.close()
+	}
+})
+
+async function pickSponsorBehindStub(ctx: ExtensionContext): Promise<void> {
 	const stub = await startNodeStub()
 	try {
 		const node = await interceptRpc(ctx.browser, ctx.extensionId, TESTNET_RPC_ORIGIN, { kind: "redirect", to: stub.url })
@@ -276,7 +285,7 @@ test("the fee method picker: a Tab stop with the ring; Enter opens it, the arrow
 	} finally {
 		await stub.stop()
 	}
-})
+}
 
 /** The fee menu's edge and its trigger's, once the menu's entry transition has settled. */
 async function feeMenuGap(page: Page): Promise<{ above: number; below: number }> {

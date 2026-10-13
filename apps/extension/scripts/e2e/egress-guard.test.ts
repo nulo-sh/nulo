@@ -249,8 +249,8 @@ describe("a guarded launch", () => {
 
 	test("a live launch routes its live host direct, and fails its close if the guard records that host", async () => {
 		const { deps, send, closeBrowser } = rig()
-		const launch = await ownGuardedLaunch({ ...deps, liveHost: "lb.drpc.live" })
-		expect(deps.launch).toHaveBeenCalledWith({ guardPort: 1, liveHost: "lb.drpc.live" })
+		const launch = await ownGuardedLaunch({ ...deps, liveHosts: ["lb.drpc.live"] })
+		expect(deps.launch).toHaveBeenCalledWith({ guardPort: 1, liveHosts: ["lb.drpc.live"] })
 		send("lb.drpc.live")
 		await expect(launch.close()).rejects.toThrow(/spec\.test\.ts: chrome sent lb\.drpc\.live to the guard/)
 		expect(closeBrowser).toHaveBeenCalled()
@@ -258,7 +258,7 @@ describe("a guarded launch", () => {
 
 	test("success control: a live launch whose live host never reached the guard closes cleanly", async () => {
 		const { deps, send } = rig()
-		const launch = await ownGuardedLaunch({ ...deps, liveHost: "lb.drpc.live" })
+		const launch = await ownGuardedLaunch({ ...deps, liveHosts: ["lb.drpc.live"] })
 		send("api.coingecko.com")
 		await launch.close()
 	})

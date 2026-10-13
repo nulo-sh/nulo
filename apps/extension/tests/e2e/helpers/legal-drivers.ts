@@ -1,6 +1,14 @@
 import type { Page } from "puppeteer"
 import { type BackgroundOwner, evaluateInBackground, reloadExtensionPage } from "../fixtures/browser"
-import { clickByTestId, seedLegalAcceptance, waitForHash } from "../fixtures/extension"
+import { TEST_PASSWORD } from "../fixtures/constants"
+import {
+	type ExtensionContext,
+	clickByTestId,
+	openOnboarding,
+	replaceInputValue,
+	seedLegalAcceptance,
+	waitForHash,
+} from "../fixtures/extension"
 import { LEGAL_ACCEPTANCE_KEY, type LegalSeed } from "../fixtures/legal"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
@@ -126,6 +134,23 @@ export async function acceptOnboardingTerms(page: Page, resumesAt: "create" | "i
 	)
 	await clickByTestId(page, "legal-continue")
 	await waitForHash(page, `#/onboarding/${resumesAt}`, 10_000)
+}
+
+/**
+ * A first run's own path, from no acceptance: the Terms gate, then a password, ending unlocked with
+ * onboarding marked complete so the popup opens on Home. The acceptance is the event the worker's
+ * token list fetches on; a launch's seeded acceptance is a storage write that no listener hears.
+ */
+export async function createProfileAcceptingTerms(ctx: ExtensionContext): Promise<void> {
+	const page = await openOnboarding(ctx, { legal: "missing" })
+	await clickByTestId(page, "onboarding-welcome-create")
+	await acceptOnboardingTerms(page, "create")
+	await replaceInputValue(page, '[data-testid="onboarding-password-input"]', TEST_PASSWORD)
+	await replaceInputValue(page, '[data-testid="onboarding-password-confirm"]', TEST_PASSWORD)
+	await clickByTestId(page, "onboarding-submit-create")
+	await waitForHash(page, "#/onboarding/learn", 60_000)
+	await page.evaluate(() => chrome.storage.local.set({ "nulo:onboarding:completed": true }))
+	await page.close()
 }
 
 /**
