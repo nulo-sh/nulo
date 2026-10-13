@@ -157,7 +157,13 @@ function credentialedFindings(tree: Tree): string[] {
 }
 
 /** The jobs that tag or publish: Bun built-ins only, from the workflow's own revision. */
-const CLEAN = ["release.yml#auto-unstick", "release.yml#attach-assets", "release.yml#sync-main-to-dev", "nightly.yml#publish-nightly"]
+const CLEAN = [
+	"release.yml#auto-unstick",
+	"release.yml#attach-assets",
+	"release.yml#sync-main-to-dev",
+	"nightly.yml#publish-nightly",
+	"nightly.yml#prune-nightlies",
+]
 const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b/
 /** A step's shell text with line continuations joined, so a command reads the same however it wraps. */
 const script = (step: Step): string => (step.run ?? "").replace(/\\\n/g, " ")
@@ -203,6 +209,7 @@ function cleanFindings(tree: Tree): string[] {
  */
 const NO_INSTALL = [
 	"_release-pr-lockfile.yml#lock-version",
+	"nightly.yml#prune-nightlies",
 	"nightly.yml#publish-nightly",
 	"pr-quick.yml#changes",
 	"pr-quick.yml#preview-comment",
@@ -414,6 +421,31 @@ function releaseWriteFindings(tree: Tree): string[] {
 			.filter((s) => /\bgh\s+release\s+(create|upload|edit|delete)\b/.test(s.run ?? ""))
 			.map(() => `${where}: writes a release with gh`),
 	)
+}
+
+const PRUNE = "nightly.yml#prune-nightlies"
+const PRUNE_GUARD = "always() && !cancelled() && needs.publish-nightly.result == 'success'"
+const PRUNE_DRY_RUN = "${{ github.event.inputs.dry_run || 'false' }}"
+const PRUNE_RUN = `if [ "$DRY_RUN" = "true" ]; then
+  bun --no-install scripts/release/prune-nightlies-run.ts
+else
+  bun --no-install scripts/release/prune-nightlies-run.ts --apply
+fi
+`
+
+/** The one job besides the publishers that deletes releases: after a published night only, never on a dry run. */
+function pruneFindings(tree: Tree): string[] {
+	const job = tree.workflows["nightly.yml"].jobs["prune-nightlies"]
+	if (!job) return [`${PRUNE}: missing`]
+	const findings: string[] = []
+	if (!Bun.deepEquals(job.permissions, { contents: "write" })) findings.push(`${PRUNE}: permissions ${JSON.stringify(job.permissions)}`)
+	if (!Bun.deepEquals(needsOf(job), ["publish-nightly"]) || job.if !== PRUNE_GUARD)
+		findings.push(`${PRUNE}: runs without a published night`)
+	const steps = (job.steps ?? []).filter((s) => s.run?.includes("prune-nightlies-run.ts"))
+	const env = (steps[0] as { env?: Record<string, unknown> } | undefined)?.env
+	if (steps.length !== 1 || steps[0].run !== PRUNE_RUN || env?.DRY_RUN !== PRUNE_DRY_RUN)
+		findings.push(`${PRUNE}: may delete on a dry run`)
+	return findings
 }
 
 /** The release notes print the attestation check for the tagged commit, which the runner fills in. */
@@ -724,6 +756,7 @@ describe("jobs that install nothing", () => {
 			"a Bun call setup-bun runs in every caller",
 			onTree((t) => t.actions[SETUP_BUN].runs.steps?.push({ run: "bun --cwd /tmp -e 1" })),
 			[
+				"nightly.yml#prune-nightlies",
 				"nightly.yml#publish-nightly",
 				"pr-quick.yml#changes",
 				"release.yml#attach-assets",
@@ -834,6 +867,28 @@ describe("release notes", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(notesFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("nightly prune", () => {
+	test("deletes with contents: write alone, after a published night only, and never on a dry run", () => {
+		expect(pruneFindings(TREE)).toEqual([])
+	})
+	const prune = (t: Tree) => t.workflows["nightly.yml"].jobs["prune-nightlies"]
+	test.each([
+		["a wider token", (t: Tree) => Object.assign(prune(t), { permissions: { contents: "write", actions: "write" } })],
+		["a run after a failed publish", (t: Tree) => Object.assign(prune(t), { if: "always() && !cancelled()" })],
+		["a run beside the publish", (t: Tree) => Object.assign(prune(t), { needs: ["resolve"] })],
+		[
+			"--apply on a dry run",
+			(t: Tree) => Object.assign(prune(t).steps?.find((s) => s.run?.includes("prune-nightlies-run.ts")) ?? {}, { env: {} }),
+		],
+		[
+			"a second prune step",
+			(t: Tree) => prune(t).steps?.push({ run: "bun --no-install scripts/release/prune-nightlies-run.ts --apply" }),
+		],
+	])("finds %s", (_, edit) => {
+		expect(pruneFindings(mutated(edit)).length).toBeGreaterThan(0)
 	})
 })
 

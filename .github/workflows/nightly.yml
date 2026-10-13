@@ -21,6 +21,8 @@ name: nightly
 #      zips + SHASUMS256.txt + git-cliff notes (scripts/release/
 #      attach-assets-run.ts, shared with release.yml). A red night publishes
 #      nothing and strands nothing (the tag does not exist until publish time).
+#   4. prune-nightlies then keeps the newest fourteen nightlies and deletes
+#      the older ones (scripts/release/prune-nightlies-run.ts).
 #
 # Version scheme — why not a calendar date in the last component:
 #   Chrome and Firefox cap every manifest `version` component at 65535, and
@@ -615,6 +617,36 @@ jobs:
           echo "DRY RUN — would have created tag $TAG at $SHA and uploaded:"
           ls -la dist/release/
 
+  # Keeps the newest fourteen nightly tags and their releases and deletes the rest, release before
+  # tag. After this night's publish, inside the same run, so the two never race. It needs the owner's
+  # exclusion of `refs/tags/v*-nightly.*` from the `release tags` ruleset, which keeps every stable
+  # and rc tag out of its reach; its selection refuses any other name as well.
+  prune-nightlies:
+    needs: publish-nightly
+    if: always() && !cancelled() && needs.publish-nightly.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+      - name: Prune nightly tags and releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            bun --no-install scripts/release/prune-nightlies-run.ts
+          else
+            bun --no-install scripts/release/prune-nightlies-run.ts --apply
+          fi
+
   status:
     name: status
     if: always()
@@ -639,6 +671,7 @@ jobs:
         smoke-firefox-against-artifact,
         nightly-notes,
         publish-nightly,
+        prune-nightlies,
       ]
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -665,6 +698,7 @@ jobs:
             "${{ needs.smoke-firefox-against-artifact.result }}" \
             "${{ needs.nightly-notes.result }}" \
             "${{ needs.publish-nightly.result }}" \
+            "${{ needs.prune-nightlies.result }}" \
           ; do
             if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
               echo "::error::A nightly stage failed or was cancelled: $r"
