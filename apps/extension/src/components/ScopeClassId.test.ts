@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
 
 // vi.mock() gets hoisted; mocks must be declared via vi.hoisted().
 const { getContactByAddress, openToast, writeText } = vi.hoisted(() => ({
@@ -72,10 +72,17 @@ describe("ScopeClassId", () => {
 		expect(writeText).toHaveBeenCalledWith("0xabcdefgh")
 	})
 
-	test("Enter key copies (a11y parity)", async () => {
+	test.each(["Enter", " "])("%j copies once and is marked handled; a repeat or composing one does nothing", async (key) => {
 		const w = factory({ id: "0xclass1" })
-		await w.find('[data-testid="scope-class-id"]').trigger("keydown.enter")
+		const el = w.get('[data-testid="scope-class-id"]').element
+		const press = new KeyboardEvent("keydown", { key, cancelable: true })
+		el.dispatchEvent(press)
+		el.dispatchEvent(new KeyboardEvent("keydown", { key, repeat: true }))
+		el.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing: true }))
+		await flushPromises()
+		expect(writeText).toHaveBeenCalledTimes(1)
 		expect(writeText).toHaveBeenCalledWith("0xclass1")
+		expect(press.defaultPrevented).toBe(true)
 	})
 
 	test("preserves the canonical testid + data attr for e2e", () => {
