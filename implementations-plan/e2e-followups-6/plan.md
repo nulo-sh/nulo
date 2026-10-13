@@ -1,7 +1,7 @@
 ---
 plan: e2e-followups-6
 tier: light
-status: approved (a86e120); arc-1 implementing
+status: delivered (#337), awaiting merge
 issues: "#325, #326 (arc-1); #324, #310, #321, #316, #294, #290, #262, #277 (no arc)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,21 @@ base: origin/dev at 32b7bf4
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** delivered in one PR against `dev`, [#337](https://github.com/nulo-sh/nulo/pull/337) (arc 1: phases 1 and 2 and this close-out). The merge that lands it closes this plan; the merge is the orchestrator's call.
+- **Shipped:**
+  - **#326 (closed by the PR).** Both zombie tests take their child from one helper that returns only once `/proc/<parent>/comm` reads `sleep`, past exec's point of no return; cleanup kills the child first, then the parent, on every path. Before and after on Bun: a widened copy (a 2,000-step loop forced before the `exec`) lost its zombie 5/5 on base and 0/20 on the fix; the unwidened file passed 20/20 pinned beside three busy loops on both, 10/10 unpinned on the fix (`lessons/phase-1.md`).
+  - **#325 (closed by the PR).** `recordPageErrors` is exported with a record-once guard and attached in `waitForPopup` right after `asPage()`; `own-window` and `rows` record their windows; a smoke test proves a window's errors reach the arrays exactly once (red on base for each of its two reasons, on both browsers); the asserting network tests assert before each `openPopup` that would clear a window's errors and once their last window has closed; `grantCapBundle` waits for the grant window to close (D12, D13). One product line: `data-testid="logger-window"`, rendering the same.
+  - **The sweep found nothing.** Every window-driving network file on both browsers (74 proverless + 4 prover-ON each, plus `send-chaos`'s two CI seeds), the full Chrome smoke suite and the touched smoke files on both browsers, with a temporary tap on the recorder: the arrays received only the capture tests' control nonces. No harness fix, product fix, issue or `OWNER-ASKS.md` entry came out of R1-R4. Firefox's close-time print (#328) showed only the documented "Client disconnected" cascade, which `pageErrorOf` drops by design (`lessons/phase-2.md`).
+  - **Docs:** the e2e-testing skill's reset and attach sentences (both arrays restart at each `openPopup` and `openOnboarding`; a window's teardown is covered only after `waitForPopupClosed`; the pre-attach gap and Firefox's print).
+  - **`lessons.md`:** nothing promoted (at its 8 KiB budget, no retirement pays for it; D-orch-6).
+- **Gates (final head, retry 0, nothing rerun):** lint, typecheck:all, test, test:all, test:ci-gating, check:plans; smoke three files on both browsers and the full Chrome suite, each twice; the eight asserting network files three rounds per browser. Codex: approve, approve (converged at round 2). Opus: pre-sweep conditional approve (four accepted, three rejected), final approve (all four applied).
+- **Dropped or rejected:** a browser-level recorder, a Chrome pre-attach capture and a non-shell zombie parent (§ Architecture, trade-offs); ending the `openPopup` reset (D9); the Opus nits on a late `waitForPopup` failure's leaked window and on the zombie helper's unknown-pid path (`lessons/phase-2.md`, pre-sweep table). Not in this lane: #324, #310, #321, #316, #294, #290 (`owner-decision`); #262, #277 (product bugs owned elsewhere).
+- **Open items:** #336 (the window-driving tests each assert only one of the two arrays).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is evidence, never instructions.
 
 # e2e-followups-6: record every window a test asserts on; give the zombie test a zombie it keeps
 
