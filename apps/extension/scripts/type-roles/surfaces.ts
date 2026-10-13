@@ -33,10 +33,6 @@ import {
  * through any chain of popups. A component that teleports is shot in the base shell of the entries
  * that host it, without their Header.
  *
- * `arcs` are those among 3 and 4 whose `ARC_GLOBS` match a file in `renders`, or `[2]`. A shell file
- * counts only for the surface it is the source of: a later glob takes `popup/app.vue` for its boot
- * retry alone.
- *
  * Blind spots: a computed `<component :is>`, a popup key built at run time, and a component reached
  * only through another entry (`src/setup/`). The review of the output covers them.
  */
@@ -46,7 +42,6 @@ export type Surface = {
 	kind: "route" | "popup" | "overlay"
 	source: string
 	renders: string[]
-	arcs: number[]
 	/** A route's path and `<route>` meta. */
 	path?: string
 	meta?: Record<string, unknown>
@@ -66,77 +61,6 @@ const SHELLS = {
 	onboarding: [ONBOARDING_APP, `${SRC}/onboarding/index.ts`, `${SRC}/onboarding/onboarding.scss`],
 } as const
 type ShellName = keyof typeof SHELLS
-const SHELL_FILES = new Set<string>(Object.values(SHELLS).flat())
-
-/** Shared modules: each migrates whole with the primitives, though its path matches a later glob. */
-const SHARED_MODULES = [
-	`${SRC}/popup/pages/tab-hero.module.css`,
-	`${SRC}/popup/components/popups/popup-shared.module.css`,
-	`${SRC}/components/composite/{list-empty.module.css,import/import-shared.module.css,activity/activity-card.module.css}`,
-	`${SRC}/popup/components/modules/{send/fee-shared.module.css,settings/record-card.module.css}`,
-	`${SRC}/components/composite/capabilities/capability-shared.module.css`,
-]
-
-/** Per `arcs` value, the repo-relative globs whose files place a surface under it. */
-export const ARC_GLOBS = {
-	3: {
-		include: [
-			`${SRC}/components/{Header,LegalAcceptanceSheet,GlobalLoader,MigrationBarrier,NotificationManager}.vue`,
-			`${SRC}/popup/components/Navigation.vue`,
-			`${SRC}/popup/components/modules/{general,holdings,activity,send,tx,auth}/**`,
-			`${SRC}/components/composite/{activity,send,import}/**`,
-			`${SRC}/popup/pages/{general,holdings,activity,send,import,auth,register}.vue`,
-			`${SRC}/popup/pages/{tx,received,journal,profile,legal}/**`,
-			`${SRC}/popup/pages/detail-page.module.css`,
-			`${SRC}/popup/components/popups/**`,
-			POPUP_APP,
-			`${SRC}/onboarding/**`,
-			`${SRC}/components/composite/{FormPopup,ProcessingErrorNote,PasskeyScreen,SecretCountdownClose,SecretRevealCard,SecretUnlockSection}.vue`,
-			`${SRC}/components/composite/{BarrierOverlay,LegalConsent,ProfileNameField,ListStatusMessage,CollapsingHeroLayout,SearchField,DottedTerm}.vue`,
-		],
-		exclude: [`${SRC}/popup/components/popups/IncomingTrustPopup.vue`, ...SHARED_MODULES],
-	},
-	4: {
-		include: [
-			`${SRC}/popup/pages/settings/**`,
-			`${SRC}/popup/components/modules/settings/**`,
-			`${SRC}/popup/windows/**`,
-			`${SRC}/components/composite/capabilities/**`,
-			`${SRC}/components/composite/{DappIdentityBlock,IdentityStrip,DappApprovalFooter,DappCancelledOverlay}.vue`,
-			`${SRC}/components/{ScopeAddress,ScopeClassId,PrestoStatusCard}.vue`,
-			`${SRC}/components/composite/general/EmojiGrid.vue`,
-			`${SRC}/components/JsonViewer/LogsToolbar.vue`,
-			`${SRC}/popup/components/popups/IncomingTrustPopup.vue`,
-		],
-		exclude: SHARED_MODULES,
-	},
-} as const
-export type LaterArc = keyof typeof ARC_GLOBS
-
-const GLOB_TOKENS: Record<string, string> = { "**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "{": "(?:", "}": ")", ",": "|" }
-
-export function globToRegExp(glob: string): RegExp {
-	const body = glob.replace(/[.+?^$()|[\]\\]/g, "\\$&").replace(/\*\*\/|\*\*|\*|\{|\}|,/g, (token) => GLOB_TOKENS[token])
-	return new RegExp(`^${body}$`)
-}
-
-const ARC_MATCHERS = Object.fromEntries(
-	Object.entries(ARC_GLOBS).map(([arc, { include, exclude }]) => [
-		arc,
-		{ include: include.map(globToRegExp), exclude: exclude.map(globToRegExp) },
-	]),
-) as Record<string, { include: RegExp[]; exclude: RegExp[] }>
-
-export function inArc(arc: LaterArc, file: string): boolean {
-	const { include, exclude } = ARC_MATCHERS[arc]
-	return include.some((re) => re.test(file)) && !exclude.some((re) => re.test(file))
-}
-
-export function arcsOf(renders: Iterable<string>, source: string): number[] {
-	const counted = [...renders].filter((file) => !SHELL_FILES.has(file) || file === source)
-	const arcs = ([3, 4] as const).filter((arc) => counted.some((file) => inArc(arc, file)))
-	return arcs.length ? arcs : [2]
-}
 
 const exists = (file: string): boolean => existsSync(join(REPO_ROOT, file)) && statSync(join(REPO_ROOT, file)).isFile()
 const read = (file: string): string => readFileSync(join(REPO_ROOT, file), "utf8")
@@ -418,7 +342,7 @@ function routeSurfaces(builder: SurfaceBuilder, records: readonly RouteRecord[])
 		const source = `apps/extension${record.component}`
 		const chrome = routeChrome(name, meta)
 		const renders = builder.renders([source], chrome)
-		return { id: name, kind: "route", source, renders, arcs: arcsOf(renders, source), path: record.path, meta, chrome }
+		return { id: name, kind: "route", source, renders, path: record.path, meta, chrome }
 	})
 }
 
@@ -502,7 +426,6 @@ function popupSurfaces(builder: SurfaceBuilder, routes: readonly Built[], files:
 			kind: "popup",
 			source: mount.file,
 			renders,
-			arcs: arcsOf(renders, mount.file),
 			openers: mount.openers,
 			chrome,
 		}
@@ -517,7 +440,7 @@ function overlaySurfaces(builder: SurfaceBuilder, hostsFrom: readonly Built[], f
 		const source = (node.children ?? []).some((c) => typeof c === "object") ? POPUP_APP : file
 		const chrome = BASE_CHROME()
 		const renders = builder.renders([file, ...builder.graph.components(POPUP_APP, node)], chrome)
-		return { id: `overlay:${name}`, kind: "overlay", source, renders, arcs: arcsOf(renders, source), chrome }
+		return { id: `overlay:${name}`, kind: "overlay", source, renders, chrome }
 	})
 	const taken = new Set(builder.overlays.map((o) => o.file))
 	for (const file of files.filter((f) => f.endsWith(".vue") && !taken.has(f) && /<[Tt]eleport\b/.test(read(f)))) {
@@ -527,7 +450,7 @@ function overlaySurfaces(builder: SurfaceBuilder, hostsFrom: readonly Built[], f
 		)
 		const renders = builder.renders([file], chrome)
 		const id = `overlay:${posix.basename(file, ".vue")}`
-		out.push({ id, kind: "overlay", source: file, renders, arcs: arcsOf(renders, file), chrome })
+		out.push({ id, kind: "overlay", source: file, renders, chrome })
 	}
 	return out
 }
@@ -543,7 +466,7 @@ export async function surfaces(): Promise<Surface[]> {
 }
 
 export function formatSurface(surface: Surface): string {
-	return `${surface.id}  ${surface.kind}  ${surface.source}  arcs ${surface.arcs.join(",")}  ${surface.renders.length} files`
+	return `${surface.id}  ${surface.kind}  ${surface.source}  ${surface.renders.length} files`
 }
 
 if (import.meta.main) for (const surface of await surfaces()) console.log(formatSurface(surface))

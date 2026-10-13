@@ -5,7 +5,6 @@
 			"name": "Account state: senders",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/developer/account-state/senders/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/developer/account-state/senders",
 			"states": ["default"],
 			"suite": "smoke"
@@ -15,7 +14,6 @@
 			"name": "Account state: notes",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/developer/account-state/notes",
 			"states": ["default"],
 			"suite": "smoke"
@@ -25,7 +23,6 @@
 			"name": "Account state: contracts",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/developer/account-state/contracts",
 			"states": ["default"],
 			"suite": "smoke"
@@ -35,7 +32,6 @@
 			"name": "Account state: authwits",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/developer/account-state/authwits/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/developer/account-state/authwits",
 			"states": ["default"],
 			"suite": "smoke"
@@ -45,7 +41,6 @@
 			"name": "Export",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/security/export/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/security/export",
 			"states": ["default"],
 			"suite": "smoke"
@@ -55,7 +50,6 @@
 			"name": "Export recovery phrase",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/security/export/seed.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/security/export/seed",
 			"states": ["default"],
 			"suite": "smoke"
@@ -65,7 +59,6 @@
 			"name": "Full backup",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/security/export/full.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/security/export/full",
 			"states": ["default"],
 			"suite": "smoke"
@@ -75,7 +68,6 @@
 			"name": "Export account",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/security/export/account.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/security/export/account",
 			"states": ["default"],
 			"suite": "smoke"
@@ -85,7 +77,6 @@
 			"name": "Account state",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/developer/account-state/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/developer/account-state",
 			"states": ["default"],
 			"suite": "smoke"
@@ -95,7 +86,6 @@
 			"name": "Developer",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/developer/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/developer",
 			"states": ["default"],
 			"suite": "smoke"
@@ -105,7 +95,6 @@
 			"name": "Tokens",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/tokens/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/tokens",
 			"states": ["default"],
 			"suite": "smoke"
@@ -115,7 +104,6 @@
 			"name": "Reset",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/security/reset.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/security/reset",
 			"states": ["default"],
 			"suite": "smoke"
@@ -125,7 +113,6 @@
 			"name": "Change password",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/security/change-password.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/security/change-password",
 			"states": ["default"],
 			"suite": "smoke"
@@ -135,7 +122,6 @@
 			"name": "Profile",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/profile/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/profile",
 			"states": ["default"],
 			"suite": "smoke"
@@ -145,7 +131,6 @@
 			"name": "Networks",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/networks/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/networks",
 			"states": ["default"],
 			"suite": "smoke"
@@ -155,7 +140,6 @@
 			"name": "FPCs",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/fpcs/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/fpcs",
 			"states": ["default"],
 			"suite": "smoke"
@@ -165,7 +149,6 @@
 			"name": "Contacts",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/contacts/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/contacts",
 			"states": ["default"],
 			"suite": "smoke"
@@ -175,7 +158,6 @@
 			"name": "Connected apps",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/connected-apps/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/connected-apps",
 			"states": ["default"],
 			"suite": "smoke"
@@ -185,7 +167,6 @@
 			"name": "Accounts",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/accounts/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/accounts",
 			"states": ["default"],
 			"suite": "smoke"
@@ -195,7 +176,6 @@
 			"name": "Import account",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/accounts/import.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/accounts/import",
 			"states": ["default"],
 			"suite": "smoke"
@@ -205,7 +185,6 @@
 			"name": "Verify",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/verify/index.vue",
-			"arcs": [4],
 			"reach": "#/windows/verify, opened by a dApp request",
 			"states": ["default"],
 			"suite": "network"
@@ -215,7 +194,6 @@
 			"name": "Passkey window",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/passkey/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/windows/passkey",
 			"states": ["default"],
 			"suite": "smoke"
@@ -225,7 +203,6 @@
 			"name": "Network unavailable",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/network-unavailable/index.vue",
-			"arcs": [4],
 			"reach": "#/windows/network-unavailable, opened by a dApp request",
 			"states": ["default"],
 			"suite": "network"
@@ -235,7 +212,6 @@
 			"name": "Logger window",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/logger/index.vue",
-			"arcs": [4],
 			"reach": "#/windows/logger",
 			"states": ["default"],
 			"suite": "smoke"
@@ -245,7 +221,6 @@
 			"name": "JSON window (the Data viewer's full-screen view)",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/json/index.vue",
-			"arcs": [4],
 			"reach": "#/windows/json",
 			"states": ["default"],
 			"suite": "smoke"
@@ -255,7 +230,6 @@
 			"name": "Execute: send, authwit, contract call",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/execute/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/windows/execute, opened by a dApp request",
 			"states": ["send", "authwit", "contract call"],
 			"suite": "network"
@@ -265,7 +239,6 @@
 			"name": "Routed module popup/windows/execute/SignerIdentityStrip.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/execute/SignerIdentityStrip.vue",
-			"arcs": [4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -276,7 +249,6 @@
 			"name": "Routed module popup/windows/execute/OperationCard.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/execute/OperationCard.vue",
-			"arcs": [3, 4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -287,7 +259,6 @@
 			"name": "Routed module popup/windows/execute/OperationActionRow.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/execute/OperationActionRow.vue",
-			"arcs": [4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -298,7 +269,6 @@
 			"name": "Routed module popup/windows/execute/CallArguments.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/execute/CallArguments.vue",
-			"arcs": [4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -309,7 +279,6 @@
 			"name": "Discover",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/discover/index.vue",
-			"arcs": [4],
 			"reach": "#/windows/discover, opened by a dApp request",
 			"states": ["default"],
 			"suite": "network"
@@ -319,7 +288,6 @@
 			"name": "Connect and capabilities",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/capabilities/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/windows/capabilities, opened by a dApp request",
 			"states": ["default"],
 			"suite": "network"
@@ -329,7 +297,6 @@
 			"name": "Routed module popup/windows/capabilities/PermissionGroup.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/capabilities/PermissionGroup.vue",
-			"arcs": [3, 4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -340,7 +307,6 @@
 			"name": "Routed module popup/windows/capabilities/AccountSelectRow.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/capabilities/AccountSelectRow.vue",
-			"arcs": [3, 4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -351,7 +317,6 @@
 			"name": "Privacy",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/privacy.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/privacy",
 			"states": ["default"],
 			"suite": "smoke"
@@ -361,7 +326,6 @@
 			"name": "Lock",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/lock.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/lock",
 			"states": ["default"],
 			"suite": "smoke"
@@ -371,7 +335,6 @@
 			"name": "Settings hub",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/index.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings",
 			"states": ["default", "Chrome's side panel", "Firefox's toolbar panel"],
 			"suite": "smoke"
@@ -381,7 +344,6 @@
 			"name": "Display",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/display.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/display",
 			"states": ["default"],
 			"suite": "smoke"
@@ -391,7 +353,6 @@
 			"name": "Proving",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/proving.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/proving",
 			"states": ["default"],
 			"suite": "smoke"
@@ -401,7 +362,6 @@
 			"name": "Glossary",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/glossary.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/glossary",
 			"states": ["default"],
 			"suite": "smoke"
@@ -411,7 +371,6 @@
 			"name": "About",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/about.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/about",
 			"states": ["default"],
 			"suite": "smoke"
@@ -421,7 +380,6 @@
 			"name": "New profile",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/profile/new.vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/profile/new",
 			"states": ["default"],
 			"suite": "smoke"
@@ -431,7 +389,6 @@
 			"name": "Legal declined",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/legal/declined.vue",
-			"arcs": [3],
 			"reach": "#/popup/legal/declined",
 			"states": ["default"],
 			"suite": "smoke"
@@ -441,7 +398,6 @@
 			"name": "Onboarding: welcome",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/welcome.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/welcome",
 			"states": ["default"],
 			"suite": "smoke"
@@ -451,7 +407,6 @@
 			"name": "Onboarding: terms",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/terms.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/terms",
 			"states": ["default"],
 			"suite": "smoke"
@@ -461,7 +416,6 @@
 			"name": "Onboarding: Presto",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/presto.vue",
-			"arcs": [3, 4],
 			"reach": "#/onboarding/presto",
 			"states": ["default"],
 			"suite": "smoke"
@@ -471,7 +425,6 @@
 			"name": "Onboarding: learn",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/learn.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/learn",
 			"states": ["default"],
 			"suite": "smoke"
@@ -481,7 +434,6 @@
 			"name": "Onboarding: import",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/import.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/import",
 			"states": ["default"],
 			"suite": "smoke"
@@ -491,7 +443,6 @@
 			"name": "Onboarding: fees",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/fees.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/fees",
 			"states": ["default"],
 			"suite": "smoke"
@@ -501,7 +452,6 @@
 			"name": "Onboarding: done",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/done.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/done",
 			"states": ["default"],
 			"suite": "smoke"
@@ -511,7 +461,6 @@
 			"name": "Onboarding: create",
 			"kind": "route",
 			"source": "apps/extension/src/onboarding/pages/create.vue",
-			"arcs": [3],
 			"reach": "#/onboarding/create",
 			"states": ["default"],
 			"suite": "smoke"
@@ -521,7 +470,6 @@
 			"name": "Routed module popup/windows/ConnectStepBar.vue",
 			"kind": "route",
 			"source": "apps/extension/src/popup/windows/ConnectStepBar.vue",
-			"arcs": [4],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -532,7 +480,6 @@
 			"name": "Activity",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/activity.vue",
-			"arcs": [3],
 			"reach": "#/popup/activity",
 			"states": ["default"],
 			"suite": "smoke"
@@ -542,7 +489,6 @@
 			"name": "Send",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/send.vue",
-			"arcs": [3],
 			"reach": "#/popup/send",
 			"states": ["empty", "recipient and amount typed", "fee card open"],
 			"suite": "smoke"
@@ -552,7 +498,6 @@
 			"name": "Register",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/register.vue",
-			"arcs": [3],
 			"reach": "#/popup/register",
 			"states": ["default"],
 			"suite": "smoke"
@@ -562,7 +507,6 @@
 			"name": "No surface: both redirect to Home",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/index.vue",
-			"arcs": [3],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -573,7 +517,6 @@
 			"name": "Import",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/import.vue",
-			"arcs": [3],
 			"reach": "#/popup/import",
 			"states": ["default"],
 			"suite": "smoke"
@@ -583,7 +526,6 @@
 			"name": "Holdings",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/holdings.vue",
-			"arcs": [3],
 			"reach": "#/popup/holdings",
 			"states": ["default", "a pasted address no listed token matches"],
 			"suite": "smoke"
@@ -593,7 +535,6 @@
 			"name": "Home",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/general.vue",
-			"arcs": [3],
 			"reach": "#/popup/general",
 			"states": ["seeded tokens", "a balance whose fit scales below 1", "Chrome's side panel", "Firefox's toolbar panel"],
 			"suite": "smoke"
@@ -603,7 +544,6 @@
 			"name": "Unlock",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/auth.vue",
-			"arcs": [3],
 			"reach": "#/popup/auth",
 			"states": ["password", "passkey"],
 			"suite": "smoke"
@@ -613,7 +553,6 @@
 			"name": "pages/about.vue",
 			"kind": "route",
 			"source": "apps/extension/src/pages/about.vue",
-			"arcs": [3],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -624,7 +563,6 @@
 			"name": "No surface: both redirect to Home",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/[...catch].vue",
-			"arcs": [3],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -635,7 +573,6 @@
 			"name": "Journal detail",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/journal/[id].vue",
-			"arcs": [3],
 			"reach": "#/popup/journal/:id",
 			"states": ["default"],
 			"suite": "smoke"
@@ -645,7 +582,6 @@
 			"name": "Received detail",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/received/[id].vue",
-			"arcs": [3],
 			"reach": "#/popup/received/:id",
 			"states": ["default"],
 			"suite": "smoke"
@@ -655,7 +591,6 @@
 			"name": "Token detail",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/tokens/[id].vue",
-			"arcs": [3],
 			"reach": "#/popup/tokens/:id",
 			"states": ["default"],
 			"suite": "smoke"
@@ -665,7 +600,6 @@
 			"name": "Tx detail",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/tx/[id].vue",
-			"arcs": [3],
 			"reach": "#/popup/tx/:id",
 			"states": ["default"],
 			"suite": "smoke"
@@ -675,7 +609,6 @@
 			"name": "Connected app",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/connected-apps/[id].vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/connected-apps/:id",
 			"states": ["default"],
 			"suite": "smoke"
@@ -685,7 +618,6 @@
 			"name": "Network",
 			"kind": "route",
 			"source": "apps/extension/src/popup/pages/settings/networks/[id].vue",
-			"arcs": [3, 4],
 			"reach": "#/popup/settings/networks/:id",
 			"states": ["default"],
 			"suite": "smoke"
@@ -695,7 +627,6 @@
 			"name": "Forgot password",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ForgotPasswordPopup.vue",
-			"arcs": [3],
 			"reach": "open 'forgot_password' from popup/pages/auth.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -705,7 +636,6 @@
 			"name": "Confirm",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ConfirmPopup.vue",
-			"arcs": [3],
 			"reach": "open 'confirm' from composables/useLockWallet.ts, composables/useProfileImportFlow.ts, popup/pages/settings/developer/account-state/senders/index.vue, popup/pages/settings/connected-apps/[id].vue, popup/pages/settings/connected-apps/index.vue, popup/pages/settings/contacts/index.vue, popup/pages/settings/fpcs/index.vue, popup/pages/settings/lock.vue, popup/pages/settings/networks/[id].vue, popup/pages/settings/tokens/index.vue, popup/pages/tokens/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -715,7 +645,6 @@
 			"name": "Data viewer",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/DataViewerPopup.vue",
-			"arcs": [3],
 			"reach": "open 'data_viewer' from popup/components/popups/RevokeAuthwitsPopup.vue, popup/pages/import.vue, popup/pages/settings/developer/account-state/authwits/index.vue, popup/pages/settings/developer/account-state/notes/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -725,7 +654,6 @@
 			"name": "Edit profile",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/EditProfilePopup.vue",
-			"arcs": [3],
 			"reach": "open 'edit_profile' from popup/pages/settings/profile/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -735,7 +663,6 @@
 			"name": "Select profile",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/SelectProfilePopup.vue",
-			"arcs": [3],
 			"reach": "open 'select_profile' from popup/pages/auth.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -745,7 +672,6 @@
 			"name": "New network",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewNetworkPopup.vue",
-			"arcs": [3],
 			"reach": "open 'new_network' from popup/pages/settings/networks/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -755,7 +681,6 @@
 			"name": "Edit network",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/EditNetworkPopup.vue",
-			"arcs": [3],
 			"reach": "open 'edit_network' from popup/pages/settings/networks/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -765,7 +690,6 @@
 			"name": "New endpoint",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewEndpointPopup.vue",
-			"arcs": [3],
 			"reach": "open 'new_endpoint' from popup/pages/settings/networks/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -775,7 +699,6 @@
 			"name": "Edit endpoint",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/EditEndpointPopup.vue",
-			"arcs": [3],
 			"reach": "open 'edit_endpoint' from popup/pages/settings/networks/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -785,7 +708,6 @@
 			"name": "Accounts popup",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/AccountsPopup.vue",
-			"arcs": [3],
 			"reach": "open 'accounts' from components/Header.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -795,7 +717,6 @@
 			"name": "New account",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewAccountPopup.vue",
-			"arcs": [3],
 			"reach": "open 'new_account' from popup/components/popups/AccountsPopup.vue, popup/pages/settings/accounts/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -805,7 +726,6 @@
 			"name": "Edit account",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/EditAccountPopup.vue",
-			"arcs": [3],
 			"reach": "open 'edit_account' from popup/pages/settings/accounts/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -815,7 +735,6 @@
 			"name": "Token metadata",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
-			"arcs": [3],
 			"reach": "open 'token_metadata' from popup/pages/tokens/[id].vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -825,7 +744,6 @@
 			"name": "New token",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewTokenPopup.vue",
-			"arcs": [3],
 			"reach": "open 'new_token' from popup/components/modules/general/TokensView.vue, popup/components/modules/send/SelectTokenCard.vue, popup/pages/settings/tokens/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -835,7 +753,6 @@
 			"name": "Select token",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/SelectTokenPopup.vue",
-			"arcs": [3],
 			"reach": "open 'select_token' from popup/components/modules/send/SelectTokenCard.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -845,7 +762,6 @@
 			"name": "New FPC",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewFpcPopup.vue",
-			"arcs": [3],
 			"reach": "open 'new_fpc' from popup/pages/settings/fpcs/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -855,7 +771,6 @@
 			"name": "Edit FPC",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/EditFpcPopup.vue",
-			"arcs": [3],
 			"reach": "open 'edit_fpc' from popup/pages/settings/fpcs/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -865,7 +780,6 @@
 			"name": "New sender",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewSenderPopup.vue",
-			"arcs": [3],
 			"reach": "open 'new_sender' from popup/pages/settings/developer/account-state/senders/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -875,7 +789,6 @@
 			"name": "Authwits registry",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ChangeAuthwitsRegistryPopup.vue",
-			"arcs": [3],
 			"reach": "open 'change_authwits_registry' from popup/pages/settings/developer/account-state/authwits/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -885,7 +798,6 @@
 			"name": "Revoke authwits",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/RevokeAuthwitsPopup.vue",
-			"arcs": [3],
 			"reach": "open 'revoke_authwits' from popup/pages/settings/developer/account-state/authwits/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -895,7 +807,6 @@
 			"name": "New contact",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/NewContactPopup.vue",
-			"arcs": [3, 4],
 			"reach": "open 'new_contact' from popup/pages/settings/contacts/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -905,7 +816,6 @@
 			"name": "Edit contact",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/EditContactPopup.vue",
-			"arcs": [3, 4],
 			"reach": "open 'edit_contact' from popup/components/popups/ImportContactsPopup.vue, popup/pages/settings/contacts/index.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -915,7 +825,6 @@
 			"name": "Import contacts",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ImportContactsPopup.vue",
-			"arcs": [3],
 			"reach": "open 'import_contacts' from popup/components/modules/settings/contacts/useContactImportExport.ts",
 			"states": ["default"],
 			"suite": "smoke"
@@ -925,7 +834,6 @@
 			"name": "Receive",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/ReceivePopup.vue",
-			"arcs": [3],
 			"reach": "open 'receive' from popup/components/modules/general/ActionButtonsView.vue",
 			"states": ["default"],
 			"suite": "smoke"
@@ -935,7 +843,6 @@
 			"name": "Incoming trust",
 			"kind": "popup",
 			"source": "apps/extension/src/popup/components/popups/IncomingTrustPopup.vue",
-			"arcs": [3, 4],
 			"reach": "open 'incoming_trust' from composables/useIncomingTrustPrompts.ts",
 			"states": ["default"],
 			"suite": "network"
@@ -945,7 +852,6 @@
 			"name": "Overlay components/ui/ToastManager.vue",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/ui/ToastManager.vue",
-			"arcs": [2],
 			"reach": "any toast, e.g. copying the Header address on #/popup/general",
 			"states": ["default"],
 			"suite": "smoke"
@@ -955,7 +861,6 @@
 			"name": "dApp notifications",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/NotificationManager.vue",
-			"arcs": [3],
 			"reach": "a dApp notification (network)",
 			"states": ["default"],
 			"suite": "smoke"
@@ -965,7 +870,6 @@
 			"name": "Global loader",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/GlobalLoader.vue",
-			"arcs": [3],
 			"reach": "a global load in flight",
 			"states": ["default"],
 			"suite": "smoke"
@@ -975,7 +879,6 @@
 			"name": "Migration barrier",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/MigrationBarrier.vue",
-			"arcs": [3],
 			"reach": "a storage migration in flight (the migration fixture)",
 			"states": ["default"],
 			"suite": "smoke"
@@ -985,7 +888,6 @@
 			"name": "Account verification failure",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/AccountIntegrityBarrier.vue",
-			"arcs": [3],
 			"reach": "withBlockedAccount from the unlocked popup",
 			"states": ["a blocked record seeded by withBlockedAccount"],
 			"suite": "smoke"
@@ -995,7 +897,6 @@
 			"name": "Legal sheet",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/LegalAcceptanceSheet.vue",
-			"arcs": [3],
 			"reach": "a Terms version the profile has not accepted",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1005,7 +906,6 @@
 			"name": "Header and bottom nav (read on Home)",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/Header.vue",
-			"arcs": [3],
 			"reach": "#/popup/general",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1015,7 +915,6 @@
 			"name": "Boot retry",
 			"kind": "overlay",
 			"source": "apps/extension/src/popup/app.vue",
-			"arcs": [3],
 			"reach": "a boot that fails or cannot reach the background (boot-outcome-banner)",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1025,7 +924,6 @@
 			"name": "Header and bottom nav (read on Home)",
 			"kind": "overlay",
 			"source": "apps/extension/src/popup/components/Navigation.vue",
-			"arcs": [3],
 			"reach": "#/popup/general",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1035,7 +933,6 @@
 			"name": "Overlay components/Popup/Popup.vue",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/Popup/Popup.vue",
-			"arcs": [2],
 			"reach": "none",
 			"states": [],
 			"suite": "none",
@@ -1046,7 +943,6 @@
 			"name": "Passkey ceremony dialog",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/passkey/PasskeyCeremonyDialog.vue",
-			"arcs": [3],
 			"reach": "a passkey ceremony, e.g. unlock with a passkey",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1056,7 +952,6 @@
 			"name": "Overlay components/ui/Dropdown/DropdownRoot.vue",
 			"kind": "overlay",
 			"source": "apps/extension/src/components/ui/Dropdown/DropdownRoot.vue",
-			"arcs": [2],
 			"reach": "an open dropdown menu",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1066,7 +961,6 @@
 			"name": "Overlay packages/design/src/ui/Popover.vue",
 			"kind": "overlay",
 			"source": "packages/design/src/ui/Popover.vue",
-			"arcs": [2],
 			"reach": "an open popover",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1076,7 +970,6 @@
 			"name": "Toasts",
 			"kind": "overlay",
 			"source": "packages/design/src/ui/ToastManagerBase.vue",
-			"arcs": [2],
 			"reach": "any toast, e.g. copying the Header address on #/popup/general",
 			"states": ["default"],
 			"suite": "smoke"
@@ -1086,7 +979,6 @@
 			"name": "A tooltip",
 			"kind": "overlay",
 			"source": "packages/design/src/ui/Tooltip.vue",
-			"arcs": [2],
 			"reach": "hover a dotted term or an icon-only button",
 			"states": ["default"],
 			"suite": "smoke"

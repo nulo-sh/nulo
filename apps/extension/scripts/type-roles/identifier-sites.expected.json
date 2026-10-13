@@ -119,7 +119,6 @@
 			"selector": "",
 			"surface": "popup-tx-id",
 			"state": "",
-			"liveFrom": 2,
 			"why": "the component's own text; each AddressDisplay element is a site of its own, read at its call site's selector"
 		},
 		{
@@ -130,8 +129,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"activity-incoming-hash\"]",
 			"surface": "popup-activity",
-			"state": "a seedReceipt note",
-			"liveFrom": 3
+			"state": "a seedReceipt note"
 		},
 		{
 			"file": "apps/extension/src/components/composite/capabilities/DetailsTable.vue",
@@ -142,7 +140,6 @@
 			"selector": "",
 			"surface": "windows-capabilities",
 			"state": "",
-			"liveFrom": 4,
 			"why": "the row's accessible name in a hidden span, never drawn"
 		},
 		{
@@ -153,8 +150,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"capability-address\"]",
 			"surface": "windows-capabilities",
-			"state": "a contract scope with its details open (network)",
-			"liveFrom": 4
+			"state": "a contract scope with its details open (network)"
 		},
 		{
 			"file": "apps/extension/src/components/composite/DappIdentityBlock.vue",
@@ -164,8 +160,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"capabilities-hostname\"]",
 			"surface": "windows-capabilities",
-			"state": "a connect request (network)",
-			"liveFrom": 4
+			"state": "a connect request (network)"
 		},
 		{
 			"file": "apps/extension/src/components/composite/general/AddressInput.vue",
@@ -176,7 +171,6 @@
 			"selector": "",
 			"surface": "popup-send",
 			"state": "",
-			"liveFrom": 2,
 			"why": "the component's own field; each AddressInput element is a site of its own, read at its call site's selector"
 		},
 		{
@@ -188,7 +182,6 @@
 			"selector": "[data-testid=\"legal-point\"]",
 			"surface": "onboarding-terms",
 			"state": "",
-			"liveFrom": 3,
 			"why": "a point's ordinal (01, 02), not an identifier"
 		},
 		{
@@ -200,7 +193,6 @@
 			"selector": "[data-testid=\"legal-consent-hint\"]",
 			"surface": "onboarding-terms",
 			"state": "",
-			"liveFrom": 3,
 			"why": "a hint sentence set in mono, not an identifier"
 		},
 		{
@@ -211,8 +203,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"recipient-card-masked\"]",
 			"surface": "popup-send",
-			"state": "a chosen recipient",
-			"liveFrom": 3
+			"state": "a chosen recipient"
 		},
 		{
 			"file": "apps/extension/src/components/composite/send/RecipientCard.vue",
@@ -222,8 +213,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"recipient-card-full-address\"]",
 			"surface": "popup-send",
-			"state": "a chosen recipient with recipient-card-reveal clicked",
-			"liveFrom": 3
+			"state": "a chosen recipient with recipient-card-reveal clicked"
 		},
 		{
 			"file": "apps/extension/src/components/Header.vue",
@@ -233,8 +223,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"account-address-text\"]",
 			"surface": "overlay:Header",
-			"state": "",
-			"liveFrom": 3
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/components/LegalAcceptanceSheet.vue",
@@ -245,7 +234,6 @@
 			"selector": "[data-testid=\"legal-sheet-version\"]",
 			"surface": "overlay:LegalAcceptanceSheet",
 			"state": "",
-			"liveFrom": 3,
 			"why": "the Terms version label: a document version, not an identifier"
 		},
 		{
@@ -256,8 +244,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"scope-address-value\"]",
 			"surface": "popup-settings-connected-apps-id",
-			"state": "a connected app whose grant holds a contract scope (network)",
-			"liveFrom": 4
+			"state": "a connected app whose grant holds a contract scope (network)"
 		},
 		{
 			"file": "apps/extension/src/components/ScopeClassId.vue",
@@ -267,8 +254,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"scope-class-id-value\"]",
 			"surface": "popup-settings-connected-apps-id",
-			"state": "a connected app whose grant holds a class scope (network)",
-			"liveFrom": 4
+			"state": "a connected app whose grant holds a class scope (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/activity/TransactionCard.vue",
@@ -278,8 +264,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"activity-row-hash\"]",
 			"surface": "popup-activity",
-			"state": "the seedTransaction row on the testnet chain with an explorer",
-			"liveFrom": 3
+			"state": "the seedTransaction row on the testnet chain with an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/activity/TransactionCard.vue",
@@ -289,8 +274,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"activity-row-hash\"]",
 			"surface": "popup-activity",
-			"state": "the seedTransaction row without an explorer",
-			"liveFrom": 3
+			"state": "the seedTransaction row without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/general/TokenImportRow.vue",
@@ -300,8 +284,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"token-import-title\"]",
 			"surface": "popup-general",
-			"state": "a token import in flight whose token has no name",
-			"liveFrom": 3
+			"state": "a token import in flight whose token has no name"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/holdings/TokenList.vue",
@@ -311,8 +294,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"holdings-add-token-address\"]",
 			"surface": "popup-holdings",
-			"state": "a pasted address no listed token matches",
-			"liveFrom": 3
+			"state": "a pasted address no listed token matches"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
@@ -322,8 +304,7 @@
 			"role": "input-data",
 			"selector": "[data-testid=\"send-destination-field\"]",
 			"surface": "popup-send",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/send/RecipientField.vue",
@@ -333,8 +314,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"recipient-suggestion-address\"]",
 			"surface": "popup-send",
-			"state": "a saved contact and a partial recipient typed",
-			"liveFrom": 3
+			"state": "a saved contact and a partial recipient typed"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/send/SendReviewSheet.vue",
@@ -344,8 +324,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"send-review-recipient\"]",
 			"surface": "popup-send",
-			"state": "recipient and amount typed, review sheet open (network)",
-			"liveFrom": 3
+			"state": "recipient and amount typed, review sheet open (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -355,8 +334,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-selector\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a backup restored with an encoded_call authwit record",
-			"liveFrom": 2
+			"state": "a backup restored with an encoded_call authwit record"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -366,8 +344,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-hash\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a backup restored with a message_hash authwit record",
-			"liveFrom": 2
+			"state": "a backup restored with a message_hash authwit record"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -377,8 +354,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-caller\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a public authwit granted (network)",
-			"liveFrom": 2
+			"state": "a public authwit granted (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -388,8 +364,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-contract\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a public authwit granted (network)",
-			"liveFrom": 2
+			"state": "a public authwit granted (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -399,8 +374,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-caller\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a backup restored with an encoded_call authwit record",
-			"liveFrom": 2
+			"state": "a backup restored with an encoded_call authwit record"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -410,8 +384,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-to\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a backup restored with an encoded_call authwit record",
-			"liveFrom": 2
+			"state": "a backup restored with an encoded_call authwit record"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/authwits/AuthwitCard.vue",
@@ -421,8 +394,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-consumer\"]",
 			"surface": "popup-settings-developer-account-state-authwits",
-			"state": "a backup restored with an intent authwit record",
-			"liveFrom": 2
+			"state": "a backup restored with an intent authwit record"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/contacts/ContactFormFields.vue",
@@ -432,8 +404,7 @@
 			"role": "input-data",
 			"selector": "[data-testid=\"contact-address-input\"]",
 			"surface": "popup:new_contact",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue",
@@ -443,8 +414,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"contact-row-address\"]",
 			"surface": "popup-settings-contacts",
-			"state": "a saved contact",
-			"liveFrom": 4
+			"state": "a saved contact"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/settings/fpcs/FpcRow.vue",
@@ -454,8 +424,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"fpc-row\"] [data-testid=\"setting-title\"]",
 			"surface": "popup-settings-fpcs",
-			"state": "a seeded FPC with no name",
-			"liveFrom": 2
+			"state": "a seeded FPC with no name"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/tx/TxDebugPanel.vue",
@@ -465,8 +434,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-debug-hash\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row, Developer mode on, the debug toggle clicked",
-			"liveFrom": 3
+			"state": "the seedTransaction row, Developer mode on, the debug toggle clicked"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/tx/TxDebugPanel.vue",
@@ -476,8 +444,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"tx-debug-chunk-nonce\"]",
 			"surface": "popup-tx-id",
-			"state": "a call with a chunkNonce, Developer mode on, the debug toggle clicked",
-			"liveFrom": 3
+			"state": "a call with a chunkNonce, Developer mode on, the debug toggle clicked"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/AccountsPopup.vue",
@@ -487,8 +454,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"account-item\"] [data-testid=\"setting-description\"]",
 			"surface": "popup:accounts",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/EditFpcPopup.vue",
@@ -498,8 +464,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"edit-fpc-header-row\"] [data-testid=\"setting-title\"]",
 			"surface": "popup:edit_fpc",
-			"state": "a seeded FPC with no name, opened for editing",
-			"liveFrom": 2
+			"state": "a seeded FPC with no name, opened for editing"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/EditFpcPopup.vue",
@@ -509,8 +474,7 @@
 			"role": "input-data",
 			"selector": "[data-testid=\"edit-fpc-address-input\"]",
 			"surface": "popup:edit_fpc",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/ImportContactsPopup.vue",
@@ -520,8 +484,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"import-contact-address-saved\"]",
 			"surface": "popup:import_contacts",
-			"state": "a saved Alice and a file naming Alice at another address (address-change)",
-			"liveFrom": 3
+			"state": "a saved Alice and a file naming Alice at another address (address-change)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/ImportContactsPopup.vue",
@@ -531,8 +494,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"import-contact-address-incoming\"]",
 			"surface": "popup:import_contacts",
-			"state": "a saved Alice and a file naming Alice at another address (address-change)",
-			"liveFrom": 3
+			"state": "a saved Alice and a file naming Alice at another address (address-change)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/ImportContactsPopup.vue",
@@ -542,8 +504,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"import-contact-address\"]",
 			"surface": "popup:import_contacts",
-			"state": "a new contact in the file",
-			"liveFrom": 3
+			"state": "a new contact in the file"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/IncomingTrustPopup.vue",
@@ -553,8 +514,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"incoming-trust-contract\"]",
 			"surface": "popup:incoming_trust",
-			"state": "an incoming transfer from an unknown sender (network)",
-			"liveFrom": 4
+			"state": "an incoming transfer from an unknown sender (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/NewFpcPopup.vue",
@@ -564,8 +524,7 @@
 			"role": "input-data",
 			"selector": "[data-testid=\"fpc-address-input\"]",
 			"surface": "popup:new_fpc",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/NewSenderPopup.vue",
@@ -575,8 +534,7 @@
 			"role": "input-data",
 			"selector": "[data-testid=\"new-sender-address-input\"]",
 			"surface": "popup:new_sender",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/NewTokenPopup.vue",
@@ -586,8 +544,7 @@
 			"role": "input-data",
 			"selector": "[data-testid=\"token-address-input\"]",
 			"surface": "popup:new_token",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/ReceivePopup.vue",
@@ -597,8 +554,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"receive-address-text\"]",
 			"surface": "popup:receive",
-			"state": "",
-			"liveFrom": 3
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
@@ -608,8 +564,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"token-metadata-id\"]",
 			"surface": "popup:token_metadata",
-			"state": "",
-			"liveFrom": 3
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
@@ -619,8 +574,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"token-metadata-address\"]",
 			"surface": "popup:token_metadata",
-			"state": "",
-			"liveFrom": 3
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
@@ -630,8 +584,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"token-metadata-chain-id\"]",
 			"surface": "popup:token_metadata",
-			"state": "",
-			"liveFrom": 3
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/pages/journal/[id].vue",
@@ -641,8 +594,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"journal-detail-recipient\"]",
 			"surface": "popup-journal-id",
-			"state": "a journal operation with a recipient",
-			"liveFrom": 3
+			"state": "a journal operation with a recipient"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/legal/declined.vue",
@@ -653,7 +605,6 @@
 			"selector": "[data-testid=\"legal-declined-version\"]",
 			"surface": "popup-legal-declined",
 			"state": "",
-			"liveFrom": 3,
 			"why": "the Terms version label: a document version, not an identifier"
 		},
 		{
@@ -664,8 +615,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"received-from-address\"]",
 			"surface": "popup-received-id",
-			"state": "a seedReceipt note from an address",
-			"liveFrom": 2
+			"state": "a seedReceipt note from an address"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
@@ -675,8 +625,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"received-to-address\"]",
 			"surface": "popup-received-id",
-			"state": "a seedReceipt note",
-			"liveFrom": 2
+			"state": "a seedReceipt note"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
@@ -686,8 +635,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-explorer-link\"]",
 			"surface": "popup-received-id",
-			"state": "a seedReceipt note on the testnet chain with an explorer",
-			"liveFrom": 3
+			"state": "a seedReceipt note on the testnet chain with an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
@@ -697,8 +645,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-hash-copy\"]",
 			"surface": "popup-received-id",
-			"state": "a seedReceipt note without an explorer",
-			"liveFrom": 3
+			"state": "a seedReceipt note without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/received/[id].vue",
@@ -708,8 +655,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"tx-block-hash\"]",
 			"surface": "popup-received-id",
-			"state": "a public seedReceipt note with a block number",
-			"liveFrom": 3
+			"state": "a public seedReceipt note with a block number"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/accounts/import.vue",
@@ -719,8 +665,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"import-account-preview-address\"]",
 			"surface": "popup-settings-accounts-import",
-			"state": "an account file pasted into Import account",
-			"liveFrom": 4
+			"state": "an account file pasted into Import account"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/accounts/index.vue",
@@ -730,8 +675,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"manage-accounts-row\"] [data-testid=\"manage-accounts-address\"]",
 			"surface": "popup-settings-accounts",
-			"state": "",
-			"liveFrom": 4
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/accounts/index.vue",
@@ -741,8 +685,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"manage-accounts-hidden-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-accounts",
-			"state": "a hidden account",
-			"liveFrom": 2
+			"state": "a hidden account"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/contracts/index.vue",
@@ -752,8 +695,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"address-display\"]",
 			"surface": "popup-settings-developer-account-state-contracts",
-			"state": "a registered contract (network)",
-			"liveFrom": 2
+			"state": "a registered contract (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue",
@@ -763,8 +705,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"note-contract\"]",
 			"surface": "popup-settings-developer-account-state-notes",
-			"state": "a note (network)",
-			"liveFrom": 4
+			"state": "a note (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/notes/index.vue",
@@ -774,8 +715,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"record-value\"]",
 			"surface": "popup-settings-developer-account-state-notes",
-			"state": "a note exists (network)",
-			"liveFrom": 2
+			"state": "a note exists (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/developer/account-state/senders/index.vue",
@@ -785,8 +725,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"address-display\"]",
 			"surface": "popup-settings-developer-account-state-senders",
-			"state": "a registered sender (network)",
-			"liveFrom": 2
+			"state": "a registered sender (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/connected-apps/[id].vue",
@@ -796,8 +735,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"connected-app-account-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-connected-apps-id",
-			"state": "a connected dApp (network)",
-			"liveFrom": 2
+			"state": "a connected dApp (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/networks/[id].vue",
@@ -807,8 +745,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"network-detail-chain-id\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-networks-id",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/profile/index.vue",
@@ -818,8 +755,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"identity-id-value\"]",
 			"surface": "popup-settings-profile",
-			"state": "",
-			"liveFrom": 4
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/pages/settings/security/export/account.vue",
@@ -829,8 +765,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"export-account-row\"] [data-testid=\"setting-description\"]",
 			"surface": "popup-settings-security-export-account",
-			"state": "",
-			"liveFrom": 2
+			"state": ""
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
@@ -840,8 +775,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"tx-from-address\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row",
-			"liveFrom": 2
+			"state": "the seedTransaction row"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
@@ -851,8 +785,7 @@
 			"role": "data-lead",
 			"selector": "[data-testid=\"tx-to-address\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row",
-			"liveFrom": 2
+			"state": "the seedTransaction row"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/tx/TxHashRow.vue",
@@ -862,8 +795,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-hash-link\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row on the testnet chain with an explorer",
-			"liveFrom": 3
+			"state": "the seedTransaction row on the testnet chain with an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/components/modules/tx/TxHashRow.vue",
@@ -873,8 +805,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-hash\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row without an explorer",
-			"liveFrom": 3
+			"state": "the seedTransaction row without an explorer"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
@@ -884,8 +815,7 @@
 			"role": "meta",
 			"selector": "[data-testid=\"tx-block-hash\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row with a block",
-			"liveFrom": 3
+			"state": "the seedTransaction row with a block"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
@@ -895,8 +825,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-nonce\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row with a nonce",
-			"liveFrom": 3
+			"state": "the seedTransaction row with a nonce"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/tx/[id].vue",
@@ -906,8 +835,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"tx-call-contract\"]",
 			"surface": "popup-tx-id",
-			"state": "the seedTransaction row with a user call",
-			"liveFrom": 3
+			"state": "the seedTransaction row with a user call"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/capabilities/AccountSelectRow.vue",
@@ -917,8 +845,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"account-select-address\"]",
 			"surface": "windows-capabilities",
-			"state": "a connect request with an account to choose (network)",
-			"liveFrom": 4
+			"state": "a connect request with an account to choose (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -928,8 +855,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
-			"state": "a transfer from one of the wallet's accounts (network)",
-			"liveFrom": 2
+			"state": "a transfer from one of the wallet's accounts (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -939,8 +865,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-transfer-sender-address\"]",
 			"surface": "windows-execute",
-			"state": "a transfer from an address the wallet does not know (network)",
-			"liveFrom": 2
+			"state": "a transfer from an address the wallet does not know (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -950,8 +875,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-transfer-to\"]",
 			"surface": "windows-execute",
-			"state": "a transfer (network)",
-			"liveFrom": 2
+			"state": "a transfer (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -961,8 +885,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-transfer-nonce-value\"]",
 			"surface": "windows-execute",
-			"state": "a transfer carrying an authwit nonce (network)",
-			"liveFrom": 4
+			"state": "a transfer carrying an authwit nonce (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -972,8 +895,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
-			"state": "a decoded call with an address parameter (network)",
-			"liveFrom": 2
+			"state": "a decoded call with an address parameter (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -983,8 +905,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-decoded-param-value\"]",
 			"surface": "windows-execute",
-			"state": "a decoded call with a field parameter (network)",
-			"liveFrom": 4
+			"state": "a decoded call with a field parameter (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -994,8 +915,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-arg-field\"]",
 			"surface": "windows-execute",
-			"state": "an undecodable call with execute-op-raw-toggle clicked (network)",
-			"liveFrom": 4
+			"state": "an undecodable call with execute-op-raw-toggle clicked (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/CallArguments.vue",
@@ -1006,7 +926,6 @@
 			"selector": "",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 4,
 			"why": "the value's native title tooltip, which no type role styles; the element's text is its own site"
 		},
 		{
@@ -1018,7 +937,6 @@
 			"selector": "",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 4,
 			"why": "the value's native title tooltip, which no type role styles; the element's text is its own site"
 		},
 		{
@@ -1030,7 +948,6 @@
 			"selector": "[data-testid=\"execute-action-contract\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "action_operations",
 			"why": "every operation carrying actions is built in action_operations; the only one sent to the execute window is the dispatcher's grantPublicAuthwit, whose one action is add_public_authwit, and the auth-registry and Send builders' call and encoded_call actions execute without the window, so this branch never renders"
 		},
@@ -1042,8 +959,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
-			"state": "a grantPublicAuthwit request (network)",
-			"liveFrom": 2
+			"state": "a grantPublicAuthwit request (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationActionRow.vue",
@@ -1053,8 +969,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-authwit-contract\"]",
 			"surface": "windows-execute",
-			"state": "a grantPublicAuthwit request (network)",
-			"liveFrom": 2
+			"state": "a grantPublicAuthwit request (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationActionRow.vue",
@@ -1065,7 +980,6 @@
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "add_public_authwit",
 			"why": "add_public_authwit's one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
 		},
@@ -1078,7 +992,6 @@
 			"selector": "[data-testid=\"execute-authwit-to\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "add_public_authwit",
 			"why": "add_public_authwit's one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
 		},
@@ -1091,7 +1004,6 @@
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "add_public_authwit",
 			"why": "add_public_authwit's one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
 		},
@@ -1104,7 +1016,6 @@
 			"selector": "[data-testid=\"execute-authwit-spender\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 4,
 			"unreachable": "add_public_authwit",
 			"why": "add_public_authwit's one producer, the dispatcher's handleGrantPublicAuthwit, builds only content kind call, so this branch never renders"
 		},
@@ -1116,8 +1027,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-account\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_sendTx request (network)",
-			"liveFrom": 4
+			"state": "an aztec_sendTx request (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1127,8 +1037,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_sendTx request (network)",
-			"liveFrom": 2
+			"state": "an aztec_sendTx request (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1138,8 +1047,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-discovered-consumer\"]",
 			"surface": "windows-execute",
-			"state": "a send with a discovered authwit (network)",
-			"liveFrom": 2
+			"state": "a send with a discovered authwit (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1149,8 +1057,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-discovered-caller\"]",
 			"surface": "windows-execute",
-			"state": "a send with a discovered authwit (network)",
-			"liveFrom": 2
+			"state": "a send with a discovered authwit (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1160,8 +1067,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-discovered-inner-hash\"]",
 			"surface": "windows-execute",
-			"state": "a discovered authwit with its details open (network)",
-			"liveFrom": 4
+			"state": "a discovered authwit with its details open (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1171,8 +1077,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-op-account\"]",
 			"surface": "windows-execute",
-			"state": "an operation other than a send, with an account (network)",
-			"liveFrom": 4
+			"state": "an operation other than a send, with an account (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1183,7 +1088,6 @@
 			"selector": "[data-testid=\"execute-register-contract-address\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1196,7 +1100,6 @@
 			"selector": "[data-testid=\"execute-register-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1208,8 +1111,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"register-token-address\"]",
 			"surface": "windows-execute",
-			"state": "a registerToken request (network)",
-			"liveFrom": 2
+			"state": "a registerToken request (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1220,7 +1122,6 @@
 			"selector": "[data-testid=\"execute-utility-contract\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1233,7 +1134,6 @@
 			"selector": "[data-testid=\"execute-op-class-id\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 4,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1246,7 +1146,6 @@
 			"selector": "[data-testid=\"execute-contract-metadata-address\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1259,7 +1158,6 @@
 			"selector": "[data-testid=\"execute-private-events-contract\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1272,7 +1170,6 @@
 			"selector": "[data-testid=\"execute-sdk-register-sender-address\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1285,7 +1182,6 @@
 			"selector": "[data-testid=\"execute-op-call-to\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1298,7 +1194,6 @@
 			"selector": "[data-testid=\"execute-utility-call-to\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1311,7 +1206,6 @@
 			"selector": "[data-testid=\"execute-register-contract-instance\"]",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 2,
 			"unreachable": "execute_window",
 			"why": "the execute window shows only the operations the dispatcher hands to the interaction service, four builders that make aztec_sendTx, aztec_createAuthWit, register_token and add_public_authwit; every other method goes straight to executeOperations without a window, so this branch never renders"
 		},
@@ -1323,8 +1217,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-authwit-caller-address\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_createAuthWit request for a call (network)",
-			"liveFrom": 2
+			"state": "an aztec_createAuthWit request for a call (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1334,8 +1227,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-authwit-target\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_createAuthWit request for a call (network)",
-			"liveFrom": 2
+			"state": "an aztec_createAuthWit request for a call (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1345,8 +1237,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-authwit-consumer\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_createAuthWit request for an intent (network)",
-			"liveFrom": 2
+			"state": "an aztec_createAuthWit request for an intent (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1356,8 +1247,7 @@
 			"role": "data",
 			"selector": "[data-testid=\"execute-authwit-inner-hash-value\"]",
 			"surface": "windows-execute",
-			"state": "an aztec_createAuthWit request for an intent (network)",
-			"liveFrom": 4
+			"state": "an aztec_createAuthWit request for an intent (network)"
 		},
 		{
 			"file": "apps/extension/src/popup/windows/execute/OperationCard.vue",
@@ -1368,7 +1258,6 @@
 			"selector": "",
 			"surface": "windows-execute",
 			"state": "",
-			"liveFrom": 4,
 			"why": "the hash's native title tooltip, which no type role styles; the element's text is its own site"
 		}
 	]

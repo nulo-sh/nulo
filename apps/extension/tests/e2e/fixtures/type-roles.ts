@@ -419,7 +419,7 @@ function faceFailures({ token, face, statuses }: FontCheck["faces"][number], req
 
 // ── The sweep and the record mode ───────────────────────────────────────
 
-/** Sweep steps 1 and 2: the faces, then every role-bearing element against its role. */
+/** The faces, then every role-bearing element against its role. */
 export async function sweepTypeRoles(page: Page, options: SweepOptions = {}): Promise<SweepResult> {
 	const typography = await readPageTypography(page, { kind: "roles" })
 	const used = new Set(typography.readings.flatMap((reading) => reading.roles.filter(isRole).map((role) => typeRoles[role].family)))
@@ -466,7 +466,6 @@ export type SiteEntry = {
 	selector: string
 	surface: string
 	state: string
-	liveFrom: 2 | 3 | 4
 	unreachable?: string
 	why?: string
 }
@@ -474,8 +473,8 @@ export type SiteEntry = {
 export type SiteObservation = {
 	key: string
 	site: SiteEntry
-	/** `recorded` before the site's `liveFrom` arc; `unreachable` sites are listed, never read. */
-	mode: "asserted" | "recorded" | "unreachable"
+	/** `unreachable` sites are listed, never read. */
+	mode: "asserted" | "unreachable"
 	readings: TypeReading[]
 	failures: SweepFailure[]
 }
@@ -489,8 +488,6 @@ export type IdentifierObservation = {
 }
 
 export type ObserveOptions = {
-	/** The arc whose head is running. */
-	arc: 1 | 2 | 3 | 4 | 5
 	/** The expected entries; by default the expected file's. */
 	sites?: readonly SiteEntry[]
 }
@@ -521,7 +518,7 @@ function judgeSite(reading: TypeReading, site: SiteEntry, vars: Vars): SweepFail
 	return [...carried, ...judgeAs(reading, role, vars)]
 }
 
-async function observeSite(page: Page, site: SiteEntry, arc: number): Promise<SiteObservation> {
+async function observeSite(page: Page, site: SiteEntry): Promise<SiteObservation> {
 	const key = siteKey(site)
 	if (site.unreachable) return { key, site, mode: "unreachable", readings: [], failures: [] }
 	const { vars, readings } = await readPageTypography(page, {
@@ -542,11 +539,11 @@ async function observeSite(page: Page, site: SiteEntry, arc: number): Promise<Si
 					},
 				]
 			: readings.flatMap((reading) => judgeSite(reading, site, vars))
-	return { key, site, mode: site.liveFrom <= arc ? "asserted" : "recorded", readings, failures }
+	return { key, site, mode: "asserted", readings, failures }
 }
 
 /**
- * Sweep step 4 on one surface in one seeded state: every element at each matching site's selector,
+ * The identifier sites of one surface in one seeded state: every element at each matching site's selector,
  * and at least one, carries the site's role and computes to it (an `AddressDisplay` showing a name
  * expects `name`; an `input-data` site is read at its native field), then the hex text scan.
  */
@@ -554,13 +551,13 @@ export async function observeIdentifierSites(
 	page: Page,
 	surface: string,
 	state: string,
-	options: ObserveOptions,
+	options: ObserveOptions = {},
 ): Promise<IdentifierObservation> {
 	const entries = (options.sites ?? identifierSites()).filter(
 		(site) => site.surface === surface && site.state === state && site.role !== "none",
 	)
 	const sites: SiteObservation[] = []
-	for (const site of entries) sites.push(await observeSite(page, site, options.arc))
+	for (const site of entries) sites.push(await observeSite(page, site))
 	return { surface, state, sites, hexOutsideMono: await readHexOutsideMono(page) }
 }
 
@@ -585,12 +582,12 @@ export type Coverage = {
 /** The coverage count: which live sites of `surfaces` (all, by default) the observations read, and every unreachable one with its reason. */
 export function coverageOf(
 	observations: readonly IdentifierObservation[],
-	options: ObserveOptions & { surfaces?: readonly string[] },
+	options: ObserveOptions & { surfaces?: readonly string[] } = {},
 ): Coverage {
 	const inScope = (options.sites ?? identifierSites()).filter(
 		(site) => site.role !== "none" && (options.surfaces === undefined || options.surfaces.includes(site.surface)),
 	)
-	const live = inScope.filter((site) => !site.unreachable && site.liveFrom <= options.arc)
+	const live = inScope.filter((site) => !site.unreachable)
 	const read = new Set(
 		observations.flatMap((observation) => observation.sites.filter((site) => site.readings.length > 0).map((site) => site.key)),
 	)
