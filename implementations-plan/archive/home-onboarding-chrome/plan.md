@@ -1,7 +1,7 @@
 ---
 plan: home-onboarding-chrome
 tier: mid
-status: approved by the orchestrator (D-orch-2 to D-orch-6); arc 1 implemented and its Codex loop converged; arc 2 not started
+status: closed (2026-10-13)
 issues: "#130, #132, #133, #135, #149 (arc 1); #156, #170 (arc 2); #181 (no arc, struck); #154, #160 (no arc, owner Mac checks); #242 (no arc, OWNER-ASKS); #244 (no arc, trigger not met)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,17 @@ base: origin/dev at 36c43155
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** closed. Two arcs, one PR each against `dev`: #348 (arc 1, merged) and #351 (arc 2); the merge that lands #351 closes the plan.
+- **Shipped:** in #348, History filtered from a token page (#130), the token page's section header (#132), onboarding's stored theme (#133), Account State under Developer with its redirects (#135), one own window per flow on Firefox (#149). In #351, the store capture's Send frame re-staged (#170): the strip is read once the send arms, and `clearAmountLine` takes the least scroll that clears the amount line (OA-5 A); nothing under `apps/extension/store/` changes.
+- **Dropped:** #156's Proving row (Phase 2.2) is not built: Phase 2.1's stop rule fired, I3 refuted on Firefox 153.0.4 ([lessons/phase-2.md](lessons/phase-2.md)); #156 stays open with its reopening condition in a comment, and OA-3 and OA-4 ship nothing. #181 is closed as not planned, struck by the owner (P13-06). D12's second ring-carrying control was that row's `Button`; #244's trigger stays unmet with `RowAction` alone. Not promoted to `lessons.md`: the Firefox CORS-mode reading lives on #156, where reopening starts, and the pending-pick read lives in `waitForFee`'s comment; the file holds 8,190 of 8,192 bytes, and neither line earns a retirement.
+- **Known limits:** #352 (D7: a start from a re-opened toolbar panel during an own window's boot opens a second window).
+- **Open items:** #156 (stopped, see above); #154 and #160 (the owner's Mac checks, P13-07 and P13-08); #242 (P9-05, restated as OA-7); #244 (trigger not met); #349 (`snack-placement`'s Home case, red once on #348's CI). OA-1, OA-2, OA-5 and OA-8 shipped their "what ships now" lines and go to the orchestrator's owner page (D-orch-10).
+- **Size:** about 670 lines against the mid target of 350: two arcs of audit verdicts (about 150 lines) and a Post-implementation section written before the README's standard existed to cite. The verdicts are the record, so nothing was cut at close.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # home-onboarding-chrome: History filter, header, onboarding theme, Account State route, own windows, the Firefox Presto permission, the store Send frame
 
@@ -92,12 +103,12 @@ Recon: [recon.md](recon.md). Questions for the owner: [OWNER-ASKS.md](OWNER-ASKS
 
 ### Inferences (unverified; the audits attack these)
 
-- I1. Firefox 153 accepts `permissions.request` for an origin listed only in `host_permissions` (MDN F12; Codex reports the source counts MV3 manifest origins as requestable). Phase 2.1 proves it.
-- I2. With `extensions.webextOptionalPermissionPrompts=false`, Firefox grants a `permissions.request` without a doorhanger, and a hit-tested pointer click from the harness counts as user input for it. Phase 2.1 proves both; the e2e shape depends on the answer (D10).
-- I3. With the loopback origins and all-sites access withheld, a Firefox 153 extension page's request to `127.0.0.1` is refused (Local Network Access), not admitted by CORS. Phase 2.1 records reachability before and after the grant.
+- I1. Firefox 153 accepts `permissions.request` for an origin listed only in `host_permissions` (MDN F12; Codex reports the source counts MV3 manifest origins as requestable). Phase 2.1 proves it. **Proven** (`lessons/phase-2.md`).
+- I2. With `extensions.webextOptionalPermissionPrompts=false`, Firefox grants a `permissions.request` without a doorhanger, and a hit-tested pointer click from the harness counts as user input for it. Phase 2.1 proves both; the e2e shape depends on the answer (D10). **Proven.**
+- I3. With the loopback origins and all-sites access withheld, a Firefox 153 extension page's request to `127.0.0.1` is refused (Local Network Access), not admitted by CORS. Phase 2.1 records reachability before and after the grant. **Refuted:** the request runs in CORS mode and Presto's CORS admits it; the stop rule fired.
 - I4. In Firefox's toolbar panel, the permission doorhanger may close the panel (F19 shows Chrome's popup closing on such a prompt). Whether the grant then lands or is cancelled is unknown (OA-4).
 - I5. A window id read back with `chrome.windows.get` names the same window for the rest of the browser session; `storage.session` clears on a browser restart.
-- I6. The sandbox's `you: unknown` has one cause among: the capture picks a method that is not the protocol FPC; the strip is read before the protocol addresses are derived; the sandbox's PrivateFPC row never matches the derived address; or the wallet truthfully cannot vouch for it there. Phase 2.3 finds which.
+- I6. The sandbox's `you: unknown` has one cause among: the capture picks a method that is not the protocol FPC; the strip is read before the protocol addresses are derived; the sandbox's PrivateFPC row never matches the derived address; or the wallet truthfully cannot vouch for it there. Phase 2.3 finds which. **None of the four:** the harness read the strip while the card's selection was still pending after the pick.
 
 ### Asks (each with the working assumption the plan proceeds on)
 
@@ -309,7 +320,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 
 ### Arc 2: Presto step and store art (#156, #170) — waits on the orchestrator's written R5 release
 
-#### Phase 2.1: probe Firefox's permission behaviour
+#### Phase 2.1: probe Firefox's permission behaviour ✓ (stop rule fired: #156 ships nothing)
 1. In a scratch smoke file (not committed), on Firefox: record `chrome.permissions.getAll()`. Remove the two loopback origins and `*://*/*` (F11), through `chrome.permissions.remove` or the driver's privileged script. Record `getAll()` and `permissions.contains` for the loopback origins; the probe is valid only when `contains` is false.
 2. With the permission withheld, fetch a loopback health stub from an extension page and record the outcome and the SDK's status (I3). Restore the permission and fetch again.
 3. Withhold again as in step 1, and confirm `contains` is false. Call `permissions.request` for the two loopback origins from a hit-tested pointer click (I1). Record whether it resolves, rejects or shows a doorhanger, then `getAll()`, `contains` and the stub's reachability.
@@ -322,7 +333,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 - Pass criteria: each of I1, I2, I3 is recorded as proven or refuted, with output; `git status` shows no committed probe file.
 - Layers: probe only.
 
-#### Phase 2.2: the permission row (#156)
+#### Phase 2.2: the permission row (#156) — not built (Phase 2.1's stop rule)
 1. Build `usePrestoHostPermission` with tests (≥ 10 cases, CLAUDE.md § composables):
    - Chrome reads `granted` and calls no permission API; Firefox starts `unknown`, then `missing` or `granted`; a read that throws lands `granted`.
    - `onAdded` and `onRemoved` flip `access`; an older read never lands over a newer one; nothing lands after `dispose`, which removes both listeners.
@@ -344,7 +355,7 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 - Pass criteria: exit 0; the Firefox case fails on the base pages (no row).
 - Layers: lint, typecheck, unit, component, smoke e2e on both browsers; network e2e when the driver changed.
 
-#### Phase 2.3: the store Send frame (#170)
+#### Phase 2.3: the store Send frame (#170) ✓
 1. Copy the committed `apps/extension/store/captures/send.png` to `screenshots/170-send-before.png`.
 2. Run the capture as it is: `cd <worktree> && STORE_CAPTURES=1 NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/store-captures.test.ts`. Record the `you` cell, the fee rows the sandbox offers, and when the protocol addresses are derived. Restore the captures (`git checkout -- apps/extension/store/captures`).
 3. Find the cause of `you: unknown` (I6) and act per D11. Stop rule: under D11's wallet or OA-6 branch, stop #170 here. #170 and #156 stop independently; Delivery names the arc for each outcome.
@@ -383,6 +394,12 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 | D-orch-6 | No nightly, release or publish dispatch; no `--admin`; no merge; every e2e at retry 0 through `agent.sh`'s ports, one `e2e:agent` run at a time; the PR opens as a normal PR only after the Codex loop converges | The orchestrator's call | — |
 | D15 | `followOwnRoute` is the router's `afterEach` hook itself, not a path function called from one | The failed-navigation case then runs against a real memory router with a cancelling guard, without mounting `popup/index.ts` | A wrapper in `popup/index.ts` (untestable without mounting the app) |
 | D16 | The chip keeps the owner-viewed prototype's look (`shot/130-A`) with the plan's `RowAction` and fixed name; two testids (`activity-token-filter-symbol`, `activity-empty`) added for the e2e | Closest to what the owner saw; e2e selects only by testid, and the glyph's ligature text sits in the chip's text | A hand-built 20 px clear button (no ring); selecting the label by DOM shape |
+| D-orch-7 | Arc 2 is released. Phase 2.1's probe runs first and decides the manifest pin and the e2e grant path (D9, D10); Phase 2.1's stop rule and D11's branches are independent, and Delivery's "by what ships" titles apply. OA-3 ships form A and pin A unless the probe refutes I1; OA-5 ships A only under D11's harness branch; OA-6 moves no expectation | The orchestrator's call | — |
+| D-orch-8 | § Proportion v2 governs the Codex loop and the close-out: a finding is accepted once its path is written and its consequence matters; a round fixes bugs, adds tests and makes local changes, and a fix that adds persistent state, a lifecycle, a coordination protocol, a recovery policy or a public contract stops for the orchestrator; a resumed round verifies. A residual with no demonstrated path is a `known-limit` issue, closed when filed; D7's residual is one | The orchestrator's call | — |
+| D-orch-9 | The close-out records arc 1's CI result (#349, the first `test:all` timeout) in `lessons/phase-1.md`; closes #181 as not planned quoting the owner; comments on #154 and #160 (the Mac check), #244 (trigger not met) and #242 (P9-05). `lessons.md` is at its budget: promote only with a retirement | The orchestrator's call | — |
+| D-orch-10 | The owner page for OA-1 to OA-6 and OA-8 is the orchestrator's; the Firefox permission row's shots go to the orchestrator's shots directory as well as the PR body | The orchestrator's call | — |
+| D-orch-11 | Commit trailers name the model that ran (Claude Opus 5.5) | The orchestrator's call | — |
+| D-orch-12 | Every e2e run at retry 0 through `agent.sh`'s ports, one `e2e:agent` run at a time; Firefox runs for the permission step; the committed captures restored after every capture run; no nightly, release or publish dispatch, no `--admin`, no merge; `gh pr checks --watch` to the end | The orchestrator's call | — |
 | D14 | Arc 2 never edits `manifest.config.ts` | It can then land before or after #101 without a conflict: chain-endpoints edits `manifest.config.ts:52-60` and `manifest.test.ts:122-124`; arc 2 edits at most `manifest.firefox.config.ts` and `manifest.test.ts`'s Firefox block (`:133` onward) | An edit after `host_permissions` in the shared file |
 
 ## Deviations (arc 1)
@@ -391,6 +408,13 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 - Phase 1.2's e2e: after the second `toOwnWindow`, it asserts the window left on profile creation is not focused (the plan's words), not that the new one is; headless Firefox returns focus to the main window when `armPanelDeath`'s guard disarms.
 - Phase 1.2's red-on-base: the committed case fails on the base at its registration wait; a proof variant waiting for the first window's boot instead shows the base's duplicate window (logged in `lessons/phase-1.md`).
 - Phase 1.4: D16's two testids.
+
+## Deviations (arc 2)
+
+- Phase 2.1: two scratch files, not one. The second adds CORS controls (a path with no CORS headers, a preflight short of `x-aztec-version`) and requests from the background, so "reachable" is shown to come from CORS mode and not from a leftover grant. The stub is a claimed loopback listener on a drawn port.
+- Phase 2.1's stop rule fired (I3 refuted): Phase 2.2 is not built, nothing in the manifest or `manifest.test.ts` changes, and OA-3 and OA-4 ship nothing. The close-out comments on #156, which stays open, in the narrower wording the Codex consult gave (`lessons/phase-2.md`).
+- Phase 2.3: the cause of `you: unknown` was none of I6's four. The harness read the strip while the fee card's selection was still pending after the pick: the trigger draws the pick before the send arms. It is a harness cause (D11's harness branch), fixed in `store-captures.test.ts` alone.
+- Arc 2 gate: no smoke e2e runs, since #156 ships nothing; the gate is `audit:vue`, `build:firefox` and Phase 2.3's two capture runs.
 
 ## Audit verdicts
 
@@ -502,6 +526,42 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 **Verdict: approve, no new material findings.** It accepted the drop-only fix over its own recovery proposal ("Recovery would restore flow behavior after reload that the base did not preserve"), confirmed by an in-memory run of the source that reload, departure and another export open a fresh window and keep the other flow's key, and marked all three round-1 findings resolved. Noted, not a finding: `forgetThisWindow`'s read-then-remove is not atomic, like `unregister`'s; the only overlapping trigger is D7's accepted boot residual.
 
 **Convergence (arc 1).** Round 1 (Codex reject, one Medium; Opus approve, three Lows), round 2 (Codex approve, nothing new). No open material finding.
+
+### Arc 2 fix loop, round 1, Codex (session `01a13562-ba7e-7670-996a-4496907339c2`, gpt-6.1-sol, high, read-only), 2026-10-13
+
+**Verdict: approve.** It confirmed the armed send as the payer-settled signal (settings and payer derive from one effective method; a pending selection yields no settings and disarms Send), the re-measure and the empty-set guard, the records' pending-preview explanation, and that nothing under `apps/extension/store/` changes.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | `clearAmountLine`'s comment promised "a written frame never clips the line", but a failed fit still writes its diagnostic frame | Accepted: the comment now says a fit that returns `scrolled` leaves the line clear |
+
+### Arc 2 fix loop, round 1, Opus (same family, `general-purpose`, read-only), 2026-10-13
+
+**Verdict: approve.** It verified the armed signal in `send.vue` and `FeeSettingsCard.vue` and judged the #156 stop sound, noting that the SDK's reading of a reachable Presto with the permission withheld is derived from the code, not measured.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | The armed read no longer ties the strip to the picked method: a pick that turns ineligible falls back to the sponsor and still reads `hidden` | Accepted: the read also matches `origin` and `method` |
+| 2 | Low | The same overstated comment (Codex 1) | Accepted with Codex 1 |
+| 3 | Nit | The no-scroller case reported "no footer or amount line" | Accepted: the message names the scroll container |
+| 4 | Low | The records said the #156 comment exists; it is a close-out step | Accepted: reworded as the close-out's step |
+
+### Arc 2 fix loop, round 2, Codex (same session, resumed on `dc1cde0a`), 2026-10-13
+
+**Verdict: approve, no new material findings.** The armed read now catches a fallback payer, the fit's comment limits its guarantee to a successful fit, and the records describe the #156 comment as a close-out step.
+
+**Convergence (arc 2).** Round 1 (Codex approve, one Low; Opus approve, three Lows and a nit, all fixed in `dc1cde0a`), round 2 (Codex approve, nothing new).
+
+### Final cross-arc pass, Codex (fresh session `01a1356d-1f30-7331-a4eb-8e491fa02c40`, gpt-6.1-sol, high, read-only), 2026-10-13
+
+**Verdict: conditional approve.** No blocking bug, material duplication or unsigned visible change across the net diff from `36c43155`. Its adversarial checks of the History query, the symbol, the redirects, the window registration and the theme read found no further path; D7's boot race and OA-8 stay accepted limits.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | OA-3 and OA-4 still read as shipping after #156's stop | Accepted: both carry a "Stopped (arc 2)" line; the options stay as a record |
+| 2 | Low | `waitForFee`'s comment promised a settled payer the trigger does not show | Accepted: the comment now says the trigger names the pick while the card is still resolving who pays. Comment only, no behaviour change, so D11's caller sweep has nothing to run |
+
+**Confirmation (same session, resumed on `db35b7b1`): approve.** Both findings resolved, no regression. **Convergence (cross-arc):** conditional approve, then approve.
 
 ## Delivery
 

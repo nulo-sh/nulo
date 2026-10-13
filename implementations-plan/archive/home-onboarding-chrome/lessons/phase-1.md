@@ -47,3 +47,9 @@
 - A test fake must accept what the real API accepts: `storage.session.get`/`remove` take a key array, and a single-key fake hid the new code path until it was widened.
 - Final head (`039a86ae`): smoke at retry 0 Chrome 21 passed, 1 skipped, Firefox 27 passed, 1 skipped; network at retry 0 Chrome and Firefox 9/9 each; `lint`, `typecheck:all`, `lint:actions`, `test:ci-gating` green.
 - `test:all` went red once on `zod-jitless.test.ts` (5 s test timeout) and `presto/client.test.ts` (10 s hook timeout), both at their cold `await import(...)`, at a host load of about 170 on 188 cores; neither file nor anything it imports is in the diff, and the one rerun was green. `zod-jitless` timed out the same way at Phase 1.4: under a loaded shared host, a red unit gate on a cold-import timeout in an untouched file gets its one rerun before anything else.
+
+## Arc 1 CI (PR #348), 2026-10-13
+
+- 52 checks passed, 4 skipped; every required aggregator passed.
+- Chrome network shard 4/5 was red on attempt 1: `snack-placement`'s Home case found Send's amount input still disabled 60 s after its balance drain. Neither the file nor anything it drives is in the arc's diff, the case passed on #344 and #347, and the one rerun of the failed jobs was green. Filed as #349 (`bug`).
+- Local `test:all` on the final head timed out once on two cold imports in untouched files (`zod-jitless`, `presto/client`) at a host load of about 170 on 188 cores, and was green on its one rerun (recorded above).
