@@ -12,3 +12,5 @@
 - 2026-10-13 — arc 1 phase 1.2 (#149) gate pass: lint, typecheck:all, test; `passkey-toolbar-panel` Firefox 6/6 at retry 0; new case red on base.
 - 2026-10-13 — arc 1 phase 1.3 (#133) gate pass: lint, typecheck:all, test; `appearance` Chrome + Firefox at retry 0; new e2e and unit cases red on base.
 - 2026-10-13 — arc 1 phase 1.4 (#132, #130) gate pass: lint, typecheck:all, test (one zod-jitless timeout, green on rerun), test:all; home-links + navigation + rows Chrome + Firefox at retry 0; home-links red on the base link; 28 shots.
+- 2026-10-13 — arc 1 Codex loop converged: r1 reject (1 Medium, 2 Low) + Opus approve (3 Low), all fixed in 638849fe; r2 approve, nothing new.
+- 2026-10-13 — arc gate network (pre-fix build), Chrome, retry 0: senders-advanced, backup-import-stalled-network, receive-unregistered, authwit-lifecycle, popup-escape-layered: 9/9 green.

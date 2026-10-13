@@ -38,3 +38,10 @@
 - Seen, not this arc's: Firefox's page-error relay printed `Client disconnected` from `useIncomingTransfers` (a read in flight when the page unmounts). It failed nothing; it predates the arc.
 - Flake: `src/utils/zod-jitless.test.ts` timed out at 5 s once inside `bun run test` (it passed in `test:all` and alone); the one rerun was green.
 - Gate: lint, typecheck:all, test, test:all; `home-links`, `navigation`, `rows` on Chrome and Firefox at retry 0: green.
+
+## Arc gate and fix loop, 2026-10-13
+
+- Arc gate: `audit:vue` and `build:firefox` exit 0; smoke at retry 0 on Chrome (`settings-routes`, `appearance`, `home-links`, `navigation`, `rows`: 21 passed, 1 skipped) and Firefox (the same plus `passkey-toolbar-panel`: 27 passed, 1 skipped). The skip is `appearance`'s existing `test.skip`.
+- Round 1: Codex rejected on one Medium (a reloaded own window keeps a registration it can no longer release) and two Lows; the Opus lens approved with the same reload path and two Lows. All held. Codex proposed recovering the flow across reloads; the fix taken drops the registration instead, which keeps the base behaviour and changes nothing a person sees. Lesson: an own window's URL loses its marker as soon as it routes, so any state keyed on "this document is an own window" must survive, or be cleared by, a reload.
+- Round 2 (Codex, resumed): approve, nothing new; it accepted the drop-only fix and noted the non-atomic read-then-remove shared with `unregister` (D7's residual only).
+- A test fake must accept what the real API accepts: `storage.session.get`/`remove` take a key array, and a single-key fake hid the new code path until it was widened.

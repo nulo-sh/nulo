@@ -1,7 +1,7 @@
 ---
 plan: home-onboarding-chrome
 tier: mid
-status: approved by the orchestrator (D-orch-2 to D-orch-6); arc 1 implemented, in its Codex loop; arc 2 not started
+status: approved by the orchestrator (D-orch-2 to D-orch-6); arc 1 implemented and its Codex loop converged; arc 2 not started
 issues: "#130, #132, #133, #135, #149 (arc 1); #156, #170 (arc 2); #181 (no arc, struck); #154, #160 (no arc, owner Mac checks); #242 (no arc, OWNER-ASKS); #244 (no arc, trigger not met)"
 driver: claude-code
 claude_model: opus
@@ -496,6 +496,12 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 | 1 | Low | Same as Codex 1; adds that an own window always boots through `/popup/auth` and lands on its flow without the marker, so a reload anywhere loses the flow | Accepted (Codex 1's fix); its trade-off (a reload on the flow page then opens a fresh window on the next start) is the base behaviour |
 | 2 | Low | The #133 e2e checks only the end state, not "the hint never reads `system`" | Accepted: the popup page stays open and records every `nulo:theme` write onboarding makes through `storage` events; the case asserts exactly `["dark"]` |
 | 3 | Low | `presto.vue`'s banner comment names the hint as the basis; usually the first read has landed by the time the step mounts | Accepted: reworded |
+
+### Arc 1 fix loop, round 2, Codex (same session, resumed on `638849fe`), 2026-10-13
+
+**Verdict: approve, no new material findings.** It accepted the drop-only fix over its own recovery proposal ("Recovery would restore flow behavior after reload that the base did not preserve"), confirmed by an in-memory run of the source that reload, departure and another export open a fresh window and keep the other flow's key, and marked all three round-1 findings resolved. Noted, not a finding: `forgetThisWindow`'s read-then-remove is not atomic, like `unregister`'s; the only overlapping trigger is D7's accepted boot residual.
+
+**Convergence (arc 1).** Round 1 (Codex reject, one Medium; Opus approve, three Lows), round 2 (Codex approve, nothing new). No open material finding.
 
 ## Delivery
 
