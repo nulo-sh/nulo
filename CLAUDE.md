@@ -40,6 +40,7 @@ Project skills in [`.claude/skills/`](./.claude/skills/) are the source of truth
 | How CLAUDE.md itself is maintained | [`update-docs`](./.claude/skills/update-docs/) |
 | The **release** process — cut/unstick/publish/deploy/sync, a new failure mode | [`release`](./.claude/skills/release/) |
 | Complexity budgets — a `biome-ignore lint/complexity` directive, the baseline manifest, a Biome bump's re-stamp, the duplication trend | [`complexity-budgets`](./.claude/skills/complexity-budgets/) |
+| Logging — what may reach a log line, the redactor and its guard, log levels and flags, the log viewer | [`logging-policy`](./.claude/skills/logging-policy/) |
 
 **Routing for anything you learn:** a *rule/policy* → here; a *durable domain procedure/technique* → the owning skill above; a *cross-task gotcha* → [`implementations-plan/lessons.md`](./implementations-plan/lessons.md), one line linking its evidence; an *open follow-up* → a GitHub issue; a *suspected exploitable weakness* → a private draft security advisory (§ [Where open work lives](#where-open-work-lives)); a *plan-specific debugging log* → `implementations-plan/<plan>/lessons/`. Re-check this table when you add or rename a skill.
 
@@ -165,54 +166,22 @@ all four contexts and funnels into `LoggerStore`, which buffers, persists to
 `console.warn` has the same reach as `this.logWarn`, and "it's just a debug line" is never a reason
 to log something sensitive.
 
+The full policy (the redactor, its static guard, the two flags, retention, the log viewer) is the
+[`logging-policy`](./.claude/skills/logging-policy/SKILL.md) skill: read it before you add or
+change a log line, a redaction key or the log viewer.
+
 - **Pass the value as an object property NAMED for what it is.** The only redaction is `trim()`
-  (`wallet/logger/utils.ts`), an object walker: it blanks secret-named keys, collapses known
-  shapes (`Note`, `ActiveSession`, `Profile`, contract artifacts), summarises typed
-  arrays/`Map`/`Set`, and projects errors. It redacts **by key name**, so `{ password }` is safe
-  and `{ value: password }` is not — the walker reads a benign key and passes the string through.
-  **A finished string is opaque to it** — `` `k=${x}` ``
+  (`wallet/logger/utils.ts`), an object walker. It redacts **by key name**, so `{ password }` is
+  safe and `{ value: password }` is not. **A finished string is opaque to it** — `` `k=${x}` ``
   can never be redacted — and neither can `"k=" + x` or a bare `x` string argument. A caught
-  error is passed the same way, under a named key (`{ error }`; `trim` projects an `Error` to a
-  capped `{ name, message }` with no stack), never flattened first by a helper or a `.message` /
-  `.stack` read. This is
-  enforced by `apps/extension/src/utils/log-payload-ban.test.ts`, which scans the extension app
-  plus every `packages/*/src` (enumerated at runtime, so a new package is covered the day it
-  exists — the transport layer logs the most dangerous payloads there is), and fails CI listing
-  every offending `file:line`. Its known false-negative is textual
-  (aliasing and indirection defeat it), stated in its own header. Its denied names are imported
-  FROM `REDACTED_KEYS`/`URL_KEYS`, so the two lists cannot drift; an arity read
-  (`authWitnesses.length`) is deliberately allowed, being the idiom this policy asks for.
-- **Log the identifier, not the payload — chosen per site.** There is no single right identifier:
-  a `txHash` links private activity, an unsalted origin hash is dictionary-reversible, a bare row
-  id is useless without the database. Prefer note type + content arity, function name + return
-  arity, operation + count + outcome, a row id for entity failures.
+  error is passed the same way, under a named key (`{ error }`).
 - **Never log**: decrypted note contents, simulation/utility return values, contact name or
   address, page or navigation URLs, balances, whole RPC envelopes (`params`/`result` carry
   passwords and export returns), or whole backup rows.
-- **Endpoint URLs** are reduced to their origin (`scrubUrls`, `@/utils/scrub-urls`) — providers
-  embed API keys in the path — on both the log path and the dApp-facing error envelope.
-- **Pick the level by REACH, not by tone.** Services call `this.log{Debug,Info,Warn,Error}`; UI
-  calls `console.{debug,warn,error}`. `LoggerStore.log` drops only `level < logLevel`, and
+- **Pick the level by REACH, not by tone.** `LoggerStore.log` drops only `level < logLevel`, and
   `logLevel` is `Info` unless `debugMode` is on — so **`warn` and `error` are captured for every
-  user with every toggle off**, and land in the buffer the log viewer renders and exports. `debug`
-  is the only level that costs nothing when nobody asked for it. A line you would not want in a
-  stranger's bug report belongs at `debug` or nowhere.
-- **Two flags, not one — don't conflate them.** `debugMode` gates the LEVEL (and grows the ring
-  buffer 1,000 → 10,000); `developerMode` gates PERSISTENCE to `chrome.storage.session`. Debug
-  lines are dropped without `debugMode` even when `developerMode` is on.
-- **`console.log`/`console.info` are banned** in `apps/extension/src/**` (biome `noConsole`,
-  `allow: debug|warn|error`). Exempt by path: the sniffer, the logger internals, e2e, tests. The
-  anti-scam DevTools banner in `popup/app.vue` carries four line-local `biome-ignore`s instead —
-  it must reach the real console, and a whole-file exemption would license every future
-  `console.log` in the app shell.
-- **Retention is opt-in.** Persistence to `chrome.storage.session` only happens with Developer
-  Mode on; turning it off purges the stored copy, and so does "Clear logs". `chrome.storage.session`
-  is memory-backed — a browser restart, extension update or reload clears it, so a log is a
-  short-lived in-session artifact, not a disk record.
-- **Reading them**: with Developer Mode on, Settings → Developer shows a Logs row that opens the
-  viewer window (`popup/windows/logger/`), which renders the buffer and exports it as CSV. That
-  export is the reason this policy exists — it is the path by which a user's logs become a public
-  bug report.
+  user with every toggle off**, and land in the buffer the log viewer renders and exports. A line
+  you would not want in a stranger's bug report belongs at `debug` or nowhere.
 
 When adding a sensitive field to a type, add its name to `REDACTED_KEYS` in
 `wallet/logger/utils.ts` — in camelCase *and* the kebab-case spelling used by exported backup JSON
