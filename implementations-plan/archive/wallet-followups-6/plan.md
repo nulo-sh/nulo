@@ -9,8 +9,30 @@ explainer: off
 eli5_mode: skipped (orchestrator-owned)
 budget: recon 3 Sonnet agents; panel = Codex (gpt-6.1-sol, high) + one Opus 5.5 Plan lens per round
 base: origin/dev 36c43155
+status: completed (delivered in #353 and #356)
 issues: "#345, #332, #331 (arc 1); #336 (arc 2); #262 known limit, no arc"
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** delivered in two PRs against `dev`: [#353](https://github.com/nulo-sh/nulo/pull/353) (arc 1, phases 1 to 3, merged) and [#356](https://github.com/nulo-sh/nulo/pull/356) (arc 2, phase 4, with this close-out), the second awaiting the orchestrator's merge; the merge that lands it closes this plan.
+- **Shipped:**
+  - #332: `assertKnownMethod` refuses a non-string method name with `UnsupportedMethodError` under a fixed placeholder (`[object]`, `[number]`) before `Object.hasOwn` can coerce it, and an unsupported method logs at `debug`.
+  - #331: `assertWalletSchemaArgs` walks each parse's output beside the wire args and refuses an address that is not on the wire as exactly its `toString()`; `createAuthWit`'s intent and `registerContract`'s instance (`ContractInstanceWithAddressSchema`, so a bare preimage is now refused at ingress) get supplementary parses. Nineteen positions pinned, each with its canonical control.
+  - #345: `validateContentScriptMessage` admits a `secure-message` only with `content` exactly `{iv, ciphertext}`, `iv` at most 32 characters and `ciphertext` at most `MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS` (16 MiB), its own keys read from the raw value (D-345d); a pin re-measures every bundled artifact's call within half the bound.
+  - #336: the eight window-driving files assert both error arrays at all 27 assertion points.
+  - `lessons.md`: nothing promoted (at its 8 KiB budget).
+- **Orchestrator records:** D-orch-1 to D-orch-7 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - A2, the other e2e files that assert one array: scope left out (D-orch-3); no item.
+  - D-262's row-id lock: withdrawn under the proportion rule; nothing built.
+  - Upper-case hex kept as a second spelling (D-331b), the parsed value handed to later layers or a rewrite at the issue's sites (D-331a), an answer after the decrypt or an ended session for an oversized message (D-345a): rejected.
+  - `verify-hold` in arc 1's e2e list: not run with arc 1, since #347 was still a draft when #353 merged (D-orch-6). Once #347 reached `dev`, #356 merged it and ran `verify-hold` with the six arc 2 files once per browser at retry 0: 7/7 files, 15 tests, on Chrome and on Firefox.
+  - Phase 4's "every run green": not met by `snack-placement`'s #349 flake, which the arc's lines are not on; the evidence is on #349 (D-a2-1).
+- **Known limits:** #262 (D-262), #355 (D-345e).
+- **Open items:** #354 (`hardening`, residual 1); tracked privately: GHSA-v48v-f4rj-78p6.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # wallet-followups-6
 
@@ -49,7 +71,7 @@ Findings filed by earlier lanes. Three sit at the dApp ingress: an unbounded mes
 
 ### Asks (working assumption in brackets; none blocks an arc)
 
-- A1. Do envelope types other than `secure-message` need a size bound? [Out of #345, which concerns a connected app's calls; carried in the orchestrator report, never in a committed file or public issue.]
+- A1. Tracked privately: GHSA-v48v-f4rj-78p6.
 - A2. The ~18 other files that assert one array (`recon.md` § e2e error arrays)? [Scope left out: one disposition line in the Outcome, no issue (D-orch-3).]
 
 ## Outcome & Quality Bar
@@ -68,7 +90,7 @@ Findings filed by earlier lanes. Three sit at the dApp ingress: an unbounded mes
 
 Two schemas strip a key a reader uses; each gets a supplementary parse the walk covers: `createAuthWit`'s intent through the existing `parseCallIntentKeys`, and `registerContract`'s instance through `ContractInstanceWithAddressSchema` (new; a bare preimage, which the executor already refuses, is now refused at ingress). Out of the walk: the artifact argument and `requestCapabilities`' manifest (its own parse, `sameFieldAddress`).
 
-**#345 (phase 3).** `content-script-validator.ts` exports `MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS = 16 * 1024 * 1024` and refuses a `secure-message` whose `content` is not a strict `{iv, ciphertext}`: `iv` a string of at most 32 characters, `ciphertext` a string within the budget. Strict, because upstream forwards the whole `content` into the per-session decrypt queue (`background.ts:618-625`), so an extra key would carry data past a bound on `ciphertext`. The unit is `.length` of the base64 string (equal to its bytes, nothing decoded). The refusal is the validator's existing `invalid`, dropped before the SDK sees it: no reply can be addressed before the decrypt (Fact 2). Other envelope types keep `content: unknown` (A1). No hunk in `background.ts`.
+**#345 (phase 3).** `content-script-validator.ts` exports `MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS = 16 * 1024 * 1024` and refuses a `secure-message` whose `content` is not a strict `{iv, ciphertext}`: `iv` a string of at most 32 characters, `ciphertext` a string within the budget. Strict, because upstream forwards the whole `content` into the per-session decrypt queue (`background.ts:618-625`), so an extra key would carry data past a bound on `ciphertext`. The unit is `.length` of the base64 string (equal to its bytes, nothing decoded). The refusal is the validator's existing `invalid`, dropped before the SDK sees it: no reply can be addressed before the decrypt (Fact 2). No hunk in `background.ts`.
 
 **#336 (phase 4).** At every existing assertion of one array in the eight files, add the other on the same `ctx`, in the `connect-dapp.test.ts` order. No helper.
 
@@ -81,16 +103,17 @@ Two schemas strip a key a reader uses; each gets a supplementary parse the walk 
 - **D-331c, keys the wire lacks.** Skipping every unresolved path is a hole for stripped keys (both legs): descend into absent, stop only at a packed string, supplementary parse per stripping schema.
 - **D-262, the chain purge.** Round 1 chose a row-id `Lock` (Codex) over a same-turn re-read (Opus). Under the owner's proportion rule both legs then found no reachable trigger and withdrew: **build nothing**. A person's remove-then-add cannot enter between two sweep deletes, since each admission drains `pendingWrites` and the sweep registers its next tracked delete first (`token/service.ts:530-551`, `purge-rows.ts:22-24`); a backup import remaps every row to the new, inactive profile and `deleteNetwork` purges only the active profile's chain (`full-backup-helpers.ts:439`, `network/service.ts:545-547`). Round 1's restore trigger (I2 then) did not hold.
 - **D-336**: no shared helper. **D-grouping**: two arcs, one PR each against `dev`; arc 2 touches no arc 1 file.
-- **Orchestrator (2026-10-13).** D-orch-1: no stack, one PR per arc against `dev`. D-orch-2: both arcs approved as planned (D-345a, D-345b, D-331b, D-262 included); arc 2 runs after arc 1's PR exists, on its own branch. D-orch-3: § Proportion v2 governs the close-out: #262 labelled `known-limit`, a `## Known limit` section appended, closed as not planned, the Outcome naming `Known limits: #262`; A2 is scope left out, one Outcome disposition line, no issue. D-orch-4: A1 a private draft advisory filed at close-out. D-orch-5: residual (1) an issue after a twin search. D-orch-6: if #347 is in `dev` before arc 1's final gate, merge it and add `verify-hold` to the e2e list; otherwise open the PR and wait for #347. D-orch-7: commit trailers name the model that ran.
+- **Orchestrator (2026-10-13).** D-orch-1: no stack, one PR per arc against `dev`. D-orch-2: both arcs approved as planned (D-345a, D-345b, D-331b, D-262 included); arc 2 runs after arc 1's PR exists, on its own branch. D-orch-3: § Proportion v2 governs the close-out: #262 labelled `known-limit`, a `## Known limit` section appended, closed as not planned, the Outcome naming `Known limits: #262`; A2 is scope left out, one Outcome disposition line, no issue. D-orch-4: A1 tracked privately (GHSA-v48v-f4rj-78p6, filed at close-out). D-orch-5: residual (1) an issue after a twin search. D-orch-6: if #347 is in `dev` before arc 1's final gate, merge it and add `verify-hold` to the e2e list; otherwise open the PR and wait for #347. D-orch-7: commit trailers name the model that ran.
 - **Arc 1 deviations (2026-10-13).** D-a1-1: the artifact pin measured 5.3 s on a loaded host, past vitest's 5 s default; it carries a declared 60 s budget. D-a1-2: the arc 1 e2e list runs with `NULO_E2E_PROVERLESS=1` (`tx-sendTx-noFrom` requires it; most CI network shards run so; the arc changes ingress, not proving). D-345d (review): a secure message's own keys are read from the raw value, since zod skips an own `__proto__` key even under `strictObject`. D-345e (review): a `batch` registering several large artifacts in one message can pass 16 MiB and is dropped; plausible, not demonstrated, and moving D-345b is not a review change, so a known limit (filed at close-out).
-- **Known limits:** #262: the sweep deletes a row of another chain only if, between its snapshot read and its first delete (`token/service.ts:249-252`), another writer removes the purged chain's highest-id token and an add on another chain commits under that id (a stale window's removal and a queued add inside one storage read), or a service-level multi-row restore overlaps a chain deletion with both timing windows hit.
+- **Arc 2 deviations (2026-10-13).** D-a2-1: phase 4's "every run green" is not met: `snack-placement` hit #349 (`fillSendForm` timing out after the drain) in one round of three on each browser, and its Firefox rerun hit it again. The arc's lines are not on that path (only passing array checks precede the drain), so the red is recorded on #349, not fixed here; CI is the merge gate. The close-out rides arc 2, which merges last, as planned (#353 merged first).
+- **Known limits:** #262: the sweep deletes a row of another chain only if, between its snapshot read and its first delete (`token/service.ts:249-252`), another writer removes the purged chain's highest-id token and an add on another chain commits under that id (a stale window's removal and a queued add inside one storage read), or a service-level multi-row restore overlaps a chain deletion with both timing windows hit. #355: D-345e.
 
 ## Security & Adversarial Considerations
 
 - **Threat model.** A page the person connected controls every byte of its content-script messages and every decrypted argument: it wants to exhaust the worker's memory, make a check read a different value than the signer, or make a refusal look like a bug.
 - **Validation.** Phase 3 bounds the one field the wallet keeps; phase 2 makes the parse the one place an address's spelling is settled and checks the `registerContract` address the parse used to drop; phase 1 closes a `TypeError` path past the typed refusal. Every new refusal refuses; nothing new admits.
 - **Logs.** Phase 1 moves a refusal a page repeats at will from `error` to `debug`; the placeholder is fixed text, never the wire value. No dependency, crypto or permission change.
-- **Residual.** (1) A connected page can still post many in-budget messages: `MAX_HELD_PER_SESSION` (#347) caps the count only while a check is unanswered; trigger: a connected page posting in a loop. Close-out files it as an issue after a twin search. (2) A1.
+- **Residual.** (1) A connected page can still post many in-budget messages: `MAX_HELD_PER_SESSION` (#347) caps the count only while a check is unanswered; trigger: a connected page posting in a loop. Close-out files it as an issue after a twin search. (2) Tracked privately: GHSA-v48v-f4rj-78p6.
 
 ## UI impact
 
@@ -108,7 +131,7 @@ Gates run from the worktree root; green is exit 0 with vitest naming the new tes
 
 **Arc 1 gate** (before the Codex fix loop; merge `origin/dev` first if it moved): `bun run lint && bun run typecheck:all && bun run test:all && bun run test:ci-gating`, then one `NULO_E2E_RETRY=0 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent <files>` run per browser (Chrome, then `NULO_E2E_BROWSER=firefox`; never two at once) over `tests/e2e/network/<name>.test.ts` for: `cap-request-accounts`, `cap-request-basic`, `cap-request-partial`, `cap-request-reject`, `cap-request-repeat-noPopup`, `cap-request-rerequest`, `cap-window`, `connect-dapp`, `connect-deny`, `connect-locked-queue`, `connect-locked-queue-sw-restart`, `connect-one-window`, `connect-unserved-chain`, `connect-verify-mismatch`, `session-reconnect`, `cold-wake-discovery`, `err-scope-and-cap`, `execute-scope-account`, `execute-scope-chain`, `register-token`, `authwit-consume-smoke`, `authwit-lifecycle`, `authwit-variants`, `contracts-getClassMetadata`, `contracts-getMetadata`, `contracts-register`, `data-addressBook`, `data-privateEvents`, `data-registerSender`, `sim-methods`, `sim-from-selfpay`, `multi-account-from`, `senders-advanced`, `meta-batch`, `batch-mixed`, `batch-partial-failure`, `tx-sendTx-default`, `tx-sendTx-feePayer`, `tx-sendTx-multicall`, `tx-sendTx-noFrom`, `tx-sendTx-reject`, `tx-sendTx-selfPay`, `tx-sendTx-sponsoredFpc`, `tx-transfer-row`, `selfpay-phase`, `fee-sponsor-funding`, plus `verify-hold` once #347 is in `dev`. Left out: `stale-anchor-recovery` (needs `NULO_E2E_REORG=1`) and `tx-sendTx-delegated-authwit` (needs `NULO_E2E_STANDARD_CONTRACTS=1`), which `agent.sh` does not provision; no smoke file drives the dApp channel. Pass: every file has a test passed and none failed; a skip only where the file's own browser gate names it (`CHROME_ONLY`, `cap-window.test.ts:202-203`); `data-registerSender` admits either outcome, so phase 2's rows carry the proof. One rerun for a known flake; otherwise a finding.
 
-**Phase 4, #336 (arc 2).** Change: the eight files at the lines in `recon.md` § e2e error arrays. Gate: `bun run lint && bun run typecheck:all`; `own-window` and `rows`, three rounds per browser at retry 0 with the armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e tests/e2e/<file>.test.ts --retry=0`; Firefox: `build:firefox`, `NULO_E2E_BROWSER=firefox`); the six network files, three rounds per browser through `agent.sh` at retry 0, all six per run. Pass: every run green. An entry in either array is a finding: fixed here when the test causes it, an issue when the wallet does; never filtered. Fact 8.
+**Phase 4, #336 (arc 2)** ✓ (lint, `typecheck:all`, smoke 3×9/9 per browser, no array entry; network green but for `snack-placement`'s #349 flake: 1 red round of 3 on each browser, the Firefox rerun red too, before any added line; `lessons/phase-4.md`). Change: the eight files at the lines in `recon.md` § e2e error arrays. Gate: `bun run lint && bun run typecheck:all`; `own-window` and `rows`, three rounds per browser at retry 0 with the armed build (`VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:chrome`, then `cd apps/extension && NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1 bun run test:e2e tests/e2e/<file>.test.ts --retry=0`; Firefox: `build:firefox`, `NULO_E2E_BROWSER=firefox`); the six network files, three rounds per browser through `agent.sh` at retry 0, all six per run. Pass: every run green. An entry in either array is a finding: fixed here when the test causes it, an issue when the wallet does; never filtered. Fact 8.
 
 ## Delivery
 
@@ -139,6 +162,8 @@ Gates run from the worktree root; green is exit 0 with vitest naming the new tes
 **Round 2, proportion rule** (both legs, #262 only): Codex `known limit: build nothing` (restore needs both timing overlaps; ordinary import cannot activate the profile during the batch); Opus `known limit: build nothing` (remove-then-add cannot interleave past the drain; the restore trigger does not exist on base). D-262 rewritten; phase 4 (purge) dropped.
 
 **Arc 1, Codex round 1** (session 01a13534): `reject`. Accepted and fixed: an own `__proto__` key passed the strict `content` check (high, demonstrated; D-345d); two inexact comments. **Opus 5.5 lens**: `approve with fixes`. Accepted: the same `__proto__` finding; the batch case as a known limit (D-345e); two comment nits. Rejected: trimming the position table and the transport row, both named by phase 2 and 3. **Round 2**: `approve`; its optional nit (a duplicated file-placement clause) applied. Converged (log: `lessons/phase-1-3.md`).
+
+**Arc 2, Codex round 1** (gpt-6.1-sol, high): `approve`; all 27 points assert both arrays on the same `ctx`, and no refusal or closure in the eight files feeds either array. Its one optional nit, a pre-existing comment at `rows.test.ts:95` narrating `tabTo`, is outside the diff: declined. **Opus 5.5 lens**: `approve`. Converged in one round (log: `lessons/phase-4.md`).
 
 ## Seeds
 
