@@ -12,6 +12,7 @@ vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { handleWalletMessage } from "./background"
+import { bindLiveSession } from "./live-session"
 
 const SESSION = { sessionId: "s1", origin: "https://dapp.example", chainInfo: { chainId: "1", version: "1" } } as never
 
@@ -25,7 +26,7 @@ function harness(assertCurrent: () => Promise<void>) {
 		handleWalletMessage(
 			SESSION,
 			{ messageId: "m1", type, args } as never,
-			{ sendResponse, terminateSession: vi.fn() } as never,
+			bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => SESSION }, SESSION),
 			{ dispatch } as never,
 			{ captureExecutionFence: async () => ({ profileId: "p1" }) } as never,
 			{ transitionIfStage } as never,

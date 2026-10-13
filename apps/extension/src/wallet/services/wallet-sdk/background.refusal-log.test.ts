@@ -16,6 +16,7 @@ vi.mock("./tab-lifecycle", () => ({ wireTabLifecycle: () => {} }))
 vi.mock("@nulo/wallet-sdk-schema-patch/register", () => ({}))
 
 import { handleWalletMessage } from "./background"
+import { bindLiveSession } from "./live-session"
 import { INVALID_PARAMS_MESSAGE, SCOPE_VIOLATION_ENVELOPE } from "./error-envelope"
 import { tryCreateQueuedJournal } from "./queued-journal"
 import { makeAccountStub, makeDeps, makeSession } from "./queued-journal.fixtures"
@@ -257,7 +258,7 @@ async function refuse(
 	await handleWalletMessage(
 		session,
 		message,
-		{ sendResponse, terminateSession: vi.fn() } as never,
+		bindLiveSession({ sendResponse, terminateSession: vi.fn(), getSession: () => session as never }, session as never),
 		dispatcher,
 		{ captureExecutionFence: async () => ({ profileId: "profile-1", epoch: 0, session: 1 }) } as never,
 		journal,

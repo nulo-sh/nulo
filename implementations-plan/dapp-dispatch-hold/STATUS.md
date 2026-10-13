@@ -11,3 +11,4 @@
 - 2026-10-13: final fresh Codex pass round 2: conditional approve, one minor condition, met; panel closed. Plan ready for orchestrator review.
 - 2026-10-13: plan committed on the worktree branch (signed); nothing pushed, no PR. Awaiting the orchestrator's approval.
 - 2026-10-13: orchestrator approved the plan (D-orch-1..6); merged origin/dev 2b01f8e0. Phase 1 gate: lint 0, typecheck:all 0, test 0 (743 files, 11458 tests) — pass.
+- 2026-10-13: Phase 2 gate: lint 0 (manifest unchanged, no suppression), typecheck:all 0, test 0 (744 files, 11484 tests), test:all 0 — pass. Confirm removed from the two edited callback cases: both red (checked by hand, restored). Every guard mutated once: each has a red.

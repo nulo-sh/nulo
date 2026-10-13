@@ -12,6 +12,7 @@ import { LogLevel } from "../../logger"
 import { topRightOf } from "../window-manager/placement"
 import { createPlaced } from "../window-manager/window-manager"
 import { isPendingVerificationDead, type PendingVerificationEntry, settlePendingVerification } from "./pending-verification"
+import type { VerificationHold } from "./verification-hold"
 import type { WindowReservation } from "./verify-admission"
 import { describeExternalId } from "@nulo/wallet-bridge"
 
@@ -65,6 +66,8 @@ export interface SessionEstablishedDeps {
 	windows: Pick<WindowPort, "create" | "remove" | "getLastFocused" | "navigate" | "update">
 	/** The verify-window slot admission reserved for this session id, if the handshake needed one. */
 	reservations: { reservation(sessionId: string): WindowReservation | undefined }
+	/** The session's gate on dispatch: released here only when no check is shown. */
+	hold: Pick<VerificationHold, "release">
 	logger: ILogger
 }
 
@@ -83,7 +86,8 @@ export function verifyWindowUrl(dappSessionId: string, verificationHash: string,
  * The check's grid comes from this session's own hash in the window URL, never from the shared
  * row a concurrent session for the same `(origin, chainId)` can overwrite. A session whose
  * hash could not be persisted or whose check could not be shown is terminated and resolves
- * `false`, and the caller dispatches no message before this resolves `true`.
+ * `false`, and the caller dispatches no message before this resolves `true`. A session that needs
+ * no check has its hold released here; one shown the check stays held until the person confirms.
  */
 export async function handleSessionEstablished(
 	session: { origin: string; sessionId: string; verificationHash: string } & Parameters<typeof chainInfoToChainId>[0],
@@ -184,7 +188,7 @@ export async function handleSessionEstablished(
 			if (!reservation) throw new Error("verify window has no reserved slot")
 			const url = verifyWindowUrl(dappSession.id, session.verificationHash, !isNewConnection)
 			await showVerifyWindow(url, session.sessionId, reservation, deps)
-		}
+		} else deps.hold.release()
 		established = true
 		return true
 	} catch (err) {
