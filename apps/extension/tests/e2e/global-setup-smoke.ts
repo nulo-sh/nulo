@@ -34,16 +34,15 @@ function cleanupOrphanChromeProcesses() {
 const ARMED_BUILD = `VITE_NULO_E2E_MIGRATION_FIXTURE=1 VITE_NULO_E2E_TOKEN_SEEDS=1 VITE_NULO_E2E_TOKEN_SEEDS_CONFIRM=1 VITE_NULO_E2E_CSP_REPORT=1 bun run --cwd apps/extension build:${BROWSER}`
 
 /**
- * A source run loads the armed build, whose empty seed list keeps the shipped Testnet tokens off
- * every profile; only a release build, smoked as an artifact, seeds them. The token-seed stamp is
- * what `_extension-smoke-e2e.yml` greps for after its armed build.
+ * A source run loads the armed build, whose empty seed list and switched-off token-list fetcher keep
+ * the shipped Testnet tokens off every profile; only a release build, smoked as an artifact, seeds
+ * them. The token-seed stamp is what `_extension-smoke-e2e.yml` greps for after its armed build.
  */
 function assertArmedSmokeBuild(): void {
 	const scripts = fs.readdirSync(EXTENSION_PATH, { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".js"))
-	const stamped = scripts.some((file) =>
-		fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8").includes("NULO_E2E_TOKEN_SEEDS_BUILD_STAMP"),
-	)
-	if (stamped) return
+	const texts = scripts.map((file) => fs.readFileSync(path.join(EXTENSION_PATH, file), "utf8"))
+	const stamped = (stamp: string) => texts.some((text) => text.includes(stamp))
+	if (stamped("NULO_E2E_TOKEN_SEEDS_BUILD_STAMP") && stamped("NULO_E2E_TOKEN_LIST_BUILD_STAMP")) return
 	throw new Error(
 		[
 			`${EXTENSION_PATH} is not the armed smoke build. Build it with:`,

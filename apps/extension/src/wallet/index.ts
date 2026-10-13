@@ -20,6 +20,7 @@ import { consoleMethods, LoggerStore, LogLevel } from "./logger"
 import { createWalletRuntime } from "./runtime"
 import { registerContentMessageRelay } from "./services/wallet-sdk/content-message-relay"
 import { PRICE_REFRESH_ALARM_NAME, PriceService } from "./services/price/service"
+import { TOKEN_LIST_REFRESH_ALARM_NAME, TokenListService } from "./services/token-list/service"
 import { isClientDisconnectRejection, isReceiverGoneRejection } from "@nulo/extension-messaging/errors"
 import { openOrFocusOnboardingTab } from "./utils/onboarding-tab"
 import { armPopupReturn, registerToolbarPopupMessage } from "./utils/toolbar-popup"
@@ -87,16 +88,21 @@ const runtime = createWalletRuntime({
 // at module scope receive the triggering event — a listener added inside
 // `runtime.start()` (after awaited config/BB/migration work) would miss it,
 // and with it every price tick of that SW lifetime. This shim is the SINGLE
-// dispatch path for the price alarm: it ensures startup completed (start()
-// is idempotent) and forwards the tick into the service, which does NOT
-// subscribe to alarms itself (no double dispatch).
+// dispatch path for the price and token-list alarms: it ensures startup
+// completed (start() is idempotent) and forwards the tick into the service,
+// which does NOT subscribe to alarms itself (no double dispatch).
+const ALARM_SERVICES: Record<string, string> = {
+	[PRICE_REFRESH_ALARM_NAME]: PriceService.name,
+	[TOKEN_LIST_REFRESH_ALARM_NAME]: TokenListService.name,
+}
 chrome.alarms.onAlarm.addListener((alarm) => {
-	if (alarm.name !== PRICE_REFRESH_ALARM_NAME) return
+	const service = ALARM_SERVICES[alarm.name]
+	if (!service) return
 	runtime
 		.start()
-		.then(() => (runtime.services.get(PriceService.name) as PriceService).onAlarmTick())
+		.then(() => (runtime.services.get(service) as PriceService | TokenListService).onAlarmTick())
 		.catch((error) => {
-			logger.log("wallet", LogLevel.Error, "price alarm dispatch failed", { error })
+			logger.log("wallet", LogLevel.Error, "alarm dispatch failed", { alarm: alarm.name, error })
 		})
 })
 

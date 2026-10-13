@@ -206,7 +206,7 @@ Each gate also runs `bun run lint`, `bun run typecheck:all` and `bun run check:p
 
 ### Arc 2: wallet
 
-**P3. `TokenListService`.**
+**P3. `TokenListService`.** ✓
 1. Add the service, the alarm shim line, its registration in `runtime.ts`, and the armed seam with its build guards.
 2. Add `packages/token-list` paths to the extension build, smoke and network filters for both browsers.
 3. Write a composition test. It covers:
