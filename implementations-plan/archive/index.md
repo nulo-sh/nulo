@@ -80,6 +80,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [design-system-externalization](design-system-externalization/plan.md) — completed — `@nulo/design` becomes the single source of tokens, base styles and primitives
 - [docs-improvement](docs-improvement/plan.md) — completed — documentation split by job, and a sweep of the code comments
 - [durable-jobs](durable-jobs/plan.md) — completed — every submission becomes a durable job in storage that the popup only observes
+- [dynamic-token-list](dynamic-token-list/plan.md) — completed — a signed token list at tokens.nulo.sh replaces the built-in default tokens: CI signs it in a gated environment, the wallet fetches it after the Terms and daily (#79)
 - [e2e-deflake](e2e-deflake/plan.md) — completed — recurring e2e and CI flakes eliminated by root cause, never by budget
 - [e2e-determinism](e2e-determinism/plan.md) — completed — fixed sleeps in the e2e helpers replaced with observable signals
 - [e2e-flake-fixes](e2e-flake-fixes/plan.md) — completed — two CI flakes fixed at their mechanism under a two-core affinity

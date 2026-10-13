@@ -294,7 +294,7 @@ So no `dev` build fetches a list before the host serves one.
 
 ## Post-implementation
 
-This section follows [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at d01569a200ccdf010a1f7cbcf38ffa37948ee3c6. What is specific to this plan:
+This section follows [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at d01569a200ccdf010a1f7cbcf38ffa37948ee3c6. What is specific to this plan:
 
 - **Review loop:**
   - Codex through `/codex`, with `run-codex.sh <prompt> <cwd> high read-only gpt-6.1-sol`, resumed in the same session.
