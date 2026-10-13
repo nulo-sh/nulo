@@ -8,14 +8,14 @@
  */
 
 import { ValidationError } from "@nulo/extension-messaging/errors"
-import { IllegalTransitionError, type JobProgress } from "@nulo/wallet-core/jobs"
+import { IllegalTransitionError, type JobProgress, type SendExpiry } from "@nulo/wallet-core/jobs"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { OperationJournalService } from "./service"
-import { type NewOperationInput, type OperationRecord, isSendCheckable, wasNeverSent } from "./spec"
+import { type NewOperationInput, type OperationRecord, type SendCheckState, isSendCheckable, wasNeverSent } from "./spec"
 
 const VALID_INPUT: NewOperationInput = {
 	kind: "transfer",
@@ -767,35 +767,37 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 	const HASH = `0x${"ab".repeat(32)}`
 	const URL = "https://rpc.example"
 	const LOST = { kind: "transfer", message: "lost", normalizedRaw: null }
+	const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"0e".repeat(32)}` }
 	let service: OperationJournalService
 
 	beforeEach(async () => {
 		;({ service } = await started())
 	})
 
-	async function atStage(stage: "simulating" | "proving" | "submitting"): Promise<string> {
+	async function atStage(stage: "simulating" | "proving" | "submitting", expiry?: SendExpiry): Promise<string> {
 		const { id } = await service.createOperation(VALID_INPUT)
 		await service.transitionOperation(id, { stage: "simulating" })
 		if (stage === "simulating") return id
 		await service.transitionOperation(id, { stage: "proving", enteredProveAt: 1 })
 		if (stage === "proving") return id
-		await service.transitionOperation(id, { stage: "submitting", txHash: HASH, submittedEndpointUrl: URL })
+		await service.transitionOperation(id, { stage: "submitting", txHash: HASH, submittedEndpointUrl: URL, expiry })
 		return id
 	}
 
-	async function failedFromSubmitting(): Promise<string> {
-		const id = await atStage("submitting")
+	async function failedFromSubmitting(expiry?: SendExpiry): Promise<string> {
+		const id = await atStage("submitting", expiry)
 		await service.transitionOperation(id, { stage: "failed" }, LOST)
 		return id
 	}
 
-	test("a row failed at submitting keeps its hash and endpoint, and the stage it failed from", async () => {
-		const id = await failedFromSubmitting()
+	test("a row failed at submitting keeps its hash, endpoint and expiry, and the stage it failed from", async () => {
+		const id = await failedFromSubmitting(EXPIRY)
 		expect((await service.getOperation(id))?.progress).toEqual({
 			stage: "failed",
 			from: "submitting",
 			txHash: HASH,
 			submittedEndpointUrl: URL,
+			expiry: EXPIRY,
 		})
 	})
 
@@ -823,27 +825,98 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 		})
 	})
 
-	test("setSendCheck writes the answer once on the matching failed row, and emits it", async () => {
+	const live = () => true
+
+	test("setSendCheck writes an answer over the one the caller read, emits it, and never touches the stage", async () => {
 		const id = await failedFromSubmitting()
 		const seen = vi.fn()
 		service.onOperationUpdated.add(seen)
-		expect(await service.setSendCheck(id, HASH, "sent", () => true)).toBe(true)
+		expect(await service.setSendCheck(id, HASH, {}, { check: "sent" }, live)).toBe(true)
 		const answered = await service.getOperation(id)
 		expect(answered?.progress).toEqual({ stage: "failed", from: "submitting", txHash: HASH, submittedEndpointUrl: URL, check: "sent" })
 		expect(seen).toHaveBeenCalledWith(answered)
-		expect(await service.setSendCheck(id, HASH, "reverted", () => true)).toBe(false)
-		expect((await service.getOperation(id))?.progress).toMatchObject({ check: "sent" })
+		expect(await service.setSendCheck(id, HASH, {}, { check: "reverted" }, live)).toBe(false)
+		expect(await service.setSendCheck(id, HASH, { check: "sent" }, { check: "reverted" }, live)).toBe(false)
+		expect((await service.getOperation(id))?.progress).toMatchObject({ stage: "failed", check: "sent" })
+	})
+
+	test("unconfirmed becomes expired only on a row with a recorded expiry, never mined, and nothing leaves expired", async () => {
+		const withExpiry = await failedFromSubmitting(EXPIRY)
+		const without = await failedFromSubmitting()
+		expect(await service.setSendCheck(withExpiry, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
+		for (const check of ["sent", "reverted"] as const) {
+			expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check }, live)).toBe(false)
+			expect(
+				await service.setSendCheck(
+					withExpiry,
+					HASH,
+					{ check: "unconfirmed" },
+					{ check, inclusion: { block: 5, hash: `0x${"01".repeat(32)}` } },
+					live,
+				),
+			).toBe(false)
+		}
+		expect(await service.setSendCheck(without, HASH, {}, { check: "expired" }, live)).toBe(false)
+		expect(await service.setSendCheck(without, HASH, {}, { check: "unconfirmed" }, live)).toBe(true)
+		expect(await service.setSendCheck(without, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(false)
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "unconfirmed" }, { check: "expired" }, live)).toBe(true)
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "expired" }, { check: "unconfirmed" }, live)).toBe(false)
+		expect(await service.setSendCheck(withExpiry, HASH, { check: "expired" }, {}, live)).toBe(false)
+		expect((await service.getOperation(withExpiry))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			expiry: EXPIRY,
+			check: "expired",
+		})
+		expect((await service.getOperation(without))?.progress).toMatchObject({ check: "unconfirmed" })
+	})
+
+	test("a mined answer's block moves only to final, another block or pruned, each over the block the caller read", async () => {
+		const id = await failedFromSubmitting()
+		const first = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const second = { block: 6, hash: `0x${"02".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "sent", inclusion: first })).toBe(true)
+
+		expect(await set({ check: "sent" }, { check: "sent" })).toBe(false)
+		expect(await set({ check: "sent", inclusion: first }, { check: "sent", inclusion: first })).toBe(false)
+		expect(await set({ check: "sent", inclusion: first }, { check: "unconfirmed" })).toBe(false)
+		expect(await set({ check: "sent", inclusion: first }, {})).toBe(false)
+
+		expect(await set({ check: "sent", inclusion: first }, { check: "reverted", inclusion: second })).toBe(true)
+		expect(await set({ check: "reverted", inclusion: second }, { checkSince: 1_234 })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			checkSince: 1_234,
+		})
+
+		expect(await set({}, { check: "sent", inclusion: first })).toBe(true)
+		expect(await set({ check: "sent", inclusion: first }, { check: "sent" })).toBe(true)
+		expect(await set({ check: "sent" }, { check: "reverted", inclusion: second })).toBe(false)
+		expect(await set({ check: "sent" }, { checkSince: 1 })).toBe(false)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			check: "sent",
+		})
 	})
 
 	test("setSendCheck writes nothing to a missing row, another hash, a live row, or once the guard fails", async () => {
 		const failed = await failedFromSubmitting()
-		const live = await atStage("submitting")
-		expect(await service.setSendCheck("absent", HASH, "sent", () => true)).toBe(false)
-		expect(await service.setSendCheck(failed, `0x${"cd".repeat(32)}`, "sent", () => true)).toBe(false)
-		expect(await service.setSendCheck(live, HASH, "sent", () => true)).toBe(false)
-		expect(await service.setSendCheck(failed, HASH, "sent", () => false)).toBe(false)
+		const active = await atStage("submitting")
+		expect(await service.setSendCheck("absent", HASH, {}, { check: "sent" }, live)).toBe(false)
+		expect(await service.setSendCheck(failed, `0x${"cd".repeat(32)}`, {}, { check: "sent" }, live)).toBe(false)
+		expect(await service.setSendCheck(active, HASH, {}, { check: "sent" }, live)).toBe(false)
+		expect(await service.setSendCheck(failed, HASH, {}, { check: "sent" }, () => false)).toBe(false)
 		expect((await service.getOperation(failed))?.progress).not.toHaveProperty("check")
-		expect((await service.getOperation(live))?.progress.stage).toBe("submitting")
+		expect((await service.getOperation(active))?.progress.stage).toBe("submitting")
 	})
 
 	function failedRecord(progress: OperationRecord["progress"], kind: string): OperationRecord {

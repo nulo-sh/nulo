@@ -38,6 +38,7 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 const TOKEN = { contract: "0xtoken", name: "Test", symbol: "TST", decimals: 18 }
 const FEE_SETTINGS = { paymentMethod: { kind: "fj" } } as never
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
 
 function makeTxRequest() {
 	return {
@@ -305,7 +306,7 @@ describe("TransferExecutor.execute", () => {
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
 			expect(bound.submittedEndpointUrl).toBe("http://primary")
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
 			throw new Error("unreachable: the refused write must reject")
 		})
 		await expect(executor.execute(makeReq(), undefined, FENCE)).rejects.toStrictEqual(new JournaledRejection(refused, "j1"))
@@ -313,6 +314,7 @@ describe("TransferExecutor.execute", () => {
 			stage: "submitting",
 			txHash: "0xhash",
 			submittedEndpointUrl: "http://primary",
+			expiry: EXPIRY,
 		})
 		expect(deps.logError).not.toHaveBeenCalledWith("Failed to update journal operation", refused)
 	})

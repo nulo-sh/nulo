@@ -411,6 +411,15 @@ const CHECKED: [SendOutcome, SendCheckOutcome | undefined, JournalTerminalDispla
 			context: "Your wallet couldn't confirm this. It may still go through, so check History before sending it again.",
 		},
 	],
+	[
+		"expired",
+		"expired",
+		{ state: "failed", subtitle: "Won't go through", icon: "close-circle", color: "red" },
+		{
+			label: "Won't go through",
+			context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
+		},
+	],
 ]
 
 describe("a failed send that may have reached the network reads as its check's answer", () => {

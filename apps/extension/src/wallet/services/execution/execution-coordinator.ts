@@ -39,7 +39,7 @@ import { StepContent, type TaskService, type WrappedTask } from "@/wallet/servic
 import type { LegalAdmission } from "@/wallet/services/legal/spec"
 import { type ProofGate, NOOP_PROOF_GATE } from "@/e2e/proof-gate"
 import { DuplicateInitializationError, SessionEndedError } from "@nulo/extension-messaging/errors"
-import type { ProveBackend } from "@nulo/wallet-core/jobs"
+import type { ProveBackend, SendExpiry } from "@nulo/wallet-core/jobs"
 import { errorMessageFromUnknown } from "@nulo/wallet-core/utils"
 import type { LastProveOutcome, ProveOutcomeHint, ProvePhaseName } from "./models"
 
@@ -116,7 +116,7 @@ export interface ProveAndSendContext<TOffchain = unknown> {
 	 *  divergent by design). */
 	markJournal: (patch: ProveAndSendJournalPatch) => Promise<unknown>
 	/** Writes `submitting`; rejects unless the row now durably holds it. The send never runs otherwise. */
-	commitSubmitting: (patch: { txHash: string; submittedEndpointUrl: string | undefined }) => Promise<void>
+	commitSubmitting: (patch: { txHash: string; submittedEndpointUrl: string | undefined; expiry: SendExpiry | undefined }) => Promise<void>
 	/** The primary endpoint of the network the tx was built against, recorded with `submitting`. */
 	submittedEndpointUrl: string | undefined
 	/** Offchain-output extraction hook. Runs BETWEEN prove and `toTx()` —
@@ -342,7 +342,7 @@ export class ExecutionCoordinator {
 		const tx = await provedTx.toTx()
 		const txHash = tx.getTxHash()
 		await ctx
-			.commitSubmitting({ txHash: txHash.toString(), submittedEndpointUrl: ctx.submittedEndpointUrl })
+			.commitSubmitting({ txHash: txHash.toString(), submittedEndpointUrl: ctx.submittedEndpointUrl, expiry: sendExpiryOf(tx) })
 			.catch((error: unknown) => {
 				// A cancel that reached the journal first is what refused the write: report the cancel.
 				ctx.checkCancelled()
@@ -354,4 +354,16 @@ export class ExecutionCoordinator {
 		await ctx.markJournal({ stage: "succeeded", txHash: txHash.toString() })
 		return { txHash, offchainOutput }
 	}
+}
+
+/** The expiry the chain enforces on `tx`, with its first nullifier, which is non-revertible: every
+ *  inclusion inserts it, reverted or not. None when the anchor is the genesis block, since the first
+ *  block is built without the expiry rule. */
+export function sendExpiryOf(tx: Tx): SendExpiry | undefined {
+	const { data } = tx
+	if (data.constants.anchorBlockHeader.getBlockNumber() === 0) return undefined
+	const nullifier = data.getNonEmptyNullifiers()[0]
+	const timestamp = Number(data.expirationTimestamp)
+	if (nullifier === undefined || !Number.isSafeInteger(timestamp)) return undefined
+	return { timestamp, nullifier: nullifier.toString() }
 }

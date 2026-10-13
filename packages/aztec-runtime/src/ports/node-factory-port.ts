@@ -27,7 +27,8 @@ export interface NodeFactory {
 
 	/**
 	 * A client whose every call is ONE non-retrying attempt, aborted at `timeoutMs`: for a caller
-	 * that retries on its own schedule and must send nothing once it stops.
+	 * that retries on its own schedule and must send nothing once it stops. Like
+	 * `readPublicStorageOnce`'s, it logs nothing: the SDK's warnings carry the endpoint URL.
 	 */
 	createSingleAttemptNode(rpcUrl: string, timeoutMs: number): AztecNode
 
