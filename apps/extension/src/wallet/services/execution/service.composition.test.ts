@@ -23,6 +23,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { BlockNumber } from "@aztec-labs/foundation/branded-types"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
+import { BlockHash } from "@aztec-labs/stdlib/block"
 import { Gas } from "@aztec-labs/stdlib/gas"
 import { BlockHeader, GlobalVariables } from "@aztec-labs/stdlib/tx"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
@@ -1174,11 +1175,13 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		const hash = `0x${"1e".repeat(32)}`
 		h.toTx.mockResolvedValueOnce(provenTx(hash))
 		h.sendTx.mockRejectedValueOnce(new TypeError("fetch failed"))
+		const blockHash = `0x${"0b".repeat(32)}`
 		const getTxReceipt = vi.fn(async (_hash: { toString(): string }) => ({
 			txHash: hash,
 			status: "proven",
 			executionResult: "success",
 			transactionFee: 1234n,
+			blockHash: BlockHash.fromString(blockHash),
 			blockNumber: 42,
 		}))
 		const network = { getSingleAttemptNodeForUrl: vi.fn(async (_url: string) => ({ getTxReceipt }) as never) }
@@ -1226,7 +1229,7 @@ describe("ExecutionService composition — a send whose answer was lost is check
 		expect(network.getSingleAttemptNodeForUrl).toHaveBeenCalledWith("http://fake")
 		expect(getTxReceipt.mock.calls[0]?.[0].toString()).toBe(hash)
 		const answered = await h.journal.getOperation(h.getJournalId())
-		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent" })
+		expect(answered?.progress).toEqual({ ...failed?.progress, check: "sent", inclusion: { block: 42, hash: blockHash } })
 		const card = answered && buildJournalTerminalCardProps(answered, { tokenById: () => undefined })
 		expect(card).toMatchObject({ state: "sent", subtitle: "Sent", color: "green" })
 		expect(balances.refreshAccountBalances).toHaveBeenCalledWith(h.req.accountAddress)

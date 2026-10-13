@@ -12,6 +12,7 @@ export {
 	type ProveBackend,
 	type SendCheckOutcome,
 	type SendExpiry,
+	type SendInclusion,
 	type TerminalStage,
 } from "./types"
 

@@ -52,6 +52,9 @@ export type SendCheckOutcome = "sent" | "reverted" | "unconfirmed" | "expired"
  *  nullifier, which every block that includes it inserts, reverted or not. */
 export type SendExpiry = { timestamp: number; nullifier: string }
 
+/** The block a `sent` or `reverted` answer was read in, kept until the finalized chain holds it. */
+export type SendInclusion = { block: number; hash: string }
+
 export type ProveBackend = "presto" | "browser"
 
 /**
@@ -87,7 +90,8 @@ export type JobProgress =
 	/**
 	 * Every field is the journal's own: `from` is the stage the row left, the hash, endpoint and
 	 * expiry are carried from `submitting`, and `check` is the network's answer. A caller's are
-	 * discarded.
+	 * discarded. `inclusion` rides a `sent` or `reverted` answer until its block is final;
+	 * `checkSince` restarts the check's window when that block was pruned.
 	 */
 	| {
 			stage: "failed"
@@ -96,6 +100,8 @@ export type JobProgress =
 			submittedEndpointUrl?: string
 			expiry?: SendExpiry
 			check?: SendCheckOutcome
+			inclusion?: SendInclusion
+			checkSince?: number
 	  }
 	| { stage: "cancelled" }
 

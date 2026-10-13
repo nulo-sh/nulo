@@ -1,6 +1,6 @@
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { TxHash, type TxReceipt } from "@aztec-labs/stdlib/tx"
-import type { SendCheckOutcome, SendExpiry } from "@nulo/wallet-core/jobs"
+import type { SendExpiry, SendInclusion } from "@nulo/wallet-core/jobs"
 import { LogLevel } from "@nulo/wallet-core/logger"
 import type { ClockPort, TimerHandle } from "@nulo/wallet-core/ports"
 import type { ILogger } from "@/wallet/logger"
@@ -8,11 +8,11 @@ import type { NetworkService } from "@/wallet/services/network/service"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
 import type { ProfileService } from "@/wallet/services/profile/service"
 import type { TokenBalanceService } from "@/wallet/services/token-balance/service"
-import { proveExpired } from "@/wallet/services/transaction/inclusion"
-import { executionResultFromReceipt, txStatusFromReceipt } from "@/wallet/services/transaction/receipt-status"
+import { FINALITY_READ_INTERVAL_MS, proveExpired, proveFinal } from "@/wallet/services/transaction/inclusion"
+import { MINED_STATUSES, executionResultFromReceipt, txStatusFromReceipt } from "@/wallet/services/transaction/receipt-status"
 import { DROPPED_RECHECK_INTERVAL_MS, DROPPED_RESURRECTION_WINDOW_MS } from "@/wallet/services/transaction/service"
 import { TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
-import { isSendCheckable, type OperationJournalService, type OperationRecord } from "./service"
+import { isSendCheckable, type OperationJournalService, type OperationRecord, type SendCheckState } from "./service"
 import { OPERATION_JOURNAL_SERVICE_NAME } from "./spec"
 
 export const SEND_CHECK_TICK_MS = 5_000
@@ -20,7 +20,6 @@ export const SEND_CHECK_TICK_MS = 5_000
 export const SEND_CHECK_FAST_WINDOW_MS = 2 * 60_000
 
 const LOG_SOURCE = OPERATION_JOURNAL_SERVICE_NAME
-const MINED: ReadonlySet<TxStatus> = new Set([TxStatus.Proposed, TxStatus.Checkpointed, TxStatus.Proven, TxStatus.Finalized])
 
 export type SendCheckDeps = {
 	journal: Pick<OperationJournalService, "getOperation" | "getOperations" | "setSendCheck" | "onOperationUpdated" | "onOperationDeleted">
@@ -39,17 +38,24 @@ type Watch = {
 }
 
 /** A row whose answer can still change: one with none yet, read against the window that starts at
- *  `since`, or an `unconfirmed` one whose expiry can still prove it will never go through. */
+ *  `since`; an `unconfirmed` one whose expiry can still prove it will never go through; or a mined
+ *  one whose block is not yet final. */
 type OpenRow =
 	| { kind: "unanswered"; txHash: string; url: string | undefined; since: number }
 	| { kind: "expiring"; txHash: string; url: string; expiry: SendExpiry }
+	| { kind: "including"; txHash: string; url: string; check: "sent" | "reverted"; inclusion: SendInclusion }
+
+/** What a read proves, and whether recording it can move a balance. */
+type Answer = { next: SendCheckState; refresh: boolean }
 
 /**
  * Asks the network what became of a failed send that may have reached it, and records the answer
- * on the journal row. A row is read only on the endpoint it was sent through, only while its
- * profile is the unlocked one, and one read at a time; nothing is persisted but the answer, so a
- * restart resumes every open row. Each read acts on the row as it loads it, so a write that the
- * row's own update re-announces never leaves it unwatched.
+ * on the journal row: first whether it was mined, then, for a mined one, whether its block became
+ * final or was pruned, and for an unconfirmed one, whether its expiry passed. A row is read only
+ * on the endpoint it was sent through, only while its profile is the unlocked one, and one read
+ * at a time; nothing is persisted but the answer, so a restart resumes every open row. Each read
+ * acts on the row as it loads it, so a write that the row's own update re-announces never leaves
+ * it unwatched.
  */
 export class SendCheck {
 	private readonly deps: SendCheckDeps
@@ -129,8 +135,7 @@ export class SendCheck {
 		}
 	}
 
-	/** A due watch stays due after a write, refused or not: the next tick's read of the row decides
-	 *  what is left to ask. */
+	/** After a write, refused or not, the next tick reads the row again to learn what is left. */
 	private async readOnce(watch: Watch, live: () => boolean, now: number): Promise<void> {
 		const op = await this.deps.journal.getOperation(watch.id)
 		const row = op ? openRow(op) : undefined
@@ -138,14 +143,27 @@ export class SendCheck {
 			this.unwatch(watch)
 			return
 		}
-		const check =
-			row.kind === "unanswered" ? await this.firstAnswer(watch, row, live, now) : await this.expiryAnswer(watch, row, live, now)
-		if (check === undefined || !live()) return
-		const expected = row.kind === "unanswered" ? undefined : "unconfirmed"
-		if (!(await this.deps.journal.setSendCheck(watch.id, row.txHash, { check: expected }, { check }, live))) return
-		this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check answered", { journalId: watch.id, outcome: check })
-		const paid = check === "sent" || check === "reverted" ? op.accountAddress : undefined
-		if (paid !== undefined && live()) await this.deps.balances.refreshAccountBalances(paid)
+		const answer = await this.answer(watch, row, live, now)
+		if (answer === undefined || !live()) return
+		const written = await this.deps.journal.setSendCheck(watch.id, row.txHash, expectedOf(row), answer.next, live)
+		watch.nextAt = now
+		if (!written) return
+		this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check answered", {
+			journalId: watch.id,
+			outcome: answer.next.check ?? "pruned",
+		})
+		if (answer.refresh && op.accountAddress !== undefined && live()) await this.deps.balances.refreshAccountBalances(op.accountAddress)
+	}
+
+	private answer(watch: Watch, row: OpenRow, live: () => boolean, now: number): Promise<Answer | undefined> {
+		switch (row.kind) {
+			case "unanswered":
+				return this.firstAnswer(watch, row, live, now)
+			case "expiring":
+				return this.expiryAnswer(watch, row, live, now)
+			default:
+				return this.finalityAnswer(watch, row, live, now)
+		}
 	}
 
 	private async firstAnswer(
@@ -153,12 +171,13 @@ export class SendCheck {
 		row: Extract<OpenRow, { kind: "unanswered" }>,
 		live: () => boolean,
 		now: number,
-	): Promise<SendCheckOutcome | undefined> {
+	): Promise<Answer | undefined> {
 		const verdict = row.url === undefined ? undefined : await this.minedVerdict(watch, row.txHash, row.url, live)
-		const last = row.url === undefined || now - row.since >= DROPPED_RESURRECTION_WINDOW_MS
-		const check = verdict ?? (last ? "unconfirmed" : undefined)
-		if (check === undefined) watch.nextAt = nextReadAt(row.since, now)
-		return check
+		if (verdict !== undefined) return { next: verdict, refresh: true }
+		if (row.url === undefined || now - row.since >= DROPPED_RESURRECTION_WINDOW_MS)
+			return { next: { check: "unconfirmed" }, refresh: false }
+		watch.nextAt = nextReadAt(row.since, now)
+		return undefined
 	}
 
 	/** Starts once the device clock passes the expiry and reads until the finalized chain's time
@@ -169,7 +188,7 @@ export class SendCheck {
 		row: Extract<OpenRow, { kind: "expiring" }>,
 		live: () => boolean,
 		now: number,
-	): Promise<SendCheckOutcome | undefined> {
+	): Promise<Answer | undefined> {
 		const expiresAt = row.expiry.timestamp * 1_000
 		if (now < expiresAt) {
 			watch.nextAt = expiresAt
@@ -186,14 +205,38 @@ export class SendCheck {
 			})
 			return undefined
 		}
-		if (proof === "expired") return "expired"
+		if (proof === "expired") return { next: { check: "expired" }, refresh: false }
 		if (proof === "present") this.unwatch(watch)
 		else watch.nextAt = now + Math.max(DROPPED_RECHECK_INTERVAL_MS, proof * 1_000)
 		return undefined
 	}
 
-	/** `sent` or `reverted` once the node reports the transaction in a block; `undefined` otherwise. */
-	private async minedVerdict(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<SendCheckOutcome | undefined> {
+	/** A pruned block returns the row to its first question, with the window restarted now. */
+	private async finalityAnswer(
+		watch: Watch,
+		row: Extract<OpenRow, { kind: "including" }>,
+		live: () => boolean,
+		now: number,
+	): Promise<Answer | undefined> {
+		watch.nextAt = now + FINALITY_READ_INTERVAL_MS
+		const node = await this.nodeFor(row.url, live)
+		if (!node) return undefined
+		const proof = await proveFinal(node, row.txHash, row.inclusion).catch(() => undefined)
+		if (proof === undefined) {
+			this.deps.logger.log(LOG_SOURCE, LogLevel.Debug, "send check finality read failed", {
+				journalId: watch.id,
+				stage: "finality-error",
+			})
+			return undefined
+		}
+		if (proof.kind === "final") return { next: { check: row.check }, refresh: false }
+		if (proof.kind === "pruned") return { next: { checkSince: now }, refresh: true }
+		const moved = proof.kind === "moved" ? verdictOf(proof.receipt) : undefined
+		return moved === undefined ? undefined : { next: moved, refresh: true }
+	}
+
+	/** `sent` or `reverted`, with its block, once the node reports the transaction in one. */
+	private async minedVerdict(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<SendCheckState | undefined> {
 		const node = await this.nodeFor(url, live)
 		if (!node) return undefined
 		try {
@@ -215,24 +258,38 @@ export class SendCheck {
 function openRow(op: OperationRecord): OpenRow | undefined {
 	const { progress } = op
 	if (progress.stage !== "failed" || !progress.txHash || !isSendCheckable(op)) return undefined
-	const { txHash, submittedEndpointUrl: url, check, expiry } = progress
-	if (check === undefined) return { kind: "unanswered", txHash, url, since: op.terminalAt ?? op.updatedAt }
-	if (check === "unconfirmed" && expiry !== undefined && url !== undefined) return { kind: "expiring", txHash, url, expiry }
+	const { txHash, submittedEndpointUrl: url, check, expiry, inclusion } = progress
+	if (check === undefined) return { kind: "unanswered", txHash, url, since: progress.checkSince ?? op.terminalAt ?? op.updatedAt }
+	if (url === undefined) return undefined
+	if (check === "unconfirmed" && expiry !== undefined) return { kind: "expiring", txHash, url, expiry }
+	if ((check === "sent" || check === "reverted") && inclusion !== undefined) return { kind: "including", txHash, url, check, inclusion }
 	return undefined
 }
 
-function verdictOf(receipt: Pick<TxReceipt, "status" | "executionResult">): SendCheckOutcome | undefined {
+/** What the row held when it was read, for the journal's compare-and-set. */
+function expectedOf(row: OpenRow): SendCheckState {
+	if (row.kind === "unanswered") return {}
+	if (row.kind === "expiring") return { check: "unconfirmed" }
+	return { check: row.check, inclusion: row.inclusion }
+}
+
+/** The result is decided at inclusion, as `waitForTx` decides a send's; the block is kept until it
+ *  is final. A mined receipt that names no block is no answer. */
+function verdictOf(receipt: Pick<TxReceipt, "status" | "executionResult" | "blockNumber" | "blockHash">): SendCheckState | undefined {
 	let status: TxStatus
 	try {
 		status = txStatusFromReceipt(receipt.status)
 	} catch {
 		return undefined
 	}
-	if (!MINED.has(status)) return undefined
-	// Decided at inclusion, as `waitForTx` decides a send: a block pruned later is not caught.
-	return executionResultFromReceipt(receipt.executionResult) === TxExecutionResult.Success ? "sent" : "reverted"
+	if (!MINED_STATUSES.has(status)) return undefined
+	const check = executionResultFromReceipt(receipt.executionResult) === TxExecutionResult.Success ? "sent" : "reverted"
+	if (status === TxStatus.Finalized) return { check }
+	const { blockNumber, blockHash } = receipt
+	if (blockNumber === undefined || blockHash === undefined) return undefined
+	return { check, inclusion: { block: blockNumber, hash: blockHash.toString() } }
 }
 
-function nextReadAt(terminalAt: number, now: number): number {
-	return now + (now - terminalAt < SEND_CHECK_FAST_WINDOW_MS ? SEND_CHECK_TICK_MS : DROPPED_RECHECK_INTERVAL_MS)
+function nextReadAt(since: number, now: number): number {
+	return now + (now - since < SEND_CHECK_FAST_WINDOW_MS ? SEND_CHECK_TICK_MS : DROPPED_RECHECK_INTERVAL_MS)
 }

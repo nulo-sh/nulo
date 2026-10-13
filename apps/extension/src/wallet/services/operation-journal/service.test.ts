@@ -15,7 +15,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { OperationJournalService } from "./service"
-import { type NewOperationInput, type OperationRecord, isSendCheckable, wasNeverSent } from "./spec"
+import { type NewOperationInput, type OperationRecord, type SendCheckState, isSendCheckable, wasNeverSent } from "./spec"
 
 const VALID_INPUT: NewOperationInput = {
 	kind: "transfer",
@@ -859,6 +859,41 @@ describe("a failed send's record: the carry, the answer, the predicates", () => 
 			check: "expired",
 		})
 		expect((await service.getOperation(without))?.progress).toMatchObject({ check: "unconfirmed" })
+	})
+
+	test("a mined answer's block moves only to final, another block or pruned, each over the block the caller read", async () => {
+		const id = await failedFromSubmitting()
+		const first = { block: 5, hash: `0x${"01".repeat(32)}` }
+		const second = { block: 6, hash: `0x${"02".repeat(32)}` }
+		const set = (expected: SendCheckState, next: SendCheckState) => service.setSendCheck(id, HASH, expected, next, live)
+		expect(await set({}, { check: "sent", inclusion: first })).toBe(true)
+
+		expect(await set({ check: "sent" }, { check: "sent" })).toBe(false)
+		expect(await set({ check: "sent", inclusion: first }, { check: "sent", inclusion: first })).toBe(false)
+		expect(await set({ check: "sent", inclusion: first }, { check: "unconfirmed" })).toBe(false)
+		expect(await set({ check: "sent", inclusion: first }, {})).toBe(false)
+
+		expect(await set({ check: "sent", inclusion: first }, { check: "reverted", inclusion: second })).toBe(true)
+		expect(await set({ check: "reverted", inclusion: second }, { checkSince: 1_234 })).toBe(true)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			checkSince: 1_234,
+		})
+
+		expect(await set({}, { check: "sent", inclusion: first })).toBe(true)
+		expect(await set({ check: "sent", inclusion: first }, { check: "sent" })).toBe(true)
+		expect(await set({ check: "sent" }, { check: "reverted", inclusion: second })).toBe(false)
+		expect(await set({ check: "sent" }, { checkSince: 1 })).toBe(false)
+		expect((await service.getOperation(id))?.progress).toEqual({
+			stage: "failed",
+			from: "submitting",
+			txHash: HASH,
+			submittedEndpointUrl: URL,
+			check: "sent",
+		})
 	})
 
 	test("setSendCheck writes nothing to a missing row, another hash, a live row, or once the guard fails", async () => {

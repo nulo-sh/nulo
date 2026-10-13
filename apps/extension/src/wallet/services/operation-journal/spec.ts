@@ -196,6 +196,8 @@ export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("s
 		submittedEndpointUrl: z.string().optional(),
 		expiry: SendExpirySchema.optional(),
 		check: z.enum(["sent", "reverted", "unconfirmed", "expired"]).optional(),
+		inclusion: z.object({ block: z.number(), hash: z.string() }).optional(),
+		checkSince: z.number().optional(),
 	}),
 	z.object({ stage: z.literal("cancelled") }),
 ])
@@ -203,14 +205,23 @@ export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("s
 type FailedProgress = Extract<JobProgress, { stage: "failed" }>
 
 /** The fields of a failed row that only the send check writes. */
-export type SendCheckState = Pick<FailedProgress, "check">
+export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "checkSince">
 
-/** The answers the send check may record over what a row holds: a first answer, and `expired`
- *  over `unconfirmed`. `expired` needs the row's recorded expiry; nothing replaces `sent`,
- *  `reverted` or `expired`. */
+/**
+ * The answers the send check may record over what a row holds:
+ * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`;
+ * - `unconfirmed`: `expired`, on a row with a recorded expiry;
+ * - `sent` or `reverted` with a block not yet final: final (the block dropped), included in
+ *   another block, or pruned (no answer, its window restarted at `checkSince`).
+ * Nothing replaces `expired`, or a `sent` or `reverted` that holds no block.
+ */
 export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boolean {
-	if (to.check === undefined || (to.check === "expired" && from.expiry === undefined)) return false
-	return from.check === undefined || (from.check === "unconfirmed" && to.check === "expired")
+	const mined = to.check === "sent" || to.check === "reverted"
+	if (from.check === undefined) return mined || (to.check === "unconfirmed" && to.inclusion === undefined)
+	if (from.check === "unconfirmed") return to.check === "expired" && from.expiry !== undefined && to.inclusion === undefined
+	if (from.inclusion === undefined || from.check === "expired") return false
+	if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
+	return mined && to.inclusion?.hash !== from.inclusion.hash
 }
 
 /** May have reached the node: it failed at `submitting` with a hash, and not at the send line's

@@ -389,9 +389,9 @@ export class OperationJournalService extends Service<Methods, Events> implements
 
 	/**
 	 * Records the network's answer for a failed send. SW-internal, never an RPC. A compare-and-set:
-	 * writes only while the row is still `failed` with this hash and holds the `expected` answer,
-	 * the move is one `isSendCheckMove` admits, and `isLive()` holds inside the lock; `false` means
-	 * nothing was written.
+	 * writes only while the row is still `failed` with this hash and holds the `expected` answer and
+	 * block, the move is one `isSendCheckMove` admits, and `isLive()` holds inside the lock; `false`
+	 * means nothing was written. `next` replaces all three of the check's fields.
 	 */
 	public async setSendCheck(
 		id: string,
@@ -405,8 +405,10 @@ export class OperationJournalService extends Service<Methods, Events> implements
 			const existing = await this._loadValidated(id)
 			if (existing?.progress.stage !== "failed" || existing.progress.txHash !== txHash) return false
 			const { progress } = existing
-			if (progress.check !== expected.check || !isSendCheckMove(progress, next) || !isLive()) return false
-			const updated: OperationRecord = { ...existing, progress: { ...progress, check: next.check }, updatedAt: Date.now() }
+			if (progress.check !== expected.check || progress.inclusion?.hash !== expected.inclusion?.hash) return false
+			if (!isSendCheckMove(progress, next) || !isLive()) return false
+			const { check, inclusion, checkSince } = next
+			const updated: OperationRecord = { ...existing, progress: { ...progress, check, inclusion, checkSince }, updatedAt: Date.now() }
 			await this.storage.set(id, updated)
 			this.emit("onOperationUpdated", updated)
 			return true

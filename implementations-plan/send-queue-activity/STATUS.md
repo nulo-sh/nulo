@@ -16,3 +16,4 @@
 - 2026-10-10 — network gate blocked: the host had another lane's network run live through the whole 120-minute poll (e2e-harness-gaps, then account-session-life). Not pushed; no PR yet.
 - 2026-10-12 — arc 3a start: branch `send-queue-activity-outcomes` off origin/dev 8d01f9b; probe and panel (Codex 01a1326f two turns, Opus lens): 3a.1 stopped (D21, OA-6), 3a.2 and 3a.3 built on finalized-anchored proofs (D22-D28, OA-7).
 - 2026-10-13 — phase 3a.2 gate: pass (lint, typecheck:all, test:all: extension 11408 passed). Expiry recorded at submission, `unconfirmed → expired` on a finalized-anchored nullifier read, compare-and-set `setSendCheck` (D29).
+- 2026-10-13 — phase 3a.3 gate: pass (lint, typecheck:all, test:all: extension 11435 passed). Finalized-archive proof for mined rows (journal and Tx), the persisted Tx marker, the silent single-attempt node (D30).
