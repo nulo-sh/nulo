@@ -16,8 +16,8 @@ import {
 } from "./source-scan"
 
 /**
- * Lists every surface the wallet renders, with the files each one draws from, so every board shoots
- * every surface and each later arc reshoots the ones it changes. A surface is:
+ * Lists every surface the wallet renders, with the files each one draws from, so a changed file names
+ * every surface it reaches. A surface is:
  *
  * 1. a route `PageContext` builds from `PAGES_OPTIONS`, with its `<route>` meta;
  * 2. a popup `PopupManager.vue` mounts, with its `isOpened` key and the files that open it;
@@ -76,7 +76,7 @@ const SHARED_MODULES = [
 	`${SRC}/components/composite/capabilities/capability-shared.module.css`,
 ]
 
-/** The files arcs 3 and 4 migrate, as globs over repo-relative paths. */
+/** Per `arcs` value, the repo-relative globs whose files place a surface under it. */
 export const ARC_GLOBS = {
 	3: {
 		include: [
