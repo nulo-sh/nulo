@@ -77,6 +77,7 @@ import {
 	InvalidWalletArgumentsError,
 	ScopeViolationError,
 	TermsAcceptanceRequiredError,
+	TooManyPendingError,
 	isReceiverGoneRejection,
 } from "@nulo/extension-messaging/errors"
 import { KeyedLock, deferred } from "@nulo/wallet-core/utils"
@@ -1327,13 +1328,14 @@ export async function handleWalletMessage(
 	}
 }
 
-/** A refusal a connected dApp can repeat on every poll, so it logs at `debug`: an `error` line lands
- *  in every user's log buffer. */
+/** A refusal a connected dApp can repeat on every poll, or with silent sends over the waiting-sends
+ *  cap, so it logs at `debug`: an `error` line lands in every user's log buffer. */
 function isExpectedRefusal(error: unknown): boolean {
 	return (
 		error instanceof TermsAcceptanceRequiredError ||
 		error instanceof ScopeViolationError ||
 		error instanceof ChainNotSupportedError ||
-		error instanceof InvalidWalletArgumentsError
+		error instanceof InvalidWalletArgumentsError ||
+		error instanceof TooManyPendingError
 	)
 }

@@ -147,6 +147,14 @@ describe("assertWalletSchemaArgs", () => {
 		await expect(assertWalletSchemaArgs("requestCapabilities", [manifest])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
 	})
 
+	test("an artifact whose storage has a field named toString registers; the instance beside it is still walked", async () => {
+		const artifact = { ...wireArtifact(), storageLayout: JSON.parse(`{"toString":{"slot":"${FIELD}"}}`) }
+		await expect(assertWalletSchemaArgs("registerContract", [wireInstance(TOKEN), artifact])).resolves.toBeUndefined()
+		await expect(assertWalletSchemaArgs("registerContractClass", [artifact])).resolves.toBeUndefined()
+		const instance = { ...wireInstance(TOKEN), toString: "x" }
+		await expect(assertWalletSchemaArgs("registerContract", [instance, artifact])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+	})
+
 	test("an own valueOf alone, and a 100,000-deep tree without an own toString, pass (controls)", async () => {
 		const ownValueOf = JSON.parse('{"valueOf":"x"}')
 		expect(String(ownValueOf)).toBe("[object Object]")

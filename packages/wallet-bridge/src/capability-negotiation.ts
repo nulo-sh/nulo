@@ -48,7 +48,6 @@ function contractClassesRequestCovered(existing: ContractClassesCapability[], re
 	)
 }
 
-/** Every requested entry sits in one of `held`; a requested `*` only under a held `*`. */
 function listCovered(requested: "*" | readonly unknown[], held: ReadonlyArray<"*" | readonly unknown[]>): boolean {
 	if (requested === "*") return held.includes("*")
 	return requested.every((id) => held.some((list) => list === "*" || list.some((x) => sameFieldAddress(String(x), String(id)))))

@@ -19,6 +19,11 @@ const NOT_PARSED: Partial<Record<MethodName, string>> = {
 	batch: "each leg re-enters dispatch and is parsed there, after its own capability check",
 }
 
+/** The contract-artifact argument the own-`toString` walk skips: its `storageLayout` is keyed by the
+ *  contract's storage-field names, where `toString` is legal, and the parse refuses an object in
+ *  every artifact field the wallet reads as a string. */
+const ARTIFACT_ARG: Partial<Record<MethodName, number>> = { registerContract: 1, registerContractClass: 0 }
+
 const CAPABILITY_HEADER = AppCapabilitiesSchema.omit({ capabilities: true })
 const KNOWN_CAPABILITY_TYPES: ReadonlySet<string> = new Set(CapabilitySchema.options.map((option) => option.shape.type.value))
 const CALL_INTENT = MessageHashOrIntentSchema.options[1]
@@ -34,7 +39,7 @@ export async function assertWalletSchemaArgs(method: MethodName, args: readonly 
 	try {
 		const parameters = getSchemaParameters(SCHEMA[method])
 		const parsed = args.slice(0, parameters.def.items.length)
-		assertNoOwnToString(parsed)
+		assertNoOwnToString(parsed.filter((_, index) => index !== ARTIFACT_ARG[method]))
 		if (method === "requestCapabilities") {
 			await parseCapabilityRequest(parsed[0])
 			return

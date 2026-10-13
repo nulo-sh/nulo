@@ -4,7 +4,7 @@
  * Aztec sandbox / PXE / bb / browser. DappSession is PXE-free AND bb-free (pure
  * storage + profile scoping), so this is the cleanest composition target — the
  * "second harness shape" (no shared PXE port). The capability negotiation runs the
- * real dispatcher over it, with the connect window as the only fake. See
+ * real dispatcher over it, with stub network, account, execution and window services. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
 import { beforeAll, describe, expect, test } from "vitest"

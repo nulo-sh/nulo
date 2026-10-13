@@ -1,10 +1,11 @@
 /**
- * A scope or schema refusal reaches no sink with a request value, and a refused `sendTx` is filed as
- * refused. Each request carries a sentinel in every field it controls, wire-valid where the refusal
- * under test comes after the schema parse, and runs through the arrival check and the real
- * dispatcher; only the connection handler and the wallet services are stubbed.
+ * A scope, schema or capacity refusal reaches no sink with a request value, and a refused `sendTx`
+ * is filed as refused. Each request carries a sentinel in every field it controls, wire-valid where
+ * the refusal under test comes after the schema parse, and runs through the arrival check and the
+ * real dispatcher; only the connection handler and the wallet services are stubbed.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
+import { TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { type GrantedCapabilityRecord, WalletSdkDispatcher } from "@nulo/wallet-bridge"
 import { wireCall, wireInstance, wirePayload } from "@nulo/wallet-bridge/testing"
 import { LogLevel } from "@/wallet/logger"
@@ -213,7 +214,14 @@ function serialize(value: unknown): string {
 	)
 }
 
-async function refuse(method: string, args: unknown[], grants: GrantedCapabilityRecord[], session = SESSION) {
+type RefuseOptions = { session?: typeof SESSION; execute?: () => Promise<unknown> }
+
+async function refuse(
+	method: string,
+	args: unknown[],
+	grants: GrantedCapabilityRecord[],
+	{ session = SESSION, execute }: RefuseOptions = {},
+) {
 	const stored = {
 		tryGetDappSessionByOriginAndChain: async () => ({
 			id: "row-1",
@@ -231,7 +239,7 @@ async function refuse(method: string, args: unknown[], grants: GrantedCapability
 	const log = vi.spyOn(deps.logger, "log")
 	const consoleLines = (["debug", "warn", "error"] as const).map((level) => vi.spyOn(console, level))
 	const execution = { executeOperations: vi.fn() }
-	const interaction = { execute: vi.fn(), requestCapabilities: vi.fn() }
+	const interaction = { execute: vi.fn(execute), requestCapabilities: vi.fn() }
 	const dispatcher = new WalletSdkDispatcher(
 		networkSvc as never,
 		account as never,
@@ -316,6 +324,17 @@ describe("handleWalletMessage — a scope refusal", () => {
 	})
 })
 
+describe("handleWalletMessage — a capacity refusal", () => {
+	test("of a sendTx over the waiting-sends cap answers -32005 at debug", async () => {
+		const overCap = async () => [{ status: "failed", error: "Too many pending", code: TooManyPendingError.CODE }]
+		expect(await refuse("sendTx", [wirePayload([call]), { from: ACCOUNT }], [tx("*")], { execute: overCap })).toMatchObject({
+			level: LogLevel.Debug,
+			envelope: { code: -32005, data: { walletErrorCode: TooManyPendingError.CODE } },
+			leakingLines: [],
+		})
+	})
+})
+
 describe("handleWalletMessage — a schema refusal", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
@@ -344,7 +363,7 @@ describe("handleWalletMessage — a schema refusal", () => {
 
 	test("on a channel whose chainInfo does not decode answers -32602 at debug before any dispatch", async () => {
 		const undecodable = { ...SESSION, chainInfo: { chainId: "", version: SESSION.chainInfo.version } } as unknown as typeof SESSION
-		expect(await refuse("getAccounts", [], [grant(authWit)], undecodable)).toEqual({
+		expect(await refuse("getAccounts", [], [grant(authWit)], { session: undecodable })).toEqual({
 			...refusedByParse("getAccounts"),
 			refusal: undefined,
 			rows: 0,

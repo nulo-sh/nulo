@@ -42,7 +42,7 @@ import { TransactionService, TransferType } from "@/wallet/services/transaction/
 import { OriginType } from "@/wallet/services/transaction/spec"
 import { AuthRegistryService } from "@/wallet/services/auth-registry/service"
 import { LegalAcceptanceService } from "@/wallet/services/legal/service"
-import { InvalidWalletArgumentsError, TermsAcceptanceRequiredError } from "@nulo/extension-messaging/errors"
+import { InvalidWalletArgumentsError, TermsAcceptanceRequiredError, TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
 import { SEND_CHECK_TICK_MS, SendCheck } from "@/wallet/services/operation-journal/send-check"
 import { TaskService } from "@/wallet/services/task/service"
@@ -1095,6 +1095,7 @@ describe("ExecutionService composition — a refused operation logs at the level
 		["a selector-binding refusal", bindingRefusal, "refused: outside its grant"],
 		["a Terms refusal", () => new TermsAcceptanceRequiredError(), "refused: terms not accepted"],
 		["an argument refusal", () => InvalidWalletArgumentsError.forMethod("executeUtility"), "refused: invalid arguments"],
+		["a capacity refusal", () => new TooManyPendingError(), "refused: too many pending"],
 		["an unclassified failure", () => new Error("boom"), undefined],
 	])("%s", async (_label, makeError, debugReason) => {
 		const h = await makeHarness()
