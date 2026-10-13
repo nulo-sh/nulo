@@ -243,6 +243,26 @@ runtime env var can never arm a build-time flag.
 
 ## 2. Write a test
 
+### Runtime budget
+
+An added scenario pays the [e2e runtime budget](../../../CLAUDE.md#quality-gates--local-and-ci) in
+CLAUDE.md: the distinct failure mode it proves, why a cheaper layer cannot prove it, and its estimated
+then measured runtime, with each browser's suite wall-clock before and after in the PR body.
+
+- **Suite wall-clock** is the CI suite job envelope: GitHub's job timestamps over the `Run / …` jobs
+  that ran and passed in a run whose first attempt succeeded (a skipped job carries no real times).
+  The PR e2e workflows run on pull requests, not on `dev`: "after" is the PR's run, "before" the
+  latest such run of the same workflow on another PR (`gh run list --workflow <file> --status success`):
+
+  ```bash
+  gh run view <id> --attempt 1 --json conclusion,jobs --jq 'if .conclusion != "success" then "attempt 1: \(.conclusion)" else [.jobs[] | select((.name | startswith("Run / ")) and .conclusion == "success")] | if length == 0 then "suite skipped" else ((map(.completedAt | fromdateiso8601) | max) - (map(.startedAt | fromdateiso8601) | min)) / 60 | floor end end'
+  ```
+
+  It prints whole minutes (`21` for run 38364426588, Chrome network) and includes setup and
+  teardown, so it is not vitest's test time. Report a cancelled, timed-out or rerun attempt apart,
+  never folded in: a later attempt's envelope spans the gap between attempts.
+- **Scenario runtime** is the per-file duration vitest's reporter prints for the file.
+
 ### Selectors
 
 Only `data-testid` (rows: `data-<entity>-id` / `data-<entity>-name`). Never text, role, aria-label,
