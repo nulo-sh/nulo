@@ -91,6 +91,16 @@ const props = defineProps({
 		type: Boolean,
 		default: undefined,
 	},
+	/** The native `<input>`'s `aria-activedescendant` and `aria-controls`, for a field that drives a
+	 *  list it does not contain. */
+	ariaActivedescendant: {
+		type: String,
+		required: false,
+	},
+	ariaControls: {
+		type: String,
+		required: false,
+	},
 	/** The native `<input>`'s `data-testid`; a `data-testid` attribute names the root. */
 	inputTestid: {
 		type: String,
@@ -312,6 +322,8 @@ const handleClear = () => {
 					:autocapitalize="autocapitalize"
 					:autocorrect="autocorrect"
 					:aria-invalid="ariaInvalid"
+					:aria-activedescendant="ariaActivedescendant"
+					:aria-controls="ariaControls"
 					:data-testid="inputTestid"
 				/>
 			</Flex>

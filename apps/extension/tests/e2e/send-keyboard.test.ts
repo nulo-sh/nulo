@@ -13,7 +13,7 @@ import { startNodeStub } from "./fixtures/node-stub"
 import { readSendInputs, shotSend } from "./fixtures/send-page"
 import { readActivityScope, seedTokenRow } from "./helpers/activity-seeds"
 import { SEEDED_FPC_IDS, SEEDED_SPONSOR_FPC_ID, fpcRowIds, seedProtocolFpcs } from "./helpers/fpc-seeds"
-import { activeTestId, coveredAt, focusRing, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
+import { activeTestId, coveredAt, focusRing, pressEscape, tabAround, tabTo, tokenColor, waitForFocus } from "./helpers/pointer-probes"
 
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const DESTINATION_INPUT = `${sel("send-destination-field")} input`
@@ -45,19 +45,56 @@ async function expectAccentRing(page: Page, testid: string): Promise<void> {
 	expect(color, testid).toBe(await tokenColor(page, "--nulo-accent"))
 }
 
+/** What the destination field tells a screen reader about the suggestions: the list it controls, and
+ *  which of its rows the field's `aria-activedescendant` names. */
+async function readSuggestionList(page: Page) {
+	return page.evaluate(
+		(input: string, list: string) => {
+			const field = document.querySelector(input)
+			const box = document.querySelector(list)
+			const named = document.getElementById(field?.getAttribute("aria-activedescendant") ?? "")
+			const rows = [...(box?.children ?? [])]
+			return {
+				role: box?.getAttribute("role") ?? null,
+				controlled: Boolean(box?.id) && field?.getAttribute("aria-controls") === box?.id,
+				active:
+					named && rows.includes(named)
+						? { row: rows.indexOf(named), role: named.getAttribute("role"), selected: named.getAttribute("aria-selected") }
+						: null,
+			}
+		},
+		DESTINATION_INPUT,
+		sel("send-destination-suggestions"),
+	)
+}
+
 async function waitForAmountMode(page: Page, mode: "token" | "usd"): Promise<void> {
 	await page.waitForSelector(sel(mode === "usd" ? "send-amount-fiat-input" : "send-amount-input"), { timeout: 5_000 })
 }
 
-test("Enter picks a destination suggestion only from the destination field", { timeout: 120_000, retry: 0 }, async ({
-	registeredExtensionPerTest: ctx,
-}) => {
+test("the destination suggestions: a listbox Down, Up, Escape and Enter drive, picking only from the field", {
+	timeout: 120_000,
+	retry: 0,
+}, async ({ registeredExtensionPerTest: ctx }) => {
 	const page = await openSendPage(ctx)
 	const account = await getAccountAddress(page)
 
 	// Accounts are suggested by name, so the profile's own "Account 1" stands in for a contact.
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
+	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
+	expect(await readSuggestionList(page)).toEqual({ role: "listbox", controlled: true, active: null })
+	await page.keyboard.press("ArrowDown")
+	expect((await readSuggestionList(page)).active).toEqual({ row: 0, role: "option", selected: "true" })
+	await shotSend(page, "send-suggestion-highlighted", "send-destination-field")
+
+	expect(await pressEscape(page)).toBe(true)
+	await page.waitForSelector(sel("send-destination-suggestions"), { hidden: true, timeout: 5_000 })
+	expect(await activeTestId(page)).toBe("send-destination-field")
+	await page.keyboard.type("o")
+	await page.waitForSelector(sel("send-destination-suggestions"), { visible: true, timeout: 5_000 })
+	await page.keyboard.press("ArrowUp")
+	expect((await readSuggestionList(page)).active?.row).toBe(0)
 	await page.keyboard.press("Enter")
 	await page.waitForSelector(sel("recipient-card"), { timeout: 5_000 })
 	expect((await readSendInputs(page)).destination).toBe(account)
@@ -66,8 +103,9 @@ test("Enter picks a destination suggestion only from the destination field", { t
 	await page.waitForSelector(DESTINATION_INPUT, { timeout: 5_000 })
 	await page.focus(DESTINATION_INPUT)
 	await page.keyboard.type("Acc")
-	// Inside the quarter second the suggestions outlive the field's blur by.
+	// Inside the quarter second the suggestions outlive the field's blur by. No row is a Tab stop.
 	await page.keyboard.press("Tab")
+	expect(await page.evaluate(() => document.activeElement?.closest('[role="listbox"]') === null)).toBe(true)
 	await page.keyboard.press("Enter")
 	expect((await readSendInputs(page)).destination).toBe("Acc")
 })
