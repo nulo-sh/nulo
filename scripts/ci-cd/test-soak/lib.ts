@@ -24,6 +24,36 @@ export const RESOLVE_SPECS = [
  */
 export const RESOLVE_ALLOWLIST: ReadonlySet<string> = new Set(["isows", "msgpackr", "@logtape/logtape", "axios"])
 
+export interface BunOnlyFile {
+	/** Workspace-relative, as inventory ids name it. */
+	file: string
+	reason: string
+}
+
+/**
+ * Test files only Bun can run, keyed by workspace (`meta.cwd`). The Node reference excludes them
+ * and `compare` holds the candidate to passing each of their tests every run, in place of the
+ * reference match it cannot make. Pinned like the allowlist: an entry is a reviewed code change.
+ */
+export const BUN_ONLY_FILES: ReadonlyMap<string, readonly BunOnlyFile[]> = new Map([
+	[
+		"apps/extension",
+		[
+			{ file: "scripts/store-icons.test.ts", reason: "renders through Bun.Image, which Node does not have" },
+			{ file: "src/popup/windows/json/index.test.ts", reason: "pins JavaScriptCore's TypeError wording for a missing window" },
+			{ file: "src/popup/windows/logger/index.test.ts", reason: "pins JavaScriptCore's TypeError wording for a missing window" },
+		],
+	],
+])
+
+export function bunOnlyFiles(cwd: string): readonly BunOnlyFile[] {
+	return BUN_ONLY_FILES.get(cwd) ?? []
+}
+
+function fileOf(id: string): string {
+	return id.slice(0, id.indexOf(" :: "))
+}
+
 /** Flags the tool enforces itself; a forwarded filter carrying one could override the gate. */
 export const RESERVED_FLAGS = ["--retry", "--reporter", "--outputFile", "--root", "--config", "--pool", "--watch"] as const
 
@@ -350,12 +380,14 @@ interface Findings {
 }
 
 /** Inventory membership must be identical; the report lists the first 20 ids on each side. */
-export function checkInventoryMembership(idsA: string[], idsB: string[], a: SoakSummary, b: SoakSummary): Findings {
+export function checkInventoryMembership(idsA: string[], idsB: string[]): Findings {
 	const problems: string[] = []
 	const lines: string[] = []
 	if (!sameArray(idsA, idsB)) {
-		const onlyA = idsA.filter((id) => !(id in b.inventory))
-		const onlyB = idsB.filter((id) => !(id in a.inventory))
+		const inA = new Set(idsA)
+		const inB = new Set(idsB)
+		const onlyA = idsA.filter((id) => !inB.has(id))
+		const onlyB = idsB.filter((id) => !inA.has(id))
 		problems.push(`inventories differ: ${onlyA.length} only in reference, ${onlyB.length} only in candidate`)
 		for (const id of onlyA.slice(0, 20)) lines.push(`  only in reference: ${id}`)
 		for (const id of onlyB.slice(0, 20)) lines.push(`  only in candidate: ${id}`)
@@ -383,6 +415,25 @@ export function checkInventoryEntries(idsA: string[], a: SoakSummary, b: SoakSum
 	return { problems, lines }
 }
 
+/** The Bun-only files stand outside the reference match: the reference must not have run them,
+ *  each of their candidate tests must pass every run, and an unfiltered soak must have run each. */
+export function checkBunOnly(a: SoakSummary, b: SoakSummary, files: readonly BunOnlyFile[]): Findings {
+	const problems: string[] = []
+	const lines: string[] = []
+	const passedEveryRun = JSON.stringify([["passed", b.meta.runs]])
+	for (const { file, reason } of files) {
+		if (Object.keys(a.inventory).some((id) => fileOf(id) === file)) problems.push(`reference ran Bun-only file "${file}"`)
+		const ids = Object.keys(b.inventory).filter((id) => fileOf(id) === file)
+		if (ids.length === 0 && b.meta.filters.length === 0) problems.push(`candidate never ran Bun-only file "${file}"`)
+		for (const id of ids) {
+			const statuses = JSON.stringify(Object.entries(b.inventory[id]?.statuses ?? {}).sort())
+			if (statuses !== passedEveryRun) problems.push(`"${id}": a Bun-only test must pass every run, got ${statuses}`)
+		}
+		lines.push(`  bun-only, not run on the reference: ${file} (${ids.length} tests): ${reason}`)
+	}
+	return { problems, lines }
+}
+
 /** Module resolution evidence per pinned spec: both sides must carry it, and a difference passes
  *  only inside the pinned allowlist (reported either way). */
 export function checkResolutions(a: SoakSummary, b: SoakSummary): Findings {
@@ -404,14 +455,14 @@ export function checkResolutions(a: SoakSummary, b: SoakSummary): Findings {
 	return { problems, lines }
 }
 
-function buildReport(a: SoakSummary, b: SoakSummary, idsA: string[], idsB: string[], lines: string[], problems: string[]): string {
+function buildReport(a: SoakSummary, b: SoakSummary, lines: string[], problems: string[]): string {
 	const wall = (side: SoakSummary) => {
 		const ms = side.runs.map((run) => run.wallMs)
 		return `min ${Math.min(...ms)} ms · median ${percentile(ms, 50)} ms · p95 ${percentile(ms, 95)} ms`
 	}
 	const header = [
-		`reference ${a.meta.cwd} ${a.meta.script} [${a.meta.runtimeMode}] ${a.meta.runs} runs, failedRuns=${a.failedRuns}, inventory ${idsA.length} tests, digest ${a.inventoryDigest.slice(0, 16)}`,
-		`candidate ${b.meta.cwd} ${b.meta.script} [${b.meta.runtimeMode}] ${b.meta.runs} runs, failedRuns=${b.failedRuns}, inventory ${idsB.length} tests, digest ${b.inventoryDigest.slice(0, 16)}`,
+		`reference ${a.meta.cwd} ${a.meta.script} [${a.meta.runtimeMode}] ${a.meta.runs} runs, failedRuns=${a.failedRuns}, inventory ${Object.keys(a.inventory).length} tests, digest ${a.inventoryDigest.slice(0, 16)}`,
+		`candidate ${b.meta.cwd} ${b.meta.script} [${b.meta.runtimeMode}] ${b.meta.runs} runs, failedRuns=${b.failedRuns}, inventory ${Object.keys(b.inventory).length} tests, digest ${b.inventoryDigest.slice(0, 16)}`,
 		`wall-clock reference: ${a.runs.length ? wall(a) : "n/a"}`,
 		`wall-clock candidate: ${b.runs.length ? wall(b) : "n/a"}`,
 	]
@@ -420,20 +471,31 @@ function buildReport(a: SoakSummary, b: SoakSummary, idsA: string[], idsB: strin
 }
 
 /** `a` is the Node reference, `b` the Bun candidate. Every rule is fail-closed. The validators run
- *  in the report's order — meta, reference side, candidate side, inventory, resolutions — so
- *  `problems` and the report lines read exactly as they always did. */
+ *  in the report's order — meta, reference side, candidate side, inventory, Bun-only files,
+ *  resolutions — so `problems` and the report lines read exactly as they always did. */
 export function compareSummaries(a: SoakSummary, b: SoakSummary): CompareResult {
 	const problems: string[] = [...checkMeta(a, b), ...checkSide(a, "reference", false), ...checkSide(b, "candidate", true)]
 	const lines: string[] = []
 
-	const idsA = Object.keys(a.inventory).sort()
-	const idsB = Object.keys(b.inventory).sort()
-	for (const found of [checkInventoryMembership(idsA, idsB, a, b), checkInventoryEntries(idsA, a, b), checkResolutions(a, b)]) {
+	const bunOnly = bunOnlyFiles(b.meta.cwd)
+	const bunOnlyPaths = new Set(bunOnly.map(({ file }) => file))
+	const compared = (side: SoakSummary) =>
+		Object.keys(side.inventory)
+			.filter((id) => !bunOnlyPaths.has(fileOf(id)))
+			.sort()
+	const idsA = compared(a)
+	const idsB = compared(b)
+	for (const found of [
+		checkInventoryMembership(idsA, idsB),
+		checkInventoryEntries(idsA, a, b),
+		checkBunOnly(a, b, bunOnly),
+		checkResolutions(a, b),
+	]) {
 		problems.push(...found.problems)
 		lines.push(...found.lines)
 	}
 
-	const report = buildReport(a, b, idsA, idsB, lines, problems)
+	const report = buildReport(a, b, lines, problems)
 	return { ok: problems.length === 0, problems, report }
 }
 

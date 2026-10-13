@@ -1,6 +1,6 @@
 {
 	"biomeVersion": "2.5.13",
-	"generated": "2026-10-11",
+	"generated": "2026-10-13",
 	"rules": {
 		"noExcessiveCognitiveComplexity": {
 			"apps/extension/src/popup/components/modules/send/FeeSettingsCard.test.ts": 1,
@@ -16,7 +16,7 @@
 			"apps/extension/tests/e2e/fixtures/journal.ts": 3,
 			"packages/wallet-core/src/base/topology.ts": 1,
 			"packages/wallet-core/src/utils/serialization.ts": 1,
-			"scripts/ci-cd/test-soak/cli.ts": 3,
+			"scripts/ci-cd/test-soak/cli.ts": 2,
 			"scripts/ci-cd/test-soak/lib.ts": 1
 		},
 		"noExcessiveLinesPerFunction": {
@@ -143,13 +143,6 @@
 			"anchor": "return JSON.stringify(obj, (_key, value) => {",
 			"accepted": 23,
 			"sentence": "upstream-compatible replacer dispatch defines the JSON wire form of each supported runtime type"
-		},
-		{
-			"file": "scripts/ci-cd/test-soak/cli.ts",
-			"rule": "noExcessiveCognitiveComplexity",
-			"anchor": "async function soak(argv: string[]): Promise<number> {",
-			"accepted": 16,
-			"sentence": "one coordinator binds two launch modes to provenance capture and summary emission"
 		},
 		{
 			"file": "scripts/ci-cd/test-soak/cli.ts",
