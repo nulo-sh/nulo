@@ -79,8 +79,9 @@ paragraph separator characters. Each (`chainId`, `address`) pair appears once.
 - Use at most the first 16 entries per `chainId`. The publisher never signs more than 16.
 
 A list is a suggestion of which contracts to show, not a statement that a token is safe or worth
-anything. The listed symbol and name are checked against the chain; the chain is the source of
-truth for balances.
+anything. The class, symbol and decimals are checked against the chain. The name is a label: Nulo
+shows it before the chain answers and where it names a known contract, and a token row takes the
+chain's name. The chain is the source of truth for balances.
 
 ## Verify by hand
 

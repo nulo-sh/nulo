@@ -133,7 +133,6 @@ export function checkTokens(value: unknown, path: string, mode: ParseMode): Toke
 	return tokens
 }
 
-/** Validates a parsed payload object. */
 export function checkPayload(value: unknown, mode: ParseMode): TokenListPayload {
 	const f = record(value, "payload", PAYLOAD_KEYS, mode)
 	ensure(f.format === PAYLOAD_FORMAT, "payload.format")
