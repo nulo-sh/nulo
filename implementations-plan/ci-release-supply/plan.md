@@ -1,7 +1,7 @@
 ---
 plan: ci-release-supply
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-14); arcs 1 to 4 merged (#252, #261, #263, #265; phase 2.4 reverted by its stop rule, D21); arc 5a and arc 5 after decision page 5 (D-orch-10 to D-orch-14)
+status: completed (arcs 1 to 4 merged as #252, #261, #263, #265; arc 5a #370 and arc 5 #378 delivered, the close-out in #378)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -12,10 +12,42 @@ budget: recon 3 Explore agents (sonnet); dual audit (Codex gpt-6.1-sol high + on
 base: origin/dev at ac259a7 (#238 merged as 8099368)
 trunk: dev
 issues: [166, 167, 168, 82, 172, 179, 183, 185, 182, 195, 178]
+known_limits: [375, 376, 377]
 closed_before_planning: [176, 193]
 no_arc: [21, 174, 180]
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** completed. Six arcs in six PRs against `dev`: arcs 1 to 4 merged; arc 5a ([#370](https://github.com/nulo-sh/nulo/pull/370)) and arc 5 ([#378](https://github.com/nulo-sh/nulo/pull/378), which carries this close-out and #370's commits, D29) await the orchestrator's merge, #370 first. The owner's ruleset exclusion that arc 5 needs is applied. The merge that lands arc 5 closes this plan.
+- **Shipped:**
+  - Arc 1, [#252](https://github.com/nulo-sh/nulo/pull/252): `quality-status` builds Storybook (#166). Each e2e lane decides from the pull request's live labels, head and base; PR runs queue per head, and `pr-supersede.yml` cancels obsolete heads (#167). The probe found no fold, so #168 closed under rule 1 with CI.md rewritten (D18).
+  - Arc 2, [#261](https://github.com/nulo-sh/nulo/pull/261): `launch-legal` refuses a stable 1.0.0 or later into `main` while a legal document holds «FILL», and `auto-unstick` and the manual unstick check again before the tag (#183). `verify-store-copies.yml` compares each store's public copy with its release zip weekly (#179). presto-banners 1.2.0 (#82). `hoist = false` was reverted by its stop rule (D21).
+  - Arc 3, [#263](https://github.com/nulo-sh/nulo/pull/263): the landing's `routes` rule and the owner's domain boundary in the release runbook (#185).
+  - Arc 4, [#265](https://github.com/nulo-sh/nulo/pull/265): four more transcript shapes ignored and asserted by `check:plans` (#182).
+  - Arc 5a, [#370](https://github.com/nulo-sh/nulo/pull/370): the onboarding Presto step takes presto-banners' blocked-access title (#82, OA-1 A, signed). #183's scope verified as signed (OA-3 A). An advisory nightly leg proves the canary files in browser WASM (#195).
+  - Arc 5, [#378](https://github.com/nulo-sh/nulo/pull/378): after each published night, `prune-nightlies` keeps the newest fourteen nightly tags and releases, and `resolve` cuts each nightly above every kept code (#178, Phases 5.1 and 5.2).
+  - `lessons.md`: the concurrency line was rewritten to the per-head rule in arc 1 (D14). Nothing else was promoted: the file is at its 8 KiB budget, and each later gotcha is held by a pin.
+- **Orchestrator records:** D-orch-1 to D-orch-14 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #176 and #193: closed by #238 before planning, verified.
+  - #21, #174 (`blocked:external`) and #180 (an owner action): no arc.
+  - #168's fix arms (rule 2): not needed, because the probe found no fold (D18).
+  - D6 and D-orch-6's option B for #82: superseded by the owner's option A (D-orch-10).
+  - The release-write guard exception that § Arc 5 planned: unnecessary (D24).
+  - A prune on quiet days: rejected (D27).
+  - The separate close-out PR in § Delivery: folded into arc 5's (D-orch-14).
+- **Known limits:**
+  - #375: the supersede sweep's force-push rewind window (D17).
+  - #376: a compromised `contents: write` release job can delete any release and move nightly tags.
+  - #377: a stale `publish-nightly` re-run republishes a pruned name, which its own prune deletes.
+- **Open items:**
+  - #172 (`dependencies`): six third-party packages import what they do not declare, so `hoist = false` waits (D21).
+  - #178 (`supply-chain`): Phase 5.3's first runs and Phase 5.4's immutability watch, after the merge. These are the orchestrator's.
+  - #251 (`owner-decision`): a retarget to `main` starts no e2e run (D15).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # ci-release-supply: CI gates, release guards and supply-chain checks
 
@@ -724,6 +756,8 @@ Session 01a1371f-ae61-7fe1-99aa-eef142841ddf over arcs 1 to 4 (`c0e1e696`, `69ea
 | F1 | Medium; demonstrated in memory. A re-run of an old run's `publish-nightly` past retention reuses that run's `resolve` outputs, republishes a pruned name, and its prune deletes it | Known limit #377: the prune already removes it in the same run and nothing kept is touched; the fix would add a check to the release publisher for an operator error |
 | F2 | Low. `CLAUDE.md`'s nightly bullet still called it the only scheduled workflow besides `source-rebuild.yml`, though arc 2 added `verify-store-copies.yml` | Accepted |
 | F3 | Nit. The prune job's comment restated the job and implied a refusal path (D25 filters) | Accepted: one sentence |
+
+Round 2 (resumed, on `413531ff`): **CLEAN**. The loop converged.
 
 ## Post-implementation
 
