@@ -147,7 +147,7 @@ One arc, one PR, no stack (D-orch-1). Branch `worktree-wallet-followups-7` → `
 
 ## Post-implementation
 
-The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at e900f710. Specific to this plan:
+The contract is this plan plus [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at e900f710. Specific to this plan:
 - Step 1 is absent (`code_review: off`). Step 2 runs once over `git diff e900f710...HEAD` after Phase 3: `~/.claude/skills/codex/scripts/run-codex.sh <prompt> <worktree> high read-only gpt-6.1-sol`, resumed with `resume-codex.sh`; prompts under `~/.cache/nulo-backlog/wallet-followups-7/`; hard stop at three rounds; rounds logged in `lessons/phase-3.md`.
 - Approval boundary: a byte budget, a worker-wide or per-id bound, failing a dead generation's calls at session end, a new error code or persistent state is a plan change and stops for the orchestrator.
 - Close-out: file KL-1 and KL-2 as closed `known-limit` issues (dedupe first); promote nothing to `lessons.md` unless a retirement pays for it (8 KiB budget); delete `STATUS.md`. Teardown: slug `wallet-followups-7`, trunk `dev`, `implementations-plan/archive/wallet-followups-7/plan.md`.
