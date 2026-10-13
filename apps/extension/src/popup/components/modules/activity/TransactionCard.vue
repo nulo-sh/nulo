@@ -15,6 +15,7 @@ import TransactionCardLayout from "@/components/composite/activity/TransactionCa
 import { TxStatus, TxExecutionResult } from "@/wallet/services/transaction/client"
 
 /** Utils */
+import { STATUS_ICON_FILL } from "@/components/composite/activity/status-icon-fill"
 import { balanceFormatted } from "@/utils/amount.js"
 import { txAmount } from "@/utils/tx-amount"
 import { PriceServiceClient } from "@/wallet/services/price/client"
@@ -145,7 +146,7 @@ onBeforeUnmount(() => {
 		:txHash="props.tx.hash"
 	>
 		<template #badge>
-			<Icon :name="statusIcon" size="12" :color="statusColor" :class="$style.status_icon" />
+			<Icon :name="statusIcon" size="12" :color="STATUS_ICON_FILL[statusColor]" :class="$style.status_icon" />
 		</template>
 
 		<template v-if="transferTypeLabel || originLabel" #title-trailing>

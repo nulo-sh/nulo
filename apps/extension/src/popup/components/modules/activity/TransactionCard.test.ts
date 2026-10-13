@@ -11,7 +11,7 @@
 
 import { mount } from "@vue/test-utils"
 import { describe, expect, test, vi } from "vitest"
-import { OriginType, TransferType, TxStatus } from "@/wallet/services/transaction/spec"
+import { OriginType, TransferType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flushPromises } from "@vue/test-utils"
 import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
@@ -97,6 +97,16 @@ const mountCard = (tx: Record<string, unknown>, props: Record<string, unknown> =
 	mount(TransactionCard, { props: { tx, ...props }, global: { stubs: STUBS, components: { RowAction } } })
 
 describe("modules/activity/TransactionCard (settled)", () => {
+	test.each([
+		["mined", { status: TxStatus.Proposed, executionResult: TxExecutionResult.Success }, "check-circle", "txt-success"],
+		["reverted", { status: TxStatus.Proposed, executionResult: TxExecutionResult.AppLogicReverted }, "close-circle", "txt-danger"],
+		["dropped", { status: TxStatus.Dropped }, "close-circle", "txt-danger"],
+		["pending", { status: TxStatus.Pending }, "clock-circle", "gray"],
+	])("a %s tx's status icon fills with its state's status text token", (_label, over, name, fill) => {
+		const icon = mountCard({ ...dappTransferTx, ...over }).find(`[data-testid="stub-icon"][data-name="${name}"]`)
+		expect(icon.attributes("data-color")).toBe(fill)
+	})
+
 	test("dApp-initiated transfer renders BOTH transferTypeLabel and originLabel chips (regression pin)", () => {
 		const w = mountCard(dappTransferTx)
 		// transferTypeLabel from call.transfers[0].type

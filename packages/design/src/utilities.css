@@ -158,6 +158,18 @@
 	color: var(--txt-white);
 }
 
+.color--txt-warning {
+	color: var(--txt-warning);
+}
+
+.color--txt-danger {
+	color: var(--txt-danger);
+}
+
+.color--txt-success {
+	color: var(--txt-success);
+}
+
 .color--blue {
 	color: var(--blue);
 }
@@ -224,6 +236,18 @@
 
 .fill--white {
 	fill: var(--txt-white);
+}
+
+.fill--txt-warning {
+	fill: var(--txt-warning);
+}
+
+.fill--txt-danger {
+	fill: var(--txt-danger);
+}
+
+.fill--txt-success {
+	fill: var(--txt-success);
 }
 
 .fill--blue {

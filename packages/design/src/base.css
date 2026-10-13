@@ -122,7 +122,8 @@
 	--txt-white: rgba(255, 255, 255, 95%);
 	--txt-inverse: rgba(0, 0, 0, 90%);
 	--txt-warning: var(--yellow);
-	--txt-danger: var(--red);
+	/* Lighter than --red so it reads 4.5:1 on a pressed row (--nulo-surface-high), hovered and on the page. */
+	--txt-danger: #ff534b;
 	--txt-success: var(--green);
 
 	--white: #fff;

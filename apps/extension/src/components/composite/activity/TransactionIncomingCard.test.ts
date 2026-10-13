@@ -12,12 +12,13 @@ import TransactionIncomingCard from "./TransactionIncomingCard.vue"
 const STUBS = {
 	Flex: { template: '<div :class="$attrs.class" v-bind="$attrs"><slot /></div>', inheritAttrs: false },
 	Text: { template: "<span><slot /></span>" },
-	Icon: { template: '<span data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color"] },
+	Icon: { template: '<span data-testid="stub-icon" :data-name="name" :data-color="color" />', props: ["name", "size", "color"] },
 	TransactionCardLayout: {
 		template: `
 			<div data-testid="layout">
 				<span class="title">{{ title }}</span>
 				<span class="title-trailing"><slot name="title-trailing" /></span>
+				<slot name="badge" />
 				<span class="amount">{{ amount }}</span>
 				<span class="symbol">{{ amountSymbol }}</span>
 				<span v-if="amountFiat" data-testid="activity-fiat">{{ amountFiat }}</span>
@@ -39,6 +40,10 @@ const mountCard = (props: Record<string, unknown> = {}) =>
 	})
 
 describe("composite/TransactionIncomingCard", () => {
+	test("the status icon fills with the success text token", () => {
+		expect(mountCard().find('[data-testid="stub-icon"][data-name="check-circle"]').attributes("data-color")).toBe("txt-success")
+	})
+
 	test("formats the raw amount by token decimals with a + prefix", () => {
 		const w = mountCard()
 		expect(w.find(".amount").text()).toBe("+500")
