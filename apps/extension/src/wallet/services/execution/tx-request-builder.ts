@@ -194,7 +194,12 @@ export class TxRequestBuilder {
 						const fn = resolveCallFn(action, instances, artifacts)
 						const fnSelector = await FunctionSelector.fromNameAndParameters(fn.name, fn.parameters)
 						collected.calls.push(newCallFunctionCall(action, fn, fnSelector))
-						collected.txCalls.push({ contract: action.contract, method: action.method, args: action.args })
+						collected.txCalls.push({
+							contract: action.contract,
+							method: action.method,
+							args: action.args,
+							classId: await calledClassId(ctx, action.contract),
+						})
 						this.log("Call enqueued.")
 						break
 					}
@@ -202,7 +207,12 @@ export class TxRequestBuilder {
 						const artifact = requireArtifact(instances, artifacts, action.to)
 						const fn = validateEncodedCallFn(action, await findFunctionBySelector(artifact, action.selector))
 						collected.calls.push(newEncodedCallFunctionCall(action, fn))
-						collected.txCalls.push({ contract: action.to, method: fn.name, args: action.args })
+						collected.txCalls.push({
+							contract: action.to,
+							method: fn.name,
+							args: action.args,
+							classId: await calledClassId(ctx, action.to),
+						})
 						this.log("EncodedCall enqueued.")
 						break
 					}
@@ -552,6 +562,19 @@ async function buildSetAuthorizedCall(messageHash: Fr): Promise<{ functionCall: 
 	return {
 		functionCall,
 		txCall: { contract: getAuthRegistryAddress().toString(), method: fn.name, args: [messageHash, true] },
+	}
+}
+
+/**
+ * The node's current class, else the original one `instances` holds, as the PXE resolves a call to
+ * run it, read at build time. A failed lookup records none, which only withholds a mint figure.
+ */
+async function calledClassId(ctx: BuildContext, contract: string): Promise<string | undefined> {
+	try {
+		const live = await ctx.node.getContract(AztecAddress.fromStringUnsafe(contract))
+		return (live ?? ctx.instances.get(contract))?.currentContractClassId.toString()
+	} catch {
+		return undefined
 	}
 }
 
