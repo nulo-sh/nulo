@@ -26,3 +26,5 @@
 7. (nit) Two file headers restated the code. Fix: one sentence each; the two non-obvious whys moved onto their functions.
 
 **Round 2 (resumed): conditional approve.** All seven fixes verified closed. One new should-fix, accepted: the `${{ }}` span extractor stopped at a `}}` inside a quoted literal, so `format('}}{0}', secrets.X)` hid the read. Fix: a quote-aware extractor; mutation case. Scanning the whole text instead was tried and rejected: it flags `_extension-network-e2e.yml#network-e2e` on a shell comment that says "secrets".
+
+**Round 3 (resumed): approve.** "No NEW material findings or comment issues in arc 1."
