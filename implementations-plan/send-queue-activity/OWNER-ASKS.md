@@ -129,3 +129,33 @@ Items 1 and 2 extend that rule to dApp sends, which you left open (#218). The wa
 **Options.** A: as shipped. B: another icon or colour (amber, as "Unconfirmed"), or a State row word other than "Failed", named by you. C: an included-after-unconfirmed row moves to "Sent", the existing word.
 
 **Recommendation.** A for the look. C is truer than leaving "Unconfirmed" and needs no new words, but the page did not ask for it.
+
+## OA-8: A settled send's figure for a token of unknown decimals (#103, outside page 10's list)
+
+**Surface.** The settled transaction card on Home and History (`TransactionCard`), for a transfer of a token with no decimals getter.
+
+**What the page approved.** #103 names its surfaces: the in-flight and journal cards, the journal page, prices, the token fold, Home's balance, the token card, arrivals and the incoming card. On those, an amount whose token's decimals are unknown now shows no figure.
+
+**The gap.** The settled card is not on that list. It shows the amount in the decimals its transaction record stored when the wallet built the send, and for a token with no getter that count was never verified. So the same send can read "—" on its journal page and a figure on its settled card.
+
+**Options.**
+- **A. As is.** The settled card keeps the figure its record stored.
+- **B. Same rule as the listed surfaces.** No figure while the wallet's token for that contract has unknown decimals.
+
+**Recommendation.** B: one rule for every place a send's amount shows.
+
+**What ships now.** A.
+
+## OA-9: Where a held token of unknown decimals sorts (#103)
+
+**Surface.** The token list on Home and Holdings, and the Send picker, which share one order.
+
+**What changes with #103.** A funded token with no decimals getter now shows "—" for its amount, as approved. The order still sorts it among held tokens that have no price, by the amount it no longer shows.
+
+**Options.**
+- **A. As is.** It keeps its place among held, unpriced tokens.
+- **B. With the rows whose balance is unknown**, at the end of the list.
+
+**Recommendation.** B: a row that shows no amount should not be ranked by one.
+
+**What ships now.** A.
