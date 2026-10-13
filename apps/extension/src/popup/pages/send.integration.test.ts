@@ -597,7 +597,7 @@ describe("send page with the real fee card — a sponsor that can't cover the fe
 	test("its verdict lands: the sponsor is set aside, the account's Fee Juice pays, and the send goes through review", async () => {
 		const { w, release } = await heldEstimate()
 		await release()
-		expect(notice(w).text()).toBe("The sponsor can't cover this fee right now, so Public Fee Juice pays it.")
+		expect(notice(w).text()).toBe("The sponsor you chose can't cover this fee right now. Public Fee Juice pays it instead.")
 		expect(feeTrigger(w)).toBe("public")
 		expect(offered(w, "sponsored")).toBe(false)
 		expect(settled(w)).toMatchObject({ you: "exposed", action: "review" })

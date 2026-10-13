@@ -170,7 +170,7 @@ test.skipIf(!hasConfig)(
 		)
 		expect(await triggerText(page)).toBe(nuloTrigger)
 		const notice = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.textContent?.trim())
-		expect(notice).toBe("The sponsor can't cover this fee right now, so Sponsored pays it.")
+		expect(notice).toBe("The sponsor you chose can't cover this fee right now. The default sponsor pays it instead.")
 		await shotSend(page, "fee-sponsor-short", "fee-sponsor-short")
 		const region = await page.$eval('[data-testid="fee-sponsor-short"]', (el) => el.parentElement?.getAttribute("data-testid"))
 		expect(region).toBe("fee-sponsor-live")

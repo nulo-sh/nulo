@@ -127,6 +127,11 @@ const setAsideSponsorIds = reactive(new Set())
 const lastVerdict = ref(null)
 /** Outside Send: the sponsor a short verdict dropped the selection of, until the person picks. */
 const droppedForVerdictId = ref(null)
+/** The sponsor paying when the transaction last changed, while it still pays and until the estimate
+ *  for the new transaction ends: its earlier verdict was for another fee limit. Only the paying
+ *  sponsor is read, so no other row can have a read in flight. */
+const recheckFpcId = ref(null)
+const verifyingSponsorId = computed(() => (props.isEstimating ? recheckFpcId.value : null))
 
 /** The FPC list the store has read for the live identity. That read is never forced, so it usually
  *  lands well before the forced balance read lets the snapshot commit: the sponsor rows answer early. */
@@ -144,6 +149,7 @@ const methods = computed(() =>
 	buildFeeMethods(knownFpcs.value, isInitComplete.value ? gasBalances.value : undefined, {
 		shortSponsorIds,
 		setAsideSponsorIds,
+		verifyingSponsorId: verifyingSponsorId.value,
 	}),
 )
 
@@ -274,11 +280,17 @@ const feePayer = computed(() => {
 	return m.fpc?.isProtocol === true ? "sponsor" : "unvouched"
 })
 
-const sponsorShortText = computed(() =>
-	effectiveMethod.value
-		? `The sponsor can't cover this fee right now, so ${effectiveMethod.value.title} pays it.`
-		: "The sponsor can't cover this fee right now.",
-)
+const SPONSOR_SHORT = "The sponsor you chose can't cover this fee right now."
+/** The payer that takes over, named by kind: a sponsor's row title can be the short one's too. */
+const takeoverName = (m) => {
+	if (m?.type === "fj") return "Public Fee Juice"
+	if (m?.type === "private_fpc") return "Private FPC"
+	return m?.type === "fpc" && m.fpc?.isProtocol === true ? "The default sponsor" : null
+}
+const sponsorShortText = computed(() => {
+	const name = takeoverName(effectiveMethod.value)
+	return name ? `${SPONSOR_SHORT} ${name} pays it instead.` : SPONSOR_SHORT
+})
 
 /** `short` while the notice shows, `funded` while the sponsor a funded verdict named pays. */
 const sponsorFunding = computed(() => {
@@ -310,8 +322,16 @@ const derivedSettings = computed(() => {
 const feeJuiceMissing = computed(() => {
 	// Send: only confirmed exhaustion — every applicable payer read, none can pay — whatever is selected.
 	if (sendSelection.value) return sendSelection.value.kind === "none"
-	return selectedMethodHasNoGas()
+	return selectedMethodHasNoGas() || noPayerCanPay()
 })
+/** Send's public-side walk, with this card's pick standing in for Send's saved one: a hand-added
+ *  sponsor counts only once picked, and an unread balance never counts as empty. */
+const noPayerCanPay = () => {
+	if (useEmbeddedFee.value || props.lockedMethod || !snapshotCommitted.value) return false
+	const know = { fpcs: knownFpcs.value, balances: gasBalances.value, shortSponsorIds, setAsideSponsorIds }
+	const pick = selectedMethod.value ? recordOf(selectedMethod.value) : undefined
+	return resolveSendSelection("public", know, pick).kind === "none"
+}
 const selectedMethodHasNoGas = () => {
 	if (!isInitComplete.value || useEmbeddedFee.value) return false
 	// Unknown balances (failed/timed-out read, silent retry pending) never
@@ -767,6 +787,7 @@ const forgetVerdicts = () => {
 	setAsideSponsorIds.clear()
 	lastVerdict.value = null
 	droppedForVerdictId.value = null
+	recheckFpcId.value = null
 }
 
 const recommitStillValid = (scope) => {
@@ -785,6 +806,7 @@ watch(
 		const row = methods.value.find((m) => m.type === "fpc" && m.fpc?.id === verdict.fpcId)
 		if (!row || !sameFieldAddress(verdict.address, row.fpc.address ?? "")) return
 		lastVerdict.value = { fpcId: verdict.fpcId, funded: verdict.funded }
+		if (recheckFpcId.value === verdict.fpcId) recheckFpcId.value = null
 		if (verdict.funded) {
 			shortSponsorIds.delete(verdict.fpcId)
 			setAsideSponsorIds.delete(verdict.fpcId)
@@ -803,6 +825,22 @@ watch(
 // A short verdict holds for one fee limit, so a new priority or transaction offers its row again;
 // the fallback's own re-estimate changes neither.
 watch([selectedPriority, () => props.txShape], () => shortSponsorIds.clear())
+watch(effectiveMethod, (m) => {
+	if (m?.fpc?.id !== recheckFpcId.value) recheckFpcId.value = null
+})
+watch(
+	() => props.txShape,
+	() => {
+		const m = effectiveMethod.value
+		recheckFpcId.value = m?.type === "fpc" ? (m.fpc?.id ?? null) : null
+	},
+)
+watch(
+	() => props.isEstimating,
+	(estimating) => {
+		if (!estimating) recheckFpcId.value = null
+	},
+)
 watch(
 	() => [props.profile, props.network, props.account],
 	async () => {

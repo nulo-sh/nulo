@@ -107,6 +107,7 @@ const STUBS = {
 					:data-fpc-id="m.fpc?.id"
 					:data-disabled="m.disabled ? 'true' : 'false'"
 					:data-checking="m.checking ? 'true' : 'false'"
+					:data-verifying="m.verifying ? 'true' : 'false'"
 					:data-reason="m.disabledReason"
 					:data-spend="m.spend"
 					@click="!m.disabled && $emit('update:modelValue', m)"
@@ -2417,8 +2418,8 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			...FEE,
 			sponsorFunding: { fpcId: "s1", address: NULO_AT, funded, ...over },
 		})
-		const PAYS_PUBLIC = "The sponsor can't cover this fee right now, so Public Fee Juice pays it."
-		const NO_PAYER = "The sponsor can't cover this fee right now."
+		const PAYS_PUBLIC = "The sponsor you chose can't cover this fee right now. Public Fee Juice pays it instead."
+		const NO_PAYER = "The sponsor you chose can't cover this fee right now."
 		const picked = (origin: string, id = "s1") => ({ [account.address]: { [origin]: { type: "fpc", fpc: { id } } } })
 		const row = (w: ReturnType<typeof mount>, id: string) => w.get(`[data-testid="pick-fpc"][data-fpc-id="${id}"]`)
 		const notice = (w: ReturnType<typeof mount>) => {
@@ -2592,6 +2593,69 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			expect(lastEmittedSettings(w)).toMatchObject({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
 		})
 
+		describe("a transaction change while the sponsor pays", () => {
+			const verifying = (w: ReturnType<typeof mount>) => row(w, "s1").attributes("data-verifying")
+			const changedWhilePaying = async () => {
+				const w = await pickedWithGas({ txShape: "t1" })
+				await w.setProps({ feeEstimate: verdict(true) })
+				await w.setProps({ txShape: "t2", feeEstimate: null, isEstimating: true })
+				await flushPromises()
+				return w
+			}
+
+			test("its row loads, still pickable, until its verdict lands", async () => {
+				const w = await changedWhilePaying()
+				expect(verifying(w)).toBe("true")
+				expect(row(w, "s1").attributes("data-disabled")).toBe("false")
+				expect(activeType(w)).toBe("fpc")
+
+				await w.setProps({ feeEstimate: verdict(true), isEstimating: false })
+				await flushPromises()
+				expect(verifying(w)).toBe("false")
+			})
+
+			test("an estimate that ends without a verdict ends the loading", async () => {
+				const w = await changedWhilePaying()
+				await w.setProps({ feeEstimate: null, isEstimating: false })
+				await flushPromises()
+				expect(verifying(w)).toBe("false")
+			})
+
+			test.each([
+				["no estimate runs", { txShape: "t2" }],
+				["the priority changed instead", { isEstimating: true }],
+			])("%s: no read is in flight for the row, so it never loads", async (_case, props) => {
+				const w = await pickedWithGas({ txShape: "t1" })
+				await w.setProps({ feeEstimate: verdict(true) })
+				if (!("txShape" in props)) await w.get('[data-testid="pick-fast"]').trigger("click")
+				await w.setProps(props)
+				await flushPromises()
+				expect(verifying(w)).toBe("false")
+			})
+
+			test("another payer is picked during the read: the sponsor's row stops loading", async () => {
+				const w = await changedWhilePaying()
+				await w.get('[data-testid="pick-fj"]').trigger("click")
+				await flushPromises()
+				expect(activeType(w)).toBe("fj")
+				expect(verifying(w)).toBe("false")
+			})
+		})
+
+		test("a hand-added sponsor short, Nulo's takes over: the notice names the default sponsor", async () => {
+			mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, NULO, HAND])
+			mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: "0" })
+			storageBacking[SEND_KEY] = picked("public", "s2")
+			const w = mountSend({ originPrivacy: "public" })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+
+			await w.setProps({ feeEstimate: verdict(false, { fpcId: "s2", address: HAND_AT }) })
+			await flushPromises()
+			expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s1" } })
+			expect(notice(w)).toBe("The sponsor you chose can't cover this fee right now. The default sponsor pays it instead.")
+		})
+
 		test("an identity switch forgets the verdict; a replaced profile object with the same key does not", async () => {
 			const w = await pickedWithGas()
 			await short(w)
@@ -2618,7 +2682,7 @@ describe("FeeSettingsCard — Send: the fee source follows the transfer's origin
 			await flushPromises()
 			await short(w)
 			expect(activeType(w)).toBe("private_fpc")
-			expect(notice(w)).toBe("The sponsor can't cover this fee right now, so Private FPC pays it.")
+			expect(notice(w)).toBe("The sponsor you chose can't cover this fee right now. Private FPC pays it instead.")
 
 			await w.setProps({ originPrivacy: "private" })
 			await flushPromises()
@@ -2670,7 +2734,7 @@ describe("FeeSettingsCard — a sponsor that can't cover this fee, outside Send"
 			await vi.advanceTimersByTimeAsync(0)
 			expect(lastEmittedSettings(w)).toBeUndefined()
 			expect(active()).toBeUndefined()
-			expect(notice().text()).toBe("The sponsor can't cover this fee right now.")
+			expect(notice().text()).toBe("The sponsor you chose can't cover this fee right now.")
 			expect(storageBacking[FEE_METHOD_LS_KEY]).toEqual(saved ? { [account.address]: saved } : undefined)
 
 			await vi.advanceTimersByTimeAsync(INIT_RETRY_BACKOFF_MS[0])
@@ -2700,13 +2764,13 @@ describe("FeeSettingsCard — a card that falls back on a short sponsor", () => 
 			case: "public Fee Juice held",
 			gas: { publicFeeJuice: "5", privateFeeJuice: null },
 			kind: "fj",
-			text: "The sponsor can't cover this fee right now, so Public Fee Juice pays it.",
+			text: "The sponsor you chose can't cover this fee right now. Public Fee Juice pays it instead.",
 		},
 		{
 			case: "nothing else can pay",
 			gas: { publicFeeJuice: "0", privateFeeJuice: null },
 			kind: undefined,
-			text: "The sponsor can't cover this fee right now.",
+			text: "The sponsor you chose can't cover this fee right now.",
 		},
 	])("$case: the selection moves along Send's public walk, unsaved, and the notice names who pays", async ({ gas, kind, text }) => {
 		mocks.getFpcs.mockResolvedValue([NULO])
@@ -2720,6 +2784,49 @@ describe("FeeSettingsCard — a card that falls back on a short sponsor", () => 
 		expect((lastEmittedSettings(w) as { paymentMethod?: { kind: string } } | undefined)?.paymentMethod?.kind).toBe(kind)
 		expect(w.get('[data-testid="fee-sponsor-short"]').text()).toBe(text)
 		expect(mocks.saveFeePick).not.toHaveBeenCalled()
+		w.unmount()
+	})
+})
+
+describe("FeeSettingsCard — the fee-juice nudge outside Send", () => {
+	const NULO = { id: "s1", type: 1, name: "Sponsored", isProtocol: true, address: `0x${"0a".repeat(32)}` }
+	const HAND = { id: "s2", type: 1, name: "Dev sponsor", isProtocol: false, address: `0x${"0b".repeat(32)}` }
+	const PRIVATE_FPC = { id: "p1", type: 2, name: "Private FPC", isProtocol: true }
+	const SHORT = {
+		maxFee: "1000",
+		maxFeeFormatted: "0.000000000000001",
+		sponsorFunding: { fpcId: "s1", address: NULO.address, funded: false },
+	}
+	const nudge = (w: ReturnType<typeof mount>) => w.find('[data-testid="send-fee-nudge"]')
+
+	test.each([
+		{ case: "both balances read empty", gas: { publicFeeJuice: "0", privateFeeJuice: "0" }, shows: true },
+		{ case: "the private balance unread", gas: { publicFeeJuice: "0", privateFeeJuice: null }, shows: false },
+	])("$case, Nulo's sponsor set aside by its check: the nudge shows only on confirmed empties", async ({ gas, shows }) => {
+		mocks.getFpcs.mockResolvedValue([PRIVATE_FPC, NULO])
+		mocks.getGasBalances.mockResolvedValue(gas)
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(nudge(w).exists()).toBe(false)
+
+		await w.setProps({ feeEstimate: SHORT })
+		await flushPromises()
+		expect(nudge(w).exists()).toBe(shows)
+		if (shows) expect(nudge(w).text()).toContain("You have no fee juice yet")
+		w.unmount()
+	})
+
+	test("a sponsor added by hand stops the nudge only once picked", async () => {
+		mocks.getFpcs.mockResolvedValue([HAND])
+		mocks.getGasBalances.mockResolvedValue({ publicFeeJuice: "0", privateFeeJuice: null })
+		const w = mount(FeeSettingsCard, { props: baseProps(), global: { stubs: STUBS } })
+		await flushPromises()
+		expect(nudge(w).exists()).toBe(true)
+
+		await w.get('[data-testid="pick-fpc"][data-fpc-id="s2"]').trigger("click")
+		await flushPromises()
+		expect(lastEmittedSettings(w)).toEqual({ paymentMethod: { kind: "fpc", fpcId: "s2" } })
+		expect(nudge(w).exists()).toBe(false)
 		w.unmount()
 	})
 })
@@ -2748,7 +2855,7 @@ describe("FeeSettingsCard — the sponsor notice's region in a dApp's embedded p
 			},
 		})
 		await flushPromises()
-		expect(live().text()).toBe("The sponsor can't cover this fee right now.")
+		expect(live().text()).toBe("The sponsor you chose can't cover this fee right now.")
 
 		await w.get('[data-testid="send-fee-back-embedded"]').trigger("click")
 		await flushPromises()

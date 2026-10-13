@@ -43,6 +43,9 @@ export interface FeeMethodOption {
 	spend?: string
 	/** The read that answers this row has not landed: it is drawn loading and is never picked. */
 	checking?: boolean
+	/** A sponsor whose funding read for the current transaction is in flight: drawn loading, and it
+	 *  can still be picked. */
+	verifying?: boolean
 	fpc?: { id: string; type: FpcType; name?: string; isProtocol?: boolean; address?: string } | null
 }
 
@@ -185,6 +188,8 @@ export interface FeeMethodsOptions {
 	balancesPending?: boolean
 	/** Its FPC list is unread too: every row is `checking`. */
 	fpcsPending?: boolean
+	/** The sponsor whose funding read is in flight: its row is `verifying`. */
+	verifyingSponsorId?: string | null
 }
 
 /**
@@ -247,6 +252,7 @@ function sponsorOption(fpc: RegisteredFpc, options: FeeMethodsOptions | undefine
 		option.disabledReason = "can't pay now"
 	}
 	if (options?.setAsideSponsorIds?.has(fpc.id)) option.setAside = true
+	if (!option.disabled && !option.setAside && options?.verifyingSponsorId === fpc.id) option.verifying = true
 	return option
 }
 

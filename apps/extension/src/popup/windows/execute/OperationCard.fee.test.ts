@@ -226,7 +226,7 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 	const SPONSOR_AT = field(0x0a11ce5c0ffeen)
 	const NULO_ROW = { ...NULO_SPONSOR, address: SPONSOR_AT }
 	const withVerdict = (funded: boolean) => ({ ...ESTIMATE, sponsorFunding: { fpcId: "s1", address: SPONSOR_AT, funded } })
-	const NO_PAYER = "The sponsor can't cover this fee right now."
+	const NO_PAYER = "The sponsor you chose can't cover this fee right now."
 	const notice = (w: VueWrapper) => w.find('[data-testid="fee-sponsor-short"]')
 
 	test("short: the card withdraws the sponsor and says why, and the pick that replaces it is what it hands the window", async () => {
@@ -267,7 +267,7 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 		})
 		const w = await mountCard(
 			{ ...op, sponsorFunding: lure, opts: { ...op.opts, sponsorFunding: lure } },
-			{ name: "The sponsor can't cover this fee right now, so Evil pays it." },
+			{ name: "The sponsor you chose can't cover this fee right now. Evil pays it instead." },
 		)
 		await w.setProps({ feeEstimate: withVerdict(true) })
 		await flushPromises()

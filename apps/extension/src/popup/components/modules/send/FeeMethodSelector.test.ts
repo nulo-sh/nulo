@@ -177,6 +177,20 @@ describe("FeeMethodSelector — rows still loading", () => {
 		await w.find('[data-testid="send-fee-method-private"]').trigger("click")
 		expect(w.emitted("update:modelValue")).toBeUndefined()
 	})
+
+	test("a sponsor whose funding read is in flight loads instead of reading free, and can still be picked", async () => {
+		const sponsor = { ...baseMethods[2], verifying: true }
+		const w = factory({ methods: [baseMethods[0], sponsor] })
+		const row = w.get('[data-testid="send-fee-method-sponsored"]')
+		expect(row.attributes("aria-busy")).toBe("true")
+		expect(row.attributes("data-verifying")).toBe("true")
+		expect(row.attributes("disabled")).toBeUndefined()
+		expect(row.text()).not.toContain("free")
+		expect(row.find('[aria-hidden="true"]').classes().join(" ")).toMatch(/skeleton/)
+
+		await row.trigger("click")
+		expect(w.emitted("update:modelValue")?.at(-1)).toEqual([sponsor])
+	})
 })
 
 describe("FeeMethodSelector — in the real menu", () => {
