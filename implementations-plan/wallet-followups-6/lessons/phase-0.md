@@ -41,3 +41,11 @@ Verdict: `conditional approve` (conditions: a #262 test that fails on base; clos
 ### Final pass, Codex (gpt-6.1-sol, high; fresh session 01a13503)
 
 Verdict: `approve`. Medium findings folded in: `wireInstance` needs `currentContractClassId` for the new supplementary parse; `service.test.ts:631` must reorder its awaits under the row-id lock (assertions unchanged); two e2e files need provisioning the local agent run lacks; keep the full 44-artifact scan (3.4 s measured). It confirmed the row-id lock over the same-turn re-read.
+
+### Round 2, proportion rule (#262 only; Codex session 01a1350d, Opus Plan lens)
+
+The common brief gained the owner's proportion rule after the final pass: a finding becomes a change only with a reachable trigger. Both legs re-judged #262 and answered `known limit: build nothing`.
+
+- Codex: the only constructed trigger is a service-level multi-row restore overlapping a chain deletion, with both timing windows hit; an ordinary backup import cannot activate the importing profile during the batch (restore-pending gate). A same-turn re-read adds no mechanism but still has no trigger behind it.
+- Opus: a person's remove-then-add cannot pass the drain, since the sweep registers its next tracked delete before any admission drains `pendingWrites`; the only gap is between the snapshot read and the first delete. Round 1's restore trigger does not exist on base: import remaps rows to the new, inactive profile, and `deleteNetwork` purges only the active profile's chain. Opus withdrew its round-1 push for the re-read.
+- Planner: D-262 rewritten to build nothing, with a `Known limits:` line; phase 4 (purge) and its tests dropped; arc 1 closes #345, #332, #331. Claim that did not hold: round 1's I2 (a reachable restore race).

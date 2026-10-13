@@ -52,6 +52,8 @@ The playground sends artifacts through the wallet channel (`apps/playground/src/
 
 ## Token chain purge (#262)
 
+Planner's disposition after the panel: a known limit, nothing built (plan § Decision ledger, D-262).
+
 - `clearChainState` is at `token/service.ts:228-255` (the issue's `:200-216` moved). It drains `pendingWrites`, snapshots `getValues()` filtered by `(profileId, chainId)`, then `purgeRows` deletes each by id and emits `onTokenDeleted` for the snapshot row.
 - Reached from `NetworkService.deleteNetwork` (`network/service.ts:542-566`, network lock held, reservation set first) and `NetworkService.purgeForProfile` (`:943-960`).
 - Ids: `nextNumericId` is max + 1 (`id-allocators.ts:17-30`), so deleting the highest id frees it for the next add or restore.
