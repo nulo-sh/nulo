@@ -2,7 +2,7 @@
 
 ## Bun & deps
 
-- An incremental `bun install` leaves a removed dependency on disk, so a leftover import passes locally and fails on CI: prove removals fresh (1.4.2). [Evidence](archive/vitest-vite8-dedupe/plan.md#fresh-install)
+- An incremental `bun install` leaves a removed dependency on disk, so a leftover import passes locally, fails on CI: prove removals fresh (1.4.2). [Evidence](archive/vitest-vite8-dedupe/plan.md#fresh-install)
 - Under the isolated linker, root `bunx <tool>` fetches npm `@latest`, past lockfile and age gate: use workspace scripts (1.4.2). [Evidence](archive/plans-scaffolding/plan.md#root-bunx)
 - When one `bun run --parallel` leg fails, Bun SIGINTs the rest (exit 130): blame the leg that printed `Exited with code N` (1.4.2). [Evidence](archive/isolated-linker-store/plan.md#exit-130)
 
@@ -18,14 +18,14 @@
 
 - A `pull_request` run takes workflows from the merge ref but builds `head.sha`, so a later `dev` fix is absent; a conflicted PR gets no run: merge `dev` first. [Evidence](archive/dedup-ledger/plan.md#merge-ref), [more](archive/accessibility-1/plan.md)
 - A job needing a skipped job is skipped unless its `if` calls a status function; `always()` also runs after a cancel: use `always() && !cancelled()`. [Evidence](archive/release-pipeline-hardening/plan.md#always)
-- Never skip required aggregators. PR workflows queue per head commit and cancel only on dispatch; `pr-supersede.yml` cancels old heads, re-reading the head before each cancel; a cancelled run still posts FAILURE on its old head. [Evidence](ci-release-supply/plan.md#arc-1-workflows)
+- Never skip required aggregators. PR runs queue per head, cancel only on dispatch; `pr-supersede.yml` cancels old heads, re-reading heads first; a cancelled run still posts FAILURE on its head. [Evidence](ci-release-supply/plan.md#arc-1-workflows)
 - `git diff -M`'s R100 is not byte identity (compare blob ids and modes), and a pathspec splits a move across it into a delete and an add. [Evidence](archive/plans-scaffolding/plan.md#renames)
 - A `gh stack` runs the plans gate on every arc head, so an arc cannot link a later arc's file; after the squash merge, merging `dev` into the old head is add/add. [Evidence](archive/ux-feedback/plan.md#stack-gate), [more](archive/amount-honesty/plan.md#add-add)
 
 ## Extension runtime
 
 - A popup-to-background call rejects after 60 s unless its client overrides `getRequestTimeoutMs`: one awaiting a proof fails while the send lands. [Evidence](archive/e2e-reliability-fixes/plan.md#rpc-60s)
-- `PopupManager` mounts every popup at start and never unmounts it: gate setup on `show` or a `v-if`. A profile switch elsewhere updates open pages in place: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
+- `PopupManager` mounts every popup at start and never unmounts it: gate setup on `show` or `v-if`. A profile switch elsewhere updates open pages in place: reset held secrets on a profile-id change. [Evidence](archive/home-holdings-pin/plan.md#popup-mounts), [more](archive/security-ui-1/lessons/phase-2.md)
 - `EventHandler.invoke` drops an async handler's promise: awaiting it waits for nothing, and a rejection escapes. [Evidence](archive/backup-restore-corruption-fix/plan.md#async-events)
 - A typed error survives only hops that name it (`walletErrorFromPayload`, `classifyOperationCatch`, `toWalletResponseError`); `viaPxe` rethrows `Error`. [Evidence](archive/harden-security-prerelease/plan.md#typed-errors)
 - EntityStorage's `getAll()` hides undecodable rows, so a purge, dedupe or max+1 id misses them: key off `getKeys()`. [Evidence](archive/backup-restore-security-hardening/plan.md#hidden-rows)
@@ -33,10 +33,9 @@
 - An error message carries text the log redactor never sees (`JSON.parse` quotes its input): log a fixed category. [Evidence](archive/backup-log-hygiene/plan.md#error-text)
 - Classify a dApp call by address, selector and arguments, never its name; validate both sides before comparing normalised keys. [Evidence](archive/dapp-preexisting-fee/plan.md#classify), [more](archive/grant-check-address-case/plan.md#normalise)
 - A MAC binds only what it names: key it on the storage key (a stored `id` moves with its row); refuse on failure, never self-heal. An address binds its original class: check an artifact against it. The wallet's PXE reports that class for every instance; a call runs the node's current one (`node.getContract`). [Evidence](archive/mac-identity-binding/plan.md#mac-scope), [more](archive/security-fixes-1/lessons/phase-6.md), [more](archive/tokens-and-balances/lessons/phase-3.md)
-- On Chrome, `bun run dev` runs the popup under Chrome's baseline policy, not the manifest CSP: check CSP on a production build. [Evidence](archive/code-followups-2/lessons/phase-2.md)
+- `bun run dev` runs Chrome's popup under its baseline policy, not the manifest CSP: check CSP on a production build. [Evidence](archive/code-followups-2/lessons/phase-2.md)
 - A dropped port reconnects under a mounted page and replays nothing: read config through `useConfigRead`. [Evidence](archive/wallet-followups/lessons/phase-4.md)
 - A balances fuzz model owes what the store's observers adopt, and only where it holds an entry: owe rules keyed on failure commits over- and under-owed. [Evidence](archive/wallet-followups-2/lessons/phase-4.md)
-- Firefox's `storage.local.set` refuses a Vue reactive Proxy Chrome serialises: store plain data. [Evidence](archive/wallet-followups-3/plan.md)
 
 ## Aztec
 
@@ -44,11 +43,11 @@
 - Blocks above the proven tip can be pruned and a symbolic tag can name another fork per call: pin reads to one block hash; reconcile records above the tip. [Evidence](archive/incoming-public-transfers/plan.md#pruning)
 - The node client retries a failed POST but not a 4xx refusal, so a refused retry can hide a send that landed (6.0.0-rc.1). [Evidence](archive/failed-send-check/plan.md#node-retries)
 - HandshakeRegistry (6.0.0-rc.1): a PXE sync of an account without its keys skips its handshakes for good (only a gated sandbox shows it); a pair's first send uses it for every token, and the PXE takes a note's index (per token, sender, recipient) at proving: two such sends in flight collide. [Evidence](archive/hd-import-handshake-loss/plan.md#handshake-cursor), [more](archive/hd-same-token-concurrent-sends/plan.md#note-index)
-- Half of field elements are no Aztec address and `0x${"a".repeat(64)}` exceeds the modulus: check fixture addresses (`isValidAztecAddress`). [Evidence](archive/hd-behaviour-alignment/plan.md#fixture-addresses)
+- Half of field elements are no Aztec address and `0x${"a".repeat(64)}` exceeds the modulus: check fixture addresses (`isValidAztecAddress`). `schemas.Fr.safeParse` throws on `""` or `"abc"` (6.0.0-rc.1). [Evidence](archive/hd-behaviour-alignment/plan.md#fixture-addresses), [more](archive/dapp-ingress-grants/lessons/phase-3.md)
 
 ## Agent tooling
 
 - Agent Bash (zsh 5.9): `set -e` ignores the left of `&&`, a pipe returns its last stage's status, `$FILES` stays one word: test each exit code. [Evidence](archive/stable-release/plan.md#agent-shell)
-- `pgrep -f` matches the agent's own `zsh -c` wrapper: signal your launcher's pgid, never `$$`/`$PPID`; a signal-killed Node child keeps `exitCode` null, so wait on `signalCode` too. [Evidence](archive/harden-findings-remediation/plan.md#pgrep), [more](archive/code-followups-2/lessons/phase-2.md)
-- Under Puppeteer mobile emulation, `innerWidth` grows to the content: compare `scrollWidth` with the viewport width you set (25.8). [Evidence](archive/landing-store-buttons/plan.md#mobile-emulation-width)
-- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on the base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base), [more](archive/code-followups-1/plan.md)
+- `pgrep -f` matches its own `zsh -c` wrapper and any agent prompt naming the pattern: anchor it (`^(bun|node) .*vitest`); signal your launcher's pgid, not `$$`/`$PPID`; a signal-killed Node child's `exitCode` is null: wait on `signalCode`. [Evidence](archive/harden-findings-remediation/plan.md#pgrep), [more](archive/code-followups-2/lessons/phase-2.md), [more](archive/dapp-ingress-grants/lessons/phase-1.md)
+- Under Puppeteer mobile emulation, `innerWidth` grows to the content: compare `scrollWidth` with the width you set (25.8). [Evidence](archive/landing-store-buttons/plan.md#mobile-emulation-width)
+- Take a red/green proof's old copy from the base SHA, never `HEAD`; rerun an environmental-looking red on base first; grep a green run for a suspect log line. [Evidence](archive/firefox-first-class-spike/plan.md#base-copy), [more](archive/aztec-5.0.1-line/plan.md#rerun-base), [more](archive/code-followups-1/plan.md)

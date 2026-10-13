@@ -3,10 +3,13 @@
  * lifecycle FSM in-process against FakeBrowserApi storage + a Profile stub — NO
  * Aztec sandbox / PXE / bb / browser. DappSession is PXE-free AND bb-free (pure
  * storage + profile scoping), so this is the cleanest composition target — the
- * "second harness shape" (no shared PXE port). See
+ * "second harness shape" (no shared PXE port). The capability negotiation runs the
+ * real dispatcher over it, with stub network, account, execution and window services. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
-import { describe, expect, test } from "vitest"
+import { beforeAll, describe, expect, test } from "vitest"
+import { type IDappInteractionRunner, WalletSdkDispatcher } from "@nulo/wallet-bridge"
+import { withHeader } from "@nulo/wallet-bridge/testing"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { ConfigStore } from "@/wallet/config"
@@ -107,5 +110,59 @@ describe("DappSessionService composition — in-process, no sandbox", () => {
 		void onProfileDeleted
 		await service.purgeForProfile("p1")
 		expect(await service.getDappSessions()).toHaveLength(0)
+	})
+})
+
+describe("capability negotiation through the real dispatcher", () => {
+	// __VERSION__ is a build-time define; the answer to requestCapabilities reads it.
+	beforeAll(() => {
+		;(globalThis as { __VERSION__?: string }).__VERSION__ = "test"
+	})
+
+	const CLASS_A = `0x${"0a".repeat(32)}`
+	const CLASS_B = `0x${"0b".repeat(32)}`
+	const classes = (...ids: string[]) => ({ type: "contractClasses", classes: ids, canGetMetadata: true })
+
+	test("a contract-classes widening opens the window once and persists; a request inside it opens none", async () => {
+		const { service } = await makeHarness()
+		const row = await service.addDappSession({ url: ORIGIN }, [], [], AccessLevel.Transactions, "0")
+		await service.setCapabilityGrants(row.id, [{ capability: classes(CLASS_A), grantedAt: 1 }] as GrantedCapabilityRecord[])
+		const windows: unknown[][] = []
+		const interaction = {
+			execute: async () => {
+				throw new Error("no send in this test")
+			},
+			requestCapabilities: async (params: { delta: unknown[] }) => {
+				windows.push(params.delta)
+				return { granted: params.delta }
+			},
+		} as unknown as IDappInteractionRunner
+		const network = { getNetworksRaw: async () => [{ id: "net-0", chainId: 0 }] }
+		const account = { provisionDefaultAccount: async () => {}, getAccounts: async () => [] }
+		const execution = { executeOperations: async () => [] }
+		const dispatcher = new WalletSdkDispatcher(
+			network as never,
+			account as never,
+			execution,
+			interaction,
+			service,
+			new LoggerStore(new ConfigStore()),
+		)
+		const ctx = {
+			chainId: 0,
+			profileId: "p1",
+			origin: ORIGIN,
+			sessionId: "wire-session",
+			fence: { profileId: "p1", epoch: 0, session: 1 },
+		}
+		const request = (...ids: string[]) =>
+			dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [classes(...ids)] })], ctx)
+
+		await request(CLASS_A, CLASS_B)
+		expect(windows).toEqual([[classes(CLASS_A, CLASS_B)]])
+		expect((await service.getCapabilityGrants(row.id)).map((g) => g.capability)).toEqual([classes(CLASS_A, CLASS_B)])
+
+		await request(CLASS_B)
+		expect(windows).toHaveLength(1)
 	})
 })

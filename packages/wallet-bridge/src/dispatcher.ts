@@ -271,8 +271,10 @@ export class WalletSdkDispatcher {
 			throw InvalidWalletArgumentsError.forMethod(methodName)
 		}
 
-		// Legs are parsed only when they re-enter dispatch, so a popup leg is refused here, before any
-		// leg runs. A stock SDK's batch union already omits these; a raw protocol client is not bound by it.
+		// Legs are parsed only when they re-enter dispatch, so a `BATCH_REFUSED_METHODS` leg is refused
+		// here, before any leg runs. `requestCapabilities` is not in that set: batched, it opens its
+		// window and answers as a top-level call. A stock SDK's batch union already omits the refused
+		// methods; a raw protocol client is not bound by it.
 		if (methodName === "batch") {
 			for (const leg of args[0] as Array<{ name: string }>) {
 				if (BATCH_REFUSED_METHODS.has(leg.name)) {

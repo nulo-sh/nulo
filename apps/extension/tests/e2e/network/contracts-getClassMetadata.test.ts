@@ -1,6 +1,6 @@
-import { expect, inject } from "vitest"
+import { inject } from "vitest"
 import { clickByTestId, test } from "../fixtures/extension"
-import { callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
+import { assertPgOk, callExpectingNoPopup, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
 import { waitForPopup, approveCapabilities } from "../fixtures/popups"
 import type { AztecTestConfig } from "../fixtures/aztec"
 
@@ -8,12 +8,8 @@ const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
 /**
- * Test #19 — getContractClassMetadata is silent on default sessions.
- *
- * Uses `contractClasses` capability. Class id is a Fr — for the test we
- * pass the token address as a class-id substitute (the call may return an
- * empty/fail result; the test verifies the SILENT-PATH dispatch, not the
- * data correctness).
+ * Test #19 — getContractClassMetadata is silent on default sessions: a held `contractClasses`
+ * grant for every class admits the deployed token's real class without a window.
  */
 test.skipIf(!hasConfig)("contracts-getClassMetadata — silent path", { timeout: 90_000 }, async ({ dappConnectedExtension }) => {
 	const page = dappConnectedExtension.playgroundPage
@@ -28,19 +24,17 @@ test.skipIf(!hasConfig)("contracts-getClassMetadata — silent path", { timeout:
 	const popupP = waitForPopup(dappConnectedExtension, "capabilities", { timeout: 30_000 })
 	await clickByTestId(page, "pg-btn-requestCapabilities")
 	await approveCapabilities(await popupP)
-	await waitForPgResult(page, "requestCapabilities", seqGrant, 30_000)
+	await assertPgOk(page, await waitForPgResult(page, "requestCapabilities", seqGrant, 30_000), "getClassMetadata:grant")
 
-	// Set classId input (using token address as a placeholder Fr)
-	await page.evaluate((addr: string) => {
+	await page.evaluate((classId: string) => {
 		const input = document.querySelector<HTMLInputElement>('[data-testid="pg-input-classId"]')!
 		const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-		setter?.call(input, addr)
+		setter?.call(input, classId)
 		input.dispatchEvent(new Event("input", { bubbles: true }))
-	}, aztecConfig!.tokenAddress)
+	}, aztecConfig!.tokenClassId)
 
 	const result = await callExpectingNoPopup(dappConnectedExtension, page, "getContractClassMetadata", async () => {
 		await clickByTestId(page, "pg-btn-getContractClassMetadata")
 	})
-	// status may be ok (empty result) or error (invalid class id) — both are silent
-	expect(["ok", "error"]).toContain(result.status)
+	await assertPgOk(page, result, "getClassMetadata:call")
 })

@@ -407,23 +407,72 @@ describe.skipIf(process.platform !== "linux")("chromes by extension path", { tim
 	})
 })
 
+type ZombieParent = { parent: ChildProcess; child: number | undefined }
+
+function comm(pid: number): string | undefined {
+	try {
+		return readFileSync(`/proc/${pid}/comm`, "utf8").trim()
+	} catch {
+		return undefined
+	}
+}
+
+/** Kills the child first, while its parent still holds the pid, then the parent. */
+function release({ parent, child }: ZombieParent): void {
+	try {
+		if (child !== undefined) process.kill(child, "SIGKILL")
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err
+	} finally {
+		parent.kill("SIGKILL")
+	}
+}
+
+/** A shell parent and its background `sleep`, returned once the parent has exec'd `sleep`, which
+ *  never waits: the shell reaps a dead background child between commands, so the child must not
+ *  die before the `exec`, and `comm` reads `sleep` only past exec's point of no return. */
+async function zombieParent(): Promise<ZombieParent & { child: number }> {
+	const held: ZombieParent = {
+		parent: spawn("sh", ["-c", "sleep 120 & echo $!; exec sleep 120"], { stdio: ["ignore", "pipe", "ignore"] }),
+		child: undefined,
+	}
+	const { parent } = held
+	try {
+		let out = ""
+		parent.stdout?.on("data", (d: Buffer) => {
+			out += d.toString()
+		})
+		if (!(await until(() => out.includes("\n")))) throw new Error("the shell printed no child pid")
+		const child = Number(out.trim())
+		if (!Number.isInteger(child) || child <= 0) throw new Error(`the shell printed ${JSON.stringify(out)}, not a pid`)
+		held.child = child
+		const pid = parent.pid
+		if (pid === undefined) throw new Error("the shell parent did not spawn")
+		const execd = await until(() => !running(pid) || comm(pid) === "sleep")
+		if (!execd || !running(pid)) throw new Error(`the shell parent ${pid} never reached its exec`)
+		return { parent, child }
+	} catch (err) {
+		release(held)
+		throw err
+	}
+}
+
 describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000 }, () => {
 	// A zombie's environ refuses the read exactly as a non-dumpable process's does.
 	test("a zombie reads as gone, not unreadable", async () => {
-		const parent = spawn("sh", ["-c", "sleep 0.1 & echo $!; exec sleep 5"], { stdio: ["ignore", "pipe", "ignore"] })
-		const zombie = Number(await new Promise<string>((resolve) => parent.stdout?.once("data", (d: Buffer) => resolve(d.toString()))))
+		const held = await zombieParent()
 		try {
-			expect(await until(() => readFileSync(`/proc/${zombie}/stat`, "utf8").includes(") Z "))).toBe(true)
-			expect(readEnviron(zombie)).toBe("gone")
+			process.kill(held.child, "SIGKILL")
+			expect(await until(() => readFileSync(`/proc/${held.child}/stat`, "utf8").includes(") Z "))).toBe(true)
+			expect(readEnviron(held.child)).toBe("gone")
 		} finally {
-			parent.kill("SIGKILL")
+			release(held)
 		}
 	})
 
-	// The parent never waits, so the child stays a zombie until the test kills the parent.
 	test("a zombie owner is dead to the identity check and to the reap", async () => {
-		const parent = spawn("sh", ["-c", "sleep 120 & echo $!; exec sleep 120"], { stdio: ["ignore", "pipe", "ignore"] })
-		const pid = Number(await new Promise<string>((resolve) => parent.stdout?.once("data", (d: Buffer) => resolve(d.toString()))))
+		const held = await zombieParent()
+		const pid = held.child
 		try {
 			const identity = `${pid}:${readStartTime(pid)}`
 			expect(identityIsDead(identity)).toBe(false)
@@ -433,7 +482,7 @@ describe.skipIf(process.platform !== "linux")("process reads", { timeout: 10_000
 			expect(identityIsDead(identity)).toBe(true)
 			expect(await reapPriorRun(lock({ markers: { anvil: marker() }, owner: identity }), fast)).toEqual({ cleared: true })
 		} finally {
-			parent.kill("SIGKILL")
+			release(held)
 		}
 	})
 })

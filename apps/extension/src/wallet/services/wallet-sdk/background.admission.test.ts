@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { DISCOVERY_STALE_MS } from "@nulo/wallet-bridge"
+import { LogLevel } from "@/wallet/logger"
 
 type Callbacks = {
 	onPendingDiscovery: (d: unknown) => void
@@ -64,7 +65,14 @@ function deferred<T>() {
 }
 
 /** Boot the handler over a remembered session (`trusted` decides whether a verify window opens). */
-function boot(opts: { remembered?: { trusted: boolean }; popup?: () => Promise<{ approved: boolean }>; legal?: () => Promise<void> } = {}) {
+function boot(
+	opts: {
+		remembered?: { trusted: boolean }
+		popup?: () => Promise<{ approved: boolean }>
+		legal?: () => Promise<void>
+		logger?: { log: (...args: unknown[]) => void }
+	} = {},
+) {
 	let created = 0
 	const onRemoved: Array<(id: number) => void> = []
 	const ports = fakeSdkPorts({
@@ -80,7 +88,8 @@ function boot(opts: { remembered?: { trusted: boolean }; popup?: () => Promise<{
 		setTimeout: (fn, ms) => setTimeout(fn, ms),
 		clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 	}
-	initWalletSdkHandler(fakeSdkServices(opts).services, noopLogger, ports)
+	const { services, rows } = fakeSdkServices(opts)
+	initWalletSdkHandler(services, (opts.logger ?? noopLogger) as never, ports)
 	const discover = (requestId: string, over: Record<string, unknown> = {}) =>
 		captured?.onPendingDiscovery({
 			requestId,
@@ -106,7 +115,7 @@ function boot(opts: { remembered?: { trusted: boolean }; popup?: () => Promise<{
 	const closeWindow = (id: number) => {
 		for (const l of onRemoved) l(id)
 	}
-	return { discover, establish, closeWindow, windowsCreated: () => created }
+	return { discover, establish, closeWindow, windowsCreated: () => created, rows }
 }
 
 /** Settle the handler's pending microtasks without moving the clock. */
@@ -311,14 +320,45 @@ describe("handleDiscovery — fresh connection and dedupe waiters", () => {
 	})
 })
 
+describe("discovery with a chainInfo that does not decode", () => {
+	test("is rejected before any approval popup opens and logged at debug", async () => {
+		const log = vi.fn()
+		const popup = vi.fn(async () => ({ approved: true }))
+		const { discover } = boot({ popup, logger: { log } })
+
+		discover("bad-chain-1", { chainInfo: { chainId: "", version: "0x1" } })
+		await flush()
+
+		expect(rejected()).toEqual(["bad-chain-1"])
+		expect(popup).not.toHaveBeenCalled()
+		const discoveryLines = log.mock.calls.filter(([, , text]) => String(text).startsWith("Discovery rejected"))
+		expect(discoveryLines.map(([, level]) => level)).toEqual([LogLevel.Debug])
+	})
+
+	test("a popup that fails still logs its rejection at warn (control)", async () => {
+		const log = vi.fn()
+		const popup = async (): Promise<{ approved: boolean }> => {
+			throw new Error("closed")
+		}
+		const { discover } = boot({ popup, logger: { log } })
+
+		discover("closed-1")
+		await flush()
+
+		expect(rejected()).toEqual(["closed-1"])
+		const discoveryLines = log.mock.calls.filter(([, , text]) => String(text).startsWith("Discovery rejected"))
+		expect(discoveryLines.map(([, level]) => level)).toEqual([LogLevel.Warn])
+	})
+})
+
 describe("discovery without a current Terms acceptance", () => {
 	const refuse = async () => {
 		throw new Error("terms")
 	}
 
-	test("a new origin is rejected before any approval popup opens", async () => {
+	test("a new origin is rejected before any approval popup opens, leaving no row and no approval", async () => {
 		const popup = vi.fn(async () => ({ approved: true }))
-		const { discover } = boot({ popup, legal: refuse })
+		const { discover, establish, rows, windowsCreated } = boot({ popup, legal: refuse })
 
 		discover("fresh-1")
 		await flush()
@@ -326,6 +366,13 @@ describe("discovery without a current Terms acceptance", () => {
 		expect(rejected()).toEqual(["fresh-1"])
 		expect(approved()).toEqual([])
 		expect(popup).not.toHaveBeenCalled()
+		expect(rows.size).toBe(0)
+		// The discovery protocol has no rejection reply, so nothing typed reaches the app; a key
+		// exchange that completed anyway finds no approval to ride and is ended with no window.
+		await establish("fresh-1")
+		await flush()
+		expect(live.has("fresh-1")).toBe(false)
+		expect(windowsCreated()).toBe(0)
 	})
 
 	test("a remembered origin still reconnects: its requests are what get refused, not its channel", async () => {

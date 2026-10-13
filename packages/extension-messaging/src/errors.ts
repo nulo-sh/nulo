@@ -511,8 +511,8 @@ export class RecoveryModeError extends WalletError {
 }
 
 /**
- * Every class a wire `code` rebuilds as. Two subclasses are absent on purpose: `TooManyPendingError`
- * rebuilds as the base `WalletError`, and `RpcConnectError` never crosses the wire.
+ * Every class a wire `code` rebuilds as. `RpcConnectError` is absent on purpose: it never crosses
+ * the wire.
  */
 const REBUILT_AS = [
 	RpcTimeoutError,
@@ -521,6 +521,7 @@ const REBUILT_AS = [
 	JobCancelledError,
 	CapabilityNotGrantedError,
 	ScopeViolationError,
+	TooManyPendingError,
 	ValidationError,
 	InvalidPasswordError,
 	AccountAddressInconsistencyError,

@@ -685,26 +685,27 @@ describe("dispatcher.requestCapabilities — field-aware accounts diff", () => {
 		expect(accountsResult?.canGet).toBe(true)
 	})
 
-	// `contractClasses` coverage is type-only, so a widening after a grant reads as covered. The
-	// pin locks that verdict; enforcement still denies the over-broad use
-	// (scope-enforcement.test.ts), so it is a re-prompt gap, not a scope escape.
-	test("(DRIFT PIN) contractClasses widening after a grant does NOT re-prompt (field-blind coverage; wallet-sdk-capability-field-diff)", async () => {
+	test.each<[string, Capability, Record<string, unknown>]>([
+		[
+			"a wider class list",
+			{ type: "contractClasses", classes: [`0x${"0a".repeat(32)}`], canGetMetadata: true },
+			{ type: "contractClasses", classes: [`0x${"0a".repeat(32)}`, `0x${"0b".repeat(32)}`], canGetMetadata: true },
+		],
+		[
+			"a flag upgrade",
+			{ type: "contractClasses", classes: [`0x${"0a".repeat(32)}`], canGetMetadata: false },
+			{ type: "contractClasses", classes: [`0x${"0a".repeat(32)}`], canGetMetadata: true },
+		],
+	])("a contractClasses request for %s after a grant re-prompts", async (_label, existing, requested) => {
 		let popupCalls = 0
-		const existing: Capability = { type: "contractClasses", classes: [`0x${"0a".repeat(32)}`], canGetMetadata: false }
 		const session = makeSession({ capabilityGrants: [{ capability: existing, grantedAt: 1 }] })
 		const { writer } = makeSessionWriter(session)
 		const dispatcher = makePhase15Dispatcher(writer, async () => {
 			popupCalls++
-			return { granted: [{ type: "contractClasses", classes: "*" }] } as CapabilityResult
+			return { granted: [requested] } as CapabilityResult
 		})
-		// Wider `classes` + `canGetMetadata:true` after a narrower grant: coverage at
-		// dispatcher.ts:760 is type-only (`grantedTypes.has`), so it reads as covered →
-		// delta empty → early return, no popup.
-		const manifest = {
-			capabilities: [{ type: "contractClasses", classes: [`0x${"0a".repeat(32)}`, `0x${"0b".repeat(32)}`], canGetMetadata: true }],
-		}
-		await dispatcher.dispatch("requestCapabilities", [withHeader(manifest)], ctx)
-		expect(popupCalls).toBe(0)
+		await dispatcher.dispatch("requestCapabilities", [withHeader({ capabilities: [requested] })], ctx)
+		expect(popupCalls).toBe(1)
 	})
 
 	test("an address-book request after a private-events-only data grant re-prompts", async () => {
@@ -2274,46 +2275,60 @@ describe("dispatcher — the answer is the stored grant", () => {
 		canGetMetadata: true,
 	})
 
+	const classes = (canGetMetadata: boolean, ...ids: string[]): Capability => ({ type: "contractClasses", classes: ids, canGetMetadata })
+
 	test.each([
 		["transaction", tx(A, B), tx(A)],
 		["simulation", sim(A, B), sim(A)],
 		["contracts", contracts(A, B), contracts(A)],
+		["contract classes", classes(true, A, B), classes(true, A)],
 	])("%s: a request inside the held grant opens no window and is answered with the held grant", async (_name, grant, requested) => {
 		const h = capabilityHarness(held(grant))
 		const result = await h.request([requested])
 		expect({ windows: h.seen.windows, granted: result.granted }).toEqual({ windows: 0, granted: [grant] })
 	})
 
-	test("contract classes: a wider request opens no window and is answered with the held class alone", async () => {
-		const grant: Capability = { type: "contractClasses", classes: [A], canGetMetadata: true }
-		const h = capabilityHarness(held(grant))
-		const result = await h.request([{ type: "contractClasses", classes: [A, B], canGetMetadata: true }])
+	test("contract classes: a wider request opens the window and the approved grant replaces the held one", async () => {
+		const h = capabilityHarness(held(classes(true, A)))
+		const result = await h.request([classes(true, A, B)])
 		expect({ windows: h.seen.windows, granted: result.granted, stored: await h.stored() }).toEqual({
-			windows: 0,
-			granted: [grant],
-			stored: [grant],
-		})
-	})
-
-	test("after a rejected widening, a request inside the held grant is answered with it and a wider one asks again", async () => {
-		const rejection = new UserRejectedError("User rejected")
-		const h = capabilityHarness(held(tx(A, B)), () => {
-			throw rejection
-		})
-		await expect(h.request([tx(A, B, C)])).rejects.toBe(rejection)
-		const rejected = (await h.row()).capabilityRejections?.map((r) => r.capabilityType)
-		expect({ windows: h.seen.windows, rejected, stored: await h.stored() }).toEqual({
 			windows: 1,
-			rejected: ["transaction"],
-			stored: [tx(A, B)],
+			granted: [classes(true, A, B)],
+			stored: [classes(true, A, B)],
 		})
-
-		const inside = await h.request([tx(A)])
-		expect({ windows: h.seen.windows, granted: inside.granted }).toEqual({ windows: 1, granted: [tx(A, B)] })
-
-		await expect(h.request([tx(A, C)])).rejects.toBe(rejection)
-		expect(h.seen.windows).toBe(2)
 	})
+
+	test("contract classes: classes from one grant and the flag from another never cover", async () => {
+		const h = capabilityHarness(held(classes(false, A), classes(true, B)))
+		await h.request([classes(true, A)])
+		expect(h.seen.windows).toBe(1)
+	})
+
+	test.each([
+		["transaction", tx(A, B), tx(A, B, C), tx(A), tx(A, C)],
+		["contractClasses", classes(true, A, B), classes(true, A, B, C), classes(true, A), classes(true, A, C)],
+	])(
+		"%s: after a rejected widening, a request inside the held grant is answered with it and a wider one asks again",
+		async (type, grant, wider, inside, other) => {
+			const rejection = new UserRejectedError("User rejected")
+			const h = capabilityHarness(held(grant), () => {
+				throw rejection
+			})
+			await expect(h.request([wider])).rejects.toBe(rejection)
+			const rejected = (await h.row()).capabilityRejections?.map((r) => r.capabilityType)
+			expect({ windows: h.seen.windows, rejected, stored: await h.stored() }).toEqual({
+				windows: 1,
+				rejected: [type],
+				stored: [grant],
+			})
+
+			const answered = await h.request([inside])
+			expect({ windows: h.seen.windows, granted: answered.granted }).toEqual({ windows: 1, granted: [grant] })
+
+			await expect(h.request([other])).rejects.toBe(rejection)
+			expect(h.seen.windows).toBe(2)
+		},
+	)
 })
 
 describe("dispatcher — the grant boundary", () => {
@@ -3418,6 +3433,14 @@ describe("dispatcher — the schema parse", () => {
 		await expect(
 			harness(scoped as GrantedCapabilityRecord[]).dispatch("sendTx", [wellFormed, { from: ACCOUNT }]),
 		).rejects.toBeInstanceOf(ScopeViolationError)
+	})
+
+	test("an account the address schema admits but String() cannot convert is refused by the parse", async () => {
+		const h = harness()
+		const bufferShaped = JSON.parse(JSON.stringify({ type: "Buffer", data: Array(32).fill(10), toString: "x" }))
+		expect(() => String(bufferShaped)).toThrow(TypeError)
+		await expect(h.dispatch("registerToken", [bufferShaped, TOKEN])).rejects.toThrow(invalid("registerToken"))
+		expect(h.sent).toHaveLength(0)
 	})
 
 	test("registerToken naming no token is refused by the parse, and its handler never runs", async () => {

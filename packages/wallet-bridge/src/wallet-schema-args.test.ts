@@ -115,6 +115,53 @@ describe("assertWalletSchemaArgs", () => {
 		await expect(assertWalletSchemaArgs("requestCapabilities", [null])).resolves.toBeUndefined()
 	})
 
+	test.each([
+		["caller", { ...content, caller: "SENTINEL" }],
+		["contract", { ...content, contract: "SENTINEL" }],
+	])("grantPublicAuthwit: a %s that is not an address is refused", async (_key, refused) => {
+		await expect(assertWalletSchemaArgs("grantPublicAuthwit", [ACCOUNT, refused])).rejects.toThrow(
+			"Invalid arguments for wallet method: grantPublicAuthwit",
+		)
+	})
+
+	const ownToString = JSON.parse('{"toString":"x"}')
+	const deep = (leaf: unknown) => {
+		let tree = leaf
+		for (let depth = 0; depth < 100_000; depth++) tree = [tree]
+		return tree
+	}
+	test.each<[string, unknown]>([
+		["at the top of an argument", ownToString],
+		["nested in an object", { inner: ownToString }],
+		["inside an array", [ACCOUNT, ownToString]],
+		["under an own __proto__ key", JSON.parse('{"__proto__":{"toString":"x"}}')],
+		["at the bottom of a 100,000-deep tree", deep(ownToString)],
+	])("an object with an own toString %s is refused", async (_label, value) => {
+		await expect(assertWalletSchemaArgs("grantPublicAuthwit", [ACCOUNT, { ...content, args: [value] }])).rejects.toThrow(
+			"Invalid arguments for wallet method: grantPublicAuthwit",
+		)
+	})
+
+	test("a requestCapabilities manifest holding an own toString is refused", async () => {
+		const manifest = withHeader({ capabilities: [{ type: "x-vendor", toString: "x" }] })
+		await expect(assertWalletSchemaArgs("requestCapabilities", [manifest])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+	})
+
+	test("an artifact whose storage has a field named toString registers; the instance beside it is still walked", async () => {
+		const artifact = { ...wireArtifact(), storageLayout: JSON.parse(`{"toString":{"slot":"${FIELD}"}}`) }
+		await expect(assertWalletSchemaArgs("registerContract", [wireInstance(TOKEN), artifact])).resolves.toBeUndefined()
+		await expect(assertWalletSchemaArgs("registerContractClass", [artifact])).resolves.toBeUndefined()
+		const instance = { ...wireInstance(TOKEN), toString: "x" }
+		await expect(assertWalletSchemaArgs("registerContract", [instance, artifact])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
+	})
+
+	test("an own valueOf alone, and a 100,000-deep tree without an own toString, pass (controls)", async () => {
+		const ownValueOf = JSON.parse('{"valueOf":"x"}')
+		expect(String(ownValueOf)).toBe("[object Object]")
+		const args = { ...content, args: [ownValueOf, deep(ACCOUNT)] }
+		await expect(assertWalletSchemaArgs("grantPublicAuthwit", [ACCOUNT, args])).resolves.toBeUndefined()
+	})
+
 	test("a method with no schema entry is refused", async () => {
 		await expect(assertWalletSchemaArgs("notAMethod" as MethodName, [])).rejects.toBeInstanceOf(InvalidWalletArgumentsError)
 	})
