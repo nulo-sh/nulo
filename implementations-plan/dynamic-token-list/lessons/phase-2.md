@@ -28,3 +28,14 @@
 **Round 2 (resumed): conditional approve.** All seven fixes verified closed. One new should-fix, accepted: the `${{ }}` span extractor stopped at a `}}` inside a quoted literal, so `format('}}{0}', secrets.X)` hid the read. Fix: a quote-aware extractor; mutation case. Scanning the whole text instead was tried and rejected: it flags `_extension-network-e2e.yml#network-e2e` on a shell comment that says "secrets".
 
 **Round 3 (resumed): approve.** "No NEW material findings or comment issues in arc 1."
+
+## Key ceremony (O2)
+
+- Keyed run `token-list-keys-925e45c1`, approved by the owner with `op-remote`: `keygen-cli.ts install` set `TOKEN_LIST_SIGNING_KEY` in the `token-list` environment (owner reviewer, branch policy) and printed only the public keys, `nulo-ci-1` `Al201vPu8pwqVmqmVBOxQqozL55HI0oViOA1QVeU6k4` and `nulo-recovery-1` `zxIA-cxJ7IPlSvaDWEW5V8UgFfzne2RsHoCN8kg1tl0`. Both seeds stay in 1Password.
+- **Deviation:** `FORMAT.md` now publishes the keys, as its README asked, and `check.ts` refuses a key table that differs from `keys.ts`, so a rotation cannot leave a stale key where third parties verify.
+
+**Keys review (same Codex session, resumed).** Round 4: **conditional approve**, one should-fix: the table check matched rows anywhere and skipped rows it could not parse, so an unquoted row, a fenced copy or a newline in a `keyId` could pass. Fixed: only the one table under "Public keys", every data row must parse; regressions for each. Round 5: **conditional approve**, one should-fix: Markdown keeps a line without a leading pipe inside the table. Fixed: the capture runs to the blank line; two regressions. Round 6: **approve**, "No new material findings. Both continuation-row bypasses are refused; reverting the capture reopens both."
+
+## Gate
+
+`bun run --cwd infra/token-list test` (18 passed, 3 live skipped; the tree test now passes on the real keys), `deploy:dry`, `test:ci-gating` (535 pass), `lint:actions`, `lint`, `typecheck:all` and `check:plans` exit 0. The sign-cli round trip on a throwaway key is the tree test "accepts an envelope sign-cli wrote".
