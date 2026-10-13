@@ -8,3 +8,4 @@
 - 2026-10-13 — phase 1 ✓: token vitest set 338 passed, lint 0, typecheck:all 0; T1, T2, T2b red on base copies.
 - 2026-10-13 — phase 2 ✓: wallet-sdk vitest 427 passed, wallet-core 279 passed, lint 0, typecheck:all 0; T4–T7 (6 tests) red on base copies.
 - 2026-10-13 — Codex round 1: conditional approve, 2 findings accepted (null decrypted payload leaked a slot; parse comment).
+- 2026-10-13 — Opus review: approve, 5 low nits (4 accepted, 1 rejected with reason).

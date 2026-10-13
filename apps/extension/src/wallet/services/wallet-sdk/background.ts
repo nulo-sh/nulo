@@ -635,7 +635,7 @@ function createQueuedJournalIfStamped(
 		: undefined
 }
 
-/** Answered at arrival, before any row or FIFO slot: `MAX_PENDING_PER_SESSION` of the session's
+/** Refused at arrival, before any row or FIFO slot: `MAX_PENDING_PER_SESSION` of the session's
  *  calls already wait or run. The reply rides the session's decrypt lane, so the lane's depth bounds
  *  owed replies with its decrypts; it is enqueued and never awaited, since this runs inside the lane. */
 function refuseOverPendingCap(

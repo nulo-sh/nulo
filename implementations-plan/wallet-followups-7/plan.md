@@ -142,6 +142,9 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 | 2 | Codex, resumed | conditional approve, conditions applied | lane for replies with its overshoot, rejection and re-key controls (D8, T7); I1 as a hypothesis; the parse's truncation of a trailing odd digit or invalid pair, as wording | none |
 | 3–4 | Codex, resumed | conditional approve, then **approve** on the applied revision | re-key controls made explicit in T6 and T7; the caller-validation claim narrowed to the popup and the dApp ingress | none |
 
+| impl 1 | Codex, gpt-6.1-sol (session 01a136e1) | conditional approve | a decrypted `null` took a slot and threw before its release: dropped before admission, with a regression; the parse comment overstated the invariant | none |
+| impl 1 | Opus 5.5 review | approve | four comment and test nits; the "two holds count apart" unit test dropped as a duplicate of T4's second-session control | deleting the line note on the rewritten hold test (the orchestrator asked for it) |
+
 Known limits to file at close-out: **KL-1** (#354 residual: the bound is per session generation, a count and not a heap bound; 32 object-dense calls held +772 MiB; re-keys and new sessions multiply it; a never-settling refusal encryption would wedge that generation's lane; reopen on a worker crash within the bound, a report, or a decision for a byte or worker-wide budget). **KL-2** (#329 residual: rows written before the fix or restored in another spelling keep it, so their mint figure stays hidden; reopen at launch if such rows exist, or on a report).
 
 ## Seeds

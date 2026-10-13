@@ -813,7 +813,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 
 	private async findToken(profileId: string, chainId: number, contract: string): Promise<Token | undefined> {
 		const tokens = await this.tokens.getValues()
-		// A row stored before adds were canonical, or restored in another spelling, is still this contract.
+		// A row stored or restored in another spelling is still this contract.
 		const key = contract.toLowerCase()
 		return tokens.find((token) => token.profileId === profileId && token.chainId === chainId && token.contract.toLowerCase() === key)
 	}

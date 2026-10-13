@@ -56,7 +56,7 @@ describe("VerificationHolds", () => {
 		expect(await outcomeOf(after)).toBe("released")
 	})
 
-	// A released hold refuses too: the bound covers a confirmed session's calls, not only held ones.
+	// Intended change: a released hold used to admit without bound; now it refuses past the bound too.
 	test(`a hold admits ${MAX_PENDING_PER_SESSION} calls, settled or not, and one more per release; a second release frees nothing`, () => {
 		const holds = new VerificationHolds()
 		const hold = holds.open("s1", HASH_A)
@@ -70,14 +70,6 @@ describe("VerificationHolds", () => {
 		releases[0]?.()
 		expect(hold.admit()).toBeDefined()
 		expect(hold.admit()).toBeUndefined()
-	})
-
-	test("two sessions' holds count apart", () => {
-		const holds = new VerificationHolds()
-		const full = holds.open("s1", HASH_A)
-		for (let i = 0; i < MAX_PENDING_PER_SESSION; i++) full.admit()
-		expect(full.admit()).toBeUndefined()
-		expect(holds.open("s2", HASH_B).admit()).toBeDefined()
 	})
 
 	test("unsettled lists only open holds; end drops an unsettled hold and removes any hold from the map", async () => {

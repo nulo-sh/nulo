@@ -6,10 +6,10 @@
  * key exchange's own verification hash, and settles once: released (no check is needed, or the
  * person confirmed it) or dropped (the session ended first). Calls that arrive meanwhile wait on
  * its outcome behind the session's FIFO. Settled or not, the hold counts each call from arrival
- * until its handling settles and refuses one past the bound; nothing here times one out. A hold outlives
- * the check's window, whose slot frees on removal, and leaves the map only when its session ends
- * or the same id key-exchanges again. Nothing persists: a hold dies with the service worker, as
- * the session it gates does.
+ * until its handling settles and refuses one past the bound; nothing here times one out. A hold
+ * outlives the check's window, whose slot frees on removal, and leaves the map only when its
+ * session ends or the same id key-exchanges again. Nothing persists: a hold dies with the service
+ * worker, as the session it gates does.
  */
 import { deferred } from "@nulo/wallet-core/utils"
 import { describeExternalId } from "@nulo/wallet-bridge"
