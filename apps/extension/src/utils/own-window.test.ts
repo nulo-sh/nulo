@@ -39,7 +39,9 @@ beforeEach(() => {
 	getWindow = vi.fn().mockRejectedValue(new Error("No window with id"))
 	update = vi.fn().mockResolvedValue({})
 	session = new Map()
-	sessionGet = vi.fn(async (key: string) => (session.has(key) ? { [key]: session.get(key) } : {}))
+	sessionGet = vi.fn(async (keys: string | string[]) =>
+		Object.fromEntries([keys].flat().flatMap((key) => (session.has(key) ? [[key, session.get(key)]] : []))),
+	)
 	vi.stubGlobal("chrome", {
 		runtime: { getURL: (path: string) => `moz-extension://nulo/${path}` },
 		windows: { create, getCurrent, get: getWindow, update },
@@ -49,8 +51,8 @@ beforeEach(() => {
 				set: async (items: Record<string, unknown>) => {
 					for (const [key, value] of Object.entries(items)) session.set(key, value)
 				},
-				remove: async (key: string) => {
-					session.delete(key)
+				remove: async (keys: string | string[]) => {
+					for (const key of [keys].flat()) session.delete(key)
 				},
 			},
 		},
@@ -285,6 +287,27 @@ describe("registering an own window", () => {
 		await bootExportWindow(21)
 		await releaseOwnWindow()
 		expect(session.has(EXPORT_KEY)).toBe(false)
+	})
+
+	test("a popup window that boots without the marker, as a reload does, is named by no flow", async () => {
+		session.set(EXPORT_KEY, 21)
+		session.set(IMPORT_KEY, 22)
+		getCurrent.mockResolvedValueOnce({ id: 21, type: "popup" })
+		captureOwnWindow("#/popup/auth")
+		await flushPromises()
+
+		expect(ownWindowRoute()).toBeUndefined()
+		expect(session.has(EXPORT_KEY)).toBe(false)
+		expect(session.get(IMPORT_KEY)).toBe(22)
+	})
+
+	test("the toolbar panel or a tab boots without touching a registration", async () => {
+		session.set(EXPORT_KEY, 21)
+		getCurrent.mockResolvedValueOnce({ id: 21, type: "normal" })
+		captureOwnWindow("#/popup/general")
+		await flushPromises()
+
+		expect(session.get(EXPORT_KEY)).toBe(21)
 	})
 
 	test("a release before the registration lands leaves no key behind", async () => {

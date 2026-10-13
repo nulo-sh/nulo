@@ -477,6 +477,26 @@ Warnings first: every e2e run is at retry 0 (smoke takes `--retry=0`; every `e2e
 
 **Convergence.** Round 1 (Codex reject; Opus conditional approve), round 2 (Codex conditional approve), the final pass (Codex reject, two blocking, all six accepted) and its confirmation (conditional approve, three conditions applied in place) leave no open material finding. The confirmation's three conditions were applied without another round; the arc-1 Codex loop reads them first.
 
+### Arc 1 fix loop, round 1, Codex (session `01a134cd-2095-72c1-a31c-0df407e511df`, gpt-6.1-sol, high, read-only), 2026-10-13
+
+**Verdict: reject** (one Medium). Every finding held in the tree.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Medium | A reloaded own window boots without the marker, so `ownFlow` is unset and leaving the flow never releases the registration; a later start focuses a window that left its flow | Accepted, with a smaller fix than Codex's "recover the flow across reloads": a popup window whose document boots without the marker removes any key naming it (`forgetThisWindow`). That keeps the base behaviour (a reload loses the flow; after unlock it lands on Home), changes nothing a person sees, and stores no route. Unit case red on the pre-fix code, with a panel/tab control |
+| 2 | Low | `home-links` selects `[data-tx-hash]`, not a testid | Accepted: `tx-card`, reading `data-tx-hash` as the value |
+| 3 | Low | Two comments restate their line (`registeredId`, `historyRoute`) | Accepted: both deleted |
+
+### Arc 1 fix loop, round 1, Opus (same family, `general-purpose`, read-only), 2026-10-13
+
+**Verdict: approve.** Three Lows, all held.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Low | Same as Codex 1; adds that an own window always boots through `/popup/auth` and lands on its flow without the marker, so a reload anywhere loses the flow | Accepted (Codex 1's fix); its trade-off (a reload on the flow page then opens a fresh window on the next start) is the base behaviour |
+| 2 | Low | The #133 e2e checks only the end state, not "the hint never reads `system`" | Accepted: the popup page stays open and records every `nulo:theme` write onboarding makes through `storage` events; the case asserts exactly `["dark"]` |
+| 3 | Low | `presto.vue`'s banner comment names the hint as the basis; usually the first read has landed by the time the step mounts | Accepted: reworded |
+
 ## Delivery
 
 One PR per arc against `dev`, no stack (D-orch-1). Each is opened only after its arc gate passes and its Codex loop converges.

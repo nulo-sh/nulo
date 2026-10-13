@@ -74,7 +74,6 @@ const props = defineProps({
  *  for any kind (`recentActivityRows`). */
 const ROW_BUDGET = 5
 
-/** History opened from a token page shows that token's rows only. */
 const historyRoute = computed(() =>
 	props.token ? { path: "/popup/activity", query: { token: String(props.token.id) } } : "/popup/activity",
 )

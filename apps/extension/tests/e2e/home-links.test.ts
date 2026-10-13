@@ -35,7 +35,7 @@ async function waitForSettledTokens(page: Page): Promise<void> {
 	)
 }
 
-const txRows = (page: Page) => page.$$eval("[data-tx-hash]", (rows) => rows.map((row) => row.getAttribute("data-tx-hash")))
+const txRows = (page: Page) => page.$$eval(sel("tx-card"), (rows) => rows.map((row) => row.getAttribute("data-tx-hash")))
 
 const clearInsideHero = (page: Page) =>
 	page.evaluate(() => {
@@ -96,7 +96,7 @@ test("View history on Home and on a token's page is a Tab stop after the token l
 	// History opens filtered to the token: its own tx row only, under a chip that stays inside the hero.
 	await waitForHash(page, `#/popup/activity?token=${TOKEN_ID}`)
 	await page.waitForSelector(sel("activity-token-filter"), { visible: true, timeout: 15_000 })
-	await page.waitForSelector("[data-tx-hash]", { visible: true, timeout: 15_000 })
+	await page.waitForSelector(sel("tx-card"), { visible: true, timeout: 15_000 })
 	expect(await txRows(page)).toEqual([TOKEN_TX])
 	expect(await page.$eval(sel("activity-token-filter-symbol"), (el) => el.textContent)).toBe(WIDE_SYMBOL)
 	expect(await clearInsideHero(page), "the clear control's box lies inside the hero").toBe(true)
@@ -111,7 +111,11 @@ test("View history on Home and on a token's page is a Tab stop after the token l
 		{ timeout: 5_000, polling: 50 },
 		sel("activity-token-filter"),
 	)
-	await page.waitForFunction(() => document.querySelectorAll("[data-tx-hash]").length === 2, { timeout: 5_000, polling: 50 })
+	await page.waitForFunction(
+		(card: string) => document.querySelectorAll(card).length === 2,
+		{ timeout: 5_000, polling: 50 },
+		sel("tx-card"),
+	)
 	expect((await txRows(page)).sort()).toEqual([TOKEN_TX, OTHER_TX].sort())
 	expect(await page.evaluate(() => document.activeElement?.getAttribute("data-testid"))).toBe("page-hero-title")
 	await shotSend(page, "history-cleared", "page-hero")

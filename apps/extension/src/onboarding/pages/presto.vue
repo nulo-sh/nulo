@@ -29,8 +29,8 @@ const isPitch = computed(() => isPitchKind(state.value.kind))
 const isProbing = computed(() => state.value.kind === "detecting")
 const canContinue = computed(() => state.value.kind === "available" || state.value.kind === "downloading")
 const diagnosis = computed(() => (state.value.kind === "secure-connection-unavailable" ? state.value.diagnosis : undefined))
-// The pre-paint theme from the hint, which onboarding's first Config read may still change; the banner
-// keeps the theme it mounted with.
+// The theme painted at mount: the stored one once onboarding's first Config read has landed, else the
+// pre-paint hint, which that read may still change. The banner keeps it.
 const bannerTheme = document.documentElement.getAttribute("theme") === "light" ? "light" : "dark"
 
 const pitchRef = useTemplateRef<HTMLDivElement>("pitchRef")

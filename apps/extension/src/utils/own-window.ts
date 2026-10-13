@@ -22,7 +22,6 @@ type OwnFlow = keyof typeof OWN_WINDOW_ROUTES
 
 let ownRoute: string | undefined
 let ownFlow: OwnFlow | undefined
-/** This document's window id once it registered as its flow's window. */
 let registeredId: number | undefined
 let registration: Promise<void> = Promise.resolve()
 let opening: Promise<boolean> | undefined
@@ -39,11 +38,13 @@ function flowOf(route: string): OwnFlow | undefined {
 export function captureOwnWindow(hash: string): void {
 	const path = hash.replace(/^#/, "")
 	const queryStart = path.indexOf("?")
-	if (queryStart < 0) return
-	const route = path.slice(0, queryStart)
+	const route = queryStart < 0 ? path : path.slice(0, queryStart)
 	const flow = flowOf(route)
-	const params = new URLSearchParams(path.slice(queryStart + 1))
-	if (flow === undefined || params.get(MARKER) !== MARKER_VALUE) return
+	const params = new URLSearchParams(queryStart < 0 ? "" : path.slice(queryStart + 1))
+	if (flow === undefined || params.get(MARKER) !== MARKER_VALUE) {
+		void forgetThisWindow()
+		return
+	}
 	params.delete(MARKER)
 	const query = params.toString()
 	ownRoute = query ? `${route}?${query}` : route
@@ -61,6 +62,21 @@ async function register(flow: OwnFlow): Promise<void> {
 		registeredId = current.id
 	} catch (error) {
 		console.debug("own window registration failed", { error })
+	}
+}
+
+/** An own window's URL loses its marker once it routes, so a reload boots a document that is no own
+ *  window in a window a flow may still name; no flow may keep naming it. */
+async function forgetThisWindow(): Promise<void> {
+	try {
+		const current = await chrome.windows.getCurrent()
+		if (current.type !== "popup") return
+		const keys = (Object.keys(OWN_WINDOW_ROUTES) as OwnFlow[]).map(flowKey)
+		const stored = await chrome.storage.session.get(keys)
+		const naming = keys.filter((key) => stored[key] === current.id)
+		if (naming.length > 0) await chrome.storage.session.remove(naming)
+	} catch (error) {
+		console.debug("own window release failed", { error })
 	}
 }
 
