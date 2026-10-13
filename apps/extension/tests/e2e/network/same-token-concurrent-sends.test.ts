@@ -439,6 +439,69 @@ test.skipIf(!hasConfig)(
 	},
 )
 
+/** The dApp send recorded after `known` keeps reading `stage` for `windowMs`: its build has not started. */
+async function expectDappRecordHeld(page: Page, known: ReadonlySet<string>, stage: string, windowMs: number): Promise<void> {
+	const fresh = async () => (await readDappExecuteRecords(page)).filter((r) => !known.has(r.id))
+	const recorded = Date.now() + 30_000
+	while ((await fresh()).length === 0) {
+		if (Date.now() > recorded) throw new Error("the dApp send was never recorded")
+		await new Promise((r) => setTimeout(r, 250))
+	}
+	const deadline = Date.now() + windowMs
+	while (Date.now() < deadline) {
+		const stages = (await fresh()).map((r) => r.stage)
+		if (stages.length !== 1 || stages[0] !== stage)
+			throw new Error(`the dApp send was expected to wait at ${stage}, but reads ${JSON.stringify(stages)}`)
+		await new Promise((r) => setTimeout(r, 250))
+	}
+}
+
+test.skipIf(!hasConfig)(
+	"a Send-page send held unmined, then a dApp send of the same account: the dApp send waits at queued, then both succeed",
+	{ timeout: 600_000, retry: 0 },
+	async ({ burst }) => {
+		const config = aztecConfig as AztecTestConfig
+		await reopen(burst)
+		const playground = await connectPlayground(burst.ctx)
+		try {
+			await grantCapBundle(burst.ctx, playground, "transaction", async (ids) => {
+				const mine = ids.find((id) => id?.toLowerCase() === burst.account.toLowerCase())
+				if (!mine) throw new Error("the capabilities popup does not offer the matrix account")
+				return [mine]
+			})
+			// A private send on a sponsor: it shares nothing with the dApp's public transfer, so only the
+			// opaque wait (a dApp send's spends are unknown before its build) can hold the dApp send.
+			const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "33", destination: to(), fee: "sponsored" }
+			const aHash = await fireIntoHeldWindow(burst, a)
+
+			await playground.bringToFront()
+			await setPgInput(playground, "tokenAddress", config.tokenAddress)
+			await setPgInput(playground, "recipient", config.minterAddress)
+			await setPgInput(playground, "amount", "1")
+			const known = new Set((await readDappExecuteRecords(burst.page)).map((r) => r.id))
+			const seq = await snapshotResultSeq(playground)
+			const approvalP = waitForPopup(burst.ctx, "execute", { timeout: 60_000 })
+			await clickByTestId(playground, "pg-btn-sendTx-default")
+			const approval = await approvalP
+			await waitForExecuteContent(approval, 60_000)
+			await approveExecute(approval, { feeMethod: "sponsored", approvableTimeoutMs: 120_000 })
+			await expectDappRecordHeld(burst.page, known, "queued", HELD_MS)
+			expect((await readTxStatuses(burst.page, [aHash]))[aHash], "A is still unmined while the dApp send waits").toBe(0)
+
+			await releaseMining()
+			await assertPgOk(playground, await waitForPgResult(playground, "sendTx", seq, 300_000), "dApp send behind a held transfer")
+			const row = (await waitForTransfersTerminal(burst.page)).find((r) => r.amount === raw(a.amount))
+			expect([row?.stage, row?.error]).toEqual(["succeeded", undefined])
+			await waitForTxsMined(burst.page, [aHash])
+			await settle(burst, [a])
+			burst.ledger.TST.publicRaw -= 1n
+			await expectLedger(burst, ["TST"])
+		} finally {
+			await playground.close()
+		}
+	},
+)
+
 /**
  * Right after a full-backup import, while the projection gate keeps the account out of the PXE, a
  * fresh account's first two sends, confirmed back to back from two windows. Both carry the
