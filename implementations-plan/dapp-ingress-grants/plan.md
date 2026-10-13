@@ -1,7 +1,7 @@
 ---
 plan: dapp-ingress-grants
 tier: mid
-status: approved (orchestrator, D-orch-1 to D-orch-5); arc 1 delivered (#254); arc 2 in progress
+status: approved (orchestrator, D-orch-1 to D-orch-12); arcs 1 (#254) and 2 (#307) delivered; arc 3 in review
 issues: "#15, #83, #84, #86, #87, #88, #89, #123, #124, #125, #126, #127, #128, #199, #201, #228"
 driver: claude-code
 claude_model: opus
@@ -168,12 +168,12 @@ The dApp-facing boundary of the wallet: which stored grants a reader trusts, how
 - **#201**: `TooManyPendingError` joins `REBUILT_AS` (`errors.ts`) and the code channel (`rpc-cancel.ts`); the two bug pins (`errors.test.ts:419`, `rpc-cancel.test.ts:133-137`) flip to assert the class and `-32005`.
 - **#89 item 8**: `GRANT_CONTENT_SCHEMA.caller` and `.contract` use `schemas.AztecAddress`. Update `apply.pins.test.ts:52,65`. `isGrantAuthwitShape` also requires `caller` and `contract` to be `schemas.AztecAddress` by identity: `patchOrVerifyEntry` keeps an existing compatible entry (`apply.ts:77-84`), so a key-presence check alone would let an existing loose entry (`caller: z.string()`) survive the patch. A loose entry now throws the drift error. The wallet's own parse uses a private copy patched from the one source (`wallet-schema-args.ts:13-15`), so this guards npm consumers, not the wallet. The published README gains the changes line (A2). The workspace `package.json` version stays; the publish input sets `0.2.0` (owner step).
 - **#89 item 9 (SR7)**: `assertWalletSchemaArgs` refuses any argument holding an object with an own `toString` key, with `InvalidWalletArgumentsError.forMethod(method)`. Wire args come from `JSON.parse`, so a value is data, never a function: an own `toString` makes `String()` and a template literal throw, while an own `valueOf` alone falls back to the inherited `toString` and cannot, so `valueOf` is not refused (refusing it would only add false positives on map keys named after Noir functions). The walk is iterative (no recursion on hostile depth), uses `Object.keys` so a child under an own `__proto__` key is visited, covers only the slice the parse reads, and runs before the `requestCapabilities` branch. One place covers every later `String()`, template literal and `fromStringUnsafe`.
-  - Residual, recorded: a Buffer-shaped address with no own `toString` passes the upstream schema and becomes `"[object Object]"` at `dispatcher.ts:540`, `:610`, `:614`, `:646`. It fails closed but unclassified; the close-out files it as an issue.
-- **#199**: `chainInfoToChainId` becomes strict. Each field is parsed with the upstream `schemas.Fr.parse`, which is synchronous (probe on this tree), as P3-03 says; then the wallet's own bounds apply: not above `2^53`, and `chainId` not above `2^32 - 1`. Either failure throws `InvalidWalletArgumentsError`. No second field-element check is written. A canonical value yields the same chain id as today; the XOR fold stays (F16).
+  - Residual, recorded: a Buffer-shaped address with no own `toString` passes the upstream schema and becomes `"[object Object]"` at `dispatcher.ts:540`, `:610`, `:614`, `:646`. It fails closed but unclassified; filed as #331. Since this arc the same shape also passes `grantPublicAuthwit`'s `caller` and `contract`, which `z.string()` refused: a `*` scope admits it into the approval flow, where the authwit build throws on it (Opus post-implementation O1; #331 extended).
+- **#199**: `chainInfoToChainId` becomes strict. Each field is parsed with the upstream `schemas.Fr.parse`, which is synchronous (probe on this tree), as P3-03 says; then the wallet's own bounds apply: neither field above `2^32 - 1`, as the signed decision bounds `version` too (D-impl-18), which subsumes the `2^53` bound. Either failure throws `InvalidWalletArgumentsError`. No second field-element check is written. A canonical value yields the same chain id as today; the XOR fold stays (F16).
   - Establishment: the decode moves inside the `try`, so a refusal terminates, tombstones the marker and releases the slot like every other failed exit.
   - Discovery and establishment: each catch logs an `InvalidWalletArgumentsError` at `debug` (SR7) and every other failure as today (`background.ts:839-842`, `session-established.ts:159`).
   - Effects by site: discovery rejects (no reply, F17; OWNER-ASKS item 4), establishment terminates, ingress answers `-32602`, revocation and the queued row skip.
-  - Claim, narrowed: this removes the aliasing a malformed `chainInfo` causes. It does not make the chain id unique: distinct valid pairs still share an id through the frozen XOR, and a `version` above `2^32` still truncates, as P3-03's bounds allow.
+  - Claim, narrowed: this removes the aliasing a malformed `chainInfo` causes. It does not make the chain id unique: distinct valid pairs still share an id through the frozen XOR. A `version` above `2^32 - 1` no longer truncates: it is refused, and no Aztec rollup can have one (`RollupCore`'s `VERSION` is `uint32`).
 - **#84**: `isCapabilityCovered` gains `contractClassesRequestCovered`, per grant as enforcement reads it (`method-scope-checkers.ts:95`, `some(c => c.canGetMetadata && inAddressList(id, c.classes))`): a request is covered when every requested class is covered by one held grant that also holds each requested flag, never by a union of classes from one grant and flags from another. Delete the rejected-type special case at `:345-347`. A widening follows the `contracts` type's replace rule.
 - **#125**: no code change is possible under P2-07 (F17). Extend the existing pin (`background.admission.test.ts:319-329`, no popup opens) to assert no row and no marker. #125 closes on the proposal's fallback; OWNER-ASKS item 5 offers an upstream ask.
 
@@ -262,7 +262,13 @@ Built only through its own deep-tier blueprint, after P2-09 is approved and H1 l
     - Ask 2 (#86): "Under P2-04, a call refused at arrival (…) is never resolved, so its row reads \"Transaction\" even when the app's claimed name was honest; a refusal after the wallet resolved the call shows the resolved name."
     - Ask 7 (#124): "**option B**. A, and the overlay also closes by itself after a fixed time (for example 30 seconds)." Built with 30 seconds.
     - Ask 8 (P2-03): "**option B**. Give the detail the card's words: \"Stopped when the wallet locked\" / \"The wallet locked while this was in progress.\" It may not say \"Nothing was sent\"". OWNER-ASKS item 10 records a cause it can misname.
-- **Arc 3**: no wallet screen. P2-07: "No wallet window or notification opens (the Terms sheet may not cover a window route)." The connect window's existing rows show a contract-classes widening (P3-01).
+- **Arc 3**: no wallet screen. P2-07: "No wallet window or notification opens (the Terms sheet may not cover a window route)." The connect window's existing rows show a contract-classes widening (P3-01). Each item is built as its issue's `## Decision` reads (page 3, signed 2026-10-12; page 0 for #87), which is the sign-off H5 asks for:
+  - #84 (P3-01): "Contract-classes coverage becomes field-aware like every other permission type: a request for classes the app does not hold opens the existing connect window with its existing rows; a request inside the held grant opens nothing. Ships as a 0.x minor with a changelog line."
+  - #87 (page 0): "Keep a batched requestCapabilities allowed, as signed; fix the wrong comment at dispatcher.ts:274-275 and pin the behaviour."
+  - #89 (P3-02): "caller and contract use the address schema; method and args stay as they are. Ships as @nulo-sh/wallet-sdk-schema-patch 0.2.0 with a changelog line: an app that sends a non-address there is now refused at the parse with INVALID_PARAMS." Ask 6: "**option A**. Lockstep 0.2.0 for all three; the changelog line goes in a \"## Changes\" section of that README."
+  - #125 (P2-07, Ask 5): "**option B**. A, and open a blocked:external issue asking aztec-packages for a typed discovery rejection (the #127 pattern)."
+  - #199 (P3-03): "chainInfo is parsed with the upstream Fr schema; a chainId or version that is blank, negative, not an integer, above 2^53, or a chainId above the wallet's u32 range is refused with INVALID_PARAMS instead of being folded onto a canonical value. A stock SDK app never sends one. Qualification (plan ask 4, #199): the discovery protocol has no error reply, so a malformed chainInfo at discovery gets no answer (the connection is refused); INVALID_PARAMS (-32602) reaches an app only on a session that already exists (terminated at establishment, refused at a call). And version is bounded to the u32 range as well as chainId, because the wallet's chain id folds it through a 32-bit XOR, once the implementer confirms every served network's version is below 2^32."
+  - #201 (P3-04): "-32005 (\"Limit exceeded\") becomes the ratified app contract for too many pending requests: TooManyPendingError joins the port's code channel, so an app gets -32005 whichever path refused it."
 - **Arc 4**: the verify window and the app-side wait; screens return for sign-off in its own plan.
 - Anything beyond these quotes is in `OWNER-ASKS.md`.
 
@@ -434,7 +440,7 @@ Warning: the G1 rule from Phase 1.3 applies until #169 merges.
 
 Before the first step: read the page 3 and C11 answers. Build each item as answered.
 
-#### Phase 3.1: #87 comment and pin; #201 -32005 on every path
+#### Phase 3.1: #87 comment and pin; #201 -32005 on every path ✓
 
 1. Rewrite `dispatcher.ts:274-275`.
 2. Add the batched `requestCapabilities` window test.
@@ -443,7 +449,7 @@ Before the first step: read the page 3 and C11 answers. Build each item as answe
 
 **Gate 3.1**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd packages/wallet-bridge test`; `bun run --cwd packages/extension-messaging test`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3.2: #89 addresses and throwing shapes
+#### Phase 3.2: #89 addresses and throwing shapes ✓
 
 1. Change `caller` and `contract` to `schemas.AztecAddress` in `GRANT_CONTENT_SCHEMA`.
 2. Update `apply.pins.test.ts` and the published README's changes line (A2).
@@ -458,7 +464,7 @@ Before the first step: read the page 3 and C11 answers. Build each item as answe
 
 **Gate 3.2**: `bun run lint`; `bun run typecheck:all`; `bun run --cwd packages/wallet-sdk-schema-patch test`; `bun run --cwd packages/wallet-bridge test`; `bun run test:release`; `bun run test:ci-gating`. Pass: exit 0 (`stage.test.ts` sees the README). Layers: lint, typecheck, unit, release staging.
 
-#### Phase 3.3: #199 strict chainInfo
+#### Phase 3.3: #199 strict chainInfo ✓
 
 1. Make `chainInfoToChainId` refuse non-canonical input with `InvalidWalletArgumentsError`.
 2. Keep canonical values mapping to today's ids.
@@ -471,7 +477,7 @@ Before the first step: read the page 3 and C11 answers. Build each item as answe
 
 **Gate 3.3**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 3.4: #84 field-aware contract classes; #125 pin
+#### Phase 3.4: #84 field-aware contract classes; #125 pin ✓ (step 4 replaced, D-impl-22)
 
 1. Add `contractClassesRequestCovered`; delete the special case at `capability-negotiation.ts:345-347`.
 2. Update the coverage pins and the doc comment on `isCapabilityCovered`.
@@ -554,6 +560,13 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-orch-3, #123's split holds.** Items 1-2 are built in arc 2 only if accessibility-1's arc 3 has merged; it has (#241, archived), so they are built.
 - **D-orch-4, no new words beyond the page.** A surface that needs a word page 2 did not sign goes to OWNER-ASKS in "what ships now" form.
 - **D-orch-5, merge before the final gates.** `origin/dev` is merged into the arc's branch before its final gates, never with a union merge.
+- **D-orch-6, Ask 4 (#199) ships as A.** No reply at discovery, termination at establishment, `-32602` at a call; `version` bounded at `2^53` only, the extra `2^32 - 1` bound not built; confirm that every served network's version is below `2^32` and keep the alias disclosed. Superseded by the signed text, D-impl-18.
+- **D-orch-7, Ask 5 (#125) = B.** #125 closes on P2-07's fallback with the extended pin (no row, no marker), and a `blocked:external` issue asks aztec-packages for a typed discovery rejection (the #127 pattern). Filed as #330.
+- **D-orch-8, Ask 6 (#89) = A.** Lockstep 0.2.0 for the three published packages; the changelog line goes in a `## Changes` section of `scripts/publish/readme/wallet-sdk-schema-patch.md`. The publish is the owner's dispatch; no agent runs `publish-packages.yml`.
+- **D-orch-9, the release vehicle check is real.** Before the PR opens, confirm that extra conventional lines in a squash body become their own changelog entries; if not, one PR per approval. Result: D-impl-27.
+- **D-orch-10, the Buffer-shaped residual is filed, not fixed.** The `"[object Object]"` address at the dispatcher's four `String()` sites becomes an issue at close-out (dedupe first). Filed as #331, with `isTokenRegistered`'s site (329) as a fifth.
+- **D-orch-11, no new words** (D-orch-4, for arc 3).
+- **D-orch-12, merge `origin/dev` before the final gates** (D-orch-5, for arc 3).
 
 ### Implementation deviations (arc 1)
 
@@ -577,6 +590,23 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-impl-15.** The #128 probe (`sim-methods.test.ts` #25) now asserts the `-32602` envelope instead of "ok or error". On the base build it answered the unclassified constant; the wallet-side throw was PXE's own type check (`Cannot run public function as utility`, moderate confidence: the worker log was not captured).
 - **D-impl-16 (Opus O2).** `failQueuedIfUnclaimed` retitles only a classified refusal. A `popup_bound` row (an approval the person rejected or closed, or an unclassified failure) keeps its title: the person saw it in the approval window, and P2-04 covers refusals before the person sees anything.
 - **D-impl-17 (Codex round 1, C1).** Leaving the expired page closes its window: a lock routes every popup page to the auth screen, and without this the window, and the slot it holds, outlived its timer.
+
+### Implementation deviations (arc 3)
+
+- **D-impl-18 (#199, against D-orch-6).** `version` is bounded to `2^32 - 1` too. The signed P3-03 text (the issue's `## Decision`, which the orchestrator names the sign-off) reads "And version is bounded to the u32 range as well as chainId ... once the implementer confirms every served network's version is below 2^32." Confirmed: `RollupCore` declares `uint32 internal immutable VERSION` (`@aztec-foundation/l1-artifacts` 6.0.0-rc.1), so no Aztec rollup has a version at or above `2^32`; testnet's is 2914217885. The u32 bound subsumes the `2^53` one. Codex (design consult Q4) read the text the same way. Reverting it is one comparison and two test rows.
+- **D-impl-19 (#199).** `chainInfoToChainId` takes the wire's strings and refuses an `Fr` instance, which the old code accepted: upstream passes only `JSON.parse`d data to every caller (Codex Q3 verified it). Test fixtures use `new Fr(x).toString()`, the SDK's wire form.
+- **D-impl-20 (#199).** `schemas.Fr`'s transform throws a plain `Error` on `""` and `"abc"` instead of reporting them, so `safeParse` alone throws; `parsedField` catches.
+- **D-impl-21 (#199).** The bound controls are `chainId = 2^32 - 1` and `version = 2^32 - 1`; the plan's `version = 2^53` control is now a refusal, and the old pin "fields above 2^53" (`version = 2^64 + 3` → 31337) flips to a refusal row.
+- **D-impl-22 (#84, Phase 3.4 step 4).** No e2e widening case: the generic playground requests only `classes: "*"`, which covers every request, and this plan forbids a playground change. The widening is proven by the dispatcher and characterization tests and a composition case that drives the real dispatcher over the real `DappSessionService`. `contracts-getClassMetadata.test.ts` now sends the token's real class id and asserts admission instead of accepting "ok or error" (Codex design consult Q1).
+- **D-impl-23 (#84).** The three list-coverage checks (contracts, contract classes, private events) share `listCovered`.
+- **D-impl-24 (#201).** `TooManyPendingError` rebuilds with its wire message and no details, not a constant: its payloads come from inside the wallet and both throwers use the default (Codex Q2).
+- **D-impl-25 (#89).** `assertWalletSchemaArgs` reads the schema's arity before the `requestCapabilities` branch, so the guard walks exactly the slice the parse reads. The walk reads `Object.values`, the same own keys as `Object.keys`, an own `__proto__` data key included.
+- **D-impl-26 (#89).** The `grantPublicAuthwit` row of `background.refusal-log.test.ts` sends sentinel addresses: the parse now refuses a non-address before the scope check the row pins.
+- **D-impl-27 (release vehicle).** release-please splits a commit message at a blank line followed by a conventional header (`src/commit.ts`, `splitMessages`), and its README documents extra messages at the bottom of the body. The squash body is the PR body, so the conventional lines at the bottom of arc 3's PR body each become a `CHANGELOG.md` entry; one PR holds. git-cliff's release notes (`cliff.toml`, `split_commits = false`) list only the squash subject.
+- **D-impl-28.** The discovery rejection's log moved into `rejectFailedDiscovery` (`handleDiscovery` scored 17 with it inline) and establishment's into `logEstablishmentFailure`.
+- **D-impl-29 (#89, Codex post-implementation C1).** The own-`toString` walk skips the contract-artifact argument of `registerContract` and `registerContractClass`. An artifact's `storageLayout` is keyed by the contract's storage-field names, and `toString` is a legal one, so the blanket walk refused a stock-SDK registration; I2's claim that a stock dApp never sends an own `toString` was false for artifacts. The parse refuses an object in every artifact field the wallet reads as a string (`name`, function names), and the instance beside the artifact is still walked. Skipping the whole argument, rather than exempting its dictionaries by path, keeps the guard from mirroring upstream's artifact schema.
+- **D-impl-30 (#201, Codex post-implementation C2).** A capacity refusal logs at `debug` at the ingress (`isExpectedRefusal`) and in the execution service (`logOperationOutcome`), like the Terms, scope and argument refusals: a dApp with silent sends reaches the cap with no window, so it can repeat the refusal at will. The row is unchanged (OWNER-ASKS item 9).
+- **D-impl-31 (Delivery).** The PR title backticks `chainInfo`: commitlint's `subject-case` refuses the bare camel-case word, and the squash subject is linted on `dev`. Otherwise the title is the Delivery table's.
 
 ### Plan-space search: the competing outline
 
@@ -676,6 +706,13 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 | 1 | Codex gpt-6.1-sol, high (session `01a12bb1`) | reject (with blocking findings: a lock after the expired page loads unmounts it and its timer while the window keeps its verification slot) | C1 Med accepted (D-impl-17); C2 Med accepted: the stall's start is acknowledged by a console mark before Allow; C3 Low accepted (three narrating comments deleted) |
 | 1 | Opus general-purpose review | approve with fixes | O1 High rejected on evidence (it predicted the stall mark would arrive only after the loop on Chrome; the retry-0 rerun passed 3/3); O2 Med accepted (D-impl-16); O3 Low pushed back (the post-window Terms settle is the refusal plan § Arc 2 #86 lists; its claimed name was never bound to its selector); O4 Low accepted as a PR-body note (D-impl-12's "this network") |
 | 2 | Codex, same session resumed | **approve** | C1 and C2 confirmed resolved; no new findings; the loop converged |
+
+### Arc 3 post-implementation
+
+| Round | Reviewer | Verdict | Outcome |
+|---|---|---|---|
+| 1 | Codex gpt-6.1-sol, high (session `01a1328b`) | approve with fixes | C1 Med accepted: a stock artifact may key `storageLayout` by `toString`, so the walk skips the artifact argument (D-impl-29); C2 Low accepted: capacity refusals log at `debug` at both sites (D-impl-30); C3 Low accepted: `listCovered`'s narrating comment deleted, the composition header names every stub |
+| 1 | Opus general-purpose review | approve with fixes (4 Low) | O1 accepted as a residual: a Buffer-shaped `caller` or `contract` now passes the address schema and fails closed at the authwit build; same root as #331, which the orchestrator keeps out of this arc (D-orch-10), so #331 now names these sites. O2 pre-existing and outside every arc-3 decision (a non-string method name throws at `assertKnownMethod`; unsupported methods log at `error`): filed as #332. O3 accepted (the capacity describe restores its spies). O4 accepted (the README's 0.2.0 line says which wallets refuse and that they receive `AztecAddress` values) |
 
 ## Seeds (draft; finalized after approval)
 
