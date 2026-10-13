@@ -962,7 +962,30 @@ export async function importToken(page: Page, contractAddress: string): Promise<
 	// Enter contract address
 	await page.waitForSelector('[data-testid="token-address-input"]', { visible: true, timeout: 5_000 })
 	await replaceInputValue(page, '[data-testid="token-address-input"]', contractAddress)
+	await submitNewTokenPopup(page)
+}
 
+export async function waitForNewTokenAddress(page: Page, address: string): Promise<void> {
+	await page.waitForFunction(
+		(want: string) => document.querySelector<HTMLInputElement>('[data-testid="token-address-field"]')?.value === want,
+		{ timeout: 5_000 },
+		address,
+	)
+}
+
+/** Submits the open New token popup, its address already entered, and waits for the success toast. */
+export async function submitNewTokenPopup(page: Page): Promise<void> {
+	await clickNewTokenSubmit(page)
+
+	// Wait for success toast. The popup now blocks until the active account's
+	// initial balance projection completes (or 30s timeout in the popup
+	// itself), then fires the toast. Generous timeout because under sustained
+	// network-suite load the flow goes through PXE metadata fetch + storage
+	// write before the projector run.
+	await waitForToast(page, "Token added", 60_000)
+}
+
+export async function clickNewTokenSubmit(page: Page): Promise<void> {
 	// Wait for parsing to complete (button text changes from "Awaiting..." to
 	// "Import new token"). The wallet calls PXE to fetch token metadata,
 	// which is slow under sustained network-suite load — 60s is the safe
@@ -979,13 +1002,6 @@ export async function importToken(page: Page, contractAddress: string): Promise<
 	// Click import
 	await page.waitForSelector('[data-testid="import-token-button"]', { visible: true })
 	await clickByTestId(page, "import-token-button")
-
-	// Wait for success toast. The popup now blocks until the active account's
-	// initial balance projection completes (or 30s timeout in the popup
-	// itself), then fires the toast. Generous timeout because under sustained
-	// network-suite load the flow goes through PXE metadata fetch + storage
-	// write before the projector run.
-	await waitForToast(page, "Token added", 60_000)
 }
 
 /** Click "Refresh balances" from the token dropdown menu.
