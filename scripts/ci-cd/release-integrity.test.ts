@@ -70,13 +70,27 @@ const thirdParty = (steps: Step[]): string[] =>
 		),
 	].sort()
 
-const EXPRESSION = /\$\{\{([\s\S]*?)\}\}/g
 /** Any read of the `secrets` context, `toJSON(secrets)` included, but the job's own `secrets.GITHUB_TOKEN`. */
 const CUSTOM_SECRET = /\bsecrets\b(?!\s*\.\s*GITHUB_TOKEN\b)/
 
+/** The `${{ }}` spans of a text. A `}}` inside a single-quoted literal (`''` escapes a quote) ends
+ *  none, and an unclosed span runs to the end, so no text can hide a read from the scan. */
+function expressions(text: string): string[] {
+	const spans: string[] = []
+	for (let start = text.indexOf("${{"); start !== -1; start = text.indexOf("${{", start)) {
+		let end = start + 3
+		for (let quoted = false; end < text.length && (quoted || !text.startsWith("}}", end)); end++) {
+			if (text[end] === "'") quoted = !quoted
+		}
+		spans.push(text.slice(start + 3, end))
+		start = end
+	}
+	return spans
+}
+
 /** Whether an expression in any step, the job's env or the workflow's env reads a stored secret. */
 const readsCustomSecret = (job: Job, wf: Workflow): boolean =>
-	[...JSON.stringify([wf.env, job.env, job.steps]).matchAll(EXPRESSION)].some(([, expression]) => CUSTOM_SECRET.test(expression))
+	expressions(JSON.stringify([wf.env, job.env, job.steps])).some((expression) => CUSTOM_SECRET.test(expression))
 
 function privileged(job: Job, wf: Workflow): boolean {
 	const declared = job.permissions ?? wf.permissions ?? {}
@@ -582,6 +596,13 @@ describe("credentialed jobs", () => {
 		[
 			"the whole secrets context",
 			(t: Tree) => Object.assign(t.workflows["release.yml"].jobs["release-notes"], { env: { ALL: "${{ toJSON(secrets) }}" } }),
+		],
+		[
+			"a secret behind a quoted closing brace",
+			(t: Tree) =>
+				Object.assign(t.workflows["release.yml"].jobs["release-notes"], {
+					env: { KEY: "${{ format('}}{0}', secrets.ANY_KEY) }}" },
+				}),
 		],
 	])("finds %s", (_, edit) => {
 		expect(credentialedFindings(mutated(edit)).length).toBeGreaterThan(0)
