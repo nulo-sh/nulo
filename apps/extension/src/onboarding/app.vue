@@ -2,13 +2,15 @@
 <script setup lang="ts">
 /** Services */
 import { managers } from "@/utils/core"
+import { ConfigServiceClient } from "@/wallet/services/config/client"
 
 /** Composables */
+import { useConfigRead } from "@/composables/useConfigRead"
 import { useProfileBootstrap } from "@/composables/useProfileBootstrap"
 
 /** Utils */
-import { isPrefersDarkScheme, persistThemeHint } from "@/utils/general"
-import { defaultConfig } from "@/wallet/config"
+import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
+import type { Config } from "@/wallet/config"
 
 /** Store */
 import { useAppStore } from "@/stores/app.store"
@@ -17,24 +19,30 @@ const appStore = useAppStore()
 const router = useRouter()
 const { hydrateKnownProfile } = useProfileBootstrap()
 
-/** Theme bootstrap — mirror popup/app.vue's behavior so onboarding respects
- * the same light/dark/system preference. Reads from Config (chrome.storage). */
-const root = document.querySelector("html")
-type Theme = "dark" | "light" | "system"
-const theme = ref<Theme>(defaultConfig().theme as Theme)
-function applyTheme(value: Theme) {
-	theme.value = value
-	persistThemeHint(value)
-	if (value === "system") {
-		root?.setAttribute("theme", isPrefersDarkScheme() ? "dark" : "light")
-	} else {
-		root?.setAttribute("theme", value)
+// `theme-boot.js` painted the hint before first paint, and it stands until Config is read: applying a
+// default first would paint a theme nobody chose and overwrite the hint the next document reads.
+const root = document.documentElement
+let storedTheme: Config["theme"] | undefined
+const configService = new ConfigServiceClient()
+const themeRead = useConfigRead(configService, readTheme, (choice) => {
+	storedTheme = choice
+	applyThemeChoice(root, choice)
+})
+const systemScheme = window.matchMedia("(prefers-color-scheme: dark)")
+
+async function readTheme(): Promise<Config["theme"]> {
+	try {
+		return await configService.getValue("theme")
+	} catch (error) {
+		console.debug("theme read failed; the pre-paint theme stays", { error })
+		throw error
 	}
 }
-applyTheme(theme.value)
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-	if (theme.value === "system") root?.setAttribute("theme", isPrefersDarkScheme() ? "dark" : "light")
-})
+
+function followSystemScheme() {
+	if (storedTheme === "system") root.setAttribute("theme", isPrefersDarkScheme() ? "dark" : "light")
+}
+systemScheme.addEventListener("change", followSystemScheme)
 
 const POPUP_URL = chrome.runtime.getURL("src/popup/index.html")
 const ONBOARDING_TAB_ID_KEY = "nulo:onboarding:tab-id"
@@ -49,6 +57,10 @@ async function openPopupWindowAndClose() {
 	await chrome.storage.session.remove(ONBOARDING_TAB_ID_KEY)
 	window.close()
 }
+
+onBeforeMount(() => {
+	void themeRead.read()
+})
 
 onMounted(async () => {
 	await appStore.loadOnboardingCompleted()
@@ -70,6 +82,12 @@ onMounted(async () => {
 	}
 
 	await openPopupWindowAndClose()
+})
+
+onBeforeUnmount(() => {
+	configService.disconnect()
+	themeRead.dispose()
+	systemScheme.removeEventListener("change", followSystemScheme)
 })
 </script>
 

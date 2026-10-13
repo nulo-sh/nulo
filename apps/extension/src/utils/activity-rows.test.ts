@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 import type { IncomingNoteRecord, IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import type { Tx } from "@/wallet/services/transaction/spec"
-import { buildActivityRows, journalRecordInScope } from "./activity-rows"
+import { buildActivityRows, journalRecordInScope, rowOnToken, txOnToken } from "./activity-rows"
 
 function tx(updatedAt: number, hash: string): Tx {
 	return { hash, updatedAt, account: "0xa", calls: [] } as unknown as Tx
@@ -388,5 +388,33 @@ describe("buildActivityRows — read order", () => {
 			"id",
 		])
 		expect(incomingReads({}, {})).toEqual(["profileId", "blockTimestamp", "discoveredAt", "id"])
+	})
+})
+
+describe("a token's rows", () => {
+	const usdc = { id: 1, contract: "0xusdc" }
+	const onContract = (hash: string, contract: string) => ({ ...tx(1, hash), calls: [{ contract }] }) as unknown as Tx
+	const rows = buildActivityRows({
+		transactions: [onContract("0x1", "0xusdc"), onContract("0x2", "0xeurc")],
+		terminalJournalOps: [journal({ id: "j1", tokenId: 1 }), journal({ id: "j2", tokenId: 2 })],
+		incomingTransfers: [incoming({ siloedNullifier: "0xa1", tokenId: 1 }), incoming({ siloedNullifier: "0xa2", tokenId: 2 })],
+		accountAddress: "0xa",
+		profileId: "p1",
+		networkId: "net-1",
+	})
+
+	test("are its journal and incoming records by id and its txs by contract, never another token's", () => {
+		expect(rows).toHaveLength(6)
+		expect(
+			rows
+				.filter((row) => rowOnToken(row, usdc))
+				.map((row) => row.key)
+				.sort(),
+		).toEqual(["incoming:note:p1|net-1|0xa1", "journal:j1", "tx:0x1"])
+	})
+
+	test("a tx with no calls belongs to no token", () => {
+		expect(txOnToken({ calls: undefined } as unknown as Tx, "0xusdc")).toBe(false)
+		expect(txOnToken(onContract("0x3", "0xusdc"), "0xusdc")).toBe(true)
 	})
 })

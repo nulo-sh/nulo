@@ -563,14 +563,14 @@ export async function navigateToSettings(page: Page, ...segments: string[]): Pro
 	}
 }
 
-/** Open Settings → Developer → Account State → `section`. Account State keeps its `advanced/` URL
- *  and its `setting-nav-advanced-account-state-*` ids, which `navigateToSettings` cannot build. */
+/** Open Settings → Developer → Account State → `section`. Account State keeps its
+ *  `setting-nav-advanced-account-state-*` ids, which `navigateToSettings` cannot build. */
 export async function openAccountState(page: Page, section: "notes" | "authwits" | "contracts" | "senders"): Promise<void> {
 	await navigateToSettings(page, "developer")
 	await clickByTestId(page, "setting-nav-advanced-account-state")
-	await waitForHash(page, "#/popup/settings/advanced/account-state", 5_000)
+	await waitForHash(page, "#/popup/settings/developer/account-state", 5_000)
 	await clickByTestId(page, `setting-nav-advanced-account-state-${section}`)
-	await waitForHash(page, `#/popup/settings/advanced/account-state/${section}`, 5_000)
+	await waitForHash(page, `#/popup/settings/developer/account-state/${section}`, 5_000)
 }
 
 // ── Network ────────────────────────────────────────────────────────────

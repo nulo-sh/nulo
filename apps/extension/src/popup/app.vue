@@ -6,7 +6,7 @@ import Navigation from "./components/Navigation.vue"
 
 /** Utils */
 import { managers, isBackgroundConnected } from "@/utils/core"
-import { isPrefersDarkScheme, persistThemeHint } from "@/utils/general"
+import { applyThemeChoice, isPrefersDarkScheme } from "@/utils/general"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
 import { ownWindowRoute, postAuthRoute } from "@/utils/own-window"
 import { shouldAdvanceToGeneral } from "./should-advance-to-general"
@@ -100,12 +100,7 @@ const legalSheetShown = ref(false)
 const settingHandlers = {
 	theme(value) {
 		theme.value = value
-		persistThemeHint(value)
-		if (value === "system") {
-			root.setAttribute("theme", isPrefersDarkScheme() ? "dark" : "light")
-		} else {
-			root.setAttribute("theme", value)
-		}
+		applyThemeChoice(root, value)
 	},
 	disableAnimations(value) {
 		root.classList.toggle("noanimations", Boolean(value))

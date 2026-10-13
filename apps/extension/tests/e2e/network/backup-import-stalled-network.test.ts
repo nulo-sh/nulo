@@ -45,7 +45,7 @@ const hasConfig = aztecConfig !== undefined
 
 /** The origin the Testnet seed dials. */
 const PUBLIC_RPC_ORIGIN = new URL(TESTNET_RPC_URL).origin
-const SENDERS_HASH = "#/popup/settings/advanced/account-state/senders"
+const SENDERS_HASH = "#/popup/settings/developer/account-state/senders"
 const FUNDED_PUBLIC_RAW = (1000n * 10n ** 18n).toString()
 
 type AccountStateItem = { networkId?: string; chainId?: number; senders?: Array<{ address: string }> }

@@ -586,6 +586,24 @@ describe("RecentActivityView — its header", () => {
 		expect(empty.text()).toContain("NOTHING HERE YET")
 		expect(empty.text()).toContain("Recent activity")
 	})
+
+	test("a token page's 'View history' opens History filtered to that token", async () => {
+		H.store.current.transactions = [
+			{ hash: "0xh1", account: ACCT_A, chainId: 1, updatedAt: 3000, calls: [{ contract: "0xtok" }] } as never,
+		]
+		const router = makeRouter()
+		const feed = mount(RecentActivityView, {
+			shallow: true,
+			props: { token: { id: 4, contract: "0xtok", symbol: "TOK" } },
+			global: { plugins: [router], stubs: { RouterLink: false } },
+		})
+		await flushPromises()
+		const link = feed.find('[data-testid="activity-view-all"]')
+		expect(link.attributes("href")).toBe("/popup/activity?token=4")
+		await link.trigger("click")
+		await flushPromises()
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity?token=4")
+	})
 })
 
 describe("RecentActivityView — one feed block for token and account views", () => {

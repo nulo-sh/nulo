@@ -60,7 +60,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Contracts" :backTo="'/popup/settings/advanced/account-state'" gap="16" v-if="appStore.isLogined">
+	<SettingsPageShell title="Contracts" :backTo="'/popup/settings/developer/account-state'" gap="16" v-if="appStore.isLogined">
 		<AsyncListStatus v-if="isFetchingContracts || isErrorOccurred" :loading="isFetchingContracts" :error="error" label="FETCHING CONTRACTS" @retry="fetchContracts(true)" />
 
 		<Flex v-else-if="contracts.length" direction="column" gap="8">

@@ -7,6 +7,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ref } from "vue"
+import { createMemoryHistory, createRouter, type Router } from "vue-router"
 
 import { createAppStoreHarness } from "../../../tests/helpers/app-store-harness"
 import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
@@ -14,12 +15,18 @@ import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
 const H = vi.hoisted(() => {
 	const event = () => ({ add: () => {}, remove: () => {} })
 	const handlers = new Set<() => void>()
+	const tokenAddedHandlers = new Set<() => void>()
 	return {
+		tokenAddedHandlers,
 		event,
 		incomingConnected: { add: (fn: () => void) => handlers.add(fn), remove: (fn: () => void) => handlers.delete(fn), handlers },
 		getIncomingTransfers: vi.fn(),
 		getOperations: vi.fn(),
 		getTokens: vi.fn(),
+		tokenAdded: {
+			add: (fn: () => void) => tokenAddedHandlers.add(fn),
+			remove: (fn: () => void) => tokenAddedHandlers.delete(fn),
+		},
 		quotes: {} as Record<string, unknown>,
 		store: { current: null as unknown as ReturnType<typeof createAppStoreHarness> },
 	}
@@ -44,7 +51,7 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { disconnect: vi.fn(), onTokenAdded: H.event(), getTokens: H.getTokens }
+		return { disconnect: vi.fn(), onTokenAdded: H.tokenAdded, getTokens: H.getTokens }
 	}),
 }))
 vi.mock("@/wallet/services/incoming-transfer/client", () => ({
@@ -89,6 +96,16 @@ const record = (siloedNullifier: string, discoveredAt: number) => ({
 })
 
 let heroCallback: IntersectionObserverCallback | undefined
+let router: Router
+
+async function historyAt(path: string): Promise<Router> {
+	const memory = createRouter({
+		history: createMemoryHistory(),
+		routes: [{ path: "/popup/activity", component: { render: () => null } }],
+	})
+	await memory.push(path)
+	return memory
+}
 
 /** One observer delivery carrying a hero entry per value, oldest first, as a fast scroll batches them. */
 async function deliverHero(...intersecting: boolean[]) {
@@ -102,7 +119,9 @@ async function deliverHero(...intersecting: boolean[]) {
 const barShown = (w: { get: (selector: string) => { element: Element } }) =>
 	(w.get('[data-testid="page-title-bar"]').element.parentElement?.className ?? "").includes("page_title_bar_visible")
 
-beforeEach(() => {
+beforeEach(async () => {
+	router = await historyAt("/popup/activity")
+	H.tokenAddedHandlers.clear()
 	H.getIncomingTransfers.mockReset().mockResolvedValue([])
 	H.getOperations.mockReset().mockResolvedValue([])
 	H.getTokens.mockReset().mockResolvedValue([])
@@ -144,6 +163,7 @@ describe("pages/activity — arrivals", () => {
 		const w = mount(Activity, {
 			shallow: true,
 			global: {
+				plugins: [router],
 				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
 				provide: { [ARRIVALS_KEY as symbol]: arrivals },
 			},
@@ -177,7 +197,13 @@ describe("pages/activity — cancelled and failed operations by network", () => 
 			updatedAt: terminalAt,
 		})
 		H.getOperations.mockResolvedValue([op("here", "net-1", 2000), op("there", "net-2", 1000)])
-		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		const w = mount(Activity, {
+			shallow: true,
+			global: {
+				plugins: [router],
+				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+			},
+		})
 		await flushPromises()
 		const keys = () =>
 			w
@@ -208,6 +234,7 @@ describe("pages/activity — the received row's token", () => {
 	const mountHistory = (errorHandler?: (error: unknown) => void) =>
 		mount(Activity, {
 			global: {
+				plugins: [router],
 				stubs: {
 					Flex: { template: "<div><slot /></div>" },
 					MaterialIcon: true,
@@ -291,7 +318,13 @@ describe("pages/activity — the incoming load signal", () => {
 	test("the feed root carries data-incoming-loaded only once the incoming read has landed", async () => {
 		let release!: (rows: unknown[]) => void
 		H.getIncomingTransfers.mockReturnValue(new Promise((resolve) => (release = resolve)))
-		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		const w = mount(Activity, {
+			shallow: true,
+			global: {
+				plugins: [router],
+				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+			},
+		})
 		await flushPromises()
 		const root = () => w.find('[data-testid="activity-feed-root"]')
 		expect(root().exists()).toBe(true)
@@ -305,14 +338,26 @@ describe("pages/activity — the incoming load signal", () => {
 
 describe("pages/activity — the title", () => {
 	test("a screen reader meets the title once: the compact bar is hidden from it, the hero title is not", async () => {
-		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		const w = mount(Activity, {
+			shallow: true,
+			global: {
+				plugins: [router],
+				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+			},
+		})
 		await flushPromises()
 		expect(w.get('[data-testid="page-title-bar"]').element.parentElement?.getAttribute("aria-hidden")).toBe("true")
 		expect(w.get('[data-testid="page-hero-title"]').element.closest('[aria-hidden="true"]')).toBeNull()
 	})
 
 	const mountTitled = async () => {
-		const w = mount(Activity, { shallow: true, global: { stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true } } })
+		const w = mount(Activity, {
+			shallow: true,
+			global: {
+				plugins: [router],
+				stubs: { Flex: { template: "<div><slot /></div>" }, MaterialIcon: true },
+			},
+		})
 		await flushPromises()
 		return w
 	}
@@ -327,5 +372,159 @@ describe("pages/activity — the title", () => {
 		const w = await mountTitled()
 		await deliverHero(false, true)
 		expect(barShown(w)).toBe(false)
+	})
+})
+
+describe("pages/activity — opened from a token page", () => {
+	const USDC = { id: 1, chainId: 1, contract: "0xusdc", name: "USD Coin", symbol: "USDC", decimals: 6, hasDecimals: true }
+	const EURC = { id: 2, chainId: 1, contract: "0xeurc", name: "Euro Coin", symbol: "EURC", decimals: 6, hasDecimals: true }
+	const txOn = (hash: string, contract: string, updatedAt: number) => ({
+		hash,
+		account: "0xacct",
+		chainId: 1,
+		profileId: "p1",
+		updatedAt,
+		calls: [{ contract }],
+	})
+	const opOn = (id: string, tokenId: number, terminalAt: number) => ({
+		id,
+		kind: "transfer",
+		origin: "popup",
+		profileId: "p1",
+		accountAddress: "0xacct",
+		networkId: "net-1",
+		tokenId,
+		progress: { stage: "cancelled" },
+		error: null,
+		terminalAt,
+		createdAt: 0,
+		updatedAt: terminalAt,
+	})
+	const usdcIn = { ...record("u", 4000), tokenId: 1 }
+	const eurcIn = { ...record("e", 3000), tokenId: 2 }
+	const stubs = {
+		Flex: { template: "<div><slot /></div>" },
+		MaterialIcon: true,
+		Badge: { template: "<div><slot /></div>" },
+		RowAction: {
+			props: ["label"],
+			emits: ["click"],
+			template: `<button :aria-label="label" @click="$emit('click')"><slot /></button>`,
+		},
+	}
+
+	let arrivals: { isArriving: ReturnType<typeof vi.fn>; present: ReturnType<typeof vi.fn>; latest: unknown; load: () => Promise<void> }
+
+	beforeEach(() => {
+		H.store.current.transactions = [txOn("0xu", "0xusdc", 6000), txOn("0xe", "0xeurc", 5000)] as never
+		H.getOperations.mockResolvedValue([opOn("ju", 1, 2000), opOn("je", 2, 1000)])
+		H.getIncomingTransfers.mockResolvedValue([usdcIn, eurcIn])
+		H.getTokens.mockResolvedValue([USDC, EURC])
+		arrivals = { isArriving: vi.fn(() => true), present: vi.fn(), latest: ref(null), load: async () => {} }
+	})
+
+	async function openHistory(path: string) {
+		router = await historyAt(path)
+		const w = mount(Activity, {
+			shallow: true,
+			attachTo: document.body,
+			global: { plugins: [router], stubs, provide: { [ARRIVALS_KEY as symbol]: arrivals } },
+		})
+		await flushPromises()
+		return w
+	}
+	const keys = (w: Awaited<ReturnType<typeof openHistory>>) =>
+		w
+			.findComponent(TransactionsList)
+			.props("rows")
+			.map((row: { key: string }) => row.key)
+	const ALL = ["tx:0xu", "tx:0xe", `incoming:${usdcIn.id}`, `incoming:${eurcIn.id}`, "journal:ju", "journal:je"]
+
+	test("shows that token's txs, operations and receipts, never another token's", async () => {
+		const w = await openHistory("/popup/activity?token=1")
+		expect(keys(w)).toEqual(["tx:0xu", `incoming:${usdcIn.id}`, "journal:ju"])
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity?token=1")
+		w.unmount()
+	})
+
+	test("paints neither rows nor the empty state, and presents nothing, until the token list is read", async () => {
+		let answer!: (tokens: unknown[]) => void
+		H.getTokens.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+		const w = await openHistory("/popup/activity?token=1")
+		expect(w.findComponent(TransactionsList).exists()).toBe(false)
+		expect(w.text()).not.toContain("No transactions yet")
+		expect(arrivals.present.mock.calls.flat(2)).toEqual([])
+
+		answer([USDC, EURC])
+		await flushPromises()
+		expect(keys(w)).toEqual(["tx:0xu", `incoming:${usdcIn.id}`, "journal:ju"])
+		expect(arrivals.present).toHaveBeenLastCalledWith([usdcIn])
+		w.unmount()
+	})
+
+	test.each([
+		["a token the scope does not hold", () => H.getTokens.mockResolvedValue([EURC])],
+		["a token list that could not be read", () => H.getTokens.mockRejectedValue(new Error("port cannot open"))],
+	])("%s drops the query and shows all activity", async (_case, arrange) => {
+		vi.spyOn(console, "debug").mockImplementation(() => {})
+		arrange()
+		const w = await openHistory("/popup/activity?token=1")
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity")
+		expect(keys(w)).toEqual(ALL)
+		expect(w.find('[data-testid="activity-token-filter"]').exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("a failed refresh after the token resolved keeps the filter", async () => {
+		vi.spyOn(console, "debug").mockImplementation(() => {})
+		const w = await openHistory("/popup/activity?token=1")
+		H.getTokens.mockRejectedValue(new Error("port cannot open"))
+		for (const reload of [...H.tokenAddedHandlers]) reload()
+		await flushPromises()
+
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity?token=1")
+		expect(keys(w)).toEqual(["tx:0xu", `incoming:${usdcIn.id}`, "journal:ju"])
+		w.unmount()
+	})
+
+	test.each(["0x1", "1e0", "-1", "0", "1.0", "9007199254740993"])("?token=%s is no filter", async (raw) => {
+		const w = await openHistory(`/popup/activity?token=${raw}`)
+		expect(keys(w)).toEqual(ALL)
+		expect(w.find('[data-testid="activity-token-filter"]').exists()).toBe(false)
+		w.unmount()
+	})
+
+	test("a repeated ?token= is no filter", async () => {
+		const w = await openHistory("/popup/activity?token=1&token=2")
+		expect(keys(w)).toEqual(ALL)
+		w.unmount()
+	})
+
+	test("the chip names the token without its control characters; clearing it shows everything and focuses the title", async () => {
+		H.getTokens.mockResolvedValue([{ ...USDC, symbol: "\u202EUS\u200BDC" }, EURC])
+		const w = await openHistory("/popup/activity?token=1")
+		expect(w.get('[data-testid="activity-token-filter-symbol"]').text()).toBe("USDC")
+		const clear = w.get('[data-testid="activity-token-filter-clear"]')
+		expect(clear.attributes("aria-label")).toBe("Show all activity")
+
+		await clear.trigger("click")
+		await flushPromises()
+		expect(router.currentRoute.value.fullPath).toBe("/popup/activity")
+		expect(keys(w)).toEqual(ALL)
+		expect(w.find('[data-testid="activity-token-filter"]').exists()).toBe(false)
+		expect(document.activeElement).toBe(w.get('[data-testid="page-hero-title"]').element)
+		w.unmount()
+	})
+
+	test("a token with no activity shows its chip over the empty state", async () => {
+		H.store.current.transactions = []
+		H.getOperations.mockResolvedValue([])
+		H.getIncomingTransfers.mockResolvedValue([eurcIn])
+		const w = await openHistory("/popup/activity?token=1")
+		expect(w.find('[data-testid="activity-token-filter"]').exists()).toBe(true)
+		expect(w.findComponent(TransactionsList).exists()).toBe(false)
+		expect(w.text()).toContain("No transactions yet")
+		expect(arrivals.present).not.toHaveBeenCalledWith([eurcIn])
+		w.unmount()
 	})
 })

@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
 
 			<!-- Account State (Notes, Authwits, Contracts, Senders) -->
 			<RouterLink
-				to="/popup/settings/advanced/account-state"
+				to="/popup/settings/developer/account-state"
 				:class="$style.state_link"
 				data-testid="setting-nav-advanced-account-state"
 			>
