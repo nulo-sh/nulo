@@ -46,6 +46,7 @@ import {
 	ScopeViolationError,
 	SessionEndedError,
 	TermsAcceptanceRequiredError,
+	TooManyPendingError,
 } from "@nulo/extension-messaging/errors"
 import { JobCancelledSentinel } from "@nulo/wallet-core/jobs"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
@@ -784,8 +785,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 		return results
 	}
 
-	/** Level by reach: a Terms, scope or argument refusal is expected, and a connected dApp can
-	 *  repeat any of them, so at `error` they would fill every user's log buffer. */
+	/** Level by reach: a Terms, scope, argument or capacity refusal is expected, and a connected dApp
+	 *  can repeat any of them, so at `error` they would fill every user's log buffer. */
 	private logOperationOutcome(traceId: string, kind: Operation["kind"], classified: CancelOrFailResult): void {
 		if (classified.status === "cancelled") {
 			this.logInfo(`[${traceId}] executeOperations: ${kind} cancelled by user`)
@@ -795,6 +796,8 @@ export class ExecutionService extends Service<Methods> implements ServiceSpec<Me
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: outside its grant`)
 		} else if (classified.code === InvalidWalletArgumentsError.CODE) {
 			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: invalid arguments`)
+		} else if (classified.code === TooManyPendingError.CODE) {
+			this.logDebug(`[${traceId}] executeOperations: ${kind} refused: too many pending`)
 		} else {
 			this.logError(`[${traceId}] executeOperations: ${kind} failed:`, classified.error)
 		}

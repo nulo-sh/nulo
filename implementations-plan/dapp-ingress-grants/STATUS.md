@@ -21,3 +21,11 @@
 - 2026-10-11: gate 2.6 green (lint, typecheck:all, root test 11282). Commits a1a9593, 4d56391. Gate 2.7 Chrome network run started.
 - 2026-10-11: gate 2.7 green on both browsers (the six network files, retry 0: Chrome 11/11, Firefox 11/11). Review loop converged: Codex round 1 reject (three accepted, d80e1c8), Opus approve with fixes (one accepted, 593fe65), Codex round 2 approve.
 - 2026-10-11: `origin/dev` 79838db merged (a52b002). Final gates on 3a8db7c: audit:vue, test:all, test:ci-gating, check:plans; network six files retry 0 Chrome 11/11, Firefox 11/11; smoke retry 0 Chrome 212 passed, Firefox 209 passed. After-shots committed. PR opened.
+- 2026-10-12: arc 3 started on `dapp-ingress-grants-arc3` off `origin/dev` 8d01f9b; page 3 decisions read from #84, #87, #89, #125, #199, #201.
+- 2026-10-12: gate 3.1 green (lint, typecheck:all, wallet-bridge 682, extension-messaging 385, root test 11388). Commit b82a5a3.
+- 2026-10-12: gate 3.2 green (lint, typecheck:all, schema-patch 15, wallet-bridge 692, test:release, test:ci-gating). Commit 4cc415a.
+- 2026-10-12: gate 3.3 green (lint, typecheck:all, root test 11417). Commits a3f7bca, 754927a.
+- 2026-10-12: Codex design consult (Q1-Q4) agreed; gate 3.4 green (lint, typecheck:all, wallet-bridge 701, root test 11427). Commit bac198a.
+- 2026-10-13: network e2e on bac198a, the seven files, retry 0: Chrome 7/7, Firefox 7/7. Issues filed: #330 (`blocked:external`, typed discovery rejection), #331 (Buffer-shaped address residual), #332 (non-string method name).
+- 2026-10-13: review round 1: Codex approve with fixes (three accepted, af22322), Opus approve with fixes (two fixed in dfdaaf2, two recorded: #331 extended, #332). Codex round 2 started.
+- 2026-10-13: Codex round 2 approve with no findings: the loop converged. Gate 3.5 green on 13c838c: audit:vue 0 (extension 11430 passed), test:all 0, test:release 294 pass, test:ci-gating 526 pass, check:plans 0; the seven network files, retry 0: Chrome 7/7, Firefox 7/7.

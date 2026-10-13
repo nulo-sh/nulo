@@ -74,6 +74,8 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 
 **What ships now.** A with P3-03's bounds as signed (no `version` bound), with this ask attached to P3-03 so its signature covers the discovery case. Without it, #199 is held out of arc 3's PR.
 
+**Answer (page 3, 2026-10-12): A**, with P3-03 signed as qualified by this ask, whose text also bounds `version` to the u32 range once every served network's version is confirmed below `2^32`. Confirmed (the rollup's `VERSION` is `uint32`) and built in arc 3 (plan D-impl-18).
+
 ## 5. #125: the typed Terms refusal cannot reach a new connection (arc 3)
 
 **Surface.** What an app receives when a new connection is refused because the Terms are not accepted.
@@ -88,6 +90,8 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 
 **What ships now.** A; B needs only a yes.
 
+**Answer (page 3, 2026-10-12): B.** Arc 3 extends the pin, and the `blocked:external` issue asks aztec-packages for a typed discovery rejection.
+
 ## 6. #89: the 0.2.0 publish (after arc 3)
 
 **Surface.** `@nulo-sh/wallet-sdk-schema-patch` on npm.
@@ -101,6 +105,8 @@ Separately, P3-03 bounds `version` only at `2^53`, but the wallet's chain id fol
 **Recommendation.** A.
 
 **What ships now.** A's README line in arc 3. The publish itself is yours to dispatch; no agent runs it.
+
+**Answer (page 3, 2026-10-12): A.** The `## Changes` line ships in arc 3; the 0.2.0 publish waits on your dispatch of `publish-packages.yml` after arc 3 merges.
 
 ## 7. #124: the expired connect window keeps the app's connect slot until it is closed (arc 2)
 

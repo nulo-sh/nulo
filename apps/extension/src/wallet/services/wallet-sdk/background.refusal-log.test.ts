@@ -1,10 +1,11 @@
 /**
- * A scope or schema refusal reaches no sink with a request value, and a refused `sendTx` is filed as
- * refused. Each request carries a sentinel in every field it controls, wire-valid where the refusal
- * under test comes after the schema parse, and runs through the arrival check and the real
- * dispatcher; only the connection handler and the wallet services are stubbed.
+ * A scope, schema or capacity refusal reaches no sink with a request value, and a refused `sendTx`
+ * is filed as refused. Each request carries a sentinel in every field it controls, wire-valid where
+ * the refusal under test comes after the schema parse, and runs through the arrival check and the
+ * real dispatcher; only the connection handler and the wallet services are stubbed.
  */
 import { afterEach, describe, expect, test, vi } from "vitest"
+import { TooManyPendingError } from "@nulo/extension-messaging/errors"
 import { type GrantedCapabilityRecord, WalletSdkDispatcher } from "@nulo/wallet-bridge"
 import { wireCall, wireInstance, wirePayload } from "@nulo/wallet-bridge/testing"
 import { LogLevel } from "@/wallet/logger"
@@ -116,7 +117,7 @@ const NOT_JOURNALED: Refusal[] = [
 	[
 		"grantPublicAuthwit, the call",
 		"grantPublicAuthwit",
-		[opts.from, { caller: "SENTINEL-CALLER", contract: "SENTINEL-CONTRACT", method: "SENTINEL-METHOD", args: ["SENTINEL-ARG"] }],
+		[opts.from, { caller: sentinel(14), contract: sentinel(15), method: "SENTINEL-METHOD", args: ["SENTINEL-ARG"] }],
 		[tx(listed(A))],
 		"Scope violation: grantPublicAuthwit call not permitted by granted transaction scope",
 	],
@@ -213,7 +214,14 @@ function serialize(value: unknown): string {
 	)
 }
 
-async function refuse(method: string, args: unknown[], grants: GrantedCapabilityRecord[]) {
+type RefuseOptions = { session?: typeof SESSION; execute?: () => Promise<unknown> }
+
+async function refuse(
+	method: string,
+	args: unknown[],
+	grants: GrantedCapabilityRecord[],
+	{ session = SESSION, execute }: RefuseOptions = {},
+) {
 	const stored = {
 		tryGetDappSessionByOriginAndChain: async () => ({
 			id: "row-1",
@@ -231,7 +239,7 @@ async function refuse(method: string, args: unknown[], grants: GrantedCapability
 	const log = vi.spyOn(deps.logger, "log")
 	const consoleLines = (["debug", "warn", "error"] as const).map((level) => vi.spyOn(console, level))
 	const execution = { executeOperations: vi.fn() }
-	const interaction = { execute: vi.fn(), requestCapabilities: vi.fn() }
+	const interaction = { execute: vi.fn(execute), requestCapabilities: vi.fn() }
 	const dispatcher = new WalletSdkDispatcher(
 		networkSvc as never,
 		account as never,
@@ -244,16 +252,16 @@ async function refuse(method: string, args: unknown[], grants: GrantedCapability
 	const sendResponse = vi.fn(async (_sessionId: string, _response: unknown) => {})
 	const message = { messageId: "m1", type: method, args } as never
 	// The background files a queued row at arrival for a `sendTx` only.
-	const queuedJournalId = method === "sendTx" ? await tryCreateQueuedJournal(message, SESSION, deps) : undefined
+	const queuedJournalId = method === "sendTx" ? await tryCreateQueuedJournal(message, session, deps) : undefined
 
 	await handleWalletMessage(
-		SESSION,
+		session,
 		message,
 		{ sendResponse, terminateSession: vi.fn() } as never,
 		dispatcher,
 		{ captureExecutionFence: async () => ({ profileId: "profile-1", epoch: 0, session: 1 }) } as never,
 		journal,
-		new Map([[SESSION.sessionId, "profile-1"]]),
+		new Map([[session.sessionId, "profile-1"]]),
 		{ current: () => 0 } as never,
 		deps.logger,
 		{ assertCurrent: async () => {} },
@@ -274,7 +282,7 @@ async function refuse(method: string, args: unknown[], grants: GrantedCapability
 		leakingLines: lines.map(serialize).filter((line) => LEAK.test(line)),
 		responseLeaks: LEAK.test(serialize(sendResponse.mock.calls)),
 		ran: [execution.executeOperations, interaction.execute, interaction.requestCapabilities].flatMap((fn) => fn.mock.calls),
-		rows: await journal.countOperations({ sessionId: SESSION.sessionId }),
+		rows: await journal.countOperations({ sessionId: session.sessionId }),
 		row: row && {
 			stage: row.progress.stage,
 			kind: row.error?.kind,
@@ -316,6 +324,21 @@ describe("handleWalletMessage — a scope refusal", () => {
 	})
 })
 
+describe("handleWalletMessage — a capacity refusal", () => {
+	afterEach(() => {
+		vi.restoreAllMocks()
+	})
+
+	test("of a sendTx over the waiting-sends cap answers -32005 at debug", async () => {
+		const overCap = async () => [{ status: "failed", error: "Too many pending", code: TooManyPendingError.CODE }]
+		expect(await refuse("sendTx", [wirePayload([call]), { from: ACCOUNT }], [tx("*")], { execute: overCap })).toMatchObject({
+			level: LogLevel.Debug,
+			envelope: { code: -32005, data: { walletErrorCode: TooManyPendingError.CODE } },
+			leakingLines: [],
+		})
+	})
+})
+
 describe("handleWalletMessage — a schema refusal", () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
@@ -339,6 +362,16 @@ describe("handleWalletMessage — a schema refusal", () => {
 				leaks: false,
 				title: "Transaction",
 			},
+		})
+	})
+
+	test("on a channel whose chainInfo does not decode answers -32602 at debug before any dispatch", async () => {
+		const undecodable = { ...SESSION, chainInfo: { chainId: "", version: SESSION.chainInfo.version } } as unknown as typeof SESSION
+		expect(await refuse("getAccounts", [], [grant(authWit)], { session: undecodable })).toEqual({
+			...refusedByParse("getAccounts"),
+			refusal: undefined,
+			rows: 0,
+			row: undefined,
 		})
 	})
 
