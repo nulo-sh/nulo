@@ -1,9 +1,9 @@
 /**
  * The home-preview row math for `RecentActivityView`: a chronological merge of terminal journal
  * records, settled chain txs and incoming transfers, scoped like `buildActivityRows` but with the
- * preview's OWN rules (journal rows arrive pre-filtered, incoming rows are token-scoped when the view
- * is a token page, and the list is sliced to the slots the in-flight cards leave). Deliberately not
- * `buildActivityRows`: unifying would broaden or drop rows.
+ * preview's OWN rules (journal rows arrive pre-filtered and give way to a tx row of the same hash,
+ * incoming rows are token-scoped when the view is a token page, and the list is sliced to the slots
+ * the in-flight cards leave). Deliberately not `buildActivityRows`: unifying would broaden or drop rows.
  */
 import { type ActivityRow, incomingInScope, incomingRow, scopedTxRows } from "@/utils/activity-rows"
 import type { IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
@@ -37,11 +37,16 @@ export function buildRecentActivityRows(p: {
 	scope: RecentRowScope
 	token: RecentTokenScope
 }): RecentActivityRow[] {
+	const txRows = scopedTxRows(p.transactions, p.scope)
+	// One card per send: a failed record whose hash a tx row carries is that row's send, and the row is the truth.
+	const settledHashes = new Set(txRows.map((row) => row.tx.hash))
 	const rows: RecentActivityRow[] = []
 	for (const op of p.journalOps) {
+		const hash = op.progress?.stage === "failed" ? op.progress.txHash : undefined
+		if (hash !== undefined && settledHashes.has(hash)) continue
 		rows.push({ type: "journal", key: `journal:${op.id}`, sortKey: op.terminalAt ?? 0, op })
 	}
-	rows.push(...scopedTxRows(p.transactions, p.scope), ...tokenScopedIncomingRows(p.incomingTransfers, p.scope, p.token))
+	rows.push(...txRows, ...tokenScopedIncomingRows(p.incomingTransfers, p.scope, p.token))
 	rows.sort((a, b) => b.sortKey - a.sortKey)
 	return rows
 }

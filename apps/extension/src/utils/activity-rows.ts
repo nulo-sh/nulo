@@ -75,8 +75,8 @@ export function isForeignProfile(scopeProfileId: string | undefined, rowProfileI
 
 /** Scope tx to the active account+chain when a scope is supplied (a late/
  *  out-of-scope tx from the store's flat list must not render under B). */
-export function scopedTxRows(transactions: BuildActivityRowsParams["transactions"], scope: RowScope): ActivityRow[] {
-	const rows: ActivityRow[] = []
+export function scopedTxRows(transactions: BuildActivityRowsParams["transactions"], scope: RowScope): ActivityRowTx[] {
+	const rows: ActivityRowTx[] = []
 	for (const tx of transactions) {
 		if (scope.accountAddress !== undefined && tx.account !== scope.accountAddress) continue
 		if (scope.chainId !== undefined && tx.chainId !== scope.chainId) continue
