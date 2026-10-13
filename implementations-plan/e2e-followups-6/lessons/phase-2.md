@@ -44,7 +44,7 @@ Run on the three committed Phase 1-2 commits while waiting for `e2e-followups-5`
 | 3 | [nit] "Chrome reports it nowhere else" implies Firefox does; at HEAD Firefox's relay delivers to a `Page` with no listener | **Accepted.** "nothing reports it elsewhere" until step 8 decides the Firefox clause. |
 | 4 | [nit] The top-of-body comments omit the fixture's setup popup, which the assertion also covers | **Accepted.** Reworded in the five files. |
 | 5 | [nit] A window leaks when `waitForPopup` fails after the target appears (rows, the capture test) | **Rejected.** Only a second failure on a retry is affected, and the first attempt's error is printed by `RetryErrorReporter`; closing windows inside `waitForPopup` on failure would change every caller's failure path for no case the suite has hit. |
-| 6 | [nit] Each test asserts only the arrays it already asserted | **Rejected for this arc** (the plan's choice: assertions move, none is added to a new array). The sweep's JSONL shows what the windows raise in each array; an entry there is a finding whichever array a test asserts. |
+| 6 | [nit] Each test asserts only the arrays it already asserted | **Out of this arc** (the plan's choice: assertions move, none is added to a new array). The sweep's JSONL showed both arrays empty for every one of these files; filed as #336. |
 | 7 | [nit] The zombie helper leaks the background `sleep` if the shell prints no pid | **Rejected.** The plan's "once known"; the pid is unknown on that path, and the old fixture had the same exposure. |
 
 ## 2026-10-12: smoke on Chrome (armed build, `env -u EXTENSION_PATH`, retry 0, the sweep tap applied)
@@ -56,3 +56,48 @@ Run on the three committed Phase 1-2 commits while waiting for `e2e-followups-5`
 - Full smoke suite on Chrome: 49 files passed, 4 skipped (214 tests passed, 10 skipped), 1,459 s.
 - Firefox (armed Firefox build): the three files 11/11 green; proof 1 and proof 2 red with the same two messages as on Chrome.
 - Sweep entries from every smoke run above (Chrome full suite, both browsers' three files, the four proof runs): 56 lines, every one a `NULO-PAGE-ERROR-` control nonce. No window, popup or onboarding page raised anything else.
+
+## 2026-10-12: the network sweep (step 7), before the merge
+
+Every network file that drives a window, through `agent.sh`, retry 0, the tap applied, one pass per browser and build mode (CI's mode for each file):
+
+| Run | Files | Result | Sweep entries |
+|---|---|---|---|
+| Chrome, proverless | 74 (outside CI's `canary` job) | 69 passed, 5 skipped (`_probe-warmup-effect`, `stale-anchor-recovery`, `firefox-background-restart` and two others that skip by design); 114 tests passed, 7 skipped; 1 h 42 m | 0 |
+| Chrome, prover-ON | `tx-sendTx-default`, `frozen-account-canary`, `passkey-execution-canary`, `delete-after-prove` | 4 passed, 6 tests | 0 |
+| Firefox, proverless | 74 | 70 passed, 4 skipped; 115 tests passed, 6 skipped; 1 h 9 m | 0 |
+| Firefox, prover-ON | the same four | 4 passed, 6 tests | 0 |
+
+**Dispositions: none to make.** Across smoke (both browsers) and the 156 network file runs, the arrays received no entry but the capture tests' own `NULO-PAGE-ERROR-` nonces: no approval, logger or own window, popup or onboarding page raised an uncaught throw, an unhandled rejection or a native console error after its recorder attached. So R1-R4 produced no harness fix, no product fix, no issue and no `OWNER-ASKS.md` entry, and the whole of #325 ships. Firefox's stderr carried its usual browser-internal lines (`FormHandlerParent.sys.mjs`, `WebDriverWorkerListenerChild.sys.mjs`) and ledger row 52's `Invalid window ID` (#312): neither belongs to a page the arrays record, as row 52 says.
+
+What the sweep cannot see (unchanged by this arc, and said at the attach): an error a window raised before `waitForPopup` attached. On Firefox, #328's close-time print now reports the add-on's latest exceptions; the gate's logs below are read for it.
+
+## 2026-10-12: step 8, the merge
+
+`origin/dev` merged at 17c6727 (#328, #327, #271). It carries #328's close-time print (`[firefox] the add-on's latest exceptions: …`, `fixtures/browser/firefox.ts`), so the attach comment and the skill sentence name it (55d6a86). `index.md` gained `tokens-and-balances`; `lessons.md` is unchanged (8,168 B). Nothing in the merge touched this arc's files except the skill (#328's ledger rows 54 and 55, a clean line-level merge).
+
+Gate on the merged head: `bun run lint`, `bun run typecheck:all` exit 0. `bun run test` first went red on `scripts/e2e/browser-seam.test.ts` › "no shared helper branches on the browser" at `fixtures/extension.ts:1228`: the uncommitted tap's `process.env.NULO_E2E_BROWSER`. The guard did its job; with the tap reverted `bun run test` exits 0 (742 files passed, 3 skipped). The tap goes back on only for the gate's e2e inventory and comes off before any commit.
+
+## 2026-10-13: the gate on the merged head (step 8 onward), tap applied for inventory
+
+Fresh armed build per browser for smoke, `env -u EXTENSION_PATH`, retry 0; network through `agent.sh`, retry 0.
+
+| Run | Head | Result |
+|---|---|---|
+| smoke `page-error-capture`, `own-window`, `rows`, Chrome | 55d6a86 | 3 files, 11/11 |
+| full smoke suite, Chrome | 55d6a86 | 49 passed, 4 skipped (214 tests, 10 skipped) |
+| smoke, the three files, Firefox | 55d6a86 | 11/11 |
+| round 2, the seven proverless asserting files + `delete-after-prove` prover-ON, Chrome | 36d8ea5 from the first file on (the nits commit landed during this run's build) | 7/7 + 1/1 |
+| round 2, the same, Firefox | 36d8ea5 | 7/7 + 1/1 |
+| round 3, Chrome | 36d8ea5 | 7/7 + 1/1 |
+| round 3, Firefox | 36d8ea5 | 7/7 + 1/1 |
+
+With the sweep's round, each of the eight asserting files ran three times per browser, all green, none rerun. Sweep entries in the gate: smoke only the capture tests' control nonces; network none.
+
+**Firefox's close-time print (#328), read in every Firefox gate log.** Smoke: the capture tests' control nonces only. Network: 4 of the 16 Firefox network launches printed `Error: Client disconnected at moz-extension://<id>/assets/useScopedTokens-*.js:1:12652`, one exception each (once in round 2's proverless run, once in round 2's `delete-after-prove`, twice in round 3's proverless run). Disposition: the documented port-close cascade. A page closing, or the background restarting, rejects its in-flight RPCs with "Client disconnected"; production treats that as benign (`isClientDisconnectRejection`), and `pageErrorOf` (`fixtures/page-errors.ts`) has dropped it from `pageErrors` since before this arc, as the recorder's console filter does. It is not an error the window recording surfaced (the relay keeps it whether or not a listener heard it). Neither filter is this arc's, and neither changed.
+
+## 2026-10-13: `send-chaos`, CI's two seeds, both browsers (inventory)
+
+The one window-driving file the sweep had skipped that CI runs (`NULO_E2E_CHAOS=1`, proverless, retry 0; seeds `1095865833` and `1960252198`, as `pr-extension-network-e2e.yml`'s chaos job). The other two skipped ones run nowhere in CI (`store-captures` needs `STORE_CAPTURES`, `tx-sendTx-delegated-authwit` needs `NULO_E2E_STANDARD_CONTRACTS`). 4/4 green; no sweep entry; one Firefox close-time print, the same "Client disconnected" cascade as above.
+
+The tap was then reverted (`git apply -R`), `git diff` and a grep of `apps/extension/tests` and `scripts` show no trace of it, and the build-regenerated `src/types/components.d.ts` was restored.

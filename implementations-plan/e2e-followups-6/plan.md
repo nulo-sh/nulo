@@ -161,7 +161,7 @@ Recon: [recon.md](recon.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Pl
   - `git status` shows no `*.widened.test.ts`.
 - **Layers:** lint, typecheck, unit.
 
-## Phase 2: #325, every window a test asserts on is recorded
+## Phase 2: #325, every window a test asserts on is recorded ✓
 
 **Assumptions:** Facts 1-7, 6a and 10-12; Inferences I1-I4.
 
@@ -332,8 +332,28 @@ Run once, over the whole arc diff, after the arc gate passes.
 | D-orch-7 | An R3 or R4 issue is filed deduped, five sections, with a `Record` link to this plan, and named in the report with its disposition | Orchestrator, at approval | accepted |
 | D12 | `grantCapBundle` waits for the capabilities window to close (10 s, as `approveVerify` waits for its own) before returning, so a cap fixture's first assertion covers the grant window's teardown | Pre-sweep Opus review #1 (`resolveInteraction` precedes `closeWindow(true)`); the fix sits in the helper that owns the window | accepted |
 | D13 | Pattern (b) of the step-6 audit, a window still open or closing at the last assertion, is closed by waiting for the window's close (`register-token`) or by closing it through its own control (`snack-placement`'s execute window, `rejectExecute`) before the assertion | Implementer, from the audit; no assertion removed or loosened | accepted |
+| D14 | Order: the Codex loop and the final Opus review ran while the gate's network rounds ran, on the committed head (the uncommitted sweep tap excluded), not after the unit arc gate. The code was final but for what the reviews changed; the unit arc gate and the gate's rounds 2-3 then ran on the reviewed head | Implementer: the gate's e2e rounds hold the worktree for hours and the tap must stay applied through them, while `test:all` cannot pass with the tap applied (the browser-seam guard reds on it) | accepted |
 
 ## Audit verdicts
+
+### Implementation: Opus 5.5 pre-sweep review (general-purpose): conditional approve
+
+Run on the first three implementation commits while the host's other lead held the e2e slot, before any e2e spend. Seven findings, all checked against the tree; four accepted (`grantCapBundle` returned before the capabilities window closed, D12; the step-6 audit table's line numbers and fixture scope; the attach comment implied Firefox reported a pre-attach error; the top-of-body comments omitted the setup popup), three rejected with reasons (a window leaked when `waitForPopup` fails late affects only a retry, which `RetryErrorReporter` already explains; asserting arrays a test did not assert before is outside this arc, and the sweep inventories both arrays anyway; the zombie helper cannot kill a child whose pid it never read). Table in `lessons/phase-2.md`.
+
+### Implementation: Codex round 1 (gpt-6.1-sol, high, read-only): approve
+
+Over the net diff from the merge base (8d01f9b) at 55d6a86, with this plan, the ledger and the sweep's record. "No material findings. Confidence: high." Session `01a1327a-…`.
+
+### Implementation: Opus 5.5 final review (general-purpose), beside Codex round 1: approve
+
+One minor and three nits, all checked and accepted (36d8ea5): the skill now states that an assertion covers an approval window's teardown only once `waitForPopupClosed` returned; `grantCapBundle` asserts the dApp's answer before the close wait; the zombie helper checks the parent is alive before reading `comm`, so a shell that dies before its exec fails as such (re-certified 10/10 unpinned and 10/10 widened); `PopupKind`'s logger note no longer claims one URL (the developer page adds `?logId=`), and the attach comment fits 100 columns. It confirmed the Firefox clause against #328's relay (`recent` keeps every exception, emitted or not; printed at close when non-empty) and that no `grantCapBundle` caller leaves the window open after approve.
+
+### Implementation: Codex round 2 (resumed): approve
+
+Over the round's delta (`55d6a86..36d8ea5`): "No material findings. The delta introduces no new problems and leaves the round-1 approval unchanged. Confidence: high." The loop converged at round 2.
+
+The plan's own audits, before approval:
+
 
 ### Codex, round 1 (gpt-6.1-sol, high): reject
 
