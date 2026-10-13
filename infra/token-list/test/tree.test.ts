@@ -98,6 +98,8 @@ describe("the host tree", () => {
 		expect(formatFindings(keyTable(tableRow(a), tableRow(b)), [a])).toEqual(refused)
 		expect(formatFindings(keyTable(tableRow(a), tableRow(a)), [a])).toEqual(refused)
 		expect(formatFindings(keyTable(tableRow(a), `| ${b.keyId} | ${b.publicKey} | signs |\n`), [a])).toEqual(refused)
+		expect(formatFindings(keyTable(tableRow(a), ` ${tableRow(b)}`), [a])).toEqual(refused)
+		expect(formatFindings(keyTable(tableRow(a), tableRow(b).slice(2)), [a])).toEqual(refused)
 		const fenced = `${keyTable(`| \`${a.keyId}\`  | \`${b.publicKey}\` | signs |\n`)}\n\`\`\`\n${tableRow(a)}\`\`\`\n`
 		expect(formatFindings(fenced, [a])).toEqual(refused)
 	})

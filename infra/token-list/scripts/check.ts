@@ -40,12 +40,12 @@ export function keyFindings(keys: readonly PinnedKey[]): string[] {
 	return findings
 }
 
-const KEY_TABLE = /\n### Public keys\n\n((?:\|.*\n)+)/g
+const KEY_TABLE = /\n### Public keys\n\n((?:.+\n)+)/g
 const KEY_ROW = /^\| `([a-z0-9][a-z0-9-]{0,31})` \| `([A-Za-z0-9_-]{43})` \| [^|]+ \|$/
 
 /**
  * Third parties verify against the published table, so it must name exactly the pinned keys.
- * Every data row of the one table must parse: a row the pattern skipped would still render.
+ * Every line up to the blank one must parse as a row: Markdown renders any it skipped inside the table.
  */
 export function formatFindings(text: string, keys: readonly PinnedKey[]): string[] {
 	const tables = [...text.matchAll(KEY_TABLE)]
