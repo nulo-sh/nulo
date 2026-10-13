@@ -128,7 +128,7 @@ function deferred<T>() {
 const CONTRACT = "0xtokenA"
 const balanceRow = (contract = CONTRACT) => ({
 	id: 1,
-	token: { id: 1, chainId: 1, contract, name: "Token A", symbol: "TKA", decimals: 18 },
+	token: { id: 1, chainId: 1, contract, name: "Token A", symbol: "TKA", decimals: 18, hasDecimals: true },
 	account: "0xacct",
 	publicBalance: "1",
 	privateBalance: "0",
@@ -145,6 +145,7 @@ const namedRow = (id: number, symbol: string, over: Partial<{ chainId: number; c
 		name: `${symbol} Token`,
 		symbol,
 		decimals: 18,
+		hasDecimals: true,
 	},
 	publicBalance: over.publicBalance ?? "1",
 })

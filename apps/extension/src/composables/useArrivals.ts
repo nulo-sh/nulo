@@ -4,7 +4,7 @@ import type { ToastOptions } from "@/composables/toast"
 import { AUTH_ENTRY_ROUTES } from "@/popup/should-advance-to-general"
 import { ADDED_COALESCE, coalesce } from "@/utils/coalesce"
 import { formatSnackAmount } from "@/utils/snack-amount"
-import { isValidDecimals } from "@/utils/token-amount"
+import { knownDecimals } from "@/utils/token-amount"
 import type { ConfigProp } from "@/wallet/config"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import { type ArrivalState, isArrivalEligible } from "@/wallet/services/incoming-transfer/arrival-state"
@@ -24,7 +24,7 @@ export const ARRIVAL_WINDOW_MS = 2_600
 const HOME = "popup-general"
 const HISTORY = "popup-activity"
 
-export type ArrivalToken = { symbol: string; decimals: number }
+export type ArrivalToken = { symbol: string; decimals: number; hasDecimals: boolean }
 /** Home's chip: `label` is null when the amount cannot be formatted, and then no chip shows. */
 export type ArrivalChip = { id: string; label: string | null }
 
@@ -110,11 +110,12 @@ const newestFirst = (a: IncomingTransferRecord, b: IncomingTransferRecord) =>
 	b.l2BlockNumber - a.l2BlockNumber || b.txIndexInBlock - a.txIndexInBlock || b.indexInTx - a.indexInTx
 const noop = () => {}
 
-/** The snack's and the chip's amount, or null when the token's `decimals` or the raw amount is unusable. */
+/** The snack's and the chip's amount, or null when the token's decimals are unknown or the raw amount is unusable. */
 export function arrivalAmount(record: IncomingTransferRecord, token: ArrivalToken | undefined): string | null {
-	if (!token || !isValidDecimals(token.decimals)) return null
+	const decimals = knownDecimals(token)
+	if (decimals === null) return null
 	try {
-		return formatSnackAmount(BigInt(record.amountRaw), token.decimals)
+		return formatSnackAmount(BigInt(record.amountRaw), decimals)
 	} catch {
 		return null
 	}

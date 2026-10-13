@@ -841,8 +841,9 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 
 	test("each in-flight op's card reads its title, icon, chips and amount from the record and its token", async () => {
 		H.getTokens.mockResolvedValue([
-			{ id: 42, symbol: "USDC", decimals: 6 },
-			{ id: 43, symbol: "", decimals: 6 },
+			{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true },
+			{ id: 43, symbol: "", decimals: 6, hasDecimals: true },
+			{ id: 44, symbol: "RAW", decimals: 0, hasDecimals: false },
 		])
 		// Newest first: the table's order is the cards' order.
 		const table: [Record<string, unknown>, Record<(typeof FIELDS)[number], unknown>][] = [
@@ -863,8 +864,19 @@ describe("RecentActivityView — the awaiting card's fields", () => {
 					title: "USDC",
 					icon: "arrow-narrow-up-right",
 					originLabel: null,
-					amount: "0",
+					amount: null,
 					amountSymbol: "USDC",
+					transferTypeLabel: null,
+				},
+			],
+			[
+				{ kind: "transfer", tokenId: 44, amountRaw: "2000000" },
+				{
+					title: "RAW",
+					icon: "arrow-narrow-up-right",
+					originLabel: null,
+					amount: null,
+					amountSymbol: "RAW",
 					transferTypeLabel: null,
 				},
 			],
@@ -984,7 +996,7 @@ describe("RecentActivityView — hydration order", () => {
 })
 
 describe("RecentActivityView — a journal record of another scope runs no side effect", () => {
-	const TOK = { id: 7, contract: "0xtok", symbol: "TOK", decimals: 18 }
+	const TOK = { id: 7, contract: "0xtok", symbol: "TOK", decimals: 18, hasDecimals: true }
 	/** A cancelled transfer of TOK to 0xrcpt: it matches the placeholder and the task below by account and token alone. */
 	const terminal = (over: Record<string, unknown> = {}) => ({
 		id: "op-done",

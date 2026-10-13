@@ -4,7 +4,14 @@ import { foldLabel, isHiddenHolding } from "./token-fold"
 import type { OrderableRow } from "./token-order"
 
 const row = (symbol: string, over: Partial<OrderableRow> & { contract?: string } = {}): OrderableRow => ({
-	token: { chainId: 1, contract: over.contract ?? `0x${symbol.toLowerCase()}`, name: `${symbol} Token`, symbol, decimals: 18 },
+	token: {
+		chainId: 1,
+		contract: over.contract ?? `0x${symbol.toLowerCase()}`,
+		name: `${symbol} Token`,
+		symbol,
+		decimals: 18,
+		hasDecimals: true,
+	},
 	publicBalance: over.publicBalance ?? "0",
 	privateBalance: over.privateBalance ?? "0",
 	updatedAt: over.updatedAt ?? 1,
@@ -35,6 +42,13 @@ describe("isHiddenHolding", () => {
 		expect(isHiddenHolding(funded, { ctx: ctx(), usdRate: 2, thresholdMicro: 0n })).toBe(false)
 		const absurd = { ...funded, token: { ...funded.token, decimals: 500 } }
 		expect(isHiddenHolding(absurd, { ctx: ctx(), usdRate: 2, thresholdMicro: dollar })).toBe(false)
+	})
+
+	test("a funded row whose decimals are unknown stays visible where the same row with them folds as dust", () => {
+		const dust = row("D", { privateBalance: (10n ** 15n).toString() })
+		expect(isHiddenHolding(dust, { ctx: ctx(), usdRate: 2, thresholdMicro: dollar })).toBe(true)
+		const unknown = { ...dust, token: { ...dust.token, hasDecimals: false } }
+		expect(isHiddenHolding(unknown, { ctx: ctx(), usdRate: 2, thresholdMicro: dollar })).toBe(false)
 	})
 
 	test("pinned, never-synced and malformed rows never fold", () => {

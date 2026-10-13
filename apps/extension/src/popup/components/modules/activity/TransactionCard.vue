@@ -117,8 +117,9 @@ const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const amountFiat = computed(() => {
 	if (type.value !== "transfer" || !amount.value || !call.value?.contract) return null
+	// The fiat follows the decimals the amount above is shown in.
 	const label = prices.tokenFiatLabel(
-		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals },
+		{ chainId: appStore.network?.chainId, contract: call.value.contract, decimals: amount.value.decimals, hasDecimals: true },
 		amount.value.units,
 	)
 	return label ?? null

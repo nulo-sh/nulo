@@ -84,8 +84,8 @@ const arrivals = useArrivals({
 	routeName: () => route.name,
 	lookupToken: async (record) => {
 		if (record.tokenId === undefined) return undefined
-		const { symbol, decimals } = await arrivalsTokens.getToken(record.tokenId)
-		return { symbol, decimals }
+		const { symbol, decimals, hasDecimals } = await arrivalsTokens.getToken(record.tokenId)
+		return { symbol, decimals, hasDecimals }
 	},
 	accountName: () => appStore.account?.name ?? "",
 	openToast,

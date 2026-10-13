@@ -25,6 +25,7 @@ import { createRunFence } from "@/composables/runFence"
 /** Utils */
 import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
 import { stageSubtitle } from "@/utils/card-subtitle"
 import { activityRowRoute, journalRecordInScope } from "@/utils/activity-rows"
 import {
@@ -192,9 +193,9 @@ const executingOriginLabel = computed(() => {
 })
 const executingAmount = computed(() => {
 	if (!isUiTransfer.value) return null
-	const token = tokenById(executingTask.value.content.tokenId)
-	if (!token) return null
-	return balanceFormatted(String(executingTask.value.content.amount), token.decimals || 0, 8, { compact: true }).value
+	const decimals = knownDecimals(tokenById(executingTask.value.content.tokenId))
+	if (decimals === null) return null
+	return balanceFormatted(String(executingTask.value.content.amount), decimals, 8, { compact: true }).value
 })
 const executingAmountSymbol = computed(() => {
 	if (!isUiTransfer.value) return null
@@ -343,15 +344,14 @@ const showJournalAwaiting = computed(() => inFlightJournalOps.value.length > 0)
  *  is independent. */
 const renderedInFlightOps = computed(() => [...inFlightJournalOps.value].sort((a, b) => b.createdAt - a.createdAt))
 
-/** The awaiting card's amount, gated unlike the terminal card's: an empty `amountRaw` still shows
- *  (as 0). Null while the token is unknown or for dApp ops. */
+/** The awaiting card's amount, gated as the terminal card's is: null for an empty `amountRaw`, while
+ *  the token or its decimals are unknown, and for dApp ops. */
 function cardAmountFor(op) {
 	if (op?.kind !== "transfer") return null
-	if (op.amountRaw === undefined) return null
-	if (op.tokenId === undefined) return null
-	const token = tokenById(op.tokenId)
-	if (!token) return null
-	return balanceFormatted(op.amountRaw, token.decimals || 0, 8, { compact: true }).value
+	if (!op.amountRaw || op.tokenId === undefined) return null
+	const decimals = knownDecimals(tokenById(op.tokenId))
+	if (decimals === null) return null
+	return balanceFormatted(op.amountRaw, decimals, 8, { compact: true }).value
 }
 
 /** The awaiting card's symbol: set whenever the token is known, amount or not. */

@@ -34,6 +34,7 @@ import { humanizeMethodName, formatTransferType } from "@/utils/tx-enrichment"
 import { usePrices } from "@/composables/usePrices"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
+import { knownDecimals } from "@/utils/token-amount"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -76,8 +77,9 @@ const title = computed(() => {
 })
 
 const amountDisplay = computed(() => {
-	if (!isTransfer.value || !op.value?.amountRaw || !token.value) return null
-	return balanceFormatted(op.value.amountRaw, token.value.decimals ?? 0, 8, { compact: true }).value
+	const decimals = knownDecimals(token.value)
+	if (!isTransfer.value || !op.value?.amountRaw || decimals === null) return null
+	return balanceFormatted(op.value.amountRaw, decimals, 8, { compact: true }).value
 })
 
 const transferTypeLabel = computed(() => {
@@ -228,7 +230,7 @@ onBeforeUnmount(() => {
 
 			<!-- Transfer amount block (transfer kind only) -->
 			<Flex v-if="isTransfer && amountDisplay" align="center" direction="column" gap="6">
-				<span :class="$style.amount_value">
+				<span :class="$style.amount_value" data-testid="journal-detail-amount">
 					{{ amountDisplay }}
 					<span v-if="token?.symbol" :class="$style.amount_symbol">{{ token.symbol }}</span>
 				</span>

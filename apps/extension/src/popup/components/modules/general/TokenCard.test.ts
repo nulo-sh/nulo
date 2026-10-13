@@ -46,6 +46,7 @@ const tokenInfo = {
 	name: "Test Token",
 	symbol: "TST",
 	decimals: 18,
+	hasDecimals: true,
 }
 
 const factory = (overrides: Record<string, unknown> = {}, tokenOverrides: Record<string, unknown> = {}) => {
@@ -249,6 +250,17 @@ describe("TokenCard — hostile rows", () => {
 	test("an absurd decimals value is treated the same way (no exponent is ever computed)", async () => {
 		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
 		const w = factory({ updatedAt: 1, publicBalance: "1" }, { chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 500 })
+		await flushPromises()
+		expect(w.find('[data-malformed="true"]').text()).toBe("—")
+		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)
+	})
+
+	test("a token whose decimals the wallet does not know shows a dash and no fiat, never a figure", async () => {
+		mockQuotes = { "usd-coin": { coingeckoId: "usd-coin", usd: 1, fetchedAt: Date.now(), providerUpdatedAt: null } }
+		const w = factory(
+			{ updatedAt: 1, publicBalance: "1" },
+			{ chainId: CHAIN_IDS.TESTNET, contract: TEST_USDC, decimals: 0, hasDecimals: false },
+		)
 		await flushPromises()
 		expect(w.find('[data-malformed="true"]').text()).toBe("—")
 		expect(w.find('[data-testid="token-fiat"]').exists()).toBe(false)

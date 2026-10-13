@@ -213,7 +213,11 @@ describe("ACTIVITY_FEED_KINDS classification", () => {
 // ── buildJournalTerminalCardProps ─────────────────────────────────────
 
 const TEST_TOKEN_BY_ID = (id: number) =>
-	id === 42 ? { symbol: "USDC", decimals: 6 } : id === 7 ? { symbol: "ETH", decimals: 18 } : undefined
+	id === 42
+		? { symbol: "USDC", decimals: 6, hasDecimals: true }
+		: id === 7
+			? { symbol: "ETH", decimals: 18, hasDecimals: true }
+			: undefined
 const TEST_CTX = { tokenById: TEST_TOKEN_BY_ID }
 
 function transferRecord(overrides: Partial<OperationRecord> = {}): OperationRecord {
@@ -340,13 +344,20 @@ describe("buildJournalTerminalCardProps", () => {
 		expect(props).toMatchObject({ title: "Swap", amount: null, amountSymbol: null, transferTypeLabel: null })
 	})
 
+	test("a token whose decimals the wallet does not know shows no amount and no symbol; known, it shows both", () => {
+		const unknown = { tokenById: () => ({ symbol: "USDC", decimals: 0, hasDecimals: false }) }
+		expect(buildJournalTerminalCardProps(transferRecord(), unknown)).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
+		const known = { tokenById: () => ({ symbol: "USDC", decimals: 6, hasDecimals: true }) }
+		expect(buildJournalTerminalCardProps(transferRecord(), known)).toMatchObject({ amount: "1.5", amountSymbol: "USDC" })
+	})
+
 	test("an empty amount shows no amount and no symbol", () => {
 		const props = buildJournalTerminalCardProps(transferRecord({ amountRaw: "" }), TEST_CTX)
 		expect(props).toMatchObject({ title: "USDC", amount: null, amountSymbol: null })
 	})
 
 	test("a token whose symbol is empty titles the card 'Transfer' and keeps the empty symbol beside the amount", () => {
-		const props = buildJournalTerminalCardProps(transferRecord(), { tokenById: () => ({ symbol: "", decimals: 6 }) })
+		const props = buildJournalTerminalCardProps(transferRecord(), { tokenById: () => ({ symbol: "", decimals: 6, hasDecimals: true }) })
 		expect(props).toMatchObject({ title: "Transfer", amount: "1.5", amountSymbol: "" })
 	})
 

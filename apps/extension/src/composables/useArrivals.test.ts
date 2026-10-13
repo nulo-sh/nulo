@@ -105,7 +105,7 @@ function setup(opts: { route?: string; fake?: ReturnType<typeof fakeService>; to
 	const epoch = ref(0)
 	const scope = ref<IncomingScope | undefined>({ ...SCOPE })
 	const account = ref("Account 1")
-	const tokens = opts.tokens ?? new Map<number, ArrivalToken>([[1, { symbol: "USDC", decimals: 6 }]])
+	const tokens = opts.tokens ?? new Map<number, ArrivalToken>([[1, { symbol: "USDC", decimals: 6, hasDecimals: true }]])
 	const openToast = vi.fn()
 	const openReceipt = vi.fn()
 	const lookupToken = vi.fn(async (r: IncomingTransferRecord) => (r.tokenId === undefined ? undefined : tokens.get(r.tokenId)))
@@ -886,7 +886,7 @@ describe("useArrivals — the snack's text", () => {
 
 	test("a hostile symbol and account name arrive stripped of controls and cut at 32", async () => {
 		const symbol = `<b>X</b>‮${"S".repeat(1_000)}`
-		const c = await seeded({ tokens: new Map([[1, { symbol, decimals: 6 }]]) })
+		const c = await seeded({ tokens: new Map([[1, { symbol, decimals: 6, hasDecimals: true }]]) })
 		c.account.value = `‮<i>n</i>${"n".repeat(1_000)}`
 		await arrive(c, receipt(20))
 		const { label, sub } = c.openToast.mock.lastCall?.[0] ?? {}
@@ -895,10 +895,21 @@ describe("useArrivals — the snack's text", () => {
 	})
 
 	test.each([-1, 1.5, 1_000])("a token with decimals %s opens no snack and claims nothing", async (decimals) => {
-		const c = await seeded({ tokens: new Map([[1, { symbol: "BAD", decimals }]]) })
+		const c = await seeded({ tokens: new Map([[1, { symbol: "BAD", decimals, hasDecimals: true }]]) })
 		await arrive(c, receipt(20))
 		expect(c.openToast).not.toHaveBeenCalled()
 		expect(c.svc.claimArrivals).not.toHaveBeenCalled()
+	})
+
+	test("a token with no decimals getter opens no snack and claims nothing; the same token with one does", async () => {
+		const unknown = await seeded({ tokens: new Map([[1, { symbol: "USDC", decimals: 0, hasDecimals: false }]]) })
+		await arrive(unknown, receipt(20))
+		expect(unknown.openToast).not.toHaveBeenCalled()
+		expect(unknown.svc.claimArrivals).not.toHaveBeenCalled()
+
+		const known = await seeded({ tokens: new Map([[1, { symbol: "USDC", decimals: 0, hasDecimals: true }]]) })
+		await arrive(known, receipt(20))
+		expect(known.openToast).toHaveBeenCalledTimes(1)
 	})
 })
 

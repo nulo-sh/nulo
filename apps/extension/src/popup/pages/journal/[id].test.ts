@@ -8,6 +8,7 @@ import JournalDetail from "./[id].vue"
 const mocks = vi.hoisted(() => ({
 	getOperation: vi.fn(),
 	updated: [] as Array<(op: OperationRecord) => void>,
+	tokens: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock("vue-router", () => ({
@@ -28,7 +29,7 @@ vi.mock("@/wallet/services/config/client", () => ({
 }))
 vi.mock("@/wallet/services/token/client", () => ({
 	TokenServiceClient: vi.fn(function () {
-		return { getTokens: vi.fn(async () => [{ id: 7, symbol: "TST", decimals: 0 }]), disconnect: vi.fn() }
+		return { getTokens: vi.fn(async () => mocks.tokens), disconnect: vi.fn() }
 	}),
 }))
 // The app store opens its own journal client for the in-flight rows; it reads none here.
@@ -49,6 +50,7 @@ vi.mock("@/wallet/services/operation-journal/client", () => ({
 
 // The stores read `chrome.storage.local` through the migration-aware facade on setup.
 beforeEach(() => {
+	mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
 	vi.stubGlobal("chrome", {
 		storage: {
 			local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) },
@@ -145,5 +147,20 @@ describe("the journal page of a failed send its wallet checks", () => {
 		expect(row(w, "context").text()).toBe(
 			"This transaction expired before the network included it. No fee was paid, and you can send it again.",
 		)
+	})
+})
+
+describe("the amount of a failed transfer", () => {
+	test("shows in the token's decimals when the wallet knows them", async () => {
+		mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: true }]
+		const w = await mountPage(failedSend())
+		expect(row(w, "amount").text()).toBe("1 TST")
+	})
+
+	test("shows no figure when the wallet does not know them", async () => {
+		mocks.tokens = [{ id: 7, symbol: "TST", decimals: 0, hasDecimals: false }]
+		const w = await mountPage(failedSend())
+		expect(row(w, "amount").exists()).toBe(false)
+		expect(row(w, "state").text()).toBe("Checking")
 	})
 })

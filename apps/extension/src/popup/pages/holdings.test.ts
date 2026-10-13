@@ -77,7 +77,7 @@ const STUBS = {
 const row = (id: string, symbol: string, chainId: number, contract = `0x${symbol.toLowerCase()}`) => ({
 	id,
 	account: "0xacct",
-	token: { id, symbol, name: `${symbol} Token`, decimals: 6, chainId, contract },
+	token: { id, symbol, name: `${symbol} Token`, decimals: 6, hasDecimals: true, chainId, contract },
 	publicBalance: (250n * 10n ** 6n).toString(),
 	privateBalance: (1_000n * 10n ** 6n).toString(),
 	updatedAt: 1,
