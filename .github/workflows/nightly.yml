@@ -247,9 +247,9 @@ jobs:
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
 
   # The canary files on the in-browser WASM prover, the path of every user without Presto; every other
-  # prover-ON job proves natively. ADVISORY: no job needs it, so a red leg reds the run but neither
-  # `status` nor the publish (a job that calls a reusable workflow cannot take `continue-on-error`).
-  # Making it a gate is the owner's call, after 30 consecutive green nights.
+  # prover-ON job proves natively unless NULO_E2E_DISABLE_PRESTO is set. ADVISORY: no job needs it, so
+  # a red leg reds the run but neither `status` nor the publish (a job that calls a reusable workflow
+  # cannot take `continue-on-error`). Making it a gate is the owner's call, after 30 green nights in a row.
   network-e2e-canary-wasm:
     name: Run / canary / in-browser proving
     needs: resolve

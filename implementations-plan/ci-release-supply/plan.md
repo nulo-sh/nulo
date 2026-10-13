@@ -26,7 +26,7 @@ The CI gates and the release chain are what every merge and every published zip 
 - **Arc 3, docs (#185).** CLAUDE.md's release runbook records wrangler's `routes` rule for the landing and that domain changes are the owner's.
 - **Arc 4, plans ignore patterns (#182).** Four more transcript shapes are ignored and asserted by `check:plans`.
 - **Arc 5a, page 5 follow-ups (#82, #183, #195).** The onboarding Presto step takes presto-banners' own blocked-access title (OA-1 answered A); the launch gate's scope is verified as signed (OA-3 answered A); one advisory nightly leg runs the canary files on the in-browser WASM prover.
-- **Arc 5, nightly retention (#178).** Approved on page 5 (P5-02). The code is built; its first run waits on the owner's ruleset exclusion.
+- **Arc 5, nightly retention (#178).** Approved on page 5 (P5-02). Its code is authorized now and built in arc 5's PR; its first run waits on the owner's ruleset exclusion.
 
 ## Tier and budget
 
@@ -385,7 +385,7 @@ Validation gate: Fast; Gating; Actions; `bun run test:all`. Pass: all exit 0; th
 
 ### Arc 5: nightly retention
 
-Warning: the code is built now (D-orch-13); Phase 5.3's first run waits until `gh api repos/nulo-sh/nulo/rulesets/24737631 --jq '.conditions.ref_name.exclude'` lists `refs/tags/v*-nightly.*`, which is the owner's change, and the orchestrator holds the merge until then.
+Warning: the code is built in arc 5's PR (D-orch-13); Phase 5.3's first run waits until `gh api repos/nulo-sh/nulo/rulesets/24737631 --jq '.conditions.ref_name.exclude'` lists `refs/tags/v*-nightly.*`, which is the owner's change, and the orchestrator holds the merge until then.
 
 **Phase 5.1, the selection.** Add `prune-nightlies.ts` and its test. Cases: 20 nightlies keep the newest 14; a stable tag, an rc tag and a tag one character off the pattern are never selected; a plan that names a non-nightly is refused; a draft counts by tag name; a tag with no release and a release with no tag are both handled; a year boundary (`25365` before `26001`) orders correctly.
 

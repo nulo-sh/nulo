@@ -762,9 +762,11 @@ describe("canary lanes", () => {
 		}
 	})
 
-	// Every other prover-ON job proves natively, so this leg is the canary files' only run on the prover
-	// users without Presto get. Its label must start with `canary` for the results assertion to arm;
-	// aggregators.test.ts holds it advisory.
+	// Every other prover-ON job proves natively unless the rollback variable is set, so this leg is the
+	// canary files' only run on the prover users without Presto get. Its label must start with `canary`
+	// for the results assertion to arm, and the suite must map `disable_presto` to neither proverless
+	// nor required mode, or the leg would pass without proving in the browser. aggregators.test.ts
+	// holds it advisory.
 	test("nightly's in-browser leg runs the Chrome canary's files, on the same nights, with Presto off", () => {
 		const { jobs } = workflow("nightly.yml")
 		const [leg, canary] = [jobs[WASM_LEG], jobs["network-e2e-canary"]]
@@ -775,6 +777,9 @@ describe("canary lanes", () => {
 		const { test_files, ...inputs } = leg.with
 		expect(words(test_files)).toEqual(words(canary.with.test_files))
 		expect(inputs).toEqual({ ref: canary.with.ref, shard_label: "canary-wasm", disable_presto: true })
+		const env = workflow(SUITE).jobs["network-e2e"].env
+		expect(env.NULO_E2E_PROVERLESS).toBe("${{ inputs.proverless && '1' || '' }}")
+		expect(env.VITE_NULO_PRESTO_REQUIRED).toBe("${{ (inputs.disable_presto == false && inputs.proverless == false) && '1' || '' }}")
 	})
 
 	// A file in a dedicated job's list but not the pool's runs twice; one in neither never runs.
