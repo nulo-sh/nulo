@@ -99,7 +99,7 @@ Tests: **T3** (`verification-hold.test.ts`, rewriting `:59-66` as an intended ch
 
 **Validation gate**: `cd apps/extension && bun --bun vitest run src/wallet/services/wallet-sdk`, `cd packages/wallet-core && bun run test`, then `bun run lint` and `bun run typecheck:all`. Pass: exit 0; T4, T6 and T7 fail against base copies. Layers: lint, typecheck, unit.
 
-## Phase 3: arc gate — arc-1
+## Phase 3: arc gate — arc-1 ✓
 
 Warning: run one `e2e:agent` at a time in this worktree, at retry 0; never raise the stall watchdog.
 1. From the root: `bun run lint`, `bun run typecheck:all`, `bun run test`, `bun run test:all`, `bun run test:ci-gating`.
@@ -144,6 +144,7 @@ The contract is this plan plus [`implementations-plan/README.md` § Post-impleme
 
 | impl 1 | Codex, gpt-6.1-sol (session 01a136e1) | conditional approve | a decrypted `null` took a slot and threw before its release: dropped before admission, with a regression; the parse comment overstated the invariant | none |
 | impl 1 | Opus 5.5 review | approve | four comment and test nits; the "two holds count apart" unit test dropped as a duplicate of T4's second-session control | deleting the line note on the rewritten hold test (the orchestrator asked for it) |
+| impl 2 | Codex, resumed | **approve** | none new: the guard and the comment fixes verified, the leak reproduced without the guard | none |
 
 Known limits to file at close-out: **KL-1** (#354 residual: the bound is per session generation, a count and not a heap bound; 32 object-dense calls held +772 MiB; re-keys and new sessions multiply it; a never-settling refusal encryption would wedge that generation's lane; reopen on a worker crash within the bound, a report, or a decision for a byte or worker-wide budget). **KL-2** (#329 residual: rows written before the fix or restored in another spelling keep it, so their mint figure stays hidden; reopen at launch if such rows exist, or on a report).
 

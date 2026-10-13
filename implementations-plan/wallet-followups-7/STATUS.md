@@ -9,3 +9,5 @@
 - 2026-10-13 — phase 2 ✓: wallet-sdk vitest 427 passed, wallet-core 279 passed, lint 0, typecheck:all 0; T4–T7 (6 tests) red on base copies.
 - 2026-10-13 — Codex round 1: conditional approve, 2 findings accepted (null decrypted payload leaked a slot; parse comment).
 - 2026-10-13 — Opus review: approve, 5 low nits (4 accepted, 1 rejected with reason).
+- 2026-10-13 — Codex round 2: approve, no new material finding; loop converged.
+- 2026-10-13 — phase 3 ✓: e2e at 51e2edb3, retry 0, both browsers green (network 34/34 each, chaos 1/1 each, smoke 1/1 each); final unit gates rerunning.
