@@ -33,6 +33,11 @@ for (const { from, to, control } of [
 	{ from: "#/popup/settings/security", to: "#/popup/settings/lock", control: "lock-now-btn" },
 	{ from: "#/popup/settings/appearance", to: "#/popup/settings/display", control: "theme-trigger" },
 	{ from: "#/popup/settings/advanced", to: "#/popup/settings/developer", control: "settings-toggle-developerMode" },
+	{
+		from: "#/popup/settings/advanced/account-state/senders",
+		to: "#/popup/settings/developer/account-state/senders",
+		control: "senders-add-btn",
+	},
 ]) {
 	test(`${from} lands on ${to}`, async ({ registeredExtension }) => {
 		const page = await openPopup(registeredExtension)

@@ -33,6 +33,13 @@ export async function readActivityScope(page: Page): Promise<ActivityScope> {
 	return { profileId, networkId, chainId, account, token }
 }
 
+/** The chain's next default token: a second contract, for specs that tell two tokens' rows apart. */
+export function secondToken(scope: ActivityScope): ActivityScope["token"] {
+	const seed = seedsForChain(scope.chainId).find((s) => s.contract !== scope.token.contract)
+	if (!seed) throw new Error(`chain ${scope.chainId} has a single default token seed`)
+	return { contract: seed.contract, name: seed.displayName, symbol: seed.expectedSymbol, decimals: seed.expectedDecimals }
+}
+
 export type TransferSeed = {
 	hash: string
 	/** Base units of the scope's token. */

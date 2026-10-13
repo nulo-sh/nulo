@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<SettingsPageShell title="Notes" :backTo="'/popup/settings/advanced/account-state'" gap="16" v-if="appStore.isLogined">
+	<SettingsPageShell title="Notes" :backTo="'/popup/settings/developer/account-state'" gap="16" v-if="appStore.isLogined">
 		<Input
 			v-if="notes.length"
 			v-model="searchTerm"

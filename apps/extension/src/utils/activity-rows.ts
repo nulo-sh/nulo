@@ -86,6 +86,18 @@ export function scopedTxRows(transactions: BuildActivityRowsParams["transactions
 	return rows
 }
 
+/** A tx belongs to a token when one of its calls targets the token's contract; a tx carries no token id. */
+export function txOnToken(tx: Pick<Tx, "calls">, contract: string): boolean {
+	return tx.calls?.some((call) => call.contract === contract) ?? false
+}
+
+/** The token page's rule for its own rows: journal and incoming records by token id, txs by contract. */
+export function rowOnToken(row: ActivityRow, token: { id: number; contract: string }): boolean {
+	if (row.type === "tx") return txOnToken(row.tx, token.contract)
+	if (row.type === "journal") return row.op.tokenId === token.id
+	return row.inc.tokenId === token.id
+}
+
 /**
  * The one scope rule every journal surface applies. A record's profile and network stamps must name
  * the active ones, so with either unknown no stamped record shows; a record that predates the

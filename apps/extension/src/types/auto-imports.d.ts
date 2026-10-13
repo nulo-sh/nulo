@@ -75,6 +75,7 @@ declare global {
   const addressChangeText: typeof import('../utils/contact-import-rows').addressChangeText
   const aggregateFiat: typeof import('../utils/token-aggregate').aggregateFiat
   const applyOutcome: typeof import('../composables/full-backup-restore').applyOutcome
+  const applyThemeChoice: typeof import('../utils/general').applyThemeChoice
   const approvedSendsInFlight: typeof import('../utils/in-flight-send').approvedSendsInFlight
   const arrivalAmount: typeof import('../composables/useArrivals').arrivalAmount
   const arrivalChipLabel: typeof import('../composables/useArrivals').arrivalChipLabel
@@ -134,6 +135,7 @@ declare global {
   const findTransferSignature: typeof import('../utils/token-transfer-vocabulary').findTransferSignature
   const fitHero: typeof import('../utils/hero-fit').fitHero
   const foldLabel: typeof import('../utils/token-fold').foldLabel
+  const followOwnRoute: typeof import('../utils/own-window').followOwnRoute
   const forChain: typeof import('../utils/token-order').forChain
   const formatBaseUnits: typeof import('../utils/amount').formatBaseUnits
   const formatFeeJuice: typeof import('../utils/fee-estimation').formatFeeJuice
@@ -293,6 +295,7 @@ declare global {
   const retryReplacedRows: typeof import('../composables/full-backup-restore').retryReplacedRows
   const rollbackCreatedProfile: typeof import('../composables/full-backup-restore').rollbackCreatedProfile
   const rowDescriptionFor: typeof import('../utils/presto-ui-state').rowDescriptionFor
+  const rowOnToken: typeof import('../utils/activity-rows').rowOnToken
   const rulerWidth: typeof import('../utils/hero-ruler').rulerWidth
   const runImportChainSync: typeof import('../composables/importChainSync').runImportChainSync
   const runRestoreFailurePath: typeof import('../composables/full-backup-restore').runRestoreFailurePath
@@ -340,6 +343,7 @@ declare global {
   const trustRestoredTokens: typeof import('../composables/full-backup-restore').trustRestoredTokens
   const txAmount: typeof import('../utils/tx-amount').txAmount
   const txBelongsToScope: typeof import('../stores/activity.store').txBelongsToScope
+  const txOnToken: typeof import('../utils/activity-rows').txOnToken
   const txScope: typeof import('../stores/activity.store').txScope
   const typedContactName: typeof import('../utils/contact-name').typedContactName
   const uiStateFromStatus: typeof import('../utils/presto-ui-state').uiStateFromStatus
@@ -698,6 +702,7 @@ declare module 'vue' {
     readonly addressChangeText: UnwrapRef<typeof import('../utils/contact-import-rows')['addressChangeText']>
     readonly aggregateFiat: UnwrapRef<typeof import('../utils/token-aggregate')['aggregateFiat']>
     readonly applyOutcome: UnwrapRef<typeof import('../composables/full-backup-restore')['applyOutcome']>
+    readonly applyThemeChoice: UnwrapRef<typeof import('../utils/general')['applyThemeChoice']>
     readonly approvedSendsInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['approvedSendsInFlight']>
     readonly arrivalAmount: UnwrapRef<typeof import('../composables/useArrivals')['arrivalAmount']>
     readonly arrivalChipLabel: UnwrapRef<typeof import('../composables/useArrivals')['arrivalChipLabel']>
@@ -757,6 +762,7 @@ declare module 'vue' {
     readonly findTransferSignature: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['findTransferSignature']>
     readonly fitHero: UnwrapRef<typeof import('../utils/hero-fit')['fitHero']>
     readonly foldLabel: UnwrapRef<typeof import('../utils/token-fold')['foldLabel']>
+    readonly followOwnRoute: UnwrapRef<typeof import('../utils/own-window')['followOwnRoute']>
     readonly forChain: UnwrapRef<typeof import('../utils/token-order')['forChain']>
     readonly formatBaseUnits: UnwrapRef<typeof import('../utils/amount')['formatBaseUnits']>
     readonly formatFeeJuice: UnwrapRef<typeof import('../utils/fee-estimation')['formatFeeJuice']>
@@ -916,6 +922,7 @@ declare module 'vue' {
     readonly retryReplacedRows: UnwrapRef<typeof import('../composables/full-backup-restore')['retryReplacedRows']>
     readonly rollbackCreatedProfile: UnwrapRef<typeof import('../composables/full-backup-restore')['rollbackCreatedProfile']>
     readonly rowDescriptionFor: UnwrapRef<typeof import('../utils/presto-ui-state')['rowDescriptionFor']>
+    readonly rowOnToken: UnwrapRef<typeof import('../utils/activity-rows')['rowOnToken']>
     readonly rulerWidth: UnwrapRef<typeof import('../utils/hero-ruler')['rulerWidth']>
     readonly runImportChainSync: UnwrapRef<typeof import('../composables/importChainSync')['runImportChainSync']>
     readonly runRestoreFailurePath: UnwrapRef<typeof import('../composables/full-backup-restore')['runRestoreFailurePath']>
@@ -963,6 +970,7 @@ declare module 'vue' {
     readonly trustRestoredTokens: UnwrapRef<typeof import('../composables/full-backup-restore')['trustRestoredTokens']>
     readonly txAmount: UnwrapRef<typeof import('../utils/tx-amount')['txAmount']>
     readonly txBelongsToScope: UnwrapRef<typeof import('../stores/activity.store')['txBelongsToScope']>
+    readonly txOnToken: UnwrapRef<typeof import('../utils/activity-rows')['txOnToken']>
     readonly txScope: UnwrapRef<typeof import('../stores/activity.store')['txScope']>
     readonly typedContactName: UnwrapRef<typeof import('../utils/contact-name')['typedContactName']>
     readonly uiStateFromStatus: UnwrapRef<typeof import('../utils/presto-ui-state')['uiStateFromStatus']>

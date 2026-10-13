@@ -44,6 +44,7 @@ import {
 import { POPUP_RETURN_FOCUS_MS } from "@/wallet/utils/toolbar-popup"
 
 const EXPORT = "#/popup/settings/security/export/full"
+const EXPORT_KEY = "nulo:own-window:export"
 const sel = (testid: string) => `[data-testid="${testid}"]`
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -241,6 +242,32 @@ async function waitForEnabled(page: Page, testid: string, timeoutMs: number): Pr
 		},
 		{ timeout: timeoutMs, polling: 250 },
 		testid,
+	)
+}
+
+const windowIdOf = (page: Page) => page.evaluate(async () => (await chrome.windows.getCurrent()).id ?? -1)
+
+/** The focused window's id, read from `control` without moving focus. */
+const focusedWindow = (control: Page) => control.evaluate(async () => (await chrome.windows.getAll()).find((win) => win.focused)?.id)
+
+const popupWindowIds = (control: Page) =>
+	control.evaluate(async () => (await chrome.windows.getAll()).filter((win) => win.type === "popup").map((win) => win.id))
+
+async function untilFocused(control: Page, focused: (id: number | undefined) => boolean): Promise<void> {
+	const deadline = Date.now() + 15_000
+	while (!focused(await focusedWindow(control))) {
+		if (Date.now() > deadline) throw new Error(`the focused window is still ${await focusedWindow(control)}`)
+		await sleep(100)
+	}
+}
+
+/** Until the export flow's registered window is `id`, or none when `id` is null. */
+async function untilRegistered(control: Page, id: number | null): Promise<void> {
+	await control.waitForFunction(
+		async (key: string, want: number | null) => ((await chrome.storage.session.get(key))[key] ?? null) === want,
+		{ timeout: 15_000, polling: 100 },
+		EXPORT_KEY,
+		id,
 	)
 }
 
@@ -442,6 +469,69 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 			await auth.cleanup()
 		}
 	}, 360_000)
+
+	test("a second export from the panel focuses its open window; a window that left the flow is not reused", async ({
+		freshExtensionPerTest: ctx,
+	}) => {
+		const { browser } = ctx
+		const control = await openPopup(ctx)
+		const auth = await sessionAuthenticator(browser)
+		try {
+			await registerPasskeyProfile(control)
+
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/general")
+			const first = await toOwnWindow(ctx, control, () => routePanel(browser, EXPORT))
+			await waitForHash(first, EXPORT, 60_000)
+			const firstId = await windowIdOf(first)
+			await untilRegistered(control, firstId)
+
+			// Focus elsewhere first, so that only the second start can bring the export window forward.
+			await control.bringToFront()
+			await untilFocused(control, (id) => id !== undefined && id !== firstId)
+			const before = new Set(browser.targets())
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/general")
+			await routePanel(browser, EXPORT)
+			await control.waitForFunction(() => chrome.extension.getViews({ type: "popup" }).length === 0, {
+				timeout: 15_000,
+				polling: 100,
+			})
+			await untilFocused(control, (id) => id === firstId)
+			expect(await popupWindowIds(control)).toEqual([firstId])
+			expect(
+				browser.targets().filter((t) => !before.has(t) && t.url().includes("/src/popup/index.html")),
+				"wallet pages the second start opened",
+			).toEqual([])
+
+			// Locked from the panel, the window leaves the flow through the lock screen's profile picker.
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/general")
+			await clickInPanel(browser, "header-lock")
+			await panelOn(browser, "#/popup/auth")
+			await closeActionPopup(browser)
+			await waitForHash(first, "#/popup/auth", 15_000)
+			await clickByTestId(first, "auth-profile", 15_000)
+			await clickByTestId(first, "select-profile-new-btn", 15_000)
+			await first.waitForSelector(sel("register-method-passkey"), { visible: true, timeout: 15_000 })
+			await untilRegistered(control, null)
+
+			// Unlocked, a new start opens a new window instead of focusing the one left on profile creation.
+			await clickByTestId(control, "auth-submit")
+			await waitForHash(control, "#/popup/general", 60_000)
+			await openActionPopup(browser)
+			await panelOn(browser, "#/popup/general")
+			const second = await toOwnWindow(ctx, control, () => routePanel(browser, EXPORT))
+			await waitForHash(second, EXPORT, 60_000)
+			const secondId = await windowIdOf(second)
+			await untilRegistered(control, secondId)
+			expect(secondId).not.toBe(firstId)
+			expect(await focusedWindow(control)).not.toBe(firstId)
+			expect((await popupWindowIds(control)).sort()).toEqual([firstId, secondId].sort())
+		} finally {
+			await auth.cleanup()
+		}
+	}, 300_000)
 
 	test("a restore window whose passkey is refused restores on the second try", async ({ freshExtensionPerTest: ctx }) => {
 		const { browser } = ctx
