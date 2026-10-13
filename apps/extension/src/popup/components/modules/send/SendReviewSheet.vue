@@ -41,6 +41,8 @@ const props = defineProps<{
 	ready: boolean
 	/** Set while the send is queued against a cap: the cap as the fee card words it. */
 	queuedCapText?: string
+	/** Set for a queued send whose fee came out above the cap the person accepted. */
+	reask?: { now: string; nowAmount: string; capAmount: string }
 }>()
 const emit = defineEmits<{ close: []; send: [] }>()
 
@@ -57,6 +59,10 @@ const toLine = computed(() => {
 })
 const paid = computed(() => paidBy(props.payerKind, props.payerType))
 const sendable = computed(() => props.show && props.canSend && props.ready && !props.sending)
+const submitLabel = computed(() => {
+	if (props.reask) return `Send for ${props.reask.nowAmount} FJ`
+	return props.queuedCapText ? "Queue send" : "Send now"
+})
 
 const rows = computed(() =>
 	ROWS.map((row) => {
@@ -153,6 +159,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 
 					<div :class="$style.fee" data-testid="send-review-fee" :data-payer="payerKind ?? 'none'">
 						<span v-if="payerKind === 'unvouched'">Fee · <span aria-hidden="true">—</span><span :class="$style.visually_hidden">{{ UNVOUCHED_FEE_SENTENCE }}</span></span>
+						<span v-else-if="reask" data-testid="send-review-fee-reask">Fee is now {{ reask.now }}, above the {{ reask.capAmount }} FJ you accepted.</span>
 						<span v-else-if="queuedCapText" data-testid="send-review-fee-cap">Fee up to {{ queuedCapText }}, based on your last send. If it comes out higher, we ask again.</span>
 						<span v-else>Fee · {{ feeText || "—" }}</span>
 						<b v-if="paid">{{ paid }}</b>
@@ -168,7 +175,7 @@ onBeforeUnmount(() => document.fonts?.removeEventListener("loadingdone", fitAmou
 						:loading="sending"
 						@click="handleSend"
 					>
-						{{ queuedCapText ? "Queue send" : "Send now" }}
+						{{ submitLabel }}
 					</Button>
 				</Flex>
 			</div>

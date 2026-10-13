@@ -16,6 +16,7 @@
  */
 
 import { flushPromises, mount } from "@vue/test-utils"
+import { createPinia, setActivePinia } from "pinia"
 import { nextTick, ref } from "vue"
 import { createMemoryHistory, createRouter } from "vue-router"
 import { beforeEach, describe, expect, test, vi } from "vitest"
@@ -51,6 +52,8 @@ const H = vi.hoisted(() => {
 		retryIncomingScan: vi.fn(),
 		incomingConnect: vi.fn(),
 		configConnect: vi.fn(),
+		acceptQueuedFee: vi.fn(),
+		refreshPrices: vi.fn(),
 		// event emitters (the mocked clients don't fire them; tests emit explicitly)
 		journalAdded: makeEvent(),
 		journalUpdated: makeEvent(),
@@ -131,6 +134,18 @@ vi.mock("@/wallet/services/execution/client", () => ({
 		return {
 			disconnect: vi.fn(),
 			cancelJob: vi.fn().mockResolvedValue(undefined),
+			acceptQueuedFee: H.acceptQueuedFee,
+		}
+	}),
+}))
+
+vi.mock("@/wallet/services/price/client", () => ({
+	PriceServiceClient: vi.fn(function () {
+		return {
+			disconnect: vi.fn(),
+			onQuotesUpdated: H.makeEvent(),
+			onConnected: H.makeEvent(),
+			refreshIfStale: H.refreshPrices,
 		}
 	}),
 }))
@@ -163,6 +178,8 @@ vi.mock("@/stores/app.store", () => ({ useAppStore: () => H.store.current }))
 // ── Fixtures + helpers ────────────────────────────────────────────────────────
 
 import { ARRIVALS_KEY } from "@/composables/useArrivals"
+import { REVIEW_ARM_MS } from "@/composables/useSendReview"
+import { usePopupStore } from "@/stores/popup.store"
 import RecentActivityView from "./RecentActivityView.vue"
 
 const makeRouter = () =>
@@ -237,6 +254,8 @@ beforeEach(() => {
 	H.retryIncomingScan.mockReset().mockResolvedValue(undefined)
 	H.incomingConnect.mockReset().mockResolvedValue(undefined)
 	H.configConnect.mockReset().mockResolvedValue(undefined)
+	H.acceptQueuedFee.mockReset().mockResolvedValue(true)
+	H.refreshPrices.mockReset().mockResolvedValue({})
 	for (const ev of [
 		H.journalAdded,
 		H.journalUpdated,
@@ -256,6 +275,7 @@ beforeEach(() => {
 		ev.handlers.clear()
 	}
 	H.store.current = createAppStoreHarness()
+	setActivePinia(createPinia())
 })
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1009,7 +1029,7 @@ describe("RecentActivityView — hydration order", () => {
 		ops.resolve([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
 		await flushPromises()
 		expect(vmOf(w).hasOrphanExecutingTask).toBe(false)
-		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Waiting for your earlier send", cancellable: true }])
 	})
 
 	test("a Send-page task with no running step and no record yet draws no stage line, before or after the snapshot", async () => {
@@ -1027,7 +1047,7 @@ describe("RecentActivityView — hydration order", () => {
 		const created = { ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }
 		H.journalAdded.emit(created)
 		await flushPromises()
-		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+		expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Waiting for your earlier send", cancellable: true }])
 	})
 
 	test("a snapshot that fails while the port stays up is retried, and a scope switch drops the retry", async () => {
@@ -1041,7 +1061,7 @@ describe("RecentActivityView — hydration order", () => {
 
 			H.getOperations.mockResolvedValueOnce([{ ...inFlightTransferOp(ACCT_A), progress: { stage: "queued" } }])
 			await vi.advanceTimersByTimeAsync(2_000)
-			expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Queued...", cancellable: true }])
+			expect(cards(w)).toEqual([{ stage: "queued", subtitle: "Waiting for your earlier send", cancellable: true }])
 
 			H.getOperations.mockRejectedValueOnce(new Error("service busy"))
 			H.store.current.account = { address: ACCT_B }
@@ -1240,5 +1260,132 @@ describe("RecentActivityView — a journal record of another scope runs no side 
 
 		const remounted = await mountWithState()
 		expect(remounted.vm.executingTask).toBeNull()
+	})
+})
+
+describe("RecentActivityView — a queued send that asks again", () => {
+	/** 0.88 FJ found at the turn, above the 0.8 FJ the person accepted. */
+	const FEE = "880000000000000000"
+	const CAP = "800000000000000000"
+	const PRIVATE_FJ = { type: "private_fpc", fpcId: "fpc-1", isProtocol: true }
+	const PUBLIC_FJ = { type: "fj", isProtocol: false }
+	const RECIPIENT = `0x${"b".repeat(64)}`
+	const asking = (over: Record<string, unknown> = {}, reask: Record<string, unknown> = {}) => ({
+		id: "op-r",
+		profileId: "p1",
+		accountAddress: ACCT_A,
+		networkId: "net-1",
+		kind: "transfer",
+		tokenId: 42,
+		amountRaw: "1500000",
+		transferType: 0,
+		recipientAddress: RECIPIENT,
+		terminalAt: null,
+		createdAt: 1,
+		progress: { stage: "queued", reask: { fee: FEE, cap: CAP, payer: PRIVATE_FJ, ...reask } },
+		...over,
+	})
+
+	const card = (w: ReturnType<typeof mountView>, id = "op-r") =>
+		w.findAllComponents({ name: "TransactionAwaitingCard" }).find((c) => c.props("jobId") === id)
+	const sheet = (w: ReturnType<typeof mountView>) => w.findComponent({ name: "SendReviewSheet" })
+
+	async function openReview(ops: unknown[] = [asking()]) {
+		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
+		H.getOperations.mockResolvedValue(ops)
+		const w = mountView()
+		await flushPromises()
+		card(w)?.vm.$emit("review", "op-r")
+		await flushPromises()
+		return w
+	}
+
+	test("a queued Send-page transfer waits on the send before it; a queued dApp record keeps its stage line", async () => {
+		H.getOperations.mockResolvedValue([
+			{ ...asking(), id: "op-t", progress: { stage: "queued" } },
+			{ ...asking(), id: "op-d", kind: "dapp_execute", progress: { stage: "queued" } },
+		])
+		const w = mountView()
+		await flushPromises()
+		expect(card(w, "op-t")?.props()).toMatchObject({ subtitle: "Waiting for your earlier send", reaskLine: null })
+		expect(card(w, "op-d")?.props()).toMatchObject({ subtitle: "Queued...", reaskLine: null })
+		expect(sheet(w).exists()).toBe(false)
+	})
+
+	test("a re-ask row reads its line, and its review opens the sheet with the new fee against the accepted one", async () => {
+		H.refreshPrices.mockResolvedValue({ aztec: { coingeckoId: "aztec", usd: 0.0147, fetchedAt: Date.now(), providerUpdatedAt: null } })
+		H.getTokens.mockResolvedValue([{ id: 42, symbol: "USDC", decimals: 6, hasDecimals: true }])
+		H.getOperations.mockResolvedValue([asking()])
+		const w = mountView()
+		await flushPromises()
+		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
+		expect(sheet(w).exists()).toBe(false)
+
+		card(w)?.vm.$emit("review", "op-r")
+		await flushPromises()
+		expect(sheet(w).props()).toMatchObject({
+			show: true,
+			amount: "1.5",
+			symbol: "USDC",
+			recipientAddress: RECIPIENT,
+			canSend: true,
+			sending: false,
+			reask: { now: "0.88 FJ ($0.013)", nowAmount: "0.88", capAmount: "0.8" },
+		})
+	})
+
+	test("Send accepts the fee the sheet opened with once, a double press included, then closes", async () => {
+		const answer = deferred<boolean>()
+		H.acceptQueuedFee.mockReturnValue(answer.promise)
+		const w = await openReview()
+		sheet(w).vm.$emit("send")
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(sheet(w).props("sending")).toBe(true)
+		answer.resolve(true)
+		await flushPromises()
+		expect(H.acceptQueuedFee.mock.calls).toEqual([["op-r", FEE]])
+		expect(sheet(w).exists()).toBe(false)
+	})
+
+	test("a refused accept closes the sheet and leaves the row reading its record", async () => {
+		H.acceptQueuedFee.mockRejectedValue(new Error("port closed"))
+		const w = await openReview()
+		sheet(w).vm.$emit("send")
+		await flushPromises()
+		expect(sheet(w).exists()).toBe(false)
+		expect(card(w)?.props("reaskLine")).toBe("Fee went up. Review")
+	})
+
+	test.each([
+		["its fee changes", { stage: "queued", reask: { fee: "890000000000000000", cap: CAP, payer: PRIVATE_FJ } }],
+		["it leaves the re-ask state", { stage: "pending" }],
+	])("the sheet closes when %s, so no press accepts a figure it did not open with", async (_name, progress) => {
+		const w = await openReview()
+		const opened = sheet(w)
+		H.journalUpdated.emit({ ...asking(), progress })
+		await flushPromises()
+		expect(sheet(w).exists()).toBe(false)
+		expect(usePopupStore().isOpened("send_reask_review"), "the slot leaves the popup stack with it").toBe(false)
+		opened.vm.$emit("send")
+		await flushPromises()
+		expect(H.acceptQueuedFee).not.toHaveBeenCalled()
+	})
+
+	test.each([
+		["Private Fee Juice", PRIVATE_FJ, "contract", "hidden"],
+		["Public Fee Juice", PUBLIC_FJ, "account", "exposed"],
+	])("%s draws its facts as Send drew them, and the button arms only after the usual pause", async (_name, payer, payerKind, you) => {
+		vi.useFakeTimers()
+		try {
+			const w = await openReview([asking({}, { payer })])
+			expect(sheet(w).props()).toMatchObject({ payerKind, payerType: payer.type, facts: { you }, ready: false })
+			await vi.advanceTimersByTimeAsync(REVIEW_ARM_MS - 1)
+			expect(sheet(w).props("ready")).toBe(false)
+			await vi.advanceTimersByTimeAsync(1)
+			expect(sheet(w).props("ready")).toBe(true)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
