@@ -8,7 +8,7 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: e900f710
-status: audited, awaiting the orchestrator's approval
+status: approved by the orchestrator at cbb663ad; implementing
 ---
 
 # wallet-followups-7: one token contract spelling; a bound on a session's pending calls
@@ -38,7 +38,7 @@ Two decision-free issues in one arc and one PR against `dev`: #329 (a token adde
 - I2. Pre-production, a row in another spelling exists only from a pre-fix add or a restored backup.
 - I3. An honest app may keep polling while the person reads an approval (the session's queue waits on it) and so meet the bound. Unverified; OA-3.
 
-**Asks**: none open. Owner asks OA-1 to OA-3 are in `OWNER-ASKS.md`; the arc ships each "what ships now".
+**Asks**: none open. Owner asks OA-1 to OA-3 are in `OWNER-ASKS.md`, settled by the orchestrator (D-orch-2 to D-orch-4).
 
 ## Architecture & Implementation
 
@@ -54,6 +54,7 @@ Two decision-free issues in one arc and one PR against `dev`: #329 (a token adde
 | File | Change |
 |---|---|
 | `apps/extension/src/wallet/services/token/service.ts` | parse uses `address.toString()`; `findToken` lower-cases both sides |
+| `apps/extension/src/popup/components/popups/NewTokenPopup.vue` (+ test) | the duplicate check compares lower-cased spellings (D-orch-2) |
 | `.../token/service.composition.test.ts`, `.../token/service.test.ts` | T1, T2 |
 | `apps/extension/src/wallet/services/wallet-sdk/verification-hold.ts` (+ test) | `admit` always counts, one-shot release, rename, module doc |
 | `apps/extension/src/wallet/services/wallet-sdk/background.ts` | release on settle; refusal through the lane; decrypt drop |
@@ -70,6 +71,10 @@ Two decision-free issues in one arc and one PR against `dev`: #329 (a token adde
 - D6. Count, not bytes, as the brief scopes it. Measured residual in KL-1; a byte or worker-wide budget is a plan change (OA-3 option 3).
 - D7. 32: six times the deepest observed pipeline, above the execution lane's per-origin 8, and the held case's existing value. In-tree evidence only (I3).
 - D8. Refusal replies ride the decrypt lane (Codex round 2, Q1): the lane's depth then bounds decrypts and owed replies together, with no new counter. Rejected: a known limit (replies were unbounded), and a separate in-flight-reply counter (more state for the same bound).
+- D-orch-1. One arc, one PR, no stack: the lane brief's default grouping; nothing in the tree forces #329 and #354 apart.
+- D-orch-2. OA-1 → option 2 (orchestrator `no_ask`, 2026-10-13): the New token popup's duplicate check compares by address, so a different-case duplicate shows the existing "Already exist" and the button stays off.
+- D-orch-3. OA-2 → option 1 (same record): one spelling per address; a token typed in upper case shows and copies in lower case.
+- D-orch-4. OA-3 → option 1: 32 on every session. A byte budget, a per-id or worker-wide budget, or failing a dead generation's calls at session end is a plan change that stops for the orchestrator.
 
 ## Security & Adversarial Considerations
 
@@ -78,11 +83,11 @@ Two decision-free issues in one arc and one PR against `dev`: #329 (a token adde
 - **Residuals**: KL-1 (per-generation bound, re-key and new sessions multiply it; a refusal encryption that never settled would wedge that generation's lane: WebCrypto settles, no timeout added). KL-2 (old spellings). Both filed as closed `known-limit` issues at close-out.
 - **#329**: the parse refuses any input whose decoded buffer is not exactly 32 bytes or is at or above the field modulus. `Buffer.from` drops a trailing odd digit or an invalid pair: the popup's `isValidHex` and the dApp ingress (#353) admit only 64 digits, and seed addresses are trusted constants; `parseTokenInterface` and `previewTokenMetadata` are popup RPCs that forward unchecked, and no validation is added here. A token row is the person's own list; no trust boundary moves.
 
-## Phase 1: one token contract spelling (#329) — arc-1
+## Phase 1: one token contract spelling (#329) — arc-1 ✓
 
 Steps: bind `const address = AztecAddress.fromStringUnsafe(contract)` in `parseTokenInterface` and use `address.toString()` everywhere after it. Make `findToken` compare lower-cased spellings. Add the tests on an address with letter digits.
 
-Tests: **T1** (composition) the parse of an upper-case address returns the canonical spelling, and `txAmount` reads a lower-case mint call against a token built from that interface (red on base). **T2** (`service.test.ts`) a row stored in one spelling and an add in the other are one token: same id, no second row (red on base; the success control is the same-spelling test at `service.test.ts:114-118`).
+Tests: **T1** (composition) the parse of an upper-case address returns the canonical spelling, and `txAmount` reads a lower-case mint call against a token built from that interface (red on base). **T2** (`service.test.ts`) a row stored in one spelling and an add in the other are one token: same id, no second row (red on base; the success control is the same-spelling test at `service.test.ts:114-118`). **T2b** (`NewTokenPopup.test.ts`, D-orch-2) a listed contract typed in upper case shows "Already exist" and the button stays off (red on base; the same-spelling test is the control).
 
 **Validation gate**: `cd apps/extension && bun --bun vitest run src/wallet/services/token src/utils/tx-amount.test.ts src/popup/components/popups/NewTokenPopup.test.ts src/wallet/services/execution/register-token.test.ts`, then `bun run lint` and `bun run typecheck:all`. Pass: exit 0; T1 and T2 fail against `git show e900f710:<path>` copies of the changed source (never `git stash`). Layers: lint, typecheck, unit, composition.
 
@@ -106,7 +111,7 @@ Pass: every command exits 0; one rerun only for a known flake. No e2e scenario i
 ## UI impact
 
 - Activity mint figure and the holdings list: "no_ask (orchestrator, 2026-10-13): #329 restores the mint figure and the single row a canonical address already gets; no new copy, no layout change."
-- A token address typed in upper case now shows and copies in lower case, the stored spelling (OA-2). The New token popup is unchanged: a case-variant duplicate passes its inline check and the add returns the existing row (OA-1).
+- New token popup and token display: "no_ask (orchestrator, 2026-10-13): #329 compares the duplicate check by address; the existing 'Already exist' message, no new copy"; and "a typed upper-case token address displays and copies in the wallet's one lower-case spelling" (D-orch-2, D-orch-3).
 - #354: no wallet screen changes; a refusal is an envelope to the app (OA-3 covers apps that poll).
 
 ## Issues
