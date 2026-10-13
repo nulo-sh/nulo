@@ -38,3 +38,7 @@ Accepted (all e2e):
 - **Medium.** The case kept the popup page it started with, which `reopen` closes; after the first accept it read the journal through the closed page. It now reads through `burst.page`.
 - **Medium.** `expectEstimateQueued` passed with no Send button at all (`undefined === false` read as disabled), weaker than the base, which required a present, disabled button. It now fails when Send is missing.
 - **Low.** Four test comments overstated or narrated their helpers; trimmed.
+
+## Codex round 3 (resumed) over the round 2 fixes and the `origin/dev` merge
+
+Verdict: approve, no new material finding. It checked the merged `SendReviewSheet.vue` (one fee block with all four branches; arc 2's number span once in the line and once in its ruler) and `send.vue` (the cap handoff beside arc 2's price-moved notice). The loop stops at three rounds.

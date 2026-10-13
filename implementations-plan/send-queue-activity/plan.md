@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: arcs 1 (#264), 3a (#343), 3b (#344) merged; arc 2 building, arc 5 next
+status: closing (arcs 1, 2, 3a, 3b merged; arc 4 carries the close-out; arcs 1b and 5 in their own PRs)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,7 +14,27 @@ trunk: dev
 issues: [90, 103, 108, 109, 110, 112, 122, 152, 209, 213, 217, 218, 219, 220, 242, 243]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** delivered in one PR per arc against `dev`. Arc 4's PR, from `send-queue-activity-queued-cap`, is planned to merge last (D-orch-23) and carries this close-out; the merge that lands it closes this plan. When it was written, arcs 1b and 5 were in their own branches, planned to merge before it; whoever merges `dev` into arc 4 after them adds their PR numbers to Shipped and drops #218, #219 and #242 from Open items as they close.
+- **Shipped:**
+  - Arc 1, #264: the fee spender kept across restarts, journal events scoped, the dApp estimate checked against the reuse epoch (#152; #219 items a and c, OA-1 A).
+  - Arc 3a, #343: the expired send state and the pruned-block re-check (#108, #109). #112 was not built: its stop rule fired (OA-6).
+  - Arc 3b, #344: one scope rule, known decimals, failed-send surfaces, status contrast (#209, #103, #213, #110, #122, #243).
+  - Arc 2, #373: long USD figures fit, the review line's gap, the price-moved notice (#90).
+  - Arc 4: a Send-page send queued behind an earlier one carries a cap, the newest same-token fee plus 25% rounded down to six decimals (D46, D47); it builds at its turn, proves at or under the cap, and above it releases the slot, keeps its ticket and asks again from Home ("Fee went up. Review", "Send for X FJ"), resuming on an accept or ending cancelled at its deadline (#217; D45 to D53, D-orch-20 to D-orch-24). One network e2e case on both browsers; § Audit verdicts holds the reviews.
+- **Orchestrator records:** D-orch-1 to D-orch-30; `OWNER-ASKS.md` keeps every ask with what shipped (OA-10 to OA-14 for #217, OA-15 for #90).
+- **Dropped, rejected, superseded:**
+  - Arc 4's old Phase 4.1 (pin the ratified constants): superseded by the re-plan (D-orch-14).
+  - Phase 4.2 (#220): moved to ci-followups-2 by the owner's call.
+  - Outlines B (a persisted intent) and C (the intent in the popup) for arc 4: rejected (D45).
+  - Mapping an accept in the last instant before the deadline to a cancel: rejected (§ Audit verdicts, arc 4 code).
+- **Known limits:** #367, #380, #381.
+- **Open items:** #112 (OA-6), #218 and #219 item b (arc 1b; OA-3, OA-5), #242 (arc 5), #244 (no arc).
+- **Seeds retired:** the `/goal` and `/loop` seeds below; this record is evidence, not instructions.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
 
 ## Tier and budget
 
@@ -1382,6 +1402,23 @@ Facts: F23's citation and the stale F11 are corrected.
 
 **Codex** (gpt-6.1-sol, high, read-only, new session `01a136fc-cea6-75f1-a013-fb12eca022cf`): **conditional approve**, then **approve** on resume. It keeps D49 (P6-12 B is the substantive reason, the shared ladder the simpler one) and Outline A, and holds D53, the deadline, the rounding limit and OA-10 to OA-14 as settled. One finding:
 1. Medium, demonstrated: `fromReusedEstimate` (`transfer-executor.ts:487-512`) drops the entry's `chainIdentity`, `fpcIdentity`, epoch and `builtAt`, so a reused build re-stashed above the cap could never be consumed again, and the composition control would have crossed into a fresh build. Re-stashing with `builtAt: Date.now()` and the stash-relative drop timer (`estimate-reuse-shared.ts:136-142`) would also have renewed a signed request's retention. **Accepted**: the reused arm keeps the consumed entry, a re-stash keeps its `builtAt`, the cache times its physical drop from `builtAt` (every caller stashes at build time), plus a fake-clock executor case and a cache case. The resume verified the fix and found nothing new.
+
+### Arc 4 code: Codex (gpt-6.1-sol, high) over three rounds and an Opus review, over `c629d335..049d1144`
+
+Session `01a1373c-806c-7fe0-ac72-e7e6f67e5a21`. Both answered every lead question "no path found", with traces: nothing proves or broadcasts above the cap shown or accepted, an accept resumes one execution once, the slot is released before the question and on every exit, no record or waiter is stranded, a stale fee resumes nothing, the ticket keeps a later key-sharing send behind, the stash is evicted on every exit and never renews `builtAt`, and the queued answer reads only storage. No log line or dApp-facing change.
+
+**Round 1. Codex: conditional approve. Opus: conditional approve.** Accepted:
+- **Medium (Codex).** An accept after the deadline, before its timer fired, resumed the send into a wait-limit failure instead of the cancel OA-12 decides. `QueuedFeeAnswers.accept` refuses past the deadline and settles `expired`.
+- **Medium (Opus).** The re-ask sheet unmounted on close, so focus fell to `body`. It draws a snapshot taken at open and stays mounted; a press on a closed sheet accepts nothing; a record it cannot draw opens no slot; a scope switch drops it.
+- **Low.** A false "nothing is signed" header; the `cap` doc; `isFeeAmount` moved into `@nulo/wallet-core/jobs`; four comments.
+
+Rejected: an accept a few milliseconds before the deadline still fails with the earlier-send wording on its next wait (Opus, low). It needs a press in the last instant of a 60-minute wait, nothing is sent, and mapping it adds a branch to the turn's error path.
+
+**Round 2 (resumed). Conditional approve.** The product fixes verify. Two e2e mediums accepted: the case read the journal through the page `reopen` had closed, and `expectEstimateQueued` passed with no Send button (weaker than base).
+
+**Round 3 (resumed), after `origin/dev` was merged (#373, #379). Approve, no new finding.** The merged review sheet keeps one fee block (unvouched, re-ask, cap, ordinary) and arc 2's number span in both the line and its ruler. The loop stops here.
+
+Known limits: a restart while queued or asking fails the send (D53); the re-ask line can read X and Y equal at six decimals. Both are filed closed: #380, #381.
 
 ## Seeds
 
