@@ -26,3 +26,5 @@ Round 1: **reject**, one blocking finding. All seven accepted and fixed; each fi
 5. The store description's "No Nulo server" contradicted § 5.11: now "No account, no telemetry." An owner copy decision, listed for sign-off in the PR.
 6. Two `remote-code.md` citations to `dapp-interaction/service.ts` were stale: repointed.
 7. Comments: `SUSPECT`'s comment named only verifying lists, the cap comments said "extension version", and one type comment narrated its type.
+
+Round 2 (resumed): **approve**, "No new material findings. Confidence: high." It confirmed that an early alarm re-arms, a due or absent deadline refreshes, a discarded envelope refetches, and that `updateMarker`'s moved check keeps the purge guarantee.

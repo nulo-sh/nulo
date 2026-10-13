@@ -340,6 +340,7 @@ This section follows [`implementations-plan/README.md` § Post-implementation st
 - **Owner: approve (2026-10-13).** A1 to A5 confirmed; A4 is disclose. The one condition: the agent drives the key ceremony with the keyed-run tools (D23).
 - **Final pass on the round-2 fixes** (same session, resumed): **approve**. All four findings are closed and no new material defect was found. Implementation review must verify that the marker round-trips and that the named regression tests exist.
 - **Arc 1 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (the summary's code was outside `SIGNING_PATHS`); all seven findings accepted and fixed, each listed in `lessons/phase-2.md`. Round 2: **conditional approve**, one new should-fix (a quoted `}}` hid a secret read from `privileged()`), fixed. Round 3: **approve**, "No NEW material findings or comment issues in arc 1." After the key ceremony, rounds 4-6 on the pinned keys and the `FORMAT.md` key-table check: two should-fixes (rows the check skipped), both fixed; round 6 **approve**, "No new material findings."
+- **Arc 2 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (a list change during the commit's marker read let `persist()` start under old pins); all seven findings accepted and fixed, each listed in `lessons/phase-6.md`. Round 2: **approve**, "No new material findings. Confidence: high."
 
 ## Seeds
 
