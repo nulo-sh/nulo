@@ -27,7 +27,7 @@ import { usePrices } from "@/composables/usePrices"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
 import { stageSubtitle } from "@/utils/card-subtitle"
-import { activityRowRoute, journalRecordInScope } from "@/utils/activity-rows"
+import { activityRowRoute, journalRecordInScope, txOnToken } from "@/utils/activity-rows"
 import {
 	ACTIVITY_FEED_KINDS,
 	buildJournalTerminalCardProps,
@@ -74,10 +74,13 @@ const props = defineProps({
  *  for any kind (`recentActivityRows`). */
 const ROW_BUDGET = 5
 
+/** History opened from a token page shows that token's rows only. */
+const historyRoute = computed(() =>
+	props.token ? { path: "/popup/activity", query: { token: String(props.token.id) } } : "/popup/activity",
+)
+
 const filteredRecentTransactions = computed(() => {
-	const source = props.token
-		? appStore.transactions.filter((t) => t.calls?.some((c) => c.contract === props.token?.contract))
-		: appStore.transactions
+	const source = props.token ? appStore.transactions.filter((t) => txOnToken(t, props.token.contract)) : appStore.transactions
 	// Per-hash pending suppression — journal-first. Suppress a pending
 	// chain tx only if its hash matches an in-flight journal record in
 	// the `submitting` stage (the one stage carrying a txHash). All
@@ -768,9 +771,9 @@ onBeforeUnmount(() => {
 		data-testid="activity-feed-root"
 		:data-active-account="appStore.account?.address"
 	>
-		<Flex align="end" justify="between" :class="$style.section_header">
+		<Flex align="end" justify="between">
 			<SectionLabel label="Recent activity" />
-			<RouterLink to="/popup/activity" :class="$style.archive_link" data-testid="activity-view-all">View history</RouterLink>
+			<RouterLink :to="historyRoute" :class="$style.archive_link" data-testid="activity-view-all">View history</RouterLink>
 		</Flex>
 
 		<div v-if="showStalledLine" :class="$style.stalled_line" data-testid="incoming-sync-stalled">
@@ -843,7 +846,7 @@ onBeforeUnmount(() => {
 		</div>
 	</Flex>
 	<Flex v-else-if="token" direction="column" gap="16" data-testid="activity-feed-root" :data-active-account="appStore.account?.address">
-		<Flex align="end" justify="between" :class="$style.section_header">
+		<Flex align="end" justify="between">
 			<SectionLabel label="Recent activity" />
 		</Flex>
 
@@ -855,11 +858,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style module>
-.section_header {
-	padding-bottom: 8px;
-	border-bottom: 1px solid var(--hairline-soft);
-}
-
 .archive_link {
 	font-family: var(--font-headline);
 	font-size: 10px;

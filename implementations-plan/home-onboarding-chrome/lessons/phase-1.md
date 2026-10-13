@@ -25,3 +25,16 @@
 - The build regenerates `src/types/auto-imports.d.ts` and `.eslintrc-auto-import.json` for each new export under `utils/`; they are tracked and ride with the change that adds the export.
 - Red on base: the three `onboarding/app.test.ts` cases fail on the base `app.vue`; the e2e case times out on it (Chrome).
 - Gate: lint, typecheck:all, test (747 files); `appearance` smoke on Chrome and Firefox at retry 0: green.
+
+## Phase 1.4: the header and the filtered History (#132, #130), 2026-10-13
+
+- `.section_header` held only the two declarations, so the class and its two template uses are gone.
+- The link's target is a one-line `historyRoute` computed rather than an inline object in the template (the template line stays one line).
+- The chip follows the owner-viewed prototype (`shot/130-A`): Badge, headline 11 px uppercase label, the `close` glyph at 14 px. Two departures, both from the plan: `RowAction` (24 px box, accent ring) instead of a hand-built 20 px button, with the chip's padding trimmed to `2px 2px 2px 10px` so its height stays the prototype's 28 px; and the fixed accessible name "Show all activity" (OA-1) instead of one that embeds the symbol.
+- Two testids added for the e2e, neither visible: `activity-token-filter-symbol` (the label; `MaterialIcon` renders its glyph as ligature text, so the chip's own text carries "close") and `activity-empty` (History's empty state had none).
+- Unit layer: every History mount now carries a memory router (the page reads the route); the filter cases cover the loading hold, the dropped query (missing token, failed first read), the kept filter on a failed refresh, six malformed queries plus a repeated one, the sanitized label, the clear and its focus move, and an empty filtered list.
+- E2E (`home-links`): two tokens with distinct contracts, a 32-wide-character symbol, a third registered token with no activity. Red on base: with the base link, Enter on the token page lands on `#/popup/activity` and the `?token=1` hash wait fails.
+- Shots: the header pair comes from the same e2e run with only the old `.section_header` rule restored, so before and after differ by #132 alone. 28 PNGs under `screenshots/`, also copied to the orchestrator's shots directory.
+- Seen, not this arc's: Firefox's page-error relay printed `Client disconnected` from `useIncomingTransfers` (a read in flight when the page unmounts). It failed nothing; it predates the arc.
+- Flake: `src/utils/zod-jitless.test.ts` timed out at 5 s once inside `bun run test` (it passed in `test:all` and alone); the one rerun was green.
+- Gate: lint, typecheck:all, test, test:all; `home-links`, `navigation`, `rows` on Chrome and Firefox at retry 0: green.

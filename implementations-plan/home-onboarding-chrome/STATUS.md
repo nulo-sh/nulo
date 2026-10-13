@@ -11,3 +11,4 @@
 - 2026-10-13 — arc 1 phase 1.1 (#135) gate pass: lint, typecheck:all, test (745 files), settings-routes smoke Chrome + Firefox at retry 0; legacy-routes pin red on the base `legacy-routes.ts`.
 - 2026-10-13 — arc 1 phase 1.2 (#149) gate pass: lint, typecheck:all, test; `passkey-toolbar-panel` Firefox 6/6 at retry 0; new case red on base.
 - 2026-10-13 — arc 1 phase 1.3 (#133) gate pass: lint, typecheck:all, test; `appearance` Chrome + Firefox at retry 0; new e2e and unit cases red on base.
+- 2026-10-13 — arc 1 phase 1.4 (#132, #130) gate pass: lint, typecheck:all, test (one zod-jitless timeout, green on rerun), test:all; home-links + navigation + rows Chrome + Firefox at retry 0; home-links red on the base link; 28 shots.
