@@ -394,7 +394,7 @@ Every gate runs from the worktree root unless it says otherwise. "Single test fi
 - Pass: every command exits 0, and reverting step 4 makes the never-happens cases fail. Check that once, then restore.
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1.2: the chain-tip gate (#219 b; only on OA-5 = A)
+#### Phase 1.2: the chain-tip gate (#219 b; only on OA-5 = A) ✓
 
 Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1b's layer, or not at all on B.
 
@@ -467,7 +467,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 
 ### Arc 1b: dApp sends wait (after OA-3 = A or B)
 
-#### Phase 1b.1: the parked slot and origin order
+#### Phase 1b.1: the parked slot and origin order ✓
 
 1. Confirm I2: read where `originKey` and the session baton are set.
 2. Build the mutex and lane pieces:
@@ -494,7 +494,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 - Pass: every command exits 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 1b.2: the waiter (#218)
+#### Phase 1b.2: the waiter (#218) ✓
 
 1. Add `SendSequencer.enterWaiter` with the blocking rule of the OA-3 option chosen, and enter a waiter for each scope the send spends from.
 2. In `runInSlot`, add:
@@ -530,7 +530,7 @@ Built in arc 1 if OA-5 is answered A before arc 1's PR opens; otherwise in arc 1
 - Pass: every command exits 0, and reverting step 2 makes the never-happens cases fail. Check that once, then restore.
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1b.3: arc 1b end-to-end gate
+#### Phase 1b.3: arc 1b end-to-end gate ✓
 
 1. Add a case to `same-token-concurrent-sends.test.ts`: "a Send-page send held unmined, then a dApp send of the same account through the approval popup".
    - Never-happens: the dApp record reaches `simulating` while the Send-page send is held.
