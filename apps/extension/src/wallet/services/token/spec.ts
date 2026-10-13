@@ -15,6 +15,8 @@ export type Token = {
 
 	chainId: number
 	contract: string
+	/** Absent on a row added before classes were recorded. */
+	classId?: string
 
 	name: string
 	symbol: string
@@ -41,6 +43,7 @@ export const TokenSchema: z.ZodType<Token> = z.object({
 	profileId: z.string(),
 	chainId: z.number(),
 	contract: z.string(),
+	classId: z.string().optional(),
 	name: z.string(),
 	symbol: z.string(),
 	decimals: z.number(),
@@ -62,6 +65,11 @@ export type TokenInfo = {
 	chainId: number
 	/** Token contract address. */
 	contract: string
+	/**
+	 * The class the wallet resolved when the token was added: trust on first use, unauthenticated
+	 * when restored, so a reader compares it only as a field element.
+	 */
+	classId?: string
 	/** Token name. */
 	name: string
 	/** Token symbol. */
@@ -89,6 +97,8 @@ export type TokenInterface = {
 	chainId: number
 	/** Contract address. */
 	contract: string
+	/** The contract's original class, as the parse resolved it; a pinned parse refuses any other. */
+	classId: string
 
 	/** Function to get token name. */
 	getNameFn?: FnImpl

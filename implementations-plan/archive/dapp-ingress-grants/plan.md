@@ -1,7 +1,7 @@
 ---
 plan: dapp-ingress-grants
 tier: mid
-status: approved (orchestrator, D-orch-1 to D-orch-12); arcs 1 (#254) and 2 (#307) delivered; arc 3 in review
+status: closed (2026-10-13); arcs 1 to 3 merged (#254, #307, #335); arc 4 moved to lane dapp-dispatch-hold
 issues: "#15, #83, #84, #86, #87, #88, #89, #123, #124, #125, #126, #127, #128, #199, #201, #228"
 driver: claude-code
 claude_model: opus
@@ -13,6 +13,72 @@ budget: recon 2 explorers (sonnet); dual audit (Codex gpt-6.1-sol high + one Opu
 post_implementation_hardening: not scheduled
 base: origin/dev ac259a7
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** closed. Arcs 1 to 3 are merged into `dev`. Arc 4 (#15) was scope only: the owner approved it on decision page 2 (P2-09, 2026-10-11), so it moved to its own deep-tier plan, lane `dapp-dispatch-hold` (D-orch-14). This plan closes with the docs-only close-out PR `docs(plans): close dapp-ingress-grants` against `dev`, and the merge that lands it closes the plan.
+- **Shipped:**
+  - **Arc 1, #254** (merged 2026-10-10). Closes #88 and #228.
+    - #88: every stored-grant reader that decides (the dApp-session service, the bridge, the queued row) and both grant writers read through `projectStoredGrants`. A malformed grant refuses with `ValidationError("Malformed capability")`, Off still succeeds, and the queued row skips at `debug`.
+    - #228: revocation keeps an unstamped channel whose live own-tab marker names another profile, and tombstones the marker of each unstamped channel it ends. Establishment rechecks its captured marker by identity, and no exit before the stamp terminates a replacement attempt (D-impl-2 to D-impl-5).
+  - **Arc 2, #307** (merged 2026-10-11). Closes #83, #86, #123, #124, #126 and #128.
+    - #83: a refusal before sending files `terms_refused`, `scope_refused`, `session_ended` (a lock, D-impl-8) or `wallet_refused` ("Refused before sending"), per P2-01 to P2-03 and ask 1 = C. The waiting-sends cap keeps today's row (D-impl-10, #340).
+    - #86: a refused call is titled by its resolved function, or "Transaction" (P2-04). The title lands in the same locked write that fails the record (D-impl-7, D-impl-16).
+    - #123 items 1-2: the connect window names the app's network before and after Allow (P2-05, D-impl-12).
+    - #124: an expired standby window shows "Connection request expired". OK, leaving the page, or 30 s closes it (P2-06, ask 7 = B; D-impl-13, D-impl-14, D-impl-17).
+    - #126: closed as not reproducible. A pin proves a batched `sendTx` never waits, and the stale TODO is gone.
+    - #128: `executeUtility` on a non-utility function answers `-32602` (SR7, D-impl-15).
+  - **Arc 3, #335** (merged 2026-10-13). Closes #84, #87, #89, #125, #199 and #201.
+    - #84: contract-classes coverage is judged per grant, so a widening opens the connect window (P3-01; D-impl-22, D-impl-23).
+    - #87: the comment at the batch refusal is fixed, and a batched `requestCapabilities` is pinned (page 0).
+    - #89: `grantPublicAuthwit`'s `caller` and `contract` use the address schema (P3-02). A dApp argument holding an own `toString` is refused at the parse, contract artifacts excepted (SR7; D-impl-25, D-impl-29). The npm README carries the 0.2.0 `## Changes` line.
+    - #125: closed on P2-07's fallback, with the pin extended to no row and no marker. #330 asks upstream for a typed rejection.
+    - #199: `chainInfo` is parsed with upstream `schemas.Fr`, and both fields are bounded to u32 (D-impl-18 to D-impl-21).
+    - #201: `-32005` on every path (P3-04; D-impl-24, D-impl-30).
+  - **Close-out:**
+    - #340 and #341 filed.
+    - The id-reuse residual added to #127.
+    - #15 commented, and the `Record` lines of #330 to #332 repointed at this archive.
+    - Two lessons promoted: the anchored `pgrep -f` poll, and `schemas.Fr.safeParse` throwing. To stay at 8 KiB, the Firefox reactive-Proxy entry is retired (since #300, `storageLocalSet` clones every write, so a Proxy rejects on every engine) and six other entries are tightened (D-orch-17).
+    - `STATUS.md` and the after-shots removed (D-impl-32 to D-impl-34).
+- **Owner step, never an agent's:** dispatch `publish-packages.yml` from `dev` with `version=0.2.0`, dry run first. It publishes `@nulo-sh/wallet-sdk-schema-patch` 0.2.0 and, in lockstep, `@nulo-sh/wallet-crypto` and `@nulo-sh/resolve-asset` (ask 6 = A, D-orch-8, D-orch-16). On 2026-10-13, npm holds 0.1.0.
+- **Gates:** every phase gate is recorded green in `lessons/phase-1.md` to `lessons/phase-3.md`. The end-to-end gates ran at retry 0: arc 1's network files in its CI lanes on both browsers (D-impl-6), and arcs 2 and 3 locally on Chrome and on Firefox. All three PRs merged with the required aggregators green.
+- **Review loop:**
+  - The plan: Codex reject, reject, reject, then approve; Opus a conditional approve.
+  - Codex converged on each arc: in three rounds on arc 1, two on arc 2 and two on arc 3, with an Opus review beside each first round (§ Audit verdicts).
+- **Dropped, rejected, superseded:**
+  - **Arc 4 / #15:** nothing built here. Approved, and moved to lane `dapp-dispatch-hold`, where #15 stays open (D-orch-14).
+  - **#127:** never this plan's. It stays open as its own `blocked:external` upstream ask. Arc 1's id-reuse residual (C3) was added to it as a comment, not opened as a twin issue (D-impl-32).
+  - **The marker-less reconnect residual (§ Arc 1):** not reproduced. It fails closed as before, and the plan files it only on a reproduction, so no issue.
+  - **P2-07's typed refusal (#125):** discovery has no rejection reply (F17). It closed on the proposal's fallback.
+  - **P2-08's batched queued row (#126):** no batched `sendTx` can wait (F11), so there was nothing to build.
+  - **#84's e2e widening case:** dropped, because the generic playground asks only for `classes: "*"` (D-impl-22).
+  - **D-orch-6's `2^53`-only `version` bound:** superseded by the signed P3-03 text (D-impl-18).
+  - **The plan's `refusalTitle` field:** replaced by a module `WeakMap` (D-impl-7).
+  - **#124's manual expiry check:** replaced by an e2e case on both browsers (D-impl-14).
+  - **D-impl-2:** withdrawn.
+  - **Outline B and the six alternatives in § Trade-offs:** rejected for the reasons recorded there. Every other rejected or partly accepted finding is dispositioned in § Panel and § Audit verdicts.
+  - **Post-implementation step 4, the fresh cross-arc Codex pass over the net diff from `ac259a7`:** not run. Under D-orch-1, each arc branched from `dev` after the one below merged, and its own Codex loop reviewed it on top of them. No pass looked at the three arcs as one diff.
+  - **OWNER-ASKS:**
+    - 1 = C: built for four of its five causes; the fifth is item 9.
+    - 2 = A: built.
+    - 3: settled by #124's approval. Both browsers keep the page under the overlay.
+    - 4 = A, with the u32 `version` bound: built.
+    - 5 = B: built, #330.
+    - 6 = A: the README line shipped; the publish is the owner step above.
+    - 7 = B: built with 30 s.
+    - 8 = B: built.
+    - 9: open as #340.
+    - 10: unanswered. A ships, the recommendation: the signed copy for every `session_ended` row. A separate kind for a profile switch is a new owner call if that case starts to matter. Nothing open.
+- **Open items:**
+  - #15 (lane `dapp-dispatch-hold`).
+  - #330 (`blocked:external`: a typed discovery rejection).
+  - #331 (the Buffer-shaped address residual).
+  - #332 (a non-string method name; unsupported methods log at `error`).
+  - #340 (`owner-decision`: the waiting-sends cap's row, OWNER-ASKS item 9).
+  - #341 (`owner-decision`: Connected apps renders stored grants raw).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired with this record; never run them.
 
 # dApp ingress: grants, refusals and the app-facing contract
 
@@ -422,7 +488,7 @@ Before the first step: read the page 2 answers in each issue's `## Decision` blo
 
 **Gate 2.6**: `bun run lint`; `bun run typecheck:all`; `bun run test`. Pass: exit 0. Layers: lint, typecheck, unit.
 
-#### Phase 2.7: arc 2 end-to-end gate
+#### Phase 2.7: arc 2 end-to-end gate ✓
 
 Warning: the G1 rule from Phase 1.3 applies until #169 merges.
 
@@ -567,6 +633,11 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-orch-10, the Buffer-shaped residual is filed, not fixed.** The `"[object Object]"` address at the dispatcher's four `String()` sites becomes an issue at close-out (dedupe first). Filed as #331, with `isTokenRegistered`'s site (329) as a fifth.
 - **D-orch-11, no new words** (D-orch-4, for arc 3).
 - **D-orch-12, merge `origin/dev` before the final gates** (D-orch-5, for arc 3).
+- **D-orch-13, the close-out's own branch.** `dapp-ingress-grants-close-out` starts from `origin/dev` 527b369f, since all three arcs are merged, and lands as one docs-only PR against `dev` (`gh pr create --base dev`) with no `Closes`. This replaces the Delivery table's "stacks on layer 3".
+- **D-orch-14, arc 4 moves out.** The owner approved P2-09 on page 2 (2026-10-11). #15 moves to its own deep-tier plan, lane `dapp-dispatch-hold`, and stays open there. This plan builds nothing for it, and its § Arc 4 is that plan's starting scope.
+- **D-orch-15, OWNER-ASKS at close.** Item 9, the waiting-sends cap's row copy, is an owner call. It is filed as an `owner-decision` issue (#340). Item 10 and every answered ask get a disposition line, and nothing stays open for them.
+- **D-orch-16, the 0.2.0 publish.** Publishing is the owner's dispatch of `publish-packages.yml` after #335. No agent runs it, and the Outcome states the step.
+- **D-orch-17, lessons at budget.** `lessons.md` is at 8168 of 8192 bytes, so a promotion must retire or tighten an existing entry. Promote at most three gotchas, one line each, linking the archived detail.
 
 ### Implementation deviations (arc 1)
 
@@ -607,6 +678,14 @@ Run per arc at its boundary, before that arc's PR opens; the cross-arc pass runs
 - **D-impl-29 (#89, Codex post-implementation C1).** The own-`toString` walk skips the contract-artifact argument of `registerContract` and `registerContractClass`. An artifact's `storageLayout` is keyed by the contract's storage-field names, and `toString` is a legal one, so the blanket walk refused a stock-SDK registration; I2's claim that a stock dApp never sends an own `toString` was false for artifacts. The parse refuses an object in every artifact field the wallet reads as a string (`name`, function names), and the instance beside the artifact is still walked. Skipping the whole argument, rather than exempting its dictionaries by path, keeps the guard from mirroring upstream's artifact schema.
 - **D-impl-30 (#201, Codex post-implementation C2).** A capacity refusal logs at `debug` at the ingress (`isExpectedRefusal`) and in the execution service (`logOperationOutcome`), like the Terms, scope and argument refusals: a dApp with silent sends reaches the cap with no window, so it can repeat the refusal at will. The row is unchanged (OWNER-ASKS item 9).
 - **D-impl-31 (Delivery).** The PR title backticks `chainInfo`: commitlint's `subject-case` refuses the bare camel-case word, and the squash subject is linted on `dev`. Otherwise the title is the Delivery table's.
+
+### Close-out decisions
+
+- **D-impl-32 (arc 1's C3 residual).** Termination by id also ends a page's own newer attempt that reuses the id in another tab. It is recorded as a comment on #127, not filed as a new issue. Its only fix is #127's upstream collision check, and the dedupe rule extends the issue that owns the work rather than opening a twin.
+- **D-impl-33 (#341).** § Arc 1 and Panel C2 had the close-out file the raw Settings grant display as an `owner-decision` issue. The orchestrator's open-item list did not name it, but the plan did, so it is filed (#341).
+- **D-impl-34 (artifacts).**
+  - The after-shots under `screenshots/` are removed rather than archived. No archived plan keeps binaries, no committed file links them, and PR #307's body shows them at a fixed commit.
+  - The `Record` lines of #330, #331 and #332 now name `implementations-plan/archive/dapp-ingress-grants/plan.md`.
 
 ### Plan-space search: the competing outline
 

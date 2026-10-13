@@ -1,7 +1,7 @@
 ---
 plan: tokens-and-balances
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-8); arc 1 merged (#271); arc 2 building (page 8 signed); arc 3 answered (OA-1 = A), not yet started
+status: completed (delivered in #271, #333 and #334)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,7 +14,32 @@ trunk: dev
 issues: [80, 93, 94, 104, 105, 106, 134, 136, 206]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** delivered in three PRs against `dev`: #271 (arc 1, merged 2026-10-12), #333 (arc 2, merged 2026-10-13) and #334 (arc 3 and this close-out), awaiting the orchestrator's merge; the merge that lands #334 closes this plan.
+- **Shipped:**
+  - #206 (#271): balance add and delete events go through one id-keyed reducer, so a seeding race no longer duplicates a row.
+  - #94 (#271): a released token add resumes under a fresh ticket and writes, deletes and announces only while it owns one (R1 to R5; OA-3 = A).
+  - #93 (#271): adopting a profile id removes that id's per-profile UI keys first.
+  - #134 (#333): Holdings search offers to add a token from a pasted contract address (P8-01).
+  - #136 (#333): the New token popup shows one generic line for every refused add (P8-02, OA-2 = A); the error goes to a debug line under `reason` (OA-4 = A, D-orch-7).
+  - #105 (#334): a listed token's mint figure reads only when the class the build recorded equals the class the token was added with (OA-1 = A). The build records the node's class, as the PXE resolves a call, because the wallet's PXE reports every instance at its original class (D-arc3-5).
+  - `lessons.md`: the class lesson joins the MAC and class entry; the draft-release `tag_name` entry is retired, its one code path pinned by `scripts/release/attach-assets-run.test.ts`.
+- **Orchestrator records:** D-orch-1 to D-orch-13 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #80: not built, `blocked:external` until a V6 mainnet exists; stays open with a comment.
+  - #104: not built, hold H8 until a real dApp reports a mint outside the standard call shapes; stays open with a comment.
+  - #106: not built, hold H8 until charter C12-fetch and its own plan; stays open with a comment.
+  - #93's orphan keys (D4): a key a racing page recreates for an id never adopted again stays, read by nothing; no sweep, no item.
+  - OA-1's options B and C: not built; the owner chose A.
+  - D9's store-refusal marker: not built, since OA-2 = A needs none (D-arc2-1).
+  - The § Delivery stack with its own close-out layer: replaced by independent PRs off `dev` (D-orch-1, D-orch-5, D-orch-9), this close-out riding #334 (D-orch-10).
+  - The final cross-arc Codex pass (§ Post-implementation step 3): not run. The arcs landed as independent PRs, each looped to convergence (arcs 1 and 2 in two rounds, arc 3 in three); the orchestrator's close-out brief did not schedule it.
+- **Open items:** #338 (`hardening`): the #93 late-write residue (D1, I2). #339 (`owner-decision`): OA-5, "Try again" for a pasted address that is not a token on this network. #262 (`bug`): the lockless chain sweep's id-reuse race (D-orch-4). #329 (`bug`): a token added with upper-case hex never matches its own calls (arc 3's review).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md). Recon: [recon.md](recon.md).
 
 ## Tier and budget
 
@@ -320,6 +345,8 @@ Built only on OA-1 = A or C; designed here so the answer can be built without a 
   use, not a standard check); a `classId` restored from a backup is hostile input, validated as a
   field element but not authenticated. A token row or a transaction record without a class shows no
   figure, which includes every mint record built before Arc 3.
+  As built (D-arc3-5): the wallet's PXE client returns a registered contract at its original class, so
+  the builder reads the class from the node, as the PXE does to execute the call.
 - **C (signature pin).** Record the call's selector (computed at `tx-request-builder.ts:194`) on the
   `TxCall`; `txAmount` reads a mint only when it equals `vocabularySelector(method, 2)`. The
   vocabulary has no `mint_to_commitment/2` selector (`token-transfer-vocabulary.ts:88-105`): C adds
@@ -414,7 +441,7 @@ with `cd`.
 
 ### Arc 1: one balance reducer, a resumable token add, adopted ids start clean (merges on OA-3)
 
-#### Phase 1.1: one reducer for balance events (#206)
+#### Phase 1.1: one reducer for balance events (#206) ✓
 
 1. Add `onBalanceAdded` and `onBalanceDeleted` to `useTokenBalanceSnapshot`, as in Architecture.
 2. In `BalanceView.vue` and `TokensView.vue`, subscribe the returned handlers. Delete the local ones.
@@ -433,7 +460,7 @@ Validation gate:
 - Pass: every command exits 0. The new BalanceView test fails against the base `BalanceView.vue`.
 - Layers: lint, typecheck, unit, component.
 
-#### Phase 1.2: a released token add resumes under a fresh ticket (#94)
+#### Phase 1.2: a released token add resumes under a fresh ticket (#94) ✓
 
 1. Extend the test helper `recordWrites` (`wallet/services/storage-write-log.ts`) with an awaitable
    hook that can hold a set before it applies, and make `afterSet` awaitable, so a test can stop the
@@ -507,7 +534,7 @@ Validation gate:
   `token/service.ts` and `network/service.ts` (paste the red run).
 - Layers: lint, typecheck, unit, composition.
 
-#### Phase 1.3: an adopted profile id starts with no UI keys (#93)
+#### Phase 1.3: an adopted profile id starts with no UI keys (#93) ✓
 
 1. Keep one `StorageArea` field in the `ProfileService` constructor.
 2. In `persistNewProfileHoldingLock` and `writeMarkerThenRowHoldingLock`, await
@@ -616,14 +643,16 @@ Validation gate:
 
 ### Arc 3: the mint figure's class pin (waits on OA-1)
 
-#### Phase 3.1: pin the class a mint figure reads (#105) — waits on OA-1
+#### Phase 3.1: pin the class a mint figure reads (#105) ✓
 
 1. Build the option OA-1 names (Architecture § Arc 3). Build nothing on B.
 2. Test `tx-amount.test.ts`: a matching pin reads the figure (control); a missing pin and a different
    pin each read none. Test the add path stores the class, `getTokenInfo` keeps it, and the builder
    records it.
 
-UI impact: per OA-1's answer; quote it in the PR.
+UI impact: the owner's sign-off, decision page 8, 2026-10-12, OA-1 (P8-03) = option A, quoted from
+#105's `## Decision`: "Pin the class: adding a token records its contract's class; building a transaction records the class seen; a mint row shows its amount only when the two match. Trust on first use; a forged backup can pin any class; a token upgraded after you added it shows its mints with no amount, as an unlisted token's mint looks today; mint rows recorded before this change, and tokens added before it until re-added, show no amount (pre-production: developer installs only)." No new copy: a mint row without a matching
+class renders as an unlisted token's mint does today.
 
 Validation gate:
 - Commands: `bun run lint`; `bun run typecheck:all`;
@@ -665,7 +694,9 @@ Validation gate:
 - **Arc 2:** P8-01, P8-02 and OA-2 = A, quoted in their phases; OA-4 = A changes no log level. The
   popup's debug line for a refused add carries the error under `reason`; nothing is added to the
   visible line (D-orch-7).
-- **Arc 3:** per OA-1.
+- **Arc 3:** OA-1 = A, signed 2026-10-12 (P8-03), quoted in Phase 3.1. A mint row of a listed token shows
+  its amount only when the class recorded at the build equals the class the token was added with; otherwise
+  it reads as an unlisted token's mint does today. No new copy.
 
 ## Security & Adversarial Considerations
 
@@ -806,6 +837,16 @@ extension view that has not seen a deletion.
 | D-orch-8 | The PR attaches the add row and the generic line in both themes; the smoke and network e2e of Phase 2.1 run on both browsers at retry 0; the `did not answer init` build search is run and quoted | | orchestrator, 2026-10-12 | CLAUDE.md § UI changes: screenshots close the loop |
 | D-arc2-1 | No store-refusal marker: the popup's `catch` shows the generic line for every error it catches, and `packages/aztec-runtime` is unchanged | the marker module, its subpath export and the marked throws (D9, designed for OA-2 = B) | implementer; panel at the arc's review | Under OA-2 = A no error the `catch` sees has approved copy, so nothing needs to tell a store refusal from another error; the two lines with copy are set outside the `catch`. D9 stands as the design for an answer that was not given |
 | D-arc2-2 | The add row is the local `Button`, `variant="secondary"`, `wide` | the outline and primary variants; the fold row's own style | implementer | An existing primitive; the secondary variant keeps the address's lower case, where the outline, primary and fold styles set every letter in capitals ("0X12…AB"). The owner judges the shots in both themes |
+| D-orch-9 | No stack: arcs 2 and 3 are independent PRs off `dev`; arc 3 is `tokens-and-balances-mint-pin`, opened with `gh pr create --base dev` | stack arc 3 on arc 2 | orchestrator, 2026-10-12 | Arc 1 landed by squash (#271) and arc 2 is built in parallel; neither needs the other's code |
+| D-orch-10 | The close-out is conditional: arc 3's PR carries it only if arc 2's PR has merged by the time arc 3's Codex loop converges; otherwise Phase 3.1 is ticked, the index line says arc 3 is in review and the orchestrator assigns the close-out | close out in arc 3 regardless | orchestrator, 2026-10-12 | A plan closes with the merge that lands its last work |
+| D-orch-11 | Hostile input stays hostile: a `classId` restored from a backup or read from a transaction record is compared only as a field element and never authenticated; a mismatch or a missing class shows no figure, never an error, never a log line carrying the class or the amount | authenticate restored pins | orchestrator, 2026-10-12 | OA-1's signed limits; the logging policy |
+| D-orch-12 | No new words; screenshots of a mint row with and without a figure, both themes, close the loop on the PR | new copy for an unpinned mint | orchestrator, 2026-10-12 | Option A adds no copy; CLAUDE.md § UI changes |
+| D-orch-13 | Gate as Phase 3.1 states it, plus the Chrome smoke suite #105's Pickup names | a lighter gate | orchestrator, 2026-10-12 | Nothing weakens a gate |
+| D-arc3-1 | A class is checked where it is read: `txAmount` matches only two field elements that are the same value (`sameFieldAddress`); `TokenSchema` carries `classId` as an optional string and the tx row schema passes it through | refuse a malformed class in `TokenSchema` and the tx row schema; recover a non-string as absent (`.catch`, Codex r1) | implementer; Codex r1 and Opus r1 flagged the non-string case | A malformed string reads as a missing class: no figure, no error, and the row survives (D-orch-11). A value of the wrong type fails the row's parse, as it does for every other `TokenSchema` field: restore records it and the codec hides it, and only a hand-written backup holds one |
+| D-arc3-2 | `TokenInterface.classId` is required and set from the fetched instance; a seeded add stores the class its pinned parse matched, which is the seed's `expectedClassId` by that parse's check | thread `expectedClassId` through the seeder's `persist` | implementer | `parseTokenInterface` refuses any other class when pinned, so the two are the same string; one source, no new seeder plumbing |
+| D-arc3-3 | A NO_FROM build records no class | record it there too | implementer | Architecture names the `call` and `encoded_call` cases. A standard token's mints check `msg_sender` against the minter (`token_contract/src/main.nr`, `_validate_minter`), and NO_FROM refuses public functions, so no standard mint succeeds there |
+| D-arc3-4 | An add of a contract already listed returns the existing row as it is, so a row added before classes were recorded keeps no class until the person deletes and adds it again | refresh the class on the idempotent path | implementer | The signed text says "until re-added"; the idempotent short-circuit is the dApp-spam guard and writes nothing |
+| D-arc3-5 | Every `call` and `encoded_call` records its contract's class as the PXE resolves it to execute: `node.getContract(target)`'s current class, else the original class `instances` holds; a failed lookup records none and the build continues | record the PXE instance's class (Architecture § Arc 3 as written); ask the node for public calls only (round 1 fix) | Opus r1 (High): the PXE hydrates `currentContractClassId` from the original class (`packages/aztec-runtime/src/pxe/effective-class.ts`) and the add registers the token, so no upgrade is ever caught. Codex r2 (High): the public-only rule leaves a private mint that runs an upgraded class recording the original | Upstream's `ContractClassService.getCurrentClassId` resolves a private call's bytecode and the kernel oracle's class from `node.getContract(address, anchor)`, falling back to the original class, so the builder records the same class with the same rule. It names the node nothing new: the PXE already asks it about every contract it simulates |
 
 ## Audit verdicts
 
@@ -944,6 +985,39 @@ a successor that loses its ticket while draining.
 The reviewer verified each round 1 fix against the code: the second network test is retry-safe on its own
 (a fresh contract per attempt) and filterable with `-t`; the field is read by testid; the handler move and
 the split component tests change no behaviour. Loop converged after two rounds.
+### Arc 3 implementation, Codex round 1 (gpt-6.1-sol, high; the managed `CODEX_ACCOUNT=best` ran it on the alejo-icloud login), `approve with fixes`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Medium | A restored record can attach `transfers` to a `mint_to_public` call; `txAmount` reads the transfer before any class check | Rejected with reason: a forged record controls both sides of the pin anyway (OA-1: "a forged backup can pin any class") and can show any figure through `transfers` on any call; a wallet-written mint record carries no transfers |
+| 2 | Medium | A non-string `classId` fails `TokenSchema`, so restore refuses the row and the codec hides it, where before the key was stripped | Rejected for code, accepted for wording: every `TokenSchema` field refuses a wrong type, and only a hand-written backup holds one; D-arc3-1 now says the "reads as missing" rule covers malformed strings |
+| 3 | Low | Pre-existing: `contract-resolver.ts` debug lines carry class ids | Rejected: pre-existing, debug level, public chain data, and not the pin's path; D-orch-11 binds the comparison, which logs nothing |
+| 4 | Low | The producer tests record pins the consumer would refuse (`"0xclass1"`, `"0xc1a55"`, a value above the field modulus) | Accepted: the builder harness uses an `Fr` class, the composition and service fixtures a canonical 64-digit field element |
+| 5 | Nit | `TokenInfo.classId`'s doc claims the class the contract ran | Accepted: "the class the wallet resolved when the token was added" |
+
+### Arc 3 implementation, Opus 5.5 review (general-purpose), `reject as built (one High, with a small fix)`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | High | The pin never catches an upgrade: the PXE hydrates `currentContractClassId` from the original class, the add registers the token, so the add and every build record the original class | Accepted (D-arc3-5), verified in `effective-class.ts` and `pxe/service.ts` `getContractInstance`. Round 1 applied it to public calls only, on a kernel-refusal premise Codex r2 disproved; round 2 applies it to every call, as Opus proposed, with the original class when the node knows no instance |
+| 2 | Low | Pre-existing: `txAmount` matches a listed token's contract by exact string, so a token added with upper-case hex never reads its mint | Left out: pre-existing, and showing those figures is a visible change outside OA-1's text; filed as #329 |
+| 3 | Nit | A non-string `classId` fails restore | Same as Codex 2 |
+
+### Arc 3 implementation, Codex round 2 (same session, resumed), `reject (one new material High)`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | High | The public-only rule is wrong: upstream resolves a private call's bytecode and the kernel oracle's class through `ContractClassService.getCurrentClassId` (`node.getContract(address, anchor)`), so with the new class's artifact registered an upgraded contract runs its private mint while the builder records the original class; reproduced in memory. The privacy reason does not hold either: the PXE already asks the node about every contract it simulates | Accepted, found by both legs (the driver read the same resolver while the round ran). Every call reads the node's class, else the original; the regression test is a private call (red on both earlier builders); the comment and D-arc3-5 rewritten |
+
+Round 2 also confirmed: function visibility comes from the resolved ABI; a scheduled upgrade reads the previous class until it activates, which the signed build-time limit covers; the failed-lookup `undefined` is the right display-only fail-closed and logs nothing; a reused estimate's `txCalls` keep the estimate build's class, as the signed text allows.
+
+### Arc 3 implementation, Codex round 3 (same session, resumed), `approve (no new material finding)`
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| 1 | Nit | `calledClassId`'s doc says "the class a call runs under", but the lookup reads the latest state while a private call executes at its anchor | Accepted: "as the PXE resolves a call to run it, read at build time" |
+
+The reviewer verified the fallback (a PXE hit hydrates the original class, a node fallback passes `assertNotUpgraded`, a bundled instance carries equal classes), that an upgraded contract cannot honestly answer `undefined`, that the extra await bypasses no fence and every failure still reaches `task.fail`, and that repeated targets only cost reads. The loop converged after three rounds.
 
 ## Post-implementation
 
@@ -1061,7 +1135,7 @@ The orchestrator writes a `## Pickup` section into each issue. The arc that clos
 
 - Arc 1 (built now; merges on OA-3): #206 (Phase 1.1), #94 (Phase 1.2), #93 (Phase 1.3).
 - Arc 2 (waits on page 8): #134 (Phase 2.1, P8-01), #136 (Phase 2.2, P8-02).
-- Arc 3 (waits on OA-1): #105 (Phase 3.1; closed as not planned on OA-1 = B).
+- Arc 3 (OA-1 = A, signed 2026-10-12): #105 (Phase 3.1).
 - No arc: #80 (`blocked:external`, no V6 mainnet), #104 (hold H8, waits on a real dApp report), #106
   (hold H8, waits on C12-fetch and its own plan).
 

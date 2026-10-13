@@ -7,7 +7,15 @@
 import type { Page } from "puppeteer"
 import { expect } from "vitest"
 import { extensionUrl, gotoExtensionPage, newPage, waitForTarget } from "./fixtures/browser"
-import { clickByTestId, type ExtensionContext, openPopup, patchPagePolling, test, waitForHash } from "./fixtures/extension"
+import {
+	clickByTestId,
+	type ExtensionContext,
+	openPopup,
+	patchPagePolling,
+	recordPageErrors,
+	test,
+	waitForHash,
+} from "./fixtures/extension"
 import { ensureUnlocked, lockWallet } from "./fixtures/helpers"
 import { waitForMainFrame, waitForPopupClosed } from "./fixtures/popups"
 
@@ -30,6 +38,7 @@ async function openWindow(ctx: ExtensionContext, opener: Page, hash: string): Pr
 		30_000,
 	)
 	const page = await target.asPage()
+	recordPageErrors(ctx, page)
 	await waitForMainFrame(page)
 	patchPagePolling(page)
 	return page

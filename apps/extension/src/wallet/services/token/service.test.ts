@@ -154,6 +154,17 @@ describe("TokenService.addToken — journal/lock machinery (characterization)", 
 		expect(restored).toBe(true)
 	})
 
+	test("the row keeps the parsed class, and the add's result and every read project it", async () => {
+		const { tokenService } = await makeHarness()
+		const classId = `0x${"c1a55".padStart(64, "0")}`
+
+		const info = await tokenService.addToken("p1", NETWORK.id, "0xacc", { ...ti("0xc0ffee"), classId }, { origin: "popup" })
+
+		expect(info.classId).toBe(classId)
+		expect((await tokenService.getTokensRaw("p1"))[0].classId).toBe(classId)
+		expect((await tokenService.getTokens("p1"))[0].classId).toBe(classId)
+	})
+
 	test("seeded persistence never backfills a title (no setOperationMeta)", async () => {
 		const { tokenService, journal } = await makeHarness()
 

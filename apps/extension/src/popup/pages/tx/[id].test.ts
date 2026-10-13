@@ -42,7 +42,8 @@ afterEach(() => {
 const field = (n: bigint) => `0x${n.toString(16).padStart(64, "0")}`
 const TOKEN = `0x${"0a".repeat(32)}`
 const ACCOUNT = `0x${"0c".repeat(32)}`
-const listed = { id: 1, chainId: 1, contract: TOKEN, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true }
+const CLASS = field(0xc1a55n)
+const listed = { id: 1, chainId: 1, contract: TOKEN, classId: CLASS, name: "Test", symbol: "TST", decimals: 18, hasDecimals: true }
 
 const settled = (origin: { type: OriginType; name?: string }, calls: unknown[]) => ({
 	hash: "0xh1",
@@ -73,7 +74,7 @@ const transferRecord = (symbol: unknown = "TST") =>
 	])
 const sentTransfer = transferRecord()
 const dappMint = settled({ type: OriginType.DAPP, name: "example.dapp.io" }, [
-	{ contract: TOKEN, method: "mint_to_public", args: [ACCOUNT, field(10n ** 18n)] },
+	{ contract: TOKEN, method: "mint_to_public", args: [ACCOUNT, field(10n ** 18n)], classId: CLASS },
 ])
 
 async function mountPage(tx: unknown, tokens: Promise<unknown[]>, stubs: Record<string, unknown> = {}) {

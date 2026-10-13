@@ -10,10 +10,19 @@ import { appendFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Target } from "puppeteer"
 import { waitForTarget } from "./browser"
-import { clickByTestId, clickSelector, patchPagePolling, waitForHash, type ExtensionContext } from "./extension"
+import { clickByTestId, clickSelector, patchPagePolling, recordPageErrors, waitForHash, type ExtensionContext } from "./extension"
 import { selectFeeMethod, type FeeMethodSubtitle } from "./helpers"
 
-export type PopupKind = "discover" | "verify" | "capabilities" | "execute" | "json" | "network-unavailable"
+export type PopupKind =
+	| "discover"
+	| "verify"
+	| "capabilities"
+	| "execute"
+	| "json"
+	| "network-unavailable"
+	/** Arm the wait before the open: a logger window's URL can repeat, and a URL already open never
+	 *  matches. */
+	| "logger"
 
 /**
  * Wait for a popup window of the given kind to open. If `requestId` is given,
@@ -51,6 +60,10 @@ export async function waitForPopup(
 		timeout,
 	)
 	const page = await target.asPage()
+	// An error the window raised before this line, module evaluation first of all, can be in neither
+	// array: Firefox's launch prints the add-on's latest exceptions at its close; Chrome reports
+	// nothing.
+	recordPageErrors(ctx, page)
 	// Puppeteer can resolve waitForTarget before the page's main frame is wired
 	// up — calling waitForFunction immediately throws "Requesting main frame too
 	// early!" Poll until mainFrame() succeeds before doing any further waits.

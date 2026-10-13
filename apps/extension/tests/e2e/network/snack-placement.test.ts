@@ -26,7 +26,7 @@ import {
 } from "../fixtures/helpers"
 import { readSendRecords, waitForBalanceQueueIdle } from "../fixtures/journal"
 import { assertPgOk, setPgInput, snapshotResultSeq, waitForPgResult } from "../fixtures/playground"
-import { approveExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup, waitForPopupClosed } from "../fixtures/popups"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -298,6 +298,9 @@ test.skipIf(!hasConfig)(
 	"Send: a fee-estimate error sits 12px above the footer and follows it when it grows",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		// `openPopup` restarts the arrays, so what came since the last one is asserted before the drain
+		// opens one: here the fixture's setup popup and its connect and grant windows.
+		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
 		await sendFromDrainedBalance(page)
 
@@ -319,6 +322,7 @@ test.skipIf(!hasConfig)(
 	"Send: a send that fails once its record is written offers Details, which opens that record",
 	{ timeout: 420_000 },
 	async ({ dappConnectedExtensionWithTransactionCap }) => {
+		expect(dappConnectedExtensionWithTransactionCap.pageErrors).toEqual([])
 		const page = await balanceDrainedBehindTheWallet(dappConnectedExtensionWithTransactionCap)
 		await sendFromDrainedBalance(page)
 		// A public origin needs no review, so the footer sends at once.
@@ -409,6 +413,8 @@ test.skipIf(!hasConfig)(
 		expect(linedHits.map((h) => h.covered)).toEqual([false, false])
 		expect(linedHits[0]?.hit).toBe("execute-reject-btn")
 
+		await rejectExecute(execute)
+		await waitForPopupClosed(execute)
 		expect(ctx.pageErrors).toEqual([])
 	},
 )

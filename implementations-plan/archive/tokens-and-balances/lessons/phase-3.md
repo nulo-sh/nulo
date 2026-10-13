@@ -1,0 +1,72 @@
+# Arc 3 — implementation log
+
+## Phase 3.1 (#105)
+
+- 2026-10-12 — OA-1 = A (P8-03, signed 2026-10-12). Built on `tokens-and-balances-mint-pin` from origin/dev
+  `8d01f9b` (arc 1 merged as #271), a standalone PR against `dev` (D-orch-9).
+- `parseTokenInterface` sets `classId` from the instance it fetched; `buildToken` copies it to the row;
+  `TokenSchema` names it, or the read codec and restore would strip it (zod drops keys a schema does not name);
+  `getTokenInfo` projects it. The builder records the resolved instance's class on the `call` and `encoded_call`
+  `TxCall`s; `txAmount` reads a mint only when the token's and the call's classes are the same field element.
+- Base-copy runs: the four refused-class cases in `tx-amount.test.ts` (no class on the call, none on the token,
+  a different class, the same malformed class on both sides) are red against 8d01f9b's `tx-amount.ts`, the 14
+  controls green. Against 8d01f9b's `token/spec.ts`, `token/utils.ts`, `token/service.ts` and
+  `tx-request-builder.ts`: the stored-class test, the seeded-class test and the three builder pins are red
+  (5 failed, 81 passed).
+- Two component fixtures (`TransactionCard.test.ts`, `pages/tx/[id].test.ts`) needed a matching class on the
+  listed token and the mint call to keep their figure; their expectations are unchanged.
+- Gotcha: a default parameter replaces an explicit `undefined`, so `mint(args, method, contract, undefined)`
+  recorded the default class; the no-class case spreads `classId: undefined` over the built call instead.
+
+## Review round 1
+
+- 2026-10-12 — Codex r1 (gpt-6.1-sol, high; the managed `CODEX_ACCOUNT=best` routed it to the alejo-icloud
+  login): approve with fixes, 2 Medium, 2 Low, 1 Nit. Opus r1: reject as built on one High.
+- The High held and Codex missed it: `pxe/service.ts` `getContractInstance` returns the PXE's preimage hydrated
+  with `currentContractClassId := originalContractClassId` (`effective-class.ts`), and the add registers the
+  token, so the builder recorded the original class at every build and the comparison could never differ.
+  Architecture § Arc 3 had named `resolveInstances` as the source. Fixed by D-arc3-5: a public call's class
+  comes from `node.getContract`; a private call keeps the PXE's, because the kernel prover reads the class
+  registry for every private contract (`getUpdatedClassIdHints`) and refuses a changed class.
+- Lesson: in this wallet an instance from the PXE never shows an upgrade; only a node read does.
+- Accepted: canonical field-element fixtures in the producer tests; the `TokenInfo.classId` doc. Rejected with
+  reasons (plan § Audit verdicts): transfers on a forged mint record, `.catch` for a non-string class,
+  pre-existing debug lines carrying class ids. Left out: exact-string contract matching (pre-existing; an issue).
+
+## Review round 2
+
+- 2026-10-12 — Codex r2: reject, one new High: the round 1 premise was false. Upstream's
+  `ContractClassService.getCurrentClassId` asks `node.getContract(address, anchor)` for every non-protocol
+  contract and executes that class (else the original), so a private mint can run an upgraded class whose
+  artifact is registered. The driver read the same resolver while the round ran. Fixed: every call records the
+  node's class, else the original; a failed lookup records none.
+- Lesson: before reasoning from what the kernel enforces, read what the installed PXE resolves; a privacy
+  argument for skipping a node query needs proof that the PXE does not already make it.
+
+## Review round 3
+
+- 2026-10-12 — Codex r3: approve, no new material finding (one doc nit, applied). Loop converged at the
+  third round.
+
+## Gate
+
+- 2026-10-13 — on 9b69713: lint, typecheck:all, check:plans, the focused vitest run, `test` and `test:all`
+  pass; smoke Chrome 49 files, 213 tests, 0 failed, retry 0 (the armed build needs the runtime
+  `NULO_E2E_MIGRATION_FIXTURE=1` too, or backup-migration's arming contract fails); network
+  `token-add-auto-trust.test.ts` Chrome 1/1 at retry 0 via `agent.sh`. Phase 3.1 ✓; the close-out waits on
+  arc 2's PR (#333).
+
+## Merge of `dev` and close-out
+
+- 2026-10-13 — arc 2 merged as #333 (7287048) after #334 opened. Merged `origin/dev` (8a54313): only `plan.md` and
+  `STATUS.md` conflicted, both arcs' content kept; no ledger id collided (arc 3's were D-orch-9 to D-orch-13
+  already). #333 left `token/service.ts` alone; its pasted-address row adds through the same popup path, so the
+  class is recorded there too.
+- `dev` moved again (#335, #337, #342) before the push; merged 517aedf (e2c80c6): only `lessons.md` conflicted,
+  with dapp-ingress-grants' close-out, both sides kept (8190 B). None of the three touches the pin's code.
+- Gates on e2c80c6: lint, typecheck:all, check:plans, focused vitest (1237), `test` (11444), `test:all` pass;
+  network Chrome retry 0 via `agent.sh`: `token-add-auto-trust.test.ts` 1/1, `holdings.test.ts` 2/2; smoke Chrome
+  retry 0 on the armed build: 50 files, 215 tests, 0 failed, 4 files skipped by design. The same gates had passed
+  on 8a54313.
+- Close-out in #334 (D-orch-10): #338 and #339 filed; `lessons.md` kept under budget by folding the class lesson
+  into the MAC entry and retiring the `tag_name` entry, which a release test now pins.

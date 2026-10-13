@@ -1,3 +1,4 @@
+import { sameFieldAddress } from "@nulo/wallet-bridge"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
 import type { TokenInfo } from "@/wallet/services/token/spec"
 import type { TxCall, TxTransfer } from "@/wallet/services/transaction/spec"
@@ -24,14 +25,19 @@ function u128(arg: unknown): bigint | null {
 	return units < U128_BOUND ? units : null
 }
 
+/** A class id is a field element, like an address: a missing or malformed side never matches. */
+function samePinnedClass(token: Pick<TokenInfo, "classId">, call: TxCall): boolean {
+	return token.classId !== undefined && call.classId !== undefined && sameFieldAddress(token.classId, call.classId)
+}
+
 /**
  * The amount a settled transaction record states, or null: a transfer from its own record; a mint
- * known only by its method's name and arity, in the decimals of the listed token it calls, whose
- * contract the person already trusts to report its own balance and symbol.
+ * known by its method's name and arity, in the decimals of the listed token it calls, only when the
+ * build recorded the class that token was added with, so an upgraded contract's mint reads as none.
  */
 export function txAmount(
 	calls: readonly TxCall[] | undefined,
-	tokens: readonly Pick<TokenInfo, "contract" | "decimals" | "symbol" | "hasDecimals">[],
+	tokens: readonly Pick<TokenInfo, "contract" | "classId" | "decimals" | "symbol" | "hasDecimals">[],
 ): TxAmount | null {
 	if (!calls?.length) return null
 	const primary = calls[pickPrimaryIndex(calls) ?? 0]
@@ -43,6 +49,6 @@ export function txAmount(
 	const token = tokens.find((t) => t.contract === primary.contract)
 	const decimals = knownDecimals(token)
 	const units = u128(primary.args[1])
-	if (!token || decimals === null || units === null) return null
+	if (!token || !samePinnedClass(token, primary) || decimals === null || units === null) return null
 	return { units, decimals, symbol: displaySymbol(token.symbol) }
 }
