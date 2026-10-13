@@ -9,6 +9,7 @@
   1. Keep it as shipped: the person sees "Token added" and still has one row.
   2. Compare by address, not by spelling: a different-case duplicate shows the existing "Already exist" message and the button stays off, exactly as the lower-case spelling does now. No new copy; one comparison changes.
 - **Recommendation**: option 2. It is the message the person already gets for the same token, and it stops a submit that can only return the row they have.
+- **Disposition**: option 2, under the orchestrator's `no_ask` record (D-orch-2), flagged to the owner on the next status.
 
 ## OA-2: a token address typed in upper case is shown and copied in lower case
 
@@ -19,6 +20,7 @@
   1. Accept: one spelling everywhere.
   2. Keep the typed spelling for display: needs a second stored field for the same address, which the lane's one-spelling rule forbids; a separate decision.
 - **Recommendation**: option 1.
+- **Disposition**: option 1, under the same record (D-orch-3).
 
 ## OA-3: a dApp that keeps calling while the person reads an approval
 
@@ -31,3 +33,4 @@
   2. A larger number for confirmed sessions: fewer refused polls, a weaker memory bound (each waiting call can carry up to 16 MiB).
   3. A byte budget instead of a count (a plan change): polls of a few bytes would never be refused; needs the message size carried from the decrypt to the dispatch.
 - **Recommendation**: option 1 now; revisit with option 3 on a report from a real app.
+- **Disposition**: option 1 (D-orch-4): 32 on every session.

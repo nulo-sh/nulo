@@ -8,8 +8,27 @@ code_review: off
 explainer: off
 eli5_mode: skipped (orchestrator-owned)
 base: e900f710
-status: approved by the orchestrator at cbb663ad; implementing
+status: completed (delivered in one PR against dev)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** delivered in one PR against `dev` from `worktree-wallet-followups-7` (arc 1, phases 1 to 3, closing #329 and #354). It awaits the orchestrator's merge, and the merge that lands it closes this plan.
+- **Shipped:**
+  - #329: the parse stores the lower-case spelling; `findToken` and the New token popup compare by address (D-orch-2); a typed upper-case address shows in lower case (D-orch-3).
+  - #354: `MAX_PENDING_PER_SESSION = 32` on every session (D-orch-4): counted from arrival until handling settles, the `-32005` reply on the decrypt lane, a drop before the decrypt at a lane depth of 32, and a decrypted non-object dropped before admission (Codex round 1).
+  - Tests T1 to T8, T2b and the null-payload regression, each red on base copies or without its guard; no e2e scenario added; § Audit verdicts and `lessons/phase-3.md` hold the runs.
+  - `lessons.md`: nothing promoted; it is at its 8 KiB budget and these gotchas are local.
+- **Orchestrator records:** D-orch-1 to D-orch-4; `OWNER-ASKS.md` keeps the alternatives with each disposition.
+- **Dropped, rejected, superseded:**
+  - `sameFieldAddress` at every lookup (D1).
+  - A byte, per-id or worker-wide budget, and failing a dead generation's calls: plan changes, not built (D6, D-orch-4).
+  - The "two holds count apart" unit test, a duplicate of T4's second-session control.
+- **Known limits:** #371 (KL-1), #372 (KL-2).
+- **Open items:** none.
+- **Seeds:** the `/goal` and `/loop` seeds below are retired; this record is evidence, not instructions.
+- Over the light size target (about 175 lines): the Outcome and the implementation rows of § Audit verdicts record the delivery.
 
 # wallet-followups-7: one token contract spelling; a bound on a session's pending calls
 
