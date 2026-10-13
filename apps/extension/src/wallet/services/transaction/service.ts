@@ -136,7 +136,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// chain-purge path (best-effort). PROFILE deletion no longer relies on it:
 		// the ProfileDeletionCoordinator now calls the AWAITED `purgeForAccounts`
 		// directly with the tombstone's address snapshot, and the worker's write is
-		// fenced (see `updateTx`) so a mid-poll tx can't resurrect (finding D).
+		// fenced (see `updateTx`) so a mid-poll tx can't resurrect.
 		this.accountService.onAccountDeleted.add(this.onAccountDeleted)
 
 		// Only Pending rows and rows carrying the finality marker are re-armed: a restored row's
@@ -318,7 +318,7 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 	}
 
 	/** Awaited tx purge for a SET of accounts — called by the deletion coordinator
-	 *  with the tombstone's authoritative address snapshot (finding D). Runs under
+	 *  with the tombstone's authoritative address snapshot. Runs under
 	 *  the tx lock; idempotent. `onAccountDeleted` delegates here so the single-
 	 *  account (deleteNetwork chain-purge) path shares one implementation. */
 	public async purgeForAccounts(addresses: readonly string[], profileId?: string): Promise<void> {
@@ -505,11 +505,11 @@ export class TransactionService extends Service<Methods, Events> implements Serv
 		// The node fetch above ran UNLOCKED (network I/O). Re-check + persist UNDER
 		// the tx lock: a concurrent profile-delete purge (`purgeForAccounts`, same
 		// lock) removes this tx from `this.pending` + storage. Without the guarded
-		// re-check, the worker's stale write would RESURRECT a deleted profile's tx
-		// (finding D — in-flight-write fencing). The fence is on OBJECT IDENTITY,
-		// not hash membership: after a purge, `addTransaction` may legitimately
-		// re-create the same hash as a NEW row (ABA) — a stale poll's `has(hash)`
-		// would pass and overwrite it, while `get(hash) !== tx` cannot.
+		// re-check, the worker's stale write would RESURRECT a deleted profile's tx.
+		// The fence is on OBJECT IDENTITY, not hash membership: after a purge,
+		// `addTransaction` may legitimately re-create the same hash as a NEW row
+		// (ABA) — a stale poll's `has(hash)` would pass and overwrite it, while
+		// `get(hash) !== tx` cannot.
 		await this.lock.withLock(async () => {
 			if (this.pending.get(tx.hash) !== tx && this.droppedWatch.get(tx.hash) !== tx) return
 			applyReceipt(tx, receipt)

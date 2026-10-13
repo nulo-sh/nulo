@@ -232,7 +232,6 @@ export class SendCheck {
 		return moved === undefined ? undefined : { next: moved, refresh: true }
 	}
 
-	/** `sent` or `reverted`, with its block, once the node reports the transaction in one. */
 	private async minedVerdict(watch: Watch, txHash: string, url: string, live: () => boolean): Promise<SendCheckState | undefined> {
 		const node = await this.nodeFor(url, live)
 		if (!node) return undefined

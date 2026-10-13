@@ -41,6 +41,10 @@ Rejected or deferred:
 - Opus, low: a lagging upstream can re-answer a pruned block (D23, accepted with reasons).
 - Codex: hash-prefix log lines in `transaction/service.ts` predate this arc and are outside its scope. A lying RPC is outside the trust model the proofs claim (they hold against lagging or forked upstreams, not a forger).
 
+## Code review round 2 (2026-10-13)
+
+Codex, resumed on `faf29458` and the e2e change: the fixes hold (high confidence), and the two stop tests fail when `live` is ignored. It judged the e2e's empty L1 mining sound, since L2 finality is the proven checkpoint at L1's finalized block, and harmless, since the agent runner gives each run its own anvil and runs network files serially. One low remained: review provenance ("finding D") in three inherited `transaction/service.ts` comments and a narrating `minedVerdict` doc. Both removed. The loop converged in two rounds.
+
 ## Network e2e: the local finalized tip stands still (2026-10-13)
 
 The local anvil mines only on a transaction, and its `finalized` tag trails `latest` by two blocks (`--slots-in-an-epoch 1`). Once the L2 chain is quiet, no L1 transaction lands, so L1's finalized block, and with it the archiver's finalized checkpoint (`l1_synchronizer.js` `updateFinalizedCheckpoint`: the proven checkpoint at L1's finalized block), stops. The first run waited 420 s with the row Proven and never final. The case now mines empty L1 blocks (`anvil_mine`) until `getBlockData("finalized")` reaches the send's block.
