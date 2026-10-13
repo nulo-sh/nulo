@@ -883,7 +883,7 @@ Branch `send-queue-activity-queued-cap` off `origin/dev`. A fresh build is out o
 
 #### Phase 4.2: record the chaos rule (#220)
 
-Moved 2026-10-11 to [ci-followups-2](../archive/ci-followups-2/plan.md) by the owner's call: the chaos jobs gate the nightly and two fixed seeds gate every network PR; nothing remains here.
+Moved 2026-10-11 to [ci-followups-2](../ci-followups-2/plan.md) by the owner's call: the chaos jobs gate the nightly and two fixed seeds gate every network PR; nothing remains here.
 
 ### Arc 5: keyboard reach (after P9-05 and arc 2)
 
