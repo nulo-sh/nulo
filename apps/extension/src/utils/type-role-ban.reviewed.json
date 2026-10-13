@@ -975,14 +975,6 @@
 			"at": "Text \"{{ emoji }}\""
 		}
 	],
-	"apps/extension/src/popup/components/modules/holdings/TokenList.vue": [
-		{
-			"rule": "identifier",
-			"text": "trimaddress(addcandidate, 4, 2, \"…\")",
-			"role": "data",
-			"at": "span[data-testid=holdings-add-token-address]"
-		}
-	],
 	"apps/extension/src/popup/components/modules/settings/connected-apps/DappSessionVerification.vue": [
 		{
 			"rule": "face",

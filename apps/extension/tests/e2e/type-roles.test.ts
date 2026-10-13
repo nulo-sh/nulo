@@ -229,6 +229,21 @@ async function expectPageClean(page: Page, label: string, states: readonly SiteS
 	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state, OBSERVE))
 }
 
+/** Holdings' offer to add a pasted address no row holds: the address in `data`, inside the button's box. */
+async function expectAddTokenOffer(page: Page): Promise<void> {
+	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
+	await page.waitForSelector(sel("holdings-add-token-address"), VISIBLE)
+	await expectPageClean(page, "Holdings add-token", [["popup-holdings", "a pasted address no listed token matches"]])
+	const fit = await page.$eval(sel("holdings-add-token-address"), (address) => {
+		const button = address.closest("button") as HTMLElement
+		const pad = getComputedStyle(button)
+		const room = button.clientWidth - Number.parseFloat(pad.paddingLeft) - Number.parseFloat(pad.paddingRight)
+		return { label: (address.parentElement as HTMLElement).getBoundingClientRect().width, room }
+	})
+	console.log(`[type-roles] holdings add-token label ${fit.label}px in ${fit.room}px`)
+	expect(fit.label).toBeLessThanOrEqual(fit.room)
+}
+
 async function expectRoleAt(page: Page, testid: string, role: string, native = false): Promise<void> {
 	const typography = await readPageTypography(page, { kind: "at", selector: sel(testid), native })
 	expect(
@@ -409,6 +424,7 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 
 		await openHoldings(page)
 		await expectPageClean(page, "Holdings")
+		await expectAddTokenOffer(page)
 		await clickNavTab(page, "activity")
 		await waitForHash(page, "#/popup/activity")
 		await page.waitForSelector(sel("page-hero-title"), VISIBLE)
