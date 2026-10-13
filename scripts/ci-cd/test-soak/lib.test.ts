@@ -396,6 +396,8 @@ describe("Bun-only files", () => {
 		const never = [`candidate never ran Bun-only file "${ICONS}"`]
 		expect(missing({})).toEqual(never)
 		expect(missing({ filters: ["src/a.test.ts", "Scripts/Store-Icons"] })).toEqual(never)
+		expect(missing({ filters: [`./${ICONS}`] })).toEqual(never)
+		expect(missing({ filters: [`<repo>/${WS}/scripts/`] })).toEqual(never)
 		expect(missing({ filters: ["src/a.test.ts"] })).toEqual([])
 		expect(missing({ script: "test:components" })).toEqual([])
 	})

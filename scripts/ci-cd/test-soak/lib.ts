@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { homedir } from "node:os"
-import { basename, relative } from "node:path"
+import { basename, posix, relative } from "node:path"
 
 /** Specs whose ESM resolution is recorded per summary and compared across engines. */
 export const RESOLVE_SPECS = [
@@ -416,11 +416,15 @@ export function checkInventoryEntries(idsA: string[], a: SoakSummary, b: SoakSum
 }
 
 /** Whether the candidate was asked to run `file`: the unfiltered `test` script (the whole suite,
- *  where another script may scope it), or a forwarded filter vitest's case-insensitive substring
- *  match selects it by. */
+ *  where another script may scope it), or a forwarded filter that selects it as vitest's
+ *  `filterFiles` does, a case-insensitive substring as given or as a workspace-relative path. */
 function selects(meta: SoakMeta, file: string): boolean {
 	if (meta.filters.length === 0) return meta.script === "test"
-	return meta.filters.some((filter) => file.toLowerCase().includes(filter.toLowerCase()))
+	const path = file.toLowerCase()
+	return meta.filters.some((filter) => {
+		const fromRepo = filter.startsWith("<repo>/") ? filter.slice("<repo>/".length) : posix.join(meta.cwd, filter)
+		return path.includes(filter.toLowerCase()) || path.includes(posix.relative(meta.cwd, fromRepo).toLowerCase())
+	})
 }
 
 /** The Bun-only files stand outside the reference match: the reference must not have run them,
