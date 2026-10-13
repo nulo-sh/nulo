@@ -1,7 +1,7 @@
 ---
 plan: e2e-harness-gaps
 tier: mid
-status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273) and 2 (#278) merged; arc 3 in review (ready since C13 = A; its wallet fix merged on its own as #285); arc 4 waits on #279
+status: approved by the orchestrator 2026-10-09; arcs 1a (#267), 1b (#273), 2 (#278) and 3 (#293) merged; arc 4a (#279) in review; arc 4 (#186) runs only on a quiet host (D-orch-16)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -11,7 +11,7 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 3 Explore agents (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); one final fresh Codex pass
 base: origin/dev at 4a357b7 (#238 merged as 8099368)
 trunk: dev
-issues: [169, 155, 161, 162, 163, 194, 186, 164, 153, 165]
+issues: [169, 155, 161, 162, 163, 194, 186, 164, 153, 165, 279]
 not_this_lane: [195, 81, 190]
 post_implementation_hardening: not scheduled
 ---
@@ -47,8 +47,8 @@ The e2e harness is what lets many agents run the network suite on one host and w
 **In:** the ten issues above, grouped as the lane map groups them, with two regroups: arc 1 ships as two PRs so #169 can merge alone (D1), and #186 leaves arc 2 for its own top arc so its hours-long soak holds nothing up (D15).
 
 **Not this lane:**
-- #195 (a WASM-proving nightly leg): waits on decision page 5 and charter C6; the minutes and the aggregator wiring are the owner's call.
-- #81 (a keyed live-transaction smoke on V6): waits on page 5; every run spends funds and is owner-operated (G5).
+- #195 (a WASM-proving nightly leg): page 5 accepted one advisory nightly canary leg with `disable_presto`; it belongs to the `ci-release-supply` lane (D-orch-17).
+- #81 (a keyed live-transaction smoke on V6): closed as not planned by the owner, page 5 (P5-01): the harnesses are the gate (D-orch-17).
 - #190 (`blocked:external`, a failed vitest fixture setup is never re-run): the fix is the vitest release that ships vitest-dev/vitest#11237. No in-repo half exists: the only lever, `extraTokensFixture`'s scope, already rethrows the first error, which is the truthful one.
 
 **Claims that did not hold or hold narrower:**
@@ -137,6 +137,10 @@ The playground stays generic: every new control reaches the wallet only through 
 - **#153, NO_FROM sends.** The existing NO_FROM button keeps sending a public call, and its test now asserts the refusal instead of "ok or error": status `error` with exactly `UNCLASSIFIED_ERROR_MESSAGE` (imported from `error-envelope.ts`; the wallet deliberately gives a dApp nothing more for an unclassified throw), and the request's journal record failed. The cause, the private-only rule, is proven where it can be seen: a `tx-request-builder.pins.test.ts` case that a NO_FROM public call throws "DefaultEntrypoint only supports private functions". The dApp-facing text stays constant. A new control, `pg-btn-sendTx-noFrom-sponsored`, sends one private call with `from: "NO_FROM"`: `SponsoredFPC.sponsor_unconditionally()` on the canonical sponsor, which takes no arguments, reads no sender and pays its own fee. The test grants the `transaction-contracts` bundle and the playground registers the sponsor's instance and artifact through `registerContract` first. Two new cases in `tx-sendTx-noFrom.test.ts`: one sponsored send returns `ok` with a transaction hash and its record reaches `succeeded`; two concurrent sponsored sends serialize, return two distinct hashes, and both records reach `succeeded` with a mined receipt (`waitForTxMined`-style node poll, as the fixtures already do). Serialization needs evidence that excludes the gate's timed-out release, as the e2e-testing skill requires: the snapshot that shows the first at `proving` and the second `queued` must be read within `PROOF_GATE_HOLD_MS` of the first record's `enteredProveAt`, as `auto-lock-defers-while-proving.test.ts:62` does, or the test fails; the gate is released in `finally`. Once, locally, the execution mutex is bypassed by a scratch edit to show this case then fails; the red run goes in `lessons/phase-3.md` and the edit is reverted. They spend no notes, so #218's same-source limit does not apply. If the file's measured time grows past 3 min, the concurrent case moves to the heavy-concurrent job with its four workflow lists and the `behavior-gating.test.ts` pin.
 - **#165, private transfer rows.** A `pg-select-transferFn` select, an allowlist of four functions (`transfer_public_to_public` by default, so no existing test moves; `transfer_private_to_private`, `transfer_private_to_public`, `transfer_public_to_private`), feeds the default send button only. The NO_FROM, fee-payer and multicall buttons keep building `transfer_public_to_public`, so the NO_FROM refusal stays a refusal whatever the select shows. `tx-transfer-row.test.ts` gains one case per private-touching kind: open the execute window, assert the row's label, `data-intent-kind="transfer"`, the sender kind and the amount, then reject; fund the private balance through the existing mint path if the window needs it. For the discovered-authwit half: run `tx-sendTx-delegated-authwit.test.ts` with `NULO_E2E_STANDARD_CONTRACTS=1` on the local network. If it passes (recon's inference: 6.0.0-rc.1 seeds `PublicChecks` at genesis), delete the env gate, import the rig's pull token into the wallet, and assert `execute-discovered-authwit-structured-args`, its toggle and the transfer row. If it fails, keep the gate, add nothing untestable, and comment on #165 that the discovered half stays open; the PR then says `Refs #165`, not `Closes`.
 
+### Arc 4a: the soak's Node reference (#279)
+
+- **#279** (D-orch-15, D26, D27). Four suites reached Bun-only behaviour through how they ran, not what they assert, and now run on Node with every assertion unchanged: the registry and reconcile-lock children spawn `bun` (they import raw TypeScript); `LegalAcceptanceSheet.test.ts` imports `vue` and the wallet-core barrel through vitest (`await vi.hoisted(async …)`, as `send.integration.test.ts` does); `presto-core-deps.test.ts` reads the manifest through `@nulo/resolve-asset`; the landing's `legal-pages.test.ts` renders through a `bun -e` bridge on both engines. Three files stay Bun-only: `store-icons` (its subject is `Bun.Image`) and `windows/{json,logger}` (they pin JavaScriptCore's TypeError wording). `scripts/ci-cd/test-soak/lib.ts` pins them in `BUN_ONLY_FILES` with a reason each; the Node reference passes `--exclude` per entry; `compare` sets the candidate's tests in them aside from the exact match and requires each to pass every run, refuses a reference that ran one, and refuses an unfiltered candidate that never ran one. `soak()`'s launcher choice moves into `launchPlan()`, so `soak()` drops under budget and its acceptance goes (CLAUDE.md: 22 acceptances).
+
 ### Arc 4: ESM configs (#186)
 
 - **#186.** Add `"type": "module"` to `apps/extension/package.json`, as the landing has. Rename the root `vitest.base.ts` to `vitest.base.mts` and update its eleven importers, `biome.json`'s `files.includes` entry (otherwise Biome silently stops linting the file), `ARCHITECTURE.md`'s test table and the `CLAUDE.md` link. Before the switch, list every `.js` file under `apps/extension` outside `src/` and every `__dirname`, `require(` and `module.exports` in configs and scripts that Node loads natively; each must already be ESM-safe (the shim stays `.cjs`). Changing how every unit suite's config loads is a test-runtime change, so the proof is CLAUDE.md's full soak matrix at one clean head commit after `bun install --frozen-lockfile`: `scripts/ci-cd/test-soak/cli.ts soak` at 30 retry-0 runs per suite on both engines (Node reference, Bun candidate) for every workspace whose config imports the base, `compare` per workspace with an exact inventory, `bun run test:all` five times, and a `workflow_dispatch` of `pr-quick.yml` bound to that commit; plus `build`, `build-storybook`, and one smoke and one network file that load the e2e configs (D9). The archived `vitest-on-bun` plan is the procedure.
@@ -158,6 +162,7 @@ The playground stays generic: every new control reaches the wallet only through 
 | 3.1 | `apps/playground/src/sections/transactions.ts` | `network/tx-sendTx-multicall.test.ts` |
 | 3.2 | `apps/playground/src/sections/transactions.ts`, `apps/playground/README.md` | `network/tx-sendTx-noFrom.test.ts` |
 | 3.3 | `apps/playground/src/sections/transactions.ts`, `apps/playground/README.md` | `network/tx-transfer-row.test.ts`, `network/tx-sendTx-delegated-authwit.test.ts` |
+| 4a.1 | `scripts/ci-cd/test-soak/{lib,cli}.ts`, `scripts/complexity-baseline/manifest.json`, `CLAUDE.md` | the four suites above; `scripts/ci-cd/test-soak/{lib,cli}.test.ts` |
 | 4.1 | `apps/extension/package.json`, `vitest.base.ts` → `vitest.base.mts`, eleven `vitest.config.ts`, `biome.json`, `ARCHITECTURE.md`, `CLAUDE.md` | soak evidence in `lessons/phase-4.md` |
 
 ### Trade-offs and alternatives not taken
@@ -320,6 +325,12 @@ Validation gate: Fast; Network (file) `tests/e2e/network/tx-sendTx-noFrom.test.t
 
 Validation gate: Fast; Network (file) `tests/e2e/network/tx-transfer-row.test.ts` and, if the gate is retired, `tests/e2e/network/tx-sendTx-delegated-authwit.test.ts` (proverless), on both browsers. Then the arc's full suites: N-full on both browsers. Pass: exit 0.
 
+### Arc 4a: the soak's Node reference (#279)
+
+**Phase 4a.1 (#279).** The fixes and the list as § Arc 4a states, one commit each, then the gate on a clean tree.
+
+Validation gate: Fast; `bun run test:ci-gating`; `bun run test:all`; the #279 suites through `scripts/ci-cd/test-soak/cli.ts`, 3 runs per engine (`soak --runtime node` and `--runtime script` with the files as filters, then `compare`) for `apps/extension` and `apps/landing`. Pass: all exit 0, both compares `COMPARE OK`, the extension's report names each of the three Bun-only files with a nonzero test count (the filters name them, so a file the candidate never ran fails the compare).
+
 ### Arc 4: ESM configs (#186)
 
 **Phase 4.1: ESM configs (#186).**
@@ -327,7 +338,7 @@ Validation gate: Fast; Network (file) `tests/e2e/network/tx-transfer-row.test.ts
 2. Run the soak matrix the archived `vitest-on-bun` plan records, at that one commit after `bun install --frozen-lockfile`: for each of the eleven workspaces whose `vitest.config.ts` imports the base, `bun scripts/ci-cd/test-soak/cli.ts soak --cwd <ws> --runtime node --runs 30 --out <scratch>/<ws>-node.json` (the reference) and the same with `--runtime script` (the Bun candidate), then `compare <node.json> <script.json>` (outputs in a scratch directory outside the repo); `bun run test:all` five times; `gh workflow run pr-quick.yml --ref e2e-harness-gaps-esm` bound to that commit (push the branch, no PR).
 3. Build, Storybook and the e2e configs: `bun run --cwd apps/extension build`, `bun run --cwd apps/extension build-storybook`, then the armed smoke build.
 
-Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts`; Network (file) `tests/e2e/network/networks.test.ts`; from `apps/extension`, `bun --bun vitest run > <scratch>/unit.log 2>&1; echo "vitest=$?"`, then `grep -c 'ESM syntax in a file loaded as CommonJS' <scratch>/unit.log`; from the repo root, `bunx biome check vitest.base.mts` prints `Checked 1 file`, so Biome still lints the renamed base. Pass: every soak `compare` passes with an identical inventory, all runs exit 0, the dispatched `pr-quick.yml` run is green at the soaked SHA, `vitest=0`, and the grep prints 0 (its own exit status 1 is expected).
+Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts`; Network (file) `tests/e2e/network/networks.test.ts`; from `apps/extension`, `bun --bun vitest run > <scratch>/unit.log 2>&1; echo "vitest=$?"`, then `grep -c 'ESM syntax in a file loaded as CommonJS' <scratch>/unit.log`; from the repo root, `bunx biome check vitest.base.mts` prints `Checked 1 file`, so Biome still lints the renamed base. Pass: every soak `compare` passes with an identical inventory, all runs exit 0, the dispatched `pr-quick.yml` run is green at the soaked SHA, `vitest=0`, and the grep prints 0 (its own exit status 1 is expected). Per D22, the same logs also hold no `configLoader: 'native'` block, and a Node probe loads every extension config with the native loader.
 
 ## Security & Adversarial Considerations
 
@@ -420,12 +431,21 @@ Validation gate: Fast; steps 2 and 3; Smoke (file) `tests/e2e/navigation.test.ts
 | D-orch-6 | After a squash merge an arc branches from `dev`: arc 2 is `e2e-harness-gaps-types` off `origin/dev` at 8c3c671 (#273's squash). D-orch-1 to D-orch-5 stay | The orchestrator's call, as D-orch-3 for arc 1b | Branching from `e2e-harness-gaps-waits` |
 | D-orch-7 | Arc 2 only, exactly as § Arc 2 and Phase 2.1 state: type-only edits in `tests/e2e`, no edit changes what a test does, no `src` edit for the gate, probe counts in `lessons/phase-2.md` before any fix, no added `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error` measured against the merge base with `origin/dev` (not 4a357b7), `unresolved-names.test.ts` deleted only once the gate's file list is shown to contain the scan's, the skill line rewritten; arc 1b's `run-limits.ts` and `stall-watchdog.ts` are covered; nothing of arcs 3 or 4 | The orchestrator's call | — |
 | D-orch-8 | The gate must bite both ways: Phase 2.1 step 4's four probes are run and their outputs recorded in `lessons/phase-2.md`; a gate that passes a probe it should refuse is not done | The orchestrator's call | — |
+| D-orch-9 | After a squash merge an arc branches from `dev`: arc 4 is `e2e-harness-gaps-esm` off `origin/dev` at af4afcc (#278's squash). D-orch-1 to D-orch-8 stay | The orchestrator's call, as D-orch-3 and D-orch-6 | Branching from `e2e-harness-gaps-types` |
+| D-orch-10 | Arc 4 runs before arc 3, which stays held on charter C13; the plan lets the orchestrator reorder when a higher arc's gate opens first. Arc 4 shares no file with arc 3, builds nothing of it and changes nothing a person sees | The orchestrator's call | Waiting for arc 3 (the Delivery table stacks 4 on 3) |
+| D-orch-11 | The proof is the full soak matrix exactly as Phase 4.1 states, at one clean commit after `bun install --frozen-lockfile`: the CJS inventory first, then 30 retry-0 runs per workspace on both engines for every workspace whose config imports the base, an exact-inventory `compare` each, `test:all` five times, a `pr-quick.yml` dispatch bound to that commit (no PR until the soak passes), `build`, `build-storybook`, the armed smoke build, one smoke and one network file, the warning grep at 0 and Biome checking the renamed base. Soak outputs stay outside the repo; the evidence goes in `lessons/phase-4.md`. A failed compare stops the arc; no run count or compare is relaxed | The orchestrator's call | A smaller parity soak |
+| D22 | #186: the config graph also becomes loadable by Vite's native config loader: its 26 relative imports name their extension, its three JSON imports carry `with { type: "json" }`, and the stall watchdog's parameter property becomes a field assigned in the constructor. The gate counts Vite's whole native-loader warning block (`configLoader: 'native'`), not only its CommonJS line, and adds a Node probe that loads all eight extension configs with the native loader | With `"type": "module"`, Vite printed the same warning block with the items the CommonJS lines had masked (extensionless imports, unattributed JSON) on every unit, e2e, build and Storybook run, and `--configLoader native` still failed; the plan closes #186 on "no warning" and the issue's impact is a future loader change breaking the configs. Codex and Opus both recommended finishing the graph before the soak; Codex found the parameter property Node's type stripping rejects | Shipping 40b9c22 alone with `Refs #186` and a new issue; patching or deleting `tsconfig.node.json`, which nothing references (tsserver reads that name only through a `references` entry) |
 | D-orch-12 | Arc 3 runs now, as `e2e-harness-gaps-coverage` off `origin/dev` at af4afcc, before arc 4 lands (D-orch-9 to D-orch-11 are recorded on arc 4's branch). Its PR opens as a draft and stays one: charter C13 (does a playground change need the owner's sign-off?) is unanswered, and § UI impact holds the merge until the owner signs off or exempts the playground. The PR body carries a screenshot of the new playground controls (`pg-btn-sendTx-noFrom-sponsored`, `pg-select-transferFn`) and quotes nothing as a sign-off; the orchestrator marks it ready once C13 is answered. Everything of arc 3 is built now | The orchestrator's call: arc 4 shares no file with arc 3 and its PR waits on #279 | Waiting for arc 4 |
 | D23 | #153: I1 did not hold. A sponsored NO_FROM send from an account with no standard build in its PXE store (the e2e's fresh profile; also a restore or a purged store) failed at simulation: `buildNoFrom` registered the account's keys but not its contract instance, and authorization discovery stubs the account by that instance (`stubAccountAddresses: no contract instance registered`). `buildNoFrom` now registers the instance next to the keys, after the drift check; a pins case orders it and the drift pin asserts it never runs on a drifted node | The test found a wallet defect on the path #153 is about, and the cause is one missing call the standard build already makes. Codex (high): A, the fix belongs with the regression that proves it, `buildNoFrom` is the right layer (both the window's preview and the confirm go through it; the PXE stub path cannot rebuild the frozen instance from an address); no new privilege, the transaction is unchanged, the only new observable is the instance's local metadata a standard estimate already registers. Opus (high): A, same layer, no other NO_FROM entry reaches the stub unregistered | B (leave it out, #153 stays open): leaves a demonstrated defect broken; C (send a standard transaction first in the e2e): papers over the cause |
 | D24 | The wallet fix ships twice-reachable: as its own `fix(execution)` commit (cc844c1) on arc 3's branch, and cherry-picked alone onto `e2e-harness-gaps-nofrom-fix` off `dev` with its own ready PR (`Refs #153`), so a user-facing fix waits on neither C13 nor the arc 3 draft, and a release note can name it. Arc 3's draft PR carries the same commit until that PR lands; merging `dev` then adds nothing | Opus: a separate `fix:` PR, since arc 3 stays a draft on an unrelated sign-off and a `test(e2e)` squash subject hides the fix from release-please. Codex: one PR with the deviation recorded. Opus's argument is the stronger: the hold is about the playground, not the wallet | Bundling the fix in arc 3's draft only |
 | D25 | #153's serialization evidence: after the second window closes (its approval is in), the journal must keep one send at `proving` (the held first) and the other `queued` for 3 s, every read before `enteredProveAt + PROOF_GATE_HOLD_MS`. One snapshot is not enough: a dApp request's record reads `queued` from its arrival, before its approval reaches the mutex | Codex: a single snapshot can catch the second send before acquisition even with the mutex bypassed; hold the pair over an interval inside the gate window. The once-only bypass run is red on it | The single snapshot § Arc 3 described |
 | D-orch-13 | Nothing a wallet user sees changes. The playground is the only surface that gains a control; every existing playground control keeps its behaviour and testid; the wallet's own screens are untouched. The `tx-request-builder.pins.test.ts` case, the three row cases and the serialization evidence are built exactly as § Arc 3 states; the once-only scratch bypass of the execution mutex is reverted and its red run recorded in `lessons/phase-3.md` | The orchestrator's call | — |
 | D-orch-14 | `OWNER-ASKS.md` Ask 1 is answered. The owner, 2026-10-11, decision page 0 (Program charter), C13 = **A**: "No. The playground is test infrastructure nobody ships; its controls need no sign-off. It must stay generic (reach the wallet only through @aztec-labs/wallet-sdk, never special-case Nulo)." Arc 3's PR (#293) leaves draft after `origin/dev` (27af8d7) is merged and `tx-sendTx-multicall`, `tx-sendTx-noFrom` and `tx-transfer-row` pass again at retry 0 on both browsers; its body quotes the decision in place of the held-for-sign-off note | The owner's call; #298 changed `waitForTxMined`, which two of those files call, so the merged head is re-proven before the PR is marked ready | Merging the held draft without re-running the files #298 touched |
+| D-orch-15 | #279 is option C (decision page 5, P5-07, signed 2026-10-13), as arc 4a, its own PR first: branch `e2e-harness-gaps-soak-node` off `origin/dev`, `Closes #279`. Fix on Node every listed suite that can run there without loosening an assertion; a reviewed Bun-only list in the soak gate for `store-icons` and the two windows tests, one-line reason per entry; the Node reference skips exactly those, every file still runs on Bun. Gate: the soak gate's own tests, `test:all`, the listed suites 3 runs per engine through `cli.ts` (not the full matrix). The owner: "Whatever we do, don't loosen our test assumptions." | The owner's and the orchestrator's call | Loosening the two assertions #279 named (option A in full) |
+| D-orch-16 | Arc 4 (#186) runs only on a quiet host: once arc 4a's PR is open, check `uptime`'s 1-minute load and `~/.agents/ports.md` every 10 minutes; start Phase 4.1's soak only when the load is under 60 and no row but this lane's is live, within 8 hours of the relaunch. Otherwise the report says `ARC4_DEFERRED: host busy`, and arc 4 and the close-out wait for a relaunch | The orchestrator's call: the matrix is hours of CPU and nine other leads share the host | Running the matrix on a loaded host |
+| D-orch-17 | #195 and #81 are not this lane's: #195 goes to `ci-release-supply`; #81 is closed as not planned by the owner (P5-01). The close-out's Outcome names both | The orchestrator's call | — |
+| D26 | The Bun-only list is a pinned `BUN_ONLY_FILES` map in `lib.ts`, per workspace, by file; `compare` sets the listed candidate tests aside from the exact match and holds each to `{passed: runs}`, refuses a reference that ran a listed file and an unfiltered candidate that never ran one, and computes membership from the compared id sets; the header keeps the full counts. "The comparator unchanged" cannot hold literally: a reference that skipped the files lacks their ids, so the exact match fails | Codex (high) and Opus (Plan) both: the narrow comparator change is necessary, and the set-aside tests need a substitute for the reference match (pass every run) plus an explicit refusal of a reference that ran one; exact `file :: ` matching, the exact list pinned, CLAUDE.md's "inventory-exact" wording to name the exception. Split on granularity: Codex would split the wording cases out to keep Node cross-checks on four portable cases; Opus would not (store-icons fails at collection anyway; the other window cases still pass every Bun run; splitting copies the mocks and the mount helper). Opus's view taken: the cases carry no engine-sensitive behaviour, so splitting adds duplication and no gate value | A literally unchanged comparator (needs fabricated reference observations or a wrapper); a meta field recording the exclusions; splitting the windows files |
+| D27 | The four Node fixes keep every assertion: children spawn `bun` explicitly; the sheet's hoisted block imports through vitest (the same `vue` instance the component gets, which the native `require` did not guarantee); the presto manifest through `resolvePackageAsset`; the landing's renderer always runs in a `bun -e` bridge, so both engines execute identical test code and the renderer runs where the build runs it | Smallest change that removes the engine dependency without touching what is asserted | Running the landing renderer in-process on Bun and bridged on Node (two paths) |
 
 ## Audit verdicts
 
@@ -619,6 +639,44 @@ Verdict: **approve with fixes**, wording only. Sound: emit identity (re-run inde
 
 Verdict: **approve**, high confidence, no new finding. A2 and A3 judged closed; the wider `include` judged sound (the same 234 files today; `.mts` and `.cts` probes fail under it; no JavaScript, JSON or Markdown pulled in; the augmentation still absent from the `src` and scripts programs); keeping the config independent of `tsconfig.scripts.json` judged acceptable; the round-1 verdicts judged faithfully recorded. The loop converged in two rounds.
 
+### Arc 4 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-10
+
+Verdict: **approve**, no findings on 40b9c22. Checked and found sound: the CommonJS inventory; Node and Bun reading `apps/extension/package.json`, loading the `.cjs` shim and importing `vitest.base.mts`; Bun's `__dirname` in the ESM-typed scripts; release-please and the preview build preserving `type`; the Mozilla source rebuild; no live reference to `vitest.base.ts`; the explicit `.mts` import. Two limits: zero CommonJS lines do not establish native-loader compatibility (taken up as D22), and soak provenance is captured at start, so the checkout must stay still through it.
+
+### Arc 4 implementation: Opus review (same family, read-only), 2026-10-10
+
+Verdict: **approve with fixes**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| O4-1 | Medium. Vite's native-loader block still prints on every extension run with the items the CommonJS lines masked; the gate's grep cannot see it, and the "0 warnings" status line is wrong | Accepted: D22, the gate counts the block, the status line corrected |
+| O4-2 | Low. `tsconfig.node.json` lacks `allowImportingTsExtensions` once D22 lands | Rejected as code: nothing references it, so no tool loads it (D22) |
+| O4-3 | Low. `vitest.base.mts`'s header does not say why it is `.mts`, so a rename back would bring the warning back silently | Accepted: one clause |
+
+### Arc 4 implementation, round 2: Codex (same session, resumed), 2026-10-10
+
+Verdict: **D22 recommended, with one more fix**.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C4-1 | Medium. The proof can pass while the warning block prints | Accepted: D22's gate |
+| C4-2 | Medium. `tests/e2e/stall-watchdog.ts`'s parameter property fails Node's type stripping (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and the watchdog loads with every extension config | Accepted: a field assigned in the constructor |
+| C4-3 | Low. `tsconfig.node.json` would report 23 TS5097 | As O4-2 |
+| Proof | Exercise native loading of the unit, e2e and build configs, not only the absent block | Accepted: a `loadConfigFromFile(…, "native")` probe of all eight configs and a native-loader build compared byte for byte |
+
+### Arc 4 implementation, round 3: Codex (same session, resumed), 2026-10-10
+
+Verdict: **approve** D22's code (1518723), no defect; it loaded the eight configs natively itself. Arc delivery blocked by the soak's Node reference: `apps/extension`'s unit suite fails the same 8 tests on Node at this head and at the base af4afcc, with either loader (`lessons/phase-4.md`).
+
+| # | Finding | Disposition |
+|---|---|---|
+| R4-1 | Medium. A failing Node reference cannot pass `compare` | Recorded; D-orch-11 stops the arc on a failed compare, so the matrix runs as written and the result goes to the orchestrator |
+| R4-2 to R4-6 | Medium/low. The 8 failures are tests written for Bun: `port-registry` and `reconcile-lock` launch children with `process.execPath`, which then import raw TypeScript Node cannot strip; `store-icons` calls `Bun.Image`; `LegalAcceptanceSheet` natively `require`s a workspace barrel with an extensionless import; `windows/{json,logger}` pin Bun's TypeError wording; `presto-core-deps` reads an unexported `package.json` subpath | Not fixed here: outside Phase 4.1's change map, and two of the fixes loosen what a test asserts. The smallest fix per file goes to the orchestrator |
+
+The Codex loop stops at its three-round limit with no open finding on the arc's code.
+
+Phase 4.1's gate, 2026-10-10: **blocked**. At f8d1200 nine workspaces pass the soak; `apps/landing` and `apps/extension` fail `compare` on their Node reference alone, on tests written for Bun that fail at the base as well (#279, `lessons/phase-4.md`). D-orch-11 stops the arc; no PR is open.
+
 ### Arc 3 implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-11
 
 Verdict: **clean**, no finding, over `git diff af4afcc...HEAD` at 422d6f6 (the multicall nonce, the `buildNoFrom` registration fix and its pins, the sponsored NO_FROM control and file, the transfer-function select and the three private-kind row cases).
@@ -645,6 +703,43 @@ Verdict: **one low finding**, high confidence otherwise. Checked the four fixes,
 ### Arc 3 implementation, round 3: Codex (same session, resumed), 2026-10-11
 
 Verdict: **clean**, high confidence: R3-1's fix confirmed, nothing material left in the arc diff. The loop converged.
+
+### Arc 4a design consult: Codex (gpt-6.1-sol, high) and Opus (Plan), 2026-10-13
+
+Both **approve with changes**; folded into D26 before the code was written: the narrow comparator change is necessary; the set-aside tests are held to passing every run; a reference that ran a listed file is refused by name; files match exactly on the id's file part; the exact list is pinned; membership is computed from the compared id sets; CLAUDE.md names the exception; `soak()` is refactored under budget. Split on granularity, settled for whole files (D26).
+
+### Arc 4a implementation, round 1: Codex (gpt-6.1-sol, high, read-only), 2026-10-13
+
+Verdict: **findings**, high confidence; no assertion removed or weakened, the landing bridge keeps every asserted message and refuses a nonzero exit.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4a-C1 | Medium. Any filter switched the never-ran check off, even one naming the listed file, so a filtered gate could pass with that file absent | Accepted: the check applies when the candidate was asked to run the file, the unfiltered `test` script or a forwarded filter vitest's case-insensitive substring match selects it by. Test: a filter naming it fails, an unrelated filter does not |
+| 4a-C2 | Medium. An unfiltered `--script test:components` (scoped to `src/components`) would fail on the three listed files outside its scope | Accepted: only the `test` script stands for the whole suite. Test case |
+| 4a-C3 | Low. The comparator's doc comment narrates the order and reads historically; a test helper's comment restates it | Accepted: both cut |
+
+### Arc 4a implementation: Opus review (same family, read-only), 2026-10-13
+
+Verdict: **approve with small fixes**. Sound: no test body changed beyond its engine path; a broken bridge reds the file through its positive cases; the hoisted imports load through vitest's runner; the comparator fails closed on every path tried, including a list that changes between soak and compare; complexity counts match CLAUDE.md.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4a-O1 | Low. `reconcile-lock.test.ts`'s comment blames type stripping; `lockfile.ts` fails on Node's loader (an extensionless import) | Accepted: each file's comment names its own cause |
+| 4a-O2 | Low. The bridge's `spawnSync` has no timeout, and a blocking spawn holds off vitest's test timeout | Accepted: a 30 s bound, and the spawn error in the message |
+| 4a-O3 | Nit. JSON turns an `undefined` argument into `null`, which would bypass a default parameter | No change: no call passes one |
+| 4a-O4 | Nit. Phase 4a.1's pass criterion ("names the three files") cannot fail | Accepted: a nonzero count per file, and the filters name the files |
+
+### Arc 4a implementation, round 2: Codex (same session, resumed), 2026-10-13
+
+Verdict: **one medium finding**; 4a-C1 to 4a-C3 and the Opus fixes otherwise judged clean.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4a-R2-1 | Medium. `selects()` missed a filter vitest still matches through `relative(dir, f)`: `./scripts/store-icons.test.ts`, or an absolute path (canonical `<repo>/…` in the summary), so a filtered soak could pass with that file absent | Accepted: each filter is also matched as a workspace-relative path. Two regression cases; the check fails with the normalized form removed |
+
+### Arc 4a implementation, round 3: Codex (same session, resumed), 2026-10-13
+
+Verdict: **clean**, high confidence. The loop converged.
 
 ## Post-implementation
 
@@ -688,6 +783,7 @@ Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `de
 | 1b | `e2e-harness-gaps-waits` | 1.6-1.9 | 1a | off | `fix(e2e): load the lock page after a restart, drop the anchor sleep, watch for stalls` | #161; #162, #163, #155 each conditional (below) |
 | 2 | `e2e-harness-gaps-types` | 2.1 | 1b | off | `build(extension): type-check the e2e tree in typecheck` | #194 |
 | 3 | `e2e-harness-gaps-coverage` | 3.1-3.3 | 2 | off | `test(e2e): prove multicall and no_from sends land, cover private transfer rows` | #164, #153; #165 conditional (below) |
+| 4a | `e2e-harness-gaps-soak-node` | 4a.1 | `dev` | off | `test(soak): run the node reference on every suite it can, list the bun-only ones` | #279 |
 | 4 | `e2e-harness-gaps-esm` | 4.1 | 3 | off | `build(extension): load the extension's vite and vitest configs as es modules` | #186 |
 | close-out | `e2e-harness-gaps-close-out` | — | 4 | off | `docs(plans): close e2e-harness-gaps` | — |
 
@@ -712,6 +808,7 @@ Superseded in part by D-orch-1 and D-orch-2: no stack; each arc's PR targets `de
 | #164 | 3 | the multicall settles in public execution |
 | #153 | 3 | two concurrent NO_FROM sends both confirm |
 | #165 | 3 | private rows asserted, and the discovered half runs, or stays open per A3 |
+| #279 | 4a | the four suites pass on Node and the soak's compare is clean for both workspaces |
 | #186 | 4 | no warning, soak matrix green |
 | #195, #81, #190 | not this lane | § Scope |
 
