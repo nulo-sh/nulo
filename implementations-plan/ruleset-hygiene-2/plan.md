@@ -84,7 +84,7 @@ Gate: `diff -w` of `:500-519` against the README section body is empty, and of `
 **Phase 4: quality gates.** ✓ (1) `CI.md` § Presto in CI: "the headless server is HTTP-only" gains "(`127.0.0.1:59833`)"; "the exact subtitle" gains ", `Proving with Presto ✦`". (2) `CLAUDE.md:540-547` become D5's pointer; the Locally subsection and the `:549` warning stay byte-identical.
 Gate: `git diff -U0 $B -- CI.md` shows exactly those two lines changed and nothing removed; `CLAUDE.md`'s `-U0` hunks touch none of `:521-537` or `:549`; each row of recon's In CI table is re-read against its named home, and the PR body quotes the home of each.
 
-**Phase 5: pins and strings.** (1) `check.ts:77` and `complexity-rescore.test.ts:8` name `.claude/skills/complexity-budgets/SKILL.md`; `structure.ts:329` names `implementations-plan/README.md § Where open work lives`. (2) `update-docs` (D8). `nightly.yml:265` stays (D7).
+**Phase 5: pins and strings.** ✓ (1) `check.ts:77` and `complexity-rescore.test.ts:8` name `.claude/skills/complexity-budgets/SKILL.md`; `structure.ts:329` names `implementations-plan/README.md § Where open work lives`. (2) `update-docs` (D8). `nightly.yml:265` stays (D7).
 Gate: also `bun run test:release` and `bun run typecheck:all`; `git grep -n 'CLAUDE.md § \(Complexity budgets\|Where open work lives\)' -- scripts` prints nothing.
 
 **Final gate:** `bun run typecheck:all`, `bun run test` and `bun run lint:actions` exit 0; every `](…#anchor)` in the touched files resolves to a heading (listed with `git grep -no '](\([^)]*\)#[^)]*)'` and checked by hand); `wc -c CLAUDE.md` recorded; this plan stays at most 150 lines.

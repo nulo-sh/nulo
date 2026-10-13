@@ -7,3 +7,4 @@
 - 2026-10-13: Phase 2 gate green: normalized diff empty; lint, check-no-local-paths, check:plans, test:ci-gating (526 pass) exit 0.
 - 2026-10-13: Phase 3 gate green: both normalized diffs empty; README -U0 shows steps 1-5 only; anchor grep empty outside this plan (D12); lint, check-no-local-paths, check:plans, test:ci-gating (526 pass) exit 0.
 - 2026-10-13: Phase 4 gate green: CI.md -U0 is the two planned lines; CLAUDE.md hunks miss :521-537 and :549; In CI rows re-read against their homes; `### Branches + releases` folded (D9: its release-only sentences moved to the `release` skill); CLAUDE.md 64,753 bytes; lint, check-no-local-paths, check:plans, test:ci-gating (526 pass) exit 0.
+- 2026-10-13: Phase 5 gate green: scripts grep empty; lint, check-no-local-paths, check:plans, test:ci-gating (526 pass), test:release (304 pass), typecheck:all exit 0.
