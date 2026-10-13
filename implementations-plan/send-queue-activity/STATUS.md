@@ -32,3 +32,6 @@
 - 2026-10-13 — phase 2.4 gates: network at retry 0 Chrome and Firefox (send-amount-exact 1/1, fiat-send 1/1 each; the new USD step fails on the base sources); Chrome smoke at retry 0 on a smoke-armed build: 219 passed, 11 skipped. 40 before/after screenshots committed. OA-10 filed (derived line legibility at large balances).
 - 2026-10-13 — arc 2 review: Codex r1 approve (two comment lows), Opus approve (comment nits; one rejection; one known limit, #367 filed closed); Codex r2 approve. Loop converged.
 - 2026-10-13 — phase 2.4: Firefox smoke at retry 0 on a smoke-armed build: 217 passed, 13 skipped. Merged origin/dev (dd922823, #356: e2e assertions only, no overlap).
+- 2026-10-13 — arc 5 started on `send-queue-activity-keyboard`, stacked on arc 2 (5523126b).
+- 2026-10-13 — phase 5.1 gates: pass at 692dec8f (lint, typecheck:all, test 11717, test:all).
+- 2026-10-13 — phase 5.2 gates: pass at 7d89fffc (unit; smoke at retry 0 `send-keyboard.test.ts` Chrome 5/5, Firefox 5/5). OA-20 filed: item 1's fee links are on a path no flow shows.

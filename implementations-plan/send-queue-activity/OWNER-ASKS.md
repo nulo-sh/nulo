@@ -176,3 +176,18 @@ Before, the same line wrapped onto three lines and pushed Max 28 px past the car
 - **C. Option C of P9-01 for long lines only.** The line moves to its own row under the amount when it would draw below the floor, so it gets the card's full width.
 
 **Recommendation.** C. It keeps the signed shrink for ordinary amounts and keeps the figure readable when it is long. The review sheet shows the full amount before anything is sent, so A is not a money risk; it is a legibility one.
+
+## OA-20: The fee card's "Override with my method" path is never shown (#242 item 1, page 9 P9-05)
+
+**Surface.** The fee card's banner for a payment the app sets: "Override with my method", and "Use app's payment" under the method picker.
+
+**What ships now.** Both are buttons with the accent focus ring, as signed. No flow shows them. Whenever an app sets the fee payment, the confirm window shows "Fee payment method set by <app>" in place of the fee card, and the wallet refuses an app-paid pick when the request is approved. Nobody sees the change.
+
+If the path were shown: pressing either button swaps it for the other control (the method picker or the banner), and focus falls to the page, so the next Tab starts from the top.
+
+**Options.**
+- **A. As built.** The path stays unreachable and is now keyboard-ready.
+- **B. Remove the override path from the card**: the banner, both buttons and their state. Nothing visible changes.
+- **C. Show it.** A person may replace an app's fee payment in the confirm window. That is a product change and needs its own security review, since an app that names a fee payer may rely on it. Focus would then move to the control that replaces the pressed button.
+
+**Recommendation.** B, in its own PR. A path nobody can reach still costs every review that reads it.
