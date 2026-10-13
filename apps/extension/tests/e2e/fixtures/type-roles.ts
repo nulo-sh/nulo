@@ -484,7 +484,7 @@ export type IdentifierObservation = {
 	surface: string
 	state: string
 	sites: SiteObservation[]
-	/** Recorded, never asserted, until the final board. */
+	/** Hex text the page renders outside a mono role; `expectSitesClean` refuses any. */
 	hexOutsideMono: { testid: string | null; text: string }[]
 }
 
@@ -568,6 +568,7 @@ export async function observeIdentifierSites(
 export function expectSitesClean(observation: IdentifierObservation): void {
 	const asserted = observation.sites.filter((site) => site.mode === "asserted").flatMap((site) => site.failures)
 	expect(asserted, `identifier sites on ${observation.surface} (${observation.state})`).toEqual([])
+	expect(observation.hexOutsideMono, `hex outside a mono role on ${observation.surface} (${observation.state})`).toEqual([])
 }
 
 export type Coverage = {
