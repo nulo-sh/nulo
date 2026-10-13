@@ -68,6 +68,7 @@ const CHECKED_DISPLAYS: Record<CheckedOutcome, JournalTerminalDisplay> = {
 	sent: { state: "sent", subtitle: "Sent", icon: ICONS.sent, color: "green" },
 	reverted: { state: "failed", subtitle: "Reverted", icon: ICONS.failed, color: "red" },
 	unconfirmed: { state: "unconfirmed", subtitle: "Unconfirmed", icon: ICONS.unconfirmed, color: "amber" },
+	expired: { state: "failed", subtitle: "Won't go through", icon: ICONS.failed, color: "red" },
 }
 
 /**
@@ -214,6 +215,10 @@ const CHECKED_LABELS: Record<CheckedOutcome, CategoricalFailureLabel> = {
 	unconfirmed: {
 		label: "Unconfirmed",
 		context: "Your wallet couldn't confirm this. It may still go through, so check History before sending it again.",
+	},
+	expired: {
+		label: "Won't go through",
+		context: "This transaction expired before the network included it. No fee was paid, and you can send it again.",
 	},
 }
 

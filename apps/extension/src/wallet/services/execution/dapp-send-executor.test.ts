@@ -77,6 +77,8 @@ vi.mock("@aztec-labs/protocol-contracts/fee-juice", async (importOriginal) => {
 
 const ORIGIN: LocalTxOrigin = { type: OriginType.DAPP, name: "test-dapp" }
 const FENCE = { profileId: "p1", epoch: 0, session: 1 }
+const EXPIRY = { timestamp: 1_750_003_600, nullifier: `0x${"02".padStart(64, "0")}` }
+
 /** A popup approval envelope carrying a reuse id; the producer mints `previewId = estimateId`
  *  for a bound standard estimate, so a real approval always pairs the two equal. */
 const APPROVAL = (estimateId: string) => ({ interactionId: "i-1", index: 0, estimateId, previewId: estimateId })
@@ -515,7 +517,7 @@ describe("DappSendExecutor: the submitting commit", () => {
 		const { executor, deps, proveAndSend } = makeHarness()
 		proveAndSend.mockImplementationOnce(async (ctx) => {
 			const bound = ctx as unknown as ProveAndSendContext
-			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl })
+			await bound.commitSubmitting({ txHash: "0xhash", submittedEndpointUrl: bound.submittedEndpointUrl, expiry: EXPIRY })
 			return { txHash: { toString: () => "0xhash" }, offchainOutput: {} }
 		})
 		await run(executor)
@@ -523,6 +525,7 @@ describe("DappSendExecutor: the submitting commit", () => {
 			stage: "submitting",
 			txHash: "0xhash",
 			submittedEndpointUrl: "https://rpc.submit",
+			expiry: EXPIRY,
 		})
 	})
 })

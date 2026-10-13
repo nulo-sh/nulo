@@ -5,7 +5,7 @@
  *
  * Invariant: this is the ONLY `createAztecNodeClient(...)` call site in
  * the codebase (and the one `createSafeJsonRpcClient` over the node schema,
- * for the silent single read). A lint guard (`no-restricted-syntax`)
+ * for the silent single-attempt node). A lint guard (`no-restricted-syntax`)
  * enforces that every other reference goes through `NodeFactory.createNode()`.
  *
  * Every node is built through the transport rule (`rpcTransportVerdict`). It is the only gate
@@ -24,7 +24,7 @@ import { makeFetchWithTimeout, makeSingleAttemptFetch } from "../utils/fetch"
 
 const noop = () => {}
 
-/** The JSON-RPC client's logger for the single read: every level a no-op. Without it the SDK
+/** The JSON-RPC client's logger for single-attempt reads: every level a no-op. Without it the SDK
  *  warns through pino, which reaches `console.*` and so the user's exportable log, with the reply
  *  body and the endpoint URL (providers put API keys in the path). */
 export const SILENT_RPC_LOG: Logger = {
@@ -75,7 +75,7 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		if (!check.ok) {
 			throw new Error(`AztecNodeFactoryAdapter refused to construct node client — ${check.reason}`)
 		}
-		return createAztecNodeClient(rpcUrl, { fetch: makeSingleAttemptFetch(timeoutMs) })
+		return silentSingleAttemptNode(rpcUrl, timeoutMs)
 	}
 
 	public async probeChainId(rpcUrl: string, timeoutMs: number): Promise<number> {
@@ -95,15 +95,18 @@ export class AztecNodeFactoryAdapter implements NodeFactory {
 		if (!check.ok) {
 			throw new Error(`AztecNodeFactoryAdapter refused to read — ${check.reason}`)
 		}
-		// `createAztecNodeClient` with no versions to check, plus the `log` option it cannot pass.
-		const node = createSafeJsonRpcClient<AztecNode>(rpcUrl, AztecNodeApiSchema, {
-			namespaceMethods: "aztec",
-			fetch: makeSingleAttemptFetch(timeoutMs),
-			log: SILENT_RPC_LOG,
-		})
-		const value = await node.getPublicStorageAt("latest", contract, slot)
+		const value = await silentSingleAttemptNode(rpcUrl, timeoutMs).getPublicStorageAt("latest", contract, slot)
 		// The SDK resolves a `null` result as `undefined` rather than rejecting it.
 		if (value === undefined) throw new Error("AztecNodeFactoryAdapter read no value")
 		return value
 	}
+}
+
+/** `createAztecNodeClient` with no versions to check, plus the `log` option it cannot pass. */
+function silentSingleAttemptNode(rpcUrl: string, timeoutMs: number): AztecNode {
+	return createSafeJsonRpcClient<AztecNode>(rpcUrl, AztecNodeApiSchema, {
+		namespaceMethods: "aztec",
+		fetch: makeSingleAttemptFetch(timeoutMs),
+		log: SILENT_RPC_LOG,
+	})
 }

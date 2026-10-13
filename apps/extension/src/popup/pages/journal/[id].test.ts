@@ -1,6 +1,7 @@
 import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import type { SendCheckOutcome } from "@nulo/wallet-core/jobs"
 import type { OperationRecord } from "@/wallet/services/operation-journal/spec"
 import JournalDetail from "./[id].vue"
 
@@ -66,7 +67,7 @@ afterEach(() => {
 const ACCOUNT = `0x${"0a".repeat(32)}`
 
 /** A transfer that failed at the send line, shaped as the journal stores it. */
-function failedSend(check?: "sent" | "reverted" | "unconfirmed"): OperationRecord {
+function failedSend(check?: SendCheckOutcome): OperationRecord {
 	return {
 		id: "j1",
 		kind: "transfer",
@@ -135,5 +136,14 @@ describe("the journal page of a failed send its wallet checks", () => {
 		)
 		expect(row(w, "category").exists()).toBe(false)
 		expect(row(w, "ended").exists()).toBe(true)
+	})
+
+	test("an expired send reads State Failed, with Outcome Won't go through and its context", async () => {
+		const w = await mountPage(failedSend("expired"))
+		expect(row(w, "state").text()).toBe("Failed")
+		expect(row(w, "category").text()).toBe("Won't go through")
+		expect(row(w, "context").text()).toBe(
+			"This transaction expired before the network included it. No fee was paid, and you can send it again.",
+		)
 	})
 })

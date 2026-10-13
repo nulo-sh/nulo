@@ -175,22 +175,54 @@ export type NewOperationInput = {
 export const OperationKindSchema = z.enum(["transfer", "dapp_execute", "token_import"])
 export const OperationOriginSchema = z.enum(["popup", "dapp", "seed"])
 
+const SendExpirySchema = z.object({ timestamp: z.number(), nullifier: z.string() })
+
 export const JobProgressSchema: z.ZodType<JobProgress> = z.discriminatedUnion("stage", [
 	z.object({ stage: z.literal("queued") }),
 	z.object({ stage: z.literal("pending") }),
 	z.object({ stage: z.literal("simulating") }),
 	z.object({ stage: z.literal("proving"), enteredProveAt: z.number(), backend: z.enum(["presto", "browser"]).optional() }),
-	z.object({ stage: z.literal("submitting"), txHash: z.string().optional(), submittedEndpointUrl: z.string().optional() }),
+	z.object({
+		stage: z.literal("submitting"),
+		txHash: z.string().optional(),
+		submittedEndpointUrl: z.string().optional(),
+		expiry: SendExpirySchema.optional(),
+	}),
 	z.object({ stage: z.literal("succeeded"), txHash: z.string().optional() }),
 	z.object({
 		stage: z.literal("failed"),
 		from: z.enum(["queued", "pending", "simulating", "proving", "submitting"]).optional(),
 		txHash: z.string().optional(),
 		submittedEndpointUrl: z.string().optional(),
-		check: z.enum(["sent", "reverted", "unconfirmed"]).optional(),
+		expiry: SendExpirySchema.optional(),
+		check: z.enum(["sent", "reverted", "unconfirmed", "expired"]).optional(),
+		inclusion: z.object({ block: z.number(), hash: z.string() }).optional(),
+		checkSince: z.number().optional(),
 	}),
 	z.object({ stage: z.literal("cancelled") }),
 ])
+
+type FailedProgress = Extract<JobProgress, { stage: "failed" }>
+
+/** The fields of a failed row that only the send check writes. */
+export type SendCheckState = Pick<FailedProgress, "check" | "inclusion" | "checkSince">
+
+/**
+ * The answers the send check may record over what a row holds:
+ * - none: `sent` or `reverted` (with the block, unless already final), or `unconfirmed`;
+ * - `unconfirmed`: `expired`, on a row with a recorded expiry;
+ * - `sent` or `reverted` with a block not yet final: final (the block cleared), included in
+ *   another block, or pruned (no answer, its window restarted at `checkSince`).
+ * Nothing replaces `expired`, or a `sent` or `reverted` that holds no block.
+ */
+export function isSendCheckMove(from: FailedProgress, to: SendCheckState): boolean {
+	const mined = to.check === "sent" || to.check === "reverted"
+	if (from.check === undefined) return mined || (to.check === "unconfirmed" && to.inclusion === undefined)
+	if (from.check === "unconfirmed") return to.check === "expired" && from.expiry !== undefined && to.inclusion === undefined
+	if (from.inclusion === undefined || from.check === "expired") return false
+	if (to.check === undefined) return to.inclusion === undefined && to.checkSince !== undefined
+	return mined && to.inclusion?.hash !== from.inclusion.hash
+}
 
 /** May have reached the node: it failed at `submitting` with a hash, and not at the send line's
  *  own liveness check, which throws before `node.sendTx`. */
