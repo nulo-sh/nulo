@@ -34,6 +34,7 @@ import {
 	panelBodies,
 	PROBE_TEXT,
 	placeTypeRoleProbes,
+	readHexOutsideMono,
 	readPageTypography,
 	type SiteEntry,
 	sweepTypeRoles,
@@ -221,12 +222,16 @@ const cutFigures = (readings: readonly TypeReading[]) =>
 			ellipsizedBy,
 		}))
 
-/** Sweep steps 1 and 2 over the page as it stands, then the identifier sites of each state it renders. */
+/**
+ * Sweep steps 1 and 2 over the page as it stands, then the identifier sites and hex text of each
+ * state it renders, or the hex text alone when it names no state.
+ */
 async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = []): Promise<void> {
 	const sweep = await sweepTypeRoles(page)
 	expectSweepClean(sweep, label)
 	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
 	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state, OBSERVE))
+	if (states.length === 0) expect(await readHexOutsideMono(page), `${label}: hex outside a mono role`).toEqual([])
 }
 
 /** Holdings' offer to add a pasted address no row holds: the address in `data`, inside the button's box. */

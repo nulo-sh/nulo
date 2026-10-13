@@ -561,8 +561,12 @@ export async function observeIdentifierSites(
 	)
 	const sites: SiteObservation[] = []
 	for (const site of entries) sites.push(await observeSite(page, site, options.arc))
-	const hexOutsideMono = (await page.evaluate(call(readHexText, "window", MONO_ROLES))) as IdentifierObservation["hexOutsideMono"]
-	return { surface, state, sites, hexOutsideMono }
+	return { surface, state, sites, hexOutsideMono: await readHexOutsideMono(page) }
+}
+
+/** Hex text the page renders outside a mono role, the scan `observeIdentifierSites` ends with. */
+export async function readHexOutsideMono(page: Page): Promise<IdentifierObservation["hexOutsideMono"]> {
+	return (await page.evaluate(call(readHexText, "window", MONO_ROLES))) as IdentifierObservation["hexOutsideMono"]
 }
 
 export function expectSitesClean(observation: IdentifierObservation): void {
