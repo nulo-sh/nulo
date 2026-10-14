@@ -465,6 +465,17 @@ export async function peekSession(page: Page): Promise<{ id: string } | undefine
 	return callService(page, "profile", "getActiveProfile")
 }
 
+/** Locks the wallet as another window's Lock does: through the profile service, so this page learns
+ *  of it only from the lock event. */
+export async function lockFromAnotherWindow(page: Page): Promise<void> {
+	await callService(page, "profile", "lockActiveProfile")
+}
+
+/** Every sender the active profile has registered on its active networks, as the PXE reports them. */
+export async function registeredSenders(page: Page): Promise<string[]> {
+	return callService(page, "account-state", "getSendersAcrossActiveNetworks", [], 60_000)
+}
+
 /** Set the auto-lock TTL in milliseconds through the config service (the settings page offers whole
  *  minutes only), and return the session row once it carries the new deadline. The deadline is
  *  recomputed from `since`, and one older than `ms` would lock the wallet on the spot, so the

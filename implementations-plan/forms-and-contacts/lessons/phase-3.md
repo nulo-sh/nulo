@@ -21,3 +21,9 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3 re
 
 - Mutation check on `useLockWallet`: dropping the confirm's named-imports check, the post-read hold check, or the import count each reds the new cases. Dropping `lockWallet`'s own hold check reds nothing: a hold starts only when the set goes from empty to one, so the import that holds is never one the confirm named, and the named-imports check abandons first. Kept as the last-line invariant, cheap and order-independent.
 - Complexity: `importContacts` (16) and `lock` (17) went over budget with the hold; `applyHoldingLock` and `decide` carry the new branches.
+
+## 3.3 end to end
+
+- First network run of `contacts-import-stop` failed in 30 s on a puppeteer launch timeout, all three attempts: a smoke build in the same worktree rewrote `dist/chrome` while `e2e:agent`'s fixture launched from it (F23). Smoke builds and `e2e:agent` are serialized from here on; smoke runs use a copied dist, but their build step still writes `dist/<browser>`.
+- `navigateToSettings` needs the bottom nav, which Contacts (a sub-page) does not render; the hold scenario leaves Contacts by `subpage-back`.
+- Measured on Chrome (this host): the hold scenario 8.2 s, the auto-lock scenario 8.7 s, the network stop 29.7 s in the test (121 s wall with the node setup). Red checks: with the import on the page's contact client, the hold scenario fails at the chip check after leaving Contacts (the import died with the page). The network scenario is the real-PXE run of sender-first, not a deterministic red: whether a stop lands between a row's two writes is timing; the composition stop table is the deterministic proof.
