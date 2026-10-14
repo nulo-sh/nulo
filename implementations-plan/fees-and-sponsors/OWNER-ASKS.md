@@ -312,7 +312,7 @@ In both options the loading row stays selectable, as the row is today.
 
 **Recommendation.** B. It is your rule as written, and it gives one rule to every path. Its cost: on private fee juice an app can now raise the charge, which the person sees before Confirm.
 
-**What ships now.** A, pinned.
+**What ships now.** A, pinned. Open as #400.
 
 ## OA-13: the activity detail's gas breakdown after OA-3 (#188)
 
@@ -330,4 +330,4 @@ In both options the loading row stays selectable, as the row is today.
 
 **Recommendation.** B. It keeps the information and stops the sum from misleading.
 
-**What ships now.** A.
+**What ships now.** A. Open as #401.

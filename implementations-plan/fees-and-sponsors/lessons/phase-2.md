@@ -44,3 +44,10 @@
 - A second `connectPlayground` in one browser times out waiting for the discovery window, because the origin is already approved; the file now connects once per browser (`playgroundFor`).
 - Fee Juice's L1 handler mints a fixed 1000 FJ, so a small public balance is a mint to the L1 account followed by `bridgeTokensPublic(to, amount, false)`.
 
+## Phase 2.6: the arc 2 gate
+
+- Unit, at the origin/dev merge (27d10364): `audit:vue` exit 0 (extension 11,853), `test:all` exit 0, `test:ci-gating` 526, `check:plans` 0.
+- E2E at d7340778, retry 0. Smoke, armed build: Chrome 51 files / 219 tests (11 skipped by design), 1,431 s; Firefox 53 / 217 (13 skipped), 2,027 s. Network, the Phase 1.5 list: Chrome 8 / 17, 867 s; Firefox 16 / 17, 1,820 s, then `fee-methods` alone 8 / 8, 671 s. Proverless `same-token-concurrent-sends`: Chrome 14 / 14, 602 s; Firefox 14 / 14, 662 s.
+- The Firefox red was `fee-methods` "public gas only": its shield send's "Transaction submitted" toast missed the test's 60 s wait. The toast follows the proof and the send, the local run proves in the browser (CI proves through Presto), and the same case passed in 150 s on the rerun: a local timing flake.
+- Smoke needs the armed build (`VITE_NULO_E2E_*` at build time, `NULO_E2E_MIGRATION_FIXTURE=1 NULO_E2E_CSP_REPORT=1` at run time); a plain `build:chrome` fails the smoke global setup before any test.
+

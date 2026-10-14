@@ -1086,7 +1086,7 @@ The driver closed these conditions without another Codex round. Each is a narrow
 |---|---|---|
 | O1: the first predicted slot | minor | **Accepted** (C3). |
 | O2: an array-like `deltas` passes the port's speed-level check and executes | minor | **Accepted.** `approveInteraction` refuses a non-array like a count mismatch; a test with an array-like carrying an unknown level. |
-| O3: the cap is per profile, so held chain-A estimates hold places against chain-B estimates; a crashed document without a proven close holds them to the TTL | minor | **Accepted in part.** A successful `createDocument` now retires the previous epoch (Chromium allows one offscreen document), which ends holds after a crash. The per-profile count stays: chain-scoped admission is a registry redesign outside arc 1. The registry header says so, and the PR body names it. |
+| O3: the cap is per profile, so held chain-A estimates hold places against chain-B estimates; a crashed document without a proven close holds them to the TTL | minor | **Accepted in part.** A successful `createDocument` now retires the previous epoch (Chromium allows one offscreen document), which ends holds after a crash. The per-profile count stays: chain-scoped admission is a registry redesign outside arc 1. The registry header says so, and the PR body names it. Known limit #398. |
 | O4: surviving mutations (`send_transaction` reader, any-status record, `null` level, the L2 component) | nit | **Accepted.** One pin each; each now fails its mutation. The `onTerminal` order is pinned against the caller's first handler, the property the hold needs. |
 | O5: the wallet subclass's record-lifetime comment overstated the bound; the registry header omitted two ends | nit | **Accepted.** Both rewritten. |
 | O6: all nine PXE clients tracked timeouts and silenced warnings; `pxe/client.ts` imported from `execution/` | nit | **Accepted.** The tracking moved into `DEFAULT_PXE_CLIENT_FACTORY`; the wallet subclass is back to `dev`. |
@@ -1114,7 +1114,7 @@ The three-round limit was reached with the round-3 fixes unreviewed by Codex. Th
 |---|---|---|
 | E1: the plan's Shape section still described "epoch = current document" | minor | **Accepted.** Rewritten; D16. |
 | E2-E4: comments and a test title stated the same inference; announcements can arrive out of order | nit | **Accepted.** Rewritten; the doc says a listener keeps the highest (the client does, with `Math.max`). |
-| E5: a close could retire an epoch started by a create while the close was in flight | nit | **Declined.** It needs the new document to load, send READY and receive work before the close reply reaches the worker; the fuzz never produced it. |
+| E5: a close could retire an epoch started by a create while the close was in flight | nit | **Declined.** It needs the new document to load, send READY and receive work before the close reply reaches the worker; the fuzz never produced it. Known limit #399. |
 
 ### Arc 2 implementation review, round 1
 
@@ -1130,8 +1130,8 @@ The three-round limit was reached with the round-3 fixes unreviewed by Codex. Th
 
 | Finding | Severity | Disposition |
 |---|---|---|
-| O1: the app window's Confirm is live while a Fee Juice estimate runs | low | **Accepted in part.** A shown shortfall now holds (C2). With no verdict yet, Confirm stays live as it is today: holding it would change the window's Confirm behaviour, which no answer covers, and the node refuses the send with nothing spent. Closed `known-limit` issue. |
-| O2: Revoke-all over 12 chunks (337 or more authwits) cannot land every estimate under the per-profile admission caps (4 running, 8 parked), so Revoke stays off | low | **Known limit.** The surface is Settings → Developer, single revokes still work, and serializing the estimates is a client queue for a case nobody reported. Closed `known-limit` issue. |
+| O1: the app window's Confirm is live while a Fee Juice estimate runs | low | **Accepted in part.** A shown shortfall now holds (C2). With no verdict yet, Confirm stays live as it is today: holding it would change the window's Confirm behaviour, which no answer covers, and the node refuses the send with nothing spent. Known limit #396. |
+| O2: Revoke-all over 12 chunks (337 or more authwits) cannot land every estimate under the per-profile admission caps (4 running, 8 parked), so Revoke stays off | low | **Known limit.** The surface is Settings → Developer, single revokes still work, and serializing the estimates is a client queue for a case nobody reported. Known limit #397. |
 | O3: the authwit popups' watcher and unmount hook sat above their handlers | low | **Accepted.** Moved below them. |
 
 **Codex round 2 (session `01a1374d`), on aac6d2e1.** **No findings.** All three round 1 findings closed, including the paths its reproductions used (a result that lands and clears in one tick, a pick made during a delayed storage read); no blocking or high finding elsewhere in the arc. The loop ends here.
