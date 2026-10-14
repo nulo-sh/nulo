@@ -42,3 +42,9 @@ Accepted (all e2e):
 ## Codex round 3 (resumed) over the round 2 fixes and the `origin/dev` merge
 
 Verdict: approve, no new material finding. It checked the merged `SendReviewSheet.vue` (one fee block with all four branches; arc 2's number span once in the line and once in its ruler) and `send.vue` (the cap handoff beside arc 2's price-moved notice). The loop stops at three rounds.
+
+## CI on PR #402, after the review rounds
+
+The new e2e case failed on both browsers in the heavy `concurrent-confirm` lane: B (Urgent) left the queue for `proving` without asking again. The cause was the CI build, not the product. `VITE_NULO_FEE_MULTIPLIER=10` replaces only the multiplier of a send with no `priorityLevel`, and Normal sends none, so in CI A (Normal) priced at 10× and B (Urgent) at 5×. B came in at half the basis, under the ×1.25 cap. Locally, without the override, the ratio is 5/2.
+
+Fix: A is sent at Fast, so both speeds are explicit and B prices at 5/3 of the basis in every build. The case was re-run with the CI override on both browsers (numbers in the PR body). Changing the override to scale the whole ladder belongs to fees-and-sponsors, filed as #405. This fix landed after the Codex hard stop; it is test-only, and no product file changed.

@@ -563,11 +563,13 @@ async function readRecordedFee(page: Page, hash: string): Promise<string | undef
 const MAX_ASKS = 3
 
 test.skipIf(!hasConfig)(
-	"a private send held unmined; a second private send of the token at Urgent is queued against the cap, asked again after the release, accepted from Home, and goes out once",
+	"a private send at Fast held unmined; a second private send of the token at Urgent is queued against the cap, asked again after the release, accepted from Home, and goes out once",
 	{ timeout: 600_000, retry: 0 },
 	async ({ burst }) => {
 		const { nodeUrl } = aztecConfig as AztecTestConfig
-		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public" }
+		// Both speeds are explicit: Normal prices at the build's default multiplier, which the e2e
+		// build widens above Urgent's, while Fast to Urgent is ×5/3 in every build, above the cap's ×1.25.
+		const a: BurstSend = { token: "TST", from: "private", to: "private", amount: "9", destination: to(), fee: "public", speed: "fast" }
 		const b: BurstSend = { ...a, amount: "10", speed: "urgent" }
 		await fireIntoHeldWindow(burst, a)
 		const { page } = burst
