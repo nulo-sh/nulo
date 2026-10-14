@@ -457,8 +457,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		// A new account means the per-(network, contract) public cursors have already scanned PAST
 		// its historical receipts (one stream serves all accounts). Reset both halves of those cursors
 		// so the next scan re-indexes public history, newest first, and discovers the new account's
-		// receipts (correctness over speed). Done under the lock +
-		// the hydrateSchedulers epoch bump so an in-flight scan bails.
+		// receipts (correctness over speed). The reset and an epoch bump share one critical section, so
+		// an in-flight scan bails.
 		const profile = await this.profileService.getActiveProfile()
 		if (profile) {
 			try {
@@ -1475,8 +1475,8 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		this.markScanned(this.noteScannedAt, key, reached ? tipHash : undefined, epochAtStart)
 	}
 
-	/** Resolves whether the scan reached the tip: its notes read succeeded and no commit stood down. */
-	/** `epochAtStart` is the target's, captured before its first await: a clear / onTokenDeleted /
+	/** Resolves whether the scan reached the tip: its notes read succeeded and no commit stood down.
+	 *  `epochAtStart` is the target's, captured before its first await: a clear / onTokenDeleted /
 	 *  onAccountDeleted that runs during the tips read or the PXE I/O makes every per-note section
 	 *  below stand down instead of resurrecting just-wiped rows. */
 	private async scanContract(
@@ -1774,9 +1774,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	/**
 	 * One public-event scan tick for `(networkId, contract)` on the tick's tips, fenced to the epoch
 	 * its target captured before reading them. Class-gates, then either resumes an in-progress
-	 * reconciliation / pending page or runs a bounded forward scan. A reorg throw (referenceBlock
-	 * dropped) escalates to reconciliation. The outcome covers the WHOLE tick: every path that did not
-	 * confirm anything reports `failed` or `no-progress`, never silence.
+	 * reconciliation / pending page or runs a bounded forward scan, then back-fill on the pages left. A
+	 * reorg throw (referenceBlock dropped) escalates to reconciliation. The outcome covers the WHOLE
+	 * tick: every path that did not confirm anything reports `failed` or `no-progress`, never silence.
 	 */
 	private async scanPublicContract(
 		profileId: string,
@@ -2644,8 +2644,8 @@ export function orphanedByReconciliation(
 }
 
 /** A cursor that never scanned starts its forward scan above the floor `F0 = min(finalized,
- *  checkpointed)`, so the newest receipts land first, and back-fills everything at or below it.
- *  Clamping to the checkpointed tip keeps every back-filled block final, below reconciliation's reach. */
+ *  checkpointed)`, so the newest receipts land first, and back-fills everything at or below it. `F0`
+ *  is final, so every back-filled block sits below reconciliation's `lastScanFinalized + 1`. */
 function seedFreshCursor(cursor: PublicScanCursor, tips: PublicScanTips): PublicScanCursor {
 	const unscanned =
 		cursor.cursor === null && cursor.lastScanFinalized === null && !cursor.backfill && !cursor.reconciling && !cursor.pendingPage

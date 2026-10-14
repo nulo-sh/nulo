@@ -4299,8 +4299,9 @@ describe("IncomingTransferService — newest-first public scan", () => {
 
 	test("a restart between a back-fill record and its cursor write replays the page without a duplicate", async () => {
 		const { service } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [receipt(950)])
-		const pending = vi.fn()
-		service.onIncomingTransferPending.add(pending)
+		trustTokenA()
+		const added = vi.fn()
+		service.onIncomingTransferAdded.add(added)
 		await scanPublic(service)
 		expect(recordedBlocks()).toEqual([950])
 		// The record write landed and the cursor write that followed it did not.
@@ -4309,7 +4310,7 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		expect(await scanPublic(service)).toBe("progress")
 
 		expect(recordedBlocks()).toEqual([950])
-		expect(pending).toHaveBeenCalledTimes(1)
+		expect(added).toHaveBeenCalledTimes(1)
 		expect(backfillOf()).toEqual({ low: 501, high: 600, position: null })
 	})
 
@@ -4348,7 +4349,7 @@ describe("IncomingTransferService — newest-first public scan", () => {
 	test("an account added during back-fill restarts both halves and finds the account's history", async () => {
 		const accounts = [{ profileId: "p1", chainId: 1, address: "0xa" }]
 		const account = makeAccountStub(accounts)
-		const { service } = await bootChain(
+		const { service, state } = await bootChain(
 			{ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 },
 			[receipt(50, { to: "0xnew" }), receipt(950, { to: "0xnew" }), receipt(960), receipt(1005, { to: "0xnew" })],
 			{ account },
@@ -4358,10 +4359,13 @@ describe("IncomingTransferService — newest-first public scan", () => {
 		expect(backfillOf()).toMatchObject({ high: 600 })
 
 		accounts.push({ profileId: "p1", chainId: 1, address: "0xnew" })
+		state.fetchArgs.length = 0
 		await (service as unknown as { onAccountAdded: (a: unknown) => Promise<void> }).onAccountAdded({ chainId: 1, address: "0xnew" })
 		await flushPromises()
 		for (let i = 0; i < 3 && backfillOf() !== undefined; i++) await scanPublic(service)
 
+		expect(state.fetchArgs[0]).toMatchObject({ fromBlock: 1001, afterCursor: undefined })
+		expect(backfillReads(state.fetchArgs)[0]).toEqual([901, 1000])
 		expect(recordedBlocks("0xnew")).toEqual([50, 950, 1005])
 		expect(recordedBlocks()).toEqual([960])
 	})
@@ -6585,7 +6589,7 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		})
 	})
 
-	test("retry: after a failed scan both receipts land on the next tick with the tip unchanged", async () => {
+	test("retry: after a failed scan the note lands on the next tick, the public receipt once its backoff ends", async () => {
 		const f = await bootTicking({}, { chain: [] })
 		for (let i = 0; i < 3; i++) await tick()
 		// The checkpoint catches up with the proposed block, whose hash the note targets already
@@ -6602,15 +6606,21 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		const classStatus = f.reader.getTokenClassStatus
 		let classFailures = 1
 		f.reader.getTokenClassStatus = async (...args) => {
-			if (classFailures-- > 0) throw new Error("node unavailable")
+			if (classFailures-- > 0) {
+				// A failing read takes time, so its backoff runs past the next tick, as on a live node.
+				await new Promise((resolve) => setTimeout(resolve, 1_000))
+				throw new Error("node unavailable")
+			}
 			return classStatus(...args)
 		}
 		const event = Date.now()
 
 		await tick()
 		expect(records.has(NOTE_ID) || records.has(pubRecordKey(ours))).toBe(false)
+		await tick()
+		expect(records.has(NOTE_ID)).toBe(true)
 
-		expect(await landedAfter(() => records.has(NOTE_ID) && records.has(pubRecordKey(ours)), event)).toBeLessThan(120_000)
+		expect(await landedAfter(() => records.has(pubRecordKey(ours)), event)).toBeLessThan(120_000)
 	})
 
 	test("quiet chain: ticks with no new block drain the outbox, and the fourth lands a note the PXE delivered late", async () => {
