@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { mount, type VueWrapper } from "@vue/test-utils"
+import { Skeleton } from "@nulo/design"
 import { QUEUED_FEE_COPY } from "@/components/composite/send/publish-facts"
 import FeeCostReadout from "./FeeCostReadout.vue"
 
@@ -7,6 +8,7 @@ const STUBS = {
 	Flex: { template: "<div><slot /></div>" },
 	Text: { template: "<span><slot /></span>" },
 	Icon: { template: "<i />" },
+	Skeleton,
 }
 
 const factory = (props: Record<string, unknown> = {}) => mount(FeeCostReadout, { props, global: { stubs: STUBS } })
@@ -40,7 +42,7 @@ describe("FeeCostReadout", () => {
 	test("estimating without a result shows the label + skeleton", () => {
 		const w = factory({ isEstimating: true })
 		expect(w.text()).toBe("You pay")
-		expect(w.html()).toMatch(/skeleton/)
+		expect(w.findComponent(Skeleton).attributes("style")).toBe("width: 60px; height: 12px;")
 	})
 
 	test("estimate takes precedence over the estimating skeleton", () => {

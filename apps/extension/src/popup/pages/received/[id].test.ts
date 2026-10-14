@@ -1,17 +1,21 @@
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { flushPromises, mount } from "@vue/test-utils"
+import { reactive } from "vue"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import { CHAIN_IDS } from "@/utils/chain-ids"
 import type { ConfigProp } from "@/wallet/config"
-import type { IncomingPublicEventRecord, IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
+import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import ReceivedDetail from "./[id].vue"
 
 const mocks = vi.hoisted(() => ({
 	getTokens: vi.fn(),
 	getNetwork: vi.fn(),
+	copy: vi.fn(),
 	routeId: "r1",
 	incoming: undefined as unknown,
 	config: undefined as unknown,
 }))
+const appStore = reactive({ defaultExplorer: "aztecscan" as string | null })
 
 const TOKEN = `0x${"0a".repeat(32)}`
 const ACCOUNT = `0x${"0c".repeat(32)}`
@@ -29,7 +33,8 @@ const RECEIPT = {
 }
 
 vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: mocks.routeId } }) }))
-vi.mock("@/stores/app.store", () => ({ useAppStore: () => ({}) }))
+vi.mock("@/stores/app.store", () => ({ useAppStore: () => appStore }))
+vi.mock("./received-copy", () => ({ copyReceivedValue: mocks.copy }))
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
 vi.mock("@/composables/usePrices", () => ({
 	usePrices: () => ({ tokenFiatLabel: () => undefined, feeJuiceQuote: { value: undefined }, dispose: vi.fn() }),
@@ -103,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.clearAllMocks()
+	appStore.defaultExplorer = "aztecscan"
 })
 
 async function mountPage(tokens: Promise<unknown[]>) {
@@ -293,5 +299,87 @@ describe("the received page's network fee and updates", () => {
 		incoming().onIncomingTransferUpdated.invoke(remined(103))
 		await flushPromises()
 		expect(w.text()).toContain("RECEIPT NOT FOUND")
+	})
+})
+
+describe("the received page's explorer links", () => {
+	const BASE = "https://testnet.aztecscan.xyz"
+	const SENDER = "0x1e763f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3fa3b2"
+	const BLOCK_HASH = `0x${"2c".repeat(32)}`
+	const common = {
+		profileId: "p1",
+		networkId: "n1",
+		accountAddress: ACCOUNT,
+		contract: TOKEN,
+		tokenId: 7,
+		amountRaw: (10n ** 18n).toString(),
+		txHash: `0x${"2b".repeat(32)}`,
+		l2BlockNumber: 48213,
+		txIndexInBlock: 0,
+		indexInTx: 0,
+		hidden: false,
+		discoveredAt: 1_000,
+	}
+	const note = {
+		...common,
+		kind: "note",
+		id: "r1",
+		siloedNullifier: `0x${"3d".repeat(32)}`,
+		noteHash: `0x${"ab".repeat(32)}`,
+		owner: ACCOUNT,
+	} satisfies IncomingNoteRecord
+	/** As the public scan stores it: the sender and the block hash come from the node's log. */
+	const publicReceipt = {
+		...common,
+		kind: "public-event",
+		id: "r1",
+		from: SENDER,
+		blockHash: BLOCK_HASH,
+	} satisfies IncomingPublicEventRecord
+	const at = (w: Awaited<ReturnType<typeof mountPage>>, id: string) => w.find(`[data-testid="${id}"]`)
+
+	async function mountReceipt(receipt: IncomingTransferRecord, chainId: number = CHAIN_IDS.TESTNET) {
+		mocks.incoming = makeIncoming(receipt)
+		mocks.getNetwork.mockResolvedValue({ id: "n1", chainId })
+		return mountPage(Promise.resolve([]))
+	}
+
+	test("a note receipt's block number and its To card open their pages; its redacted sender has no link", async () => {
+		const w = await mountReceipt(note)
+		expect(at(w, "received-block-link").attributes("href")).toBe(`${BASE}/blocks/48213`)
+		expect(at(w, "received-block-link").text()).toBe("#48213")
+		expect(at(w, "received-to-explorer-link").attributes("href")).toBe(`${BASE}/address/${ACCOUNT}`)
+		expect(at(w, "received-from-explorer-link").exists()).toBe(false)
+	})
+
+	test("a public receipt links its block hash and its sender; the block number stays text", async () => {
+		const w = await mountReceipt(publicReceipt)
+		expect(at(w, "received-block-link").attributes("href")).toBe(`${BASE}/blocks/${BLOCK_HASH}`)
+		expect(at(w, "received-block-link").text()).toBe("0x2c2c..2c2c")
+		expect(at(w, "tx-block-hash").exists()).toBe(false)
+		expect(w.text()).toContain("#48213")
+		const from = at(w, "received-from-explorer-link")
+		expect(from.attributes("href")).toBe(`${BASE}/address/${SENDER}`)
+		expect(w.find(`#${from.attributes("aria-describedby")}`).text()).toBe("From")
+	})
+
+	test.each([
+		["explorer None", CHAIN_IDS.TESTNET, null],
+		["the sandbox", CHAIN_IDS.SANDBOX, "aztecscan"],
+	])("under %s no link shows and the block hash copies", async (_, chainId, explorer) => {
+		appStore.defaultExplorer = explorer
+		const w = await mountReceipt(publicReceipt, chainId)
+		expect(w.find('[data-testid$="-link"]').exists()).toBe(false)
+		expect(at(w, "tx-hash-copy").exists()).toBe(true)
+		await at(w, "tx-block-hash").trigger("click")
+		expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(BLOCK_HASH, "Block hash", expect.any(Function))
+	})
+
+	test("choosing explorer None while the page is open removes every link", async () => {
+		const w = await mountReceipt(publicReceipt)
+		expect(w.findAll('[data-testid$="-link"]')).toHaveLength(4)
+		appStore.defaultExplorer = null
+		await flushPromises()
+		expect(w.find('[data-testid$="-link"]').exists()).toBe(false)
 	})
 })

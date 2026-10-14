@@ -77,7 +77,7 @@ const onRowClick = (method, event) => {
 							{{ method.title }}
 						</Text>
 						<template v-if="method.checking || method.verifying">
-							<span :class="$style.skeleton" aria-hidden="true" />
+							<Skeleton />
 							<span :class="$style.visually_hidden">Checking</span>
 						</template>
 						<Text v-else variant="caption" color="tertiary">
@@ -136,10 +136,6 @@ const onRowClick = (method, event) => {
 	pointer-events: auto;
 	cursor: default;
 	background: transparent;
-}
-
-.skeleton {
-	composes: skeleton from "./fee-shared.module.css";
 }
 
 .visually_hidden {

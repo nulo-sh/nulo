@@ -613,6 +613,7 @@ describe("Firefox lanes", () => {
 			"network-e2e",
 			"network-e2e-heavy",
 			"network-e2e-heavy-concurrent",
+			"network-e2e-heavy-long",
 			"network-e2e-canary",
 			"network-e2e-chaos",
 		])
@@ -643,7 +644,13 @@ describe("Firefox lanes", () => {
 
 	test("nightly's Firefox network jobs mirror its Chrome ones", () => {
 		const { jobs } = workflow("nightly.yml")
-		for (const name of ["network-e2e", "network-e2e-heavy", "network-e2e-heavy-concurrent", "network-e2e-canary"]) {
+		for (const name of [
+			"network-e2e",
+			"network-e2e-heavy",
+			"network-e2e-heavy-concurrent",
+			"network-e2e-heavy-long",
+			"network-e2e-canary",
+		]) {
 			const [chrome, firefox] = [jobs[name], jobs[`${name}-firefox`]]
 			expect(firefox, `nightly.yml → ${name}-firefox`).toBeDefined()
 			expect(firefox.with.browser).toBe("firefox")

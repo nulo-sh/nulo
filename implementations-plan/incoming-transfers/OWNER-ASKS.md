@@ -1,7 +1,8 @@
 # incoming-transfers — owner asks
 
-OA-1 to OA-6 were answered on decision page 4 (§ Answers). OA-8 is open: arc 3b builds its "what
-ships now", and its PR merges only once your answer is quoted in it. Arc 3a's own ask is OA-7.
+OA-1 to OA-6 were answered on decision page 4 (§ Answers). Two are open: OA-7 (arc 3a ships its "what
+ships now") and OA-8 (arc 3b builds its "what ships now", and its PR merges only once your answer is
+quoted in it).
 
 ## OA-1. #140: a received private transfer that a chain reorganisation dropped
 
@@ -144,6 +145,27 @@ So the record can be read two ways.
 **What ships now.** Nothing on these rows: they stay as they are until this is answered, and #142
 stays open.
 
+## OA-7. Keyboard focus on the Details links and the "View on <explorer>" line
+
+**Surface.** The sent transaction, received and journal pages: the Tx hash link, the new Block and
+To links (#142), and the "View on <explorer>" line under the time.
+
+**Situation.** The wallet's stylesheet removes every link's focus outline, so a person moving through
+these links with Tab sees no sign of where they are. The wallet's other controls draw a 2 px accent
+ring on keyboard focus. Arc 3a gave its two new controls that are not rows, the address card's
+corner icon and the trust prompt's "View contract on <explorer>", that ring. The new Block and To
+links are exactly the Tx hash row's link (OA-6), so they share its gap.
+
+**Options.**
+
+- **A. The accent ring on keyboard focus** for those four links (recommended). Nothing changes at
+  rest or for a mouse or a tap.
+- **B. As today.** No ring on these links.
+
+**Recommendation.** A: a keyboard user can see which link Enter opens, as on every other control.
+
+**What ships now.** B.
+
 ## OA-8. The privacy mode row in Settings → Privacy (#141, arc 3b)
 
 **Surface.** Settings → Privacy, a new row; and through it, the received page's "Network fee" row.
@@ -188,6 +210,17 @@ hides all dollar values" and "Block Explorer" / "Transaction link explorer".
 - **OA-5 = A, newest first** (decision page 4, signed 2026-10-14). Phase 2.3 is built: newest public
   receipts land on a token's first scan, and older rows fill in below, newest to oldest.
 - **OA-1 = A, remove the row** (page 4, 2026-10-14). Arc 3b builds it (#140).
-- **OA-2 = A, OA-3 = B, OA-6 = A** (page 4, 2026-10-14, with P4-02b A). Arc 3a builds them (#142).
+- **OA-2 = A** (decision page 4 on #142, 2026-10-14; built in arc 3a). A small external-link icon in
+  each card's corner; a tap elsewhere on the card still copies; no icon under explorer None or on a
+  network with no explorer.
+- **OA-3 = B** (2026-10-14, same record). No contract link on detail pages; the contract link ships
+  only on the first-receive trust prompt (P4-01, #97).
+- **OA-6 = A** (2026-10-14, same record). The value is the link, exactly as the Tx hash row in
+  Details; with explorer None the row stays as it is today.
+- **P4-02b = A** (2026-10-14, same record; settles P4-02 and P4-07). A corner icon on each address
+  card and the Block hash as a link in the Tx hash row's style; no row added, nothing moves; the
+  icon's hit area may grow; From gets the icon only when the sender is an address.
 - **OA-4a = A, OA-4b = A** (page 4, 2026-10-14). The owner's addendum on #141 the same day makes the
   fee automatic by default and these govern the tap path under privacy mode; arc 3b builds them.
+
+Open: OA-7, OA-8.

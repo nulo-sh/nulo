@@ -37,6 +37,7 @@ declare global {
   const HOSTNAME_WARNING: typeof import('../composables/useDappHostname').HOSTNAME_WARNING
   const IMPORT_ACTIVATION_TIMEOUT_MS: typeof import('../composables/completeImportWithRecovery').IMPORT_ACTIVATION_TIMEOUT_MS
   const IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS
+  const IMPORT_LOCK_HOLD_MS: typeof import('../stores/contact-import-guard').IMPORT_LOCK_HOLD_MS
   const IMPORT_PREFLIGHT_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_PREFLIGHT_BUDGET_MS
   const IMPORT_REGISTRATION_BUDGET_MS: typeof import('../composables/importChainSync').IMPORT_REGISTRATION_BUDGET_MS
   const INIT_FETCH_TIMEOUT_MS: typeof import('../stores/balances.store').INIT_FETCH_TIMEOUT_MS
@@ -115,6 +116,7 @@ declare global {
   const copyToClipboard: typeof import('../utils/clipboard').copyToClipboard
   const copyWithToast: typeof import('../utils/clipboard').copyWithToast
   const createApp: typeof import('vue').createApp
+  const createContactImportGuard: typeof import('../stores/contact-import-guard').createContactImportGuard
   const createRunFence: typeof import('../composables/runFence').createRunFence
   const customRef: typeof import('vue').customRef
   const debounce: typeof import('../utils/general').debounce
@@ -685,6 +687,7 @@ declare module 'vue' {
     readonly HOSTNAME_WARNING: UnwrapRef<typeof import('../composables/useDappHostname')['HOSTNAME_WARNING']>
     readonly IMPORT_ACTIVATION_TIMEOUT_MS: UnwrapRef<typeof import('../composables/completeImportWithRecovery')['IMPORT_ACTIVATION_TIMEOUT_MS']>
     readonly IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_CHAIN_SYNC_TOTAL_BUDGET_MS']>
+    readonly IMPORT_LOCK_HOLD_MS: UnwrapRef<typeof import('../stores/contact-import-guard')['IMPORT_LOCK_HOLD_MS']>
     readonly IMPORT_PREFLIGHT_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_PREFLIGHT_BUDGET_MS']>
     readonly IMPORT_REGISTRATION_BUDGET_MS: UnwrapRef<typeof import('../composables/importChainSync')['IMPORT_REGISTRATION_BUDGET_MS']>
     readonly INIT_FETCH_TIMEOUT_MS: UnwrapRef<typeof import('../stores/balances.store')['INIT_FETCH_TIMEOUT_MS']>
@@ -763,6 +766,7 @@ declare module 'vue' {
     readonly copyToClipboard: UnwrapRef<typeof import('../utils/clipboard')['copyToClipboard']>
     readonly copyWithToast: UnwrapRef<typeof import('../utils/clipboard')['copyWithToast']>
     readonly createApp: UnwrapRef<typeof import('vue')['createApp']>
+    readonly createContactImportGuard: UnwrapRef<typeof import('../stores/contact-import-guard')['createContactImportGuard']>
     readonly createRunFence: UnwrapRef<typeof import('../composables/runFence')['createRunFence']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
     readonly debounce: UnwrapRef<typeof import('../utils/general')['debounce']>

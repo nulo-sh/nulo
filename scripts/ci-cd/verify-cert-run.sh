@@ -42,7 +42,7 @@ declare -A REQUIRED_JOBS=(
 	["Extension smoke e2e"]="Run / shard 1/3 / Vitest + Puppeteer|Run / shard 2/3 / Vitest + Puppeteer|Run / shard 3/3 / Vitest + Puppeteer"
 )
 
-# The exact network suite job set: 5 sharded jobs + 2 heavies + the prover-ON
+# The exact network suite job set: 5 sharded jobs + 3 heavies + the prover-ON
 # canary + the two fixed chaos seeds. Checking names rather than a count means a
 # missing shard cannot be offset by an extra job elsewhere. behavior-gating.test.ts
 # derives this list from the workflows, so a renamed job or a rotated seed fails a
@@ -55,6 +55,7 @@ EXPECTED_NETWORK_JOBS=(
 	"Run / shard 5/5 / network suite (shard 5/5)"
 	"Run / heavy / fee-methods + selfpay-phase / network suite"
 	"Run / heavy / concurrent-confirm / network suite"
+	"Run / heavy / snack-placement + failed-send-check / network suite"
 	"Run / canary / real-proving / network suite"
 	"Run / chaos / seed 1095865833 / network suite"
 	"Run / chaos / seed 1960252198 / network suite"

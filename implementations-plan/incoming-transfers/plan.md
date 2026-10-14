@@ -1,7 +1,7 @@
 ---
 plan: incoming-transfers
 tier: mid
-status: arcs 1 and 2 merged (#248, #420); arc 3a in review (#426); arc 3b built, at its boundary gate
+status: arcs 1, 2 and 3a merged (#248, #420, #426); arc 3b in review (#436), waiting on OA-8
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -15,7 +15,7 @@ issues: [92, 97, 138, 139, 140, 141, 142, 143, 144, 227]
 ---
 
 Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (§ Answers holds
-page 4's). Recon: [recon.md](recon.md). Arcs 1 and 2: ledger D1 to D20, D-orch-1 to 11, audit
+page 4's). Recon: [recon.md](recon.md). Arcs 1, 2 and 3a: ledger D1 to D24, D-orch-1 to 12, audit
 verdicts, assumptions and residue in [decisions.md](decisions.md); design and phases here at `264a4b30`.
 Over the 350-line target by the build's audit verdicts, kept whole as this arc's evidence.
 
@@ -25,8 +25,8 @@ Over the 350-line target by the build's audit verdicts, kept whole as this arc's
 |---|---|---|
 | 1 | #227, #144, #92 | merged, #248 (`9574a9de`) |
 | 2 | #143, #138 | merged, #420 (`264a4b30`); P4-04, OA-5 A |
-| 3a | #142, #97 | in review, #426 (head `6998ac16`), from `worktree-incoming-transfers-links` and this file's Arc 3 text; P4-01, P4-02b A, OA-2 A, OA-3 B, OA-6 A; not planned here |
-| 3b | #141, #139, #140 | this revision; OA-4a A and OA-4b A govern its tap path (#141 addendum); the close-out follows 3a and 3b |
+| 3a | #142, #97 | merged, #426 (`b886fda6`), built from this file's Arc 3 text at `264a4b30`; P4-01, P4-02b A, OA-2 A, OA-3 B, OA-6 A; ledger and verdicts in decisions.md; OA-7 open |
+| 3b | #141, #139, #140 | in review, #436; OA-4a A and OA-4b A govern its tap path (#141 addendum); OA-8 open; the close-out follows its merge |
 
 ## Outcome & Quality Bar (arc 3b)
 
@@ -265,7 +265,7 @@ assumption: OA-8's recommendation is built, and the PR merges only with the owne
 
 ## Decision ledger (continued)
 
-D1 to D20, D-orch-1 to 11: decisions.md; D21 to D24, D-orch-12: arc 3a's (§ Delivery); R1 C*n*, R1 O*n*: below.
+D1 to D24, D-orch-1 to 12: decisions.md (D21 to D24 and D-orch-12 are arc 3a's); R1 C*n*, R1 O*n*: below.
 
 - **D25, the page owns the mode read, failing closed.** The shell keeps the default (off) when its
   boot read fails; the page's own read starts unknown and re-reads on reconnect.
@@ -282,7 +282,7 @@ D1 to D20, D-orch-1 to 11: decisions.md; D21 to D24, D-orch-12: arc 3a's (§ Del
   component tests mock the client. #139 and #140 add no e2e (F11).
 - **D42, retries stay:** `getSingleAttemptNodeForUrl` would end them but change mode-off behaviour.
 
-## Audit verdicts (arcs 1 and 2: decisions.md; arc 3a: its own PR)
+## Audit verdicts (arcs 1, 2 and 3a: decisions.md)
 
 ### Arc 3b round 1: Codex (gpt-6.1-sol, high, read-only), `reject (with blocking findings: stale PXE data can permanently settle an orphan; privacy mode is latched across later lookups; feed refreshes can overwrite Updated events)`
 
@@ -359,11 +359,11 @@ This plan plus `implementations-plan/README.md` § Post-implementation standard 
 
 - Plain PRs (`gh pr create --base dev`), no stack (decisions.md D-orch-4), no labels unless a path
   filter skips a needed suite. Never merge, never `--admin`, never force-push a pushed branch.
-- **Arc 3a overlap.** Both arcs edit `plan.md`, `OWNER-ASKS.md`, `STATUS.md`, `received/[id].vue` and
-  its test, and add `lessons/phase-3.md` and `screenshots/`. #426 already numbers its entries D-orch-12
-  and D21 to D24 and its ask OA-7; those ids stay. The second to merge brings `dev` in: this file keeps
-  its structure, arc 3a's ledger and verdicts go to decisions.md; OA-7 and OA-8 both stay; both lessons
-  sections stay; Phase 3.5's tests rerun.
+- **Arc 3a overlap.** #426 merged first; this branch merged `dev` in, kept this file's structure,
+  moved arc 3a's ledger (D-orch-12, D21 to D24) and verdicts to decisions.md, kept OA-7 and OA-8 and
+  both lessons sections, joined the received page's explorer links with its fee row (the page reads
+  the explorer from the app store and `privacyMode` from its own config client), and reran Phase 3.5's
+  tests.
 
 ## Seeds (drafts until the orchestrator approves; no ELI5, orchestrator-owned)
 

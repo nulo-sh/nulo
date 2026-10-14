@@ -6,9 +6,11 @@ import { toRestoreError } from "@/utils/restore-error"
 import type { ILogger } from "@/wallet/logger"
 import type { Restored, ServiceCollection, ServiceSpec } from "@/wallet/base"
 import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
-import { RecoveryModeError } from "@nulo/extension-messaging/errors"
+import { RecoveryModeError, SessionEndedError } from "@nulo/extension-messaging/errors"
 import { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { NetworkService } from "@/wallet/services/network/service"
+import { ProfileService } from "@/wallet/services/profile/service"
+import type { RunFence } from "@/wallet/services/profile/spec"
 import type { Network } from "@/wallet/services/network/spec"
 import { networkInfoFrom, NetworkSchema, NodeStatus } from "@/wallet/services/network/spec"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -43,11 +45,14 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	)
 	public static name = ACCOUNT_STATE_SERVICE_NAME
 
+	public readonly dependencies = [ProfileService.name] as const
+
 	public readonly onSenderAdded = new EventHandler<string>()
 	public readonly onSenderDeleted = new EventHandler<string>()
 
 	private pxeService: PxeServiceClient = null!
 	private networkService: NetworkService = null!
+	private profileService: ProfileService = null!
 
 	public constructor(
 		logger: ILogger,
@@ -59,6 +64,7 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 	protected async init(services: ServiceCollection) {
 		this.pxeService = new PxeServiceClient(this.logger)
 		this.networkService = services.get(NetworkService.name)
+		this.profileService = services.get(ProfileService.name)
 	}
 
 	public async getAccounts(networkId: string): Promise<string[]> {
@@ -110,15 +116,24 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 		return [...union]
 	}
 
-	public async addSender(networkId: string, address: string): Promise<string> {
+	public async addSender(networkId: string, address: string, fence?: RunFence | null): Promise<string> {
 		await this.ensureInitialized()
+		if (fence) await this.profileService.assertRunFence(fence)
 		const network = await this.networkService.getNetwork(networkId)
 		const info = networkInfoFrom(network)
-		return this.viaPxe("register sender", async () => {
-			const sender = (await this.pxeService.registerSender(info, AztecAddress.fromStringUnsafe(address))).toString()
-			this.emit("onSenderAdded", sender)
-			return sender
-		})
+		// A stop reaches the caller as a stop, never as a logged PXE failure; a registration that
+		// already reached the PXE finishes in its own profile.
+		const ended = () => fence != null && !this.profileService.isFenceLive(fence)
+		if (ended()) throw new SessionEndedError()
+		return this.viaPxe(
+			"register sender",
+			async () => {
+				const sender = (await this.pxeService.registerSender(info, AztecAddress.fromStringUnsafe(address))).toString()
+				this.emit("onSenderAdded", sender)
+				return sender
+			},
+			ended,
+		)
 	}
 
 	public async deleteSender(networkId: string, address: string): Promise<string> {
@@ -141,13 +156,14 @@ export class AccountStateService extends Service<Methods, Events> implements Ser
 
 	/** Every PXE failure surfaces as the same opaque error; the cause goes to the log. The network
 	 *  lookup stays outside so a missing network keeps its own error. */
-	private async viaPxe<T>(action: string, fn: () => Promise<T>): Promise<T> {
+	private async viaPxe<T>(action: string, fn: () => Promise<T>, ended?: () => boolean): Promise<T> {
 		try {
 			return await fn()
 		} catch (error) {
 			// The recovery sentence is the user's repair instruction and the backup assembler's
 			// per-network omission signal — it must reach the caller by type, not as the opaque error.
 			if (error instanceof RecoveryModeError) throw error
+			if (ended?.()) throw new SessionEndedError()
 			this.logError(`Failed to ${action}`, error)
 			throw new Error("PXE request failed")
 		}

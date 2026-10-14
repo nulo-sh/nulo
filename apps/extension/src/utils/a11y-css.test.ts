@@ -2,7 +2,7 @@
  * jsdom evaluates neither media queries nor `:focus-visible`, so these rules are pinned in their
  * sources; the screenshot harness and the computed-style probe cover them in real browsers.
  */
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, test } from "vitest"
 
@@ -27,19 +27,41 @@ function reducedMotionRules(source: string): Map<string, string> {
 	return rules
 }
 
-describe("reduced motion stops the shake and the shimmers", () => {
+/** The rules scoped under `:global(.noanimations)`, keyed by their selector list with that scope removed. */
+function noAnimationsRules(source: string): Map<string, string> {
+	const scope = ":global(.noanimations) "
+	const rules = new Map<string, string>()
+	for (const [, selectors, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+		const list = selectors.split(",").map((s) => s.replace(/\s+/g, " ").trim())
+		if (!list.every((s) => s.startsWith(scope))) continue
+		rules.set(list.map((s) => s.slice(scope.length)).join(", "), body.replace(/\s+/g, " ").trim())
+	}
+	return rules
+}
+
+describe("reduced motion and Disable animations both stop the shakes and the shimmers", () => {
 	test.each([
 		["components/composite/shake.module.css", ".shake_password, .shake_name"],
-		["popup/components/modules/send/fee-shared.module.css", ".skeleton"],
-		["components/composite/send/AmountCard.vue", ".skeleton"],
+		["popup/components/popups/NewSenderPopup.vue", ".shake"],
+		["popup/pages/received/[id].vue", ".fee_shimmer"],
 	])("%s: %s", (path, selectors) => {
-		expect(reducedMotionRules(read(path)).get(selectors)).toBe("animation: none;")
+		const source = read(path)
+		expect(reducedMotionRules(source).get(selectors)).toBe("animation: none;")
+		expect(noAnimationsRules(source).get(selectors)).toBe("animation: none;")
 	})
 
 	test("popup/pages/settings/security/export/full.vue: .shake is the shared one, with its stop", () => {
 		expect(read("popup/pages/settings/security/export/full.vue")).toMatch(
 			/\.shake \{\s*composes: shake_password from "(\.\.\/)+components\/composite\/shake\.module\.css";\s*\}/,
 		)
+	})
+
+	test("no extension file draws its own skeleton shimmer: they all render the design package's Skeleton", () => {
+		const root = resolve(__dirname, "..")
+		const own = readdirSync(root, { recursive: true, encoding: "utf8" })
+			.filter((file) => /\.(vue|css)$/.test(file))
+			.filter((file) => /^\s*\.skeleton\s*\{/m.test(readFileSync(resolve(root, file), "utf8")))
+		expect(own).toEqual([])
 	})
 })
 
