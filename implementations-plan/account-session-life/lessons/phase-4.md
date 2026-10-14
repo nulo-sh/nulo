@@ -69,3 +69,4 @@ A throwaway build counted each popup port's opens and closes (`background/client
 - The one that matters beyond this arc: a page that owns a client and disconnects it on unmount must ask whether the call in flight outlives the page. Deleting the open profile closes its session before the purge, the lock routes the popup off the page, and the unmount then rejected the very call whose tail finishes the reset.
 - vue-router's 30-hop infinite-redirect check is dev-only; a guard that can redirect a forced navigation to its own `from` loops in production.
 - Round 2 (Codex, resumed): `CHANGES`, two Medium regressions from the round 1 fixes, both real: a deletion surviving its page must not clobber a profile unlocked meanwhile, and the self-redirect fallback must go where an unlock goes (`postAuthRoute`), not to Home. Fixed with proofs red before.
+- Round 3 (Codex, resumed): `APPROVE`, no findings. The loop closed at three rounds.
