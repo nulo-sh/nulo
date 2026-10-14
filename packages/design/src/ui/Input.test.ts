@@ -71,25 +71,29 @@ describe("Input", () => {
 		expect(mountInput().get("input").attributes("data-testid")).toBeUndefined()
 	})
 
-	test("the list attributes land on the native <input>, and are absent when not given", () => {
-		const given = mountInput({
+	test("the combo box attributes land on the native <input>, and none is set when not given", async () => {
+		const w = mountInput({
 			role: "combobox",
+			ariaLabelledby: "label-1",
 			ariaExpanded: false,
 			ariaAutocomplete: "list",
 			ariaActivedescendant: "opt-2",
 			ariaControls: "list-1",
-		}).get("input")
-		expect(given.attributes()).toMatchObject({
+		})
+		const attributes = {
 			role: "combobox",
+			"aria-labelledby": "label-1",
 			"aria-expanded": "false",
 			"aria-autocomplete": "list",
 			"aria-activedescendant": "opt-2",
 			"aria-controls": "list-1",
-		})
-		const bare = mountInput().get("input").attributes()
-		for (const name of ["role", "aria-expanded", "aria-autocomplete", "aria-activedescendant", "aria-controls"]) {
-			expect(bare[name], name).toBeUndefined()
 		}
+		expect(w.get("input").attributes()).toMatchObject(attributes)
+		await w.setProps({ ariaExpanded: true })
+		expect(w.get("input").attributes("aria-expanded")).toBe("true")
+
+		const bare = mountInput().get("input").attributes()
+		for (const name of Object.keys(attributes)) expect(bare[name], name).toBeUndefined()
 	})
 
 	test.each([

@@ -94,6 +94,11 @@ const props = defineProps({
 		type: Boolean,
 		default: undefined,
 	},
+	/** The native `<input>`'s `aria-labelledby`, for a field whose visible label sits outside the component. */
+	ariaLabelledby: {
+		type: String,
+		required: false,
+	},
 	/** The native `<input>`'s `role`, `aria-expanded`, `aria-autocomplete`, `aria-activedescendant`
 	 *  and `aria-controls`, for a field that drives a list it does not contain. */
 	role: {
@@ -346,6 +351,7 @@ const handleClear = () => {
 					:autocapitalize="autocapitalize"
 					:autocorrect="autocorrect"
 					:role="role"
+					:aria-labelledby="ariaLabelledby"
 					:aria-invalid="ariaInvalid"
 					:aria-expanded="ariaExpanded"
 					:aria-autocomplete="ariaAutocomplete"

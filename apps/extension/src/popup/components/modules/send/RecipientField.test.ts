@@ -16,12 +16,13 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>", props: ["color", "noWrap", "align", "selectable"] },
 	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "scale"] },
 	AddressInput: {
-		template: `<div class="stub-input"><input :value="modelValue" :role="role" :aria-expanded="ariaExpanded" :aria-autocomplete="ariaAutocomplete" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
+		template: `<div class="stub-input"><input :value="modelValue" :role="role" :aria-labelledby="ariaLabelledby" :aria-expanded="ariaExpanded" :aria-autocomplete="ariaAutocomplete" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
 		props: [
 			"modelValue",
 			"placeholder",
 			"autofocus",
 			"role",
+			"ariaLabelledby",
 			"ariaExpanded",
 			"ariaAutocomplete",
 			"ariaActivedescendant",
@@ -270,13 +271,22 @@ describe("modules/send/RecipientField", () => {
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
 		})
 
-		test("the field is a combo box that suggests as you type, expanded exactly while its list shows", async () => {
-			const w = await open()
-			expect(field(w)).toMatchObject({ role: "combobox", "aria-autocomplete": "list", "aria-expanded": "true" })
-			await press(w, "Escape")
-			expect(field(w)["aria-expanded"]).toBe("false")
+		test("the field is a combo box named by the list's visible label, expanded exactly while its list shows", async () => {
+			const combo = (w: ReturnType<typeof mount>) => {
+				const { role, "aria-autocomplete": autocomplete, "aria-expanded": expanded, "aria-labelledby": by } = field(w)
+				return { role, autocomplete, expanded, label: w.get(`[id="${by}"]`).text() }
+			}
+			const closed = { role: "combobox", autocomplete: "list", expanded: "false", label: "Recipient Address" }
 			const empty = await open({ candidates: [alice, account1], searchTerm: "" })
-			expect(field(empty)).toMatchObject({ role: "combobox", "aria-expanded": "false" })
+			expect(combo(empty)).toEqual(closed)
+
+			const w = await open()
+			expect(combo(w)).toEqual({ ...closed, expanded: "true" })
+			expect(field(w)["aria-labelledby"]).toBe(w.get('[role="listbox"]').attributes("aria-labelledby"))
+			await press(w, "ArrowDown")
+			expect(combo(w)).toEqual({ ...closed, expanded: "true" })
+			await press(w, "Escape")
+			expect(combo(w)).toEqual(closed)
 		})
 
 		test("Escape closes the list until the next input; with the list closed it is left unhandled", async () => {
