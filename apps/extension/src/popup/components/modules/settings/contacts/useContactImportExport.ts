@@ -216,7 +216,7 @@ function openImportSelection(
 	return importPromise
 }
 
-/** Upsert every selected row, then register its sender intent. Import is adds-only toward sender
+/** Register each selected row's sender intent, then upsert the row. Import is adds-only toward sender
  *  state: rows explicitly carrying `isSender: true` (from a previous deliberate export) get registered
  *  on the active network. It never deletes or migrates registrations — those live in
  *  Settings → Developer → Account State → Senders. */
@@ -253,21 +253,32 @@ interface ImportPass {
 
 async function importRow(pass: ImportPass, { row, targetId }: ImportWrite<SelectedRow>): Promise<typeof STOPPED | undefined> {
 	const { deps, tally } = pass
-	// The book can change while earlier rows are written (another window), so each row is checked
-	// again just before its own write.
-	const saved = await pass.book()
-	if (saved === STOPPED) return STOPPED
-	if (!stillAsShown(row, saved)) {
-		tally.errors.push(refusal(row))
-		return
+	const shown = await stillShownInBook(pass, row)
+	if (shown !== true) return shown
+	// The sender goes first, so a stop between the two writes leaves no contact saved without its
+	// sender, and a re-run lists the row as new.
+	if (row.isSender) {
+		const sender = await registerSender(deps, tally, pass.activeNetworkId, row.address)
+		if (sender === STOPPED) return STOPPED
+		// A registration waits on the PXE, long enough for another window to change the book.
+		if (sender !== "skipped") {
+			const again = await stillShownInBook(pass, row)
+			if (again !== true) return again
+		}
 	}
 	const error = await upsertOneContact(deps, row, targetId)
 	if (error === STOPPED) return STOPPED
 	if (error) tally.errors.push(error)
 	else tally.written++
+}
 
-	// Sender intent is independent of the upsert: it is attempted and counted even when the write failed.
-	if (row.isSender) await registerSender(deps, tally, pass.activeNetworkId, row.address)
+/** Reads the book and checks the row against it: the book can change while earlier rows are written
+ *  (another window). A row no longer as shown is refused and counted. */
+async function stillShownInBook(pass: ImportPass, row: SelectedRow): Promise<true | typeof STOPPED | undefined> {
+	const saved = await pass.book()
+	if (saved === STOPPED) return STOPPED
+	if (stillAsShown(row, saved)) return true
+	pass.tally.errors.push(refusal(row))
 }
 
 /** A fenced call that rejects asks the fence: a session the wallet no longer confirms, ended or
@@ -289,20 +300,27 @@ function refusal(row: SelectedRow): UpsertError {
 	return { name: row.name, address: row.address, operation: "import", error: new Error("row refused") }
 }
 
-async function registerSender(deps: ContactIoDeps, tally: ImportTally, activeNetworkId: string | null, address: string): Promise<void> {
+async function registerSender(
+	{ accountStateService, run }: ContactIoDeps,
+	tally: ImportTally,
+	activeNetworkId: string | null,
+	address: string,
+): Promise<"registered" | "failed" | "skipped" | typeof STOPPED> {
 	tally.senderTotal++
 	if (!activeNetworkId) {
 		tally.senderSkippedNoNetwork++
 		console.warn("Skipping sender registration: no active network")
-		return
+		return "skipped"
 	}
 	try {
-		await deps.accountStateService.addSender(activeNetworkId, address)
+		if ((await fenced(run, () => accountStateService.addSender(activeNetworkId, address, run.fence))) === STOPPED) return STOPPED
 		tally.senderOk++
-	} catch (err) {
+		return "registered"
+	} catch (error) {
 		// The counterparty address is PII and this fires per failed row; the counts below carry
 		// the diagnosis.
-		console.warn("Failed to register a sender", err)
+		console.warn("Failed to register a sender", { error })
+		return "failed"
 	}
 }
 

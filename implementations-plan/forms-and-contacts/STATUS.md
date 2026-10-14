@@ -27,3 +27,4 @@
 - 2026-10-11: PR #282 opened against dev (no label at creation); issues #283 and #284 filed (five sections, deduped).
 - 2026-10-14: arc 3a started on forms-and-contacts-arc-3a off origin/dev 7e9eb0f; page 11 hand-off read; § Arc 3 re-verified (lessons/phase-3.md); plan revised for FA-7 B, D-orch-6, phases 3.8 and 3.9; Codex review of the revision started.
 - 2026-10-14: Codex review of the revision: reject (5), conditional approve (1), approve; all 6 findings applied. Revision committed alone.
+- 2026-10-14: gate 3.1 pass: lint, typecheck:all, import + account-state + H6 pin 124/124; the never-happens cases (switch during a sender, another window's Ben, the stop table) fail on the base `useContactImportExport.ts`, the fence tests fail without the fence.

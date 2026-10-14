@@ -314,7 +314,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 ### Arc 3a: page 11 (D-orch-6)
 
-**3.1 #151 fenced sender, sender first.**
+**3.1 #151 fenced sender, sender first.** ✓
 1. Give `AccountStateService` the `ProfileService`; fence `addSender` outside `viaPxe`.
 2. Reorder `importRow`: refusal check, sender step with its outcome, the refusal check again after a sender step that awaited the PXE, then the contact write.
 3. Tests: composition — a session that ends between the sender and the contact leaves no contact row (never-happens), and an unstopped run writes both (control); a registration already awaiting the PXE when the session ends may finish, and the contact write after it still stops; a failed sender (live session) still writes the contact and the outcome toast reports it (FA-11 A pin); with the registration held, another window renames the row's contact: the contact write is refused and counted as a refusal (never-happens), and with no change while held the row is written (control). Unit — a dead fence registers no sender and logs nothing at Error, a live one registers (control); the pins test's "contact before sender" row flips to "sender before contact" (F27); its stop table still reads "Import incomplete · N of M contacts written". A call-site pin: `setExpiryDeferral` has exactly one caller (H6).

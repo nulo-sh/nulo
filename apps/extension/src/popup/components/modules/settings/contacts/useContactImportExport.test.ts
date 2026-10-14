@@ -124,7 +124,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 
 		expect(contactService.addContact).toHaveBeenCalledTimes(2)
 		expect(accountStateService.addSender).toHaveBeenCalledTimes(1)
-		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A)
+		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A, RUN_FENCE)
 		expect(accountStateService.deleteSender).not.toHaveBeenCalled()
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "success", label: "Contacts imported · 1 sender registered" })
 	})
@@ -197,7 +197,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 		expect(contactService.addContact).toHaveBeenCalledTimes(1)
 		expect(contactService.addContact).toHaveBeenCalledWith("Lower", ADDR_A, RUN_FENCE)
 		expect(accountStateService.addSender).toHaveBeenCalledTimes(1)
-		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A)
+		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A, RUN_FENCE)
 	})
 
 	test("hostile extra properties are stripped at the boundary (minimal rows only)", async () => {
@@ -256,7 +256,7 @@ describe("useContactImportExport — import sender semantics (adds-only)", () =>
 
 		await runImport(api)
 
-		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A)
+		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A, RUN_FENCE)
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Import ended with errors" })
 	})
 
@@ -458,7 +458,7 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 		release([])
 		await done
 
-		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A)
+		expect(accountStateService.addSender).toHaveBeenCalledWith("net-1", ADDR_A, RUN_FENCE)
 	})
 
 	test("a book that cannot be read writes nothing", async () => {

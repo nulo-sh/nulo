@@ -394,9 +394,10 @@ describe("import composition — a profile switch mid-import", () => {
 		return out
 	}
 
-	test("a switch after the second row writes nothing more, to either profile, and the toast reports it", async () => {
+	test("a switch while a row's sender registers leaves that row's contact unwritten, writes nothing more, and the toast reports it", async () => {
 		const { api, contacts } = await startWallet()
 		const page = openContactsPage(contacts)
+		// The registration that was already running finishes in its profile; its contact never follows.
 		accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
 			sendersOf(activeProfile).add(address.toLowerCase())
 			switchProfile("p2")
@@ -404,12 +405,52 @@ describe("import composition — a profile switch mid-import", () => {
 		})
 
 		const { done } = await pick(page, fiveNew)
-		expect(await confirm(page, done)).toBe("Import incomplete · 2 of 5 contacts written")
-		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben"] })
+		expect(await confirm(page, done)).toBe("Import incomplete · 1 of 5 contacts written")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana"] })
 		expect(accountState.addSender).toHaveBeenCalledTimes(1)
 		expect([...sendersOf("p1")]).toEqual([ADDR.b])
 		expect(sendersOf("p2").size).toBe(0)
 	})
+
+	test("a sender that fails while the session holds still writes its contact, and the toast says so", async () => {
+		const { api, contacts } = await startWallet()
+		const page = openContactsPage(contacts)
+		accountState.addSender.mockRejectedValueOnce(new Error("PXE request failed"))
+
+		const { done } = await pick(page, fiveNew)
+		expect(await confirm(page, done)).toBe("Contacts imported · sender registration failed")
+		expect(await namesByProfile(api)).toEqual({ p1: ["Ana", "Ben", "Cleo", "Dan", "Eve"] })
+	})
+
+	test.each([
+		{ change: true, toast: "Import ended with errors", ben: ADDR.f },
+		{ change: false, toast: "Contacts imported · 1 sender registered", ben: ADDR.b },
+	])(
+		"another window saving a Ben while Ben's sender registers: the import's Ben is refused (change: $change)",
+		async ({ change, toast, ben }) => {
+			const { contacts } = await startWallet()
+			const page = openContactsPage(contacts)
+			let release: () => void = () => {}
+			accountState.addSender.mockImplementationOnce(async (_networkId: string, address: string) => {
+				await new Promise<void>((resolve) => {
+					release = resolve
+				})
+				sendersOf(activeProfile).add(address.toLowerCase())
+				return address
+			})
+
+			const { done } = await pick(page, fiveNew)
+			await page.popup.find(SUBMIT).trigger("click")
+			await vi.waitFor(() => expect(accountState.addSender).toHaveBeenCalledTimes(1))
+			if (change) await contacts.addContact("Ben", ADDR.f)
+			release()
+			await done
+			await flushPromises()
+			expect(boundary.toasts.at(-1)?.label).toBe(toast)
+			expect((await book(contacts)).Ben).toBe(ben)
+			expect(Object.keys(await book(contacts)).sort()).toEqual(["Ana", "Ben", "Cleo", "Dan", "Eve"])
+		},
+	)
 
 	test("control: the same file without a switch writes every row to the profile it was shown in", async () => {
 		const { api, contacts } = await startWallet()

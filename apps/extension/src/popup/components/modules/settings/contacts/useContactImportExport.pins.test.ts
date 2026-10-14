@@ -3,8 +3,8 @@
  * suite (which already proves the byte cap, minimal rows, dedupe and adds-only senders):
  *   - the selection promise's CONTROLS are registered on the cache store BEFORE the popup opens, with
  *     the staged rows already in place, and settling through those controls settles the import;
- *   - per row the contact upsert settles before that row's sender attempt, which is counted even
- *     when the upsert failed;
+ *   - per row the sender registration settles before that row's contact upsert, and a contact that
+ *     then fails is reported as before;
  *   - every early exit clears the cache store's staging + controls;
  *   - the toast ladder: contact errors (logged in order with the ORIGINAL error objects) win over
  *     sender failures; partial and total sender failures read differently.
@@ -80,7 +80,7 @@ function makeServices() {
 		updateContact: vi.fn(async () => {}),
 	}
 	const accountStateService = {
-		addSender: vi.fn(async (_net: string, address: string) => {
+		addSender: vi.fn(async (_net: string, address: string, _fence?: unknown) => {
 			trace.push(`sender:${address === ADDR_A ? "A" : "B"}`)
 		}),
 		getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]),
@@ -143,28 +143,31 @@ describe("importContacts — selection gate", () => {
 })
 
 describe("importContacts — per-row order and early exits", () => {
-	test("a row's contact upsert settles BEFORE its sender attempt; the attempt is counted even when the upsert failed", async () => {
+	test("a row's sender settles BEFORE its contact upsert; a contact that then fails is reported as before", async () => {
 		const services = makeServices()
 		let releaseA: () => void = () => {}
-		services.contactService.addContact.mockImplementationOnce(
+		services.accountStateService.addSender.mockImplementationOnce(
 			() =>
-				new Promise<void>((_, reject) => {
+				new Promise<void>((resolve) => {
 					releaseA = () => {
-						trace.push("add:A:rejected")
-						reject(new Error("row A failed"))
+						trace.push("sender:A")
+						resolve()
 					}
 				}),
 		)
+		services.contactService.addContact.mockImplementationOnce(async () => {
+			trace.push("add:A:rejected")
+			throw new Error("row A failed")
+		})
 		fileWith(twoSenders)
 		const done = api(services).importContacts()
 		await untilSelectionGate()
 		cacheStoreState.importPromise?.resolve(reviewed(cacheStoreState.importContacts))
-		await vi.waitFor(() => expect(services.contactService.addContact).toHaveBeenCalledTimes(1))
-		expect(trace).toEqual([]) // row A's sender attempt waits for its upsert to settle
+		await vi.waitFor(() => expect(services.accountStateService.addSender).toHaveBeenCalledTimes(1))
+		expect(services.contactService.addContact).not.toHaveBeenCalled() // row A's contact waits for its sender
 		releaseA()
 		await done
-		expect(trace).toEqual(["add:A:rejected", "sender:A", "add:B", "sender:B"])
-		expect(services.accountStateService.addSender).toHaveBeenCalledTimes(2)
+		expect(trace).toEqual(["sender:A", "add:A:rejected", "sender:B", "add:B"])
 		// Contact errors win the toast and are logged with the ORIGINAL error object.
 		expect(openToastMock).toHaveBeenLastCalledWith({ kind: "error", label: "Import ended with errors" })
 		expect(console.error).toHaveBeenCalledWith("Failed to create a contact", expect.objectContaining({ message: "row A failed" }))
@@ -301,7 +304,7 @@ describe("importContacts — a session that ends mid-import", () => {
 			}),
 		}
 		const accountStateService = {
-			addSender: vi.fn(async (_net: string, address: string) => {
+			addSender: vi.fn(async (_net: string, address: string, _fence?: unknown) => {
 				trace.push(`sender:${address === ADDR_A ? "A" : "C"}`)
 			}),
 			getSendersAcrossActiveNetworks: vi.fn().mockResolvedValue([]),
@@ -320,23 +323,35 @@ describe("importContacts — a session that ends mid-import", () => {
 
 	test.each<[string, (s: ReturnType<typeof stopServices>) => void, string[], number]>([
 		["the plan read", (s) => s.contactService.getContacts.mockRejectedValueOnce(ended()), [], 0],
+		["a row's sender", (s) => s.accountStateService.addSender.mockRejectedValueOnce(ended()), [], 0],
 		[
-			"a row's re-read",
+			"the re-read between a row's sender and its contact",
 			(s) => s.contactService.getContacts.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved).mockRejectedValueOnce(ended()),
-			["add:A", "sender:A"],
+			["sender:A"],
+			0,
+		],
+		[
+			"a later row's re-read",
+			(s) =>
+				s.contactService.getContacts
+					.mockResolvedValueOnce(saved)
+					.mockResolvedValueOnce(saved)
+					.mockResolvedValueOnce(saved)
+					.mockRejectedValueOnce(ended()),
+			["sender:A", "add:A"],
 			1,
 		],
-		["an add", (s) => s.contactService.addContact.mockRejectedValueOnce(ended()), [], 0],
-		["an update", (s) => s.contactService.updateContact.mockRejectedValueOnce(ended()), ["add:A", "sender:A"], 1],
+		["an add", (s) => s.contactService.addContact.mockRejectedValueOnce(ended()), ["sender:A"], 0],
+		["an update", (s) => s.contactService.updateContact.mockRejectedValueOnce(ended()), ["sender:A", "add:A"], 1],
 		[
-			"a write cut off by the page closing",
+			"a write cut off by a dropped connection",
 			(s) =>
 				s.contactService.addContact
 					.mockImplementationOnce(async () => {
 						trace.push("add:A")
 					})
 					.mockRejectedValueOnce(new Error(CLIENT_DISCONNECTED_MESSAGE)),
-			["add:A", "sender:A", "update:c1"],
+			["sender:A", "add:A", "update:c1", "sender:C"],
 			2,
 		],
 		[
@@ -349,7 +364,7 @@ describe("importContacts — a session that ends mid-import", () => {
 					.mockRejectedValueOnce(new Error("write failed"))
 				assertRunFenceMock.mockRejectedValue(new RpcTimeoutError("RPC 'assertRunFence' timed out after 60000ms"))
 			},
-			["add:A", "sender:A", "update:c1"],
+			["sender:A", "add:A", "update:c1", "sender:C"],
 			2,
 		],
 	])("a stop at %s writes and registers nothing after it, and reports what was written", async (_at, fail, expected, written) => {
@@ -361,8 +376,13 @@ describe("importContacts — a session that ends mid-import", () => {
 		expect(toast).toEqual({ kind: "error", label: `Import incomplete · ${written} of 3 contacts written` })
 		expect(assertRunFenceMock).toHaveBeenCalledWith(RUN_FENCE)
 		const { getContacts, addContact, updateContact } = services.contactService
-		const contactCalls = [...getContacts.mock.calls, ...addContact.mock.calls, ...updateContact.mock.calls]
-		expect(contactCalls.every((args) => args.at(-1) === RUN_FENCE)).toBe(true)
+		const calls = [
+			...getContacts.mock.calls,
+			...addContact.mock.calls,
+			...updateContact.mock.calls,
+			...services.accountStateService.addSender.mock.calls,
+		]
+		expect(calls.every((args) => args.at(-1) === RUN_FENCE)).toBe(true)
 	})
 
 	test("a stop in a one-contact import counts it in the singular", async () => {
@@ -381,7 +401,7 @@ describe("importContacts — a session that ends mid-import", () => {
 			})
 			.mockRejectedValueOnce(new Error("write failed"))
 		const toast = await run(services)
-		expect(trace).toEqual(["add:A", "sender:A", "update:c1", "sender:C"])
+		expect(trace).toEqual(["sender:A", "add:A", "update:c1", "sender:C"])
 		expect(toast).toEqual({ kind: "error", label: "Import ended with errors" })
 		expect(assertRunFenceMock).toHaveBeenCalledTimes(1)
 	})
