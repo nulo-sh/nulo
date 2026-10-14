@@ -168,8 +168,9 @@ const STUBS = {
 	// The card's read-only rows, and the menu chrome around the real selector's items.
 	FeeMethodRow: { template: '<div data-testid="stub-fee-method-row" />' },
 	FeeCostReadout: {
-		props: ["estimate", "isEstimating", "isQueued"],
-		template: '<div data-testid="stub-fee-cost" :data-usd="estimate?.usd" :data-queued="String(Boolean(isEstimating && isQueued))" />',
+		props: ["estimate", "isEstimating", "isQueued", "queuedCap"],
+		template:
+			'<div data-testid="stub-fee-cost" :data-usd="estimate?.usd" :data-queued="String(Boolean(isEstimating && isQueued))" :data-cap="queuedCap?.cap.amount" />',
 	},
 	FeePriorityRow: { template: '<div data-testid="stub-fee-priority" />' },
 	DropdownRoot: { template: '<div data-testid="stub-dropdown"><slot name="trigger" /><slot name="popup" /></div>' },
@@ -692,6 +693,67 @@ describe("send page — an estimate queued behind an earlier send", () => {
 		expect(queuedRow(w)).toBe(false)
 		expect(sendDisabled(w)).toBe(false)
 		expect(mocks.openToast).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	const CAPPED = { ...QUEUED, cap: { basis: "3577824000000000000", cap: "4472280000000000000" } }
+	const capShown = (w: W) => w.get('[data-testid="stub-fee-cost"]').attributes("data-cap")
+
+	async function queuedPrivately(funding: Funding) {
+		vi.useFakeTimers()
+		mocks.estimateTransferFee.mockResolvedValue(CAPPED)
+		const mounted = await mountSend(funding)
+		await fillForm(mounted.w)
+		await vi.advanceTimersByTimeAsync(800)
+		await flushPromises()
+		return mounted
+	}
+
+	test("with a cap and Private Fee Juice: Queue send is enabled, and sends the cap with no estimate to reuse", async () => {
+		const { w } = await queuedPrivately(FUNDING["private Fee Juice only"])
+		expect(capShown(w)).toBe("4.47228")
+		expect(submit(w).text()).toBe("Queue send")
+		expect(sendDisabled(w)).toBe(false)
+		await strip(w).trigger("click")
+		expect(w.get('[data-testid="send-review-fee-cap"]').text()).toBe(
+			"Fee up to 4.47228 FJ, based on your last send. If it comes out higher, we ask again.",
+		)
+		await closeSheet(w)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).toHaveBeenCalledTimes(1)
+		const args = mocks.executeTransfer.mock.calls[0] as unknown[]
+		expect(args[7]).toBeUndefined()
+		expect(args[8]).toBe("4472280000000000000")
+		w.unmount()
+	})
+
+	test("with a cap and a sponsor paying: the queued row stays, Send stays disabled, nothing is sent", async () => {
+		const { w } = await queuedPrivately(FUNDING["no gas, a sponsor"])
+		expect(queuedRow(w)).toBe(true)
+		expect(capShown(w)).toBeUndefined()
+		expect(submit(w).text()).toBe("Confirm Transaction")
+		expect(sendDisabled(w)).toBe(true)
+		await submit(w).trigger("click")
+		expect(mocks.executeTransfer).not.toHaveBeenCalled()
+		w.unmount()
+	})
+
+	test("a capped answer to a superseded estimate never offers Queue send", async () => {
+		const stale = deferred<unknown>()
+		const fresh = deferred<unknown>()
+		mocks.estimateTransferFee.mockReturnValueOnce(stale.promise).mockReturnValueOnce(fresh.promise)
+		vi.useFakeTimers()
+		const { w } = await mountSend(FUNDING["private Fee Juice only"])
+		await fillForm(w)
+		await vi.advanceTimersByTimeAsync(800)
+		await w.get('[data-testid="stub-amount"]').setValue("2")
+		await vi.advanceTimersByTimeAsync(800)
+		await flushPromises()
+		stale.resolve(CAPPED)
+		await vi.advanceTimersByTimeAsync(0)
+		await flushPromises()
+		expect(capShown(w)).toBeUndefined()
+		expect(submit(w).text()).not.toBe("Queue send")
 		w.unmount()
 	})
 

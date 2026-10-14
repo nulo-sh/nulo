@@ -25,7 +25,10 @@ import {
 	buildFeeMethods,
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
+	feeAmountDisplay,
 	feeDisplay,
+	feeInWords,
+	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
 	isLiveFeeScope,
@@ -79,6 +82,8 @@ const props = defineProps({
 	 *  instead of to nothing. For a transaction whose calls are public, where paying from the
 	 *  account's own Fee Juice publishes nothing new. */
 	fallsBack: { type: Boolean, default: false },
+	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
+	queuedCap: { type: Object, default: null },
 })
 
 const readStored = async (key) => (await storageLocalGet(key))[key]
@@ -99,6 +104,9 @@ const payerOut = defineModel("payer", { default: null })
 /** One-way child→parent: the fee as "You pay" shows it. The review sheet repeats this value rather
  *  than pricing it again, since the page's own price client can hold a different quote. */
 const feeDisplayOut = defineModel("feeDisplay", { default: null })
+
+/** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
+const queuedCapTextOut = defineModel("queuedCapText", { default: null })
 
 const methodId = getRandomHex(6)
 
@@ -205,6 +213,11 @@ const privateFeeJuiceFormatted = computed(() =>
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const estimatedFeeDisplay = computed(() => feeDisplay(props.feeEstimate, prices.feeJuiceQuote.value?.usd))
+const queuedCapDisplay = computed(() => {
+	if (!props.queuedCap) return null
+	const usd = prices.feeJuiceQuote.value?.usd
+	return { about: feeAmountDisplay(props.queuedCap.basis, usd), cap: feeAmountDisplay(props.queuedCap.cap, usd) }
+})
 
 const showMethodSelector = computed(() => {
 	if (!isCustomMethod.value) return true
@@ -277,12 +290,10 @@ const nudgeCopy = computed(() =>
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? sendSelection.value?.preview)
 
-/** Who pays the estimate the readout shows. Only Nulo's own sponsor is promised "Nothing"; a
- *  sponsor added by hand can charge the account through an authorization it granted earlier. */
+/** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
 const feePayer = computed(() => {
 	const m = effectiveMethod.value
-	if (m?.type !== "fpc") return "self"
-	return m.fpc?.isProtocol === true ? "sponsor" : "unvouched"
+	return feePayerOf(m && { type: m.type, isProtocol: m.fpc?.isProtocol }) ?? "self"
 })
 
 const SPONSOR_SHORT = "The sponsor you chose can't cover this fee right now."
@@ -378,6 +389,13 @@ watch(
 	effectiveMethod,
 	(m) => {
 		payerOut.value = m ? { type: m.type, fpcId: m.fpc?.id, isProtocol: m.fpc?.isProtocol === true } : null
+	},
+	{ immediate: true },
+)
+watch(
+	queuedCapDisplay,
+	(d) => {
+		queuedCapTextOut.value = d ? feeInWords(d.cap) : null
 	},
 	{ immediate: true },
 )
@@ -1068,6 +1086,7 @@ onBeforeUnmount(() => {
 				:isEstimating="isEstimating"
 				:isQueued="isQueued"
 				:payer="feePayer"
+				:queuedCap="queuedCapDisplay"
 			/>
 
 			<FeePriorityRow v-if="effectiveMethod && !feeJuiceMissing" v-model="selectedPriority" />
