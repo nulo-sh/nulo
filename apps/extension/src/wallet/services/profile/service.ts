@@ -55,6 +55,7 @@ import {
 	type Profile,
 	type ProfileType,
 	type Events,
+	type FinalizedRestore,
 	type Methods,
 	type RestoreSecret,
 	type RunFence,
@@ -515,13 +516,15 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 *  lock acquisitions would let a delete slip between them. */
 	public async captureExecutionFence(): Promise<ExecutionFence> {
 		await this.ensureInitialized()
-		return this.runExclusive(async () => {
-			const session = await this.sessionManager.getActive()
-			if (!session) throw new WalletLockedError()
-			// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
-			if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
-			return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
-		})
+		return this.runExclusive(() => this.captureExecutionFenceHoldingLock())
+	}
+
+	private async captureExecutionFenceHoldingLock(): Promise<ExecutionFence> {
+		const session = await this.sessionManager.getActive()
+		if (!session) throw new WalletLockedError()
+		// A profile whose deletion has begun answers as locked to every caller, but it is not a lock.
+		if (this.deletionState.isReserved(session.profile.id)) throw new Error("Wallet locked")
+		return { profileId: session.profile.id, epoch: this.deletionState.capture(session.profile.id), session: session.serial }
 	}
 
 	/** Throws {@link SessionEndedError} unless the session `fence` was captured under is still the
@@ -2605,55 +2608,62 @@ export class ProfileService extends Service<Methods, Events> implements ServiceS
 	 * Idempotent in spirit: if the session is already active for this profile,
 	 * skips the re-open (the no-op case after a second `finalizeRestore` call).
 	 */
-	public async finalizeRestore(id: string, password?: string): Promise<ProfileInfo> {
+	public async finalizeRestore(id: string, password?: string): Promise<FinalizedRestore> {
 		await this.ensureInitialized()
 
 		return this.runExclusive(async () => {
-			// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
-			// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
-			// identity checks spare entries a later restore stashed after the lock's hold watchdog
-			// released this call.
-			const seen = this.pendingRestoreSecrets.get(id)
-			const seenRewrap = this.pendingDekRewraps.get(id)
-			try {
-				// Sweep stale entries but never the id being finalized here.
-				this.sweepStalePendingRestore(Date.now(), id)
-				const profile = await this.repo.get(id)
-				if (!profile) {
-					throw new Error("Invalid profile id")
-				}
-				// A tombstoned profile (SW died mid-delete: row still present, id
-				// reserved) must not open a session — it is being erased. Gate here as
-				// well as at row-read so a delete that began mid-restore is caught.
-				if (this.deletionState.isReserved(id)) {
-					throw new Error("Invalid profile id")
-				}
-
-				// Clear the restore-in-progress marker at ENTRY: being called at all
-				// proves the storage-slice phase completed (the import flow only
-				// finalizes after every slice restore). Clearing on entry — not on
-				// session-open success — keeps finalize-throw survivors (wrong
-				// password, lost passkey pending-secret) on their documented
-				// unlock-later recovery instead of branding them torn.
-				await this.restorePending.delete(id)
-
-				// If the session is already active for this profile, treat as
-				// no-op. Defensive against double-finalize.
-				if (this.sessionManager.isActive(id)) {
-					return this.getProfileInfo(profile)
-				}
-
-				if (profile.type === "password") {
-					return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
-				}
-				// This dispatch falls through to the passkey branch for ANY non-password
-				// type — an edited `type` field must not select it; the branch re-checks.
-				return await this.finalizePasskeyRestoreHoldingLock(id, profile)
-			} finally {
-				if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
-				if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
-			}
+			const profile = await this.finalizeRestoreHoldingLock(id, password)
+			const fence = await this.captureExecutionFenceHoldingLock()
+			if (fence.profileId !== id) throw new SessionEndedError()
+			return { profile, fence: { ...fence, incarnation: this.workerId } }
 		})
+	}
+
+	private async finalizeRestoreHoldingLock(id: string, password: string | undefined): Promise<ProfileInfo> {
+		// Finalize is the last reader of both restore stashes for its id, so every path wipes what it
+		// did not take: a leftover rewrap context is the empty-slice case (nothing consumed it). The
+		// identity checks spare entries a later restore stashed after the lock's hold watchdog
+		// released this call.
+		const seen = this.pendingRestoreSecrets.get(id)
+		const seenRewrap = this.pendingDekRewraps.get(id)
+		try {
+			// Sweep stale entries but never the id being finalized here.
+			this.sweepStalePendingRestore(Date.now(), id)
+			const profile = await this.repo.get(id)
+			if (!profile) {
+				throw new Error("Invalid profile id")
+			}
+			// A tombstoned profile (SW died mid-delete: row still present, id
+			// reserved) must not open a session — it is being erased. Gate here as
+			// well as at row-read so a delete that began mid-restore is caught.
+			if (this.deletionState.isReserved(id)) {
+				throw new Error("Invalid profile id")
+			}
+
+			// Clear the restore-in-progress marker at ENTRY: being called at all
+			// proves the storage-slice phase completed (the import flow only
+			// finalizes after every slice restore). Clearing on entry — not on
+			// session-open success — keeps finalize-throw survivors (wrong
+			// password, lost passkey pending-secret) on their documented
+			// unlock-later recovery instead of branding them torn.
+			await this.restorePending.delete(id)
+
+			// If the session is already active for this profile, treat as
+			// no-op. Defensive against double-finalize.
+			if (this.sessionManager.isActive(id)) {
+				return this.getProfileInfo(profile)
+			}
+
+			if (profile.type === "password") {
+				return await this.finalizePasswordRestoreHoldingLock(id, profile, password)
+			}
+			// This dispatch falls through to the passkey branch for ANY non-password
+			// type — an edited `type` field must not select it; the branch re-checks.
+			return await this.finalizePasskeyRestoreHoldingLock(id, profile)
+		} finally {
+			if (this.pendingRestoreSecrets.get(id) === seen) this.pendingRestoreSecrets.drop(id)
+			if (this.pendingDekRewraps.get(id) === seenRewrap) this.pendingDekRewraps.drop(id)
+		}
 	}
 
 	/** Password-side finalize: re-derive from the supplied password (PBKDF2 paid again —

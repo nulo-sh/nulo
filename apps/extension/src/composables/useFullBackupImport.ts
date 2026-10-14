@@ -28,13 +28,16 @@ import {
 } from "@/utils/full-backup-helpers"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "@/wallet/services/backup/backup-migration-registry"
 import { maxBackupSchemaVersion, migrateBackupData } from "@/wallet/services/backup/backup-migrator"
+import { armRestoreOutcome } from "@/utils/restore-outcome"
 import {
+	accountStateNetworkIds,
 	type AccountStateRetryContext,
 	applyOutcome,
 	type BackupProfile,
 	buildRestoreSecret,
 	type RestoreData,
 	type RestoreIo,
+	type RestoreRun,
 	type RestoreScratch,
 	resolvePasskeyCredential,
 	type RestoredNetwork,
@@ -70,6 +73,8 @@ export type FullBackupEnvelope = {
 type ValidatedBackup = {
 	data: RestoreData & { profile: BackupProfile }
 	backup: Omit<FullBackupEnvelope, "checksum">
+	/** The verified checksum: it names this exact backup. */
+	checksum: string
 }
 
 type ValidateAndMigrateResult = ({ kind: "ok" } & ValidatedBackup) | { kind: "rejected"; title: string; message: string }
@@ -159,7 +164,7 @@ export async function validateAndMigrateBackup(fullBackup: FullBackupEnvelope): 
 
 	const data = migrationResult.data as RestoreData
 	if (!isBackupProfile(data.profile)) return INTEGRITY_REFUSAL
-	return { kind: "ok", data: data as ValidatedBackup["data"], backup }
+	return { kind: "ok", data: data as ValidatedBackup["data"], backup, checksum: comparisonChecksum }
 }
 
 export interface UseFullBackupImportOptions {
@@ -328,6 +333,26 @@ async function restoreProfileStep(
 }
 
 /**
+ * Arms the reminder for the networks the tail is about to restore, then opens the profile; the
+ * tail is bound to the session that call opened. Arming is best effort: without it the restore
+ * goes on, and nothing reminds of a network it leaves behind.
+ */
+async function finalizeWithReminder(
+	validated: ValidatedBackup,
+	profileId: string,
+	deps: { profileService: ProfileServiceClient; opts: UseFullBackupImportOptions },
+): Promise<RestoreRun> {
+	let run: string | undefined
+	try {
+		run = await armRestoreOutcome(profileId, validated.checksum, accountStateNetworkIds(validated.data))
+	} catch (error) {
+		console.warn("[restore-outcome] the reminder could not be armed", { error })
+	}
+	const { fence } = await deps.profileService.finalizeRestore(profileId, deps.opts.password.value || undefined)
+	return { fence, run }
+}
+
+/**
  * The staged restore sequence between the validate gate and completion — the order-of-restore
  * law lives here (see full-backup-restore.ts for each stage's own invariants). Returns the
  * restored profile with what a Retry of its account-state would replay, or null when a stage
@@ -434,8 +459,9 @@ async function executeRestore(
 	// see the imported data, not an empty profile that needs default seeding.
 	scratch.finalizeStarted = true
 	io.setStage("finalizing")
+	let restoreRun: RestoreRun
 	try {
-		await profileService.finalizeRestore(newProfile.id, opts.password.value || undefined)
+		restoreRun = await finalizeWithReminder(validated, newProfile.id, deps)
 	} catch (err) {
 		applyOutcome(io, {
 			kind: "fail",
@@ -446,7 +472,7 @@ async function executeRestore(
 	}
 
 	io.setStage("restoring:account-state")
-	const accountStateRetry = await restoreAccountStateStage(data, nets.seeded, networkService, io)
+	const accountStateRetry = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService)
 	return { profile: newProfile, networks: nets.seeded, accountStateRetry }
 }
 

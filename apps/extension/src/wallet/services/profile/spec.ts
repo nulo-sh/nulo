@@ -20,6 +20,9 @@ export type ProfileType = "password" | "passkey"
  *  with the service worker, so the fence also names the worker that issued it. */
 export type RunFence = ExecutionFence & { incarnation: string }
 
+/** A finalized restore: the opened profile, and the fence of the session its finalize opened. */
+export type FinalizedRestore = { profile: ProfileInfo; fence: RunFence }
+
 /**
  * The secret half of a full-backup `restore()`, discriminated by profile type.
  * Replaces the old polymorphic `masterKey: string` slot, where a password profile
@@ -414,11 +417,13 @@ export type Methods = {
 	 *
 	 * Emits `onActiveProfileChanged` once the session is up. Idempotent: if
 	 * the session is already active for `id`, returns without re-opening.
+	 * The fence is captured under the same lock hold that opened the session, so it can only
+	 * name this restore's profile, never a same-id successor.
 	 *
 	 * @param id Profile id (from the `restore` return value).
 	 * @param password Password (password profiles only).
 	 */
-	finalizeRestore(id: string, password?: string): ProfileInfo
+	finalizeRestore(id: string, password?: string): FinalizedRestore
 }
 
 export type Events = {
