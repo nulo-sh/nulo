@@ -77,8 +77,14 @@ export class StaleNetworkRepository {
 	}
 
 	/** A runtime verdict for one chain: replaces that chain's entry and keeps every other. */
-	public mergeEntry(profileId: string, entry: StaleEntry, accountSetDigest: string): Promise<void> {
+	public mergeEntry(
+		profileId: string,
+		entry: StaleEntry,
+		accountSetDigest: string,
+		currentDigest: () => Promise<string>,
+	): Promise<boolean> {
 		return this.withLock(profileId, async () => {
+			if ((await currentDigest()) !== accountSetDigest) return false
 			const prior = await this.getRecord(profileId)
 			const entries = (prior?.entries ?? []).filter((e) => e.chainId !== entry.chainId)
 			await this.writeRecord({
@@ -86,6 +92,7 @@ export class StaleNetworkRepository {
 				accountSetDigest: prior?.accountSetDigest ?? accountSetDigest,
 				entries: [...entries, entry],
 			})
+			return true
 		})
 	}
 

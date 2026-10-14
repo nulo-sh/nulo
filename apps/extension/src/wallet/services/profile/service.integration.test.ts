@@ -2817,7 +2817,7 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 		const { api, service } = await makeService()
 		const profile = await service.createProfile("P", "pass1234")
 		const stale = new StaleNetworkRepository(api.storage.local)
-		await stale.mergeEntry(profile.id, { networkId: "n", chainId: 1, networkReset: true, addressesMoved: false }, "d")
+		await stale.mergeEntry(profile.id, { networkId: "n", chainId: 1, networkReset: true, addressesMoved: false }, "d", async () => "d")
 		await stale.withLock(profile.id, async () => {
 			await stale.setJournalLocked({
 				profileId: profile.id,

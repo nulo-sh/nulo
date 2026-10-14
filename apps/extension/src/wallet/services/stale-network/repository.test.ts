@@ -82,10 +82,16 @@ describe("StaleNetworkRepository", () => {
 	test("a runtime merge replaces its chain's entry and keeps the other chains'", async () => {
 		await repo.compareAndSetRecord(record([entry(10), entry(11)]), async () => "d1")
 		const moved: StaleEntry = { networkId: "n11", chainId: 11, networkReset: false, addressesMoved: true }
-		await repo.mergeEntry("p1", moved, "ignored")
+		await repo.mergeEntry("p1", moved, "ignored", async () => "ignored")
 		expect(await repo.getRecord("p1")).toEqual(record([entry(10), moved]))
-		await repo.mergeEntry("p2", entry(5), "d9")
+		await repo.mergeEntry("p2", entry(5), "d9", async () => "d9")
 		expect(await repo.getRecord("p2")).toEqual({ profileId: "p2", accountSetDigest: "d9", entries: [entry(5)] })
+	})
+
+	test("a runtime merge writes nothing once the account set left the classified digest", async () => {
+		await repo.compareAndSetRecord(record([entry(10)]), async () => "d1")
+		await expect(repo.mergeEntry("p1", entry(11), "d1", async () => "d2")).resolves.toBe(false)
+		expect((await repo.getRecord("p1"))?.entries).toEqual([entry(10)])
 	})
 
 	test("the lock serializes a merge behind a compare-and-set holding it", async () => {
@@ -97,7 +103,7 @@ describe("StaleNetworkRepository", () => {
 			await gate
 			return "d1"
 		})
-		const merge = repo.mergeEntry("p1", entry(11), "d1")
+		const merge = repo.mergeEntry("p1", entry(11), "d1", async () => "d1")
 		await new Promise((r) => setTimeout(r, 0))
 		expect(await repo.getRecord("p1")).toBeUndefined()
 		release()
@@ -142,7 +148,7 @@ describe("StaleNetworkRepository", () => {
 
 	test("clearProfile removes all three keys and only that profile's", async () => {
 		await repo.compareAndSetRecord(record([entry(10)]), async () => "d1")
-		await repo.mergeEntry("p2", entry(5), "d9")
+		await repo.mergeEntry("p2", entry(5), "d9", async () => "d9")
 		await repo.withLock("p1", async () => {
 			await repo.setJournalLocked(journal())
 			await repo.setNoticeLocked("p1", { networkId: "n10", addressesMoved: false })

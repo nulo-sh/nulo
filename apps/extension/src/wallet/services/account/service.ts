@@ -923,7 +923,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async backup(): Promise<Account[]> {
 		const profile = await requireActiveProfile(this.profileService)
 		await this.refuseDuringReset(profile.id)
-		return this.rowsOfProfile(profile.id)
+		const rows = await this.rowsOfProfile(profile.id)
+		await this.refuseDuringReset(profile.id)
+		return rows
 	}
 
 	/** The journal is the only copy of the accounts a reset is moving, so a full backup refuses
@@ -1099,7 +1101,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
 		await this.refuseDuringReset(profile.id)
-		return this.importedKeys.backup(profile.id)
+		const keys = await this.importedKeys.backup(profile.id)
+		await this.refuseDuringReset(profile.id)
+		return keys
 	}
 
 	/** Restore imported-account key rows via the SOURCE→DESTINATION rewrap (clone divergence):

@@ -322,7 +322,8 @@ describe("AccountIntegrityCoordinator — chain-aware verdicts", () => {
 
 	test("a green pass removes a record the build no longer earns", async () => {
 		const { coordinator, stale } = await build({ rows: [onTestnet()], networks: [TESTNET_ROW], derive: async () => "0xaaaa" })
-		await stale.mergeEntry("p1", { networkId: "tn", chainId: TESTNET_ROW.chainId, networkReset: false, addressesMoved: true }, "d")
+		const moved = { networkId: "tn", chainId: TESTNET_ROW.chainId, networkReset: false, addressesMoved: true }
+		await stale.mergeEntry("p1", moved, "d", async () => "d")
 		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
 		expect(await stale.getRecord("p1")).toBeUndefined()
 	})
@@ -390,7 +391,7 @@ describe("AccountIntegrityCoordinator — operation-time classification", () => 
 			derive: async (_m, a) => (a.l1ChainId === TESTNET_ROW.l1ChainId ? "0xmoved" : "0xaaaa"),
 		})
 		const other = { networkId: "x", chainId: 9, networkReset: true, addressesMoved: false }
-		await stale.mergeEntry("p1", other, "d")
+		await stale.mergeEntry("p1", other, "d", async () => "d")
 		expect(await coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(true)
 		expect((await stale.getRecord("p1"))?.entries).toEqual([
 			other,
@@ -399,6 +400,23 @@ describe("AccountIntegrityCoordinator — operation-time classification", () => 
 		expect(locks).toEqual([])
 		expect(await repo.isBlocked("p1")).toBe(false)
 	})
+
+	test("a verdict read before the accounts changed refuses the operation and writes nothing", async () => {
+		const before = [onTestnet()]
+		const after = [{ ...onTestnet(), chainId: TESTNET_ROW.chainId + 1 }]
+		let reads = 0
+		const { coordinator, locks, stale, repo } = await build({
+			rows: before,
+			accountsRaw: async () => (reads++ === 0 ? before : after),
+			networks: [TESTNET_ROW],
+			derive: async () => "0xmoved",
+		})
+		reads = 0
+		expect(await coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(true)
+		expect(await stale.getRecord("p1")).toBeUndefined()
+		expect(locks).toEqual([])
+		expect(await repo.isBlocked("p1")).toBe(false)
+	}, 30_000)
 
 	test("a mixed chain, or a chain with no network row, is not confined", async () => {
 		const mixed = await build({

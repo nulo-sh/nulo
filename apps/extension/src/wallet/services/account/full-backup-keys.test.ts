@@ -404,4 +404,39 @@ describe("exportFullBackupKeys — a network reset in progress", () => {
 		})
 		await expect(account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)).rejects.toThrow(/^ERR_RESET_PENDING/)
 	}, 30_000)
+
+	test("the passkey path's slices refuse when a reset journal appears while they read", async () => {
+		const { api, profile, account, keys } = await build()
+		const p = await profile.createProfile("P", PASSWORD)
+		await seedImported(api, p.id, ADDR_A, 0x2a, (await profile.getProfileDek(p.id))!)
+		const journal = JSON.stringify({
+			profileId: p.id,
+			networkId: "n1",
+			fromChainId: 1,
+			toChainId: 2,
+			l1ChainId: L1,
+			cause: { networkReset: true, addressesMoved: false },
+			purged: false,
+			switchToSeedNode: false,
+			probedEndpoint: null,
+			accounts: [],
+		})
+		const read = keys.backup.bind(keys)
+		const keysRead = vi.spyOn(ImportedKeysRepository.prototype, "backup").mockImplementation(async (id: string) => {
+			const rows = await read(id)
+			await api.storage.local.set({ [`nulo:core:network-reset@${p.id}`]: journal })
+			return rows
+		})
+		await expect(account.backupImportedKeys()).rejects.toThrow(/^ERR_RESET_PENDING/)
+		keysRead.mockRestore()
+		await api.storage.local.remove(`nulo:core:network-reset@${p.id}`)
+		const internals = account as unknown as { liveRows: () => Promise<unknown[]> }
+		const live = internals.liveRows.bind(account)
+		vi.spyOn(internals, "liveRows").mockImplementation(async () => {
+			const rows = await live()
+			await api.storage.local.set({ [`nulo:core:network-reset@${p.id}`]: journal })
+			return rows
+		})
+		await expect(account.backup()).rejects.toThrow(/^ERR_RESET_PENDING/)
+	}, 30_000)
 })
