@@ -346,7 +346,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 - Tests: `popup.store.test.ts`'s BUG PIN becomes the contract: re-opening `a` in `{a, b}` gives `{b: 0, a: 1}`, and a later close and open never share an order; `usePopupStack.test.ts`'s re-open case expects depths 1 and 2.
 - Validation gate: fast layers on both files, `popup-stack.pins.test.ts` and `PopupCard.test.ts`.
 
-**3.9 #214, network names (FA-10 A).**
+**3.9 #214, network names (FA-10 A).** ✓
 - Tests, modelled on arc 1's account ones: beside a saved "Testnet", "Testnet " and " Testnet" show "Already exists" with Create disabled, "testnet" does not (control); `addNetwork` and `renameNetwork` receive the trimmed name; "   " keeps Create and Update disabled; Edit network excludes itself, and "Testnet " for a network named "Testnet" counts as unchanged.
 - Validation gate: fast layers on `NewNetworkPopup.{test,pins.test}.ts`, `EditNetworkPopup.test.ts`, `account-name.test.ts`.
 
