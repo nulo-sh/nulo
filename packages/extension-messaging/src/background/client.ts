@@ -88,7 +88,7 @@ export abstract class ServiceClient<
 		if (this.state === ClientState.Disconnected) {
 			this.state = ClientState.Connecting
 			this.ready = deferred()
-			// Nobody may be waiting; the requests that are attach their own handlers.
+			// A close with no waiter must not surface as an unhandled rejection.
 			this.ready.promise.catch(() => {})
 		}
 		this.logDebug("Connecting")

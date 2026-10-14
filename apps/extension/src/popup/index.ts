@@ -45,9 +45,10 @@ const router = createRouter({
 	routes,
 })
 
-// One grace per opening, counted from the page's navigation start (`performance.now()`'s origin).
+// One grace per opening, counted from here, as the bar's delay counts from its first render: a slow
+// bundle evaluation must not spend the grace before the first route.
 const startGrace = createStartGrace({
-	deadline: START_GRACE_MS,
+	deadline: performance.now() + START_GRACE_MS,
 	now: () => performance.now(),
 	isReady: () => isServiceReady.value,
 	waitForReady: waitForServiceReady,

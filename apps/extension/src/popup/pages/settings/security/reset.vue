@@ -46,10 +46,10 @@ const SLOW_DELETE_HINT_DELAY_MS = 10_000
 const isSlowDelete = ref(false)
 let slowDeleteTimer = null
 
-// Its own client: the shared one gives up at 60 s, well inside the wait the hint promises.
+// Its own client: the shared one gives up at 60 s, well inside the wait the hint promises. It
+// outlives the page while a call runs: deleting the open profile locks the wallet, whose route
+// unmounts this page before the purge returns, and the rest of the reset must still run.
 const deleteService = deleteProfileClient()
-// Disconnecting the page does not cancel the background's deletion, so the rejection it causes
-// says nothing.
 let isUnmounted = false
 
 const handleReset = async () => {
@@ -70,13 +70,14 @@ const handleReset = async () => {
 	try {
 		await deleteService.deleteProfile(deletedId)
 	} catch (_err) {
-		if (isUnmounted) return
+		if (isUnmounted) deleteService.disconnect()
 		isResetting.value = false
 		clearTimeout(slowDeleteTimer)
 		isSlowDelete.value = false
 		openToast({ kind: "error", label: "Couldn't delete profile. Try again" })
 		return
 	}
+	if (isUnmounted) deleteService.disconnect()
 	isResetting.value = false
 	clearTimeout(slowDeleteTimer)
 	isSlowDelete.value = false
@@ -109,7 +110,7 @@ const handleReset = async () => {
 
 onBeforeUnmount(() => {
 	isUnmounted = true
-	deleteService.disconnect()
+	if (!isResetting.value) deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
 })
 </script>

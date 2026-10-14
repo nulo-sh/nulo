@@ -482,6 +482,7 @@ describe("auth.vue — the password field's controls, real Input", () => {
 		return wrapper
 	}
 	const FIELD = "auth-password-input"
+	// jsdom applies no module CSS, so this reads the class; the held-boot e2e reads the computed visibility.
 	const hidden = (testid: string) =>
 		(wrapper as NonNullable<typeof wrapper>)
 			.get(`[data-testid="${testid}"]`)

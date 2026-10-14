@@ -7,10 +7,8 @@
  *    needs the authoritative session read. An async lookup here would fire during cold boot and its
  *    degrade would redirect to `from` before loadProfile has chosen a destination, stranding the
  *    boot at the bare index route.
- *  - `lateDecision` holds the awaited checks, each under the guard it always had. While the session
- *    is unchecked it first waits for the background's Ready within the page-load grace
- *    (`start-grace.ts`); past it, or when a read fails, it decides without the reads and marks the
- *    navigation provisional.
+ *  - `lateDecision` holds the awaited checks, each under the guard it always had, and the page-load
+ *    grace (`start-grace.ts`).
  */
 import type { NavigationGuardNext, RouteLocationNormalized, RouteLocationRaw } from "vue-router"
 import type { useAppStore } from "@/stores/app.store"
@@ -52,8 +50,7 @@ export async function lateDecision(
 	}
 }
 
-/** The answer without the service's reads: what an unchecked session gets from the auth gate, and
- *  no profile selected. The replay on Ready decides it again with the reads. */
+/** The auth gate's answer without the service's reads; `start-grace.ts` replays it. */
 function provisionalDecision(to: RouteLocationNormalized, appStore: AppStore, grace: StartGrace): RouteLocationRaw | undefined {
 	grace.markProvisional(to)
 	return to.meta.isAuthRequired && !appStore.isLogined ? { name: "popup-auth" } : undefined
@@ -78,7 +75,7 @@ async function decideWithReads(
 		const lastActiveId = await getLastActiveProfileId()
 		const lastActive = lastActiveId ? profiles.find((p) => p.id === lastActiveId) : undefined
 		// A boot run can select a profile while these reads are in flight; its choice stands.
-		appStore.profile ??= lastActive ?? profiles[0]
+		if (!appStore.profile) appStore.profile = lastActive ?? profiles[0]
 	}
 
 	if (to.meta.requirePasswordProfile && appStore.profile?.type === "passkey") return { path: "/popup/settings/profile" }

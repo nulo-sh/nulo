@@ -214,7 +214,7 @@ describe("lateDecision — the page-load grace", () => {
 		}
 	})
 
-	test("a profile the boot run selects while the guard reads stands; with none selected, the last active is chosen", async () => {
+	test("a profile the boot run selects while the guard reads stands; with none selected, even the reset's `0`, the last active is chosen", async () => {
 		let answerLastActive!: (id: string) => void
 		lastActiveMock.mockImplementation(() => new Promise((resolve) => (answerLastActive = resolve)))
 		const api = profileApi()
@@ -228,7 +228,9 @@ describe("lateDecision — the page-load grace", () => {
 		await pending
 		expect(raced.profile).toEqual({ id: "b" })
 
-		const quiet = store() as { profile?: { id: string } }
+		// The last profile's deletion leaves `profile` as `0`, not undefined.
+		const quiet = store() as { profile?: { id: string } | 0 }
+		quiet.profile = 0
 		const control = lateDecision(route("popup-auth"), quiet as never, api, readyGrace())
 		await vi.waitFor(() => expect(lastActiveMock).toHaveBeenCalledTimes(2))
 		answerLastActive("a")

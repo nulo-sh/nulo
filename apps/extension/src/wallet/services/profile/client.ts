@@ -128,7 +128,7 @@ definePassthroughsExhaustive<Methods>()(ProfileServiceClient.prototype, [
 ])
 
 /** A client for Delete Profile alone, whose calls wait out `DELETE_PROFILE_TIMEOUT_MS`. Every other
- *  caller keeps the default bound, so the backup import's rollback stays at three 60 s attempts. */
+ *  caller keeps the default bound. */
 export function deleteProfileClient(): ProfileServiceClient {
 	return new ProfileServiceClient("profile-delete-client", { requestTimeoutMs: DELETE_PROFILE_TIMEOUT_MS })
 }
