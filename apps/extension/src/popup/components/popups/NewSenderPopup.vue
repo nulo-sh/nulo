@@ -188,4 +188,14 @@ usePopupEntity(() => props.show, {
 		transform: translateX(-2px);
 	}
 }
+
+@media (prefers-reduced-motion: reduce) {
+	.shake {
+		animation: none;
+	}
+}
+
+:global(.noanimations) .shake {
+	animation: none;
+}
 </style>
