@@ -5,13 +5,32 @@ driver: claude-code
 claude_model: opus
 codex_model: sol
 code_review: off
-explainer: narrated
+explainer: off (the owner cancelled the narrated explainer, 2026-10-13)
 eli5_mode: artifact
 budget: recon 2 Sonnet agents; audits = Codex (gpt-6.1-sol, high) + one Opus 5.5 Plan leg, then one fresh Codex pass
 base: origin/dev d01569a200ccdf010a1f7cbcf38ffa37948ee3c6
 issues: "#79 (closes, arc 2); #324, #98, #329 collide (no arc)"
+status: completed (delivered in #388, #389 and the close-out stacked on them)
 harden: not scheduled (owner, 2026-10-13)
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13; the held-token check and the second rebase onto `dev` followed on 2026-10-14.
+- **Status:** delivered as a three-PR stack against `dev`: [#388](https://github.com/nulo-sh/nulo/pull/388) (arc 1), [#389](https://github.com/nulo-sh/nulo/pull/389) (arc 2, `Closes #79`) and this close-out. The owner merges in the bootstrap order: #388 alone, then O3 to O6 until `token-list-host-live` is green, then the close-out, which lands #389 with it. That merge closes this plan.
+- **Shipped:**
+  - Arc 1: `@nulo/token-list` (the `nulo-token-list/1` envelope and strict parser, `sign-cli` and `keygen-cli` with a pinned import closure, the price-id table and bundled class ids); `infra/token-list` (source, Worker, `FORMAT.md`, tree tests); `publish-token-list.yml` (`prepare`, `sign` in the `token-list` environment, `publish-pr`); `privileged()` counting custom secrets; the advisory nightly `token-list-host-live`.
+  - The key ceremony ran as keyed run `token-list-keys-925e45c1`. It pinned `nulo-ci-1` `Al201vPu8pwqVmqmVBOxQqozL55HI0oViOA1QVeU6k4` and `nulo-recovery-1` `zxIA-cxJ7IPlSvaDWEW5V8UgFfzne2RsHoCN8kg1tl0`, and `FORMAT.md`'s key table is now checked against `keys.ts`.
+  - Arc 2: `TokenListService` (admission on the Terms, one persisted deadline, single-flight, verify before parse, strictly higher sequence); the seeder, tombstone, `verifiedPins` and price consumers, with the owner's held-token check (D12, amended 2026-10-14: a listed token the wallet already holds gets the same on-chain check before "Nulo knows" names it); the armed e2e seam with held lists; the `token-list` smoke file and the artifact-only live leg; privacy 1.2, Terms § 7.5, the store documents and a `BEFORE-LAUNCH.md` § 1 re-read row.
+  - `lessons.md`: nothing promoted, since it sits at its 8 KiB budget. The facts worth reusing stay in `lessons/phase-1.md` and `lessons/phase-2.md`: WebCrypto takes an Ed25519 seed only as PKCS#8; the all-zero public key is small-order and verifies forgeries; a step summary renders HTML, so escape punctuation; env-exec needs a clean tree at the approved, pushed HEAD.
+- **Dropped, rejected, superseded:**
+  - The narrated explainer: cancelled by the owner on 2026-10-13. Only the ELI5 was published.
+  - Terms § 7.5 as a 1.0.1 patch: amended inside draft 1.0 instead (`lessons/phase-6.md`), pending the owner's sign-off on #389 with the other legal and store text.
+  - D19 (a diff-scope check on the publish PR) and D20 (a quota for leaked-key rows): rejected, reasons in the ledger.
+  - O3 to O6 are owner steps that come before this close-out's merge, so none outlives it.
+- **Known limits:** #385 (a leaked key verifies until a release unpins it), #386 (freeze, and rollback on a fresh install), #387 (rows a leaked-key list seeded stay).
+- **Open items:** #382 (live entry checks), #383 (scam flagging with a compiled sequence floor), #384 (a published verifier package); `BEFORE-LAUNCH.md` § 1 (the `tokens.nulo.sh` re-read row). #324 has a comment: its seed step is now a list publish.
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # dynamic-token-list
 
@@ -275,7 +294,7 @@ So no `dev` build fetches a list before the host serves one.
 
 ## Post-implementation
 
-This section follows [`implementations-plan/README.md` § Post-implementation standard](../README.md#post-implementation-standard) at d01569a200ccdf010a1f7cbcf38ffa37948ee3c6. What is specific to this plan:
+This section follows [`implementations-plan/README.md` § Post-implementation standard](../../README.md#post-implementation-standard) at d01569a200ccdf010a1f7cbcf38ffa37948ee3c6. What is specific to this plan:
 
 - **Review loop:**
   - Codex through `/codex`, with `run-codex.sh <prompt> <cwd> high read-only gpt-6.1-sol`, resumed in the same session.
