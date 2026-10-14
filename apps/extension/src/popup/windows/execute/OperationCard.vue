@@ -224,7 +224,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 						:class="$style.row"
 					>
 						<Text size="12" weight="600" color="primary">{{ callName(call, surface) }}</Text>
-						<Text size="11" color="secondary">on <AddressDisplay :address="call.to" size="11" data-testid="execute-op-call-to" /></Text>
+						<Text size="11" color="secondary">on <AddressDisplay :address="call.to" data-testid="execute-op-call-to" /></Text>
 					</Flex>
 					<CallArguments :surface="surface" :contract="call.to" :chainId="op.network?.chainId" :tokens="tokens" prefix="execute-op" json-view />
 				</Flex>
@@ -248,11 +248,11 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				>
 					<Flex justify="between" :class="$style.row">
 						<Text size="11" color="secondary">Consumer:</Text>
-						<AddressDisplay :address="a.consumer" size="11" data-testid="execute-discovered-consumer" />
+						<AddressDisplay :address="a.consumer" data-testid="execute-discovered-consumer" />
 					</Flex>
 					<Flex justify="between" :class="$style.row">
 						<Text size="11" color="secondary">Authorizes:</Text>
-						<AddressDisplay :address="a.caller" size="11" data-testid="execute-discovered-caller" />
+						<AddressDisplay :address="a.caller" data-testid="execute-discovered-caller" />
 					</Flex>
 					<Flex justify="between" :class="$style.row">
 						<Text size="11" color="secondary">Function:</Text>

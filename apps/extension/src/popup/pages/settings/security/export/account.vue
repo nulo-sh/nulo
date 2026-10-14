@@ -229,7 +229,9 @@ onBeforeUnmount(() => {
 						@click="handleSelect(account)"
 						size="large"
 						:title="account.name"
+						titleVariant="name"
 						:description="trimAddress(account.address, 6, 4, '...')"
+						descriptionVariant="data"
 						icon="user"
 						chevron
 						data-testid="export-account-row"

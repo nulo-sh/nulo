@@ -9,6 +9,8 @@ defineProps<{ action: Action }>()
 
 <template>
 	<Text data-testid="execute-op-payload-row" size="12" color="primary">
+		<!-- Unreachable from today's window producers (the one request carrying actions is a grant); rendered so a
+			future producer can never hide a call target behind an opaque label. -->
 		<template v-if="action.kind === 'call' || action.kind === 'encoded_call'">
 			<Text weight="600">
 				{{ humanizeMethodName(safeWire(action.kind === "call" ? action.method : (action.name ?? action.selector), 64)) }}

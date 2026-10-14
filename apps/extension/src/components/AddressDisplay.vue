@@ -23,13 +23,9 @@ const props = defineProps({
 		type: Function,
 		default: null,
 	},
-	size: {
-		type: String,
-		default: "12",
-	},
-	weight: {
-		type: String,
-		default: "500",
+	lead: {
+		type: Boolean,
+		default: false,
 	},
 	height: {
 		type: String,
@@ -49,6 +45,7 @@ const contactName = ref("")
 const displayedAddress = ref("")
 
 const showName = ref(false)
+const showsName = computed(() => Boolean(showName.value && contactName.value))
 
 const handleClick = () => {
 	if (props.static) {
@@ -94,21 +91,41 @@ onMounted(async () => {
 
 <template>
 	<Text
+		v-if="showsName"
+		variant="name"
 		data-testid="address-display"
-		:data-address-shows="showName && contactName ? 'name' : 'address'"
+		data-address-shows="name"
 		@click="handleClick"
-		:size="size"
 		:color="color"
-		:weight="weight"
+		:height="height"
+		:class="[lead ? $style.name_lead : $style.name, $style.clickable]"
+	>
+		{{ contactName }}
+	</Text>
+	<Text
+		v-else
+		:variant="lead ? 'data-lead' : 'data'"
+		data-testid="address-display"
+		data-address-shows="address"
+		@click="handleClick"
+		:color="color"
 		:height="height"
 		:class="contactName && $style.clickable"
 	>
-		{{ showName && contactName ? contactName : displayedAddress }}
+		{{ displayedAddress }}
 	</Text>
 </template>
 
 <style module>
 .clickable {
 	cursor: pointer;
+}
+
+.name {
+	font-size: 12px;
+}
+
+.name_lead {
+	font-size: 13px;
 }
 </style>

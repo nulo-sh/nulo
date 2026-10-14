@@ -92,6 +92,7 @@ const target = ref(null)
 }
 
 .row_address {
+	composes: type--data from global;
 	composes: row_sub from "../../../../../components/ui/Settings/settings-row.module.css";
 }
 

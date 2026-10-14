@@ -296,11 +296,8 @@ onBeforeUnmount(() => {
 	color: var(--nulo-secondary);
 }
 
-/** Inline contract-name annotation appended to the note-type label
- *  with a middle-dot separator. Lighter weight than the type itself
- *  so the type stays the primary glyph; brutalist-friendly. */
+/** Takes the note type's role; the colour alone sets it apart. */
 .contract_name {
-	font-weight: 500;
 	color: var(--nulo-secondary);
 }
 

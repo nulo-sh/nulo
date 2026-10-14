@@ -133,6 +133,7 @@ usePopupEntity(() => props.show, {
 					<SettingItem
 						size="large"
 						:title="appStore.profile?.name"
+						titleVariant="name"
 						description="Profile for editing"
 						icon="user"
 						raw

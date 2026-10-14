@@ -79,6 +79,13 @@ describe("Input", () => {
 		expect(bare["aria-controls"]).toBeUndefined()
 	})
 
+	test.each([
+		[undefined, "type--input"],
+		["input-data", "type--input-data"],
+	])("textVariant %s puts %s on the native <input>", (textVariant, role) => {
+		expect(mountInput({ textVariant }).get("input").classes()).toEqual([role])
+	})
+
 	test("type prop maps to the native input type", () => {
 		expect(mountInput({ type: "password" }).find("input").attributes("type")).toBe("password")
 	})

@@ -230,8 +230,7 @@ onBeforeUnmount(() => {
 						<AddressDisplay
 							static
 							data-testid="tx-from-address"
-							size="13"
-							weight="600"
+							lead
 							:address="transfer.from"
 							:formatter="(addr) => trimAddress(addr, 6, 4)"
 						/>
@@ -248,8 +247,7 @@ onBeforeUnmount(() => {
 						<AddressDisplay
 							static
 							data-testid="tx-to-address"
-							size="13"
-							weight="600"
+							lead
 							:address="transfer.to"
 							:formatter="(addr) => trimAddress(addr, 6, 4)"
 						/>

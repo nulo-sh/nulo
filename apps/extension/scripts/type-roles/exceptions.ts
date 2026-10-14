@@ -32,6 +32,9 @@ const PRESTO = "apps/extension/src/onboarding/pages/presto.vue"
 const APP = "apps/extension/src/popup/app.vue"
 const BRUTALIST = "packages/design/src/ui/BrutalistTitle.vue"
 const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView.vue"
+const BUTTON = "packages/design/src/ui/Button.vue"
+const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
+const ROLELESS_WHY = "the icon-only variants carry no role and keep their size step"
 
 export const CARVE_OUTS: CarveOut[] = [
 	{
@@ -62,6 +65,13 @@ export const CARVE_OUTS: CarveOut[] = [
 		rule: "faceless",
 		text: "fontSize: `${fontSize}px`",
 		why: "initials size with their avatar's box, which the board leaves unchanged",
+	},
+	{
+		file: "apps/extension/src/components/composite/general/AccountAvatar.vue",
+		rule: "faceless",
+		text: "font-weight: 600",
+		selector: ".initials",
+		why: "the initials' weight, which the board leaves unchanged",
 	},
 	{
 		file: "apps/extension/src/components/composite/send/AmountCard.vue",
@@ -103,6 +113,19 @@ export const CARVE_OUTS: CarveOut[] = [
 		rule: "faceless",
 		text: "fontSize: `${props.size}px`",
 		why: "sizes an icon glyph, not text",
+	},
+	{ file: BUTTON, rule: "faceless", text: "font-weight: 600", selector: ROLELESS, why: ROLELESS_WHY },
+	{ file: BUTTON, rule: "faceless", text: "font-size: 14px", selector: `${ROLELESS}.large`, why: ROLELESS_WHY },
+	{ file: BUTTON, rule: "faceless", text: "font-size: 13px", selector: `${ROLELESS}.medium`, why: ROLELESS_WHY },
+	{ file: BUTTON, rule: "faceless", text: "font-size: 12px", selector: `${ROLELESS}.compact`, why: ROLELESS_WHY },
+	{ file: BUTTON, rule: "faceless", text: "font-size: 12px", selector: `${ROLELESS}.mini`, why: ROLELESS_WHY },
+	{ file: BUTTON, rule: "faceless", text: "font-size: 11px", selector: `${ROLELESS}.micro`, why: ROLELESS_WHY },
+	{
+		file: BUTTON,
+		rule: "faceless",
+		text: "font-size: 12px",
+		selector: ".wrapper.text.small",
+		why: "the text variant carries no role and keeps its smaller step",
 	},
 ]
 

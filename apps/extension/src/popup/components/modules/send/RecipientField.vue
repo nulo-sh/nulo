@@ -296,13 +296,6 @@ onBeforeUnmount(() => {
 	position: relative;
 }
 
-/* Restore the recipient field's monospace 14px style — the
- * migration to <Input> shifted it to body-font 15px. */
-.recipient_wrap :global(input) {
-	font-family: var(--font-mono);
-	font-size: 14px;
-}
-
 .recipient_wrap :global(input::placeholder) {
 	color: var(--txt-tertiary);
 }

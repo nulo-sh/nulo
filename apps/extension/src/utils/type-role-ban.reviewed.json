@@ -1,18 +1,4 @@
 {
-	"apps/extension/src/components/AddressDisplay.vue": [
-		{
-			"rule": "text-prop",
-			"text": ":size=\"size\"",
-			"role": "data",
-			"at": "Text \"{{ showName && contactName ? c\""
-		},
-		{
-			"rule": "text-prop",
-			"text": ":weight=\"weight\"",
-			"role": "data",
-			"at": "Text \"{{ showName && contactName ? c\""
-		}
-	],
 	"apps/extension/src/components/GlobalLoader.vue": [
 		{
 			"rule": "face",
@@ -209,12 +195,6 @@
 			"text": "size=\"12\"",
 			"role": "tag",
 			"at": "Text \"{{ capitalize(kind) }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "body",
-			"at": "Text \"{{ getDisplayName(kind, k) }}\""
 		},
 		{
 			"rule": "text-prop",
@@ -1381,38 +1361,6 @@
 			"at": ".subtitle"
 		}
 	],
-	"apps/extension/src/components/composite/activity/activity-card.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "row-title",
-			"at": ".title_sep"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "tag",
-			"at": ".chip"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "tag",
-			"at": ".chip"
-		},
-		{
-			"rule": "size",
-			"text": "font-size: 8px",
-			"role": "tag",
-			"at": ".chip"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "row-title",
-			"at": ".title_sep"
-		}
-	],
 	"apps/extension/src/components/composite/capabilities/CapabilityDetailPanel.vue": [
 		{
 			"rule": "text-prop",
@@ -1999,28 +1947,6 @@
 			"at": "Text \"{{ String(p.function) === \"*\" \""
 		}
 	],
-	"apps/extension/src/components/composite/capabilities/capability-shared.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "data",
-			"at": ".mono"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.04em",
-			"role": "data",
-			"at": ".mono"
-		}
-	],
-	"apps/extension/src/components/composite/general/AccountAvatar.vue": [
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "carve-out",
-			"at": "Text \"{{ initials }}\""
-		}
-	],
 	"apps/extension/src/components/composite/general/EmojiGrid.vue": [
 		{
 			"rule": "text-prop",
@@ -2193,82 +2119,6 @@
 			"text": "font-weight: 700",
 			"role": "tag",
 			"at": ".error_tag"
-		}
-	],
-	"apps/extension/src/components/composite/import/import-shared.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".section_label"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.18em",
-			"role": "label-section",
-			"at": ".section_label"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".section_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "label-section",
-			"at": ".section_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".section_label"
-		}
-	],
-	"apps/extension/src/components/composite/list-empty.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "title-page",
-			"at": ".empty_headline"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "body",
-			"at": ".empty_sub"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.1em",
-			"role": "title-page",
-			"at": ".empty_headline"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "title-page",
-			"at": ".empty_headline"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "body",
-			"at": ".empty_sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "title-page",
-			"at": ".empty_headline"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "title-page",
-			"at": ".empty_headline"
 		}
 	],
 	"apps/extension/src/components/composite/send/AmountCard.vue": [
@@ -2553,186 +2403,6 @@
 			"text": "font-weight: 700",
 			"role": "segment",
 			"at": ".toggle_active"
-		}
-	],
-	"apps/extension/src/components/ui/Dropdown/DropdownItem.vue": [
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "row-title",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "row-title",
-			"at": ".wrapper"
-		}
-	],
-	"apps/extension/src/components/ui/Dropdown/DropdownTitle.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "label-section",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "label-section",
-			"at": "Text"
-		}
-	],
-	"apps/extension/src/components/ui/Settings/ItemsContainer.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-body)",
-			"role": "body",
-			"at": ".description"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.2em",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 10px",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "body",
-			"at": ".description"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".title"
-		}
-	],
-	"apps/extension/src/components/ui/Settings/SettingField.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "name",
-			"at": "Text \"{{ value }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "name",
-			"at": "Text \"{{ value }}\""
-		}
-	],
-	"apps/extension/src/components/ui/Settings/SettingItem.vue": [
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.01em",
-			"role": "row-title",
-			"at": ".title"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "caption",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "value",
-			"at": "Text[data-testid=setting-value]"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"14\"",
-			"role": "row-title",
-			"at": "Text \"{{ title }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "caption",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "row-title",
-			"at": "Text \"{{ title }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "value",
-			"at": "Text[data-testid=setting-value]"
-		}
-	],
-	"apps/extension/src/components/ui/Settings/settings-row.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-body)",
-			"role": "name",
-			"at": ".row_name"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "data",
-			"at": ".row_sub"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.01em",
-			"role": "name",
-			"at": ".row_name"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "data",
-			"at": ".row_sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "name",
-			"at": ".row_name"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 600",
-			"role": "name",
-			"at": ".row_name"
 		}
 	],
 	"apps/extension/src/onboarding/app.vue": [
@@ -4071,24 +3741,6 @@
 			"at": ".tag"
 		},
 		{
-			"rule": "text-prop",
-			"text": "size=\"11\"",
-			"role": "caption",
-			"at": "Text \"{{ method.disabled && method.d\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "name",
-			"at": "Text \"{{ method.title }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "name",
-			"at": "Text \"{{ method.title }}\""
-		},
-		{
 			"rule": "faceless",
 			"text": "font-size: 10px",
 			"role": "tag",
@@ -4305,12 +3957,6 @@
 			"at": ".section_label"
 		},
 		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "input-data",
-			"at": ".recipient_wrap :global(input)"
-		},
-		{
 			"rule": "tracking",
 			"text": "letter-spacing: 0.1em",
 			"role": "label-section",
@@ -4363,12 +4009,6 @@
 			"text": "font-size: 10px",
 			"role": "label-section",
 			"at": ".section_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "input-data",
-			"at": ".recipient_wrap :global(input)"
 		},
 		{
 			"rule": "faceless",
@@ -4717,38 +4357,6 @@
 			"at": ".title"
 		}
 	],
-	"apps/extension/src/popup/components/modules/send/fee-shared.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label",
-			"at": ".fee_label"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.1em",
-			"role": "label",
-			"at": ".fee_label"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label",
-			"at": ".fee_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 10px",
-			"role": "label",
-			"at": ".fee_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label",
-			"at": ".fee_label"
-		}
-	],
 	"apps/extension/src/popup/components/modules/settings/connected-apps/DappSessionVerification.vue": [
 		{
 			"rule": "face",
@@ -4893,12 +4501,6 @@
 			"text": "font-weight: 700",
 			"role": "tag",
 			"at": ".sender_chip"
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(contact.address)",
-			"role": "data",
-			"at": "span[data-testid=contact-row-address]"
 		}
 	],
 	"apps/extension/src/popup/components/modules/settings/new-profile/NewProfileCredentials.vue": [
@@ -5005,62 +4607,6 @@
 			"text": "font-weight: 700",
 			"role": "segment",
 			"at": ".tab"
-		}
-	],
-	"apps/extension/src/popup/components/modules/settings/record-card.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".type"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "label",
-			"at": ".kv_key"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "data",
-			"at": ".kv_val"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.04em",
-			"role": "label-section",
-			"at": ".type"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".type"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "label",
-			"at": ".kv_key"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "data",
-			"at": ".kv_val"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "label-section",
-			"at": ".type"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".type"
 		}
 	],
 	"apps/extension/src/popup/components/modules/tx/TxDebugPanel.vue": [
@@ -5375,12 +4921,6 @@
 			"text": "font-weight: 700",
 			"role": "title-page",
 			"at": ".title"
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(acc.address, 6, 4, '...')",
-			"role": "data",
-			"at": "SettingItem[data-testid=account-item]"
 		}
 	],
 	"apps/extension/src/popup/components/popups/ChangeAuthwitsRegistryPopup.vue": [
@@ -6225,68 +5765,6 @@
 			"text": "weight=\"600\"",
 			"role": "data",
 			"at": "Text \"{{ token?.id }}\""
-		}
-	],
-	"apps/extension/src/popup/components/popups/popup-shared.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".pre_title"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.08em",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.2em",
-			"role": "label-section",
-			"at": ".pre_title"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".pre_title"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 10px",
-			"role": "label-section",
-			"at": ".pre_title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 16px",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".pre_title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "title-page",
-			"at": ".title"
 		}
 	],
 	"apps/extension/src/popup/pages/activity.vue": [
@@ -7439,12 +6917,6 @@
 			"text": "weight=\"600\"",
 			"role": "name",
 			"at": "Text \"{{ session.dappMetadata.name ?\""
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(acc.address, 6, 4, '...')",
-			"role": "data",
-			"at": "SettingItem"
 		}
 	],
 	"apps/extension/src/popup/pages/settings/connected-apps/index.vue": [
@@ -7591,12 +7063,6 @@
 			"text": "font-size: 12px",
 			"role": "data",
 			"at": ".location"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "drop",
-			"at": ".contract_name"
 		},
 		{
 			"rule": "faceless",
@@ -8205,12 +7671,6 @@
 			"text": "weight=\"500\"",
 			"role": "body",
 			"at": "Text \"This account is not covered by\""
-		},
-		{
-			"rule": "identifier",
-			"text": "trimaddress(account.address, 6, 4, '...')",
-			"role": "data",
-			"at": "SettingItem[data-testid=export-account-row]"
 		}
 	],
 	"apps/extension/src/popup/pages/settings/security/export/full.vue": [
@@ -8447,38 +7907,6 @@
 			"text": "font-weight: 700",
 			"role": "label-section",
 			"at": ".section_label"
-		}
-	],
-	"apps/extension/src/popup/pages/tab-hero.module.css": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "title-page",
-			"at": ".page_title_label"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.12em",
-			"role": "title-page",
-			"at": ".page_title_label"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "title-page",
-			"at": ".page_title_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "title-page",
-			"at": ".page_title_label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "title-page",
-			"at": ".page_title_label"
 		}
 	],
 	"apps/extension/src/popup/pages/tx/[id].vue": [
@@ -9367,488 +8795,6 @@
 			"text": "weight=\"600\"",
 			"role": "row-title",
 			"at": "Text \"Skip this check next time\""
-		}
-	],
-	"packages/design/src/ui/Banner.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label",
-			"at": ".action_btn"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.12em",
-			"role": "label",
-			"at": ".action_btn"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label",
-			"at": ".action_btn"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "value",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "body",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"500\"",
-			"role": "body",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "value",
-			"at": "Text"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "label",
-			"at": ".action_btn"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label",
-			"at": ".action_btn"
-		}
-	],
-	"packages/design/src/ui/BrutalistTitle.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "title-hero",
-			"at": ".main, .sub"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: -0.04em",
-			"role": "title-hero",
-			"at": ".main, .sub"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "title-hero",
-			"at": ".main, .sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "title-hero",
-			"at": ".main, .sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "drop",
-			"at": ".stack"
-		}
-	],
-	"packages/design/src/ui/Button.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "button",
-			"at": ".wrapper.cta, .wrapper.cta_outline, .wrapper.cta_destructive"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "button-md",
-			"at": ".wrapper.primary"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "button-md",
-			"at": ".wrapper.primary_outline"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.03em",
-			"role": "button-md",
-			"at": ".wrapper.medium"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.05em",
-			"role": "button-md",
-			"at": ".wrapper.large"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.2em",
-			"role": "button",
-			"at": ".wrapper.cta, .wrapper.cta_outline, .wrapper.cta_destructive"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "button",
-			"at": ".wrapper.cta, .wrapper.cta_outline, .wrapper.cta_destructive"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "button-md",
-			"at": ".wrapper.primary"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "button-md",
-			"at": ".wrapper.primary_outline"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "drop",
-			"at": ".wrapper.micro"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "drop",
-			"at": ".wrapper.compact"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "button",
-			"at": ".wrapper.cta.compact, .wrapper.cta_outline.compact, .wrapper.cta_destructive.compact"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "drop",
-			"at": ".wrapper.mini"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "drop",
-			"at": ".wrapper.text.small"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "button-md",
-			"at": ".wrapper.medium"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "button",
-			"at": ".wrapper.cta, .wrapper.cta_outline, .wrapper.cta_destructive"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "button-md",
-			"at": ".wrapper.large"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 600",
-			"role": "drop",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "button",
-			"at": ".wrapper.cta, .wrapper.cta_outline, .wrapper.cta_destructive"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "button-md",
-			"at": ".wrapper.primary"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "button-md",
-			"at": ".wrapper.primary_outline"
-		}
-	],
-	"packages/design/src/ui/FieldWarning.vue": [
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "body",
-			"at": "Text"
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "body",
-			"at": "Text"
-		}
-	],
-	"packages/design/src/ui/Input.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-body)",
-			"role": "input",
-			"at": ".base input"
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"12\"",
-			"role": "body",
-			"at": "Text \"Maximum length reached\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "size=\"13\"",
-			"role": "value",
-			"at": "Text \"{{ leftText }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "label",
-			"at": "Text \"{{ label }}\""
-		},
-		{
-			"rule": "text-prop",
-			"text": "weight=\"600\"",
-			"role": "value",
-			"at": "Text \"{{ leftText }}\""
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 15px",
-			"role": "input",
-			"at": ".base input"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 500",
-			"role": "input",
-			"at": ".base input"
-		}
-	],
-	"packages/design/src/ui/LoadingState.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "title-page",
-			"at": ".label"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "body",
-			"at": ".sub"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.1em",
-			"role": "title-page",
-			"at": ".label"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "title-page",
-			"at": ".label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "body",
-			"at": ".sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 14px",
-			"role": "title-page",
-			"at": ".label"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "title-page",
-			"at": ".label"
-		}
-	],
-	"packages/design/src/ui/SectionLabel.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-mono)",
-			"role": "meta",
-			"at": ".count"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.1em",
-			"role": "label-section",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "size",
-			"text": "font-size: 10px",
-			"role": "meta",
-			"at": ".count"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "label-section",
-			"at": ".wrapper"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".wrapper"
-		}
-	],
-	"packages/design/src/ui/SubPageHeaderBase.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.12em",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 13px",
-			"role": "title-page",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "title-page",
-			"at": ".title"
-		}
-	],
-	"packages/design/src/ui/ToastManagerBase.vue": [
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label",
-			"at": ".action"
-		},
-		{
-			"rule": "face",
-			"text": "font-family: var(--font-headline)",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.06em",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "tracking",
-			"text": "letter-spacing: 0.12em",
-			"role": "label",
-			"at": ".action"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label",
-			"at": ".action"
-		},
-		{
-			"rule": "case",
-			"text": "text-transform: uppercase",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "label",
-			"at": ".action"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 11px",
-			"role": "caption",
-			"at": ".sub"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "label-section",
-			"at": ".title"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label",
-			"at": ".action"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 700",
-			"role": "label-section",
-			"at": ".title"
-		}
-	],
-	"packages/design/src/ui/Tooltip.vue": [
-		{
-			"rule": "faceless",
-			"text": "font-size: 12px",
-			"role": "body",
-			"at": ".text"
-		},
-		{
-			"rule": "faceless",
-			"text": "font-weight: 600",
-			"role": "body",
-			"at": ".text"
 		}
 	]
 }

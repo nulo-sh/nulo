@@ -242,8 +242,7 @@ onBeforeUnmount(() => {
 						v-if="fromDisplay.kind === 'address'"
 						static
 						data-testid="received-from-address"
-						size="13"
-						weight="600"
+						lead
 						:address="fromDisplay.address"
 						:formatter="(addr) => trimAddress(addr, 6, 4)"
 					/>
@@ -265,8 +264,7 @@ onBeforeUnmount(() => {
 					<AddressDisplay
 						static
 						data-testid="received-to-address"
-						size="13"
-						weight="600"
+						lead
 						:address="received.accountAddress"
 						:formatter="(addr) => trimAddress(addr, 6, 4)"
 					/>

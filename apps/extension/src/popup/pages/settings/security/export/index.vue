@@ -18,7 +18,7 @@ const appStore = useAppStore()
 		<!-- Passkey profile -->
 		<template v-if="appStore.profile.type === 'passkey'">
 			<ItemsContainer title="Profile">
-				<SettingItem :title="appStore.profile.name" icon="user" raw />
+				<SettingItem :title="appStore.profile.name" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 
 			<Flex direction="column" gap="12" style="padding: 0 8px;">
@@ -36,7 +36,7 @@ const appStore = useAppStore()
 		<!-- Password profile -->
 		<template v-else>
 			<ItemsContainer title="Profile to backup">
-				<SettingItem :title="appStore.profile.name" icon="user" raw />
+				<SettingItem :title="appStore.profile.name" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 
 			<ItemsContainer title="Choose backup mode">

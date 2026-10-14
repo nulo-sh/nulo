@@ -18,6 +18,7 @@ defineProps({
 
 <style module>
 .wrapper {
+	composes: type--row-title from global;
 	display: flex;
 	align-items: center;
 
@@ -31,7 +32,6 @@ defineProps({
 	transform: translateZ(0);
 
 	font-size: 13px;
-	font-weight: 500;
 	line-height: 16px;
 	color: var(--txt-primary);
 	white-space: nowrap;

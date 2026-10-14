@@ -19,17 +19,13 @@
 }
 
 .page_title_label {
+	composes: type--title-page from global;
 	display: block;
 
 	padding: 12px 24px;
 
 	background: var(--app-bg);
 
-	font-family: var(--font-headline);
-	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 
 	text-decoration: underline;

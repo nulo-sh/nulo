@@ -216,6 +216,7 @@ watch(
 				data-testid="edit-fpc-header-row"
 				size="large"
 				:title="fpcToEdit?.name || fpcToEdit?.address"
+				:titleVariant="fpcToEdit?.name ? 'row-title' : 'data'"
 				:description="typeDescription"
 				icon="fpc"
 				raw
@@ -263,6 +264,7 @@ watch(
 			sanitize
 			:disabled="isPrivateFpc"
 			data-testid="edit-fpc-address-input"
+			textVariant="input-data"
 		>
 			<template #right>
 				<Transition name="fade">

@@ -85,6 +85,7 @@ const handleCopyAddress = (target) => {
 					v-for="account in accounts"
 					@click="handleSelectAccount(account)"
 					:title="account.name"
+					titleVariant="name"
 					:icon="account?.address === appStore.account?.address ? 'check-circle' : 'circle'"
 					:iconFillColor="account?.address === appStore.account?.address ? 'primary' : 'tertiary'"
 					data-testid="manage-accounts-row"
@@ -185,7 +186,9 @@ const handleCopyAddress = (target) => {
 					v-for="account in hiddenAccounts"
 					@click="handleShowAccount(account)"
 					:title="account.name"
+					titleVariant="name"
 					:description="account.address"
+					descriptionVariant="data"
 					data-testid="manage-accounts-hidden-row"
 					:data-account-name="account.name"
 				>
