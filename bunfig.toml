@@ -1,8 +1,9 @@
 # Bun configuration. Docs: https://bun.com/docs/runtime/bunfig
 
 [install]
-# Isolated linker: per-workspace symlinked node_modules + a .bun store. Kills phantom
-# dependencies (a workspace resolves ONLY what it declares). The old hoisting assumptions
+# Isolated linker: per-workspace symlinked node_modules + a .bun store. A workspace's source
+# resolves what it declares plus the root devDependencies; only store packages also reach the
+# store fallback (CLAUDE.md, the linker rule). The old hoisting assumptions
 # (resolvePackageFile walkers) were made layout-agnostic first via @nulo/resolve-asset; the
 # executable guarantee is apps/extension/scripts/layout-identity.test.ts.
 # `globalStore` is DELIBERATELY unset (defaults off): the committed layout uses per-project

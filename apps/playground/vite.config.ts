@@ -24,7 +24,7 @@ const disableHmr = process.env.VITE_DISABLE_HMR === "1" || process.env.NODE_ENV 
 export default defineConfig({
 	plugins: [
 		nodePolyfills({
-			include: ["buffer", "stream", "util", "events", "process"],
+			include: ["assert", "buffer", "stream", "util", "events", "process"],
 			globals: { Buffer: true, process: true, global: true },
 		}),
 	],
