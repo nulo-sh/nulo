@@ -33,6 +33,9 @@ export const ConfigSchema = z.object({
 	// fiat values across the UI. OFF disables all price fetching and hides
 	// every fiat surface — the privacy kill-switch.
 	showFiatValues: z.boolean().default(true),
+	// When ON, a lookup that names one transaction to a node runs only on a tap. OFF (default) keeps
+	// it automatic. A backup never restores it: an import must not switch a privacy setting.
+	privacyMode: z.boolean().default(false),
 
 	// Activity
 	// When OFF, IncomingTransferService records are still persisted but

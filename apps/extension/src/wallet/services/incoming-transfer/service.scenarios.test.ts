@@ -3871,6 +3871,42 @@ describe("IncomingTransferService — dust filter (getIncomingTransfers)", () =>
 		expect(called).toBe(true) // the null came from the NODE throwing, not a fromString parse error
 	})
 
+	test("getCachedReceiptFee answers only from what getReceiptFee fetched, and never reaches the network", async () => {
+		const network = makeNetworkStub()
+		const { service } = await bootService({ network })
+		const rec = seedPublic({ txHash: txh(0x1010), blockHash: "0xbh" })
+		network.setReceiptImpl(async () => ({ transactionFee: 321n, blockHash: hash("0xbh") }))
+
+		expect(await service.getCachedReceiptFee(rec.id)).toBeNull()
+		expect(network.getNodeForUrl).not.toHaveBeenCalled()
+		expect(network.getNetwork).not.toHaveBeenCalled()
+
+		expect(await service.getReceiptFee(rec.id)).toEqual({ feeJuice: "321" })
+		expect(network.getNodeForUrl).toHaveBeenCalledTimes(1)
+		expect(await service.getCachedReceiptFee(rec.id)).toEqual({ feeJuice: "321" })
+		expect(network.getNodeForUrl).toHaveBeenCalledTimes(1)
+
+		seedPublic({ txHash: txh(0x1010), blockHash: "0xremined" })
+		expect(await service.getCachedReceiptFee(rec.id)).toBeNull()
+	})
+
+	test("a failed fee lookup logs the error's class, never the hash or the node's message", async () => {
+		const network = makeNetworkStub()
+		const { service } = await bootService({ network })
+		const rec = seedPublic({ txHash: txh(0x1011), blockHash: "0xbh" })
+		network.setReceiptImpl(async (txHash) => {
+			throw new TypeError(`tx ${txHash} not found on node`)
+		})
+		const logDebug = vi.spyOn(service as unknown as { logDebug: (...args: unknown[]) => void }, "logDebug")
+		expect(await service.getReceiptFee(rec.id)).toBeNull()
+		const line = logDebug.mock.calls.find(([message]) => message === "receipt fee lookup failed")
+		expect(line).toEqual(["receipt fee lookup failed", { errorName: "TypeError" }])
+		const logged = JSON.stringify(logDebug.mock.calls)
+		expect(logged).not.toContain(txh(0x1011))
+		expect(logged).not.toContain(txh(0x1011).slice(0, 10))
+		expect(logged).not.toContain("not found on node")
+	})
+
 	test("getReceiptFee is reorg-safe — a receipt/record blockHash MISMATCH returns null (never a wrong-block fee)", async () => {
 		const network = makeNetworkStub()
 		const { service } = await bootService({ network })

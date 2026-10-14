@@ -63,7 +63,6 @@ export const useAppStore = defineStore("app", () => {
 	const feed = createActivityBridge({ activity, profile, profiles, network, account })
 
 	const dappSessions = ref([])
-	const isPrivacyModeEnabled = ref(false)
 	const defaultExplorer = ref<BlockExplorerType | null>("aztecscan")
 	const loggerWindowId = useSyncedRef("loggerWindowId", null)
 
@@ -107,7 +106,6 @@ export const useAppStore = defineStore("app", () => {
 		onTxAdded: feed.onTxAdded,
 		onTxUpdated: feed.onTxUpdated,
 		syncTransactions: feed.syncTransactions,
-		isPrivacyModeEnabled,
 		defaultExplorer,
 		loggerWindowId,
 		onboardingCompleted: onboarding.onboardingCompleted,

@@ -52,7 +52,6 @@ const STATE_KEYS = [
 	"networkStatus",
 	"networks",
 	"dappSessions",
-	"isPrivacyModeEnabled",
 	"defaultExplorer",
 	"loggerWindowId",
 ]
@@ -118,7 +117,6 @@ const RETURN_ORDER = [
 	"onTxAdded",
 	"onTxUpdated",
 	"syncTransactions",
-	"isPrivacyModeEnabled",
 	"defaultExplorer",
 	"loggerWindowId",
 	"onboardingCompleted",

@@ -198,6 +198,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		"getIncomingTransfers",
 		"getIncomingTransferById",
 		"getReceiptFee",
+		"getCachedReceiptFee",
 		"getTrustState",
 		"getIncomingSyncHealth",
 		"retryIncomingScan",
@@ -616,8 +617,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const epochAtStart = this.serviceEpoch
 		const record = await this.getIncomingTransferById(id)
 		if (record?.kind !== "public-event") return null
-		// The reconciler rewrites `record.blockHash` on re-mine, so keying on it busts a stale cached fee.
-		const cacheKey = `${record.networkId}|${record.txHash}|${record.blockHash}`
+		const cacheKey = receiptFeeKey(record)
 		const cached = this.feeCache.get(cacheKey)
 		if (cached !== undefined) return { feeJuice: cached }
 		try {
@@ -643,9 +643,20 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			if (this.serviceEpoch === epochAtStart) this.feeCache.set(cacheKey, feeJuice)
 			return { feeJuice }
 		} catch (err) {
-			this.logDebug(`getReceiptFee failed for ${record.txHash.slice(0, 10)}`, err)
+			// The node's message can echo the transaction hash, so only the error's class is logged.
+			this.logDebug("receipt fee lookup failed", { errorName: err instanceof Error ? err.name : typeof err })
 			return null
 		}
+	}
+
+	/** The fee a lookup already fetched this session for the record's current block, or `null`. It
+	 *  makes no network call, so a page under privacy mode can show a held fee without naming the
+	 *  transaction to a node. */
+	public async getCachedReceiptFee(id: string): Promise<{ feeJuice: string } | null> {
+		const record = await this.getIncomingTransferById(id)
+		if (record?.kind !== "public-event") return null
+		const cached = this.feeCache.get(receiptFeeKey(record))
+		return cached === undefined ? null : { feeJuice: cached }
 	}
 
 	/**
@@ -2783,6 +2794,11 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 			return new Set()
 		}
 	}
+}
+
+/** The reconciler rewrites `blockHash` on a re-mine, so keying on it retires a stale cached fee. */
+function receiptFeeKey(record: IncomingPublicEventRecord): string {
+	return `${record.networkId}|${record.txHash}|${record.blockHash}`
 }
 
 /** Records are flat, so a shallow compare tells whether a row changed since it was read. */

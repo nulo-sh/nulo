@@ -92,6 +92,20 @@ describe("settings/privacy", () => {
 		expect(w.get('[data-testid="fiat-values-toggle"]').attributes("data-on")).toBe("false")
 	})
 
+	test("privacy mode sits under the explorer, off as read, and its toggle turns it on", async () => {
+		const w = await mountPrivacy()
+		const toggle = w.get('[data-testid="privacy-mode-toggle"]')
+		expect(toggle.attributes("data-on")).toBe("false")
+		expect(w.text()).toContain("Privacy mode")
+		expect(w.text()).toContain("Load a receipt's network fee only when you tap Show fee")
+		expect(w.html().indexOf("explorer-trigger")).toBeLessThan(w.html().indexOf("privacy-mode-toggle"))
+		const modeToggle = w.findAllComponents(Toggle).find((c) => c.attributes("data-testid") === "privacy-mode-toggle")
+		modeToggle?.vm.$emit("update:modelValue", true)
+		await flushPromises()
+		expect(config.setValue).toHaveBeenCalledExactlyOnceWith("privacyMode", true)
+		expect(w.get('[data-testid="privacy-mode-toggle"]').attributes("data-on")).toBe("true")
+	})
+
 	test("the explorer trigger names the chosen explorer, and None turns links off with a toast", async () => {
 		const w = await mountPrivacy()
 		expect(w.get('[data-testid="explorer-trigger"]').text()).toBe("Aztecscan")

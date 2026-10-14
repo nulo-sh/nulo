@@ -347,6 +347,9 @@ export type Methods = {
 	 * fee, or the node lookup fails.
 	 */
 	getReceiptFee(id: string): { feeJuice: string } | null
+	/** The fee `getReceiptFee` already fetched this session for the record's current block, or `null`
+	 *  (a note receipt, an unknown id, nothing fetched yet). Never makes a network call. */
+	getCachedReceiptFee(id: string): { feeJuice: string } | null
 	/** Trust state for a (profile, network, contract) triple. Returns
 	 *  `unknown` for contracts that have never received an incoming note. */
 	getTrustState(profileId: string, networkId: string, contract: string): IncomingTrustState
