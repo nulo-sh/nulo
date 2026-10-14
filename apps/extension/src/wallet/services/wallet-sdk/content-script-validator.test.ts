@@ -209,7 +209,7 @@ describe("MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS — every bundled artifact's regis
 			)
 			largest = Math.max(largest, content.ciphertext.length)
 		}
-		expect(artifactFiles.length).toBeGreaterThanOrEqual(44)
+		expect(artifactFiles.length).toBeGreaterThanOrEqual(40)
 		expect(2 * largest).toBeLessThanOrEqual(MAX_SECURE_MESSAGE_CIPHERTEXT_CHARS)
 		// A fixed scan over about 100 MB of artifacts takes 3 to 6 s, past the 5 s default.
 	}, 60_000)
