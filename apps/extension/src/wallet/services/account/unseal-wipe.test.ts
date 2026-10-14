@@ -102,7 +102,13 @@ async function makeHarness(over: { skFill?: number; unsealFails?: boolean; addre
 			exportPlain: async () => Buffer.from(new Uint8Array(32).fill(9)).toString("base64"),
 		}),
 	)
-	services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {}, isChainLive: async () => true }))
+	services.add(
+		svc(NETWORK_SERVICE_NAME, {
+			registerChainPurgeSubscriber: () => {},
+			isChainLive: async () => true,
+			isChainQuarantined: async () => false,
+		}),
+	)
 	const service = new AccountService(new LoggerStore(new ConfigStore()), api)
 	services.add(service)
 	await services.start()

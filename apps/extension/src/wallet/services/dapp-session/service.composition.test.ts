@@ -7,6 +7,7 @@
  * real dispatcher over it, with stub network, account, execution and window services. See
  * `apps/extension/tests/COMPOSITION-TESTS.md`.
  */
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { beforeAll, describe, expect, test } from "vitest"
 import { type IDappInteractionRunner, WalletSdkDispatcher } from "@nulo/wallet-bridge"
 import { withHeader } from "@nulo/wallet-bridge/testing"
@@ -52,6 +53,7 @@ async function makeHarness() {
 		}),
 	)
 	const service = new DappSessionService(logger, api)
+	collection.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
 	collection.add(service)
 	await collection.start()
 	return { service, onProfileDeleted }

@@ -4,6 +4,7 @@ import { Service, defineRpcMethods } from "@nulo/extension-messaging/background"
 import { CapabilityNotGrantedError, ValidationError } from "@nulo/extension-messaging/errors"
 import { coversAnyContract, projectStoredGrants, readConsent } from "@nulo/wallet-bridge"
 import type { ILogger } from "@/wallet/logger"
+import { NetworkService } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
 import { type ExecutionFence, profileDeletedError } from "@/wallet/services/profile/profile-deletion-state"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
@@ -119,6 +120,11 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 	protected async init(services: ServiceCollection) {
 		this.profileService = services.get(ProfileService.name)
 		// Profile-delete cleanup is now the coordinator's awaited `purgeForProfile` (D).
+		// A purged chain's sessions name accounts that no longer exist, and an existing session
+		// auto-approves with whatever accounts the chain holds next.
+		services
+			.get<NetworkService>(NetworkService.name)
+			.registerChainPurgeSubscriber(async (profileId, chainId) => this.purgeForChain(profileId, chainId))
 	}
 
 	public async getDappSessions(): Promise<DappSession[]> {
@@ -489,6 +495,20 @@ export class DappSessionService extends Service<Methods, Events> implements Serv
 					return this.storage.delete(session.id)
 				},
 				(session) => this.emit("onDappSessionDeleted", session),
+			)
+		})
+	}
+
+	/** Every session of `profileId` on `chainId`, read raw like `purgeForProfile`, so a lock or
+	 *  recovery mode cannot hide one. */
+	public async purgeForChain(profileId: string, chainId: number): Promise<void> {
+		await this.ensureInitialized()
+		await this.lock.withLock(async () => {
+			const rows = (await this.storage.rowsForProfile(profileId)).filter(({ row }) => Number(row.chainId) === chainId)
+			await purgeRows(
+				rows,
+				({ storageId }) => this.storage.delete(storageId),
+				({ row }) => this.emit("onDappSessionDeleted", row),
 			)
 		})
 	}

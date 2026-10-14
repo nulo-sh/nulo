@@ -566,6 +566,12 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return network !== undefined && !this.deletingNetworks.has(network.id)
 	}
 
+	/** {@link servesChain} for a chain the dApp may also use now: a quarantined chain keeps its row
+	 *  (so its sessions are not dropped) but serves no new connection. */
+	public async servesLiveChain(profileId: string, chainId: number): Promise<boolean> {
+		return (await this.servesChain(profileId, chainId)) && !(await this.isChainQuarantined(profileId, chainId))
+	}
+
 	/**
 	 * Whether `chainId` must not be used in `profileId`: a stale-network record entry names it, a
 	 * reset journal starts or ends on it, or a seeded row on it is behind this build's seed. The

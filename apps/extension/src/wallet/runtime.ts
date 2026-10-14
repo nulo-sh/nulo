@@ -52,6 +52,7 @@ import { TokenListService } from "./services/token-list/service"
 import { ProfileService } from "./services/profile/service"
 import {
 	registerPxeGenerationProvider,
+	registerPxeChainGuard,
 	registerPxeRecoveryGuard,
 	registerPxeScopeRegistrar,
 	registerPxeStoreKeyProvider,
@@ -511,6 +512,7 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	const networkService = new NetworkService(logger, browserApi)
 	services.add(networkService)
 	registerPxeScopeRegistrar(createScopeRegistrar(accountService, networkService))
+	registerPxeChainGuard((profileId, chainId) => networkService.isChainQuarantined(profileId, chainId))
 	services.add(new NoteService(logger))
 	services.add(new OperationJournalService(logger, browserApi))
 	services.add(new PriceService(logger, browserApi))

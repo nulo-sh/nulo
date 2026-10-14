@@ -27,6 +27,8 @@ export function fakeSdkServices(
 		notice?: (params: { dappMetadata: { name: string; url: string } }) => Promise<void>
 		/** Whether the profile has a network for a chain; every chain by default. */
 		served?: (chainId: number) => boolean | Promise<boolean>
+		/** Whether a served chain is quarantined; none by default. */
+		quarantined?: (chainId: number) => boolean
 		legal?: () => Promise<void>
 		/** What `getActiveProfile` answers; `p1` by default. */
 		activeProfile?: () => Promise<{ id: string } | undefined>
@@ -65,6 +67,9 @@ export function fakeSdkServices(
 				network: {
 					getNetworksRaw: async () => [{ id: "net-1" }],
 					servesChain: async (_profileId: string, chainId: number) => opts.served?.(chainId) ?? true,
+					servesLiveChain: async (_profileId: string, chainId: number) =>
+						((await opts.served?.(chainId)) ?? true) && !opts.quarantined?.(chainId),
+					isChainQuarantined: async (_profileId: string, chainId: number) => opts.quarantined?.(chainId) ?? false,
 				},
 				account: { getAccounts: async () => [{ address: FAKE_SENDER }] },
 				execution: { beginQueuedWait: () => {}, endQueuedWait: () => {} },

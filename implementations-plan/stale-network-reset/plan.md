@@ -408,7 +408,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** `bun run --cwd apps/extension test src/wallet/services/account-integrity src/wallet/services/profile src/wallet/services/account`, `bun run lint`. Pass: green with existing assertions unedited; no new complexity directive.
 
-### Phase 3. Guards
+### Phase 3. Guards ✓
 
 1. Add the six AccountService guard sites.
 2. Chain-scope the transaction purge; add the dApp-session chain-purge subscriber.

@@ -14,6 +14,8 @@
  * stay small (1–2 PBKDF2 runs each) so the suite stays under ~30s total.
  */
 
+import { svc } from "@/wallet/services/composition-harness"
+import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { createHmac, hkdfSync } from "node:crypto"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import type { ConfigProp, IConfig } from "@/wallet/config"
@@ -3854,6 +3856,7 @@ describe("dApp-session rows under same-phrase SIBLINGS — the real ProfileServi
 		const profiles = new ProfileService(config, logger, api)
 		services.add(profiles)
 		const sessions = new DappSessionService(logger, api)
+		services.add(svc(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
 		services.add(sessions)
 		await services.start()
 		profiles.setDeletionDelegate({ snapshot: async () => ({ addresses: [], tokenIds: [], networkIds: [] }), runFor: async () => {} })

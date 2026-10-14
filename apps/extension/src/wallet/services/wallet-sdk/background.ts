@@ -68,6 +68,7 @@ import {
 	type DispatchHooks,
 	DiscoveryQueue,
 	isDiscoveryExpired,
+	type INetworkReader,
 	type SessionContext,
 	WalletSdkDispatcher,
 } from "@nulo/wallet-bridge"
@@ -213,6 +214,17 @@ type SdkDeps = {
 	logger: ILogger
 }
 
+/** The dispatcher's one network read. A quarantined chain resolves to no network, so every dApp
+ *  call on it gets `CHAIN_NOT_SUPPORTED` and the dApp learns nothing of the stale chain. */
+export function dispatcherNetworks(networkService: Pick<NetworkService, "getNetworksRaw" | "isChainQuarantined">): INetworkReader {
+	return {
+		getNetworksRaw: async (profileId, chainId) => {
+			if (chainId !== undefined && (await networkService.isChainQuarantined(profileId, chainId))) return []
+			return networkService.getNetworksRaw(profileId, chainId)
+		},
+	}
+}
+
 function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 	const networkService: NetworkService = services.get(NetworkService.name)
 	const accountService: AccountService = services.get(AccountService.name)
@@ -225,7 +237,7 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 	const legal: LegalAcceptanceService = services.get(LegalAcceptanceService.name)
 
 	const dispatcher = new WalletSdkDispatcher(
-		networkService,
+		dispatcherNetworks(networkService),
 		accountService,
 		executionService,
 		dappInteractionService,
@@ -784,7 +796,7 @@ async function drainQueuedDiscovery(discovery: PendingDiscovery, deps: SdkDeps, 
 type DiscoveryDeps = {
 	handler: BackgroundConnectionHandler
 	profileService: ProfileService
-	networkService: Pick<NetworkService, "servesChain">
+	networkService: Pick<NetworkService, "servesChain" | "servesLiveChain">
 	dappInteractionService: DappInteractionService
 	dappSessionService: DappSessionService
 	pendingVerification: Map<string, PendingVerificationEntry>
@@ -877,7 +889,7 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 		// Both read BEFORE the session lookup, never after it: the lookup must stay the last yield
 		// ahead of the popup-promise registration below.
 		const legalCurrent = await isLegalCurrent(deps.legal)
-		const served = await deps.networkService.servesChain(profile.id, Number(chainId))
+		const served = await deps.networkService.servesLiveChain(profile.id, Number(chainId))
 
 		// Check for existing valid session (returning user on this chain → auto-approve).
 		// Lookup is by `(origin, chainId)` so a session remembered on testnet does
@@ -1253,7 +1265,7 @@ async function persistAndApprove(
 		// The connect window opened on a served chain, and its network can be removed while it is up:
 		// a row written then could only serve refusals. Removal after the write is the 4901 case.
 		// Read before the profile check, which must stay the last await ahead of the write.
-		if (!(await deps.networkService.servesChain(profileId, Number(chainId)))) {
+		if (!(await deps.networkService.servesLiveChain(profileId, Number(chainId)))) {
 			rejectThrottled(discovery, deps, "its chain lost its network while the connect window was open")
 			return
 		}

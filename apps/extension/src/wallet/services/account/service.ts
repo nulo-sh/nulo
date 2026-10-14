@@ -241,6 +241,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	public async createAccount(profileId: string, chainId: number, type: AccountType, name: string): Promise<Account> {
 		await this.ensureInitialized()
+		await this.assertChainUsable(profileId, chainId)
 		return this.serializePerTuple(profileId, chainId, type, () => this.createAccountInternal(profileId, chainId, type, name))
 	}
 
@@ -255,6 +256,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 */
 	public async ensureDefaultAccount(profileId: string, chainId: number, type: AccountType, name: string): Promise<Account> {
 		await this.ensureInitialized()
+		await this.assertChainUsable(profileId, chainId)
 		return this.serializePerTuple(profileId, chainId, type, async () => {
 			// Imported accounts are excluded from the default-account candidate pool: a foreign key
 			// must never become the profile's auto-selected default.
@@ -278,6 +280,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 */
 	public async provisionDefaultAccount(profileId: string, chainId: number): Promise<void> {
 		await this.ensureInitialized()
+		await this.assertChainUsable(profileId, chainId)
 		await this.serializePerTuple(profileId, chainId, AccountType.Nulo_v1, async () => {
 			const rows = (await this.liveRows()).filter((x) => x.profileId === profileId && x.chainId === chainId)
 			if (rows.length > 0) return
@@ -439,6 +442,9 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		if (account.type !== AccountType.Nulo_v1) {
 			throw new Error("unknown account type")
 		}
+		// Before the derivation: a quarantined chain's addresses are expected to mismatch, and must
+		// never reach `raiseRuntimeMismatch`.
+		await this.assertChainUsable(profileId, chainId)
 		// Re-derivation reads the ROW-CARRIED l1ChainId (self-contained; a tampered value derives
 		// a different address and fails closed below). `deriveAccountSeed` rejects non-canonical
 		// values — never a silent default.
@@ -461,6 +467,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * no `raiseRuntimeMismatch`.
 	 */
 	private async loadImportedAccountContract(profileId: string, account: Account, requestedAddress: string): Promise<IAccountContract> {
+		await this.assertChainUsable(profileId, account.chainId)
 		const keyRow = await this.importedKeys.get(profileId, account.chainId, account.address)
 		if (!keyRow) throw new ImportedAccountUnusableError(account.address, "signing key missing")
 		// The imported-key root is the CREDENTIAL-sealed per-profile DEK, never the master (a
@@ -543,6 +550,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		name?: string,
 	): Promise<Account> {
 		await this.ensureInitialized()
+		await this.assertChainUsable(profileId, chainId)
 		// Fenced like createAccount: captured before the DEK read, which a deletion can interleave.
 		const deletion = this.profileService.getDeletionState()
 		const epoch = deletion.capture(profileId)
@@ -666,6 +674,12 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "integrity session close failed", { error: closeError })
 		}
 		throw new AccountAddressInconsistencyError(undefined, { profileId, chainId, accountIndex })
+	}
+
+	/** No account on a quarantined chain is created, imported or loaded for signing; the reset
+	 *  re-creates through the internal path. */
+	private async assertChainUsable(profileId: string, chainId: number): Promise<void> {
+		if (await this.networkService.isChainQuarantined(profileId, chainId)) throw new ChainNotSupportedError()
 	}
 
 	private async quarantinedAtRuntime(profileId: string, chainId: number): Promise<boolean> {
