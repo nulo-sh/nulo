@@ -185,13 +185,14 @@ export const IncomingTrustRecordSchema: z.ZodType<IncomingTrustRecord> = z.objec
  * writer, only inside the service lock + epoch check.
  */
 export type PublicScanCursor = {
-	/** Last committed page position; `null` = never scanned (start from `startBlock`). */
+	/** Last committed page position; `null` = nothing committed yet (start just above
+	 *  `lastScanFinalized`, or at `startBlock` before the first scan). */
 	cursor: PublicEventCursor | null
 	/** Reorg anchor — passed as `referenceBlock`; the node throws if this block was reorged out. */
 	lastSyncedBlockHash: string | null
 	/** Rewind FLOOR — the finalized tip AT the last successful scan (NOT the current finalized). */
 	lastScanFinalized: number | null
-	/** Retrofit seam for a future per-token backfill window. `0` in v1. */
+	/** Where history starts: the back-fill's lowest block. `0` in v1. */
 	startBlock: number
 	/**
 	 * Closes the normal-scan record-before-cursor crash window: written BEFORE a page's record
@@ -215,6 +216,13 @@ export type PublicScanCursor = {
 		progress: PublicEventCursor | null
 		seen: Array<[height: number, blockHash: string]>
 	}
+	/**
+	 * History at or below the finalized tip of the first scan, read newest window first: the window
+	 * `[low, high]` is paged upward from `position` (`null` before its first page). Absent once the
+	 * window that starts at `startBlock` is read. Its blocks are final, so a crash between a record
+	 * write and this field's advance only replays a page.
+	 */
+	backfill?: { low: number; high: number; position: PublicEventCursor | null }
 }
 
 /** Build the storage key for a public-scan cursor row. */
@@ -236,6 +244,12 @@ const reconcilingSchema = z.object({
 	seen: z.array(z.tuple([z.number(), z.string()])),
 })
 
+const backfillSchema = z.object({
+	low: z.number(),
+	high: z.number(),
+	position: PublicEventCursorSchema.nullable(),
+})
+
 /** Storage codec row schema — mirrors `PublicScanCursor` exactly. */
 export const PublicScanCursorSchema: z.ZodType<PublicScanCursor> = z.object({
 	cursor: PublicEventCursorSchema.nullable(),
@@ -244,6 +258,7 @@ export const PublicScanCursorSchema: z.ZodType<PublicScanCursor> = z.object({
 	startBlock: z.number(),
 	pendingPage: pendingPageSchema.optional(),
 	reconciling: reconcilingSchema.optional(),
+	backfill: backfillSchema.optional(),
 })
 
 /**

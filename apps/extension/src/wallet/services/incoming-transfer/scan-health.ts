@@ -2,7 +2,7 @@
  * What one public-scan tick achieved for a contract.
  * - `progress`: a validated cursor advance was committed (forward, or a reconciliation step).
  * - `idle-at-tip`: a validated empty read up to the pinned checkpoint — nothing to do.
- * - `no-progress`: the tick ran but confirmed nothing (dropped page, no checkpoint hash).
+ * - `no-progress`: the tick ran but confirmed nothing (a dropped page, a stood-down commit).
  * - `failed`: the tick could not run or threw.
  * - `ineligible`: the token is never scanned (non-standard class); not a health signal.
  */

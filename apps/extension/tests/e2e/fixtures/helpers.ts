@@ -1623,6 +1623,30 @@ export async function navigateByHash(page: Page, hash: string, timeout = 5_000):
 	// add its own state-driven wait, not bring the sleep back.
 }
 
+/** The incoming scheduler's tick interval: a receipt shown sooner after an unlock came from the
+ *  unlock's own scan, not from a tick. */
+export const INCOMING_SCAN_INTERVAL_MS = 30_000
+
+/** Unlock a locked wallet, then wait on History for an incoming row whose kind chip reads `label`
+ *  and amount reads `amount`. Resolves the time from helper entry to the row. */
+export async function unlockUntilIncomingRow(page: Page, label: string, amount: string, timeout = 180_000): Promise<number> {
+	const unlockedFrom = Date.now()
+	await ensureUnlocked(page, TEST_PASSWORD)
+	await waitForHash(page, "#/popup/general", 60_000)
+	await navigateByHash(page, "#/popup/activity")
+	await page.waitForFunction(
+		([lbl, amt]) =>
+			[...document.querySelectorAll('[data-testid="tx-incoming-card"]')].some(
+				(card) =>
+					(card.querySelector('[data-testid="tx-incoming-kind-chip"]')?.textContent || "").trim() === lbl &&
+					(card.querySelector('[data-testid="activity-amount"]')?.textContent || "").trim() === amt,
+			),
+		{ timeout, polling: 500 },
+		[label, amount] as const,
+	)
+	return Date.now() - unlockedFrom
+}
+
 /** Drive the change-password form. Assumes you're on `/popup/settings/profile`
  *  or already on the change-password page; navigates explicitly to be
  *  idempotent. Submits and waits for the success toast. Caller is then on

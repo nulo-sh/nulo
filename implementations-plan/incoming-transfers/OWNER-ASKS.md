@@ -147,4 +147,5 @@ stays open.
 
 ## Answers
 
-None yet.
+- **OA-5 = A, newest first** (decision page 4, signed 2026-10-14). Phase 2.3 is built: newest public
+  receipts land on a token's first scan, and older rows fill in below, newest to oldest.

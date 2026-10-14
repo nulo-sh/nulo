@@ -24,7 +24,7 @@ import { BlockNumber } from "@aztec-labs/foundation/branded-types"
 import type { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { decodeFromAbi } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
-import { BlockHash } from "@aztec-labs/stdlib/block"
+import { BlockHash, type L2BlockId } from "@aztec-labs/stdlib/block"
 import { getContractClassFromArtifact } from "@aztec-labs/stdlib/contract"
 import { computeLogTag } from "@aztec-labs/stdlib/hash"
 import { MAX_LOGS_PER_TAG } from "@aztec-labs/stdlib/interfaces/api-limit"
@@ -88,13 +88,14 @@ export interface PublicTransferPage {
 	dropped: boolean
 }
 
-/** Both reorg-relevant tips resolved in one probe (plain `BlockNumber`s, no `getChainTips` structs). */
+/** The chain tips one scan tick works from, read in one `getChainTips` call. */
 export interface PublicScanTips {
 	checkpointedBlockNumber: number
-	/** Hash of the checkpointed tip block — the reconciliation fork anchor (`upperBoundHash`).
-	 *  `null` if the node couldn't resolve the block data (reconciliation then waits a tick). */
-	checkpointedBlockHash: string | null
+	/** Hash of the checkpointed tip block — the reconciliation fork anchor (`upperBoundHash`). */
+	checkpointedBlockHash: string
 	finalizedBlockNumber: number
+	/** Hash of the proposed tip block: it changes with every new block, a same-height re-mine included. */
+	proposedBlockHash: string
 }
 
 /**
@@ -131,8 +132,9 @@ export const PublicTransferPageSchema = z.object({
 
 export const PublicScanTipsSchema = z.object({
 	checkpointedBlockNumber: z.number().int().nonnegative(),
-	checkpointedBlockHash: z.string().nullable(),
+	checkpointedBlockHash: z.string(),
 	finalizedBlockNumber: z.number().int().nonnegative(),
+	proposedBlockHash: z.string(),
 }) satisfies z.ZodType<PublicScanTips>
 
 export const PublicTokenClassStatusSchema = z.enum(["standard", "non-standard", "unresolved"]) satisfies z.ZodType<PublicTokenClassStatus>
@@ -387,21 +389,39 @@ function decodePublicTransfer(entry: LogResult, log?: PublicEventLogger): Public
 	}
 }
 
-/** Resolve both reorg-relevant tips: the `checkpointed` index bound + fork-anchor hash + the
- *  `finalized` rewind floor. Number + hash come from the SAME checkpointed block data so they can't
- *  skew; a `getBlockData` failure falls back to the plain number with a `null` hash. */
+const BLOCK_HASH = /^0x[0-9a-fA-F]{64}$/
+
+function tipNumber(id: L2BlockId, tier: string): number {
+	const number: unknown = id.number
+	if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 0)
+		throw new Error(`public-events: ${tier} tip number refused`)
+	return number
+}
+
+function tipHash(id: L2BlockId, tier: string): string {
+	const hash: unknown = id.hash
+	if (typeof hash !== "string" || !BLOCK_HASH.test(hash)) throw new Error(`public-events: ${tier} tip hash refused`)
+	return hash
+}
+
+/**
+ * The chain tips, all from ONE `getChainTips` reply, so they describe one instant. A reply whose
+ * tips are out of order (`finalized ≤ checkpointed ≤ proposed`) is refused: the scan bounds, the
+ * finalized rewind floor and the back-fill start all assume it.
+ */
 export async function getPublicScanTips(node: AztecNode): Promise<PublicScanTips> {
-	const [checkpointedData, finalized] = await Promise.all([
-		node.getBlockData("checkpointed").catch(() => undefined),
-		node.getBlockNumber("finalized"),
-	])
-	const checkpointedBlockNumber = checkpointedData
-		? Number(checkpointedData.header.getBlockNumber())
-		: Number(await node.getBlockNumber("checkpointed"))
+	const tips = await node.getChainTips()
+	const finalizedBlockNumber = tipNumber(tips.finalized.block, "finalized")
+	const checkpointedBlockNumber = tipNumber(tips.checkpointed.block, "checkpointed")
+	const proposedBlockNumber = tipNumber(tips.proposed, "proposed")
+	if (finalizedBlockNumber > checkpointedBlockNumber || checkpointedBlockNumber > proposedBlockNumber) {
+		throw new Error("public-events: chain tips out of order")
+	}
 	return {
 		checkpointedBlockNumber,
-		checkpointedBlockHash: checkpointedData ? checkpointedData.blockHash.toString() : null,
-		finalizedBlockNumber: Number(finalized),
+		checkpointedBlockHash: tipHash(tips.checkpointed.block, "checkpointed"),
+		finalizedBlockNumber,
+		proposedBlockHash: tipHash(tips.proposed, "proposed"),
 	}
 }
 

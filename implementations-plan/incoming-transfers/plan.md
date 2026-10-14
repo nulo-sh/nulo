@@ -471,7 +471,7 @@ this host. Check `~/.agents/ports.md` first.
 Every phase here waits on page 4. P4-04 is conditional: Arc 2 merges only with Phase 2.4's proofs.
 Phase 2.3 also waits on OA-5.
 
-#### Phase 2.1: baseline count
+#### Phase 2.1: baseline count ✓
 
 1. Run the extension on the sandbox for ten unlocked minutes: two accounts, the default tokens, no
    sends.
@@ -481,7 +481,7 @@ Phase 2.3 also waits on OA-5.
 Validation gate: the table and the call-site names are in `lessons/phase-2.md`; `git diff --stat`
 shows no product file.
 
-#### Phase 2.2: block-gated ticks (#143)
+#### Phase 2.2: block-gated ticks (#143) ✓
 
 1. Rebuild `getPublicScanTips` on `getChainTips()`; add the proposed tip and the ordering checks.
 2. Add a unit test per refused reply class: a bad number, a bad hash, out-of-order tips.
@@ -496,7 +496,7 @@ Validation gate:
   with no new blocks, and no more on a busy one.
 - Layers: unit, lint, typecheck.
 
-#### Phase 2.3: newest-first public scan (#138; only on OA-5 = A)
+#### Phase 2.3: newest-first public scan (#138; only on OA-5 = A) ✓
 
 1. Fix `W` from the forward scan's page budget; record it in `lessons/phase-2.md`.
 2. Add the optional `backfill: { low, high, position }` field to `PublicScanCursor` and its schema.
@@ -516,7 +516,7 @@ Validation gate:
 
 Validation gate: as Phase 2.2; the storage codec round-trip test covers the new field.
 
-#### Phase 2.4: liveness proofs (P4-04's condition)
+#### Phase 2.4: liveness proofs (P4-04's condition) ✓
 
 Each scenario asserts the receipt row exists less than 120 s of fake time after the event, so the
 fallback tick cannot explain it.
@@ -850,6 +850,52 @@ not verify the witness. Nothing in this plan widens that assumption.
   behaviour, for a case that needs a five-minute storage stall, and the recovery path exists. Accepted
   as a test: both arms pin that the next tick stores the receipt hidden and the next popup open
   prompts.
+- **D-orch-4, Arc 2 is one plain PR.** After Arc 1's squash merge an arc branches from `dev`. Arc 2
+  opens with `gh pr create --base dev`, not as a `gh stack` layer; Arc 3 is planned after it opens and
+  may stack on it.
+- **D-orch-5, the tree wins.** The tree moved since the plan's facts. Every Arc 2 fact is re-verified;
+  where plan and tree disagree the tree wins, recorded here and in `lessons/phase-2.md`.
+- **D-orch-6, e2e runtime budget.** Each of Phase 2.4 step 5's two install-run scenarios names in
+  `lessons/phase-2.md` the failure mode it proves, why a cheaper layer cannot, and its estimated then
+  measured runtime. The PR body states the network suite's per-browser wall-clock before and after.
+- **D-orch-7, no `.vue` change.** `check:plans` runs inside `test:ci-gating`. Every `.vue` style takes
+  face, letter-spacing and case from a type role; Arc 2 touches no `.vue`.
+- **D-orch-8, one new persisted field.** `PublicScanCursor.backfill` is the only one (pre-production:
+  no migration; the codec round-trip test covers it). A review round that needs more persistent state
+  stops for the orchestrator.
+- **D-orch-9, pins move, never loosen.** No `skipIf`, retry, raised timeout or suppression; the stall
+  watchdog stays; Phase 2.4's proofs assert the 120 s fake-time bound as written.
+- **D-orch-10, proportion.** A finding becomes a change only with its path written; later Codex rounds
+  verify, they do not reopen.
+- **D-orch-11, close-out is not Arc 2's.** Arc 2 keeps `STATUS.md`, ticks Phases 2.1 to 2.4, records its
+  Codex rounds here and under § Audit verdicts, and adds OA-5 = A under `OWNER-ASKS.md` § Answers. Arc 3
+  and the close-out layer follow.
+- **D14, a failed shared tips read fails the public tick (tree wins).** § Architecture said each target
+  then reads its own tips. A second read in the same tick hits the same node and only adds calls during
+  an outage or a rate limit; episodes and the stalled banner see the same `failed`. Note targets run
+  ungated. A failed read is shared only while in flight, so a Retry reads again. The design consult
+  judged it sound.
+- **D15, a run that misses the tips forgets its mark.** § Architecture said such a run keeps the old
+  `scannedAt`. Deleting it means a forced run that fails at an unchanged hash cannot leave a mark that
+  skips the next tick. The design consult judged it sound and asked for the epoch to be captured before
+  the tips await, which is built.
+- **D16, the forward start derives from the floor (tree wins).** A cursor-less forward scan starts at
+  `lastScanFinalized + 1` (or `startBlock` before any scan), so seeding `F0` needs no new field. The
+  stranded-cursor reset after a rollback now re-covers from the floor: every block at or below it was
+  read or is left to back-fill. The design consult judged it safe.
+- **D17, `W = 100` and one tick budget.** `W` is five pages of 20 logs. Back-fill reads as many windows
+  as the pages the forward pass left; an empty window costs one page. Doubling windows was rejected: it
+  weakens newest-first ordering, which is OA-5's. Empty history costs about `F0 / 100` pages, four a
+  tick (an hour for 50,000 blocks).
+- **D18, the tips type narrowed.** `PublicScanTips` gained `proposedBlockHash` only (no proposed
+  number: nothing reads it). `checkpointedBlockHash` is no longer nullable, since `getChainTips` always
+  carries it, and the two tests of a null checkpoint hash were deleted as unreachable.
+- **D19, Phase 2.1 measured one token.** The sandbox has one deployed token; the default tokens are
+  testnet addresses with no contract there. The public arm costs the same per token.
+- **D20, a failing back-fill counts against the target.** A back-fill `no-progress` or `failed` is the
+  tick's outcome, so a page a hostile node drops forever opens a failure episode: backoff spaces the
+  whole target, forward pass included, up to 5 minutes apart and the stalled banner shows. Before this
+  arc the same page stopped the forward scan outright. Recorded, not changed (Opus review, Low).
 - **Unresolved:** I7 (storage dispatch order) is an inference neither reviewer could check from the
   tree; Phase 1.2's handoff rows prove the fence, not the browser's ordering.
 
@@ -1059,6 +1105,56 @@ No pin weaker than at `18a1111`; the touched comments exact. One Low:
 ### Arc 1 implementation review, round 3: Codex (same session, resumed, on `caee105..11ef717`), `approve`
 
 No findings; the revised TSDoc matches the implementation. The loop converged.
+
+### Arc 2 design consult: Codex (gpt-6.1-sol, high, read-only, default login), on Phase 2.2 built and Phase 2.3 proposed
+
+1. D-A, a failed shared tips read fails public ticks without a second read: **sound** (D14).
+2. D-B, the note arm's "reached the tips" and a missed run forgetting its mark: **sound**, with one
+   demonstrated defect: the target's epoch was captured after the tips await, so a deletion during
+   the read let a stale run write. **Accepted**: captured before, passed into both scans; two
+   regression tests fail with it reverted (D15).
+3. D-C, a cursor-less forward scan starting at `lastScanFinalized + 1`: **safe** (D16).
+4. D-D, doubling back-fill windows to cut the cost of empty history: **rejected** by the reviewer, as
+   it weakens newest-first ordering; keep `W` fixed and read several windows a tick (D17).
+5. D-E, back-fill replay without a pending-page marker: **sound**, but the forward pass and back-fill
+   must share the tick's page budget. **Accepted** (D17).
+
+### Arc 2 implementation review, round 1: Codex (gpt-6.1-sol, high, read-only, default login, fresh session on `d3dc4415..ef6f484d`), `reject (with blocking findings: retry proof does not establish mark deletion)`
+
+1. Medium, the retry proof changed both hashes, so a failed run that kept its old mark was rerun
+   anyway. **Accepted**: only the checkpoint moves and the note arrives late at the hash its target
+   reached; keeping the mark, or marking the tips, fails it.
+2. Low, the backoff-restart test had loosened "no tips call" to "one call" (the note target's).
+   **Accepted**: it boots without accounts and asserts no call; reading tips before the backoff gate
+   fails it.
+3. Low, the back-fill doc said a dropped page keeps the position; it keeps its valid prefix.
+   **Accepted**.
+4. Low, five comments restated their code, and the e2e helper misnamed its clock start. **Accepted**.
+
+Looks fine, per the round: the gap and reorg proofs' mechanism sensitivity, both network scenarios'
+timing, the shared budget, window termination, the forward start, reconciliation's floor and the
+back-fill fences.
+
+### Arc 2 implementation review: Opus (general-purpose agent, final diff, beside round 1), `holds; no High or Medium; eight Low`
+
+1. Low, the replay test could not see a duplicate. **Accepted**: it counts the trusted token's Added
+   emit; re-inserting an existing record fails it.
+2. Low, the account-add test proved only the forward half. **Accepted**: it asserts the forward read
+   at 1001 and back-fill at `[901, 1000]`; keeping the old window fails it.
+3. Low, the retry proof's next-tick claim for the public arm held only under zero-time scans: live,
+   the backoff (stamped at the scan's end) outlasts the next tick. **Accepted**: the failing read takes
+   a second; the note lands on the next tick, the public receipt at 90 s.
+4. to 6. Low, an orphaned doc block and stale comments (`no-progress`, the tips client, the
+   account-reset lock, `F0`'s reason, the public tick's doc). **Accepted**.
+7. Low, a back-fill page dropped forever opens a failure episode for the whole target. **Recorded**,
+   not changed (D20).
+8. Low, gate evidence missing from `lessons/phase-2.md`. **Accepted**: the after-count table and the
+   revert record are there.
+
+### Arc 2 implementation review, round 2: Codex (same session, resumed, on `ef6f484d..a28e64d1`), `approve`
+
+Every round-1 finding fixed; neither commit changes production behaviour or weakens an assertion; no
+new finding. The loop converged.
 
 ## Post-implementation
 

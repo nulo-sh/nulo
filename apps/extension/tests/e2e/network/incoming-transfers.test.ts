@@ -1,6 +1,7 @@
 import { expect, inject } from "vitest"
 import { openPopup, test, waitForHash } from "../fixtures/extension"
 import type { AztecTestConfig } from "../fixtures/aztec"
+import { INCOMING_SCAN_INTERVAL_MS, getAccountAddress, lockWallet, switchToLocalNetwork, unlockUntilIncomingRow } from "../fixtures/helpers"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
@@ -46,6 +47,34 @@ test.skipIf(!hasConfig)(
 		expect(onActivityPage).toBe(true)
 
 		await page.close()
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"a private receipt sent while the wallet is locked shows sooner after the unlock than one scan interval",
+	{ timeout: 600_000 },
+	async ({ tokenReadyExtension }) => {
+		if (!aztecConfig) throw new Error("unreachable — skipIf guards")
+		const page = await openPopup(tokenReadyExtension)
+		await waitForHash(page, "#/popup/general", 30_000)
+		await switchToLocalNetwork(page)
+		const walletAddress = await getAccountAddress(page)
+		const { createTestWallet, createSponsoredFeeOptions, mintPrivateTokens, transferPrivateTokens } = await import("../fixtures/aztec")
+		const { wallet, node, cleanup } = await createTestWallet(aztecConfig.nodeUrl)
+		try {
+			const feeOptions = await createSponsoredFeeOptions(wallet)
+			const minter = aztecConfig.minterAddress
+			await mintPrivateTokens(wallet, node, aztecConfig.tokenAddress, minter, 9n * 10n ** 18n, minter, feeOptions)
+			await lockWallet(page)
+			await transferPrivateTokens(wallet, node, aztecConfig.tokenAddress, minter, walletAddress, 9n * 10n ** 18n, feeOptions)
+
+			const elapsed = await unlockUntilIncomingRow(page, "Received privately", "+9")
+			console.log(`[install-run] private receipt shown ${elapsed} ms after the unlock`)
+			expect(elapsed).toBeLessThan(INCOMING_SCAN_INTERVAL_MS)
+		} finally {
+			await cleanup()
+			await page.close()
+		}
 	},
 )
 

@@ -492,7 +492,7 @@ export class PxeServiceClientBase extends ServiceClient<Methods, PxeEvents> impl
 		return await PublicTransferPageSchema.parseAsync(result)
 	}
 
-	/** The checkpointed + finalized tips for the index bound + rewind floor. */
+	/** The checkpointed and finalized tips (index bound, rewind floor) and the proposed hash the scan ticks are gated on. */
 	public async getPublicScanTips(network: NetworkInfo): Promise<PublicScanTips> {
 		const result = await this.request("getPublicScanTips", network)
 		return await PublicScanTipsSchema.parseAsync(result)

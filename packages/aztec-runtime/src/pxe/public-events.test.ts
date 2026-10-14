@@ -70,16 +70,14 @@ function makeNode(opts: {
 	 *  (ancestor); `undefined` (default when unset & `membershipWitness` omitted) → non-member. */
 	membershipWitness?: unknown
 	onMembershipQuery?: (referenceBlock: unknown, blockHash: unknown) => void
+	chainTips?: unknown
 }): AztecNode {
 	return {
 		getBlockNumber: async (tip?: string) => {
 			if (tip === "finalized") return BlockNumber(opts.finalized ?? 100)
 			return BlockNumber(opts.checkpointed ?? 100)
 		},
-		getBlockData: async () => ({
-			header: { getBlockNumber: () => opts.checkpointed ?? 100 },
-			blockHash: { toString: () => "0xcheckpointtip" },
-		}),
+		getChainTips: async () => opts.chainTips,
 		getBlockHashMembershipWitness: async (referenceBlock: unknown, blockHash: unknown) => {
 			opts.onMembershipQuery?.(referenceBlock, blockHash)
 			return opts.membershipWitness
@@ -375,10 +373,40 @@ describe("fetchPublicTokenTransferEvents — boundary-ancestry probe", () => {
 })
 
 describe("getPublicScanTips", () => {
-	test("returns checkpointed number + hash + finalized number", async () => {
-		const node = makeNode({ checkpointed: 30, finalized: 12 })
-		const tips = await getPublicScanTips(node)
-		expect(tips).toEqual({ checkpointedBlockNumber: 30, checkpointedBlockHash: "0xcheckpointtip", finalizedBlockNumber: 12 })
+	const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`
+	const tip = (number: unknown, h: unknown = hash(Number(number))) => ({ number, hash: h })
+	const chainTips = (finalized: unknown, checkpointed: unknown, proposed: unknown) => ({
+		proposed,
+		checkpointed: { block: checkpointed, checkpoint: tip(1) },
+		proven: { block: checkpointed, checkpoint: tip(1) },
+		finalized: { block: finalized, checkpoint: tip(1) },
+	})
+
+	test("reads every tip from one getChainTips reply", async () => {
+		const node = makeNode({ chainTips: chainTips(tip(12), tip(30), tip(31)) })
+		expect(await getPublicScanTips(node)).toEqual({
+			checkpointedBlockNumber: 30,
+			checkpointedBlockHash: hash(30),
+			finalizedBlockNumber: 12,
+			proposedBlockHash: hash(31),
+		})
+	})
+
+	test("refuses a tip number that is not a block number", async () => {
+		const node = makeNode({ chainTips: chainTips(tip(-1, hash(1)), tip(30), tip(31)) })
+		await expect(getPublicScanTips(node)).rejects.toThrow(/finalized tip number refused/)
+	})
+
+	test("refuses a tip hash that is not 32-byte hex", async () => {
+		const node = makeNode({ chainTips: chainTips(tip(12), tip(30), tip(31, "0x31")) })
+		await expect(getPublicScanTips(node)).rejects.toThrow(/proposed tip hash refused/)
+	})
+
+	test("refuses tips out of order", async () => {
+		const finalizedAhead = makeNode({ chainTips: chainTips(tip(31), tip(30), tip(31)) })
+		await expect(getPublicScanTips(finalizedAhead)).rejects.toThrow(/out of order/)
+		const checkpointedAhead = makeNode({ chainTips: chainTips(tip(12), tip(32), tip(31)) })
+		await expect(getPublicScanTips(checkpointedAhead)).rejects.toThrow(/out of order/)
 	})
 })
 
