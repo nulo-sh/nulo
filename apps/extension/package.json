@@ -64,6 +64,7 @@
 		"@nulo/legal": "workspace:*",
 		"@nulo/resolve-asset": "workspace:*",
 		"@nulo/third-party-notices": "workspace:*",
+		"@nulo/token-list": "workspace:*",
 		"@nulo/wallet-bridge": "workspace:*",
 		"@nulo/wallet-core": "workspace:*",
 		"@nulo/wallet-crypto": "workspace:*",

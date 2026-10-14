@@ -15,14 +15,12 @@ import type { AztecTestConfig } from "../fixtures/aztec"
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 const hasConfig = aztecConfig !== undefined
 
-test.skipIf(!hasConfig)("getPublicScanTips returns well-formed checkpointed + finalized tips", { timeout: 60_000 }, async () => {
+test.skipIf(!hasConfig)("getPublicScanTips accepts the live node's chain tips", { timeout: 60_000 }, async () => {
 	const node = createAztecNodeClient(aztecConfig!.nodeUrl)
 	const tips = await getPublicScanTips(node)
-	expect(typeof tips.checkpointedBlockNumber).toBe("number")
-	expect(tips.checkpointedBlockNumber).toBeGreaterThanOrEqual(0)
-	expect(typeof tips.finalizedBlockNumber).toBe("number")
-	// The checkpointed block hash resolves on a live node (used as the D6 reconciliation anchor).
-	expect(tips.checkpointedBlockHash === null || typeof tips.checkpointedBlockHash === "string").toBe(true)
+	expect(tips.finalizedBlockNumber).toBeLessThanOrEqual(tips.checkpointedBlockNumber)
+	expect(tips.checkpointedBlockHash).toMatch(/^0x[0-9a-f]{64}$/i)
+	expect(tips.proposedBlockHash).toMatch(/^0x[0-9a-f]{64}$/i)
 })
 
 test.skipIf(!hasConfig)(
@@ -58,8 +56,7 @@ test.skipIf(!hasConfig)(
 		// The dual-anchor gate resolves the class at the EXACT pinned checkpoint hash, so
 		// pass the live checkpoint hash from the tips probe.
 		const tips = await getPublicScanTips(node)
-		expect(tips.checkpointedBlockHash).not.toBeNull()
-		const status = await resolveTokenClassStatus(node, aztecConfig!.tokenAddress, tips.checkpointedBlockHash!)
+		const status = await resolveTokenClassStatus(node, aztecConfig!.tokenAddress, tips.checkpointedBlockHash)
 		// The sandbox token IS the aztec-standards Token, so the gate must never report `non-standard`.
 		// `unresolved` is tolerated here (the finalized anchor can lag a freshly-deployed sandbox); the
 		// full scan-through-finality path is exercised by the behavioral e2e.

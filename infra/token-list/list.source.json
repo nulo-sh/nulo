@@ -1,0 +1,39 @@
+{
+	"tokens": [
+		{
+			"chainId": 2904119610,
+			"address": "0x0f8df6867e9547fdf90e0f69187ada6fbd7b1f6ad4903ad333200bb032279ecf",
+			"classId": "0x24c34002788720c941a327a20c369b12c8bdcff3b5a974673a8f618763471505",
+			"symbol": "USDC",
+			"decimals": 6,
+			"name": "Test USDC",
+			"priceId": "usd-coin"
+		},
+		{
+			"chainId": 2904119610,
+			"address": "0x0432a81ca01e5f7a4a738117718595c258bb6f0b1df1e797fc0881e26cdc41ee",
+			"classId": "0x24c34002788720c941a327a20c369b12c8bdcff3b5a974673a8f618763471505",
+			"symbol": "USDT",
+			"decimals": 6,
+			"name": "Test USDT",
+			"priceId": "tether"
+		},
+		{
+			"chainId": 2904119610,
+			"address": "0x0d8493a9747a706649e6bf85694356e3a8bd0f03a5f28479562d6b50d2ce590d",
+			"classId": "0x24c34002788720c941a327a20c369b12c8bdcff3b5a974673a8f618763471505",
+			"symbol": "EURC",
+			"decimals": 6,
+			"name": "Test EURC",
+			"priceId": "euro-coin"
+		},
+		{
+			"chainId": 2904119610,
+			"address": "0x2d8fb63a7b035198295a451cac292a50a2a58fdf4824e2f5c18356146062ff50",
+			"classId": "0x24c34002788720c941a327a20c369b12c8bdcff3b5a974673a8f618763471505",
+			"symbol": "GBPC",
+			"decimals": 6,
+			"name": "Test GBPC"
+		}
+	]
+}

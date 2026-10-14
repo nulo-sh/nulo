@@ -15,3 +15,10 @@
 - 2026-10-09 — Phase 1.3 gate passed: units 373/373, test 10746 passed, test:all 0, lint 0, typecheck:all 0; composition test passes the checklist.
 - 2026-10-10 — Arc 1 review round 1: Codex `approve` (3 Low), Opus holds (7 Low); all accepted and fixed.
 - 2026-10-10 — Arc 1 review round 2: Codex `approve` (1 Low, doc), fixed.
+- 2026-10-14 — Arc 2 started on `incoming-transfers-cadence` off `dev` `d3dc4415` (D-orch-4 to D-orch-11); page 4 P4-04 and OA-5 = A signed.
+- 2026-10-14 — Phase 2.1 measured on base code: quiet 12.0 and 13.6 calls/min, busy 46.8/min (20 blocks in 10 min); table in lessons/phase-2.md.
+- 2026-10-14 — Phase 2.2 and 2.3 built (design consult with Codex: D14 to D17); Phase 2.4's unit proofs fail with their mechanisms reverted (gap 240 s, reorg 150 s, retry 150 s).
+- 2026-10-14 — Phase 2.2 gate: after-count quiet 4.8 calls/min (base 12.0, 13.6), busy 44.0 (base 46.8); units, test:all, lint, typecheck:all green. Phase 2.3 gate: units 391/391, codec round-trip covers `backfill`.
+- 2026-10-14 — Arc 2 review: Codex round 1 `reject` (retry proof, three Low), Opus `holds` (eight Low); fixed. Codex round 2 `approve`; loop converged.
+- 2026-10-14 — Phase 2.4 network gate on `ef6f484d`: 7 files, 19/19 at retry 0 (proverless); install-run rows 2.2 s (public) and 1.7 s (private) after unlock. Final-head rerun next.
+- 2026-10-14 — Phase 2.4 gate on the final product code (`cffb6200`): 7 files, 19/19 at retry 0; lint, typecheck:all, test, test:all, test:ci-gating and check:plans green on `9961b437`. Arc 2 ready for its PR.
