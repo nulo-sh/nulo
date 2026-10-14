@@ -451,6 +451,7 @@ describe("auth.vue — what a failed unlock says", () => {
 
 	test("any other passkey failure gets the generic line", async () => {
 		await failPasskeyUnlock(new Error("authenticator exploded"))
+		expect(openToastMock).toHaveBeenCalledTimes(1)
 		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Couldn't unlock. Try again." })
 	})
 
