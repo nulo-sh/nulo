@@ -139,6 +139,7 @@ describe("auth.vue — torn-import unlock refusal", () => {
 		expect(torn.exists()).toBe(true)
 		expect(torn.text()).toContain("didn't finish")
 		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(false)
+		expect(openToastMock).not.toHaveBeenCalled()
 		expect(routerPush).not.toHaveBeenCalled()
 	})
 
@@ -406,6 +407,26 @@ describe("auth.vue — what a failed unlock says", () => {
 		await flushPromises()
 		return wrapper
 	}
+
+	async function failPasswordUnlock(error: unknown) {
+		unlockProfile.mockRejectedValue(error)
+		const { wrapper } = mountAuth()
+		await flushPromises()
+		await wrapper.find("[data-stub-input]").setValue("pass1234")
+		await wrapper.find("form").trigger("submit")
+		await flushPromises()
+		return wrapper
+	}
+
+	test("a password unlock that fails for an unlisted reason says so, without the error's text, and stops the spinner", async () => {
+		const wrapper = await failPasswordUnlock(new Error("Invalid profile id"))
+		expect(openToastMock).toHaveBeenCalledTimes(1)
+		expect(openToastMock).toHaveBeenCalledWith({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
+		expect(wrapper.find('[data-testid="error-text"]').exists()).toBe(false)
+		// The latch is released: the next submit reaches the service again.
+		await wrapper.find("form").trigger("submit")
+		expect(unlockProfile).toHaveBeenCalledTimes(2)
+	})
 
 	test("a wrong password keeps its inline error and gets no toast", async () => {
 		unlockProfile.mockRejectedValue(new InvalidPasswordError())
