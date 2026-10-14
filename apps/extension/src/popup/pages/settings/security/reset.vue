@@ -10,8 +10,8 @@
 </route>
 
 <script setup>
-/** Utils */
-import { managers } from "@/utils/core"
+/** Services */
+import { deleteProfileClient } from "@/wallet/services/profile/client"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -46,6 +46,12 @@ const SLOW_DELETE_HINT_DELAY_MS = 10_000
 const isSlowDelete = ref(false)
 let slowDeleteTimer = null
 
+// Its own client: the shared one gives up at 60 s, well inside the wait the hint promises.
+const deleteService = deleteProfileClient()
+// A call the unmount's disconnect rejects says nothing: the deletion runs on, and the shell hears
+// its outcome through `onProfileDeleted`.
+let isUnmounted = false
+
 const handleReset = async () => {
 	if (!isReadyToReset.value || isResetting.value) return
 
@@ -62,8 +68,9 @@ const handleReset = async () => {
 		isSlowDelete.value = true
 	}, SLOW_DELETE_HINT_DELAY_MS)
 	try {
-		await managers.profile.deleteProfile(deletedId)
+		await deleteService.deleteProfile(deletedId)
 	} catch (_err) {
+		if (isUnmounted) return
 		isResetting.value = false
 		clearTimeout(slowDeleteTimer)
 		isSlowDelete.value = false
@@ -101,6 +108,8 @@ const handleReset = async () => {
 }
 
 onBeforeUnmount(() => {
+	isUnmounted = true
+	deleteService.disconnect()
 	if (slowDeleteTimer) clearTimeout(slowDeleteTimer)
 })
 </script>

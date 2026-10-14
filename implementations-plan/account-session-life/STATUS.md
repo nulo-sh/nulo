@@ -41,3 +41,4 @@
 - 2026-10-14: phase 4.2 gate pass: lint 0, typecheck:all 0 (after a bun install the dev merge needed), test:all 0 (extension 12167, messaging 394); nine new proofs red on 15881c7d, the drop guard green there.
 - 2026-10-14: phase 4.3 gate pass: lint 0, typecheck:all 0, test 0 (extension 12184), the rg gate clean; 14 new proofs red on the pre-shell source; smoke sw-resilience + registration + passkey-paths retry-0 Chrome 14/14 in 84 s, Firefox 9/9 (5 Chrome-only skips) in 94 s. The type-roles inventory swaps GlobalLoader for StartBar.
 - 2026-10-14: phase 4.4 held-boot case pass: Chrome 10/10 (64 s), Firefox 5/5 (67 s) on sw-resilience retry-0; red on base at the auth hash; release to Ready 550 ms / 708–844 ms.
+- 2026-10-14: phase 4.5 gate pass: lint 0, typecheck:all 0, profile client + composables 887/887; both new proofs red on the pre-4.5 client, the 60 s guard green there. reset.vue's catch stays silent after unmount, as the shared client's call ran on before.

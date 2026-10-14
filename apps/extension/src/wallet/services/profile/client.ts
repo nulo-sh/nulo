@@ -1,12 +1,16 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
 import type { MethodsSpec, Restored, ServiceSpec } from "@/wallet/base"
-import { ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
+import { DEFAULT_INIT_TIMEOUT_MS, ServiceClient, definePassthroughsExhaustive } from "@nulo/extension-messaging/background"
 import { documentLogger } from "@/wallet/services/logger/client"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import type { PasskeyCredentialData } from "@nulo/wallet-crypto"
 import { PROFILE_SERVICE_NAME, type ProfileInfo, type Events, type Methods, type RestoreSecret } from "./spec"
 
 export * from "./spec"
+
+/** Delete Profile's bound: the 30 minutes its hint says a running proof may hold the purge, plus the
+ *  start-up allowance the call may spend waiting for the background's Ready. */
+export const DELETE_PROFILE_TIMEOUT_MS = 30 * 60_000 + DEFAULT_INIT_TIMEOUT_MS
 
 // Declaration-merge the passthrough signatures onto the class type. Bodies are
 // installed at runtime by `definePassthroughs`; this is what satisfies
@@ -20,8 +24,8 @@ export class ProfileServiceClient extends ServiceClient<Methods, Events> impleme
 	public readonly onActiveProfileChanged = new EventHandler<ProfileInfo | undefined>()
 	public readonly onImportedKeysDegraded = new EventHandler<ProfileInfo>()
 
-	public constructor(name?: string) {
-		super(PROFILE_SERVICE_NAME, documentLogger(), name)
+	public constructor(name?: string, options?: { requestTimeoutMs?: number }) {
+		super(PROFILE_SERVICE_NAME, documentLogger(), name, options)
 	}
 
 	/** Declared here (and re-installed by the exhaustive list below) because the base client's
@@ -122,3 +126,9 @@ definePassthroughsExhaustive<Methods>()(ProfileServiceClient.prototype, [
 	"restore",
 	"finalizeRestore",
 ])
+
+/** A client for Delete Profile alone, whose calls wait out `DELETE_PROFILE_TIMEOUT_MS`. Every other
+ *  caller keeps the default bound, so the backup import's rollback stays at three 60 s attempts. */
+export function deleteProfileClient(): ProfileServiceClient {
+	return new ProfileServiceClient("profile-delete-client", { requestTimeoutMs: DELETE_PROFILE_TIMEOUT_MS })
+}

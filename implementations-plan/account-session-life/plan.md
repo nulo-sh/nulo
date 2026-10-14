@@ -341,7 +341,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: exit 0 on both browsers; the new proof fails on the base build; both measured runtimes and the added wait are recorded in `lessons/phase-4.md`.
 - Layers: smoke e2e on Chrome and Firefox.
 
-#### Phase 4.5: Delete Profile's bound (P7-09)
+#### Phase 4.5: Delete Profile's bound (P7-09) ✓
 
 1. Pass the constructor's `options` through, add `deleteProfileClient()`, and use it in `reset.vue` as § Arc 4 states.
 2. `profile/client.test.ts`, with fake timers:
