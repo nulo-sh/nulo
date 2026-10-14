@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { OriginType } from "@/wallet/services/transaction/client"
+import { formatGas } from "@/utils/fee-estimation"
 import { buildGasBreakdown, computeFeeSavings, describeFeePaymentMethod } from "./tx-detail-helpers"
 
 describe("tx-detail-helpers/buildGasBreakdown", () => {
@@ -9,30 +10,17 @@ describe("tx-detail-helpers/buildGasBreakdown", () => {
 		expect(buildGasBreakdown(undefined)).toBeNull()
 	})
 
-	test("computes L2 + DA costs", () => {
+	test("the L2 and DA lines alone, whatever the teardown limits: they add up to the fee limit", () => {
+		// 1_000 · 1e12 + 500 · 2e12 = 2e15, the fee limit; the teardown sits inside both limits.
 		const result = buildGasBreakdown({
-			feePerL2Gas: 10n,
-			feePerDaGas: 20n,
-			l2GasLimit: 100,
-			daGasLimit: 50,
-			teardownL2GasLimit: 0,
-			teardownDaGasLimit: 0,
+			feePerL2Gas: 1_000_000_000_000n,
+			feePerDaGas: 2_000_000_000_000n,
+			l2GasLimit: 1_000,
+			daGasLimit: 500,
+			teardownL2GasLimit: 300,
+			teardownDaGasLimit: 100,
 		})
-		expect(result?.hasTeardown).toBe(false)
-		expect(result?.l2Cost).toBeTruthy()
-		expect(result?.daCost).toBeTruthy()
-	})
-
-	test("flags hasTeardown when either teardown limit is non-zero", () => {
-		const result = buildGasBreakdown({
-			feePerL2Gas: 1n,
-			feePerDaGas: 1n,
-			l2GasLimit: 1,
-			daGasLimit: 1,
-			teardownL2GasLimit: 5,
-			teardownDaGasLimit: 0,
-		})
-		expect(result?.hasTeardown).toBe(true)
+		expect(result).toEqual({ l2Gas: formatGas(1_000), daGas: formatGas(500), l2Cost: "0.001", daCost: "0.001" })
 	})
 })
 
