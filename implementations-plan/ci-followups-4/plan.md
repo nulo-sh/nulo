@@ -231,6 +231,8 @@ One PR from `worktree-ci-followups-4` against `dev`; `code_review: off`. Title: 
 | O5 | The fallback links one copy per name, not every package | Accepted |
 | O6 | `bunfig.toml`'s header still says the linker kills phantom dependencies | Accepted: it states the boundary (comment only; no setting moves) |
 
+**Round 2 (2026-10-14, Codex resume, verify only).** **Clean**: every accepted fix verified, `bunfig.toml`'s parsed settings identical before and after (comments only), the playground's `tty` exception supported (colorette guards `tty.isatty`); no regression. The loop converged.
+
 ## Seeds (drafts; the orchestrator runs the implementer)
 
 `/goal Phases 1-4 of implementations-plan/ci-followups-4/plan.md marked ✓, each backed by its gate's output in the transcript; the Codex loop converged; the PR exists with the close-out as its final commits; bun run lint and bun run test:all exit 0.`
