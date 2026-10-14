@@ -293,6 +293,7 @@ Trunk `dev`. `code_review` is `off` on every arc.
 | close-out | — | `aztec-rc3-close-out` | `docs(plans): close the aztec-rc3 plan` |
 
 - **Deviation (decision record, item 3):** arc 1 may open as a draft once P1-P3 are green and its Codex loop has converged on that diff: `gh stack init --adopt worktree-aztec-rc3`, then `gh stack submit --auto --draft` (or `gh pr create --draft --base dev`). Each fill-in lands as its own commit and gets a resumed Codex round; the PR turns ready only after P7.
+- **Deviation (implementation, P4):** M7's one-PR ordering deadlocks the list's publishing. The tree check, which `publish-token-list.yml` runs before `sign`, refuses the signed rc.1-class envelope once the class set moves, so nothing could re-sign it. The empty source therefore ships first as #429, and the owner publishes its envelope. Arc 1 then merges `dev`, its source edit becomes a no-op, and P4's gate passes (`lessons/phase-4.md`; Codex agreed, fresh session `01a13c11`).
 - Arc 1 body: `Closes #324`; source-bound provenance per excluded package; the lockfile disposition; the presto-server release pinned; `SECURITY.md`'s three items (M4); each browser's e2e wall-clock (no scenario added). Labels after creation: `e2e:extension-network`, `e2e:extension-smoke`.
 - Arc 3 body: `Refs #324`; the digests; the owner's dispatch steps.
 - Parallelism: P4, P5 and P6 wait on outside events, in any order; nothing else is independent. No lanes.
