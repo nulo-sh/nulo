@@ -694,10 +694,17 @@ Opus's phase 1.1 notes:
 - **Opus 5.5 final-diff review** (general-purpose, read-only): `CHANGES`. It found the same test gap (rated Medium) and the same stale comment independently, and ran the two unit files (41/41).
   - **[Low] Not built; OWNER-ASKS OA-6.** The new error toast, like today's "Unlock timed out", stays until closed, so a retry that unlocks lands on Home with "Try unlocking again." still showing (`scope-epoch.ts` closes only snacks with an action). Closing it on a new attempt, as `usePasskeyCeremony` does with its own line, changes when an approved toast leaves the screen: the owner's call. Ships as today.
 
+- **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked the call-count guard and the fixture comment, kept the two-flag comment's rejection, and agreed OA-6 leaves the toast's timing to the owner. The loop closed at round 2 of 3.
+
 **Arc 2 deviations from the plan text** (the tree wins):
 - Phase 2.2: the delegate wait is not a separate 30 s after `ensureInitialized`. One deadline, taken at entry, covers both (D1). `DEFAULT_INIT_TIMEOUT_MS` is exported from `packages/extension-messaging/src/background/index.ts`.
 - Phase 2.3: besides `incarnation-fence.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` and `service-sweep.test.ts` move to the record shape or gain the sweep guard. The failed-joined-erase test (D3) is added to the plan's list.
 - Phase 2.1: the shared `PortRegistry` fake now passes the port to `onDisconnect` listeners, as the browsers do; `connectServiceClient` takes an optional sender.
+
+**Arc 3 deviations from the plan text** (the tree wins):
+- Phase 3.4 is deferred to the lane's first arc after backup-import-export arc 3 lands (D-orch-7); arc 3's PR says `Refs #208`.
+- Phase 3.2: the plan's guard list is carried mostly by cases already in `auth.test.ts` (wrong password, bootstrap failure, the lost-race timeout, both passkey toasts, the passkey cancel); the torn-import case gained its no-toast assertion and the passkey generic case its one-call count. A password unlock cannot raise `UserRejectedError`, so no password-path case exists for it.
+- Phase 3.3: no e2e case; the component test proves the split and `security.test.ts` guards the page on both browsers.
 
 ## Delivery
 
