@@ -400,7 +400,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 **Validation gate:** `bun run --cwd apps/extension test src/wallet/services/stale-network src/wallet/services/network`, `bun run lint`, `bun run typecheck:all`. Pass: all exit 0; the existing network tests pass unedited.
 
-### Phase 2. Narrow the integrity block
+### Phase 2. Narrow the integrity block ✓
 
 1. Make `verifyProfile` derive every row, classify and write the record with compare-and-set.
 2. Add `persistIntegrityVerdictIfLive`; clear both keys on profile deletion.

@@ -13,11 +13,14 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountService, AccountType, type Account } from "@/wallet/services/account/service"
+import { NetworkService, type Network } from "@/wallet/services/network/service"
 import { ProfileService } from "@/wallet/services/profile/service"
+import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
 import { loggedAfter } from "../../../../tests/helpers/logged"
 import { svc } from "../composition-harness"
 import { AccountIntegrityBlockedRepository, AccountIntegrityVerifiedStampRepository } from "./blocked-repository"
 import { AccountIntegrityCoordinator, type DeriveAddress } from "./coordinator"
+import { accountSetDigest } from "./types"
 
 const MASTER = asMasterSecretBytes(new Uint8Array(32).fill(7) as Uint8Array<ArrayBuffer>)
 
@@ -45,6 +48,9 @@ async function build(opts: {
 	/** The guarded block writer rejects with this. */
 	persistError?: Error
 	api?: FakeBrowserApi
+	networks?: Network[]
+	/** Replaces the static `rows` read, for an account set that changes between reads. */
+	accountsRaw?: () => Promise<Account[]>
 }) {
 	const api = opts.api ?? new FakeBrowserApi()
 	if (!opts.api) api.reset()
@@ -65,18 +71,23 @@ async function build(opts: {
 				if (record.profileId === opts.deletedProfileId) return
 				await repo.set(record)
 			},
+			persistIntegrityVerdictIfLive: async (id: string, write: () => Promise<unknown>) =>
+				id === opts.deletedProfileId ? undefined : write(),
 			getActiveProfile: async () => (opts.activeProfileId ? { id: opts.activeProfileId, name: "P", type: "password" } : undefined),
 			getProfileSecret: async () => Fr.fromBuffer(Buffer.from(MASTER)),
 		}),
 	)
-	services.add(svc(AccountService.name, { getAccountsRaw: async () => opts.rows }))
+	services.add(
+		svc(AccountService.name, { getAccountsRaw: opts.accountsRaw ?? (async () => opts.rows), setRuntimeMismatchDelegate: () => {} }),
+	)
+	services.add(svc(NetworkService.name, { getNetworksRaw: async () => opts.networks ?? [] }))
 	const logger = new LoggerStore(new ConfigStore())
 	const coordinator = new AccountIntegrityCoordinator(logger, api, opts.derive)
 	services.add(coordinator)
 	await services.start()
 	await coordinator.bootVerification
 	const stamps = new AccountIntegrityVerifiedStampRepository(api.storage.local)
-	return { coordinator, repo, stamps, locks, api, logger }
+	return { coordinator, repo, stamps, locks, api, logger, stale: new StaleNetworkRepository(api.storage.local) }
 }
 
 describe("AccountIntegrityCoordinator", () => {
@@ -245,5 +256,159 @@ describe("AccountIntegrityCoordinator", () => {
 		expect(c.n).toBe(2)
 		await build({ rows, derive, activeProfileId: "p1", api })
 		expect(c.n).toBe(2) // no re-derive: same build + same digest
+	})
+})
+
+const TESTNET_ROW: Network = {
+	id: "tn",
+	profileId: "p1",
+	chainId: 2904119610,
+	l1ChainId: 11155111,
+	name: "Testnet",
+	primaryEndpointId: "e1",
+	endpoints: [{ id: "e1", rpcUrl: "https://rpc.example" }],
+	kind: "testnet",
+}
+const onTestnet = (over: Partial<Account> = {}) => row({ chainId: TESTNET_ROW.chainId, l1ChainId: TESTNET_ROW.l1ChainId, ...over })
+const BLOCK = {
+	profileId: "p1",
+	chainId: 0,
+	accountIndex: 0,
+	storedAddress: "0xaaaa",
+	derivedAddress: "0xstale",
+	regimeId: "nulo-v6",
+	walletVersion: "0.0.0",
+	detectedAt: 1,
+}
+
+describe("AccountIntegrityCoordinator — chain-aware verdicts", () => {
+	test("a chain whose every address moved opens, writes the record and clears a prior block", async () => {
+		const rows = [onTestnet(), onTestnet({ index: 1, address: "0xbbbb", visible: false })]
+		const { coordinator, repo, stale, stamps } = await build({ rows, networks: [TESTNET_ROW], derive: async () => "0xmoved" })
+		await repo.set(BLOCK)
+		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
+		expect(await repo.isBlocked("p1")).toBe(false)
+		expect((await stale.getRecord("p1"))?.entries).toEqual([
+			{ networkId: "tn", chainId: TESTNET_ROW.chainId, networkReset: false, addressesMoved: true },
+		])
+		expect(await stamps.get("p1")).toBeDefined()
+	})
+
+	test("Mainnet with every address moved writes a record, not a block", async () => {
+		const mainnet: Network = { ...TESTNET_ROW, id: "mn", chainId: 42, l1ChainId: 1, kind: "mainnet" }
+		const { coordinator, repo, stale } = await build({
+			rows: [row({ chainId: 42, l1ChainId: 1 })],
+			networks: [mainnet],
+			derive: async () => "0xmoved",
+		})
+		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
+		expect(await repo.isBlocked("p1")).toBe(false)
+		expect((await stale.getRecord("p1"))?.entries).toEqual([
+			{ networkId: "mn", chainId: 42, networkReset: false, addressesMoved: true },
+		])
+	})
+
+	test("a chain with only some addresses moved blocks the profile and writes no record", async () => {
+		const rows = [onTestnet(), onTestnet({ index: 1, address: "0xbbbb" })]
+		const { coordinator, repo, stale } = await build({
+			rows,
+			networks: [TESTNET_ROW],
+			derive: async (_m, a) => (a.index === 0 ? "0xaaaa" : "0xmoved"),
+		})
+		await expect(coordinator.verifyBeforeSessionOpen("p1", MASTER)).rejects.toBeInstanceOf(AccountAddressInconsistencyError)
+		expect((await repo.get("p1"))?.accountIndex).toBe(1)
+		expect(await stale.getRecord("p1")).toBeUndefined()
+	})
+
+	test("a green pass removes a record the build no longer earns", async () => {
+		const { coordinator, stale } = await build({ rows: [onTestnet()], networks: [TESTNET_ROW], derive: async () => "0xaaaa" })
+		await stale.mergeEntry("p1", { networkId: "tn", chainId: TESTNET_ROW.chainId, networkReset: false, addressesMoved: true }, "d")
+		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
+		expect(await stale.getRecord("p1")).toBeUndefined()
+	})
+
+	test("boot verify: a resettable chain is quarantined and the session stays open", async () => {
+		const { locks, repo, stale } = await build({
+			rows: [onTestnet()],
+			networks: [TESTNET_ROW],
+			derive: async () => "0xmoved",
+			activeProfileId: "p1",
+		})
+		expect(locks).toEqual([])
+		expect(await repo.isBlocked("p1")).toBe(false)
+		expect((await stale.getRecord("p1"))?.entries).toHaveLength(1)
+	})
+
+	test("boot verify: a profile deleted during the verify gets no record", async () => {
+		const { stale } = await build({
+			rows: [onTestnet()],
+			networks: [TESTNET_ROW],
+			derive: async () => "0xmoved",
+			activeProfileId: "p1",
+			deletedProfileId: "p1",
+		})
+		expect(await stale.getRecord("p1")).toBeUndefined()
+	})
+
+	test("an account set that changes once is re-read and re-classified", async () => {
+		const first = [onTestnet()]
+		const second = [onTestnet(), onTestnet({ index: 1, address: "0xbbbb" })]
+		const reads = [first, second, second, second]
+		const { coordinator, stale, stamps } = await build({
+			rows: first,
+			accountsRaw: async () => reads.shift() ?? second,
+			networks: [TESTNET_ROW],
+			derive: async () => "0xmoved",
+		})
+		await coordinator.verifyBeforeSessionOpen("p1", MASTER)
+		expect((await stale.getRecord("p1"))?.accountSetDigest).toBe(accountSetDigest(second))
+		expect((await stamps.get("p1"))?.accountSetDigest).toBe(accountSetDigest(second))
+	})
+
+	test("an account set that changes twice refuses the open and clears, stamps and writes nothing", async () => {
+		let n = 0
+		const { coordinator, repo, stale, stamps } = await build({
+			rows: [],
+			accountsRaw: async () => [onTestnet({ index: n, address: `0x${n++}` })],
+			networks: [TESTNET_ROW],
+			derive: async () => "0xmoved",
+		})
+		await repo.set(BLOCK)
+		await expect(coordinator.verifyBeforeSessionOpen("p1", MASTER)).rejects.toThrow(/^ERR_ACCOUNTS_CHANGED: /)
+		expect(await repo.isBlocked("p1")).toBe(true)
+		expect(await stamps.get("p1")).toBeUndefined()
+		expect(await stale.getRecord("p1")).toBeUndefined()
+	})
+})
+
+describe("AccountIntegrityCoordinator — operation-time classification", () => {
+	test("a moved chain merges its entry, keeps the other chains' entries and closes nothing", async () => {
+		const local: Network = { ...TESTNET_ROW, id: "ln", chainId: 0, l1ChainId: 31337, kind: "local" }
+		const { coordinator, locks, stale, repo } = await build({
+			rows: [onTestnet(), row({ l1ChainId: 31337 })],
+			networks: [TESTNET_ROW, local],
+			derive: async (_m, a) => (a.l1ChainId === TESTNET_ROW.l1ChainId ? "0xmoved" : "0xaaaa"),
+		})
+		const other = { networkId: "x", chainId: 9, networkReset: true, addressesMoved: false }
+		await stale.mergeEntry("p1", other, "d")
+		expect(await coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(true)
+		expect((await stale.getRecord("p1"))?.entries).toEqual([
+			other,
+			{ networkId: "tn", chainId: TESTNET_ROW.chainId, networkReset: false, addressesMoved: true },
+		])
+		expect(locks).toEqual([])
+		expect(await repo.isBlocked("p1")).toBe(false)
+	})
+
+	test("a mixed chain, or a chain with no network row, is not confined", async () => {
+		const mixed = await build({
+			rows: [onTestnet(), onTestnet({ index: 1, address: "0xbbbb" })],
+			networks: [TESTNET_ROW],
+			derive: async (_m, a) => (a.index === 0 ? "0xaaaa" : "0xmoved"),
+		})
+		expect(await mixed.coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(false)
+		expect(await mixed.stale.getRecord("p1")).toBeUndefined()
+		const orphan = await build({ rows: [onTestnet()], derive: async () => "0xmoved" })
+		expect(await orphan.coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(false)
 	})
 })

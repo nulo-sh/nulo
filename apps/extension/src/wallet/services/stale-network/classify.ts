@@ -47,7 +47,8 @@ function classifyChain(chainId: number, rows: ClassifiedNetwork[], accounts: Cla
  * reads storage and the build's seeds, never a node.
  */
 export function classifyChains(networks: ClassifiedNetwork[], accounts: ClassifiedAccount[]): Classification {
-	const chainIds = [...new Set([...networks.map((n) => n.chainId), ...accounts.map((a) => a.chainId)])]
+	// Account order first, so the block names the first stored row's chain, as it always did.
+	const chainIds = [...new Set([...accounts.map((a) => a.chainId), ...networks.map((n) => n.chainId)])]
 	const moved = new Set<number>()
 	for (const chainId of chainIds) {
 		const verdict = classifyChain(

@@ -32,6 +32,7 @@ import {
 	SessionEndedError,
 } from "@nulo/extension-messaging/errors"
 import { AccountIntegrityBlockedRepository } from "../account-integrity/blocked-repository"
+import { StaleNetworkRepository } from "../stale-network/repository"
 import {
 	asBase64Ciphertext,
 	asBase64CredentialId,
@@ -2798,6 +2799,42 @@ describe("account-integrity delegate — the session-open chokepoint", () => {
 		await service.deleteProfile(profile.id)
 		await service.persistIntegrityBlockIfLive(record)
 		expect(await repo.isBlocked(profile.id)).toBe(false)
+	}, 30_000)
+
+	test("persistIntegrityVerdictIfLive: runs the write for a live profile and returns its result, SKIPS a deleted one", async () => {
+		const { service } = await makeService()
+		const profile = await service.createProfile("P", "pass1234")
+		const writes: string[] = []
+		expect(await service.persistIntegrityVerdictIfLive(profile.id, async () => writes.push("live"))).toBe(1)
+		await service.deleteProfile(profile.id)
+		expect(await service.persistIntegrityVerdictIfLive(profile.id, async () => writes.push("gone"))).toBeUndefined()
+		expect(writes).toEqual(["live"])
+	}, 30_000)
+
+	test("deleting a profile clears its stale-network record, reset journal and reset notice", async () => {
+		const { api, service } = await makeService()
+		const profile = await service.createProfile("P", "pass1234")
+		const stale = new StaleNetworkRepository(api.storage.local)
+		await stale.mergeEntry(profile.id, { networkId: "n", chainId: 1, networkReset: true, addressesMoved: false }, "d")
+		await stale.withLock(profile.id, async () => {
+			await stale.setJournalLocked({
+				profileId: profile.id,
+				networkId: "n",
+				fromChainId: 1,
+				toChainId: 2,
+				l1ChainId: 5,
+				cause: { networkReset: true, addressesMoved: false },
+				purged: false,
+				switchToSeedNode: false,
+				probedEndpoint: null,
+				accounts: [],
+			})
+			await stale.setNoticeLocked(profile.id, { networkId: "other", addressesMoved: false })
+		})
+		await service.deleteProfile(profile.id)
+		const keys = Object.keys(await api.storage.local.get(null))
+		expect(keys.filter((k) => k.endsWith(`@${profile.id}`) && k.startsWith("nulo:core:network-reset"))).toEqual([])
+		expect(keys.filter((k) => k.startsWith(`nulo:core:stale-networks@${profile.id}`))).toEqual([])
 	}, 30_000)
 
 	test("EPOCH FENCE: a deletion that completes (reserve→release) DURING verify aborts the open", async () => {

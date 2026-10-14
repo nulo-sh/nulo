@@ -30,9 +30,9 @@ import {
 } from "@nulo/aztec-runtime/account"
 import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
 import { type ImportedKeysDek, sealImportedSigningKeyV2, unsealImportedSigningKeyV2, zeroize } from "@nulo/wallet-crypto"
-import { AccountAddressInconsistencyError, InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+import { AccountAddressInconsistencyError, ChainNotSupportedError, InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
 import { ImportedKeysRepository } from "./imported-keys-repository"
-import type { AccountIntegrityBlocked } from "../account-integrity/types"
+import type { AccountIntegrityBlocked, AccountRuntimeMismatchDelegate } from "../account-integrity/types"
 import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
 import {
 	ACCOUNT_SERVICE_NAME,
@@ -121,6 +121,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	private profileService: ProfileService = null!
 	private networkService: NetworkService = null!
+	/** Set by the last-started AccountIntegrityCoordinator; never a topological dependency (a cycle). */
+	private runtimeMismatchDelegate: AccountRuntimeMismatchDelegate | null = null
 
 	public constructor(logger: ILogger, browserApi: BrowserApi) {
 		super(ACCOUNT_SERVICE_NAME, logger)
@@ -134,6 +136,10 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		const schema = (AccountMethodSchemas as Record<string, z.ZodType | undefined>)[method]
 		if (schema && !schema.safeParse(params).success) throw InvalidWalletArgumentsError.forMethod(method)
 		return super.invoke(method, params)
+	}
+
+	public setRuntimeMismatchDelegate(delegate: AccountRuntimeMismatchDelegate): void {
+		this.runtimeMismatchDelegate = delegate
 	}
 
 	/**
@@ -619,13 +625,14 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	/**
 	 * Mid-session escape hatch: an extension update can rehydrate a live session under new
-	 * derivation code without passing the pre-open verifier. Everything here is
-	 * DELEGATE-INDEPENDENT and fail-closed so a mismatch during the startup window (before the
-	 * coordinator starts) is still handled: `profileService` is a phase-0 dependency (always
-	 * present) and `integrityBlocked` is our own repo. Both the durable block (drives the barrier +
-	 * the next-boot gate) and the session close are AWAITED before the error propagates, so an MV3
-	 * termination right after the throw cannot lose either; a failure in one is logged but never
-	 * masks the typed error.
+	 * derivation code without passing the pre-open verifier. With the coordinator's delegate set, a
+	 * mismatch confined to this chain quarantines the chain and keeps the session
+	 * (`ChainNotSupportedError`). Anything else, a delegate that fails, or no delegate yet (the
+	 * startup window) is fail-closed and delegate-independent: `profileService` is a phase-0
+	 * dependency (always present) and `integrityBlocked` is our own repo. Both the durable block
+	 * (drives the barrier + the next-boot gate) and the session close are AWAITED before the error
+	 * propagates, so an MV3 termination right after the throw cannot lose either; a failure in one
+	 * is logged but never masks the typed error.
 	 */
 	private async raiseRuntimeMismatch(
 		profileId: string,
@@ -634,6 +641,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		storedAddress: string,
 		derivedAddress: string,
 	): Promise<never> {
+		if (await this.quarantinedAtRuntime(profileId, chainId)) throw new ChainNotSupportedError()
 		const record: AccountIntegrityBlocked = {
 			profileId,
 			chainId,
@@ -658,6 +666,16 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "integrity session close failed", { error: closeError })
 		}
 		throw new AccountAddressInconsistencyError(undefined, { profileId, chainId, accountIndex })
+	}
+
+	private async quarantinedAtRuntime(profileId: string, chainId: number): Promise<boolean> {
+		if (!this.runtimeMismatchDelegate) return false
+		try {
+			return await this.runtimeMismatchDelegate.classifyRuntimeMismatch(profileId, chainId)
+		} catch (error) {
+			this.logger.log(ACCOUNT_SERVICE_NAME, LogLevel.Error, "runtime mismatch classification failed", { error })
+			return false
+		}
 	}
 
 	private async deriveAccountSecret(profileId: string, l1ChainId: number, type: number, index: number): Promise<Fr> {
