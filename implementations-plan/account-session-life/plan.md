@@ -327,7 +327,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: exit 0 on both browsers. The new proofs fail against the base copies.
 - Layers: lint, typecheck, unit, component, smoke e2e on Chrome and Firefox.
 
-#### Phase 4.4: the held-boot e2e and the screenshots
+#### Phase 4.4: the held-boot e2e and the screenshots ✓
 
 1. Add one case to `sw-resilience.test.ts`, skipped unless the build carries the fixture (`migration.test.ts:20-24`). Register a password profile, lock, rewind the schema marker and set the migration hold (F29). Close every page and stop the worker. The hold's 30 s self-release counts from the stop, so open the popup at once as a raw page, as `migration.test.ts:131-135` does, not through `openPopup`, which would wait out the hold.
    - **New proof.** While the hold stands, the hash reaches `#/popup/auth` under the Updating barrier, with `start-pending` present, `data-service-ready` absent and the password field's computed visibility hidden. On the base, the hash stays empty. The barrier covers the frame, so this proves the route, not the look; the screenshots show the look.
