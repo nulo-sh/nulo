@@ -166,7 +166,7 @@ Commands run from the worktree root unless they start with `cd`. Every gate also
 
 **Validation gate.** `UNIT src/components/composite/send/AmountCard.test.ts src/utils/`; `bun run test`; `SMOKE tests/e2e/send-keyboard.test.ts`; `NET send-amount-exact.test.ts`. Pass: all exit 0; the type-role test is green without a new carve-out; shots exist for both cases. Layers: unit, component, smoke, network. e2e budget: no new scenario; step 4 adds a control step to the existing case (failure mode: the decision misreads real layout and moves a short line; jsdom has no layout), estimated +3 s per browser, measured in phase 2.
 
-### Phase 3: the like-shaped basis (#412)
+### Phase 3: the like-shaped basis (#412) ✓
 
 1. Add `SendShape`, `sendShapeOf` and `speedOf`; key `queuedFeeBasis`; pass `sequence.feeSpender` through `queuedFeeCapFor`.
 2. Add `Tx.priorityLevel`, its codec and the conditional write; `recordTransfer` passes it.
