@@ -1,7 +1,7 @@
 ---
 plan: account-session-life
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-6); arc 1 merged (#253); arc 2 built and reviewed (Codex approve), in delivery
+status: approved by the orchestrator (D-orch-1 to D-orch-8); arcs 1 and 2 merged (#253, #266); arc 3 (3.1 to 3.3) built and reviewed (Codex approve), in delivery; 3.4 deferred; arc 4 waits on a plan revision for page 7's picks
 issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
 driver: claude-code
 claude_model: opus
@@ -410,7 +410,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 
 Re-read the page's answers first: a changed record replaces the proposal quoted here, and a struck veto item is not built.
 
-#### Phase 3.1: #24 (P7-01)
+#### Phase 3.1: #24 (P7-01) ✓
 
 1. Approved: comment on #24 with the decision text, its date and the SECURITY.md citation, then close it as not planned. No code.
 2. Changed: record it in STATUS.md, leave #24 open under H2, and continue with phase 3.2.
@@ -420,7 +420,7 @@ Re-read the page's answers first: a changed record replaces the proposal quoted 
 - Pass: approved → `CLOSED`, `NOT_PLANNED`, the comment present; changed → `OPEN` with the hold recorded.
 - Layers: none (tracker).
 
-#### Phase 3.2: the unlock toast (#137, P7-02)
+#### Phase 3.2: the unlock toast (#137, P7-02) ✓
 
 1. Add the final rung to `handleUnlockError`.
 2. `auth.test.ts`:
@@ -433,7 +433,7 @@ Re-read the page's answers first: a changed record replaces the proposal quoted 
 - Pass: exit 0 on both browsers.
 - Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
 
-#### Phase 3.3: the split reveal (#208, P7-03)
+#### Phase 3.3: the split reveal (#208, P7-03) ✓
 
 1. Split the flag in `change-password.vue`.
 2. `change-password.test.ts`:
@@ -446,7 +446,7 @@ Re-read the page's answers first: a changed record replaces the proposal quoted 
 - Pass: exit 0 on both browsers.
 - Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
 
-#### Phase 3.4: backup autocomplete (#208, P7-04)
+#### Phase 3.4: backup autocomplete (#208, P7-04) — deferred (D-orch-7)
 
 **Warning:** skip this phase if the owner struck P7-04; then comment the strike on #208.
 
@@ -566,6 +566,11 @@ Sign-off: arc 1's one visible change rides the recorded no-ask decision for #159
 - **D-orch-5. Arc 2 only, and it lands first under R4.** fees-and-sponsors arc 2 (#91) waits on decision page 6, which is unsigned, so arc 2 edits `ProfileService.deleteProfile`'s first lines now and #91 rebases later. Nothing else on the deletion path changes: `coordinator.ts`, `profile-deletion/types.ts` and the tombstone repository stay untouched (the R4 seam). Nothing of arcs 3 or 4 is built (page 7 and H2; P7-08). Nothing a screen shows changes; no new words.
 - **D-orch-6. Any open panel finding on arc 2 comes first.** Before phase 2.1's gate counts as passed, the first Codex round and the Opus review are each asked, first and explicitly, whether the arc-2 design holds on the merged tree: the per-profile lifecycle record (`live`/`deleting`/`dead`/`clearing`), the joined clear, and the delegate wait's 30 s bound against a `deleteProfile` that starts before the offscreen document exists. A hole is fixed within the plan's lock order with a never-happens test. The answers are under Audit verdicts, "Arc 2 design asked first".
 
+### Orchestrator decisions (arc 3, 2026-10-14)
+
+- **D-orch-7. Arc 3 builds 3.1 to 3.3; Phase 3.4 is deferred, not skipped.** Decision page 7 was signed by the owner at 2026-10-14 17:42Z and applied to #24, #137 and #208: P7-01, P7-02 and P7-03 approved as proposed, P7-04 not struck. Hold H2's recorded answer is P7-01 as approved. backup-import-export arc 3 has not merged (its arc 2 is in flight), so Phase 3.4 moves to this lane's first arc after it lands. #208 stays open after Phase 3.3, with a comment naming the pending autocomplete half, and arc 3's PR says `Refs #208`, not `Closes`. Arc 3 branches from `dev` (D-orch-4) as `account-session-life-arc-3` and opens one plain PR against `dev`.
+- **D-orch-8. Page 7's other picks wait for a plan revision.** P7-05 = B (#100), P7-06 = B (#99), P7-07 = B (#159), P7-08 = C (#157, OA-4) and P7-09 = B (#157, OA-5) each change what an earlier arc shipped as "what ships now" and have no phase here. They are recorded in [OWNER-ASKS.md](OWNER-ASKS.md) § Answers; the orchestrator revises the plan for them after arc 3's PR. Arc 3 builds none of them and adds no words beyond § UI impact's two arc 3 lines.
+
 ### Audit verdicts
 
 **Round 1, Codex** (`gpt-6.1-sol`, high): `reject (with blocking findings: unsafe imported-key cleanup, unfenced activation tail, Ready-to-send race, unsupported session-isolation claim, overlapping erasures)`.
@@ -680,10 +685,26 @@ Opus's phase 1.1 notes:
   - **[Comment] Accepted.** Three trims (fbe0f79): the injection field's garbled sentence, `closeReason`'s "both are read every time", and a duplicate of the failed-erase rule in `eraseProfile`. The close test no longer pins `port.error` read counts, which no behaviour depends on.
 - **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked both reviews' fixes in memory (remaining budget, delegate replacement, timer cleanup). The loop closed at round 2 of 3.
 
+**Arc 3 review: the Codex fix loop and the Opus final-diff review**, on the arc diff from `d3dc441` (dev at the branch point).
+
+- **Codex round 1** (`gpt-6.1-sol`, high, new session `01a13b93-9f54-7221-b3c1-0e543b35f333`): `APPROVE`, high confidence, one Low and two Comments.
+  - **[Low] Accepted.** The passkey rung's new `return` had no guard: without it a passkey failure calls the passkey toast and then the generic one, and `toHaveBeenCalledWith` still matches. Fixed in a71acaea: "any other passkey failure" asserts one call; it fails with the `return` removed.
+  - **[Comment] Accepted.** "Tests 3-4 use the per-test fixture" went stale when the new case landed above it. Fixed in a71acaea: the new case sits under the comment, which names no count.
+  - **[Comment] Rejected.** "Delete the two-flag comment in `change-password.vue`." The names say which field each flag drives; the comment says why they must stay two (revealing the new pair never shows the current password), which a refactor that re-merges them would otherwise learn only from a red test. Opus read the same line as an invariant worth keeping.
+- **Opus 5.5 final-diff review** (general-purpose, read-only): `CHANGES`. It found the same test gap (rated Medium) and the same stale comment independently, and ran the two unit files (41/41).
+  - **[Low] Not built; OWNER-ASKS OA-6.** The new error toast, like today's "Unlock timed out", stays until closed, so a retry that unlocks lands on Home with "Try unlocking again." still showing (`scope-epoch.ts` closes only snacks with an action). Closing it on a new attempt, as `usePasskeyCeremony` does with its own line, changes when an approved toast leaves the screen: the owner's call. Ships as today.
+
+- **Codex round 2 (same session): `APPROVE`**, high confidence, no findings. It checked the call-count guard and the fixture comment, kept the two-flag comment's rejection, and agreed OA-6 leaves the toast's timing to the owner. The loop closed at round 2 of 3.
+
 **Arc 2 deviations from the plan text** (the tree wins):
 - Phase 2.2: the delegate wait is not a separate 30 s after `ensureInitialized`. One deadline, taken at entry, covers both (D1). `DEFAULT_INIT_TIMEOUT_MS` is exported from `packages/extension-messaging/src/background/index.ts`.
 - Phase 2.3: besides `incarnation-fence.test.ts`, `service-idb-delete.test.ts`, `store-key-decode.test.ts` and `service-sweep.test.ts` move to the record shape or gain the sweep guard. The failed-joined-erase test (D3) is added to the plan's list.
 - Phase 2.1: the shared `PortRegistry` fake now passes the port to `onDisconnect` listeners, as the browsers do; `connectServiceClient` takes an optional sender.
+
+**Arc 3 deviations from the plan text** (the tree wins):
+- Phase 3.4 is deferred to the lane's first arc after backup-import-export arc 3 lands (D-orch-7); arc 3's PR says `Refs #208`.
+- Phase 3.2: the plan's guard list is carried mostly by cases already in `auth.test.ts` (wrong password, bootstrap failure, the lost-race timeout, both passkey toasts, the passkey cancel); the torn-import case gained its no-toast assertion and the passkey generic case its one-call count. A password unlock cannot raise `UserRejectedError`, so no password-path case exists for it.
+- Phase 3.3: no e2e case; the component test proves the split and `security.test.ts` guards the page on both browsers.
 
 ## Delivery
 
