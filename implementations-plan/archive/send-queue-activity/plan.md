@@ -1,7 +1,7 @@
 ---
 plan: send-queue-activity
 tier: mid
-status: closing (arcs 1, 2, 3a, 3b merged; arc 4 carries the close-out; arcs 1b and 5 in their own PRs)
+status: closing (arcs 1, 2, 3a, 3b merged; arc 4 carries the close-out; arcs 1b #392 and 5 #393 in review)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -17,7 +17,7 @@ issues: [90, 103, 108, 109, 110, 112, 122, 152, 209, 213, 217, 218, 219, 220, 24
 ## Outcome
 
 - **Date:** 2026-10-13.
-- **Status:** delivered in one PR per arc against `dev`. Arc 4's PR, from `send-queue-activity-queued-cap`, is planned to merge last (D-orch-23) and carries this close-out; the merge that lands it closes this plan. When it was written, arcs 1b and 5 were in their own branches, planned to merge before it; whoever merges `dev` into arc 4 after them adds their PR numbers to Shipped and drops #218, #219 and #242 from Open items as they close.
+- **Status:** delivered in one PR per arc against `dev`. Arc 4's PR, from `send-queue-activity-queued-cap`, is planned to merge last (D-orch-23) and carries this close-out; the merge that lands it closes this plan. When it was written, arc 1b (#392) and arc 5 (#393) were open, planned to merge before it with fees-and-sponsors arc 2; whoever merges `dev` into arc 4 after them moves them to Shipped and drops the issues they close (#218, #219, #242) from Open items.
 - **Shipped:**
   - Arc 1, #264: the fee spender kept across restarts, journal events scoped, the dApp estimate checked against the reuse epoch (#152; #219 items a and c, OA-1 A).
   - Arc 3a, #343: the expired send state and the pruned-block re-check (#108, #109). #112 was not built: its stop rule fired (OA-6).
