@@ -57,3 +57,15 @@ The owner asked whether the connect window needs wording for a listed token the 
 - The seeder's already-present branch, and any seeded default whose current pins were never checked, now run the same pin and metadata preview and persist nothing. A pass writes `verifiedPins`; a refusal holds until the version changes; an error retries on the next pass. Status stays `seeded`, so no screen changes but the name. D12 is amended.
 - Gate: token service tests 164 passed; `lint` and `typecheck:all` exit 0. Disabling the recheck reds three tests; removing both the guard and the epoch fence reds the list-change test (either alone suffices for its timing).
 - Codex (arc 2 session, resumed): **approve**, "No new material findings. Confidence: high." One comment nit (three comments still described the seed-only path), fixed.
+
+## The second rebase onto dev (2026-10-14)
+
+Twelve `dev` commits landed during review, among them the send queue (#402), fees and sponsors (#409) and the type-roles series. The conflicts were all textual: the index lines, `privileged()` (dev's new `contents: write` rule kept beside `readsCustomSecret`), the `release-integrity` job lists, the nightly rows in `CI.md` and `WORKFLOWS.md`, and the imports in `TokenCard.test.ts` and `send-keyboard.test.ts`. Two dev tests broke on the list-era price API without conflicting:
+
+- `RecentActivityView.test.ts` mocked the price client without `getQuotes` and with bare quotes from `refreshIfStale`, so all 63 of its tests threw at mount. The mock now returns `{ quotes, pricedTokens }`.
+- The type-roles sweep's seeded Home priced a token no list names, so its balance drew `$0.00` and the hero never fit. It now holds the e2e list, quotes the token that list prices, and scales the balance by the token's decimals. The unfixed copy times out on the same build.
+
+Smoke runs against `dist/<browser>`, which nothing rebuilds: after a rebase, rebuild the armed build first. A stale build gave seven unrelated type-role failures, and a repro on it would have proved nothing.
+
+Gates: `test:all` exits 0 (extension 12,118 passed); full smoke passes on Chrome (53 files, 229 tests) and Firefox (55 files, 228 tests). The cross-arc session, resumed on the range-diff: round 5, **reject**, on the type-roles hero; round 6, after both fixes, **approve**, "No new material findings. Confidence: high."
+
