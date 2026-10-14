@@ -64,7 +64,8 @@ export const useAppStore = defineStore("app", () => {
 
 	const dappSessions = ref([])
 	const isPrivacyModeEnabled = ref(false)
-	const defaultExplorer = ref<BlockExplorerType | null>("aztecscan")
+	// Null until the shell applies the stored choice, so a failed settings read shows no explorer link.
+	const defaultExplorer = ref<BlockExplorerType | null>(null)
 	const loggerWindowId = useSyncedRef("loggerWindowId", null)
 
 	return {

@@ -373,3 +373,9 @@ describe("app.store — account-switch containment (Layer A)", () => {
 		expect(store.awaitingTransactions.length).toBe(0)
 	})
 })
+
+describe("app.store — explorer choice", () => {
+	test("is null until the shell applies the stored one, so a failed settings read draws no explorer link", () => {
+		expect(useAppStore().defaultExplorer).toBeNull()
+	})
+})

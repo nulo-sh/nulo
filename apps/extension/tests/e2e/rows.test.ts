@@ -37,6 +37,8 @@ type Probe = {
 	__rowClicks?: number
 	__logsClicks?: number
 	__linkClick?: { modified: boolean; href: string | null; prevented: boolean } | null
+	__copies?: string[]
+	__cardLink?: { prevented: boolean } | null
 }
 
 const TOKEN_ROWS = `${sel("tokens-card")}, ${sel("token-seed-row")}`
@@ -368,6 +370,66 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 
 	expect(listedExtension.consoleErrors).toEqual([])
 	expect(listedExtension.pageErrors).toEqual([])
+}, 90_000)
+
+test("a receipt's To card: its explorer link is a Tab stop with the ring and a 24px box on top of the card; Enter activates it and copies nothing, a press elsewhere on the card copies", async ({
+	registeredExtension,
+}) => {
+	const page = await openPopup(registeredExtension)
+	await waitForHash(page, "#/popup/general")
+	const scope = await readActivityScope(page)
+	await seedTokenRow(page, scope, 1)
+	await seedReceipt(page, scope, { tokenId: 1, amount: "1500000", nullifier: `0x${"3d".repeat(32)}` })
+	await seedUsdQuoteAndReload(page)
+	const row = `${sel("tx-incoming-card")} a[data-row-target]`
+	await page.waitForSelector(row, { visible: true, timeout: 15_000 })
+	await page.$eval(row, (a) => (a as HTMLElement).click())
+	const link = "received-to-explorer-link"
+	await page.waitForSelector(sel(link), { visible: true, timeout: 15_000 })
+
+	const box = await page.$eval(sel(link), (el) => {
+		const { width, height } = el.getBoundingClientRect()
+		return { width, height }
+	})
+	expect(box.width).toBeGreaterThanOrEqual(24)
+	expect(box.height).toBeGreaterThanOrEqual(24)
+	expect(await coveredAt(page, link)).toBeNull()
+
+	await page.evaluate((s: string) => {
+		const w = window as unknown as Probe
+		w.__copies = []
+		w.__cardLink = null
+		navigator.clipboard.writeText = async (text: string) => {
+			w.__copies?.push(text)
+		}
+		// Registered after the page's own handler, so it reads whether the page left the browser's new
+		// tab alone; it then cancels the tab, since smoke refuses every outside host.
+		document.querySelector(s)?.addEventListener("click", (e) => {
+			w.__cardLink = { prevented: e.defaultPrevented }
+			e.preventDefault()
+		})
+	}, sel(link))
+	const copies = () => page.evaluate(() => (window as unknown as Probe).__copies ?? [])
+
+	const walk = await tabTo(page, link)
+	console.log(`[rows] the Tab walk to the To card's link: ${walk.join(" → ")}`)
+	const focused = await page.evaluate(() => {
+		const el = document.activeElement as HTMLElement
+		const { outlineStyle, outlineWidth } = getComputedStyle(el)
+		return { tag: el.tagName, outlineStyle, outlineWidth }
+	})
+	expect(focused).toEqual({ tag: "A", outlineStyle: "solid", outlineWidth: "2px" })
+	await page.keyboard.press("Enter")
+	await page.waitForFunction(() => (window as unknown as Probe).__cardLink != null, { timeout: 5_000, polling: 50 })
+	expect(await page.evaluate(() => (window as unknown as Probe).__cardLink)).toEqual({ prevented: false })
+	expect(await copies()).toEqual([])
+
+	await pointerClick(page, "received-to-address")
+	await page.waitForFunction(() => ((window as unknown as Probe).__copies?.length ?? 0) > 0, { timeout: 5_000, polling: 50 })
+	expect(await copies()).toEqual([scope.account])
+
+	expect(registeredExtension.consoleErrors).toEqual([])
+	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
 test("a click-mode Settings row opens on Enter and on Space; an action inside a Tooltip runs once per key and never activates its row; inert rows are skipped", async ({
