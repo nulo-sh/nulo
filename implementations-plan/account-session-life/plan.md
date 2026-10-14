@@ -283,7 +283,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: `lessons/phase-4.md` answers I4 to I8. A "no" for I6 makes phase 4.4 relaunch the browser as `migration.test.ts` does. A gap over 500 ms for I8, or a "no" for I5, goes to OWNER-ASKS before phase 4.2 or 4.3 builds on it.
 - Layers: none (evidence).
 
-#### Phase 4.2: wire, server, client, send check
+#### Phase 4.2: wire, server, client, send check ✓
 
 1. Build `collectionStarted()`, the wire, the server's Ready, the client's states and the send check as § Arc 4 states.
 2. Teach `port-registry.ts` and `transport-harness.ts` to post Ready after `collectionStarted()`.

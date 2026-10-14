@@ -38,3 +38,4 @@
 - 2026-10-14: Codex r2 reject (3 items, all accepted and fixed); r3 (resumed, final verify) running.
 - 2026-10-14: Codex r3 conditional approve; its one condition applied in the plan. Revision committed for the orchestrator's approval.
 - 2026-10-14: phase 4.1 gate pass: I4 to I8 hold on both browsers (lessons/phase-4.md); I8 gap at most 63 ms, I5 yes, so nothing goes to OWNER-ASKS.
+- 2026-10-14: phase 4.2 gate pass: lint 0, typecheck:all 0 (after a bun install the dev merge needed), test:all 0 (extension 12167, messaging 394); nine new proofs red on 15881c7d, the drop guard green there.

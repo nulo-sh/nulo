@@ -16,6 +16,7 @@
 
 import { describe, expect, test, vi } from "vitest"
 import { type ILogger, LogLevel } from "@nulo/wallet-core/logger"
+import { EventHandler } from "@nulo/wallet-core/utils"
 import { buildErrorResponseContent } from "../core/error-response"
 import {
 	JobCancelledError,
@@ -31,8 +32,15 @@ import {
 	WalletError,
 } from "../errors"
 import { MessageType, type ResponseMessage } from "../messages"
-import { capturePortMessage, emitPortDisconnect, emitPortMessage, makeSpyLogger, silentLogger } from "../testing/transport-harness"
-import { ServiceClient, DEFAULT_RPC_TIMEOUT_MS } from "./client"
+import {
+	capturePortMessage,
+	emitPortDisconnect,
+	emitPortMessage,
+	makeSpyLogger,
+	portRegistry,
+	silentLogger,
+} from "../testing/transport-harness"
+import { ServiceClient, DEFAULT_RPC_TIMEOUT_MS, RECONNECT_DELAY_MS } from "./client"
 
 const SERVICE = "test-svc"
 
@@ -127,6 +135,12 @@ function lastRequestId(): number {
 	expect(calls.length).toBeGreaterThan(0)
 	const msg = calls[calls.length - 1][0] as { content: { requestId: number } }
 	return msg.content.requestId
+}
+
+/** The requestId of the next request posted on SERVICE's current port, once it has waited for Ready. */
+async function postedRequestId(): Promise<number> {
+	await vi.waitFor(() => expect(capturePortMessage(SERVICE)).toHaveBeenCalled())
+	return lastRequestId()
 }
 
 // ── Response correlation ──────────────────────────────────────────────
@@ -583,30 +597,30 @@ describe("port onDisconnect → reconnect", () => {
 		const client = newClient()
 		await client.connect()
 
-		// Listener added AFTER the initial connect, so it only catches the reconnect.
+		// Listener added AFTER the initial connect, so it only catches the reconnect's Ready.
 		const reconnected = vi.fn()
 		client.onConnected.add(reconnected)
 		const disconnected = vi.fn()
 		client.onDisconnected.add(disconnected)
+		await vi.waitFor(() => expect(reconnected).toHaveBeenCalledTimes(1))
+		reconnected.mockClear()
 
 		const inflight = client.echo("inflight").catch((e: unknown) => e)
 
-		// SW dies: the Port fires onDisconnect → disconnect() rejects pending →
-		// connect() re-establishes against a fresh port.
+		// SW dies: the Port fires onDisconnect → pending requests reject → a fresh port opens.
 		emitPortDisconnect(SERVICE)
 
 		const err = await inflight
 		expect(err).toBeInstanceOf(Error)
 		expect((err as Error).message).toBe("Client disconnected")
 		expect(disconnected).toHaveBeenCalledTimes(1)
-		expect(reconnected).toHaveBeenCalledTimes(1)
+		await vi.waitFor(() => expect(reconnected).toHaveBeenCalledTimes(1))
 		// biome-ignore lint/suspicious/noExplicitAny: probing the correlator's pending count
 		expect((client as any).pendingCount).toBe(0)
 
 		// A request issued after the reconnect goes out on the NEW port and resolves.
 		const afterReconnect = client.echo("after")
-		const id = lastRequestId()
-		emitPortMessage(SERVICE, responseMessage(id, "ok-again"))
+		emitPortMessage(SERVICE, responseMessage(lastRequestId(), "ok-again"))
 		await expect(afterReconnect).resolves.toBe("ok-again")
 	})
 
@@ -617,8 +631,7 @@ describe("port onDisconnect → reconnect", () => {
 		for (let cycle = 0; cycle < 3; cycle++) {
 			emitPortDisconnect(SERVICE)
 			const p = client.echo(`cycle-${cycle}`)
-			const id = lastRequestId()
-			emitPortMessage(SERVICE, responseMessage(id, `r-${cycle}`))
+			emitPortMessage(SERVICE, responseMessage(await postedRequestId(), `r-${cycle}`))
 			await expect(p).resolves.toBe(`r-${cycle}`)
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: probing the correlator's pending count
@@ -648,16 +661,22 @@ describe("port onDisconnect → reconnect", () => {
 		client.onConnected.add(connected)
 		client.onDisconnected.add(disconnected)
 
+		const closeOnceReady = async (count: number) => {
+			await vi.waitFor(() => expect(connected).toHaveBeenCalledTimes(count))
+			emitPortDisconnect(SERVICE)
+		}
+
 		// Chrome: the reason is on runtime.lastError.
 		watchPortError(undefined)
-		emitPortDisconnect(SERVICE)
+		await closeOnceReady(1)
 		// Firefox: the reason is on the port.
 		lastError = undefined
 		watchPortError(new Error(ERROR_TEXT))
-		emitPortDisconnect(SERVICE)
+		await closeOnceReady(2)
 		// A clean close: neither is set.
 		watchPortError(undefined)
-		emitPortDisconnect(SERVICE)
+		await closeOnceReady(3)
+		await vi.waitFor(() => expect(connected).toHaveBeenCalledTimes(4))
 
 		expect(lastErrorReads).toBe(3)
 		const closeLines = calls.filter((line) => line[2] === "Port closed with an error")
@@ -666,9 +685,8 @@ describe("port onDisconnect → reconnect", () => {
 			[LogLevel.Debug, "Port closed with an error", { reason: "port.error" }],
 		])
 		expect(JSON.stringify(calls)).not.toContain(ERROR_TEXT)
-		// Each close still reconnects at once, as before.
+		// Each close of a Ready port still reconnects at once.
 		expect(disconnected).toHaveBeenCalledTimes(3)
-		expect(connected).toHaveBeenCalledTimes(3)
 		expect(connectMock()).toHaveBeenCalledTimes(4)
 	})
 
@@ -677,6 +695,7 @@ describe("port onDisconnect → reconnect", () => {
 		try {
 			const client = newClient()
 			await client.connect()
+			await vi.advanceTimersByTimeAsync(0)
 			const inflight = client.echo("inflight").catch((e: unknown) => e)
 
 			connectMock().mockImplementationOnce(contextInvalidated)
@@ -686,7 +705,7 @@ describe("port onDisconnect → reconnect", () => {
 			expect(vi.getTimerCount()).toBe(0)
 
 			const afterReopen = client.echo("after")
-			emitPortMessage(SERVICE, responseMessage(lastRequestId(), "ok-again"))
+			emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "ok-again"))
 			await expect(afterReopen).resolves.toBe("ok-again")
 		} finally {
 			vi.useRealTimers()
@@ -737,7 +756,7 @@ describe("connect failure is terminal", () => {
 	test("connect() resolves even when the throw is not a failed open", async () => {
 		const logger = {
 			log: (...line: unknown[]) => {
-				if (line[2] === "Connected") throw new Error("logger down")
+				if (line[2] === "Connecting") throw new Error("logger down")
 			},
 		}
 
@@ -750,7 +769,200 @@ describe("connect failure is terminal", () => {
 		await expect(client.echo("first")).rejects.toBeInstanceOf(RpcConnectError)
 
 		const second = client.echo("second")
-		emitPortMessage(SERVICE, responseMessage(lastRequestId(), "ok"))
+		emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "ok"))
 		await expect(second).resolves.toBe("ok")
+	})
+})
+
+// ── The Ready handshake ────────────────────────────────────────────────
+// A port is usable only once the background says the whole wallet has started. A worker still
+// starting refuses ports at once, so closes before Ready are spaced, and nothing is posted early.
+
+describe("Ready handshake", () => {
+	const readyMessage = { type: MessageType.Ready }
+	const posted = () => portRegistry().posted.length
+
+	test("a request made before Ready is not posted until Ready, then posts once and resolves", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const promise = client.echo("early")
+		await new Promise((r) => setTimeout(r, 10))
+		expect(posted()).toBe(0)
+
+		portRegistry().ready(SERVICE)
+		emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "late"))
+		await expect(promise).resolves.toBe("late")
+		expect(posted()).toBe(1)
+	})
+
+	test("closes before Ready reject nothing, fire nothing, and reopen after the delay; disconnect cancels a pending reopen", async () => {
+		vi.useFakeTimers()
+		try {
+			portRegistry().holdReady = true
+			const client = newClient()
+			const disconnected = vi.fn()
+			client.onDisconnected.add(disconnected)
+			const promise = client.echo("waits")
+			const settled = vi.fn()
+			void promise.then(settled, settled)
+
+			for (const opened of [1, 2]) {
+				expect(connectMock()).toHaveBeenCalledTimes(opened)
+				emitPortDisconnect(SERVICE)
+				await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS - 1)
+				expect(connectMock()).toHaveBeenCalledTimes(opened)
+				await vi.advanceTimersByTimeAsync(1)
+			}
+			expect(connectMock()).toHaveBeenCalledTimes(3)
+			expect(settled).not.toHaveBeenCalled()
+			expect(disconnected).not.toHaveBeenCalled()
+
+			portRegistry().ready(SERVICE)
+			emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "third port"))
+			await expect(promise).resolves.toBe("third port")
+			client.disconnect()
+
+			const other = newClient()
+			const waiting = other.echo("never").catch((e: unknown) => e)
+			emitPortDisconnect(SERVICE)
+			other.disconnect()
+			await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS * 4)
+			expect(((await waiting) as Error).message).toBe("Client disconnected")
+			expect(connectMock()).toHaveBeenCalledTimes(4)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("an explicit disconnect between Ready and a request's continuation rejects it and opens no port", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const promise = client.echo("raced").catch((e: unknown) => e)
+		await Promise.resolve()
+
+		portRegistry().ready(SERVICE)
+		client.disconnect()
+
+		expect(await promise).toBeInstanceOf(RpcDisconnectedError)
+		expect(posted()).toBe(0)
+		expect(connectMock()).toHaveBeenCalledTimes(1)
+
+		portRegistry().holdReady = false
+		const later = client.echo("later")
+		emitPortMessage(SERVICE, responseMessage(await postedRequestId(), "reopened"))
+		await expect(later).resolves.toBe("reopened")
+		expect(connectMock()).toHaveBeenCalledTimes(2)
+	})
+
+	test("a request is never posted past its deadline: not while it waits, not when the clock passes it after Ready", async () => {
+		vi.useFakeTimers()
+		try {
+			portRegistry().holdReady = true
+			const waited = newClient(500)
+			const timedOut = waited.echo("waited").catch((e: unknown) => e)
+			await vi.advanceTimersByTimeAsync(500)
+			expect(await timedOut).toBeInstanceOf(RpcTimeoutError)
+			portRegistry().ready(SERVICE)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(posted()).toBe(0)
+			waited.disconnect()
+
+			const delayed = newClient(500)
+			const late = delayed.echo("delayed").catch((e: unknown) => e)
+			await vi.advanceTimersByTimeAsync(400)
+			portRegistry().ready(SERVICE)
+			// The continuation runs after the deadline, as on a page the browser stalled.
+			vi.setSystemTime(Date.now() + 200)
+			expect(await late).toBeInstanceOf(RpcTimeoutError)
+			expect(posted()).toBe(0)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("onConnected fires once per Ready, in a later task after the waiting requests posted, never for a bare open", async () => {
+		vi.useFakeTimers()
+		try {
+			portRegistry().holdReady = true
+			const client = newClient()
+			const order: string[] = []
+			client.onConnected.add(() => order.push(`connected after ${posted()} posted`))
+			await client.connect()
+			void client.echo("one").catch(() => {})
+			void client.echo("two").catch(() => {})
+			await vi.advanceTimersByTimeAsync(1_000)
+			expect(order).toEqual([])
+
+			portRegistry().ready(SERVICE)
+			portRegistry().ready(SERVICE)
+			await Promise.resolve()
+			expect(order).toEqual([])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(order).toEqual(["connected after 2 posted"])
+
+			emitPortDisconnect(SERVICE)
+			portRegistry().ready(SERVICE)
+			client.disconnect()
+			await vi.advanceTimersByTimeAsync(0)
+			expect(order).toHaveLength(1)
+
+			void client.connect()
+			portRegistry().ready(SERVICE)
+			emitPortDisconnect(SERVICE)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(order).toHaveLength(1)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("a message or a Ready from a stale port is dropped and that port closed; events before Ready are dispatched", async () => {
+		portRegistry().holdReady = true
+		const client = newClient()
+		const connected = vi.fn()
+		client.onConnected.add(connected)
+		await client.connect()
+		const [first] = portRegistry().opened.get(SERVICE) ?? []
+		if (!first) throw new Error("no port opened")
+		const [staleListener] = [...first.messageListeners]
+
+		const events = vi.fn()
+		;(client as unknown as { ping: EventHandler<number> }).ping = new EventHandler<number>()
+		;(client as unknown as { ping: EventHandler<number> }).ping.add(events)
+		emitPortMessage(SERVICE, { type: MessageType.Event, content: { event: "ping", payload: 1 } })
+		expect(events).toHaveBeenCalledWith(1)
+
+		emitPortDisconnect(SERVICE)
+		await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS + 50))
+		const second = portRegistry().opened.get(SERVICE)?.[1]
+		if (!second || !staleListener) throw new Error("no reopened port")
+		const disconnectsBefore = portRegistry().localDisconnects.get(SERVICE) ?? 0
+
+		staleListener(readyMessage, first)
+		await new Promise((r) => setTimeout(r, 0))
+		expect(connected).not.toHaveBeenCalled()
+		expect(portRegistry().localDisconnects.get(SERVICE)).toBe(disconnectsBefore + 1)
+
+		portRegistry().ready(SERVICE)
+		portRegistry().ready(SERVICE)
+		await vi.waitFor(() => expect(connected).toHaveBeenCalledTimes(1))
+		await new Promise((r) => setTimeout(r, 0))
+		expect(connected).toHaveBeenCalledTimes(1)
+		expect(second.closed).toBe(false)
+	})
+
+	test("a request posted on a Ready port that drops rejects once and is never posted again, even when a subscriber reconnects", async () => {
+		const client = newClient()
+		await client.connect()
+		await new Promise((r) => setTimeout(r, 0))
+		client.onConnected.add(() => void client.connect())
+		const inflight = client.echo("once").catch((e: unknown) => e)
+		expect(posted()).toBe(1)
+
+		emitPortDisconnect(SERVICE)
+		expect(((await inflight) as Error).message).toBe("Client disconnected")
+		await new Promise((r) => setTimeout(r, 10))
+		expect(posted()).toBe(1)
+		expect(portRegistry().posted.filter((entry) => entry.method === "echo")).toHaveLength(1)
 	})
 })

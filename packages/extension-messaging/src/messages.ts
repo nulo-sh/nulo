@@ -6,6 +6,12 @@ export enum MessageType {
 	Event = 1,
 	Request = 2,
 	Response = 3,
+	/** Background → page, once per port: the whole wallet has started. Carries no content. */
+	Ready = 4,
+}
+
+export type ReadyMessage = {
+	type: MessageType.Ready
 }
 export type EventMessage<T extends EventsMap> = {
 	type: MessageType.Event

@@ -24,6 +24,7 @@ import { MessageType } from "../messages"
 import { wrapParams } from "../utils"
 import { connectServiceClient, silentLogger } from "../testing/transport-harness"
 import { Service } from "./service"
+import { DEFAULT_INIT_TIMEOUT_MS } from "../core/initialization"
 
 const SERVICE = "test-svc"
 
@@ -370,6 +371,53 @@ describe("ensureInitialized", () => {
 			const err = await p
 			expect(err).toBeInstanceOf(Error)
 			expect((err as Error).message).toBe("Service not initialized")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
+// ── Ready ─────────────────────────────────────────────────────────────
+
+describe("Ready", () => {
+	const types = (handle: ReturnType<typeof connectServiceClient>) =>
+		handle.captureResponse().mock.calls.map(([message]) => (message as { type: number }).type)
+	const disconnect = (handle: ReturnType<typeof connectServiceClient>) => (handle.port as { disconnect: () => void }).disconnect
+
+	test("a trusted port hears Ready once the whole collection has started, not at connect or at its own start", async () => {
+		const svc = new TestService()
+		const early = connectServiceClient(SERVICE)
+		await flush()
+		await svc.start({} as unknown as ServiceCollection)
+		await flush()
+		expect(types(early)).toEqual([])
+
+		svc.collectionStarted()
+		await flush()
+		expect(types(early)).toEqual([MessageType.Ready])
+
+		const late = connectServiceClient(SERVICE)
+		await flush()
+		expect(types(late)).toEqual([MessageType.Ready])
+		expect(types(early)).toEqual([MessageType.Ready])
+	})
+
+	test("a port still waiting at the init bound hears no Ready and is closed; an untrusted port hears nothing", async () => {
+		vi.useFakeTimers()
+		try {
+			const svc = new TestService()
+			const waiting = connectServiceClient(SERVICE)
+			const foreign = connectServiceClient(SERVICE, { id: "another-extension" })
+			await vi.advanceTimersByTimeAsync(DEFAULT_INIT_TIMEOUT_MS - 1)
+			expect(disconnect(waiting)).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1)
+			expect(disconnect(waiting)).toHaveBeenCalledTimes(1)
+
+			svc.collectionStarted()
+			svc.emitPing(1)
+			await vi.advanceTimersByTimeAsync(0)
+			expect(types(waiting)).toEqual([])
+			expect(types(foreign)).toEqual([])
 		} finally {
 			vi.useRealTimers()
 		}
