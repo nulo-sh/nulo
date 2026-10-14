@@ -62,3 +62,9 @@ A throwaway build counted each popup port's opens and closes (`background/client
 - Red on base: with the base source and base fixtures (one throwaway import stub), the case fails at `waitForHash("#/popup/auth")` after 10 s, the hash never leaving empty. A first attempt with the HEAD fixtures failed earlier, inside `openPopup`, because the base shell has no `data-service-ready`; that is not the proof, so it was rerun.
 - File runs, retry 0: Chrome 10/10 in 64 s, Firefox 5/5 (5 Chrome-only skips) in 67 s.
 - Screenshots (`screenshots/arc4-*`, Chrome, both themes) were taken under two throwaway holds that were never committed: one between the listeners and `collectionStarted()`, one at the head of `deleteProfile`. At 360 px the 2 px bar disappears when an image viewer downscales the page; the pixels show it on rows 0 and 1 (the accent in light, cream in dark), so the `arc4-start-bar-edge-*` files are 3× crops of the top 20 px.
+
+## Arc 4 review, round 1 (2026-10-14)
+
+- Codex (`01a13c6d-…`, gpt-6.1-sol high, over `15881c7d..8e29450c`): `CHANGES`, one High, two Medium, three Comments. Opus (one general-purpose agent alongside): `CHANGES`, confirmed the High and the guard fence independently, then found four more against `4d913436`. Every item reproduced at the tree; all fixed in 4d913436 and 3c3263ad, each new proof red on the pre-fix copy. Dispositions in plan § Audit verdicts.
+- The one that matters beyond this arc: a page that owns a client and disconnects it on unmount must ask whether the call in flight outlives the page. Deleting the open profile closes its session before the purge, the lock routes the popup off the page, and the unmount then rejected the very call whose tail finishes the reset.
+- vue-router's 30-hop infinite-redirect check is dev-only; a guard that can redirect a forced navigation to its own `from` loops in production.

@@ -509,6 +509,18 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what s
 
 **Round 3** (Codex, resumed over the round 2 fixes): `conditional approve`. R2-1, R2-new and R2-4 FIXED. One condition, checked at the tree and accepted: the predicate over `inFlightBootstraps` misses an activation whose core finished but whose final session read is pending (`useProfileBootstrap.ts:142-144,175-180`); the predicate now spans each `bootstrapActiveProfile` call to settlement, with a proof that holds that read. The audit loop stops here at its third round; arc 4's own Codex loop re-reads the built fence.
 
+**Arc 4 review, round 1** (`15881c7d..8e29450c`; Codex `01a13c6d-…` gpt-6.1-sol high, and one Opus agent alongside): Codex `CHANGES`, Opus `CHANGES`. Each item was checked at the tree:
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 High | A forced replay of the unlock screen after the session unlocked redirects to `from`, itself, without end (Opus confirmed: no 30-hop cap in production) | FIXED 4d913436: never back to the route itself; proof red before |
+| C2 Medium | A superseded guard whose read fails late marks the route the person left | FIXED 4d913436: only the latest navigation's guard marks or settles; proof red before |
+| C3 Medium | The deadline check ran before serialization, so a large payload could still post past it | FIXED 4d913436: the check follows serialization; proof red before |
+| O1 Medium | Deleting the open profile locks the popup off Delete Profile; the unmount's disconnect rejected the call and dropped the rest of the reset (no toast, the deleted profile stays selected) | FIXED 3c3263ad: the client outlives the page while a call runs; component proof red before |
+| O2 Low | `??=` keeps the reset's `0`, so the guard selects nothing | FIXED 3c3263ad: assigns when falsy; proof red before |
+| O3 Low | The grace counted from navigation start while the bar's delay counts from its render | FIXED 3c3263ad: the deadline is taken at `popup/index.ts` evaluation, as § Arc 4 words it |
+| O4, C4 to C6 | Comments: a wrong event claim, a plan path, narration, a garbled line, a caller named, the grace contract stated three times; `hidden()` reads a class | FIXED; the test notes the e2e reads the computed visibility |
+
 ### Deviations from the plan text (the tree wins)
 
 - **Arc 2.** One deadline taken at entry covers the init and the delegate waits; `DEFAULT_INIT_TIMEOUT_MS` is exported from `background/index.ts`; three more PXE test files moved to the record shape; the shared `PortRegistry` fake passes the port to `onDisconnect`.
@@ -518,6 +530,7 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what s
   - OA-4's premise "the unlock screen while it is still deciding" held only for a popup open across a restart; a fresh popup is empty until `getProfiles` answers (F22), so the first screen is a change to make.
   - "The loader keeps today's timing under C" became the loader's removal, because Ready makes the flag false at every start (F24).
   - I3 is demonstrated (F19, #421). The send boundary became a deadline check before the post and a `Connected` check in `sendEnvelope`, which leave the offscreen transport alone (F18). Ready comes after the whole collection started, not from the 500 ms poll (F20) or one service's start (F35). `sw-resilience.test.ts` gains a held-boot case instead of the first plan's base-evidence case, because arc 2 already reads `lastError`.
+- **Arc 4 build.** `reset.vue` disconnects its client on unmount only when no call runs, else when the call settles: a disconnect at unmount dropped the rest of a reset the lock had routed away from (O1). The type-roles surface inventory swaps `overlay:GlobalLoader` for `overlay:StartBar`.
 
 ## Delivery
 
