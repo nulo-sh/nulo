@@ -72,11 +72,24 @@ describe("Input", () => {
 	})
 
 	test("the list attributes land on the native <input>, and are absent when not given", () => {
-		const given = mountInput({ ariaActivedescendant: "opt-2", ariaControls: "list-1" }).get("input")
-		expect(given.attributes()).toMatchObject({ "aria-activedescendant": "opt-2", "aria-controls": "list-1" })
+		const given = mountInput({
+			role: "combobox",
+			ariaExpanded: false,
+			ariaAutocomplete: "list",
+			ariaActivedescendant: "opt-2",
+			ariaControls: "list-1",
+		}).get("input")
+		expect(given.attributes()).toMatchObject({
+			role: "combobox",
+			"aria-expanded": "false",
+			"aria-autocomplete": "list",
+			"aria-activedescendant": "opt-2",
+			"aria-controls": "list-1",
+		})
 		const bare = mountInput().get("input").attributes()
-		expect(bare["aria-activedescendant"]).toBeUndefined()
-		expect(bare["aria-controls"]).toBeUndefined()
+		for (const name of ["role", "aria-expanded", "aria-autocomplete", "aria-activedescendant", "aria-controls"]) {
+			expect(bare[name], name).toBeUndefined()
+		}
 	})
 
 	test.each([

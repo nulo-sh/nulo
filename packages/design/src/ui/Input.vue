@@ -94,8 +94,20 @@ const props = defineProps({
 		type: Boolean,
 		default: undefined,
 	},
-	/** The native `<input>`'s `aria-activedescendant` and `aria-controls`, for a field that drives a
-	 *  list it does not contain. */
+	/** The native `<input>`'s `role`, `aria-expanded`, `aria-autocomplete`, `aria-activedescendant`
+	 *  and `aria-controls`, for a field that drives a list it does not contain. */
+	role: {
+		type: String,
+		required: false,
+	},
+	ariaExpanded: {
+		type: Boolean,
+		default: undefined,
+	},
+	ariaAutocomplete: {
+		type: String as PropType<"list" | "inline" | "both">,
+		required: false,
+	},
 	ariaActivedescendant: {
 		type: String,
 		required: false,
@@ -333,7 +345,10 @@ const handleClear = () => {
 					:autocomplete="autocomplete"
 					:autocapitalize="autocapitalize"
 					:autocorrect="autocorrect"
+					:role="role"
 					:aria-invalid="ariaInvalid"
+					:aria-expanded="ariaExpanded"
+					:aria-autocomplete="ariaAutocomplete"
 					:aria-activedescendant="ariaActivedescendant"
 					:aria-controls="ariaControls"
 					:data-testid="inputTestid"

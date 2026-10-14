@@ -16,8 +16,17 @@ const STUBS = {
 	Text: { template: "<span><slot /></span>", props: ["color", "noWrap", "align", "selectable"] },
 	Icon: { template: '<i data-testid="stub-icon" :data-name="name" />', props: ["name", "size", "color", "scale"] },
 	AddressInput: {
-		template: `<div class="stub-input"><input :value="modelValue" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
-		props: ["modelValue", "placeholder", "autofocus", "ariaActivedescendant", "ariaControls"],
+		template: `<div class="stub-input"><input :value="modelValue" :role="role" :aria-expanded="ariaExpanded" :aria-autocomplete="ariaAutocomplete" :aria-activedescendant="ariaActivedescendant" :aria-controls="ariaControls" @focus="$emit('focus')" @blur="$emit('blur')" /><slot name="suffix" /></div>`,
+		props: [
+			"modelValue",
+			"placeholder",
+			"autofocus",
+			"role",
+			"ariaExpanded",
+			"ariaAutocomplete",
+			"ariaActivedescendant",
+			"ariaControls",
+		],
 		emits: ["focus", "blur", "update:modelValue"],
 	},
 	Transition: { template: "<slot />" },
@@ -259,6 +268,15 @@ describe("modules/send/RecipientField", () => {
 			expect(await press(w, "Enter")).toBe(true)
 			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([account1.address])
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
+		})
+
+		test("the field is a combo box that suggests as you type, expanded exactly while its list shows", async () => {
+			const w = await open()
+			expect(field(w)).toMatchObject({ role: "combobox", "aria-autocomplete": "list", "aria-expanded": "true" })
+			await press(w, "Escape")
+			expect(field(w)["aria-expanded"]).toBe("false")
+			const empty = await open({ candidates: [alice, account1], searchTerm: "" })
+			expect(field(empty)).toMatchObject({ role: "combobox", "aria-expanded": "false" })
 		})
 
 		test("Escape closes the list until the next input; with the list closed it is left unhandled", async () => {
