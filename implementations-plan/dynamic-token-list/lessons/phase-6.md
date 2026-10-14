@@ -49,3 +49,11 @@ Round 3 (resumed): **approve**, "No new material findings. Confidence: high."
 ## The rebase onto dev
 
 Seven `dev` commits landed during review. Conflicts: the index line, the nightly advisory set (now the union with `network-e2e-canary-wasm`), the `WORKFLOWS.md` rows, `CLAUDE.md` § In CI (dev's slimmer text kept) and the `rows` e2e error-array assertions, moved onto the listed fixtures. Dev's new moved-quote notice test read the removed seed list; it now prices from the list fixture. The cross-arc session, resumed on the range-diff, read #379 and #347 against the seeder and the first fetch: **approve**, "No new material findings. Confidence: high."
+
+## Owner change after delivery: a held token gets the check (2026-10-14)
+
+The owner asked whether the connect window needs wording for a listed token the wallet held before the list named it, and chose the code fix instead ("Yes, make the change to #389"). A "you added this" label was rejected: its name would come from the token store, which dApps write through `registerToken`.
+
+- The seeder's already-present branch, and any seeded default whose current pins were never checked, now run the same pin and metadata preview and persist nothing. A pass writes `verifiedPins`; a refusal holds until the version changes; an error retries on the next pass. Status stays `seeded`, so no screen changes but the name. D12 is amended.
+- Gate: token service tests 164 passed; `lint` and `typecheck:all` exit 0. Disabling the recheck reds three tests; removing both the guard and the epoch fence reds the list-change test (either alone suffices for its timing).
+- Codex (arc 2 session, resumed): **approve**, "No new material findings. Confidence: high." One comment nit (three comments still described the seed-only path), fixed.

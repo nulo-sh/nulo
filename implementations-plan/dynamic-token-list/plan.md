@@ -126,7 +126,7 @@ The wallet's default tokens are a list compiled into each build (`apps/extension
 **Consumers.**
 - `getSeeds` and `getVersion` read one snapshot together. The version is `${manifestVersion}+${sequence}`, so a failed or rejected default gets one fresh round per list update.
 - Every user delete writes a tombstone keyed by (chainId, lower-case contract). The tombstone has no effect on a token that is not listed.
-- The preview path alone writes a new marker field, `verifiedPins` (`classId|symbol|decimals`). A token that was already present gets none.
+- Only the seeder's on-chain check writes a new marker field, `verifiedPins` (`classId|symbol|decimals`): the preview before a seed, or the same check on a token already present or re-pinned since, which persists nothing (owner, 2026-10-14).
 - `knownContracts` names a list entry only when that marker's `verifiedPins` equal the entry's current pins.
 - A seed commit becomes irrevocable when `persist()` starts. A list change during it lets the row land, as a seed just before the change would.
 - `price-map.ts` uses `PRICE_IDS`. `allCoingeckoIds()` returns every id in the table, so the request never varies. The worker reads `priceIdFor` from the snapshot.
@@ -218,7 +218,7 @@ Each gate also runs `bun run lint`, `bun run typecheck:all` and `bun run check:p
 **P4. Consumers.** ✓
 1. Rewire `getSeeds`/`getVersion`, `invalidate()`, tombstone-on-delete, `knownContracts`, `price-map`, `getQuotes`, and `usePrices`/`BalanceView`.
 2. Remove `TESTNET_TOKENS` and `DEFAULT_TOKEN_SEEDS`.
-3. Write seeder tests: a re-pin and a delist during a held preview; a list change during a held persist (the row lands, with no name under the new pins); no `verifiedPins` for an already-present token; a rejected default that retries after an update.
+3. Write seeder tests: a re-pin and a delist during a held preview; a list change during a held persist (the row lands, with no name under the new pins); an already-present token checked on chain and named only on a pass; a rejected default that retries after an update.
 4. Write a `usePrices` test: the mapping is resnapshotted on reconnect.
 - Gate: `bun run audit:vue` exits 0. `rg -n "TESTNET_TOKENS|DEFAULT_TOKEN_SEEDS" apps/extension/src` returns nothing.
 
@@ -312,7 +312,7 @@ This section follows [`implementations-plan/README.md` § Post-implementation st
 | D9 | Tree tests in `test:all`, no new `pr-quick` job | Opus | A new filter key and state-machine entry |
 | D10 | Two arcs + close-out | both audits | Three arcs (Opus); one arc (Codex: too large to review in one sitting) |
 | D11 | Tombstone every user delete | Opus over Codex C2 | Marker-or-membership (more code; same effect) |
-| D12 | "Nulo knows" names only entries whose current pins the preview path verified (`verifiedPins`) | Opus S1, final Codex 1 | List names, or the `seeded` outcome (written without a preview for tokens already present) |
+| D12 | "Nulo knows" names only entries whose current pins the seeder checked on chain (`verifiedPins`); a token already present gets the same check (owner, 2026-10-14: "make the change to #389") | Opus S1, final Codex 1, owner | List names, or the `seeded` outcome (written without a check for tokens already present); a "you added this" label (its name would come from the token store, which dApps write) |
 | D13 | Mapping rides `getQuotes`; `settled` covers it | both audits | A separate getter and event (reconnect drift; a hero jump) |
 | D14 | Domain prefix in `envelope.ts`; no `wallet-crypto` edit | both audits | The KDF separator file (coupling; breaks `--no-install`) |
 | D15 | CORS `*`, no host permission; proven from `localhost` and the live leg | both audits | A host permission (store warning; 127.0.0.1 tests prove nothing) |
@@ -340,7 +340,7 @@ This section follows [`implementations-plan/README.md` § Post-implementation st
 - **Owner: approve (2026-10-13).** A1 to A5 confirmed; A4 is disclose. The one condition: the agent drives the key ceremony with the keyed-run tools (D23).
 - **Final pass on the round-2 fixes** (same session, resumed): **approve**. All four findings are closed and no new material defect was found. Implementation review must verify that the marker round-trips and that the named regression tests exist.
 - **Arc 1 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (the summary's code was outside `SIGNING_PATHS`); all seven findings accepted and fixed, each listed in `lessons/phase-2.md`. Round 2: **conditional approve**, one new should-fix (a quoted `}}` hid a secret read from `privileged()`), fixed. Round 3: **approve**, "No NEW material findings or comment issues in arc 1." After the key ceremony, rounds 4-6 on the pinned keys and the `FORMAT.md` key-table check: two should-fixes (rows the check skipped), both fixed; round 6 **approve**, "No new material findings."
-- **Arc 2 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (a list change during the commit's marker read let `persist()` start under old pins); all seven findings accepted and fixed, each listed in `lessons/phase-6.md`. Round 2: **approve**, "No new material findings. Confidence: high."
+- **Arc 2 implementation review** (Codex `gpt-6.1-sol`, high). Round 1: **reject** on one blocking finding (a list change during the commit's marker read let `persist()` start under old pins); all seven findings accepted and fixed, each listed in `lessons/phase-6.md`. Round 2: **approve**, "No new material findings. Confidence: high." After the owner amended D12 (2026-10-14), round 3 on the held-token check: **approve**, "No new material findings. Confidence: high."; one comment nit fixed.
 - **Final cross-arc review** (fresh Codex session from `d01569a2`, `gpt-6.1-sol`, high). Round 1: **conditional approve**, no blocking finding; four accepted (smoke coupled to the owner's list contents, a FORMAT.md claim about names, two comments). Round 2: **conditional approve**, two residual (a source run could skip priced tests; History priced from the list), fixed. Round 3: **approve**, "No new material findings. Confidence: high." Each in `lessons/phase-6.md`. After the rebase onto `dev` `1823144f`, round 4 on the range-diff: **approve**, "No new material findings."
 
 ## Seeds
