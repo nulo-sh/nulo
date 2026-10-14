@@ -9,8 +9,6 @@
  *     non-thrower; a locked wallet must decline auto-approve, NOT throw — this
  *     site was EXCLUDED from the sweep and must stay silent).
  */
-import { svc as stubService } from "@/wallet/services/composition-harness"
-import { NETWORK_SERVICE_NAME } from "@/wallet/services/network/spec"
 import { CapabilityNotGrantedError, ValidationError } from "@nulo/extension-messaging/errors"
 import { authorizationsEffective, projectKnownCapability } from "@nulo/wallet-bridge"
 import { EventHandler } from "@nulo/wallet-core/utils"
@@ -75,7 +73,6 @@ async function makeService(): Promise<{
 	const collection = new ServiceCollection()
 	const profileStub = makeProfileStub()
 	collection.add(profileStub as never)
-	collection.add(stubService(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
 	collection.add(service)
 	await collection.start()
 	return { service, profileStub, browserApi }
@@ -517,7 +514,6 @@ describe("the authorizations consent", () => {
 		const reader = new DappSessionService(new LoggerStore(new ConfigStore()), browserApi)
 		const collection = new ServiceCollection()
 		collection.add(makeProfileStub() as never)
-		collection.add(stubService(NETWORK_SERVICE_NAME, { registerChainPurgeSubscriber: () => {} }))
 		collection.add(reader)
 		await collection.start()
 		const row = await reader.getDappSession(id)
@@ -636,21 +632,13 @@ describe("confirmVerification", () => {
 	})
 })
 
-describe("a chain purge deletes that chain's sessions", () => {
-	test("only the purged profile's sessions on the purged chain go, with their delete events", async () => {
+describe("purgeForChain", () => {
+	test("only the given profile's sessions on the given chain go, with their delete events", async () => {
 		const logger = new LoggerStore(new ConfigStore())
 		const browserApi = new FakeBrowserApi()
 		browserApi.reset()
-		let purge: ((profileId: string, chainId: number, networkId: string) => Promise<void>) | undefined
 		const collection = new ServiceCollection()
 		collection.add(makeProfileStub() as never)
-		collection.add(
-			stubService(NETWORK_SERVICE_NAME, {
-				registerChainPurgeSubscriber: (fn: typeof purge) => {
-					purge = fn
-				},
-			}),
-		)
 		const service = new DappSessionService(logger, browserApi)
 		collection.add(service)
 		await collection.start()
@@ -664,7 +652,7 @@ describe("a chain purge deletes that chain's sessions", () => {
 			deleted.push(row.chainId)
 		})
 
-		await purge?.("p1", 1, "net-1")
+		await service.purgeForChain("p1", 1)
 
 		expect(deleted).toEqual(["1", "1"])
 		expect((await service.getDappSessions()).map((s) => s.id)).toEqual([other.id])

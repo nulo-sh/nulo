@@ -9,6 +9,7 @@ import type { ServiceCollection, ServiceSpec } from "@/wallet/base"
 import type { ILogger } from "@/wallet/logger"
 import { ACCOUNT_INTEGRITY_COORDINATOR_NAME, type AccountIntegrityCoordinator } from "@/wallet/services/account-integrity/coordinator"
 import { type Account, AccountService, AccountType } from "@/wallet/services/account/service"
+import { DappSessionService } from "@/wallet/services/dapp-session/service"
 import { seedForKind, type DefaultSeed } from "@/wallet/services/network/seeds"
 import { findPrimaryEndpoint, isSeedEndpointUrl, type Network, NetworkService } from "@/wallet/services/network/service"
 import { requireActiveProfile } from "@/wallet/services/profile/require-active-profile"
@@ -159,6 +160,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		NetworkService.name,
 		TransactionService.name,
 		TokenService.name,
+		DappSessionService.name,
 		ACCOUNT_INTEGRITY_COORDINATOR_NAME,
 	] as const
 
@@ -168,6 +170,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 	private accounts: AccountService = null!
 	private networks: NetworkService = null!
 	private transactions: TransactionService = null!
+	private dappSessions: DappSessionService = null!
 	private tokens: TokenService = null!
 	private integrity: Pick<AccountIntegrityCoordinator, "bootVerification"> = null!
 	private readonly staleNetworks: StaleNetworkRepository
@@ -190,6 +193,7 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 		this.accounts = services.get(AccountService.name)
 		this.networks = services.get(NetworkService.name)
 		this.transactions = services.get(TransactionService.name)
+		this.dappSessions = services.get(DappSessionService.name)
 		this.tokens = services.get(TokenService.name)
 		this.integrity = services.get<AccountIntegrityCoordinator>(ACCOUNT_INTEGRITY_COORDINATOR_NAME)
 		this.networks.setResetRunProbe((networkId) => this.flight?.networkId === networkId)
@@ -503,7 +507,11 @@ export class NetworkResetService extends Service<Methods, Events> implements Ser
 					await this.gate.waitAt("network-reset-purging")
 					addresses = await this.chainAddresses(profileId, journal)
 				},
-				afterPurge: () => this.transactions.purgeForAccounts(addresses, profileId, journal.fromChainId),
+				afterPurge: async () => {
+					await this.transactions.purgeForAccounts(addresses, profileId, journal.fromChainId)
+					// A kept session would auto-approve with the accounts the reset creates on that chain.
+					await this.dappSessions.purgeForChain(profileId, journal.fromChainId)
+				},
 				onPurged: async () => {
 					await this.updateJournal(profileId, networkId, (j) => ({ ...j, purged: true }))
 					this.emitChanged(flight, { running: true })

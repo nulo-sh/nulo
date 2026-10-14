@@ -376,4 +376,12 @@ describe("a stale network reset through the real service graph", () => {
 		expect((await h.account.getAccounts("p1", LOCAL)).map((a) => a.address)).toEqual([derived(LOCAL_L1_CHAIN_ID, 0)])
 		expect(await h.network.isChainLive("p1", NEW)).toBe(true)
 	})
+
+	test("deleting a network keeps its dApp sessions: only a reset deletes them, and the next connect drops these", async () => {
+		const h = await harness()
+		await twoChains(h)
+		await h.network.deleteNetwork("ln")
+		expect(await h.account.getAccountsRaw("p1").then((rows) => rows.filter((a) => a.chainId === LOCAL))).toEqual([])
+		await expect(h.sessions.tryGetDappSessionByOriginAndChain("https://dapp2.example", String(LOCAL))).resolves.toBeDefined()
+	})
 })

@@ -41,6 +41,7 @@ import { StaleNetworkRepository } from "@/wallet/services/stale-network/reposito
 import type { ResetJournal } from "@/wallet/services/stale-network/types"
 import { TOKEN_SERVICE_NAME } from "@/wallet/services/token/spec"
 import { TRANSACTION_SERVICE_NAME } from "@/wallet/services/transaction/spec"
+import { DAPP_SESSION_SERVICE_NAME } from "@/wallet/services/dapp-session/spec"
 import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
 import { svc } from "../composition-harness"
@@ -109,6 +110,8 @@ async function harness(opts: { gate?: Gate; recovery?: () => boolean } = {}) {
 	services.add(account)
 	const purgeForAccounts = vi.fn(async (_addresses: readonly string[], _profileId?: string, _chainId?: number) => {})
 	services.add(svc(TRANSACTION_SERVICE_NAME, { purgeForAccounts }))
+	const purgeForChain = vi.fn(async (_profileId: string, _chainId: number) => {})
+	services.add(svc(DAPP_SESSION_SERVICE_NAME, { purgeForChain }))
 	const repo = new StaleNetworkRepository(api.storage.local)
 	const seedDefaultTokens = vi.fn(async () => {
 		journalAtSeeding.push(await repo.getJournal("p1"))
@@ -150,6 +153,7 @@ async function harness(opts: { gate?: Gate; recovery?: () => boolean } = {}) {
 		factory,
 		pxe,
 		purgeForAccounts,
+		purgeForChain,
 		seedDefaultTokens,
 		journalAtSeeding,
 		handedDeks,
@@ -537,6 +541,7 @@ describe("NetworkResetService — the run", () => {
 			"p1",
 			OLD,
 		)
+		expect(h.purgeForChain.mock.calls).toEqual([["p1", OLD]])
 
 		const finish = writes.log.filter((w) => /network-reset/.test(w))
 		expect(finish.slice(-2)).toEqual(["set:nulo:core:network-reset-done@p1", "remove:nulo:core:network-reset@p1"])
@@ -710,6 +715,7 @@ describe("NetworkResetService — resume and forged journals", () => {
 		await resume(h)
 		expect(h.pxe).not.toHaveBeenCalled()
 		expect(h.purgeForAccounts).not.toHaveBeenCalled()
+		expect(h.purgeForChain).not.toHaveBeenCalled()
 	})
 
 	test("an imported entry whose ciphertext does not open, or derives another address, writes no account", async () => {
@@ -803,7 +809,13 @@ describe("NetworkResetService — the run lock and the notice", () => {
 
 		const other = new NetworkResetService(new LoggerStore(new ConfigStore()), h.api)
 		const services = new ServiceCollection()
-		for (const name of [PROFILE_SERVICE_NAME, TRANSACTION_SERVICE_NAME, TOKEN_SERVICE_NAME, ACCOUNT_INTEGRITY_COORDINATOR_NAME]) {
+		for (const name of [
+			PROFILE_SERVICE_NAME,
+			TRANSACTION_SERVICE_NAME,
+			TOKEN_SERVICE_NAME,
+			DAPP_SESSION_SERVICE_NAME,
+			ACCOUNT_INTEGRITY_COORDINATOR_NAME,
+		]) {
 			services.add(
 				svc(name, {
 					getActiveProfile: async () => ({ id: "p1" }),
