@@ -38,7 +38,7 @@ import { PublicScanCursorSchema, noteRecordId } from "./spec"
 import type { IncomingNoteRecord, IncomingPublicEventRecord, IncomingTransferRecord, IncomingTrustRecord, IncomingTrustState } from "./spec"
 import { TaskStatus } from "@/wallet/services/task/spec"
 import { type ExecutionFence, ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
-import type { PublicEventReader } from "./public-event-indexer"
+import { type PublicEventReader, comparePublicPositions } from "./public-event-indexer"
 import { SCAN_EPISODES_KEY, scanEpisodeNetworkPrefix } from "./scan-episodes"
 import { type ArrivalRow, isArrivalEligible } from "./arrival-state"
 import type { ScanOutcome } from "./scan-health"
@@ -2706,8 +2706,28 @@ function pubDroppedPage(): PublicTransferPage {
 
 type ReaderResponse = PublicTransferPage | Error | ((args: PublicTransferFetchArgs) => PublicTransferPage)
 
+const LOG_PAGE = 20
+const positionOf = (e: PublicTransferEvent) => ({
+	blockNumber: e.l2BlockNumber,
+	txIndexWithinBlock: e.txIndexWithinBlock,
+	logIndexWithinTx: e.logIndexWithinTx,
+})
+
+/** Serves `logs` as the node pages them: inside `[fromBlock, toBlock]`, after `afterCursor`, in log
+ *  order, 20 a page. An ancestry probe reads no logs. */
+function chainPage(logs: PublicTransferEvent[], args: PublicTransferFetchArgs): PublicTransferPage {
+	if (args.verifyAncestorHash !== undefined) return pubPage([])
+	const { fromBlock = 0, toBlock = Number.MAX_SAFE_INTEGER, afterCursor } = args
+	const page = logs
+		.filter((e) => e.l2BlockNumber >= fromBlock && e.l2BlockNumber <= toBlock)
+		.filter((e) => !afterCursor || comparePublicPositions(positionOf(e), afterCursor) > 0)
+		.sort((x, y) => comparePublicPositions(positionOf(x), positionOf(y)))
+		.slice(0, LOG_PAGE)
+	return pubPage(page, page.length === LOG_PAGE)
+}
+
 /** A queue-driven fake public-event reader. `responses` is consumed FIFO; an exhausted queue
- *  returns an empty page. A response may be an Error (thrown — reorg simulation). */
+ *  serves `chain` when set, else an empty page. A response may be an Error (thrown — reorg simulation). */
 function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?: PublicTokenClassStatus }) {
 	const state = {
 		tips: {
@@ -2719,6 +2739,7 @@ function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?:
 		} as PublicScanTips,
 		classStatus: (init?.classStatus ?? "standard") as PublicTokenClassStatus,
 		responses: [] as ReaderResponse[],
+		chain: undefined as PublicTransferEvent[] | undefined,
 		fetchArgs: [] as PublicTransferFetchArgs[],
 		tipsCalls: 0,
 		classCalls: 0,
@@ -2733,7 +2754,7 @@ function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?:
 		fetchTransferPage: async (_n, _c, args) => {
 			state.fetchArgs.push(args)
 			const next = state.responses.shift()
-			if (next === undefined) return { events: [], scannedThrough: null, hasMore: false, dropped: false }
+			if (next === undefined) return state.chain ? chainPage(state.chain, args) : pubPage([])
 			if (next instanceof Error) throw next
 			if (typeof next === "function") return next(args)
 			return next
@@ -4110,13 +4131,16 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		expect(cursorFor()?.pendingPage).toBeUndefined()
 	})
 
-	test("PublicScanCursorSchema round-trips a reconciling cursor (the repository parses every read through it)", () => {
+	test.each([
+		["reconciling", { reconciling: { lowerBound: 60, upperBound: 90, upperBoundHash: "0xfork", progress: null, seen: [] } }],
+		["back-filling", { backfill: { low: 1, high: 50, position: { blockNumber: 7, txIndexWithinBlock: 2, logIndexWithinTx: 0 } } }],
+	])("PublicScanCursorSchema round-trips a %s cursor (the repository parses every read through it)", (_case, extra) => {
 		const cursor = {
 			cursor: { blockNumber: 90, txIndexWithinBlock: 1, logIndexWithinTx: 2 },
 			lastSyncedBlockHash: "0xanchor",
 			lastScanFinalized: 50,
 			startBlock: 0,
-			reconciling: { lowerBound: 60, upperBound: 90, upperBoundHash: "0xfork", progress: null, seen: [] },
+			...extra,
 		}
 		expect(PublicScanCursorSchema.parse(cursor)).toEqual(cursor)
 	})
@@ -4167,6 +4191,180 @@ describe("IncomingTransferService — public-scan cursor resume (SW-restart, cas
 		)
 		expect(resumed).toBeDefined()
 		expect(resumed?.fromBlock).toBeUndefined()
+	})
+})
+
+describe("IncomingTransferService — newest-first public scan", () => {
+	const receipt = (block: number, overrides: Partial<PublicTransferEvent> = {}) =>
+		pubEvent({
+			txHash: `0x${block}-${overrides.txIndexWithinBlock ?? 0}`,
+			l2BlockNumber: block,
+			blockHash: `0xbh${block}`,
+			...overrides,
+		})
+	const recordedBlocks = (account = "0xa") =>
+		[...records.values()]
+			.filter((r) => r.kind === "public-event" && r.accountAddress === account)
+			.map((r) => r.l2BlockNumber)
+			.sort((x, y) => x - y)
+	const backfillOf = () => (cursorFor() as { backfill?: { low: number; high: number; position: unknown } } | undefined)?.backfill
+	const backfillReads = (fetchArgs: PublicTransferFetchArgs[]) =>
+		fetchArgs.filter((a) => a.referenceBlock === undefined).map((a) => [a.fromBlock, a.toBlock])
+	const trustTokenA = () =>
+		trust.set(trustKey("p1", "n1", tokenA.contract), {
+			profileId: "p1",
+			networkId: "n1",
+			contract: tokenA.contract,
+			state: "trusted",
+			updatedAt: 0,
+		})
+	const bootChain = async (
+		tips: Partial<PublicScanTips>,
+		chain: PublicTransferEvent[],
+		stubs: Parameters<typeof bootService>[0] = {},
+	) => {
+		const { reader, state } = makePublicReader({ tips })
+		const booted = await bootPublic(reader, state, stubs)
+		state.chain = chain
+		return { ...booted, state }
+	}
+
+	test("the newest receipts land on the first tick, and older ones fill in below, newest to oldest", async () => {
+		const { service } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [
+			receipt(50),
+			receipt(500),
+			receipt(950),
+			receipt(1005),
+		])
+
+		const landed: number[][] = []
+		for (let i = 0; i < 3; i++) {
+			expect(await scanPublic(service)).toBe("progress")
+			landed.push(recordedBlocks())
+		}
+
+		expect(landed).toEqual([
+			[950, 1005],
+			[500, 950, 1005],
+			[50, 500, 950, 1005],
+		])
+		expect(backfillOf()).toBeUndefined()
+	})
+
+	test("on a quiet chain with finalized = checkpointed, a receipt at the floor lands on the first tick, history still unread", async () => {
+		const { service, state } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1000 }, [
+			receipt(10),
+			receipt(1000),
+		])
+
+		await scanPublic(service)
+
+		expect(state.fetchArgs[0].fromBlock).toBe(1001)
+		expect(recordedBlocks()).toEqual([1000])
+		expect(backfillOf()).toMatchObject({ high: 600 })
+	})
+
+	test("an empty window ends and the next one starts, as many as the tick's page budget allows", async () => {
+		const { service, state } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [])
+
+		expect(await scanPublic(service)).toBe("progress")
+
+		expect(backfillReads(state.fetchArgs)).toEqual([
+			[901, 1000],
+			[801, 900],
+			[701, 800],
+			[601, 700],
+		])
+		expect(backfillOf()).toEqual({ low: 501, high: 600, position: null })
+	})
+
+	test("a block with more logs than one tick's budget resumes at the next log, with no duplicate and no gap", async () => {
+		const logs = Array.from({ length: 150 }, (_, i) => receipt(1000, { txIndexWithinBlock: i, to: i % 7 === 0 ? "0xa" : "0xother" }))
+		const { service, state } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1000 }, logs)
+		trustTokenA()
+		const added = vi.fn()
+		service.onIncomingTransferAdded.add(added)
+
+		await scanPublic(service)
+		expect(backfillOf()).toEqual({ low: 901, high: 1000, position: { blockNumber: 1000, txIndexWithinBlock: 79, logIndexWithinTx: 0 } })
+		state.fetchArgs.length = 0
+
+		await scanPublic(service)
+
+		expect(state.fetchArgs.find((a) => a.referenceBlock === undefined)?.afterCursor).toEqual(positionOf(logs[79]))
+		const ours = logs.filter((e) => e.to === "0xa").map((e) => `pub:p1|n1|${e.txHash}|${e.logIndexWithinTx}`)
+		expect([...records.keys()].filter((k) => k.startsWith("pub:")).sort()).toEqual(ours.sort())
+		expect(added).toHaveBeenCalledTimes(ours.length)
+		expect(backfillOf()).toEqual({ low: 801, high: 900, position: null })
+	})
+
+	test("a restart between a back-fill record and its cursor write replays the page without a duplicate", async () => {
+		const { service } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [receipt(950)])
+		const pending = vi.fn()
+		service.onIncomingTransferPending.add(pending)
+		await scanPublic(service)
+		expect(recordedBlocks()).toEqual([950])
+		// The record write landed and the cursor write that followed it did not.
+		seedCursor({ ...cursorFor(), backfill: { low: 901, high: 1000, position: null } })
+
+		expect(await scanPublic(service)).toBe("progress")
+
+		expect(recordedBlocks()).toEqual([950])
+		expect(pending).toHaveBeenCalledTimes(1)
+		expect(backfillOf()).toEqual({ low: 501, high: 600, position: null })
+	})
+
+	test("a revoked back-fill commit leaves the window's position where it was", async () => {
+		const { service } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [receipt(950)])
+		;(service as unknown as { deletersRunning: number }).deletersRunning = 1
+
+		expect(await scanPublic(service)).toBe("no-progress")
+		expect(recordedBlocks()).toEqual([])
+		expect(backfillOf()).toEqual({ low: 901, high: 1000, position: null })
+		;(service as unknown as { deletersRunning: number }).deletersRunning = 0
+
+		await scanPublic(service)
+		expect(recordedBlocks()).toEqual([950])
+	})
+
+	test("a reconciliation deletes a forward orphan and never reaches a back-filled record", async () => {
+		const { service, state } = await bootChain({ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 }, [
+			receipt(990),
+			receipt(1005),
+		])
+		await scanPublic(service)
+		expect(recordedBlocks()).toEqual([990, 1005])
+
+		// The block holding 1005's receipt is reorged out: the boundary probe fails and the node serves
+		// no receipt at all, so only the reconciliation's reach decides which rows it deletes.
+		state.chain = []
+		state.tips = { ...state.tips, checkpointedBlockHash: "0xcheckpoint2" }
+		state.responses.push(new Error("not an ancestor"))
+		await scanPublic(service)
+
+		expect(recordedBlocks()).toEqual([990])
+		expect(cursorFor()?.reconciling).toBeUndefined()
+	})
+
+	test("an account added during back-fill restarts both halves and finds the account's history", async () => {
+		const accounts = [{ profileId: "p1", chainId: 1, address: "0xa" }]
+		const account = makeAccountStub(accounts)
+		const { service } = await bootChain(
+			{ finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 },
+			[receipt(50, { to: "0xnew" }), receipt(950, { to: "0xnew" }), receipt(960), receipt(1005, { to: "0xnew" })],
+			{ account },
+		)
+		await scanPublic(service)
+		expect(recordedBlocks()).toEqual([960])
+		expect(backfillOf()).toMatchObject({ high: 600 })
+
+		accounts.push({ profileId: "p1", chainId: 1, address: "0xnew" })
+		await (service as unknown as { onAccountAdded: (a: unknown) => Promise<void> }).onAccountAdded({ chainId: 1, address: "0xnew" })
+		await flushPromises()
+		for (let i = 0; i < 3 && backfillOf() !== undefined; i++) await scanPublic(service)
+
+		expect(recordedBlocks("0xnew")).toEqual([50, 950, 1005])
+		expect(recordedBlocks()).toEqual([960])
 	})
 })
 
@@ -6142,8 +6340,9 @@ const PUBLIC_KEY = `p1|n1|${tokenA.contract}`
 
 /** Boots real-cadence schedulers on fake timers for two accounts and one token, after the install
  *  run has marked every target; the reader's counters and the notes reads start at zero. */
-async function bootTicking(stubs: Parameters<typeof bootService>[0] = {}) {
-	const { reader, state } = makePublicReader({ tips: { proposedBlockHash: "0xproposed1" } })
+async function bootTicking(stubs: Parameters<typeof bootService>[0] = {}, chain?: { tips: Partial<PublicScanTips> }) {
+	const { reader, state } = makePublicReader({ tips: { proposedBlockHash: "0xproposed1", ...chain?.tips } })
+	if (chain) state.chain = []
 	const note = stubs.note ?? makeNoteStub()
 	const accounts = [
 		{ profileId: "p1", chainId: 1, address: "0xa" },
@@ -6237,6 +6436,20 @@ describe("IncomingTransferService — block-gated ticks", () => {
 		await tick()
 
 		expect(runs(f)).toBeGreaterThan(first)
+	})
+
+	test("a public target with history left to back-fill runs on every tick until it is read, then waits for a block", async () => {
+		// Eleven empty windows below the floor at four a tick: the install run and two ticks read them.
+		const { state } = await bootTicking({}, { tips: { finalizedBlockNumber: 1000, checkpointedBlockNumber: 1010 } })
+
+		const reads: number[] = []
+		for (let i = 0; i < 3; i++) {
+			state.fetchArgs.length = 0
+			await tick()
+			reads.push(state.fetchArgs.length)
+		}
+
+		expect(reads).toEqual([5, 4, 0])
 	})
 
 	test("a note target whose tips read outlives its account's deletion writes nothing for that account", async () => {

@@ -61,6 +61,10 @@ const FALLBACK_EVERY_TICKS = 4
  *  tick in phase, so a tick's targets share one read. */
 const SHARED_TIPS_TTL_MS = 5_000
 
+/** Public history at or below the first scan's floor is read in windows of this many blocks, newest
+ *  window first. At one transfer a block, a window fits one tick's five pages of 20 logs. */
+const BACKFILL_WINDOW_BLOCKS = 100
+
 /** One scan's capture for its per-note critical sections: the scope and the scan-scoped timestamp
  *  cache. */
 type NoteScanContext = {
@@ -95,6 +99,11 @@ type PublicCommit = "revoked" | "processed"
 /** A public tick's outcome, and whether it left nothing to do below the tips it worked from: no page
  *  or marker pending and no page left unread. Only then may later ticks skip it until the tips move. */
 type PublicTick = { outcome: ScanOutcome; atTip: boolean }
+
+type PublicTarget = { profileId: string; networkId: string; contract: string; chainId: number }
+
+/** A back-fill step's outcome, and whether history is still left to read. */
+type BackfillStep = { outcome: "none" | "progress" | "no-progress" | "failed"; left: boolean }
 
 type TrustScope = { profileId: string; networkId: string; accountAddress: string; contract: string }
 
@@ -447,9 +456,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 
 	private onAccountAdded = async (account: { chainId: number; address: string }): Promise<void> => {
 		// A new account means the per-(network, contract) public cursors have already scanned PAST
-		// its historical receipts (one stream serves all accounts). Reset those cursors to null so
-		// the next scan re-indexes public history from `startBlock` and discovers the new account's
-		// receipts (correctness over speed; the reset restarts backfill). Done under the lock +
+		// its historical receipts (one stream serves all accounts). Reset both halves of those cursors
+		// so the next scan re-indexes public history, newest first, and discovers the new account's
+		// receipts (correctness over speed). Done under the lock +
 		// the hydrateSchedulers epoch bump so an in-flight scan bails.
 		const profile = await this.profileService.getActiveProfile()
 		if (profile) {
@@ -1799,7 +1808,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (classStatus === "non-standard") return { outcome: "ineligible", atTip: true }
 		if (classStatus !== "standard") return notAtTip("failed")
 
-		const cursor = (await this.repo.getCursor(profileId, networkId, contract)) ?? this.freshCursor(0)
+		const cursor = seedFreshCursor((await this.repo.getCursor(profileId, networkId, contract)) ?? this.freshCursor(0), tips)
 
 		// Resume an in-progress reconciliation FIRST (crash / MV3-tick resume) — don't forward-scan
 		// the same tick.
@@ -1819,21 +1828,85 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 				return notAtTip("no-progress")
 		}
 
+		const target: PublicTarget = { profileId, networkId, contract, chainId: network.chainId }
+		let forward: { tick: PublicTick; pages: number }
 		try {
-			return await this.forwardScanOnce(
-				profileId,
-				networkId,
-				contract,
-				network.chainId,
-				{ ...cursor, pendingPage: undefined },
-				tips,
-				epochAtStart,
-			)
+			forward = await this.forwardScanOnce(target, { ...cursor, pendingPage: undefined }, tips, epochAtStart)
 		} catch (err) {
-			return notAtTip(
-				await this.handleScanFailure({ profileId, networkId, contract, chainId: network.chainId }, cursor, tips, epochAtStart, err),
-			)
+			return notAtTip(await this.handleScanFailure(target, cursor, tips, epochAtStart, err))
 		}
+		return this.backfillAfter(target, forward, epochAtStart)
+	}
+
+	/** Back-fill reads only after a forward pass that committed, on the pages that pass left. */
+	private async backfillAfter(
+		target: PublicTarget,
+		forward: { tick: PublicTick; pages: number },
+		epochAtStart: number,
+	): Promise<PublicTick> {
+		if (!isScanSuccess(forward.tick.outcome)) return forward.tick
+		const step = await this.backfillOnce(target, this.indexer.pageBudget - forward.pages, epochAtStart).catch((error): BackfillStep => {
+			this.logDebug("public back-fill failed", { error })
+			return { outcome: "failed", left: true }
+		})
+		return {
+			outcome: step.outcome === "none" ? forward.tick.outcome : step.outcome,
+			atTip: forward.tick.atTip && !step.left,
+		}
+	}
+
+	/**
+	 * Reads history at or below the first scan's floor, newest window first, within `budget` pages.
+	 * Back-fill blocks are final, so its pages carry no reorg anchor and it keeps no pending-page
+	 * marker: a crash between a record write and the cursor write replays the page, and records are
+	 * keyed by transaction and log index.
+	 */
+	private async backfillOnce(target: PublicTarget, budget: number, epochAtStart: number): Promise<BackfillStep> {
+		let row = await this.repo.getCursor(target.profileId, target.networkId, target.contract)
+		if (!row?.backfill || budget < 1) return { outcome: "none", left: row?.backfill !== undefined }
+		const recipients = await this.recipientsFor(target.profileId, target.chainId)
+		let pages = budget
+		while (row.backfill && pages > 0) {
+			const step = await this.backfillWindowPages(target, row, row.backfill, pages, recipients, epochAtStart)
+			if (!step.row) return { outcome: "no-progress", left: true }
+			row = step.row
+			pages -= step.pages
+		}
+		return { outcome: "progress", left: row.backfill !== undefined }
+	}
+
+	/** Reads one window upward from its position within `pages`, commits what it finds, and persists
+	 *  the new position, or the next window down once a validated end of results closes this one.
+	 *  `row` is null when the tick must stop: a revoked commit or a dropped page keeps the position,
+	 *  and a moved epoch writes nothing. */
+	private async backfillWindowPages(
+		target: PublicTarget,
+		row: PublicScanCursor,
+		window: NonNullable<PublicScanCursor["backfill"]>,
+		pages: number,
+		recipients: Map<string, string>,
+		epochAtStart: number,
+	): Promise<{ row: PublicScanCursor | null; pages: number }> {
+		const { profileId, networkId, contract } = target
+		const result = await this.indexer.scan(networkId, contract, {
+			fromBlock: window.position === null ? window.low : undefined,
+			toBlock: window.high,
+			afterCursor: window.position,
+			maxPages: pages,
+		})
+		const matching = this.indexer.filterToRecipients(result.events, recipients)
+		if (!(await this.commitAddressedEvents(target, matching, recipients, epochAtStart))) return { row: null, pages: result.pages }
+		const ended = !result.hasMore && !result.dropped
+		const next: PublicScanCursor = {
+			...row,
+			backfill: ended
+				? backfillWindow(row.startBlock, window.low - 1)
+				: { ...window, position: result.scannedThrough ?? window.position },
+		}
+		const persisted =
+			(ended || result.scannedThrough !== null) &&
+			(await this.persistCursorLocked(profileId, networkId, contract, next, epochAtStart))
+		return { row: persisted && !result.dropped ? next : null, pages: result.pages }
 	}
 
 	/** A forward scan threw. With a reorg anchor the throw means the anchor was reorged out — or a
@@ -1854,20 +1927,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		return "failed"
 	}
 
-	/** One budgeted forward-scan batch. Persists `pendingPage` before record writes and advances the
-	 *  cursor after; the finalized watermark advances on every tick (even empty ones). The outcome is
-	 *  judged on the CURSOR, not on block coverage: the scan pages by log count, so a busy block takes
-	 *  many productive ticks without covering a new block. A quiet token reaches `idle-at-tip` on its
-	 *  validated empty read. */
+	/** One budgeted forward-scan batch, and the pages it fetched. The outcome is judged on the CURSOR,
+	 *  not on block coverage: the scan pages by log count, so a busy block takes many productive ticks
+	 *  without covering a new block. A quiet token reaches `idle-at-tip` on its validated empty read. */
 	private async forwardScanOnce(
-		profileId: string,
-		networkId: string,
-		contract: string,
-		chainId: number,
+		target: PublicTarget,
 		cursor: PublicScanCursor,
 		tips: PublicScanTips,
 		epochAtStart: number,
-	): Promise<PublicTick> {
+	): Promise<{ tick: PublicTick; pages: number }> {
+		const { networkId, contract } = target
 		// The checkpoint fork hash is the reorg anchor every page pins, the frame the boundary-ancestry
 		// proof is rooted in, AND the committed-fork anchor we persist.
 		const checkpointHash = tips.checkpointedBlockHash
@@ -1886,12 +1955,25 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		// page throw immediately (defeats even a transient A→B→A excursion — the B page can't validate
 		// against H_A).
 		const result = await this.indexer.scan(networkId, contract, {
-			fromBlock: cursor.cursor === null ? cursor.startBlock : undefined,
+			fromBlock: forwardStart(cursor),
 			toBlock: tips.checkpointedBlockNumber,
 			afterCursor: cursor.cursor,
 			referenceBlock: checkpointHash,
 		})
+		return { tick: await this.commitForwardPass(target, cursor, tips, result, epochAtStart), pages: result.pages }
+	}
 
+	/** Persists `pendingPage` before record writes and advances the cursor after; the finalized
+	 *  watermark advances on every tick (even empty ones). */
+	private async commitForwardPass(
+		target: PublicTarget,
+		cursor: PublicScanCursor,
+		tips: PublicScanTips,
+		result: PublicScanResult,
+		epochAtStart: number,
+	): Promise<PublicTick> {
+		const { profileId, networkId, contract, chainId } = target
+		const checkpointHash = tips.checkpointedBlockHash
 		const watermark = this.finalizedWatermark(cursor, result, tips)
 
 		if (result.scannedThrough === null) {
@@ -1942,7 +2024,6 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		}
 		if (!(await this.persistCursorLocked(profileId, networkId, contract, withPending, epochAtStart))) return notAtTip("no-progress")
 
-		const target = { profileId, networkId, contract, chainId }
 		if (!(await this.commitAddressedEvents(target, matching, recipients, epochAtStart))) return notAtTip("no-progress")
 
 		// Advance the cursor + clear `pendingPage` + record the watermark.
@@ -2159,7 +2240,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		if (!cursorRow) return false
 		// If the cursor sits ABOVE the reconciled checkpoint (a rollback stranded it) and reconcile
 		// found nothing to resume from, reset it to `null` so the next forward scan re-covers from
-		// `startBlock` as the checkpoint re-advances — otherwise it would forever query the empty
+		// the finalized floor as the checkpoint re-advances — otherwise it would forever query the empty
 		// `(oldCursor, newCheckpoint]` backwards range and the deleted rollback rows never re-index.
 		// A full re-scan is heavy but rollbacks are rare + commits are idempotent.
 		const strandedAboveCheckpoint = cursorRow.cursor !== null && cursorRow.cursor.blockNumber > marker.upperBound
@@ -2562,6 +2643,30 @@ export function orphanedByReconciliation(
 	const aboveCheckpoint = record.l2BlockNumber > marker.upperBound
 	if (!aboveCheckpoint && canonicalByHeight.get(record.l2BlockNumber) === record.blockHash) return false
 	return true
+}
+
+/** A cursor that never scanned starts its forward scan above the floor `F0 = min(finalized,
+ *  checkpointed)`, so the newest receipts land first, and back-fills everything at or below it.
+ *  Clamping to the checkpointed tip keeps every back-filled block final, below reconciliation's reach. */
+function seedFreshCursor(cursor: PublicScanCursor, tips: PublicScanTips): PublicScanCursor {
+	const unscanned =
+		cursor.cursor === null && cursor.lastScanFinalized === null && !cursor.backfill && !cursor.reconciling && !cursor.pendingPage
+	if (!unscanned) return cursor
+	const floor = Math.min(tips.finalizedBlockNumber, tips.checkpointedBlockNumber)
+	return { ...cursor, lastScanFinalized: floor, backfill: backfillWindow(cursor.startBlock, floor) }
+}
+
+/** The back-fill window ending at `high`, or none once `high` is below the start of history. */
+function backfillWindow(startBlock: number, high: number): PublicScanCursor["backfill"] {
+	if (high < startBlock) return undefined
+	return { low: Math.max(startBlock, high - BACKFILL_WINDOW_BLOCKS + 1), high, position: null }
+}
+
+/** Where a forward scan with nothing committed begins: just above the finalized floor, at or below
+ *  which every block was read or is left to back-fill, or at the start of history before any scan. */
+function forwardStart(cursor: PublicScanCursor): number | undefined {
+	if (cursor.cursor !== null) return undefined
+	return cursor.lastScanFinalized === null ? cursor.startBlock : cursor.lastScanFinalized + 1
 }
 
 function notAtTip(outcome: ScanOutcome): PublicTick {

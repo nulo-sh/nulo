@@ -45,6 +45,8 @@ export interface PublicScanResult {
 	/** True when the scan stopped because a page was DROPPED by hostile-response validation (as opposed
 	 *  to a genuine empty/EOF page). The reconciliation caller must NOT treat this as "window complete". */
 	dropped: boolean
+	/** Pages fetched, the empty or dropped page that ended the scan included. */
+	pages: number
 }
 
 export const DEFAULT_MAX_PAGES_PER_SCAN = 5
@@ -55,6 +57,11 @@ export class PublicEventIndexer {
 		private readonly log: PublicIndexerLogger,
 		private readonly maxPages: number = DEFAULT_MAX_PAGES_PER_SCAN,
 	) {}
+
+	/** The most pages one scan tick may fetch. */
+	public get pageBudget(): number {
+		return this.maxPages
+	}
 
 	public getTips(networkId: string): Promise<PublicScanTips> {
 		return this.reader.getScanTips(networkId)
@@ -70,20 +77,25 @@ export class PublicEventIndexer {
 	 * Passes `toBlock` + `referenceBlock` on EVERY page so the whole multi-page scan reads ONE fixed
 	 * tip and a reorg that dropped the anchor throws (and propagates). Stops early on an empty/dropped
 	 * page, on a non-advancing cursor (hostile), or on the first non-full page; surfaces `dropped` so
-	 * the caller can tell a suspect drop from a genuine EOF.
+	 * the caller can tell a suspect drop from a genuine EOF. `maxPages` lowers the budget for one call.
 	 */
 	public async scan(
 		networkId: string,
 		contract: string,
-		args: { fromBlock?: number; toBlock?: number; afterCursor?: PublicEventCursor | null; referenceBlock?: string },
+		args: { fromBlock?: number; toBlock?: number; afterCursor?: PublicEventCursor | null; referenceBlock?: string; maxPages?: number },
 	): Promise<PublicScanResult> {
 		const events: PublicTransferEvent[] = []
 		let cursor: PublicEventCursor | null = args.afterCursor ?? null
 		let scannedThrough: PublicEventCursor | null = null
 		let hasMore = false
 		let dropped = false
+		const maxPages = Math.min(args.maxPages ?? this.maxPages, this.maxPages)
+		// A zero budget would read as a validated end of results.
+		if (maxPages < 1) throw new Error("public-indexer: page budget must be at least one page")
+		let pages = 0
 
-		for (let page = 0; page < this.maxPages; page++) {
+		for (let page = 0; page < maxPages; page++) {
+			pages++
 			const fetchArgs: PublicTransferFetchArgs = {
 				fromBlock: args.fromBlock,
 				toBlock: args.toBlock,
@@ -114,10 +126,10 @@ export class PublicEventIndexer {
 				break
 			}
 			// Page was full; if this was the last budgeted page, more work remains for the next tick.
-			hasMore = page === this.maxPages - 1
+			hasMore = page === maxPages - 1
 		}
 
-		return { events, scannedThrough, hasMore, dropped }
+		return { events, scannedThrough, hasMore, dropped, pages }
 	}
 
 	/** Filter a page's events to those addressed to one of `recipients` (lower-cased compare). */

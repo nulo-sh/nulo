@@ -123,11 +123,23 @@ describe("PublicEventIndexer.scan", () => {
 		expect(res.hasMore).toBe(true)
 	})
 
+	test("a lowered budget stops a full run early with hasMore=true and counts its pages", async () => {
+		const responses = Array.from({ length: DEFAULT_MAX_PAGES_PER_SCAN }, (_, i) =>
+			page([ev({ txHash: `0x${i}`, l2BlockNumber: 5 + i })], true),
+		)
+		const { reader, fetchArgs } = makeReader(responses)
+		const idx = new PublicEventIndexer(reader, noop)
+		const res = await idx.scan("n", "c", { maxPages: 2 })
+		expect(fetchArgs).toHaveLength(2)
+		expect(res).toMatchObject({ hasMore: true, pages: 2 })
+		await expect(idx.scan("n", "c", { maxPages: 0 })).rejects.toThrow(/at least one page/)
+	})
+
 	test("empty first page → null cursor, no events, hasMore=false", async () => {
 		const { reader } = makeReader([page([])])
 		const idx = new PublicEventIndexer(reader, noop)
 		const res = await idx.scan("n", "c", {})
-		expect(res).toEqual({ events: [], scannedThrough: null, hasMore: false, dropped: false })
+		expect(res).toEqual({ events: [], scannedThrough: null, hasMore: false, dropped: false, pages: 1 })
 	})
 
 	test("threads fromBlock + toBlock + referenceBlock to EVERY page; advances afterCursor per page", async () => {
@@ -156,7 +168,7 @@ describe("PublicEventIndexer.scan", () => {
 		const { reader } = makeReader([droppedPage()])
 		const idx = new PublicEventIndexer(reader, noop)
 		const res = await idx.scan("n", "c", {})
-		expect(res).toEqual({ events: [], scannedThrough: null, hasMore: false, dropped: true })
+		expect(res).toEqual({ events: [], scannedThrough: null, hasMore: false, dropped: true, pages: 1 })
 	})
 
 	test("an empty EOF page surfaces dropped=false", async () => {
