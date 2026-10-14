@@ -22,8 +22,10 @@ import { Lock } from "@/wallet/utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { getErrorMessage } from "@nulo/wallet-core/utils"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, MAINNET_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID, walletChainId } from "@/utils/chain-ids"
-import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
+import { walletChainId } from "@/utils/chain-ids"
+import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
+import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
+import { DEFAULT_SEEDS, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND } from "./seeds"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
@@ -49,6 +51,7 @@ import {
 } from "./spec"
 
 export * from "./spec"
+export { LOCAL_NETWORK_RPC_URL } from "./seeds"
 
 /**
  * Per-profile active-network pointer. The service owns this state (vs. v0
@@ -57,67 +60,6 @@ export * from "./spec"
  */
 const ACTIVE_KEY_PREFIX = "nulo:core:active-network@"
 const activeKey = (profileId: string) => `${ACTIVE_KEY_PREFIX}${profileId}`
-
-/** Immutable L1 identities for the seeded kinds — the trust root `getL1ChainIdStored` validates
- *  seeded rows against (a row is mutable storage; these constants ship in code). Custom/devnet
- *  kinds have no constant and are probe-verified at account creation instead. */
-const SEED_L1_BY_KIND: Partial<Record<ChainKind, number>> = {
-	mainnet: MAINNET_L1_CHAIN_ID,
-	testnet: TESTNET_L1_CHAIN_ID,
-	local: LOCAL_L1_CHAIN_ID,
-}
-
-interface DefaultSeed {
-	name: string
-	rpcUrl: string
-	chainId: number
-	/** Hardcoded L1 identity — NEVER probed at seed time (seeding is offline-safe and
-	 *  load-bearing for fresh profiles with the node down). Key derivation consumes it. */
-	l1ChainId: number
-	kind: ChainKind
-	isPrimaryActive: boolean
-	/** Provider label stamped on the seeded endpoint (Settings shows it instead of the raw URL). */
-	endpointLabel?: string
-}
-
-/**
- * RPC URL stamped into the "Local Network" preset at build time. Defaults
- * to `http://localhost:8080`; e2e runs override via `VITE_LOCAL_NETWORK_RPC_URL`
- * so each parallel agent's wallet build talks to its own aztec sandbox.
- *
- * The chainId-zero check below also normalizes against this value so that
- * if a user (or test fixture) edits the seed's endpoint URL via the
- * settings UI, the chainId resolution still recognizes it as Local Network.
- * For the structural path, callers that already know they're touching a
- * `kind === "local"` network pass `kindHint` to `_getChainId` and bypass
- * the URL comparison entirely.
- */
-export const LOCAL_NETWORK_RPC_URL: string = (import.meta.env.VITE_LOCAL_NETWORK_RPC_URL as string | undefined) ?? "http://localhost:8080"
-
-const DEFAULT_SEEDS: DefaultSeed[] = [
-	{
-		name: "Testnet",
-		rpcUrl: TESTNET_RPC_URL,
-		chainId: CHAIN_IDS.TESTNET, // (TESTNET_L1_CHAIN_ID ^ TESTNET_ROLLUP_VERSION) >>> 0 — single-sourced in @/utils/chain-ids
-		l1ChainId: TESTNET_L1_CHAIN_ID,
-		kind: "testnet",
-		isPrimaryActive: true,
-		endpointLabel: "dRPC",
-	},
-	{
-		name: "Local Network",
-		rpcUrl: LOCAL_NETWORK_RPC_URL,
-		chainId: 0,
-		l1ChainId: LOCAL_L1_CHAIN_ID,
-		kind: "local",
-		isPrimaryActive: false,
-	},
-]
-
-/** The one seed marked `isPrimaryActive` (Testnet). Single source
- *  for the primary/default network — consumed by `getOrInitNetworks` (fresh seed) AND
- *  `getPrimaryNetwork` (the import/bootstrap fallback), so the two can't disagree. */
-const PRIMARY_SEED = DEFAULT_SEEDS.find((s) => s.isPrimaryActive)
 
 /**
  * Strict RPC-URL equality that tolerates trailing-slash and casing differences
@@ -211,6 +153,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	public readonly onChainPurged = new EventHandler<{ profileId: string; chainId: number }>()
 
 	private readonly storage: EntityStorage<Network>
+	private readonly staleNetworks: StaleNetworkRepository
 	private readonly nodes = new Map<number, AztecNode>()
 	/** URL-keyed transient cache for pending-tx polling pin. */
 	private readonly transientNodes = new Map<string, { node: AztecNode; failures: number }>()
@@ -229,6 +172,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 	) {
 		super(NETWORK_SERVICE_NAME, logger)
 		this.storage = new EntityStorage<Network>(NETWORK_STORAGE_ROOT, browserApi.storage.local, (raw) => NetworkRowSchema.parse(raw))
+		this.staleNetworks = new StaleNetworkRepository(browserApi.storage.local)
 		// Watchdog DISABLED: deleteNetwork legitimately holds this lock across
 		// purgeChain → clearChainState, which rides the 30-minute prove-tx
 		// envelope (it drains behind an in-flight proof). A force-release would
@@ -474,9 +418,10 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		validateParams(NetworkMethodSchemas.getPrimaryNetwork.params, [], "getPrimaryNetwork")
 		await this.ensureInitialized()
 		const profile = await requireActiveProfile(this.profileService)
-		if (!PRIMARY_SEED) return null
+		const primary = PRIMARY_SEED
+		if (!primary) return null
 		const rows = (await this.storage.getValues()).filter((n) => n.profileId === profile.id)
-		return rows.find((n) => n.chainId === PRIMARY_SEED.chainId) ?? null
+		return rows.find((n) => n.chainId === primary.chainId) ?? null
 	}
 
 	public async setActiveForProfile(profileId: string, networkId: string): Promise<string> {
@@ -619,6 +564,18 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		if (seeding && DEFAULT_SEEDS.some((seed) => seed.chainId === chainId)) return true
 		const network = rows.find((n) => n.chainId === chainId)
 		return network !== undefined && !this.deletingNetworks.has(network.id)
+	}
+
+	/**
+	 * Whether `chainId` must not be used in `profileId`: a stale-network record entry names it, a
+	 * reset journal starts or ends on it, or a seeded row on it is behind this build's seed. The
+	 * last is read from the row, so it holds before any classification lands. Lock-free.
+	 */
+	public async isChainQuarantined(profileId: string, chainId: number): Promise<boolean> {
+		await this.ensureInitialized()
+		const [state, rows] = await Promise.all([this.staleNetworks.readQuarantineState(profileId), this.storage.getValues()])
+		if (quarantinedBy(state, chainId)) return true
+		return rows.some((n) => n.profileId === profileId && n.chainId === chainId && hasNetworkCause(n))
 	}
 
 	public async setActiveNetwork(id: string): Promise<Network> {

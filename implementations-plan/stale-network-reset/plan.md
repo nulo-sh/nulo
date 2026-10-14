@@ -392,7 +392,7 @@ NULO_E2E_PROVERLESS=1 NULO_E2E_RETRY=0 bun run e2e:agent <files>   # builds its 
 
 ## Phases
 
-### Phase 1. Seeds, classifier, records
+### Phase 1. Seeds, classifier, records ✓
 
 1. Move the seed constants to `S/network/seeds.ts` with no behaviour change.
 2. Add `S/stale-network/{types,classify,repository}.ts` with their unit tests.

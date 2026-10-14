@@ -1751,3 +1751,43 @@ describe("NetworkService missing-primary policies", () => {
 		expect(factory.created.map((c) => c.rpcUrl)).toEqual(["https://first.example"])
 	})
 })
+
+describe("NetworkService.isChainQuarantined", () => {
+	const OLD_TESTNET = 4321
+
+	test("a seeded row behind its seed is quarantined from the row alone; a current one is not", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		storeRow(local, { id: "tn", chainId: OLD_TESTNET, l1ChainId: 11155111, kind: "testnet" })
+		storeRow(local, { id: "ln", chainId: 0, l1ChainId: LOCAL_L1_CHAIN_ID, kind: "local" })
+		storeRow(local, { id: "cn", chainId: 77, l1ChainId: 5 })
+		expect(await service.isChainQuarantined("p1", OLD_TESTNET)).toBe(true)
+		expect(await service.isChainQuarantined("p1", 0)).toBe(false)
+		expect(await service.isChainQuarantined("p1", 77)).toBe(false)
+		expect(await service.isChainQuarantined("p2", OLD_TESTNET)).toBe(false)
+	})
+
+	test("a record entry or either end of a journal quarantines its chain, for its profile only", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		storeRow(local, { id: "tn", chainId: CHAIN_IDS.TESTNET, l1ChainId: 11155111, kind: "testnet" })
+		const entry = { networkId: "tn", chainId: CHAIN_IDS.TESTNET, networkReset: false, addressesMoved: true }
+		local.store.set("nulo:core:stale-networks@p1", JSON.stringify({ profileId: "p1", accountSetDigest: "d", entries: [entry] }))
+		local.store.set(
+			"nulo:core:network-reset@p1",
+			JSON.stringify({
+				profileId: "p1",
+				networkId: "x",
+				fromChainId: 10,
+				toChainId: 20,
+				l1ChainId: 5,
+				cause: { networkReset: false, addressesMoved: true },
+				purged: true,
+				switchToSeedNode: false,
+				probedEndpoint: null,
+				accounts: [],
+			}),
+		)
+		for (const chainId of [CHAIN_IDS.TESTNET, 10, 20]) expect(await service.isChainQuarantined("p1", chainId)).toBe(true)
+		expect(await service.isChainQuarantined("p1", 0)).toBe(false)
+		expect(await service.isChainQuarantined("p2", CHAIN_IDS.TESTNET)).toBe(false)
+	})
+})
