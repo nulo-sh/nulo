@@ -9,3 +9,4 @@
 - 2026-10-14: arc1 Phase 1 gate pass (lint, typecheck:all, execution 1232, wallet-bridge 750, aztec-runtime 392). One pin outside the plan's list moved (fee-structural-parity embedded app cap); lessons/phase-1.md.
 - 2026-10-14: arc1 Phase 2 gate pass (lint, typecheck:all, execute window 304 incl. copy/type-role scans).
 - 2026-10-14: arc1 Phase 3 gate pass (lint, typecheck:all, tx module 16).
+- 2026-10-14: arc1 Phase 4 gate pass (fee-sponsor-funding Chrome 4/4, Firefox 4/4; new scenario 21.1 s / 67.3 s; screenshots captured).

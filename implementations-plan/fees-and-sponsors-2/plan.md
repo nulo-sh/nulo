@@ -1,7 +1,7 @@
 ---
 plan: fees-and-sponsors-2
 tier: mid
-status: at the approval gate (final Codex pass: conditional approve, conditions applied)
+status: approved 2026-10-14 (orchestrator); arc 1 in progress
 issues: "#400, #401, #411 (one arc)"
 driver: claude-code
 claude_model: opus
@@ -245,6 +245,13 @@ The PR body states the network suite's per-browser wall-clock before and after.
 | D10 | One live scenario through new playground fee inputs: the row and the node's admission. Unit pins prove the confirm build carries the priority. | I-1; a read-back of the submitted settings races mining (final pass F2). | Reading the transaction back (Codex C7; not deterministic); a CDP tap on the worker (Chrome-only, new harness). |
 | D11 | The stash refuses an app priority, as it refuses an app cap. | One condition beside an existing one. | Extending `reuseCapRule` (Codex C6). |
 | D12 | A confirm-time rebuild above the shown figure is a known limit, filed at close-out. | Pre-existing on every rebuilt path; binding needs a new approval contract. | Binding now (Codex C5). |
+| D13 (orch) | #396 is reopened for the case D8 covers (an app-set cap or priority); an operation whose app set nothing stays its known limit. The PR comments on #396 and says `Refs #396`; the arc neither reopens nor closes it. | The Confirm wait meets #396's reopening condition (an owner answer: P6-07, P6-19 B). | Closing #396 from the PR. |
+| D14 (orch) | D12's known limit is filed at close-out as a closed `known-limit` issue in the five-section form, after a dedupe search, and named on the Outcome's `Known limits:` line. | The proportion rule's home for a known limit. | A line in the plan only. |
+| D15 (orch) | #395 gets a comment: the default-entrypoint row's figure waits on the same simulation (D9). | #395 stays its known limit. | A new estimate path. |
+| D16 (orch) | Pins move to the values the plan predicts, never loosen; a pin the plan did not predict is recorded in `lessons/phase-1.md` and here. `DottedTerm.scan.test.ts` and the glossary tests stay untouched unless OA-1 is answered. | The owner's standing instruction. | Deleting or loosening a pin. |
+| D17 (orch) | Seam with `send-followups-1`: merge `origin/dev` before the final gates; `FeeCostReadout.vue` is untouched unless OA-2 is answered A. | That lane edits the fee card, the Send amount card and the USD basis helpers. | Editing the readout now. |
+| D18 | `finalizeGasLimits` keeps an embedded payment's request cap in every case, so `fee-structural-parity.test.ts`'s embedded app-cap pin now feeds the request as `applyEmbeddedFpcGasCap` leaves it (same expected cap). | Phase 1 step 3; the app's cap reaching the request is pinned by `embedded-fpc-cap.test.ts`. The plan's pin list missed this file. | Keeping a second embedded-cap derivation at finalize. |
+| D19 | Fixtures carry the app's fee settings as decimal strings, not `0x` hex. | The wallet-sdk's `jsonStringify` writes each bigint as a decimal string; the NO_FROM fingerprint's JSON round-trip refuses a `GasFees` instance. | `0x` hex (the plan's wording). |
 
 ## Audit verdicts
 

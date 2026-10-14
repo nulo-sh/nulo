@@ -4,6 +4,8 @@
  * deployed or funded: the playground registers it and Settings adds it by hand, the kernel names it
  * as the fee payer, and the node would refuse its send for want of a balance. An app that pays
  * through it is read from the final simulation's kernel the same way: no unit layer runs that kernel.
+ * An app that asks for a priority fee through Nulo's sponsor proves the node admits a send whose cap
+ * makes room for it: no installed package holds the node's admission code.
  */
 import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js/contracts"
 import { Fr } from "@aztec-labs/aztec.js/fields"
@@ -22,8 +24,16 @@ import {
 	waitForHash,
 } from "../fixtures/extension"
 import { fillSendForm, navigateToSettings, setActiveSendType } from "../fixtures/helpers"
-import { assertPgOk, callExpectingNoPopup, clickPgButton, setPgInput, setPgTextarea } from "../fixtures/playground"
-import { rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
+import {
+	assertPgOk,
+	callExpectingNoPopup,
+	clickPgButton,
+	setPgInput,
+	setPgTextarea,
+	snapshotResultSeq,
+	waitForPgResult,
+} from "../fixtures/playground"
+import { approveExecute, rejectExecute, waitForExecuteContent, waitForPopup } from "../fixtures/popups"
 import { serializeInstance } from "../fixtures/selfpay-phase"
 import { openSend, shotSend, waitForFee } from "../fixtures/send-page"
 
@@ -222,5 +232,42 @@ test.skipIf(!hasConfig)(
 		expect(await popup.$eval('[data-testid="execute-confirm-btn"]', (el) => (el as HTMLButtonElement).disabled)).toBe(true)
 		await shotSend(popup, "execute-app-payer-short", "execute-op-app-payer-short")
 		await rejectExecute(popup)
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"an app asking for a priority fee through Nulo's sponsor: the row names it, and the node admits the send",
+	{ timeout: 300_000 },
+	async ({ tokenReadyExtension }) => {
+		const config = aztecConfig as AztecTestConfig
+		const pg = await playgroundFor(tokenReadyExtension)
+		await setPgInput(pg, "tokenAddress", config.tokenAddress)
+		await setPgInput(pg, "recipient", config.minterAddress)
+		await setPgInput(pg, "amount", "1")
+		await setPgInput(pg, "sponsorSalt", "0")
+		await setPgInput(pg, "maxPriorityFeesPerGas", "10000000000,10000000000")
+		try {
+			const seq = await snapshotResultSeq(pg)
+			const execute = waitForPopup(tokenReadyExtension, "execute", { timeout: 60_000 })
+			await clickPgButton(pg, "sendTx-appSponsored")
+			const popup = await execute
+			await waitForExecuteContent(popup)
+			await popup.waitForSelector('[data-testid="execute-op-app-fee"]', { visible: true, timeout: 120_000 })
+			const row = await popup.$eval('[data-testid="execute-op-fee-set-badge"]', (el) => el.textContent?.replace(/\s+/g, " ").trim())
+			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(row ?? "")
+			expect(sentence, `the row reads "${row}"`).not.toBeNull()
+			const [figure, priority] = [Number(sentence?.[1]), Number(sentence?.[2])]
+			expect(priority).toBeGreaterThan(0)
+			expect(priority).toBeLessThan(figure)
+			await shotSend(popup, "execute-app-fee-priority", "execute-op-fee-set-badge")
+
+			await approveExecute(popup)
+			// `NO_WAIT` resolves with the hash only once the node has admitted the transaction.
+			const result = await waitForPgResult(pg, "sendTx", seq, 240_000)
+			await assertPgOk(pg, result, "fee-sponsor-funding:priority")
+			expect(typeof (result.resultJson as { txHash?: unknown }).txHash).toBe("string")
+		} finally {
+			await setPgInput(pg, "maxPriorityFeesPerGas", "")
+		}
 	},
 )
