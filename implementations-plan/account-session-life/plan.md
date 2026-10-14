@@ -1,7 +1,7 @@
 ---
 plan: account-session-life
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-6); arc 1 merged (#253); arc 2 built and reviewed (Codex approve), in delivery
+status: approved by the orchestrator (D-orch-1 to D-orch-8); arcs 1 and 2 merged (#253, #266); arc 3 (3.1 to 3.3) built and reviewed (Codex approve), in delivery; 3.4 deferred; arc 4 waits on a plan revision for page 7's picks
 issues: "#99, #100, #159, #198, #158 (arc 1); #157 decision-free half (arc 2); #24, #137, #208 (arc 3, waits on page 7, hold H2 and backup-import-export arc 3); #157 Ready half (arc 4, waits on OWNER-ASKS OA-4)"
 driver: claude-code
 claude_model: opus
@@ -410,7 +410,7 @@ A red/green proof takes the old copy from the base SHA (`git show 643c0c9:<path>
 
 Re-read the page's answers first: a changed record replaces the proposal quoted here, and a struck veto item is not built.
 
-#### Phase 3.1: #24 (P7-01)
+#### Phase 3.1: #24 (P7-01) ✓
 
 1. Approved: comment on #24 with the decision text, its date and the SECURITY.md citation, then close it as not planned. No code.
 2. Changed: record it in STATUS.md, leave #24 open under H2, and continue with phase 3.2.
@@ -420,7 +420,7 @@ Re-read the page's answers first: a changed record replaces the proposal quoted 
 - Pass: approved → `CLOSED`, `NOT_PLANNED`, the comment present; changed → `OPEN` with the hold recorded.
 - Layers: none (tracker).
 
-#### Phase 3.2: the unlock toast (#137, P7-02)
+#### Phase 3.2: the unlock toast (#137, P7-02) ✓
 
 1. Add the final rung to `handleUnlockError`.
 2. `auth.test.ts`:
@@ -433,7 +433,7 @@ Re-read the page's answers first: a changed record replaces the proposal quoted 
 - Pass: exit 0 on both browsers.
 - Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
 
-#### Phase 3.3: the split reveal (#208, P7-03)
+#### Phase 3.3: the split reveal (#208, P7-03) ✓
 
 1. Split the flag in `change-password.vue`.
 2. `change-password.test.ts`:
@@ -446,7 +446,7 @@ Re-read the page's answers first: a changed record replaces the proposal quoted 
 - Pass: exit 0 on both browsers.
 - Layers: lint, typecheck, unit, smoke e2e on Chrome and Firefox.
 
-#### Phase 3.4: backup autocomplete (#208, P7-04)
+#### Phase 3.4: backup autocomplete (#208, P7-04) — deferred (D-orch-7)
 
 **Warning:** skip this phase if the owner struck P7-04; then comment the strike on #208.
 

@@ -30,3 +30,4 @@
 - 2026-10-14 — phase 3.3 gate pass: lint 0, typecheck:all 0, settings/security unit 56/56 (two proofs red on base change-password.vue), smoke security retry-0 Chrome 4/4 + Firefox 4/4; before/after shots taken.
 - 2026-10-14 — arc 3 review round 1: Codex APPROVE (1 Low + 1 Comment fixed a71acaea, 1 Comment rejected), Opus CHANGES (same two; 1 Low → OWNER-ASKS OA-6, not built).
 - 2026-10-14 — arc 3 review round 2: Codex APPROVE, no findings; loop closed at 2 of 3. Boundary smoke retry-0 (auth-flows, security, passkey-backup): Chrome 12/12 in 98 s, Firefox 12/12 in 128 s; audit:vue 0 on ca83549.
+- 2026-10-14 — arc 3 boundary gate pass: audit:vue 0; smoke Chrome 12/12, Firefox 12/12; network backup-restore-integrity 2/2 retry-0 (host waited 23 min to load 56); test:all, test:ci-gating, check:plans 0.

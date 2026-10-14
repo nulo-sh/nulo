@@ -26,3 +26,9 @@
 
 - Codex round 1 (session `01a13b93-9f54-7221-b3c1-0e543b35f333`, on the alejo-icloud account that `best` picked): APPROVE with one Low (the passkey rung's `return` unguarded) and two Comments (a stale test count, accepted; the two-flag comment, rejected). Opus: CHANGES, the same two plus a Low that became OWNER-ASKS OA-6 (the error toast outlives a successful retry). Fixed in a71acaea.
 - A guard that a branch returns needs a call count: `toHaveBeenCalledWith` passes when any one call matches, so a fall-through that adds a second toast stays green.
+
+## Arc 3 boundary gate
+
+- `audit:vue` 0 on ca83549; after the review fixes (test and comment only), lint, typecheck:all, test:all, test:ci-gating and check:plans 0 on the final head.
+- Smoke, retry 0, armed build: `auth-flows`, `security`, `passkey-backup`: Chrome 12/12 in 98 s, Firefox 12/12 in 128 s.
+- Network, retry 0: `backup-restore-integrity` 2/2 on Chrome, started at load 56 after the poll-and-launch runner waited 23 minutes for the host to drop below 60.
