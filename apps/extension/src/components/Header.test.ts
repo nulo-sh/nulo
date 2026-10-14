@@ -2,7 +2,8 @@
  * Narrow integration test for the header — deliberately NOT a full Header suite (L4+ convention:
  * e2e owns the header). It pins the wiring unit tests cannot see: the address button hands the FULL
  * active address (not the truncated display text) to the clipboard, both switcher affordances open
- * the accounts popup, and the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`).
+ * the accounts popup, the lock chip runs the shared lock (its behavior: `useLockWallet.test.ts`), and
+ * the network chip's `data-status` follows the store's status.
  */
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import { flushPromises, mount } from "@vue/test-utils"
@@ -147,5 +148,13 @@ describe("Header — lock", () => {
 
 		w.unmount()
 		expect(H.profileListeners.size + H.disconnectListeners.size).toBe(0)
+	})
+})
+
+describe("Header — network status", () => {
+	test("the network chip's data-status names the store's status", () => {
+		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("active")
+		H.app.networkStatus = "InvalidChain"
+		expect(mountHeader().get('[data-testid="network-button"]').attributes("data-status")).toBe("invalidchain")
 	})
 })

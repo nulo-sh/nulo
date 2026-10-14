@@ -1,7 +1,7 @@
 ---
 plan: backup-import-export
 tier: mid
-status: approved by the orchestrator; arc 1 merged (#246); arc 1b in progress (A1 answered, D-orch-3); arcs 2 and 3 wait on decision page 1
+status: approved by the orchestrator; arcs 1 (#246) and 1b (#247) merged; arc 2 in review on `backup-import-export-arc-2` (P1-05 approved 2026-10-14); arc 3 waits on its page 1 records
 issues: "#146, #203, #207, #223, #226 (arc 1); #148 in-repo half (arc 1b, stays open); #147, #191, #221 (arc 2); #98, #189, #192, #230, #231 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -98,7 +98,7 @@ Recon: [recon.md](recon.md). Owner questions beyond page 1: [OWNER-ASKS.md](OWNE
 - I2. Bun's native `Buffer` decodes `" 0a"` differently from the shim, as #203 says. Not run; the fix does not depend on it, since the new decoder uses no `Buffer`.
 - I3. The watchdog's 60 s is a chosen policy, not a measurement: no real migration exists to measure. A data transform over `chrome.storage.local` is expected to finish in seconds.
 - I4. The watchdog bounds the engine's wait on an awaiting `up()` only. It cannot cut a loop that never yields, and it cannot help when `chrome.storage` itself stops answering (the restore and the attempt bump would hang too). On Chrome the worker's idle termination often comes first; the existing resume path then counts the interruption. Its real targets are Firefox's event page with a wallet page open and the in-page backup-import migrator.
-- I5. The lazily registered account contracts and protocol sponsors are registered before any read that needs them (#221). Phase 2.3 exists to prove or refute this, on a real PXE.
+- I5. The lazily registered account contracts and protocol sponsors are registered before any read that needs them (#221). Phase 2.3 exists to prove or refute this, on a real PXE. **Refuted at the trace** (2026-10-14): a dApp's utility read, a call-intent authwit and a tx naming an own account all resolve it without registering it (`lessons/phase-2.md`, D-arc2-2).
 - I6. A slice carrying an edited Local Network fits under the existing cap once #191 removes the PXE-provided contracts.
 - I7. Writing the deleted-token markers for the new profile before `finalizeRestore` beats the first seed pass, since the seeder runs for the active profile only (F15). The phase 3.1 e2e proves a seed pass ran.
 
@@ -324,11 +324,11 @@ Validation gate:
 - Pass: all exit 0; the heal test passes on the patched install and fails with the patch reverted (checked once by hand, logged in `lessons/phase-1b.md`); the build's notices step accepts the modified file.
 - Layers: install, lint, typecheck, unit, audit, build, network e2e.
 
-### Arc 2: the account-state slice (waits on page 1, P1-05)
+### Arc 2: the account-state slice (P1-05 approved as proposed, 2026-10-14)
 
-Every phase in this arc waits on page 1. If P1-05 is answered "as is", #191, #221 and #147 close as not planned (SR3) and the arc does not exist.
+P1-05 was signed as proposed; the phases below are built as written, with the deviations in the ledger (D-orch-5 to D-orch-10, D-arc2-1 to D-arc2-3).
 
-#### Phase 2.1: an edited Local Network reads its true status (#147)
+#### Phase 2.1: an edited Local Network reads its true status (#147) ✓
 
 1. Pass `network.kind` to `_getChainId` in `getNodeStatus`.
 2. Flip the `(BUG PIN)` in `network/service.test.ts`. A local-kind network on a non-seed URL that answers is Active. A local-kind network on a dead URL is Inactive. A public network whose chain id differs is still InvalidChain (the control).
@@ -341,7 +341,7 @@ Validation gate:
 - Pass: exit 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 2.2: the export drops PXE-provided contracts (#191)
+#### Phase 2.2: the export drops PXE-provided contracts (#191) ✓
 
 1. Skip `isPxeProvidedAddress` contracts in `backupNetworkState` before their instance and artifact are fetched.
 2. Rewrite the `normalize.ts:21-34` comment to what is now true.
@@ -354,7 +354,7 @@ Validation gate:
 - Pass: exit 0.
 - Layers: lint, typecheck, unit.
 
-#### Phase 2.3: the #221 proof, then the skip
+#### Phase 2.3: the #221 proof, then the skip ✓ (the proof failed: no skip, D-arc2-1, D-arc2-2)
 
 1. List in `lessons/phase-2.md` every PXE call that can name a profile account address or a protocol sponsor address after a restore. Mark each as a harmless probe or a read that needs the contract.
 2. Add composition tests on a fake PXE that refuses an unregistered address, one per class of read: tx build, fee payment through a sponsor (with no row, and with a row present on a fresh PXE), the gas-balance read, a view.
@@ -369,7 +369,7 @@ Validation gate:
 - Pass: exit 0, with the proof's outcome written in `lessons/phase-2.md`.
 - Layers: lint, typecheck, unit, composition, network e2e.
 
-#### Phase 2.4: chain 0 travels in the backup (#147)
+#### Phase 2.4: chain 0 travels in the backup (#147) ✓
 
 1. Test that a full-backup export includes an edited Local Network that answers, with its contracts and senders as its own per-network item.
 2. Add `tests/e2e/network/backup-edited-local-network.test.ts`. Edit the Local Network's RPC URL to the sandbox's own address (the edit flow of the smoke spec `tests/e2e/endpoints.test.ts`). Assert the dot's `data-status` reads active. Export a full backup and assert its account-state slice carries the chain 0 item.
@@ -497,6 +497,15 @@ Each row: the chosen design, the alternatives weighed, the panel's views, and wh
 | D-arc1b-1 | The pxe patch is also named in `store/listing.md`'s reviewer notes, `store/SOURCE-BUILD.md` and `UPDATE.md` | leave the store docs to a later release PR | found in the tree (not in the change map) | The reviewer notes go to AMO with every version as the exact list of third-party modifications; leaving them at two patches would misstate the next submission. The noir line is reworded to fit AMO's 3,000-code-point cap (2981). |
 | D-arc1b-2 | `@aztec-labs/pxe` gets its own `OVERRIDES` record; the licence fields are one constant shared with the Aztec record | append the sentence to the shared Aztec note | — | The note prints on every package the record names; a shared note would tell eighteen packages that `dest/pxe.js` is modified. One constant keeps one `reviewedVersion` per bump. |
 | D-arc1b-3 | The network gate runs `import-handshake-note` on a proverless build (`NULO_E2E_PROVERLESS=1`) and `profile-reimport-matrix` on the default build | one run of both files, as the gate was written | found by the gate | The handshake file's projection gate is compiled into proverless builds only (`@requires-proverless`); run 1 without the flag timed out waiting for it. `agent.sh`'s marker guard did not refuse that run because `--retry=0` reaches its grep as an option (reported to the orchestrator for the e2e harness lane). |
+| D-orch-5 | Arc 2 opens as one plain PR against `dev` (`gh pr create --base dev`) from `backup-import-export-arc-2` off `origin/dev` d3dc441 | a `gh stack` layer | orchestrator decision | The stack's lower layers are merged; arc 3 is planned after this PR opens and may stack on it. |
+| D-orch-6 | The tree moved since the plan's facts (f15a9b5): every Arc 2 fact is re-verified at the base, and the tree wins where they disagree; the type-role rule, the e2e runtime budget and `check:plans` inside `test:ci-gating` apply | — | orchestrator decision | F13 and F14 held at d3dc441 (`lessons/phase-2.md`). |
+| D-orch-7 | Pins move, never loosen: the `(BUG PIN)` flips to the fixed contract; no `skipIf`, retry, raised timeout or suppression; the stall watchdog stays | — | orchestrator decision | The new network file asserts the sandbox config instead of skipping without it. |
+| D-orch-8 | Proportion: a finding becomes a change only with its path written; a fix that adds persistent state beyond the slice change, a lifecycle, a protocol, a recovery policy or a public contract stops for the orchestrator; later Codex rounds verify | — | orchestrator decision | — |
+| D-orch-9 | UI impact is only Phase 2.1's quoted line: the header dot reads its true status, `data-status` on the dot's testid'd element; no new words; a header screenshot in both themes in the PR | — | orchestrator decision | — |
+| D-orch-10 | Close-out is not arc 2's: arc 3 and the close-out layer follow; `STATUS.md` stays | — | orchestrator decision | — |
+| D-arc2-1 | The #221 order is documented by one unit failure/control pair in `view-executor.test.ts` over the real `ContractResolver` | the plan's composition tests, one per class of read (Phase 2.3 step 2) | Codex: the composition matrix is not buildable; use the real resolver, assert no contract registration and no `executeUtility`; Opus: make the stub's account the target and assert `ensureContractRegistered` uncalled | COMPOSITION-TESTS.md, which is normative, excludes tx builds (D3), FpcService discovery (D6), the gas-balance read (D2) and selector-bound views (D6). The tree wins over the plan. |
+| D-arc2-2 | #221's proof fails at the trace: no skip is built, no `restore-skip-proof.test.ts` is added, #221 closes as not planned quoting P1-05 | build the skip and run the plan's e2e; an e2e that restores a backup with the account contract removed | Codex: skip both e2es for the failure exit; Opus: agrees, the owner's rule puts the burden on the skip and one counterexample closes it | The plan's step 5 stops at the counterexample. Its e2e scenario reads balances and sends, each registering first, so it would pass with the skip on and miss the failing read; the failing read needs no real PXE to establish: the wallet path registers nothing (unit-pinned) and upstream's `runUtility` refuses an unregistered contract whatever the node answers. |
+| D-arc2-3 | `data-status` goes on `network-button`, the testid'd element that holds the dot | a new testid on the dot | — | The dot is a bare `<div>` with no testid; a testid on a non-interactive element would be invented for one read. The dot's class and the attribute read one computed key, so they cannot disagree. |
 
 ### Competing outline (cheapest-first), sent to both audits
 
@@ -621,6 +630,25 @@ None rejected.
 Rejected: only B1-1's extra conflicting-bytes case, with the reason above.
 
 - **Codex round 2 (resumed session): clean.** No new material findings on the fix diff. The loop converged in two rounds.
+
+### Arc 2 implementation review (2026-10-14)
+
+- **Codex round 1 (gpt-6.1-sol, high, read-only; session 01a13b65-ca80-7db2-9a71-4d3fcb00754a): approve with fixes, no High or Medium.** It checked that the kind hint widens `getNodeStatus` exactly as far as Settings' `probeNodeStatus` (a `local` row comes only from seeds, `addNetwork` writes `custom`, a backup carries no network rows, an endpoint edit checks L1), that Active gates only the header, the contact sender list and the full backup, that the export filter runs before the instance and artifact reads and keeps custom contracts, accounts and sponsors, and that each new test is red without its fix.
+- **Opus 5.5 diff review (alongside round 1): approve with fixes, two Lows, three Nits, one Info.**
+
+| # | Source | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| A2-1 | Codex | Low | The new e2e's 300 s timeout raises the suite's 30 s default | Tightened to 120 s, not removed: vitest 4 times fixture setup inside the test, the measured 18.4 s (Chrome) and 20.1 s (Firefox) include the launch, and CI runners are 3-5x slower. |
+| A2-2 | Codex, Opus | Low | The e2e header spends two paragraphs; the Header test's doc names its caller (the e2e) | Accepted: one paragraph; the clause is cut. |
+| A2-3 | Opus | Low | The e2e waited for a settled status, then read it separately; startup syncs twice and each sync passes through `sync` | Accepted: one `waitForFunction` returns the first settled value. |
+| A2-4 | Opus | Low | The new file ran on Chrome only; the arc gate's e2e was not recorded; Phase 2.4 unticked | Accepted: Firefox 1/1 (20.1 s); the arc gate is in `lessons/phase-2.md`; 2.4 ticked. |
+| A2-5 | Opus | Nit | The network id came from `page.url()` (Firefox tracks `pushState` through BiDi) | Accepted: read from `location.hash`. |
+| A2-6 | Opus | Nit | `data-status="undefined"` before the first status | Accepted: the attribute is absent until a status exists; the dot's class is unchanged. |
+| A2-7 | Opus | Info | A `local` row reads Active for any answering node; `getNodeStatus` never compares L1 | No change: it is how Settings already checks a Local Network (P1-05), and the worst case, a node that changes chain after the edit, puts only the wallet's own local PXE contents in its own backup. |
+
+None rejected.
+
+- **Codex round 2 (resumed session): clean.** It verified the runner times fixture setup inside the test and withdrew the timeout finding; the single-evaluation status read still fails on `invalidchain`. The loop converged in two rounds.
 
 ## Delivery
 

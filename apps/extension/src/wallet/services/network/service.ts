@@ -757,8 +757,7 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		const primary = findPrimaryEndpoint(network)
 		if (!primary) return NodeStatus.Inactive
 		try {
-			// No kind hint, unlike probeNodeStatus: a local network off the seed URL reads InvalidChain.
-			const probedChainId = await this._getChainId(primary.rpcUrl)
+			const probedChainId = await this._getChainId(primary.rpcUrl, network.kind)
 			if (probedChainId !== network.chainId) return NodeStatus.InvalidChain
 			return NodeStatus.Active
 		} catch {
