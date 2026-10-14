@@ -156,7 +156,7 @@ Commands run from the worktree root unless they start with `cd`. Every gate also
 
 **Validation gate.** `UNIT src/popup/components/modules/send/`; `bun run test`; `SMOKE tests/e2e/send-fee-privacy.test.ts tests/e2e/send-keyboard.test.ts`. Pass: all exit 0; `git grep -n "send-fee-override\|send-fee-back-embedded\|useEmbeddedFee" apps/` prints nothing. Layers: unit, component, smoke.
 
-### Phase 2: a row for a long derived line (#408)
+### Phase 2: a row for a long derived line (#408) ✓
 
 1. Measure first (I3): run `send-amount-exact.test.ts` on base with a temporary log of the derived line's font size after the USD toggle. Record it in `lessons/phase-2.md`. If it is 8 px or more, stop and take a longer figure to the panel before step 4.
 2. Implement the rule and the template under #408 in Architecture.

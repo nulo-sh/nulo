@@ -8,3 +8,5 @@
 - 2026-10-14 final fresh Codex pass: conditional approve, three fixes applied; confirmation resume: approve. Plan committed, awaiting the orchestrator.
 - 2026-10-14 implementation started on `worktree-send-followups-1` at 20f33414; the orchestrator approved the plan and confirmed OA-1.
 - 2026-10-14 phase 1 gate: pass. `UNIT src/popup/components/modules/send/` 389/389; `bun run test` 12081 passed; lint and `typecheck:all` exit 0; `SMOKE send-fee-privacy send-keyboard` Chrome 6/6 (103 s), Firefox 6/6 (112 s); the leftover-id grep prints nothing.
+- 2026-10-14 phase 2 measured on base: the committed case draws at 6.16 px beside the balance on both browsers (I3 holds); OA-15's two cases at 3.96 px and 5.17 px.
+- 2026-10-14 phase 2 gate: pass. `UNIT AmountCard src/utils` 1365 passed; `bun run test` 12093 passed; lint, `typecheck:all` exit 0; `NET send-amount-exact` Chrome and Firefox green; `SMOKE send-keyboard` green on both (run with phase 3's smoke); the type-role test green with no new carve-out; 16 shots under `screenshots/`.
