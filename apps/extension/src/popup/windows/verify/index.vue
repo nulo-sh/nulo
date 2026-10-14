@@ -224,7 +224,7 @@ onUnmounted(() => {
 
 				<Flex direction="column" align="center" gap="12">
 					<div data-testid="verify-emoji-grid"><EmojiGrid :emojis="emojis" /></div>
-					<Text size="12" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">{{ CHECK_INSTRUCTION }}</Text>
+					<Text variant="body" color="secondary" :style="{ textAlign: 'center', lineHeight: '1.4' }">{{ CHECK_INSTRUCTION }}</Text>
 				</Flex>
 			</Flex>
 		</Flex>
@@ -232,8 +232,8 @@ onUnmounted(() => {
 		<Flex v-snack-footer direction="column" gap="12" :class="$style.footer">
 			<Flex align="center" justify="between" gap="12" wide>
 				<Flex direction="column" gap="4">
-					<Text size="13" weight="600" color="primary">Skip this check next time</Text>
-					<Text size="12" weight="500" color="tertiary">Only for this app on this network.</Text>
+					<Text variant="row-title" color="primary" :class="$style.skip_title_size">Skip this check next time</Text>
+					<Text variant="caption" color="tertiary">Only for this app on this network.</Text>
 				</Flex>
 				<div data-testid="verify-always-trust-toggle"><Toggle :modelValue="alwaysTrust" @update:modelValue="(v: boolean) => (alwaysTrust = v)" /></div>
 			</Flex>
@@ -262,7 +262,7 @@ onUnmounted(() => {
 					They match
 				</Button>
 			</Flex>
-			<Text v-if="refusalError" size="12" color="red" role="alert" data-testid="verify-mismatch-error">
+			<Text v-if="refusalError" variant="body" color="red" role="alert" data-testid="verify-mismatch-error">
 				{{
 					refusalError === "unremoved"
 						? "The connection ended, but this app could not be removed. Remove it in Settings, Connected apps."
@@ -296,6 +296,10 @@ onUnmounted(() => {
 
 .footer {
 	composes: footer from "../window-shell.module.css";
+}
+
+.skip_title_size {
+	font-size: 13px;
 }
 
 .visually_hidden {

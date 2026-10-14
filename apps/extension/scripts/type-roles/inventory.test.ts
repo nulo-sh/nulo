@@ -58,6 +58,22 @@ const digest = (file: string): string =>
 		.digest("hex")
 const keyOf = (x: SiteKey): string => JSON.stringify([x.file, x.expression, x.branch, x.ordinal])
 const testidsIn = (selector: string): string[] => [...selector.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1])
+/** A bound template-literal testid as a pattern: any text stands in place of each `${…}`. */
+const templateTestid = (literal: string): RegExp => {
+	const parts = literal
+		.slice(1, -1)
+		.split(/\$\{[^}]*\}/)
+		.map(escapeRegExp)
+	return new RegExp(`^${parts.join(".*")}$`)
+}
+/** Whether `file` renders `testid`, written out or as a bound template literal with a static part. */
+const holdsTestid = (file: string, testid: string): boolean => {
+	const source = read(file)
+	if (source.includes(testid)) return true
+	return [...source.matchAll(/:data-testid="(`[^"`]*`)"/g)].some(
+		([, literal]) => /[\w-]{3}/.test(literal.replace(/\$\{[^}]*\}/g, "")) && templateTestid(literal).test(testid),
+	)
+}
 
 const expectedSites = readJson<{ producers: Record<string, ProducerSet>; sites: SiteEntry[] }>("identifier-sites.expected.json")
 const expectedSurfaces = readJson<{ surfaces: SurfaceEntry[] }>("surfaces.expected.json").surfaces
@@ -114,13 +130,7 @@ function namesOwnElement(site: IdentifierSite, selector: readonly string[]): boo
 	const testid = selector.at(-1) ?? ""
 	const own = site.ownTestid
 	if (own?.bound && !own.text.startsWith("`")) return !site.testids.includes(testid)
-	if (own?.bound) {
-		const pattern = own.text
-			.slice(1, -1)
-			.split(/\$\{[^}]*\}/)
-			.map(escapeRegExp)
-		return new RegExp(`^${pattern.join(".*")}$`).test(testid)
-	}
+	if (own?.bound) return templateTestid(own.text).test(testid)
 	if (own?.text === testid) return true
 	return (own === null || selector.includes(own.text)) && declaresInside(site.component, testid, site.prop)
 }
@@ -157,7 +167,7 @@ describe("identifier sites", () => {
 
 	test("an entry no site backs stays only while its selector's testid is in its file", () => {
 		const unmatched = entries.filter((entry) => !sitesByKey.has(keyOf(entry)))
-		const stale = unmatched.filter((entry) => !testidsIn(entry.selector).some((id) => read(entry.file).includes(id)))
+		const stale = unmatched.filter((entry) => !testidsIn(entry.selector).some((id) => holdsTestid(entry.file, id)))
 		const kept = unmatched.filter((entry) => !stale.includes(entry))
 		if (kept.length) console.info(`identifier entries no pattern finds, kept by testid:\n${kept.map(keyOf).join("\n")}`)
 		expect(stale.map(keyOf)).toEqual([])

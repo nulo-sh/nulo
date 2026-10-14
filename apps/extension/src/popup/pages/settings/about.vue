@@ -59,15 +59,15 @@ onBeforeUnmount(() => legal.dispose())
 		<SubPageHeader title="About Nulo" :backTo="'/popup/settings'" />
 		<Flex direction="column" gap="24" align="center" :class="$style.content">
 			<Flex wide align="start" direction="column" gap="8">
-				<Text size="13" weight="600" color="primary"> Nulo </Text>
+				<Text variant="row-title" color="primary" :class="$style.title_size"> Nulo </Text>
 				<Flex align="start" direction="column" gap="4" wide>
-					<Text @click="handleCopy(version)" size="12" weight="500" color="support" class="copyable">
+					<Text @click="handleCopy(version)" variant="caption" color="support" class="copyable">
 						Wallet version - {{ version }} - Testnet
 					</Text>
-					<Text @click="handleCopy(aztecVersion)" size="12" weight="500" color="support" class="copyable">
+					<Text @click="handleCopy(aztecVersion)" variant="caption" color="support" class="copyable">
 						Aztec version - {{ aztecVersion }}
 					</Text>
-					<Text size="12" weight="500" color="support" data-testid="coingecko-attribution">
+					<Text variant="caption" color="support" data-testid="coingecko-attribution">
 						Token prices by CoinGecko
 					</Text>
 				</Flex>
@@ -144,7 +144,7 @@ onBeforeUnmount(() => legal.dispose())
 					data-testid="legal-about-not-accepted"
 				/>
 			</ItemsContainer>
-			<Text size="11" color="support" height="150" data-testid="legal-about-note">
+			<Text variant="body" color="support" height="150" data-testid="legal-about-note">
 				Kept on this device. Never sent anywhere, and not part of a backup.
 			</Text>
 		</Flex>
@@ -159,5 +159,9 @@ onBeforeUnmount(() => legal.dispose())
 
 .content {
 	composes: content from "../../../components/composite/settings-page.module.css";
+}
+
+.title_size {
+	font-size: 13px;
 }
 </style>

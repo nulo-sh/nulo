@@ -184,7 +184,7 @@ test("withBlockedAccount raises the verification barrier and hands back an unloc
 	expect(ctx.pageErrors).toEqual([])
 })
 
-const OBSERVE = { arc: 3 } as const
+const OBSERVE = { arc: 4 } as const
 const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x${"5e".repeat(32)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */

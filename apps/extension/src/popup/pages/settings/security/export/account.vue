@@ -247,11 +247,11 @@ onBeforeUnmount(() => {
 			<div class="export_section_last">
 				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body"> This file gives full control of one account. </Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body"> This file gives full control of one account. </Text>
+					<Text variant="body" height="150" color="body">
 						Anyone holding the plain file can spend from this account. Store it as carefully as your recovery phrase.
 					</Text>
-					<Text size="13" height="150" color="body"> By continuing you accept these risks. </Text>
+					<Text variant="body" height="150" color="body"> By continuing you accept these risks. </Text>
 				</Flex>
 			</div>
 		</template>
@@ -285,7 +285,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="selectedAccount?.type === AccountType.Imported" gap="8">
 						<Icon name="warning" size="12" color="tertiary" style="height: 18px; flex-shrink: 0" />
-						<Text size="12" weight="500" height="150" color="tertiary">
+						<Text variant="body" height="150" color="tertiary">
 							This account is not covered by your recovery phrase. This file is its only backup.
 						</Text>
 					</Flex>

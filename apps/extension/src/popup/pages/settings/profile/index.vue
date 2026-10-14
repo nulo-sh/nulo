@@ -30,13 +30,13 @@ const popupStore = usePopupStore()
 			/>
 			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-id-row">
 				<Text variant="label" color="secondary">ID</Text>
-				<Text size="12" weight="500" color="tertiary" data-testid="identity-id-value" :class="$style.id_value">
+				<Text variant="data" color="tertiary" data-testid="identity-id-value" :class="$style.id_value">
 					{{ appStore.profile?.id }}
 				</Text>
 			</Flex>
 			<Flex direction="column" gap="6" :class="$style.field_row" data-testid="identity-type-row">
 				<Text variant="label" color="secondary">Type</Text>
-				<Text size="13" weight="600" color="primary">{{ profileTypeLabel(appStore.profile?.type) }}</Text>
+				<Text variant="value" color="primary">{{ profileTypeLabel(appStore.profile?.type) }}</Text>
 			</Flex>
 		</ItemsContainer>
 	</SettingsPageShell>
@@ -59,7 +59,6 @@ const popupStore = usePopupStore()
 }
 
 .id_value {
-	font-family: var(--font-mono);
 	word-break: break-all;
 }
 </style>

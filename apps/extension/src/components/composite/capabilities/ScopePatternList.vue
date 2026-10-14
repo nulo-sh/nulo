@@ -27,8 +27,8 @@ const formatted = computed(() => formatScope(props.scope))
 		gap="6"
 		:class="$style.detail_list"
 	>
-		<Text size="12" color="tertiary" :class="$style.bullet">&#x2022;</Text>
-		<Text size="12" color="secondary">Any contract, any function</Text>
+		<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
+		<Text variant="body" color="secondary">Any contract, any function</Text>
 	</Flex>
 	<Flex v-else direction="column" gap="10" :class="$style.detail_list">
 		<Flex
@@ -37,16 +37,16 @@ const formatted = computed(() => formatScope(props.scope))
 			align="start"
 			gap="6"
 		>
-			<Text size="12" color="tertiary" :class="$style.bullet">&#x2022;</Text>
+			<Text variant="body" color="tertiary" :class="$style.bullet">&#x2022;</Text>
 			<Flex direction="column" gap="3">
-				<Text v-if="String(p.contract) === '*'" size="12" color="secondary">Any contract</Text>
+				<Text v-if="String(p.contract) === '*'" variant="body" color="secondary">Any contract</Text>
 				<ScopeAddress v-else :address="String(p.contract)" />
 				<Flex align="center" gap="6">
-					<Text size="11" color="tertiary">fn:</Text>
-					<Text size="11" weight="600" color="secondary" :class="$style.mono">
+					<Text variant="label" color="tertiary">fn:</Text>
+					<Text color="secondary" :class="$style.mono">
 						{{ String(p.function) === "*" ? "*" : fnLabel(String(p.function)) }}
 					</Text>
-					<Text v-if="String(p.function) !== '*' && getMethodLabel(String(p.function), String(p.contract))" size="11" color="tertiary">
+					<Text v-if="String(p.function) !== '*' && getMethodLabel(String(p.function), String(p.contract))" variant="caption" color="tertiary">
 						· {{ getMethodLabel(String(p.function), String(p.contract)) }}
 					</Text>
 				</Flex>

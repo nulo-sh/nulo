@@ -282,6 +282,7 @@ onBeforeUnmount(() => {
 }
 
 .contract {
+	composes: type--meta from global;
 	flex-shrink: 0;
 
 	padding: 3px 6px;
@@ -289,10 +290,6 @@ onBeforeUnmount(() => {
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--nulo-border);
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.02em;
 	color: var(--nulo-secondary);
 }
 
@@ -302,8 +299,7 @@ onBeforeUnmount(() => {
 }
 
 .location {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-outline);
 	line-height: 1.4;
 	word-break: break-all;
@@ -332,8 +328,7 @@ onBeforeUnmount(() => {
 }
 
 .raw_line {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
@@ -354,16 +349,12 @@ onBeforeUnmount(() => {
 }
 
 .render_error_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
+	composes: type--label from global;
 	color: var(--red);
 }
 
 .render_error_msg {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--body from global;
 	color: var(--nulo-outline);
 	overflow-wrap: anywhere;
 	line-height: 1.4;

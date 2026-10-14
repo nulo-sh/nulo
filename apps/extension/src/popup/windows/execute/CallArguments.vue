@@ -43,37 +43,36 @@ const nonce = computed(() =>
 		     account it names, and the entrypoint spends from nobody. -->
 		<Flex v-if="surface.kind === 'transfer'" :data-testid="`${prefix}-transfer-sender`" :data-sender-kind="surface.sender.kind" justify="between" :class="$style.row">
 			<template v-if="surface.sender.kind === 'none'">
-				<Text size="11" color="secondary">Caller:</Text>
-				<Text size="11" color="primary">none</Text>
+				<Text variant="label" color="secondary">Caller:</Text>
+				<Text variant="value" color="primary">none</Text>
 			</template>
 			<template v-else-if="surface.sender.kind === 'account'">
-				<Text size="11" color="secondary">From:</Text>
-				<Text size="11" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />)</Text></Text>
+				<Text variant="label" color="secondary">From:</Text>
+				<Text variant="value" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />)</Text></Text>
 			</template>
 			<template v-else>
-				<Text size="11" color="secondary">From:</Text>
+				<Text variant="label" color="secondary">From:</Text>
 				<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" />
 			</template>
 		</Flex>
 		<Flex justify="between" :class="$style.row">
-			<Text size="11" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
+			<Text variant="label" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
 			<AddressDisplay :data-testid="`${prefix}-transfer-to`" :address="surface.to" />
 		</Flex>
 		<Flex justify="between" :class="$style.row">
-			<Text size="11" color="secondary">Amount:</Text>
-			<Text :data-testid="`${prefix}-amount`" size="11" color="primary">
+			<Text variant="label" color="secondary">Amount:</Text>
+			<Text :data-testid="`${prefix}-amount`" variant="data" color="primary">
 				{{ amount?.text }}
-				<Text v-if="amount?.symbol" weight="600">{{ amount.symbol }}</Text>
+				<Text v-if="amount?.symbol" variant="meta">{{ amount.symbol }}</Text>
 				<Text v-else color="tertiary">base units</Text>
 			</Text>
 		</Flex>
 		<Flex v-if="nonce" :data-testid="`${prefix}-transfer-nonce`" justify="between" :class="$style.row">
-			<Text size="11" color="secondary">Authwit nonce:</Text>
+			<Text variant="label" color="secondary">Authwit nonce:</Text>
 			<Text
 				:data-testid="`${prefix}-transfer-nonce-value`"
-				size="11"
+				variant="data"
 				color="primary"
-				:mono="nonce.kind === 'field'"
 				:title="valueTitle(nonce)"
 			>
 				{{ valueText(nonce) }}
@@ -91,14 +90,13 @@ const nonce = computed(() =>
 			justify="between"
 			:class="$style.row"
 		>
-			<Text size="11" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
+			<Text variant="label" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
 			<AddressDisplay v-if="p.value.kind === 'address'" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" />
 			<Text
 				v-else
 				:data-testid="`${prefix}-decoded-param-value`"
-				size="11"
+				variant="data"
 				color="primary"
-				:mono="p.value.kind === 'field'"
 				:title="valueTitle(p.value)"
 			>
 				{{ valueText(p.value) }}
@@ -106,16 +104,16 @@ const nonce = computed(() =>
 		</Flex>
 	</Flex>
 
-	<Text v-else-if="surface.kind === 'pending'" :data-testid="`${prefix}-args-pending`" size="11" color="tertiary" :class="$style.block">
+	<Text v-else-if="surface.kind === 'pending'" :data-testid="`${prefix}-args-pending`" variant="body" color="tertiary" :class="$style.block">
 		Reading arguments…
 	</Text>
 
 	<Flex v-else :data-testid="`${prefix}-unverified-args`" :data-reason="surface.reason" direction="column" gap="4" :class="$style.block">
 		<Flex align="center" gap="4">
 			<Icon name="warning" size="12" color="orange" />
-			<Text :data-testid="`${prefix}-unverified-warning`" size="11" weight="600" color="orange">Can't read the arguments</Text>
+			<Text :data-testid="`${prefix}-unverified-warning`" variant="body" color="orange">Can't read the arguments</Text>
 		</Flex>
-		<Text size="11" color="tertiary">{{ RAW_NOTICE[surface.reason] }} Check what the app says this does before approving.</Text>
+		<Text variant="body" color="tertiary">{{ RAW_NOTICE[surface.reason] }} Check what the app says this does before approving.</Text>
 		<button
 			v-if="surface.rows.length"
 			type="button"
@@ -125,18 +123,18 @@ const nonce = computed(() =>
 			@click="rawOpen = !rawOpen"
 		>
 			<Icon name="chevron-right" size="10" color="secondary" :class="[$style.chevron, rawOpen && $style.chevron_open]" />
-			<Text size="11" color="secondary">{{ rawToggleLabel(surface.rows.length + surface.hidden, rawOpen) }}</Text>
+			<Text variant="label" color="secondary">{{ rawToggleLabel(surface.rows.length + surface.hidden, rawOpen) }}</Text>
 		</button>
 		<Flex v-if="rawOpen" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
-				<Text size="11" color="secondary">#{{ m }}</Text>
-				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" size="11" color="primary" mono :title="row.full">
+				<Text variant="label" color="secondary">#{{ m }}</Text>
+				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" variant="data" color="primary" :title="row.full">
 					{{ row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
 				</Text>
-				<Text v-else-if="row.kind === 'text'" size="11" color="primary">{{ row.value }}</Text>
-				<Text v-else size="11" color="tertiary">(unreadable)</Text>
+				<Text v-else-if="row.kind === 'text'" variant="data" color="primary">{{ row.value }}</Text>
+				<Text v-else variant="value" color="tertiary">(unreadable)</Text>
 			</Flex>
-			<Text v-if="surface.hidden" :data-testid="`${prefix}-args-more`" size="11" color="tertiary">
+			<Text v-if="surface.hidden" :data-testid="`${prefix}-args-more`" variant="meta" color="tertiary">
 				+{{ surface.hidden }} more{{ jsonView ? " in the JSON view" : " not shown" }}
 			</Text>
 		</Flex>
@@ -148,12 +146,17 @@ const nonce = computed(() =>
 	width: 100%;
 }
 
+/* A dApp's artifact names each parameter and supplies its value; either may run long and unbroken. */
 .row {
 	width: 100%;
 	gap: 12px;
 
-	> :last-child {
+	> * {
 		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	> :last-child {
 		text-align: right;
 	}
 }

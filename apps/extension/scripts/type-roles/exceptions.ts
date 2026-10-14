@@ -35,6 +35,7 @@ const BALANCE = "apps/extension/src/popup/components/modules/general/BalanceView
 const BUTTON = "packages/design/src/ui/Button.vue"
 const ROLELESS = ".wrapper:is(.secondary, .ghost, .text)"
 const ROLELESS_WHY = "the icon-only variants carry no role and keep their size step"
+const CONTACT_ROW = "apps/extension/src/popup/components/modules/settings/contacts/ContactRow.vue"
 
 export const CARVE_OUTS: CarveOut[] = [
 	{
@@ -121,6 +122,27 @@ export const CARVE_OUTS: CarveOut[] = [
 		text: "fontSize: `${props.size}px`",
 		why: "sizes an icon glyph, not text",
 	},
+	{
+		file: "apps/extension/src/components/composite/general/EmojiGrid.vue",
+		rule: "faceless",
+		text: "font-size: 24px",
+		selector: ".cell",
+		why: "the verification emoji's size, a glyph a person compares, which no role carries",
+	},
+	{
+		file: CONTACT_ROW,
+		rule: "faceless",
+		text: "font-size: 10px",
+		selector: ".avatar_text",
+		why: "a contact's initials size with their 24px box, as AccountAvatar's do",
+	},
+	{
+		file: CONTACT_ROW,
+		rule: "faceless",
+		text: "font-weight: 600",
+		selector: ".avatar_text",
+		why: "a contact's initials keep the avatar row's weight, which the board leaves unchanged",
+	},
 	{ file: BUTTON, rule: "faceless", text: "font-weight: 600", selector: ROLELESS, why: ROLELESS_WHY },
 	{ file: BUTTON, rule: "faceless", text: "font-size: 14px", selector: `${ROLELESS}.large`, why: ROLELESS_WHY },
 	{ file: BUTTON, rule: "faceless", text: "font-size: 13px", selector: `${ROLELESS}.medium`, why: ROLELESS_WHY },
@@ -163,5 +185,23 @@ export const OVERRIDES: Override[] = [
 		value: "700",
 		role: "segment",
 		why: "the selected method tab takes segment's active weight",
+	},
+	{
+		file: "apps/extension/src/popup/components/modules/settings/new-profile/NewProfileMethodTabs.vue",
+		selector: ".tab.tab_active",
+		scope: '[data-testid^="register-method-"][aria-selected="true"]',
+		property: "font-weight",
+		value: "700",
+		role: "segment",
+		why: "the selected new-profile method tab takes segment's active weight",
+	},
+	{
+		file: "apps/extension/src/components/composite/IdentityStrip.vue",
+		selector: ".identity_network.identity_warn",
+		scope: '[data-testid="identity-network"][data-warn]',
+		property: "font-weight",
+		value: "700",
+		role: "meta",
+		why: "a warned network keeps its bold over meta's 400",
 	},
 ]

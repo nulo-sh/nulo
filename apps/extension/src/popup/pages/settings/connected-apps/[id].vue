@@ -243,13 +243,13 @@ onBeforeUnmount(() => {
 			<Icon v-else name="dapp" size="40" color="tertiary" />
 
 			<Flex direction="column" gap="4" wide>
-				<Text size="14" weight="600" color="primary">
+				<Text variant="name" color="primary" :class="$style.name_size">
 					{{ session.dappMetadata.name ?? "Unknown dapp" }}
 				</Text>
-				<Text size="12" weight="500" color="tertiary" selectable>
+				<Text variant="data-lead" color="tertiary" selectable>
 					{{ session.dappMetadata.url }}
 				</Text>
-				<Text v-if="expiryFormatted" size="11" color="tertiary">
+				<Text v-if="expiryFormatted" variant="time" color="tertiary">
 					Expires {{ expiryFormatted }}
 				</Text>
 			</Flex>
@@ -292,30 +292,30 @@ onBeforeUnmount(() => {
 			<SectionLabel label="Session allowances" />
 
 			<Flex v-if="sessionChainName" align="start" gap="4">
-				<Text size="13" weight="600" color="secondary">Network:</Text>
-				<Text size="13" color="secondary" :style="{ lineHeight: '1.2' }">
+				<Text variant="label" color="secondary">Network:</Text>
+				<Text variant="value" color="secondary" :style="{ lineHeight: '1.2' }">
 					{{ sessionChainName }}
 				</Text>
 			</Flex>
 
 			<Flex align="start" gap="4">
-				<Text size="13" weight="600" color="secondary">Methods:</Text>
-				<Text size="13" color="secondary" :style="{ lineHeight: '1.2' }">{{ methods.join(", ") }}</Text>
+				<Text variant="label" color="secondary">Methods:</Text>
+				<Text variant="data" color="secondary" :style="{ lineHeight: '1.2' }">{{ methods.join(", ") }}</Text>
 			</Flex>
 
 			<Flex align="start" gap="4">
-				<Text size="13" weight="600" color="secondary">Events:</Text>
-				<Text v-if="events.length" size="13" color="secondary" :style="{ lineHeight: '1.2' }">
+				<Text variant="label" color="secondary">Events:</Text>
+				<Text v-if="events.length" variant="data" color="secondary" :style="{ lineHeight: '1.2' }">
 					{{ events.join(", ") }}
 				</Text>
-				<Text v-else size="13" color="tertiary" :style="{ lineHeight: '1.2' }">no allowances given</Text>
+				<Text v-else variant="value" color="tertiary" :style="{ lineHeight: '1.2' }">no allowances given</Text>
 			</Flex>
 		</Flex>
 
 		<!-- Confirmation policy -->
 		<Flex direction="column" gap="10" wide>
 			<SectionLabel label="Confirmation policy" />
-			<Text size="13" color="secondary" :style="{ lineHeight: '1.4' }">
+			<Text variant="body" color="secondary" :style="{ lineHeight: '1.4' }">
 				{{
 					confirmationPolicies.find((x) => x.confirmationLevel === session?.confirmationLevel)?.description ?? "Unknown"
 				}}
@@ -367,6 +367,10 @@ onBeforeUnmount(() => {
 	height: 40px;
 	object-fit: cover;
 	flex-shrink: 0;
+}
+
+.name_size {
+	font-size: 14px;
 }
 
 .icon_btn {

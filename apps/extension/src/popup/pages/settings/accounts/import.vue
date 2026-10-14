@@ -196,7 +196,7 @@ const collapsingLabel = "Import Account"
 				</ItemsContainer>
 				<Flex v-if="error" align="center" gap="6" data-testid="import-account-error">
 					<Icon name="warning" size="12" color="red" />
-					<Text size="12" weight="600" color="red" height="140">{{ error }}</Text>
+					<Text variant="body" color="red" height="140">{{ error }}</Text>
 				</Flex>
 			</div>
 
@@ -249,16 +249,16 @@ const collapsingLabel = "Import Account"
 
 			<div class="export_section_last">
 				<Flex direction="column" gap="8">
-					<Text size="12" weight="500" height="150" color="tertiary">
+					<Text variant="body" height="150" color="tertiary">
 						The address is recomputed from the file. Confirm it matches the account you expect.
 					</Text>
-					<Text size="12" weight="500" height="150" color="tertiary">
+					<Text variant="body" height="150" color="tertiary">
 						This account is not covered by your recovery phrase. Keep its file safe.
 					</Text>
 				</Flex>
 				<Flex v-if="error" align="center" gap="6" data-testid="import-account-error">
 					<Icon name="warning" size="12" color="red" />
-					<Text size="12" weight="600" color="red" height="140">{{ error }}</Text>
+					<Text variant="body" color="red" height="140">{{ error }}</Text>
 				</Flex>
 			</div>
 		</template>
@@ -290,9 +290,9 @@ const collapsingLabel = "Import Account"
 
 <style module>
 .preview_address {
+	composes: type--data from global;
 	display: block;
 	white-space: normal;
 	word-break: break-all;
-	font-family: var(--font-mono);
 }
 </style>

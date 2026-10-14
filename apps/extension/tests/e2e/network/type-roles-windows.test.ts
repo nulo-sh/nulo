@@ -53,7 +53,7 @@ async function sweepWindow(win: Page, surface: string, states: readonly string[]
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	const observations: IdentifierObservation[] = []
 	for (const state of states) {
-		const observation = await observeIdentifierSites(win, surface, state, { arc: 3, sites: SITES })
+		const observation = await observeIdentifierSites(win, surface, state, { arc: 4, sites: SITES })
 		expectSitesClean(observation)
 		observations.push(observation)
 	}
@@ -81,6 +81,12 @@ test.skipIf(!hasConfig)("the capabilities window holds its roles", { timeout: 18
 			"a connect request (network)",
 			"a connect request with an account to choose (network)",
 		])
+		await clickByTestId(win, "cap-detail-toggle")
+		await win.waitForSelector(sel("capability-address"), { visible: true, timeout: 10_000 })
+		const [details] = await sweepWindow(win, "windows-capabilities", ["a contract scope with its details open (network)"])
+		expect(details!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
+			sel("capability-address"),
+		)
 	} finally {
 		await dismiss(win, rejectCapabilities)
 	}
@@ -94,6 +100,8 @@ type Request = {
 	/** Shown once the window has decoded the request and named what it can. */
 	ready: string
 	states: readonly string[]
+	/** The payload must stay inside the card and every hex string in a mono role. */
+	contained?: true
 }
 
 function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
@@ -106,6 +114,7 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			inputs: { tokenAddress, recipient: minterAddress, amount: AMOUNT },
 			ready: `${sel("execute-op-decoded-param-value")}[data-address-shows="name"]`,
 			states: ["an aztec_sendTx request (network)", "a decoded call with an address parameter (network)"],
+			contained: true,
 		},
 		{
 			method: "createAuthWit",
@@ -114,9 +123,57 @@ function requests({ tokenAddress, minterAddress }: AztecTestConfig): Request[] {
 			ready: sel("execute-authwit-target"),
 			states: ["an aztec_createAuthWit request for a call (network)"],
 		},
+		{
+			// Its hex arguments are the longest unbroken strings a generic dApp puts in the payload.
+			method: "grantPublicAuthwit",
+			button: "pg-btn-grantPublicAuthwit",
+			inputs: { tokenAddress, authwitCaller: minterAddress, authwitAmount: "1", authwitNonce: "7" },
+			ready: sel("execute-authwit-args"),
+			states: ["a grantPublicAuthwit request (network)"],
+			contained: true,
+		},
 	]
 }
 
+/** Every element that holds dApp-supplied payload text: the call or action rows and the argument rows. */
+const PAYLOAD_TEXT = ["execute-op-payload-row", "execute-op-decoded-param", "execute-op-arg", "execute-op-transfer-nonce"].map(sel)
+
+/** How far the payload's text reaches past the card's right edge, in px; 0 or less is inside. */
+async function payloadPastCard(win: Page): Promise<number> {
+	return win.evaluate((selectors: string[]) => {
+		const card = document.querySelector('[data-testid="execute-op-item"]')
+		if (!card) throw new Error("no execute-op-item")
+		const nodes: Node[] = []
+		for (const holder of document.querySelectorAll(selectors.join(", "))) {
+			const text = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT)
+			for (let node = text.nextNode(); node; node = text.nextNode()) nodes.push(node)
+		}
+		const rights = nodes.flatMap((node) => {
+			const range = document.createRange()
+			range.selectNodeContents(node)
+			return [...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.right)
+		})
+		if (rights.length === 0) throw new Error("no payload text")
+		return Math.max(...rights) - card.getBoundingClientRect().right
+	}, PAYLOAD_TEXT)
+}
+
+/**
+ * Writes the longest strings a dApp can make the card show into the rendered window: a 64-glyph
+ * function name, a 25-glyph contact name for its contract, 32-glyph parameter names and 64-glyph
+ * values. The playground sends real calls only, so this is the one way to reach them.
+ */
+async function stretchPayload(win: Page): Promise<void> {
+	await win.evaluate(() => {
+		const set = (selector: string, text: string) => {
+			for (const el of document.querySelectorAll(selector)) el.textContent = text
+		}
+		set('[data-testid="execute-op-payload-row"] > :first-child', `I${"i".repeat(63)}`)
+		set('[data-testid="execute-op-call-to"]', "W".repeat(25))
+		set('[data-testid="execute-op-decoded-param"] > :first-child', `${"W".repeat(32)}:`)
+		set('[data-testid="execute-op-decoded-param-value"]', "i".repeat(64))
+	})
+}
 async function openExecute(ctx: Connected, { button, inputs, ready }: Request): Promise<Page> {
 	for (const [name, value] of Object.entries(inputs)) await setPgInput(ctx.playgroundPage, name, value)
 	const opened = waitForPopup(ctx, "execute", { timeout: 60_000 })
@@ -138,14 +195,21 @@ test.skipIf(!hasConfig)(
 	{ timeout: 300_000 },
 	async ({ dappConnectedExtensionWithTransactionCap: ctx }) => {
 		const pg = ctx.playgroundPage
-		const shown = new Set<string | null>()
+		const shown = new Set<string>()
 		for (const request of requests(aztecConfig!)) {
 			const seq = await snapshotResultSeq(pg)
 			const win = await openExecute(ctx, request)
 			try {
 				const observations = await sweepWindow(win, "windows-execute", request.states)
+				if (request.contained) {
+					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+					await stretchPayload(win)
+					expect(await payloadPastCard(win)).toBeLessThanOrEqual(0)
+					expect(observations.flatMap(({ hexOutsideMono }) => hexOutsideMono)).toEqual([])
+				}
 				const asserted = observations.flatMap(({ sites }) => sites.filter(({ mode }) => mode === "asserted"))
-				for (const { readings } of asserted) for (const { addressShows } of readings) shown.add(addressShows)
+				// Only an `AddressDisplay` states what it shows; every other site reads `null`.
+				for (const { readings } of asserted) for (const { addressShows } of readings) if (addressShows) shown.add(addressShows)
 			} finally {
 				await dismiss(win, rejectExecute)
 			}
@@ -192,6 +256,12 @@ test.skipIf(!hasConfig)(
 			const [observation] = await sweepWindow(win, "windows-execute", ["a send with a discovered authwit (network)"])
 			const asserted = observation!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)
 			expect(asserted).toEqual(expect.arrayContaining([sel("execute-discovered-consumer"), sel("execute-discovered-caller")]))
+			await clickByTestId(win, "execute-discovered-authwit-toggle")
+			await win.waitForSelector(sel("execute-discovered-authwit-details"), { visible: true, timeout: 10_000 })
+			const [open] = await sweepWindow(win, "windows-execute", ["a discovered authwit with its details open (network)"])
+			expect(open!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
+				sel("execute-discovered-inner-hash"),
+			)
 		} finally {
 			await dismiss(win, rejectExecute)
 		}
