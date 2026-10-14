@@ -11,7 +11,7 @@
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { getFeeJuiceClaimPayload } from "@/wallet/utils/fee-juice"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
-import { finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
+import { appPriorityOf, finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
 
 export class FeeJuiceWithClaimStrategy implements FeeStrategy {
 	public readonly kind = "fjwc" as const
@@ -31,6 +31,7 @@ export class FeeJuiceWithClaimStrategy implements FeeStrategy {
 				ctx.fence,
 				AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM,
 				task,
+				appPriorityOf(ctx.op.fee),
 			)
 			const { txRequest, node, pxe, account } = built
 			suggestGasLimits(txRequest, ctx.op.fee)

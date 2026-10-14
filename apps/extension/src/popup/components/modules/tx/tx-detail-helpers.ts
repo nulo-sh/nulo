@@ -12,37 +12,21 @@ export interface GasDetailsRaw {
 	teardownDaGasLimit: number | string
 }
 
+/** The gas limits already hold the teardown's, so the L2 and DA lines alone add up to the fee limit. */
 export interface GasBreakdown {
 	l2Gas: string
 	daGas: string
-	teardownL2Gas: string
-	teardownDaGas: string
 	l2Cost: string
 	daCost: string
-	teardownCost: string
-	hasTeardown: boolean
 }
 
 export function buildGasBreakdown(gd: GasDetailsRaw | undefined | null): GasBreakdown | null {
 	if (!gd) return null
-
-	const feePerL2 = BigInt(gd.feePerL2Gas)
-	const feePerDa = BigInt(gd.feePerDaGas)
-
-	const l2Cost = BigInt(gd.l2GasLimit) * feePerL2
-	const daCost = BigInt(gd.daGasLimit) * feePerDa
-	const teardownL2Cost = BigInt(gd.teardownL2GasLimit) * feePerL2
-	const teardownDaCost = BigInt(gd.teardownDaGasLimit) * feePerDa
-
 	return {
 		l2Gas: formatGas(Number(gd.l2GasLimit)),
 		daGas: formatGas(Number(gd.daGasLimit)),
-		teardownL2Gas: formatGas(Number(gd.teardownL2GasLimit)),
-		teardownDaGas: formatGas(Number(gd.teardownDaGasLimit)),
-		l2Cost: formatFeeJuice(l2Cost),
-		daCost: formatFeeJuice(daCost),
-		teardownCost: formatFeeJuice(teardownL2Cost + teardownDaCost),
-		hasTeardown: Number(gd.teardownL2GasLimit) > 0 || Number(gd.teardownDaGasLimit) > 0,
+		l2Cost: formatFeeJuice(BigInt(gd.l2GasLimit) * BigInt(gd.feePerL2Gas)),
+		daCost: formatFeeJuice(BigInt(gd.daGasLimit) * BigInt(gd.feePerDaGas)),
 	}
 }
 

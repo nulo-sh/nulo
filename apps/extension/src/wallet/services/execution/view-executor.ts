@@ -41,7 +41,7 @@ import type { PxeServiceClient } from "@/wallet/services/pxe/client"
 import { assertSelectorBinding, CALL_BINDING, type ContractResolver, findFunctionByName, findFunctionBySelector } from "./contract-resolver"
 import { rehydrateOptimizablePrefix, runFastPath } from "./fast-path"
 import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
-import { suggestGasLimits } from "./fee/fee-strategy"
+import { appPriorityOf, suggestGasLimits } from "./fee/fee-strategy"
 import type { OperationPlanner } from "./operation-planner"
 import type {
 	AztecExecuteUtilityOperation,
@@ -384,7 +384,13 @@ export class ViewExecutor {
 		}
 		const fence = await this.deps.profileService.captureExecutionFence()
 		const { actions, feePaymentMethod, feeOptions: fee } = await this.deps.planner.processAztecJsPayload(op.exec, op.opts)
-		const { txRequest, node, pxe } = await this.deps.txBuilder.buildStandard({ ...op, actions }, fence, feePaymentMethod)
+		const { txRequest, node, pxe } = await this.deps.txBuilder.buildStandard(
+			{ ...op, actions },
+			fence,
+			feePaymentMethod,
+			undefined,
+			appPriorityOf(fee),
+		)
 		suggestGasLimits(txRequest, fee)
 		await applyEmbeddedFpcGasCap(txRequest, fee, node)
 		const additionalScopes = Array.isArray(op.opts.additionalScopes) ? op.opts.additionalScopes : []

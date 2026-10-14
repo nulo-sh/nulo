@@ -4,7 +4,8 @@
  * multicall, chunked, delegated.
  *
  * Each variant constructs an `ExecutionPayload` and calls
- * `wallet.sendTx()`. `sendTx` ALWAYS opens `/windows/execute`
+ * `wallet.sendTx()` with the app's own fee settings when `pg-input-maxFeesPerGas` or
+ * `pg-input-maxPriorityFeesPerGas` is set. `sendTx` ALWAYS opens `/windows/execute`
  * (`Transactions=5 >= confirmationLevel=5`); tests drive the popup via
  * `approveExecute()` / `rejectExecute()`.
  */
@@ -13,6 +14,7 @@ import { getContractInstanceFromInstantiationParams } from "@aztec-labs/aztec.js
 import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee"
 import { Fr } from "@aztec-labs/aztec.js/fields"
 import { mergeExecutionPayloads } from "@aztec-labs/aztec.js/tx"
+import { GasFees } from "@aztec-labs/stdlib/gas"
 import { getWallet } from "../lib/wallet"
 import { logCall } from "../lib/log"
 import { getInput, getState, setState } from "../state"
@@ -44,6 +46,8 @@ export function renderTransactions(): string {
 				<label>Amount: <input data-testid="pg-input-amount" name="amount" type="number" placeholder="100" /></label>
 				<label>FeePayer (FPC addr): <input data-testid="pg-input-feePayer" name="feePayer" type="text" placeholder="0x... (defaults to recipient)" /></label>
 				<label>App sponsor salt: <input data-testid="pg-input-sponsorSalt" name="sponsorSalt" type="number" placeholder="0" /></label>
+				<label>App max fees per gas: <input data-testid="pg-input-maxFeesPerGas" name="maxFeesPerGas" type="text" placeholder="da,l2" /></label>
+				<label>App priority fees per gas: <input data-testid="pg-input-maxPriorityFeesPerGas" name="maxPriorityFeesPerGas" type="text" placeholder="da,l2" /></label>
 				<label>Default transfer: <select data-testid="pg-select-transferFn" name="transferFn">
 					${TRANSFER_FNS.map((fn) => `<option value="${fn}">${fn}</option>`).join("")}
 				</select></label>
@@ -65,6 +69,23 @@ export function renderTransactions(): string {
 			</div>
 		</fieldset>
 	`
+}
+
+/** A "da,l2" fee input in base units, as `GasFees`; absent when the input is empty. */
+function gasFeesInput(name: "maxFeesPerGas" | "maxPriorityFeesPerGas"): GasFees | undefined {
+	const value = getInput(name).trim()
+	if (value === "") return undefined
+	const parts = value.split(",").map((part) => part.trim())
+	if (parts.length !== 2 || parts.some((part) => !/^\d+$/.test(part))) throw new Error(`${name} must be "da,l2" in base units`)
+	return new GasFees(BigInt(parts[0]), BigInt(parts[1]))
+}
+
+/** The options every `sendTx` button passes: the app's own fee settings only when one is set. */
+function sendOpts<F>(from: F) {
+	const maxFeesPerGas = gasFeesInput("maxFeesPerGas")
+	const maxPriorityFeesPerGas = gasFeesInput("maxPriorityFeesPerGas")
+	const gasSettings = { ...(maxFeesPerGas && { maxFeesPerGas }), ...(maxPriorityFeesPerGas && { maxPriorityFeesPerGas }) }
+	return { from, wait: "NO_WAIT" as const, ...(Object.keys(gasSettings).length > 0 && { fee: { gasSettings } }) }
 }
 
 async function buildTransferExec(callCount = 1, fn: TransferFn = "transfer_public_to_public") {
@@ -108,7 +129,7 @@ async function sendAppSponsored() {
 	// biome-ignore lint/suspicious/noExplicitAny: the transfer payload is built structurally
 	const payload = mergeExecutionPayloads([fee, exec as any])
 	// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
-	return wallet.sendTx(payload, { from: fromAddr, wait: "NO_WAIT" } as any)
+	return wallet.sendTx(payload, sendOpts(fromAddr) as any)
 }
 
 function safe<T>(method: string, fn: () => Promise<T>): () => Promise<void> {
@@ -140,7 +161,7 @@ export function bindTransactions(root: HTMLElement): void {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferExec(1, selectedTransferFn())
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -151,7 +172,7 @@ export function bindTransactions(root: HTMLElement): void {
 			const { exec } = await buildTransferExec(1)
 			// The wallet sends `from: "NO_FROM"` through the default entrypoint, not the account contract.
 			// biome-ignore lint/suspicious/noExplicitAny: NO_FROM is a sentinel string the SDK doesn't type
-			return wallet.sendTx(exec as any, { from: "NO_FROM", wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts("NO_FROM") as any)
 		}),
 	)
 
@@ -166,7 +187,7 @@ export function bindTransactions(root: HTMLElement): void {
 			await wallet.registerContract(instance, SponsoredFPCContract.artifact)
 			const sponsor = SponsoredFPCContract.at(instance.address, wallet)
 			const exec = await sponsor.methods.sponsor_unconditionally().request()
-			return wallet.sendTx(exec, { from: "NO_FROM", wait: "NO_WAIT" })
+			return wallet.sendTx(exec, sendOpts("NO_FROM"))
 		}),
 	)
 
@@ -185,7 +206,7 @@ export function bindTransactions(root: HTMLElement): void {
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload doesn't include feePayer in this version's types
 			const execWithFeePayer: any = { ...exec, feePayer }
 			// biome-ignore lint/suspicious/noExplicitAny: SendOptions structural cast
-			return wallet.sendTx(execWithFeePayer, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(execWithFeePayer, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -200,7 +221,7 @@ export function bindTransactions(root: HTMLElement): void {
 			const wallet = getWallet()!
 			const { exec, fromAddr } = await buildTransferExec(3)
 			// biome-ignore lint/suspicious/noExplicitAny: structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -238,7 +259,7 @@ export function bindTransactions(root: HTMLElement): void {
 			const crowdfunding: any = await CrowdfundingContract.at(AztecAddress.fromStringUnsafe(consumer), wallet as any)
 			const exec = await crowdfunding.methods.donate(BigInt(amount)).request()
 			// biome-ignore lint/suspicious/noExplicitAny: ExecutionPayload + SendOptions structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 
@@ -249,7 +270,7 @@ export function bindTransactions(root: HTMLElement): void {
 			// >5 calls triggers nulo-account.ts recursive chunking (CLAUDE.md mentions this).
 			const { exec, fromAddr } = await buildTransferExec(7)
 			// biome-ignore lint/suspicious/noExplicitAny: structural cast
-			return wallet.sendTx(exec as any, { from: fromAddr, wait: "NO_WAIT" } as any)
+			return wallet.sendTx(exec as any, sendOpts(fromAddr) as any)
 		}),
 	)
 }

@@ -17,6 +17,7 @@ import { ContractInitializationStatus } from "@aztec-labs/aztec.js/wallet"
 import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { FunctionSelector, FunctionType } from "@aztec-labs/stdlib/abi"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
+import { applyEmbeddedFpcGasCap } from "./fee/embedded-fpc-cap"
 import { ViewExecutor, type ViewExecutorDeps } from "./view-executor"
 
 const fastPathMocks = vi.hoisted(() => ({
@@ -505,5 +506,26 @@ describe("ViewExecutor.executeAztecExecuteUtility — the selector binding, with
 		await executor.executeAztecExecuteUtility(op(undefined))
 		expect(pxe.executeUtility).toHaveBeenCalledTimes(1)
 		expect((pxe.executeUtility as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ name: "symbol" })
+	})
+})
+
+describe("ViewExecutor.executeAztecProfileTx: the gas settings a send would commit", () => {
+	test("the build carries the app's priority fee and the embedded cap gets its cap and priority, as the embedded send's do", async () => {
+		const fee = {
+			embeddedFeePayment: "fpc",
+			maxFeesPerGas: { feePerDaGas: "5", feePerL2Gas: "6" },
+			maxPriorityFeesPerGas: { feePerDaGas: "7", feePerL2Gas: "8" },
+			gasPadding: 1,
+		}
+		const validAddr = `0x${"11".repeat(32)}`
+		const { executor, deps, node } = makeHarness({
+			planner: { processAztecJsPayload: vi.fn(async () => ({ actions: [], feePaymentMethod: 0, feeOptions: fee })) } as never,
+		})
+		await executor.executeAztecProfileTx(
+			makeSimOp({ kind: "aztec_profileTx", accountAddress: validAddr, opts: { from: addr(validAddr), additionalScopes: [] } }),
+		)
+		const buildArgs = (deps.txBuilder.buildStandard as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]
+		expect(buildArgs[4]).toEqual({ maxPriorityFeesPerGas: fee.maxPriorityFeesPerGas })
+		expect(vi.mocked(applyEmbeddedFpcGasCap)).toHaveBeenLastCalledWith({ kind: "txr" }, fee, node)
 	})
 })
