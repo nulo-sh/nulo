@@ -431,7 +431,7 @@ async function bootService(
 		price?: ReturnType<typeof makePriceStub>
 		publicReader?: PublicEventReader
 	} = {},
-	opts: { keepStorage?: boolean } = {},
+	opts: { keepStorage?: boolean; pollIntervalMs?: number } = {},
 ) {
 	const fixture = {
 		profile: stubs.profile ?? makeProfileStub(),
@@ -452,7 +452,7 @@ async function bootService(
 	const browserApi = new FakeBrowserApi()
 	// `keepStorage` models a service-worker restart: a new service graph over the same storage areas.
 	if (!opts.keepStorage) browserApi.reset()
-	const service = new IncomingTransferService(logger, browserApi, 1_000_000, stubs.publicReader)
+	const service = new IncomingTransferService(logger, browserApi, opts.pollIntervalMs ?? 1_000_000, stubs.publicReader)
 	const collection = new ServiceCollection()
 	for (const stub of Object.values(fixture)) collection.add(stub as never)
 	collection.add(service)
@@ -2715,6 +2715,7 @@ function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?:
 			checkpointedBlockNumber: 100,
 			checkpointedBlockHash: "0xcheckpoint",
 			finalizedBlockNumber: 50,
+			proposedBlockHash: "0xproposed",
 			...init?.tips,
 		} as PublicScanTips,
 		classStatus: (init?.classStatus ?? "standard") as PublicTokenClassStatus,
@@ -2751,12 +2752,13 @@ function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?:
 	return { reader, state }
 }
 
-function scanPublic(service: unknown, contract: string = tokenA.contract, networkId = "n1", profileId = "p1"): Promise<ScanOutcome> {
-	return (service as { scanPublicContract: (p: string, n: string, c: string) => Promise<ScanOutcome> }).scanPublicContract(
-		profileId,
-		networkId,
-		contract,
-	)
+/** One public tick on tips read through the service's own indexer, as a scheduler tick reads them. */
+async function scanPublic(service: unknown, contract: string = tokenA.contract, networkId = "n1", profileId = "p1"): Promise<ScanOutcome> {
+	const s = service as {
+		indexer: { getTips: (n: string) => Promise<PublicScanTips> }
+		scanPublicContract: (p: string, n: string, c: string, tips: PublicScanTips) => Promise<{ outcome: ScanOutcome }>
+	}
+	return (await s.scanPublicContract(profileId, networkId, contract, await s.indexer.getTips(networkId))).outcome
 }
 
 /** Account stub owning `0xa` on chainId 1 — the recipient the pre-lock filter matches. */
@@ -2779,8 +2781,13 @@ async function bootPublic(
 	await flushPromises()
 	cursors.clear()
 	outbox.clear()
-	// The initial kick warmed the finalized-tip class-gate cache; clear it so caching tests start cold.
-	;(booted.service as unknown as { classGateCache: Map<string, unknown> }).classGateCache.clear()
+	// The initial kick warmed the class-gate cache, the shared tips read and the targets' marks; clear
+	// them so each test starts cold.
+	const warmed = booted.service as unknown as Record<
+		"classGateCache" | "tipsReads" | "noteScannedAt" | "publicScannedAt",
+		Map<string, unknown>
+	>
+	for (const cache of [warmed.classGateCache, warmed.tipsReads, warmed.noteScannedAt, warmed.publicScannedAt]) cache.clear()
 	state.reset()
 	return booted
 }
@@ -3138,7 +3145,12 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 	test("a budget-incomplete forward scan CAPS the finalized watermark at the scanned block (no reconcile-gap)", async () => {
 		const { reader, state } = makePublicReader()
 		const { service } = await bootPublic(reader, state)
-		state.tips = { checkpointedBlockNumber: 100, checkpointedBlockHash: "0xcheckpoint", finalizedBlockNumber: 90 }
+		state.tips = {
+			checkpointedBlockNumber: 100,
+			checkpointedBlockHash: "0xcheckpoint",
+			finalizedBlockNumber: 90,
+			proposedBlockHash: "0xproposed",
+		}
 		trust.set(trustKey("p1", "n1", tokenA.contract), {
 			profileId: "p1",
 			networkId: "n1",
@@ -3183,7 +3195,12 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		})
 		// The node has rolled the checkpoint back to 90 (proven tip). The boundary ancestry probe fails
 		// (old anchor not in the new archive) → reconcile over [61..90], which is empty.
-		state.tips = { checkpointedBlockNumber: 90, checkpointedBlockHash: "0xnewcheckpoint", finalizedBlockNumber: 60 }
+		state.tips = {
+			checkpointedBlockNumber: 90,
+			checkpointedBlockHash: "0xnewcheckpoint",
+			finalizedBlockNumber: 60,
+			proposedBlockHash: "0xnewproposed",
+		}
 		state.responses.push(new Error("old checkpoint not an ancestor")) // boundary ancestry throws
 		state.responses.push(pubPage([])) // reconcile window [61..90] empty
 
@@ -3287,30 +3304,6 @@ describe("IncomingTransferService — public-event reorg reconciliation", () => 
 		expect(state.fetchArgs[1].referenceBlock).toBe("0xcheckpoint")
 		// …and reconciliation ran to completion (marker cleared).
 		expect(cursorFor()?.reconciling).toBeUndefined()
-	})
-
-	test("no checkpoint hash → class gate is UNRESOLVED → nothing scanned (fail-closed defer)", async () => {
-		const { reader, state } = makePublicReader({ tips: { checkpointedBlockHash: null } })
-		const { service } = await bootPublic(reader, state)
-		state.tips.checkpointedBlockHash = null // bootPublic's initial kick may have reset; re-assert
-		trust.set(trustKey("p1", "n1", tokenA.contract), {
-			profileId: "p1",
-			networkId: "n1",
-			contract: tokenA.contract,
-			state: "trusted",
-			updatedAt: 0,
-		})
-		seedCursor({ cursor: null, lastSyncedBlockHash: null, lastScanFinalized: 3 })
-		state.responses.push(pubPage([pubEvent({ txHash: "0xc1", l2BlockNumber: 6 })], true))
-
-		await scanPublic(service)
-
-		// Without the pinned checkpoint hash the class gate can't verify the checkpointed anchor → it
-		// returns `unresolved` (fail closed) and the whole tick short-circuits: no class fetch, no page
-		// fetch, no records. A blind scan is never attempted.
-		expect(state.classCalls).toBe(0)
-		expect(state.fetchArgs).toHaveLength(0)
-		expect(records.get("pub:p1|n1|0xc1|0")).toBeUndefined()
 	})
 
 	test("forward scan runs an ATOMIC boundary-ancestry probe first; a non-ancestor → reconcile", async () => {
@@ -3949,8 +3942,14 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 		reader.getScanTips = async () => {
 			throw new Error("node down")
 		}
+		const record = vi.spyOn((service as unknown as { episodes: { record: (k: string, o: ScanOutcome) => void } }).episodes, "record")
 
-		expect(await scanPublic(service)).toBe("failed")
+		await (service as unknown as { pollPublic: (key: string, force: boolean) => Promise<void> }).pollPublic(
+			`n1|${tokenA.contract}`,
+			true,
+		)
+
+		expect(record).toHaveBeenCalledWith(`p1|n1|${tokenA.contract}`, "failed", expect.any(Number))
 		expect(cursorFor()).toEqual({ cursor: null, lastSyncedBlockHash: null, lastScanFinalized: null, startBlock: 0, pendingPage })
 		expect(state.fetchArgs).toEqual([])
 	})
@@ -3964,15 +3963,6 @@ describe("IncomingTransferService — public-scan tick outcomes", () => {
 
 		expect(await scanPublic(service)).toBe(outcome)
 		expect(state.fetchArgs).toEqual([])
-	})
-
-	test("no checkpoint hash this tick → no-progress: the class gate is not consulted and nothing is written", async () => {
-		const { reader, state } = makePublicReader({ tips: { checkpointedBlockHash: null } })
-		const { service } = await bootPublic(reader, state)
-
-		expect(await scanPublic(service)).toBe("no-progress")
-		expect(state.classCalls).toBe(0)
-		expect(cursorFor()).toBeUndefined()
 	})
 
 	test("a quiet token whose last event is far behind the tip reads a validated empty page → idle-at-tip", async () => {
@@ -4541,7 +4531,7 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 	test("a restart during an active backoff keeps the gate: the boot poll does not touch the node", async () => {
 		const gate = T0 + 100_000
 		await seedEpisodes({ [KEY]: { failures: 3, failingSince: T0 - 5 * MIN, nextAttemptAt: gate } })
-		const { reader } = makePublicReader()
+		const { reader, state } = makePublicReader()
 		const tips = vi.fn().mockRejectedValue(new Error("node down"))
 		reader.getScanTips = tips
 		const { service } = await bootService(
@@ -4550,7 +4540,10 @@ describe("IncomingTransferService — public-scan health (episodes, backoff, ret
 		)
 		await flushPromises()
 
-		expect(tips).not.toHaveBeenCalled()
+		// The one tips read is the note target's; the backed-off public target adds no call of its own.
+		expect(tips).toHaveBeenCalledTimes(1)
+		expect(state.classCalls).toBe(0)
+		expect(state.fetchArgs).toEqual([])
 		expect(await storedEpisodes(service)).toEqual({ [KEY]: { failures: 3, failingSince: T0 - 5 * MIN, nextAttemptAt: gate } })
 	})
 
@@ -6138,6 +6131,126 @@ describe("IncomingTransferService — receipt sections beside a handoff or a dis
 			vi.useRealTimers()
 		}
 		expect(records.has(NOTE_ID)).toBe(false)
+	})
+})
+
+// ── Block-gated ticks ─────────────────────────────────────────────────────────
+
+const TICK_MS = 30_000
+const PUBLIC_KEY = `p1|n1|${tokenA.contract}`
+
+/** Boots real-cadence schedulers on fake timers for two accounts and one token, after the install
+ *  run has marked every target; the reader's counters and the notes reads start at zero. */
+async function bootTicking(stubs: Parameters<typeof bootService>[0] = {}) {
+	const { reader, state } = makePublicReader({ tips: { proposedBlockHash: "0xproposed1" } })
+	const note = stubs.note ?? makeNoteStub()
+	const accounts = [
+		{ profileId: "p1", chainId: 1, address: "0xa" },
+		{ profileId: "p1", chainId: 1, address: "0xb" },
+	]
+	const booted = await bootService(
+		{ account: makeAccountStub(accounts), token: makeTokenStub([tokenA]), ...stubs, note, publicReader: reader },
+		{ pollIntervalMs: TICK_MS },
+	)
+	await vi.advanceTimersByTimeAsync(0)
+	state.reset()
+	note.getNotesRaw.mockClear()
+	return { ...booted, reader, state, note }
+}
+
+const tick = () => vi.advanceTimersByTimeAsync(TICK_MS)
+const episodesOf = (service: unknown) => (service as { episodes: { has: (key: string) => boolean } }).episodes
+
+describe("IncomingTransferService — block-gated ticks", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	test("one tips read serves every target of a tick, and a tick with no new block scans nothing", async () => {
+		const { state, note } = await bootTicking()
+
+		await tick()
+
+		expect(state.tipsCalls).toBe(1)
+		expect(note.getNotesRaw).not.toHaveBeenCalled()
+		expect(state.fetchArgs).toEqual([])
+	})
+
+	test("a new proposed block runs the note targets alone; a new checkpoint runs the public target alone", async () => {
+		const { state, note } = await bootTicking()
+
+		state.tips = { ...state.tips, proposedBlockHash: "0xproposed2" }
+		await tick()
+		expect(note.getNotesRaw).toHaveBeenCalledTimes(2)
+		expect(state.fetchArgs).toEqual([])
+
+		note.getNotesRaw.mockClear()
+		state.tips = { ...state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcheckpoint2" }
+		await tick()
+		expect(note.getNotesRaw).not.toHaveBeenCalled()
+		expect(state.fetchArgs).toHaveLength(1)
+	})
+
+	test("with the tips read failing, the note targets scan ungated and the public tick fails", async () => {
+		const { service, reader, state, note } = await bootTicking()
+		reader.getScanTips = async () => {
+			throw new Error("node down")
+		}
+
+		await tick()
+
+		expect(note.getNotesRaw).toHaveBeenCalledTimes(2)
+		expect(state.fetchArgs).toEqual([])
+		expect(episodesOf(service).has(PUBLIC_KEY)).toBe(true)
+	})
+
+	test.each<[string, (f: Awaited<ReturnType<typeof bootTicking>>) => void, (f: Awaited<ReturnType<typeof bootTicking>>) => number]>([
+		[
+			"a dropped public page",
+			(f) => {
+				f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcheckpoint2" }
+				f.state.responses.push(pubDroppedPage())
+			},
+			(f) => f.state.fetchArgs.length,
+		],
+		[
+			"a note commit that stood down beside a displaced deleter",
+			(f) => {
+				f.note.getNotesRaw.mockResolvedValue([note()])
+				f.state.tips = { ...f.state.tips, proposedBlockHash: "0xproposed2" }
+				;(f.service as unknown as { deletersRunning: number }).deletersRunning = 1
+			},
+			(f) => f.note.getNotesRaw.mock.calls.length,
+		],
+	])("a run that did not reach the tips runs again on the next tick with no new block: %s", async (_case, arrange, runs) => {
+		const f = await bootTicking()
+		arrange(f)
+		await tick()
+		const first = runs(f)
+		expect(first).toBeGreaterThan(0)
+		;(f.service as unknown as { deletersRunning: number }).deletersRunning = 0
+
+		await tick()
+
+		expect(runs(f)).toBeGreaterThan(first)
+	})
+
+	test("a non-standard token counts as caught up: it is not scanned again until the checkpoint moves", async () => {
+		const { state } = await bootTicking()
+		state.classStatus = "non-standard"
+		state.tips = { ...state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcheckpoint2" }
+		await tick()
+		expect(state.classCalls).toBe(1)
+
+		await tick()
+		expect(state.classCalls).toBe(1)
+
+		state.tips = { ...state.tips, checkpointedBlockNumber: 102, checkpointedBlockHash: "0xcheckpoint3" }
+		await tick()
+		expect(state.classCalls).toBe(2)
 	})
 })
 

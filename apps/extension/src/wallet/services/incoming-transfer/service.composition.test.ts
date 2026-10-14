@@ -35,7 +35,12 @@ const TIP = 100
 
 const reader: PublicEventReader = {
 	fetchTransferPage: async () => ({ events: [], scannedThrough: null, hasMore: false, dropped: false }),
-	getScanTips: async () => ({ checkpointedBlockNumber: TIP, checkpointedBlockHash: "0xcheckpoint", finalizedBlockNumber: TIP }),
+	getScanTips: async () => ({
+		checkpointedBlockNumber: TIP,
+		checkpointedBlockHash: "0xcheckpoint",
+		finalizedBlockNumber: TIP,
+		proposedBlockHash: "0xproposed",
+	}),
 	getTokenClassStatus: async () => "standard",
 	getLatestBlockNumber: async () => TIP,
 }

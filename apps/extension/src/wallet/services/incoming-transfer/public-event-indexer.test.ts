@@ -53,7 +53,12 @@ function makeReader(responses: Array<PublicTransferPage | Error>) {
 			if (next instanceof Error) throw next
 			return next
 		},
-		getScanTips: async () => ({ checkpointedBlockNumber: 100, checkpointedBlockHash: "0xcp", finalizedBlockNumber: 50 }),
+		getScanTips: async () => ({
+			checkpointedBlockNumber: 100,
+			checkpointedBlockHash: "0xcp",
+			finalizedBlockNumber: 50,
+			proposedBlockHash: "0xpp",
+		}),
 		getTokenClassStatus: async () => "standard",
 		getLatestBlockNumber: async () => 100,
 	}
