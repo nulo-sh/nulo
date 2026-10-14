@@ -1,11 +1,8 @@
 /**
  * A Local Network edited off its seeded URL, on a live sandbox: the header reads the node's real
- * status, and a full backup carries chain 0's account state as its own item.
- *
- * The edit points the endpoint at the same sandbox under its IPv4 literal, so only the URL leaves
- * the seed's: the node still answers, and only a status check that knows the network's kind reads
- * it as chain 0. The unit layer pins the status rule against a fake node; only the browser shows
- * the header and the exported file agreeing with it through the real popup, export and node.
+ * status, and a full backup carries chain 0's account state as its own item. The edit swaps
+ * `localhost` for its IPv4 literal, so the same node answers on a URL only the network's kind marks
+ * as chain 0.
  */
 import { expect, inject } from "vitest"
 import type { AztecTestConfig } from "../fixtures/aztec"
@@ -15,7 +12,7 @@ import { exportBackupContent } from "../helpers/backup-export"
 
 const aztecConfig = inject("aztecTestConfig") as AztecTestConfig | undefined
 
-test("an edited Local Network that answers reads active and travels in the full backup as chain 0", { timeout: 300_000 }, async ({
+test("an edited Local Network that answers reads active and travels in the full backup as chain 0", { timeout: 120_000 }, async ({
 	localNetworkExtension,
 }) => {
 	expect(aztecConfig, "the network runner provisions a sandbox").toBeDefined()
@@ -23,7 +20,7 @@ test("an edited Local Network that answers reads active and travels in the full 
 	await waitForHash(page, "#/popup/general")
 	await navigateToSettings(page, "networks")
 	await openNetworkDetail(page, "Local Network")
-	const networkId = page.url().split("/popup/settings/networks/")[1]
+	const networkId = await page.evaluate(() => location.hash.split("/popup/settings/networks/")[1])
 
 	await page.waitForSelector('[data-testid="endpoint-edit-btn"]', { visible: true, timeout: 5_000 })
 	await page.evaluate(() => {
@@ -43,10 +40,16 @@ test("an edited Local Network that answers reads active and travels in the full 
 
 	const fresh = await openPopup(localNetworkExtension)
 	await waitForHash(fresh, "#/popup/general")
-	await fresh.waitForSelector('[data-testid="network-button"]:not([data-status="sync"]):not([data-status="undefined"])', {
-		timeout: 30_000,
-	})
-	expect(await fresh.$eval('[data-testid="network-button"]', (el) => el.getAttribute("data-status"))).toBe("active")
+	// Startup syncs the status twice and each sync passes through "sync", so the first settled value
+	// is read in the same evaluation that sees it.
+	const settled = await fresh.waitForFunction(
+		() => {
+			const status = document.querySelector('[data-testid="network-button"]')?.getAttribute("data-status")
+			return status && status !== "sync" ? status : false
+		},
+		{ timeout: 30_000 },
+	)
+	expect(await settled.jsonValue()).toBe("active")
 	await fresh.close()
 
 	const backup = await exportBackupContent(localNetworkExtension)
