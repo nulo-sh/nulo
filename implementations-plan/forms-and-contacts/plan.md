@@ -554,6 +554,9 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Opus 5.5 review, beside round 1: conditional approve.** Its three Low findings are A3a-C1..C3, found independently; its comment and naming nits are applied (the import's doc names sender-first, a test title restated, the H6 pin names the forwarder, the guard's getter comment says why). It checked and found sound: no path locks while the hold stands, a confirm never stops an import it did not name, the cap cannot be extended, fenced writes stay in the fence's profile, every re-opening caller of `popupStore.open` checks `isOpened` first, and the trimmed names reach only the two network popups.
 
+**Codex round 2 (resumed): conditional approve.** A3a-C1..C4 verified. One new finding, accepted:
+- A3a-C5 [Medium] `shownToast` matched any card in the DOM, and a closed snack stays there for its 150 ms leave (longer under rAF throttling), so a stop toast the lock seal closed could still pass: it now matches only a settled card (no leave class, opacity 1, no running animation), the check `snackbar.test.ts` already uses.
+
 ## Post-implementation
 
 `implementations-plan/README.md` § Post-implementation standard, read at `175d8268`, binds; what is specific to this plan:
