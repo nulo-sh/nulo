@@ -1,7 +1,6 @@
 # incoming-transfers — owner asks
 
-OA-1 to OA-7 were answered on decision page 4 (§ Answers). OA-8 is open (arc 3b builds its "what
-ships now", and its PR merges only once your answer is quoted in it).
+OA-1 to OA-8 were answered on decision page 4 (§ Answers). None is open.
 
 ## OA-1. #140: a received private transfer that a chain reorganisation dropped
 
@@ -223,6 +222,9 @@ hides all dollar values" and "Block Explorer" / "Transaction link explorer".
   fee automatic by default and these govern the tap path under privacy mode; arc 3b builds them.
 - **OA-7 = A** (P4-15, page 4 re-signed 2026-10-14, the `## Decision` block on #142). The accent ring
   on keyboard focus for the four Details links on the tx, received and journal pages; nothing changes
-  at rest, for a mouse or a tap. Built as the follow-up to arc 3a.
+  at rest, for a mouse or a tap. Built as the follow-up to arc 3a (#439).
+- **OA-8 = A** (P4-14, page 4 re-signed 2026-10-14, the `## Decision` block on #141). Title "Privacy
+  mode", sub-line "Load a receipt's network fee only when you tap Show fee", with the placement above.
+  Built in arc 3b (#436).
 
-Open: OA-8.
+Open: none.

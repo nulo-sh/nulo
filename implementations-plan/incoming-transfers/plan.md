@@ -1,7 +1,7 @@
 ---
 plan: incoming-transfers
 tier: mid
-status: arcs 1, 2 and 3a merged (#248, #420, #426); arc 3b in review (#436), waiting on OA-8
+status: closed (delivered in #248, #420, #426, #436 and #439; this docs-only close-out)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -14,10 +14,52 @@ trunk: dev
 issues: [92, 97, 138, 139, 140, 141, 142, 143, 144, 227]
 ---
 
-Live progress: [STATUS.md](STATUS.md). Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (§ Answers holds
+## Outcome
+
+- **Date:** 2026-10-14. Planned 2026-10-09; the arcs merged on 2026-10-10 (arc 1) and 2026-10-14 (the rest).
+- **Status:** closed. Delivered as five PRs against `dev`, then this docs-only close-out:
+  - [#248](https://github.com/nulo-sh/nulo/pull/248)
+  - [#420](https://github.com/nulo-sh/nulo/pull/420)
+  - [#426](https://github.com/nulo-sh/nulo/pull/426)
+  - [#436](https://github.com/nulo-sh/nulo/pull/436)
+  - [#439](https://github.com/nulo-sh/nulo/pull/439)
+- **Shipped:**
+  - **Arc 1, #248** (closes #227, #144, #92):
+    - both scan arms use one receipt dedupe order;
+    - the trust write is fenced by the lock ticket and the epoch, and receipt and acceptance writes stand down while a deleter runs (`deletersRunning`);
+    - the Allow is all or nothing, in one storage write.
+  - **Arc 2, #420** (closes #143, #138):
+    - scans run on new blocks, with a 2-minute fallback: quiet node calls fell from 12.0 and 13.6 to 4.8 per minute;
+    - a token's first public scan lands its newest receipts first (OA-5 A).
+  - **Arc 3a, #426** (closes #142, #97):
+    - explorer links on the tx, received and journal pages: the Block hash as a link, a corner icon on the address cards (P4-02b A, OA-2 A, OA-6 A);
+    - the contract link on the first-receive trust prompt only (P4-01, OA-3 B).
+  - **Arc 3b, #436** (closes #141, #139, #140):
+    - Privacy mode in Settings → Privacy, which turns the received page's fee lookup into a "Show fee" press (C12-fetch B; OA-8 A, P4-14). The mode reads as on when its value is unknown or unreadable.
+    - Open screens follow a re-mined receipt.
+    - Note rows are reconciled against the PXE at a verified anchor: deleted after two strikes, settled for good once finalized (OA-1 A).
+  - **The OA-7 follow-up, #439** (refs #142): the 2 px accent ring on `:focus-visible` for the Details links and the "View on <explorer>" line (P4-15 A).
+  - **`lessons.md`:** three lines promoted. A PXE notes read can answer from a stale anchor; a `Lock` watchdog handoff never stops the displaced holder; a C1 hook's `dispose()` must be terminal.
+- **Dropped, rejected, superseded:**
+  - #92's repair on popup connect: replaced by the all-or-nothing Allow (D4).
+  - Outline B's pins-first plan and the inert #140 detector: rejected (D1, D2).
+  - A fresh, fenced prompt replay after a handoff: rejected (D13). It changes when prompts appear, for a five-minute stall, so it is pinned by a test instead.
+  - A failing back-fill counting against its target: recorded, not changed (D20).
+  - OA-4c: dropped as an ask (D7).
+  - A contract link on the detail pages: not built (OA-3 B).
+  - An armed reorg e2e: not built, since the network does not reliably mine again after a prune (D31).
+  - The fee lookup's retries: they stay (D42).
+  - One storage read per contract per block: declined (arc 3b Opus review, Low 3).
+  - The third #140 limit's named trigger, a PXE schema bump: it did not hold. The store refuses to open, and the remedy purges the profile. #442 keeps the residual path (D44).
+  - decisions.md § Not this lane's four residues: each entry there names its disposition, as #443 and #444 (D43).
+- **Known limits:** #440, #441, #442, #443, #444.
+- **Open items:** #432 (the retrying node client's error text; `owner-decision`).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
+
+Owner questions: [OWNER-ASKS.md](OWNER-ASKS.md) (§ Answers holds
 page 4's). Recon: [recon.md](recon.md). Arcs 1, 2 and 3a: ledger D1 to D24, D-orch-1 to 12, audit
 verdicts, assumptions and residue in [decisions.md](decisions.md); design and phases here at `264a4b30`.
-Over the 350-line target by the build's audit verdicts, kept whole as this arc's evidence.
+Over the 350-line target by the build's audit verdicts and the Outcome, kept whole as the lane's record.
 
 ## Lane state
 
@@ -25,8 +67,9 @@ Over the 350-line target by the build's audit verdicts, kept whole as this arc's
 |---|---|---|
 | 1 | #227, #144, #92 | merged, #248 (`9574a9de`) |
 | 2 | #143, #138 | merged, #420 (`264a4b30`); P4-04, OA-5 A |
-| 3a | #142, #97 | merged, #426 (`b886fda6`), built from this file's Arc 3 text at `264a4b30`; P4-01, P4-02b A, OA-2 A, OA-3 B, OA-6 A; ledger and verdicts in decisions.md; OA-7 open |
-| 3b | #141, #139, #140 | in review, #436; OA-4a A and OA-4b A govern its tap path (#141 addendum); OA-8 open; the close-out follows its merge |
+| 3a | #142, #97 | merged, #426 (`b886fda6`), built from this file's Arc 3 text at `264a4b30`; P4-01, P4-02b A, OA-2 A, OA-3 B, OA-6 A; ledger and verdicts in decisions.md |
+| 3b | #141, #139, #140 | merged, #436 (`0e451c3a`); OA-4a A and OA-4b A govern its tap path (#141 addendum); OA-8 A (P4-14) |
+| OA-7 | refs #142 | merged, #439 (`1e9507da`); P4-15 A |
 
 ## Outcome & Quality Bar (arc 3b)
 
@@ -281,6 +324,27 @@ D1 to D24, D-orch-1 to 12: decisions.md (D21 to D24 and D-orch-12 are arc 3a's);
 - **D34, one smoke scenario, proven at the wire** (R1 O6): the only layer that sees a request leave;
   component tests mock the client. #139 and #140 add no e2e (F11).
 - **D42, retries stay:** `getSingleAttemptNodeForUrl` would end them but change mode-off behaviour.
+- **D-orch-13, OA-7 = A as its own PR.** Orchestrator call at the close-out: P4-15 A (page 4
+  re-signed 2026-10-14, the `## Decision` block on #142) ships as #439 off `dev`, before this
+  close-out, which follows its merge.
+- **D-orch-14, the residues filed.** decisions.md § Not this lane's four residues each get a
+  disposition there (D43).
+- **D-orch-15, three closed known limits for #140:** lying finality or a kept pruned note (#440), a
+  sustained mid-scan block (#441), a PXE store reset after a schema bump (#442).
+- **D-orch-16, #432 stays open**, labelled `owner-decision`, and is this plan's one open item.
+- **D-orch-17, `lessons.md` takes at most three lines**, each linking its archived detail. It held
+  7,124 bytes of its 8 KiB budget.
+- **D-orch-18, the close-out is docs-only:** `STATUS.md` deleted, the `git mv` into `archive/` in its
+  own commit, the index line moved. No `Closes`.
+- **D43, the four residues as two known limits.** Proportion's rules give each a home. Three need the
+  same unobserved condition, a section held past the lock's five-minute watchdog, and share one
+  reopening condition, so they are one record (#443). The spent-before-scan note is plausible but
+  unverified, and its fix changes which rows a person sees (#444). D-orch-15 named three known
+  limits; with these, the Outcome lists five.
+- **D44, the third #140 limit, rescoped.** Opus named a PXE schema bump. At HEAD, a version mismatch
+  refuses to open the store (`PxeStoreVersionMismatch`), and the remedy is a profile purge, which also
+  clears the rows. #442 records that the trigger did not hold, and it keeps the path for an emptied
+  store under a kept profile.
 
 ## Audit verdicts (arcs 1, 2 and 3a: decisions.md)
 
@@ -364,6 +428,7 @@ This plan plus `implementations-plan/README.md` § Post-implementation standard 
 | Arc | Branch | Base | PR title (≤ 93) | Closes |
 |---|---|---|---|---|
 | 3b | `incoming-transfers-arc-3b` (carries this plan commit) | `dev` | `feat(incoming): receipt fee on a tap under privacy mode, updates on re-mine, settled notes` (90) | #141, #139, #140 |
+| OA-7 | `incoming-transfers-focus-ring` | `dev` | `fix(receipt): accent focus ring on the Details links` (52) | none (refs #142) |
 | close-out | `incoming-transfers-close-out` | `dev` | `docs(plans): close incoming-transfers` (37) | none |
 
 - Plain PRs (`gh pr create --base dev`), no stack (decisions.md D-orch-4), no labels unless a path
