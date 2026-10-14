@@ -1,0 +1,5 @@
+# Phase 3: the chain cascade
+
+- 2026-10-14 19:0xZ, `node_getNodeInfo` (origin only): `nodeVersion 6.0.0-rc.3`, `rollupVersion 3409706519`, `l1ChainId 11155111`, block 2723. `(11155111 ^ 3409706519) >>> 0 = 3415328944`, rollupVersion hex `0xcb3bfe17`.
+- `ensureContractSynced(` callers in `@aztec-labs/pxe@6.0.0-rc.3` `dest/`: `pxe.js:226,817,876`, `debug/pxe_debug_utils.js:32`, the private (`:486`) and utility (`:709`) oracles; the same set as rc.1, only the oracle line numbers moved.
+- rc.1 → rc.3 tarball diffs on our surface: `aztec.js` only protocol-contract bytecode; `wallet-sdk`, `entrypoints`, `wallets` none; `stdlib`: the V3 separator (`keys/derivation`), `getBlockHashMembershipWitnessAtArchive` added (M6), `GasFees.min` and two fee-provider interfaces added, upstream's L1 gas constants; `foundation`: `isRetryableError`, `BlockNumber.diff/min`, and `schemas/utils` `optional()` now lets a wrapped `.default()` fire on null (no wallet schema wraps a default in `optional()`: `aztec.js/dest/wallet` and `wallet-sdk` checked); `pxe`: oracle version, fact-store scope, nullifier-status oracle, queue-pressure warnings.

@@ -30,8 +30,8 @@ export const BLOCK_EXPLORERS: BlockExplorer[] = [
  * To add a new explorer: add its ID to BlockExplorerType,
  * add to BLOCK_EXPLORERS array, and add URLs here.
  *
- * testnet.aztecscan.xyz may still index the V5 testnet, in which case its V6 links 404 until it
- * serves the V6 chain.
+ * testnet.aztecscan.xyz may lag a Testnet reset, in which case its links 404 until it indexes the
+ * current rollup.
  */
 const EXPLORER_BASE_URLS: Record<BlockExplorerType, Record<number, string>> = {
 	aztecscan: {
