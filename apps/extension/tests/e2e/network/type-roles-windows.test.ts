@@ -232,17 +232,24 @@ async function instanceJson(address: string): Promise<string> {
 	})
 }
 
+/** Deploys the delegated-pull rig for the granted account and fills the playground's delegated send, consumer instance aside. */
+async function rigDelegatedSend(ctx: Connected): Promise<{ consumerAddress: string }> {
+	const pg = ctx.playgroundPage
+	const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
+	await ensureStandardPublicChecks(aztecConfig!)
+	const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, account!)
+	await setPgInput(pg, "consumerAddress", consumerAddress)
+	await setPgInput(pg, "amount", "100")
+	await setPgTextarea(pg, "delegatedTokenInstance", await instanceJson(pullTokenAddress))
+	return { consumerAddress }
+}
+
 test.skipIf(!hasConfig)(
 	"the execute window holds its roles on a send whose simulation discovers an authwit",
 	{ timeout: 600_000 },
 	async ({ dappConnectedExtensionPerTest: ctx }) => {
 		const pg = ctx.playgroundPage
-		const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
-		await ensureStandardPublicChecks(aztecConfig!)
-		const { pullTokenAddress, consumerAddress } = await deployDelegatedPullRig(aztecConfig!, account!)
-		await setPgInput(pg, "consumerAddress", consumerAddress)
-		await setPgInput(pg, "amount", "100")
-		await setPgTextarea(pg, "delegatedTokenInstance", await instanceJson(pullTokenAddress))
+		const { consumerAddress } = await rigDelegatedSend(ctx)
 		await setPgTextarea(pg, "delegatedConsumerInstance", await instanceJson(consumerAddress))
 		const seq = await snapshotResultSeq(pg)
 		const win = await openExecute(ctx, {
@@ -261,6 +268,35 @@ test.skipIf(!hasConfig)(
 			const [open] = await sweepWindow(win, "windows-execute", ["a discovered authwit with its details open (network)"])
 			expect(open!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
 				sel("execute-discovered-inner-hash"),
+			)
+		} finally {
+			await dismiss(win, rejectExecute)
+		}
+		expect((await waitForPgResult(pg, "sendTx", seq, 30_000)).status).toBe("error")
+	},
+)
+
+test.skipIf(!hasConfig)(
+	"the execute window holds its roles on the raw fields of a call it cannot decode",
+	{ timeout: 600_000 },
+	async ({ dappConnectedExtensionPerTest: ctx }) => {
+		const pg = ctx.playgroundPage
+		// The consumer stays unregistered, so the wallet has no interface for `donate` and its field stays raw.
+		await rigDelegatedSend(ctx)
+		const seq = await snapshotResultSeq(pg)
+		const win = await openExecute(ctx, {
+			method: "sendTx",
+			button: "pg-btn-sendTx-delegated",
+			inputs: {},
+			ready: sel("execute-op-raw-toggle"),
+			states: [],
+		})
+		try {
+			await clickByTestId(win, "execute-op-raw-toggle")
+			await win.waitForSelector(sel("execute-op-arg-field"), { visible: true, timeout: 10_000 })
+			const [raw] = await sweepWindow(win, "windows-execute", ["an undecodable call with execute-op-raw-toggle clicked (network)"])
+			expect(raw!.sites.filter(({ mode }) => mode === "asserted").map(({ site }) => site.selector)).toContain(
+				sel("execute-op-arg-field"),
 			)
 		} finally {
 			await dismiss(win, rejectExecute)

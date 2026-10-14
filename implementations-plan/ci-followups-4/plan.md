@@ -156,7 +156,7 @@ Gate, after step 4: `bun run lint`; `bun run typecheck:all`; `bun run test:all`;
 3. Do step 6 without the fallback-names clause and without D3's entry rule: the bullet says the fallback holds every package, and keeps old lines 5 and 6. Skip step 7's SECURITY.md sentence.
 4. At close-out, comment the evidence on #172 and close it as `known-limit`. Reopening condition: every listed importer declares its import, or the orchestrator approves `hoistPattern`.
 
-### Phase 3: the raw field's case (#365)
+### Phase 3: the raw field's case (#365) ✓
 
 1. Add the case per § Architecture.
 2. Run `NULO_E2E_RETRY=0 NULO_E2E_PROVERLESS=1 NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/type-roles-windows.test.ts`, then the same with `NULO_E2E_BROWSER=firefox`.
@@ -165,7 +165,7 @@ Gate, after step 4: `bun run lint`; `bun run typecheck:all`; `bun run test:all`;
 
 Gate: both browsers exit 0 with all four cases green; step 4's red observed; `bun run lint`; `bun run typecheck:all`. On branch A1-approved these runs are also Phase 2's network check. Layers: network e2e, both browsers.
 
-### Phase 4: hygiene
+### Phase 4: hygiene ✓
 
 1. Apply § Lessons pass; each commit message names where a moved or retired line now lives.
 2. Point `nightly.yml`'s `dup-trend` comment (`:273-276`) at `.claude/skills/complexity-budgets/SKILL.md`.
