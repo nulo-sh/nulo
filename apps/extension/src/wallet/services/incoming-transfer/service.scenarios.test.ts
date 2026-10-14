@@ -2690,6 +2690,10 @@ function pubEvent(overrides: Partial<PublicTransferEvent> = {}): PublicTransferE
 const pubReceipt = (block: number, overrides: Partial<PublicTransferEvent> = {}) =>
 	pubEvent({ txHash: `0x${block}-${overrides.txIndexWithinBlock ?? 0}`, l2BlockNumber: block, blockHash: `0xbh${block}`, ...overrides })
 const pubRecordKey = (e: PublicTransferEvent) => `pub:p1|n1|${e.txHash}|${e.logIndexWithinTx}`
+const storedBlockHash = (e: PublicTransferEvent) => {
+	const record = records.get(pubRecordKey(e))
+	return record?.kind === "public-event" ? record.blockHash : undefined
+}
 
 /** A page whose `scannedThrough` is the last event's position (or null when empty). */
 function pubPage(events: PublicTransferEvent[], hasMore = false): PublicTransferPage {
@@ -6572,14 +6576,14 @@ describe("IncomingTransferService — liveness on the real cadence", () => {
 		await tick()
 		await tick()
 		const remined = pubReceipt(101, { blockHash: "0xbh101b" })
-		expect(records.get(pubRecordKey(remined))?.blockHash).toBe("0xbh101a")
+		expect(storedBlockHash(remined)).toBe("0xbh101a")
 
 		f.state.chain = [...below, remined]
 		f.state.tips = { ...f.state.tips, checkpointedBlockHash: "0xcp101b", proposedBlockHash: "0xpp101b" }
 		f.state.responses.push(new Error("not an ancestor"))
 		const event = Date.now()
 
-		expect(await landedAfter(() => records.get(pubRecordKey(remined))?.blockHash === "0xbh101b", event)).toBeLessThan(120_000)
+		expect(await landedAfter(() => storedBlockHash(remined) === "0xbh101b", event)).toBeLessThan(120_000)
 		expect(cursorFor()?.reconciling).toBeUndefined()
 		f.state.fetchArgs.length = 0
 		await tick()
