@@ -151,6 +151,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [import-stage-deadlines](import-stage-deadlines/plan.md) — completed — import stage timing and console-capture fixes in the e2e suite
 - [incoming-public-transfers](incoming-public-transfers/plan.md) — completed — incoming public token transfers indexed into the activity feed
 - [incoming-sync-indicator](incoming-sync-indicator/plan.md) — superseded by holdings-loading-sync — a per-token indicator for incoming history backfill
+- [incoming-transfers](incoming-transfers/plan.md) — completed — the receive path: fenced trust writes, scans on new blocks, explorer links and their focus ring, the fee on a tap under Privacy mode, re-mined and pruned note receipts reconciled against the PXE
 - [incoming-trust-state-machine-refactor](incoming-trust-state-machine-refactor/plan.md) — completed — the incoming-transfer trust table serialized behind one lock per service
 - [isolated-linker-store](isolated-linker-store/plan.md) — completed — Bun's isolated linker adopted consumers first, with `@nulo/resolve-asset`
 - [journal-reaper](journal-reaper/plan.md) — completed — three fixes for the operation-journal reaper and its neighbours
