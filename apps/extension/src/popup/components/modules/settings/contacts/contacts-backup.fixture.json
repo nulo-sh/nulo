@@ -2,6 +2,11 @@
 	"compat-epoch": 5,
 	"backup-schema-version": 1,
 	"data": {
+		"profile": {
+			"id": "p1",
+			"name": "Main",
+			"type": "password"
+		},
 		"contact": [
 			{
 				"id": "c1",
@@ -33,5 +38,5 @@
 			}
 		]
 	},
-	"checksum": "f82d86429c3c108510eaa2c60a8de00dca9341b370e537a16ddd0820776fdc22"
+	"checksum": "65fbe3ecad064abb9f744abacd32a51862635e80039d70d9d01b43f1cf56d16c"
 }
