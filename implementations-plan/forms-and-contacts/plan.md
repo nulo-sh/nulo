@@ -377,7 +377,7 @@ No stack (D-orch-1): one plain PR per arc against `dev`, each opened only after 
 |---|---|---|---|---|---|
 | 1 | `worktree-forms-and-contacts` | 1.1-1.5 | merged as #255 | closed #184, #205, #210, #212, #214 | off |
 | 2 | `forms-and-contacts-arc-2` | 2.1-2.3 | merged as #282 | closed #224, #225 | off |
-| 3a | `forms-and-contacts-arc-3a` off `origin/dev` | 3.1-3.3, 3.7-3.9 | `feat(contacts): fence the import's sender, hold Lock while it runs; honour reduced motion` | `Refs #151`, `Closes #215`, `Refs #210`, `Refs #214` | off |
+| 3a | `forms-and-contacts-arc-3a` off `origin/dev` | 3.1-3.3, 3.7-3.9 | `feat(contacts): fence the import's sender, hold lock while it runs; honour reduced motion` (commitlint's subject-case refuses "Lock") | `Refs #151`, `Closes #215`, `Refs #210`, `Refs #214` | off |
 | 3b | `forms-and-contacts-arc-3b` | 3.4-3.6, the line, the overlap rule | set at its start | #151, #211, #216, #229 | off |
 | close-out | `forms-and-contacts-close-out` | close-out | `docs(plans): close forms-and-contacts` | — | off |
 
@@ -556,6 +556,8 @@ Outcome: the plan kept its #184, #205, #210 and #151 shapes; it took the outline
 
 **Codex round 2 (resumed): conditional approve.** A3a-C1..C4 verified. One new finding, accepted:
 - A3a-C5 [Medium] `shownToast` matched any card in the DOM, and a closed snack stays there for its 150 ms leave (longer under rAF throttling), so a stop toast the lock seal closed could still pass: it now matches only a settled card (no leave class, opacity 1, no running animation), the check `snackbar.test.ts` already uses.
+
+**Codex round 3 (resumed): approve, no new material findings.**
 
 ## Post-implementation
 
