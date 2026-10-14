@@ -9,7 +9,7 @@ const props = defineProps({
 	isQueued: { type: Boolean, default: false },
 	/** Who pays an estimate. The parent decides: only it knows whether a sponsor is Nulo's own. */
 	payer: { type: String, default: "self", validator: (v) => ["self", "sponsor", "unvouched"].includes(v) },
-	/** Set while the send can be queued against a cap: `about` is the last fee of this token's sends,
+	/** Set while the send can be queued against a cap: `about` is the last fee of this token's like sends,
 	 *  `cap` the most it goes out for without asking again, both as the card writes a fee. */
 	queuedCap: { type: Object, default: null },
 })

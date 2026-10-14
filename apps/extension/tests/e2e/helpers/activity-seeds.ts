@@ -18,7 +18,8 @@ export type ActivityScope = {
 	token: { contract: string; name: string; symbol: string; decimals: number }
 }
 
-export async function readActivityScope(page: Page): Promise<ActivityScope> {
+/** The scope without its token, for a chain with no default token seeds (the local one). */
+export async function readScopeIdentity(page: Page): Promise<Omit<ActivityScope, "token">> {
 	const profileId = await captureSoleProfileId(page)
 	const account = await getAccountAddress(page)
 	const { networkId, chainId } = await page.evaluate(async (pid: string) => {
@@ -27,10 +28,16 @@ export async function readActivityScope(page: Page): Promise<ActivityScope> {
 		const network = JSON.parse(all[`nulo:core:networks@${networkId}`] as string) as { chainId: number }
 		return { networkId, chainId: network.chainId }
 	}, profileId)
+	return { profileId, networkId, chainId, account }
+}
+
+export async function readActivityScope(page: Page): Promise<ActivityScope> {
+	const identity = await readScopeIdentity(page)
+	const { chainId } = identity
 	const seed = seedsForChain(chainId).find((s) => getPriceMapEntry(chainId, s.contract))
 	if (!seed) throw new Error(`the price map prices no default token seed on chain ${chainId}`)
 	const token = { contract: seed.contract, name: seed.displayName, symbol: seed.expectedSymbol, decimals: seed.expectedDecimals }
-	return { profileId, networkId, chainId, account, token }
+	return { ...identity, token }
 }
 
 /** The chain's next default token: a second contract, for specs that tell two tokens' rows apart. */
@@ -49,6 +56,11 @@ export type TransferSeed = {
 	transferType?: number
 	/** Sent by a dApp: its name is the row's second chip. */
 	dapp?: string
+	/** Base units of Fee Juice the send was built to pay at most. */
+	estimatedFee?: string
+	/** The wire's fee option: 0 a fee contract (the default), 1 public Fee Juice, 2 Fee Juice with a claim. */
+	feePaymentMethod?: number
+	priorityLevel?: "normal" | "fast" | "urgent"
 }
 
 /** A finalized transfer under the tx root, with every field the row codec branches on. */
@@ -61,12 +73,14 @@ export async function seedTransaction(page: Page, scope: ActivityScope, seed: Tr
 		networkId: scope.networkId,
 		account: scope.account,
 		nonce: "0",
-		feePaymentMethod: 0,
+		feePaymentMethod: seed.feePaymentMethod ?? 0,
 		hash: seed.hash,
 		createdAt: at,
 		updatedAt: at,
 		status: 5,
 		executionResult: 0,
+		...(seed.estimatedFee === undefined ? {} : { estimatedFee: seed.estimatedFee }),
+		...(seed.priorityLevel === undefined ? {} : { priorityLevel: seed.priorityLevel }),
 		origin: seed.dapp === undefined ? { type: 0 } : { type: 1, name: seed.dapp },
 		calls: [
 			{

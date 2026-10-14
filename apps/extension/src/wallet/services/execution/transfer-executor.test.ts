@@ -174,6 +174,7 @@ const RECORD_FIELDS = [
 	"fence",
 	"networkId",
 	"feeSpender",
+	"priorityLevel",
 ] as const
 
 /** The activity record `addTransaction` received, by field name. */
@@ -754,7 +755,18 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			fence: FENCE,
 			networkId: "net-built",
 			feeSpender: undefined,
+			priorityLevel: "normal",
 		})
+	})
+
+	test("the record carries the speed the send was priced at", async () => {
+		const h = makeHarness()
+		await h.executor.execute(
+			makeReq({ feeSettings: { paymentMethod: { kind: "fj" }, priorityLevel: "urgent" } as never }),
+			undefined,
+			FENCE,
+		)
+		expect(recordedTx(h.deps).priorityLevel).toBe("urgent")
 	})
 
 	test("a reused estimate records the entry's provenance and the re-resolved network's id", async () => {
@@ -789,6 +801,7 @@ describe("TransferExecutor: the activity record, field by field", () => {
 			fence: FENCE,
 			networkId: "net-live",
 			feeSpender: undefined,
+			priorityLevel: "normal",
 		})
 	})
 })

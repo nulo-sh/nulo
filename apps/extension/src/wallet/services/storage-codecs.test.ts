@@ -188,6 +188,7 @@ const CORPUS = [
 			fee: "5",
 			estimatedFee: "6",
 			gasDetails: { l2GasLimit: 1, daGasLimit: 2, teardownL2GasLimit: 3, teardownDaGasLimit: 4 },
+			priorityLevel: "fast",
 			error: "none",
 			submittedEndpointUrl: "http://h",
 			origin: { type: "ui" },
@@ -418,6 +419,17 @@ describe("durable-store codecs", () => {
 			})
 		})
 	}
+
+	test("a transaction row naming an unknown speed reads without one, and stays readable", async () => {
+		const api = new FakeBrowserApi()
+		api.reset()
+		const full = CORPUS.find((c) => c.name === "transaction")?.full as Tx
+		await api.storage.local.set({ "nulo:core:txs@0xtx": JSON.stringify({ ...full, priorityLevel: "turbo" }) })
+		const storage = new EntityStorage<Tx>("nulo:core:txs", api.storage.local, (raw) => TxSchema.parse(raw))
+		const read = await storage.get("0xtx")
+		expect(read).toMatchObject({ hash: "0xtx", estimatedFee: "6" })
+		expect(read?.priorityLevel).toBeUndefined()
+	})
 
 	test("authwit enabled-flag store: booleans round-trip; a non-boolean is kept-but-unreadable", async () => {
 		const api = new FakeBrowserApi()
