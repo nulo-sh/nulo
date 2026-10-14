@@ -264,7 +264,9 @@ export default defineConfig({
 		// `process.env`. The two would diverge silently. The current
 		// three-layer split is what produces a working browser bundle.
 		nodePolyfills({
-			include: ["buffer", /*"crypto",*/ "net", "path", "stream", "tty", "vm", "util"],
+			// Every builtin the bundle imports (`assert` comes from @aztec-labs/stdlib): one left out
+			// becomes an empty stub, and the build only warns.
+			include: ["assert", "buffer", /*"crypto",*/ "net", "path", "stream", "tty", "vm", "util"],
 			// Make a naked `Buffer` identifier auto-import the polyfill at
 			// build time. Required because wallet-core's serialization.ts
 			// uses naked `Buffer` (no import) — see its docstring for why.

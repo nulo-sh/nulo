@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-4
 tier: light
-status: implementing arc 1; A1 approved by the orchestrator 2026-10-14
+status: implementing arc 1; A1 approved 2026-10-14; D3 fired in Phase 2 (a sixth third-party gap), so #172 takes the known-limit branch
 issues: "#172, #365 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -53,6 +53,9 @@ Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). 
 | storybook loads `@storybook/vue3-vite` by name | `main.ts`: `framework.name` is `dirname(resolvePackageAsset("@storybook/vue3-vite", "package.json", { from: import.meta.url }))` |
 | aztec-runtime's `Buffer` and `node:*` | declare `@types/node` `^24.13.2`; `types: ["chrome-types", "node"]` (as wallet-core) |
 | design's stories `import type` from `@storybook/vue3-vite` | declare it in `packages/design` devDependencies, at the extension's range |
+| *Found in Phase 2:* the bundles' Node builtin `assert` (from `@aztec-labs/stdlib`, `noir-protocol-circuits-types`) reached npm `assert` only through the fallback | `"assert"` in the extension's and the playground's `nodePolyfills` `include` (D-impl-2) |
+| *Found in Phase 2:* wallet-bridge's tests use `Buffer` | declare `@types/node` `^24.13.2`; `types: ["chrome-types", "node"]` (D-impl-3) |
+| *Found in Phase 2:* `bun-types@1.4.2` (behind the root's `@types/bun`) imports `undici-types` undeclared | a sixth entry: D3 fired (D-impl-4) |
 
 `bunfig.toml` gains `hoistPattern` with the five exact names, one per line, each with a comment naming the importer and its removal condition.
 
@@ -86,6 +89,9 @@ Recon: [recon.md](recon.md). Owner asks: [OWNER-ASKS.md](OWNER-ASKS.md) (none). 
 | D4 | No test pins the list | `bunfig.toml` changes trip the audit gate and review |
 | D5 | Production-build identity on fresh trees, after a determinism control | Proves no shipped resolution moved |
 | D-orch-1 | One arc, one PR against `dev`, no stack | orchestrator |
+| D-impl-2 | `"assert"` joins both apps' `nodePolyfills` `include` | Step 4's dist moved because the bundle got npm `assert` only through the fallback; a builtin's importer rightly declares nothing, so the gap is our bundler config's (D2, D3's first clause). Panel: Opus fix-and-continue; Codex first ruled the fix right but the stop an authorisation boundary, then on resume with D3's full text reversed (high): declaring a first-party gap is inside D3 and not a plan change. With it every dist is byte-identical, pattern or not |
+| D-impl-3 | `@nulo/wallet-bridge` declares `@types/node` | Its tests use `Buffer`; the same gap as aztec-runtime's, found by the pattern's typecheck |
+| D-impl-4 | `hoistPattern` reverted; #172 closes `known-limit` | `bun-types@1.4.2` imports `undici-types` undeclared (`fetch.d.ts:24-30`); only a sixth entry fixes `typecheck:scripts` (probed). D3 and the orchestrator's decision: a sixth entry stops the route and closes the issue with the evidence. The first-party fixes ship |
 | D-impl-1 | Storybook's `framework.name` is `resolvePackageRoot("@storybook/vue3-vite", { from: import.meta.url })` | The package already exports the root lookup; same path as `dirname(resolvePackageAsset(…, "package.json", …))` without the `dirname` |
 
 ## Assumptions
@@ -131,7 +137,7 @@ Warnings: network e2e runs only through `agent.sh`, at retry 0; smoke uses `test
 
 Gate: `bun run lint`; `bun run typecheck:all`; `bun run test:all`; `bun run --cwd apps/extension build-storybook`; `bun scripts/phantom-sweep.ts`. Pass: all exit 0; the sweep's design finding is gone and its six known false-positive lines remain (`~pages`, `Awaiting...` and two `@…-artifact/undefined` under the extension; the same two under aztec-runtime). Layers: lint, typecheck, unit, build.
 
-### Phase 2: the fallback (#172)
+### Phase 2: the fallback (#172) ✓ (D3 fired; branch A1-declined's steps 2-4 ran)
 
 **Branch A1-approved.**
 1. Add the five `hoistPattern` entries to `bunfig.toml`; rewrite the header's "Kills phantom dependencies" to the real boundary.
