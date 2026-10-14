@@ -257,7 +257,7 @@ test.skipIf(!hasConfig)(
 			const row = await popup.$eval('[data-testid="execute-op-fee-set-badge"]', (el) =>
 				(el as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
 			)
-			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(row ?? "")
+			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(row)
 			expect(sentence, `the row reads "${row}"`).not.toBeNull()
 			const [figure, priority] = [Number(sentence?.[1]), Number(sentence?.[2])]
 			expect(priority).toBeGreaterThan(0)

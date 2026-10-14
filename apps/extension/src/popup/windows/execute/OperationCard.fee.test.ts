@@ -311,7 +311,7 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				feeEstimate: feeEstimate as never,
 				dapp: { name: "Swap" },
 			},
-			// The real term, so the test reads the markup a person and a screen reader get.
+			// The real term, so the test reads its markup: the key, the Tab stop, the hidden definition.
 			global: { stubs, components: { DottedTerm } },
 		})
 		mounted = w
