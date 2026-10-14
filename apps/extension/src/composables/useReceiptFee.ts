@@ -17,6 +17,7 @@ export interface UseReceiptFeeResult {
 	load: (record: IncomingTransferRecord, tapOnly: boolean) => Promise<void>
 	/** The tap: looks the fee up, and only from `tap`; a failed lookup returns to `tap`. */
 	show: () => Promise<void>
+	/** Ends the hook: an answer in flight is dropped, and a later `load` or `show` calls nothing. */
 	dispose: () => void
 }
 
@@ -29,6 +30,7 @@ export function useReceiptFee(service: ReceiptFeeService): UseReceiptFeeResult {
 	const feeJuice = ref<string | null>(null)
 	const fence = createRunFence()
 	let record: IncomingTransferRecord | null = null
+	let disposed = false
 
 	async function settle(isCurrent: () => boolean, lookup: Promise<{ feeJuice: string } | null>, onMiss: ReceiptFeeState): Promise<void> {
 		const fee = await lookup.catch(() => null)
@@ -38,6 +40,7 @@ export function useReceiptFee(service: ReceiptFeeService): UseReceiptFeeResult {
 	}
 
 	async function load(next: IncomingTransferRecord, tapOnly: boolean): Promise<void> {
+		if (disposed) return
 		const isCurrent = fence.begin()
 		record = next
 		feeJuice.value = null
@@ -51,11 +54,16 @@ export function useReceiptFee(service: ReceiptFeeService): UseReceiptFeeResult {
 	}
 
 	async function show(): Promise<void> {
-		if (state.value !== "tap" || !record) return
+		if (disposed || state.value !== "tap" || !record) return
 		const isCurrent = fence.begin()
 		state.value = "loading"
 		await settle(isCurrent, service.getReceiptFee(record.id), "tap")
 	}
 
-	return { state, feeJuice, load, show, dispose: () => fence.invalidate() }
+	function dispose(): void {
+		disposed = true
+		fence.invalidate()
+	}
+
+	return { state, feeJuice, load, show, dispose }
 }

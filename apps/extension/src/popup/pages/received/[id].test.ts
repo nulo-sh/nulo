@@ -5,7 +5,13 @@ import type { ConfigProp } from "@/wallet/config"
 import type { IncomingPublicEventRecord, IncomingTransferRecord } from "@/wallet/services/incoming-transfer/spec"
 import ReceivedDetail from "./[id].vue"
 
-const mocks = vi.hoisted(() => ({ getTokens: vi.fn(), routeId: "r1", incoming: undefined as unknown, config: undefined as unknown }))
+const mocks = vi.hoisted(() => ({
+	getTokens: vi.fn(),
+	getNetwork: vi.fn(),
+	routeId: "r1",
+	incoming: undefined as unknown,
+	config: undefined as unknown,
+}))
 
 const TOKEN = `0x${"0a".repeat(32)}`
 const ACCOUNT = `0x${"0c".repeat(32)}`
@@ -40,7 +46,7 @@ vi.mock("@/wallet/services/incoming-transfer/client", () => ({
 }))
 vi.mock("@/wallet/services/network/client", () => ({
 	NetworkServiceClient: vi.fn(function () {
-		return { getNetwork: vi.fn(async () => ({ id: "n1", chainId: 1 })), disconnect: vi.fn() }
+		return { getNetwork: mocks.getNetwork, disconnect: vi.fn() }
 	}),
 }))
 vi.mock("@/wallet/services/token/client", () => ({
@@ -90,6 +96,7 @@ function makeConfig(modeReads: Array<() => Promise<unknown>>) {
 
 beforeEach(() => {
 	mocks.routeId = "r1"
+	mocks.getNetwork.mockResolvedValue({ id: "n1", chainId: 1 })
 	mocks.incoming = makeIncoming(RECEIPT as unknown as IncomingTransferRecord)
 	mocks.config = makeConfig([])
 })
@@ -234,6 +241,17 @@ describe("the received page's network fee and updates", () => {
 		incoming().onIncomingTransferUpdated.invoke(remined(104))
 		await flushPromises()
 		expect(incoming().getReceiptFee).toHaveBeenCalledTimes(2)
+	})
+
+	test("leaving while the mount still awaits the network looks nothing up afterwards", async () => {
+		let failNetworkRead!: (error: Error) => void
+		mocks.getNetwork.mockReturnValueOnce(new Promise((_, reject) => (failNetworkRead = reject)))
+		const w = await mountPublic([async () => false])
+		w.unmount()
+		failNetworkRead(new Error("port closed"))
+		await flushPromises()
+		expect(incoming().getReceiptFee).not.toHaveBeenCalled()
+		expect(incoming().getCachedReceiptFee).not.toHaveBeenCalled()
 	})
 
 	test("a press of Show fee looks the fee up once and shows it", async () => {

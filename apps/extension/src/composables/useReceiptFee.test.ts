@@ -145,4 +145,16 @@ describe("useReceiptFee", () => {
 		await loading
 		expect([fee.state.value, fee.feeJuice.value]).toEqual(["loading", null])
 	})
+
+	test("after dispose neither load nor a press calls the service", async () => {
+		const service = makeService()
+		const fee = useReceiptFee(service)
+		await fee.load(publicRecord(), true)
+		fee.dispose()
+		await fee.show()
+		await fee.load(publicRecord("remined"), false)
+		expect(service.getReceiptFee).not.toHaveBeenCalled()
+		expect(service.getCachedReceiptFee).toHaveBeenCalledTimes(1)
+		expect(fee.state.value).toBe("tap")
+	})
 })
