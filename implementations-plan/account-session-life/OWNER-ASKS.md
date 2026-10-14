@@ -77,3 +77,15 @@ Under both B and C, the banner for a service that never starts comes after up to
 **Recommendation.** B: it makes the page do what its own hint says, with no new words.
 
 **What ships now.** A. Arc 2 adds no time to it: `deleteProfile`'s new wait for the deletion coordinator shares the 30-second budget the call already spends waiting for the service to start, so the call reaches its first write no later than it does today.
+
+## Answers
+
+Decision page 7, signed by the owner on 2026-10-14 and applied to the issues the same day (each issue's `## Decision` block). Arc 3 builds none of the five picks below: each changes what arc 1 or arc 2 shipped as "what ships now", has no phase in this plan, and waits for the plan revision the orchestrator runs after arc 3's PR. Nothing on screen changes for them until then.
+
+- **OA-1 (P7-05, #100): B.** Say so and go to the unlock screen: the toast reads "Something went wrong" with the line "Open the wallet again to unlock your new profile." and the popup goes to the unlock screen with the new profile selected. Owner note: "Should we give some more information to the user? How can we help him here?"
+- **OA-2 (P7-06, #99): B.** Skip it: keep the imported account as it is and create the next account after it.
+- **OA-3 (P7-07, #159): B.** Start over on Try again, for this failure only: Try again starts a new passkey so the person can pick an authenticator that works. The window's words stay.
+- **OA-4 (P7-08, #157): C.** B without the loader: calls wait as in B, but start-up looks as it does today (the unlock screen while it is still deciding). A service that never starts shows that screen for up to 60 s, then the banner. Owner note: "How does it look today? As an empty screen? If so, showcase to me 4/5 options for this. though it shouldn't be more than less than 1 sec, but Im intrigued now." The options for the start-up moment go to a separate shots worker (`program-2-shots-157`), not to this lane.
+- **OA-5 (P7-09, #157): B.** Give this one call the time the page promises: the popup waits for `deleteProfile` up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words.
+
+Page 7's arc 3 records, built in arc 3 as approved: P7-01 (#24, no recovery bearer), P7-02 (#137, the unlock toast), P7-03 (#208, one eye per change-password field). P7-04 (#208, backup autocomplete) was not struck, so it stands; it is built in Phase 3.4, deferred by D-orch-7.
