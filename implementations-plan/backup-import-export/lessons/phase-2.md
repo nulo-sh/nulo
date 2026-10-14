@@ -68,3 +68,15 @@ Consequence: with the skip, between a restore and the account's first build on t
   - Shape: on `localNetworkExtension`, the endpoint is edited from `localhost` to `127.0.0.1` (the same sandbox under another URL), the header's `data-status` must read `active` on a fresh popup, and the exported backup's only chain-0 item must be that network's.
   - Runtime: estimated 30 s; measured 18.4 s (Chrome, retry 0, the file alone). Red-check: a scratch worktree at 1406a8b with only the kind hint removed fails on `expected 'invalidchain' to be 'active'`.
   - No sandbox config fails the test (an assertion) instead of skipping it (D-orch-7).
+  - Its declared budget is 120 s, not the suite's 30 s default: vitest 4 times the fixture's setup inside the test (`withTimeout(withFixtures(…))` in `@vitest/runner`), the 18.4 s includes the launch, and CI runners are 3-5x slower. Codex round 1 read the first draft's 300 s as a raised timeout; it was the declared budget, tightened to 120 s.
+
+## Arc gate (Phase 2.4)
+
+- Network, Chrome, retry 0, default build: `backup-restore-integrity` 62.7 s, `backup-import-stalled-network` 95.5 s, `backup-edited-local-network` 15.6 s (5/5); `import-handshake-note` 2/2 (85.9 s) on a proverless build, as D-arc1b-3 runs it.
+- The first smoke leg failed `import-dead-rpc.test.ts` 3/3 with the stub seeing no request: the dist was the proverless network build, its Local seed stamped `http://localhost:25929`, so the spec's interception of `localhost:8080` never matched. Environmental; the armed smoke build (the setup's `ARMED_BUILD` line) is the one a smoke run needs after any `e2e:agent` run in the same worktree.
+- Rerun on the armed smoke build, Chrome, retry 0: `import-dead-rpc` 7/7, `backup-roundtrip` 1/1, `endpoints` 6/6.
+
+## Review loop
+
+- Codex round 1 (session 01a13b65) and the Opus diff review: approve with fixes; A2-1 to A2-7 in plan.md § Audit verdicts. The Opus race finding (A2-3) is real: `syncNetworkStatus` sets `sync` before each probe, and startup calls it from the network watch and from the profile bootstrap, so a settled status can go back to `sync` between a wait and a later read.
+- After the fixes, retry 0: Chrome 22.8 s, Firefox 19.7 s. Codex round 2 clean.

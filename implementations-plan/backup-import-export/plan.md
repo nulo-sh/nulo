@@ -1,7 +1,7 @@
 ---
 plan: backup-import-export
 tier: mid
-status: approved by the orchestrator; arcs 1 (#246) and 1b (#247) merged; arc 2 in progress (P1-05 approved 2026-10-14); arc 3 waits on its page 1 records
+status: approved by the orchestrator; arcs 1 (#246) and 1b (#247) merged; arc 2 in review on `backup-import-export-arc-2` (P1-05 approved 2026-10-14); arc 3 waits on its page 1 records
 issues: "#146, #203, #207, #223, #226 (arc 1); #148 in-repo half (arc 1b, stays open); #147, #191, #221 (arc 2); #98, #189, #192, #230, #231 (arc 3)"
 driver: claude-code
 claude_model: opus
@@ -369,7 +369,7 @@ Validation gate:
 - Pass: exit 0, with the proof's outcome written in `lessons/phase-2.md`.
 - Layers: lint, typecheck, unit, composition, network e2e.
 
-#### Phase 2.4: chain 0 travels in the backup (#147)
+#### Phase 2.4: chain 0 travels in the backup (#147) ✓
 
 1. Test that a full-backup export includes an edited Local Network that answers, with its contracts and senders as its own per-network item.
 2. Add `tests/e2e/network/backup-edited-local-network.test.ts`. Edit the Local Network's RPC URL to the sandbox's own address (the edit flow of the smoke spec `tests/e2e/endpoints.test.ts`). Assert the dot's `data-status` reads active. Export a full backup and assert its account-state slice carries the chain 0 item.
@@ -630,6 +630,25 @@ None rejected.
 Rejected: only B1-1's extra conflicting-bytes case, with the reason above.
 
 - **Codex round 2 (resumed session): clean.** No new material findings on the fix diff. The loop converged in two rounds.
+
+### Arc 2 implementation review (2026-10-14)
+
+- **Codex round 1 (gpt-6.1-sol, high, read-only; session 01a13b65-ca80-7db2-9a71-4d3fcb00754a): approve with fixes, no High or Medium.** It checked that the kind hint widens `getNodeStatus` exactly as far as Settings' `probeNodeStatus` (a `local` row comes only from seeds, `addNetwork` writes `custom`, a backup carries no network rows, an endpoint edit checks L1), that Active gates only the header, the contact sender list and the full backup, that the export filter runs before the instance and artifact reads and keeps custom contracts, accounts and sponsors, and that each new test is red without its fix.
+- **Opus 5.5 diff review (alongside round 1): approve with fixes, two Lows, three Nits, one Info.**
+
+| # | Source | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| A2-1 | Codex | Low | The new e2e's 300 s timeout raises the suite's 30 s default | Tightened to 120 s, not removed: vitest 4 times fixture setup inside the test, the measured 18.4 s (Chrome) and 20.1 s (Firefox) include the launch, and CI runners are 3-5x slower. |
+| A2-2 | Codex, Opus | Low | The e2e header spends two paragraphs; the Header test's doc names its caller (the e2e) | Accepted: one paragraph; the clause is cut. |
+| A2-3 | Opus | Low | The e2e waited for a settled status, then read it separately; startup syncs twice and each sync passes through `sync` | Accepted: one `waitForFunction` returns the first settled value. |
+| A2-4 | Opus | Low | The new file ran on Chrome only; the arc gate's e2e was not recorded; Phase 2.4 unticked | Accepted: Firefox 1/1 (20.1 s); the arc gate is in `lessons/phase-2.md`; 2.4 ticked. |
+| A2-5 | Opus | Nit | The network id came from `page.url()` (Firefox tracks `pushState` through BiDi) | Accepted: read from `location.hash`. |
+| A2-6 | Opus | Nit | `data-status="undefined"` before the first status | Accepted: the attribute is absent until a status exists; the dot's class is unchanged. |
+| A2-7 | Opus | Info | A `local` row reads Active for any answering node; `getNodeStatus` never compares L1 | No change: it is how Settings already checks a Local Network (P1-05), and the worst case, a node that changes chain after the edit, puts only the wallet's own local PXE contents in its own backup. |
+
+None rejected.
+
+- **Codex round 2 (resumed session): clean.** It verified the runner times fixture setup inside the test and withdrew the timeout finding; the single-evaluation status read still fails on `invalidchain`. The loop converged in two rounds.
 
 ## Delivery
 
