@@ -163,7 +163,7 @@ export async function seedPublicReceipt(page: Page, scope: ActivityScope, seed: 
 		kind: "public-event",
 		id,
 		from: `0x${"0e".repeat(32)}`,
-		blockHash: `0x${"3f".repeat(32)}`,
+		blockHash: `0x0f${"3f".repeat(31)}`,
 		profileId: scope.profileId,
 		networkId: scope.networkId,
 		accountAddress: scope.account,

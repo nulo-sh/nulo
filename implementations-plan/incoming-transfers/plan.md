@@ -1,7 +1,7 @@
 ---
 plan: incoming-transfers
 tier: mid
-status: arcs 1 and 2 merged (#248, #420); arc 3a in review; arc 3b revised 2026-10-14, awaiting approval
+status: arcs 1 and 2 merged (#248, #420); arc 3a in review (#426); arc 3b built, at its boundary gate
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -24,7 +24,7 @@ verdicts, assumptions and residue in [decisions.md](decisions.md); design and ph
 |---|---|---|
 | 1 | #227, #144, #92 | merged, #248 (`9574a9de`) |
 | 2 | #143, #138 | merged, #420 (`264a4b30`); P4-04, OA-5 A |
-| 3a | #142, #97 | in flight on `worktree-incoming-transfers-links` from this file's Arc 3 text; P4-01, P4-02b A, OA-2 A, OA-3 B, OA-6 A; not planned here |
+| 3a | #142, #97 | in review, #426 (head `6998ac16`), from `worktree-incoming-transfers-links` and this file's Arc 3 text; P4-01, P4-02b A, OA-2 A, OA-3 B, OA-6 A; not planned here |
 | 3b | #141, #139, #140 | this revision; OA-4a A and OA-4b A govern its tap path (#141 addendum); the close-out follows 3a and 3b |
 
 ## Outcome & Quality Bar (arc 3b)
@@ -163,7 +163,7 @@ Gate: Phase 3.3's commands, then `bun run test:all` (it includes the extension s
 the survives-scan-one case fails with the strike check removed, the stale-anchor case with the hash
 check removed, the next-tick case with step 3's `false` removed (recorded). Layers: unit, lint, typecheck.
 
-#### Phase 3.5: privacy mode, the fee row and updates on the page (#141; #139's page half)
+#### Phase 3.5: privacy mode, the fee row and updates on the page (#141; #139's page half) ✓
 
 1. `privacyMode`, a default pin, a restore test that a backup's value is not applied; the Settings row
    and its test (it renders, its toggle writes `setValue("privacyMode", true)`); delete the dead ref.
@@ -179,11 +179,13 @@ check removed, the next-tick case with step 3's `false` removed (recorded). Laye
    client turns the mode on, or during a held or rejected reconnect read, looks nothing up (a landed
    `false` read is the control); an Updated moves the Block row, wins over the first read,
    and loses to a later Deleted.
-5. Smoke scenario (D34): seed a public receipt on the testnet seed and redirect its RPC origin to
+5. Smoke scenario (D34): seed a public receipt on the `readActivityScope` scope (its `E2E_LIST_TOKENS`
+   token) and redirect its RPC origin to
    `startStub` (`tests/e2e/helpers/rpc-stub.ts`); with privacy mode on (toggled in Settings), the page
    shows `received-fee-show` and the stub logs no receipt request; after a press it logs one. Control,
    mode off: the stub logs one on open. Estimate 20 s; record the measure.
-6. Screenshots, light and dark: Settings → Privacy; the fee row, mode on (before, after a press) and off.
+6. Screenshots, light and dark, in `screenshots/`: Settings → Privacy; the fee row, mode on (before,
+   loading, after a press) and off; the Updated state.
 
 Gate: `bun run lint && bun run typecheck:all && bun run test`; from `apps/extension`,
 `bun run test:e2e -- <the scenario's file> tests/e2e/fiat-display.test.ts --retry=0`, then with
@@ -262,7 +264,7 @@ assumption: OA-8's recommendation is built, and the PR merges only with the owne
 
 ## Decision ledger (continued)
 
-D1 to D20, D-orch-1 to 11: decisions.md; D21 to D24: arc 3a's (§ Delivery); R1 C*n*, R1 O*n*: below.
+D1 to D20, D-orch-1 to 11: decisions.md; D21 to D24, D-orch-12: arc 3a's (§ Delivery); R1 C*n*, R1 O*n*: below.
 
 - **D25, the page owns the mode read, failing closed.** The shell keeps the default (off) when its
   boot read fails; the page's own read starts unknown and re-reads on reconnect.
@@ -327,15 +329,16 @@ This plan plus `implementations-plan/README.md` § Post-implementation standard 
 
 | Arc | Branch | Base | PR title (≤ 93) | Closes |
 |---|---|---|---|---|
-| 3b | `incoming-transfers-arc-3b` (carries this plan commit) | `dev` | `feat(incoming): fee on tap in privacy mode, follow re-mines, reconcile private receipts` (87) | #141, #139, #140 |
+| 3b | `incoming-transfers-arc-3b` (carries this plan commit) | `dev` | `feat(incoming): receipt fee on a tap under privacy mode, updates on re-mine, settled notes` (90) | #141, #139, #140 |
 | close-out | `incoming-transfers-close-out` | `dev` | `docs(plans): close incoming-transfers` (37) | none |
 
 - Plain PRs (`gh pr create --base dev`), no stack (decisions.md D-orch-4), no labels unless a path
   filter skips a needed suite. Never merge, never `--admin`, never force-push a pushed branch.
 - **Arc 3a overlap.** Both arcs edit `plan.md`, `OWNER-ASKS.md`, `STATUS.md`, `received/[id].vue` and
-  its test, and add `lessons/phase-3.md`; arc 3a's ledger reuses D14 to D17. The second to merge brings
-  `dev` in: this file keeps its structure, arc 3a's entries become D21 to D24 and its verdicts go to
-  decisions.md; OA-7 and OA-8 both stay; both lessons sections stay; Phase 3.5's tests rerun.
+  its test, and add `lessons/phase-3.md` and `screenshots/`. #426 already numbers its entries D-orch-12
+  and D21 to D24 and its ask OA-7; those ids stay. The second to merge brings `dev` in: this file keeps
+  its structure, arc 3a's ledger and verdicts go to decisions.md; OA-7 and OA-8 both stay; both lessons
+  sections stay; Phase 3.5's tests rerun.
 
 ## Seeds (drafts until the orchestrator approves; no ELI5, orchestrator-owned)
 

@@ -26,3 +26,4 @@
 - 2026-10-14 — arc 3b audit: Codex round 1 `reject` (8 findings), Opus `conditional approve` (15); all accepted (one in part, one as words). Final fresh Codex pass `reject` (1 High, 1 Medium), accepted, unreviewed. plan.md at 350 lines; awaiting orchestrator approval.
 - 2026-10-14 — arc 3b build started on `incoming-transfers-arc-3b` (plan commit rebased onto `b3c98acb` as `f0beffb3`). Phase 3.3 gate passed: units 1278/1278, lint 0, typecheck:all 0; revert checks fail as required.
 - 2026-10-14 — Phase 3.4 gate passed: units 1315/1315, lint 0, typecheck:all 0, test:all 0; three revert checks fail as required.
+- 2026-10-14 — Phase 3.5 gate passed: lint 0, typecheck:all 0, test 0 (12253); smoke 3/3 on Chrome and Firefox at retry 0; revert checks fail as required; 24 screenshots in `screenshots/`.

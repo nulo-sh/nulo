@@ -52,3 +52,22 @@ dev added the `@nulo/token-list` workspace, so the worktree needed a `bun instal
   case first; the bracket's hash check removed fails the stale-anchor and mid-scan-block cases; a
   strike reporting reached fails 8, the next-unforced-tick case included.
 - Gate: units 56 files / 1315 tests, lint 0, typecheck:all 0, test:all 0 (extension 12228 passed).
+
+### Phase 3.5
+
+- A hash seeded as `0x3f…` is not a BN254 field element (the modulus starts `0x3064`), so the node
+  client's receipt parse rejected it and the fee row fell to a dash. Seeds use `0x0f…`; the smoke
+  scenario's own hashes were already field-valid, the screenshot run's were not.
+- The received page has no bottom nav, so toggling Settings from it goes home first.
+- The smoke stub answers `null` to every method; the receipt parse treats that as terminal, so one
+  look-up is exactly one wire request and the counts carry no retry noise.
+- The Updated screenshot is staged by rewriting the stored record's block and reopening the page; the
+  live path is the page test ("an Updated moves the Block row").
+- Revert record: the page's mount load forced to `tapOnly = false` fails 3 page cases; no reset on
+  `onDisconnected` fails the reconnect case; a held Updated ignored fails the Block case; the smoke
+  scenario fails with the mode read removed (Chrome dist rebuilt with the real code afterwards).
+- E2E budget, `received-fee-privacy.test.ts`: proves no receipt request leaves the browser under the
+  mode until the press, which component tests cannot see (they mock the client). Estimate 20 s;
+  measured 11.9 s and 10.4 s on Chrome, 21.0 s and 14.6 s on Firefox.
+- Gate: lint 0, typecheck:all 0, test 0 (12253 passed); smoke with `fiat-display.test.ts` at retry 0,
+  3/3 on Chrome (24.4 s) and Firefox (40.8 s).
