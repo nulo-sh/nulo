@@ -34,6 +34,7 @@ function popup(getProfiles: () => Promise<Profile[]>) {
 	const store = {
 		isLogined: false,
 		isSessionChecked: false,
+		pageAwaitingAuth: "",
 		profile: undefined as Profile | undefined,
 		// As the app store derives it.
 		get isRegistered() {
@@ -129,14 +130,20 @@ describe("the replay of a provisional route", () => {
 		expect(p.replace).toHaveBeenCalledTimes(2)
 	})
 
-	test("an unlock screen replayed after the session unlocked goes to Home, never redirecting to itself", async () => {
-		const p = popup(async () => [alice])
-		await p.router.push("/popup/auth")
-		p.store.isLogined = true
-		p.store.isSessionChecked = true
-		p.setReady()
-		p.grace.replay()
-		await vi.waitFor(() => expect(p.router.currentRoute.value.name).toBe("popup-general"))
+	test("an unlock screen replayed after the session unlocked goes where an unlock would, never redirecting to itself", async () => {
+		for (const [awaiting, lands] of [
+			["", "/popup/general"],
+			["/popup/settings/profile", "/popup/settings/profile"],
+		]) {
+			const p = popup(async () => [alice])
+			await p.router.push("/popup/auth")
+			p.store.isLogined = true
+			p.store.isSessionChecked = true
+			p.store.pageAwaitingAuth = awaiting
+			p.setReady()
+			p.grace.replay()
+			await vi.waitFor(() => expect(p.router.currentRoute.value.path).toBe(lands))
+		}
 	})
 
 	test("a superseded guard whose read fails late leaves the grace to the navigation that replaced it", async () => {

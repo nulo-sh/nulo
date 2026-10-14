@@ -83,6 +83,12 @@ const handleReset = async () => {
 	isSlowDelete.value = false
 
 	appStore.profiles = appStore.profiles.filter((p) => p.id !== deletedId)
+	// The lock this deletion causes lets another profile be unlocked before a long purge returns;
+	// that profile's session and route stand.
+	if (appStore.profile && appStore.profile.id !== deletedId) {
+		openToast({ kind: "success", label: "Profile deleted" })
+		return
+	}
 	appStore.profile = appStore.profiles.length && appStore.profiles[0]
 	appStore.networks = []
 	appStore.network = null

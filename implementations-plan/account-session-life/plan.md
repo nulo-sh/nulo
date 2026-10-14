@@ -521,6 +521,13 @@ Sign-off: each line rides the record it quotes; OA-7 and OA-8 ship their "what s
 | O3 Low | The grace counted from navigation start while the bar's delay counts from its render | FIXED 3c3263ad: the deadline is taken at `popup/index.ts` evaluation, as § Arc 4 words it |
 | O4, C4 to C6 | Comments: a wrong event claim, a plan path, narration, a garbled line, a caller named, the grace contract stated three times; `hidden()` reads a class | FIXED; the test notes the e2e reads the computed visibility |
 
+**Arc 4 review, round 2** (Codex, resumed over `8e29450c..3b579ef0`): `CHANGES`; C1 to C3 verified fixed. Two regressions, both checked at the tree:
+
+| # | Finding | Disposition |
+|---|---|---|
+| R2-1 Medium | With the client now outliving the page, a deletion that returns after another profile was unlocked selected the first remaining profile, cleared its state and routed to the unlock screen (the 60 s shared client had the same path, much shorter) | FIXED: the tail drops the deleted profile, shows its toast, and leaves a session another profile took over; proof red before |
+| R2-2 Medium | The self-redirect fallback sent a replayed unlock screen to Home, losing an own window's route when the replay cancelled the shell's push | FIXED: it goes where an unlock would (`postAuthRoute`); proof red before |
+
 ### Deviations from the plan text (the tree wins)
 
 - **Arc 2.** One deadline taken at entry covers the init and the delegate waits; `DEFAULT_INIT_TIMEOUT_MS` is exported from `background/index.ts`; three more PXE test files moved to the record shape; the shared `PortRegistry` fake passes the port to `onDisconnect`.

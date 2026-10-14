@@ -32,10 +32,11 @@ const openToast = vi.hoisted(() => vi.fn())
 vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast }) }))
 
 import { useAppStore } from "@/stores/app.store"
+import type { ProfileInfo } from "@/wallet/services/profile/spec"
 import Reset from "./reset.vue"
 
-const main = { id: "p1", name: "Main", type: "password" }
-const other = { id: "p2", name: "Other", type: "password" }
+const main: ProfileInfo = { id: "p1", name: "Main", type: "password" }
+const other: ProfileInfo = { id: "p2", name: "Other", type: "password" }
 
 async function mountReady() {
 	const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { app: { profile: main, profiles: [main, other] } } })
@@ -89,6 +90,26 @@ describe("Delete Profile's client", () => {
 		expect(app.profile).toEqual(other)
 		expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Profile deleted" })
 		expect(router.push).toHaveBeenCalledWith("/popup/auth")
+	})
+
+	test("a profile unlocked while the deletion runs keeps its session and route", async () => {
+		const call = client.pending()
+		const { w, app } = await mountReady()
+		await w.get('[data-testid="reset-submit-btn"]').trigger("click")
+		w.unmount()
+		const third: ProfileInfo = { id: "p3", name: "Third", type: "password" }
+		app.profiles = [main, other, third]
+		app.profile = third
+		app.isLogined = true
+
+		call.resolve(main)
+		await flushPromises()
+		expect(app.profiles).toEqual([other, third])
+		expect(app.profile).toEqual(third)
+		expect(app.isLogined).toBe(true)
+		expect(openToast).toHaveBeenCalledWith({ kind: "success", label: "Profile deleted" })
+		expect(router.push).not.toHaveBeenCalled()
+		expect(client.disconnect).toHaveBeenCalledTimes(1)
 	})
 
 	test("a page left with no deletion running lets go of its client at once", async () => {

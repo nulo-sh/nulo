@@ -25,7 +25,7 @@ const profileApi = () => ({
 const readyGrace = () => ({ ready: vi.fn(async () => true), markProvisional: vi.fn(), settle: vi.fn(), replay: vi.fn() })
 
 describe("earlyDecision (synchronous)", () => {
-	test("a passkey interaction proceeds; register-when-registered and auth-when-logined bounce to `from` (or general)", () => {
+	test("a passkey interaction proceeds; register-when-registered and auth-when-logined bounce to `from` (or where an unlock goes)", () => {
 		expect(earlyDecision(route("x", { isPasskeyInteraction: true }), route("y"), store())).toEqual({ kind: "proceed" })
 		expect(earlyDecision(route("popup-register"), route("popup-home"), store({ isRegistered: true }))).toEqual({
 			kind: "redirect",
@@ -33,7 +33,7 @@ describe("earlyDecision (synchronous)", () => {
 		})
 		expect(earlyDecision(route("popup-auth"), { name: undefined, meta: {} } as never, store({ isLogined: true }))).toEqual({
 			kind: "redirect",
-			to: { name: "popup-general" },
+			to: "/popup/general",
 		})
 		expect(earlyDecision(route("popup-register"), route("y"), store())).toBeUndefined()
 		expect(earlyDecision(route("popup-auth"), route("y"), store())).toBeUndefined()

@@ -14,6 +14,7 @@ import type { NavigationGuardNext, RouteLocationNormalized, RouteLocationRaw } f
 import type { useAppStore } from "@/stores/app.store"
 import type { ProfileInfo } from "@/wallet/services/profile/client"
 import { getLastActiveProfileId } from "@/utils/lastActiveProfile"
+import { postAuthRoute } from "@/utils/own-window"
 import { authRequiredGate } from "./auth-guard"
 import type { StartGrace } from "./start-grace"
 
@@ -27,8 +28,9 @@ export type EarlyDecision = { kind: "proceed" } | { kind: "redirect"; to: RouteL
 
 export function earlyDecision(to: RouteLocationNormalized, from: RouteLocationNormalized, appStore: AppStore): EarlyDecision | undefined {
 	if (to.meta.isPasskeyInteraction) return { kind: "proceed" }
-	// Never back to the route itself: a forced replay of it would redirect forever.
-	const back = { name: from.name && from.name !== to.name ? from.name : "popup-general" }
+	// Never back to the route itself, where a forced replay of it would redirect forever; it goes
+	// where an unlock would, so a replay that cancels the shell's push keeps an own window's route.
+	const back = from.name && from.name !== to.name ? { name: from.name } : postAuthRoute(appStore.pageAwaitingAuth)
 	if (to.name === "popup-register" && appStore.isRegistered) return { kind: "redirect", to: back }
 	if (to.name === "popup-auth" && appStore.isLogined) return { kind: "redirect", to: back }
 	return undefined
