@@ -512,26 +512,7 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.fee_show {
-	composes: type--data from global;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: var(--txt-primary);
-	cursor: pointer;
-	transition: color 0.2s var(--bezier);
-
-	&:hover {
-		color: var(--nulo-accent);
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--nulo-accent);
-		outline-offset: 2px;
-	}
-}
-
-.fee_shimmer {
+	.fee_shimmer {
 		animation: none;
 	}
 }
