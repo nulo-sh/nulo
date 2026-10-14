@@ -29,6 +29,7 @@ const isLoading = ref(true)
 const defaultConfig = makeDefaultConfig()
 const isShowFiatValues = ref(defaultConfig.showFiatValues)
 const defaultExplorer = ref(defaultConfig.defaultExplorer)
+const isPrivacyMode = ref(defaultConfig.privacyMode)
 const settings = {
 	showFiatValues: {
 		title: "Show fiat values",
@@ -39,6 +40,11 @@ const settings = {
 		title: "Block Explorer",
 		description: "Transaction link explorer",
 		model: defaultExplorer,
+	},
+	privacyMode: {
+		title: "Privacy mode",
+		description: "Load a receipt's network fee only when you tap Show fee",
+		model: isPrivacyMode,
 	},
 }
 
@@ -160,6 +166,19 @@ onBeforeUnmount(() => {
 						</DropdownItem>
 					</template>
 				</Dropdown>
+			</Flex>
+
+			<Flex justify="between" align="center">
+				<Flex direction="column" gap="6">
+					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.privacyMode.title }}</Text>
+					<Text variant="caption" color="tertiary">{{ settings.privacyMode.description }}</Text>
+				</Flex>
+
+				<Toggle
+					@update:modelValue="updateSetting('privacyMode', $event)"
+					:modelValue="settings.privacyMode.model.value"
+					data-testid="privacy-mode-toggle"
+				/>
 			</Flex>
 		</template>
 	</SettingsPageShell>

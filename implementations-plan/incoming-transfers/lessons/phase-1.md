@@ -57,7 +57,7 @@
 - Codex (gpt-6.1-sol, high, read-only, default login) and an Opus general-purpose agent ran in
   parallel on the Phase 1.1 and 1.2 commits plus the Phase 1.3 design. Both: the entry read plus the
   per-write read closes the displaced-deleter race and opens none. Verdicts and dispositions in
-  plan.md § Audit verdicts; decisions D12 (entry read made structural) and D13 (prompt liveness:
+  decisions.md § Audit verdicts; decisions D12 (entry read made structural) and D13 (prompt liveness:
   test, not code).
 - After D12 the "entry read removed" revert check must remove both the captured count and the
   section's first live read; with only one removed the other still catches the boundary case.
@@ -95,7 +95,7 @@
 ## Post-implementation loop
 
 - Round 1 (fresh Codex session on `ac259a7..18a1111`, gpt-6.1-sol high, default login): `approve`,
-  three Low. Opus final-diff review in parallel: holds, seven Low. All accepted (plan.md § Audit
+  three Low. Opus final-diff review in parallel: holds, seven Low. All accepted (decisions.md § Audit
   verdicts); fixes are comments, test names, one new recovery assertion and three duplicate tests
   removed. Production code unchanged apart from comments, so the smoke run started on the 18a1111
   build stands for this head.

@@ -65,7 +65,6 @@ export const useAppStore = defineStore("app", () => {
 	const contactImports = createContactImportGuard()
 
 	const dappSessions = ref([])
-	const isPrivacyModeEnabled = ref(false)
 	// Null until the shell applies the stored choice, so a failed settings read shows no explorer link.
 	const defaultExplorer = ref<BlockExplorerType | null>(null)
 	const loggerWindowId = useSyncedRef("loggerWindowId", null)
@@ -114,7 +113,6 @@ export const useAppStore = defineStore("app", () => {
 		onTxAdded: feed.onTxAdded,
 		onTxUpdated: feed.onTxUpdated,
 		syncTransactions: feed.syncTransactions,
-		isPrivacyModeEnabled,
 		defaultExplorer,
 		loggerWindowId,
 		onboardingCompleted: onboarding.onboardingCompleted,

@@ -62,3 +62,27 @@ the Aztec 6.0.0-rc.1 sources under `node_modules/.bun/`. No open PR touches this
 - A note reconciler that calls `getNotesRaw` again on every tick doubles the PXE work the note arm already does; #140 reads the second status only when a recent row is missing from the first read.
 - Composition tests: an incoming-transfer test that needs note or event state from the PXE breaks D4. Only the trust and storage paths (#92, #144) qualify; the scan arms (#227) stay in unit scenarios.
 - Lane overlaps: `received/[id].vue` and `journal/[id].vue` are edited later by send-queue-activity arc 3 and forms-and-contacts arc 3 (reservation R1: this lane first). Nothing else in wave 1 touches `incoming-transfer/`.
+
+## Arc 3b recon (`264a4b30`)
+
+Three Explore agents (sonnet): the fee and config surface, the Updated emit path, the note
+reconciler's plumbing; plus the driver's read of `scanNoteTarget`, `scanContract`, `getReceiptFee`,
+`privacy.vue`, the shell's settings read and arc 3a's branch diff.
+
+| Capability | Existing code | Verdict |
+|---|---|---|
+| A boolean setting | `ConfigSchema` (`wallet/config/config.ts:12-63`): one line gives type, default and validation; `RESTORABLE_CONFIG_KEYS` gates restore (`wallet/services/config/spec.ts:15-24`) | reuse; the key stays out of the restore set |
+| A toggle row with a sub-line | `privacy.vue:110-121` (Show fiat values), `display.vue:238-246`, `lock.vue:187-198` | reuse the Show fiat values markup |
+| Session fee cache | `feeCache` (`incoming-transfer/service.ts:308`), keyed network, transaction, block hash | reuse; a cache-only reader beside `getReceiptFee` |
+| The shell's settings | `settingHandlers` and one boot read (`app.vue:100-123`, `:350-366`) | not used for the mode (D25) |
+| Updated plumbing | declared (`spec.ts:313`, `client.ts:24`); feed `onUpdated` (`useIncomingTransfers.ts:132-136`); Added gate (`service.ts:2372-2374`) | reuse; one emit helper |
+| Tombstoned page listener | `deletedIds` and `onReceiptDeleted` (`received/[id].vue:89-94`) | adapt for Updated |
+| PXE synced block | `getSyncedBlockHeader` (`packages/aztec-runtime/src/pxe/service.ts:645`, `client.ts:471-474`), already used by `execution/helpers/block-header-anchor.ts:25` | reuse |
+| Deleting a reconciled row | `finishReconciliation` (`service.ts:2210-2237`): `withDeleterLock`, dirty mark, delete, Deleted | reuse its order |
+| Pure reconcile decision | `orphanedByReconciliation` (`service.ts:2634-2645`) | the shape for `note-reconcile.ts` |
+| Test seams | `makeNoteStub`, `note()`, `noteRecord()`, `bootTicking`, the liveness describe (`service.scenarios.test.ts:327-540`, `:6339-6660`) | reuse; add a synced-header stub |
+| E2E interception | `interceptRpc` refuses or redirects (`tests/e2e/fixtures/browser/index.ts:38-43`, `hits()` counts); `startStub` logs every JSON-RPC method it receives (`tests/e2e/helpers/rpc-stub.ts`) | the smoke scenario redirects to the stub and reads its log (corrected after round 1) |
+
+Claims checked: #141 holds (`received/[id].vue:167-177`; the lookup names the transaction hash,
+`service.ts:626`). #139 holds (no emit; F5, F6). #140 holds; the PXE drops notes on a prune
+(`block_synchronizer.ts:115-150`) and the plan's armed e2e cannot reach the delete (F11).
