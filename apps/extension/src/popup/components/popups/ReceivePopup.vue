@@ -49,7 +49,7 @@ watch(
 			<Flex wide align="center" direction="column" gap="24" :class="$style.wrapper">
 				<Flex align="center" gap="6">
 					<Icon name="arrow-bottom-circle" size="16" color="primary" />
-					<Text size="16" weight="600" color="primary"> Receive </Text>
+					<Text variant="title-page" color="primary"> Receive </Text>
 				</Flex>
 
 				<Flex wide direction="column" align="center" gap="8">
@@ -57,12 +57,12 @@ watch(
 
 					<Flex align="center" justify="center" :class="$style.link">
 						<Flex align="center" direction="column" gap="8">
-							<Text size="14" weight="600" color="primary">
+							<Text variant="name" color="primary" :class="$style.name_size">
 								{{ account.name }}
 							</Text>
 
 							<Flex @click="handleCopyAddress" align="center" gap="6" class="copyable" data-testid="receive-address">
-								<Text size="13" weight="600" color="body" data-testid="receive-address-text">
+								<Text variant="data-lead" color="body" data-testid="receive-address-text">
 									{{ account.address.slice(0, 6) }}
 									<Text color="tertiary">•••</Text>
 									{{ account.address.slice(-4) }}
@@ -87,6 +87,10 @@ watch(
 
 .link {
 	padding: 12px 16px 12px 12px;
+}
+
+.name_size {
+	font-size: 14px;
 }
 
 .qrcode {

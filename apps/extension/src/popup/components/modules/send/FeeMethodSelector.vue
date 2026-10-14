@@ -115,7 +115,7 @@ const onRowClick = (method, event) => {
 }
 
 .fee_value {
-	font-family: var(--font-mono);
+	composes: type--name from global;
 	font-size: 12px;
 	color: var(--txt-primary);
 }
@@ -146,14 +146,10 @@ const onRowClick = (method, event) => {
 }
 
 .tag {
+	composes: type--tag from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
-
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
 	white-space: nowrap;
 }
 </style>

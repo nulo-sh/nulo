@@ -128,12 +128,7 @@ const handleManageAccounts = () => {
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-
+	composes: type--title-page from global;
 	color: var(--txt-primary);
 }
 </style>

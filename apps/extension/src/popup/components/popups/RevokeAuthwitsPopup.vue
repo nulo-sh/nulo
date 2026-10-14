@@ -142,7 +142,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">Revoke authwits</Text>
+					<Text variant="title-page" color="primary">Revoke authwits</Text>
 				</template>
 			</PopupHeader>
 
@@ -182,9 +182,9 @@ usePopupEntity(() => props.show, {
 					>
 						<Flex align="center" justify="between" wide :class="$style.header">
 							<Flex align="end" gap="4">
-								<Text v-if="chunksCount > 1" size="13" color="primary"> {{ `#${i + 1}` }} </Text>
-								<Text size="13" color="primary">Revoke authwits</Text>
-								<Text v-if="ch.count > 1" size="12" color="tertiary"> {{ `(${ch.count})` }} </Text>
+								<Text v-if="chunksCount > 1" variant="row-title" color="primary" :class="$style.chunk_title_size"> {{ `#${i + 1}` }} </Text>
+								<Text variant="row-title" color="primary" :class="$style.chunk_title_size">Revoke authwits</Text>
+								<Text v-if="ch.count > 1" variant="meta" color="tertiary"> {{ `(${ch.count})` }} </Text>
 							</Flex>
 							<Tooltip position="end">
 								<RowAction
@@ -196,7 +196,7 @@ usePopupEntity(() => props.show, {
 								</RowAction>
 
 								<template #content>
-									<Text size="12" color="secondary">View authwits content</Text>
+									<Text color="secondary">View authwits content</Text>
 								</template>
 							</Tooltip>
 							
@@ -230,7 +230,7 @@ usePopupEntity(() => props.show, {
 					<Tooltip v-if="ch.error && chunksCount > 1" side="top">
 						<Flex align="center" gap="6" style="margin-top: -8px;">
 							<Icon name="info" size="12" color="red" />
-							<Text size="12" weight="500" color="secondary">
+							<Text variant="body" color="secondary">
 								Finished with an error
 							</Text>
 						</Flex>
@@ -258,7 +258,7 @@ usePopupEntity(() => props.show, {
 					<Tooltip v-if="isErrorOccurred" side="top" wide>
 						<Flex align="center" justify="start" gap="6" wide>
 							<Icon name="info" size="12" color="red" />
-							<Text size="12" weight="500" color="secondary">
+							<Text variant="body" color="secondary">
 								An error occurred
 							</Text>
 						</Flex>
@@ -286,6 +286,10 @@ usePopupEntity(() => props.show, {
 	.header {
 		padding: 12px;
 	}
+}
+
+.chunk_title_size {
+	font-size: 13px;
 }
 
 .status_line {

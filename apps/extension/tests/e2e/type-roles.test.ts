@@ -3,7 +3,8 @@
  * judges the element it should, the faces they ask for load, History's hero title takes
  * `title-hero` through its composed module rule, every page the smoke suite sweeps holds its roles
  * and its identifier sites, as do the native fields and each `Button` variant and size in today's
- * box, and in Firefox's real toolbar panel the role-bearing text neither clips nor moves the layout.
+ * box, no figure on any of them loses a digit to a clip or an ellipsis, and in Firefox's real
+ * toolbar panel the role-bearing text neither clips nor moves the layout.
  */
 import { typeRoleNames, typeRoles } from "@nulo/design/tokens"
 import type { Page } from "puppeteer"
@@ -183,7 +184,7 @@ test("withBlockedAccount raises the verification barrier and hands back an unloc
 	expect(ctx.pageErrors).toEqual([])
 })
 
-const OBSERVE = { arc: 2 } as const
+const OBSERVE = { arc: 3 } as const
 const VISIBLE = { visible: true, timeout: 15_000 } as const
 const TX_HASH = `0x${"5e".repeat(32)}`
 /** About 123 trillion of the scope's token: at $1, a figure Home's fit draws only below full size. */
@@ -193,10 +194,60 @@ const RECIPIENT = "0x09c1c9d2ce72c53c2451f8e9add86ccb8cb284dd4dc4f0eaf301b40b38a
 
 type SiteState = readonly [surface: string, state: string]
 
+/**
+ * A person reads these to the digit, so none may lose one: not to its own clip or ellipsis, nor to
+ * an ancestor's. An unpriced token row shows its contract-supplied name in the fiat line's place,
+ * clipped on purpose.
+ */
+const FIGURE_ROLES = new Set(["amount-hero", "amount-total", "amount-row", "amount-detail", "fiat"])
+
+const cutFigures = (readings: readonly TypeReading[]) =>
+	readings
+		.filter(
+			(reading) =>
+				reading.visible &&
+				reading.roles.some((role) => FIGURE_ROLES.has(role)) &&
+				reading.testid !== "token-name" &&
+				(reading.clippedBy !== null ||
+					reading.ellipsizedBy !== null ||
+					(reading.overflowX !== "visible" && reading.scrollWidth > reading.clientWidth)),
+		)
+		.map(({ testid, text, scrollWidth, clientWidth, clippedBy, ellipsizedBy }) => ({
+			testid,
+			text,
+			scrollWidth,
+			clientWidth,
+			clippedBy,
+			ellipsizedBy,
+		}))
+
 /** Sweep steps 1 and 2 over the page as it stands, then the identifier sites of each state it renders. */
 async function expectPageClean(page: Page, label: string, states: readonly SiteState[] = []): Promise<void> {
-	expectSweepClean(await sweepTypeRoles(page), label)
+	const sweep = await sweepTypeRoles(page)
+	expectSweepClean(sweep, label)
+	expect(cutFigures(sweep.readings), `${label}: figures cut`).toEqual([])
 	for (const [surface, state] of states) expectSitesClean(await observeIdentifierSites(page, surface, state, OBSERVE))
+}
+
+/** Holdings' offer to add a pasted address no row holds: the address in `data`, inside the button's box. */
+async function expectAddTokenOffer(page: Page): Promise<void> {
+	await replaceInputValue(page, sel("holdings-search"), RECIPIENT)
+	await page.waitForSelector(sel("holdings-add-token-address"), VISIBLE)
+	await expectPageClean(page, "Holdings add-token", [["popup-holdings", "a pasted address no listed token matches"]])
+	// The label's text, not its box: under `nowrap` text can run past a box that fits, and the button clips it.
+	const fit = await page.$eval(sel("holdings-add-token-address"), (address) => {
+		const button = address.closest("button") as HTMLElement
+		const pad = getComputedStyle(button)
+		const outer = button.getBoundingClientRect()
+		const start = outer.left + button.clientLeft + Number.parseFloat(pad.paddingLeft)
+		const end = outer.left + button.clientLeft + button.clientWidth - Number.parseFloat(pad.paddingRight)
+		const range = document.createRange()
+		range.selectNodeContents(address.parentElement as HTMLElement)
+		const text = range.getBoundingClientRect()
+		return { width: text.width, room: end - start, inset: Math.min(text.left - start, end - text.right) }
+	})
+	console.log(`[type-roles] holdings add-token label ${fit.width}px in ${fit.room}px, inset ${fit.inset}px`)
+	expect(fit.inset).toBeGreaterThanOrEqual(0)
 }
 
 async function expectRoleAt(page: Page, testid: string, role: string, native = false): Promise<void> {
@@ -300,6 +351,54 @@ const waitForFittedHero = (page: Page) =>
 		sel("balance-amount"),
 	)
 
+type FittedHero = {
+	family: string
+	weight: string
+	fontSize: number
+	letterSpacing: number
+	scale: number
+	symbolLetterSpacing: number | null
+	overflow: number
+}
+
+/**
+ * The visible figure, not its container or the hidden ruler: the em tracking must compute at the
+ * fitted size. Only a token's page draws the symbol, which must inherit the figure's px tracking, not
+ * recompute it at its half size; that page refreshes on entry and the seed does not survive, so its
+ * figure may stand at full size.
+ */
+async function expectHero(page: Page, onTokenPage: boolean): Promise<void> {
+	const hero = await page.$eval(sel("balance-amount"), (amount): FittedHero | null => {
+		const fit = [...amount.children].find(
+			(el): el is HTMLElement => el instanceof HTMLElement && el.style.getPropertyValue("--hero-scale") !== "",
+		)
+		if (!fit) return null
+		const style = getComputedStyle(fit)
+		const symbol = fit.querySelector("span")
+		return {
+			family: style.fontFamily,
+			weight: style.fontWeight,
+			fontSize: Number.parseFloat(style.fontSize),
+			letterSpacing: Number.parseFloat(style.letterSpacing),
+			scale: Number.parseFloat(fit.style.getPropertyValue("--hero-scale")),
+			symbolLetterSpacing: symbol ? Number.parseFloat(getComputedStyle(symbol).letterSpacing) : null,
+			overflow: amount.scrollWidth - amount.clientWidth,
+		}
+	})
+	console.log(`[type-roles] fitted hero: ${JSON.stringify(hero)}`)
+	expect(hero).not.toBeNull()
+	const fitted = hero as FittedHero
+	expect(fitted.scale).toBeGreaterThan(0)
+	if (onTokenPage) expect(fitted.scale).toBeLessThanOrEqual(1)
+	else expect(fitted.scale).toBeLessThan(1)
+	expect(firstFamily(fitted.family)).toBe("Space Grotesk")
+	expect(fitted.weight).toBe("700")
+	expect(Math.abs(fitted.letterSpacing / fitted.fontSize + 0.04)).toBeLessThanOrEqual(0.002)
+	if (onTokenPage) expect(fitted.symbolLetterSpacing).toBeCloseTo(fitted.letterSpacing, 2)
+	else expect(fitted.symbolLetterSpacing).toBeNull()
+	expect(fitted.overflow).toBeLessThanOrEqual(0)
+}
+
 async function openAndSweep(page: Page, opener: string, ready: string, label: string, states: readonly SiteState[] = []): Promise<void> {
 	await clickByTestId(page, opener)
 	await page.waitForSelector(sel(ready), VISIBLE)
@@ -319,6 +418,7 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 	try {
 		const page = await openSeededHome(ctx)
 		await waitForFittedHero(page)
+		await expectHero(page, false)
 		await expectPageClean(page, "Home")
 		await expectRoleAt(page, "holdings-section-label", "label-section")
 		await expectButtons(page, "tokens-menu-trigger")
@@ -330,11 +430,16 @@ test("a seeded wallet's Home with its fitted balance, Holdings, Activity, a tx d
 
 		await openHoldings(page)
 		await expectPageClean(page, "Holdings")
+		await expectAddTokenOffer(page)
 		await clickNavTab(page, "activity")
 		await waitForHash(page, "#/popup/activity")
 		await page.waitForSelector(sel("page-hero-title"), VISIBLE)
 		await expectPageClean(page, "Activity")
 		await goAndSweep(page, `#/popup/tx/${TX_HASH}`, "tx-from-address", "tx detail", [["popup-tx-id", "the seedTransaction row"]])
+		const amounts = (await sweepTypeRoles(page)).readings.filter(({ roles }) => roles.includes("amount-detail"))
+		expect(amounts.map(({ fontSize }) => fontSize)).toEqual(["24px"])
+		await navigateByHash(page, "#/popup/tokens/1", 10_000)
+		await vi.waitFor(() => expectHero(page, true), { timeout: 15_000, interval: 500 })
 
 		await navigateByHash(page, "#/popup/general", 10_000)
 		await page.waitForSelector(sel("account-avatar-btn"), VISIBLE)
@@ -461,9 +566,15 @@ describe.skipIf(!isFirefox)(FIREFOX_ONLY.toolbarPanel, () => {
 				expect(typography.readings.filter((reading) => reading.testid?.startsWith(PROBE))).toHaveLength(typeRoleNames.length)
 				expect(judgeTypography(typography), `${tab}: role values in the panel`).toEqual([])
 				const clipped = typography.readings.filter(
-					(reading) => reading.scrollWidth > reading.clientWidth && reading.textOverflow !== "ellipsis",
+					(reading) =>
+						reading.visible &&
+						(reading.clippedBy !== null ||
+							(reading.overflowX !== "visible" &&
+								reading.scrollWidth > reading.clientWidth &&
+								reading.textOverflow !== "ellipsis")),
 				)
 				expect(clipped, `${tab}: role-bearing text clipped without an ellipsis`).toEqual([])
+				expect(cutFigures(typography.readings), `${tab}: figures cut in the panel`).toEqual([])
 				const widths = typography.readings
 					.filter((reading) => !reading.testid?.startsWith(PROBE))
 					.map((r) => `${r.testid}:${r.scrollWidth}/${r.clientWidth}`)

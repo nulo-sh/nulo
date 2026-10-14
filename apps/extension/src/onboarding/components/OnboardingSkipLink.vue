@@ -13,13 +13,10 @@ const emit = defineEmits(["click"])
 
 <style module>
 .skipLink {
+	composes: type--label from global;
 	background: transparent;
 	border: none;
 	color: var(--txt-secondary);
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	cursor: pointer;
 	padding: 6px 12px;
 	transition: color 0.15s var(--bezier);

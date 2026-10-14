@@ -135,7 +135,7 @@ usePopupEntity(() => props.show, {
 		</Input>
 
 		<template #belowSubmit>
-			<Text size="12" weight="500" color="tertiary" height="140" align="center" style="padding: 0 20px">
+			<Text variant="body" color="tertiary" height="140" align="center" style="padding: 0 20px">
 				New accounts do not require the creation of a new recovery phrase
 			</Text>
 		</template>

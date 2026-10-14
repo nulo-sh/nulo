@@ -516,7 +516,7 @@ onBeforeUnmount(discardRun)
 		<!-- Agreement gate -->
 		<template v-if="!isAgreed">
 			<div class="export_section_last">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
 					<Text size="13" height="150" color="body">
 						Backup provides direct, unrestricted access to your entire profile.
@@ -594,7 +594,7 @@ onBeforeUnmount(discardRun)
 				</div>
 
 				<div v-else class="export_section">
-					<span class="export_section_label">Backup</span>
+					<span class="export_section_label type--label-section">Backup</span>
 					<Banner v-if="dekReplaced" variant="warning" direction="vertical" data-testid="backup-keys-lost-banner">
 						<template #title> Imported keys are not in this backup </template>
 						<template #description>
@@ -653,7 +653,7 @@ onBeforeUnmount(discardRun)
 					v-if="!showRecommendation && isPasskeyProfile && backupStatus === 'finished'"
 					class="export_section_last"
 				>
-					<span class="export_section_label">Encrypt with password</span>
+					<span class="export_section_label type--label-section">Encrypt with password</span>
 					<Flex direction="column" gap="12">
 						<div :class="[isPasswordMismatch && $style.shake]">
 							<Input

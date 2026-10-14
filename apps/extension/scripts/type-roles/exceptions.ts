@@ -88,6 +88,13 @@ export const CARVE_OUTS: CarveOut[] = [
 		why: "the review figure's full size, which the hero fit shrinks",
 	},
 	{
+		file: "apps/extension/src/components/composite/send/AmountCard.vue",
+		rule: "faceless",
+		text: "font-size: calc(11px * var(--hero-scale, 1))",
+		selector: ".derived_type",
+		why: "the derived token line at its meta line's 11px, which the fit shrinks to keep it on one line",
+	},
+	{
 		file: BALANCE,
 		rule: "size",
 		text: "font-size: 48px",
@@ -138,5 +145,23 @@ export const OVERRIDES: Override[] = [
 		value: "12px",
 		role: "input",
 		why: "a mini field's typed text keeps its 12px",
+	},
+	{
+		file: "apps/extension/src/components/composite/send/SendTypesCard.vue",
+		selector: ".toggle_btn.toggle_active",
+		scope: '[data-testid="send-from-type"] > [data-selected], [data-testid="send-to-type"] > [data-selected]',
+		property: "font-weight",
+		value: "700",
+		role: "segment",
+		why: "the selected side of the send type toggle takes segment's active weight",
+	},
+	{
+		file: "apps/extension/src/onboarding/pages/create.vue",
+		selector: ".tab.tabActive",
+		scope: '[data-testid^="onboarding-method-"][aria-selected="true"]',
+		property: "font-weight",
+		value: "700",
+		role: "segment",
+		why: "the selected method tab takes segment's active weight",
 	},
 ]

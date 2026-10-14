@@ -467,11 +467,7 @@ onBeforeUnmount(() => {
 }
 
 .view_all {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

@@ -606,8 +606,8 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 		w.unmount()
 	})
 
-	// "≈ 1,234,567.123456789012345678 TST": 650 px at 10 px in the stand-in font.
-	test("in USD a long derived token line shrinks to the largest scale that keeps it on one line; a short one keeps 10 px", async () => {
+	// "≈ 1,234,567.123456789012345678 TST": 650 px at full size in the stand-in font.
+	test("in USD a long derived token line shrinks to the largest scale that keeps it on one line; a short one keeps 11 px", async () => {
 		const DERIVED = "[data-testid='send-amount-derived']"
 		const w = mountField({
 			fiatMode: true,

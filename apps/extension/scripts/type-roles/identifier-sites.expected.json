@@ -271,42 +271,6 @@
 			"liveFrom": 4
 		},
 		{
-			"file": "apps/extension/src/onboarding/components/OnboardingExplainer.vue",
-			"expression": "card.number",
-			"branch": "",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "onboarding-learn",
-			"state": "",
-			"liveFrom": 3,
-			"why": "a card's step number, not an identifier"
-		},
-		{
-			"file": "apps/extension/src/onboarding/pages/done.vue",
-			"expression": "mono",
-			"branch": "",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "onboarding-done",
-			"state": "",
-			"liveFrom": 3,
-			"why": "the tagline, a sentence set in mono"
-		},
-		{
-			"file": "apps/extension/src/onboarding/pages/welcome.vue",
-			"expression": "mono",
-			"branch": "",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "onboarding-welcome",
-			"state": "",
-			"liveFrom": 3,
-			"why": "the tagline, a sentence set in mono"
-		},
-		{
 			"file": "apps/extension/src/popup/components/modules/activity/TransactionCard.vue",
 			"expression": "hashSlice",
 			"branch": "hashSlice && explorerUrl",
@@ -668,18 +632,6 @@
 			"surface": "popup:token_metadata",
 			"state": "",
 			"liveFrom": 3
-		},
-		{
-			"file": "apps/extension/src/popup/components/popups/TokenMetadataPopup.vue",
-			"expression": "row.key",
-			"branch": "",
-			"ordinal": 0,
-			"role": "none",
-			"selector": "",
-			"surface": "popup:token_metadata",
-			"state": "",
-			"liveFrom": 3,
-			"why": "a capability key name, not an identifier"
 		},
 		{
 			"file": "apps/extension/src/popup/pages/journal/[id].vue",

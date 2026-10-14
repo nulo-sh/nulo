@@ -110,24 +110,17 @@ const formatTimestamp = (timestamp) => {
 }
 
 .detail_key {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	font-weight: 600;
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
 .detail_value_aux {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
@@ -137,34 +130,26 @@ const formatTimestamp = (timestamp) => {
 }
 
 .raw_call_method {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 600;
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
 .raw_call_aux {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
 .error_key {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--red);
 }
 
 .error_text {
+	composes: type--meta from global;
 	padding: 8px 10px;
 	border: 1px solid rgba(255, 0, 0, 0.3);
 	background: transparent;
 
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--red);
 	word-break: break-word;
 }

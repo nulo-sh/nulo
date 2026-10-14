@@ -8,6 +8,9 @@
 </route>
 
 <script setup lang="ts">
+/** Vendor */
+import type { ComponentPublicInstance } from "vue"
+
 /** Components */
 import TokenList from "../components/modules/holdings/TokenList.vue"
 
@@ -21,6 +24,8 @@ import type { TokenBalanceInfo } from "@/wallet/services/token-balance/spec"
 import { parseRawBalance, safeFiatOf } from "@/utils/token-amount"
 import { aggregateFiat } from "@/utils/token-aggregate"
 import { forChain } from "@/utils/token-order"
+import { fitHero } from "@/utils/hero-fit"
+import { heroRoom, rulerWidth } from "@/utils/hero-ruler"
 
 /** Composables */
 import { useEntityCrud } from "@/composables/useEntityCrud"
@@ -110,6 +115,49 @@ const openAddToken = (address: string) => {
 	popupStore.open("new_token")
 }
 
+const summary = useTemplateRef<ComponentPublicInstance>("summary")
+const totalRuler = useTemplateRef<HTMLElement>("totalRuler")
+const metaRuler = useTemplateRef<HTMLElement>("metaRuler")
+const summaryMeta = computed(
+	() => `${rows.value.length} tokens${showFiatValues.value && aggregate.value.partial ? " · priced assets only" : ""}`,
+)
+/** The total's type as a fraction of its 26 px: full size while it fits beside the meta line
+ *  wrapped to its narrowest, then the largest that does, with no floor, so no digit is ever hidden. */
+const totalScale = ref(1)
+/** The space, in px, a shrunk total keeps before the meta line: `.summary_amount_shrunk`'s margin,
+ *  which makes the meta line wrap clear of it. A total that fits at full size has none. */
+const TOTAL_GAP = 8
+/** Measured widths are rounded to layout units (1/60 px in Firefox), so a total the line lays out
+ *  exactly beside the meta can measure a hair over the room the two leave it. */
+const LAYOUT_ROUNDING = 0.05
+// jsdom has no ResizeObserver; there the fit still runs on each render.
+const summaryResizes = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fitTotal)
+const summaryLine = () => summary.value?.$el as HTMLElement | undefined
+function fitTotal() {
+	const line = summaryLine()
+	const form = totalRuler.value
+	const meta = metaRuler.value
+	if (!line || !form || !meta) return
+	const room = heroRoom(line) - meta.getBoundingClientRect().width
+	if (rulerWidth(form, 1) <= room + LAYOUT_ROUNDING) {
+		totalScale.value = 1
+		return
+	}
+	totalScale.value = fitHero(1, (_, scale) => rulerWidth(form, scale), Math.max(room - TOTAL_GAP, 1)).scale
+}
+
+// The summary renders only while logged in, which may begin after the page mounts.
+watch(
+	summaryLine,
+	(line, previous) => {
+		if (previous) summaryResizes?.unobserve(previous)
+		if (line) summaryResizes?.observe(line)
+	},
+	{ flush: "post", immediate: true },
+)
+// After the render, so the ruler holds the figure the line shows.
+watch([summary, aggregateDisplay, summaryMeta], fitTotal, { flush: "post" })
+
 watch(
 	() => [appStore.profile?.id, appStore.account?.address, appStore.network?.chainId],
 	() => {
@@ -118,7 +166,14 @@ watch(
 	},
 )
 
+onMounted(() => {
+	fitTotal()
+	document.fonts?.addEventListener("loadingdone", fitTotal)
+})
+
 onBeforeUnmount(() => {
+	summaryResizes?.disconnect()
+	document.fonts?.removeEventListener("loadingdone", fitTotal)
 	tokenBalanceService.onConnected.remove(onReconnected)
 	disposeCrud()
 	tokenBalanceService.disconnect()
@@ -133,10 +188,18 @@ onBeforeUnmount(() => {
 <template>
 	<Flex v-if="appStore.isLogined" direction="column" :class="$style.wrapper" data-testid="holdings-page">
 		<Flex direction="column" gap="16" :class="$style.content">
-			<Flex align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
-				<span v-if="showFiatValues" :class="$style.summary_amount">{{ aggregateDisplay }}</span>
-				<span :class="$style.summary_meta">
-					{{ rows.length }} tokens<template v-if="showFiatValues && aggregate.partial"> · priced assets only</template>
+			<Flex ref="summary" align="end" justify="between" :class="$style.summary" data-testid="holdings-summary">
+				<span v-if="showFiatValues" :class="[$style.summary_amount, { [$style.summary_amount_shrunk]: totalScale < 1 }]">
+					<span :class="$style.summary_fit" :style="{ '--hero-scale': totalScale }">{{ aggregateDisplay }}</span>
+				</span>
+				<span :class="$style.summary_meta">{{ summaryMeta }}</span>
+				<!-- The fit's ruler: the total in the line's classes at full size and the meta line at its
+				     narrowest, clipped to nothing, never drawn. -->
+				<span v-if="showFiatValues" aria-hidden="true" :class="$style.summary_ruler">
+					<span :class="[$style.summary_amount, $style.summary_ruler_total]">
+						<span ref="totalRuler" :class="$style.summary_fit">{{ aggregateDisplay }}</span>
+					</span>
+					<span ref="metaRuler" :class="[$style.summary_meta, $style.summary_ruler_meta]">{{ summaryMeta }}</span>
 				</span>
 			</Flex>
 
@@ -172,24 +235,48 @@ onBeforeUnmount(() => {
 }
 
 .summary_amount {
-	font-family: var(--font-headline);
+	composes: type--amount-total from global;
 	font-size: 26px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
 	color: var(--txt-primary);
 }
 
+.summary_amount_shrunk {
+	margin-right: 8px;
+}
+
+/* The figure scales down from the total's size, while its line keeps the full size's height; the
+   role composes here too, so its em tracking computes at the fitted size. */
+.summary_fit {
+	composes: type--amount-total from global;
+	font-size: calc(1em * var(--hero-scale, 1));
+}
+
+.summary_ruler {
+	position: absolute;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.summary_ruler_total {
+	position: absolute;
+	white-space: nowrap;
+}
+
+.summary_ruler_meta {
+	position: absolute;
+	width: min-content;
+}
+
 .summary_meta {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
 .error {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--body from global;
 	color: var(--red);
 }
 </style>

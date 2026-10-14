@@ -90,11 +90,7 @@ const navigationLinks = [
 }
 
 .label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 500;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--nav from global;
 	color: inherit;
 }
 

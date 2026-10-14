@@ -14,7 +14,7 @@ defineExpose({ focus: () => fieldRef.value?.focus() })
 
 <template>
 	<Flex direction="column" gap="8">
-		<Text size="11" weight="700" color="secondary" :class="$style.section_label">Profile name</Text>
+		<Text variant="label-section" color="secondary">Profile name</Text>
 		<ProfileNameField
 			ref="fieldRef"
 			:modelValue="modelValue"
@@ -26,11 +26,3 @@ defineExpose({ focus: () => fieldRef.value?.focus() })
 		/>
 	</Flex>
 </template>
-
-<style module>
-.section_label {
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
-	font-family: var(--font-headline);
-}
-</style>

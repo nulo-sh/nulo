@@ -51,13 +51,10 @@ const emit = defineEmits(["update:modelValue"])
 }
 
 .priority_btn {
+	composes: type--tag from global;
 	padding: 6px 0;
 	cursor: pointer;
 
-	font-family: var(--font-mono);
-	font-size: 9px;
-	font-weight: 500;
-	text-transform: uppercase;
 	text-align: center;
 	color: var(--nulo-secondary);
 

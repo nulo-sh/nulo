@@ -181,7 +181,7 @@ const collapsingLabel = "Import Account"
 		     separates it from a NEXT section, and a plain file has none. -->
 		<template v-if="!needsConfirm">
 			<div :class="isProtectedFile ? 'export_section' : 'export_section_last'">
-				<span class="export_section_label">Account file</span>
+				<span class="export_section_label type--label-section">Account file</span>
 				<ItemsContainer flat>
 					<SettingItem
 						@click="handlePickFile"
@@ -202,7 +202,7 @@ const collapsingLabel = "Import Account"
 
 			<!-- Step 2 (protected files only): the file password -->
 			<div v-if="isProtectedFile" class="export_section_last">
-				<span class="export_section_label">Protected file</span>
+				<span class="export_section_label type--label-section">Protected file</span>
 				<Input
 					label="File password"
 					type="password"
@@ -216,7 +216,7 @@ const collapsingLabel = "Import Account"
 		<!-- Step 3: preview + confirm -->
 		<template v-else>
 			<div class="export_section">
-				<span class="export_section_label">You are importing</span>
+				<span class="export_section_label type--label-section">You are importing</span>
 				<ItemsContainer flat>
 					<SettingItem
 						size="large"
@@ -236,7 +236,7 @@ const collapsingLabel = "Import Account"
 			</div>
 
 			<div class="export_section_last">
-				<span class="export_section_label">Account name</span>
+				<span class="export_section_label type--label-section">Account name</span>
 				<Input
 					label="Name"
 					placeholder="Name this account"

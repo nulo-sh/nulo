@@ -88,11 +88,8 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 }
 
 .wordmark {
-	font-family: var(--font-headline);
+	composes: type--title-hero from global;
 	font-size: 20px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 }
 
@@ -103,12 +100,9 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 }
 
 .headline {
-	font-family: var(--font-headline);
+	composes: type--title-hero from global;
 	font-size: 28px;
-	font-weight: 500;
-	letter-spacing: -0.04em;
 	line-height: 1.1;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 	margin: 0;
 
@@ -116,8 +110,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 }
 
 .subcopy {
-	font-family: var(--font-body);
-	font-size: 14px;
+	composes: type--body from global;
 	line-height: 1.4;
 	color: var(--nulo-secondary);
 	margin: 0;
@@ -130,9 +123,7 @@ onBeforeMount(() => redirectToOnboardingTabIfNeeded(appStore))
 }
 
 .terms {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.08em;
+	composes: type--caption from global;
 	line-height: 1.5;
 	color: var(--nulo-outline);
 	text-align: center;

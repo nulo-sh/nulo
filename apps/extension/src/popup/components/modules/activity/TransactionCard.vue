@@ -192,9 +192,7 @@ onBeforeUnmount(() => {
 }
 
 .hash {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	text-transform: uppercase;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
@@ -203,9 +201,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	font-family: var(--font-mono);
-	font-size: 8px;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--nulo-secondary);
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);

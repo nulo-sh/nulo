@@ -53,7 +53,7 @@ async function sweepWindow(win: Page, surface: string, states: readonly string[]
 	expectSweepClean(await sweepTypeRoles(win), surface)
 	const observations: IdentifierObservation[] = []
 	for (const state of states) {
-		const observation = await observeIdentifierSites(win, surface, state, { arc: 2, sites: SITES })
+		const observation = await observeIdentifierSites(win, surface, state, { arc: 3, sites: SITES })
 		expectSitesClean(observation)
 		observations.push(observation)
 	}

@@ -393,10 +393,8 @@ onBeforeUnmount(() => {
 }
 
 .balance_amount {
-	font-family: var(--font-headline);
+	composes: type--amount-hero from global;
 	font-size: 48px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
 	color: var(--txt-primary);
 	cursor: pointer;
 
@@ -408,8 +406,8 @@ onBeforeUnmount(() => {
 
 /* The figure's type scales down from the hero's size, while its line keeps the full size's height. */
 .hero_fit {
+	composes: type--amount-hero from global;
 	font-size: calc(1em * var(--hero-scale, 1));
-	letter-spacing: -0.04em;
 }
 
 .hero_ruler {
@@ -432,6 +430,7 @@ onBeforeUnmount(() => {
 }
 
 .arrival_chip {
+	composes: type--tag from global;
 	position: absolute;
 	left: 50%;
 	top: -18px;
@@ -441,9 +440,6 @@ onBeforeUnmount(() => {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	padding: 3px 8px;
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 600;
 	color: var(--green);
 	background: color-mix(in srgb, var(--green), transparent 88%);
 	border: 1px solid color-mix(in srgb, var(--green), transparent 55%);
@@ -500,17 +496,14 @@ onBeforeUnmount(() => {
 }
 
 .fiat_line {
-	font-family: var(--font-mono);
+	composes: type--fiat from global;
 	font-size: 13px;
 	color: var(--nulo-secondary);
 	margin-top: 4px;
 }
 
 .fiat_partial {
-	font-family: var(--font-mono);
-	font-size: 10px;
-	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 	margin-top: 4px;
 }
@@ -520,13 +513,10 @@ onBeforeUnmount(() => {
 }
 
 .breakdown_item {
+	composes: type--meta from global;
 	display: flex;
 	align-items: center;
 	gap: 6px;
-
-	font-family: var(--font-mono);
-	font-size: 11px;
-	letter-spacing: 0.02em;
 	color: var(--nulo-secondary);
 }
 

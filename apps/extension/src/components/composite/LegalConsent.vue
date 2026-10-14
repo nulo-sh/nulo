@@ -43,16 +43,16 @@ const accept = () => {
 	<Flex direction="column" gap="20" wide :class="$style.consent" data-testid="legal-consent">
 		<Flex v-if="points?.length" direction="column" :class="$style.card" data-testid="legal-points">
 			<Flex v-for="(point, index) in points" :key="point.lead" gap="12" :class="$style.point" data-testid="legal-point">
-				<Text size="11" color="primary" mono :class="$style.ordinal">{{ String(index + 1).padStart(2, "0") }}</Text>
-				<Text size="14" color="secondary" height="150">
-					<Text size="14" color="primary" weight="600">{{ point.lead }}</Text>
+				<Text variant="meta" color="primary" :class="$style.ordinal">{{ String(index + 1).padStart(2, "0") }}</Text>
+				<Text variant="body" color="secondary" height="150">
+					<Text variant="value" color="primary">{{ point.lead }}</Text>
 					{{ point.body }}
 				</Text>
 			</Flex>
 		</Flex>
 
 		<Flex v-if="changes?.length" direction="column" gap="8" :class="$style.card" data-testid="legal-changes">
-			<Text v-for="change in changes" :key="change" size="13" color="secondary" height="150" data-testid="legal-change">
+			<Text v-for="change in changes" :key="change" variant="body" color="secondary" height="150" data-testid="legal-change">
 				{{ change }}
 			</Text>
 		</Flex>
@@ -74,14 +74,14 @@ const accept = () => {
 				<Icon v-if="agreed" name="check" size="14" color="inverse" />
 			</Flex>
 			<Flex direction="column" gap="6">
-				<Text size="13" color="primary" height="160" data-testid="legal-consent-label">
+				<Text variant="body" color="primary" height="160" data-testid="legal-consent-label">
 					{{ lead
 					}}<a :class="$style.link" tabindex="-1" data-testid="legal-terms-link" @click.stop.prevent="emit('open', 'terms')">{{
 						LINKED
 					}}</a
 					>{{ tail }}
 				</Text>
-				<Text size="12" color="secondary" height="150">
+				<Text variant="body" color="secondary" height="150">
 					The
 					<a :class="$style.link" tabindex="-1" data-testid="legal-privacy-link" @click.stop.prevent="emit('open', 'privacy')">Privacy Policy</a>
 					explains what leaves your device.
@@ -93,7 +93,7 @@ const accept = () => {
 			<Button variant="primary" size="large" wide :disabled="!agreed || busy" data-testid="legal-continue" @click="accept">
 				{{ CONTINUE_LABEL }}
 			</Button>
-			<Text size="10" color="secondary" mono align="center" :class="$style.hint" data-testid="legal-consent-hint">{{ hint }}</Text>
+			<Text variant="body" color="secondary" align="center" data-testid="legal-consent-hint">{{ hint }}</Text>
 		</Flex>
 	</Flex>
 </template>
@@ -161,9 +161,5 @@ const accept = () => {
 
 .actions {
 	width: 100%;
-}
-
-.hint {
-	letter-spacing: 0.08em;
 }
 </style>

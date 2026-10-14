@@ -96,7 +96,7 @@ usePopupEntity(() => props.show, {
 		<PopupCard :displaceIdx="depth">
 			<PopupHeader @onClose="emit('onClose')" closable>
 				<template #title>
-					<Text size="14" weight="600" color="primary">New sender</Text>
+					<Text variant="title-page" color="primary">New sender</Text>
 				</template>
 			</PopupHeader>
 
@@ -133,13 +133,13 @@ usePopupEntity(() => props.show, {
 									color="red"
 								/>
 
-								<Text size="12" weight="600" color="secondary">
+								<Text variant="body" color="secondary">
 									{{ error.title }}
 								</Text>
 							</Flex>
 
 							<template #content>
-								<Text size="12" color="secondary">
+								<Text color="secondary">
 									{{ error.tooltip }}
 								</Text>
 							</template>

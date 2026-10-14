@@ -105,12 +105,29 @@ async function readUsdLines(page: Page): Promise<{ hidden: number; fontSize: num
 	})
 }
 
-async function readReviewAmount(page: Page): Promise<{ text: string; overflow: number; fontSize: number }> {
-	return page.$eval(REVIEW_AMOUNT, (el) => ({
-		text: el.textContent?.replace(/\s+/g, "") ?? "",
-		overflow: el.scrollWidth - el.clientWidth,
-		fontSize: Number.parseFloat(getComputedStyle(el).fontSize),
-	}))
+type ReviewAmount = {
+	text: string
+	overflow: number
+	fontSize: number
+	scrollWidth: number
+	clientWidth: number
+	scale: string
+	figures: string
+}
+
+async function readReviewAmount(page: Page): Promise<ReviewAmount> {
+	return page.$eval(REVIEW_AMOUNT, (el) => {
+		const style = getComputedStyle(el)
+		return {
+			text: el.textContent?.replace(/\s+/g, "") ?? "",
+			overflow: el.scrollWidth - el.clientWidth,
+			fontSize: Number.parseFloat(style.fontSize),
+			scrollWidth: el.scrollWidth,
+			clientWidth: el.clientWidth,
+			scale: (el as HTMLElement).style.getPropertyValue("--hero-scale"),
+			figures: style.fontVariantNumeric,
+		}
+	})
 }
 
 test.skipIf(!hasConfig)(
@@ -178,6 +195,7 @@ test.skipIf(!hasConfig)(
 
 		await openReviewFromStrip(page)
 		const review = await readReviewAmount(page)
+		console.log(`[send-amount-exact] review amount: ${JSON.stringify(review)}`)
 		expect(review.text).toBe("1,235,567.123456789012345678TST")
 		expect.soft(review.overflow, `the review's amount line overflows: ${JSON.stringify(review)}`).toBeLessThanOrEqual(0)
 		expect.soft(review.fontSize, "the review's amount is below 60% of 30 px").toBeGreaterThanOrEqual(18)
