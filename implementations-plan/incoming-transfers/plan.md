@@ -334,6 +334,8 @@ No findings; the loop converged.
 1. Medium, the retrying node logs a failed call's error text through the SDK's loggers (warn, and
    error per retry), past the fee lookup's own line. **Out of scope**: it predates the lane and covers
    every node the wallet builds; `trim` keeps the URL to its origin. Issue #432. Resumed: `approve`.
+   After #426 merged, the same session checked the merge's resolution of the received page (`35a20acc`,
+   executed, 62 tests): `approve`.
 
 ## Post-implementation
 
