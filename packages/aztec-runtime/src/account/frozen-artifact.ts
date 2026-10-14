@@ -4,9 +4,9 @@
  * Account addresses embed this artifact's contract class id. Upstream rebuilds its artifacts on
  * any toolchain or bytecode change, which shifts class ids across Aztec bumps and would
  * strand every stored account behind an address the wallet can no longer re-derive. The
- * address-bearing copy is therefore vendored in-repo (never bumped with the Aztec line) and
- * pinned by digest + class id in `artifact-freeze.test.ts`; provenance lives in
- * `artifacts/PROVENANCE.md`.
+ * address-bearing copy is therefore vendored in-repo (never bumped with the Aztec line; only a
+ * regime rotation in `address-freeze.ts` replaces it) and pinned by digest + class id in
+ * `artifact-freeze.test.ts`; provenance lives in `artifacts/PROVENANCE.md`.
  *
  * The JSON→artifact interpretation (`loadContractArtifact`) and the class-id hash computation
  * remain upstream code: the class-id pin is a TRIPWIRE for that path, not a freeze of it.

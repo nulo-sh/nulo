@@ -82,9 +82,14 @@ version and invites unrelated churn).
 descriptor + regime record (`frozen-artifact.ts`, `instantiation-descriptor.ts`,
 `address-freeze.ts`), fixes every derived account address. A bump must leave the KAT
 (`derivation-vectors.test.ts`) and all freeze tests green with ZERO vector regeneration and zero
-pin edits — if a bump reds any of them, upstream moved a protocol-level input; STOP, that is
-new-extension-major territory, not a re-pin (mirror the PrivateFPC conscious-re-pin spirit; see
-CLAUDE.md "Account-address freeze").
+pin edits — if a bump reds any of them, upstream moved a protocol-level input (6.0.0-rc.3's
+contract-address domain separator did): STOP and re-gate. Hold the bump, or rotate the regime on
+the owner's recorded decision: append a `REGIMES` entry the build binds (the last one), re-vendor
+the artifact byte-exact with its `PROVENANCE.md`, add a `reference/<regime>/` generator with its
+own lockfile, regenerate the vectors twice with an empty diff, and move the tests to the new
+truth. Off Mainnet that ships in place as an update; a Mainnet-serving build rotates only as a new
+extension major (CLAUDE.md "Account-address freeze"). Worked example:
+`implementations-plan/aztec-rc3/` (`nulo-v6.1`).
 
 **The scope guard's coverage.** `PxeService` refuses to sync a scope the PXE holds no keys for,
 because the HandshakeRegistry sync would move that account's cursor past its handshakes for good
@@ -95,7 +100,7 @@ each is still reached only through `getNotes`, `simulateTx`, `proveTx`, `profile
 `executeUtility` or `getPrivateEvents` (`scope-registration.test.ts`). A new entry point needs the
 guard before the bump ships.
 
-**The drift detector** (GREEN on every bump, reset or not — the address is network-independent):
+**The drift detector** (GREEN on a bump, reset or not, unless upstream's address derivation moved: the address is network-independent, but a protocol bump that rotates the contract-address domain separator moves it on purpose):
 `apps/extension/src/wallet/services/fpc/protocol-fpcs.test.ts` re-derives the PrivateFPC through
 the wallet's own `derivePrivateFpc()` (`protocol-fpcs.ts`: the `private-fee-juice` artifact, salt
 `0x…01`, deployer zero) and pins salt, deployer and address to the canonical deployment. The same
@@ -143,8 +148,8 @@ the same for a PRF-derived account (in-page ceremony → frozen ctor → authwit
 background-restart ceremony re-unlock + tx). The address KAT cannot see execution breakage — these
 canaries are the only gate that does. **A red canary on either browser BLOCKS the bump** (read the
 Firefox lane's canary job on the bump PR by hand — advisory means it cannot block a merge, not that it
-may be ignored): default response is HOLD the Aztec line; shipping a new extension major
-(address-regime rotation) is the deliberate alternative — never a casual fix.
+may be ignored): default response is HOLD the Aztec line; an address-regime rotation (above) is
+the deliberate alternative — never a casual fix.
 
 ## Branch A — bump-only (no reset, detectors green)
 
