@@ -13,9 +13,8 @@ defineProps({
 </template>
 
 <style module>
-/* Indeterminate: a segment sweeps the popup's top edge until the service has started. It stays
-   transparent for the start grace, so a normal open never shows it. Under the barriers (10000) and
-   over the Terms sheet (9000); it takes no pointer. */
+/* Transparent for the start grace, so a normal open never shows it. Under the barriers (10000),
+   over the Terms sheet (9000). */
 .bar {
 	position: fixed;
 	top: 0;

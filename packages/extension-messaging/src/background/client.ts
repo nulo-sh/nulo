@@ -116,7 +116,6 @@ export abstract class ServiceClient<
 		port.disconnect()
 	}
 
-	/** Leaves `Connecting` (or `Connected`) for `Disconnected`, failing whoever waits for Ready. */
 	private endEpisode(error: unknown): void {
 		const ready = this.ready
 		this.ready = undefined
@@ -189,7 +188,6 @@ export abstract class ServiceClient<
 		}, 0)
 	}
 
-	/** An event from a port this client no longer uses: it is dropped and the port closed. */
 	private dropStalePort(port: chrome.runtime.Port): void {
 		this.logDebug("Stale port dropped")
 		port.onMessage.removeListener(this.onMessage)

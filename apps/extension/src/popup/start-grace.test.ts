@@ -22,6 +22,7 @@ function popup(getProfiles: () => Promise<Profile[]>) {
 			{ path: "/popup/general", name: "popup-general", component: page, meta: { isAuthRequired: true } },
 			{ path: "/popup/auth", name: "popup-auth", component: page },
 			{ path: "/popup/register", name: "popup-register", component: page },
+			{ path: "/popup/import", name: "popup-import", component: page },
 			{ path: "/popup/settings/profile", name: "popup-settings-profile", component: page },
 			{ path: "/popup/password-only", name: "popup-password-only", component: page, meta: { requirePasswordProfile: true } },
 		],
@@ -126,5 +127,36 @@ describe("the replay of a provisional route", () => {
 		p.grace.replay()
 		await p.settled()
 		expect(p.replace).toHaveBeenCalledTimes(2)
+	})
+
+	test("an unlock screen replayed after the session unlocked goes to Home, never redirecting to itself", async () => {
+		const p = popup(async () => [alice])
+		await p.router.push("/popup/auth")
+		p.store.isLogined = true
+		p.store.isSessionChecked = true
+		p.setReady()
+		p.grace.replay()
+		await vi.waitFor(() => expect(p.router.currentRoute.value.name).toBe("popup-general"))
+	})
+
+	test("a superseded guard whose read fails late leaves the grace to the navigation that replaced it", async () => {
+		let failRead: (error: Error) => void = () => {}
+		let reads = 0
+		const p = popup(() => {
+			reads++
+			return reads === 1 ? new Promise<Profile[]>((_, reject) => (failRead = reject)) : Promise.resolve([alice])
+		})
+		await p.router.push("/popup/settings/profile")
+		p.setReady()
+		p.grace.replay()
+		await vi.waitFor(() => expect(reads).toBe(1))
+
+		await p.router.push("/popup/import")
+		failRead(new Error("Client disconnected"))
+		await p.settled()
+		p.grace.replay()
+		await p.settled()
+		expect(p.replace).toHaveBeenCalledTimes(1)
+		expect(p.router.currentRoute.value.name).toBe("popup-import")
 	})
 })

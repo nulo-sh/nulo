@@ -4,10 +4,9 @@
  *
  *  - `earlyDecision` is SYNCHRONOUS and decides — and the guard calls `next` — BEFORE any suspension.
  *    `isLogined=true` exists only AFTER the activation bootstrap has completed, so the auth check never
- *    needs the authoritative session read. An async lookup here fires during cold boot (ports not
- *    ready → rejects) and its optimistic degrade redirects to `from` before loadProfile has chosen a
- *    destination — stranding the boot at the bare index route (reproduced under CPU restriction; see
- *    implementations-plan/archive/mac-identity-binding/plan.md, Boot route race).
+ *    needs the authoritative session read. An async lookup here would fire during cold boot and its
+ *    degrade would redirect to `from` before loadProfile has chosen a destination, stranding the
+ *    boot at the bare index route.
  *  - `lateDecision` holds the awaited checks, each under the guard it always had. While the session
  *    is unchecked it first waits for the background's Ready within the page-load grace
  *    (`start-grace.ts`); past it, or when a read fails, it decides without the reads and marks the
@@ -30,8 +29,10 @@ export type EarlyDecision = { kind: "proceed" } | { kind: "redirect"; to: RouteL
 
 export function earlyDecision(to: RouteLocationNormalized, from: RouteLocationNormalized, appStore: AppStore): EarlyDecision | undefined {
 	if (to.meta.isPasskeyInteraction) return { kind: "proceed" }
-	if (to.name === "popup-register" && appStore.isRegistered) return { kind: "redirect", to: { name: from.name || "popup-general" } }
-	if (to.name === "popup-auth" && appStore.isLogined) return { kind: "redirect", to: { name: from.name || "popup-general" } }
+	// Never back to the route itself: a forced replay of it would redirect forever.
+	const back = { name: from.name && from.name !== to.name ? from.name : "popup-general" }
+	if (to.name === "popup-register" && appStore.isRegistered) return { kind: "redirect", to: back }
+	if (to.name === "popup-auth" && appStore.isLogined) return { kind: "redirect", to: back }
 	return undefined
 }
 
@@ -87,7 +88,11 @@ async function decideWithReads(
 /** The `beforeEach` callback. Terminal early decisions call `next` synchronously, before the
  *  first `await`; everything else resolves through `lateDecision` and calls `next` once. */
 export function createPopupGuard(getAppStore: () => AppStore, getProfileApi: () => GuardProfileApi, grace: StartGrace) {
+	// Only the latest navigation's guard marks or settles the grace: a superseded guard whose read
+	// fails late would mark a route the user has left, and the next replay would take them back.
+	let latest = 0
 	return async (to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext): Promise<void> => {
+		const run = ++latest
 		const appStore = getAppStore()
 		const early = earlyDecision(to, from, appStore)
 		if (early) {
@@ -95,7 +100,17 @@ export function createPopupGuard(getAppStore: () => AppStore, getProfileApi: () 
 			else next(early.to)
 			return
 		}
-		const late = await lateDecision(to, appStore, getProfileApi(), grace)
+		const current = () => run === latest
+		const fenced: StartGrace = {
+			...grace,
+			markProvisional(route) {
+				if (current()) grace.markProvisional(route)
+			},
+			settle() {
+				if (current()) grace.settle()
+			},
+		}
+		const late = await lateDecision(to, appStore, getProfileApi(), fenced)
 		if (late) next(late)
 		else next()
 	}

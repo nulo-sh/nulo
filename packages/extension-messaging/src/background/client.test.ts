@@ -854,7 +854,7 @@ describe("Ready handshake", () => {
 		expect(connectMock()).toHaveBeenCalledTimes(2)
 	})
 
-	test("a request is never posted past its deadline: not while it waits, not when the clock passes it after Ready", async () => {
+	test("a request is never posted past its deadline: not while it waits, not when the clock or its serialization passes it after Ready", async () => {
 		vi.useFakeTimers()
 		try {
 			portRegistry().holdReady = true
@@ -874,6 +874,21 @@ describe("Ready handshake", () => {
 			// The continuation runs after the deadline, as on a page the browser stalled.
 			vi.setSystemTime(Date.now() + 200)
 			expect(await late).toBeInstanceOf(RpcTimeoutError)
+			expect(posted()).toBe(0)
+			delayed.disconnect()
+
+			const large = newClient(500)
+			// A payload whose serialization outlasts the deadline.
+			const slow = {
+				toJSON: () => {
+					vi.setSystemTime(Date.now() + 200)
+					return "large"
+				},
+			}
+			const crossed = large.echo(slow as unknown as string).catch((e: unknown) => e)
+			await vi.advanceTimersByTimeAsync(400)
+			portRegistry().ready(SERVICE)
+			expect(await crossed).toBeInstanceOf(RpcTimeoutError)
 			expect(posted()).toBe(0)
 		} finally {
 			vi.useRealTimers()

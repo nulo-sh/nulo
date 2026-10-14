@@ -48,8 +48,8 @@ let slowDeleteTimer = null
 
 // Its own client: the shared one gives up at 60 s, well inside the wait the hint promises.
 const deleteService = deleteProfileClient()
-// A call the unmount's disconnect rejects says nothing: the deletion runs on, and the shell hears
-// its outcome through `onProfileDeleted`.
+// Disconnecting the page does not cancel the background's deletion, so the rejection it causes
+// says nothing.
 let isUnmounted = false
 
 const handleReset = async () => {
