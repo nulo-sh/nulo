@@ -34,3 +34,4 @@
 - 2026-10-14: gate 3.8 pass: popup store, usePopupStack, popup-stack pins, PopupCard 69/69; the two re-open pins now state the contract.
 - 2026-10-14: gate 3.9 pass: New/Edit network + account-name 24/24; the six new cases red on the HEAD popups.
 - 2026-10-14: arc 3a review round 1: Codex conditional approve (4 accepted), Opus conditional approve (same 3 + nits); fixes committed, Codex resumed.
+- 2026-10-14: arc 3a review rounds 2 and 3: Codex conditional approve (1 accepted: `shownToast` reads only a settled snack), then approve with no new material findings. Loop converged. Chrome contacts-import smoke 7/7 and the network stop pass at the fix; typecheck:all passes.

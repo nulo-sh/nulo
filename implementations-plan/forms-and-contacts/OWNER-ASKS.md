@@ -176,7 +176,7 @@ Also: each popup keeps its own rule for a change it receives (some add an unknow
 
 ## P11-13b. #151: the "Lock anyway" confirm, worded for the import (FA-7 B)
 
-**Surface:** the confirm that opens when the person presses Lock (the header chip or Settings → Lock → "Lock now") while a contacts import has run for more than two minutes. It is the confirm running transactions use today: pre-title "Running transactions" (red), title "Lock wallet?", "1 transaction is still running. Locking cancels it.", and a "Lock anyway" button in the confirm's default look. The import's confirm keeps that look; only the words below are new.
+**Surface:** the confirm that opens when the person presses Lock (the header chip or Settings → Lock → "Lock now") while a contacts import has run for more than two minutes. It is the confirm running transactions use today: pre-title "Running transactions" (grey; the red `confirm_color` colours the button, not the pre-title), title "Lock wallet?", "1 transaction is still running. Locking cancels it.", and a "Lock anyway" button. The import's confirm keeps that look; only the words below are new.
 
 | Case | Pre-title | Title | Description | Button |
 |---|---|---|---|---|
