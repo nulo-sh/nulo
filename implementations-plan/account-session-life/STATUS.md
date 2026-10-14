@@ -27,3 +27,4 @@
 - 2026-10-14 — arc 3 started: branch `account-session-life-arc-3` off dev d3dc4415 (D-orch-4). Page 7 signed 2026-10-14 17:42Z: P7-01 to P7-03 approved, P7-04 stands; backup-import-export arc 3 not merged (#418 is its arc 2, open), so Phase 3.4 is deferred (D-orch-7). P7-05 to P7-09 recorded in OWNER-ASKS § Answers, not built (D-orch-8).
 - 2026-10-14 — phase 3.1 gate pass: #24 CLOSED NOT_PLANNED with the decision comment (P7-01 text, 2026-10-14, SECURITY.md § Session secret (password profiles) item 5).
 - 2026-10-14 — phase 3.2 gate pass: lint 0, typecheck:all 0, auth.test.ts 26/26 (new proof red on base auth.vue), smoke auth-flows retry-0 Chrome 5/5 + Firefox 5/5 (new case 7.1 s / 10.7 s).
+- 2026-10-14 — phase 3.3 gate pass: lint 0, typecheck:all 0, settings/security unit 56/56 (two proofs red on base change-password.vue), smoke security retry-0 Chrome 4/4 + Firefox 4/4; before/after shots taken.

@@ -143,11 +143,22 @@ describe("change password — the credential fields' controls", () => {
 		return w
 	}
 
-	test.each([
-		["current-password-input-visibility-toggle", "current-password-input"],
-		["new-password-input-visibility-toggle", "new-password-input"],
-	])("%s masks the current, new and repeat fields together", async (toggle, field) => {
-		await expectMaskToggle(await mountEmpty(), { toggle, field, drives: FIELDS })
+	test("the current-password eye unmasks the current field only, never the new pair", async () => {
+		await expectMaskToggle(await mountEmpty(), {
+			toggle: "current-password-input-visibility-toggle",
+			field: FIELDS[0],
+			drives: [FIELDS[0]],
+			others: FIELDS.slice(1),
+		})
+	})
+
+	test("the new-password eye unmasks the new pair only, never the current field", async () => {
+		await expectMaskToggle(await mountEmpty(), {
+			toggle: "new-password-input-visibility-toggle",
+			field: FIELDS[1],
+			drives: FIELDS.slice(1),
+			others: [FIELDS[0]],
+		})
 	})
 
 	test("the current field is focused on mount; autofill names each field's role", async () => {
