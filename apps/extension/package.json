@@ -70,7 +70,7 @@
 		"@nulo/wallet-crypto": "workspace:*",
 		"@nulo/wallet-sdk-schema-patch": "workspace:*",
 		"@replit/codemirror-indentation-markers": "^6.5.3",
-		"@alejoamiras/private-fee-juice": "6.0.0-rc.1",
+		"@alejoamiras/private-fee-juice": "6.0.0-rc.3",
 		"@vue/devtools-api": "^8.2.1",
 		"codemirror": "^6.0.2",
 		"focus-trap": "^8.2.1",

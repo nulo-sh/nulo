@@ -38,7 +38,7 @@
 		"@nulo/extension-messaging": "workspace:*",
 		"@nulo/wallet-core": "workspace:*",
 		"@nulo/wallet-crypto": "workspace:*",
-		"@alejoamiras/private-fee-juice": "6.0.0-rc.1",
+		"@alejoamiras/private-fee-juice": "6.0.0-rc.3",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {

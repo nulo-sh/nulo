@@ -55,6 +55,7 @@ auto = "disable"
 minimumReleaseAge = 604800
 minimumReleaseAgeExcludes = [
 	"@alejoamiras/presto",
+	"@alejoamiras/private-fee-juice",
 	"@aztec-foundation/aztec-standards",
 	"@aztec-foundation/bb-avm-sim",
 	"@aztec-foundation/bb-avm-sim-darwin-arm64",
