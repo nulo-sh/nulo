@@ -48,7 +48,7 @@ export type SeedMarkerEntry = {
 	/** Terminal outcomes. `deleted` is the user tombstone: it survives chain
 	 *  purges — delete + network re-add must NOT resurrect the default. */
 	outcome?: "seeded" | "deleted"
-	/** Chain-observed decimals recorded at seed time; equal to the seed's `expectedDecimals`. */
+	/** Chain-observed decimals from the last check that passed; equal to the seed's `expectedDecimals`. */
 	observedDecimals?: number
 	/** `seedPins` of the seed whose on-chain check passed, before seeding it or on a token the wallet
 	 *  already held: what lets the connect window name the token as one Nulo knows while the list
@@ -190,8 +190,7 @@ export class TokenSeeder {
 	private epoch = 0
 	/** A trigger arriving while a pass is in flight coalesces into it — but the
 	 *  new trigger may be for a DIFFERENT profile/network. Run once more after
-	 *  the pass so the coalesced context is never silently skipped (an extra
-	 *  pass over settled markers is read-only + cheap). */
+	 *  the pass so the coalesced context is never silently skipped. */
 	private rerunRequested = false
 	/** `${profileId}|${seedKey}` of every attempt currently running. */
 	private readonly attempting = new Set<string>()
@@ -622,8 +621,8 @@ export class TokenSeeder {
 	/**
 	 * One seed's single-pass validated snapshot: the pin is enforced INSIDE
 	 * `parseTokenInterface` on the one fetched instance (before any PXE
-	 * registration) and the metadata simulates against THAT interface. The
-	 * caller persists the exact returned snapshot — no refetch window anywhere.
+	 * registration) and the metadata simulates against THAT interface. A seed
+	 * persists the exact returned snapshot — no refetch window anywhere.
 	 * Returns undefined on a validation hard-skip.
 	 */
 	private async previewOne(
