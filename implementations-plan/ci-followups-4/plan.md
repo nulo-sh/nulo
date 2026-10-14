@@ -216,6 +216,21 @@ One PR from `worktree-ci-followups-4` against `dev`; `code_review: off`. Title: 
 
 **Round 3 (2026-10-14, Codex resume, verify only).** **Approve.** All three round-2 conditions resolved; the tightened text kept the determinism control, the D3 ceiling, the fresh-install rules, the red proof and the close-out; no regression. A1 stays an explicit decision before branch A1-approved runs.
 
+## Implementation review (arc 1)
+
+**Round 1 (2026-10-14).** Codex (gpt-6.1-sol high, session `01a13c60`): **fixes needed**, three doc and comment findings, no implementation bug. Opus diff review beside it: **fixes needed**, seven.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 / O3 | The polyfill comment and the CLAUDE.md rule describe only the stub, not the silent bind through the fallback | Accepted: both name the two outcomes; the comment names `assert`'s importer |
+| C2 / O7 | `index.md` still says awaiting A1 and "narrowed" | Accepted |
+| C3 / O7 | `rigDelegatedSend`'s comment narrates its body | Accepted: it states what it leaves out and why |
+| O1 | Workspace typecheck does see the fallback, through a dependency's `/// <reference types="node" />` | Accepted: the bullet says so and states the `@types/node` rule |
+| O2 | The playground leaves `tty` (colorette) out, against the new rule | Accepted in part: the rule now covers builtins a bundle needs at run time; colorette guards `tty`, and the unshipped playground keeps its bytes |
+| O4 | "`--force` included" is unproven for a removed dependency | Accepted: dropped |
+| O5 | The fallback links one copy per name, not every package | Accepted |
+| O6 | `bunfig.toml`'s header still says the linker kills phantom dependencies | Accepted: it states the boundary (comment only; no setting moves) |
+
 ## Seeds (drafts; the orchestrator runs the implementer)
 
 `/goal Phases 1-4 of implementations-plan/ci-followups-4/plan.md marked ✓, each backed by its gate's output in the transcript; the Codex loop converged; the PR exists with the close-out as its final commits; bun run lint and bun run test:all exit 0.`

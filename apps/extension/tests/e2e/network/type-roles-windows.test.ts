@@ -232,7 +232,7 @@ async function instanceJson(address: string): Promise<string> {
 	})
 }
 
-/** Deploys the delegated-pull rig for the granted account and fills the playground's delegated send, consumer instance aside. */
+/** Fills the playground's delegated send but leaves the consumer instance unset: registering it is what lets the wallet decode the call. */
 async function rigDelegatedSend(ctx: Connected): Promise<{ consumerAddress: string }> {
 	const pg = ctx.playgroundPage
 	const [account] = await grantCapBundle(ctx, pg, "transaction-contracts", async (ids) => [ids[0]!])
