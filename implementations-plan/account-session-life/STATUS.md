@@ -39,3 +39,4 @@
 - 2026-10-14: Codex r3 conditional approve; its one condition applied in the plan. Revision committed for the orchestrator's approval.
 - 2026-10-14: phase 4.1 gate pass: I4 to I8 hold on both browsers (lessons/phase-4.md); I8 gap at most 63 ms, I5 yes, so nothing goes to OWNER-ASKS.
 - 2026-10-14: phase 4.2 gate pass: lint 0, typecheck:all 0 (after a bun install the dev merge needed), test:all 0 (extension 12167, messaging 394); nine new proofs red on 15881c7d, the drop guard green there.
+- 2026-10-14: phase 4.3 gate pass: lint 0, typecheck:all 0, test 0 (extension 12184), the rg gate clean; 14 new proofs red on the pre-shell source; smoke sw-resilience + registration + passkey-paths retry-0 Chrome 14/14 in 84 s, Firefox 9/9 (5 Chrome-only skips) in 94 s. The type-roles inventory swaps GlobalLoader for StartBar.

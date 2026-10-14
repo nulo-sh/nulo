@@ -15,10 +15,11 @@ import routes from "~pages"
 import "@nulo/design/base.css"
 import "./index.scss"
 
-import { initAppServiceContext, managers } from "@/utils/core"
+import { initAppServiceContext, isServiceReady, managers, waitForServiceReady } from "@/utils/core"
 import { captureOwnWindow, followOwnRoute } from "@/utils/own-window"
 import { LEGACY_SETTINGS_REDIRECTS } from "./legacy-routes"
 import { createPopupGuard } from "./route-guard"
+import { createStartGrace, START_GRACE_KEY, START_GRACE_MS } from "./start-grace"
 
 // Eagerly open profile + contact service-worker ports at boot. Matches the
 // timing of the previous module-eval init in core.js so no consumer sees a
@@ -44,14 +45,24 @@ const router = createRouter({
 	routes,
 })
 
+// One grace per opening, counted from the page's navigation start (`performance.now()`'s origin).
+const startGrace = createStartGrace({
+	deadline: START_GRACE_MS,
+	now: () => performance.now(),
+	isReady: () => isServiceReady.value,
+	waitForReady: waitForServiceReady,
+	replace: (to) => router.replace(to),
+})
+
 // The guard's decision logic (and its synchronous-early-branch contract) lives in `route-guard.ts`,
 // where it is unit-tested; this module only mounts.
 router.beforeEach(
 	createPopupGuard(
 		() => useAppStore(),
 		() => managers.profile,
+		startGrace,
 	),
 )
 router.afterEach(followOwnRoute)
 
-createApp(App).use(router).use(createPinia()).mount("#app")
+createApp(App).provide(START_GRACE_KEY, startGrace).use(router).use(createPinia()).mount("#app")

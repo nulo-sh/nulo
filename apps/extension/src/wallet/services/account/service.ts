@@ -241,9 +241,8 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	 * lowest-index one. Otherwise creates the index-0 account and returns it.
 	 *
 	 * The whole sequence runs under the same per-tuple serialization as
-	 * `createAccount`, so concurrent callers (e.g. `app.vue`'s `initAccount`
-	 * fired by both `onActiveProfileChanged` and `loadProfile` re-entry on
-	 * `isBackgroundConnected` flip) don't race-create duplicates.
+	 * `createAccount`, so concurrent callers (the popup's activation bootstrap,
+	 * reached from both a profile event and a boot run) don't race-create duplicates.
 	 */
 	public async ensureDefaultAccount(profileId: string, chainId: number, type: AccountType, name: string): Promise<Account> {
 		await this.ensureInitialized()

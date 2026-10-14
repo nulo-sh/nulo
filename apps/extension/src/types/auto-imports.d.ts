@@ -178,7 +178,6 @@ declare global {
   const isActiveScopeRow: typeof import('../utils/token-order').isActiveScopeRow
   const isAmountAboveDustThreshold: typeof import('../utils/incoming-dust').isAmountAboveDustThreshold
   const isApprovedSendInFlight: typeof import('../utils/in-flight-send').isApprovedSendInFlight
-  const isBackgroundConnected: typeof import('../utils/core').isBackgroundConnected
   const isComposing: typeof import('../composables/usePopupEntity').isComposing
   const isEmptyContactName: typeof import('../utils/contact-name').isEmptyContactName
   const isFirefox: typeof import('../utils/browser-surface').isFirefox
@@ -195,6 +194,7 @@ declare global {
   const isReadonly: typeof import('vue').isReadonly
   const isRef: typeof import('vue').isRef
   const isRepeatOrComposing: typeof import('../composables/usePopupEntity').isRepeatOrComposing
+  const isServiceReady: typeof import('../utils/core').isServiceReady
   const isShallow: typeof import('vue').isShallow
   const isUnknownParsedRow: typeof import('../utils/token-amount').isUnknownParsedRow
   const isUnknownRow: typeof import('../utils/token-amount').isUnknownRow
@@ -422,6 +422,7 @@ declare global {
   const validateAndMigrateBackup: typeof import('../composables/useFullBackupImport').validateAndMigrateBackup
   const vocabularySelector: typeof import('../utils/token-transfer-vocabulary').vocabularySelector
   const waitForProfileActive: typeof import('../composables/waitForProfileActive').waitForProfileActive
+  const waitForServiceReady: typeof import('../utils/core').waitForServiceReady
   const walletChainId: typeof import('../utils/chain-ids').walletChainId
   const watch: typeof import('vue').watch
   const watchEffect: typeof import('vue').watchEffect
@@ -822,7 +823,6 @@ declare module 'vue' {
     readonly isActiveScopeRow: UnwrapRef<typeof import('../utils/token-order')['isActiveScopeRow']>
     readonly isAmountAboveDustThreshold: UnwrapRef<typeof import('../utils/incoming-dust')['isAmountAboveDustThreshold']>
     readonly isApprovedSendInFlight: UnwrapRef<typeof import('../utils/in-flight-send')['isApprovedSendInFlight']>
-    readonly isBackgroundConnected: UnwrapRef<typeof import('../utils/core')['isBackgroundConnected']>
     readonly isComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isComposing']>
     readonly isEmptyContactName: UnwrapRef<typeof import('../utils/contact-name')['isEmptyContactName']>
     readonly isFirefox: UnwrapRef<typeof import('../utils/browser-surface')['isFirefox']>
@@ -839,6 +839,7 @@ declare module 'vue' {
     readonly isReadonly: UnwrapRef<typeof import('vue')['isReadonly']>
     readonly isRef: UnwrapRef<typeof import('vue')['isRef']>
     readonly isRepeatOrComposing: UnwrapRef<typeof import('../composables/usePopupEntity')['isRepeatOrComposing']>
+    readonly isServiceReady: UnwrapRef<typeof import('../utils/core')['isServiceReady']>
     readonly isShallow: UnwrapRef<typeof import('vue')['isShallow']>
     readonly isUnknownParsedRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownParsedRow']>
     readonly isUnknownRow: UnwrapRef<typeof import('../utils/token-amount')['isUnknownRow']>
@@ -1066,6 +1067,7 @@ declare module 'vue' {
     readonly validateAndMigrateBackup: UnwrapRef<typeof import('../composables/useFullBackupImport')['validateAndMigrateBackup']>
     readonly vocabularySelector: UnwrapRef<typeof import('../utils/token-transfer-vocabulary')['vocabularySelector']>
     readonly waitForProfileActive: UnwrapRef<typeof import('../composables/waitForProfileActive')['waitForProfileActive']>
+    readonly waitForServiceReady: UnwrapRef<typeof import('../utils/core')['waitForServiceReady']>
     readonly walletChainId: UnwrapRef<typeof import('../utils/chain-ids')['walletChainId']>
     readonly watch: UnwrapRef<typeof import('vue')['watch']>
     readonly watchEffect: UnwrapRef<typeof import('vue')['watchEffect']>

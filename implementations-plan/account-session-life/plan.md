@@ -306,7 +306,7 @@ Every gate below passed with exit 0 at retry 0; STATUS.md and `lessons/phase-1.m
 - Pass: exit 0. Each new proof fails against the base copies of `index.ts`, `client.ts`, `service.ts` and `base-client.ts`.
 - Layers: lint, typecheck, unit (every package).
 
-#### Phase 4.3: the popup shell
+#### Phase 4.3: the popup shell ✓
 
 1. In `utils/core.ts`, rename `isBackgroundConnected` to `isServiceReady` and add `waitForServiceReady(ms)`. Move the boot triggers to `boot-triggers.ts` and remove the watch on the flag; `onBeforeMount` as § Arc 4 states.
 2. Add `start-grace.ts` (the page-load deadline, the provisional mark, the replay), the guard's use of it, the bar, `data-service-ready` on the popup and onboarding shell roots, and the hidden form in `auth.vue`.

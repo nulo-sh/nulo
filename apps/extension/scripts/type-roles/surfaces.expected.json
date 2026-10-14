@@ -866,11 +866,11 @@
 			"suite": "smoke"
 		},
 		{
-			"id": "overlay:GlobalLoader",
-			"name": "Global loader",
+			"id": "overlay:StartBar",
+			"name": "Start-up bar",
 			"kind": "overlay",
-			"source": "apps/extension/src/components/GlobalLoader.vue",
-			"reach": "a global load in flight",
+			"source": "apps/extension/src/components/StartBar.vue",
+			"reach": "a background that has not said Ready 200 ms after the page opened",
 			"states": ["default"],
 			"suite": "smoke"
 		},

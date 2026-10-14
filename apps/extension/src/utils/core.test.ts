@@ -2,7 +2,17 @@ import { beforeEach, describe, expect, test, vi } from "vitest"
 import type { AccountServiceClient } from "@/wallet/services/account/client"
 import type { NetworkServiceClient } from "@/wallet/services/network/client"
 import type { TransactionServiceClient } from "@/wallet/services/transaction/client"
-import { getAccount, getNetwork, getTransaction, managers, refreshBalances, requireAccount, requireNetwork } from "@/utils/core"
+import {
+	getAccount,
+	getNetwork,
+	getTransaction,
+	isServiceReady,
+	managers,
+	refreshBalances,
+	requireAccount,
+	requireNetwork,
+	waitForServiceReady,
+} from "@/utils/core"
 
 const tbMock = vi.hoisted(() => ({
 	getTokenBalances: vi.fn(),
@@ -128,5 +138,32 @@ describe("refreshBalances — the disconnect must not cancel its own refresh RPC
 		expect(consoleSpy).toHaveBeenCalledWith(expect.objectContaining({ message: "boom" }))
 		expect(tbMock.disconnect).toHaveBeenCalledTimes(1)
 		consoleSpy.mockRestore()
+	})
+})
+
+describe("isServiceReady", () => {
+	test("follows the profile port's Ready and its drop; the wait resolves at Ready, or false at its bound", async () => {
+		// Let the real client's own first Ready settle before the clock is faked.
+		await new Promise((resolve) => setTimeout(resolve, 10))
+		vi.useFakeTimers()
+		try {
+			managers.profile.onDisconnected.invoke()
+			expect(isServiceReady.value).toBe(false)
+			const bounded = waitForServiceReady(200)
+			await vi.advanceTimersByTimeAsync(200)
+			expect(await bounded).toBe(false)
+
+			const waiting = waitForServiceReady(200)
+			await vi.advanceTimersByTimeAsync(100)
+			managers.profile.onConnected.invoke()
+			expect(isServiceReady.value).toBe(true)
+			expect(await waiting).toBe(true)
+			expect(await waitForServiceReady(0)).toBe(true)
+
+			managers.profile.onDisconnected.invoke()
+			expect(isServiceReady.value).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 })
