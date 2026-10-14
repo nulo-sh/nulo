@@ -418,6 +418,18 @@ describe("AccountIntegrityCoordinator — operation-time classification", () => 
 		expect(await repo.isBlocked("p1")).toBe(false)
 	}, 30_000)
 
+	test("a chain that derives clean now refuses the operation and writes nothing", async () => {
+		const { coordinator, locks, stale, repo } = await build({
+			rows: [onTestnet()],
+			networks: [TESTNET_ROW],
+			derive: async () => "0xaaaa",
+		})
+		expect(await coordinator.classifyRuntimeMismatch("p1", TESTNET_ROW.chainId)).toBe(true)
+		expect(await stale.getRecord("p1")).toBeUndefined()
+		expect(locks).toEqual([])
+		expect(await repo.isBlocked("p1")).toBe(false)
+	}, 30_000)
+
 	test("a mixed chain, or a chain with no network row, is not confined", async () => {
 		const mixed = await build({
 			rows: [onTestnet(), onTestnet({ index: 1, address: "0xbbbb" })],

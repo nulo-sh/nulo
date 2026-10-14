@@ -169,13 +169,14 @@ export class AccountIntegrityCoordinator implements IService, AccountIntegrityDe
 		const onChain = rows.filter((r) => r.chainId === chainId)
 		const { entries, unclassifiable } = classifyChains(networks, await this.deriveAll(master, onChain, new Map()))
 		const entry = entries.find((e) => e.chainId === chainId && e.addressesMoved)
-		if (unclassifiable || !entry) return false
+		if (unclassifiable) return false
+		// A clean chain, or accounts that changed before the merge, mean the caller derived a row that
+		// was since replaced (a reset finished, say): its operation is refused and nothing is written.
+		if (!entry) return true
 		const current = async () => accountSetDigest(await this.accounts.getAccountsRaw(profileId))
 		const merged = await this.profiles.persistIntegrityVerdictIfLive(profileId, () =>
 			this.staleNetworks.mergeEntry(profileId, entry, accountSetDigest(rows), current),
 		)
-		// The accounts changed since the read (a reset finished, say): the verdict is obsolete, so
-		// this operation is refused and nothing is written, never a profile block.
 		if (merged === false) return true
 		if (merged) this.logger.log(this.name, LogLevel.Warn, "chain quarantined at operation time", { chainId })
 		return merged === true
