@@ -1,3 +1,5 @@
+import type { PricedTokens } from "./price-map"
+
 export const PRICE_SERVICE_NAME = "price"
 
 /** A validated USD quote for one CoinGecko id. */
@@ -37,14 +39,19 @@ export function isQuoteFresh(quote: PriceQuote, now: number): boolean {
 	return now - effectiveAt < QUOTE_TTL_MS
 }
 
+/** Usable quotes with the mapping that says which token each id prices. They travel together, so a
+ *  reader never prices a token with a mapping from another moment than its quotes. */
+export type PriceSnapshot = { quotes: PriceState; pricedTokens: PricedTokens }
+
 export type Methods = {
 	/** Usable quotes only (validated + fresh + fiat display enabled). */
-	getQuotes(): PriceState
+	getQuotes(): PriceSnapshot
 	/** Refresh if the cache is stale, then return usable quotes. No-op fast path when fresh. */
-	refreshIfStale(): PriceState
+	refreshIfStale(): PriceSnapshot
 }
 
 export type Events = {
-	/** Emitted after every successful refresh, and with `{}` when fiat display is disabled. */
-	onQuotesUpdated: PriceState
+	/** Emitted after every successful refresh and every new token list, and with no quotes when
+	 *  fiat display is disabled. */
+	onQuotesUpdated: PriceSnapshot
 }

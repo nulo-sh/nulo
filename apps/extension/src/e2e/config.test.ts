@@ -53,8 +53,8 @@ describe("e2e-proverless config (layer-1 fail-closed guard)", FRESH_IMPORT, () =
 
 /**
  * Same fail-closed shape for the token-seed source, and for a sharper reason
- * than the migration fixture's single flag: an armed build REPLACES
- * `DEFAULT_TOKEN_SEEDS`, so a stray single flag would not be inert — it would
+ * than the migration fixture's single flag: an armed build REPLACES the
+ * token list, so a stray single flag would not be inert — it would
  * ship a wallet that silently stops seeding default tokens.
  */
 describe("e2e-token-seeds config (layer-1 fail-closed guard)", FRESH_IMPORT, () => {

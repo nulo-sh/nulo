@@ -7,7 +7,7 @@ const entry = (status: string) => ({ chainId: 1, contract: "0xseed", symbol: "cU
 const mountRow = (status: string) => mount(TokenSeedRow, { props: { entry: entry(status) }, global: { stubs: STUBS } })
 
 describe("TokenSeedRow", () => {
-	test("pending, seeding and seeded-awaiting-its-row look the same: compiled-in symbol and label, a skeleton amount, no button", () => {
+	test("pending, seeding and seeded-awaiting-its-row look the same: the list's symbol and label, a skeleton amount, no button", () => {
 		for (const status of ["pending", "seeding", "seeded"]) {
 			const w = mountRow(status)
 			const row = w.get('[data-testid="token-seed-row"]')

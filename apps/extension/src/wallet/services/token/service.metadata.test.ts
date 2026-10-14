@@ -15,7 +15,7 @@ import { ServiceCollection } from "@/wallet/base"
 import { ConfigStore } from "@/wallet/config"
 import { LoggerStore } from "@/wallet/logger"
 import { AccountService } from "@/wallet/services/account/service"
-import { svc } from "@/wallet/services/composition-harness"
+import { svc, tokenListStub } from "@/wallet/services/composition-harness"
 import { batchedViewSimulation } from "@/wallet/services/execution/helpers/batched-view-simulation"
 import { NetworkService } from "@/wallet/services/network/service"
 import { OperationJournalService } from "@/wallet/services/operation-journal/service"
@@ -90,6 +90,7 @@ async function makeFetch(): Promise<Fetch> {
 	collection.add(svc(AccountService.name, { onAccountAdded: new EventHandler(), getAccountContract: async () => ACCOUNT }))
 	collection.add(svc(TaskService.name, {}))
 	collection.add(svc(OperationJournalService.name, {}))
+	collection.add(tokenListStub())
 	const tokenService = new TokenService(new LoggerStore(new ConfigStore()), api, () => ({ getPXE: () => PXE }) as never)
 	collection.add(tokenService)
 	await collection.start()

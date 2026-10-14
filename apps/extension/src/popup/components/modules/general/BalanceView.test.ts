@@ -9,7 +9,7 @@
 import { flushPromises, mount } from "@vue/test-utils"
 import { createTestingPinia } from "@pinia/testing"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 let deletedHandler: ((tb: unknown) => void) | undefined
 let addedHandler: ((tb: unknown) => void) | undefined
@@ -17,7 +17,7 @@ let updatedHandler: ((tb: unknown) => void) | undefined
 let configHandler: ((prop: { key: string; value: unknown }) => void) | undefined
 let connectedHandler: (() => void) | undefined
 
-const TEST_USDC = TESTNET_TOKENS.USDC
+const TEST_USDC = TEST_TOKENS.USDC
 // tok-1 is price-mapped (the testnet Test USDC row); tok-2 is deliberately unmapped.
 const SEED = [
 	{
@@ -100,7 +100,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			refreshIfStale: vi.fn().mockImplementation(() => answerQuotes()),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: await answerQuotes(), pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
