@@ -41,7 +41,7 @@ function onKey(e: KeyboardEvent) {
 		tabindex="0"
 		:class="$style.row"
 	>
-		<span :class="$style.id">{{ sanitizeWireString(trimAddress(id), 128) }}</span>
+		<span :class="$style.id" data-testid="scope-class-id-value">{{ sanitizeWireString(trimAddress(id), 128) }}</span>
 	</span>
 </template>
 

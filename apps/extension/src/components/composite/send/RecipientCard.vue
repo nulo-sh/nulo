@@ -65,7 +65,7 @@ const toggleReveal = () => {
 		</Flex>
 
 		<Flex v-if="revealed" :class="$style.reveal" data-testid="recipient-card-full">
-			<Text size="12" weight="500" color="primary" mono selectable :class="$style.full_addr">
+			<Text size="12" weight="500" color="primary" mono selectable :class="$style.full_addr" data-testid="recipient-card-full-address">
 				{{ address }}
 			</Text>
 		</Flex>

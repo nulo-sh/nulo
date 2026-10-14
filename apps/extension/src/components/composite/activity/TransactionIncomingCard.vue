@@ -69,7 +69,7 @@ const hashSlice = computed(() => {
 		</template>
 
 		<template #secondary>
-			<span v-if="hashSlice" :class="$style.hash">{{ hashSlice }}</span>
+			<span v-if="hashSlice" data-testid="activity-incoming-hash" :class="$style.hash">{{ hashSlice }}</span>
 		</template>
 	</TransactionCardLayout>
 </template>

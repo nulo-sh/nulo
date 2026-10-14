@@ -3,9 +3,14 @@
 import { computed, type PropType } from "vue"
 import type { TextColorName } from "../color-names"
 import type { TextAlign } from "../layout-names"
-import type { FontSize, FontWeight } from "../tokens"
+import { type FontSize, type FontWeight, type TypeRole, typeRoleNames } from "../tokens"
 
 const props = defineProps({
+	// Validated at run time too: most callers are SFCs without `lang="ts"`, which vue-tsc skips.
+	variant: {
+		type: String as PropType<TypeRole>,
+		validator: (value: string) => (typeRoleNames as readonly string[]).includes(value),
+	},
 	// Static Vue attrs arrive as strings (`size="13"`), dynamic binds as numbers (`:size="13"`) —
 	// accept both the token and its stringified form.
 	size: {
@@ -45,6 +50,9 @@ const props = defineProps({
 const classes = computed(() => {
 	const flexClasses = []
 
+	if (props.variant) {
+		flexClasses.push(`type--${props.variant}`)
+	}
 	if (props.size) {
 		flexClasses.push(`fz--${props.size}`)
 	}

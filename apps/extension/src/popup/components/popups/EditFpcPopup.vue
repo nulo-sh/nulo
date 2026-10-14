@@ -213,6 +213,7 @@ watch(
 	>
 		<ItemsContainer>
 			<SettingItem
+				data-testid="edit-fpc-header-row"
 				size="large"
 				:title="fpcToEdit?.name || fpcToEdit?.address"
 				:description="typeDescription"

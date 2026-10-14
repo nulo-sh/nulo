@@ -48,16 +48,16 @@ const nonce = computed(() =>
 			</template>
 			<template v-else-if="surface.sender.kind === 'account'">
 				<Text size="11" color="secondary">From:</Text>
-				<Text size="11" color="primary">this account <Text color="secondary">(<AddressDisplay :address="surface.sender.address" size="11" />)</Text></Text>
+				<Text size="11" color="primary">this account <Text color="secondary">(<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" size="11" />)</Text></Text>
 			</template>
 			<template v-else>
 				<Text size="11" color="secondary">From:</Text>
-				<AddressDisplay :address="surface.sender.address" size="11" />
+				<AddressDisplay :data-testid="`${prefix}-transfer-sender-address`" :address="surface.sender.address" size="11" />
 			</template>
 		</Flex>
 		<Flex justify="between" :class="$style.row">
 			<Text size="11" color="secondary">{{ surface.kind === "mint" ? "Mint to:" : "To:" }}</Text>
-			<AddressDisplay :address="surface.to" size="11" />
+			<AddressDisplay :data-testid="`${prefix}-transfer-to`" :address="surface.to" size="11" />
 		</Flex>
 		<Flex justify="between" :class="$style.row">
 			<Text size="11" color="secondary">Amount:</Text>
@@ -92,9 +92,10 @@ const nonce = computed(() =>
 			:class="$style.row"
 		>
 			<Text size="11" color="secondary">{{ safeWire(p.name, 32) }}:</Text>
-			<AddressDisplay v-if="p.value.kind === 'address'" :address="p.value.value" size="11" />
+			<AddressDisplay v-if="p.value.kind === 'address'" :data-testid="`${prefix}-decoded-param-value`" :address="p.value.value" size="11" />
 			<Text
 				v-else
+				:data-testid="`${prefix}-decoded-param-value`"
 				size="11"
 				color="primary"
 				:mono="p.value.kind === 'field'"
@@ -129,7 +130,7 @@ const nonce = computed(() =>
 		<Flex v-if="rawOpen" :data-testid="`${prefix}-raw-args`" direction="column" gap="2">
 			<Flex v-for="(row, m) in surface.rows" :key="m" :data-testid="`${prefix}-arg`" :data-arg-kind="row.kind" justify="between" :class="$style.row">
 				<Text size="11" color="secondary">#{{ m }}</Text>
-				<Text v-if="row.kind === 'field'" size="11" color="primary" mono :title="row.full">
+				<Text v-if="row.kind === 'field'" :data-testid="`${prefix}-arg-field`" size="11" color="primary" mono :title="row.full">
 					{{ row.short }}<Text v-if="row.decimal !== undefined" color="tertiary"> = {{ row.decimal }}</Text>
 				</Text>
 				<Text v-else-if="row.kind === 'text'" size="11" color="primary">{{ row.value }}</Text>

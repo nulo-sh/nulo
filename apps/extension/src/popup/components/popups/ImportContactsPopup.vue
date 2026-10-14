@@ -260,16 +260,16 @@ watch(
 											:class="item.row.addressText?.full && $style.detail_full"
 										>
 											<template v-if="item.row.addressText">
-												<Text size="13" weight="600" color="tertiary" :class="$style.address_saved">
+												<Text size="13" weight="600" color="tertiary" data-testid="import-contact-address-saved" :class="$style.address_saved">
 													{{ item.row.addressText.saved }}
 												</Text>
 												<span :class="$style.visually_hidden">changes to</span>
 												<Icon name="arrow-right" size="12" color="tertiary" aria-hidden="true" :class="$style.arrow" />
-												<Text size="13" weight="600" color="primary" :class="$style.address_incoming">
+												<Text size="13" weight="600" color="primary" data-testid="import-contact-address-incoming" :class="$style.address_incoming">
 													{{ item.row.addressText.incoming }}
 												</Text>
 											</template>
-											<Text v-else size="13" weight="600" color="tertiary">{{ trimAddress(item.row.address) }}</Text>
+											<Text v-else size="13" weight="600" color="tertiary" data-testid="import-contact-address">{{ trimAddress(item.row.address) }}</Text>
 											<Text v-if="item.row.isSender" size="10" weight="600" color="tertiary" :class="$style.tag">sender</Text>
 										</Flex>
 

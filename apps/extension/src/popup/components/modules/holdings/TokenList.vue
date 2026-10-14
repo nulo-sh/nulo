@@ -110,7 +110,7 @@ const toggleSort = () => {
 
 		<Flex direction="column" :class="$style.list">
 			<Button v-if="addCandidate" wide variant="secondary" data-testid="holdings-add-token" @click="emit('addToken', addCandidate)">
-				Add token {{ trimAddress(addCandidate, 4, 2, "…") }}
+				<span>Add token <span data-testid="holdings-add-token-address">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
 			</Button>
 			<ListStatusMessage v-else-if="noResults" variant="no-results" testid="holdings-no-results" />
 			<template v-else>

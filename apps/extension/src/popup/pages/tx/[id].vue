@@ -229,6 +229,7 @@ onBeforeUnmount(() => {
 					>
 						<AddressDisplay
 							static
+							data-testid="tx-from-address"
 							size="13"
 							weight="600"
 							:address="transfer.from"
@@ -246,6 +247,7 @@ onBeforeUnmount(() => {
 					>
 						<AddressDisplay
 							static
+							data-testid="tx-to-address"
 							size="13"
 							weight="600"
 							:address="transfer.to"
@@ -260,7 +262,7 @@ onBeforeUnmount(() => {
 				<SectionLabel label="Details" />
 
 				<Flex wide direction="column" gap="10" :class="$style.details_box">
-					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" @copy="handleCopy" />
+					<TxHashRow v-if="tx?.hash" :hash="tx.hash" :explorerUrl="explorerUrl" linkTestid="tx-hash-link" copyTestid="tx-hash" @copy="handleCopy" />
 
 					<Flex v-if="originLabel" wide justify="between" align="center">
 						<span :class="$style.detail_key">App</span>
@@ -298,7 +300,7 @@ onBeforeUnmount(() => {
 						<span :class="$style.detail_key">Block</span>
 						<Flex align="center" gap="6">
 							<span :class="$style.detail_value_mono">#{{ tx.block.number }}</span>
-							<span @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
+							<span data-testid="tx-block-hash" @click="handleCopy(tx.block.hash)" :class="[$style.detail_value_aux, 'copyable']">
 								{{ trimAddress(tx.block.hash, 6, 4) }}
 							</span>
 						</Flex>
@@ -306,7 +308,7 @@ onBeforeUnmount(() => {
 
 					<Flex v-if="tx?.nonce" wide justify="between" align="center">
 						<span :class="$style.detail_key">Nonce</span>
-						<span @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
+						<span data-testid="tx-nonce" @click="handleCopy(tx.nonce)" :class="[$style.detail_value_mono, 'copyable']">
 							{{ trimAddress(tx.nonce, 6, 4) }}
 						</span>
 					</Flex>
@@ -325,7 +327,7 @@ onBeforeUnmount(() => {
 						:class="[$style.call_row, idx > 0 && $style.call_row_divider]"
 					>
 						<span :class="$style.call_method">{{ humanizeMethodName(c.method) || "Call" }}</span>
-						<span @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
+						<span data-testid="tx-call-contract" @click="handleCopy(c.contract)" :class="[$style.call_contract, 'copyable']">
 							{{ trimAddress(c.contract, 6, 4) }}
 						</span>
 					</Flex>

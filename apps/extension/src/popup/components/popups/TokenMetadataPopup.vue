@@ -84,7 +84,7 @@ watch(
 					<Flex align="center" justify="between">
 						<Text size="12" weight="600" color="tertiary"> Id </Text>
 
-						<Text size="12" weight="600" color="secondary">
+						<Text size="12" weight="600" color="secondary" data-testid="token-metadata-id">
 							{{ token?.id }}
 						</Text>
 					</Flex>
@@ -92,7 +92,7 @@ watch(
 					<Flex align="center" justify="between">
 						<Text size="12" weight="600" color="tertiary"> Contract Address </Text>
 
-						<Text @click="handleCopyAddress" size="12" weight="600" color="secondary" class="copyable">
+						<Text @click="handleCopyAddress" size="12" weight="600" color="secondary" class="copyable" data-testid="token-metadata-address">
 							{{ token.contract.slice(0, 6) }}
 							<Text color="tertiary">•••</Text>
 							{{ token.contract.slice(-4) }}
@@ -120,7 +120,7 @@ watch(
 
 						<Tooltip position="end">
 							<Flex align="center" gap="4">
-								<Text size="12" weight="600" color="secondary">
+								<Text size="12" weight="600" color="secondary" data-testid="token-metadata-chain-id">
 									{{ token.chainId }}
 								</Text>
 								<Icon name="info" size="12" color="secondary" />

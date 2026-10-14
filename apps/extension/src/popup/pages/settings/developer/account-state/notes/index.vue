@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
 					<span :id="`${rowIdBase}-${i}`" :class="$style.type">
 						{{ display.type }}<span v-if="display.contractName" :class="$style.contract_name"> · {{ display.contractName }}</span>
 					</span>
-					<span v-if="display.contractTrim" :class="$style.contract">{{ display.contractTrim }}</span>
+					<span v-if="display.contractTrim" data-testid="note-contract" :class="$style.contract">{{ display.contractTrim }}</span>
 				</div>
 
 				<span v-if="display.location" :class="$style.location">{{ display.location }}</span>
@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
 				<div v-if="display.kvEntries.length" :class="$style.kv_grid">
 					<template v-for="entry in display.kvEntries" :key="entry.key">
 						<span :class="$style.kv_key">{{ entry.key }}</span>
-						<span :class="[$style.kv_val, entry.isLongHex && $style.kv_val_wrap]">{{ entry.value }}</span>
+						<span data-testid="record-value" :class="[$style.kv_val, entry.isLongHex && $style.kv_val_wrap]">{{ entry.value }}</span>
 					</template>
 				</div>
 

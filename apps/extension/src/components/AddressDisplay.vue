@@ -94,6 +94,8 @@ onMounted(async () => {
 
 <template>
 	<Text
+		data-testid="address-display"
+		:data-address-shows="showName && contactName ? 'name' : 'address'"
 		@click="handleClick"
 		:size="size"
 		:color="color"

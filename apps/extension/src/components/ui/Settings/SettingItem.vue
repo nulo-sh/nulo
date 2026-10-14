@@ -131,10 +131,10 @@ const Root = (_, { slots }) => {
 				<!-- Labels: Title & Description -->
 				<Flex direction="column" gap="4" wide>
 					<Flex align="center" gap="6">
-						<Text :id="titleId" size="14" weight="500" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
+						<Text :id="titleId" data-testid="setting-title" size="14" weight="500" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" size="12" weight="500" color="tertiary" :class="$style.description">
+					<Text v-if="description || $slots.description" data-testid="setting-description" size="12" weight="500" color="tertiary" :class="$style.description">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>

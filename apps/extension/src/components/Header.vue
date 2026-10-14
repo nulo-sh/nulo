@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
 					aria-label="Copy address"
 					:class="$style.account_address"
 				>
-					<span :class="$style.address_text">
+					<span :class="$style.address_text" data-testid="account-address-text">
 						{{ appStore.account?.address ? trimAddress(appStore.account.address, 6, 4, "...") : "" }}
 						<span :class="$style.copy_reveal"><Icon name="copy" size="12" /></span>
 					</span>

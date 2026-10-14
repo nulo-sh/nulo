@@ -70,7 +70,7 @@ function onKey(e: KeyboardEvent) {
 		tabindex="0"
 		:class="$style.row"
 	>
-		<span :class="$style.addr">{{ sanitizeWireString(trimAddress(address), 128) }}</span>
+		<span :class="$style.addr" data-testid="scope-address-value">{{ sanitizeWireString(trimAddress(address), 128) }}</span>
 		<span v-if="contactName" :class="$style.contact">(@{{ contactName }})</span>
 	</span>
 </template>
