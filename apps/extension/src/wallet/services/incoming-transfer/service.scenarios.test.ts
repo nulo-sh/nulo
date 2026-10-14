@@ -536,12 +536,11 @@ function note(
 }
 
 async function scan(service: unknown, contract: string = tokenA.contract) {
-	await (service as { scanContract: (p: string, n: string, a: string, c: string) => Promise<void> }).scanContract(
-		"p1",
-		"n1",
-		"0xa",
-		contract,
-	)
+	const s = service as {
+		serviceEpoch: number
+		scanContract: (p: string, n: string, a: string, c: string, epoch: number) => Promise<boolean>
+	}
+	await s.scanContract("p1", "n1", "0xa", contract, s.serviceEpoch)
 }
 
 describe("IncomingTransferService — public surface gating (visibility)", () => {
@@ -2755,10 +2754,12 @@ function makePublicReader(init?: { tips?: Partial<PublicScanTips>; classStatus?:
 /** One public tick on tips read through the service's own indexer, as a scheduler tick reads them. */
 async function scanPublic(service: unknown, contract: string = tokenA.contract, networkId = "n1", profileId = "p1"): Promise<ScanOutcome> {
 	const s = service as {
+		serviceEpoch: number
 		indexer: { getTips: (n: string) => Promise<PublicScanTips> }
-		scanPublicContract: (p: string, n: string, c: string, tips: PublicScanTips) => Promise<{ outcome: ScanOutcome }>
+		scanPublicContract: (p: string, n: string, c: string, tips: PublicScanTips, epoch: number) => Promise<{ outcome: ScanOutcome }>
 	}
-	return (await s.scanPublicContract(profileId, networkId, contract, await s.indexer.getTips(networkId))).outcome
+	const epoch = s.serviceEpoch
+	return (await s.scanPublicContract(profileId, networkId, contract, await s.indexer.getTips(networkId), epoch)).outcome
 }
 
 /** Account stub owning `0xa` on chainId 1 — the recipient the pre-lock filter matches. */
@@ -6238,6 +6239,42 @@ describe("IncomingTransferService — block-gated ticks", () => {
 		expect(runs(f)).toBeGreaterThan(first)
 	})
 
+	test("a note target whose tips read outlives its account's deletion writes nothing for that account", async () => {
+		const f = await bootTicking()
+		f.note.getNotesRaw.mockImplementation(async (_n: string, account: string) => (account === "0xb" ? [note()] : []))
+		const held = holdCall(f.reader, "getScanTips", 1, "before")
+		f.state.tips = { ...f.state.tips, proposedBlockHash: "0xproposed2" }
+		const ticking = tick()
+		await untilReached(held.held)
+
+		f.account.getAccounts.mockResolvedValue([{ profileId: "p1", chainId: 1, address: "0xa" }])
+		await f.account.onAccountDeleted.invoke({ profileId: "p1", chainId: 1, address: "0xb" })
+		await vi.advanceTimersByTimeAsync(0)
+		held.release()
+		await ticking
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect([...records.values()].filter((r) => r.accountAddress === "0xb")).toEqual([])
+	})
+
+	test("a public target whose tips read outlives its token's deletion leaves no cursor behind", async () => {
+		const f = await bootTicking()
+		f.state.responses.push(pubPage([pubEvent({ txHash: "0xlate" })]))
+		const held = holdCall(f.reader, "getScanTips", 1, "before")
+		f.state.tips = { ...f.state.tips, checkpointedBlockNumber: 101, checkpointedBlockHash: "0xcheckpoint2" }
+		const ticking = tick()
+		await untilReached(held.held)
+
+		f.token.getTokensRaw.mockResolvedValue([])
+		await f.token.onTokenDeleted.invoke({ ...tokenA, profileId: "p1" } as never)
+		await vi.advanceTimersByTimeAsync(0)
+		held.release()
+		await ticking
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(cursorFor()).toBeUndefined()
+	})
+
 	test("a non-standard token counts as caught up: it is not scanned again until the checkpoint moves", async () => {
 		const { state } = await bootTicking()
 		state.classStatus = "non-standard"
@@ -6293,8 +6330,11 @@ describe("IncomingTransferService — prompt payloads", () => {
 
 	test("the note arm's first-receive prompt", async () => {
 		const f = await bootWire()
-		const svc = f.service as unknown as { scanContract: (p: string, n: string, a: string, c: string) => Promise<void> }
-		await svc.scanContract("p1", "n1", WIRE_ACCOUNT, WIRE_CONTRACT)
+		const svc = f.service as unknown as {
+			serviceEpoch: number
+			scanContract: (p: string, n: string, a: string, c: string, e: number) => Promise<boolean>
+		}
+		await svc.scanContract("p1", "n1", WIRE_ACCOUNT, WIRE_CONTRACT, svc.serviceEpoch)
 		expectWirePrompt(f.prompts)
 	})
 

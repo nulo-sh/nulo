@@ -264,8 +264,9 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  has not moved. */
 	private readonly noteScannedAt = new Map<string, string>()
 	private readonly publicScannedAt = new Map<string, string>()
-	/** One in-flight or recent tips read per network, shared by every target of a tick. */
-	private readonly tipsReads = new Map<string, { at: number; read: Promise<PublicScanTips | undefined> }>()
+	/** One in-flight or recent tips read per network, shared by every target of a tick. `settledAt`
+	 *  is set once the read succeeded; a pending read is shared whatever its age. */
+	private readonly tipsReads = new Map<string, { read: Promise<PublicScanTips | undefined>; settledAt?: number }>()
 	private pxeService: PxeServiceClient = null!
 	private reader: PublicEventReader = null!
 	private indexer: PublicEventIndexer = null!
@@ -1183,10 +1184,12 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		const tips = await this.sharedTips(target.networkId)
 		if (tips && !force && this.publicScannedAt.get(key) === tips.checkpointedBlockHash) return
 		const tick = tips
-			? await this.scanPublicContract(target.profileId, target.networkId, target.contract, tips).catch((error): PublicTick => {
-					this.logDebug("public scan tick threw", { contract: target.contract, error })
-					return notAtTip("failed")
-				})
+			? await this.scanPublicContract(target.profileId, target.networkId, target.contract, tips, epochAtStart).catch(
+					(error): PublicTick => {
+						this.logDebug("public scan tick threw", { contract: target.contract, error })
+						return notAtTip("failed")
+					},
+				)
 			: notAtTip("failed")
 		this.markScanned(this.publicScannedAt, key, tick.atTip ? tips?.checkpointedBlockHash : undefined, epochAtStart)
 		// The steady state — healthy, and nothing to clear — takes no lock.
@@ -1210,16 +1213,23 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	 *  Then a note target runs ungated and a public tick fails, as it did on its own failed read. A
 	 *  failed read is shared only while in flight, so a Retry right after it reads again. */
 	private sharedTips(networkId: string): Promise<PublicScanTips | undefined> {
-		const now = Date.now()
 		const recent = this.tipsReads.get(networkId)
-		if (recent && now - recent.at < SHARED_TIPS_TTL_MS) return recent.read
-		const read: Promise<PublicScanTips | undefined> = this.indexer.getTips(networkId).catch((error) => {
-			if (this.tipsReads.get(networkId)?.read === read) this.tipsReads.delete(networkId)
-			this.logDebug("public scan: tips failed", { networkId, error })
-			return undefined
-		})
-		this.tipsReads.set(networkId, { at: now, read })
-		return read
+		if (recent && (recent.settledAt === undefined || Date.now() - recent.settledAt < SHARED_TIPS_TTL_MS)) return recent.read
+		const entry: { read: Promise<PublicScanTips | undefined>; settledAt?: number } = {
+			read: this.indexer.getTips(networkId).then(
+				(tips) => {
+					entry.settledAt = Date.now()
+					return tips
+				},
+				(error) => {
+					if (this.tipsReads.get(networkId) === entry) this.tipsReads.delete(networkId)
+					this.logDebug("public scan: tips failed", { networkId, error })
+					return undefined
+				},
+			),
+		}
+		this.tipsReads.set(networkId, entry)
+		return entry.read
 	}
 
 	/** Emit `onIncomingSyncHealthChanged` when the network's health differs from the last announced
@@ -1448,7 +1458,7 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 		let reached = true
 		for (const contract of contracts) {
 			try {
-				if (!(await this.scanContract(profileId, networkId, accountAddress, contract))) reached = false
+				if (!(await this.scanContract(profileId, networkId, accountAddress, contract, epochAtStart))) reached = false
 			} catch (error) {
 				reached = false
 				this.logWarn(`Scan failed for ${contract}`, error)
@@ -1458,14 +1468,16 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/** Resolves whether the scan reached the tip: its notes read succeeded and no commit stood down. */
-	private async scanContract(profileId: string, networkId: string, accountAddress: string, contract: string): Promise<boolean> {
-		// Capture lifecycle epoch BEFORE any await — if a clear / onTokenDeleted /
-		// onAccountDeleted runs during PXE I/O or any other await in the unlocked
-		// discovery phase, every per-note CS below will observe the mismatch
-		// and bail. Closes the hole where PXE I/O outside the lock lets a
-		// scan resurrect just-wiped rows.
-		const epochAtStart = this.serviceEpoch
-
+	/** `epochAtStart` is the target's, captured before its first await: a clear / onTokenDeleted /
+	 *  onAccountDeleted that runs during the tips read or the PXE I/O makes every per-note section
+	 *  below stand down instead of resurrecting just-wiped rows. */
+	private async scanContract(
+		profileId: string,
+		networkId: string,
+		accountAddress: string,
+		contract: string,
+		epochAtStart: number,
+	): Promise<boolean> {
 		// ── UNLOCKED discovery (PXE-bound — kept outside the service lock
 		// so user-mediated writers like setTrustAllow don't wait on PXE) ──
 		let notes: RawNote[]
@@ -1752,13 +1764,19 @@ export class IncomingTransferService extends Service<Methods, Events> implements
 	}
 
 	/**
-	 * One public-event scan tick for `(networkId, contract)` on the tick's tips. Class-gates, then
-	 * either resumes an in-progress reconciliation / pending page or runs a bounded forward scan. A
-	 * reorg throw (referenceBlock dropped) escalates to reconciliation. The outcome covers the WHOLE
-	 * tick: every path that did not confirm anything reports `failed` or `no-progress`, never silence.
+	 * One public-event scan tick for `(networkId, contract)` on the tick's tips, fenced to the epoch
+	 * its target captured before reading them. Class-gates, then either resumes an in-progress
+	 * reconciliation / pending page or runs a bounded forward scan. A reorg throw (referenceBlock
+	 * dropped) escalates to reconciliation. The outcome covers the WHOLE tick: every path that did not
+	 * confirm anything reports `failed` or `no-progress`, never silence.
 	 */
-	private async scanPublicContract(profileId: string, networkId: string, contract: string, tips: PublicScanTips): Promise<PublicTick> {
-		const epochAtStart = this.serviceEpoch
+	private async scanPublicContract(
+		profileId: string,
+		networkId: string,
+		contract: string,
+		tips: PublicScanTips,
+		epochAtStart: number,
+	): Promise<PublicTick> {
 		let network: Network
 		try {
 			network = await this.networkService.getNetwork(networkId)
