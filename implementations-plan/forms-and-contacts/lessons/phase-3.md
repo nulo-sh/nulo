@@ -55,3 +55,8 @@ The tree wins; each disagreement is also in `plan.md` (§ Assumptions, "Arc 3b r
 - #428 holds; and the lock seal clears the guard while a released run can still reach its `finally`, so the disabled item alone leaves the silent loss reachable across a lock.
 - The toast API has no update; its region clears hover and focus on every toast change.
 - 2026-10-14: 3b revision review, Codex gpt-6.1-sol high, session `01a13c9d`: conditional approve, R3b-C1..C3 accepted (plan § Audit verdicts).
+
+## 3.10-3.11 the snack and the refusal
+
+- A Pinia store hands back a reactive proxy of an object it holds, so `store.slot === mine` is never true for the object a run stored; compare with `toRaw`. The unit tests' plain-object store hid it; the composition test's reactive store caught it, and the unit store is now reactive too.
+- A per-row re-opened snack never settles (its 150 ms entrance outlasts a 46 ms row), so the e2e read of a relabelled card fails on it by timeout.

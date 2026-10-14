@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 				</button>
 
 				<template #popup>
-					<DropdownItem @click="importContacts" data-testid="contacts-menu-import">
+					<DropdownItem @click="importContacts" :disabled="appStore.contactImports.size > 0" data-testid="contacts-menu-import">
 						<Flex align="center" gap="8">
 							<Icon name="upload-outline" size="14" color="secondary" />
 							Import contacts

@@ -390,7 +390,7 @@ Order: 3.10, 3.11, 3.4, 3.5, 3.6, each committed with its gate green before the 
 4. Smoke, `contacts-import.test.ts`'s hold scenario (no new scenario): once rows are stored, the snack reads "Importing contacts · N of 500" with N > 0; after leaving Contacts for Settings the same card element shows a larger N with no enter class; "Import completed successfully" then replaces it. Proves the built shell's region receiving the import's updates through the extension's re-export shim, across a real route unmount; the unit layers mock `useToast` or mount the region alone (whose test already runs real transitions). Estimate +1 s per browser, measured at the gate.
 - Validation gate: fast layers on those files (design package and extension); smoke, both browsers, on `contacts-import.test.ts`.
 
-**3.11 #151 and #428, a second import refused (P11-07b C).**
+**3.11 #151 and #428, a second import refused (P11-07b C).** ✓
 1. The menu item's `disabled`; `importContacts` returns at once while an entry exists.
 2. The staging-time refusal; staging replaces the rows; the slot released on settle by its owner; the run's `finally` stops clearing `cacheStore`.
 3. Tests:

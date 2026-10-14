@@ -24,6 +24,7 @@ const trace: string[] = []
 const appStoreState = {
 	network: { id: "net-1", name: "Testnet" } as { id: string; name: string } | null,
 	beginContactImport: () => () => {},
+	contactImports: new Set<symbol>(),
 }
 // The clients the import opens for itself: the services each test builds.
 const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
@@ -231,16 +232,19 @@ describe("importContacts — per-row order and early exits", () => {
 				}),
 			"Error occurred during import",
 		],
-	])("early exit (%s) clears the staging + controls", async (_label, arrange, toast) => {
-		// Leftover staging from an interrupted earlier run must be wiped by this run's `finally` too.
-		cacheStoreState.importContacts = ["stale-staging"]
+	])("early exit (%s) leaves the selection slot as it was", async (_label, arrange, toast) => {
+		// The slot is the selection's, so a run that never staged leaves another selection's rows and
+		// controls alone (a run a lock released can end while the next run's selection is open).
+		const other = { resolve: vi.fn(), reject: vi.fn() }
+		cacheStoreState.importContacts = ["other selection's row"]
+		cacheStoreState.importPromise = other
 		arrange()
 		const services = makeServices()
 		await api(services).importContacts()
 		expect(popupOpenMock).not.toHaveBeenCalled()
 		expect(services.contactService.getContacts).not.toHaveBeenCalled()
-		expect(cacheStoreState.importContacts).toEqual([])
-		expect(cacheStoreState.importPromise).toBeNull()
+		expect(cacheStoreState.importContacts).toEqual(["other selection's row"])
+		expect(cacheStoreState.importPromise).toBe(other)
 		if (toast) expect(openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)).toContain(toast)
 		else expect(openToastMock).not.toHaveBeenCalled()
 	})

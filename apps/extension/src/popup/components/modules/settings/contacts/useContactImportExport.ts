@@ -1,5 +1,5 @@
 // Modified from Azguard Wallet (https://github.com/AzguardWallet/azguard-wallet), Copyright 2026 BB Strategy Pte. Ltd., Apache-2.0.
-import type { Ref } from "vue"
+import { type Ref, toRaw } from "vue"
 import { useToast } from "@/composables/toast"
 import { FilePickCanceledError, FileTooLargeError, downloadFile, pickFile } from "@/utils"
 import {
@@ -50,7 +50,12 @@ export function useContactImportExport(opts: UseContactImportExportOptions) {
 		cacheStore: useCacheStore(),
 		popupStore: usePopupStore(),
 	}
-	return { exportContacts: () => exportContacts(deps), importContacts: () => importContacts(deps) }
+	return {
+		exportContacts: () => exportContacts(deps),
+		// One import per window, so its one selection slot has one owner; the menu's disabled item is
+		// this rule's visible part.
+		importContacts: () => (deps.appStore.contactImports.size > 0 ? Promise.resolve() : importContacts(deps)),
+	}
 }
 
 interface ContactIoServices {
@@ -138,7 +143,7 @@ async function exportContacts(deps: ContactIoServices): Promise<void> {
 }
 
 async function importContacts(deps: ContactIoServices): Promise<void> {
-	const { openToast, cacheStore, popupStore } = deps
+	const { openToast } = deps
 	const profileService = new ProfileServiceClient()
 	const contactService = new ContactServiceClient()
 	const accountStateService = new AccountStateServiceClient()
@@ -170,9 +175,11 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 		profileService.connect()
 		const run: ImportRun = { fence: await profileService.captureRunFence(), profileService }
 
+		const selection = openImportSelection(deps, importedContacts)
+		if (!selection) return
 		let res: SelectedRow[]
 		try {
-			res = await openImportSelection(cacheStore, popupStore, importedContacts)
+			res = await selection
 		} catch {
 			openToast({ kind: "success", label: "Contact import canceled" })
 			return
@@ -197,25 +204,34 @@ async function importContacts(deps: ContactIoServices): Promise<void> {
 		profileService.disconnect()
 		contactService.disconnect()
 		accountStateService.disconnect()
-		cacheStore.importContacts = []
-		cacheStore.importPromise = null
 	}
 }
 
 /** Stage the rows, create the selection promise, REGISTER its controls on the cache store and open
- *  the popup — one synchronous unit; the caller awaits the returned promise (reject = canceled). */
+ *  the popup — one synchronous unit; the caller awaits the returned promise (reject = canceled).
+ *  `undefined` while an import runs or another selection is open: two runs can both pass the entry
+ *  check while each awaits its file and its fence, and the later one must not take the slot. */
 function openImportSelection(
-	cacheStore: ContactIoDeps["cacheStore"],
-	popupStore: ContactIoDeps["popupStore"],
+	{ appStore, cacheStore, popupStore }: ContactIoServices,
 	rows: ImportRow[],
-): Promise<SelectedRow[]> {
-	for (const _c of rows) (cacheStore.importContacts as unknown[]).push(_c)
+): Promise<SelectedRow[]> | undefined {
+	const slot = cacheStore as unknown as { importContacts: unknown[]; importPromise: unknown }
+	if (appStore.contactImports.size > 0 || slot.importPromise) return undefined
+	slot.importContacts = [...rows]
 
+	let controls: unknown
 	const importPromise = new Promise<SelectedRow[]>((resolve, reject) => {
-		;(cacheStore as unknown as { importPromise: unknown }).importPromise = { resolve, reject }
+		controls = { resolve, reject }
+		slot.importPromise = controls
 	})
 	popupStore.open("import_contacts")
-	return importPromise
+	// Released by this selection only: a run a lock released can settle while the next run's
+	// selection holds the slot. The store hands back a reactive proxy of what it holds.
+	return importPromise.finally(() => {
+		if (toRaw(slot.importPromise) !== controls) return
+		slot.importPromise = null
+		slot.importContacts = []
+	})
 }
 
 async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {

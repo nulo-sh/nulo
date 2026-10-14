@@ -419,10 +419,11 @@ test("export, then import: into the same wallet nothing changes, into a fresh wa
 }, 300_000)
 
 // Fails if leaving Contacts cuts off a running import (the page's clients rejected the row being
-// written), if the real chip does not follow the hold, or if the import's progress snack does not
-// reach the shell's region on every page as one card relabelled in place. Component tests mount
-// stubs, fake clients and a mocked toast, so only the built popup's real page unmount, Header and
-// snack region can show these.
+// written), if the real chip or the menu's Import item does not follow the running import, or if
+// the import's progress snack does not reach the shell's region on every page as one card
+// relabelled in place. Component tests mount
+// stubs, fake clients and a mocked toast, so only the built popup's real page unmount, Header, menu
+// and snack region can show these.
 test("an import holds Lock until it ends, counts on one snack on every page, and leaving Contacts does not disturb it", async ({
 	registeredExtensionPerTest: ctx,
 }) => {
@@ -435,6 +436,11 @@ test("an import holds Lock until it ends, counts on one snack on every page, and
 				await waitForStoredCount(page, 1)
 				expect(await lockChipDisabled(page)).toBe(true)
 				const onContactsPage = await progressAbove(page, 0)
+				// A second import is refused while this one runs.
+				await clickByTestId(page, "contacts-menu-trigger")
+				await page.waitForSelector(sel("contacts-menu-import"), { visible: true, timeout: 5_000 })
+				expect(await page.$eval(sel("contacts-menu-import"), (item) => item.getAttribute("aria-disabled"))).toBe("true")
+				expect(await pressEscape(page)).toBe(true)
 				await clickByTestId(page, "subpage-back")
 				await waitForHash(page, "#/popup/settings")
 				// Still disabled: the import was still running when the Contacts page unmounted (the hold

@@ -48,7 +48,7 @@ vi.mock("@/wallet/services/account-state/client", () => ({
 	}),
 }))
 vi.mock("@/stores/app.store", () => ({
-	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {} }),
+	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {}, contactImports: new Set() }),
 }))
 vi.mock("@/stores/cache.store", () => ({ useCacheStore: () => cacheStoreState }))
 vi.mock("@/stores/popup.store", () => ({ usePopupStore: () => ({ open: vi.fn() }) }))
