@@ -242,8 +242,8 @@ jobs:
     name: Run / heavy / snack-placement + failed-send-check
     needs: decide
     if: needs.decide.outputs.run == 'true'
-    # The pool's two longest files (about 8 and 4.5 minutes on Firefox). The SHA-1 sharder weighs
-    # no runtime, so together they put one shard at its 30-minute job limit with every test green.
+    # Two files of about 8 and 4.5 minutes on Firefox. The SHA-1 sharder weighs no runtime, and the
+    # shard that drew both reached its 30-minute job limit with every test green.
     uses: ./.github/workflows/_extension-network-e2e.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.ref }}
