@@ -22,3 +22,5 @@
 - 2026-10-14 — Arc 2 review: Codex round 1 `reject` (retry proof, three Low), Opus `holds` (eight Low); fixed. Codex round 2 `approve`; loop converged.
 - 2026-10-14 — Phase 2.4 network gate on `ef6f484d`: 7 files, 19/19 at retry 0 (proverless); install-run rows 2.2 s (public) and 1.7 s (private) after unlock. Final-head rerun next.
 - 2026-10-14 — Phase 2.4 gate on the final product code (`cffb6200`): 7 files, 19/19 at retry 0; lint, typecheck:all, test, test:all, test:ci-gating and check:plans green on `9961b437`. Arc 2 ready for its PR.
+- 2026-10-14 — arc 3b revision on `incoming-transfers-arc-3b` (from `dev` `264a4b30`): recon (3 Explore agents), plan revised in place (arcs 1-2 record moved to decisions.md), OA-8 added; dual audit next.
+- 2026-10-14 — arc 3b audit: Codex round 1 `reject` (8 findings), Opus `conditional approve` (15); all accepted (one in part, one as words). Final fresh Codex pass `reject` (1 High, 1 Medium), accepted, unreviewed. plan.md at 350 lines; awaiting orchestrator approval.

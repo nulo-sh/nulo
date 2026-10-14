@@ -1,8 +1,7 @@
 # incoming-transfers — owner asks
 
-Six asks. None blocks Arc 1, which changes nothing a person sees. Each ask says what ships if it is
-not answered. Page 4 (P4-01 to P4-05) and charter C12 are already on the owner's pages and are not
-repeated here; these asks cover only what those records do not say.
+OA-1 to OA-6 were answered on decision page 4 (§ Answers). OA-8 is open: arc 3b builds its "what
+ships now", and its PR merges only once your answer is quoted in it. Arc 3a's own ask is OA-7.
 
 ## OA-1. #140: a received private transfer that a chain reorganisation dropped
 
@@ -145,7 +144,50 @@ So the record can be read two ways.
 **What ships now.** Nothing on these rows: they stay as they are until this is answered, and #142
 stays open.
 
+## OA-8. The privacy mode row in Settings → Privacy (#141, arc 3b)
+
+**Surface.** Settings → Privacy, a new row; and through it, the received page's "Network fee" row.
+
+**Situation.** Charter C12-fetch B, with your note, makes lookups that name one transaction automatic
+by default and adds an opt-in Privacy mode in Settings → Privacy that turns them into a tap. Today
+the one such lookup is a public receipt's fee. With the mode off the fee loads when the page opens,
+as now; with it on the row reads "Show fee" and loads on a tap (a failed tap shows "Show fee" again;
+a fee already fetched this session shows at once). The row needs a title and a sub-line. The page's
+two existing rows read "Show fiat values" / "Fetch USD prices from CoinGecko while unlocked. Off
+hides all dollar values" and "Block Explorer" / "Transaction link explorer".
+
+**Options for the words.**
+
+- **A. Title "Privacy mode", sub-line "Load a receipt's network fee only when you tap Show fee"**
+  (recommended). Your own name for the setting, and a sub-line that says exactly what it changes
+  today.
+- **B. Title "Fees on tap", same sub-line.** Names the effect instead of the mode; a later lookup
+  (#106, an unlisted token's decimals) would need a new title.
+- **C. Title "Privacy mode", sub-line "Look up details about a transaction only when you tap them".**
+  Covers later lookups, but says less about what changes now.
+
+**What else ships with it, unless you say otherwise.**
+
+- The row sits third, under Block Explorer, as a toggle like Show fiat values, off by default.
+- "Show fee" is a text button in the colour of the Details box's links, in the row's own font; the
+  row shows its loading shimmer until the wallet knows whether to load the fee or show the button.
+- If the wallet cannot read the setting (rare: the background restarting as the page opens), the page
+  behaves as if the mode were on and shows "Show fee", so nothing is looked up without a tap.
+- The Settings list entry for Privacy keeps its words ("Prices, explorer", with "Prices on" or
+  "Prices off" on the right); it does not mention the new mode.
+- A restored backup does not change the setting on this device, as for Show fiat values.
+- One tap is one fee lookup; if the network fails, the wallet retries that same lookup up to three
+  times on its own, as it does today for the automatic one.
+
+**Recommendation.** A.
+
+**What ships now.** A, with the placement above.
+
 ## Answers
 
 - **OA-5 = A, newest first** (decision page 4, signed 2026-10-14). Phase 2.3 is built: newest public
   receipts land on a token's first scan, and older rows fill in below, newest to oldest.
+- **OA-1 = A, remove the row** (page 4, 2026-10-14). Arc 3b builds it (#140).
+- **OA-2 = A, OA-3 = B, OA-6 = A** (page 4, 2026-10-14, with P4-02b A). Arc 3a builds them (#142).
+- **OA-4a = A, OA-4b = A** (page 4, 2026-10-14). The owner's addendum on #141 the same day makes the
+  fee automatic by default and these govern the tap path under privacy mode; arc 3b builds them.

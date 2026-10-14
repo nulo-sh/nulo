@@ -23,12 +23,12 @@ Consults and decisions during planning. Every consult is listed, failed ones inc
   `alejo-icloud`, not the default login: the shell inherited `CODEX_ACCOUNT=best`, which the wrapper
   honours. Later calls run under `env -u CODEX_ACCOUNT`. Verdict: `reject (with blocking findings:
   incomplete watchdog/purge fences; Arc 1 changes visible behavior; note reconciliation misses moved
-  notes)`. Ten findings; dispositions in plan.md § Audit verdicts.
+  notes)`. Ten findings; dispositions in decisions.md § Audit verdicts.
 - **Round 1, Opus Plan agent**, 2026-10-09. Verdict: `conditional approve (with conditions: add the
   lock ticket to the #144 trust write and its emits; make N5b/P5b able to fail on revert; have the #92
   repair re-check trust inside the lock and capture the session fence; spell out Arc 2's rules for when
   a scan counts as caught up, plus tip ordering checks and the #138 cursor fields; tighten the liveness
-  proofs so each one shows a receipt landing)`. Fourteen findings; dispositions in plan.md.
+  proofs so each one shows a receipt landing)`. Fourteen findings; dispositions in decisions.md.
 - **Driver decisions after round 1** (put to the final pass): #92's repair replaced by an all-or-nothing
   Allow, because both reviewers' objections were to partial state the repair tried to clean up; #144's
   emits gated on the lock ticket only, because every deleting writer holds the lock and an epoch-gated
@@ -40,7 +40,7 @@ Consults and decisions during planning. Every consult is listed, failed ones inc
 - **Final fresh pass, Codex** (gpt-6.1-sol, high, read-only, default login), 2026-10-09. Verdict:
   `reject (with blocking findings: D4 is not atomic; D3's deletion invariant fails after handoff; refused
   public receipts can be skipped permanently; #140 can preserve orphan rows forever)`. Eight findings:
-  six accepted, two accepted in part with the proposed fix rejected (dispositions in plan.md). Lesson:
+  six accepted, two accepted in part with the proposed fix rejected (dispositions in decisions.md). Lesson:
   "dispatched in one synchronous block" is not "atomic"; separate storage calls fail one by one. One
   multi-key `set` is the atomic unit.
 - Lesson: a fence that refuses a write inside a scan must also stop the scan's cursor, or the refused
@@ -54,3 +54,18 @@ Consults and decisions during planning. Every consult is listed, failed ones inc
   findings: a completed displaced wipe can still be resurrected)`. One finding, accepted: read the
   deleter count at lock entry, before any read. Loop stopped at three rounds; the fix is the reviewer's
   own and is not re-reviewed, so Arc 1's first Codex audit asks about it first.
+
+## Arc 3b revision (2026-10-14, base `264a4b30`)
+
+- Recon: three Explore agents (sonnet): the fee and config surface, the Updated emit path, the note
+  reconciler's plumbing; findings in recon.md § Arc 3b recon.
+- **Round 1, Codex** (gpt-6.1-sol, high, read-only, default login; session `01a13bda`): `reject (with
+  blocking findings: stale PXE data can permanently settle an orphan; privacy mode is latched across
+  later lookups; feed refreshes can overwrite Updated events)`. Eight findings; dispositions in plan.md
+  § Audit verdicts.
+- **Round 1, Opus Plan agent**: `conditional approve (with conditions: findings 1 to 5 fixed in the
+  plan text before the build starts)`. Fifteen findings; dispositions in plan.md.
+- **Final fresh pass, Codex** (new session `01a13bef`): `reject (with blocking findings: reconnects
+  can retain mode-off permission for new fee lookups while privacy mode is on)`. Two findings (one
+  High, one Medium), both accepted; dispositions in plan.md. The two fixes are not re-reviewed, so the
+  implementer's first Codex round checks them first. Loop stopped here: planning budget spent.
