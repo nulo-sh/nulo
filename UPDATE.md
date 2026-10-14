@@ -110,6 +110,28 @@ Current line: **`@aztec-labs/*` = 6.0.0-rc.3**, with the `@aztec-foundation/*` t
 - **Preloaded protocol contracts.** `createPXE`'s default provider registers MultiCall,
   AuthRegistry (moved address) and HandshakeRegistry; `pxe-provided.ts` follows it.
 
+## 6.0.0-rc.3 couplings (the address separator)
+
+- **Two numberings.** `@aztec-labs/*@6.0.0-rc.3` depends on the `@aztec-foundation/*` toolchain at
+  `6.0.0-rc.6`; the residue check keeps one line per numbering (and one for `aztec-standards`),
+  and the patch file names follow the package each patches.
+- **Every derived address moves.** The preaddress separator is `CONTRACT_ADDRESS_V3`, so the account
+  KAT (regime `nulo-v6.1`), the SponsoredFPC, the PrivateFPC and upstream's standard contracts
+  (`STANDARD_AUTH_REGISTRY_ADDRESS`) all moved; protocol contracts keep their magic addresses.
+- **The PXE refuses another oracle major** (`utility_execution_oracle.js`): every artifact the
+  wallet runs (the vendored SchnorrAccount, the PrivateFPC, the standards Token) must be an rc.3
+  build.
+- **Exact-version peers do not re-bind.** Under the isolated linker a package whose Aztec peers are
+  pinned at another version (`@alejoamiras/private-fee-juice`) nests a second generation beneath
+  it, so it moves with the line like presto.
+- **`getBlockHashMembershipWitness`** needs a reference block the node holds and throws when the
+  node's archive at that height differs; `probeAncestryWitness`
+  (`packages/aztec-runtime/src/pxe/public-events.ts`) passes a held block hash, and both failures
+  land in its one failure path.
+- **Standard contracts on a fresh network.** Test environments seed them at genesis; a live network
+  serves them only once someone publishes them (`getPublishableStandardContracts`), so a new
+  Testnet can answer `null` for AuthRegistry, PublicChecks and HandshakeRegistry.
+
 ## Bridge couplings — in `alejoamiras/unleashed`
 
 The any-ERC-20 bridge's Aztec couplings live with the bridge in [`alejoamiras/unleashed`](https://github.com/alejoamiras/unleashed): hub ↔ factory, `tokenClassId` ↔ the standards `Token` artifact, hub → `ContractInstanceRegistry`, the split JS/Noir toolchain, token-list origin ↔ CSP, the `txe-server` lockfile and per-token wallet grants, plus the PrivateFPC deploy descriptor, its node-compat map and the deploy-intent tooling.
