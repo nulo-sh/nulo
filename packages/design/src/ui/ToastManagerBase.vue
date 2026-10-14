@@ -49,9 +49,12 @@ const trackPointer = (event: PointerEvent) => {
 
 watch([hovered, focusWithin], ([h, f]) => holdToast(h || f))
 
+// A relabel keeps its id and its card, so the pointer and focus the card holds stay as they are.
 const show = (next: ToastState | null) => {
-	hovered.value = false
-	focusWithin.value = false
+	if (next?.id !== shown.value?.id) {
+		hovered.value = false
+		focusWithin.value = false
+	}
 	shown.value = next
 }
 

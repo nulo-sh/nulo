@@ -56,7 +56,7 @@ vi.mock("@/utils", async (importOriginal) => ({
 	},
 }))
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: (toast: { kind: string; label: string }) => boundary.toasts.push(toast) }),
+	useToast: () => ({ openToast: (toast: { kind: string; label: string }) => boundary.toasts.push(toast), updateToast: () => {} }),
 }))
 vi.mock("@/stores/app.store", () => ({
 	useAppStore: () => ({ network: { id: "net-1", name: "Testnet" }, beginContactImport: () => () => {} }),

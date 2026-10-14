@@ -33,7 +33,7 @@ const cacheStoreState: {
 } = { importContacts: [], importPromise: null }
 
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock }),
+	useToast: () => ({ openToast: openToastMock, updateToast: vi.fn() }),
 }))
 vi.mock("@/utils", () => ({
 	FilePickCanceledError: class FilePickCanceledError extends Error {},

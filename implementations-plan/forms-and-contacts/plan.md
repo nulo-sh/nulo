@@ -380,7 +380,7 @@ Every command runs from the worktree root unless it says otherwise. "Fast layers
 
 Order: 3.10, 3.11, 3.4, 3.5, 3.6, each committed with its gate green before the next.
 
-**3.10 #151, the progress snack (P11-06b A).**
+**3.10 #151, the progress snack (P11-06b A).** ✓
 1. `toast.ts`: `openToast` returns the id; `updateToast(id, label)`. `ToastManagerBase`: `show()` clears hover and focus only on a new id.
 2. `applyHoldingLock` opens the line and updates it per confirmed write.
 3. Tests:

@@ -40,11 +40,12 @@ export interface UseContactImportExportOptions {
  */
 export function useContactImportExport(opts: UseContactImportExportOptions) {
 	const { contacts, accountStateService } = opts
-	const { openToast } = useToast()
+	const { openToast, updateToast } = useToast()
 	const deps: ContactIoServices = {
 		contacts,
 		accountStateService,
 		openToast,
+		updateToast,
 		appStore: useAppStore(),
 		cacheStore: useCacheStore(),
 		popupStore: usePopupStore(),
@@ -56,6 +57,7 @@ interface ContactIoServices {
 	contacts: Ref<ContactRecord[]>
 	accountStateService: AccountStateServiceClient
 	openToast: ReturnType<typeof useToast>["openToast"]
+	updateToast: ReturnType<typeof useToast>["updateToast"]
 	appStore: ReturnType<typeof useAppStore>
 	cacheStore: ReturnType<typeof useCacheStore>
 	popupStore: ReturnType<typeof usePopupStore>
@@ -219,7 +221,7 @@ function openImportSelection(
 async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promise<void> {
 	const endHold = deps.appStore.beginContactImport()
 	try {
-		const tally = await applyImportRows(deps, res)
+		const tally = await applyImportRows(deps, res, showProgress(deps, res.length))
 		if (tally.stopped) toastStoppedImport(deps.openToast, tally, res.length)
 		else toastImportOutcome(deps.openToast, tally)
 	} finally {
@@ -227,11 +229,19 @@ async function applyHoldingLock(deps: ContactIoDeps, res: SelectedRow[]): Promis
 	}
 }
 
+/** Opens the running import's snack and returns what moves its count; the count is the incomplete
+ *  toast's, written of selected, and a snack the person closed stays closed. */
+function showProgress({ openToast, updateToast }: ContactIoDeps, selected: number): (written: number) => void {
+	const label = (written: number) => `Importing contacts · ${written} of ${selected}`
+	const id = openToast({ kind: "info", label: label(0) })
+	return (written) => updateToast(id, label(written))
+}
+
 /** Register each selected row's sender intent, then upsert the row. Import is adds-only toward sender
  *  state: rows explicitly carrying `isSender: true` (from a previous deliberate export) get registered
  *  on the active network. It never deletes or migrates registrations — those live in
  *  Settings → Developer → Account State → Senders. */
-async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise<ImportTally> {
+async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[], onWritten: (written: number) => void): Promise<ImportTally> {
 	// Snapshot active network ONCE, before the first await, so it is the network the confirmed banner
 	// named and a swap mid-loop can't split sender registrations across chains. Null-safe: if no
 	// network is selected, isSender:true rows produce a per-row sender failure.
@@ -249,8 +259,10 @@ async function applyImportRows(deps: ContactIoDeps, res: SelectedRow[]): Promise
 	tally.errors = refused.map(refusal)
 	const pass: ImportPass = { deps, tally, book, activeNetworkId }
 	for (const write of admitted) {
+		const before = tally.written
 		tally.stopped = (await importRow(pass, write)) === STOPPED
 		if (tally.stopped) break
+		if (tally.written !== before) onWritten(tally.written)
 	}
 	return tally
 }

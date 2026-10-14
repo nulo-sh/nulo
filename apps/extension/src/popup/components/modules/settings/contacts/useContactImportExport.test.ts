@@ -12,6 +12,7 @@ import { ref } from "vue"
 // ── Mocks ────────────────────────────────────────────────────────────
 
 const openToastMock = vi.fn()
+const updateToastMock = vi.fn()
 const pickFileMock = vi.fn()
 const popupOpenMock = vi.fn()
 
@@ -32,7 +33,7 @@ const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, inc
 // The clients the import opens for itself; `makeServices` hands it the fakes it builds.
 const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
 vi.mock("@/composables/toast", () => ({
-	useToast: () => ({ openToast: openToastMock }),
+	useToast: () => ({ openToast: openToastMock, updateToast: updateToastMock }),
 }))
 vi.mock("@/utils", () => ({
 	FilePickCanceledError: class FilePickCanceledError extends Error {},
@@ -517,6 +518,76 @@ describe("useContactImportExport — apply refuses what no row on screen promise
 	})
 })
 
+describe("useContactImportExport — the progress snack", () => {
+	const SNACK_ID = 41
+	const labels = () => openToastMock.mock.calls.map((c) => (c[0] as { label: string }).label)
+	const updates = () => updateToastMock.mock.calls.map((c) => c as [number, string])
+
+	test("opens at 0 of the selected rows before the first row, counts each confirmed write, and the result opens after it", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const order: string[] = []
+		let nextId = SNACK_ID - 1
+		contactService.addContact.mockImplementation(async (name: string) => {
+			order.push(`write ${name}`)
+			// The second row's write fails: a row the wallet did not confirm moves nothing.
+			if (name === "Eve") throw new Error("disk full")
+		})
+		openToastMock.mockImplementation((toast: { label: string }) => {
+			order.push(toast.label)
+			return ++nextId
+		})
+		updateToastMock.mockImplementation((_id: number, label: string) => order.push(label))
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Eve", address: ADDR_B },
+			],
+		})
+
+		await runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
+
+		expect(order).toEqual([
+			"Importing contacts · 0 of 2",
+			"write Dana",
+			"Importing contacts · 1 of 2",
+			"write Eve",
+			"Import ended with errors",
+		])
+		expect(updates().map(([id]) => id)).toEqual([SNACK_ID])
+	})
+
+	test("a stop's incomplete toast reads the count the line last showed", async () => {
+		const { contactService, accountStateService } = makeServices()
+		const sessionEnds = vi.fn().mockResolvedValue(undefined)
+		contactService.addContact.mockResolvedValueOnce(undefined).mockImplementationOnce(async () => {
+			sessionEnds.mockRejectedValue(new Error("session ended"))
+			throw new Error("port closed")
+		})
+		const { ProfileServiceClient } = await import("@/wallet/services/profile/client")
+		vi.mocked(ProfileServiceClient).mockImplementationOnce(function () {
+			return {
+				connect: vi.fn(),
+				disconnect: vi.fn(),
+				captureRunFence: vi.fn().mockResolvedValue(RUN_FENCE),
+				assertRunFence: sessionEnds,
+			} as never
+		})
+		fileWith({
+			version: 2,
+			contacts: [
+				{ name: "Dana", address: ADDR_A },
+				{ name: "Eve", address: ADDR_B },
+			],
+		})
+
+		await runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
+
+		expect(updates().map(([, label]) => label)).toEqual(["Importing contacts · 1 of 2"])
+		expect(labels().at(-1)).toBe("Import incomplete · 1 of 2 contacts written")
+	})
+})
+
 describe("useContactImportExport — the running import holds Lock and owns its connections", () => {
 	let guard: ReturnType<typeof createContactImportGuard>
 	beforeEach(() => {
@@ -525,20 +596,21 @@ describe("useContactImportExport — the running import holds Lock and owns its 
 	})
 	const held = () => ({ running: guard.contactImports.value.size, holds: guard.lockHeldByImport.value })
 
-	test("Lock is held from the first row to the result toast, and released after it", async () => {
+	test("Lock is held from the progress snack through the rows to the result toast, and released after it", async () => {
 		const { contactService, accountStateService } = makeServices()
 		const seen: Array<{ at: string; running: number; holds: boolean }> = []
 		contactService.addContact.mockImplementation(async () => {
 			seen.push({ at: "row", ...held() })
 		})
-		openToastMock.mockImplementation(() => seen.push({ at: "toast", ...held() }))
+		openToastMock.mockImplementation((toast: { label: string }) => seen.push({ at: toast.label, ...held() }))
 		fileWith({ version: 2, contacts: [{ name: "Dana", address: ADDR_A }] })
 
 		await runImport(useContactImportExport({ contacts: ref([]), accountStateService } as never))
 
 		expect(seen).toEqual([
+			{ at: "Importing contacts · 0 of 1", running: 1, holds: true },
 			{ at: "row", running: 1, holds: true },
-			{ at: "toast", running: 1, holds: true },
+			{ at: "Import completed successfully", running: 1, holds: true },
 		])
 		expect(held()).toEqual({ running: 0, holds: false })
 	})

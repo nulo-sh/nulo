@@ -16,7 +16,7 @@ const cacheStoreState: {
 const RUN_FENCE = vi.hoisted(() => ({ profileId: "p1", epoch: 0, session: 1, incarnation: "w1" }))
 // The clients the import opens for itself: the services each test builds.
 const importClients = vi.hoisted(() => ({ contact: {} as object, accountState: {} as object }))
-vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn() }) }))
+vi.mock("@/composables/toast", () => ({ useToast: () => ({ openToast: vi.fn(), updateToast: vi.fn() }) }))
 vi.mock("@/utils", async (importOriginal) => {
 	const real = await importOriginal<typeof import("@/utils")>()
 	return {
