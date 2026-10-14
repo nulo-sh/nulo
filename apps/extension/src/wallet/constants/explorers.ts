@@ -39,27 +39,20 @@ const EXPLORER_BASE_URLS: Record<BlockExplorerType, Record<number, string>> = {
 	},
 }
 
+const HEX_32_BYTES = /^0x[0-9a-fA-F]{64}$/
+
 /**
- * Construct a transaction explorer URL for a given transaction hash.
- * Returns null if explorer is disabled (null) or doesn't support the network.
- *
- * @param chainId - The network's chain ID
- * @param explorerId - User's selected explorer ID, or null if disabled
- * @param txHash - Transaction hash
- * @returns Full URL to view the transaction, or null if unavailable
+ * A transaction's explorer page. Returns null as `getBlockExplorerUrl` does, for anything but a
+ * 32-byte hex hash: a stored hash, which a restored backup supplies, lands in a URL path.
  */
 export function getTransactionExplorerUrl(
 	chainId: number,
 	explorerId: BlockExplorerType | null | undefined,
 	txHash: string,
 ): string | null {
-	if (!explorerId) return null
-
-	const baseUrl = EXPLORER_BASE_URLS[explorerId]?.[chainId]
+	const baseUrl = HEX_32_BYTES.test(txHash) ? explorerBaseUrl(chainId, explorerId) : null
 	return baseUrl ? `${baseUrl}/tx-effects/${txHash}` : null
 }
-
-const HEX_32_BYTES = /^0x[0-9a-fA-F]{64}$/
 
 /** The explorer's base URL for the chain, or null when the explorer is None or covers no such chain. */
 function explorerBaseUrl(chainId: number | null | undefined, explorerId: BlockExplorerType | null | undefined): string | null {

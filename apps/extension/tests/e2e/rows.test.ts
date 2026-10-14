@@ -368,7 +368,7 @@ test("a contact row: its edit action is a 24px box whose real press stays on Con
 	expect(registeredExtension.pageErrors).toEqual([])
 }, 90_000)
 
-test("a receipt's To card: its explorer link is a Tab stop and a 24px box on top of the card; Enter activates it and copies nothing, a press elsewhere on the card copies", async ({
+test("a receipt's To card: its explorer link is a Tab stop with the ring and a 24px box on top of the card; Enter activates it and copies nothing, a press elsewhere on the card copies", async ({
 	registeredExtension,
 }) => {
 	const page = await openPopup(registeredExtension)
@@ -409,7 +409,12 @@ test("a receipt's To card: its explorer link is a Tab stop and a 24px box on top
 
 	const walk = await tabTo(page, link)
 	console.log(`[rows] the Tab walk to the To card's link: ${walk.join(" → ")}`)
-	expect(await page.evaluate(() => document.activeElement?.tagName)).toBe("A")
+	const focused = await page.evaluate(() => {
+		const el = document.activeElement as HTMLElement
+		const { outlineStyle, outlineWidth } = getComputedStyle(el)
+		return { tag: el.tagName, outlineStyle, outlineWidth }
+	})
+	expect(focused).toEqual({ tag: "A", outlineStyle: "solid", outlineWidth: "2px" })
 	await page.keyboard.press("Enter")
 	await page.waitForFunction(() => (window as unknown as Probe).__cardLink != null, { timeout: 5_000, polling: 50 })
 	expect(await page.evaluate(() => (window as unknown as Probe).__cardLink)).toEqual({ prevented: false })

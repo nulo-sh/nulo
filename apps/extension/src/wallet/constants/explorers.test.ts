@@ -17,6 +17,10 @@ describe("getTransactionExplorerUrl", () => {
 	test("explorer disabled (null) → null", () => {
 		expect(getTransactionExplorerUrl(CHAIN_IDS.TESTNET, null, TX)).toBeNull()
 	})
+
+	test("refuses a stored hash that is not 32-byte hex", () => {
+		expect(getTransactionExplorerUrl(CHAIN_IDS.TESTNET, "aztecscan", `${TX}/../../address/x`)).toBeNull()
+	})
 })
 
 const BASE = "https://testnet.aztecscan.xyz"

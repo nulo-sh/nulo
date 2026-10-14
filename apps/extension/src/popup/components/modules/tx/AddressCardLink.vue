@@ -1,8 +1,5 @@
 <script setup>
-/**
- * The explorer link in an address card's top-right corner. A click on it opens the explorer and
- * never reaches the card, whose own click copies the address.
- */
+/** The explorer link in an address card's corner; its click never reaches the card, whose click copies. */
 defineProps({
 	href: { type: String, required: true },
 	label: { type: String, required: true },
@@ -16,7 +13,7 @@ defineProps({
 </template>
 
 <style module>
-/* A 24 px target around the 12 px glyph, the glyph 10 px in from the card's top and right edges. */
+/* Only the target grows to 24 px; the glyph keeps its place, 10 px in from the card's corner. */
 .link {
 	position: absolute;
 	top: 4px;
@@ -31,6 +28,11 @@ defineProps({
 
 	&:hover svg {
 		fill: var(--nulo-accent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: -2px;
 	}
 }
 </style>

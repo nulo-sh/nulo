@@ -307,6 +307,10 @@ watch(
 	composes: hero_link from "../../pages/detail-page.module.css";
 	align-self: flex-start;
 }
+.contract_link:focus-visible {
+	outline: 2px solid var(--nulo-accent);
+	outline-offset: 2px;
+}
 .warning {
 	padding: 0 8px;
 }

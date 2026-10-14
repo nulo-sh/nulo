@@ -32,7 +32,6 @@ import { DateTime } from "luxon"
 /** Services */
 import { IncomingTransferServiceClient } from "@/wallet/services/incoming-transfer/client"
 import { TokenServiceClient } from "@/wallet/services/token/client"
-import { ConfigServiceClient } from "@/wallet/services/config/client"
 import { PriceServiceClient } from "@/wallet/services/price/client"
 import { NetworkServiceClient } from "@/wallet/services/network/client"
 
@@ -64,7 +63,6 @@ const route = useRoute()
 const received = ref(null)
 const loaded = ref(false)
 const tokens = ref([])
-const explorerId = ref(null)
 /** The RECORD's own chainId (resolved from its networkId) — NOT the active network's. Token
  *  decimals/symbol + the explorer URL must follow the record, so a deep-linked or off-network record
  *  (or a network switch after open) can't show the wrong chain's catalogue/explorer. */
@@ -77,7 +75,6 @@ const feeLoading = ref(false)
 /** Service clients */
 const incomingTransferService = new IncomingTransferServiceClient()
 const tokenService = new TokenServiceClient()
-const configService = new ConfigServiceClient()
 const priceService = new PriceServiceClient()
 const networkService = new NetworkServiceClient()
 const prices = usePrices(priceService)
@@ -126,20 +123,21 @@ const receivedTime = computed(() => {
 const explorerUrl = computed(() => {
 	const inc = received.value
 	if (!inc) return null
-	return getTransactionExplorerUrl(recordChainId.value ?? undefined, explorerId.value, inc.txHash)
+	return getTransactionExplorerUrl(recordChainId.value ?? undefined, appStore.defaultExplorer, inc.txHash)
 })
-const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === explorerId.value)?.name ?? "explorer")
-/** The Block row's link is the value it shows: a public receipt's hash, a note's number. */
+const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
+/** A public receipt's hash names the block the wallet saw, whatever a re-mine did at its height;
+ *  a note carries only the height. */
 const blockUrl = computed(() => {
 	const inc = received.value
 	if (!inc?.l2BlockNumber) return null
-	return getBlockExplorerUrl(recordChainId.value, explorerId.value, isPublic.value ? inc.blockHash : inc.l2BlockNumber)
+	return getBlockExplorerUrl(recordChainId.value, appStore.defaultExplorer, isPublic.value ? inc.blockHash : inc.l2BlockNumber)
 })
 const fromUrl = computed(() =>
-	fromClickable.value ? getAccountExplorerUrl(recordChainId.value, explorerId.value, fromDisplay.value.address) : null,
+	fromClickable.value ? getAccountExplorerUrl(recordChainId.value, appStore.defaultExplorer, fromDisplay.value.address) : null,
 )
 const toUrl = computed(() =>
-	received.value ? getAccountExplorerUrl(recordChainId.value, explorerId.value, received.value.accountAddress) : null,
+	received.value ? getAccountExplorerUrl(recordChainId.value, appStore.defaultExplorer, received.value.accountAddress) : null,
 )
 const fromLabelId = useId()
 const toLabelId = useId()
@@ -169,7 +167,7 @@ onMounted(async () => {
 	const net = await networkService.getNetwork(inc.networkId).catch(() => null)
 	recordChainId.value = net?.chainId ?? null
 
-	// Aux data loads INDEPENDENTLY (allSettled): a token/config failure must not skip the fee fetch, and
+	// Aux data loads INDEPENDENTLY (allSettled): a token failure must not skip the fee fetch, and
 	// none of these may escape the async mounted hook as an unhandled rejection. The fee is PUBLIC-only
 	// (the service also gates on kind server-side) and fails soft to the dash.
 	const tasks = []
@@ -178,7 +176,6 @@ onMounted(async () => {
 	if (recordChainId.value !== null) {
 		tasks.push(tokenService.getTokens(inc.profileId, recordChainId.value).then((t) => (tokens.value = t)))
 	}
-	tasks.push(configService.getValue("defaultExplorer").then((v) => (explorerId.value = v)))
 	if (inc.kind === "public-event") {
 		feeLoading.value = true
 		tasks.push(
@@ -196,7 +193,6 @@ onBeforeUnmount(() => {
 	incomingTransferService.onIncomingTransferDeleted.remove(onReceiptDeleted)
 	incomingTransferService.disconnect()
 	tokenService.disconnect()
-	configService.disconnect()
 	networkService.disconnect()
 	prices.dispose()
 	priceService.disconnect()

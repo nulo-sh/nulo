@@ -145,6 +145,27 @@ So the record can be read two ways.
 **What ships now.** Nothing on these rows: they stay as they are until this is answered, and #142
 stays open.
 
+## OA-7. Keyboard focus on the Details links and the "View on <explorer>" line
+
+**Surface.** The sent transaction, received and journal pages: the Tx hash link, the new Block and
+To links (#142), and the "View on <explorer>" line under the time.
+
+**Situation.** The wallet's stylesheet removes every link's focus outline, so a person moving through
+these links with Tab sees no sign of where they are. The wallet's other controls draw a 2 px accent
+ring on keyboard focus. Arc 3a gave its two new controls that are not rows, the address card's
+corner icon and the trust prompt's "View contract on <explorer>", that ring. The new Block and To
+links are exactly the Tx hash row's link (OA-6), so they share its gap.
+
+**Options.**
+
+- **A. The accent ring on keyboard focus** for those four links (recommended). Nothing changes at
+  rest or for a mouse or a tap.
+- **B. As today.** No ring on these links.
+
+**Recommendation.** A: a keyboard user can see which link Enter opens, as on every other control.
+
+**What ships now.** B.
+
 ## Answers
 
 - **OA-5 = A, newest first** (decision page 4, signed 2026-10-14). Phase 2.3 is built: newest public

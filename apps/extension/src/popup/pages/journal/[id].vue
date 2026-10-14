@@ -418,7 +418,7 @@ onBeforeUnmount(() => {
 	composes: detail_value_mono from "../detail-page.module.css";
 }
 
-/* The Tx hash row's link, so both linked values in Details read alike. */
+/* TxHashRow's link, so both linked values in Details read alike. */
 .recipient_link {
 	composes: type--data from global;
 	composes: detail_link from "../detail-page.module.css";

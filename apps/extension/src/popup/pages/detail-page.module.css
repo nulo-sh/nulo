@@ -134,6 +134,11 @@
 	&:hover {
 		background: var(--nulo-surface-low);
 	}
+
+	/* A name long enough to reach the corner link wraps before its glyph. */
+	&:has(> a) > :first-child {
+		padding-right: 14px;
+	}
 }
 
 .detail_value_aux {
