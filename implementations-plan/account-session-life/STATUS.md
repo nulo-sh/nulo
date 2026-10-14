@@ -31,3 +31,9 @@
 - 2026-10-14 — arc 3 review round 1: Codex APPROVE (1 Low + 1 Comment fixed a71acaea, 1 Comment rejected), Opus CHANGES (same two; 1 Low → OWNER-ASKS OA-6, not built).
 - 2026-10-14 — arc 3 review round 2: Codex APPROVE, no findings; loop closed at 2 of 3. Boundary smoke retry-0 (auth-flows, security, passkey-backup): Chrome 12/12 in 98 s, Firefox 12/12 in 128 s; audit:vue 0 on ca83549.
 - 2026-10-14 — arc 3 boundary gate pass: audit:vue 0; smoke Chrome 12/12, Firefox 12/12; network backup-restore-integrity 2/2 retry-0 (host waited 23 min to load 56); test:all, test:ci-gating, check:plans 0.
+- 2026-10-14 — arc 4 revision started: branch `account-session-life-arc-4` off dev 15881c7d (D-orch-9); page 7 picks, #421 and the shots report read.
+- 2026-10-14 — revision recon done (2 Sonnet explorers + planner reading); nine plan-vs-tree disagreements recorded in lessons/phase-4.md (the tree wins).
+- 2026-10-14 — revision drafted: arc 4 (Ready, the bar, #421, P7-09), arc 5 (P7-05 to P7-07); OWNER-ASKS OA-7, OA-8 added; OA-6 listed for the next page.
+- 2026-10-14: revision audited (Codex r1 reject, Opus conditional approve); every finding checked at the tree and dispositioned in plan § Audit verdicts; fixes applied; Codex round 2 (resumed) running.
+- 2026-10-14: Codex r2 reject (3 items, all accepted and fixed); r3 (resumed, final verify) running.
+- 2026-10-14: Codex r3 conditional approve; its one condition applied in the plan. Revision committed for the orchestrator's approval.

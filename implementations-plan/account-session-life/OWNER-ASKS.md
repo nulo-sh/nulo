@@ -1,6 +1,6 @@
 # Owner asks: account-session-life
 
-Six questions. Page 7 answered OA-1 to OA-5 on 2026-10-14 (§ Answers); their picks wait for a plan revision, and until it lands each part ships in its "What ships now" form. OA-6, found in arc 3's review, is open and ships as A.
+Eight questions. Page 7 answered OA-1 to OA-5 on 2026-10-14 (§ Answers); the plan's arcs 4 and 5 build those picks. OA-6 (found in arc 3's review), OA-7 and OA-8 (found in the arc 4 revision) are open, and each ships in its "What ships now" form.
 
 ## OA-1: profile create when the new profile does not start (#100)
 
@@ -92,14 +92,57 @@ Under both B and C, the banner for a service that never starts comes after up to
 
 **What ships now.** A. Arc 3 adds the approved toast and changes nothing about how any toast leaves.
 
+## OA-7: the unlock screen before the service has answered (#157, arc 4)
+
+**Surface.** The popup's unlock screen (`popup/pages/auth.vue`) on a cold start, before the background service has said it has started (P7-08b = C: the unlock screen at once, with the 2 px bar).
+
+**Why it is asked.** The record says the profile name stays blank until the service answers. The screen's heading ("Password required" or "Passkey required"), its line and its form also depend on the profile, which is unknown until then. The shot showed the password form, so a passkey profile would see the password form and then a swap.
+
+**Options.**
+- **A. Keep their place, hidden.** Until the profile is known, the heading, its line and the form keep their place but do not show: the screen shows the NULO wordmark, the lock, an empty profile pill, "Delete profile" and the bar. A password profile's form then appears in place, and the cursor goes to the password field. A passkey profile's shorter form appears, and the column re-centres once.
+- **B. As the shot.** The password heading and form show at once. A passkey profile sees them for about a second, then the passkey form.
+- **C. Nothing moves.** Everything below the bar stays hidden until the profile is known, then the whole unlock screen appears at once in its final place. Until then the popup shows only the bar, as the screen did before it, so this is the furthest from "the unlock screen at once".
+
+**Timing, in every option.** The record says "at once"; as built, the unlock screen comes once 200 ms pass without the service's answer, the same delay the bar has, counted once per opening. On a normal open the service answers sooner, so the popup looks exactly as today. Showing the screen at 0 ms would show the empty pill and the swap on every normal open. Say so if you want 0 ms.
+
+**A wallet with no profile.** On a cold start, a popup opened with no profile at all shows the unlock frame until the service answers, then the Create profile screen replaces it. Today it is empty until then, then the Create profile screen. Say so if this needs a different first frame.
+
+**Recommendation.** A: no screen ever shows a form for the wrong kind of profile, and only a passkey profile's column moves, once.
+
+**What ships now.** A, with the 200 ms delay. Arc 4's PR may open before you answer; its merge waits for it. Any option is a local change to the unlock page.
+
+## OA-8: a new profile that does not open: the time limit, another profile taking over, reopening (#100, arc 5)
+
+**Surface.** Popup → New profile, after Create, when another window opens another profile while the new one starts (or the page's last steps fail after the new profile opened).
+
+**Why it is asked.** P7-05 = B sends the popup to the unlock screen with the new profile selected. Here another profile's session is open in this popup, and the unlock screen is only reachable by locking it, which would also lock the other window.
+
+**Options.**
+- **A. As today.** The button keeps reading "Creating…"; the person closes the popup and reopens it on the profile that is open.
+- **B. Say so and stay on the open profile.** The toast reads "Something went wrong" with the line "Open the wallet again to unlock your new profile.", and the popup goes to the open profile's home.
+
+**Recommendation.** B: the person learns the new profile exists without losing the open one.
+
+**What ships now.** A.
+
+**The named time limit.** P7-05 asks for a named limit on a slow start without a value. As built: 60 s after the new profile exists, the limit every popup call already has. The time spent naming the profile, creating it and on a passkey prompt is not counted. Name another value if you want one.
+
+**Reopening after the hand-off.** The new profile's session stays open in the background, so after the toast "Open the wallet again to unlock your new profile." a reopened popup goes straight to its home, without asking to unlock. Locking it at the hand-off would close a session the record does not name. Say so if the toast's second line should change.
+
+Arc 5's PR may open before you answer; its merge waits for it.
+
 ## Answers
 
-Decision page 7, signed by the owner on 2026-10-14 and applied to the issues the same day (each issue's `## Decision` block). Arc 3 builds none of the five picks below: each changes what arc 1 or arc 2 shipped as "what ships now", has no phase in this plan, and waits for the plan revision the orchestrator runs after arc 3's PR. Nothing on screen changes for them until then.
+Decision page 7, signed by the owner on 2026-10-14 and applied to the issues the same day (each issue's `## Decision` block). Each pick below changes what arc 1 or arc 2 shipped as "what ships now"; the 2026-10-14 revision of the plan builds them in arcs 4 and 5.
 
 - **OA-1 (P7-05, #100): B.** Say so and go to the unlock screen: the toast reads "Something went wrong" with the line "Open the wallet again to unlock your new profile." and the popup goes to the unlock screen with the new profile selected. Owner note: "Should we give some more information to the user? How can we help him here?"
-- **OA-2 (P7-06, #99): B.** Skip it: keep the imported account as it is and create the next account after it.
-- **OA-3 (P7-07, #159): B.** Start over on Try again, for this failure only: Try again starts a new passkey so the person can pick an authenticator that works. The window's words stay.
-- **OA-4 (P7-08, #157): C.** B without the loader: calls wait as in B, but start-up looks as it does today (the unlock screen while it is still deciding). A service that never starts shows that screen for up to 60 s, then the banner. Owner note: "How does it look today? As an empty screen? If so, showcase to me 4/5 options for this. though it shouldn't be more than less than 1 sec, but Im intrigued now." The options for the start-up moment go to a separate shots worker (`program-2-shots-157`), not to this lane.
-- **OA-5 (P7-09, #157): B.** Give this one call the time the page promises: the popup waits for `deleteProfile` up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words.
+  - **The named limit (the note the record asks for):** 60 seconds after the new profile exists, the planner's value, listed on OA-8 for confirmation. It is the bound every popup call to the service already has, and the limit after which the start-up banner appears. Past it, a start-up that would have finished lands on the unlock screen, and finishing later does not move the screen. Built in arc 5. A second line for a slow start ("The wallet is taking long to start."), offered in chat, has no answer, so B's words ship as recorded.
+- **OA-2 (P7-06, #99): B.** Skip it: keep the imported account as it is and create the next account after it. Built in arc 5.
+- **OA-3 (P7-07, #159): B.** Start over on Try again, for this failure only: Try again starts a new passkey so the person can pick an authenticator that works. The window's words stay. Built in arc 5.
+- **OA-4 (P7-08, #157): C.** B without the loader: calls wait as in B, but start-up looks as it does today (the unlock screen while it is still deciding). A service that never starts shows that screen for up to 60 s, then the banner. Owner note: "How does it look today? As an empty screen? If so, showcase to me 4/5 options for this. though it shouldn't be more than less than 1 sec, but Im intrigued now." The options for the start-up moment went to a separate shots worker (`program-2-shots-157`), not to this lane.
+- **OA-4 follow-up (P7-08b, #157): C**, picked 2026-10-14 19:20Z: "The unlock screen at once with a 2 px bar sweeping along the popup's top edge until the service has started. Nothing else changes and nothing moves. On a normal open at most one frame of the bar, none with a 200 ms delay before it shows; on a cold start the bar runs about a second and the unlock screen appears about a second sooner than today. The profile name stays blank until the service answers." Built in arc 4; OA-7 asks the details it leaves open.
+- **OA-5 (P7-09, #157): B.** Give this one call the time the page promises: the popup waits for `deleteProfile` up to the hint's 30 minutes plus the start-up allowance, so the page keeps "Deleting…" and its hint until the background finishes, then shows "Profile deleted" as on the quick path. No new words. Built in arc 4.
+
+OA-6 is not on page 7: it goes on the orchestrator's next page, with OA-7 and OA-8.
 
 Page 7's arc 3 records, built in arc 3 as approved: P7-01 (#24, no recovery bearer), P7-02 (#137, the unlock toast), P7-03 (#208, one eye per change-password field). P7-04 (#208, backup autocomplete) was not struck, so it stands; it is built in Phase 3.4, deferred by D-orch-7.
