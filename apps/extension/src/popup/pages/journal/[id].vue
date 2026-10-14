@@ -37,7 +37,7 @@ import { PriceServiceClient } from "@/wallet/services/price/client"
 import { balanceFormatted } from "@/utils/amount.js"
 import { knownDecimals } from "@/utils/token-amount"
 import { copyWithToast } from "@/utils/clipboard"
-import { getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
+import { getAccountExplorerUrl, getTransactionExplorerUrl, BLOCK_EXPLORERS } from "@/wallet/constants/explorers"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
@@ -123,10 +123,16 @@ const originChip = computed(() => {
 
 const txHash = computed(() => op.value?.progress?.txHash ?? null)
 
-// Only a record that names the active network places its hash on a chain; a legacy record names none.
+// Only a record that names the active network places its hash or recipient on a chain; a legacy record names none.
+const onActiveNetwork = computed(() => Boolean(appStore.network) && op.value?.networkId === appStore.network.id)
 const explorerUrl = computed(() => {
-	if (!txHash.value || !appStore.network || op.value?.networkId !== appStore.network.id) return null
+	if (!txHash.value || !onActiveNetwork.value) return null
 	return getTransactionExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, txHash.value)
+})
+const recipientUrl = computed(() => {
+	const r = op.value?.recipientAddress
+	if (!r || !onActiveNetwork.value) return null
+	return getAccountExplorerUrl(appStore.network.chainId, appStore.defaultExplorer, r)
 })
 const explorerName = computed(() => BLOCK_EXPLORERS.find((e) => e.id === appStore.defaultExplorer)?.name ?? "explorer")
 
@@ -301,7 +307,16 @@ onBeforeUnmount(() => {
 
 				<Flex v-if="recipientLabel" wide justify="between" align="center">
 					<span :class="$style.detail_key">To</span>
-					<span :class="$style.detail_value_mono" data-testid="journal-detail-recipient">{{ recipientLabel }}</span>
+					<a
+						v-if="recipientUrl"
+						:href="recipientUrl"
+						target="_blank"
+						rel="noopener noreferrer"
+						data-testid="journal-detail-recipient-link"
+						:class="$style.recipient_link"
+						>{{ recipientLabel }}</a
+					>
+					<span v-else :class="$style.detail_value_mono" data-testid="journal-detail-recipient">{{ recipientLabel }}</span>
 				</Flex>
 
 				<Flex v-if="showOutcome" wide justify="between" align="center">
@@ -401,6 +416,13 @@ onBeforeUnmount(() => {
 
 .detail_value_mono {
 	composes: detail_value_mono from "../detail-page.module.css";
+}
+
+/* The Tx hash row's link, so both linked values in Details read alike. */
+.recipient_link {
+	composes: type--data from global;
+	composes: detail_link from "../detail-page.module.css";
+	color: var(--txt-secondary);
 }
 
 .detail_context {

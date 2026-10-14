@@ -119,6 +119,8 @@
 }
 
 .address_card {
+	/* Anchors the corner explorer link. */
+	position: relative;
 	width: 100%;
 
 	padding: 12px;
