@@ -6,6 +6,8 @@
 import { config, flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
+import DottedTerm from "@/components/composite/DottedTerm.vue"
+import { GLOSSARY } from "@/utils/glossary"
 import OperationCard from "./OperationCard.vue"
 
 const mocks = vi.hoisted(() => ({
@@ -145,6 +147,13 @@ function spokenText(el: Element): string {
 		if (text) parts.push(text)
 	}
 	return parts.join(" ")
+}
+
+/** The text a sighted person reads in `el`: a dotted term's always-mounted definition is `hidden`. */
+function shownText(el: Element): string {
+	const clone = el.cloneNode(true) as Element
+	for (const node of clone.querySelectorAll("[hidden]")) node.remove()
+	return clone.textContent?.replace(/\s+/g, " ").trim() ?? ""
 }
 
 const fee = (w: VueWrapper) => w.find('[data-testid="fee-settings-card"]')
@@ -302,7 +311,8 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 				feeEstimate: feeEstimate as never,
 				dapp: { name: "Swap" },
 			},
-			global: { stubs },
+			// The real term, so the test reads the markup a person and a screen reader get.
+			global: { stubs, components: { DottedTerm } },
 		})
 		mounted = w
 		await flushPromises()
@@ -326,9 +336,12 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
 		expect(w.get('[data-testid="execute-op-app-fee"]').text()).toBe("Fee up to 3.577824 FJ")
 		expect(region(w).text()).toBe("")
+		expect(w.findAllComponents(DottedTerm)).toHaveLength(0)
 	})
 
-	test("the app asked for a priority fee: the row reads the limit and the priority part in one sentence", async () => {
+	// An approval window carries one operation and nothing else on it is dotted, so the card's
+	// dotted terms are the screen's, which the glossary rule caps at two.
+	test("the app asked for a priority fee: one sentence, its priority fee the screen's one dotted term, defined by the glossary", async () => {
 		const w = await mountWith({
 			...ESTIMATE,
 			maxFee: "16000000000000000",
@@ -337,7 +350,14 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 			priorityFeeFormatted: "0.004",
 			appPayerFunding: covered,
 		})
-		expect(row(w).text()).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
+		expect(shownText(row(w).element)).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
+		expect(w.findAllComponents(DottedTerm).map((t) => t.props("term"))).toEqual(["priority-fee"])
+		const term = w.get('[data-testid="execute-op-priority-term"]')
+		expect(term.text()).toBe("priority fee")
+		expect(term.attributes("tabindex")).toBe("0")
+		const description = row(w).element.querySelector(`[id="${term.attributes("aria-describedby")}"]`)
+		expect(description?.hasAttribute("hidden")).toBe(true)
+		expect(description?.textContent).toBe(GLOSSARY["priority-fee"].definition)
 	})
 
 	test.each([true, false])(

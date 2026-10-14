@@ -118,6 +118,7 @@ test("Settings → Glossary lists every entry in section order, and its back arr
 	await page.waitForSelector(sel("glossary-entry-proving"), { visible: true, timeout: 5_000 })
 	const entries = await page.$$eval('[data-testid^="glossary-entry-"]', (els) => els.map((el) => el.getAttribute("data-testid")))
 	expect(entries).toEqual(GLOSSARY_SECTIONS.flatMap((section) => section.keys.map((key) => `glossary-entry-${key}`)))
+	await shotSend(page, "glossary-fees", "glossary-entry-priority-fee")
 
 	await prepareKeys(page)
 	await tabTo(page, "subpage-back", 10)

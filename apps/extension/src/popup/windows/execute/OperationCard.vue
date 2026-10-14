@@ -289,7 +289,7 @@ const toggleAuthwit = (a: DiscoveredAuthwit): void => {
 				<Icon name="check-circle" size="14" color="green" />
 				<Text v-if="feeEstimate" variant="body" color="secondary" data-testid="execute-op-app-fee">
 					Fee up to
-					<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ priority fee the app asked for</template>
+					<Text variant="name" color="primary" :class="$style.name_size">{{ feeEstimate.maxFeeFormatted }} FJ</Text><template v-if="feeEstimate.priorityFeeFormatted">, includes a {{ feeEstimate.priorityFeeFormatted }} FJ <DottedTerm term="priority-fee" testid="execute-op-priority-term">priority fee</DottedTerm> the app asked for</template>
 				</Text>
 				<Text v-else variant="body" color="secondary">
 					Fee payment method set by

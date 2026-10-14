@@ -253,7 +253,10 @@ test.skipIf(!hasConfig)(
 			const popup = await execute
 			await waitForExecuteContent(popup)
 			await popup.waitForSelector('[data-testid="execute-op-app-fee"]', { visible: true, timeout: 120_000 })
-			const row = await popup.$eval('[data-testid="execute-op-fee-set-badge"]', (el) => el.textContent?.replace(/\s+/g, " ").trim())
+			// `innerText`: the dotted term's definition sits in the row, hidden, for its `aria-describedby`.
+			const row = await popup.$eval('[data-testid="execute-op-fee-set-badge"]', (el) =>
+				(el as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
+			)
 			const sentence = /^Fee up to ([\d.]+) FJ, includes a ([\d.]+) FJ priority fee the app asked for$/.exec(row ?? "")
 			expect(sentence, `the row reads "${row}"`).not.toBeNull()
 			const [figure, priority] = [Number(sentence?.[1]), Number(sentence?.[2])]
