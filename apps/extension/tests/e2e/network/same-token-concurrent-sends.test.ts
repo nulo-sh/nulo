@@ -699,6 +699,7 @@ test.skipIf(!hasConfig)(
 			if (asking === "sent") break
 			if (asks > MAX_ASKS) throw new Error(`asked again ${asks} times: ${JSON.stringify(asking)}`)
 			caps.push(asking.reask.cap)
+			console.log(`[same-token] re-ask ${asks} over a ${basis} basis: ${JSON.stringify(asking.reask)}`)
 			expect(BigInt(asking.reask.fee) > BigInt(asking.reask.cap), "a re-ask names a fee above its cap").toBe(true)
 			expect(await pendingTxCount(nodeUrl), "the node holds no tx of B before the accept").toBe(0)
 			if (asks === 1) await reopen(burst)
