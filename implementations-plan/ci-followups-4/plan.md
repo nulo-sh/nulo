@@ -1,7 +1,7 @@
 ---
 plan: ci-followups-4
 tier: light
-status: implementing arc 1; A1 approved 2026-10-14; D3 fired in Phase 2 (a sixth third-party gap), so #172 takes the known-limit branch
+status: completed; arc 1 in #437, awaiting the orchestrator's merge
 issues: "#172, #365 (arc 1)"
 driver: claude-code
 claude_model: opus
@@ -14,6 +14,24 @@ base: origin/dev at b3c98acb
 trunk: dev
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-14.
+- **Status:** completed. One arc, [#437](https://github.com/nulo-sh/nulo/pull/437) against `dev`, awaiting the orchestrator's merge; the merge closes this plan. A1 was approved, then D3 fired in Phase 2 (a sixth third-party gap), so #172 took the known-limit branch (D-impl-4).
+- **Shipped:** in #437.
+  - The first-party gaps the narrowed fallback surfaced, declared: `@types/node` in `@nulo/aztec-runtime` and `@nulo/wallet-bridge`; `@storybook/vue3-vite` in `@nulo/design`; Storybook's framework from an absolute root (D-impl-1); `assert` in the extension's and the playground's `nodePolyfills` lists (D-impl-2). Every bundle byte-identical, 15,751 test identities unchanged.
+  - CLAUDE.md's linker bullet states the real boundary and the polyfill rule, and absorbs two lessons lines; `bunfig.toml`'s header says the same (comment only).
+  - #365: the raw field's network case, green on Chrome and Firefox at retry 0, proven red by a scratch `variant` change.
+  - `lessons.md` 8,191 → 7,124 B; `nightly.yml`'s `dup-trend` comment points at the complexity-budgets skill.
+- **Dropped, rejected, superseded:**
+  - D1 (`hoistPattern`, five entries): tried, superseded by D3: `bun-types@1.4.2` imports `undici-types` undeclared (D-impl-4). Phase 2 step 7 (the SECURITY.md sentence, the aztec-update line) and the host-wide fresh install went with it.
+  - #365's PublicChecks note for #165: already carried by #165's existing comment from the type-roles close-out; no duplicate.
+  - The playground's `tty`: left out of its list (colorette guards it; review O2).
+  - No `lessons.md` promotion: the linker facts live in CLAUDE.md.
+- **Known limits:** #172 (the store fallback stays: six upstream gaps), #438 (the extension build only warns when it stubs a Node builtin).
+- **Open items:** none.
+- **Seeds retired:** the `/goal` and `/loop` seeds below.
 
 # ci-followups-4: a named store fallback, the raw field's e2e case, a lessons pass
 
