@@ -134,6 +134,23 @@ describe("ImportFullBackupForm", () => {
 		expect(sentence?.classes()).not.toContain("color--yellow")
 	})
 
+	it("a page restoring into the open profile asks for no new password", () => {
+		const props = baseProps({ selectedBackup: { name: "x.json", backup: {}, type: "plain", profileType: "password" } })
+		expect(mount(ImportFullBackupForm, { props, global: { stubs } }).text()).toContain("New Password")
+		const own = mount(ImportFullBackupForm, { props: { ...props, askNewPassword: false }, global: { stubs } })
+		expect(own.text()).not.toContain("New Password")
+		expect(own.find("[data-testid=import-full-backup-password-input]").exists()).toBe(false)
+	})
+
+	it("a page's own warning replaces the worded one", () => {
+		const wrapper = mount(ImportFullBackupForm, {
+			props: baseProps({ restoreStatus: "finished", isRestoreHasErrors: true, warningText: "Testnet couldn't be restored." }),
+			global: { stubs },
+		})
+		expect(wrapper.get("[data-testid=import-full-backup-warning]").text()).toContain("Testnet couldn't be restored.")
+		expect(wrapper.text()).not.toContain("import completed with some errors")
+	})
+
 	it("names the networks a Retry replays in the warning", () => {
 		const wrapper = mount(ImportFullBackupForm, {
 			props: baseProps({

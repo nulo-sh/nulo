@@ -52,7 +52,7 @@ export interface UseProfileImportFlowOptions {
 }
 
 /** The flow's error banner + copy-to-clipboard affordance. */
-function useImportErrorState(openToast: UseProfileImportFlowOptions["openToast"]) {
+export function useImportErrorState(openToast: UseProfileImportFlowOptions["openToast"]) {
 	const error = ref({ type: "", title: "", tooltip: "" })
 	function fillError(type?: string, title?: string, tooltip?: string) {
 		if (!title) {
@@ -233,7 +233,7 @@ function createImportHandlers(deps: ImportHandlerDeps) {
  *  inflate in there, before any caller-side .size check could). The cap
  *  error maps to the flow's error banner and the flow exits through its
  *  existing no-file path. */
-function cappedBackupPick(fillError: (type?: string, title?: string, tooltip?: string) => void) {
+export function cappedBackupPick(fillError: (type?: string, title?: string, tooltip?: string) => void) {
 	return async () => {
 		try {
 			return await pickFile(undefined, false, true, MAX_BACKUP_FILE_BYTES)

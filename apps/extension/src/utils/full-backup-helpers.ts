@@ -104,6 +104,19 @@ export async function openFullBackupText(text: string, password: string): Promis
 	}
 }
 
+/** The decrypt + parse chain of a picked encrypted backup, stale-fenced after the KDF and decrypt: a
+ *  re-pick (or the too-large clear) meanwhile must not have its error wiped or its selection
+ *  resurrected by a late publication. */
+export async function openEncryptedBackup(
+	sealed: string,
+	password: string,
+	isStale: () => boolean,
+): Promise<{ kind: "stale" } | { kind: "ok"; backupObject: { data?: { profile?: { type?: string; name?: string } } } }> {
+	const decodedJson = await openFullBackupText(sealed, password)
+	if (isStale()) return { kind: "stale" }
+	return { kind: "ok", backupObject: JSON.parse(decodedJson) as { data?: { profile?: { type?: string; name?: string } } } }
+}
+
 export interface ProcessBackupResult {
 	selection: BackupSelection
 	parseError?: { title: string; tooltip: string }

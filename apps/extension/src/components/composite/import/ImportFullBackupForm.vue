@@ -17,6 +17,10 @@ const props = defineProps({
 	/** Names of the networks a Retry replays; the warning names them. */
 	unrestoredNetworks: { type: Array, default: () => [] },
 	hasOtherErrors: { type: Boolean, default: false },
+	/** Replaces the warning the form words from `unrestoredNetworks` and `hasOtherErrors`. */
+	warningText: { type: String, default: undefined },
+	/** Restoring into a new profile asks for its password; restoring into the open one does not. */
+	askNewPassword: { type: Boolean, default: true },
 	error: { type: Object, default: () => ({ type: "", title: "", tooltip: "" }) },
 	isCopied: { type: Boolean, default: false },
 	maxPasswordLength: { type: Number, default: 128 },
@@ -36,7 +40,7 @@ const warningRef = useTemplateRef("warningRef")
 
 const passwordHint = computed(() => newPasswordHint(password.value ?? "", repeatedPassword.value ?? ""))
 const showWarning = computed(() => props.restoreStatus === "finished" && props.isRestoreHasErrors)
-const warningText = computed(() => restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
+const shownWarning = computed(() => props.warningText ?? restoreWarningText(props.unrestoredNetworks, props.hasOtherErrors))
 
 // The errors screen's footer buttons appear with the warning and shorten the popup's scroller,
 // which leaves the warning below its edge.
@@ -99,7 +103,7 @@ watch(
 		>
 			<Flex align="center" gap="8">
 				<span :class="[$style.error_tag, $style.error_tag_warning]">Warning</span>
-				<Text variant="body" height="120" color="txt-warning">{{ warningText }}</Text>
+				<Text variant="body" height="120" color="txt-warning">{{ shownWarning }}</Text>
 			</Flex>
 		</Flex>
 	</div>
@@ -123,7 +127,7 @@ watch(
 		</Input>
 	</div>
 
-	<div v-if="selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
+	<div v-if="askNewPassword && selectedBackup?.profileType === 'password' && !restoreStatus" :class="$style.section">
 		<span :class="$style.section_label">New Password</span>
 		<Flex direction="column" gap="12">
 			<Input

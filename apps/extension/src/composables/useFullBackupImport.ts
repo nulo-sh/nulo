@@ -23,7 +23,7 @@ import {
 	type BackupSelection,
 	collectRestoreErrors,
 	normalizeAllIds,
-	openFullBackupText,
+	openEncryptedBackup,
 	readBackupFile,
 } from "@/utils/full-backup-helpers"
 import { BACKUP_SCHEMA_VERSION_FIELD, COMPAT_EPOCH_FIELD, isSupportedCompatEpoch } from "@/wallet/services/backup/backup-migration-registry"
@@ -78,6 +78,18 @@ type ValidatedBackup = {
 }
 
 type ValidateAndMigrateResult = ({ kind: "ok" } & ValidatedBackup) | { kind: "rejected"; title: string; message: string }
+
+/** A picked file that is no backup the wallet reads. */
+export const UNRECOGNIZED_BACKUP = {
+	title: "Unrecognized Backup File",
+	message: "The selected file is not a valid backup. Please select a correct backup file.",
+} as const
+
+export const DECRYPTION_FAILED = {
+	title: "Decryption Failed",
+	message:
+		"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
+} as const
 
 /** What a backup that is not the one the wallet exported shows, whichever check refused it. */
 const INTEGRITY_REFUSAL = {
@@ -274,19 +286,6 @@ function sanitizedBackupName(raw: unknown): string | null {
 	return cleaned.length > 0 ? cleaned : null
 }
 
-/** The decrypt + parse chain of decryptBackup, stale-fenced after the KDF and decrypt: a
- *  re-pick (or the too-large clear) meanwhile must not have its error wiped or its selection
- *  resurrected by a late publication. */
-async function openEncryptedBackup(
-	sealed: string,
-	password: string,
-	isStale: () => boolean,
-): Promise<{ kind: "stale" } | { kind: "ok"; backupObject: { data?: { profile?: { type?: string; name?: string } } } }> {
-	const decodedJson = await openFullBackupText(sealed, password)
-	if (isStale()) return { kind: "stale" }
-	return { kind: "ok", backupObject: JSON.parse(decodedJson) as { data?: { profile?: { type?: string; name?: string } } } }
-}
-
 /** The post-token slice clients, constructed up-front for the whole-loop finally. */
 function buildSliceClients(): Array<{ name: string; client: SliceRestoreClient }> {
 	return [
@@ -472,8 +471,8 @@ async function executeRestore(
 	}
 
 	io.setStage("restoring:account-state")
-	const accountStateRetry = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService)
-	return { profile: newProfile, networks: nets.seeded, accountStateRetry }
+	const tail = await restoreAccountStateStage(data, nets.seeded, networkService, io, restoreRun, profileService)
+	return { profile: newProfile, networks: nets.seeded, accountStateRetry: tail.retry }
 }
 
 /** The composable's reactive state, bundled for the module-level flow functions. */
@@ -538,11 +537,7 @@ async function runPickBackupFile(state: ImportRefs, opts: UseFullBackupImportOpt
 			return
 		}
 		if (selection.type === "unknown" || (selection.type === "plain" && !selection.profileType)) {
-			opts.fillError(
-				"full_backup",
-				"Unrecognized Backup File",
-				"The selected file is not a valid backup. Please select a correct backup file.",
-			)
+			opts.fillError("full_backup", UNRECOGNIZED_BACKUP.title, UNRECOGNIZED_BACKUP.message)
 			return
 		}
 		// Surface the backup-embedded profile name as soon as it's available so the parent
@@ -594,11 +589,7 @@ async function runDecryptBackup(state: ImportRefs, opts: UseFullBackupImportOpti
 		opts.clearError()
 	} catch {
 		if (state.selectedBackup.value !== target) return
-		opts.fillError(
-			"full_backup",
-			"Decryption Failed",
-			"The provided password is incorrect or the backup file is corrupted. Please try again with the correct password or select another file.",
-		)
+		opts.fillError("full_backup", DECRYPTION_FAILED.title, DECRYPTION_FAILED.message)
 	}
 }
 
@@ -691,9 +682,11 @@ async function runRetryAccountState(
 	const live = () => state.accountStateRetry.value === ctx
 	let next: AccountStateRetryContext | undefined
 	try {
-		next = await retryAccountStateStage(ctx, (serviceName, stale, data) =>
-			live() ? deps.replaceRestoreErrors(serviceName, stale, data) : [],
-		)
+		next = (
+			await retryAccountStateStage(ctx, (serviceName, stale, data) =>
+				live() ? deps.replaceRestoreErrors(serviceName, stale, data) : [],
+			)
+		).retry
 	} finally {
 		if (state.retryingAccountState.value === ctx) state.retryingAccountState.value = null
 	}
@@ -709,7 +702,7 @@ function retryNetworkNames(ctx: AccountStateRetryContext): string[] {
 }
 
 /** Whether `log` holds a row a Retry of `ctx` would not replace; with no context, any row. */
-function hasRowsBeyondRetry(log: Record<string, unknown[]>, ctx: AccountStateRetryContext | null): boolean {
+export function hasRowsBeyondRetry(log: Record<string, unknown[]>, ctx: AccountStateRetryContext | null): boolean {
 	const replaced = new Set(ctx ? retryReplacedRows(ctx) : [])
 	// Rows read back through the reactive log are proxies: compare the raw rows.
 	return Object.values(log).some((rows) => rows.some((row) => !replaced.has(toRaw(row))))
@@ -733,7 +726,8 @@ function reportRestoreErrors(serviceName: string, data: unknown): unknown[] {
 	return errors
 }
 
-function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
+/** The error log's two writers: a stage's append, and a Retry's swap of the rows it replaces. */
+export function errorLogWriters(restoreErrorLog: Ref<Record<string, unknown[]>>) {
 	function recordRestoreErrors(serviceName: string, data: unknown): unknown[] {
 		const errors = reportRestoreErrors(serviceName, data)
 		// APPEND, not assign: some services already have entries recorded before

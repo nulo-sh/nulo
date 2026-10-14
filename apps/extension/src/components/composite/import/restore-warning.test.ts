@@ -1,5 +1,14 @@
 import { describe, expect, test } from "vitest"
-import { restoreNoticeText, restoreWarningText, retryResultText, withNetworkNames } from "./restore-warning"
+import {
+	RESTORE_AGAIN_OTHER_BACKUP,
+	restoreAgainDoneText,
+	restoreAgainFailedText,
+	restoreAgainIntroText,
+	restoreNoticeText,
+	restoreWarningText,
+	retryResultText,
+	withNetworkNames,
+} from "./restore-warning"
 
 describe("restoreWarningText", () => {
 	test.each([
@@ -77,5 +86,28 @@ describe("withNetworkNames", () => {
 		withNetworkNames(log, names)
 		expect(log["account-state"][0]).toBe(row)
 		expect(row).not.toHaveProperty("network")
+	})
+})
+
+describe("Restore again's words", () => {
+	test("the line above the file picker", () => {
+		expect(restoreAgainIntroText(["Testnet"])).toBe(
+			"Choose the backup file you restored this profile from. Only Testnet will be restored, into this profile.",
+		)
+		expect(restoreAgainIntroText(["Testnet", "Local Network"])).toBe(
+			"Choose the backup file you restored this profile from. Only Testnet and Local Network will be restored, into this profile.",
+		)
+	})
+
+	test("the toast, the warning for what no Retry restores, and the other-backup refusal", () => {
+		expect(restoreAgainDoneText(["Testnet"])).toBe("Testnet restored")
+		expect(restoreAgainDoneText(["Testnet", "Local Network"])).toBe("Testnet and Local Network restored")
+		expect(restoreAgainFailedText(["Testnet"])).toBe(
+			"Testnet couldn't be restored from this backup. You can review the details or continue.",
+		)
+		expect(RESTORE_AGAIN_OTHER_BACKUP).toEqual({
+			title: "This isn't the backup you restored",
+			message: "Choose the file you restored this profile from.",
+		})
 	})
 })
