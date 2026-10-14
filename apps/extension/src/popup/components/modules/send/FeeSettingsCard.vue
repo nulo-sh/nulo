@@ -308,11 +308,7 @@ const sponsorFunding = computed(() => {
 /** The dApp-locked method's fresh row from `methods` (balance-aware), never a saved record. */
 const lockedOption = () => methods.value.find((m) => m.type === props.lockedMethod)
 
-/**
- * Pure derivation of settings from current state. Returns `undefined` while
- * init is in flight so the parent's estimation watcher doesn't fire against
- * a partially-resolved snapshot.
- */
+/** `undefined` until init commits a whole snapshot, so the parent never estimates against a partial one. */
 const derivedSettings = computed(() => {
 	if (!isInitComplete.value) return undefined
 	const m = effectiveMethod.value
@@ -602,8 +598,7 @@ const commitFromEntry = (scope, reqKey, saved, baseline) => {
 	}
 }
 
-/** True when a run no longer owns the card: unmounted, or the identity props
- *  (profile/network/chain/account) moved off the snapshot this run targeted. */
+/** Unmounting counts: either way the run no longer owns the card. */
 const identityDrifted = (scope) => !isMounted || !isLiveFeeScope(props, scope)
 
 /** The store fetches the legs with per-leg isolation, timeout, and raw-promise
@@ -945,7 +940,6 @@ onBeforeUnmount(() => {
 			</Flex>
 		</div>
 
-		<!-- Get-fee-juice nudge: the selected method has no fee juice to pay with. -->
 		<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
 			<Icon name="warning" size="14" color="secondary" />
 			<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">

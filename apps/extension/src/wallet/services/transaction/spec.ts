@@ -166,10 +166,9 @@ export type Tx = {
 	calls: TxCall[]
 }
 
-/** Tolerant-deep sub-schema: validates only the fields consumers BRANCH on
- *  (contract/method/args + transfer from/to for balance-refresh targeting);
- *  `z.custom` passes the value through VERBATIM, so display-only fields
- *  (token, type, amount, …) are never stripped by the codec. */
+/** Tolerant-deep sub-schema: validates the call's contract/method/args and each transfer's from/to;
+ *  `z.custom` passes the value through VERBATIM, so a field it does not check (token, type,
+ *  amount, …) is never stripped, and a reader that branches on one compares it exactly. */
 const TxCallRowSchema = z.custom<TxCall>((v) => {
 	const c = v as TxCall
 	if (typeof c !== "object" || c === null) return false
