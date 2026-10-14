@@ -91,18 +91,12 @@ const expanded = defineModel({ type: Boolean, default: false })
 
 <style module>
 .detail_key {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	font-weight: 600;
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
@@ -111,8 +105,8 @@ const expanded = defineModel({ type: Boolean, default: false })
 }
 
 .detail_value_aux {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--fiat from global;
+	font-size: 11px;
 	color: var(--nulo-outline);
 }
 
@@ -141,17 +135,12 @@ const expanded = defineModel({ type: Boolean, default: false })
 }
 
 .fee_grid_key {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .fee_grid_num {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	text-align: right;
 }
 
@@ -161,7 +150,6 @@ const expanded = defineModel({ type: Boolean, default: false })
 
 .fee_grid_val {
 	color: var(--txt-primary);
-	font-weight: 600;
 }
 
 .fee_breakdown_divider {
@@ -170,8 +158,7 @@ const expanded = defineModel({ type: Boolean, default: false })
 }
 
 .fee_savings {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--green);
 }
 </style>

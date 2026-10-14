@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" icon="user" raw />
+				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 		</div>
 
@@ -172,7 +172,7 @@ onBeforeUnmount(() => {
 					<template #bottom>
 						<Flex align="center" gap="6" :class="$style.hint_row">
 							<MaterialIcon name="lock" :size="12" color="tertiary" />
-							<Text size="12" weight="600" color="tertiary">{{ passwordHint }}</Text>
+							<Text variant="body" color="tertiary">{{ passwordHint }}</Text>
 						</Flex>
 					</template>
 				</Input>
@@ -196,8 +196,7 @@ onBeforeUnmount(() => {
 			>
 				<Icon name="info" size="14" color="red" />
 				<Text
-					size="12"
-					weight="600"
+					variant="body"
 					height="120"
 					color="red"
 					data-testid="error-text-unexpected"
@@ -241,11 +240,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -254,8 +249,7 @@ onBeforeUnmount(() => {
 }
 
 .error_text {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--red);
 	margin-top: 4px;
 	display: block;

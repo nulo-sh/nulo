@@ -156,8 +156,8 @@ onBeforeUnmount(() => {
 			<template v-for="sk in Object.keys(settings)" :key="sk">
 				<Flex v-if="settings[sk].visible.value" align="center" justify="between">
 					<Flex direction="column" justify="center" gap="6">
-						<Text size="13" weight="600" color="primary">{{ settings[sk].title }}</Text>
-						<Text size="12" weight="500" color="tertiary">{{ settings[sk].description }}</Text>
+						<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings[sk].title }}</Text>
+						<Text variant="caption" color="tertiary">{{ settings[sk].description }}</Text>
 					</Flex>
 
 					<Toggle
@@ -175,14 +175,14 @@ onBeforeUnmount(() => {
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
 						<Flex align="center" gap="8">
-							<Text :id="logsTitleId" size="13" weight="600" color="primary">Logs</Text>
+							<Text :id="logsTitleId" variant="row-title" :class="$style.title_size" color="primary">Logs</Text>
 							<div
 								v-if="cacheStore.failureLog?.color"
 								:class="$style.failure_dot"
 								:style="{ background: cacheStore.failureLog.color }"
 							/>
 						</Flex>
-						<Text size="12" weight="500" color="tertiary">
+						<Text variant="caption" color="tertiary">
 							{{ cacheStore.failureLog ? '1 recent failure' : 'Open the log viewer window' }}
 						</Text>
 					</Flex>
@@ -198,8 +198,8 @@ onBeforeUnmount(() => {
 			>
 				<Flex justify="between" align="center">
 					<Flex direction="column" gap="6">
-						<Text size="13" weight="600" color="primary">Account State</Text>
-						<Text size="12" weight="500" color="tertiary">Notes, authwits, contracts, senders</Text>
+						<Text variant="row-title" :class="$style.title_size" color="primary">Account State</Text>
+						<Text variant="caption" color="tertiary">Notes, authwits, contracts, senders</Text>
 					</Flex>
 					<MaterialIcon name="chevron_right" :size="18" color="secondary" />
 				</Flex>
@@ -242,5 +242,9 @@ onBeforeUnmount(() => {
 	height: 8px;
 	border-radius: 50%;
 	flex-shrink: 0;
+}
+
+.title_size {
+	font-size: 13px;
 }
 </style>

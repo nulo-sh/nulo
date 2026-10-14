@@ -6,8 +6,11 @@ import {
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
 	type FeeMethodOption,
+	feeAmountDisplay,
 	feeDisplay,
+	feeInWords,
 	feeLine,
+	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
 	isLiveFeeScope,
@@ -466,5 +469,28 @@ describe("fee-helpers/fee scope", () => {
 		const live = { profile: { id: "p1" }, network: { id: "n1", chainId: 7 }, account: { address: "0xabc" } }
 		const scope = { profileId: "p1", networkId: "n1", chainId: "7" as unknown as number, accountAddress: "0xabc" }
 		expect(isLiveFeeScope(live, scope)).toBe(false)
+	})
+})
+
+describe("fee-helpers/feeInWords", () => {
+	test("the amount, then the dollars when priced", () => {
+		expect(feeInWords({ amount: "4.47228", usd: "$0.269" })).toBe("4.47228 FJ ($0.269)")
+		expect(feeInWords({ amount: "4.47228", usd: null })).toBe("4.47228 FJ")
+		expect(feeInWords(feeAmountDisplay("4472280000000000000", undefined))).toBe("4.47228 FJ")
+	})
+})
+
+describe("fee-helpers/feePayerOf", () => {
+	test("Fee Juice, public or private, is the person's; a sponsor pays only when it is Nulo's own", () => {
+		expect(feePayerOf({ type: "fj" })).toBe("self")
+		expect(feePayerOf({ type: "private_fpc", isProtocol: true })).toBe("self")
+		expect(feePayerOf({ type: "fpc", isProtocol: true })).toBe("sponsor")
+		expect(feePayerOf({ type: "fpc", isProtocol: false })).toBe("unvouched")
+		expect(feePayerOf({ type: "fpc" })).toBe("unvouched")
+	})
+
+	test("nobody pays while no method is chosen", () => {
+		expect(feePayerOf(null)).toBeNull()
+		expect(feePayerOf(undefined)).toBeNull()
 	})
 })

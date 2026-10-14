@@ -19,5 +19,5 @@ test("base.css content is pinned (edits must be deliberate + visually re-verifie
 	// Firefox matches Chrome; the dark palette is declared once (`:root, [theme="dark"]`), its hairline
 	// and scrim tokens at their literals' values, its --txt-danger lighter than --red so it reads 4.5:1 on a
 	// pressed row; line 1 carries the Apache-2.0 §4(b) header.
-	expect(hash).toBe("910a6a070127fd820b0cbf3cb1bcfed5a592a352b3398e11cf48fbfad284b3e6")
+	expect(hash).toBe("63aabfe04107936e4286dfd43d7817d9d734ecf21900dea082f6561536ae3c90")
 })

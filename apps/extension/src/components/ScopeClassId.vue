@@ -11,6 +11,7 @@
  * a hostile dApp can't pick a class ID that collides with a user's
  * named contact to imply a relationship that doesn't exist.
  */
+import { isRepeatOrComposing } from "@/composables/usePopupEntity"
 import { copyWithToast } from "@/utils/clipboard"
 import { trimAddress } from "@/utils/string"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -23,6 +24,10 @@ function handleClick() {
 	// Same stripping-without-truncation rule as ScopeAddress.
 	void copyWithToast(props.id, openToast, "Class id is copied", { sanitize: true })
 }
+
+function onKey(e: KeyboardEvent) {
+	if (!isRepeatOrComposing(e)) handleClick()
+}
 </script>
 
 <template>
@@ -30,12 +35,13 @@ function handleClick() {
 		data-testid="scope-class-id"
 		:data-scope-class-id="id"
 		@click="handleClick"
-		@keydown.enter="handleClick"
+		@keydown.enter.prevent="onKey"
+		@keydown.space.prevent="onKey"
 		role="button"
 		tabindex="0"
 		:class="$style.row"
 	>
-		<span :class="$style.id">{{ sanitizeWireString(trimAddress(id), 128) }}</span>
+		<span :class="$style.id" data-testid="scope-class-id-value">{{ sanitizeWireString(trimAddress(id), 128) }}</span>
 	</span>
 </template>
 
@@ -58,8 +64,7 @@ function handleClick() {
 }
 
 .id {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 }
 </style>

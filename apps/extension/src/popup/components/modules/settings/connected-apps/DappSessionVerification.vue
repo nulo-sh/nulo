@@ -21,7 +21,7 @@ const emit = defineEmits(["toggleTrust"])
 		<Flex direction="column" align="center" wide>
 			<EmojiGrid :emojis="emojis" />
 		</Flex>
-		<Text size="12" color="tertiary" :style="{ lineHeight: '1.4' }">
+		<Text variant="body" color="tertiary" :style="{ lineHeight: '1.4' }">
 			Emojis from the most recent connection. They should have matched what the app showed then.
 		</Text>
 		<Flex align="center" justify="between" gap="12" wide>
@@ -36,17 +36,12 @@ const emit = defineEmits(["toggleTrust"])
 
 <style module>
 .setting_key {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .setting_sub {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--caption from global;
 	line-height: 1.4;
 	color: var(--nulo-outline);
 }

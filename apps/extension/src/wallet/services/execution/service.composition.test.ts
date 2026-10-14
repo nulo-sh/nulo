@@ -62,6 +62,7 @@ import type { OperationEstimateReuse } from "./operation-estimate-reuse"
 import { fingerprintOperation } from "./operation-fingerprint"
 import type { OperationPlanner } from "./operation-planner"
 import type { PreviewSnapshots } from "./preview-snapshots"
+import type { SendSequencer } from "./send-sequencer"
 import { fingerprintBaseFee } from "./estimate-reuse-shared"
 import { fingerprintFeeSettings, type TransferEstimateReuse, type TransferEstimateReuseEntry } from "./transfer-estimate-reuse"
 import { ExecutionService } from "./service"
@@ -312,6 +313,7 @@ async function makeHarness() {
 		ctrl,
 		req,
 		estimateId: "estimate-1",
+		entry,
 		journal,
 		stages,
 		sendTx,
@@ -1271,5 +1273,111 @@ describe("ExecutionService composition — a send whose answer was lost is check
 			expiry: RECORDED_EXPIRY,
 		})
 		expect(failed && sendOutcome(failed)).toBe("checking")
+	})
+})
+
+describe("ExecutionService composition — a send queued against a fee cap asks again above it", () => {
+	// The seeded request's fee: (100+10)×2 + (200+20)×3 = 880. A cap one below it asks.
+	const FEE = "880"
+	const CAP = "879"
+	const queuedTransfer = (h: Harness) =>
+		h.service
+			.executeTransfer(
+				h.req.networkId,
+				h.req.accountAddress,
+				h.req.tokenId,
+				h.req.transferType,
+				h.req.recipientAddress,
+				h.req.amount,
+				h.req.feeSettings,
+				h.estimateId,
+				CAP,
+			)
+			.catch((e) => e)
+	const asking = async (h: Harness) => {
+		await waitFor(() => h.stages.includes("queued"))
+		return h.getJournalId()
+	}
+	/** The proof gate is opened at the end, so a proof that was going to run would be counted. */
+	const settled = async (h: Harness, run: Promise<unknown>) => {
+		h.ctrl.release()
+		return run
+	}
+
+	test("the control: the seeded request is consumed, asked about, stashed again as it was, accepted, then proved and sent once", async () => {
+		const h = await makeHarness()
+		const stash = vi.spyOn((h.service as unknown as { estimateReuse: TransferEstimateReuse }).estimateReuse, "stash")
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		expect((await h.journal.getOperation(id))?.progress).toEqual({
+			stage: "queued",
+			reask: { fee: FEE, cap: CAP, payer: { type: "fpc", fpcId: SPONSOR.id, isProtocol: true } },
+		})
+		expect(stash.mock.calls[0][1]).toBe(h.entry)
+		expect(h.proveTx).not.toHaveBeenCalled()
+
+		expect(await h.service.acceptQueuedFee(id, FEE)).toBe(true)
+		await waitFor(() => h.ctrl.entered)
+		expect(await settled(h, run)).toBe("0xhash")
+		expect(h.proveTx).toHaveBeenCalledTimes(1)
+		expect((h.proveTx.mock.calls[0] as unknown[])[0]).toBe(h.entry.txRequest)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+		expect(h.stages).toEqual(["simulating", "queued", "pending", "simulating", "proving", "submitting", "succeeded"])
+		expect(await h.service.acceptQueuedFee(id, FEE)).toBe(false)
+	})
+
+	test("a second accept resumes nothing: one proof, one broadcast", async () => {
+		const h = await makeHarness()
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		const answers = await Promise.all([h.service.acceptQueuedFee(id, FEE), h.service.acceptQueuedFee(id, FEE)])
+		expect(answers.filter(Boolean)).toHaveLength(1)
+		await waitFor(() => h.ctrl.entered)
+		expect(await settled(h, run)).toBe("0xhash")
+		expect(h.proveTx).toHaveBeenCalledTimes(1)
+		expect(h.sendTx).toHaveBeenCalledTimes(1)
+	})
+
+	test.each([
+		{ label: "× then accept", cancelFirst: true },
+		{ label: "accept then ×", cancelFirst: false },
+	])("$label in the same tick ends cancelled, never proved", async ({ cancelFirst }) => {
+		const h = await makeHarness()
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		const cancel = () => h.service.cancelJob(id)
+		const accept = () => h.service.acceptQueuedFee(id, FEE)
+		await Promise.all(cancelFirst ? [cancel(), accept()] : [accept(), cancel()])
+		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
+		expect(await stageOf(h, id)).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
+		expect(await accept()).toBe(false)
+	})
+
+	test("an accept racing a session end ends cancelled, never proved", async () => {
+		const h = await makeHarness()
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		const accept = h.service.acceptQueuedFee(id, FEE)
+		h.session.setActive(undefined)
+		h.session.fireChanged()
+		await accept
+		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
+		expect(await stageOf(h, id)).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
+	})
+
+	test("an accept once the send's deadline has passed resumes nothing: the question ended cancelled", async () => {
+		const h = await makeHarness()
+		const sequencer = (h.service as unknown as { sendSequencer: SendSequencer }).sendSequencer
+		const enter = sequencer.enter.bind(sequencer)
+		vi.spyOn(sequencer, "enter").mockImplementation((scope, keys) => enter(scope, keys, Date.now() + 200))
+		const run = queuedTransfer(h)
+		const id = await asking(h)
+		await waitFor(() => h.stages.includes("cancelled"))
+		expect(await h.service.acceptQueuedFee(id, FEE)).toBe(false)
+		expect(await settled(h, run)).toBeInstanceOf(JobCancelledError)
+		expect(await stageOf(h, id)).toBe("cancelled")
+		expect(h.proveTx).not.toHaveBeenCalled()
 	})
 })

@@ -79,8 +79,8 @@ onBeforeUnmount(() => {
 					<Icon name="zap" size="16" color="tertiary" />
 
 					<Flex direction="column" gap="8">
-						<Text size="14" weight="600" color="primary"> Contract </Text>
-						<AddressDisplay size="13" weight="600" color="tertiary" :address="contract" :formatter="(addr) => trimAddress(addr, 6, 4)" />
+						<Text variant="row-title" color="primary" :class="$style.title_size"> Contract </Text>
+						<AddressDisplay lead color="tertiary" :address="contract" :formatter="(addr) => trimAddress(addr, 6, 4)" />
 					</Flex>
 				</Flex>
 			</Flex>
@@ -96,6 +96,10 @@ onBeforeUnmount(() => {
 	border: 1px solid var(--nulo-border);
 
 	padding: 12px;
+}
+
+.title_size {
+	font-size: 14px;
 }
 
 </style>

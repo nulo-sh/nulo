@@ -109,8 +109,8 @@ onBeforeUnmount(() => {
 		<template v-if="!isLoading">
 			<Flex justify="between" align="center">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary">{{ settings.showFiatValues.title }}</Text>
-					<Text size="12" weight="500" color="tertiary">{{ settings.showFiatValues.description }}</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.showFiatValues.title }}</Text>
+					<Text variant="caption" color="tertiary">{{ settings.showFiatValues.description }}</Text>
 				</Flex>
 
 				<Toggle
@@ -122,14 +122,14 @@ onBeforeUnmount(() => {
 
 			<Flex justify="between" align="center">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary">{{ settings.defaultExplorer.title }}</Text>
-					<Text size="12" weight="500" color="tertiary">{{ settings.defaultExplorer.description }}</Text>
+					<Text variant="row-title" :class="$style.title_size" color="primary">{{ settings.defaultExplorer.title }}</Text>
+					<Text variant="caption" color="tertiary">{{ settings.defaultExplorer.description }}</Text>
 				</Flex>
 
 				<Dropdown>
 					<template #trigger>
 						<DropdownTrigger :class="$style.explorerTrigger" data-testid="explorer-trigger">
-							<Text size="13" weight="600" color="primary">
+							<Text variant="value" color="primary">
 								{{ selectedExplorerName }}
 							</Text>
 							<Icon name="chevron-down" size="12" color="tertiary" />
@@ -170,5 +170,9 @@ onBeforeUnmount(() => {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+}
+
+.title_size {
+	font-size: 13px;
 }
 </style>

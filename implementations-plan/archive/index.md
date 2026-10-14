@@ -43,6 +43,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [ci-followups-2](ci-followups-2/plan.md) — completed — nightly's Firefox jobs and both send-chaos runs gate the nightly release (#220), two fixed chaos seeds gate every network PR, chaos jobs asserted like canaries
 - [ci-followups-3](ci-followups-3/plan.md) — completed — a draft release keeps its tag through every edit (#309), a malformed chaos seed is refused (#305), release's opt-in network run replays the PR chaos seeds (#306)
 - [ci-gates](ci-gates/plan.md) — completed — fail-closed CI aggregators, and no PR run cancels another on its own head
+- [ci-release-supply](ci-release-supply/plan.md) — completed — Storybook in quality-status, live e2e labels and per-head queues, the shard-fold probe, the launch «FILL» gate, store-copy checks, plans ignore shapes, presto's blocked-access title, an advisory in-browser nightly leg, nightly retention at fourteen
 - [code-followups-1](code-followups-1/plan.md) — completed — prune resolved follow-ups, ship 14 small code-only ones in three arcs, settle the boot-line flake
 - [code-followups-2](code-followups-2/plan.md) — completed — 16 small follow-ups shipped whole and 6 in part across three PRs; 177 parked with reasons
 - [cognitive-shallow-tail](cognitive-shallow-tail/plan.md) — completed — the 16 to 20 cognitive-complexity band cleared by extracting named helpers
@@ -88,6 +89,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [e2e-followups-4](e2e-followups-4/plan.md) — completed — #308: artifact smoke runs let discovery write a second Nulo sponsor beside the seed; the fee-picker spec holds the node from before the profile exists (#316, #317 filed)
 - [e2e-followups-5](e2e-followups-5/plan.md) — completed — a lock supersedes any activation in flight, so a stale "active" answer cannot unlock the popup (#319); Firefox targets carry an add-on page's committed URL and a failed wait reports without moving focus (#322 stays open)
 - [e2e-followups-6](e2e-followups-6/plan.md) — completed — every window a helper hands back is recorded and each asserting test checks its arrays before a popup clears them (#325); the zombie tests keep their zombie (#326)
+- [e2e-followups-7](e2e-followups-7/plan.md) — completed — snack-placement's drain settles the grant's finality balance write before the mint (#349); #403 a known limit
 - [e2e-network-recovery](e2e-network-recovery/plan.md) — completed — the network e2e suite recovered by probes and root causes
 - [e2e-proverless-stub](e2e-proverless-stub/plan.md) — completed — network e2e skips real proving for most tests and keeps simulation and execution
 - [e2e-reliability-fixes](e2e-reliability-fixes/plan.md) — completed — a wave of test-reliability follow-ups closed at their root causes
@@ -224,6 +226,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [restore-stage-extraction](restore-stage-extraction/plan.md) — completed — the coupling between two full-backup restore stages made an explicit value
 - [row-service-method-families](row-service-method-families/plan.md) — completed — pins first and one extraction across the token and network row services
 - [ruleset-hygiene-1](ruleset-hygiene-1/plan.md) — completed — the release runbook moves to a skill; proportion, known limits, a post-implementation standard and an e2e runtime budget
+- [ruleset-hygiene-2](ruleset-hygiene-2/plan.md) — completed — CLAUDE.md sheds depth: complexity budgets and logging policy become skills; plans point at their README, CI at CI.md
 - [runtime-edges](runtime-edges/plan.md) — completed — three low-severity runtime edge fixes, each pinned
 - [runtime-start-single-flight](runtime-start-single-flight/plan.md) — completed — a single-flight service-worker start replaces the started latch
 - [security-audit-remediation](security-audit-remediation/plan.md) — completed — a security audit's findings fixed in small, separately reviewed phases
@@ -233,6 +236,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [send-amount-exact](send-amount-exact/plan.md) — completed — every amount path on the Send page made exact
 - [send-fee-privacy-notice](send-fee-privacy-notice/plan.md) — completed — the Send fee source follows the transfer's privacy and says so where it cannot
 - [send-publish-ledger](send-publish-ledger/plan.md) — completed — Send says what a send puts on the public chain
+- [send-queue-activity](send-queue-activity/plan.md) — completed — dApp sends ordered behind earlier sends, fee spender kept across restarts; send outcome states, feed surfaces; Send's amount card and keyboard reach; a queued send held to a fee cap, asked again above it
 - [send-states](send-states/plan.md) — completed — a sponsor funding check on the fee card and a load error on Send's token card
 - [service-fences](service-fences/plan.md) — completed — capture-then-assert fences for three durable writes made after an await
 - [settings-by-task](settings-by-task/plan.md) — completed — Settings grouped by task: profile card, Safety, Preferences, Danger zone, Lock and Privacy pages
@@ -250,6 +254,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [tokens-and-balances](tokens-and-balances/plan.md) — completed — one balance reducer, resumable token adds, adopted profile ids start clean (#271); Holdings paste-to-add, one generic refusal line (#333); a mint figure reads only from a pinned token class (#334)
 - [tools-readiness](tools-readiness/plan.md) — completed — a dApp session widened to a new account without forgetting the app
 - [transport-unification](transport-unification/plan.md) — completed — one template-method RPC design for the background and offscreen transports
+- [type-roles](type-roles/plan.md) — completed — one rulebook of 28 type roles, generated from the token contract, chooses every text face; a guard and a computed-style sweep enforce it
 - [typecheck-cleanup](typecheck-cleanup/plan.md) — completed — the extension taken to zero type errors, with one root typecheck command
 - [unserved-chain-connect](unserved-chain-connect/plan.md) — completed — a connection to a chain the profile has no network for is refused, and the wallet says so
 - [ux-cleanup-arc](ux-cleanup-arc/plan.md) — completed in part — five small fixes for user-facing rough edges
@@ -268,6 +273,7 @@ Closed plans, one line each: `- [plan-name](plan-name/plan.md) — status — on
 - [wallet-followups-4](wallet-followups-4/plan.md) — completed — caught errors logged under a named key at 26 sites and a fixed category at 2 migration lines, `getErrorData` deleted, the log scanner refusing it and error `.message`/`.stack` reads
 - [wallet-followups-5](wallet-followups-5/plan.md) — completed — a gone window closes quietly (#312); the log scan reads every logger level method and every call on a line, the column cut rejected in review (#302)
 - [wallet-followups-6](wallet-followups-6/plan.md) — completed — a secure message bounded to `{iv, ciphertext}` within 16 MiB (#345), one address spelling at the parse (#331), a typed refusal for a non-string method (#332), both e2e error arrays (#336); #262 and #355 known limits
+- [wallet-followups-7](wallet-followups-7/plan.md) — completed — one token contract spelling at the parse (#329); a bound of 32 pending calls on every dApp session at decrypt and dispatch (#354); #371 and #372 known limits
 - [wallet-safety-fixes](wallet-safety-fixes/plan.md) — completed — four small safety and privacy fixes
 - [wallet-sdk-implicit-account-grant](wallet-sdk-implicit-account-grant/plan.md) — completed — no implicit account grant: getAccounts before requestCapabilities throws
 - [wallet-ux-fixes](wallet-ux-fixes/plan.md) — completed — four wallet UX fixes in one change set

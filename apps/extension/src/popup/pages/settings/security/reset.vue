@@ -123,7 +123,7 @@ onBeforeUnmount(() => {
 		<div :class="$style.section">
 			<span :class="$style.section_label">Profile to delete</span>
 			<ItemsContainer flat>
-				<SettingItem :title="appStore.profile?.name ?? ''" icon="user" raw />
+				<SettingItem :title="appStore.profile?.name ?? ''" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 		</div>
 
@@ -132,13 +132,13 @@ onBeforeUnmount(() => {
 			<span :class="$style.section_label">Agreements required</span>
 			<Flex direction="column" gap="12">
 				<Checkbox v-model="checks.permanent" data-testid="reset-checkbox-permanent">
-					<Text size="14" weight="600" color="secondary" height="140">I understand this action is permanent</Text>
+					<Text variant="body" color="secondary" height="140">I understand this action is permanent</Text>
 				</Checkbox>
 				<Checkbox v-model="checks.undone" data-testid="reset-checkbox-undone">
-					<Text size="14" weight="600" color="secondary" height="140">I understand this action cannot be undone</Text>
+					<Text variant="body" color="secondary" height="140">I understand this action cannot be undone</Text>
 				</Checkbox>
 				<Checkbox v-model="checks.sure" data-testid="reset-checkbox-sure">
-					<Text size="14" weight="600" color="secondary" height="140">I'm sure there's no assets left in my profile</Text>
+					<Text variant="body" color="secondary" height="140">I'm sure there's no assets left in my profile</Text>
 				</Checkbox>
 			</Flex>
 		</div>
@@ -154,13 +154,13 @@ onBeforeUnmount(() => {
 				:placeholder="`Type &quot;${appStore.profile?.name}&quot; to confirm`"
 				data-testid="reset-confirm-input"
 			/>
-			<Text size="12" weight="500" color="tertiary" height="150">
+			<Text variant="body" color="tertiary" height="150">
 				You will be able to recover your profile later if you have saved your recovery phrase
 			</Text>
 		</div>
 
 		<template #bottom>
-			<Text v-if="isSlowDelete" size="12" color="secondary" data-testid="reset-wait-hint">
+			<Text v-if="isSlowDelete" variant="body" color="secondary" data-testid="reset-wait-hint">
 				Waiting for an in-flight operation to finish. This can take up to ~30 minutes while a
 				transaction is proving. Keep this window open.
 			</Text>
@@ -193,11 +193,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 </style>

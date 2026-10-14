@@ -36,7 +36,7 @@ const isExpanded = (i) => expanded.value.has(i)
 			>
 				<Flex align="center" gap="6">
 					<Icon name="check-circle" size="11" color="primary" />
-					<Text size="13" color="secondary">{{ getCapabilityLabel(grant.capability.type) }}</Text>
+					<Text variant="row-title" color="secondary" :class="$style.label_size">{{ getCapabilityLabel(grant.capability.type) }}</Text>
 				</Flex>
 				<Icon
 					name="chevron"
@@ -59,6 +59,10 @@ const isExpanded = (i) => expanded.value.has(i)
 	width: 100%;
 	overflow: hidden;
 	border: 1px solid var(--nulo-border);
+}
+
+.label_size {
+	font-size: 13px;
 }
 
 .grant_header {

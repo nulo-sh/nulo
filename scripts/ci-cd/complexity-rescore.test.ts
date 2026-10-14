@@ -5,8 +5,8 @@ import { scanTree } from "../complexity-baseline/scan"
 
 // Every accepted complexity directive's stamp must EQUAL its function's observed value — a raised
 // stamp is an unreviewed ceiling, a lowered one a function that grew, a stale one a directive that
-// outlived its function. CLAUDE.md § Complexity budgets. `bun run baseline:rescore` is the same
-// audit on demand; this is the CI gate.
+// outlived its function (`.claude/skills/complexity-budgets/SKILL.md`). `bun run baseline:rescore`
+// is the same audit on demand; this is the CI gate.
 
 const IGNORE = "// biome-ignore"
 const rule = "noExcessiveCognitiveComplexity" as const

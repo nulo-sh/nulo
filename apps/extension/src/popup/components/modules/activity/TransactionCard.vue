@@ -167,12 +167,12 @@ onBeforeUnmount(() => {
 
 		<template #secondary>
 			<span v-if="hashSlice && explorerUrl" :class="$style.hash_group">
-				<span :class="$style.hash">{{ hashSlice }}</span>
+				<span data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 				<RowAction :href="explorerUrl" label="Open in block explorer" :class="$style.explorer">
 					<Icon name="external-link" size="10" color="tertiary" />
 				</RowAction>
 			</span>
-			<span v-else-if="hashSlice" :class="$style.hash">{{ hashSlice }}</span>
+			<span v-else-if="hashSlice" data-testid="activity-row-hash" :class="$style.hash">{{ hashSlice }}</span>
 		</template>
 	</TransactionCardLayout>
 </template>
@@ -192,9 +192,7 @@ onBeforeUnmount(() => {
 }
 
 .hash {
-	font-family: var(--font-mono);
-	font-size: 9px;
-	text-transform: uppercase;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
@@ -203,9 +201,7 @@ onBeforeUnmount(() => {
 }
 
 .chip {
-	font-family: var(--font-mono);
-	font-size: 8px;
-	text-transform: uppercase;
+	composes: type--tag from global;
 	color: var(--nulo-secondary);
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--hairline-soft);

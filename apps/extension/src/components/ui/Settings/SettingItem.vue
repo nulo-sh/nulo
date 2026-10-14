@@ -14,7 +14,19 @@ const props = defineProps({
 		default: "medium",
 	},
 	title: String,
+	/** `name` for a row titled with a person's or account's name, `data` for an identifier. */
+	titleVariant: {
+		type: String,
+		default: "row-title",
+		validator: (value) => ["row-title", "name", "data"].includes(value),
+	},
 	description: String,
+	/** `data` for an address or id. */
+	descriptionVariant: {
+		type: String,
+		default: "caption",
+		validator: (value) => ["caption", "data"].includes(value),
+	},
 	icon: String,
 	materialIcon: String,
 	iconBgColor: {
@@ -131,17 +143,18 @@ const Root = (_, { slots }) => {
 				<!-- Labels: Title & Description -->
 				<Flex direction="column" gap="4" wide>
 					<Flex align="center" gap="6">
-						<Text :id="titleId" size="14" weight="500" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
+						<Text v-if="titleVariant === 'data'" :id="titleId" data-testid="setting-title" variant="data" color="primary" :class="[$style.title, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
+						<Text v-else :id="titleId" data-testid="setting-title" :variant="titleVariant === 'name' ? 'name' : 'row-title'" color="primary" :class="[$style.title, $style.title_size, $slots.titleSuffix && $style.titleWithSuffix]"> {{ title }} </Text>
 						<slot name="titleSuffix" />
 					</Flex>
-					<Text v-if="description || $slots.description" size="12" weight="500" color="tertiary" :class="$style.description">
+					<Text v-if="description || $slots.description" data-testid="setting-description" :variant="descriptionVariant === 'data' ? 'data' : 'caption'" color="tertiary" :class="$style.description">
 						<slot name="description">{{ description }}</slot>
 					</Text>
 				</Flex>
 			</Flex>
 
 			<Flex align="center" gap="12">
-				<Text v-if="value" data-testid="setting-value" size="12" weight="500" color="secondary" :class="$style.value">{{ value }}</Text>
+				<Text v-if="value" data-testid="setting-value" variant="value" color="secondary" :class="$style.value">{{ value }}</Text>
 				<slot name="right">
 					<MaterialIcon
 						v-if="to || chevron"
@@ -273,7 +286,6 @@ const Root = (_, { slots }) => {
 	width: 0;
 
 	line-height: 20px !important;
-	letter-spacing: 0.01em;
 
 	text-overflow: ellipsis;
 	overflow: hidden;
@@ -283,6 +295,10 @@ const Root = (_, { slots }) => {
 		min-width: unset;
 		width: auto;
 	}
+}
+
+.title_size {
+	font-size: 14px;
 }
 
 .description {

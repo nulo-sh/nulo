@@ -85,6 +85,7 @@ const handleCopyAddress = (target) => {
 					v-for="account in accounts"
 					@click="handleSelectAccount(account)"
 					:title="account.name"
+					titleVariant="name"
 					:icon="account?.address === appStore.account?.address ? 'check-circle' : 'circle'"
 					:iconFillColor="account?.address === appStore.account?.address ? 'primary' : 'tertiary'"
 					data-testid="manage-accounts-row"
@@ -96,7 +97,7 @@ const handleCopyAddress = (target) => {
 					     the line adapts to whatever width the action icons leave instead of a guessed
 					     trim length fighting the wrapper's own ellipsis. -->
 					<template #description>
-						<Text size="11" weight="500" color="tertiary" mono :class="$style.desc_line">
+						<Text variant="meta" color="tertiary" :class="$style.desc_line" data-testid="manage-accounts-address">
 							<template v-if="account.type === AccountType.Imported">
 								<span data-testid="account-imported-badge" :class="$style.desc_fixed">imported</span>
 								<span :class="$style.desc_fixed">&nbsp;&#183;&nbsp;</span>
@@ -173,9 +174,9 @@ const handleCopyAddress = (target) => {
 
 		<Flex v-if="hiddenAccounts.length" direction="column" gap="12">
 			<Flex align="center" justify="between">
-				<Text size="13" weight="600" color="body"> Hidden accounts </Text>
+				<Text variant="label-section" color="body"> Hidden accounts </Text>
 
-				<Text size="13" weight="600" color="secondary">
+				<Text variant="meta" color="secondary">
 					{{ hiddenAccounts.length }}
 				</Text>
 			</Flex>
@@ -185,7 +186,9 @@ const handleCopyAddress = (target) => {
 					v-for="account in hiddenAccounts"
 					@click="handleShowAccount(account)"
 					:title="account.name"
+					titleVariant="name"
 					:description="account.address"
+					descriptionVariant="data"
 					data-testid="manage-accounts-hidden-row"
 					:data-account-name="account.name"
 				>

@@ -220,10 +220,8 @@ function hasActionsContent() {
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-weight: 700;
+	composes: type--row-title from global;
 	font-size: 14px;
-	letter-spacing: -0.02em;
 	color: var(--txt-primary);
 }
 
@@ -232,8 +230,8 @@ function hasActionsContent() {
 }
 
 .amount_fiat {
-	font-family: var(--font-mono);
-	font-size: 9px;
+	composes: type--fiat from global;
+	font-size: 11px;
 	color: var(--nulo-secondary);
 }
 
@@ -242,15 +240,12 @@ function hasActionsContent() {
 }
 
 .amount {
-	font-family: var(--font-mono);
-	font-size: 14px;
-	font-weight: 500;
+	composes: type--amount-row from global;
 	color: var(--txt-primary);
 }
 
 .amount_symbol {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 

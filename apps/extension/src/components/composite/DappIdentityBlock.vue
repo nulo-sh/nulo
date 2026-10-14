@@ -81,10 +81,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 }
 
 .dapp_hostname {
-	font-family: var(--font-headline);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: 0.01em;
+	composes: type--data-lead from global;
 	color: var(--txt-primary);
 
 	overflow: hidden;
@@ -97,15 +94,13 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 }
 
 .warning_text {
-	font-size: 12px;
-	font-weight: 500;
+	composes: type--body from global;
 	line-height: 1.3;
 	color: var(--orange);
 }
 
 .dapp_name {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 
 	overflow: hidden;
@@ -114,8 +109,7 @@ const sanitizedName = computed(() => (props.dapp?.name ? sanitizeWireString(prop
 }
 
 .dapp_action {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--nulo-secondary);
 }
 </style>

@@ -74,7 +74,7 @@ if (hasEntries(manifest) && JSON.stringify(manifest.rules) !== JSON.stringify(ru
 }
 
 if (problems.length > 0) {
-	console.error("complexity-baseline check FAILED (CLAUDE.md § Complexity budgets):")
+	console.error("complexity-baseline check FAILED (.claude/skills/complexity-budgets/SKILL.md):")
 	for (const p of problems) console.error(`\n• ${p}`)
 	process.exit(1)
 }

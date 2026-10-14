@@ -42,11 +42,10 @@ defineEmits<{ "update:modelValue": [value: string] }>()
 }
 
 .search_input {
+	composes: type--input-data from global;
 	flex: 1;
 	min-width: 0;
 
-	font-family: var(--font-mono);
-	font-size: 12px;
 	color: var(--txt-primary);
 	background: transparent;
 	border: none;

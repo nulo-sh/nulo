@@ -24,7 +24,7 @@ const onClick = () => emit("clearError")
 
 <template>
 	<div class="export_section_last">
-		<span class="export_section_label">Unlock</span>
+		<span class="export_section_label type--label-section">Unlock</span>
 		<div :class="[error && $style.shake]">
 			<Input
 				:modelValue="modelValue"
@@ -55,8 +55,7 @@ const onClick = () => emit("clearError")
 
 <style module>
 .error_text {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--red);
 	margin-top: 4px;
 	display: block;

@@ -14,10 +14,10 @@ const router = useRouter()
 		<Flex direction="column" align="center" gap="16" :class="$style.hero">
 			<BrutalistTitle main="Welcome" sub="to Nulo" align="center" size="hero" />
 			<div :class="$style.hero_bar" />
-			<Text size="15" color="secondary" height="150" align="center" :class="$style.subhead">
+			<Text variant="body" color="secondary" height="150" align="center" :class="$style.subhead">
 				Access the internet-native coordination layer.
 			</Text>
-			<Text size="13" color="secondary" height="150" align="center" mono :class="$style.tagline">
+			<Text variant="body" color="secondary" height="150" align="center" :class="$style.tagline">
 				Private by default. Sovereign by design.
 			</Text>
 		</Flex>
@@ -61,8 +61,6 @@ const router = useRouter()
 }
 
 .tagline {
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
 	opacity: 0.65;
 }
 

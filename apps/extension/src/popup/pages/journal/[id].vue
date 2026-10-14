@@ -404,8 +404,7 @@ onBeforeUnmount(() => {
 }
 
 .detail_context {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--txt-primary);
 }
@@ -415,8 +414,7 @@ onBeforeUnmount(() => {
 }
 
 .code_block {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--meta from global;
 	background: var(--nulo-surface-low);
 	padding: 8px 12px;
 	border: 1px solid var(--nulo-border);

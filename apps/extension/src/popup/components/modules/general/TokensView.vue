@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
 	<Flex direction="column" gap="12" :class="$style.wrapper">
 		<Flex align="end" justify="between" :class="$style.section_header">
 			<Flex align="center" gap="8">
-				<SectionLabel label="Holdings" :count="homeLayout.slots.length || null" countTestid="tokens-count" />
+				<SectionLabel label="Holdings" :count="homeLayout.slots.length || null" countTestid="tokens-count" data-testid="holdings-section-label" />
 				<!-- The ONE refresh-activity signal for the whole list (per-row indication is deliberately
 				     silent — batch refreshes would animate every row). Same vocabulary as the gas card's
 				     activity dot: grey pulse = a shown value being re-verified. -->
@@ -467,11 +467,7 @@ onBeforeUnmount(() => {
 }
 
 .view_all {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

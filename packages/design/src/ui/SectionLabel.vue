@@ -25,21 +25,16 @@ defineProps({
 
 <style module>
 .wrapper {
+	composes: type--label-section from global;
 	display: flex;
 	align-items: baseline;
 	gap: 10px;
 
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 }
 
 .count {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 </style>

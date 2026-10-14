@@ -165,6 +165,7 @@ watch(
 			sanitize
 			v-model="fpcAddressTerm"
 			data-testid="fpc-address-input"
+			textVariant="input-data"
 		>
 			<template #right>
 				<Transition name="fade">

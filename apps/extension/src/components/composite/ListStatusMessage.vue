@@ -42,12 +42,9 @@ defineProps({
 }
 
 .no_results {
+	composes: type--body from global;
 	padding: 24px 16px;
 	text-align: center;
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
 	color: var(--nulo-outline);
 }
 </style>

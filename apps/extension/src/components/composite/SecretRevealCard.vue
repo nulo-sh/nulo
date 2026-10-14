@@ -65,6 +65,7 @@ const toggleVisibility = () => {
 }
 
 .action_chip {
+	composes: type--label from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -74,11 +75,6 @@ const toggleVisibility = () => {
 	cursor: pointer;
 	padding: 6px 10px;
 
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: all 0.15s var(--bezier);

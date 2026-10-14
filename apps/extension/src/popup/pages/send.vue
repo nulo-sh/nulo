@@ -33,10 +33,10 @@ import { LEGAL_DISMISSED_KEY } from "@/utils/legal-sheet"
 import { isValidAztecAddress } from "@/utils/aztec-address"
 import { contactListReducers } from "@/utils/entity-list"
 import { EstimateRequeue, estimateWhenClear } from "@/utils/estimate-when-clear"
-import { FEE_JUICE_BRIDGE_URL, feeLine } from "@/popup/components/modules/send/fee-helpers"
+import { FEE_JUICE_BRIDGE_URL, feeLine, feePayerOf } from "@/popup/components/modules/send/fee-helpers"
 import { validateSendAmount } from "@/popup/pages/send-amount"
 import { applyBalanceAdd, applyBalanceUpdate } from "@/popup/pages/send-balance-events"
-import { evaluateFiatGate } from "@/popup/pages/send-fiat-gate"
+import { evaluateFiatGate, requoteReason } from "@/popup/pages/send-fiat-gate"
 import { submitTransfer } from "@/popup/pages/send-submit"
 import { NO_FACTS, payerKindOf, publishFacts } from "@/components/composite/send/publish-facts"
 
@@ -80,6 +80,8 @@ const payer = ref(null)
  *  shows the explainer banner (A). */
 const needsFeeJuice = ref(false)
 const feeDisplay = ref(null)
+/** The fee card's wording of the queued cap, for the review sheet. */
+const queuedCapText = ref(null)
 
 /** Open the fee-juice bridge in a new tab. */
 const openFeeJuiceBridge = () => {
@@ -263,6 +265,7 @@ const fiatGate = computed(() =>
 const fiatQuoteBlocked = computed(() => !fiatGate.value.ok)
 /** Distinguishes "needs explicit re-confirmation" from "just converting". */
 const fiatNeedsRequote = computed(() => !fiatGate.value.ok && fiatGate.value.requote)
+const fiatQuoteMoved = computed(() => requoteReason(fiatGuard.value?.frozenUsd, liveQuote.value?.usd) === "moved")
 const handleRequote = (e) => {
 	// Re-freezes at the current quote and re-derives the token amount — the
 	// user sees the NEW derived amount on the card before confirming.
@@ -274,10 +277,18 @@ const handleRequote = (e) => {
 /** The wallet answered that an earlier send holds this transfer's chain state; set until a real
  *  estimate lands, fails or stops, so nothing goes out on a fee the user has not seen. */
 const feeQueued = ref(false)
+/** The cap the queued answer offered (`{ basis, cap }`), or null when it offered none. */
+const queuedCap = ref(null)
+const clearQueued = () => {
+	feeQueued.value = false
+	queuedCap.value = null
+}
+/** Queued against the cap: only a fee the person pays, and nothing goes out above the cap shown. */
+const queueCap = computed(() => (feeQueued.value && feePayerOf(payer.value) === "self" ? queuedCap.value : null))
 
 const isAllowedToSend = computed(() => {
 	if (!legal.isCurrent.value) return false
-	if (feeQueued.value) return false
+	if (feeQueued.value && !queueCap.value) return false
 	if (!amountTerm.value) return false
 	if (isBlockedTransfer.value) return false
 	if (!isValidAddress.value) return false
@@ -368,8 +379,11 @@ const {
 				executionService.estimateTransferFee(networkId, accountAddress, tokenId, tt, destination, amount, settings, estimateToken),
 			signal,
 			{
-				onQueued: () => {
-					if (!signal.aborted) feeQueued.value = true
+				onQueued: (answer) => {
+					if (signal.aborted) return
+					feeQueued.value = true
+					// A spent token's answer carries no cap; the requeue's own answer will.
+					if (!answer.tokenSpent) queuedCap.value = answer.cap ?? null
 				},
 			},
 		)
@@ -380,7 +394,7 @@ const {
 	onError: (err) => {
 		// Rescheduled before the engine's settle clears `isEstimating`, so the queued row never drops.
 		if (err instanceof EstimateRequeue) return scheduleFeeEstimate(lastEstimateParams)
-		feeQueued.value = false
+		clearQueued()
 		console.error(`[send:${sendInstanceId}] estimateTransferFee failed:`, err)
 		openToast({ kind: "error", label: "Couldn't estimate fee. Try again." })
 	},
@@ -439,7 +453,8 @@ function snapshotTransfer() {
 	// Only when a consumable id exists: handing off a still-in-flight
 	// estimate would orphan its eventual stash (nobody consumes, nobody can
 	// cancel) for the full TTL.
-	const precomputedEstimateId = feeEstimate.value?.estimateId
+	const feeCap = queueCap.value?.cap
+	const precomputedEstimateId = feeCap ? undefined : feeEstimate.value?.estimateId
 	if (precomputedEstimateId) handoffFeeEstimate()
 	return {
 		networkId: appStore.network.id,
@@ -450,6 +465,7 @@ function snapshotTransfer() {
 		amount: amountValidation.value.integerized,
 		feeSettings: feeSettings.value,
 		precomputedEstimateId,
+		feeCap,
 		contract: activeToken.value.contract,
 		symbol: activeToken.value.symbol,
 		decimals: activeToken.value.decimals,
@@ -481,7 +497,7 @@ const submitDeps = {
 
 // The queued flag outlives requeues (the engine stays estimating) but never the estimate itself.
 watch(isEstimating, (estimating) => {
-	if (!estimating) feeQueued.value = false
+	if (!estimating) clearQueued()
 })
 
 watch(
@@ -526,7 +542,7 @@ watch(
 		}
 
 		// New input asks a new question: it is queued only once the wallet says so again.
-		feeQueued.value = false
+		clearQueued()
 		scheduleFeeEstimate({
 			networkId: appStore.network.id,
 			accountAddress: appStore.account.address,
@@ -728,8 +744,8 @@ onBeforeUnmount(() => {
 					/>
 					<Flex v-if="fiatNeedsRequote" align="center" gap="6" :class="$style.requote_notice">
 						<Icon name="warning" size="12" color="tertiary" />
-						<Text size="11" weight="500" color="tertiary">
-							{{ liveQuote ? "The price moved since you started typing." : "The price quote went stale." }}
+						<Text variant="caption" color="tertiary">
+							{{ fiatQuoteMoved ? "The price moved since you started typing." : "The price quote went stale." }}
 						</Text>
 						<button type="button" @click="handleRequote" data-testid="send-fiat-requote" :class="$style.requote_action">
 							Refresh quote
@@ -746,6 +762,7 @@ onBeforeUnmount(() => {
 						:feeEstimate="feeEstimate"
 						:isEstimating="isEstimating"
 						:isQueued="feeQueued"
+						:queuedCap="queueCap"
 						:originPrivacy="selectedSendType"
 						:destinationPrivacy="selectedReceiverType"
 						:payerNoticeShape="facts.noticeShape"
@@ -754,6 +771,7 @@ onBeforeUnmount(() => {
 						v-model:needsFeeJuice="needsFeeJuice"
 						v-model:payer="payer"
 						v-model:feeDisplay="feeDisplay"
+						v-model:queuedCapText="queuedCapText"
 					/>
 				</div>
 			</Flex>
@@ -779,7 +797,7 @@ onBeforeUnmount(() => {
 					:disabled="!isAllowedToSend || isSending"
 					:loading="isSending"
 				>
-					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : "Confirm Transaction" }}
+					{{ isSending ? "CONFIRMING" : facts.requiresReview ? "Review send" : queueCap ? "Queue send" : "Confirm Transaction" }}
 				</Button>
 			</Flex>
 		</Flex>
@@ -799,6 +817,7 @@ onBeforeUnmount(() => {
 			:canSend="isAllowedToSend"
 			:sending="isSending"
 			:ready="reviewReady"
+			:queuedCapText="queueCap ? queuedCapText : undefined"
 			@close="closeReview"
 			@send="submit('review')"
 		/>
@@ -840,11 +859,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 
@@ -864,13 +879,9 @@ onBeforeUnmount(() => {
 }
 
 .requote_action {
-	font: inherit;
+	composes: type--label from global;
+	line-height: inherit;
 	background: none;
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
 	color: var(--nulo-accent);
 	cursor: pointer;
 

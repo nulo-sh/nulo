@@ -510,11 +510,12 @@ describe("composite/AmountCard — fiat mode", () => {
 	})
 })
 
-// jsdom has no layout: a stand-in font measures the field's amount at its full 40 px (digits 20 px,
-// separators 10 px), and `room` is the width the field gives its text.
+// jsdom has no layout: a stand-in font measures a line at its full size (separators 10 px, every
+// other character 20 px), and `room` is the width the field gives its text and the derived line has.
 let room = 10_000
 const standInWidth = (text: string) => [...text].reduce((w, c) => w + (c === "," || c === "." ? 10 : 20), 0)
 vi.mock("@/utils/hero-ruler", () => ({
+	heroRoom: () => room,
 	inputRoom: () => room,
 	rulerWidth: (el: Element, scale: number) => standInWidth(el.textContent ?? "") * scale,
 }))
@@ -528,8 +529,9 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 			attachTo: document.body,
 		})
 	type Field = ReturnType<typeof mountField>
-	const fieldOf = (w: Field) => w.get("[data-testid='send-amount-input']").element as HTMLInputElement
-	const scaleOf = (w: Field) => fieldOf(w).style.getPropertyValue("--hero-scale")
+	const fieldOf = (w: Field, testid = "send-amount-input") => w.get(`[data-testid='${testid}']`).element as HTMLInputElement
+	const scaleOf = (w: Field, testid = "send-amount-input") => fieldOf(w, testid).style.getPropertyValue("--hero-scale")
+	const QUOTE = { usd: 1, fetchedAt: Date.now() }
 	// "1,234,567.123456789012345678": 25 digits and 3 separators, 530 px at full size.
 	const LONG = "1234567.123456789012345678"
 
@@ -581,6 +583,45 @@ describe("composite/AmountCard — the field at rest shows the whole amount", ()
 		fieldOf(w).blur()
 		await nextTick()
 		expect(scaleOf(w)).toBe("1")
+		w.unmount()
+	})
+
+	test.each([
+		["a long figure, once left, draws at the largest scale that shows all of it", "123456789012.34", "0.68"],
+		["$25.00 keeps 40 px", "25.00", "1"],
+	])("in USD %s; focus brings back 40 px", async (_, typed, scale) => {
+		const USD = "send-amount-fiat-input"
+		const w = mountField({ liveQuote: QUOTE })
+		await w.get("[data-testid='send-amount-fiat-toggle']").trigger("click")
+		fieldOf(w, USD).focus()
+		await w.get(`[data-testid='${USD}']`).setValue(typed)
+		expect(scaleOf(w, USD)).toBe("1")
+		fieldOf(w, USD).blur()
+		await nextTick()
+		expect(fieldOf(w, USD).value).toBe(typed)
+		expect(scaleOf(w, USD)).toBe(scale)
+		fieldOf(w, USD).focus()
+		await nextTick()
+		expect(scaleOf(w, USD)).toBe("1")
+		w.unmount()
+	})
+
+	// "≈ 1,234,567.123456789012345678 TST": 650 px at full size in the stand-in font.
+	test("in USD a long derived token line shrinks to the largest scale that keeps it on one line; a short one keeps 11 px", async () => {
+		const DERIVED = "[data-testid='send-amount-derived']"
+		const w = mountField({
+			fiatMode: true,
+			fiatGuard: { frozenUsd: 1, frozenAt: Date.now(), converting: false },
+			liveQuote: QUOTE,
+			modelValue: LONG,
+		})
+		await nextTick()
+		const derivedScale = () => (w.get(DERIVED).element as HTMLElement).style.getPropertyValue("--hero-scale")
+		expect(w.get(DERIVED).text()).toBe("≈ 1,234,567.123456789012345678 TST")
+		expect(derivedScale()).toBe("0.3")
+		await w.setProps({ modelValue: "25" })
+		expect(w.get(DERIVED).text()).toBe("≈ 25 TST")
+		expect(derivedScale()).toBe("1")
 		w.unmount()
 	})
 

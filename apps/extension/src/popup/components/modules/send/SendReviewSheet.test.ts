@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { mount } from "@vue/test-utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { nextTick } from "vue"
@@ -61,6 +63,8 @@ type SheetProps = {
 	canSend: boolean
 	sending: boolean
 	ready: boolean
+	queuedCapText?: string
+	reask?: { now: string; nowAmount: string; capAmount: string }
 }
 const BASE: SheetProps = {
 	show: true,
@@ -241,6 +245,32 @@ describe("modules/send/SendReviewSheet", () => {
 		expect(fee.attributes("data-payer")).toBe("unvouched")
 	})
 
+	test("queued against a cap: the fee line names the cap and the button queues; without it, Send now", async () => {
+		w = mountSheet({ payerKind: "contract", payerType: "private_fpc", queuedCapText: "4.47228 FJ ($0.269)" })
+		const fee = w.get('[data-testid="send-review-fee"]')
+		expect(fee.get('[data-testid="send-review-fee-cap"]').text()).toBe(
+			"Fee up to 4.47228 FJ ($0.269), based on your last send. If it comes out higher, we ask again.",
+		)
+		expect(fee.get("b").text()).toBe("paid by the fee contract")
+		expect(submit(w).text()).toBe("Queue send")
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
+		w.unmount()
+		w = mountSheet()
+		expect(w.find('[data-testid="send-review-fee-cap"]').exists()).toBe(false)
+		expect(submit(w).text()).toBe("Send now")
+	})
+
+	test("a re-ask: the fee line sets the new fee against the accepted one, and the button sends at it", async () => {
+		w = mountSheet({ queuedCapText: "0.8 FJ", reask: { now: "0.88 FJ ($0.013)", nowAmount: "0.88", capAmount: "0.8" } })
+		const fee = w.get('[data-testid="send-review-fee"]')
+		expect(fee.get('[data-testid="send-review-fee-reask"]').text()).toBe("Fee is now 0.88 FJ ($0.013), above the 0.8 FJ you accepted.")
+		expect(fee.find('[data-testid="send-review-fee-cap"]').exists()).toBe(false)
+		expect(submit(w).text()).toBe("Send for 0.88 FJ")
+		await submit(w).trigger("click")
+		expect(w.emitted("send")).toEqual([[]])
+	})
+
 	test("send now: enabled and emitting only when shown, sendable, ready and idle", async () => {
 		w = mountSheet()
 		expect(submit(w).attributes("data-ready")).toBe("true")
@@ -307,5 +337,28 @@ describe("modules/send/SendReviewSheet — the amount line fits", () => {
 		const line = w.get('[data-testid="send-review-amount"]')
 		expect((line.element as HTMLElement).style.getPropertyValue("--hero-scale")).toBe(scale)
 		expect(line.text()).toBe("1,235,567.123456789012345678TST")
+	})
+})
+
+describe("modules/send/SendReviewSheet — the gap before the symbol", () => {
+	let w: W | undefined
+	afterEach(() => w?.unmount())
+	const numbers = (sheet: W) => sheet.findAll("span").filter((s) => s.element.childElementCount === 0 && s.text() === "25")
+
+	test("the 4 px gap ends the number and no longer starts the symbol, so a wrapped symbol starts flush", () => {
+		// jsdom lays out no line, so the rule is read from the source.
+		const source = readFileSync(resolve(__dirname, "SendReviewSheet.vue"), "utf8").replace(/\s+/g, " ")
+		expect(source).toContain(".number { margin-right: 4px; }")
+		expect(source).not.toMatch(/\.amount small \{[^}]*margin/)
+	})
+
+	test("the number carries the gap beside a symbol, in the line and its ruler alike, and none without one", () => {
+		w = mountSheet()
+		const [line, ruler] = numbers(w)
+		expect(line?.classes()).toHaveLength(1)
+		expect(ruler?.classes()).toEqual(line?.classes())
+		w.unmount()
+		w = mountSheet({ symbol: undefined })
+		expect(numbers(w).map((s) => s.classes())).toEqual([[], []])
 	})
 })

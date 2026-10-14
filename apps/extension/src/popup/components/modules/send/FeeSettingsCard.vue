@@ -23,7 +23,10 @@ import {
 	buildFeeMethods,
 	defaultSponsor,
 	FEE_JUICE_BRIDGE_URL,
+	feeAmountDisplay,
 	feeDisplay,
+	feeInWords,
+	feePayerOf,
 	feeScopeKey,
 	formatGasBalance,
 	isLiveFeeScope,
@@ -38,6 +41,7 @@ import { usePrices } from "@/composables/usePrices"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 const { openToast } = useToast()
 
 /** Stores */
@@ -72,6 +76,8 @@ const props = defineProps({
 	payerNoticeShape: { type: String, default: null },
 	/** The transaction the fee is for, less its fee settings; a change is a new transaction. */
 	txShape: { type: String, default: "" },
+	/** `{ basis, cap }` in base units while the page offers to queue the send against a cap. */
+	queuedCap: { type: Object, default: null },
 })
 
 const FEE_METHOD_LS_KEY = UI_STORAGE_KEYS.FEE_PAYMENT_METHODS
@@ -92,6 +98,9 @@ const payerOut = defineModel("payer", { default: null })
 /** One-way child→parent: the fee as "You pay" shows it. The review sheet repeats this value rather
  *  than pricing it again, since the page's own price client can hold a different quote. */
 const feeDisplayOut = defineModel("feeDisplay", { default: null })
+
+/** One-way child→parent: the cap as the readout words it, for the review sheet, priced once here. */
+const queuedCapTextOut = defineModel("queuedCapText", { default: null })
 
 const methodId = getRandomHex(6)
 
@@ -192,6 +201,11 @@ const privateFeeJuiceFormatted = computed(() =>
 const priceService = new PriceServiceClient()
 const prices = usePrices(priceService)
 const estimatedFeeDisplay = computed(() => feeDisplay(props.feeEstimate, prices.feeJuiceQuote.value?.usd))
+const queuedCapDisplay = computed(() => {
+	if (!props.queuedCap) return null
+	const usd = prices.feeJuiceQuote.value?.usd
+	return { about: feeAmountDisplay(props.queuedCap.basis, usd), cap: feeAmountDisplay(props.queuedCap.cap, usd) }
+})
 
 const showMethodSelector = computed(() => {
 	if (!isCustomMethod.value) return true
@@ -261,12 +275,10 @@ const nudgeCopy = computed(() =>
 /** What the dropdown trigger shows: the paying method, or the saved pick's row while loading. */
 const displayMethod = computed(() => effectiveMethod.value ?? sendSelection.value?.preview)
 
-/** Who pays the estimate the readout shows. Only Nulo's own sponsor is promised "Nothing"; a
- *  sponsor added by hand can charge the account through an authorization it granted earlier. */
+/** Who pays the estimate the readout shows; the readout draws only while a method is chosen. */
 const feePayer = computed(() => {
 	const m = effectiveMethod.value
-	if (m?.type !== "fpc") return "self"
-	return m.fpc?.isProtocol === true ? "sponsor" : "unvouched"
+	return feePayerOf(m && { type: m.type, isProtocol: m.fpc?.isProtocol }) ?? "self"
 })
 
 const sponsorShortText = computed(() =>
@@ -342,6 +354,13 @@ watch(
 	effectiveMethod,
 	(m) => {
 		payerOut.value = m ? { type: m.type, fpcId: m.fpc?.id, isProtocol: m.fpc?.isProtocol === true } : null
+	},
+	{ immediate: true },
+)
+watch(
+	queuedCapDisplay,
+	(d) => {
+		queuedCapTextOut.value = d ? feeInWords(d.cap) : null
 	},
 	{ immediate: true },
 )
@@ -861,15 +880,24 @@ onBeforeUnmount(() => {
 		<!-- Embedded fee override banner -->
 		<template v-if="isCustomMethod && !useOwnMethod">
 			<Flex align="center" justify="between" :class="$style.card" data-testid="send-fee-embedded">
-				<Text size="13" weight="600" color="primary">Fee</Text>
-				<Text size="13" weight="600" color="primary">Embedded payload</Text>
+				<Text variant="label" color="primary">Fee</Text>
+				<Text variant="name" color="primary" :class="$style.method_size">Embedded payload</Text>
 			</Flex>
 			<Flex direction="column" gap="8" :class="$style.detail_row">
-				<Text size="12" weight="600" color="secondary">
+				<Text variant="body" color="secondary">
 					The app includes fee payment in the transaction.
 				</Text>
-				<Flex @click="handleUseOwnMethod" align="center" gap="4" :class="$style.link" data-testid="send-fee-override">
-					<Text size="12" weight="600" color="primary">Override with my method</Text>
+				<Flex
+					tag="button"
+					type="button"
+					@click="handleUseOwnMethod"
+					@keydown.enter="refuseRepeatEnter"
+					align="center"
+					gap="4"
+					:class="$style.link"
+					data-testid="send-fee-override"
+				>
+					<Text variant="label" color="primary">Override with my method</Text>
 					<Icon name="arrow-right" size="10" color="primary" />
 				</Flex>
 			</Flex>
@@ -879,8 +907,8 @@ onBeforeUnmount(() => {
 		<template v-if="showMethodSelector">
 			<!-- A method the dApp asked for: shown, never a choice. -->
 			<Flex v-if="lockedMethod" align="center" justify="between" :class="$style.card" data-testid="send-fee-locked">
-				<Text size="13" weight="600" color="primary">Fee</Text>
-				<Text size="13" weight="600" color="primary">Public Fee Juice · set by the app</Text>
+				<Text variant="label" color="primary">Fee</Text>
+				<Text variant="name" color="primary" :class="$style.method_size">Public Fee Juice · set by the app</Text>
 			</Flex>
 			<FeeMethodSelector
 				v-else
@@ -900,28 +928,47 @@ onBeforeUnmount(() => {
 				:class="$style.detail_row"
 				:style="{ padding: '6px 12px' }"
 			>
-				<Flex @click="handleUseEmbedded" align="center" gap="4" :class="$style.link" data-testid="send-fee-back-embedded">
+				<Flex
+					tag="button"
+					type="button"
+					@click="handleUseEmbedded"
+					@keydown.enter="refuseRepeatEnter"
+					align="center"
+					gap="4"
+					:class="$style.link"
+					data-testid="send-fee-back-embedded"
+				>
 					<Icon name="arrow-right" size="10" color="primary" style="transform: rotate(180deg)" />
-					<Text size="12" weight="600" color="primary">Use app's payment</Text>
+					<Text variant="label" color="primary">Use app's payment</Text>
 				</Flex>
 			</Flex>
 
-			<!-- Degraded fee data (silent retry pending) -->
-			<Flex v-if="statusNotice" align="start" gap="6" wide :class="$style.detail_row" data-testid="fee-init-degraded">
-				<Icon name="info" size="14" color="primary" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+		</template>
+
+		<!-- Mounted with the card: a load error outlives a switch to the app's payment and back. -->
+		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-init-degraded-live">
+			<Flex
+				v-if="showMethodSelector && statusNotice"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-init-degraded"
+			>
+				<Icon name="info" size="14" color="primary" aria-hidden="true" />
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ statusNotice }}
 				</Text>
 			</Flex>
+		</div>
 
-			<FeeMethodRow
-				v-else
-				:method="effectiveMethod"
-				:isLoading="isLoading"
-				:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
-				:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
-			/>
-		</template>
+		<FeeMethodRow
+			v-if="showMethodSelector && !statusNotice"
+			:method="effectiveMethod"
+			:isLoading="isLoading"
+			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
+			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
+		/>
 
 		<!-- Mounted with the card in every state: a region created with its text in place may go unannounced. -->
 		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-sponsor-live">
@@ -934,7 +981,7 @@ onBeforeUnmount(() => {
 				data-testid="fee-sponsor-short"
 			>
 				<Icon name="info" size="14" color="primary" aria-hidden="true" />
-				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
+				<Text variant="body" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ sponsorShortText }}
 				</Text>
 			</Flex>
@@ -945,8 +992,8 @@ onBeforeUnmount(() => {
 			<Flex v-if="feeJuiceMissing" align="center" gap="8" :class="$style.detail_row" data-testid="send-fee-nudge">
 				<Icon name="warning" size="14" color="secondary" />
 				<Flex direction="column" gap="2" :style="{ flex: 1, minWidth: 0 }">
-					<Text size="12" weight="600" color="primary">{{ nudgeCopy.title }}</Text>
-					<Text size="11" weight="500" color="tertiary">{{ nudgeCopy.body }}</Text>
+					<Text variant="value" color="primary">{{ nudgeCopy.title }}</Text>
+					<Text variant="caption" color="tertiary">{{ nudgeCopy.body }}</Text>
 				</Flex>
 				<a
 					:href="FEE_JUICE_BRIDGE_URL"
@@ -963,6 +1010,7 @@ onBeforeUnmount(() => {
 				:isEstimating="isEstimating"
 				:isQueued="isQueued"
 				:payer="feePayer"
+				:queuedCap="queuedCapDisplay"
 			/>
 
 			<FeePriorityRow v-if="effectiveMethod && !feeJuiceMissing" v-model="selectedPriority" />
@@ -984,12 +1032,24 @@ onBeforeUnmount(() => {
 	padding: 12px;
 }
 
+.method_size {
+	font-size: 13px;
+}
+
 .detail_row {
 	composes: detail_row from "./fee-shared.module.css";
 }
 
 .link {
+	font: inherit;
+	color: inherit;
+	background: none;
 	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 
 	& span,
 	& svg {
@@ -1008,11 +1068,7 @@ onBeforeUnmount(() => {
 }
 
 .get_fee_juice {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.1em;
+	composes: type--label from global;
 	color: var(--nulo-accent);
 	white-space: nowrap;
 	cursor: pointer;

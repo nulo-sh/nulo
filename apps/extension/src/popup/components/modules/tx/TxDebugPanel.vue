@@ -40,7 +40,7 @@ const formatTimestamp = (timestamp) => {
 			<Flex wide justify="between" align="center">
 				<span :class="$style.detail_key">Tx hash</span>
 				<Flex @click="emit('copy', tx.hash)" align="center" gap="6" :class="'copyable'">
-					<span :class="$style.detail_value_mono">{{ trimAddress(tx.hash, 8, 6) }}</span>
+					<span data-testid="tx-debug-hash" :class="$style.detail_value_mono">{{ trimAddress(tx.hash, 8, 6) }}</span>
 					<Icon name="copy" size="10" color="tertiary" />
 				</Flex>
 			</Flex>
@@ -80,6 +80,7 @@ const formatTimestamp = (timestamp) => {
 						</Flex>
 						<span
 							v-if="c.chunkNonce"
+							data-testid="tx-debug-chunk-nonce"
 							@click="emit('copy', c.chunkNonce)"
 							:class="[$style.raw_call_aux, 'copyable']"
 						>
@@ -109,24 +110,17 @@ const formatTimestamp = (timestamp) => {
 }
 
 .detail_key {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--nulo-secondary);
 }
 
 .detail_value_mono {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	font-weight: 600;
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
 .detail_value_aux {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
@@ -136,34 +130,26 @@ const formatTimestamp = (timestamp) => {
 }
 
 .raw_call_method {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 600;
+	composes: type--data from global;
 	color: var(--txt-primary);
 }
 
 .raw_call_aux {
-	font-family: var(--font-mono);
-	font-size: 10px;
+	composes: type--meta from global;
 	color: var(--nulo-secondary);
 }
 
 .error_key {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
+	composes: type--label from global;
 	color: var(--red);
 }
 
 .error_text {
+	composes: type--meta from global;
 	padding: 8px 10px;
 	border: 1px solid rgba(255, 0, 0, 0.3);
 	background: transparent;
 
-	font-family: var(--font-mono);
-	font-size: 11px;
 	color: var(--red);
 	word-break: break-word;
 }

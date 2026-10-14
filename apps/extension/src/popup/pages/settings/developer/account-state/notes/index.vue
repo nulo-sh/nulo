@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
 					<span :id="`${rowIdBase}-${i}`" :class="$style.type">
 						{{ display.type }}<span v-if="display.contractName" :class="$style.contract_name"> · {{ display.contractName }}</span>
 					</span>
-					<span v-if="display.contractTrim" :class="$style.contract">{{ display.contractTrim }}</span>
+					<span v-if="display.contractTrim" data-testid="note-contract" :class="$style.contract">{{ display.contractTrim }}</span>
 				</div>
 
 				<span v-if="display.location" :class="$style.location">{{ display.location }}</span>
@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
 				<div v-if="display.kvEntries.length" :class="$style.kv_grid">
 					<template v-for="entry in display.kvEntries" :key="entry.key">
 						<span :class="$style.kv_key">{{ entry.key }}</span>
-						<span :class="[$style.kv_val, entry.isLongHex && $style.kv_val_wrap]">{{ entry.value }}</span>
+						<span data-testid="record-value" :class="[$style.kv_val, entry.isLongHex && $style.kv_val_wrap]">{{ entry.value }}</span>
 					</template>
 				</div>
 
@@ -282,6 +282,7 @@ onBeforeUnmount(() => {
 }
 
 .contract {
+	composes: type--meta from global;
 	flex-shrink: 0;
 
 	padding: 3px 6px;
@@ -289,24 +290,16 @@ onBeforeUnmount(() => {
 	background: var(--nulo-surface-low);
 	border: 1px solid var(--nulo-border);
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.02em;
 	color: var(--nulo-secondary);
 }
 
-/** Inline contract-name annotation appended to the note-type label
- *  with a middle-dot separator. Lighter weight than the type itself
- *  so the type stays the primary glyph; brutalist-friendly. */
+/** Takes the note type's role; the colour alone sets it apart. */
 .contract_name {
-	font-weight: 500;
 	color: var(--nulo-secondary);
 }
 
 .location {
-	font-family: var(--font-mono);
-	font-size: 12px;
+	composes: type--data from global;
 	color: var(--nulo-outline);
 	line-height: 1.4;
 	word-break: break-all;
@@ -335,8 +328,7 @@ onBeforeUnmount(() => {
 }
 
 .raw_line {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--data from global;
 	color: var(--nulo-secondary);
 	overflow-wrap: anywhere;
 	line-height: 1.4;
@@ -357,16 +349,12 @@ onBeforeUnmount(() => {
 }
 
 .render_error_label {
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
+	composes: type--label from global;
 	color: var(--red);
 }
 
 .render_error_msg {
-	font-family: var(--font-mono);
-	font-size: 11px;
+	composes: type--body from global;
 	color: var(--nulo-outline);
 	overflow-wrap: anywhere;
 	line-height: 1.4;

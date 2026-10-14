@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
-import { pendingHashesChanged, SingleShotTtlCache } from "./estimate-reuse-shared"
+import { ESTIMATE_REUSE_TTL_MS, pendingHashesChanged, SingleShotTtlCache } from "./estimate-reuse-shared"
 
 const TTL = 1000
 type E = { builtAt: number; v: string }
@@ -44,6 +44,25 @@ describe("SingleShotTtlCache", () => {
 			c.stash("id", { builtAt: Date.now(), v: "x" })
 			vi.advanceTimersByTime(TTL + 2)
 			expect(c.consume("id")).toBeUndefined()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test("an entry stashed late is dropped at its builtAt + TTL, never renewed by the stash", () => {
+		vi.useFakeTimers()
+		try {
+			const stashLate = () => {
+				const c = new SingleShotTtlCache<E>(ESTIMATE_REUSE_TTL_MS)
+				c.stash("id", { builtAt: Date.now() - 100_000, v: "x" })
+				return c
+			}
+			const kept = stashLate()
+			const dropped = stashLate()
+			vi.advanceTimersByTime(19_000)
+			expect(kept.consume("id")?.v).toBe("x")
+			vi.advanceTimersByTime(2_000)
+			expect(dropped.consume("id")).toBeUndefined()
 		} finally {
 			vi.useRealTimers()
 		}

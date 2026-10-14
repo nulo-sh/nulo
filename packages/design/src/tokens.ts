@@ -102,6 +102,73 @@ export const durations = {
 	long: "300ms",
 } as const
 
+export const MIN_TEXT_PX = 10
+export const MIN_MONO_PX = 11
+
+export const typeRoles = {
+	"title-hero": { family: "--font-headline", size: null, weight: 700, tracking: -0.04, uppercase: true, tabular: false },
+	"amount-hero": { family: "--font-headline", size: null, weight: 700, tracking: -0.04, uppercase: false, tabular: true },
+	"amount-total": { family: "--font-mono", size: null, weight: 500, tracking: -0.02, uppercase: false, tabular: false },
+	"title-page": { family: "--font-headline", size: 13, weight: 700, tracking: 0.12, uppercase: true, tabular: false },
+	"label-section": { family: "--font-headline", size: 11, weight: 700, tracking: 0.1, uppercase: true, tabular: false },
+	label: { family: "--font-headline", size: 10, weight: 700, tracking: 0.1, uppercase: true, tabular: false },
+	"row-title": { family: "--font-headline", size: null, weight: 700, tracking: -0.02, uppercase: false, tabular: false },
+	caption: { family: "--font-body", size: 11, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	name: { family: "--font-body", size: null, weight: 600, tracking: 0, uppercase: false, tabular: false },
+	"name-tag": { family: "--font-body", size: 11, weight: 600, tracking: 0.04, uppercase: true, tabular: false },
+	body: { family: "--font-body", size: 12, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	button: { family: "--font-headline", size: 14, weight: 700, tracking: 0.2, uppercase: true, tabular: false },
+	"button-md": { family: "--font-headline", size: 13, weight: 700, tracking: 0.03, uppercase: true, tabular: false },
+	nav: { family: "--font-headline", size: 10, weight: 500, tracking: 0.05, uppercase: true, tabular: false },
+	segment: { family: "--font-headline", size: 10, weight: 500, activeWeight: 700, tracking: 0.06, uppercase: true, tabular: false },
+	tag: { family: "--font-headline", size: 10, weight: 600, tracking: 0.08, uppercase: true, tabular: false },
+	"tag-name": { family: "--font-headline", size: 10, weight: 700, tracking: 0.08, uppercase: true, tabular: false },
+	brand: { family: "--font-headline", size: 10, weight: 700, tracking: 0.2, uppercase: false, tabular: false },
+	"input-data": { family: "--font-mono", size: 14, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	data: { family: "--font-mono", size: 12, weight: 500, tracking: 0, uppercase: false, tabular: false },
+	"data-lead": { family: "--font-mono", size: 13, weight: 600, tracking: 0, uppercase: false, tabular: false },
+	"amount-row": { family: "--font-mono", size: 14, weight: 500, tracking: 0, uppercase: false, tabular: false },
+	"amount-detail": { family: "--font-headline", size: 24, weight: 700, tracking: -0.02, uppercase: false, tabular: true },
+	fiat: { family: "--font-mono", size: null, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	time: { family: "--font-mono", size: 11, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	meta: { family: "--font-mono", size: 11, weight: 400, tracking: 0, uppercase: false, tabular: false },
+	value: { family: "--font-body", size: 12, weight: 600, tracking: 0, uppercase: false, tabular: false },
+	input: { family: "--font-body", size: 15, weight: 500, tracking: 0, uppercase: false, tabular: false },
+} as const
+
+export const typeRoleNames = [
+	"title-hero",
+	"amount-hero",
+	"amount-total",
+	"title-page",
+	"label-section",
+	"label",
+	"row-title",
+	"caption",
+	"name",
+	"name-tag",
+	"body",
+	"button",
+	"button-md",
+	"nav",
+	"segment",
+	"tag",
+	"tag-name",
+	"brand",
+	"input-data",
+	"data",
+	"data-lead",
+	"amount-row",
+	"amount-detail",
+	"fiat",
+	"time",
+	"meta",
+	"value",
+	"input",
+] as const
+
+export const siteSizedTypeRoles = ["title-hero", "amount-hero", "amount-total", "row-title", "name", "fiat"] as const
+
 export const cssVar = (name: string, fallback?: string): string => (fallback === undefined ? `var(${name})` : `var(${name}, ${fallback})`)
 
 export type SurfaceToken = (typeof surfaces)[keyof typeof surfaces]
@@ -112,3 +179,4 @@ export type FontToken = (typeof fonts)[keyof typeof fonts]
 export type FontSize = (typeof fontSizes)[number]
 export type FontWeight = (typeof fontWeights)[number]
 export type LineHeight = keyof typeof lineHeights
+export type TypeRole = (typeof typeRoleNames)[number]

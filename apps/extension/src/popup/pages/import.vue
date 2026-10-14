@@ -368,11 +368,7 @@ onBeforeUnmount(() => {
 }
 
 .section_label {
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.18em;
+	composes: type--label-section from global;
 	color: var(--nulo-secondary);
 }
 </style>

@@ -166,29 +166,26 @@ onBeforeUnmount(() => {
 }
 
 .bannerText {
-	font-size: 11px;
+	composes: type--body from global;
 	color: var(--txt-primary);
 }
 
 .bannerDismiss {
+	composes: type--body from global;
 	border: none;
 	background: none;
 	color: var(--txt-primary);
 	cursor: pointer;
-	font-size: 11px;
 }
 
 .retryBtn {
+	composes: type--button-md from global;
 	margin-top: 8px;
 	padding: 8px 16px;
 
 	border: 1px solid var(--nulo-border);
 	background-color: var(--nulo-surface-low);
 	color: var(--txt-primary);
-
-	font-family: var(--font-headline);
-	font-weight: 700;
-	font-size: 12px;
 	cursor: pointer;
 }
 

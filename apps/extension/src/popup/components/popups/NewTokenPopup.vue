@@ -41,7 +41,8 @@ const form = useFormState({
 		validate: (v) => {
 			if (!v?.length) return null
 			if (!isValidHex(v)) return "Invalid address"
-			if (tokens.value.some((t) => t.contract === v)) return "Already exist"
+			// Hex is case-insensitive: another spelling of a listed contract is that token.
+			if (tokens.value.some((t) => t.contract.toLowerCase() === v.toLowerCase())) return "Already exist"
 			return null
 		},
 	},
@@ -310,6 +311,7 @@ usePopupEntity(
 			placeholder="0x"
 			data-testid="token-address-input"
 			inputTestid="token-address-field"
+			textVariant="input-data"
 			autofocus
 			sanitize
 			:disabled="isBusy"
@@ -321,11 +323,11 @@ usePopupEntity(
 				<Transition name="fade">
 					<Flex v-if="isAlreadyExist" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="warning" size="12" color="orange" />
-						<Text size="12" weight="600" color="primary"> Already exist </Text>
+						<Text variant="body" color="primary"> Already exist </Text>
 					</Flex>
 					<Flex v-else-if="isInvalidAddress" align="center" gap="4" role="alert" data-testid="error-text">
 						<Icon name="close-circle" size="12" color="red" />
-						<Text size="12" weight="600" color="primary"> Invalid address </Text>
+						<Text variant="body" color="primary"> Invalid address </Text>
 					</Flex>
 				</Transition>
 			</template>
@@ -334,7 +336,7 @@ usePopupEntity(
 		<template v-if="error" #belowSubmit>
 			<Flex align="center" gap="6" :class="$style.error_row" data-testid="new-token-error">
 				<Icon name="info" size="12" color="red" />
-				<Text size="12" weight="500" color="secondary" :style="{ lineHeight: '1.4' }">
+				<Text variant="body" color="secondary" :style="{ lineHeight: '1.4' }">
 					{{ error }}
 				</Text>
 			</Flex>

@@ -4,10 +4,12 @@
  *  that fails once its record is written offers Details, which opens that record. */
 import type { Page } from "puppeteer"
 import { expect, inject } from "vitest"
+import { TRANSACTION_STORAGE_ROOT, type Tx, TxStatus } from "@/wallet/services/transaction/spec"
 import {
 	type AztecTestConfig,
 	createSponsoredFeeOptions,
 	createTestWallet,
+	finalizeThrough,
 	mintPublicTokens,
 	spendPublicAuthwit,
 	waitForTxMined,
@@ -218,6 +220,8 @@ async function placementsAtRestAndScrolled(page: Page, testid: string): Promise<
 type DrainCtx = ExtensionContext & { playgroundPage: Page; accountAddress: string }
 
 const DRAINED = 10n * 10n ** 18n
+/** Two of the worker's once-a-minute finality reads, each a single attempt that can fail, and margin. */
+const FINAL_READ_MS = 180_000
 
 async function storedValue<T>(page: Page, key: string): Promise<T | undefined> {
 	const raw = await page.evaluate(async (k: string) => (await chrome.storage.local.get(k))[k], key)
@@ -277,24 +281,82 @@ async function grantSpender(ctx: DrainCtx, page: Page, spender: string, nonce: b
 	const grantHash = String(granted.resultJson).replace(/^"(.*)"$/, "$1")
 	await waitForTxMined(config, grantHash)
 	await waitFor("the wallet never saw its grant mined", async () => {
-		const tx = await storedValue<{ status?: number }>(page, `nulo:core:txs@${grantHash}`)
-		return tx !== undefined && tx.status !== 0
+		const tx = await storedValue<Tx>(page, `${TRANSACTION_STORAGE_ROOT}@${grantHash}`)
+		return tx !== undefined && tx.status !== TxStatus.Pending
 	})
 	return grantHash
+}
+
+type TxNode = Awaited<ReturnType<typeof createTestWallet>>["node"]
+
+async function accountTxRows(page: Page, account: string): Promise<Tx[]> {
+	const raws = await page.evaluate(async (root: string) => {
+		const all = await chrome.storage.local.get(null)
+		return Object.entries(all)
+			.filter(([k]) => k.startsWith(`${root}@`))
+			.map(([, v]) => v)
+	}, TRANSACTION_STORAGE_ROOT)
+	return raws
+		.map((v) => (typeof v === "string" ? JSON.parse(v) : v) as Tx)
+		.filter((tx) => tx.account?.toLowerCase() === account.toLowerCase())
+}
+
+/** The account's rows, which must be exactly the grant: any other row could owe a write of its own. */
+async function soleGrantRow(page: Page, account: string, grantHash: string): Promise<Tx> {
+	const rows = await accountTxRows(page, account)
+	const [grant] = rows
+	if (rows.length !== 1 || grant?.hash !== grantHash) {
+		throw new Error(`expected the grant ${grantHash} as the account's only tx row: ${JSON.stringify(rows)}`)
+	}
+	return grant
+}
+
+/**
+ * Drives the grant's block final and waits for the balance write the wallet owes for it. The worker
+ * commits the row Finalized, then emits the update its balance subscriber answers with a refresh it
+ * does not await, so the row alone proves nothing. The grant still awaits finality once its mined
+ * write has settled, so the final commit follows that write; before the mint the final refresh is the
+ * only one left to enqueue, so a write newer than the commit is its write, and the idle queue after
+ * it ends it.
+ */
+async function settledGrantFinality(page: Page, node: TxNode, account: string, grantHash: string): Promise<void> {
+	const mined = await soleGrantRow(page, account, grantHash)
+	const block = mined.block?.number
+	if (block === undefined || !Number.isFinite(block) || !mined.awaitingFinality) {
+		throw new Error(`expected the grant mined below Finalized, its final read still owed: ${JSON.stringify(mined)}`)
+	}
+	const started = Date.now()
+	await finalizeThrough(node, block)
+	const chainFinal = Date.now()
+	let grant = await soleGrantRow(page, account, grantHash)
+	const deadline = chainFinal + FINAL_READ_MS
+	while (grant.status !== TxStatus.Finalized || grant.awaitingFinality) {
+		if (Date.now() > deadline) {
+			throw new Error(`the wallet never read its grant final within ${FINAL_READ_MS} ms: ${JSON.stringify(grant)}`)
+		}
+		await new Promise((r) => setTimeout(r, 500))
+		grant = await soleGrantRow(page, account, grantHash)
+	}
+	console.log(
+		`[snack-placement] grant block ${block}: chain final in ${chainFinal - started} ms, wallet final ${Date.now() - chainFinal} ms later`,
+	)
+	await settledBalanceWrite(page, account, "0", grant.updatedAt)
 }
 
 /**
  * Leaves the wallet showing a public balance the chain no longer holds, as when a dApp spends a
  * public approval: the account grants the sandbox's first account a public authwit for
- * {@link DRAINED}, receives that much, and the spender takes it all. A balance refreshes only on the
- * wallet's own transactions, receipts to its accounts and a manual refresh, and the spend is none
- * of them. Nothing here asks for a refresh, so each balance write has one known cause, and the
- * balance queue is idle before the spend.
+ * {@link DRAINED}, receives that much, and the spender takes it all. A balance refreshes only on a
+ * token import, the wallet's own transactions, receipts to its accounts and a manual refresh, and the
+ * spend is none of them. A wallet transaction first seen mined below Finalized refreshes balances
+ * twice, when mined and when the worker reads its block final; one first seen Finalized refreshes
+ * once; each move or prune of its block can add another. A receipt to the account refreshes it once.
+ * Nothing here asks for a refresh, so each write has one known cause, and none is owed at the spend.
  */
 async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 	const config = aztecConfig as AztecTestConfig
 	const account = ctx.accountAddress
-	const { wallet, accounts, cleanup } = await createTestWallet(config.nodeUrl)
+	const { wallet, accounts, node, cleanup } = await createTestWallet(config.nodeUrl)
 	try {
 		const spender = accounts[0]?.toString()
 		if (!spender) throw new Error("expected at least one sandbox-deployed test account")
@@ -313,8 +375,10 @@ async function balanceDrainedBehindTheWallet(ctx: DrainCtx): Promise<Page> {
 		// The grant leaving Pending refreshes the account's balances once.
 		const nonce = BigInt(Math.floor(Math.random() * 2 ** 48))
 		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)
-		await grantSpender(ctx, page, spender, nonce)
+		const grantHash = await grantSpender(ctx, page, spender, nonce)
 		await settledBalanceWrite(page, account, "0", baseline)
+		// The grant read final refreshes them again.
+		await settledGrantFinality(page, node, account, grantHash)
 
 		// The mint's receipt refreshes the balance once, and its outbox row clears after that.
 		baseline = await captureBalanceBaseline(page, account, config.tokenAddress)

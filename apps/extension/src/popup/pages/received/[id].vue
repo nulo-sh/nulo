@@ -241,16 +241,14 @@ onBeforeUnmount(() => {
 					<AddressDisplay
 						v-if="fromDisplay.kind === 'address'"
 						static
-						size="13"
-						weight="600"
+						data-testid="received-from-address"
+						lead
 						:address="fromDisplay.address"
 						:formatter="(addr) => trimAddress(addr, 6, 4)"
 					/>
-					<!-- Non-address senders render through the SAME <Text> primitive (size/weight/color) that
-					     AddressDisplay uses for the "To" account, so both cards' values look identical. -->
-					<Text v-else-if="fromDisplay.kind === 'private'" size="13" weight="600" color="primary" data-testid="from-private">Private</Text>
-					<Text v-else-if="fromDisplay.kind === 'mint'" size="13" weight="600" color="primary" data-testid="from-mint">Mint</Text>
-					<Text v-else size="13" weight="600" color="primary" data-testid="from-redacted">Private</Text>
+					<Text v-else-if="fromDisplay.kind === 'private'" variant="name" color="primary" :class="$style.from_name" data-testid="from-private">Private</Text>
+					<Text v-else-if="fromDisplay.kind === 'mint'" variant="name" color="primary" :class="$style.from_name" data-testid="from-mint">Mint</Text>
+					<Text v-else variant="name" color="primary" :class="$style.from_name" data-testid="from-redacted">Private</Text>
 					<span :class="$style.address_label">From</span>
 				</Flex>
 
@@ -263,8 +261,8 @@ onBeforeUnmount(() => {
 				>
 					<AddressDisplay
 						static
-						size="13"
-						weight="600"
+						data-testid="received-to-address"
+						lead
 						:address="received.accountAddress"
 						:formatter="(addr) => trimAddress(addr, 6, 4)"
 					/>
@@ -319,6 +317,7 @@ onBeforeUnmount(() => {
 							<span :class="$style.detail_value_mono">#{{ received.l2BlockNumber }}</span>
 							<span
 								v-if="isPublic"
+								data-testid="tx-block-hash"
 								@click="copy(received.blockHash, 'Block hash')"
 								:class="[$style.detail_value_aux, 'copyable']"
 							>
@@ -395,6 +394,10 @@ onBeforeUnmount(() => {
 	composes: caption from "../detail-page.module.css";
 }
 
+.from_name {
+	font-size: 13px;
+}
+
 .details_box {
 	composes: details_box from "../detail-page.module.css";
 }
@@ -404,17 +407,18 @@ onBeforeUnmount(() => {
 }
 
 .detail_key_note {
-	font-family: var(--font-mono);
-	font-size: 9px;
+	composes: type--meta from global;
 	color: var(--nulo-outline);
 }
 
 .detail_value_mono {
-	composes: detail_value_mono from "../detail-page.module.css";
+	composes: type--data from global;
+	color: var(--txt-primary);
 }
 
 .detail_value_aux {
-	composes: detail_value_aux from "../detail-page.module.css";
+	composes: type--meta from global;
+	color: var(--nulo-outline);
 }
 
 .detail_link {

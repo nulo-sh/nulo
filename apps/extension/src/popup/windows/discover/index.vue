@@ -196,7 +196,7 @@ onUnmounted(() => {
 			/>
 
 			<Flex direction="column" gap="8" :class="$style.body">
-				<Text size="12" color="tertiary" :style="{ lineHeight: '1.5' }">
+				<Text variant="body" color="tertiary" :style="{ lineHeight: '1.5' }">
 					Make sure you trust the site you're connecting to. You can revoke this connection any time from Settings → Connected Apps.
 				</Text>
 			</Flex>

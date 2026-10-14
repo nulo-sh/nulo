@@ -110,7 +110,7 @@ const toggleSort = () => {
 
 		<Flex direction="column" :class="$style.list">
 			<Button v-if="addCandidate" wide variant="secondary" data-testid="holdings-add-token" @click="emit('addToken', addCandidate)">
-				Add token {{ trimAddress(addCandidate, 4, 2, "…") }}
+				<span>Add token <span class="type--data" data-testid="holdings-add-token-address">{{ trimAddress(addCandidate, 4, 2, "…") }}</span></span>
 			</Button>
 			<ListStatusMessage v-else-if="noResults" variant="no-results" testid="holdings-no-results" />
 			<template v-else>
@@ -147,14 +147,11 @@ const toggleSort = () => {
 }
 
 .sort {
+	composes: type--label from global;
 	height: 20px;
 	padding: 0 8px;
 	background: var(--nulo-surface-high);
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
 	color: var(--txt-primary);
 	cursor: pointer;
 }
@@ -169,6 +166,7 @@ const toggleSort = () => {
 }
 
 .fold {
+	composes: type--label from global;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -180,10 +178,6 @@ const toggleSort = () => {
 	cursor: pointer;
 	text-align: left;
 
-	font-family: var(--font-mono);
-	font-size: 10px;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
 	color: var(--nulo-secondary);
 
 	transition: color 0.2s var(--bezier);

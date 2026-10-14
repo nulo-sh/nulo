@@ -29,8 +29,8 @@ defineProps<{
 			size === 'compact' && $style.compact,
 		]"
 	>
-		<span :class="$style.main">{{ main }}</span>
-		<span :class="$style.sub">{{ sub }}</span>
+		<span class="type--title-hero" :class="$style.main">{{ main }}</span>
+		<span class="type--title-hero" :class="$style.sub">{{ sub }}</span>
 	</h1>
 </template>
 
@@ -40,7 +40,6 @@ defineProps<{
 	flex-direction: column;
 	line-height: 0.95;
 	margin: 0;
-	font-weight: 700;
 }
 
 .center {
@@ -50,11 +49,7 @@ defineProps<{
 
 .main,
 .sub {
-	font-family: var(--font-headline);
 	font-size: 48px;
-	font-weight: 700;
-	letter-spacing: -0.04em;
-	text-transform: uppercase;
 }
 
 .hero .main,

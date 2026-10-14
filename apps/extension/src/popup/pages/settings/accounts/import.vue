@@ -181,7 +181,7 @@ const collapsingLabel = "Import Account"
 		     separates it from a NEXT section, and a plain file has none. -->
 		<template v-if="!needsConfirm">
 			<div :class="isProtectedFile ? 'export_section' : 'export_section_last'">
-				<span class="export_section_label">Account file</span>
+				<span class="export_section_label type--label-section">Account file</span>
 				<ItemsContainer flat>
 					<SettingItem
 						@click="handlePickFile"
@@ -196,13 +196,13 @@ const collapsingLabel = "Import Account"
 				</ItemsContainer>
 				<Flex v-if="error" align="center" gap="6" data-testid="import-account-error">
 					<Icon name="warning" size="12" color="red" />
-					<Text size="12" weight="600" color="red" height="140">{{ error }}</Text>
+					<Text variant="body" color="red" height="140">{{ error }}</Text>
 				</Flex>
 			</div>
 
 			<!-- Step 2 (protected files only): the file password -->
 			<div v-if="isProtectedFile" class="export_section_last">
-				<span class="export_section_label">Protected file</span>
+				<span class="export_section_label type--label-section">Protected file</span>
 				<Input
 					label="File password"
 					type="password"
@@ -216,11 +216,12 @@ const collapsingLabel = "Import Account"
 		<!-- Step 3: preview + confirm -->
 		<template v-else>
 			<div class="export_section">
-				<span class="export_section_label">You are importing</span>
+				<span class="export_section_label type--label-section">You are importing</span>
 				<ItemsContainer flat>
 					<SettingItem
 						size="large"
 						:title="accountName.trim() || 'Account'"
+						titleVariant="name"
 						icon="user"
 						raw
 						data-testid="import-account-preview"
@@ -235,7 +236,7 @@ const collapsingLabel = "Import Account"
 			</div>
 
 			<div class="export_section_last">
-				<span class="export_section_label">Account name</span>
+				<span class="export_section_label type--label-section">Account name</span>
 				<Input
 					label="Name"
 					placeholder="Name this account"
@@ -248,16 +249,16 @@ const collapsingLabel = "Import Account"
 
 			<div class="export_section_last">
 				<Flex direction="column" gap="8">
-					<Text size="12" weight="500" height="150" color="tertiary">
+					<Text variant="body" height="150" color="tertiary">
 						The address is recomputed from the file. Confirm it matches the account you expect.
 					</Text>
-					<Text size="12" weight="500" height="150" color="tertiary">
+					<Text variant="body" height="150" color="tertiary">
 						This account is not covered by your recovery phrase. Keep its file safe.
 					</Text>
 				</Flex>
 				<Flex v-if="error" align="center" gap="6" data-testid="import-account-error">
 					<Icon name="warning" size="12" color="red" />
-					<Text size="12" weight="600" color="red" height="140">{{ error }}</Text>
+					<Text variant="body" color="red" height="140">{{ error }}</Text>
 				</Flex>
 			</div>
 		</template>
@@ -289,9 +290,9 @@ const collapsingLabel = "Import Account"
 
 <style module>
 .preview_address {
+	composes: type--data from global;
 	display: block;
 	white-space: normal;
 	word-break: break-all;
-	font-family: var(--font-mono);
 }
 </style>

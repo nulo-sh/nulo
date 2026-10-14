@@ -72,14 +72,14 @@ const onRowClick = (method, event) => {
 					@click="onRowClick(method, $event)"
 				>
 					<Flex align="center" justify="between" gap="8" wide>
-						<Text size="13" weight="600" :color="method.disabled || method.checking ? 'tertiary' : 'primary'">
+						<Text variant="name" :class="$style.method_title" :color="method.disabled || method.checking ? 'tertiary' : 'primary'">
 							{{ method.title }}
 						</Text>
 						<template v-if="method.checking">
 							<span :class="$style.skeleton" aria-hidden="true" />
 							<span :class="$style.visually_hidden">Checking</span>
 						</template>
-						<Text v-else size="11" color="tertiary">
+						<Text v-else variant="caption" color="tertiary">
 							{{ method.disabled && method.disabledReason ? method.disabledReason : method.spend }}
 						</Text>
 					</Flex>
@@ -92,6 +92,10 @@ const onRowClick = (method, event) => {
 <style module>
 .card {
 	padding: 12px;
+}
+
+.method_title {
+	font-size: 13px;
 }
 
 .fee_label {
@@ -111,7 +115,7 @@ const onRowClick = (method, event) => {
 }
 
 .fee_value {
-	font-family: var(--font-mono);
+	composes: type--name from global;
 	font-size: 12px;
 	color: var(--txt-primary);
 }
@@ -142,14 +146,10 @@ const onRowClick = (method, event) => {
 }
 
 .tag {
+	composes: type--tag from global;
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
-
-	font-family: var(--font-headline);
-	font-size: 10px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
 	white-space: nowrap;
 }
 </style>

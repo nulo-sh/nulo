@@ -71,6 +71,21 @@ describe("Input", () => {
 		expect(mountInput().get("input").attributes("data-testid")).toBeUndefined()
 	})
 
+	test("the list attributes land on the native <input>, and are absent when not given", () => {
+		const given = mountInput({ ariaActivedescendant: "opt-2", ariaControls: "list-1" }).get("input")
+		expect(given.attributes()).toMatchObject({ "aria-activedescendant": "opt-2", "aria-controls": "list-1" })
+		const bare = mountInput().get("input").attributes()
+		expect(bare["aria-activedescendant"]).toBeUndefined()
+		expect(bare["aria-controls"]).toBeUndefined()
+	})
+
+	test.each([
+		[undefined, "type--input"],
+		["input-data", "type--input-data"],
+	])("textVariant %s puts %s on the native <input>", (textVariant, role) => {
+		expect(mountInput({ textVariant }).get("input").classes()).toEqual([role])
+	})
+
 	test("type prop maps to the native input type", () => {
 		expect(mountInput({ type: "password" }).find("input").attributes("type")).toBe("password")
 	})

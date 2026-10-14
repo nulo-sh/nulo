@@ -1095,6 +1095,66 @@ describe("FeeSettingsCard — embedded ↔ manual switching", () => {
 	})
 })
 
+describe("FeeSettingsCard — keyboard reach in a dApp's embedded payment", () => {
+	const TAGGED = { ...STUBS, Flex: { props: ["tag"], template: "<component :is=\"tag || 'div'\"><slot /></component>" } }
+	const mountEmbedded = () =>
+		mount(FeeSettingsCard, {
+			props: { ...baseProps(), modelValue: { paymentMethod: { kind: "embedded" } } },
+			global: { stubs: TAGGED },
+		})
+	const enter = (el: Element, init: KeyboardEventInit = {}) => {
+		const e = new KeyboardEvent("keydown", { key: "Enter", cancelable: true, ...init })
+		el.dispatchEvent(e)
+		return e.defaultPrevented
+	}
+
+	test("both links are buttons, and a held or composing Enter is refused before it activates one", async () => {
+		const w = mountEmbedded()
+		await flushPromises()
+		for (const id of ["send-fee-override", "send-fee-back-embedded"]) {
+			const el = w.get(`[data-testid="${id}"]`).element as HTMLButtonElement
+			expect([el.tagName, el.type]).toEqual(["BUTTON", "button"])
+			expect(enter(el)).toBe(false)
+			expect(enter(el, { repeat: true })).toBe(true)
+			expect(enter(el, { isComposing: true })).toBe(true)
+			await w.get(`[data-testid="${id}"]`).trigger("click")
+			await flushPromises()
+		}
+		expect(w.find('[data-testid="send-fee-embedded"]').exists()).toBe(true)
+	})
+
+	test("a load error lands in a polite region mounted empty with the card, which the switch to the app's payment and back keeps", async () => {
+		vi.useFakeTimers()
+		try {
+			mocks.getGasBalances.mockRejectedValue(new Error("PXE unreachable"))
+			mocks.getFpcs.mockRejectedValue(new Error("PXE unreachable"))
+			const w = mountEmbedded()
+			await vi.advanceTimersByTimeAsync(0)
+			const live = w.get('[data-testid="fee-init-degraded-live"]')
+			expect(live.attributes()).toMatchObject({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+			expect(live.text()).toBe("")
+
+			await w.get('[data-testid="send-fee-override"]').trigger("click")
+			await vi.advanceTimersByTimeAsync(0)
+			const notice = live.text()
+			expect(notice).toMatch(/^Couldn't load fee data\./)
+			expect(w.find('[data-testid="fee-method-row"]').exists()).toBe(false)
+
+			await w.get('[data-testid="send-fee-back-embedded"]').trigger("click")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(live.text()).toBe("")
+
+			await w.get('[data-testid="send-fee-override"]').trigger("click")
+			await vi.advanceTimersByTimeAsync(0)
+			expect(w.get('[data-testid="fee-init-degraded-live"]').element).toBe(live.element)
+			expect(live.text()).toBe(notice)
+			w.unmount()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+})
+
 describe("FeeSettingsCard — concurrency", () => {
 	test("rapid prop change while init is in flight: only one Promise.all completes per logical state", async () => {
 		// First mount with one network, immediately switch to another.

@@ -18,13 +18,13 @@ const appStore = useAppStore()
 		<!-- Passkey profile -->
 		<template v-if="appStore.profile.type === 'passkey'">
 			<ItemsContainer title="Profile">
-				<SettingItem :title="appStore.profile.name" icon="user" raw />
+				<SettingItem :title="appStore.profile.name" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 
 			<Flex direction="column" gap="12" style="padding: 0 8px;">
-				<Text size="13" weight="500" height="150" color="tertiary">
-					To access your profile on a new device, the Passkey must be <Text weight="600" color="secondary">synced</Text> with
-					it or <Text weight="600" color="secondary">available on another device</Text> you own.
+				<Text variant="body" height="150" color="tertiary">
+					To access your profile on a new device, the Passkey must be <Text variant="value" color="secondary">synced</Text> with
+					it or <Text variant="value" color="secondary">available on another device</Text> you own.
 				</Text>
 			</Flex>
 
@@ -36,7 +36,7 @@ const appStore = useAppStore()
 		<!-- Password profile -->
 		<template v-else>
 			<ItemsContainer title="Profile to backup">
-				<SettingItem :title="appStore.profile.name" icon="user" raw />
+				<SettingItem :title="appStore.profile.name" titleVariant="name" icon="user" raw />
 			</ItemsContainer>
 
 			<ItemsContainer title="Choose backup mode">

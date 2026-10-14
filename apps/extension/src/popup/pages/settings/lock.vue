@@ -186,8 +186,8 @@ onBeforeUnmount(() => {
 			<!-- Strict Security Mode -->
 			<Flex v-if="!isPasskey" justify="between" align="center" data-testid="setting-strict-security-mode">
 				<Flex direction="column" gap="6">
-					<Text size="13" weight="600" color="primary">Strict security mode</Text>
-					<Text size="12" weight="500" color="tertiary">
+					<Text variant="row-title" :class="$style.title_size" color="primary">Strict security mode</Text>
+					<Text variant="caption" color="tertiary">
 						More secure, asks for your password more often. Recommended.
 					</Text>
 				</Flex>
@@ -203,17 +203,17 @@ onBeforeUnmount(() => {
 			<Flex justify="between" align="center">
 				<Flex direction="column" gap="6">
 					<Flex align="end" gap="6">
-						<Text size="13" weight="600" color="primary">Auto-lock Timeout</Text>
+						<Text variant="row-title" :class="$style.title_size" color="primary">Auto-lock Timeout</Text>
 						<Tooltip v-if="notification.show">
 							<Icon name="info" color="secondary" size="14" />
 							<template #content>
 								<Flex align="center" :class="$style.tooltip">
-									<Text size="12" color="secondary">{{ notification.text }}</Text>
+									<Text color="secondary">{{ notification.text }}</Text>
 								</Flex>
 							</template>
 						</Tooltip>
 					</Flex>
-					<Text size="12" weight="500" color="tertiary">Automatic wallet locking (minutes)</Text>
+					<Text variant="caption" color="tertiary">Automatic wallet locking (minutes)</Text>
 				</Flex>
 
 				<Input
@@ -246,5 +246,9 @@ onBeforeUnmount(() => {
 	* {
 		text-align: center;
 	}
+}
+
+.title_size {
+	font-size: 13px;
 }
 </style>

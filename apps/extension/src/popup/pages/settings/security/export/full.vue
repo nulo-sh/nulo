@@ -516,15 +516,15 @@ onBeforeUnmount(discardRun)
 		<!-- Agreement gate -->
 		<template v-if="!isAgreed">
 			<div class="export_section_last">
-				<span class="export_section_label">Before you continue</span>
+				<span class="export_section_label type--label-section">Before you continue</span>
 				<Flex direction="column" gap="8">
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Backup provides direct, unrestricted access to your entire profile.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						Ensure that your backup is stored securely and never shared with anyone.
 					</Text>
-					<Text size="13" height="150" color="body">
+					<Text variant="body" height="150" color="body">
 						By continuing you agree to all risks and responsibilities.
 					</Text>
 				</Flex>
@@ -594,7 +594,7 @@ onBeforeUnmount(discardRun)
 				</div>
 
 				<div v-else class="export_section">
-					<span class="export_section_label">Backup</span>
+					<span class="export_section_label type--label-section">Backup</span>
 					<Banner v-if="dekReplaced" variant="warning" direction="vertical" data-testid="backup-keys-lost-banner">
 						<template #title> Imported keys are not in this backup </template>
 						<template #description>
@@ -653,7 +653,7 @@ onBeforeUnmount(discardRun)
 					v-if="!showRecommendation && isPasskeyProfile && backupStatus === 'finished'"
 					class="export_section_last"
 				>
-					<span class="export_section_label">Encrypt with password</span>
+					<span class="export_section_label type--label-section">Encrypt with password</span>
 					<Flex direction="column" gap="12">
 						<div :class="[isPasswordMismatch && $style.shake]">
 							<Input
@@ -777,16 +777,13 @@ onBeforeUnmount(discardRun)
 }
 
 .status_title {
-	font-family: var(--font-headline);
+	composes: type--row-title from global;
 	font-size: 16px;
-	font-weight: 700;
-	letter-spacing: -0.01em;
 	color: var(--txt-primary);
 }
 
 .status_subtitle {
-	font-family: var(--font-body);
-	font-size: 13px;
+	composes: type--body from global;
 	line-height: 1.5;
 	color: var(--nulo-secondary);
 	margin: 0;
@@ -794,8 +791,7 @@ onBeforeUnmount(discardRun)
 }
 
 .error_text {
-	font-family: var(--font-body);
-	font-size: 12px;
+	composes: type--body from global;
 	color: var(--red);
 	margin-top: 4px;
 	display: block;

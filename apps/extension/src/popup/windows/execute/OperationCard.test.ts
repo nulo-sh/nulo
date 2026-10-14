@@ -61,7 +61,7 @@ describe("windows/execute/OperationCard", () => {
 			const row = w.find("[data-testid='execute-op-payload-row']")
 			expect(row.exists()).toBe(true)
 			expect(row.attributes("data-call-to")).toBe("0xaaa")
-			expect(w.find("[data-testid='address']").attributes("data-address")).toBe("0xaaa")
+			expect(w.find("[data-testid='execute-op-call-to']").attributes("data-address")).toBe("0xaaa")
 		}
 	})
 
@@ -69,7 +69,7 @@ describe("windows/execute/OperationCard", () => {
 		const w = mountCard(execOp("aztec_simulateTx", "0xaaa"))
 		const before = mounts.count
 		await w.setProps({ op: execOp("aztec_profileTx", "0xbbb") as never })
-		expect(w.find("[data-testid='address']").attributes("data-address")).toBe("0xbbb")
+		expect(w.find("[data-testid='execute-op-call-to']").attributes("data-address")).toBe("0xbbb")
 		expect(mounts.count).toBe(before + 1)
 	})
 })

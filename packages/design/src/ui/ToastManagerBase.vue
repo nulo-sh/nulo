@@ -241,26 +241,18 @@ onBeforeUnmount(() => {
 }
 
 .title {
-	font-family: var(--font-headline);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	composes: type--label-section from global;
 }
 
 .sub {
-	font-size: 11px;
+	composes: type--caption from global;
 	color: var(--nulo-secondary);
 }
 
 .action {
+	composes: type--label from global;
 	flex: none;
 	padding: 6px 4px;
-	font-family: var(--font-headline);
-	font-size: 11px;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
 	color: var(--nulo-accent);
 	background: none;
 	border: 0;
