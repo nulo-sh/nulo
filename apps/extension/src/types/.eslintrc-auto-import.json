@@ -365,6 +365,7 @@
     "isAmountAboveDustThreshold": true,
     "isApprovedSendInFlight": true,
     "isBackgroundConnected": true,
+    "isComposing": true,
     "isEmptyContactName": true,
     "isFirefox": true,
     "isForeignProfile": true,

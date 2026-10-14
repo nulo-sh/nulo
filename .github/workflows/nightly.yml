@@ -16,11 +16,15 @@ name: nightly
 #   2. The full gate battery runs at that sha: lint+typecheck, unit, the
 #      complete network e2e suite and the seeded send chaos run on chrome and
 #      on firefox, chrome+firefox builds, smoke against each built artifact.
+#      Beside them, one advisory leg runs the canary files on the in-browser
+#      prover and gates nothing.
 #   3. Only if EVERY gate is green, publish-nightly creates the tag at that
 #      sha, then fills, checks and publishes a draft PRE-release with the
 #      zips + SHASUMS256.txt + git-cliff notes (scripts/release/
 #      attach-assets-run.ts, shared with release.yml). A red night publishes
 #      nothing and strands nothing (the tag does not exist until publish time).
+#   4. prune-nightlies then keeps the newest fourteen nightlies and deletes
+#      the older ones (scripts/release/prune-nightlies-run.ts).
 #
 # Version scheme — why not a calendar date in the last component:
 #   Chrome and Firefox cap every manifest `version` component at 65535, and
@@ -120,24 +124,15 @@ jobs:
             exit 1
           fi
 
+          # Above every nightly code on any version line: prune-nightlies frees the oldest names, and
+          # a code below a kept one would sort oldest and be pruned at once (GitHub never reissues a
+          # deleted immutable release's tag). Captured first, so a failed probe aborts via set -e
+          # instead of reading as "no tags".
+          REMOTE_TAGS="$(git ls-remote --tags origin)"
+          LAST_CODE="$(sed -nE 's#.*refs/tags/v[0-9]+\.[0-9]+\.[0-9]+-nightly\.([0-9]{5})$#\1#p' <<<"$REMOTE_TAGS" | sort -n | tail -n 1)"
+          LAST_CODE="${LAST_CODE:-0}"
           DATE_CODE="$(date -u +%y%j)"
-          CODE="$DATE_CODE"
-          ATTEMPT=0
-          while true; do
-            # Capture first so a git/network failure aborts via set -e instead
-            # of reading as "tag absent" (an empty result must only ever mean
-            # absence, never an errored probe).
-            REMOTE_MATCH="$(git ls-remote --tags origin "refs/tags/v${BASE_VERSION}-nightly.${CODE}")"
-            if ! grep -q . <<<"$REMOTE_MATCH"; then
-              break
-            fi
-            ATTEMPT=$((ATTEMPT + 1))
-            if [ "$ATTEMPT" -gt 20 ]; then
-              echo "::error::more than 20 nightly tags exist for date-code $DATE_CODE — aborting rather than looping further"
-              exit 1
-            fi
-            CODE=$((CODE + 1))
-          done
+          CODE=$((DATE_CODE > LAST_CODE ? DATE_CODE : LAST_CODE + 1))
 
           TAG="v${BASE_VERSION}-nightly.${CODE}"
           VERSION="${TAG#v}"
@@ -243,6 +238,21 @@ jobs:
       shard_label: "canary"
       test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
       disable_presto: ${{ vars.NULO_E2E_DISABLE_PRESTO == '1' }}
+
+  # The canary files on the in-browser WASM prover, the path of every user without Presto; every other
+  # prover-ON job proves natively unless NULO_E2E_DISABLE_PRESTO is set. ADVISORY: no job needs it, so
+  # a red leg reds the run but neither `status` nor the publish (a job that calls a reusable workflow
+  # cannot take `continue-on-error`). Making it a gate is the owner's call, after 30 green nights in a row.
+  network-e2e-canary-wasm:
+    name: Run / canary / in-browser proving
+    needs: resolve
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.skip != 'true'
+    uses: ./.github/workflows/_extension-network-e2e.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      shard_label: "canary-wasm"
+      test_files: "tests/e2e/network/transfers.test.ts tests/e2e/network/tx-sendTx-default.test.ts tests/e2e/network/frozen-account-canary.test.ts tests/e2e/network/passkey-execution-canary.test.ts tests/e2e/network/delete-after-prove.test.ts"
+      disable_presto: true
 
   # The seeded send chaos run (send-chaos.test.ts) gates the publish. Unseeded it takes the run's
   # id, which "Re-run failed jobs" keeps, so a re-run replays the actions a red night drew (a seed
@@ -615,6 +625,34 @@ jobs:
           echo "DRY RUN — would have created tag $TAG at $SHA and uploaded:"
           ls -la dist/release/
 
+  # After this night's publish, in the same run, so the two never race. The `release tags` ruleset
+  # excludes `refs/tags/v*-nightly.*` for it and still holds every stable and rc tag.
+  prune-nightlies:
+    needs: publish-nightly
+    if: always() && !cancelled() && needs.publish-nightly.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+        with:
+          cache: "false"
+          install: "false"
+      - name: Prune nightly tags and releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            bun --no-install scripts/release/prune-nightlies-run.ts
+          else
+            bun --no-install scripts/release/prune-nightlies-run.ts --apply
+          fi
+
   status:
     name: status
     if: always()
@@ -639,6 +677,7 @@ jobs:
         smoke-firefox-against-artifact,
         nightly-notes,
         publish-nightly,
+        prune-nightlies,
       ]
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -665,6 +704,7 @@ jobs:
             "${{ needs.smoke-firefox-against-artifact.result }}" \
             "${{ needs.nightly-notes.result }}" \
             "${{ needs.publish-nightly.result }}" \
+            "${{ needs.prune-nightlies.result }}" \
           ; do
             if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
               echo "::error::A nightly stage failed or was cancelled: $r"

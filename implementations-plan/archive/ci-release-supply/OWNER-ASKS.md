@@ -1,6 +1,6 @@
 # Owner asks: ci-release-supply
 
-Two asks, one for information. OA-1 changes what a person could see, if you choose it. Nothing waits on either answer: arcs 1 to 4 ship in full with the form marked "what ships now".
+Answered on decision page 5 (2026-10-13): OA-1 **option A** (built in arc 5a), OA-2 read with P5-02 approved (arc 5), OA-3 **option A** (what arc 2 shipped). Nothing is open.
 
 ## OA-1: the onboarding title when the browser blocks Presto (#82)
 

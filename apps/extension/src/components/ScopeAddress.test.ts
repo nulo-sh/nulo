@@ -89,12 +89,19 @@ describe("ScopeAddress", () => {
 		expect(writeText).toHaveBeenCalledWith("0x12345678")
 	})
 
-	test("Enter key copies (a11y parity with click)", async () => {
+	test.each(["Enter", " "])("%j copies once and is marked handled; a repeat or composing one does nothing", async (key) => {
 		getContactByAddress.mockResolvedValueOnce(null)
 		const w = factory({ address: "0xenter" })
 		await flushPromises()
-		await w.find('[data-testid="scope-address"]').trigger("keydown.enter")
+		const el = w.get('[data-testid="scope-address"]').element
+		const press = new KeyboardEvent("keydown", { key, cancelable: true })
+		el.dispatchEvent(press)
+		el.dispatchEvent(new KeyboardEvent("keydown", { key, repeat: true }))
+		el.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing: true }))
+		await flushPromises()
+		expect(writeText).toHaveBeenCalledTimes(1)
 		expect(writeText).toHaveBeenCalledWith("0xenter")
+		expect(press.defaultPrevented).toBe(true)
 	})
 
 	test("preserves the canonical testid + data attr for e2e", async () => {

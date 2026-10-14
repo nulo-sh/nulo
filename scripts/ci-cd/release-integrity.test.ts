@@ -74,8 +74,8 @@ function privileged(job: Job, wf: Workflow): boolean {
 	const declared = job.permissions ?? wf.permissions ?? {}
 	if (declared === "write-all") return true
 	const permissions = declared as Record<string, unknown>
-	const signs = permissions["id-token"] === "write" || permissions.attestations === "write"
-	return signs || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
+	const writes = permissions["id-token"] === "write" || permissions.attestations === "write" || permissions.contents === "write"
+	return writes || (job.steps ?? []).some((s) => s.uses?.startsWith(MINT))
 }
 
 /** The exact permission set of each App token; none may name another owner or repository. */
@@ -134,6 +134,7 @@ const THIRD_PARTY: Record<string, string[]> = {
 	"store-check.yml#chrome": ["google-github-actions/auth", "oven-sh/setup-bun"],
 	"publish-packages.yml#publish": [],
 	"nightly.yml#publish-nightly": ["oven-sh/setup-bun"],
+	"nightly.yml#prune-nightlies": ["oven-sh/setup-bun"],
 }
 
 function credentialedJobFindings(tree: Tree, where: string, wf: Workflow, job: Job): string[] {
@@ -157,7 +158,13 @@ function credentialedFindings(tree: Tree): string[] {
 }
 
 /** The jobs that tag or publish: Bun built-ins only, from the workflow's own revision. */
-const CLEAN = ["release.yml#auto-unstick", "release.yml#attach-assets", "release.yml#sync-main-to-dev", "nightly.yml#publish-nightly"]
+const CLEAN = [
+	"release.yml#auto-unstick",
+	"release.yml#attach-assets",
+	"release.yml#sync-main-to-dev",
+	"nightly.yml#publish-nightly",
+	"nightly.yml#prune-nightlies",
+]
 const INSTALLS = /\b(bun|npm|pnpm|yarn)\s+(install|i|ci|add)\b|\bbunx\b|\bbun\s+(-\S+\s+)*(x|create)\s|\bnpx\b/
 /** A step's shell text with line continuations joined, so a command reads the same however it wraps. */
 const script = (step: Step): string => (step.run ?? "").replace(/\\\n/g, " ")
@@ -203,6 +210,7 @@ function cleanFindings(tree: Tree): string[] {
  */
 const NO_INSTALL = [
 	"_release-pr-lockfile.yml#lock-version",
+	"nightly.yml#prune-nightlies",
 	"nightly.yml#publish-nightly",
 	"pr-quick.yml#changes",
 	"pr-quick.yml#preview-comment",
@@ -416,6 +424,33 @@ function releaseWriteFindings(tree: Tree): string[] {
 	)
 }
 
+const PRUNE = "nightly.yml#prune-nightlies"
+const PRUNE_GUARD = "always() && !cancelled() && needs.publish-nightly.result == 'success'"
+const PRUNE_DRY_RUN = "${{ github.event.inputs.dry_run || 'false' }}"
+const PRUNE_RUN = `if [ "$DRY_RUN" = "true" ]; then
+  bun --no-install scripts/release/prune-nightlies-run.ts
+else
+  bun --no-install scripts/release/prune-nightlies-run.ts --apply
+fi
+`
+
+/** The one job besides the publishers that deletes releases: after a published night only, never on a dry run. */
+function pruneFindings(tree: Tree): string[] {
+	const job = tree.workflows["nightly.yml"].jobs["prune-nightlies"]
+	if (!job) return [`${PRUNE}: missing`]
+	const findings: string[] = []
+	if (!Bun.deepEquals(job.permissions, { contents: "write" })) findings.push(`${PRUNE}: permissions ${JSON.stringify(job.permissions)}`)
+	if (!Bun.deepEquals(needsOf(job), ["publish-nightly"]) || job.if !== PRUNE_GUARD)
+		findings.push(`${PRUNE}: runs without a published night`)
+	const steps = [...jobs(tree)].flatMap(({ where, job }) =>
+		(job.steps ?? []).filter((s) => s.run?.includes("prune-nightlies-run.ts")).map((step) => ({ where, step })),
+	)
+	const env = (steps[0]?.step as { env?: Record<string, unknown> } | undefined)?.env
+	if (steps.length !== 1 || steps[0].where !== PRUNE || steps[0].step.run !== PRUNE_RUN || env?.DRY_RUN !== PRUNE_DRY_RUN)
+		findings.push(`${PRUNE}: may delete on a dry run, or from another job`)
+	return findings
+}
+
 /** The release notes print the attestation check for the tagged commit, which the runner fills in. */
 function cliffFindings(toml: string): string[] {
 	const checks = toml.match(/gh attestation verify [^`]+/g) ?? []
@@ -495,6 +530,11 @@ describe("credentialed jobs", () => {
 			(t: Tree) => Object.assign(step(t, "store-check.yml#chrome", "actions/checkout@").with ?? {}, { "persist-credentials": true }),
 		],
 		["a job-wide GH_TOKEN", (t: Tree) => Object.assign(t.workflows["release.yml"].jobs["auto-unstick"], { env: { GH_TOKEN: "x" } })],
+		[
+			"a persisted checkout in a contents-write job",
+			(t: Tree) =>
+				Object.assign(step(t, "nightly.yml#prune-nightlies", "actions/checkout@").with ?? {}, { "persist-credentials": true }),
+		],
 		[
 			"an unlisted action",
 			(t: Tree) =>
@@ -724,6 +764,7 @@ describe("jobs that install nothing", () => {
 			"a Bun call setup-bun runs in every caller",
 			onTree((t) => t.actions[SETUP_BUN].runs.steps?.push({ run: "bun --cwd /tmp -e 1" })),
 			[
+				"nightly.yml#prune-nightlies",
 				"nightly.yml#publish-nightly",
 				"pr-quick.yml#changes",
 				"release.yml#attach-assets",
@@ -834,6 +875,36 @@ describe("release notes", () => {
 		],
 	])("finds %s", (_, edit) => {
 		expect(notesFindings(mutated(edit)).length).toBeGreaterThan(0)
+	})
+})
+
+describe("nightly prune", () => {
+	test("deletes with contents: write alone, after a published night only, and never on a dry run", () => {
+		expect(pruneFindings(TREE)).toEqual([])
+	})
+	const prune = (t: Tree) => t.workflows["nightly.yml"].jobs["prune-nightlies"]
+	test.each([
+		["a wider token", (t: Tree) => Object.assign(prune(t), { permissions: { contents: "write", actions: "write" } })],
+		["a run after a failed publish", (t: Tree) => Object.assign(prune(t), { if: "always() && !cancelled()" })],
+		["a run beside the publish", (t: Tree) => Object.assign(prune(t), { needs: ["resolve"] })],
+		[
+			"--apply on a dry run",
+			(t: Tree) => Object.assign(prune(t).steps?.find((s) => s.run?.includes("prune-nightlies-run.ts")) ?? {}, { env: {} }),
+		],
+		[
+			"a second prune step",
+			(t: Tree) => prune(t).steps?.push({ run: "bun --no-install scripts/release/prune-nightlies-run.ts --apply" }),
+		],
+		[
+			"the prune moved into the publishing job",
+			(t: Tree) => {
+				const steps = prune(t).steps ?? []
+				const at = steps.findIndex((s) => s.run?.includes("prune-nightlies-run.ts"))
+				t.workflows["nightly.yml"].jobs["publish-nightly"].steps?.push(...steps.splice(at, 1))
+			},
+		],
+	])("finds %s", (_, edit) => {
+		expect(pruneFindings(mutated(edit)).length).toBeGreaterThan(0)
 	})
 })
 

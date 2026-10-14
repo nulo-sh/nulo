@@ -21,6 +21,7 @@ import {
 	type SoakSummary,
 	type VitestJson,
 	buildInventory,
+	bunOnlyFiles,
 	canonicalExecPath,
 	compactSummary,
 	compareSummaries,
@@ -268,7 +269,7 @@ function resolveEsm(engine: "bun" | "node", wsDir: string, canon: Canonicalizer)
 	return canonical
 }
 
-interface SoakArgs {
+export interface SoakArgs {
 	cwd: string
 	script: string
 	runtime: "script" | "node"
@@ -314,37 +315,48 @@ export function parseSoakArgs(argv: string[]): SoakArgs {
 	return args
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: accepted at score 16 — one coordinator binds two launch modes to provenance capture and summary emission
+export interface LaunchPlan {
+	launcher: string[]
+	before: string[][]
+	after: string[][]
+}
+
+/** The candidate runs the workspace's own script. The Node reference runs that script's vitest
+ *  arguments on the vitest bin's own Node, between its `pre`/`post` hooks, minus the workspace's
+ *  Bun-only files. */
+export function launchPlan(args: SoakArgs, wsDir: string, cwd: string, scripts: Record<string, string>): LaunchPlan {
+	if (args.runtime === "script") {
+		return { launcher: ["bun", "--no-install", "run", "--cwd", wsDir, args.script, "--", ...args.filters], before: [], after: [] }
+	}
+	const scriptValue = scripts[args.script] ?? ""
+	const tokens = parseFlippedScript(scriptValue)
+	if (tokens === null) throw new Error(`--runtime node needs a script of the form "bun --bun vitest run [...]", got "${scriptValue}"`)
+	const hook = (name: string) => (scripts[name] ? [["bun", "--no-install", "run", "--cwd", wsDir, name]] : [])
+	const excludes = bunOnlyFiles(cwd).flatMap(({ file }) => ["--exclude", file])
+	return {
+		launcher: ["bun", "--no-install", "run", "--cwd", wsDir, "vitest", "run", ...tokens, ...excludes, ...args.filters],
+		before: hook(`pre${args.script}`),
+		after: hook(`post${args.script}`),
+	}
+}
+
 async function soak(argv: string[]): Promise<number> {
 	const args = parseSoakArgs(argv)
 	const wsDir = resolve(args.cwd)
 	const repoRoot = git(["rev-parse", "--show-toplevel"], wsDir)
+	const cwd = relative(repoRoot, wsDir)
 	const canon = createCanonicalizer({ repoRoot, wsDir })
 	const manifest = JSON.parse(readFileSync(join(wsDir, "package.json"), "utf8")) as { scripts?: Record<string, string> }
-	const scriptValue = manifest.scripts?.[args.script]
-	if (!scriptValue) throw new Error(`${relative(repoRoot, wsDir)} has no "${args.script}" script`)
-
-	let launcher: string[]
-	let before: string[][] = []
-	let after: string[][] = []
-	if (args.runtime === "script") {
-		launcher = ["bun", "--no-install", "run", "--cwd", wsDir, args.script, "--", ...args.filters]
-	} else {
-		const tokens = parseFlippedScript(scriptValue)
-		if (tokens === null) throw new Error(`--runtime node needs a script of the form "bun --bun vitest run [...]", got "${scriptValue}"`)
-		const pre = manifest.scripts?.[`pre${args.script}`]
-		const post = manifest.scripts?.[`post${args.script}`]
-		before = pre ? [["bun", "--no-install", "run", "--cwd", wsDir, `pre${args.script}`]] : []
-		after = post ? [["bun", "--no-install", "run", "--cwd", wsDir, `post${args.script}`]] : []
-		launcher = ["bun", "--no-install", "run", "--cwd", wsDir, "vitest", "run", ...tokens, ...args.filters]
-	}
+	const scripts = manifest.scripts ?? {}
+	if (!scripts[args.script]) throw new Error(`${cwd} has no "${args.script}" script`)
+	const { launcher, before, after } = launchPlan(args, wsDir, cwd, scripts)
 
 	const gitSha = git(["rev-parse", "HEAD"], repoRoot)
 	const gitDirty = git(["status", "--porcelain", "--", ".", `:!${BASELINES_DIR}`], repoRoot) !== ""
 	const lockfileSha256 = sha256(readFileSync(join(repoRoot, "bun.lock")))
 	const timeoutMs = Math.round(args.timeoutMin * 60_000)
 
-	console.log(`soak ${relative(repoRoot, wsDir)} ${args.script} [${args.runtime}] ×${args.runs} (timeout ${args.timeoutMin} min)`)
+	console.log(`soak ${cwd} ${args.script} [${args.runtime}] ×${args.runs} (timeout ${args.timeoutMin} min)`)
 	const outcomes = await runLoop({
 		launcher,
 		spawnCwd: wsDir,
@@ -376,7 +388,7 @@ async function soak(argv: string[]): Promise<number> {
 		meta: {
 			tool: "test-soak@1",
 			argv: ["soak", ...argv].map((value) => canon.text(value)),
-			cwd: relative(repoRoot, wsDir),
+			cwd,
 			script: args.script,
 			runtimeMode: args.runtime,
 			filters: args.filters.map((filter) => canon.text(filter)),

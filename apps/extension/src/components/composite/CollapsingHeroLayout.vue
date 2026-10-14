@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
 		<Flex ref="wrapperRef" direction="column" :class="$style.wrapper" data-testid="collapsing-hero-scroller">
 			<SubPageHeader ref="headerRef" :backTo="backTo" data-testid="collapsing-hero-header">
 				<template #title>
-					<span :class="[$style.collapsing_label, !heroVisible && $style.collapsing_label_visible]">
+					<span :class="[$style.collapsing_label, !heroVisible && $style.collapsing_label_visible]" aria-hidden="true">
 						{{ collapsingLabel }}
 					</span>
 				</template>

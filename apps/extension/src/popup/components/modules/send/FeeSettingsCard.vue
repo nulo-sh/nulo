@@ -40,6 +40,7 @@ import { usePrices } from "@/composables/usePrices"
 
 /** Composables */
 import { useToast } from "@/composables/toast"
+import { refuseRepeatEnter } from "@/composables/usePopupEntity"
 const { openToast } = useToast()
 
 /** Stores */
@@ -931,7 +932,16 @@ onBeforeUnmount(() => {
 				<Text size="12" weight="600" color="secondary">
 					The app includes fee payment in the transaction.
 				</Text>
-				<Flex @click="handleUseOwnMethod" align="center" gap="4" :class="$style.link" data-testid="send-fee-override">
+				<Flex
+					tag="button"
+					type="button"
+					@click="handleUseOwnMethod"
+					@keydown.enter="refuseRepeatEnter"
+					align="center"
+					gap="4"
+					:class="$style.link"
+					data-testid="send-fee-override"
+				>
 					<Text size="12" weight="600" color="primary">Override with my method</Text>
 					<Icon name="arrow-right" size="10" color="primary" />
 				</Flex>
@@ -963,28 +973,47 @@ onBeforeUnmount(() => {
 				:class="$style.detail_row"
 				:style="{ padding: '6px 12px' }"
 			>
-				<Flex @click="handleUseEmbedded" align="center" gap="4" :class="$style.link" data-testid="send-fee-back-embedded">
+				<Flex
+					tag="button"
+					type="button"
+					@click="handleUseEmbedded"
+					@keydown.enter="refuseRepeatEnter"
+					align="center"
+					gap="4"
+					:class="$style.link"
+					data-testid="send-fee-back-embedded"
+				>
 					<Icon name="arrow-right" size="10" color="primary" style="transform: rotate(180deg)" />
 					<Text size="12" weight="600" color="primary">Use app's payment</Text>
 				</Flex>
 			</Flex>
 
-			<!-- Degraded fee data (silent retry pending) -->
-			<Flex v-if="statusNotice" align="start" gap="6" wide :class="$style.detail_row" data-testid="fee-init-degraded">
-				<Icon name="info" size="14" color="primary" />
+		</template>
+
+		<!-- Mounted with the card: a load error outlives a switch to the app's payment and back. -->
+		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-init-degraded-live">
+			<Flex
+				v-if="showMethodSelector && statusNotice"
+				align="start"
+				gap="6"
+				wide
+				:class="$style.detail_row"
+				data-testid="fee-init-degraded"
+			>
+				<Icon name="info" size="14" color="primary" aria-hidden="true" />
 				<Text size="12" weight="600" color="secondary" :style="{ paddingTop: '1px' }">
 					{{ statusNotice }}
 				</Text>
 			</Flex>
+		</div>
 
-			<FeeMethodRow
-				v-else
-				:method="effectiveMethod"
-				:isLoading="isLoading"
-				:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
-				:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
-			/>
-		</template>
+		<FeeMethodRow
+			v-if="showMethodSelector && !statusNotice"
+			:method="effectiveMethod"
+			:isLoading="isLoading"
+			:feeJuiceBalanceFormatted="feeJuiceBalanceFormatted"
+			:privateFeeJuiceFormatted="privateFeeJuiceFormatted"
+		/>
 
 		<!-- Mounted with the card in every state: a region created with its text in place may go unannounced. -->
 		<div role="status" aria-live="polite" aria-atomic="true" data-testid="fee-sponsor-live">
@@ -1065,7 +1094,15 @@ onBeforeUnmount(() => {
 }
 
 .link {
+	font: inherit;
+	color: inherit;
+	background: none;
 	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid var(--nulo-accent);
+		outline-offset: 2px;
+	}
 
 	& span,
 	& svg {

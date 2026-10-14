@@ -1,7 +1,7 @@
 ---
 plan: ci-release-supply
 tier: mid
-status: approved by the orchestrator (D-orch-1 to D-orch-9); arc 1 merged (#252); arc 2 merged (#261, phase 2.4 reverted by its stop rule, D21); arcs 3 and 4 as two PRs off dev (D-orch-8)
+status: completed (arcs 1 to 4 merged as #252, #261, #263, #265; arc 5a #370 and arc 5 #378 delivered, the close-out in #378)
 driver: claude-code
 claude_model: opus
 codex_model: sol
@@ -11,11 +11,43 @@ eli5_mode: skipped (orchestrator-owned)
 budget: recon 3 Explore agents (sonnet); dual audit (Codex gpt-6.1-sol high + one Opus Plan agent); one final fresh Codex pass
 base: origin/dev at ac259a7 (#238 merged as 8099368)
 trunk: dev
-issues: [166, 167, 168, 82, 172, 179, 183, 185, 182, 178]
+issues: [166, 167, 168, 82, 172, 179, 183, 185, 182, 195, 178]
+known_limits: [375, 376, 377]
 closed_before_planning: [176, 193]
 no_arc: [21, 174, 180]
 post_implementation_hardening: not scheduled
 ---
+
+## Outcome
+
+- **Date:** 2026-10-13.
+- **Status:** completed. Six arcs in six PRs against `dev`: arcs 1 to 4 merged; arc 5a ([#370](https://github.com/nulo-sh/nulo/pull/370)) and arc 5 ([#378](https://github.com/nulo-sh/nulo/pull/378), which carries this close-out and #370's commits, D29) await the orchestrator's merge, #370 first. The owner's ruleset exclusion that arc 5 needs is applied. The merge that lands arc 5 closes this plan.
+- **Shipped:**
+  - Arc 1, [#252](https://github.com/nulo-sh/nulo/pull/252): `quality-status` builds Storybook (#166). Each e2e lane decides from the pull request's live labels, head and base; PR runs queue per head, and `pr-supersede.yml` cancels obsolete heads (#167). The probe found no fold, so #168 closed under rule 1 with CI.md rewritten (D18).
+  - Arc 2, [#261](https://github.com/nulo-sh/nulo/pull/261): `launch-legal` refuses a stable 1.0.0 or later into `main` while a legal document holds «FILL», and `auto-unstick` and the manual unstick check again before the tag (#183). `verify-store-copies.yml` compares each store's public copy with its release zip weekly (#179). presto-banners 1.2.0 (#82). `hoist = false` was reverted by its stop rule (D21).
+  - Arc 3, [#263](https://github.com/nulo-sh/nulo/pull/263): the landing's `routes` rule and the owner's domain boundary in the release runbook (#185).
+  - Arc 4, [#265](https://github.com/nulo-sh/nulo/pull/265): four more transcript shapes ignored and asserted by `check:plans` (#182).
+  - Arc 5a, [#370](https://github.com/nulo-sh/nulo/pull/370): the onboarding Presto step takes presto-banners' blocked-access title (#82, OA-1 A, signed). #183's scope verified as signed (OA-3 A). An advisory nightly leg proves the canary files in browser WASM (#195).
+  - Arc 5, [#378](https://github.com/nulo-sh/nulo/pull/378): after each published night, `prune-nightlies` keeps the newest fourteen nightly tags and releases, and `resolve` cuts each nightly above every kept code (#178, Phases 5.1 and 5.2).
+  - `lessons.md`: the concurrency line was rewritten to the per-head rule in arc 1 (D14). Nothing else was promoted: the file is at its 8 KiB budget, and each later gotcha is held by a pin.
+- **Orchestrator records:** D-orch-1 to D-orch-14 (§ Decision ledger).
+- **Dropped, rejected, superseded:**
+  - #176 and #193: closed by #238 before planning, verified.
+  - #21, #174 (`blocked:external`) and #180 (an owner action): no arc.
+  - #168's fix arms (rule 2): not needed, because the probe found no fold (D18).
+  - D6 and D-orch-6's option B for #82: superseded by the owner's option A (D-orch-10).
+  - The release-write guard exception that § Arc 5 planned: unnecessary (D24).
+  - A prune on quiet days: rejected (D27).
+  - The separate close-out PR in § Delivery: folded into arc 5's (D-orch-14).
+- **Known limits:**
+  - #375: the supersede sweep's force-push rewind window (D17).
+  - #376: a compromised `contents: write` release job can delete any release and move nightly tags.
+  - #377: a stale `publish-nightly` re-run republishes a pruned name, which its own prune deletes.
+- **Open items:**
+  - #172 (`dependencies`): six third-party packages import what they do not declare, so `hoist = false` waits (D21).
+  - #178 (`supply-chain`): Phase 5.3's first runs and Phase 5.4's immutability watch, after the merge. These are the orchestrator's.
+  - #251 (`owner-decision`): a retarget to `main` starts no e2e run (D15).
+- **Seeds retired:** the `/goal` and `/loop` seeds below are retired; this plan is a record, not a task list.
 
 # ci-release-supply: CI gates, release guards and supply-chain checks
 
@@ -25,7 +57,8 @@ The CI gates and the release chain are what every merge and every published zip 
 - **Arc 2, scripts and installs (#82, #172, #179, #183).** `presto-banners` moves to 1.2.0 with the onboarding title Nulo shows today kept as it is. The install stops creating the hoist fallback (`hoist = false`). A check on every PR into `main` refuses a stable 1.0.0 or later while a legal document holds «FILL», so the Release PR for 1.0.0 cannot merge, and `auto-unstick` refuses to create such a tag if the PR got past it. A weekly job compares each store's public copy with the release zip it claims to be.
 - **Arc 3, docs (#185).** CLAUDE.md's release runbook records wrangler's `routes` rule for the landing and that domain changes are the owner's.
 - **Arc 4, plans ignore patterns (#182).** Four more transcript shapes are ignored and asserted by `check:plans`.
-- **Arc 5, nightly retention (#178).** Planned only. It waits on decision page 5 (record P5-02) and on the owner's ruleset change.
+- **Arc 5a, page 5 follow-ups (#82, #183, #195).** The onboarding Presto step takes presto-banners' own blocked-access title (OA-1 answered A); the launch gate's scope is verified as signed (OA-3 answered A); one advisory nightly leg runs the canary files on the in-browser WASM prover.
+- **Arc 5, nightly retention (#178).** Approved on page 5 (P5-02). After each published night, `prune-nightlies` keeps the newest fourteen nightly tags and releases and deletes the rest, and `resolve` cuts each nightly's code above every kept one. The owner excluded nightly tags from the tag ruleset on 2026-10-13.
 
 ## Tier and budget
 
@@ -104,7 +137,7 @@ Pre-registered decision rule:
 1. If a fresh `status` (as the procedure defines) reads `needs.m.result` and `needs.rm.result` as `failure` after the single-leg re-runs, the fold does not happen here. No workflow changes. CI.md:45 states the measured behaviour with the run's link, and #168 closes on that evidence.
 2. If either reads `success`, the fold holds. Fix every gate that reads a sharded suite: the four PR e2e aggregators, `release.yml`'s `attach-assets` and `status` (`needs.network-e2e.result`, :463 and :804), and `nightly.yml`'s `publish-nightly` and `status` (:511, :631). Take the first mechanism the probe proves:
    - (b) **Unrolled shards, preferred.** If `needs.rjb.result` reads `failure` after `rja` alone was re-run, and `status` re-ran, each sharded matrix becomes named jobs, one per shard or leg, each calling the same reusable workflow with the same inputs and keeping its check-run name; each gate lists them in `needs` and checks each result. Deterministic, no API call, no new permission.
-   - (a) **Per-leg check by API, scoped.** Otherwise, if `filter=all` (taking each job name's highest `run_attempt`) lists the carried-over failed leg as `failure`, each gate checks an exact inventory: the legs of the matrix jobs it already needs, by name, exactly the matrix's count, each `completed` with conclusion `success` (or all `skipped` when its gate said not to run). A missing, extra, ambiguous or unfinished leg fails; the check retries briefly while a leg reads unfinished. When the gate decided not to run the suite, the check reads only `needs.<job>.result == 'skipped'` and never the inventory, so no leg's result is invented for a matrix that never expanded (the `sk`/`rsk` listings show what GitHub records). In the PR aggregators the check joins the existing step, with `actions: read` on the status job. A matrix job that reads `skipped` while its gate said to run fails. In `release.yml` and `nightly.yml` the check runs in a separate read-only job (`network-e2e-legs`, `permissions: { actions: read }`, `if: always() && !cancelled()` so a skipped ancestor never skips the check) that the publisher and `status` need, so `attach-assets` and `publish-nightly` keep their exact `SIGNING` permissions. No advisory job (nightly's chaos, Firefox, `dup-trend`, `rp-host-live`) enters any gate. *(Superseded 2026-10-11 by [ci-followups-2](../archive/ci-followups-2/plan.md): nightly's chaos and Firefox jobs now gate it.)*
+   - (a) **Per-leg check by API, scoped.** Otherwise, if `filter=all` (taking each job name's highest `run_attempt`) lists the carried-over failed leg as `failure`, each gate checks an exact inventory: the legs of the matrix jobs it already needs, by name, exactly the matrix's count, each `completed` with conclusion `success` (or all `skipped` when its gate said not to run). A missing, extra, ambiguous or unfinished leg fails; the check retries briefly while a leg reads unfinished. When the gate decided not to run the suite, the check reads only `needs.<job>.result == 'skipped'` and never the inventory, so no leg's result is invented for a matrix that never expanded (the `sk`/`rsk` listings show what GitHub records). In the PR aggregators the check joins the existing step, with `actions: read` on the status job. A matrix job that reads `skipped` while its gate said to run fails. In `release.yml` and `nightly.yml` the check runs in a separate read-only job (`network-e2e-legs`, `permissions: { actions: read }`, `if: always() && !cancelled()` so a skipped ancestor never skips the check) that the publisher and `status` need, so `attach-assets` and `publish-nightly` keep their exact `SIGNING` permissions. No advisory job (nightly's chaos, Firefox, `dup-trend`, `rp-host-live`) enters any gate. *(Superseded 2026-10-11 by [ci-followups-2](../ci-followups-2/plan.md): nightly's chaos and Firefox jobs now gate it.)*
    - (c) If neither holds, stop: comment the evidence on #168, keep CI.md's "Re-run failed jobs, never one shard" rule, and leave #168 open. Arc 1 ships #166 and #167.
 
 ### Arc 2: scripts and installs
@@ -153,7 +186,15 @@ CLAUDE.md § Release runbook, under Prerequisites, after the `nulo-landing` line
 
 Add `draft-*.md`, `outline-*.md`, `leg-*.md` and `eli5-*.html` to `implementations-plan/.gitignore`, above `!**/lessons/**` so the re-include still wins, and to `CANONICAL_PATTERNS` (`scripts/ci-cd/plans/lib.ts:66`). `gitignoreFindings` then requires them and `trackedArtifactFindings` flags a tracked match. Update `CANONICAL_GITIGNORE` (`plans/fixture-repo.ts:69`), the missing-lines count in `structure.test.ts:35`, the negation's line number in `structure.test.ts:44-46` (6 becomes 10), and `lib.test.ts`'s `isCanonical` cases (each new shape, and its `lessons/` exemption). Update `implementations-plan/README.md` (the layout prose and portable rule 1) and CLAUDE.md § Implementation plans. No tracked file matches any new shape today. The blueprint skill's list (aa-skills) is outside this repository; the report flags it.
 
-### Arc 5: nightly retention (#178), waits on page 5 and the owner's ruleset
+### Arc 5a: page 5 follow-ups (#82, #183, #195)
+
+**#82, option A.** `PERMISSION_BLOCKED_COPY.onboarding.title` reads `STRINGS["permission-blocked"].title` again; the settings page keeps Nulo's compact title. `presto-ui-state.test.ts` pins the literal, so a later banner release that rewords it fails the test instead of changing the screen unseen.
+
+**#183, option A.** Verified against `e900f710`, no gap: `launch-legal` runs only on a pull request whose base is `main` (`pr-quick.yml:365`), `quality-status` expects it ran exactly then (`:427-436`), and `auto-unstick` checks both documents at the merge commit before it creates a stable tag (`auto-unstick-run.ts:118-127`). No code change.
+
+**#195, one advisory leg.** `nightly.yml` gains `network-e2e-canary-wasm`: the Chrome canary's five files, `disable_presto: true` (no presto-server, `VITE_NULO_PRESTO_REQUIRED` empty, so the build proves as production does without Presto: in browser WASM), label `canary-wasm` so the reusable workflow's json-report assertion arms, the canary's `needs` and `if:`, the nightly's retry policy. No job needs it, so it gates neither `status` nor `publish-nightly`; a job that calls a reusable workflow cannot take `continue-on-error`, so a red leg reds the run's conclusion. Pins: `aggregators.test.ts` names it in `NIGHTLY_ADVISORY` and refuses any job that waits on an advisory one; `behavior-gating.test.ts` holds its shape to the canary's and keeps it out of the lane pins. Promotion to a gate follows the 30-green-nights rule, the owner's call (release skill § Staged-rollout switches).
+
+### Arc 5: nightly retention (#178), approved on page 5 (P5-02)
 
 Planned against record P5-02 as proposed: the owner excludes `refs/tags/v*-nightly.*` from ruleset 24737631; a scheduled job keeps the 14 newest nightly tags and releases and deletes older ones; stable and rc tags stay fully protected; immutable releases come after this, by the owner.
 
@@ -163,6 +204,7 @@ Planned against record P5-02 as proposed: the owner excludes `refs/tags/v*-night
 - `nightly.yml`'s group cancels a run in flight, so a prune can stop between deleting a release and deleting its tag. The next run finds a tag with no release, which the union already selects, and finishes it; a test plants that state.
 - The tag ruleset protects tags, not release objects: this job's `contents: write`, like `publish-nightly`'s, could edit or delete any release if the job were compromised. The job runs no third-party action besides the pinned checkout and the local `setup-bun`, and its selection refuses non-nightly names. Immutable releases, the owner's later step, protect a release's assets and its tag, not the release object: it can still be deleted, and its title and notes edited. Whole-release deletion by a compromised `contents: write` job stays a residual of this job and of `publish-nightly` alike.
 - Under immutable releases, GitHub's docs disagree on whether a tag can be deleted after its release is; deleting the release first is the only order that can work. The first prune after the owner enables immutability is watched (phase 5.4), and a refusal is reported, never retried around (`OWNER-ASKS.md` OA-2).
+- As built, with the deviations D24 to D28: no release-write guard exception, a selection that filters instead of refusing, `resolve`'s allocation above every kept code, recovery on the next published night, one read-back per deletion.
 
 ### File-level change map
 
@@ -362,15 +404,27 @@ Validation gate: Gating; Plans; Fast. Pass: all exit 0; the planted file is repo
 | O2 | Low, pre-existing. `gitignoreFindings` checks each line's presence, not that it sits above `!**/lessons/**` | Declined: outside #182, and a line placed below the re-include over-ignores a `lessons/` file without ever letting a transcript be tracked |
 | O3 | Nit. The `lib.test.ts` `lessons/` cases for `draft-x.md` and `leg-codex.md` pass with or without the change | Accepted: removed; the `legacy.md` case stays (it catches a `leg*.md` typo) |
 
-### Arc 5: nightly retention (waits on page 5 and the owner's ruleset)
+### Arc 5a: page 5 follow-ups
 
-Warning: every phase below waits until P5-02 is approved and `gh api repos/nulo-sh/nulo/rulesets/24737631 --jq '.conditions.ref_name.exclude'` lists `refs/tags/v*-nightly.*`. Build nothing before that.
+**Phase 5a.1, the onboarding title (#82).** ✓ (2026-10-13, `lessons/phase-5.md`) Point the onboarding arm at `STRINGS["permission-blocked"].title`, rewrite the module header, pin the literal in `presto-ui-state.test.ts`; take the step's screenshot in both themes.
 
-**Phase 5.1, the selection.** Add `prune-nightlies.ts` and its test. Cases: 20 nightlies keep the newest 14; a stable tag, an rc tag and a tag one character off the pattern are never selected; a plan that names a non-nightly is refused; a draft counts by tag name; a tag with no release and a release with no tag are both handled; a year boundary (`25365` before `26001`) orders correctly.
+Validation gate: Fast; `bun run test:all`; the armed builds; `onboarding-tab.test.ts` at `--retry=0` on Chrome and Firefox. Pass: all exit 0; the test is red on the base copy.
+
+**Phase 5a.2, the launch gate's scope (#183).** ✓ (2026-10-13) Verify § Arc 5a's three facts against the tree. Gate: each fact cited with its line.
+
+**Phase 5a.3, the advisory in-browser leg (#195).** ✓ (2026-10-13) Add `network-e2e-canary-wasm` to `nightly.yml`, its pins, CI.md, `.github/WORKFLOWS.md` and the release skill's staged-rollout row; measure its runtime (D23).
+
+Validation gate: Fast; Gating; Actions; `bun run test:all`. Pass: all exit 0; the pins are red on the base `nightly.yml` and under each mutation in `lessons/phase-5.md`; the measured minutes are in the PR body.
+
+### Arc 5: nightly retention
+
+The owner's exclusion is applied: `gh api repos/nulo-sh/nulo/rulesets/24737631 --jq '.conditions.ref_name.exclude'` read `["refs/tags/v*-nightly.*"]` on 2026-10-13 (`updated_at` 20:47Z, rules unchanged). Phases 5.3 and 5.4 run after the merge and are the orchestrator's (D-orch-13); #178 holds them.
+
+**Phase 5.1, the selection.** ✓ (2026-10-13, `lessons/phase-5.md`; the refusal case became the never-selected case, D25) Add `prune-nightlies.ts` and its test. Cases: 20 nightlies keep the newest 14; a stable tag, an rc tag and a tag one character off the pattern are never selected; a plan that names a non-nightly is refused; a draft counts by tag name; a tag with no release and a release with no tag are both handled; a year boundary (`25365` before `26001`) orders correctly.
 
 Validation gate: Release; Fast. Pass: all exit 0. Layers: lint, unit.
 
-**Phase 5.2, the runner and the job.** Add `prune-nightlies-run.ts` with a fake-IO test: dry run by default; release before tag; re-read before and read back after each deletion; stop at the first failure; a tag left without its release by an interrupted run is deleted next time. Add the `prune-nightlies` job to `nightly.yml` and its pins (`CLEAN`, so no checkout `ref`; the release-write guard's one exception; `contents: write` only; `install: "false"`; `cache: "false"`; the `if`; the `status` list). Update CLAUDE.md § Tag rulesets and immutable releases.
+**Phase 5.2, the runner and the job.** ✓ (2026-10-13; no guard exception, D24; `resolve`'s allocation added, D26) Add `prune-nightlies-run.ts` with a fake-IO test: dry run by default; release before tag; re-read before and read back after each deletion; stop at the first failure; a tag left without its release by an interrupted run is deleted next time. Add the `prune-nightlies` job to `nightly.yml` and its pins (`CLEAN`, so no checkout `ref`; the release-write guard's one exception; `contents: write` only; `install: "false"`; `cache: "false"`; the `if`; the `status` list). Update CLAUDE.md § Tag rulesets and immutable releases.
 
 Validation gate: Release; Gating; Actions; Fast. Pass: all exit 0. Layers: lint, unit.
 
@@ -408,7 +462,8 @@ Validation gate: the dry-run plan equals the expected set; after the real run, `
 
 ## UI impact
 
-None. No wallet screen, copy, row or format changes. #82's only rendered difference in 1.2.0 is a title that the shipped form keeps as it is today; adopting the package's new title is `OWNER-ASKS.md` OA-1. The Storybook build renders nothing anyone sees.
+- Arcs 1 to 4 and 5: none. The Storybook build renders nothing anyone sees.
+- Arc 5a, the onboarding Presto step when the browser blocks local network access: the card's title changes from "Your browser blocked local access" to "Your browser blocked this site from reaching Presto". The detail line, the three steps and the Settings page do not change. Sign-off, the owner on decision page 5 (2026-10-13), OA-1: "**option A**. Adopt 1.2.0's title: "Your browser blocked this site from reaching Presto" (Presto's canonical wording; in an extension, "this site" is the wallet's own page)." The PR attaches the step's screenshot in both themes.
 
 ## Assumptions
 
@@ -473,7 +528,12 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D-orch-6 | Arc 2 only for this run, with the owner's asks in their "what ships now" form: OA-1 option B (today's onboarding title kept as Nulo's own string, page 5 P5-05), OA-3 option A (PRs into `main` only, plus the `auto-unstick` preflight, page 5 P5-06). Nothing of arcs 3, 4 or 5 is built | The orchestrator's scope call | — |
 | D-orch-7 | The unreviewed verifier fix comes first: before phase 2.3's gate counts as passed, the first Codex round and the Opus review are each asked, explicitly and first, whether `fetchVerified` as exported keeps every check the publish path makes (digest, `SHASUMS256.txt`, the attestation, the frozen pre-attestation list) for the store-copy caller, with `attach-assets-run.test.ts`'s call-order assertion unchanged; their answers go under Audit verdicts | The planning panel's last Codex round rejected on that fix and it was applied unreviewed | — |
 | D-orch-8 | Arcs 3 and 4 are two PRs, each branched from `origin/dev` after arc 2 merged (69eab05, #261), built in one run: arc 3 on `ci-release-supply-docs`, arc 4 on `ci-release-supply-plans-ignore`, never one on top of the other. Each runs its gate and its Codex round (one round for arc 3's docs paragraph unless it finds something), and opens its PR against `dev` with the Delivery table's title. Whichever lands second merges `origin/dev` in | Both edit CLAUDE.md, in different sections, and merge independently; the shared plan edits (this row, the status lines) are byte-identical on both branches so they merge clean | Supersedes the arc 3 and arc 4 bases in § Delivery ("arc 2, then `dev`", "arc 3, then `dev`") and § Post-implementation's `<top arc>`: with two PRs side by side there is none, so the final cross-arc pass (step 3) runs on the close-out branch once both have merged |
-| D-orch-9 | Nothing of arc 5 is built: it waits on decision page 5 (P5-02) and the owner's ruleset change. Arcs 3 and 4 change nothing a person sees and add no words outside the two docs the plan names (CLAUDE.md; `implementations-plan/README.md`). The blueprint skill's transcript list lives in aa-skills, outside this repository: the arc 4 report flags it and nothing there changes | The orchestrator's scope call | — |
+| D-orch-9 | Nothing of arc 5 is built (superseded by D-orch-13): it waits on decision page 5 (P5-02) and the owner's ruleset change. Arcs 3 and 4 change nothing a person sees and add no words outside the two docs the plan names (CLAUDE.md; `implementations-plan/README.md`). The blueprint skill's transcript list lives in aa-skills, outside this repository: the arc 4 report flags it and nothing there changes | The orchestrator's scope call | — |
+| D-orch-10 | Arc 5a, after decision page 5 (signed 2026-10-13; each issue's `## Decision` section is the sign-off): one PR on `ci-release-supply-page5` off `origin/dev` (e900f710), titled `ci: show presto's blocked-access title, add the wasm nightly leg, close the launch-gate ask`. #82 takes P5-05 option A: the onboarding `permission-blocked` title is presto-banners 1.2.0's own, replacing the literal arc 2 kept; the PR quotes the page in `UI impact` and attaches the step's screenshot in both themes | The orchestrator's delivery call and the owner's page 5 | Supersedes D6 and D-orch-6's option B for #82 |
+| D-orch-11 | #183 takes P5-06 option A: the launch gate binds PRs into `main` only, as arc 2 shipped (D7). Verified against the tree; `Closes #183` with no code change unless the verification finds a gap | The owner's page 5 | The verification found none (§ Arc 5a) |
+| D-orch-12 | #195 takes P5-04 (accepted from the veto list, not struck): one advisory nightly canary leg proving in browser WASM (`disable_presto`), gating nothing, promotable only under charter C6 (30 green nightlies, the owner's call), the canary files only, its minutes in the PR body. It ships here, not in e2e-harness-gaps arc 4 as #195's lane map says, because `nightly.yml` is this lane's file in arc 5 | The orchestrator's scope call | Moves #195 from e2e-harness-gaps to this lane |
+| D-orch-13 | Arc 5 (#178, P5-02 approved): phases 5.1 and 5.2 are built now, on `ci-release-supply-nightly-prune` off `origin/dev` once arc 5a's PR is open, and its PR opens with the Delivery title. § Arc 5's "build nothing before the ruleset readback" is superseded for the code; the ruleset exclusion of `refs/tags/v*-nightly.*` from 24737631 is still the owner's, Phase 5.3's first run needs it, and the orchestrator holds the merge until the readback lists it. Phases 5.3 and 5.4 are post-merge and the orchestrator's | The owner's page 5 and the orchestrator's delivery call | The owner asked why prune when GitHub storage is free: the reason is not storage. Nightlies bury the stable releases in the releases list and the `v*` tag namespace; release-please and the store checks page through a list that grows by one a day; and once immutable releases are on, every nightly published before the prune exists is permanent, so the prune must exist and run before immutability |
+| D-orch-14 | The lane's close-out folds into arc 5's PR when it is the last to land; the separate close-out branch in § Delivery is kept only if the orchestrator's merge order needs it | The orchestrator's delivery call | Supersedes the close-out row of § Delivery unless the merge order needs it |
 | D19 | `verify-store-copies.yml`'s job holds `contents: read` and `attestations: read` | The plan grants the second scope only if `gh attestation verify` needs it, as measured; the job token cannot be measured before the workflow reaches `dev` (scheduled and dispatched runs start there), and anonymous `api.github.com` is rate-limited from this host. A read scope on public data costs nothing, while a missing one would red the first run for a permission instead of a store difference | Implementation decision (phase 2.3); put to the arc's Codex round and Opus review |
 | D20 | Chrome's allowlist names the `_metadata/` directory entry beside `_metadata/verified_contents.json` | The re-measure found it in the central directory (627 entries); phase 0 compared unpacked trees, which hide directory entries. It holds no bytes | Implementation deviation from § Arc 2 (#179) step 2, found by its own step 1 |
 | D21 | `hoist = false` is reverted and #172 stays open; the PR title drops "hoist nothing" and says `Refs #172` | The battery on a fresh install found six third-party packages importing what they do not declare (`@aztec-labs/aztec.js` from aztec-standards, `vue` from `@pinia/testing`, `@vue/compiler-sfc` from local-pkg for vite-plugin-pages, `@storybook/vue3-vite` from storybook, the polyfill plugin's rewritten `buffer` shim, `@aztec-labs/simulator` from presto), past the stop rule's three. One bounded probe hoisted them to complete the list for #172, then the key and the probe were reverted; nothing of it is committed | The stop rule pre-registered in § Arc 2 (#172) |
@@ -483,6 +543,14 @@ Panel: Codex (gpt-6.1-sol, high) and an Opus 5.5 Plan agent, round 1 on 2026-10-
 | D16 | Each lane's aggregator accepts skipped suites only when `changes` read the labels in its own attempt (`read-attempt` == `github.run_attempt`); otherwise it fails with "re-run all jobs" | A re-run of `status` or `decide` alone carries the earlier attempt's `run=false` over, so a skip decided before a label was added could post green | Codex round 1 finding 1 (High, accepted; Codex evaluated all four scripts green on the carried inputs). A re-run of failed suites keeps its ran gate and passes |
 | D17 | `pr-supersede.yml` acts only for its event's head: it never selects `EVENT_HEAD`'s runs and stops, cancelling nothing more, when any head read differs from it; runs are listed in lifecycle order; `live-labels.sh` reads once more after a pause before calling a run superseded | Every head change, a rewind included, starts its own sweep, so stopping never cancels what another sweep needs, and it also covers a pull request read staler than the event; sweeps share no concurrency group, so a late-admitted older sweep cannot cancel a newer one | Opus round 1 finding 1 (Medium, accepted) supersedes the skip-if-current re-read of D2; findings 2 and 3 (Low, accepted). Codex round 1 finding 3: the claims are best effort, residuals restated in CI.md and § Arc 1. Codex round 2 finding 2: the per-PR group with `cancel-in-progress` let an older sweep cancel the newer one (accepted: group removed, pinned absent) |
 | D18 | #168 closes under rule 1: no fold | The probe's four fresh readings (run 38013958157) kept `needs.m.result` and `needs.rm.result` at `failure` after single-leg re-runs, with each re-run leg green at its attempt and the dependent `status` re-run directly; the separate-job controls flipped to their own new results | Pre-registered rule (D4, D5). Phase 1.5 is the CI.md rewrite only; no gate, `release.yml` or `nightly.yml` change |
+| D22 | The WASM leg is a separate job beside the canary, not a matrix leg of it; `behavior-gating.test.ts`'s lane helper leaves it out by name and a dedicated pin holds its inputs to the canary's | A matrix would put the advisory leg inside the gating canary's single result; a lane pin that counted it would see each canary file in two jobs. Renaming the job brings it back into the lane pins, which then fail | Implementation decision; put to the Codex round and the Opus review |
+| D23 | The leg's runtime is measured before merge by one dispatch of `extension-network-e2e-soak.yml` (mode `files`, the five canary files, `proverless: false`, `disable_presto: true`, retry 0) on `dev` | `nightly.yml` may not be dispatched from this lane; the soak workflow calls the same reusable workflow with the same inputs on one hosted runner | Implementation decision |
+| D24 | The release-write guard gets no exception; `pruneFindings` pins the prune job (exact token, the publish guard, the one prune step with its dry-run switch, no other job running it), and `privileged()` counts `contents: write`, so the credentialed-job checks hold it too | The guard reads `gh release` in step text, and the prune deletes through REST inside its script, so there was nothing to except | Implementation deviation from § Arc 5 and Phase 5.2; the token and placement pins came from Codex round 1 finding 3 and Opus finding 2 |
+| D25 | `planPrune` drops every name off the nightly pattern before counting, so it cannot return one; the runner keeps no second check | A plan that cannot hold a stable or rc name needs no refusal path | Implementation deviation from § Arc 5's "refuses to return a plan that names a non-qualifying tag" and Phase 5.1's refusal case, which the never-selected case replaces |
+| D26 | `resolve` cuts each nightly at today's code, or one past the newest nightly code on any version line when that is later | The prune frees the oldest names. The old per-version search from today's code could cut a freed name once codes ran fourteen ahead of the calendar, and that name sorts oldest and is pruned in the same run; immutable releases never reissue a deleted name | Codex round 1 finding 2 and Opus finding 4 (accepted); `nightly-resolve.test.ts` runs the real step |
+| D27 | A prune cut short is finished by the next published night; quiet days run no prune | The leftover is a tag past retention that nothing reads; a trigger on skip nights would couple the prune to `resolve`'s skip output | Codex round 1 finding 1: code change rejected, docs corrected |
+| D28 | Each deletion is read back once, with no retry; pagination follows `Link: rel="next"` only on `https://api.github.com/`, and every request refuses redirects | A stale read reds one night and the next published night finishes the name; the token never leaves the API host | Implementation decision; put to the arc's Codex round and Opus review |
+| D29 | Arc 5's branch merges `ci-release-supply-page5` before the close-out, so its PR shows #370's commits until #370 merges; #370 merges first | The close-out (D-orch-14) records arc 5a's plan state, which lives only on #370's branch | Delivery deviation; a merge, not a rebase, so no pushed history is rewritten |
 
 ## Audit verdicts
 
@@ -647,6 +715,50 @@ On `ae63506`: **CLEAN**. The bound is fixed. The publish path is unchanged: same
 
 Built in parallel as two PRs off `dev` (D-orch-8). A block both branches insert merges once only while neither edits inside it, so each arc records its Codex rounds and Opus review, with every finding's disposition, under its own phase in § Phases (3.1, 4.1).
 
+### Arc 5a, Codex round 1 (gpt-6.1-sol, high, read-only) and the Opus review, 2026-10-13
+
+Codex session 01a136f7-4c81-7ec2-99b5-d2eb603bc9b7 on `e900f710...225d5aef`: **approve with fixes**, three Low. Opus: **approve with fixes**, one Low-Medium, two Low, one Nit. Both found that nothing can gate a publish, the pins can fail, and #82 and #183 hold.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1, O1 | Low, Low-Medium; plausible. The leg's evidence rests on unasserted facts: `tx-sendTx-default` accepts either awaiting card off required mode (Codex), and nothing pins that `disable_presto` maps to neither proverless nor required mode (Opus), so a native service on the runner or a "WASM is slow" edit could green the leg without proving in the browser | Accepted, both: on a runner a plain build must show the browser card (presto-server starts for required builds only); the WASM-leg pin also holds both env expressions of the suite. Proven on a runner by soak run 38464845247 |
+| C2 | Low. CI.md: "a red night publishes nothing" no longer holds; the Presto paragraph and "every other prover-ON job" ignore the leg and the rollback flag | Accepted |
+| C3 | Low. The plan called arc 5's code built before it existed | Accepted |
+| O2 | Low. CLAUDE.md's nightly bullet named two non-gating jobs | Accepted |
+| O3 | Low. The Presto copy header still misstated which titles are Nulo's own (the pitch states, the remembered denial) | Accepted |
+| O4 | Nit. Two new comment lines over 100 characters | Accepted |
+
+Round 2 (resumed, on `54156237`): **CLEAN**. The backend selection holds on every lane (required canaries and native soaks require Presto; the leg, rollback-variable canaries and Presto-off soaks require the browser; local plain builds accept either), and the expression pins hold. The loop converged.
+
+
+### Arc 5, Codex round 1 (gpt-6.1-sol, high, read-only) and the Opus review, 2026-10-13
+
+Codex session 01a1370f-6de0-7942-9a01-c8bede4a23b3 on `dd922823...bb4d6e8c`: **approve with fixes**, two Medium and one Low. Opus: **approve with fixes**, one Medium, one Low-Medium, two Low and a note. Both: no stable or rc name, kept nightly, or release of another tag can be selected; release-before-tag holds; the token stays on the API host.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C2, O4 | Medium; selection demonstrated. With codes fourteen or more ahead of the calendar (same-day re-runs), `resolve` re-cuts a pruned name, which sorts oldest and is pruned in the same run; immutable releases never reissue a deleted name | Accepted (D26): `resolve` takes today's code or one past the newest nightly code on any version line; `nightly-resolve.test.ts` runs the real step, red on the base step |
+| C3, O2 | Low, Low-Medium; demonstrated. The pins saw only inside the prune job: a prune step elsewhere, a persisted checkout or a job-wide `GH_TOKEN` passed | Accepted (D24): `privileged()` counts `contents: write`; `pruneFindings` requires the one prune step in the prune job |
+| C1 | Medium. A quiet day runs no prune, so an interrupted one is not finished by "the next run" | Code change rejected, docs corrected (D27) |
+| O1 | Medium, demonstrated. The exclusion was already applied; the release skill still called it the owner's next step | Accepted |
+| O3 | Low, demonstrated. Version-before-code ordering and an unanchored pattern each passed the selection tests | Accepted: a case for each |
+| O5 | Note. The exclusion also leaves nightly tags movable by any `contents: write` token | Recorded in the release skill; a second ruleset for nightly tags is the owner's call (Outcome, Known limits) |
+| C, comments | Two test helper comments narrated their code | Accepted: deleted |
+
+Round 2 (resumed, on `494267c0`): **CLEAN**. The loop converged.
+
+### Final cross-arc pass, Codex (gpt-6.1-sol, high, fresh session), 2026-10-13
+
+Session 01a1371f-ae61-7fe1-99aa-eef142841ddf over arcs 1 to 4 (`c0e1e696`, `69eab05c`, `e3b7bf54`, `4f34f563`) and `dd922823...88d898fd` (arcs 5a and 5): **approve with fixes**. No seam breaks a gate: nightly's `status` holds the prune and none of the three advisory jobs, nothing waits on the WASM leg, and the credentialed set, the docs' gate lists and the release skill's tables agree with the ledger.
+
+| # | Finding | Disposition |
+|---|---|---|
+| F1 | Medium; demonstrated in memory. A re-run of an old run's `publish-nightly` past retention reuses that run's `resolve` outputs, republishes a pruned name, and its prune deletes it | Known limit #377: the prune already removes it in the same run and nothing kept is touched; the fix would add a check to the release publisher for an operator error |
+| F2 | Low. `CLAUDE.md`'s nightly bullet still called it the only scheduled workflow besides `source-rebuild.yml`, though arc 2 added `verify-store-copies.yml` | Accepted; #374 then moved the whole bullet out of `CLAUDE.md` |
+| F3 | Nit. The prune job's comment restated the job and implied a refusal path (D25 filters) | Accepted: one sentence |
+
+Round 2 (resumed, on `413531ff`): **CLEAN**. The loop converged.
+
 ## Post-implementation
 
 Run per arc, at each arc boundary, before the next arc's branch starts; then one final cross-arc pass. `code_review` is `off`, so no `/code-review` step runs.
@@ -689,12 +801,12 @@ One PR per arc, in order, each against `dev` (A5). Open each after its gates pas
 | 2 | `ci-release-supply-scripts` | 2.1-2.4 | arc 1, then `dev` once it lands | off | `build: hoist nothing, gate launch on blank terms, verify store copies, bump presto-banners` | #82, #179, #183; #172 unless its stop rule fired (`Refs #172`) |
 | 3 | `ci-release-supply-docs` | 3.1 | arc 2, then `dev` | off | `docs(claude): record the landing domain rule in the release runbook` | #185 |
 | 4 | `ci-release-supply-plans-ignore` | 4.1 | arc 3, then `dev` | off | `chore(plans): ignore draft, outline, leg and eli5 transcript shapes and assert them` | #182 |
-| 5 | `ci-release-supply-nightly-prune` | 5.1-5.4 | the top merged arc | off | `ci(release): prune nightly tags and releases to the newest fourteen` | #178 |
-| close-out | `ci-release-supply-close-out` | — | the last merged arc | off | `docs(plans): close ci-release-supply` | — |
+| 5a | `ci-release-supply-page5` | 5a.1-5a.3 | `dev` | off | `ci: show presto's blocked-access title, add the wasm nightly leg, close the launch-gate ask` | #183, #195 (#82 closed by #261; this PR finishes its signed option) |
+| 5 | `ci-release-supply-nightly-prune` | 5.1-5.2 (5.3-5.4 after the merge) | `dev` | off | `ci(release): prune nightly tags and releases to the newest fourteen` | `Refs #178`, which holds Phases 5.3 and 5.4; carries the close-out (D-orch-14, D29) |
 
 - Arc 1's PR carries this plan's commit. Hosted proof on it, recorded in `lessons/phase-1.md`: add and then remove `e2e:extension-smoke`, and show `decide` read the live list; push a second commit while the network lane runs, and show `cancel-superseded` cancelled the old head's runs while the new head's runs completed; log the supersede job's API call count.
 - Arc 1 touches no file #169 touches, so it does not wait for gate G1. Phase 2.4's network file does. e2e-harness-gaps arc 3 may later edit the network lanes' job lists; whichever PR lands second rebases.
-- Arc 5's PR opens only after page 5 and the ruleset readback (§ Arc 5).
+- Arc 5's PR opens once arc 5a's is open (D-orch-13); its body carries the ruleset readback, which lists the nightly exclusion. It merges after #370 and carries the close-out (D-orch-14, D29).
 - If the orchestrator asks for a stack: `gh stack init --adopt worktree-ci-release-supply`, `gh stack add <branch>` at each boundary, `gh stack submit --auto` then `gh pr edit` bodies, `gh stack sync` after `dev` moves. Merging is the orchestrator's.
 - Commits: conventional, lower-case subjects, signed; afterwards `git log --format='%h %G?' -3` shows no `N`. If a commit or push hangs, rerun it as `env -u SSH_AUTH_SOCK git <cmd>`.
 - Before every push: `bun run test` and `bun run lint:actions`.
@@ -706,13 +818,14 @@ One PR per arc, in order, each against `dev` (A5). Open each after its gates pas
 | #166 | 1 | `quality-status` needs the Storybook build |
 | #167 | 1 | live labels, per-head queues and the supersede job are in, and the hosted proof is recorded |
 | #168 | 1 | rule 1 (evidence) or rule 2(b)/(a) (fix) ships; rule 2(c) leaves it open with the evidence |
-| #82 | 2 | 1.2.0 is pinned with no visible change |
+| #82 | 2, 5a | 1.2.0 is pinned (arc 2); the onboarding title follows the owner's option A (arc 5a) |
 | #172 | 2 | `hoist = false` passes the battery and the PR's four e2e lanes, or stays open per its stop rule |
 | #179 | 2 | the comparison and its workflow are in, and the live case passes for both stores |
-| #183 | 2 | `launch-legal` is in `quality-status` |
+| #183 | 2, 5a | `launch-legal` is in `quality-status` (arc 2); its scope is verified as signed (arc 5a) |
+| #195 | 5a | the advisory in-browser leg and its pins are in `nightly.yml` |
 | #185 | 3 | the runbook lines land |
 | #182 | 4 | the four shapes are ignored and asserted |
-| #178 | 5 | after page 5 and the ruleset change, the prune runs |
+| #178 | 5 | Phases 5.3 and 5.4 read back the first prunes, after the merge |
 | #176, #193 | none | already closed by #238 (verified) |
 | #21 | none | `blocked:external`: a green stable release on the draft flow, then the owner's settings |
 | #174 | none | `blocked:external`: the vitest release that ships vitest-dev/vitest#10363 |
