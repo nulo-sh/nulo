@@ -1,5 +1,17 @@
 import { z } from "zod"
 
+// Refusals of a reset, matched by prefix; none of them changed anything.
+/** What the popup confirmed no longer matches a fresh view of the network. */
+export const ERR_STALE_CHANGED = "ERR_STALE_CHANGED"
+/** Mainnet, a chain that is not stale, a target chain another row holds, or a row that moved. */
+export const ERR_NOT_RESETTABLE = "ERR_NOT_RESETTABLE"
+/** Another network of the profile has an unfinished reset. */
+export const ERR_RESET_IN_PROGRESS = "ERR_RESET_IN_PROGRESS"
+/** A custom network's node did not confirm its L1 before anything was removed. */
+export const ERR_NODE_UNREACHABLE = "ERR_NODE_UNREACHABLE"
+/** A full backup made during a reset would miss the accounts the journal holds. */
+export const ERR_RESET_PENDING = "ERR_RESET_PENDING"
+
 /** Raw `storage.local` roots, one key per profile (`<root>@<profileId>`). None is in any backup
  *  slice: each describes this device's storage against this build, never a portable fact. */
 export const STALE_NETWORKS_ROOT = "nulo:core:stale-networks"

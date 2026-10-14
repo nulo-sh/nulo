@@ -350,3 +350,31 @@ describe("exportFullBackupKeys — the run fence", () => {
 		expect(unsealImportedSigningKeyV2).not.toHaveBeenCalled()
 	}, 30_000)
 })
+
+describe("exportFullBackupKeys — a network reset in progress", () => {
+	test("refuses while a reset journal exists, with no key opened, and exports again once it is gone", async () => {
+		const { api, profile, account } = await build()
+		const p = await profile.createProfile("P", PASSWORD)
+		await seedImported(api, p.id, ADDR_A, 0x2a, (await profile.getProfileDek(p.id))!)
+		const journal = {
+			profileId: p.id,
+			networkId: "n1",
+			fromChainId: 1,
+			toChainId: 2,
+			l1ChainId: L1,
+			cause: { networkReset: true, addressesMoved: false },
+			purged: true,
+			switchToSeedNode: false,
+			probedEndpoint: null,
+			accounts: [],
+		}
+		await api.storage.local.set({ [`nulo:core:network-reset@${p.id}`]: JSON.stringify(journal) })
+
+		await expect(account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)).rejects.toThrow(/^ERR_RESET_PENDING/)
+		expect(unsealImportedSigningKeyV2).not.toHaveBeenCalled()
+		await expect(account.backupImportedKeys()).resolves.toHaveLength(1)
+
+		await api.storage.local.remove(`nulo:core:network-reset@${p.id}`)
+		await expect(account.exportFullBackupKeys(await profile.captureRunFence(), PASSWORD)).resolves.toMatchObject({ dekReplaced: false })
+	}, 30_000)
+})

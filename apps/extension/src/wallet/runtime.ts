@@ -47,6 +47,7 @@ import { SendCheck } from "./services/operation-journal/send-check"
 import { PasskeyService } from "./services/passkey/service"
 import { ProfileDeletionCoordinator } from "./services/profile-deletion/coordinator"
 import { AccountIntegrityCoordinator } from "./services/account-integrity/coordinator"
+import { NetworkResetService } from "./services/network-reset/service"
 import { PriceService } from "./services/price/service"
 import { TokenListService } from "./services/token-list/service"
 import { ProfileService } from "./services/profile/service"
@@ -566,6 +567,8 @@ function registerServices(services: ServiceCollection, deps: WalletRuntimeDeps):
 	// Also last-phase: registers as ProfileService's pre-open address verifier + AccountService's
 	// operation-time mismatch sink (the address-freeze runtime guard).
 	services.add(new AccountIntegrityCoordinator(logger, browserApi))
+	// The proverless-only restore gate carries the reset's hold points, under the same key.
+	services.add(new NetworkResetService(logger, browserApi, restoreGate))
 	return { deletionCoordinator }
 }
 

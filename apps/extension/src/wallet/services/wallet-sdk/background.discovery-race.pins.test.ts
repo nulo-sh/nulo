@@ -89,6 +89,7 @@ function makeServices(popup: Promise<{ approved: boolean }>, timedLookup: Promis
 		"operation-journal": {},
 		token: { getTokens: async () => [] },
 		"legal-acceptance": { assertCurrent: async () => undefined },
+		"network-reset": { waitForRunEnd: async () => undefined },
 	}
 	return { services: { get: (name: string) => stubs[name] } as never, timedLookupRequested: timedLookupRequested.promise }
 }

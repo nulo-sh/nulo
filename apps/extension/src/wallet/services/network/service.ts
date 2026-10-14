@@ -25,15 +25,18 @@ import type { BrowserApi } from "@nulo/wallet-core/ports"
 import { walletChainId } from "@/utils/chain-ids"
 import { hasNetworkCause } from "@/wallet/services/stale-network/classify"
 import { quarantinedBy, StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
-import { DEFAULT_SEEDS, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND } from "./seeds"
+import { ERR_NOT_RESETTABLE, ERR_STALE_CHANGED, type ProbedEndpoint } from "@/wallet/services/stale-network/types"
+import { DEFAULT_SEEDS, type DefaultSeed, LOCAL_NETWORK_RPC_URL, PRIMARY_SEED, SEED_L1_BY_KIND, seedForKind } from "./seeds"
 import {
 	type ChainKind,
 	ERR_ACTIVE_NETWORK,
+	ERR_CHAIN_QUARANTINED,
 	ERR_DUPLICATE_CHAIN,
 	ERR_DUPLICATE_ENDPOINT,
 	ERR_ENDPOINT_CHAIN_MISMATCH,
 	ERR_LAST_ENDPOINT,
 	ERR_PRIMARY_ENDPOINT,
+	ERR_RESET_RUNNING,
 	ERR_UNATTENDED_LIVE_CHECK,
 	type Events,
 	findPrimaryEndpoint,
@@ -101,6 +104,34 @@ function assertSameChainIdentity(probed: { chainId: number; l1ChainId: number },
 		)
 	}
 }
+
+/** Whether `rpcUrl` is `seed`'s endpoint, with Local Network's tolerance for an edited URL. */
+export function isSeedEndpointUrl(seed: DefaultSeed, rpcUrl: string): boolean {
+	return rpcUrl === normalizeRpcUrl(seed.rpcUrl) || (seed.kind === "local" && sameLocalNetworkUrl(rpcUrl, seed.rpcUrl))
+}
+
+/** One in-place reset of a network row, as the reset journal names it. */
+export type ChainResetRequest = {
+	profileId: string
+	networkId: string
+	fromChainId: number
+	toChainId: number
+	purged: boolean
+	switchToSeedNode: boolean
+	probedEndpoint: ProbedEndpoint | null
+}
+
+/** The reset's own steps around the chain purge. */
+export type ChainResetHooks = {
+	/** Under the reservation, before anything is deleted. */
+	beforePurge(): Promise<void>
+	/** Under the reservation, after `purgeChain`: the caller's chain-scoped purges. */
+	afterPurge(): Promise<void>
+	/** After the reservation is released and before the rewrite: makes the purge durable. */
+	onPurged(): Promise<void>
+}
+
+const notResettable = (why: string) => new Error(`${ERR_NOT_RESETTABLE}: ${why}`)
 
 function trimmedLabel(label: string | undefined): string | undefined {
 	return label?.trim() || undefined
@@ -452,6 +483,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (sameChain) {
 				throw new Error(`${ERR_DUPLICATE_CHAIN}: A network for chain ${chainId} already exists in this profile.`)
 			}
+			if (await this.isChainQuarantined(fence.profileId, chainId)) {
+				throw new Error(`${ERR_CHAIN_QUARANTINED}: A reset of another network is moving to chain ${chainId}.`)
+			}
 			if (existingForProfile.some((n) => n.name === name)) {
 				throw new Error(`Name '${name}' already in use.`)
 			}
@@ -494,6 +528,9 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			if (activeId === id) {
 				throw new Error(`${ERR_ACTIVE_NETWORK}: Cannot delete the active network. Switch to another chain first.`)
 			}
+			if (this.resetRunning(id)) {
+				throw new Error(`${ERR_RESET_RUNNING}: This network is being reset. Try again when the reset ends.`)
+			}
 			// Reserve BEFORE the cascade: the network row deliberately survives
 			// until the cascade finishes, so "row exists" alone would admit a
 			// journal create landing between its sweep and the row delete. The
@@ -501,6 +538,13 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 			this.deletingNetworks.add(id)
 			this.reservations.set(id, (this.reservations.get(id) ?? 0) + 1)
 			try {
+				// The way out of a reset that cannot finish: its journal and verdict go with the row.
+				await this.staleNetworks.withLock(profile.id, async () => {
+					if ((await this.staleNetworks.getJournal(profile.id))?.networkId === id) {
+						await this.staleNetworks.deleteJournalLocked(profile.id)
+					}
+					await this.staleNetworks.removeEntryLocked(profile.id, id)
+				})
 				// Purge chain-scoped state via the awaited coordinator
 				await this.purgeChain(profile.id, network.chainId, network.id)
 				await this.storage.delete(id)
@@ -832,11 +876,132 @@ export class NetworkService extends Service<Methods, Events> implements ServiceS
 		return networkInfoFrom(await this.getNetwork(networkId))
 	}
 
+	// ── Stale-network reset ──────────────────────────────────────────────
+
+	private resetRunning: (networkId: string) => boolean = () => false
+
+	/** Set by the reset service, which owns the run lock: `deleteNetwork` refuses a network it names. */
+	public setResetRunProbe(probe: (networkId: string) => boolean): void {
+		this.resetRunning = probe
+	}
+
+	/** One identity read of `rpcUrl` whose request dies with `timeoutMs` and is never retried. */
+	public async probeIdentityOnce(
+		rpcUrl: string,
+		kind: ChainKind | undefined,
+		timeoutMs: number,
+	): Promise<{ chainId: number; l1ChainId: number }> {
+		const info = await this.nodeFactory.createSingleAttemptNode(rpcUrl, timeoutMs).getNodeInfo()
+		if (isLocalNetworkTarget(rpcUrl, kind)) return { chainId: 0, l1ChainId: info.l1ChainId }
+		return { chainId: walletChainId(info.l1ChainId, info.rollupVersion), l1ChainId: info.l1ChainId }
+	}
+
+	/**
+	 * Runs `write` under the network lock while the row is still on `chainId`, not being deleted,
+	 * and, when `primary` is given, its primary endpoint still has that id and URL. A reset's
+	 * capture commits its journal here, so a change that landed after the popup's view refuses.
+	 */
+	public async commitResetCapture(
+		profileId: string,
+		networkId: string,
+		check: { chainId: number; primary: ProbedEndpoint | null },
+		write: () => Promise<void>,
+	): Promise<void> {
+		await this.ensureInitialized()
+		await this.lock.withLock(async () => {
+			const row = await this.storage.get(networkId)
+			if (row?.profileId !== profileId || row.chainId !== check.chainId || this.deletingNetworks.has(networkId)) {
+				throw notResettable("the network changed before the reset began")
+			}
+			const primary = findPrimaryEndpoint(row)
+			if (check.primary && (primary?.id !== check.primary.id || primary.rpcUrl !== check.primary.url)) {
+				throw new Error(`${ERR_STALE_CHANGED}: the network's node changed before the reset began`)
+			}
+			await write()
+		})
+	}
+
+	/**
+	 * The network half of an in-place reset. Unless `purged`, reserves the row as `deleteNetwork`
+	 * does, releases the lock, and purges under the reservation, so other chains' `getNode` never
+	 * waits on this chain's PXE drain. Then, when the row is not on `toChainId`, rewrites its chain
+	 * identity from the build's seed under the lock, keeping its id, name and active pointer. A
+	 * failed purge step throws with the row untouched.
+	 */
+	public async resetChainInPlace(req: ChainResetRequest, hooks: ChainResetHooks): Promise<Network> {
+		await this.ensureInitialized()
+		if (!req.purged) {
+			await this.lock.withLock(async () => {
+				const row = await this.storage.get(req.networkId)
+				if (row?.profileId !== req.profileId || row.chainId !== req.fromChainId) {
+					throw notResettable("the network is not on the chain the reset purges")
+				}
+				this.deletingNetworks.add(req.networkId)
+				this.reservations.set(req.networkId, (this.reservations.get(req.networkId) ?? 0) + 1)
+			})
+			try {
+				await hooks.beforePurge()
+				await this.purgeChain(req.profileId, req.fromChainId, req.networkId)
+				await hooks.afterPurge()
+			} finally {
+				this.deletingNetworks.delete(req.networkId)
+			}
+			await hooks.onPurged()
+		}
+		return await this.lock.withLock(() => this.rewriteForResetLocked(req))
+	}
+
+	/** Caller holds the network lock. Idempotent: a row already on `toChainId` is returned as is. */
+	private async rewriteForResetLocked(req: ChainResetRequest): Promise<Network> {
+		const row = await this.storage.get(req.networkId)
+		if (row?.profileId !== req.profileId) throw notResettable("the network is gone")
+		if (row.chainId === req.toChainId) return row
+		const seed = seedForKind(row.kind)
+		if (row.chainId !== req.fromChainId || seed?.chainId !== req.toChainId) {
+			throw notResettable("the network's chain is not the reset's")
+		}
+		const rows = await this.storage.getValues()
+		if (rows.some((n) => n.profileId === req.profileId && n.id !== row.id && n.chainId === req.toChainId)) {
+			throw notResettable("another network holds the new chain")
+		}
+		const primaryBefore = row.primaryEndpointId
+		row.chainId = seed.chainId
+		row.l1ChainId = seed.l1ChainId
+		this.applyResetEndpoint(row, seed, req)
+		await this.storage.set(row.id, row)
+		this.nodes.delete(req.fromChainId)
+		this.nodes.delete(req.toChainId)
+		if (row.primaryEndpointId !== primaryBefore) {
+			this.emit("onPrimaryEndpointChanged", { networkId: row.id, endpointId: row.primaryEndpointId })
+		}
+		this.emit("onNetworkUpdated", row)
+		return row
+	}
+
+	/** The user's primary survives only while it is the endpoint the popup probed and found serving
+	 *  the new chain; otherwise the seed's endpoint, added if missing, becomes primary. */
+	private applyResetEndpoint(row: Network, seed: DefaultSeed, req: ChainResetRequest): void {
+		const primary = findPrimaryEndpoint(row)
+		const probed = req.probedEndpoint
+		if (!req.switchToSeedNode && probed && primary?.id === probed.id && primary.rpcUrl === probed.url) return
+		let endpoint = row.endpoints.find((e) => isSeedEndpointUrl(seed, e.rpcUrl))
+		if (!endpoint) {
+			endpoint = {
+				id: this._fresh8(row.endpoints.map((e) => e.id)),
+				rpcUrl: normalizeRpcUrl(seed.rpcUrl),
+				label: trimmedLabel(seed.endpointLabel),
+			}
+			row.endpoints.push(endpoint)
+		}
+		row.primaryEndpointId = endpoint.id
+	}
+
 	// ── Cascade coordinator ──────────────────────────────────────────────
 
 	/**
 	 * Awaited purge of all chain-scoped state for `(profileId, chainId)`.
-	 * Called by `deleteNetwork` and `onProfileDeleted`.
+	 * Called by `deleteNetwork` and `purgeForProfile` under the network lock, and by
+	 * `resetChainInPlace` under a reservation only.
 	 *
 	 * Pipeline:
 	 *  1. SW-side subscribers (registered via `registerChainPurgeSubscriber`

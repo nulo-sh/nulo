@@ -30,7 +30,14 @@ import {
 } from "@nulo/aztec-runtime/account"
 import { GrumpkinScalar } from "@aztec-labs/foundation/curves/grumpkin"
 import { type ImportedKeysDek, sealImportedSigningKeyV2, unsealImportedSigningKeyV2, zeroize } from "@nulo/wallet-crypto"
-import { AccountAddressInconsistencyError, ChainNotSupportedError, InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+import {
+	AccountAddressInconsistencyError,
+	ChainNotSupportedError,
+	InvalidWalletArgumentsError,
+	RecoveryModeError,
+} from "@nulo/extension-messaging/errors"
+import { StaleNetworkRepository } from "@/wallet/services/stale-network/repository"
+import { ERR_RESET_PENDING, type JournalAccount } from "@/wallet/services/stale-network/types"
 import { ImportedKeysRepository } from "./imported-keys-repository"
 import type { AccountIntegrityBlocked, AccountRuntimeMismatchDelegate } from "../account-integrity/types"
 import { ERR_UNATTENDED_LIVE_CHECK } from "@/wallet/services/network/spec"
@@ -89,6 +96,10 @@ async function unsealImportedScalar(dek: ImportedKeysDek, chainId: number, addre
 	}
 }
 
+/** `unattended` refuses a live L1 probe; the rest are the in-place reset's: the journal's index and
+ *  visibility, and an L1 the reset already verified, so a create after the purge never probes. */
+type CreateOverrides = { unattended?: boolean; index?: number; visible?: boolean; l1ChainId?: number }
+
 export class AccountService extends Service<Methods, Events> implements ServiceSpec<Methods, Events> {
 	protected readonly rpcMethods = defineRpcMethods<Methods>()(
 		"getAccounts",
@@ -114,6 +125,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 
 	private readonly storage: EntityStorage<Account>
 	private readonly importedKeys: ImportedKeysRepository
+	private readonly staleNetworks: StaleNetworkRepository
 	// Serialises restore() so two concurrent full-backup imports of the same
 	// account can't BOTH pass the intersection check and BOTH write the same row
 	// (last-writer-wins ownership flip).
@@ -128,6 +140,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		super(ACCOUNT_SERVICE_NAME, logger)
 		this.storage = new EntityStorage<Account>(ACCOUNT_STORAGE_ROOT, browserApi.storage.local, (raw) => AccountSchema.parse(raw))
 		this.importedKeys = new ImportedKeysRepository(browserApi.storage.local)
+		this.staleNetworks = new StaleNetworkRepository(browserApi.storage.local)
 	}
 
 	/** The method gets the caller's own argument objects, not zod's parsed copies; the framework
@@ -297,7 +310,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		chainId: number,
 		type: AccountType,
 		name: string,
-		opts?: { unattended?: boolean },
+		opts?: CreateOverrides,
 	): Promise<Account> {
 		if (type !== AccountType.Nulo_v1) {
 			throw new Error("unsupported account type")
@@ -322,16 +335,20 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		// Next index over the SAME-TYPE rows only: the guard must sit on the filtered list, or the
 		// first account of a new type starts at 1 (`array_max([]) + 1` — the cross-type guard bug).
 		const sameType = accounts.filter((x) => x.type === type)
-		let index = sameType.length > 0 ? array_max(sameType.map((x) => +x.index)) + 1 : 0
+		let index = opts?.index ?? (sameType.length > 0 ? array_max(sameType.map((x) => +x.index)) + 1 : 0)
 		// The derivation chain input is the verified EXACT L1 id, never the composite: seeded rows
 		// are checked against in-code constants, custom rows against a live probe (fail-closed).
-		const l1ChainId = await this.networkService.resolveVerifiedL1ChainId(profileId, chainId, opts)
+		const l1ChainId = opts?.l1ChainId ?? (await this.networkService.resolveVerifiedL1ChainId(profileId, chainId, opts))
 		let account: Account | undefined
 		while (!account) {
 			const secret = await deriveAccountSeed(master, l1ChainId, type, index)
 			const address = (await NuloAccount.new(secret, this.logger, this.name)).address.toString()
-			const candidate: Account = { profileId, chainId, address, index, type, l1ChainId, name, visible: true }
+			const visible = opts?.visible ?? true
+			const candidate: Account = { profileId, chainId, address, index, type, l1ChainId, name, visible }
 			if (await this.writeIfFree(candidate, deletion, epoch)) account = candidate
+			// A pinned index is a reset re-creating its own account: the row standing at that address
+			// holds it, so nothing is written and no other index is tried.
+			else if (opts?.index !== undefined) return candidate
 			else index++
 		}
 		// Either purge can snapshot during the set. The epoch check runs after the liveness await,
@@ -359,6 +376,122 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 			await this.storage.set(id, account)
 			return true
 		})
+	}
+
+	/**
+	 * Re-creates one reset-journal account on `toChainId`; worker-internal. A derived account keeps
+	 * its index, name and visibility and derives under `l1ChainId`, which the reset verified, so
+	 * nothing probes after the purge. An imported one is committed only when its resealed key opens
+	 * under `(toChainId, newAddress)` and derives `newAddress`. A row already present is skipped;
+	 * every other fence of a create applies.
+	 */
+	public async recreateForReset(profileId: string, toChainId: number, entry: JournalAccount, l1ChainId: number): Promise<void> {
+		await this.ensureInitialized()
+		if (entry.type === AccountType.Imported) return this.recreateImportedForReset(profileId, toChainId, entry, l1ChainId)
+		await this.serializePerTuple(profileId, toChainId, AccountType.Nulo_v1, async () => {
+			const rows = await this.liveRows()
+			const present = rows.some(
+				(x) => x.profileId === profileId && x.chainId === toChainId && x.type === AccountType.Nulo_v1 && x.index === entry.index,
+			)
+			if (present) return
+			const overrides = { index: entry.index, visible: entry.visible, l1ChainId }
+			await this.createAccountInternal(profileId, toChainId, AccountType.Nulo_v1, entry.name, overrides)
+		})
+	}
+
+	private async recreateImportedForReset(profileId: string, toChainId: number, entry: JournalAccount, l1ChainId: number): Promise<void> {
+		const { newAddress, encryptedSigningKey } = entry
+		if (newAddress === undefined || encryptedSigningKey === undefined) throw new Error("imported reset entry has no resealed key")
+		// Fenced like importAccount: captured before the DEK read, which a deletion can interleave.
+		const deletion = this.profileService.getDeletionState()
+		const epoch = deletion.capture(profileId)
+		const dek = await this.profileService.getProfileDek(profileId)
+		if (!dek) throw new RecoveryModeError()
+		const signingKey = await unsealImportedScalar(dek, toChainId, newAddress, encryptedSigningKey)
+		if ((await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString() !== newAddress) {
+			throw ImportedAccountUnusableError.forAccount(newAddress, "address mismatch")
+		}
+		const account: Account = {
+			profileId,
+			chainId: toChainId,
+			address: newAddress,
+			index: entry.index,
+			type: AccountType.Imported,
+			l1ChainId,
+			name: entry.name,
+			visible: entry.visible,
+		}
+		await this.serializePerTuple(profileId, toChainId, AccountType.Imported, async () => {
+			if (await this.storage.contains(accountRowIdOf(account))) return
+			if (!(await this.networkService.isChainLive(profileId, toChainId))) throw new Error("network deleted")
+			await this.commitImportedAccount(account, encryptedSigningKey, epoch)
+		})
+	}
+
+	/**
+	 * For the reset view: each imported account on `chainId` mapped to the address its key derives
+	 * under this build, or to null when its key is missing or does not open. Reads only.
+	 */
+	public async inspectImportedForReset(profileId: string, chainId: number): Promise<Map<string, string | null>> {
+		await this.ensureInitialized()
+		const out = new Map<string, string | null>()
+		for (const account of await this.importedOnChain(profileId, chainId)) {
+			const signingKey = await this.openImportedForReset(profileId, chainId, account.address)
+			out.set(
+				account.address,
+				signingKey && (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString(),
+			)
+		}
+		return out
+	}
+
+	/**
+	 * The reset's capture of imported keys: each one on `fromChainId` unsealed, its address derived,
+	 * and the key resealed under `(toChainId, newAddress)`. A key that is missing or does not open
+	 * maps to null and stays out of the reset. Nothing is written.
+	 */
+	public async resealImportedForReset(
+		profileId: string,
+		fromChainId: number,
+		toChainId: number,
+	): Promise<Map<string, { newAddress: string; encryptedSigningKey: string } | null>> {
+		await this.ensureInitialized()
+		const out = new Map<string, { newAddress: string; encryptedSigningKey: string } | null>()
+		for (const account of await this.importedOnChain(profileId, fromChainId)) {
+			const signingKey = await this.openImportedForReset(profileId, fromChainId, account.address)
+			if (!signingKey) {
+				out.set(account.address, null)
+				continue
+			}
+			const newAddress = (await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)).address.toString()
+			// A second copy: the unseal wiped the first, and the seal does not wipe its own.
+			const dek = await this.profileService.getProfileDek(profileId)
+			if (!dek) throw new RecoveryModeError()
+			try {
+				out.set(account.address, { newAddress, encryptedSigningKey: await sealSigningKey(dek, toChainId, newAddress, signingKey) })
+			} finally {
+				zeroize(dek)
+			}
+		}
+		return out
+	}
+
+	private async importedOnChain(profileId: string, chainId: number): Promise<Account[]> {
+		return (await this.liveRows()).filter((x) => x.profileId === profileId && x.chainId === chainId && x.type === AccountType.Imported)
+	}
+
+	/** The key with a fresh DEK copy, which the unseal wipes; null when it is missing or does not
+	 *  open, or the session holds no DEK. */
+	private async openImportedForReset(profileId: string, chainId: number, address: string): Promise<GrumpkinScalar | null> {
+		const keyRow = await this.importedKeys.get(profileId, chainId, address)
+		if (!keyRow) return null
+		const dek = await this.profileService.getProfileDek(profileId)
+		if (!dek) return null
+		try {
+			return await unsealImportedScalar(dek, chainId, address, keyRow.encryptedSigningKey)
+		} catch {
+			return null
+		}
 	}
 
 	/** The post-write liveness read. A read that fails removes the row too, so no caller is left
@@ -469,22 +602,22 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	private async loadImportedAccountContract(profileId: string, account: Account, requestedAddress: string): Promise<IAccountContract> {
 		await this.assertChainUsable(profileId, account.chainId)
 		const keyRow = await this.importedKeys.get(profileId, account.chainId, account.address)
-		if (!keyRow) throw new ImportedAccountUnusableError(account.address, "signing key missing")
+		if (!keyRow) throw ImportedAccountUnusableError.forAccount(account.address, "signing key missing")
 		// The imported-key root is the CREDENTIAL-sealed per-profile DEK, never the master (a
 		// shared recovery phrase means a shared master — the DEK is the isolation boundary).
 		// A DEGRADED session (dek undefined — the slot failed at unlock) quarantines per-account.
 		const dek = await this.profileService.getProfileDek(profileId)
-		if (!dek) throw new ImportedAccountUnusableError(account.address, "imported keys unavailable — unlock again")
+		if (!dek) throw ImportedAccountUnusableError.forAccount(account.address, "imported keys unavailable — unlock again")
 		try {
 			const signingKey = await unsealImportedScalar(dek, account.chainId, account.address, keyRow.encryptedSigningKey)
 			const contract = await NuloAccount.fromSigningKey(signingKey, this.logger, this.name)
 			if (contract.address.toString() !== requestedAddress) {
-				throw new ImportedAccountUnusableError(account.address, "address mismatch")
+				throw ImportedAccountUnusableError.forAccount(account.address, "address mismatch")
 			}
 			return contract
 		} catch (err) {
 			if (err instanceof ImportedAccountUnusableError) throw err
-			throw new ImportedAccountUnusableError(account.address, "signing key could not be recovered")
+			throw ImportedAccountUnusableError.forAccount(account.address, "signing key could not be recovered")
 		}
 	}
 
@@ -509,7 +642,7 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 		let signingKey: GrumpkinScalar
 		if (account.type === AccountType.Imported) {
 			const keyRow = await this.importedKeys.get(profileId, chainId, address)
-			if (!keyRow) throw new ImportedAccountUnusableError(address, "signing key missing")
+			if (!keyRow) throw ImportedAccountUnusableError.forAccount(address, "signing key missing")
 			// Fresh auth: the DEK unseals under the SUPPLIED password directly —
 			// session-independent, deletion-guarded — never via SessionManager.
 			const dek = await this.profileService.exportImportedKeysDek(profileId, password)
@@ -879,6 +1012,10 @@ export class AccountService extends Service<Methods, Events> implements ServiceS
 	public async exportFullBackupKeys(fence: RunFence, password: string): Promise<FullBackupKeys> {
 		await this.ensureInitialized()
 		await this.profileService.assertRunFence(fence)
+		// The journal is the only copy of the accounts a reset is moving.
+		if (await this.staleNetworks.getJournal(fence.profileId)) {
+			throw new Error(`${ERR_RESET_PENDING}: Finish the network reset before making a full backup.`)
+		}
 		const { masterKey, entropy, sourceDek, transferKey } = await this.profileService.openBackupTransfer(fence.profileId, password)
 		try {
 			const accounts = await this.rowsOfProfile(fence.profileId)

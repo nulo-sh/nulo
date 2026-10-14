@@ -24,6 +24,12 @@ const noticeKey = (profileId: string) => `${NETWORK_RESET_DONE_ROOT}@${profileId
 
 export type QuarantineState = { record: StaleNetworksRecord | undefined; journal: ResetJournal | undefined }
 
+/** A stored record value, or undefined when it is absent or does not decode. */
+export function decodeStaleRecord(raw: unknown): StaleNetworksRecord | undefined {
+	const row = decodeRow(StaleNetworksRecordSchema, raw)
+	return row.kind === "valid" ? row.value : undefined
+}
+
 /** A chain is quarantined by a record entry or by either end of a reset journal. */
 export function quarantinedBy(state: QuarantineState, chainId: number): boolean {
 	if (state.record?.entries.some((e) => e.chainId === chainId)) return true
@@ -130,8 +136,7 @@ export class StaleNetworkRepository {
 	}
 
 	private decodeRecord(raw: unknown): StaleNetworksRecord | undefined {
-		const row = decodeRow(StaleNetworksRecordSchema, raw)
-		return row.kind === "valid" ? row.value : undefined
+		return decodeStaleRecord(raw)
 	}
 
 	private decodeJournal(raw: unknown): ResetJournal | undefined {

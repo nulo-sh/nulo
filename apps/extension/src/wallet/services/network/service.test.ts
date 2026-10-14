@@ -20,7 +20,8 @@ import { Fr } from "@aztec-labs/foundation/curves/bn254"
 import { AztecAddress } from "@aztec-labs/stdlib/aztec-address"
 import { recordWrites } from "../storage-write-log"
 import type { AztecNode } from "@aztec-labs/stdlib/interfaces/client"
-import { CHAIN_IDS, LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { CHAIN_IDS, LOCAL_L1_CHAIN_ID, TESTNET_L1_CHAIN_ID } from "@/utils/chain-ids"
+import { TESTNET_RPC_URL } from "@/wallet/constants/network-endpoints"
 import { ProfileDeletionState } from "@/wallet/services/profile/profile-deletion-state"
 import { LoggerStore } from "@/wallet/logger"
 import { ConfigStore } from "@/wallet/config"
@@ -28,8 +29,8 @@ import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
 import { FakeBrowserApi } from "@nulo/wallet-core/testing"
 import type { BrowserApi } from "@nulo/wallet-core/ports"
 import type { ProfileService } from "@/wallet/services/profile/service"
-import { LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
-import { ERR_UNATTENDED_LIVE_CHECK, NodeStatus } from "./spec"
+import { type ChainResetHooks, type ChainResetRequest, LOCAL_NETWORK_RPC_URL, NetworkService } from "./service"
+import { ERR_UNATTENDED_LIVE_CHECK, findPrimaryEndpoint, NodeStatus } from "./spec"
 import type { Network, NetworkEndpoint } from "./spec"
 
 type NodeInfo = {
@@ -1789,5 +1790,240 @@ describe("NetworkService.isChainQuarantined", () => {
 		for (const chainId of [CHAIN_IDS.TESTNET, 10, 20]) expect(await service.isChainQuarantined("p1", chainId)).toBe(true)
 		expect(await service.isChainQuarantined("p1", 0)).toBe(false)
 		expect(await service.isChainQuarantined("p2", CHAIN_IDS.TESTNET)).toBe(false)
+	})
+})
+
+describe("NetworkService in-place reset", () => {
+	const OLD = 4321
+	const MY_NODE = "https://my-node.example"
+	const hooks = (over: Partial<ChainResetHooks> = {}): ChainResetHooks => ({
+		beforePurge: async () => {},
+		afterPurge: async () => {},
+		onPurged: async () => {},
+		...over,
+	})
+	const request = (over: Partial<ChainResetRequest> = {}): ChainResetRequest => ({
+		profileId: "p1",
+		networkId: "tn",
+		fromChainId: OLD,
+		toChainId: CHAIN_IDS.TESTNET,
+		purged: false,
+		switchToSeedNode: false,
+		probedEndpoint: null,
+		...over,
+	})
+	const staleTestnet = (local: FakeStorageArea, over: Partial<Network> = {}) =>
+		storeRow(local, {
+			id: "tn",
+			name: "Testnet",
+			chainId: OLD,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+			kind: "testnet",
+			primaryEndpointId: "u1",
+			endpoints: [
+				{ id: "u1", rpcUrl: MY_NODE },
+				{ id: "u2", rpcUrl: "https://other.example", label: "Other" },
+			],
+			...over,
+		})
+	const stored = (local: FakeStorageArea, id: string): Network => JSON.parse(local.store.get(`nulo:core:networks@${id}`) as string)
+	const journalFor = (networkId: string) =>
+		JSON.stringify({
+			profileId: "p1",
+			networkId,
+			fromChainId: 10,
+			toChainId: 20,
+			l1ChainId: 5,
+			cause: { networkReset: true, addressesMoved: false },
+			purged: false,
+			switchToSeedNode: false,
+			probedEndpoint: null,
+			accounts: [],
+		})
+
+	test("the row is not live during the purge, and the network lock stays free for other networks", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		staleTestnet(local)
+		storeRow(local, { id: "ln", chainId: 0, kind: "local" })
+		let release!: () => void
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const observed: boolean[] = []
+		const run = service.resetChainInPlace(
+			request(),
+			hooks({
+				beforePurge: async () => {
+					observed.push(await service.isChainLive("p1", OLD), await service.isNetworkLive("tn"))
+					await held
+				},
+			}),
+		)
+		await vi.waitFor(() => expect(observed).toHaveLength(2))
+		await expect(service.renameNetwork("ln", "Local 2")).resolves.toMatchObject({ name: "Local 2" })
+		release()
+		await run
+		expect(observed).toEqual([false, false])
+		expect(await service.isChainLive("p1", CHAIN_IDS.TESTNET)).toBe(true)
+	})
+
+	test("a network reset re-keys the row to the seed and keeps its id, name, endpoints and active pointer", async () => {
+		const { service, local, pxeStub } = setupServiceWithStorage({})
+		staleTestnet(local)
+		local.store.set("nulo:core:active-network@p1", "tn")
+		const order: string[] = []
+		service.onNetworkUpdated.add((n) => order.push(`updated:${n.chainId}`))
+		await service.resetChainInPlace(
+			request({ switchToSeedNode: true, probedEndpoint: { id: "u1", url: MY_NODE } }),
+			hooks({
+				afterPurge: async () => {
+					order.push("after")
+				},
+				onPurged: async () => {
+					order.push("purged")
+				},
+			}),
+		)
+		expect(pxeStub).toHaveBeenCalledWith("p1", OLD)
+		const row = stored(local, "tn")
+		expect(row).toMatchObject({ id: "tn", name: "Testnet", chainId: CHAIN_IDS.TESTNET, l1ChainId: TESTNET_L1_CHAIN_ID })
+		expect(row.endpoints.map((e) => e.rpcUrl)).toEqual([MY_NODE, "https://other.example", TESTNET_RPC_URL])
+		expect(findPrimaryEndpoint(row)?.rpcUrl).toBe(TESTNET_RPC_URL)
+		expect(local.store.get("nulo:core:active-network@p1")).toBe("tn")
+		expect(order).toEqual(["after", "purged", `updated:${CHAIN_IDS.TESTNET}`])
+	})
+
+	test.each<[string, Partial<Network>, Partial<ChainResetRequest>, string]>([
+		["the probed primary serves the new chain", {}, { probedEndpoint: { id: "u1", url: MY_NODE } }, MY_NODE],
+		["the popup chose the seed's node", {}, { switchToSeedNode: true, probedEndpoint: { id: "u1", url: MY_NODE } }, TESTNET_RPC_URL],
+		[
+			"the primary was switched after the probe",
+			{ primaryEndpointId: "u2" },
+			{ probedEndpoint: { id: "u1", url: MY_NODE } },
+			TESTNET_RPC_URL,
+		],
+		[
+			"the primary's URL was edited in place after the probe",
+			{ endpoints: [{ id: "u1", rpcUrl: "https://edited.example" }] },
+			{ probedEndpoint: { id: "u1", url: MY_NODE } },
+			TESTNET_RPC_URL,
+		],
+		["the seed's own node was primary (nothing probed)", { endpoints: [{ id: "u1", rpcUrl: TESTNET_RPC_URL }] }, {}, TESTNET_RPC_URL],
+	])("A6: %s", async (_label, row, req, primaryUrl) => {
+		const { service, local } = setupServiceWithStorage({})
+		staleTestnet(local, row)
+		await service.resetChainInPlace(request(req), hooks())
+		const after = stored(local, "tn")
+		expect(findPrimaryEndpoint(after)?.rpcUrl).toBe(primaryUrl)
+		expect(after.endpoints.filter((e) => e.rpcUrl === TESTNET_RPC_URL).length).toBeLessThanOrEqual(1)
+	})
+
+	test("a purge failure throws with the row untouched, nothing marked purged, and the reservation released", async () => {
+		const { service, local, pxeStub } = setupServiceWithStorage({})
+		staleTestnet(local)
+		pxeStub.mockRejectedValueOnce(new Error("offscreen down"))
+		const onPurged = vi.fn(async () => {})
+		await expect(service.resetChainInPlace(request(), hooks({ onPurged }))).rejects.toThrow(/offscreen down/)
+		expect(stored(local, "tn")).toMatchObject({ chainId: OLD, primaryEndpointId: "u1" })
+		expect(onPurged).not.toHaveBeenCalled()
+		expect(await service.isNetworkLive("tn")).toBe(true)
+	})
+
+	test("an address-only reset purges and leaves the row; a resume after the purge only rewrites", async () => {
+		const { service, local, pxeStub } = setupServiceWithStorage({})
+		staleTestnet(local, { chainId: CHAIN_IDS.TESTNET })
+		await service.resetChainInPlace(request({ fromChainId: CHAIN_IDS.TESTNET }), hooks())
+		expect(pxeStub).toHaveBeenCalledWith("p1", CHAIN_IDS.TESTNET)
+		expect(stored(local, "tn")).toMatchObject({ chainId: CHAIN_IDS.TESTNET, primaryEndpointId: "u1" })
+
+		const second = setupServiceWithStorage({})
+		staleTestnet(second.local)
+		await second.service.resetChainInPlace(request({ purged: true }), hooks())
+		expect(second.pxeStub).not.toHaveBeenCalled()
+		expect(stored(second.local, "tn").chainId).toBe(CHAIN_IDS.TESTNET)
+	})
+
+	test("refuses, purging nothing, a row not on the chain it names; the rewrite refuses a target another row holds", async () => {
+		const { service, local, pxeStub } = setupServiceWithStorage({})
+		staleTestnet(local)
+		await expect(service.resetChainInPlace(request({ fromChainId: 999 }), hooks())).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
+		expect(pxeStub).not.toHaveBeenCalled()
+		storeRow(local, { id: "mine", chainId: CHAIN_IDS.TESTNET })
+		await expect(service.resetChainInPlace(request({ purged: true }), hooks())).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
+		expect(stored(local, "tn").chainId).toBe(OLD)
+	})
+
+	test("deleteNetwork refuses while the network's reset runs; idle, it takes the journal and the verdict with the row", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		staleTestnet(local)
+		storeRow(local, { id: "ln", chainId: 0, kind: "local" })
+		local.store.set("nulo:core:active-network@p1", "ln")
+		let running = true
+		service.setResetRunProbe((id) => running && id === "tn")
+		await expect(service.deleteNetwork("tn")).rejects.toThrow(/^RESET_RUNNING/)
+		expect(local.store.has("nulo:core:networks@tn")).toBe(true)
+
+		running = false
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		const entries = [
+			{ networkId: "tn", chainId: OLD, networkReset: true, addressesMoved: false },
+			{ networkId: "zz", chainId: 9, networkReset: false, addressesMoved: true },
+		]
+		local.store.set("nulo:core:stale-networks@p1", JSON.stringify({ profileId: "p1", accountSetDigest: "d", entries }))
+		await service.deleteNetwork("tn")
+		expect(local.store.has("nulo:core:network-reset@p1")).toBe(false)
+		const record = JSON.parse(local.store.get("nulo:core:stale-networks@p1") as string)
+		expect(record.entries.map((e: { networkId: string }) => e.networkId)).toEqual(["zz"])
+	})
+
+	test("deleteNetwork keeps another network's journal", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		storeRow(local, { id: "cn", chainId: 77 })
+		storeRow(local, { id: "ln", chainId: 0, kind: "local" })
+		local.store.set("nulo:core:active-network@p1", "ln")
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		await service.deleteNetwork("cn")
+		expect(local.store.get("nulo:core:network-reset@p1")).toBe(journalFor("tn"))
+	})
+
+	test("addNetwork refuses a chain a reset journal moves to, and admits another", async () => {
+		const { service, local } = setupServiceWithStorage({
+			"https://new.example": nodeInfoForChain(20),
+			"https://other-chain.example": nodeInfoForChain(30),
+		})
+		local.store.set("nulo:core:network-reset@p1", journalFor("tn"))
+		await expect(service.addNetwork("New", "https://new.example")).rejects.toThrow(/^CHAIN_QUARANTINED/)
+		await expect(service.addNetwork("Other", "https://other-chain.example")).resolves.toMatchObject({ chainId: 30 })
+	})
+
+	test("commitResetCapture writes nothing once the row left the captured chain or is being deleted", async () => {
+		const { service, local } = setupServiceWithStorage({})
+		staleTestnet(local)
+		const write = vi.fn(async () => {})
+		await expect(service.commitResetCapture("p1", "tn", { chainId: 999, primary: null }, write)).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
+		let release!: () => void
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const run = service.resetChainInPlace(request(), hooks({ beforePurge: () => held }))
+		await vi.waitFor(async () => expect(await service.isNetworkLive("tn")).toBe(false))
+		await expect(service.commitResetCapture("p1", "tn", { chainId: OLD, primary: null }, write)).rejects.toThrow(/^ERR_NOT_RESETTABLE/)
+		release()
+		await run
+		expect(write).not.toHaveBeenCalled()
+		await service.commitResetCapture("p1", "tn", { chainId: CHAIN_IDS.TESTNET, primary: null }, write)
+		expect(write).toHaveBeenCalledTimes(1)
+	})
+
+	test("probeIdentityOnce makes one single-attempt read within its budget", async () => {
+		const { service, factory } = setupServiceWithStorage({})
+		const getNodeInfo = vi.fn().mockResolvedValue({ l1ChainId: TESTNET_L1_CHAIN_ID, rollupVersion: 9 })
+		const single = vi.spyOn(factory, "createSingleAttemptNode").mockReturnValue({ getNodeInfo } as unknown as AztecNode)
+		await expect(service.probeIdentityOnce(MY_NODE, "testnet", 5000)).resolves.toEqual({
+			chainId: (TESTNET_L1_CHAIN_ID ^ 9) >>> 0,
+			l1ChainId: TESTNET_L1_CHAIN_ID,
+		})
+		expect(single).toHaveBeenCalledWith(MY_NODE, 5000)
+		expect(getNodeInfo).toHaveBeenCalledTimes(1)
 	})
 })

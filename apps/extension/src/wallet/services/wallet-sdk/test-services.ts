@@ -30,6 +30,8 @@ export function fakeSdkServices(
 		/** Whether a served chain is quarantined; none by default. */
 		quarantined?: (chainId: number) => boolean
 		legal?: () => Promise<void>
+		/** The reset run lock's wait; resolves at once by default. */
+		resetRun?: () => Promise<void>
 		/** What `getActiveProfile` answers; `p1` by default. */
 		activeProfile?: () => Promise<{ id: string } | undefined>
 		/** The approval's second durable write; resolves at once by default. */
@@ -106,6 +108,7 @@ export function fakeSdkServices(
 				"operation-journal": opts.operationJournal ?? {},
 				token: { getTokens: async () => [] },
 				"legal-acceptance": { assertCurrent: opts.legal ?? (async () => undefined) },
+				"network-reset": { waitForRunEnd: opts.resetRun ?? (async () => undefined) },
 			})[name],
 	} as never
 	return { services, rows, onActiveProfileChanged, onDappSessionDeleted, onVerificationRefused, onVerificationConfirmed }

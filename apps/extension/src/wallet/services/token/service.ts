@@ -249,7 +249,7 @@ export class TokenService extends Service<Methods, Events> implements ServiceSpe
 		// inside the lock would invert the seeder-commit's markerLock→tokenLock
 		// order into a deadlock.)
 		await this.seeder.onChainPurged(profileId, chainId)
-		// NO token lock here — the caller (purgeChain) holds the NETWORK lock
+		// NO token lock here — the caller (purgeChain) may hold the NETWORK lock
 		// (watchdog-disabled by design), and persistToken's in-token-lock
 		// metadata fetch takes the network lock via getNode: a sweep under the
 		// token lock closes that pair into an ABBA deadlock broken only by the

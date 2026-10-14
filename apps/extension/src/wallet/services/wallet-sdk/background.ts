@@ -49,7 +49,7 @@ import {
 	wireProfileSwitchTeardown,
 } from "./profile-switch-teardown"
 
-import type { ServiceCollection } from "@/wallet/base"
+import type { IService, ServiceCollection } from "@/wallet/base"
 import { NetworkService } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { ExecutionService } from "@/wallet/services/execution/service"
@@ -57,6 +57,7 @@ import { ProfileService } from "@/wallet/services/profile/service"
 import { DappInteractionService } from "@/wallet/services/dapp-interaction/service"
 import { TokenService } from "@/wallet/services/token/service"
 import { LegalAcceptanceService, type LegalAdmission } from "@/wallet/services/legal/service"
+import { NETWORK_RESET_SERVICE_NAME, type ResetRunGate } from "@/wallet/services/network-reset/spec"
 import type { DiscoveryParams } from "@/wallet/services/dapp-interaction/spec"
 import { DappSessionService, AccessLevel, type DappMetadata, type DappSession } from "@/wallet/services/dapp-session/service"
 import { sanitizeWireString } from "@/wallet/services/dapp-session/capability-meta"
@@ -210,6 +211,7 @@ type SdkDeps = {
 	operationJournal: OperationJournalService
 	tokenService: TokenService
 	legal: LegalAdmission
+	resetRun: ResetRunGate
 	dispatcher: WalletSdkDispatcher
 	logger: ILogger
 }
@@ -235,6 +237,7 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 	const operationJournal: OperationJournalService = services.get(OperationJournalService.name)
 	const tokenService: TokenService = services.get(TokenService.name)
 	const legal: LegalAcceptanceService = services.get(LegalAcceptanceService.name)
+	const resetRun = services.get<IService & ResetRunGate>(NETWORK_RESET_SERVICE_NAME)
 
 	const dispatcher = new WalletSdkDispatcher(
 		dispatcherNetworks(networkService),
@@ -262,6 +265,7 @@ function resolveSdkDeps(services: ServiceCollection, logger: ILogger): SdkDeps {
 		operationJournal,
 		tokenService,
 		legal,
+		resetRun,
 		dispatcher,
 		logger,
 	}
@@ -738,6 +742,7 @@ async function runEstablishedMessage(
 			onExecutionEnqueued: releaseFifo,
 			queuedJournalId,
 		},
+		deps.resetRun,
 	)
 }
 
@@ -803,6 +808,7 @@ type DiscoveryDeps = {
 	pendingDiscoveryPromises: Map<string, Promise<void>>
 	discoveryQueue: DiscoveryQueue
 	legal: LegalAdmission
+	resetRun: ResetRunGate
 	admission: VerifyAdmissionGate
 	dedupeWaiters: Map<string, number>
 	handedOver: SdkHandlerState["handedOver"]
@@ -822,6 +828,7 @@ function discoveryDeps(deps: SdkDeps, state: SdkHandlerState): DiscoveryDeps {
 		pendingDiscoveryPromises: state.pendingDiscoveryPromises,
 		discoveryQueue: state.late.discoveryQueue!,
 		legal: deps.legal,
+		resetRun: deps.resetRun,
 		admission: state.admission,
 		dedupeWaiters: state.dedupeWaiters,
 		handedOver: state.handedOver,
@@ -867,6 +874,9 @@ async function handleDiscovery(discovery: PendingDiscovery, deps: DiscoveryDeps)
 		// popup caps below all key on `(origin,chainId)`, not just the
 		// auto-approve lookup and new-session creation.
 		const chainId = String(chainInfoToChainId(discovery))
+		// While a reset runs, a discovery waits for it before any read below, so the profile, the
+		// Terms and the session it then reads are the ones the reset left.
+		await deps.resetRun.waitForRunEnd()
 
 		// Captured BEFORE the profile read, as `handleWalletMessage` does: a switch landing inside any
 		// read below registers as a bump after this baseline.
@@ -1349,6 +1359,7 @@ export async function handleWalletMessage(
 	logger: ILogger,
 	legal: LegalAdmission,
 	hooks?: DispatchHooks,
+	resetRun?: ResetRunGate,
 ): Promise<void> {
 	const response: WalletResponse = {
 		messageId: message.messageId,
@@ -1408,6 +1419,9 @@ export async function handleWalletMessage(
 		// Once per top-level request, before the dispatcher sees a method name: no dApp request is
 		// served without a current Terms acceptance. The catch below answers with the typed envelope
 		// and closes any queued journal row, exactly as for every other refusal.
+		// A request that arrives while a network reset runs waits for it, at most a bounded time;
+		// the per-chain guards still decide what it may do once admitted.
+		await resetRun?.waitForRunEnd()
 		await legal.assertCurrent()
 		// The last await before the dispatch: the session can end, and its id re-key, inside any of
 		// the reads above.
