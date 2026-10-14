@@ -14,9 +14,9 @@ export interface LaunchOptions {
 	headless: boolean
 	/** `false` drops the fixed window size a driver launches with; only Chrome's launch has one. */
 	fixedWindowSize?: boolean
-	/** Route every request for an outside host to the egress guard on this loopback port, but
-	 *  `liveHost`, which goes direct. */
-	egress?: { guardPort: number; liveHost?: string }
+	/** Route every request for an outside host to the egress guard on this loopback port, but the
+	 *  `liveHosts`, which go direct. */
+	egress?: { guardPort: number; liveHosts?: readonly string[] }
 }
 
 export interface LaunchedBrowser {

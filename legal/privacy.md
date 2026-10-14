@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Version 1.1.1 — effective 6 October 2026**
+**Version 1.2 — effective 13 October 2026**
 
 This policy explains what happens to information when you use Nulo. The published source shows the
 extension's implemented data handling. Hosting, correspondence, authenticator and store processing
@@ -13,8 +13,8 @@ also depend on the configurations and provider practices identified below.
 > secrets are protected locally as described below; some wallet metadata is stored without
 > application-level encryption, and wallet operation sends the information described in § 5. A few
 > things must leave your device for the wallet to work at all — requests to an Aztec node, downloads
-> of public proving parameters, and an optional price lookup — and this policy says what each one is,
-> what it reveals, and which can be turned off or replaced.
+> of public proving parameters and of the token list, and an optional price lookup — and this policy
+> says what each one is, what it reveals, and which can be turned off or replaced.
 >
 > *This box is a summary. The sections below are the policy.*
 
@@ -26,7 +26,8 @@ Nulo is maintained by **Alejo Amiras**, a natural person resident in Argentina (
 "**I**"). There is no company.
 
 Where applicable data-protection law applies, I am responsible as controller for processing carried
-out for the Nulo website, the passkey relying-party host, and correspondence described below.
+out for the Nulo website, the passkey relying-party host, the token-list host, and correspondence
+described below.
 Independent providers are responsible for processing they determine themselves; providers acting on
 my instructions are processors.
 
@@ -39,7 +40,9 @@ Contact: **hello@nulo.sh**
 
 ## 2. No wallet telemetry; limited website and correspondence processing
 
-I do not operate a backend for the wallet. Nulo requires no Developer-hosted account or sign-up. It
+I do not operate a backend for the wallet. The one host of mine it contacts by itself,
+`tokens.nulo.sh`, serves the same signed file to every wallet and receives no wallet data (§ 5.11).
+Nulo requires no Developer-hosted account or sign-up. It
 creates local identifiers for wallet operation, including profile identifiers, but does not use them
 for wallet telemetry.
 
@@ -65,6 +68,7 @@ described in § 5.
 | Separately imported signing keys | Extension local storage | Encrypted using profile-specific key material |
 | Account addresses, profile names, settings, contacts | Extension local storage | Stored without application-level encryption |
 | Tracked tokens, cached balances, cached prices | Extension local storage | Stored without application-level encryption |
+| The token list (default tokens and their price identifiers) | Extension local storage, shared by every profile; not included in backups | Public data, checked against its signature; stored without application-level encryption |
 | Transaction history, activity records, networks, granted app permissions | Extension local storage | Stored without application-level encryption |
 | Private execution database (notes, proving state) | Browser Origin Private File System, using SQLite | Encrypted with a profile-specific database key |
 | Public proving-parameter cache | Browser cache / IndexedDB | Public parameters; not wallet-secret storage |
@@ -172,14 +176,14 @@ Article 6(1)(f).
 
 The website is static and carries no analytics or tracking of mine.
 
-Hosting for `nulo.sh` and `passkey.nulo.sh` is provided by Cloudflare, Inc.
+Hosting for `nulo.sh`, `passkey.nulo.sh` and `tokens.nulo.sh` is provided by Cloudflare, Inc.
 ([privacy policy](https://www.cloudflare.com/privacypolicy/)). Website requests expose IP addresses,
 requested URLs and ordinary browser headers to the hosting provider. Information available to the
 Developer through hosting tools is aggregate traffic statistics (requests, bandwidth, unique visitors
 and countries) and, for up to the past 30 days, a sample of individual requests showing the time, IP
 address, country, network, user agent, method, protocol, hostname, requested path, and how the
-request was cached or filtered. Request logging on the `passkey.nulo.sh` application is turned off,
-and the hosting provider's browser analytics are not enabled. This processing supports delivery and
+request was cached or filtered. Request logging on the `passkey.nulo.sh` and `tokens.nulo.sh` applications is
+turned off, and the hosting provider's browser analytics are not enabled. This processing supports delivery and
 security of the
 sites, relying on legitimate interests where applicable. The retention information below and the
 international-processing information in § 12 cover these hosting records.
@@ -266,12 +270,37 @@ node, are not Nulo's, and this policy does not describe them.
 
 **Your control:** the site is contacted only if you follow the link.
 
+### 5.11 `tokens.nulo.sh` — the token list
+
+**What it is:** the tokens a wallet shows by default, and the price each one uses, come from one list
+I publish at `https://tokens.nulo.sh/v1/list.json`, signed with a key I hold. The extension downloads
+it once you have accepted the Terms, then about once a day, and again sooner after a failed attempt.
+It keeps a list only if the signature checks out against a key built into the extension and the list
+is newer than the one it holds; otherwise it keeps what it had.
+
+**What it reveals:** every wallet requests the same file. The request carries no account address,
+balance, network, token or other wallet data, no cookies and no referrer. Cloudflare, Inc., which hosts
+the file, receives your IP address, the time and ordinary browser headers such as the user agent, and
+can infer from them that you use Nulo. Depending on the browser, the request may also carry an
+`Origin` header naming the extension; in Firefox that name is unique to your installation, and the
+requests of §§ 5.1 and 5.2 may carry it too.
+
+**What the Developer can see:** what § 5.5 describes for its hosts: aggregate statistics and, for up to
+the past 30 days, a sample of individual requests, which can include requests for this file.
+
+**Your control:** no request is made until you accept the Terms. While the extension is installed and
+the Terms accepted, the daily download cannot be turned off; the default tokens depend on it, and a
+token you remove stays removed.
+
+**Legal basis (GDPR):** legitimate interests — delivering a verified list of default tokens and keeping
+its host available and secure — under Article 6(1)(f).
+
 ## 6. Browser permissions, and what they do and do not cover
 
 | Permission | Why |
 |---|---|
 | `storage`, `unlimitedStorage` | To keep your wallet data on your device; proving data is large |
-| `alarms` | To schedule background refreshes while unlocked |
+| `alarms` | To schedule background refreshes: prices while unlocked, the token list about daily |
 | `offscreen` (Chrome only) | To run the private execution environment in a hidden document; Firefox uses a fallback |
 | `sidePanel` | The optional side-panel view |
 | `downloads` | To save backups, account exports, contacts and diagnostic logs when **you** request an export |
@@ -360,7 +389,8 @@ notices.
 
 Wallet secrets are encrypted at rest with modern authenticated encryption, derived from your
 password or passkey. The private execution database is encrypted with a profile-specific key. The
-extension loads no remote code.
+extension loads no remote code. The token list it downloads is data, used only after its signature
+is checked (§ 5.11).
 
 The Developer's passkey-host application response contains no scripts; hosting-provider responses and
 their limitations are described in § 5.4. Keeping that domain and its eligible subdomains secure is
@@ -398,6 +428,7 @@ actual build.**
 | Application connection metadata | Used for discovery, connection security and permission management |
 | Proving inputs | Processed in-browser, or sent to the optional local proving application on `127.0.0.1` |
 | Public proving parameters | Downloaded from the hosts named in § 5.9 |
+| Token list | Downloaded from `tokens.nulo.sh` (§ 5.11); the request carries no wallet data |
 | Website requests and voluntary reports | Processed by the identified hosting and correspondence providers and, where described, by the Developer |
 | Analytics and advertising data | No wallet analytics or advertising collection is implemented |
 
@@ -414,3 +445,4 @@ described in § 5.
 | 1.0 | 23 September 2026 | First published version. |
 | 1.1 | 6 October 2026 | Names the site the "Get Fee Juice" and "Get private gas" links open (§ 5.10). |
 | 1.1.1 | 6 October 2026 | Updated the address for reporting security vulnerabilities. |
+| 1.2 | 13 October 2026 | The wallet downloads its list of default tokens from `tokens.nulo.sh` (§ 5.11). |

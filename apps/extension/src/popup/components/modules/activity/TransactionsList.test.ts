@@ -11,7 +11,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			refreshIfStale: vi.fn().mockResolvedValue({}),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: {} })),
+			refreshIfStale: vi.fn().mockResolvedValue({ quotes: {}, pricedTokens: {} }),
 		}
 	}),
 }))

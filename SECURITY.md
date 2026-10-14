@@ -340,9 +340,11 @@ While a profile session is unlocked (and `showFiatValues` is on — the default,
 toggleable in Settings → Privacy), the wallet fetches USD quotes from
 CoinGecko's keyless public API every ~3 minutes. Privacy posture:
 
-- The request is ONE batched query for a FIXED id set compiled into the build
-  (`price-map.ts`) — it never varies with the user's holdings, accounts, or
-  activity, so nothing user-specific is inferable from the query string.
+- The request is ONE batched query for the FIXED id table compiled into the
+  build (`PRICE_IDS` in `@nulo/token-list`) — it never varies with the user's
+  holdings, accounts, activity or the token list, so nothing user-specific is
+  inferable from the query string. The signed list only says which token an id
+  prices.
 - No fetch is ever triggered by transaction activity (fee-USD reads are
   cache-or-nothing), so request timing does not correlate with transactions.
 - What CoinGecko (and any on-path observer) does learn: an IP address running

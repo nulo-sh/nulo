@@ -58,10 +58,10 @@ describe("TokenSeeder — happy path + skips", () => {
 		expect((marker[KEY] as { observedDecimals?: number }).observedDecimals).toBe(6)
 	})
 
-	test("already-present token: marked seeded without preview or persist", async () => {
+	test("already-present token: marked seeded and checked on chain, never persisted", async () => {
 		const { seeder, deps } = makeSeeder({ isTokenPresent: vi.fn(async () => true) })
 		await seeder.run()
-		expect(deps.preview).not.toHaveBeenCalled()
+		expect(deps.preview).toHaveBeenCalledTimes(1)
 		expect(deps.persist).not.toHaveBeenCalled()
 		expect((await readMarker())[KEY].outcome).toBe("seeded")
 	})

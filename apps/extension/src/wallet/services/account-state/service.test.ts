@@ -8,6 +8,7 @@
  * status gating logic.
  */
 
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from "@aztec-labs/standard-contracts/auth-registry/constants"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 import type { IService, ServiceCollection as ServiceCollectionType } from "@/wallet/base"
 import { ServiceCollection } from "@/wallet/base"
@@ -16,6 +17,10 @@ import { ConfigStore } from "@/wallet/config"
 import { RecoveryModeError } from "@nulo/extension-messaging/errors"
 import { assertWireArtifactClassId } from "@nulo/aztec-runtime/pxe"
 import { NETWORK_SERVICE_NAME, type Network, NodeStatus } from "@/wallet/services/network/spec"
+import { NetworkService } from "@/wallet/services/network/service"
+import { FakeNodeFactory } from "@/core/testing/fake-node-factory"
+import { FakeBrowserApi } from "@nulo/wallet-core/testing"
+import { LOCAL_L1_CHAIN_ID } from "@/utils/chain-ids"
 import { ACCOUNT_STATE_CAPS, normalizeAccountStateSlice } from "./normalize"
 import { AccountStateService } from "./service"
 
@@ -56,6 +61,33 @@ function makeNetwork(id: string, chainId: number): Network {
 }
 
 describe("AccountStateService.backup", () => {
+	test("the contracts every PXE boot registers are left out before their instance or artifact is read; a custom one is kept", async () => {
+		const networkService = new FakeNetworkService()
+		const services = new ServiceCollection()
+		services.add(networkService)
+		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		networkService.networks = [{ ...makeNetwork("net-a", 7), endpoints: [{ id: "primary", rpcUrl: "https://a.example/" }] } as Network]
+		networkService.statuses.set("net-a", NodeStatus.Active)
+		const protocol = `0x${"00".repeat(31)}03`
+		const custom = `0x${"07".repeat(32)}`
+		vi.spyOn(accountStateService, "getSenders").mockResolvedValue([])
+		vi.spyOn(accountStateService, "getContracts").mockResolvedValue([protocol, STANDARD_AUTH_REGISTRY_ADDRESS.toString(), custom])
+		const instance = { currentContractClassId: { toString: () => "0xclass" } }
+		const pxe = {
+			getContractInstance: vi.fn(async () => instance),
+			getContractArtifact: vi.fn(async () => ({ name: "Custom" })),
+		}
+		;(accountStateService as unknown as { pxeService: typeof pxe }).pxeService = pxe
+
+		const items = await accountStateService.backup()
+
+		expect(items?.[0].contracts).toEqual([{ address: custom, instance, artifact: { name: "Custom" } }])
+		expect(pxe.getContractInstance).toHaveBeenCalledTimes(1)
+		expect(pxe.getContractArtifact).toHaveBeenCalledTimes(1)
+	})
+
 	test("each item names its chain beside the network id — the import rebinds by chain, never by the exported id", async () => {
 		const networkService = new FakeNetworkService()
 		const services = new ServiceCollection()
@@ -106,6 +138,43 @@ describe("AccountStateService.backup", () => {
 		// An unrelated failure is NOT swallowed — the export aborts with the opaque wrapper error.
 		pxe.getContracts.mockRejectedValueOnce(new Error("boom"))
 		await expect(accountStateService.backup()).rejects.toThrow("PXE request failed")
+	})
+})
+
+describe("AccountStateService.backup over the network service's own status check", () => {
+	test("an edited Local Network whose node answers travels as its own chain-0 item; a custom network answering for another chain stays out", async () => {
+		const editedUrl = "http://localhost:18080"
+		const factory = new FakeNodeFactory()
+		factory.setOverrides(editedUrl, { getNodeInfo: async () => ({ l1ChainId: LOCAL_L1_CHAIN_ID, rollupVersion: 1 }) as never })
+		const browserApi = new FakeBrowserApi()
+		browserApi.reset()
+		const networkService = new NetworkService(new LoggerStore(new ConfigStore()), browserApi, factory)
+		Object.assign(networkService, { profileService: { getActiveProfile: async () => ({ id: "p1" }) }, initialized: true })
+		const row = (id: string, kind: string, chainId: number) => ({
+			id,
+			profileId: "p1",
+			chainId,
+			l1ChainId: LOCAL_L1_CHAIN_ID,
+			name: id,
+			primaryEndpointId: "e1",
+			endpoints: [{ id: "e1", rpcUrl: editedUrl }],
+			kind,
+		})
+		await browserApi.storage.local.set({
+			"nulo:core:networks@loc": JSON.stringify(row("loc", "local", 0)),
+			"nulo:core:networks@cust": JSON.stringify(row("cust", "custom", 7)),
+		})
+		const services = new ServiceCollection()
+		services.add(new FakeNetworkService())
+		const accountStateService = new AccountStateService(new LoggerStore(new ConfigStore()))
+		services.add(accountStateService)
+		await services.start()
+		const pxe = { getSenders: vi.fn(async () => [{ toString: () => "0xbob" }]), getContracts: vi.fn(async () => []) }
+		Object.assign(accountStateService, { networkService, pxeService: pxe })
+
+		const items = await accountStateService.backup()
+
+		expect(items).toEqual([{ networkId: "loc", chainId: 0, senders: [{ address: "0xbob" }], contracts: [] }])
 	})
 })
 

@@ -59,12 +59,13 @@ describe("egress guard prefs", () => {
 		expect(Object.keys(FIREFOX_LAUNCH_PREFS).filter((key) => key.startsWith("network."))).toEqual([])
 	})
 
-	test("a live host, alone of the outside names, goes direct", () => {
-		const live = egressGuardPrefs(4321, "lb.drpc.live")
+	test("the live hosts, alone of the outside names, go direct", () => {
+		const live = egressGuardPrefs(4321, ["lb.drpc.live", "tokens.nulo.sh"])
 		const findLive = findProxyOf(live)
 		expect(findLive("https://lb.drpc.live/", "lb.drpc.live")).toBe("DIRECT")
+		expect(findLive("https://tokens.nulo.sh/v1/list.json", "tokens.nulo.sh")).toBe("DIRECT")
 		for (const host of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(findLive(`http://${host}/`, host)).toBe("DIRECT")
-		for (const host of ["rpc.lb.drpc.live", "lb.drpc.live.evil.test", "egress-canary.test", "api.coingecko.com"]) {
+		for (const host of ["rpc.lb.drpc.live", "lb.drpc.live.evil.test", "nulo.sh", "egress-canary.test", "api.coingecko.com"]) {
 			expect(findLive(`https://${host}/`, host)).toBe("PROXY 127.0.0.1:4321")
 		}
 		expect({ ...live, "network.proxy.autoconfig_url": "" }).toEqual({ ...prefs, "network.proxy.autoconfig_url": "" })

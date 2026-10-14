@@ -9,12 +9,14 @@ import { afterEach, describe, expect, test, vi } from "vitest"
 import { defineComponent, h } from "vue"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { CHAIN_IDS } from "@/utils/chain-ids"
-import { QUOTE_TTL_MS, type PriceState } from "@/wallet/services/price/spec"
+import { QUOTE_TTL_MS, type PriceSnapshot, type PriceState } from "@/wallet/services/price/spec"
 import type { PriceServiceClient } from "@/wallet/services/price/client"
 import { usePrices } from "./usePrices"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
-const TEST_USDC = TESTNET_TOKENS.USDC
+const TEST_USDC = TEST_TOKENS.USDC
+
+const snap = (quotes: PriceState): PriceSnapshot => ({ quotes, pricedTokens: TEST_PRICED_TOKENS })
 
 function quoteState(now: number, overrides?: Partial<PriceState>): PriceState {
 	return {
@@ -26,10 +28,15 @@ function quoteState(now: number, overrides?: Partial<PriceState>): PriceState {
 
 function fakeClient(initial: PriceState = {}) {
 	return {
-		onQuotesUpdated: new EventHandler<PriceState>(),
+		onQuotesUpdated: new EventHandler<PriceSnapshot>(),
 		onConnected: new EventHandler<void>(),
-		refreshIfStale: vi.fn().mockResolvedValue(initial),
-	} as unknown as PriceServiceClient & { onQuotesUpdated: EventHandler<PriceState>; refreshIfStale: ReturnType<typeof vi.fn> }
+		getQuotes: vi.fn().mockResolvedValue(snap({})),
+		refreshIfStale: vi.fn().mockResolvedValue(snap(initial)),
+	} as unknown as PriceServiceClient & {
+		onQuotesUpdated: EventHandler<PriceSnapshot>
+		getQuotes: ReturnType<typeof vi.fn>
+		refreshIfStale: ReturnType<typeof vi.fn>
+	}
 }
 
 /** Mount a host component so useTicker's onUnmounted has a scope. Hosts are
@@ -65,16 +72,16 @@ describe("composables/usePrices", () => {
 	})
 
 	test("settled turns true on the first price answer: a refresh that resolves or rejects, or a broadcast", async () => {
-		let answer: (state: PriceState) => void = () => {}
+		let answer: (state: PriceSnapshot) => void = () => {}
 		const held = fakeClient()
 		held.refreshIfStale.mockReturnValue(
-			new Promise<PriceState>((resolve) => {
+			new Promise<PriceSnapshot>((resolve) => {
 				answer = resolve
 			}),
 		)
 		const { api } = await withPrices(held)
 		expect(api.settled.value).toBe(false)
-		answer({})
+		answer(snap({}))
 		await flushPromises()
 		expect(api.settled.value).toBe(true)
 
@@ -86,8 +93,18 @@ describe("composables/usePrices", () => {
 		broadcast.refreshIfStale.mockReturnValue(new Promise(() => {}))
 		const { api: live } = await withPrices(broadcast)
 		expect(live.settled.value).toBe(false)
-		broadcast.onQuotesUpdated.invoke(quoteState(Date.now()))
+		broadcast.onQuotesUpdated.invoke(snap(quoteState(Date.now())))
 		expect(live.settled.value).toBe(true)
+	})
+
+	test("the mapping arrives from the network-free read before the refresh answers", async () => {
+		const client = fakeClient()
+		client.refreshIfStale.mockReturnValue(new Promise(() => {}))
+		const { api } = await withPrices(client)
+		expect(api.settled.value).toBe(false)
+		expect(api.mapped.value).toBe(true)
+		expect(api.isPriced(CHAIN_IDS.TESTNET, TEST_USDC)).toBe(true)
+		expect(api.isPriced(CHAIN_IDS.TESTNET, TEST_TOKENS.GBPC)).toBe(false)
 	})
 
 	test("a refreshIfStale rejection is swallowed (surfaces render token-only)", async () => {
@@ -101,18 +118,18 @@ describe("composables/usePrices", () => {
 		const client = fakeClient()
 		const { api } = await withPrices(client)
 		expect(api.usableQuotes.value).toEqual({})
-		client.onQuotesUpdated.invoke(quoteState(Date.now()))
+		client.onQuotesUpdated.invoke(snap(quoteState(Date.now())))
 		expect(api.usableQuotes.value["usd-coin"]).toBeDefined()
 	})
 
 	test("an empty broadcast (kill-switch) clears every quote", async () => {
 		const client = fakeClient(quoteState(Date.now()))
 		const { api } = await withPrices(client)
-		client.onQuotesUpdated.invoke({})
+		client.onQuotesUpdated.invoke(snap({}))
 		expect(api.usableQuotes.value).toEqual({})
 	})
 
-	test("quoteFor resolves mapped tokens through the price map", async () => {
+	test("quoteFor resolves tokens through the mapping the worker sent", async () => {
 		const client = fakeClient(quoteState(Date.now()))
 		const { api } = await withPrices(client)
 		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)?.coingeckoId).toBe("usd-coin")
@@ -181,7 +198,7 @@ describe("composables/usePrices", () => {
 		const client = fakeClient()
 		const { api } = await withPrices(client)
 		api.dispose()
-		client.onQuotesUpdated.invoke(quoteState(Date.now()))
+		client.onQuotesUpdated.invoke(snap(quoteState(Date.now())))
 		expect(api.usableQuotes.value).toEqual({})
 	})
 
@@ -192,10 +209,23 @@ describe("composables/usePrices", () => {
 
 		// While the port was down, fiat was disabled elsewhere — the new SW
 		// returns {} on the reconnect resnapshot.
-		client.refreshIfStale.mockResolvedValue({})
+		client.refreshIfStale.mockResolvedValue(snap({}))
 		;(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
 		await flushPromises()
 
 		expect(api.usableQuotes.value).toEqual({})
+	})
+
+	test("client RECONNECT re-snapshots the mapping: a token a new list stopped pricing loses its quote", async () => {
+		const client = fakeClient(quoteState(Date.now()))
+		const { api } = await withPrices(client)
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeDefined()
+
+		client.refreshIfStale.mockResolvedValue({ quotes: quoteState(Date.now()), pricedTokens: {} })
+		;(client as unknown as { onConnected: EventHandler<void> }).onConnected.invoke()
+		await flushPromises()
+
+		expect(api.quoteFor(CHAIN_IDS.TESTNET, TEST_USDC)).toBeUndefined()
+		expect(api.usableQuotes.value["usd-coin"]).toBeDefined()
 	})
 })

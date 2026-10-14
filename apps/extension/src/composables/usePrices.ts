@@ -5,9 +5,9 @@ import { computed, readonly, ref } from "vue"
 import { useTicker } from "@/composables/ticker"
 
 /** Services */
-import type { PriceServiceClient, PriceState, PriceQuote } from "@/wallet/services/price/client"
+import type { PriceServiceClient, PriceSnapshot, PriceState, PriceQuote } from "@/wallet/services/price/client"
 import { isQuoteFresh } from "@/wallet/services/price/spec"
-import { getPriceMapEntry, FEE_JUICE_ENTRY } from "@/wallet/services/price/price-map"
+import { getPriceMapEntry, FEE_JUICE_ENTRY, type PricedTokens } from "@/wallet/services/price/price-map"
 import { tokenAmountToUsdMicro, formatUsdMicro } from "@/wallet/services/price/convert"
 import { knownDecimals } from "@/utils/token-amount"
 
@@ -25,15 +25,32 @@ export type PricedToken = { chainId?: number; contract?: string; decimals?: numb
  */
 export function usePrices(priceService: PriceServiceClient) {
 	const quotes = ref<PriceState>({})
+	/** Which token each id prices. It comes from the signed list, through the worker, with the quotes. */
+	const pricedTokens = ref<PricedTokens>({})
+	/** The mapping has arrived. Until then no surface can tell a priced token from an unpriced one. */
+	const mapped = ref(false)
 	/** The first price answer has arrived: a refresh result or failure, or a broadcast. */
 	const settled = ref(false)
 	const now = useTicker(30_000)
 
-	const onQuotesUpdated = (state: PriceState) => {
-		quotes.value = state
+	const onQuotesUpdated = (snapshot: PriceSnapshot) => {
+		quotes.value = snapshot.quotes
+		pricedTokens.value = snapshot.pricedTokens
+		mapped.value = true
 		settled.value = true
 	}
 	priceService.onQuotesUpdated.add(onQuotesUpdated)
+
+	// The mapping first, from a read that never touches the network: a refresh can wait on the price
+	// provider, and a surface must not wait with it to learn that a token has no price at all.
+	priceService
+		.getQuotes()
+		.then((snapshot) => {
+			if (mapped.value) return
+			pricedTokens.value = snapshot.pricedTokens
+			mapped.value = true
+		})
+		.catch(() => {})
 
 	// Stale-on-connect refresh; the service no-ops when the cache is fresh
 	// (and returns {} when fiat display is disabled).
@@ -48,8 +65,9 @@ export function usePrices(priceService: PriceServiceClient) {
 	}
 	resnapshot()
 	// Re-snapshot after every reconnect (MV3 SW restarts drop the port): the
-	// held quotes may have been invalidated while we were detached — e.g. the
-	// kill-switch flipped from another context, whose {} broadcast we missed.
+	// held quotes and mapping may have changed while we were detached — e.g. the
+	// kill-switch flipped from another context, or a new list landed, and we
+	// missed the broadcast.
 	priceService.onConnected.add(resnapshot)
 
 	/** Fresh usable quotes only (ticker-reactive). */
@@ -65,10 +83,14 @@ export function usePrices(priceService: PriceServiceClient) {
 	/** Quote for a mapped token, or undefined (unmapped / unpriced / stale / disabled). */
 	const quoteFor = (chainId: number | undefined, contract: string | undefined): PriceQuote | undefined => {
 		if (chainId === undefined || contract === undefined) return undefined
-		const entry = getPriceMapEntry(chainId, contract)
+		const entry = getPriceMapEntry(pricedTokens.value, chainId, contract)
 		if (!entry) return undefined
 		return usableQuotes.value[entry.coingeckoId]
 	}
+
+	/** The signed list prices this token. False until `mapped`. */
+	const isPriced = (chainId: number | undefined, contract: string | undefined): boolean =>
+		chainId !== undefined && contract !== undefined && getPriceMapEntry(pricedTokens.value, chainId, contract) !== undefined
 
 	/** Fee Juice quote (chain-independent mapping). */
 	const feeJuiceQuote = computed<PriceQuote | undefined>(() => usableQuotes.value[FEE_JUICE_ENTRY.coingeckoId])
@@ -97,5 +119,16 @@ export function usePrices(priceService: PriceServiceClient) {
 		priceService.onConnected.remove(resnapshot)
 	}
 
-	return { usableQuotes, settled: readonly(settled), quoteFor, feeJuiceQuote, tokenFiatMicro, tokenFiatLabel, formatUsdMicro, dispose }
+	return {
+		usableQuotes,
+		settled: readonly(settled),
+		mapped: readonly(mapped),
+		isPriced,
+		quoteFor,
+		feeJuiceQuote,
+		tokenFiatMicro,
+		tokenFiatLabel,
+		formatUsdMicro,
+		dispose,
+	}
 }

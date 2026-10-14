@@ -14,7 +14,7 @@ import { describe, expect, test, vi } from "vitest"
 import { OriginType, TransferType, TxExecutionResult, TxStatus } from "@/wallet/services/transaction/spec"
 import { CHAIN_IDS } from "@/utils/chain-ids"
 import { flushPromises } from "@vue/test-utils"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // Bypass the real Pinia app store + its chrome.storage subscriptions —
 // TransactionCard only reads `network.chainId` + `defaultExplorer` for the
@@ -31,7 +31,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: { add: vi.fn(), remove: vi.fn() },
 			onConnected: { add: vi.fn(), remove: vi.fn() },
-			refreshIfStale: vi.fn().mockImplementation(async () => mockQuotes),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))
@@ -174,7 +175,7 @@ describe("modules/activity/TransactionCard (settled)", () => {
 })
 
 describe("TransactionCard fiat (D2 activity rows)", () => {
-	const TEST_USDC = TESTNET_TOKENS.USDC
+	const TEST_USDC = TEST_TOKENS.USDC
 	const mkTransferTx = (contract: string) =>
 		({
 			hash: "0xfiat1",

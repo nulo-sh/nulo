@@ -9,6 +9,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { nextTick } from "vue"
+import { Input } from "@nulo/design"
+import AddressInput from "@/components/composite/general/AddressInput.vue"
 import RecipientField from "./RecipientField.vue"
 
 const STUBS = {
@@ -259,6 +261,31 @@ describe("modules/send/RecipientField", () => {
 			expect(await press(w, "Enter")).toBe(true)
 			expect(w.emitted("update:searchTerm")?.at(-1)).toEqual([account1.address])
 			expect(w.emitted("update:selectedContact")?.at(-1)).toEqual([account1])
+		})
+
+		test("the field is a combo box named by the list's visible label, expanded exactly while its list is open", async () => {
+			const real = async (props: Record<string, unknown>) => {
+				const global = { components: { AddressInput, Input }, stubs: { ...STUBS, AddressInput: false } }
+				const w = mount(RecipientField, { props, global, attachTo: document.body })
+				mounted.push(w)
+				await w.get("input").trigger("focus")
+				return w
+			}
+			const combo = (w: ReturnType<typeof mount>) => {
+				const { role, "aria-autocomplete": autocomplete, "aria-expanded": expanded, "aria-labelledby": by } = field(w)
+				return { role, autocomplete, expanded, label: w.get(`[id="${by}"]`).text(), list: w.find('[role="listbox"]').exists() }
+			}
+			const closed = { role: "combobox", autocomplete: "list", expanded: "false", label: "Recipient Address", list: false }
+			const opened = { ...closed, expanded: "true", list: true }
+			expect(combo(await real({ candidates: [alice, account1], searchTerm: "" }))).toEqual(closed)
+
+			const w = await real({ candidates: [alice, account1], searchTerm: "a" })
+			expect(combo(w)).toEqual(opened)
+			expect(field(w)["aria-labelledby"]).toBe(w.get('[role="listbox"]').attributes("aria-labelledby"))
+			await press(w, "ArrowDown")
+			expect(combo(w)).toEqual(opened)
+			await press(w, "Escape")
+			expect(combo(w)).toEqual(closed)
 		})
 
 		test("Escape closes the list until the next input; with the list closed it is left unhandled", async () => {

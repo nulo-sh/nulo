@@ -8,6 +8,7 @@ import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-
 import { NetworkService } from "@/wallet/services/network/service"
 import { AccountService } from "@/wallet/services/account/service"
 import { FpcService } from "@/wallet/services/fpc/service"
+import { TokenService } from "@/wallet/services/token/service"
 import { DappSessionService, AccessLevel, type DappSession } from "@/wallet/services/dapp-session/service"
 import {
 	ExecutionService,
@@ -136,6 +137,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 	private executionService: ExecutionService = null!
 	private operationJournal: OperationJournalService = null!
 	private fpcService: FpcService = null!
+	private tokenService: TokenService = null!
 
 	public constructor(
 		logger: ILogger,
@@ -158,6 +160,7 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		this.executionService = services.get(ExecutionService.name)
 		this.operationJournal = services.get(OperationJournalService.name)
 		this.fpcService = services.get(FpcService.name)
+		this.tokenService = services.get(TokenService.name)
 		// A feed cancel lands in the journal only (`cancelJob` → queued → cancelled);
 		// the open approval popup and the dApp's pending promise learn of it here.
 		this.operationJournal.onOperationUpdated.add((record) => {
@@ -468,7 +471,10 @@ export class DappInteractionService extends Service<Methods, Events> implements 
 		await this.ensureInitialized()
 		const session = await this.dappSessionService.getDappSession(params.sessionId)
 		const chainId = Number(session.chainId)
-		const known = knownContracts(chainId, await this.fpcService.getOrComputeProtocolAddresses(chainId))
+		const known = knownContracts(
+			await this.fpcService.getOrComputeProtocolAddresses(chainId),
+			await this.tokenService.getVerifiedDefaults(session.profileId, chainId),
+		)
 		const payload: CapabilityPayload = { params: { ...params, knownContracts: known }, session }
 		return (await this.interaction("capabilities", payload, cancellationToken)) as CapabilityResult
 	}

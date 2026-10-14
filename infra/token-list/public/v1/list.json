@@ -1,0 +1,6 @@
+{
+	"format": "nulo-token-list-envelope/1",
+	"keyId": "nulo-ci-1",
+	"payload": "eyJmb3JtYXQiOiJudWxvLXRva2VuLWxpc3QvMSIsInNlcXVlbmNlIjoxNzkyMDE0OTA4LCJpc3N1ZWRBdCI6IjIwMjYtMTAtMTRUMjE6NTU6MDguMDAwWiIsInRva2VucyI6W119",
+	"signature": "w9VH4gOPHz3CYlDBF_18caBd_TFdpeQphzQOg-oIynGdRe_k0huZkJaj7Nju0MrRWUEQjtHPCBnk34u96zn-DQ"
+}

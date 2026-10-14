@@ -7,9 +7,9 @@ import { createTestingPinia } from "@pinia/testing"
 import { flushPromises, mount } from "@vue/test-utils"
 import { EventHandler } from "@nulo/wallet-core/utils"
 import { afterEach, describe, expect, test, vi } from "vitest"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
-const TEST_USDC = TESTNET_TOKENS.USDC
+const TEST_USDC = TEST_TOKENS.USDC
 let seedRows: unknown[] = []
 let fetchError: Error | undefined
 const balanceEvents = { added: new EventHandler(), updated: new EventHandler(), deleted: new EventHandler(), connected: new EventHandler() }
@@ -36,7 +36,8 @@ vi.mock("@/wallet/services/price/client", () => ({
 			disconnect: vi.fn(),
 			onQuotesUpdated: new EventHandler(),
 			onConnected: new EventHandler(),
-			refreshIfStale: vi.fn().mockImplementation(async () => mockQuotes),
+			getQuotes: vi.fn(async () => ({ quotes: {}, pricedTokens: TEST_PRICED_TOKENS })),
+			refreshIfStale: vi.fn().mockImplementation(async () => ({ quotes: mockQuotes, pricedTokens: TEST_PRICED_TOKENS })),
 		}
 	}),
 }))

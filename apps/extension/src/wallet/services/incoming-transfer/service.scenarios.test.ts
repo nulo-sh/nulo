@@ -49,7 +49,7 @@ import type {
 	PublicTransferFetchArgs,
 	PublicTransferPage,
 } from "@nulo/aztec-runtime/pxe/public-events"
-import { TESTNET_TOKENS } from "@/wallet/services/token/default-tokens"
+import { TEST_PRICED_TOKENS, TEST_TOKENS } from "@/wallet/services/token-list/list.fixture"
 
 // ── Repo mock (in-memory) ────────────────────────────────────────────────
 
@@ -382,13 +382,14 @@ function makeTokenBalanceStub() {
 	}
 }
 
-/** PriceService stub — `getQuotes` returns a settable `coingeckoId → {usd}` map (dust filter). */
+/** PriceService stub — `getQuotes` returns a settable `coingeckoId → {usd}` map (dust filter), with the
+ *  Testnet tokens' mapping. */
 function makePriceStub() {
 	const state = { quotes: {} as Record<string, { usd: number }> }
 	return {
 		name: "price",
 		dependencies: [],
-		getQuotes: vi.fn(async () => state.quotes),
+		getQuotes: vi.fn(async () => ({ quotes: state.quotes, pricedTokens: TEST_PRICED_TOKENS })),
 		setQuotes(q: Record<string, { usd: number }>) {
 			state.quotes = q
 		},
@@ -3703,7 +3704,7 @@ describe("IncomingTransferService — balance-refresh drain (causal ack)", () =>
 
 // A (chainId, contract) the price map recognizes: CHAIN_IDS.TESTNET + Test USDC → USDC.
 const MAPPED_CHAIN = CHAIN_IDS.TESTNET
-const MAPPED_CONTRACT = TESTNET_TOKENS.USDC
+const MAPPED_CONTRACT = TEST_TOKENS.USDC
 const mappedToken = { id: 9, profileId: "p1", chainId: MAPPED_CHAIN, contract: MAPPED_CONTRACT, symbol: "cUSD", decimals: 6 }
 
 async function bootDust(overrides: { threshold?: number; quotes?: Record<string, { usd: number }>; visibility?: boolean } = {}) {

@@ -149,7 +149,12 @@ const handleUnlockError = (error, activeProfileId, isPasskeyAttempt) => {
 		// the join's job here is only to release the spinner immediately.
 		return
 	}
-	if (isPasskeyAttempt) openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
+	if (isPasskeyAttempt) {
+		openToast({ kind: "error", label: passkeyFailureCopy(error, PASSKEY_COPY.unlockFailed) })
+		return
+	}
+	// The error's text never reaches the toast: it can name internals.
+	openToast({ kind: "error", label: "Something went wrong", sub: "Try unlocking again." })
 }
 
 const handleUnlockWallet = async () => {
