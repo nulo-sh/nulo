@@ -841,11 +841,11 @@ describe("execute window — an operation the app pays for", () => {
 		} as never)
 	}
 	const appPaid = { kind: "aztec_sendTx", account: `aztec:1:${OWNER}`, exec: { calls: [], feePayer: APP_FPC }, opts: { from: OWNER } }
-	async function opened() {
+	async function opened(op: object = appPaid) {
 		resolvable()
 		payloadToLoad = {
 			session: { profileId: "p1", dappMetadata: { name: "Test DApp", url: "https://example.com" } },
-			params: { operations: [appPaid] },
+			params: { operations: [op] },
 		}
 		w = factory()
 		await completeInit()
@@ -919,6 +919,51 @@ describe("execute window — an operation the app pays for", () => {
 		toastMocks.openToast.mockClear()
 		fees.opts.onError?.(0, new Error("node down"))
 		expect(toastMocks.openToast).not.toHaveBeenCalled()
+	})
+
+	// The app's own fee settings as the wallet-sdk serializes them: each bigint a decimal string.
+	const withAppFee = (gasSettings: object) => ({ ...appPaid, opts: { from: OWNER, fee: { gasSettings } } })
+	const CAP = { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" }
+
+	test.each([
+		["its own cap", { maxFeesPerGas: CAP }],
+		["its own priority fee", { maxPriorityFeesPerGas: { feePerDaGas: "300000000", feePerL2Gas: "300000000" } }],
+	])("an app that set %s: Confirm waits for the figure, and approve sends nothing until it lands", async (_case, gas) => {
+		const { vm, fees, confirm } = await opened(withAppFee(gas))
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+
+		api.results.value = { 0: { maxFee: "16000000000000000", maxFeeFormatted: "0.016" } }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
+	})
+
+	test("an app that set its own cap: a failed estimate keeps Confirm off", async () => {
+		const { vm, fees, confirm } = await opened(withAppFee({ maxFeesPerGas: CAP }))
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.results.value = { 0: null }
+		api.estimating.value = { 0: false }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeDefined()
+		await vm.approve()
+		expect(approveInteractionMock).not.toHaveBeenCalled()
+	})
+
+	test("an app that set nothing: Confirm never waits for the figure", async () => {
+		const { vm, fees, confirm } = await opened()
+		const api = fees.api as typeof fees.api & { estimating: Ref<Record<number, boolean>> }
+		api.estimating.value = { 0: true }
+		await flushPromises()
+		expect(confirm().attributes("disabled")).toBeUndefined()
+		await vm.approve()
+		expect(approveInteractionMock).toHaveBeenCalledTimes(1)
 	})
 })
 

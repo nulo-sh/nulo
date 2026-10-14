@@ -162,6 +162,19 @@ const {
 const isAppPaid = (op: UIOperation | undefined): boolean =>
 	(op?.kind === "aztec_sendTx" || op?.kind === "send_transaction") && isEmbeddedFeePayment(op)
 
+/** A send whose app set its own cap or priority fee, either of which may raise the charge. A
+ *  default-entrypoint operation is never estimated, so there is no figure to wait for. */
+const setsOwnFee = (op: UIOperation): boolean => {
+	if (op.kind === "send_transaction") return Boolean(op.fee?.maxFeesPerGas || op.fee?.maxPriorityFeesPerGas)
+	if (op.kind !== "aztec_sendTx" || op.executionMode === "default_entrypoint") return false
+	const gas = op.opts?.fee?.gasSettings
+	return Boolean(gas?.maxFeesPerGas || gas?.maxPriorityFeesPerGas)
+}
+/** The figure such a send commits is on screen before Confirm; a failed estimate keeps Confirm off. */
+const awaitsAppFeeFigure = computed(() =>
+	operations.value.some((op, i) => setsOwnFee(op as unknown as UIOperation) && !feeEstimates.value[i]),
+)
+
 /** An estimate whose payer the node would refuse at submission: an app's fee contract proven unable
  *  to pay, or the account's own Fee Juice below the fee. Confirm stays off, so nothing is proven. */
 const isShortEstimate = (estimate: TransferFeeEstimate): boolean =>
@@ -500,7 +513,7 @@ const approve = async () => {
 		setError("Validation error", "Select a fee payment method for each transaction", "warning")
 		return
 	}
-	if (payerShort.value) return
+	if (payerShort.value || awaitsAppFeeFigure.value) return
 	try {
 		isLoading.value = true
 		// Ownership handoff: approval transfers the estimates and previews to the
@@ -710,6 +723,7 @@ onUnmounted(() => {
 				operations.length === 0 ||
 				needsFeeSelection ||
 				payerShort ||
+				awaitsAppFeeFigure ||
 				isInteractionCancelled
 			"
 			@reject="reject"

@@ -283,7 +283,16 @@ describe("OperationCard — a sponsor that can't cover a wire-shaped transaction
 
 describe("OperationCard — a wire-shaped transaction whose fee the app pays", () => {
 	const APP_FPC = field(0x2f1e0d9c8b7a69584736251403f2e1d0c9b8a7968574635241302f1e0d9c8b7an)
-	const appPaid = () => ({ ...sendTx({ feePayer: APP_FPC }), feeSettings: { paymentMethod: { kind: "embedded" } } })
+	// The app's own fee settings as the wallet-sdk serializes them: each bigint a decimal string.
+	const GAS_SETTINGS = {
+		maxFeesPerGas: { feePerDaGas: "1200000000", feePerL2Gas: "1200000000" },
+		maxPriorityFeesPerGas: { feePerDaGas: "300000000", feePerL2Gas: "300000000" },
+	}
+	const appPaid = () => ({
+		...sendTx({ feePayer: APP_FPC }),
+		opts: { from: OWNER, fee: { gasSettings: GAS_SETTINGS } },
+		feeSettings: { paymentMethod: { kind: "embedded" } },
+	})
 	const mountWith = async (feeEstimate: unknown) => {
 		const w = mount(OperationCard, {
 			props: {
@@ -300,22 +309,42 @@ describe("OperationCard — a wire-shaped transaction whose fee the app pays", (
 		return w
 	}
 	const region = (w: VueWrapper) => w.get('[data-testid="execute-op-app-payer-live"]')
+	const row = (w: VueWrapper) => w.get('[data-testid="execute-op-fee-set-badge"]')
+	const covered = { address: APP_FPC, funded: true, provenShort: false }
 
-	test.each([
-		["no check has landed", undefined],
-		["the app's fee contract covers it", { ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: true, provenShort: false } }],
-	])("%s: the row reads as before, its region empty", async (_case, estimate) => {
-		const w = await mountWith(estimate)
-		expect(w.get('[data-testid="execute-op-fee-set-badge"]').text()).toBe("Fee payment method set by Swap")
+	test("no estimate has landed: the row names the app, its region empty", async () => {
+		const w = await mountWith(undefined)
+		expect(row(w).text()).toBe("Fee payment method set by Swap")
+		expect(w.find('[data-testid="execute-op-app-fee"]').exists()).toBe(false)
 		expect(region(w).attributes()).toMatchObject({ role: "status", "aria-live": "polite" })
 		expect(region(w).text()).toBe("")
 		expect(fee(w).exists()).toBe(false)
 	})
 
+	test("the estimate lands: the row reads the fee limit, and no priority part when the app set none", async () => {
+		const w = await mountWith({ ...ESTIMATE, appPayerFunding: covered })
+		expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
+		expect(w.get('[data-testid="execute-op-app-fee"]').text()).toBe("Fee up to 3.577824 FJ")
+		expect(region(w).text()).toBe("")
+	})
+
+	test("the app asked for a priority fee: the row reads the limit and the priority part in one sentence", async () => {
+		const w = await mountWith({
+			...ESTIMATE,
+			maxFee: "16000000000000000",
+			maxFeeFormatted: "0.016",
+			priorityFee: "4000000000000000",
+			priorityFeeFormatted: "0.004",
+			appPayerFunding: covered,
+		})
+		expect(row(w).text()).toBe("Fee up to 0.016 FJ, includes a 0.004 FJ priority fee the app asked for")
+	})
+
 	test.each([true, false])(
-		"the app's fee contract reads short (proven: %s): the hedged notice shows under the row",
+		"the app's fee contract reads short (proven: %s): the figure stays and the hedged notice shows under the row",
 		async (provenShort) => {
 			const w = await mountWith({ ...ESTIMATE, appPayerFunding: { address: APP_FPC, funded: false, provenShort } })
+			expect(row(w).text()).toBe("Fee up to 3.577824 FJ")
 			expect(region(w).text()).toBe("This app's fee contract may not cover this fee right now.")
 		},
 	)
