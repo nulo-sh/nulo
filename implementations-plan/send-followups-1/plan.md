@@ -1,7 +1,7 @@
 ---
 plan: send-followups-1
 tier: mid
-status: audited (Codex and Opus round 1, final fresh Codex pass); awaiting the orchestrator's approval
+status: approved by the orchestrator 2026-10-14; implementing (arc 1)
 issues: "#412, #408, #406 (one arc)"
 driver: claude-code
 claude_model: opus
@@ -148,7 +148,7 @@ Commands run from the worktree root unless they start with `cd`. Every gate also
 - `NET <file>` = `NODE_OPTIONS=--dns-result-order=ipv4first bun run e2e:agent tests/e2e/network/<file>`, then the same with `NULO_E2E_BROWSER=firefox`; one run at a time in this worktree, retry 0.
 - Never overlap a `SMOKE` and a `NET` run.
 
-### Phase 1: remove the fee card's dead path (#406)
+### Phase 1: remove the fee card's dead path (#406) ✓
 
 1. Delete the code listed under #406 in Architecture.
 2. In `FeeSettingsCard.test.ts`, delete the tests that drive the embedded path: `:350-368`, the whole describe at `:1059-1110` (its first test asserts nothing), `:1112-1139`, `:1515-1540`, `:1629-1690`, `:2945-2975` (`fee-sponsor-live` stays covered at `:2564`), `:3228-3265`. The retry chain's live re-entry is the identity watcher, already tested.

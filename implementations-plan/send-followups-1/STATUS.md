@@ -6,3 +6,5 @@
 - 2026-10-14 audit round 1, Codex: conditional approve; six findings verified and applied.
 - 2026-10-14 audit round 1, Opus: conditional approve; nine findings accepted, one rejected for scope (D13).
 - 2026-10-14 final fresh Codex pass: conditional approve, three fixes applied; confirmation resume: approve. Plan committed, awaiting the orchestrator.
+- 2026-10-14 implementation started on `worktree-send-followups-1` at 20f33414; the orchestrator approved the plan and confirmed OA-1.
+- 2026-10-14 phase 1 gate: pass. `UNIT src/popup/components/modules/send/` 389/389; `bun run test` 12081 passed; lint and `typecheck:all` exit 0; `SMOKE send-fee-privacy send-keyboard` Chrome 6/6 (103 s), Firefox 6/6 (112 s); the leftover-id grep prints nothing.
