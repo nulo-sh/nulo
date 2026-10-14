@@ -163,7 +163,7 @@ The playground stays generic: every new control reaches the wallet only through 
 | 3.2 | `apps/playground/src/sections/transactions.ts`, `apps/playground/README.md` | `network/tx-sendTx-noFrom.test.ts` |
 | 3.3 | `apps/playground/src/sections/transactions.ts`, `apps/playground/README.md` | `network/tx-transfer-row.test.ts`, `network/tx-sendTx-delegated-authwit.test.ts` |
 | 4a.1 | `scripts/ci-cd/test-soak/{lib,cli}.ts`, `scripts/complexity-baseline/manifest.json`, `CLAUDE.md` | the four suites above; `scripts/ci-cd/test-soak/{lib,cli}.test.ts` |
-| 4.1 | `apps/extension/package.json`, `vitest.base.ts` → `vitest.base.mts`, eleven `vitest.config.ts`, `biome.json`, `ARCHITECTURE.md`, `CLAUDE.md` | soak evidence in `lessons/phase-4.md` |
+| 4.1 | `apps/extension/package.json`, `vitest.base.ts` → `vitest.base.mts`, eleven `vitest.config.ts`, the extension's config graph (D22), the stall and soak fixture configs, `biome.json`, `ARCHITECTURE.md`, `CLAUDE.md`, `apps/extension/README.md` | soak evidence in `lessons/phase-4.md` |
 
 ### Trade-offs and alternatives not taken
 
@@ -759,6 +759,18 @@ Verdict: **approve with fixes**. Sound: of the 27 files the configs load, dev ch
 | 4-O2 | Low-medium. `"type": "module"` changes how Rolldown hands a CommonJS default export to the extension's importers, and nothing proves the shipped bytes unchanged | Accepted as a gate: Phase 4.1 step 3 diffs both browsers' builds against `dev`'s |
 | 4-O3 | Nit. The `ARCHITECTURE.md` row the arc edits names 9 of the 11 workspaces that spread the base | Accepted: `legal` and `third-party-notices` added |
 | 4-O4 | Optional. Nothing keeps the config graph natively loadable; Vite does not warn on parameter properties | Accepted as one README sentence, as `packages/third-party-notices` states its own rule; no guard |
+
+### Arc 4 on the merged head, round 2: Codex (same session, resumed), 2026-10-14
+
+Verdict: **approve with fixes**. 4-O1 to 4-O4 judged sound, no regression; its repository-wide scan loaded all 27 tracked Vite, vitest and Storybook configs natively.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 4-R2-1 | Low, demonstrated. The six `scripts/ci-cd/test-soak/fixtures/*/vitest.config.ts` sit under the root package, which declares no `type`, so every nested fixture run prints the CommonJS line into output `cli.test.ts` captures | Accepted (b2c2966): renamed `vitest.config.mts`, found by vitest's discovery. With `cli.test.ts`'s launcher the `passing` fixture printed the block on Node and Bun before and prints none after, same counts; `cli.test.ts` 15/15, `test:ci-gating` 547 |
+
+### Arc 4 on the merged head, round 3: Codex (same session, resumed), 2026-10-14
+
+Verdict: **approve**, no finding, high confidence: six pure renames, no stale reference in tests, docs, workflows or ignore files. The loop converged.
 
 ## Post-implementation
 
