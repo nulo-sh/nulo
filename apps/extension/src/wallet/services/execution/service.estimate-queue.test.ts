@@ -6,6 +6,7 @@
 import { describe, expect, test, vi } from "vitest"
 import { AccountFeePaymentMethodOptions } from "@aztec-labs/entrypoints/account"
 import { InvalidWalletArgumentsError } from "@nulo/extension-messaging/errors"
+import type { FeeSettings } from "@nulo/wallet-bridge"
 import { QueuedFeeAnswers } from "./queued-fee-cap"
 import { OriginType, TransferType, type Tx } from "@/wallet/services/transaction/spec"
 import { ChainTipGate } from "./chain-tip-gate"
@@ -39,7 +40,7 @@ const sent = (estimatedFee: string, createdAt = 1, priorityLevel = "urgent"): Tx
 
 const URGENT_FJ = { paymentMethod: { kind: "fj" }, priorityLevel: "urgent" } as const
 
-function makeFacade(rows: Tx[] = []) {
+function makeFacade(rows: Tx[] = [], feeSpender?: string) {
 	const sendSequencer = new SendSequencer({ pendingTxs: () => [], sleep: async () => {}, now: () => 0 })
 	const node = { tip: 0, reads: 0 }
 	const chainTipGate = new ChainTipGate({
@@ -58,15 +59,17 @@ function makeFacade(rows: Tx[] = []) {
 		ensureInitialized: async () => {},
 		sendSequencer,
 		chainTipGate,
-		transferExecutor: { sequence: vi.fn(async () => ({ scope: SCOPE, keys: KEYS })), estimateFee },
+		transferExecutor: { sequence: vi.fn(async () => ({ scope: SCOPE, keys: KEYS, feeSpender })), estimateFee },
 		profileService: { getActiveProfile: async () => ({ id: "p1" }) },
 		lane,
 		estimateCancel: { admit, settle: vi.fn() },
 		tokenService: { getTokenRaw: async () => ({ contract: "0xtoken" }) },
 		transactionService: { getTransactions: vi.fn(async () => rows) },
 	}) as ExecutionService
-	const estimate = () => facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, URGENT_FJ, "tok-1")
-	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate }
+	const estimateWith = (feeSettings: FeeSettings) =>
+		facade.estimateTransferFee("net-1", "0xme", 1, TransferType.Private, "0xyou", 5n, feeSettings, "tok-1")
+	const estimate = () => estimateWith(URGENT_FJ)
+	return { facade, sendSequencer, chainTipGate, node, lane, admit, estimateFee, estimate, estimateWith }
 }
 
 describe("ExecutionService.estimateTransferFee while a send holds the transfer's chain state", () => {
@@ -86,7 +89,7 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		expect(admit).not.toHaveBeenCalled()
 	})
 
-	test("a queued answer offers the cap over the last fee of this token's sends, and none without one", async () => {
+	test("a queued answer offers the cap over the last fee of this token's like sends, and none without one", async () => {
 		const withBasis = makeFacade([sent("4000000000000000000", 1), sent("3577824000000000000", 2)])
 		withBasis.sendSequencer.enter(SCOPE, KEYS)
 		expect(await withBasis.estimate()).toEqual({
@@ -103,6 +106,14 @@ describe("ExecutionService.estimateTransferFee while a send holds the transfer's
 		const unlike = makeFacade([sent("3577824000000000000", 1), sent("1000000000000000000", 2, "normal")])
 		unlike.sendSequencer.enter(SCOPE, KEYS)
 		expect(await unlike.estimate()).toMatchObject({ queued: true, cap: { basis: "3577824000000000000" } })
+
+		// Through a fee contract, the sequence's spender picks its own sends over the sponsor's newer one.
+		const viaFpc = (estimatedFee: string, createdAt: number, feeSpender?: string): Tx =>
+			({ ...sent(estimatedFee, createdAt), feePaymentMethod: AccountFeePaymentMethodOptions.EXTERNAL, feeSpender }) as Tx
+		const privateFpc = makeFacade([viaFpc("3577824000000000000", 1, "0xFPC"), viaFpc("1000000000000000000", 2)], "0xfpc")
+		privateFpc.sendSequencer.enter(SCOPE, KEYS)
+		const fpcSettings = { paymentMethod: { kind: "fpc", fpcId: "f1" }, priorityLevel: "urgent" } as const
+		expect(await privateFpc.estimateWith(fpcSettings)).toMatchObject({ queued: true, cap: { basis: "3577824000000000000" } })
 
 		// A predecessor's block the node lacks queues the send the same way, so it offers the cap too.
 		const lagging = makeFacade([sent("3577824000000000000")])
