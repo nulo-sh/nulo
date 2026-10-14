@@ -86,8 +86,20 @@ type HarnessOpts = {
 
 function harness(path: PathName, opts: HarnessOpts = {}) {
 	const builds: Built[] = []
-	const buildStandard = vi.fn(async (..._args: unknown[]) => {
+	const buildStandard = vi.fn(async (...args: unknown[]) => {
 		const built = makeBuilt(opts.build ?? {})
+		// As the entrypoint completes them: the priority fee the build is given, else the fixture's.
+		const priority = (args[4] as { maxPriorityFeesPerGas?: { feePerDaGas: string; feePerL2Gas: string } } | undefined)
+			?.maxPriorityFeesPerGas
+		if (priority) {
+			const gs = built.txRequest.txContext.gasSettings
+			built.txRequest.txContext.gasSettings = new GasSettings(
+				gs.gasLimits,
+				gs.teardownGasLimits,
+				gs.maxFeesPerGas,
+				new GasFees(BigInt(priority.feePerDaGas), BigInt(priority.feePerL2Gas)),
+			)
+		}
 		builds.push(built)
 		return built
 	})
@@ -401,11 +413,9 @@ describe("committed fees for an explicit multiplier", () => {
 		},
 	)
 
-	test("private fee juice: the level and an app's cap never apply; the cap is the basis × 1.2, rounded up", async () => {
+	test("private fee juice: the level never applies; the cap is the basis × 1.2, rounded up", async () => {
 		const h = harness("fpc two-pass")
 		h.ctx.feeMultiplier = 3
-		const op = h.ctx.op as { fee?: Record<string, unknown> }
-		op.fee = { ...op.fee, maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } }
 		const capsAtSim: bigint[][] = []
 		h.simulateTxTask.mockImplementation(async (...args: unknown[]) => {
 			capsAtSim.push(feesOf(args[1] as never))
@@ -442,27 +452,53 @@ describe("an app's fee settings against the wallet's", () => {
 		expect(feesOf(result.txRequest as never)).toEqual([5n, 6n])
 	})
 
-	test.each(["fpc two-pass", "fpc fast path"] as PathName[])(
-		"%s, a sponsor: the app's cap is ignored; the cap and the payload's maxFee are the wallet's",
-		async (path) => {
-			const h = harness(path, { twoPassRow: "hand-added sponsor" })
-			h.ctx.feeMultiplier = 3
-			withAppFee(h, { maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } })
-			const result = await h.strategy.buildAndEstimate(h.ctx)
-			expect(feesOf(result.txRequest as never)).toEqual([1_665n, 1_998n])
-			const lastPayload = h.fpc.getFeePayload.mock.calls.at(-1) as unknown as [string, { toBigInt(): bigint }]
-			expect(lastPayload[1].toBigInt()).toBe(115_551_000n)
-		},
-	)
+	test.each<[PathName, TwoPassRow]>([
+		["fpc two-pass", "hand-added sponsor"],
+		["fpc fast path", "hand-added sponsor"],
+		["fpc two-pass", "private fee juice"],
+	])("%s, %s: the app's cap is committed verbatim, in the cap and in the payload's maxFee", async (path, twoPassRow) => {
+		const h = harness(path, { twoPassRow })
+		h.ctx.feeMultiplier = 3
+		withAppFee(h, { maxFeesPerGas: { feePerDaGas: "99999", feePerL2Gas: "99999" } })
+		const capsAtSim: bigint[][] = []
+		h.simulateTxTask.mockImplementation(async (...args: unknown[]) => {
+			capsAtSim.push(feesOf(args[1] as never))
+			return sentinelSim()
+		})
+		const result = await h.strategy.buildAndEstimate(h.ctx)
+		expect(feesOf(result.txRequest as never)).toEqual([99_999n, 99_999n])
+		if (path === "fpc two-pass") expect(capsAtSim[1]).toEqual([99_999n, 99_999n])
+		const lastPayload = h.fpc.getFeePayload.mock.calls.at(-1) as unknown as [string, { toBigInt(): bigint }]
+		// (31_000 + 32_000) · 99_999: the final sim's gas at padding 1, priced at the app's cap.
+		expect(lastPayload[1].toBigInt()).toBe(6_299_937_000n)
+	})
 
-	test.each(PATHS)("%s: the app's priority fee never reaches a build; the committed priority is the build's", async (path) => {
+	// The fixture's build priority is (7, 8); the app's is (70, 80). Without an app cap, the payer's
+	// basis rises by the priority: × 2 for the account and a sponsor, × 1.2 for private fee juice,
+	// × 1 for the app's own payment.
+	test.each<[PathName, [bigint, bigint]]>([
+		["fj", [1_180n, 1_412n]],
+		["fjwc", [1_180n, 1_412n]],
+		["embedded", [625n, 746n]],
+		["fpc two-pass", [736n, 880n]],
+		["fpc fast path", [1_180n, 1_412n]],
+	])("%s: every build commits the app's priority fee, and the cap makes room for it", async (path, cap) => {
 		const h = harness(path)
 		withAppFee(h, { maxPriorityFeesPerGas: { feePerDaGas: "70", feePerL2Gas: "80" } })
 		const result = await h.strategy.buildAndEstimate(h.ctx)
 		expect(h.buildStandard.mock.calls.length).toBeGreaterThan(0)
-		for (const call of h.buildStandard.mock.calls) expect(call[4]).toBeUndefined()
+		for (const call of h.buildStandard.mock.calls) {
+			expect(call[4]).toEqual({ maxPriorityFeesPerGas: { feePerDaGas: "70", feePerL2Gas: "80" } })
+		}
 		const { maxPriorityFeesPerGas } = (result.txRequest as unknown as { txContext: { gasSettings: GasSettings } }).txContext.gasSettings
-		expect([maxPriorityFeesPerGas.feePerDaGas, maxPriorityFeesPerGas.feePerL2Gas]).toEqual([7n, 8n])
+		expect([maxPriorityFeesPerGas.feePerDaGas, maxPriorityFeesPerGas.feePerL2Gas]).toEqual([70n, 80n])
+		expect(feesOf(result.txRequest as never)).toEqual(cap)
+	})
+
+	test.each(PATHS)("%s: with no app fee settings, no build is given a priority fee", async (path) => {
+		const h = harness(path)
+		await h.strategy.buildAndEstimate(h.ctx)
+		for (const call of h.buildStandard.mock.calls) expect(call[4]).toBeUndefined()
 	})
 })
 

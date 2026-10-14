@@ -13,7 +13,7 @@ import type { TxSimulationResult } from "@aztec-labs/stdlib/tx"
 import { callsFeeJuice } from "../sponsor-funding"
 import { applyEmbeddedFpcGasCap } from "./embedded-fpc-cap"
 import type { FeeEstimate, FeeStrategy, FeeStrategyContext, FeeStrategyDeps } from "./fee-strategy"
-import { finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
+import { appPriorityOf, finalizeGasLimits, startEstimateTask, suggestGasLimits, validatedSimOpts } from "./fee-strategy"
 
 /** The app's own fee contract, as the final simulation's kernel names it. A claim to the sender
  *  (`fjwc`) is the sender paying itself: no contract of the app's pays. */
@@ -39,7 +39,7 @@ export class EmbeddedStrategy implements FeeStrategy {
 		const task = startEstimateTask(this.deps.tasks, ctx.parentTask)
 
 		try {
-			const built = await this.deps.txBuilder.buildStandard(ctx.op, ctx.fence, embeddedMethod, task)
+			const built = await this.deps.txBuilder.buildStandard(ctx.op, ctx.fence, embeddedMethod, task, appPriorityOf(ctx.op.fee))
 			const { txRequest, node, pxe, account } = built
 			suggestGasLimits(txRequest, ctx.op.fee)
 			await applyEmbeddedFpcGasCap(txRequest, ctx.op.fee, node)

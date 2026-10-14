@@ -6,3 +6,4 @@
 - 2026-10-14: Codex round 1: reject (C1-C7); Opus round 1 running.
 - 2026-10-14: Opus round 1: conditional approve. Plan and OWNER-ASKS revised (priority on every payer, Confirm wait, fjwc, gates); final fresh Codex pass next.
 - 2026-10-14: final fresh Codex pass: conditional approve; both conditions applied. Plan at the approval gate.
+- 2026-10-14: arc1 Phase 1 gate pass (lint, typecheck:all, execution 1232, wallet-bridge 750, aztec-runtime 392). One pin outside the plan's list moved (fee-structural-parity embedded app cap); lessons/phase-1.md.

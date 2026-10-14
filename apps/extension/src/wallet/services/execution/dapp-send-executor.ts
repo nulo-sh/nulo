@@ -81,7 +81,7 @@ import type {
 } from "./spec"
 import type { TxRequestBuilder } from "./tx-request-builder"
 import type { ExecutionFence } from "@/wallet/services/profile/profile-deletion-state"
-import { getEstimatedFee, getGasDetails } from "./tx-fee-details"
+import { getEstimatedFee, getGasDetails, priorityFeeOf } from "./tx-fee-details"
 import { detectEmbeddedFeePayment } from "./utils/fee-detection"
 
 /** Project an `Action[]` (a discriminated union with non-call variants like
@@ -462,9 +462,11 @@ export class DappSendExecutor {
 			bound && preview ? this.writePreview(preview, fingerprintOperation(identity), discoveredHashes, estimateId) : undefined
 
 		const maxFeeRaw = BigInt(getEstimatedFee(txRequest))
+		const priorityFee = priorityFeeOf(txRequest)
 		return {
 			maxFee: maxFeeRaw.toString(),
 			maxFeeFormatted: formatFeeJuice(maxFeeRaw),
+			...(priorityFee > 0n ? { priorityFee: priorityFee.toString(), priorityFeeFormatted: formatFeeJuice(priorityFee) } : {}),
 			gasDetails: getGasDetails(txRequest),
 			estimateId,
 			previewId,
@@ -592,11 +594,11 @@ export class DappSendExecutor {
 			operation.kind === "aztec_sendTx" &&
 			((operation as AztecSendTxOperation).executionMode ?? "standard") !== "default_entrypoint" &&
 			!detectedFee?.embeddedFeePayment &&
-			// A dApp-supplied fee cap makes the built request's maxFees diverge
-			// from the predicted-worst basis the consume ladder re-derives, so
-			// such an entry would ALWAYS miss on "base fee drift" — stashing it
-			// only parks an unusable signed request for the TTL.
+			// A dApp-supplied fee cap or priority fee makes the built request's
+			// maxFees diverge from the predicted-worst basis the consume ladder
+			// re-derives, which carries neither.
 			!detectedFee?.maxFeesPerGas &&
+			!detectedFee?.maxPriorityFeesPerGas &&
 			(kind === "fj" || kind === "fpc")
 		if (!eligible) return undefined
 		try {
@@ -1065,12 +1067,19 @@ export class DappSendExecutor {
 		// set explicitly here (the planner-built path infers it) — that is what
 		// gates `applyEmbeddedFpcGasCap`; see the helper's JSDoc for the cap rationale.
 		const maxFeesUpstream = op.opts.fee?.gasSettings?.maxFeesPerGas
+		const maxPriorityFeesUpstream = op.opts.fee?.gasSettings?.maxPriorityFeesPerGas
 		const feeOpts: FeeOptions = {
 			embeddedFeePayment: detectEmbeddedFeePayment(op.exec?.feePayer, op.opts.from, op.exec?.calls) ?? "fpc",
 			gasLimits: op.opts.fee?.gasSettings?.gasLimits,
 			teardownGasLimits: op.opts.fee?.gasSettings?.teardownGasLimits,
 			maxFeesPerGas: maxFeesUpstream
 				? { feePerDaGas: maxFeesUpstream.feePerDaGas.toString(), feePerL2Gas: maxFeesUpstream.feePerL2Gas.toString() }
+				: undefined,
+			maxPriorityFeesPerGas: maxPriorityFeesUpstream
+				? {
+						feePerDaGas: maxPriorityFeesUpstream.feePerDaGas.toString(),
+						feePerL2Gas: maxPriorityFeesUpstream.feePerL2Gas.toString(),
+					}
 				: undefined,
 			gasPadding: 1,
 		}

@@ -16,6 +16,17 @@ export function feeLimitOf(txRequest: TxExecutionRequest): bigint {
 	return BigInt(gasLimits.daGas) * maxFeesPerGas.feePerDaGas + BigInt(gasLimits.l2Gas) * maxFeesPerGas.feePerL2Gas
 }
 
+/** The part of the fee limit an app's priority fee may take: gas limits × the priority, each per-gas
+ *  priority bounded by the cap, as the protocol pays it. Never above `feeLimitOf`. */
+export function priorityFeeOf(txRequest: TxExecutionRequest): bigint {
+	const { gasLimits, maxFeesPerGas, maxPriorityFeesPerGas } = txRequest.txContext.gasSettings
+	const min = (a: bigint, b: bigint) => (a < b ? a : b)
+	return (
+		BigInt(gasLimits.daGas) * min(maxPriorityFeesPerGas.feePerDaGas, maxFeesPerGas.feePerDaGas) +
+		BigInt(gasLimits.l2Gas) * min(maxPriorityFeesPerGas.feePerL2Gas, maxFeesPerGas.feePerL2Gas)
+	)
+}
+
 export function getEstimatedFee(txRequest: TxExecutionRequest): string {
 	return feeLimitOf(txRequest).toString()
 }
